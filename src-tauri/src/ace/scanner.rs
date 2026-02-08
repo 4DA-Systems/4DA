@@ -182,7 +182,7 @@ impl ProjectScanner {
         if let Ok(entries) = fs::read_dir(dir) {
             for entry in entries.flatten() {
                 let path = entry.path();
-                if path.extension().map_or(false, |e| e == "csproj") {
+                if path.extension().is_some_and(|e| e == "csproj") {
                     if let Some(signal) = self.parse_manifest(&path, ManifestType::Csproj) {
                         signals.push(signal);
                     }
@@ -296,10 +296,10 @@ impl ProjectScanner {
         }
 
         // Check for TypeScript
-        if content.contains("\"typescript\"") || content.contains("\"@types/") {
-            if !signal.languages.contains(&"typescript".to_string()) {
-                signal.languages.push("typescript".to_string());
-            }
+        if (content.contains("\"typescript\"") || content.contains("\"@types/"))
+            && !signal.languages.contains(&"typescript".to_string())
+        {
+            signal.languages.push("typescript".to_string());
         }
 
         // Extract dependencies
@@ -519,7 +519,7 @@ fn extract_json_object(content: &str, key: &str) -> Option<String> {
             let mut depth = 1;
             let mut obj_end = obj_start + 1;
 
-            for (i, c) in after_key[obj_start + 1..].chars().enumerate() {
+            for (i, c) in after_key[obj_start + 1..].char_indices() {
                 match c {
                     '{' => depth += 1,
                     '}' => {
@@ -545,7 +545,7 @@ fn extract_json_keys(obj: &str) -> Vec<String> {
     let mut in_string = false;
     let mut key_start = None;
 
-    for (i, c) in obj.chars().enumerate() {
+    for (i, c) in obj.char_indices() {
         match c {
             '"' if !in_string => {
                 in_string = true;

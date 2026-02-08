@@ -193,7 +193,7 @@ impl Source for ProductHuntSource {
             .await
             .map_err(|e| SourceError::Network(e.to_string()))?;
 
-        let ph_items = self.parse_feed(&xml).map_err(|e| SourceError::Parse(e))?;
+        let ph_items = self.parse_feed(&xml).map_err(SourceError::Parse)?;
 
         info!(
             total = ph_items.len(),

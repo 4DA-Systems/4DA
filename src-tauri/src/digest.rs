@@ -245,14 +245,14 @@ impl Digest {
             "Average relevance: {:.1}%\n",
             self.summary.avg_relevance * 100.0
         ));
-        output.push_str("\n");
+        output.push('\n');
 
         // Sources breakdown
         output.push_str("Sources:\n");
         for (source, count) in &self.summary.sources {
             output.push_str(&format!("  - {}: {} items\n", source, count));
         }
-        output.push_str("\n");
+        output.push('\n');
 
         // Top topics
         if !self.summary.top_topics.is_empty() {
@@ -260,7 +260,7 @@ impl Digest {
             for (topic, count) in &self.summary.top_topics {
                 output.push_str(&format!("  - {} ({})\n", topic, count));
             }
-            output.push_str("\n");
+            output.push('\n');
         }
 
         // Signals section (only if any signals detected)
@@ -285,7 +285,7 @@ impl Digest {
                     self.summary.high_count
                 ));
             }
-            output.push_str("\n");
+            output.push('\n');
             for item in &signal_items {
                 let priority_marker = match item.signal_priority.as_deref() {
                     Some("critical") => "!!",
@@ -309,7 +309,7 @@ impl Digest {
                     item.signal_action.as_deref().unwrap_or(&item.title)
                 ));
             }
-            output.push_str("\n");
+            output.push('\n');
         }
 
         output.push_str("───────────────────────────────────────────────────────────────\n");
@@ -333,7 +333,7 @@ impl Digest {
             if let Some(ref action) = item.signal_action {
                 output.push_str(&format!("   Signal: {}\n", action));
             }
-            output.push_str("\n");
+            output.push('\n');
         }
 
         output.push_str("═══════════════════════════════════════════════════════════════\n");
@@ -523,7 +523,7 @@ impl Digest {
             "- **Average Relevance:** {:.1}%\n",
             self.summary.avg_relevance * 100.0
         ));
-        output.push_str("\n");
+        output.push('\n');
 
         // Signals section in markdown
         let md_signal_items: Vec<_> = self
@@ -562,7 +562,7 @@ impl Digest {
                 let action = item.signal_action.as_deref().unwrap_or(&item.title);
                 output.push_str(&format!("- {} **[{}]** {}\n", emoji, priority, action));
             }
-            output.push_str("\n");
+            output.push('\n');
         }
 
         output.push_str("---\n\n");

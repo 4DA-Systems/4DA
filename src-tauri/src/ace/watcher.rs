@@ -664,10 +664,8 @@ impl WatcherStatePersistence {
         if let Some(state) = state {
             let mut restored = 0;
             for path in state.watched_paths {
-                if path.exists() {
-                    if watcher.watch(&path).is_ok() {
-                        restored += 1;
-                    }
+                if path.exists() && watcher.watch(&path).is_ok() {
+                    restored += 1;
                 }
             }
             info!(

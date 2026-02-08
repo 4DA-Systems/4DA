@@ -2,19 +2,14 @@
 use serde::{Deserialize, Serialize};
 
 /// The intent of a query
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
 pub enum QueryIntent {
-    Find,      // Find files/content matching criteria
+    #[default]
+    Find, // Find files/content matching criteria
     Summarize, // Summarize content about a topic
     Compare,   // Compare multiple items
     Timeline,  // Show chronological progression
     Count,     // Count items matching criteria
-}
-
-impl Default for QueryIntent {
-    fn default() -> Self {
-        Self::Find
-    }
 }
 
 /// A structured query parsed from natural language

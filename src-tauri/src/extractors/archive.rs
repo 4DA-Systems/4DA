@@ -235,7 +235,7 @@ impl ArchiveExtractor {
             _ => {
                 // Only try if it looks like text (no null bytes in first 1000 chars)
                 let sample = &content[..content.len().min(1000)];
-                if sample.iter().any(|&b| b == 0) {
+                if sample.contains(&0) {
                     None
                 } else {
                     String::from_utf8(content.to_vec()).ok()

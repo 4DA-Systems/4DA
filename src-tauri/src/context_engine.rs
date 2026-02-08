@@ -66,17 +66,13 @@ pub struct Interest {
 /// Where an interest came from
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "lowercase")]
+#[derive(Default)]
 pub enum InterestSource {
+    #[default]
     Explicit, // User directly added
     GitHub,   // Imported from GitHub
     Import,   // Imported from other sources
     Inferred, // System inferred from behavior
-}
-
-impl Default for InterestSource {
-    fn default() -> Self {
-        InterestSource::Explicit
-    }
 }
 
 // ============================================================================
@@ -331,7 +327,7 @@ impl ContextEngine {
         source: InterestSource,
     ) -> SqliteResult<i64> {
         let conn = self.conn.lock();
-        let embedding_blob = embedding.map(|e| embedding_to_blob(e));
+        let embedding_blob = embedding.map(embedding_to_blob);
         let source_str = match source {
             InterestSource::Explicit => "explicit",
             InterestSource::GitHub => "github",

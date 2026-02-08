@@ -270,7 +270,7 @@ impl ACE {
     pub fn is_watching(&self) -> bool {
         self.watcher
             .as_ref()
-            .map_or(false, |w| w.lock().is_watching())
+            .is_some_and(|w| w.lock().is_watching())
     }
 
     /// Analyze git repositories in the given paths
@@ -1592,11 +1592,9 @@ pub fn load_topic_embeddings(
         })
         .map_err(|e| e.to_string())?;
 
-    for row in rows {
-        if let Ok((topic, blob)) = row {
-            let embedding = blob_to_embedding(&blob);
-            result.insert(topic, embedding);
-        }
+    for (topic, blob) in rows.flatten() {
+        let embedding = blob_to_embedding(&blob);
+        result.insert(topic, embedding);
     }
 
     debug!(
