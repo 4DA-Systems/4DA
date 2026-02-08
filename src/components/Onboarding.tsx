@@ -80,7 +80,7 @@ export function Onboarding({ onComplete }: OnboardingProps) {
       if (status.running && status.models.length > 0) {
         setSelectedOllamaModel(status.models[0]);
       }
-    } catch (e) {
+    } catch {
       setOllamaStatus({ running: false, version: null, models: [], base_url: 'http://localhost:11434' });
     }
     setIsCheckingOllama(false);
@@ -197,7 +197,7 @@ export function Onboarding({ onComplete }: OnboardingProps) {
         baseUrl: 'http://localhost:11434',
       });
       nextStep();
-    } catch (e) {
+    } catch {
       // Even if this fails, let them continue
       nextStep();
     }
@@ -303,6 +303,7 @@ export function Onboarding({ onComplete }: OnboardingProps) {
     if (step === 'first-scan' && !scanProgress && !isScanning) {
       runFirstScan();
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- only trigger scan when step changes to first-scan
   }, [step]);
 
   const removeInterest = (interest: string) => {

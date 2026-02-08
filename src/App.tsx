@@ -87,7 +87,7 @@ function App() {
   const [showSplash, setShowSplash] = useState(true);
   const [showSettings, setShowSettings] = useState(false);
   // Result filtering and sorting state
-  const [sourceFilters, setSourceFilters] = useState<Set<string>>(new Set(['hackernews', 'arxiv', 'reddit']));
+  const [sourceFilters, setSourceFilters] = useState<Set<string>>(new Set(['hackernews', 'arxiv', 'reddit', 'github', 'rss', 'youtube', 'twitter', 'producthunt']));
   const [sortBy, setSortBy] = useState<'score' | 'date'>('score');
   const [showOnlyRelevant, setShowOnlyRelevant] = useState(false);
 
@@ -188,6 +188,7 @@ function App() {
     if (settingsForm.provider === 'ollama') {
       checkOllamaStatus(settingsForm.baseUrl || undefined);
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- only re-check when provider changes, not on every baseUrl keystroke
   }, [settingsForm.provider, checkOllamaStatus]);
 
   // AI Briefing state
@@ -347,6 +348,7 @@ function App() {
 
       return () => clearTimeout(briefingTimer);
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- trigger on analysis complete and count change, not on full results array
   }, [state.analysisComplete, state.relevanceResults.length, autoBriefingEnabled, aiBriefing.loading]);
 
   return (
@@ -744,26 +746,32 @@ function App() {
               {/* Filter Bar - Polished */}
               {state.analysisComplete && (
                 <div className="flex flex-wrap items-center gap-3 pt-3 border-t border-[#2A2A2A]">
-                  {/* Source Filters */}
-                  <div className="flex items-center gap-2 bg-[#1F1F1F] px-3 py-1.5 rounded-lg">
+                  {/* Source Filters - dynamic based on results */}
+                  <div className="flex items-center gap-2 bg-[#1F1F1F] px-3 py-1.5 rounded-lg flex-wrap">
                     <span className="text-xs text-gray-500">Sources:</span>
-                    {[
-                      { id: 'hackernews', label: 'HN' },
-                      { id: 'arxiv', label: 'arXiv' },
-                      { id: 'reddit', label: 'Reddit' },
-                    ].map(source => (
-                      <button
-                        key={source.id}
-                        onClick={() => toggleSourceFilter(source.id)}
-                        className={`px-2 py-1 text-xs rounded-lg transition-all ${
-                          sourceFilters.has(source.id)
-                            ? 'bg-orange-500/20 text-orange-400 border border-orange-500/30'
-                            : 'text-gray-500 hover:text-gray-300'
-                        }`}
-                      >
-                        {source.label}
-                      </button>
-                    ))}
+                    {(() => {
+                      const sourceLabels: Record<string, string> = {
+                        hackernews: 'HN', arxiv: 'arXiv', reddit: 'Reddit',
+                        github: 'GitHub', rss: 'RSS', youtube: 'YouTube',
+                        twitter: 'Twitter', producthunt: 'PH',
+                      };
+                      const presentSources = [...new Set(state.relevanceResults.map(r => r.source_type || 'hackernews'))];
+                      return presentSources
+                        .sort((a, b) => (sourceLabels[a] || a).localeCompare(sourceLabels[b] || b))
+                        .map(id => (
+                        <button
+                          key={id}
+                          onClick={() => toggleSourceFilter(id)}
+                          className={`px-2 py-1 text-xs rounded-lg transition-all ${
+                            sourceFilters.has(id)
+                              ? 'bg-orange-500/20 text-orange-400 border border-orange-500/30'
+                              : 'text-gray-500 hover:text-gray-300'
+                          }`}
+                        >
+                          {sourceLabels[id] || id}
+                        </button>
+                      ));
+                    })()}
                   </div>
 
                   {/* Sort */}

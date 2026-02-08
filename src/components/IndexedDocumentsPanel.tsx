@@ -115,9 +115,10 @@ export function IndexedDocumentsPanel({ onStatusChange }: IndexedDocumentsPanelP
     }
   };
 
-  // Load on mount
+  // Load on mount and when filter changes
   useEffect(() => {
     loadDocuments();
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- loadDocuments is stable via useCallback, only re-run on filter change
   }, [filterType]);
 
   // Handle search on Enter
