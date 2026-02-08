@@ -32,7 +32,7 @@ fn main() {
             img.put_pixel(x, y, Rgb([0, 0, 0]));
         }
         // Middle of H
-        if y >= 45 && y <= 55 {
+        if (45..=55).contains(&y) {
             for x in 50..110 {
                 img.put_pixel(x, y, Rgb([0, 0, 0]));
             }

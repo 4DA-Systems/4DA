@@ -1587,7 +1587,7 @@ async fn fetch_all_sources_deep(
                 &format!(
                     "Embedding batch {}/{} ({} items)...",
                     batch_idx + 1,
-                    (total_to_embed + batch_size - 1) / batch_size,
+                    total_to_embed.div_ceil(batch_size),
                     chunk.len()
                 ),
                 all_items.len() + start_idx,
@@ -2092,11 +2092,9 @@ fn chunk_text(text: &str, source_file: &str) -> Vec<(String, String)> {
             continue;
         }
 
-        if current_chunk.len() + para.len() > MAX_CHUNK_SIZE {
-            if !current_chunk.is_empty() {
-                chunks.push((source_file.to_string(), current_chunk.clone()));
-                current_chunk.clear();
-            }
+        if current_chunk.len() + para.len() > MAX_CHUNK_SIZE && !current_chunk.is_empty() {
+            chunks.push((source_file.to_string(), current_chunk.clone()));
+            current_chunk.clear();
         }
 
         if !current_chunk.is_empty() {
@@ -2306,7 +2304,7 @@ fn void_get_particle_detail(id: i64, layer: String) -> Result<serde_json::Value,
                 .get_source_item_by_id(id)
                 .map_err(|e| format!("DB error: {e}"))?
                 .ok_or_else(|| format!("Source item {id} not found"))?;
-            serde_json::to_value(&serde_json::json!({
+            serde_json::to_value(serde_json::json!({
                 "id": item.id,
                 "layer": "source",
                 "source_type": item.source_type,
@@ -2443,8 +2441,8 @@ async fn index_context() -> Result<String, String> {
         let filename = file
             .path
             .split('/')
-            .last()
-            .and_then(|s| s.split('\\').last())
+            .next_back()
+            .and_then(|s| s.split('\\').next_back())
             .unwrap_or(&file.path);
         let chunks = chunk_text(&file.content, filename);
         debug!(target: "4da::context", file = filename, chunks = chunks.len(), "Chunked file");
@@ -5033,7 +5031,7 @@ pub fn run() {
                             let state = get_monitoring_state();
                             monitoring::complete_scheduled_check(
                                 &handle,
-                                &state,
+                                state,
                                 relevant_count,
                                 results.len(),
                                 signal_summary,
@@ -5347,47 +5345,43 @@ async fn run_background_analysis(app: &AppHandle) -> Result<Vec<HNRelevance>, St
         } else {
             // Fetch from API
             let url = format!("https://hacker-news.firebaseio.com/v0/item/{}.json", id);
-            match client.get(&url).send().await {
-                Ok(response) => match response.json::<HNStory>().await {
-                    Ok(story) => {
-                        let title = story.title.unwrap_or_else(|| "[No title]".to_string());
+            if let Ok(response) = client.get(&url).send().await {
+                if let Ok(story) = response.json::<HNStory>().await {
+                    let title = story.title.unwrap_or_else(|| "[No title]".to_string());
+                    emit_progress(
+                        app,
+                        "fetch",
+                        progress,
+                        &format!("Fetching: {}", &truncate_utf8(&title, 35)),
+                        idx + 1,
+                        total_items,
+                    );
+
+                    let content = if let Some(text) = story.text {
+                        text
+                    } else if let Some(ref article_url) = story.url {
                         emit_progress(
                             app,
-                            "fetch",
+                            "scrape",
                             progress,
-                            &format!("Fetching: {}", &truncate_utf8(&title, 35)),
+                            &format!("Scraping: {}", &truncate_utf8(&title, 35)),
                             idx + 1,
                             total_items,
                         );
+                        scrape_article_content(article_url)
+                            .await
+                            .unwrap_or_default()
+                    } else {
+                        String::new()
+                    };
 
-                        let content = if let Some(text) = story.text {
-                            text
-                        } else if let Some(ref article_url) = story.url {
-                            emit_progress(
-                                app,
-                                "scrape",
-                                progress,
-                                &format!("Scraping: {}", &truncate_utf8(&title, 35)),
-                                idx + 1,
-                                total_items,
-                            );
-                            scrape_article_content(article_url)
-                                .await
-                                .unwrap_or_default()
-                        } else {
-                            String::new()
-                        };
-
-                        new_items.push(HNItem {
-                            id: story.id,
-                            title,
-                            url: story.url,
-                            content,
-                        });
-                    }
-                    Err(_) => {}
-                },
-                Err(_) => {}
+                    new_items.push(HNItem {
+                        id: story.id,
+                        title,
+                        url: story.url,
+                        content,
+                    });
+                }
             }
         }
     }
@@ -6047,7 +6041,7 @@ async fn run_deep_initial_scan_impl(app: &AppHandle) -> Result<Vec<HNRelevance>,
         0,
         0,
     );
-    let all_items = fetch_all_sources_deep(&db, app, 100).await?;
+    let all_items = fetch_all_sources_deep(db, app, 100).await?;
     info!(target: "4da::analysis", items = all_items.len(), "Deep fetched items from all sources");
 
     emit_progress(
@@ -6343,7 +6337,7 @@ async fn run_multi_source_analysis_impl(app: &AppHandle) -> Result<Vec<HNRelevan
 
     // Step 2: Fetch from all sources (50 items per source for comprehensive coverage)
     emit_progress(app, "fetch", 0.1, "Fetching from all sources...", 0, 0);
-    let all_items = fetch_all_sources(&db, app, 50).await?;
+    let all_items = fetch_all_sources(db, app, 50).await?;
     info!(target: "4da::analysis", items = all_items.len(), "Fetched items from all sources");
 
     // Step 3: Load user context

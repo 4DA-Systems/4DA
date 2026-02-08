@@ -102,7 +102,7 @@ impl OfficeExtractor {
                 for row in range.rows() {
                     let row_text: Vec<String> = row
                         .iter()
-                        .map(|cell| cell_to_string(cell))
+                        .map(cell_to_string)
                         .filter(|s| !s.is_empty())
                         .collect();
 
