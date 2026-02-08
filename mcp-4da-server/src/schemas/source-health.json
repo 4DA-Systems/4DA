@@ -1,0 +1,17 @@
+{
+  "name": "source_health",
+  "description": "Diagnose the health of 4DA's content sources.\nReturns:\n- Per-source status (healthy/degraded/failing)\n- Recent fetch statistics\n- Data quality metrics\n- Error patterns detected\n- Recommendations for fixes\n\nUse this when content seems stale or sources aren't working.",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "source": {
+        "type": "string",
+        "description": "Specific source to analyze (optional, all if not specified)"
+      },
+      "hours": {
+        "type": "number",
+        "description": "Hours to analyze (default: 24)"
+      }
+    }
+  }
+}

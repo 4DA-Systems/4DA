@@ -1,27 +1,20 @@
-//! ACE - Autonomous Context Engine
+//! ACE - Autonomous Context Engine (Simplified)
 //!
 //! The brain of 4DA. Implements autonomous context detection with:
 //! - Project manifest scanning (Cargo.toml, package.json, etc.)
 //! - Real-time file watching for context updates
 //! - Git history analysis
-//! - Behavior learning from user interactions
-//! - Confidence scoring on all signals
-//! - Cross-validation between sources
-//! - Graceful degradation
+//! - Embedding-based semantic search
+//!
+//! Note: Advanced behavior learning, health monitoring, anomaly detection,
+//! and validation are archived in _future/ace/ for potential future use.
 //!
 //! ACE always hits its mark.
 
-pub mod anomaly;
-pub mod behavior;
-pub mod confidence;
 pub mod db;
 pub mod embedding;
 pub mod git;
-pub mod health;
-#[cfg(test)]
-mod integration_tests;
 pub mod scanner;
-pub mod validation;
 pub mod watcher;
 
 use parking_lot::Mutex;
@@ -30,45 +23,124 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
+use tracing::{debug, error, info, warn};
 
-pub use anomaly::{Anomaly, AnomalyConfig, AnomalyDetector, AnomalySeverity, AnomalyType};
-pub use behavior::{
-    ActivityPatterns, AntiTopic, BehaviorAction, BehaviorConfig, BehaviorLearner, BehaviorSignal,
-    LearnedBehavior, SourcePreference, TopicAffinity,
-};
-pub use confidence::{ConfidenceScore, SignalConfidence};
-pub use embedding::{EmbeddingConfig, EmbeddingProvider, EmbeddingService};
-pub use git::{CommitInfo, GitAnalyzer, GitSignal};
-pub use health::{
-    AccuracyMetrics, AccuracyTracker, AlertSeverity, AlertType, AuditEntry, AuditEntryType,
-    AuditLogger, ComponentStatus, ContextQuality, DailyMetrics, FallbackChain, FallbackLevel,
-    FeedbackResult, FeedbackType, HealthAlert, HealthMonitor, HealthSnapshot, HealthStatus,
-};
-pub use scanner::{ManifestType, ProjectScanner, ProjectSignal};
-pub use validation::{SignalValidator, ValidatedSignal, ValidationResult};
+pub use embedding::{EmbeddingConfig, EmbeddingService};
+pub use git::{GitAnalyzer, GitSignal};
+pub use scanner::ProjectScanner;
 pub use watcher::{
     FileChange, FileChangeType, FileWatcher, InteractionRateLimiter, RateLimitStatus,
     WatcherConfig, WatcherStatePersistence,
 };
 
 // ============================================================================
+// Behavior Types
+// ============================================================================
+
+/// Types of user behavior we track
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum BehaviorAction {
+    Click { dwell_time_seconds: u64 },
+    Save,
+    Share,
+    Dismiss,
+    MarkIrrelevant,
+    Scroll { visible_seconds: f32 },
+    Ignore,
+}
+
+impl BehaviorAction {
+    pub fn compute_strength(&self) -> f32 {
+        match self {
+            BehaviorAction::Click { dwell_time_seconds } => {
+                let base = 0.5;
+                let dwell_bonus = (*dwell_time_seconds as f32 / 60.0).min(0.5);
+                base + dwell_bonus
+            }
+            BehaviorAction::Save => 1.0,
+            BehaviorAction::Share => 1.0,
+            BehaviorAction::Dismiss => -0.8,
+            BehaviorAction::MarkIrrelevant => -1.0,
+            BehaviorAction::Scroll { visible_seconds } => 0.1 * visible_seconds.min(3.0),
+            BehaviorAction::Ignore => -0.1,
+        }
+    }
+}
+
+/// Behavior signal
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BehaviorSignal {
+    pub item_id: i64,
+    pub action: BehaviorAction,
+    pub timestamp: String,
+    pub item_topics: Vec<String>,
+    pub item_source: String,
+    pub signal_strength: f32,
+}
+
+/// Topic affinity
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TopicAffinity {
+    pub topic: String,
+    pub embedding: Option<Vec<f32>>,
+    pub positive_signals: u32,
+    pub negative_signals: u32,
+    pub total_exposures: u32,
+    pub affinity_score: f32,
+    pub confidence: f32,
+    pub last_interaction: String,
+    pub decay_applied: bool,
+}
+
+/// Anti-topic
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AntiTopic {
+    pub topic: String,
+    pub rejection_count: u32,
+    pub confidence: f32,
+    pub auto_detected: bool,
+    pub user_confirmed: bool,
+    pub first_rejection: String,
+    pub last_rejection: String,
+}
+
+/// Source preference (stub for API compatibility)
+#[allow(dead_code)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SourcePreference {
+    pub source: String,
+    pub score: f32,
+    pub interactions: u32,
+}
+
+/// Learned behavior (stub for API compatibility)
+#[allow(dead_code)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct LearnedBehavior {
+    pub interests: Vec<String>,
+    pub anti_topics: Vec<String>,
+}
+
+/// Activity patterns (stub for API compatibility)
+#[allow(dead_code)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ActivityPatterns {
+    pub hourly_engagement: Vec<f32>,
+    pub daily_engagement: Vec<f32>,
+}
+
+// ============================================================================
 // Core ACE Types
 // ============================================================================
 
-/// The Autonomous Context Engine
+/// The Autonomous Context Engine (simplified)
 pub struct ACE {
     conn: Arc<Mutex<Connection>>,
     scanner: ProjectScanner,
-    validator: SignalValidator,
     git_analyzer: GitAnalyzer,
     watcher: Option<Mutex<FileWatcher>>,
     watcher_persistence: Option<WatcherStatePersistence>,
-    behavior_learner: BehaviorLearner,
-    health_monitor: Mutex<HealthMonitor>,
-    fallback_chain: Mutex<FallbackChain>,
-    audit_logger: Mutex<AuditLogger>,
-    accuracy_tracker: Mutex<AccuracyTracker>,
-    anomaly_detector: Mutex<AnomalyDetector>,
     embedding_service: Option<Mutex<EmbeddingService>>,
     rate_limiter: InteractionRateLimiter,
 }
@@ -97,11 +169,11 @@ pub enum TechCategory {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "lowercase")]
 pub enum DetectionSource {
-    Manifest,      // From package.json, Cargo.toml, etc.
-    FileExtension, // From file type counts
-    FileContent,   // From imports, code analysis
-    GitHistory,    // From commit patterns
-    UserExplicit,  // User declared
+    Manifest,
+    FileExtension,
+    FileContent,
+    GitHistory,
+    UserExplicit,
 }
 
 /// Active topic detected from current work
@@ -125,62 +197,6 @@ pub enum TopicSource {
     ActivityTracker,
 }
 
-/// Exclusion with strength levels
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Exclusion {
-    pub topic: String,
-    pub strength: ExclusionStrength,
-    pub source: ExclusionSource,
-    pub reason: Option<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Copy)]
-#[serde(rename_all = "lowercase")]
-pub enum ExclusionStrength {
-    Soft,     // Reduce score by 50%
-    Hard,     // Reduce score by 90%
-    Absolute, // Score = 0, never show
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-#[serde(rename_all = "lowercase")]
-pub enum ExclusionSource {
-    UserExplicit,
-    LearnedHard,
-    LearnedSoft,
-}
-
-impl ExclusionStrength {
-    pub fn apply_to_score(&self, base_score: f32) -> f32 {
-        match self {
-            ExclusionStrength::Soft => base_score * 0.5,
-            ExclusionStrength::Hard => base_score * 0.1,
-            ExclusionStrength::Absolute => 0.0,
-        }
-    }
-}
-
-/// System health status
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SystemHealth {
-    pub project_scanner: ComponentHealth,
-    pub file_watcher: ComponentHealth,
-    pub git_analyzer: ComponentHealth,
-    pub behavior_learner: ComponentHealth,
-    pub overall_status: HealthStatus,
-    pub context_quality: ContextQuality,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ComponentHealth {
-    pub status: HealthStatus,
-    pub last_success: Option<String>,
-    pub error_count: u32,
-    pub last_error: Option<String>,
-}
-
-// HealthStatus and ContextQuality are imported from health.rs
-
 // ============================================================================
 // ACE Implementation
 // ============================================================================
@@ -188,48 +204,34 @@ pub struct ComponentHealth {
 impl ACE {
     /// Create a new ACE instance
     pub fn new(conn: Arc<Mutex<Connection>>) -> Result<Self, String> {
-        // Run migrations
         db::migrate(&conn)?;
 
         let scanner = ProjectScanner::new();
-        let validator = SignalValidator::new();
         let git_analyzer = GitAnalyzer::default();
-        let behavior_learner = BehaviorLearner::default();
-        let health_monitor = HealthMonitor::new(conn.clone());
-        let fallback_chain = FallbackChain::new();
-        let audit_logger = AuditLogger::new(conn.clone());
-        let accuracy_tracker = AccuracyTracker::new(conn.clone());
-        let anomaly_detector = AnomalyDetector::new(conn.clone(), AnomalyConfig::default());
         let watcher_persistence = WatcherStatePersistence::new(conn.clone()).ok();
 
-        // Initialize embedding service with mock provider by default
-        // Can be configured later with real provider
         let embedding_config = EmbeddingConfig::default();
         let embedding_service = EmbeddingService::new(embedding_config, conn.clone());
 
-        // Rate limiter: 1000 global, 100 per source, per minute
         let rate_limiter = InteractionRateLimiter::new(1000, 100, 60);
 
-        // Initialize file watcher (empty, ready to add paths)
         let watcher_config = WatcherConfig::default();
         let watcher = FileWatcher::new(watcher_config);
 
         Ok(Self {
             conn,
             scanner,
-            validator,
             git_analyzer,
             watcher: Some(Mutex::new(watcher)),
             watcher_persistence,
-            behavior_learner,
-            health_monitor: Mutex::new(health_monitor),
-            fallback_chain: Mutex::new(fallback_chain),
-            audit_logger: Mutex::new(audit_logger),
-            accuracy_tracker: Mutex::new(accuracy_tracker),
-            anomaly_detector: Mutex::new(anomaly_detector),
             embedding_service: Some(Mutex::new(embedding_service)),
             rate_limiter,
         })
+    }
+
+    /// Get the database connection
+    pub fn get_conn(&self) -> &Arc<Mutex<Connection>> {
+        &self.conn
     }
 
     /// Start file watching for real-time context updates
@@ -237,15 +239,13 @@ impl ACE {
         let config = WatcherConfig::default();
         let mut watcher = FileWatcher::new(config);
 
-        // Set up callback to process file changes
         let conn = self.conn.clone();
         watcher.set_callback(move |changes| {
             if let Err(e) = process_file_changes(&conn, &changes) {
-                println!("[ACE/Watcher] Error processing changes: {}", e);
+                error!(target: "ace::watcher", error = %e, "Error processing file changes");
             }
         });
 
-        // Watch each path
         for path in paths {
             if path.exists() {
                 watcher.watch(path)?;
@@ -253,7 +253,7 @@ impl ACE {
         }
 
         self.watcher = Some(Mutex::new(watcher));
-        println!("[ACE] File watching started for {} paths", paths.len());
+        info!(target: "ace::watcher", path_count = paths.len(), "File watching started");
         Ok(())
     }
 
@@ -263,7 +263,7 @@ impl ACE {
             watcher.lock().stop();
         }
         self.watcher = None;
-        println!("[ACE] File watching stopped");
+        info!(target: "ace::watcher", "File watching stopped");
     }
 
     /// Check if file watching is active
@@ -282,39 +282,34 @@ impl ACE {
                 continue;
             }
 
-            // Find git repos in this path
             let repos = self.git_analyzer.find_repos(path, 3);
 
             for repo_path in repos {
                 match self.git_analyzer.analyze_repo(&repo_path) {
                     Ok(signal) => {
-                        println!(
-                            "[ACE/Git] Analyzed: {} ({} commits, confidence: {:.0}%)",
-                            signal.repo_name,
-                            signal.recent_commits.len(),
-                            signal.confidence * 100.0
+                        debug!(target: "ace::git",
+                            repo = %signal.repo_name,
+                            commits = signal.recent_commits.len(),
+                            confidence = signal.confidence * 100.0,
+                            "Analyzed git repo"
                         );
                         signals.push(signal);
                     }
                     Err(e) => {
-                        println!("[ACE/Git] Failed to analyze {}: {}", repo_path.display(), e);
+                        warn!(target: "ace::git", path = %repo_path.display(), error = %e, "Failed to analyze repo");
                     }
                 }
             }
         }
 
-        // Store git signals in database
         self.store_git_signals(&signals)?;
-
         Ok(signals)
     }
 
-    /// Store git signals in database
     fn store_git_signals(&self, signals: &[GitSignal]) -> Result<(), String> {
         let conn = self.conn.lock();
 
         for signal in signals {
-            // Store extracted topics as active topics
             for topic in &signal.extracted_topics {
                 conn.execute(
                     "INSERT INTO active_topics (topic, weight, confidence, source, last_seen)
@@ -328,7 +323,6 @@ impl ACE {
                 .map_err(|e| format!("Failed to store git topic: {}", e))?;
             }
 
-            // Store git signal record
             let topics_json = serde_json::to_string(&signal.extracted_topics).unwrap_or_default();
             conn.execute(
                 "INSERT INTO git_signals (repo_path, commit_hash, commit_message, extracted_topics, timestamp)
@@ -346,15 +340,13 @@ impl ACE {
     }
 
     /// Perform autonomous context detection
-    /// This is the main entry point for ACE - scans without requiring user input
     pub fn detect_context(&self, scan_paths: &[PathBuf]) -> Result<AutonomousContext, String> {
-        println!("[ACE] Starting autonomous context detection...");
+        info!(target: "ace::detect", "Starting autonomous context detection");
 
         let mut detected_tech: Vec<DetectedTech> = Vec::new();
         let mut active_topics: Vec<ActiveTopic> = Vec::new();
         let mut projects_found = 0;
 
-        // Scan each path for project manifests
         for path in scan_paths {
             if !path.exists() {
                 continue;
@@ -365,16 +357,15 @@ impl ACE {
                     for signal in signals {
                         projects_found += 1;
 
-                        // Validate signal
-                        let validated = self.validator.validate_project_signal(&signal);
+                        // Simple confidence check (was using validator)
+                        let confidence = 0.8; // Default high confidence for manifest detection
 
-                        if validated.confidence >= 0.3 {
-                            // Extract technologies
+                        if confidence >= 0.3 {
                             for lang in &signal.languages {
                                 detected_tech.push(DetectedTech {
                                     name: lang.clone(),
                                     category: TechCategory::Language,
-                                    confidence: validated.confidence,
+                                    confidence,
                                     source: DetectionSource::Manifest,
                                     evidence: vec![format!(
                                         "Found in {}",
@@ -387,7 +378,7 @@ impl ACE {
                                 detected_tech.push(DetectedTech {
                                     name: framework.clone(),
                                     category: TechCategory::Framework,
-                                    confidence: validated.confidence * 0.9,
+                                    confidence: confidence * 0.9,
                                     source: DetectionSource::Manifest,
                                     evidence: vec![format!(
                                         "Dependency in {}",
@@ -397,12 +388,11 @@ impl ACE {
                             }
 
                             for dep in &signal.dependencies {
-                                // Only include well-known dependencies
                                 if is_notable_dependency(dep) {
                                     detected_tech.push(DetectedTech {
                                         name: dep.clone(),
                                         category: TechCategory::Library,
-                                        confidence: validated.confidence * 0.7,
+                                        confidence: confidence * 0.7,
                                         source: DetectionSource::Manifest,
                                         evidence: vec![format!(
                                             "Dependency in {}",
@@ -412,12 +402,11 @@ impl ACE {
                                 }
                             }
 
-                            // Create active topics from project
                             for lang in &signal.languages {
                                 active_topics.push(ActiveTopic {
                                     topic: lang.clone(),
                                     weight: 0.8,
-                                    confidence: validated.confidence,
+                                    confidence,
                                     source: TopicSource::ProjectManifest,
                                     last_seen: chrono::Utc::now().to_rfc3339(),
                                     embedding: None,
@@ -427,31 +416,28 @@ impl ACE {
                     }
                 }
                 Err(e) => {
-                    println!("[ACE] Warning: Failed to scan {}: {}", path.display(), e);
+                    warn!(target: "ace::detect", path = %path.display(), error = %e, "Failed to scan path");
                 }
             }
         }
 
-        // Deduplicate and merge technologies
         let merged_tech = merge_detected_tech(detected_tech);
 
-        // Compute overall confidence
         let context_confidence = if merged_tech.is_empty() {
-            0.3 // Minimal confidence with no detections
+            0.3
         } else {
             let avg_confidence: f32 =
                 merged_tech.iter().map(|t| t.confidence).sum::<f32>() / merged_tech.len() as f32;
-            avg_confidence.min(0.95) // Cap at 0.95 for inferred
+            avg_confidence.min(0.95)
         };
 
-        println!(
-            "[ACE] Detected {} technologies from {} projects (confidence: {:.0}%)",
-            merged_tech.len(),
-            projects_found,
-            context_confidence * 100.0
+        info!(target: "ace::detect",
+            tech_count = merged_tech.len(),
+            projects = projects_found,
+            confidence = context_confidence * 100.0,
+            "Context detection complete"
         );
 
-        // Store results in database
         self.store_detected_context(&merged_tech, &active_topics)?;
 
         Ok(AutonomousContext {
@@ -463,7 +449,6 @@ impl ACE {
         })
     }
 
-    /// Store detected context in database
     fn store_detected_context(
         &self,
         tech: &[DetectedTech],
@@ -471,7 +456,6 @@ impl ACE {
     ) -> Result<(), String> {
         let conn = self.conn.lock();
 
-        // Store detected technologies
         for t in tech {
             let source_str = match t.source {
                 DetectionSource::Manifest => "manifest",
@@ -508,7 +492,6 @@ impl ACE {
             .map_err(|e| format!("Failed to store detected tech: {}", e))?;
         }
 
-        // Store active topics
         for topic in topics {
             let source_str = match topic.source {
                 TopicSource::FileContent => "file_content",
@@ -542,9 +525,11 @@ impl ACE {
     /// Get all detected technologies
     pub fn get_detected_tech(&self) -> Result<Vec<DetectedTech>, String> {
         let conn = self.conn.lock();
-        let mut stmt = conn.prepare(
-            "SELECT name, category, confidence, source, evidence FROM detected_tech ORDER BY confidence DESC"
-        ).map_err(|e| e.to_string())?;
+        let mut stmt = conn
+            .prepare(
+                "SELECT name, category, confidence, source, evidence FROM detected_tech ORDER BY confidence DESC",
+            )
+            .map_err(|e| e.to_string())?;
 
         let rows = stmt
             .query_map([], |row| {
@@ -615,67 +600,11 @@ impl ACE {
             .map_err(|e| e.to_string())
     }
 
-    /// Log an audit entry
-    pub fn log_audit(&self, entry: &AuditEntry) -> Result<(), String> {
-        let conn = self.conn.lock();
-        let entry_type_str = match entry.entry_type {
-            AuditEntryType::ContextUpdate => "context_update",
-            AuditEntryType::RelevanceDecision => "relevance_decision",
-            AuditEntryType::ExclusionApplied => "exclusion_applied",
-            AuditEntryType::FeedbackReceived => "feedback_received",
-            AuditEntryType::AnomalyDetected => "anomaly_detected",
-            AuditEntryType::FallbackActivated => "fallback_activated",
-            AuditEntryType::HealthCheck => "health_check",
-            AuditEntryType::ConfigChange => "config_change",
-        };
-
-        conn.execute(
-            "INSERT INTO audit_log (entry_type, action, reason, confidence) VALUES (?1, ?2, ?3, ?4)",
-            rusqlite::params![entry_type_str, entry.action, entry.reason, entry.confidence],
-        ).map_err(|e| format!("Failed to log audit: {}", e))?;
-
-        Ok(())
-    }
-
-    /// Get system health
-    pub fn get_health(&self) -> SystemHealth {
-        // For now, return healthy status - will be enhanced with real checks
-        SystemHealth {
-            project_scanner: ComponentHealth {
-                status: HealthStatus::Healthy,
-                last_success: Some(chrono::Utc::now().to_rfc3339()),
-                error_count: 0,
-                last_error: None,
-            },
-            file_watcher: ComponentHealth {
-                status: HealthStatus::Disabled, // Not implemented yet
-                last_success: None,
-                error_count: 0,
-                last_error: None,
-            },
-            git_analyzer: ComponentHealth {
-                status: HealthStatus::Disabled, // Not implemented yet
-                last_success: None,
-                error_count: 0,
-                last_error: None,
-            },
-            behavior_learner: ComponentHealth {
-                status: HealthStatus::Healthy,
-                last_success: Some(chrono::Utc::now().to_rfc3339()),
-                error_count: 0,
-                last_error: None,
-            },
-            overall_status: HealthStatus::Healthy,
-            context_quality: ContextQuality::Good,
-        }
-    }
-
     // ========================================================================
-    // Behavior Learning Methods (Phase C)
+    // Behavior Learning Methods (Simplified)
     // ========================================================================
 
-    /// Record a user interaction (click, save, dismiss, etc.)
-    /// Returns Err if rate limited
+    /// Record a user interaction
     pub fn record_interaction(
         &self,
         item_id: i64,
@@ -683,49 +612,44 @@ impl ACE {
         item_topics: Vec<String>,
         item_source: String,
     ) -> Result<(), String> {
-        // Check rate limit
         if !self.rate_limiter.check(&item_source) {
             return Err("Rate limited: too many interactions".to_string());
         }
 
-        let signal = BehaviorLearner::create_signal(
+        let signal_strength = action.compute_strength();
+        let signal = BehaviorSignal {
             item_id,
-            action.clone(),
-            item_topics.clone(),
-            item_source.clone(),
-        );
+            action: action.clone(),
+            timestamp: chrono::Utc::now().to_rfc3339(),
+            item_topics: item_topics.clone(),
+            item_source: item_source.clone(),
+            signal_strength,
+        };
 
-        // Store in database
         self.store_interaction(&signal)?;
-
-        // Update topic affinities
         self.update_topic_affinities(&signal)?;
 
-        // Check for anti-topic updates
         if signal.signal_strength < -0.5 {
             self.update_anti_topics(&item_topics, signal.signal_strength)?;
         }
 
-        // Update source preferences
         self.update_source_preference(&item_source, signal.signal_strength)?;
 
-        // Update activity patterns
-        self.update_activity_patterns(signal.signal_strength)?;
-
-        println!(
-            "[ACE/Behavior] Recorded: {:?} on item {} (strength: {:.2})",
-            action, item_id, signal.signal_strength
+        debug!(target: "ace::behavior",
+            action = ?action,
+            item_id = item_id,
+            strength = signal.signal_strength,
+            "Recorded behavior signal"
         );
 
         Ok(())
     }
 
-    /// Get rate limit status for a source
+    /// Get rate limit status
     pub fn get_rate_limit_status(&self, source: &str) -> RateLimitStatus {
         self.rate_limiter.status(source)
     }
 
-    /// Store an interaction in the database
     fn store_interaction(&self, signal: &BehaviorSignal) -> Result<(), String> {
         let conn = self.conn.lock();
 
@@ -753,17 +677,16 @@ impl ACE {
                 signal.item_source,
                 signal.signal_strength
             ],
-        ).map_err(|e| format!("Failed to store interaction: {}", e))?;
+        )
+        .map_err(|e| format!("Failed to store interaction: {}", e))?;
 
         Ok(())
     }
 
-    /// Update topic affinities based on interaction
     fn update_topic_affinities(&self, signal: &BehaviorSignal) -> Result<(), String> {
         let conn = self.conn.lock();
 
         for topic in &signal.item_topics {
-            // Upsert topic affinity
             if signal.signal_strength > 0.0 {
                 conn.execute(
                     "INSERT INTO topic_affinities (topic, positive_signals, total_exposures, last_interaction)
@@ -798,9 +721,9 @@ impl ACE {
                         updated_at = datetime('now')",
                     rusqlite::params![topic],
                 )
-            }.map_err(|e| format!("Failed to update topic affinity: {}", e))?;
+            }
+            .map_err(|e| format!("Failed to update topic affinity: {}", e))?;
 
-            // Recompute affinity score
             conn.execute(
                 "UPDATE topic_affinities SET
                     affinity_score = CASE
@@ -812,16 +735,16 @@ impl ACE {
                     confidence = MIN(CAST(total_exposures AS REAL) / 20.0, 1.0)
                  WHERE topic = ?1",
                 rusqlite::params![topic],
-            ).map_err(|e| format!("Failed to recompute affinity: {}", e))?;
+            )
+            .map_err(|e| format!("Failed to recompute affinity: {}", e))?;
         }
 
         Ok(())
     }
 
-    /// Update anti-topics based on rejections
     fn update_anti_topics(&self, topics: &[String], signal_strength: f32) -> Result<(), String> {
         if signal_strength >= -0.5 {
-            return Ok(()); // Not a strong rejection
+            return Ok(());
         }
 
         let conn = self.conn.lock();
@@ -843,10 +766,9 @@ impl ACE {
         Ok(())
     }
 
-    /// Update source preferences
     fn update_source_preference(&self, source: &str, signal_strength: f32) -> Result<(), String> {
         let conn = self.conn.lock();
-        let alpha = 0.1; // Learning rate
+        let alpha = 0.1;
 
         conn.execute(
             "INSERT INTO source_preferences (source, score, interactions, last_interaction)
@@ -863,55 +785,7 @@ impl ACE {
         Ok(())
     }
 
-    /// Update activity patterns
-    fn update_activity_patterns(&self, signal_strength: f32) -> Result<(), String> {
-        let conn = self.conn.lock();
-        let now = chrono::Utc::now();
-        let hour = now.format("%H").to_string().parse::<usize>().unwrap_or(0);
-        let day = now.format("%w").to_string().parse::<usize>().unwrap_or(0);
-
-        // Get current patterns
-        let (hourly, daily, total): (String, String, u32) = conn.query_row(
-            "SELECT hourly_engagement, daily_engagement, total_tracked FROM activity_patterns WHERE id = 1",
-            [],
-            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
-        ).unwrap_or_else(|_| (
-            "[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]".to_string(),
-            "[0,0,0,0,0,0,0]".to_string(),
-            0
-        ));
-
-        // Parse and update
-        let mut hourly_arr: Vec<f32> =
-            serde_json::from_str(&hourly).unwrap_or_else(|_| vec![0.0; 24]);
-        let mut daily_arr: Vec<f32> = serde_json::from_str(&daily).unwrap_or_else(|_| vec![0.0; 7]);
-
-        let alpha = 0.05;
-        if hour < 24 {
-            hourly_arr[hour] = hourly_arr[hour] * (1.0 - alpha) + signal_strength * alpha;
-        }
-        if day < 7 {
-            daily_arr[day] = daily_arr[day] * (1.0 - alpha) + signal_strength * alpha;
-        }
-
-        let hourly_json = serde_json::to_string(&hourly_arr).unwrap_or_default();
-        let daily_json = serde_json::to_string(&daily_arr).unwrap_or_default();
-
-        conn.execute(
-            "UPDATE activity_patterns SET
-                hourly_engagement = ?1,
-                daily_engagement = ?2,
-                total_tracked = ?3,
-                updated_at = datetime('now')
-             WHERE id = 1",
-            rusqlite::params![hourly_json, daily_json, total + 1],
-        )
-        .map_err(|e| format!("Failed to update activity patterns: {}", e))?;
-
-        Ok(())
-    }
-
-    /// Get topic affinities from the database
+    /// Get topic affinities
     pub fn get_topic_affinities(&self) -> Result<Vec<TopicAffinity>, String> {
         let conn = self.conn.lock();
         let mut stmt = conn
@@ -945,7 +819,7 @@ impl ACE {
             .map_err(|e| e.to_string())
     }
 
-    /// Get anti-topics that meet the threshold
+    /// Get anti-topics
     pub fn get_anti_topics(&self, min_rejections: u32) -> Result<Vec<AntiTopic>, String> {
         let conn = self.conn.lock();
         let mut stmt = conn
@@ -976,13 +850,12 @@ impl ACE {
             .map_err(|e| e.to_string())
     }
 
-    /// Get behavior modifier for an item based on learned preferences
+    /// Get behavior modifier for an item
     pub fn get_behavior_modifier(&self, topics: &[String], source: &str) -> Result<f32, String> {
         let conn = self.conn.lock();
         let mut modifier = 0.0;
         let mut count = 0;
 
-        // Get topic affinities
         for topic in topics {
             let result: Result<(f32, f32), _> = conn.query_row(
                 "SELECT affinity_score, confidence FROM topic_affinities WHERE topic = ?1",
@@ -995,12 +868,10 @@ impl ACE {
             }
         }
 
-        // Average topic contribution
         if count > 0 {
             modifier /= count as f32;
         }
 
-        // Add source preference (weighted less)
         let source_score: f32 = conn
             .query_row(
                 "SELECT score FROM source_preferences WHERE source = ?1",
@@ -1021,12 +892,10 @@ impl ACE {
 
         let conn = self.conn.lock();
 
-        // Get total interactions
         let total_interactions: u32 = conn
             .query_row("SELECT COUNT(*) FROM interactions", [], |row| row.get(0))
             .unwrap_or(0);
 
-        // Get source preferences
         let mut stmt = conn
             .prepare(
                 "SELECT source, score, interactions FROM source_preferences ORDER BY score DESC",
@@ -1045,10 +914,8 @@ impl ACE {
             .collect::<Result<Vec<_>, _>>()
             .map_err(|e| e.to_string())?;
 
-        // Compute learning confidence
         let learning_confidence = (total_interactions as f32 / 100.0).min(0.95);
 
-        // Get interests (strong positive affinities)
         let interests: Vec<String> = affinities
             .iter()
             .filter(|a| a.affinity_score > 0.3 && a.confidence > 0.5)
@@ -1065,211 +932,72 @@ impl ACE {
         })
     }
 
-    /// Confirm an anti-topic (user explicitly agrees)
+    /// Confirm an anti-topic
     pub fn confirm_anti_topic(&self, topic: &str) -> Result<(), String> {
         let conn = self.conn.lock();
         conn.execute(
             "UPDATE anti_topics SET user_confirmed = 1, confidence = 1.0, updated_at = datetime('now')
              WHERE topic = ?1",
             [topic],
-        ).map_err(|e| format!("Failed to confirm anti-topic: {}", e))?;
+        )
+        .map_err(|e| format!("Failed to confirm anti-topic: {}", e))?;
         Ok(())
     }
 
-    /// Apply temporal decay to topic affinities
+    /// Apply temporal decay
+    /// Note: SQLite doesn't have native POWER() function, so we compute decay in Rust
     pub fn apply_behavior_decay(&self) -> Result<usize, String> {
         let conn = self.conn.lock();
 
-        // Apply decay based on last_interaction timestamp
-        // Half-life of 30 days
-        let updated = conn.execute(
-            "UPDATE topic_affinities SET
-                affinity_score = affinity_score * POWER(0.5, (julianday('now') - julianday(last_interaction)) / 30.0),
-                confidence = confidence * POWER(0.5, (julianday('now') - julianday(last_interaction)) / 30.0),
-                decay_applied = 1
-             WHERE decay_applied = 0
-               AND julianday('now') - julianday(last_interaction) > 1",
-            [],
-        ).map_err(|e| format!("Failed to apply behavior decay: {}", e))?;
+        // First, fetch all topics that need decay applied
+        let mut stmt = conn
+            .prepare(
+                "SELECT topic, affinity_score, confidence, julianday('now') - julianday(last_interaction) as days_since
+                 FROM topic_affinities
+                 WHERE decay_applied = 0
+                   AND julianday('now') - julianday(last_interaction) > 1",
+            )
+            .map_err(|e| format!("Failed to prepare decay query: {}", e))?;
+
+        let rows: Vec<(String, f32, f32, f64)> = stmt
+            .query_map([], |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, f32>(1)?,
+                    row.get::<_, f32>(2)?,
+                    row.get::<_, f64>(3)?,
+                ))
+            })
+            .map_err(|e| format!("Failed to query topics for decay: {}", e))?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|e| format!("Failed to collect decay rows: {}", e))?;
+
+        let mut updated = 0;
+
+        // Apply decay using Rust's pow function
+        for (topic, affinity_score, confidence, days_since) in &rows {
+            let decay_factor = 0.5_f32.powf((*days_since as f32) / 30.0);
+            let new_affinity = affinity_score * decay_factor;
+            let new_confidence = confidence * decay_factor;
+
+            conn.execute(
+                "UPDATE topic_affinities SET
+                    affinity_score = ?1,
+                    confidence = ?2,
+                    decay_applied = 1
+                 WHERE topic = ?3",
+                rusqlite::params![new_affinity, new_confidence, topic],
+            )
+            .map_err(|e| format!("Failed to update topic decay: {}", e))?;
+
+            updated += 1;
+        }
 
         if updated > 0 {
-            println!(
-                "[ACE/Behavior] Applied decay to {} topic affinities",
-                updated
-            );
+            debug!(target: "ace::behavior", updated = updated, "Applied decay to topic affinities");
         }
 
         Ok(updated)
-    }
-
-    // ========================================================================
-    // Phase D: Health Monitoring & Validation
-    // ========================================================================
-
-    /// Perform a complete health check
-    pub fn check_health(&self) -> HealthSnapshot {
-        let mut monitor = self.health_monitor.lock();
-        let snapshot = monitor.check_health();
-
-        // Update fallback chain based on health
-        let mut chain = self.fallback_chain.lock();
-        chain.update_from_health(&snapshot);
-
-        // Log to audit trail
-        let mut logger = self.audit_logger.lock();
-        let _ = logger.log(AuditEntry {
-            id: None,
-            timestamp: chrono::Utc::now().to_rfc3339(),
-            entry_type: AuditEntryType::HealthCheck,
-            action: format!("Health check: {:?}", snapshot.overall_status),
-            reason: format!("Quality: {:?}", snapshot.context_quality),
-            contributing_factors: snapshot.components.iter().map(|c| c.name.clone()).collect(),
-            before_state: None,
-            after_state: Some(format!("{:?}", snapshot.overall_status)),
-            confidence: 1.0,
-        });
-
-        snapshot
-    }
-
-    /// Get current fallback level
-    pub fn get_fallback_level(&self) -> FallbackLevel {
-        self.fallback_chain.lock().current_level()
-    }
-
-    /// Get available features at current fallback level
-    pub fn get_available_features(&self) -> Vec<String> {
-        self.fallback_chain.lock().available_features()
-    }
-
-    /// Get recent health alerts
-    pub fn get_health_alerts(&self) -> Vec<HealthAlert> {
-        let monitor = self.health_monitor.lock();
-        let accuracy = self.accuracy_tracker.lock();
-
-        let mut alerts = monitor.get_recent_alerts();
-        alerts.extend(accuracy.check_alerts());
-        alerts
-    }
-
-    /// Log a context update to audit trail
-    pub fn audit_context_update(
-        &self,
-        action: &str,
-        topics: &[String],
-        confidence: f32,
-    ) -> Result<i64, String> {
-        let mut logger = self.audit_logger.lock();
-        logger.log_context_update(action, topics, confidence)
-    }
-
-    /// Log a relevance decision to audit trail
-    pub fn audit_relevance_decision(
-        &self,
-        item_id: i64,
-        score: f32,
-        matches: &[String],
-        confidence: f32,
-    ) -> Result<i64, String> {
-        let mut logger = self.audit_logger.lock();
-        logger.log_relevance_decision(item_id, score, matches, confidence)
-    }
-
-    /// Log an anomaly detection
-    pub fn audit_anomaly(
-        &self,
-        anomaly_type: &str,
-        topic: &str,
-        confidence: f32,
-    ) -> Result<i64, String> {
-        let mut logger = self.audit_logger.lock();
-        logger.log_anomaly(anomaly_type, topic, confidence)
-    }
-
-    /// Get recent audit entries
-    pub fn get_audit_entries(&self, limit: usize) -> Vec<AuditEntry> {
-        self.audit_logger.lock().get_recent(limit)
-    }
-
-    /// Query audit log by type
-    pub fn query_audit_log(
-        &self,
-        entry_type: Option<AuditEntryType>,
-        limit: usize,
-    ) -> Result<Vec<AuditEntry>, String> {
-        self.audit_logger.lock().query(entry_type, limit)
-    }
-
-    /// Explain a relevance decision for an item
-    pub fn explain_decision(&self, item_id: i64) -> Result<Option<String>, String> {
-        self.audit_logger.lock().explain_decision(item_id)
-    }
-
-    /// Record feedback for accuracy tracking
-    pub fn record_accuracy_feedback(&self, result: FeedbackResult) {
-        let mut tracker = self.accuracy_tracker.lock();
-        tracker.record_feedback(result);
-    }
-
-    /// Get current accuracy metrics
-    pub fn get_accuracy_metrics(&self) -> AccuracyMetrics {
-        self.accuracy_tracker.lock().compute_metrics()
-    }
-
-    /// Get accuracy history
-    pub fn get_accuracy_history(&self, days: u32) -> Result<Vec<DailyMetrics>, String> {
-        self.accuracy_tracker.lock().get_history(days)
-    }
-
-    /// Persist accuracy metrics to database
-    pub fn persist_accuracy_metrics(&self) -> Result<(), String> {
-        self.accuracy_tracker.lock().persist_metrics()
-    }
-
-    /// Check if accuracy targets are being met
-    pub fn meets_accuracy_targets(&self) -> bool {
-        self.accuracy_tracker.lock().compute_metrics().meets_targets
-    }
-
-    /// Get comprehensive system status
-    pub fn get_system_status(&self) -> SystemStatus {
-        let health = self.check_health();
-        let fallback_level = self.get_fallback_level();
-        let accuracy = self.get_accuracy_metrics();
-        let alerts = self.get_health_alerts();
-
-        SystemStatus {
-            health_snapshot: health,
-            fallback_level,
-            accuracy_metrics: accuracy,
-            active_alerts: alerts,
-            available_features: self.get_available_features(),
-        }
-    }
-
-    // ========================================================================
-    // Anomaly Detection Methods
-    // ========================================================================
-
-    /// Run all anomaly detection checks
-    pub fn detect_anomalies(&self) -> Vec<Anomaly> {
-        let mut detector = self.anomaly_detector.lock();
-        detector.detect_all()
-    }
-
-    /// Get unresolved anomalies
-    pub fn get_unresolved_anomalies(&self) -> Result<Vec<Anomaly>, String> {
-        self.anomaly_detector.lock().get_unresolved()
-    }
-
-    /// Resolve an anomaly by ID
-    pub fn resolve_anomaly(&self, anomaly_id: i64) -> Result<(), String> {
-        self.anomaly_detector.lock().resolve(anomaly_id)
-    }
-
-    /// Get recent anomalies
-    pub fn get_recent_anomalies(&self, limit: usize) -> Vec<Anomaly> {
-        self.anomaly_detector.lock().get_recent(limit)
     }
 
     // ========================================================================
@@ -1284,7 +1012,7 @@ impl ACE {
         }
     }
 
-    /// Find similar topics to a query
+    /// Find similar topics
     pub fn find_similar_topics(
         &self,
         query: &str,
@@ -1299,12 +1027,6 @@ impl ACE {
         }
     }
 
-    /// Configure embedding provider
-    pub fn configure_embedding(&mut self, config: EmbeddingConfig) {
-        let service = EmbeddingService::new(config, self.conn.clone());
-        self.embedding_service = Some(Mutex::new(service));
-    }
-
     /// Check if embedding service is operational
     pub fn is_embedding_operational(&self) -> bool {
         self.embedding_service
@@ -1317,7 +1039,7 @@ impl ACE {
     // Watcher Persistence Methods
     // ========================================================================
 
-    /// Save watcher state for restart recovery
+    /// Save watcher state
     pub fn save_watcher_state(&self) -> Result<(), String> {
         if let (Some(persistence), Some(watcher)) = (&self.watcher_persistence, &self.watcher) {
             let watcher_guard = watcher.lock();
@@ -1327,26 +1049,7 @@ impl ACE {
         }
     }
 
-    /// Restore watcher from saved state
-    pub fn restore_watcher_state(&mut self) -> Result<usize, String> {
-        if let Some(persistence) = &self.watcher_persistence {
-            if self.watcher.is_none() {
-                let config = WatcherConfig::default();
-                self.watcher = Some(Mutex::new(FileWatcher::new(config)));
-            }
-
-            if let Some(watcher) = &self.watcher {
-                let mut watcher_guard = watcher.lock();
-                persistence.restore(&mut watcher_guard)
-            } else {
-                Err("Failed to create watcher".to_string())
-            }
-        } else {
-            Err("Watcher persistence not initialized".to_string())
-        }
-    }
-
-    /// Clear saved watcher state
+    /// Clear watcher state
     pub fn clear_watcher_state(&self) -> Result<(), String> {
         if let Some(persistence) = &self.watcher_persistence {
             persistence.clear()
@@ -1356,15 +1059,9 @@ impl ACE {
     }
 }
 
-/// Comprehensive system status
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SystemStatus {
-    pub health_snapshot: HealthSnapshot,
-    pub fallback_level: FallbackLevel,
-    pub accuracy_metrics: AccuracyMetrics,
-    pub active_alerts: Vec<HealthAlert>,
-    pub available_features: Vec<String>,
-}
+// ============================================================================
+// Additional Types
+// ============================================================================
 
 /// Summary of learned behavior
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1399,7 +1096,7 @@ pub struct AutonomousContext {
 // Helper Functions
 // ============================================================================
 
-/// Check if a dependency is notable enough to include
+/// Check if a dependency is notable
 fn is_notable_dependency(name: &str) -> bool {
     let notable = [
         // Rust
@@ -1465,7 +1162,7 @@ fn is_notable_dependency(name: &str) -> bool {
     notable.iter().any(|n| name.to_lowercase().contains(n))
 }
 
-/// Merge duplicate detected technologies, keeping highest confidence
+/// Merge duplicate detected technologies
 fn merge_detected_tech(tech: Vec<DetectedTech>) -> Vec<DetectedTech> {
     let mut map: HashMap<String, DetectedTech> = HashMap::new();
 
@@ -1482,7 +1179,11 @@ fn merge_detected_tech(tech: Vec<DetectedTech>) -> Vec<DetectedTech> {
     }
 
     let mut result: Vec<_> = map.into_values().collect();
-    result.sort_by(|a, b| b.confidence.partial_cmp(&a.confidence).unwrap());
+    result.sort_by(|a, b| {
+        b.confidence
+            .partial_cmp(&a.confidence)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
     result
 }
 
@@ -1491,7 +1192,10 @@ fn process_file_changes(
     conn: &Arc<Mutex<Connection>>,
     changes: &[FileChange],
 ) -> Result<(), String> {
+    use crate::extractors::ExtractorRegistry;
+
     let conn = conn.lock();
+    let extractor_registry = ExtractorRegistry::new();
 
     for change in changes {
         let change_type_str = match change.change_type {
@@ -1500,16 +1204,69 @@ fn process_file_changes(
             FileChangeType::Deleted => "deleted",
         };
 
-        // Extract topics from file content (if not deleted)
-        let topics = if change.change_type != FileChangeType::Deleted {
-            watcher::extract_topics_from_file(&change.path).unwrap_or_default()
+        // Extract content based on file type
+        let (topics, extracted_text, source_type) = if change.change_type != FileChangeType::Deleted
+        {
+            // Check if this is a document file that needs extraction
+            let ext = change
+                .path
+                .extension()
+                .and_then(|e| e.to_str())
+                .map(|s| s.to_lowercase())
+                .unwrap_or_default();
+
+            if matches!(
+                ext.as_str(),
+                "pdf"
+                    | "docx"
+                    | "xlsx"
+                    | "zip"
+                    | "tar"
+                    | "gz"
+                    | "tgz"
+                    | "png"
+                    | "jpg"
+                    | "jpeg"
+                    | "tiff"
+                    | "tif"
+                    | "bmp"
+                    | "gif"
+                    | "webp"
+            ) {
+                // Use document extractor
+                match extractor_registry.extract(&change.path) {
+                    Ok(doc) => {
+                        // Extract topics from the extracted text
+                        let topics = watcher::extract_topics_from_content(&doc.text, &ext);
+                        info!(target: "ace::watcher",
+                            path = %change.path.display(),
+                            source_type = %doc.source_type,
+                            word_count = doc.word_count(),
+                            confidence = doc.confidence,
+                            "Extracted document content"
+                        );
+                        (topics, Some(doc.text), doc.source_type)
+                    }
+                    Err(e) => {
+                        warn!(target: "ace::watcher",
+                            path = %change.path.display(),
+                            error = %e,
+                            "Failed to extract document"
+                        );
+                        (Vec::new(), None, "unknown".to_string())
+                    }
+                }
+            } else {
+                // Plain text file - use existing logic
+                let topics = watcher::extract_topics_from_file(&change.path).unwrap_or_default();
+                (topics, None, "text".to_string())
+            }
         } else {
-            Vec::new()
+            (Vec::new(), None, "deleted".to_string())
         };
 
         let topics_json = serde_json::to_string(&topics).unwrap_or_default();
 
-        // Store file signal
         conn.execute(
             "INSERT INTO file_signals (path, change_type, extracted_topics, timestamp)
              VALUES (?1, ?2, ?3, datetime('now'))",
@@ -1517,7 +1274,6 @@ fn process_file_changes(
         )
         .map_err(|e| format!("Failed to store file signal: {}", e))?;
 
-        // Update active topics from file content
         for topic in &topics {
             conn.execute(
                 "INSERT INTO active_topics (topic, weight, confidence, source, last_seen)
@@ -1530,11 +1286,86 @@ fn process_file_changes(
             .map_err(|e| format!("Failed to update active topic: {}", e))?;
         }
 
-        println!(
-            "[ACE/Watcher] Processed: {} ({}, {} topics)",
-            change.path.display(),
-            change_type_str,
-            topics.len()
+        // Store extracted document content in indexed_documents and document_chunks
+        if let Some(text) = extracted_text {
+            if !text.is_empty() {
+                let file_path_str = change.path.to_string_lossy().to_string();
+                let file_name = change
+                    .path
+                    .file_name()
+                    .and_then(|n| n.to_str())
+                    .unwrap_or("unknown")
+                    .to_string();
+                let file_size = std::fs::metadata(&change.path)
+                    .map(|m| m.len() as i64)
+                    .unwrap_or(0);
+                let word_count = text.split_whitespace().count() as i64;
+
+                // Insert or update indexed_documents
+                conn.execute(
+                    "INSERT INTO indexed_documents (file_path, file_name, file_type, file_size, word_count, extraction_confidence, extracted_topics, updated_at)
+                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, datetime('now'))
+                     ON CONFLICT(file_path) DO UPDATE SET
+                        file_name = excluded.file_name,
+                        file_type = excluded.file_type,
+                        file_size = excluded.file_size,
+                        word_count = excluded.word_count,
+                        extraction_confidence = excluded.extraction_confidence,
+                        extracted_topics = excluded.extracted_topics,
+                        updated_at = datetime('now')",
+                    rusqlite::params![
+                        file_path_str,
+                        file_name,
+                        source_type,
+                        file_size,
+                        word_count,
+                        0.8_f64, // Default confidence for successful extraction
+                        topics_json
+                    ],
+                ).ok();
+
+                // Get the document ID
+                if let Ok(doc_id) = conn.query_row(
+                    "SELECT id FROM indexed_documents WHERE file_path = ?1",
+                    rusqlite::params![file_path_str],
+                    |row| row.get::<_, i64>(0),
+                ) {
+                    // Delete old chunks for this document
+                    conn.execute(
+                        "DELETE FROM document_chunks WHERE document_id = ?1",
+                        rusqlite::params![doc_id],
+                    )
+                    .ok();
+
+                    // Split text into chunks (max 1000 words per chunk)
+                    let words: Vec<&str> = text.split_whitespace().collect();
+                    let chunk_size = 1000;
+                    for (i, chunk_words) in words.chunks(chunk_size).enumerate() {
+                        let chunk_text = chunk_words.join(" ");
+                        let chunk_word_count = chunk_words.len() as i64;
+                        conn.execute(
+                            "INSERT INTO document_chunks (document_id, chunk_index, content, word_count)
+                             VALUES (?1, ?2, ?3, ?4)",
+                            rusqlite::params![doc_id, i as i64, chunk_text, chunk_word_count],
+                        ).ok();
+                    }
+
+                    debug!(target: "ace::watcher",
+                        path = %change.path.display(),
+                        doc_id = doc_id,
+                        chunks = (words.len() / chunk_size) + 1,
+                        "Stored document content"
+                    );
+                }
+            }
+        }
+
+        debug!(target: "ace::watcher",
+            path = %change.path.display(),
+            change_type = change_type_str,
+            topic_count = topics.len(),
+            source_type = source_type,
+            "Processed file change"
         );
     }
 
@@ -1542,12 +1373,9 @@ fn process_file_changes(
 }
 
 /// Apply freshness decay to active topics
-/// Topics decay over time - half-life of 7 days
 pub fn apply_freshness_decay(conn: &Arc<Mutex<Connection>>) -> Result<usize, String> {
     let conn = conn.lock();
 
-    // Apply decay based on last_seen timestamp
-    // weight = weight * 0.5^(days_since_seen / 7)
     let updated = conn
         .execute(
             "UPDATE active_topics SET
@@ -1559,27 +1387,21 @@ pub fn apply_freshness_decay(conn: &Arc<Mutex<Connection>>) -> Result<usize, Str
         )
         .map_err(|e| format!("Failed to apply decay: {}", e))?;
 
-    // Remove topics with very low weight
     let removed = conn
         .execute("DELETE FROM active_topics WHERE weight < 0.1", [])
         .map_err(|e| format!("Failed to clean up topics: {}", e))?;
 
     if updated > 0 || removed > 0 {
-        println!(
-            "[ACE] Applied freshness decay: {} updated, {} removed",
-            updated, removed
-        );
+        debug!(target: "ace::decay", updated = updated, removed = removed, "Applied freshness decay");
     }
 
     Ok(updated)
 }
 
 /// Get real-time context for relevance scoring
-/// Combines active topics from files, git, and manifests
 pub fn get_realtime_context(conn: &Arc<Mutex<Connection>>) -> Result<RealtimeContext, String> {
     let conn = conn.lock();
 
-    // Get active topics (recent, with decay applied)
     let mut stmt = conn
         .prepare(
             "SELECT topic, weight, confidence, source, last_seen
@@ -1611,7 +1433,6 @@ pub fn get_realtime_context(conn: &Arc<Mutex<Connection>>) -> Result<RealtimeCon
         .collect::<Result<Vec<_>, _>>()
         .map_err(|e| e.to_string())?;
 
-    // Get detected technologies
     let mut stmt = conn
         .prepare(
             "SELECT name, category, confidence, source
@@ -1651,9 +1472,8 @@ pub fn get_realtime_context(conn: &Arc<Mutex<Connection>>) -> Result<RealtimeCon
         .collect::<Result<Vec<_>, _>>()
         .map_err(|e| e.to_string())?;
 
-    // Calculate overall context confidence
     let context_confidence = if topics.is_empty() && tech.is_empty() {
-        0.3 // Minimal
+        0.3
     } else {
         let topic_conf = if topics.is_empty() {
             0.0
@@ -1686,19 +1506,222 @@ pub struct RealtimeContext {
 }
 
 // ============================================================================
+// Topic Embedding Functions (semantic matching via sqlite-vec)
+// ============================================================================
+
+/// Convert embedding vector to blob for SQLite storage
+fn embedding_to_blob(embedding: &[f32]) -> Vec<u8> {
+    embedding.iter().flat_map(|f| f.to_le_bytes()).collect()
+}
+
+/// Convert blob from SQLite to embedding vector
+fn blob_to_embedding(blob: &[u8]) -> Vec<f32> {
+    blob.chunks_exact(4)
+        .map(|chunk| f32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]))
+        .collect()
+}
+
+/// Store a topic embedding in the database and vec0 index
+pub fn store_topic_embedding(
+    conn: &Arc<Mutex<Connection>>,
+    topic: &str,
+    embedding: &[f32],
+) -> Result<(), String> {
+    let conn = conn.lock();
+    let embedding_blob = embedding_to_blob(embedding);
+
+    // Get the topic's rowid
+    let topic_id: Option<i64> = conn
+        .query_row(
+            "SELECT id FROM active_topics WHERE topic = ?1",
+            rusqlite::params![topic],
+            |row| row.get(0),
+        )
+        .ok();
+
+    if let Some(id) = topic_id {
+        // Update the embedding in active_topics
+        conn.execute(
+            "UPDATE active_topics SET embedding = ?1 WHERE id = ?2",
+            rusqlite::params![embedding_blob, id],
+        )
+        .map_err(|e| format!("Failed to update topic embedding: {}", e))?;
+
+        // Update or insert into vec0 index
+        // First try to update existing, then insert if not found
+        let updated = conn
+            .execute(
+                "UPDATE topic_vec SET embedding = ?1 WHERE rowid = ?2",
+                rusqlite::params![embedding_blob, id],
+            )
+            .unwrap_or(0);
+
+        if updated == 0 {
+            // Insert with explicit rowid matching the topic id
+            conn.execute(
+                "INSERT OR REPLACE INTO topic_vec (rowid, embedding) VALUES (?1, ?2)",
+                rusqlite::params![id, embedding_blob],
+            )
+            .map_err(|e| format!("Failed to insert topic into vec0: {}", e))?;
+        }
+    }
+
+    Ok(())
+}
+
+/// Load all topic embeddings from the database
+pub fn load_topic_embeddings(
+    conn: &Arc<Mutex<Connection>>,
+) -> Result<std::collections::HashMap<String, Vec<f32>>, String> {
+    let conn = conn.lock();
+    let mut result = std::collections::HashMap::new();
+
+    let mut stmt = conn
+        .prepare(
+            "SELECT topic, embedding FROM active_topics
+             WHERE embedding IS NOT NULL
+             AND julianday('now') - julianday(last_seen) <= 7",
+        )
+        .map_err(|e| e.to_string())?;
+
+    let rows = stmt
+        .query_map([], |row| {
+            let topic: String = row.get(0)?;
+            let blob: Vec<u8> = row.get(1)?;
+            Ok((topic, blob))
+        })
+        .map_err(|e| e.to_string())?;
+
+    for row in rows {
+        if let Ok((topic, blob)) = row {
+            let embedding = blob_to_embedding(&blob);
+            result.insert(topic, embedding);
+        }
+    }
+
+    debug!(
+        target: "ace::embedding",
+        count = result.len(),
+        "Loaded topic embeddings from database"
+    );
+
+    Ok(result)
+}
+
+/// Generate embeddings for topics that don't have them
+/// Returns count of topics updated
+#[allow(dead_code)] // Future: batch embedding generation on startup
+pub fn generate_missing_topic_embeddings(conn: &Arc<Mutex<Connection>>) -> Result<usize, String> {
+    // Find topics without embeddings
+    let topics_without_embeddings: Vec<(i64, String)> = {
+        let conn_guard = conn.lock();
+        let mut stmt = conn_guard
+            .prepare(
+                "SELECT id, topic FROM active_topics
+                 WHERE embedding IS NULL
+                 AND julianday('now') - julianday(last_seen) <= 7
+                 LIMIT 50",
+            )
+            .map_err(|e| e.to_string())?;
+
+        let rows = stmt
+            .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))
+            .map_err(|e| e.to_string())?;
+
+        rows.collect::<Result<Vec<_>, _>>()
+            .map_err(|e| e.to_string())?
+    };
+
+    if topics_without_embeddings.is_empty() {
+        return Ok(0);
+    }
+
+    info!(
+        target: "ace::embedding",
+        count = topics_without_embeddings.len(),
+        "Generating embeddings for topics without embeddings"
+    );
+
+    // Generate embeddings using the main embed_texts function
+    let topic_texts: Vec<String> = topics_without_embeddings
+        .iter()
+        .map(|(_, t)| t.clone())
+        .collect();
+
+    let embeddings = crate::embed_texts(&topic_texts)?;
+
+    // Store embeddings
+    let mut updated = 0;
+    for ((id, topic), embedding) in topics_without_embeddings.iter().zip(embeddings.iter()) {
+        let embedding_blob = embedding_to_blob(embedding);
+
+        let conn_guard = conn.lock();
+
+        // Update active_topics
+        if conn_guard
+            .execute(
+                "UPDATE active_topics SET embedding = ?1 WHERE id = ?2",
+                rusqlite::params![embedding_blob, id],
+            )
+            .is_ok()
+        {
+            // Insert into vec0 index
+            let _ = conn_guard.execute(
+                "INSERT OR REPLACE INTO topic_vec (rowid, embedding) VALUES (?1, ?2)",
+                rusqlite::params![id, embedding_blob],
+            );
+            updated += 1;
+            debug!(target: "ace::embedding", topic = %topic, "Generated embedding for topic");
+        }
+    }
+
+    info!(target: "ace::embedding", updated = updated, "Generated topic embeddings");
+    Ok(updated)
+}
+
+/// KNN search for topics similar to a given embedding
+/// Returns (topic, similarity_score) pairs sorted by similarity
+#[allow(dead_code)] // Future: semantic topic matching via KNN
+pub fn find_similar_topics(
+    conn: &Arc<Mutex<Connection>>,
+    query_embedding: &[f32],
+    limit: usize,
+) -> Result<Vec<(String, f32)>, String> {
+    let conn = conn.lock();
+    let embedding_blob = embedding_to_blob(query_embedding);
+
+    let mut stmt = conn
+        .prepare(
+            "SELECT at.topic, tv.distance
+             FROM topic_vec tv
+             JOIN active_topics at ON at.id = tv.rowid
+             WHERE tv.embedding MATCH ?1
+             AND k = ?2
+             ORDER BY tv.distance",
+        )
+        .map_err(|e| format!("Failed to prepare KNN query: {}", e))?;
+
+    let rows = stmt
+        .query_map(rusqlite::params![embedding_blob, limit as i32], |row| {
+            let topic: String = row.get(0)?;
+            let distance: f32 = row.get(1)?;
+            // Convert L2 distance to similarity (1 / (1 + distance))
+            let similarity = 1.0 / (1.0 + distance);
+            Ok((topic, similarity))
+        })
+        .map_err(|e| format!("KNN query failed: {}", e))?;
+
+    rows.collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())
+}
+
+// ============================================================================
 // Tests
 // ============================================================================
 
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn test_exclusion_strength() {
-        assert_eq!(ExclusionStrength::Soft.apply_to_score(1.0), 0.5);
-        assert_eq!(ExclusionStrength::Hard.apply_to_score(1.0), 0.1);
-        assert_eq!(ExclusionStrength::Absolute.apply_to_score(1.0), 0.0);
-    }
 
     #[test]
     fn test_notable_dependency() {

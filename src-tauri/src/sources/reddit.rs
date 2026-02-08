@@ -4,6 +4,7 @@
 
 use async_trait::async_trait;
 use serde::Deserialize;
+use tracing::{info, warn};
 
 use super::{Source, SourceConfig, SourceError, SourceItem, SourceResult};
 
@@ -147,6 +148,57 @@ impl Default for RedditSource {
     }
 }
 
+impl RedditSource {
+    /// Helper to fetch from specified subreddits
+    async fn fetch_from_subreddits(
+        &self,
+        subreddits: &[&'static str],
+        max_items: usize,
+    ) -> SourceResult<Vec<SourceItem>> {
+        if !self.config.enabled {
+            return Err(SourceError::Disabled);
+        }
+
+        info!(count = subreddits.len(), "Fetching from subreddits");
+
+        let mut all_items = Vec::new();
+        let items_per_sub = (max_items / subreddits.len()).max(3);
+
+        for subreddit in subreddits {
+            match self.fetch_subreddit(subreddit, items_per_sub).await {
+                Ok(items) => {
+                    info!(count = items.len(), subreddit, "Got posts from subreddit");
+                    all_items.extend(items);
+                }
+                Err(e) => {
+                    warn!(subreddit, error = ?e, "Failed to fetch subreddit");
+                }
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+        }
+
+        all_items.sort_by(|a, b| {
+            let score_a = a
+                .metadata
+                .as_ref()
+                .and_then(|m| m.get("score"))
+                .and_then(|s| s.as_i64())
+                .unwrap_or(0);
+            let score_b = b
+                .metadata
+                .as_ref()
+                .and_then(|m| m.get("score"))
+                .and_then(|s| s.as_i64())
+                .unwrap_or(0);
+            score_b.cmp(&score_a)
+        });
+
+        all_items.truncate(max_items);
+        info!(count = all_items.len(), "Total posts across all subreddits");
+        Ok(all_items)
+    }
+}
+
 #[async_trait]
 impl Source for RedditSource {
     fn source_type(&self) -> &'static str {
@@ -166,61 +218,72 @@ impl Source for RedditSource {
     }
 
     async fn fetch_items(&self) -> SourceResult<Vec<SourceItem>> {
+        self.fetch_from_subreddits(&self.subreddits, self.config.max_items)
+            .await
+    }
+
+    async fn fetch_items_deep(&self, items_per_category: usize) -> SourceResult<Vec<SourceItem>> {
         if !self.config.enabled {
             return Err(SourceError::Disabled);
         }
 
-        println!(
-            "[4DA/Reddit] Fetching from {} subreddits...",
-            self.subreddits.len()
+        let deep_subreddits: Vec<&'static str> = vec![
+            "programming",
+            "rust",
+            "golang",
+            "python",
+            "typescript",
+            "javascript",
+            "java",
+            "cpp",
+            "csharp",
+            "swift",
+            "kotlin",
+            "webdev",
+            "frontend",
+            "reactjs",
+            "node",
+            "nextjs",
+            "svelte",
+            "learnprogramming",
+            "cscareerquestions",
+            "machinelearning",
+            "deeplearning",
+            "LanguageTechnology",
+            "artificial",
+            "LocalLLaMA",
+            "ChatGPT",
+            "ClaudeAI",
+            "datascience",
+            "dataengineering",
+            "datasets",
+            "devops",
+            "kubernetes",
+            "docker",
+            "aws",
+            "selfhosted",
+            "homelab",
+            "linux",
+            "sysadmin",
+            "netsec",
+            "cybersecurity",
+            "technology",
+            "startups",
+            "SideProject",
+            "opensource",
+            "tauri",
+            "electronjs",
+            "flutter",
+        ];
+
+        info!(
+            subreddit_count = deep_subreddits.len(),
+            items_per = items_per_category,
+            "Deep fetching Reddit"
         );
-
-        let mut all_items = Vec::new();
-        let items_per_sub = (self.config.max_items / self.subreddits.len()).max(5);
-
-        for subreddit in &self.subreddits {
-            match self.fetch_subreddit(subreddit, items_per_sub).await {
-                Ok(items) => {
-                    println!(
-                        "[4DA/Reddit] Got {} posts from r/{}",
-                        items.len(),
-                        subreddit
-                    );
-                    all_items.extend(items);
-                }
-                Err(e) => {
-                    println!("[4DA/Reddit] Failed to fetch r/{}: {:?}", subreddit, e);
-                }
-            }
-
-            // Small delay between subreddits to be respectful
-            tokio::time::sleep(std::time::Duration::from_millis(200)).await;
-        }
-
-        // Sort by score and take top items
-        all_items.sort_by(|a, b| {
-            let score_a = a
-                .metadata
-                .as_ref()
-                .and_then(|m| m.get("score"))
-                .and_then(|s| s.as_i64())
-                .unwrap_or(0);
-            let score_b = b
-                .metadata
-                .as_ref()
-                .and_then(|m| m.get("score"))
-                .and_then(|s| s.as_i64())
-                .unwrap_or(0);
-            score_b.cmp(&score_a)
-        });
-
-        all_items.truncate(self.config.max_items);
-
-        println!(
-            "[4DA/Reddit] Total: {} posts across all subreddits",
-            all_items.len()
-        );
-        Ok(all_items)
+        // Multiplier of 15 gives ~1500 max items, ~36 per subreddit for comprehensive coverage
+        self.fetch_from_subreddits(&deep_subreddits, items_per_category * 15)
+            .await
     }
 
     async fn scrape_content(&self, item: &SourceItem) -> SourceResult<String> {

@@ -3,7 +3,7 @@
 //! Provides background analysis scheduling, system tray integration,
 //! and native OS notifications for new relevant items.
 
-use parking_lot::Mutex;
+// parking_lot::Mutex available if needed for state management
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
@@ -13,6 +13,7 @@ use tauri::{
     AppHandle, Emitter, Manager, Runtime,
 };
 use tauri_plugin_notification::NotificationExt;
+use tracing::{info, warn};
 
 // ============================================================================
 // Monitoring State
@@ -32,6 +33,12 @@ pub struct MonitoringState {
     pub last_relevant_count: AtomicU64,
     /// Total checks performed
     pub total_checks: AtomicU64,
+    /// Last health check timestamp (unix seconds)
+    pub last_health_check: AtomicU64,
+    /// Last anomaly detection timestamp (unix seconds)
+    pub last_anomaly_check: AtomicU64,
+    /// Last behavior decay timestamp (unix seconds)
+    pub last_decay: AtomicU64,
 }
 
 impl Default for MonitoringState {
@@ -43,6 +50,9 @@ impl Default for MonitoringState {
             last_check: AtomicU64::new(0),
             last_relevant_count: AtomicU64::new(0),
             total_checks: AtomicU64::new(0),
+            last_health_check: AtomicU64::new(0),
+            last_anomaly_check: AtomicU64::new(0),
+            last_decay: AtomicU64::new(0),
         }
     }
 }
@@ -109,7 +119,11 @@ pub fn setup_tray<R: Runtime>(app: &AppHandle<R>) -> Result<TrayIcon<R>, String>
 
     // Build tray icon
     let tray = TrayIconBuilder::new()
-        .icon(app.default_window_icon().unwrap().clone())
+        .icon(
+            app.default_window_icon()
+                .ok_or_else(|| "No default window icon configured".to_string())?
+                .clone(),
+        )
         .menu(&menu)
         .tooltip("4DA Home - The internet searches for you")
         .on_menu_event(move |app, event| {
@@ -151,7 +165,7 @@ pub fn setup_tray<R: Runtime>(app: &AppHandle<R>) -> Result<TrayIcon<R>, String>
         .build(app)
         .map_err(|e| e.to_string())?;
 
-    println!("[4DA/Tray] System tray initialized");
+    info!(target: "4da::tray", "System tray initialized");
     Ok(tray)
 }
 
@@ -159,9 +173,20 @@ pub fn setup_tray<R: Runtime>(app: &AppHandle<R>) -> Result<TrayIcon<R>, String>
 // Background Scheduler
 // ============================================================================
 
+// Background job intervals (in seconds)
+const HEALTH_CHECK_INTERVAL: u64 = 300; // 5 minutes
+const ANOMALY_CHECK_INTERVAL: u64 = 3600; // 1 hour
+const BEHAVIOR_DECAY_INTERVAL: u64 = 86400; // 24 hours (daily)
+
 /// Start the background monitoring scheduler
 pub fn start_scheduler<R: Runtime>(app: AppHandle<R>, state: Arc<MonitoringState>) {
-    println!("[4DA/Monitor] Starting background scheduler");
+    info!(target: "4da::monitor", "Starting background scheduler");
+    info!(target: "4da::monitor",
+        health_interval_min = HEALTH_CHECK_INTERVAL / 60,
+        anomaly_interval_hr = ANOMALY_CHECK_INTERVAL / 3600,
+        decay_interval_hr = BEHAVIOR_DECAY_INTERVAL / 3600,
+        "Background job intervals configured"
+    );
 
     tauri::async_runtime::spawn(async move {
         let mut interval = tokio::time::interval(Duration::from_secs(60)); // Check every minute
@@ -169,16 +194,67 @@ pub fn start_scheduler<R: Runtime>(app: AppHandle<R>, state: Arc<MonitoringState
         loop {
             interval.tick().await;
 
-            // Check if monitoring is enabled
+            let now = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_secs();
+
+            // ================================================================
+            // Background Jobs (run regardless of monitoring enabled state)
+            // ================================================================
+
+            // Health check - every 5 minutes
+            let last_health = state.last_health_check.load(Ordering::Relaxed);
+            if now - last_health >= HEALTH_CHECK_INTERVAL {
+                state.last_health_check.store(now, Ordering::Relaxed);
+                match crate::run_background_health_check().await {
+                    Ok(result) => {
+                        info!(target: "4da::monitor", result = %result, "Health check completed");
+                    }
+                    Err(e) => {
+                        warn!(target: "4da::monitor", error = %e, "Health check failed");
+                    }
+                }
+            }
+
+            // Anomaly detection - every hour
+            let last_anomaly = state.last_anomaly_check.load(Ordering::Relaxed);
+            if now - last_anomaly >= ANOMALY_CHECK_INTERVAL {
+                state.last_anomaly_check.store(now, Ordering::Relaxed);
+                match crate::run_background_anomaly_detection().await {
+                    Ok(result) => {
+                        info!(target: "4da::monitor", result = %result, "Anomaly detection completed");
+                    }
+                    Err(e) => {
+                        warn!(target: "4da::monitor", error = %e, "Anomaly detection failed");
+                    }
+                }
+            }
+
+            // Behavior decay - daily
+            let last_decay = state.last_decay.load(Ordering::Relaxed);
+            if now - last_decay >= BEHAVIOR_DECAY_INTERVAL {
+                state.last_decay.store(now, Ordering::Relaxed);
+                match crate::run_background_behavior_decay().await {
+                    Ok(result) => {
+                        info!(target: "4da::monitor", result = %result, "Behavior decay completed");
+                    }
+                    Err(e) => {
+                        warn!(target: "4da::monitor", error = %e, "Behavior decay failed");
+                    }
+                }
+            }
+
+            // ================================================================
+            // Scheduled Analysis (only when monitoring is enabled)
+            // ================================================================
+
+            // Check if monitoring is enabled for scheduled analysis
             if !state.is_enabled() {
                 continue;
             }
 
             // Check if enough time has passed since last check
-            let now = std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_secs();
             let last = state.last_check.load(Ordering::Relaxed);
             let interval_secs = state.get_interval();
 
@@ -191,7 +267,7 @@ pub fn start_scheduler<R: Runtime>(app: AppHandle<R>, state: Arc<MonitoringState
                 continue;
             }
 
-            println!("[4DA/Monitor] Running scheduled analysis...");
+            info!(target: "4da::monitor", "Running scheduled analysis...");
             state.last_check.store(now, Ordering::Relaxed);
             state.total_checks.fetch_add(1, Ordering::Relaxed);
 
@@ -204,26 +280,47 @@ pub fn start_scheduler<R: Runtime>(app: AppHandle<R>, state: Arc<MonitoringState
     });
 }
 
+/// Signal summary extracted from analysis results
+pub struct SignalSummary {
+    pub critical_count: usize,
+    pub high_count: usize,
+    pub top_signal: Option<(String, String)>, // (signal_type, action)
+}
+
 /// Called when a scheduled analysis completes
 pub fn complete_scheduled_check<R: Runtime>(
     app: &AppHandle<R>,
     state: &MonitoringState,
     new_relevant_count: usize,
     total_count: usize,
+    signal_summary: Option<SignalSummary>,
 ) {
     state.is_checking.store(false, Ordering::Relaxed);
     state
         .last_relevant_count
         .store(new_relevant_count as u64, Ordering::Relaxed);
 
-    // Send notification if we found new relevant items
-    if new_relevant_count > 0 {
+    // Send signal-aware notifications
+    if let Some(ref summary) = signal_summary {
+        if summary.critical_count > 0 {
+            // Critical signals get their own urgent notification
+            send_signal_notification(app, "critical", summary);
+        } else if summary.high_count > 0 {
+            send_signal_notification(app, "high", summary);
+        } else if new_relevant_count > 0 {
+            send_notification(app, new_relevant_count, total_count);
+        }
+    } else if new_relevant_count > 0 {
         send_notification(app, new_relevant_count, total_count);
     }
 
-    println!(
-        "[4DA/Monitor] Scheduled check complete: {}/{} relevant",
-        new_relevant_count, total_count
+    info!(
+        target: "4da::monitor",
+        relevant = new_relevant_count,
+        total = total_count,
+        critical = signal_summary.as_ref().map(|s| s.critical_count).unwrap_or(0),
+        high = signal_summary.as_ref().map(|s| s.high_count).unwrap_or(0),
+        "Scheduled check complete"
     );
 }
 
@@ -237,18 +334,77 @@ pub fn send_notification<R: Runtime>(
     relevant_count: usize,
     _total_count: usize,
 ) {
-    let title = "4DA Home - New Relevant Items";
+    let title = "4DA - New Relevant Items";
     let body = if relevant_count == 1 {
         "1 new item matches your interests".to_string()
     } else {
         format!("{} new items match your interests", relevant_count)
     };
 
-    // Use Tauri's notification plugin
     if let Err(e) = app.notification().builder().title(title).body(&body).show() {
-        println!("[4DA/Notify] Failed to send notification: {}", e);
+        warn!(target: "4da::notify", error = %e, "Failed to send notification");
     } else {
-        println!("[4DA/Notify] Sent notification: {}", body);
+        info!(target: "4da::notify", body = %body, "Sent notification");
+    }
+}
+
+/// Send a signal-aware notification for critical/high priority signals
+pub fn send_signal_notification<R: Runtime>(
+    app: &AppHandle<R>,
+    priority: &str,
+    summary: &SignalSummary,
+) {
+    let (title, body) = match priority {
+        "critical" => {
+            let title = format!(
+                "4DA - {} Critical Signal{}",
+                summary.critical_count,
+                if summary.critical_count > 1 { "s" } else { "" }
+            );
+            let body = if let Some((ref sig_type, ref action)) = summary.top_signal {
+                let label = match sig_type.as_str() {
+                    "security_alert" => "Security Alert",
+                    "breaking_change" => "Breaking Change",
+                    _ => "Alert",
+                };
+                format!("{}: {}", label, action)
+            } else {
+                format!(
+                    "{} critical items need your attention",
+                    summary.critical_count
+                )
+            };
+            (title, body)
+        }
+        "high" => {
+            let title = format!(
+                "4DA - {} High Priority Signal{}",
+                summary.high_count,
+                if summary.high_count > 1 { "s" } else { "" }
+            );
+            let body = if let Some((_, ref action)) = summary.top_signal {
+                action.clone()
+            } else {
+                format!("{} high priority items found", summary.high_count)
+            };
+            (title, body)
+        }
+        _ => (
+            "4DA - New Signals".to_string(),
+            "New actionable signals detected".to_string(),
+        ),
+    };
+
+    if let Err(e) = app
+        .notification()
+        .builder()
+        .title(&title)
+        .body(&body)
+        .show()
+    {
+        warn!(target: "4da::notify", error = %e, "Failed to send signal notification");
+    } else {
+        info!(target: "4da::notify", priority = priority, body = %body, "Sent signal notification");
     }
 }
 
@@ -257,6 +413,7 @@ pub fn send_notification<R: Runtime>(
 // ============================================================================
 
 /// Update the tray menu text based on monitoring state
+#[allow(dead_code)] // Future: dynamic tray menu updates
 pub fn update_tray_menu<R: Runtime>(
     tray: &TrayIcon<R>,
     app: &AppHandle<R>,

@@ -7,6 +7,8 @@
 //! - Topic affinity computation
 //! - Anti-topic detection
 
+#![allow(dead_code)]
+
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -96,19 +98,22 @@ impl BehaviorAction {
         }
     }
 
-    /// Is this a positive signal?
+    /// Check if this action indicates strong engagement
+    pub fn is_strong(&self) -> bool {
+        matches!(
+            self,
+            BehaviorAction::Save | BehaviorAction::Share | BehaviorAction::Dismiss | BehaviorAction::MarkIrrelevant
+        )
+    }
+
+    /// Check if this is a positive action
     pub fn is_positive(&self) -> bool {
         self.compute_strength() > 0.0
     }
 
-    /// Is this a negative signal?
+    /// Check if this is a negative action
     pub fn is_negative(&self) -> bool {
         self.compute_strength() < 0.0
-    }
-
-    /// Is this a strong signal (worth recording)?
-    pub fn is_strong(&self) -> bool {
-        self.compute_strength().abs() >= 0.5
     }
 }
 
@@ -270,20 +275,6 @@ impl AntiTopic {
     pub fn confirm(&mut self) {
         self.user_confirmed = true;
         self.confidence = 1.0;
-    }
-
-    /// Get the exclusion strength to apply
-    pub fn exclusion_strength(&self) -> super::ExclusionStrength {
-        if self.user_confirmed {
-            super::ExclusionStrength::Absolute
-        } else if self.rejection_count >= 10 {
-            super::ExclusionStrength::Hard
-        } else if self.rejection_count >= 5 {
-            super::ExclusionStrength::Soft
-        } else {
-            // Not enough rejections yet
-            super::ExclusionStrength::Soft
-        }
     }
 }
 

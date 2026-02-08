@@ -1,0 +1,34 @@
+{
+  "name": "daily_briefing",
+  "description": "Generate an executive briefing from 4DA's recent discoveries.\n\nWith synthesize=true (recommended), uses AI to generate genuine insights tailored to your context.\n\nReturns:\n- TL;DR summary (AI-generated when synthesize=true)\n- Key themes with item counts\n- Notable high-scoring items\n- Actionable recommendations\n- Trend highlights\n- AI synthesis (when enabled)\n\nUse this for your daily/weekly content review.",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "hours": {
+        "type": "number",
+        "description": "Hours to look back (default: 24)"
+      },
+      "min_score": {
+        "type": "number",
+        "description": "Minimum relevance score (default: 0.5)"
+      },
+      "max_items": {
+        "type": "number",
+        "description": "Maximum items to analyze (default: 50)"
+      },
+      "format": {
+        "type": "string",
+        "enum": ["full", "brief", "actionable"],
+        "description": "Output format (default: full)"
+      },
+      "synthesize": {
+        "type": "boolean",
+        "description": "Use AI to generate genuine insights (default: true if LLM configured)"
+      },
+      "compact": {
+        "type": "boolean",
+        "description": "Return compact result with file reference (default: true for ~80% token reduction)"
+      }
+    }
+  }
+}

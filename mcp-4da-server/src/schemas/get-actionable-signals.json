@@ -1,0 +1,29 @@
+{
+  "name": "get_actionable_signals",
+  "description": "Classify content into actionable signal types (security_alert, breaking_change, tool_discovery, tech_trend, learning, competitive_intel) with priority levels. Cross-references against user's tech stack.",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "priority_filter": {
+        "type": "string",
+        "description": "Filter by priority level",
+        "enum": ["critical", "high", "medium", "low"]
+      },
+      "signal_type": {
+        "type": "string",
+        "description": "Filter by signal type",
+        "enum": ["security_alert", "breaking_change", "tool_discovery", "tech_trend", "learning", "competitive_intel"]
+      },
+      "limit": {
+        "type": "number",
+        "description": "Maximum signals to return (default: 20, max: 100)",
+        "default": 20
+      },
+      "since_hours": {
+        "type": "number",
+        "description": "Only include items from last N hours (default: 48)",
+        "default": 48
+      }
+    }
+  }
+}

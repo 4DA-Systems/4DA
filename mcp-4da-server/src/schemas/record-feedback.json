@@ -1,0 +1,24 @@
+{
+  "name": "record_feedback",
+  "description": "Record user feedback on a content item.\n\nFeedback actions:\n- \"click\": User clicked/opened the item (moderate positive signal)\n- \"save\": User saved/bookmarked the item (strong positive signal)\n- \"dismiss\": User dismissed the item (weak negative signal)\n- \"mark_irrelevant\": User marked item as not relevant (strong negative signal)\n\nThis feedback helps 4DA learn user preferences over time.",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "item_id": {
+        "type": "number",
+        "description": "The database ID of the item"
+      },
+      "source_type": {
+        "type": "string",
+        "description": "The source type: \"hackernews\", \"arxiv\", or \"reddit\"",
+        "enum": ["hackernews", "arxiv", "reddit"]
+      },
+      "action": {
+        "type": "string",
+        "description": "The feedback action: \"click\", \"save\", \"dismiss\", or \"mark_irrelevant\"",
+        "enum": ["click", "save", "dismiss", "mark_irrelevant"]
+      }
+    },
+    "required": ["item_id", "source_type", "action"]
+  }
+}

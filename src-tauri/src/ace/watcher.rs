@@ -4,6 +4,8 @@
 //! Uses debouncing to prevent excessive processing during rapid saves.
 //! Includes state persistence for restart recovery.
 
+#![allow(dead_code)]
+
 use notify::{Config, Event, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
 use parking_lot::Mutex;
 use rusqlite::Connection;
@@ -13,6 +15,7 @@ use std::path::{Path, PathBuf};
 use std::sync::mpsc::{channel, Receiver, Sender};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
+use tracing::{debug, info, warn};
 
 /// File watcher configuration
 #[derive(Debug, Clone)]
@@ -40,6 +43,14 @@ impl Default for WatcherConfig {
         }
         // Config/docs
         for ext in ["md", "txt", "json", "toml", "yaml", "yml"] {
+            watched_extensions.insert(ext.to_string());
+        }
+        // Documents (Phase 1 extractors)
+        for ext in ["pdf", "docx", "xlsx"] {
+            watched_extensions.insert(ext.to_string());
+        }
+        // Archives (Phase 1 extractors)
+        for ext in ["zip", "tar", "gz", "tgz"] {
             watched_extensions.insert(ext.to_string());
         }
 
@@ -143,7 +154,7 @@ impl FileWatcher {
                 .map_err(|e| format!("Failed to watch {}: {}", path.display(), e))?;
 
             self.watched_paths.lock().insert(path.to_path_buf());
-            println!("[ACE/Watcher] Watching: {}", path.display());
+            info!(target: "ace::watcher", path = %path.display(), "Watching");
         }
 
         Ok(())
@@ -157,7 +168,7 @@ impl FileWatcher {
                 .map_err(|e| format!("Failed to unwatch {}: {}", path.display(), e))?;
 
             self.watched_paths.lock().remove(path);
-            println!("[ACE/Watcher] Stopped watching: {}", path.display());
+            info!(target: "ace::watcher", path = %path.display(), "Stopped watching");
         }
 
         Ok(())
@@ -201,7 +212,7 @@ impl FileWatcher {
                         Self::process_event(&event, &pending_changes, &config);
                     }
                     Ok(Err(e)) => {
-                        println!("[ACE/Watcher] Error: {:?}", e);
+                        warn!(target: "ace::watcher", error = ?e, "Watcher error");
                     }
                     Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
                         // Check if we should flush pending changes
@@ -237,10 +248,10 @@ impl FileWatcher {
                 }
             }
 
-            println!("[ACE/Watcher] Event processing thread stopped");
+            debug!(target: "ace::watcher", "Event processing thread stopped");
         });
 
-        println!("[ACE/Watcher] Started");
+        info!(target: "ace::watcher", "Started");
         Ok(())
     }
 
@@ -303,7 +314,7 @@ impl FileWatcher {
         *self.running.lock() = false;
         self.watcher = None;
         self.watched_paths.lock().clear();
-        println!("[ACE/Watcher] Stopped");
+        info!(target: "ace::watcher", "Stopped");
     }
 
     /// Get list of watched paths
@@ -659,9 +670,10 @@ impl WatcherStatePersistence {
                     }
                 }
             }
-            println!(
-                "[ACE/Watcher] Restored {} watched paths from saved state",
-                restored
+            info!(
+                target: "ace::watcher",
+                restored = restored,
+                "Restored watched paths from saved state"
             );
             Ok(restored)
         } else {

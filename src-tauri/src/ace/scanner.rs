@@ -103,6 +103,9 @@ impl ProjectScanner {
         }
     }
 
+    /// Maximum signals to collect (prevents OOM on huge repos)
+    const MAX_SIGNALS: usize = 500;
+
     /// Scan a directory for project manifests
     pub fn scan_directory(&self, path: &Path) -> Result<Vec<ProjectSignal>, String> {
         let mut signals = Vec::new();
@@ -116,7 +119,8 @@ impl ProjectScanner {
         depth: usize,
         signals: &mut Vec<ProjectSignal>,
     ) -> Result<(), String> {
-        if depth > self.max_depth {
+        // Bounds check: depth and total signals
+        if depth > self.max_depth || signals.len() >= Self::MAX_SIGNALS {
             return Ok(());
         }
 

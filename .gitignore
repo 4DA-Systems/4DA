@@ -28,6 +28,20 @@ dist-ssr
 .claude/memory.db
 *.local.md
 
+# ONNX model cache (binary files)
+src-tauri/.fastembed_cache/
+
+# Tauri build artifacts
+src-tauri/target/
+
+# SQLite database files
+data/*.db
+data/*.db-shm
+data/*.db-wal
+
+# ONNX models
+src-tauri/models/
+
 # MCP memory server build
 mcp-memory-server/dist/
 mcp-memory-server/node_modules/

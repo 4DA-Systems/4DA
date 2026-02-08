@@ -170,6 +170,14 @@ impl AnomalyDetector {
         // Check for contradictions
         anomalies.extend(self.detect_contradictions());
 
+        // Check for suspicious activity patterns
+        if let Some(suspicious) = self.detect_suspicious_activity() {
+            anomalies.push(suspicious);
+        }
+
+        // Check for confidence mismatches
+        anomalies.extend(self.detect_confidence_mismatch());
+
         // Store and update history
         for anomaly in &anomalies {
             let _ = self.store_anomaly(anomaly);
@@ -525,6 +533,129 @@ impl AnomalyDetector {
                         evidence: vec![
                             format!("Affinity score: {:.0}%", affinity * 100.0),
                             format!("Anti-topic confidence: {:.0}%", anti_confidence * 100.0),
+                        ],
+                        detected_at: chrono::Utc::now().to_rfc3339(),
+                        resolved: false,
+                    });
+                }
+            }
+        }
+
+        anomalies
+    }
+
+    /// Detect suspicious activity patterns (e.g., unusual hours)
+    fn detect_suspicious_activity(&self) -> Option<Anomaly> {
+        let conn = self.conn.lock();
+
+        // Check for activity outside normal hours (assuming normal is 6am-11pm)
+        // Count interactions in unusual hours (midnight to 6am)
+        let unusual_count: i32 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM interactions
+                 WHERE strftime('%H', timestamp) < '06'
+                   AND timestamp > datetime('now', '-7 days')",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap_or(0);
+
+        let total_count: i32 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM interactions
+                 WHERE timestamp > datetime('now', '-7 days')",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap_or(0);
+
+        if total_count > 10 {
+            let unusual_ratio = unusual_count as f32 / total_count as f32;
+
+            // Flag if >20% of activity is during unusual hours
+            if unusual_ratio > 0.2 {
+                return Some(Anomaly {
+                    id: None,
+                    anomaly_type: AnomalyType::SuspiciousActivity,
+                    topic: None,
+                    description: format!(
+                        "Unusual activity pattern: {:.0}% of interactions during unusual hours (midnight-6am)",
+                        unusual_ratio * 100.0
+                    ),
+                    confidence: unusual_ratio.min(1.0),
+                    severity: if unusual_ratio > 0.4 {
+                        AnomalySeverity::High
+                    } else {
+                        AnomalySeverity::Medium
+                    },
+                    evidence: vec![
+                        format!("Unusual hour interactions: {}", unusual_count),
+                        format!("Total interactions: {}", total_count),
+                        format!("Ratio: {:.0}%", unusual_ratio * 100.0),
+                    ],
+                    detected_at: chrono::Utc::now().to_rfc3339(),
+                    resolved: false,
+                });
+            }
+        }
+
+        None
+    }
+
+    /// Detect confidence mismatches (high confidence with low evidence)
+    fn detect_confidence_mismatch(&self) -> Vec<Anomaly> {
+        let conn = self.conn.lock();
+        let mut anomalies = Vec::new();
+
+        // Find topics with high confidence but low interaction count
+        let result = conn.prepare(
+            "SELECT at.topic, at.confidence, at.source,
+                    COALESCE((SELECT COUNT(*) FROM interactions i
+                              WHERE i.item_topics LIKE '%' || at.topic || '%'), 0) as evidence_count
+             FROM active_topics at
+             WHERE at.confidence > 0.7
+             HAVING evidence_count < 3",
+        );
+
+        if let Ok(mut stmt) = result {
+            let rows = stmt.query_map([], |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, f32>(1)?,
+                    row.get::<_, String>(2)?,
+                    row.get::<_, i32>(3)?,
+                ))
+            });
+
+            if let Ok(rows) = rows {
+                for row in rows.flatten() {
+                    let (topic, confidence, source, evidence_count) = row;
+
+                    // Skip if source is 'manual' (user-defined topics are allowed high confidence)
+                    if source == "manual" {
+                        continue;
+                    }
+
+                    anomalies.push(Anomaly {
+                        id: None,
+                        anomaly_type: AnomalyType::ConfidenceMismatch,
+                        topic: Some(topic.clone()),
+                        description: format!(
+                            "Topic '{}' has {:.0}% confidence but only {} supporting interactions",
+                            topic,
+                            confidence * 100.0,
+                            evidence_count
+                        ),
+                        confidence: 0.7,
+                        severity: if confidence > 0.9 && evidence_count == 0 {
+                            AnomalySeverity::High
+                        } else {
+                            AnomalySeverity::Low
+                        },
+                        evidence: vec![
+                            format!("Topic confidence: {:.0}%", confidence * 100.0),
+                            format!("Supporting interactions: {}", evidence_count),
+                            format!("Source: {}", source),
                         ],
                         detected_at: chrono::Utc::now().to_rfc3339(),
                         resolved: false,

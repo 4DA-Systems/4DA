@@ -1,5 +1,8 @@
 @import "tailwindcss";
 
+/* Limit Tailwind content scanning to src directory only */
+@source "../src/**/*.{js,jsx,ts,tsx}";
+
 /* Design System: Matte Black Minimalism */
 @theme {
   --color-bg-primary: #0A0A0A;
@@ -88,4 +91,34 @@ body {
 /* Radial gradient for glow effect */
 .bg-gradient-radial {
   background: radial-gradient(circle, var(--tw-gradient-from) 0%, var(--tw-gradient-via) 50%, var(--tw-gradient-to) 100%);
+}
+
+/* Void Engine Heartbeat Animation */
+@keyframes void-pulse {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 0.8;
+  }
+  50% {
+    transform: scale(1.08);
+    opacity: 1;
+  }
+}
+
+/* Confidence Indicator Styles */
+.confidence-indicator {
+  margin-left: 0.25rem;
+  opacity: 0.7;
+}
+
+.confidence-high {
+  color: var(--color-success);
+}
+
+.confidence-medium {
+  color: var(--color-text-secondary);
+}
+
+.confidence-low {
+  color: var(--color-error);
 }

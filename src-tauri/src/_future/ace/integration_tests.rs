@@ -153,13 +153,6 @@ mod phase_a_foundation {
     }
 
     #[test]
-    fn test_exclusion_strength_application() {
-        assert_eq!(ExclusionStrength::Soft.apply_to_score(1.0), 0.5);
-        assert_eq!(ExclusionStrength::Hard.apply_to_score(1.0), 0.1);
-        assert_eq!(ExclusionStrength::Absolute.apply_to_score(1.0), 0.0);
-    }
-
-    #[test]
     fn test_ace_creation() {
         let ace = create_test_ace();
         // Verify ACE is created with all components
@@ -378,7 +371,6 @@ mod phase_c_behavior {
         anti.confirm();
         assert!(anti.user_confirmed);
         assert_eq!(anti.confidence, 1.0);
-        assert_eq!(anti.exclusion_strength(), ExclusionStrength::Absolute);
     }
 
     #[test]

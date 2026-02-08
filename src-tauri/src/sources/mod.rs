@@ -11,10 +11,16 @@
 
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
+use tracing::info;
 
 pub mod arxiv;
+pub mod github;
 pub mod hackernews;
+pub mod producthunt;
 pub mod reddit;
+pub mod rss;
+pub mod twitter;
+pub mod youtube;
 
 // ============================================================================
 // Source Item - Universal representation of content from any source
@@ -74,6 +80,7 @@ impl SourceItem {
     }
 
     /// Build text for embedding (title + content)
+    #[allow(dead_code)] // Future: embedding generation
     pub fn embedding_text(&self) -> String {
         if self.content.is_empty() {
             self.title.clone()
@@ -125,6 +132,7 @@ pub enum SourceError {
     /// Error parsing response
     Parse(String),
     /// Rate limited by source
+    #[allow(dead_code)]
     RateLimited,
     /// Source is disabled
     Disabled,
@@ -159,6 +167,7 @@ pub trait Source: Send + Sync {
     fn config(&self) -> &SourceConfig;
 
     /// Update the configuration
+    #[allow(dead_code)] // Future: dynamic source configuration
     fn set_config(&mut self, config: SourceConfig);
 
     /// Fetch new items from this source
@@ -167,12 +176,22 @@ pub trait Source: Send + Sync {
     /// Content scraping happens separately for better parallelization.
     async fn fetch_items(&self) -> SourceResult<Vec<SourceItem>>;
 
+    /// Deep fetch for comprehensive initial scans
+    ///
+    /// Sources can override this to fetch from multiple endpoints/categories.
+    /// Default implementation just calls fetch_items().
+    async fn fetch_items_deep(&self, _items_per_category: usize) -> SourceResult<Vec<SourceItem>> {
+        // Default: just use regular fetch
+        self.fetch_items().await
+    }
+
     /// Scrape/extract content for a single item
     ///
     /// This is called separately from fetch_items to allow parallel scraping.
     async fn scrape_content(&self, item: &SourceItem) -> SourceResult<String>;
 
     /// Check if enough time has passed since last fetch
+    #[allow(dead_code)] // Future: rate limiting
     fn should_fetch(&self, last_fetch: Option<std::time::SystemTime>) -> bool {
         match last_fetch {
             None => true,
@@ -203,10 +222,10 @@ impl SourceRegistry {
 
     /// Register a source
     pub fn register(&mut self, source: Box<dyn Source>) {
-        println!(
-            "[4DA/Sources] Registered source: {} ({})",
-            source.name(),
-            source.source_type()
+        info!(
+            name = source.name(),
+            source_type = source.source_type(),
+            "Registered source"
         );
         self.sources.push(source);
     }
@@ -217,6 +236,7 @@ impl SourceRegistry {
     }
 
     /// Get enabled sources only
+    #[allow(dead_code)] // Future: source filtering
     pub fn enabled_sources(&self) -> Vec<&dyn Source> {
         self.sources
             .iter()
@@ -226,6 +246,7 @@ impl SourceRegistry {
     }
 
     /// Get a source by type
+    #[allow(dead_code)] // Future: source lookup
     pub fn get_source(&self, source_type: &str) -> Option<&dyn Source> {
         self.sources
             .iter()

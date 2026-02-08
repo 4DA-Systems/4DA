@@ -7,6 +7,8 @@
 //! - Audit trail for all decisions
 //! - Accuracy metrics tracking
 
+#![allow(dead_code)]
+
 use parking_lot::Mutex;
 use rusqlite::Connection;
 use serde::{Deserialize, Serialize};

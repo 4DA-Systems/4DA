@@ -5,6 +5,7 @@
 use async_trait::async_trait;
 use scraper::{Html, Selector};
 use serde::Deserialize;
+use tracing::{info, warn};
 
 use super::{Source, SourceConfig, SourceError, SourceItem, SourceResult};
 
@@ -13,6 +14,7 @@ use super::{Source, SourceConfig, SourceError, SourceItem, SourceResult};
 // ============================================================================
 
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)] // Fields deserialized from HN API JSON
 struct HNStory {
     id: u64,
     title: Option<String>,
@@ -38,7 +40,7 @@ impl HackerNewsSource {
         Self {
             config: SourceConfig {
                 enabled: true,
-                max_items: 30,
+                max_items: 100, // Increased from 30 for better first-run experience
                 fetch_interval_secs: 300,
                 custom: None,
             },
@@ -50,6 +52,7 @@ impl HackerNewsSource {
     }
 
     /// Create with custom config
+    #[allow(dead_code)] // Future: configurable HN source
     pub fn with_config(config: SourceConfig) -> Self {
         Self {
             config,
@@ -64,6 +67,52 @@ impl HackerNewsSource {
 impl Default for HackerNewsSource {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+impl HackerNewsSource {
+    /// Fetch story details by IDs (helper method)
+    async fn fetch_stories_by_ids(
+        &self,
+        ids: &[u64],
+        max_items: usize,
+    ) -> SourceResult<Vec<SourceItem>> {
+        let mut items = Vec::new();
+
+        for id in ids.iter().take(max_items) {
+            let url = format!("https://hacker-news.firebaseio.com/v0/item/{}.json", id);
+
+            match self.client.get(&url).send().await {
+                Ok(response) => match response.json::<HNStory>().await {
+                    Ok(story) => {
+                        let title = story.title.unwrap_or_else(|| "[No title]".to_string());
+                        let content = story.text.unwrap_or_default();
+
+                        let mut item = SourceItem::new("hackernews", &id.to_string(), &title)
+                            .with_url(story.url.clone())
+                            .with_content(content);
+
+                        if let (Some(score), Some(by)) = (story.score, story.by) {
+                            item = item.with_metadata(serde_json::json!({
+                                "score": score,
+                                "author": by,
+                            }));
+                        }
+
+                        items.push(item);
+                    }
+                    Err(e) => {
+                        warn!(story_id = id, error = %e, "Failed to parse story");
+                    }
+                },
+                Err(e) => {
+                    warn!(story_id = id, error = %e, "Failed to fetch story");
+                }
+            }
+        }
+
+        info!(count = items.len(), "Fetched stories");
+        Ok(items)
     }
 }
 
@@ -90,9 +139,8 @@ impl Source for HackerNewsSource {
             return Err(SourceError::Disabled);
         }
 
-        println!("[4DA/HN] Fetching top stories...");
+        info!("Fetching top stories");
 
-        // Fetch top story IDs
         let top_ids: Vec<u64> = self
             .client
             .get("https://hacker-news.firebaseio.com/v0/topstories.json")
@@ -103,51 +151,88 @@ impl Source for HackerNewsSource {
             .await
             .map_err(|e| SourceError::Parse(e.to_string()))?;
 
-        println!(
-            "[4DA/HN] Got {} story IDs, fetching top {}...",
-            top_ids.len(),
-            self.config.max_items
+        info!(
+            total = top_ids.len(),
+            max_items = self.config.max_items,
+            "Got story IDs, fetching top items"
         );
 
-        let mut items = Vec::new();
+        self.fetch_stories_by_ids(&top_ids, self.config.max_items)
+            .await
+    }
 
-        for id in top_ids.into_iter().take(self.config.max_items) {
-            let url = format!("https://hacker-news.firebaseio.com/v0/item/{}.json", id);
+    async fn fetch_items_deep(&self, items_per_category: usize) -> SourceResult<Vec<SourceItem>> {
+        if !self.config.enabled {
+            return Err(SourceError::Disabled);
+        }
 
-            match self.client.get(&url).send().await {
-                Ok(response) => match response.json::<HNStory>().await {
-                    Ok(story) => {
-                        let title = story.title.unwrap_or_else(|| "[No title]".to_string());
+        info!(items_per_category, "Deep fetching from all HN categories");
 
-                        // For Ask HN / Show HN, content is in the text field
-                        let content = story.text.unwrap_or_default();
+        let endpoints = [
+            (
+                "topstories",
+                "https://hacker-news.firebaseio.com/v0/topstories.json",
+            ),
+            (
+                "newstories",
+                "https://hacker-news.firebaseio.com/v0/newstories.json",
+            ),
+            (
+                "beststories",
+                "https://hacker-news.firebaseio.com/v0/beststories.json",
+            ),
+            (
+                "askstories",
+                "https://hacker-news.firebaseio.com/v0/askstories.json",
+            ),
+            (
+                "showstories",
+                "https://hacker-news.firebaseio.com/v0/showstories.json",
+            ),
+        ];
 
-                        let mut item = SourceItem::new("hackernews", &id.to_string(), &title)
-                            .with_url(story.url.clone())
-                            .with_content(content);
+        let mut all_ids: std::collections::HashSet<u64> = std::collections::HashSet::new();
+        let mut ordered_ids: Vec<u64> = Vec::new();
 
-                        // Add metadata
-                        if let (Some(score), Some(by)) = (story.score, story.by) {
-                            item = item.with_metadata(serde_json::json!({
-                                "score": score,
-                                "author": by,
-                            }));
+        for (category, url) in endpoints {
+            match self.client.get(url).send().await {
+                Ok(response) => match response.json::<Vec<u64>>().await {
+                    Ok(ids) => {
+                        let new_count = ids
+                            .iter()
+                            .take(items_per_category)
+                            .filter(|id| all_ids.insert(**id))
+                            .count();
+
+                        for id in ids.into_iter().take(items_per_category) {
+                            if !ordered_ids.contains(&id) {
+                                ordered_ids.push(id);
+                            }
                         }
 
-                        items.push(item);
+                        info!(
+                            category,
+                            new = new_count,
+                            total = all_ids.len(),
+                            "Fetched category IDs"
+                        );
                     }
                     Err(e) => {
-                        println!("[4DA/HN] Failed to parse story {}: {}", id, e);
+                        warn!(category, error = %e, "Failed to parse category IDs");
                     }
                 },
                 Err(e) => {
-                    println!("[4DA/HN] Failed to fetch story {}: {}", id, e);
+                    warn!(category, error = %e, "Failed to fetch category");
                 }
             }
         }
 
-        println!("[4DA/HN] Fetched {} stories", items.len());
-        Ok(items)
+        info!(
+            unique_ids = all_ids.len(),
+            "Fetching unique stories from all categories"
+        );
+        self.fetch_stories_by_ids(&ordered_ids, ordered_ids.len())
+            .await
     }
 
     async fn scrape_content(&self, item: &SourceItem) -> SourceResult<String> {
@@ -247,6 +332,6 @@ mod tests {
         assert_eq!(source.source_type(), "hackernews");
         assert_eq!(source.name(), "Hacker News");
         assert!(source.config().enabled);
-        assert_eq!(source.config().max_items, 30);
+        assert_eq!(source.config().max_items, 100);
     }
 }
