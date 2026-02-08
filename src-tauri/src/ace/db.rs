@@ -5,12 +5,18 @@
 use parking_lot::Mutex;
 use rusqlite::Connection;
 use std::sync::Arc;
+use tracing::info;
 
 /// Run all ACE database migrations
 pub fn migrate(conn: &Arc<Mutex<Connection>>) -> Result<(), String> {
     let conn = conn.lock();
 
     conn.execute_batch(r#"
+        -- Enable WAL mode for better concurrency (prevents "database is locked" errors)
+        PRAGMA journal_mode = WAL;
+        PRAGMA busy_timeout = 5000;
+        PRAGMA synchronous = NORMAL;
+
         -- ═══════════════════════════════════════════════════════════════
         -- SIGNAL ACQUISITION TABLES
         -- ═══════════════════════════════════════════════════════════════
@@ -248,13 +254,74 @@ pub fn migrate(conn: &Arc<Mutex<Connection>>) -> Result<(), String> {
             ('~/workspace', 8),
             ('~/work', 7),
             ('~/.config', 3);
+
+        -- ═══════════════════════════════════════════════════════════════
+        -- DOCUMENT EXTRACTION TABLES
+        -- ═══════════════════════════════════════════════════════════════
+
+        -- Indexed documents (files that have been extracted)
+        CREATE TABLE IF NOT EXISTS indexed_documents (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            file_path TEXT NOT NULL UNIQUE,
+            file_name TEXT NOT NULL,
+            file_type TEXT NOT NULL,           -- 'pdf', 'docx', 'xlsx', 'zip', etc.
+            file_size INTEGER,
+            content_hash TEXT,
+            word_count INTEGER DEFAULT 0,
+            page_count INTEGER DEFAULT 0,
+            extraction_confidence REAL DEFAULT 0.0,
+            extracted_topics TEXT,             -- JSON array
+            last_modified TEXT,
+            indexed_at TEXT DEFAULT (datetime('now')),
+            updated_at TEXT DEFAULT (datetime('now'))
+        );
+        CREATE INDEX IF NOT EXISTS idx_indexed_documents_path ON indexed_documents(file_path);
+        CREATE INDEX IF NOT EXISTS idx_indexed_documents_type ON indexed_documents(file_type);
+        CREATE INDEX IF NOT EXISTS idx_indexed_documents_indexed ON indexed_documents(indexed_at);
+
+        -- Document chunks (extracted text segments for search)
+        CREATE TABLE IF NOT EXISTS document_chunks (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            document_id INTEGER NOT NULL,
+            chunk_index INTEGER NOT NULL,
+            content TEXT NOT NULL,
+            word_count INTEGER DEFAULT 0,
+            embedding BLOB,                    -- 384-dim embedding for semantic search
+            created_at TEXT DEFAULT (datetime('now')),
+            FOREIGN KEY (document_id) REFERENCES indexed_documents(id) ON DELETE CASCADE
+        );
+        CREATE INDEX IF NOT EXISTS idx_document_chunks_doc ON document_chunks(document_id);
+
     "#).map_err(|e| format!("ACE migration failed: {}", e))?;
 
-    println!("[ACE] Database schema initialized");
+    // Create vec0 virtual table for KNN search on topic embeddings (sqlite-vec)
+    // This enables O(log n) semantic similarity search for topics
+    conn.execute_batch(
+        "
+        -- Vector index for active topic embeddings (384-dim MiniLM embeddings)
+        CREATE VIRTUAL TABLE IF NOT EXISTS topic_vec USING vec0(
+            embedding float[384]
+        );
+
+        -- Vector index for topic affinity embeddings (384-dim MiniLM embeddings)
+        CREATE VIRTUAL TABLE IF NOT EXISTS affinity_vec USING vec0(
+            embedding float[384]
+        );
+
+        -- Vector index for document chunk embeddings (384-dim MiniLM embeddings)
+        CREATE VIRTUAL TABLE IF NOT EXISTS document_vec USING vec0(
+            embedding float[384]
+        );
+    ",
+    )
+    .map_err(|e| format!("Failed to create topic vec0 tables: {}", e))?;
+
+    info!(target: "ace::db", "ACE database schema initialized with sqlite-vec");
     Ok(())
 }
 
 /// Get bootstrap paths for initial scan
+#[allow(dead_code)] // Future: ACE autonomous scanning
 pub fn get_bootstrap_paths(conn: &Arc<Mutex<Connection>>) -> Result<Vec<String>, String> {
     let conn = conn.lock();
     let mut stmt = conn
@@ -269,93 +336,18 @@ pub fn get_bootstrap_paths(conn: &Arc<Mutex<Connection>>) -> Result<Vec<String>,
     paths.map_err(|e| e.to_string())
 }
 
-/// Mark a bootstrap path as scanned
-pub fn mark_path_scanned(conn: &Arc<Mutex<Connection>>, path: &str) -> Result<(), String> {
-    let conn = conn.lock();
-    conn.execute(
-        "UPDATE bootstrap_paths SET scanned = 1, last_scanned = datetime('now') WHERE path = ?1",
-        rusqlite::params![path],
-    )
-    .map_err(|e| format!("Failed to mark path scanned: {}", e))?;
-    Ok(())
-}
-
-/// Record accuracy metrics for the day
-pub fn record_accuracy_metrics(
-    conn: &Arc<Mutex<Connection>>,
-    items_shown: u64,
-    items_clicked: u64,
-    positive_feedback: u64,
-    negative_feedback: u64,
-) -> Result<(), String> {
-    let conn = conn.lock();
-    let today = chrono::Utc::now().format("%Y-%m-%d").to_string();
-
-    let precision = if items_shown > 0 {
-        (items_clicked + positive_feedback) as f32 / items_shown as f32
-    } else {
-        0.0
-    };
-
-    let engagement = if items_shown > 0 {
-        items_clicked as f32 / items_shown as f32
-    } else {
-        0.0
-    };
-
-    conn.execute(
-        "INSERT INTO accuracy_metrics (metric_date, precision_score, engagement_rate, items_shown, items_clicked, positive_feedback, negative_feedback)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
-         ON CONFLICT(metric_date) DO UPDATE SET
-            precision_score = excluded.precision_score,
-            engagement_rate = excluded.engagement_rate,
-            items_shown = excluded.items_shown,
-            items_clicked = excluded.items_clicked,
-            positive_feedback = excluded.positive_feedback,
-            negative_feedback = excluded.negative_feedback",
-        rusqlite::params![today, precision, engagement, items_shown, items_clicked, positive_feedback, negative_feedback],
-    ).map_err(|e| format!("Failed to record accuracy metrics: {}", e))?;
-
-    Ok(())
-}
-
-/// Update component health status
-pub fn update_component_health(
-    conn: &Arc<Mutex<Connection>>,
-    component: &str,
-    status: &str,
-    error: Option<&str>,
-) -> Result<(), String> {
-    let conn = conn.lock();
-
-    if let Some(err) = error {
-        conn.execute(
-            "INSERT INTO system_health (component, status, error_count, last_error)
-             VALUES (?1, ?2, 1, ?3)
-             ON CONFLICT(component) DO UPDATE SET
-                status = excluded.status,
-                error_count = system_health.error_count + 1,
-                last_error = excluded.last_error,
-                checked_at = datetime('now')",
-            rusqlite::params![component, status, err],
-        )
-    } else {
-        conn.execute(
-            "INSERT INTO system_health (component, status, last_success, error_count)
-             VALUES (?1, ?2, datetime('now'), 0)
-             ON CONFLICT(component) DO UPDATE SET
-                status = excluded.status,
-                last_success = datetime('now'),
-                error_count = 0,
-                last_error = NULL,
-                checked_at = datetime('now')",
-            rusqlite::params![component, status],
-        )
-    }
-    .map_err(|e| format!("Failed to update health: {}", e))?;
-
-    Ok(())
-}
+// ═══════════════════════════════════════════════════════════════
+// REMOVED UNUSED FUNCTIONS (cleanup 2026-01-21):
+// - mark_path_scanned
+// - record_accuracy_metrics
+// - get_active_topics_by_weight
+// - get_tech_stack_summary
+// - get_recent_activity_context
+// - get_topic_affinities (ACE uses BehaviorLearner methods)
+// - get_anti_topics (ACE uses BehaviorLearner methods)
+// - ActivityContext struct
+// - update_component_health
+// ═══════════════════════════════════════════════════════════════
 
 #[cfg(test)]
 mod tests {
@@ -364,6 +356,13 @@ mod tests {
 
     #[test]
     fn test_migration() {
+        // Load sqlite-vec extension for vec0 virtual tables
+        unsafe {
+            rusqlite::ffi::sqlite3_auto_extension(Some(std::mem::transmute(
+                sqlite_vec::sqlite3_vec_init as *const (),
+            )));
+        }
+
         let conn = Arc::new(Mutex::new(Connection::open_in_memory().unwrap()));
         assert!(migrate(&conn).is_ok());
 

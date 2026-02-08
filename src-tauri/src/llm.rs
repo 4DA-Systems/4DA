@@ -7,6 +7,7 @@
 
 use crate::settings::LLMProvider;
 use serde::{Deserialize, Serialize};
+use tracing::debug;
 
 // ============================================================================
 // Types
@@ -58,6 +59,7 @@ impl LLMClient {
     }
 
     /// Check if the client is configured
+    #[allow(dead_code)] // Future: settings validation
     pub fn is_configured(&self) -> bool {
         match self.provider.provider.as_str() {
             "anthropic" | "openai" => !self.provider.api_key.is_empty(),
@@ -305,6 +307,46 @@ impl LLMClient {
 }
 
 // ============================================================================
+// Ollama Utilities
+// ============================================================================
+
+/// List available models from Ollama API
+#[allow(dead_code)] // Utility function for future use
+pub async fn list_ollama_models(base_url: &str) -> Result<Vec<String>, String> {
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(5))
+        .build()
+        .map_err(|e| format!("Failed to create HTTP client: {}", e))?;
+
+    let url = format!("{}/api/tags", base_url);
+    let response = client
+        .get(&url)
+        .send()
+        .await
+        .map_err(|e| format!("Failed to connect to Ollama: {}", e))?;
+
+    if !response.status().is_success() {
+        return Err(format!("Ollama returned error: {}", response.status()));
+    }
+
+    let data: serde_json::Value = response
+        .json()
+        .await
+        .map_err(|e| format!("Failed to parse response: {}", e))?;
+
+    let models = data["models"]
+        .as_array()
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|m| m["name"].as_str().map(String::from))
+                .collect()
+        })
+        .unwrap_or_default();
+
+    Ok(models)
+}
+
+// ============================================================================
 // Relevance Judge
 // ============================================================================
 
@@ -463,12 +505,13 @@ Output JSON array:
 
             // Debug log first few judgments
             if judgments.len() < 3 {
-                println!(
-                    "[4DA/LLM] Parsed judgment: id={}, relevant={}, confidence={:.2}, reason={}",
-                    id,
-                    relevant,
-                    confidence,
-                    &reasoning[..reasoning.len().min(50)]
+                debug!(
+                    target: "4da::llm",
+                    id = %id,
+                    relevant = %relevant,
+                    confidence = confidence,
+                    reason = %&reasoning[..reasoning.len().min(50)],
+                    "Parsed judgment"
                 );
             }
 
@@ -518,6 +561,7 @@ mod tests {
             api_key: "test".to_string(),
             model: "claude-3-haiku-20240307".to_string(),
             base_url: None,
+            openai_api_key: String::new(),
         };
         let client = LLMClient::new(provider);
 
@@ -535,6 +579,7 @@ mod tests {
             api_key: String::new(),
             model: "llama3".to_string(),
             base_url: None,
+            openai_api_key: String::new(),
         };
         let client = LLMClient::new(provider);
 

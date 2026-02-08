@@ -28,6 +28,7 @@ use rusqlite::{params, Connection, Result as SqliteResult};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
+use tracing::info;
 
 // ============================================================================
 // Types - Static Identity (Layer 1)
@@ -79,58 +80,11 @@ impl Default for InterestSource {
 }
 
 // ============================================================================
-// Types - Active Context (Layer 2) - Placeholder for Phase 2
-// ============================================================================
-
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
-pub struct ActiveContext {
-    pub watched_dirs: Vec<WatchedDirectory>,
-    pub active_topics: Vec<TopicWeight>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct WatchedDirectory {
-    pub path: String,
-    pub enabled: bool,
-    pub last_indexed: Option<String>,
-    pub chunk_count: usize,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct TopicWeight {
-    pub topic: String,
-    pub weight: f32,
-}
-
-// ============================================================================
-// Types - Learned Behavior (Layer 3) - Placeholder for Phase 3
-// ============================================================================
-
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
-pub struct LearnedBehavior {
-    pub topic_affinities: HashMap<String, TopicAffinity>,
-    pub anti_topics: Vec<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct TopicAffinity {
-    pub topic: String,
-    pub positive_signals: u32,
-    pub negative_signals: u32,
-    pub total_exposures: u32,
-    pub affinity_score: f32,
-}
-
-// ============================================================================
 // Types - Interaction Tracking
 // ============================================================================
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Interaction {
-    pub source_item_id: i64,
-    pub action: InteractionType,
-    pub timestamp: String,
-}
+// Note: ActiveContext, WatchedDirectory, TopicWeight, LearnedBehavior,
+// TopicAffinity, and Interaction structs were removed (2026-01-21) as they
+// are unused - ACE module provides the active implementations.
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "lowercase")]
@@ -142,148 +96,12 @@ pub enum InteractionType {
 }
 
 // ============================================================================
-// Context Membrane - The unified context model
+// Context Membrane - Removed (2026-01-21)
 // ============================================================================
-
-/// The complete context membrane combining all three layers
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
-pub struct ContextMembrane {
-    pub static_identity: StaticIdentity,
-    pub active_context: ActiveContext,
-    pub learned_behavior: LearnedBehavior,
-}
-
-impl ContextMembrane {
-    /// Compute relevance score for an item embedding against user context
-    pub fn compute_relevance(&self, item_embedding: &[f32], item_topics: &[String]) -> f32 {
-        // Check exclusions first (hard filter)
-        for topic in item_topics {
-            let topic_lower = topic.to_lowercase();
-            for exclusion in &self.static_identity.exclusions {
-                if topic_lower.contains(&exclusion.to_lowercase()) {
-                    return 0.0;
-                }
-            }
-        }
-
-        // Layer 1: Static identity match (explicit interests)
-        let static_score = self.compute_static_score(item_embedding);
-
-        // Layer 2: Active context match (current work - placeholder)
-        let active_score = self.compute_active_score(item_topics);
-
-        // Layer 3: Learned behavior match (placeholder)
-        let learned_score = self.compute_learned_score(item_topics);
-
-        // Anti-topic penalty
-        let anti_penalty = self.compute_anti_penalty(item_topics);
-
-        // Weighted combination
-        // Phase 1: Static gets full weight, others minimal until implemented
-        let combined = static_score * 0.7      // Explicit intent (primary for now)
-                     + active_score * 0.2      // Current work
-                     + learned_score * 0.1     // Behavioral signal
-                     - anti_penalty;
-
-        combined.clamp(0.0, 1.0)
-    }
-
-    /// Compute score from static identity (explicit interests)
-    fn compute_static_score(&self, item_embedding: &[f32]) -> f32 {
-        if self.static_identity.interests.is_empty() {
-            return 0.5; // Neutral if no interests defined
-        }
-
-        let mut max_score: f32 = 0.0;
-
-        for interest in &self.static_identity.interests {
-            if let Some(ref interest_embedding) = interest.embedding {
-                let similarity = cosine_similarity(item_embedding, interest_embedding);
-                let weighted = similarity * interest.weight;
-                max_score = max_score.max(weighted);
-            }
-        }
-
-        max_score
-    }
-
-    /// Compute score from active context (Phase 2 placeholder)
-    fn compute_active_score(&self, item_topics: &[String]) -> f32 {
-        if self.active_context.active_topics.is_empty() {
-            return 0.0;
-        }
-
-        let mut max_score: f32 = 0.0;
-
-        for active_topic in &self.active_context.active_topics {
-            for item_topic in item_topics {
-                if item_topic
-                    .to_lowercase()
-                    .contains(&active_topic.topic.to_lowercase())
-                {
-                    max_score = max_score.max(active_topic.weight);
-                }
-            }
-        }
-
-        max_score
-    }
-
-    /// Compute score from learned behavior (Phase 3 placeholder)
-    fn compute_learned_score(&self, item_topics: &[String]) -> f32 {
-        if self.learned_behavior.topic_affinities.is_empty() {
-            return 0.0;
-        }
-
-        let mut total_score: f32 = 0.0;
-
-        for topic in item_topics {
-            let topic_lower = topic.to_lowercase();
-            for (affinity_topic, affinity) in &self.learned_behavior.topic_affinities {
-                if topic_lower.contains(&affinity_topic.to_lowercase())
-                    && affinity.affinity_score > 0.0
-                {
-                    total_score += affinity.affinity_score;
-                }
-            }
-        }
-
-        total_score.min(1.0)
-    }
-
-    /// Compute anti-topic penalty
-    fn compute_anti_penalty(&self, item_topics: &[String]) -> f32 {
-        let mut penalty: f32 = 0.0;
-
-        for topic in item_topics {
-            let topic_lower = topic.to_lowercase();
-            for anti in &self.learned_behavior.anti_topics {
-                if topic_lower.contains(&anti.to_lowercase()) {
-                    penalty += 0.3;
-                }
-            }
-        }
-
-        penalty.min(1.0)
-    }
-}
-
-/// Cosine similarity between two vectors
-fn cosine_similarity(a: &[f32], b: &[f32]) -> f32 {
-    if a.len() != b.len() || a.is_empty() {
-        return 0.0;
-    }
-
-    let dot: f32 = a.iter().zip(b.iter()).map(|(x, y)| x * y).sum();
-    let norm_a: f32 = a.iter().map(|x| x * x).sum::<f32>().sqrt();
-    let norm_b: f32 = b.iter().map(|x| x * x).sum::<f32>().sqrt();
-
-    if norm_a == 0.0 || norm_b == 0.0 {
-        return 0.0;
-    }
-
-    dot / (norm_a * norm_b)
-}
+// The ContextMembrane struct, its methods (compute_relevance, compute_static_score,
+// compute_active_score, compute_learned_score, compute_anti_penalty), and the
+// cosine_similarity function were removed as they are unused.
+// ACE module provides the active unified scoring implementation.
 
 // ============================================================================
 // Context Engine - Database-backed context management
@@ -397,7 +215,7 @@ impl ContextEngine {
             INSERT OR IGNORE INTO user_identity (id) VALUES (1);
         ")?;
 
-        println!("[4DA/Context] Context engine tables initialized");
+        info!(target: "4da::context", "Context engine tables initialized");
         Ok(())
     }
 
@@ -606,6 +424,7 @@ impl ContextEngine {
     }
 
     /// Get interaction counts for an item
+    #[allow(dead_code)] // Future: analytics API
     pub fn get_interaction_counts(
         &self,
         source_item_id: i64,
@@ -628,24 +447,8 @@ impl ContextEngine {
         Ok(counts)
     }
 
-    // ========================================================================
-    // Full Context Membrane
-    // ========================================================================
-
-    /// Load the complete context membrane
-    pub fn get_context_membrane(&self) -> SqliteResult<ContextMembrane> {
-        let static_identity = self.get_static_identity()?;
-
-        // Active context and learned behavior are placeholders for now
-        let active_context = ActiveContext::default();
-        let learned_behavior = LearnedBehavior::default();
-
-        Ok(ContextMembrane {
-            static_identity,
-            active_context,
-            learned_behavior,
-        })
-    }
+    // Note: get_context_membrane was removed (2026-01-21) as ContextMembrane
+    // struct was removed. Use get_static_identity() or ACE for context needs.
 
     /// Get interest count
     pub fn interest_count(&self) -> SqliteResult<i64> {
@@ -690,33 +493,14 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_cosine_similarity() {
-        let a = vec![1.0, 0.0, 0.0];
-        let b = vec![1.0, 0.0, 0.0];
-        assert!((cosine_similarity(&a, &b) - 1.0).abs() < 1e-6);
-
-        let c = vec![0.0, 1.0, 0.0];
-        assert!(cosine_similarity(&a, &c).abs() < 1e-6);
-
-        let d = vec![-1.0, 0.0, 0.0];
-        assert!((cosine_similarity(&a, &d) - (-1.0)).abs() < 1e-6);
+    fn test_embedding_conversion() {
+        let original = vec![1.0, 2.5, -0.5, 0.0];
+        let blob = embedding_to_blob(&original);
+        let restored = blob_to_embedding(&blob);
+        assert_eq!(original, restored);
     }
 
-    #[test]
-    fn test_exclusion_filter() {
-        let mut membrane = ContextMembrane::default();
-        membrane.static_identity.exclusions = vec!["crypto".to_string(), "nft".to_string()];
-
-        let embedding = vec![0.5; 384];
-        let topics_clean = vec!["rust".to_string(), "programming".to_string()];
-        let topics_excluded = vec!["cryptocurrency".to_string(), "programming".to_string()];
-
-        // Clean topics should get a non-zero score
-        let score_clean = membrane.compute_relevance(&embedding, &topics_clean);
-        assert!(score_clean > 0.0);
-
-        // Excluded topics should get zero
-        let score_excluded = membrane.compute_relevance(&embedding, &topics_excluded);
-        assert_eq!(score_excluded, 0.0);
-    }
+    // Note: test_cosine_similarity and test_exclusion_filter were removed
+    // as they tested the removed ContextMembrane functionality.
+    // ACE module provides comprehensive relevance scoring tests.
 }

@@ -1,6 +1,6 @@
 [package]
 name = "fourda"
-version = "0.1.0"
+version = "1.0.0"
 description = "4DA - The internet searches for you"
 authors = ["4DA Team"]
 edition = "2021"
@@ -17,6 +17,7 @@ tauri-build = { version = "2", features = [] }
 tauri = { version = "2", features = ["tray-icon"] }
 tauri-plugin-opener = "2"
 tauri-plugin-notification = "2"
+tauri-plugin-updater = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 
@@ -25,6 +26,9 @@ tokio = { version = "1", features = ["full"] }
 
 # HTTP client
 reqwest = { version = "0.12", features = ["json"] }
+
+# URL encoding
+urlencoding = "2"
 
 # Error handling
 thiserror = "2"
@@ -41,7 +45,7 @@ notify = "8"
 scraper = "0.23"
 
 # Embeddings (local MiniLM model)
-fastembed = "4"
+# fastembed = "4"  # DISABLED: ONNX linking issues on Windows - using OpenAI embeddings only
 
 # Thread-safe state
 once_cell = "1"
@@ -67,6 +71,23 @@ dirs = "5"
 
 # Async trait support
 async-trait = "0.1"
+
+# Base64 encoding/decoding (for GitHub README)
+base64 = "0.22"
+
+# Phase 1: Multi-format document extraction (basic support)
+# Note: Using pure Rust alternatives instead of C library bindings
+pdf-extract = "0.7"          # PDF text extraction
+lopdf = "0.32"               # PDF manipulation
+docx-rs = "0.4"              # Word document parsing
+calamine = "0.25"            # Excel spreadsheet parsing
+image = "0.25"               # Image loading/preprocessing (Month 2 - OCR)
+ocrs = "0.12"               # Pure Rust OCR engine
+rten = "0.24"               # Model loading for ocrs (text-detection.rten, text-recognition.rten)
+# whisper-rs = "0.14"       # DISABLED: Requires vcpkg/system deps - audio.rs stubbed
+zip = "0.6"                  # ZIP archive extraction
+tar = "0.4"                  # TAR archive extraction
+flate2 = "1.0"               # Gzip compression/decompression
 
 [profile.release]
 strip = true

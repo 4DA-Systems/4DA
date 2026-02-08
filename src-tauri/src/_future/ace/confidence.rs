@@ -9,6 +9,8 @@
 //! - 0.3 - 0.5: Uncertain (minimal weight)
 //! - 0.0 - 0.3: Rejected (discarded)
 
+#![allow(dead_code)]
+
 use serde::{Deserialize, Serialize};
 
 /// Confidence score wrapper with metadata

@@ -2,9 +2,16 @@
   "mcpServers": {
     "memory": {
       "command": "node",
-      "args": ["/mnt/d/4da-v3/mcp-memory-server/dist/index.js"],
+      "args": ["D:/4da-v3/mcp-memory-server/dist/index.js"],
       "env": {
-        "MEMORY_DB_PATH": "/mnt/d/4da-v3/.claude/memory.db"
+        "MEMORY_DB_PATH": "D:/4da-v3/.claude/memory.db"
+      }
+    },
+    "4da": {
+      "command": "node",
+      "args": ["D:/4da-v3/mcp-4da-server/dist/index.js"],
+      "env": {
+        "FOURDA_DB_PATH": "D:/4da-v3/data/4da.db"
       }
     }
   }

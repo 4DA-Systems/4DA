@@ -1,0 +1,17 @@
+{
+  "name": "get_context",
+  "description": "Get the user's context - what 4DA knows about them.\n\nReturns information about:\n- Static Identity: User-declared role, tech stack, domains, interests, and exclusions\n- ACE Context (optional): Auto-detected technologies and active topics from recent activity\n- Learned Preferences (optional): Topic affinities learned from user behavior\n\nUse this to understand what the user is working on and interested in.",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "include_ace": {
+        "type": "boolean",
+        "description": "Include ACE-detected context (detected tech, active topics). Default: true"
+      },
+      "include_learned": {
+        "type": "boolean",
+        "description": "Include learned preferences (topic affinities, anti-topics). Default: true"
+      }
+    }
+  }
+}

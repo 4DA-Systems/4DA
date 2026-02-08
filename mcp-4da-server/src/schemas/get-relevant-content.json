@@ -1,0 +1,26 @@
+{
+  "name": "get_relevant_content",
+  "description": "Get filtered relevant content from 4DA's personalized feed.\n\nReturns content items that match the user's interests, tech stack, and learned preferences.\nItems are scored based on:\n- Explicit interests declared by the user\n- Tech stack and domains\n- ACE-detected context (recent files, projects, git activity)\n- Learned preferences from past interactions\n\nUse this to find content relevant to the user's current context.",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "min_score": {
+        "type": "number",
+        "description": "Minimum relevance score (0.0-1.0). Default: 0.35"
+      },
+      "source_type": {
+        "type": "string",
+        "description": "Filter by source type: \"hackernews\", \"arxiv\", or \"reddit\". Leave empty for all sources.",
+        "enum": ["hackernews", "arxiv", "reddit"]
+      },
+      "limit": {
+        "type": "number",
+        "description": "Maximum number of items to return. Default: 20, max: 100"
+      },
+      "since_hours": {
+        "type": "number",
+        "description": "Only include items discovered in the last N hours. Default: 24"
+      }
+    }
+  }
+}

@@ -6,6 +6,8 @@
 //! - Anomaly detection
 //! - Contradiction detection
 
+#![allow(dead_code)]
+
 use super::confidence::{ConfidenceScore, SignalConfidence};
 use super::scanner::ProjectSignal;
 use serde::{Deserialize, Serialize};

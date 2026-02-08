@@ -4,6 +4,7 @@
 
 use async_trait::async_trait;
 use serde::Deserialize;
+use tracing::info;
 
 use super::{Source, SourceConfig, SourceError, SourceItem, SourceResult};
 
@@ -58,6 +59,7 @@ impl ArxivSource {
     }
 
     /// Create with custom categories
+    #[allow(dead_code)] // Future: configurable arXiv categories
     pub fn with_categories(categories: Vec<String>) -> Self {
         let mut source = Self::new();
         source.categories = categories;
@@ -166,47 +168,28 @@ impl Default for ArxivSource {
     }
 }
 
-#[async_trait]
-impl Source for ArxivSource {
-    fn source_type(&self) -> &'static str {
-        "arxiv"
-    }
-
-    fn name(&self) -> &'static str {
-        "arXiv"
-    }
-
-    fn config(&self) -> &SourceConfig {
-        &self.config
-    }
-
-    fn set_config(&mut self, config: SourceConfig) {
-        self.config = config;
-    }
-
-    async fn fetch_items(&self) -> SourceResult<Vec<SourceItem>> {
+impl ArxivSource {
+    /// Helper to fetch papers for specified categories
+    async fn fetch_for_categories(
+        &self,
+        categories: &[String],
+        max_items: usize,
+    ) -> SourceResult<Vec<SourceItem>> {
         if !self.config.enabled {
             return Err(SourceError::Disabled);
         }
 
-        println!(
-            "[4DA/arXiv] Fetching papers for categories: {:?}",
-            self.categories
-        );
+        info!(categories = ?categories, "Fetching papers for categories");
 
-        // Build query for categories
-        let cat_query = self
-            .categories
+        let cat_query = categories
             .iter()
             .map(|c| format!("cat:{}", c))
             .collect::<Vec<_>>()
             .join("+OR+");
 
-        // arXiv API query
         let url = format!(
             "http://export.arxiv.org/api/query?search_query={}&start=0&max_results={}&sortBy=submittedDate&sortOrder=descending",
-            cat_query,
-            self.config.max_items
+            cat_query, max_items
         );
 
         let response = self
@@ -227,33 +210,73 @@ impl Source for ArxivSource {
             .text()
             .await
             .map_err(|e| SourceError::Parse(e.to_string()))?;
-
         let entries = self.parse_atom_feed(&xml);
-        println!("[4DA/arXiv] Parsed {} entries from feed", entries.len());
+        info!(count = entries.len(), "Parsed entries from feed");
 
         let items: Vec<SourceItem> = entries
             .into_iter()
             .map(|entry| {
                 let arxiv_id = Self::extract_arxiv_id(&entry.id);
-
-                let mut item = SourceItem::new("arxiv", &arxiv_id, &entry.title)
+                SourceItem::new("arxiv", &arxiv_id, &entry.title)
                     .with_url(Some(entry.link.clone()))
-                    .with_content(entry.summary);
-
-                // Add metadata
-                item = item.with_metadata(serde_json::json!({
-                    "authors": entry.authors,
-                    "categories": entry.categories,
-                    "published": entry.published,
-                    "arxiv_url": entry.id,
-                }));
-
-                item
+                    .with_content(entry.summary)
+                    .with_metadata(serde_json::json!({
+                        "authors": entry.authors,
+                        "categories": entry.categories,
+                        "published": entry.published,
+                        "arxiv_url": entry.id,
+                    }))
             })
             .collect();
 
-        println!("[4DA/arXiv] Fetched {} papers", items.len());
+        info!(count = items.len(), "Fetched papers");
         Ok(items)
+    }
+}
+
+#[async_trait]
+impl Source for ArxivSource {
+    fn source_type(&self) -> &'static str {
+        "arxiv"
+    }
+
+    fn name(&self) -> &'static str {
+        "arXiv"
+    }
+
+    fn config(&self) -> &SourceConfig {
+        &self.config
+    }
+
+    fn set_config(&mut self, config: SourceConfig) {
+        self.config = config;
+    }
+
+    async fn fetch_items(&self) -> SourceResult<Vec<SourceItem>> {
+        self.fetch_for_categories(&self.categories, self.config.max_items)
+            .await
+    }
+
+    async fn fetch_items_deep(&self, items_per_category: usize) -> SourceResult<Vec<SourceItem>> {
+        if !self.config.enabled {
+            return Err(SourceError::Disabled);
+        }
+
+        let deep_categories = vec![
+            "cs.AI", "cs.LG", "cs.CL", "cs.CV", "cs.SE", "cs.PL", "cs.DB", "cs.DC", "cs.CR",
+            "cs.NE", "cs.IR", "cs.RO", "cs.HC", "stat.ML", "q-bio.QM", "q-fin.ST",
+        ];
+
+        info!(
+            category_count = deep_categories.len(),
+            items_per = items_per_category,
+            "Deep fetching arXiv"
+        );
+
+        let categories: Vec<String> = deep_categories.iter().map(|s| s.to_string()).collect();
+        // Multiplier of 10 gives ~1000 papers across 16 categories for deep scan
+        self.fetch_for_categories(&categories, items_per_category * 10)
+            .await
     }
 
     async fn scrape_content(&self, item: &SourceItem) -> SourceResult<String> {

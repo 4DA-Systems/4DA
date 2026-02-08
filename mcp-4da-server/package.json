@@ -1,0 +1,35 @@
+{
+  "name": "mcp-4da-server",
+  "version": "3.1.0",
+  "description": "MCP server for 4DA - 11 AI-powered tools for content filtering, analysis, and insights",
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc && npm run copy-schemas",
+    "copy-schemas": "node -e \"const fs=require('fs');const path=require('path');const src='src/schemas';const dst='dist/schemas';if(!fs.existsSync(dst))fs.mkdirSync(dst,{recursive:true});fs.readdirSync(src).filter(f=>f.endsWith('.json')).forEach(f=>fs.copyFileSync(path.join(src,f),path.join(dst,f)))\"",
+    "dev": "tsc --watch",
+    "start": "node dist/index.js",
+    "inspect": "npx @modelcontextprotocol/inspector node dist/index.js"
+  },
+  "keywords": [
+    "mcp",
+    "4da",
+    "ai",
+    "context",
+    "relevance"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "better-sqlite3": "^11.0.0"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.11",
+    "@types/node": "^20.11.0",
+    "typescript": "^5.3.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

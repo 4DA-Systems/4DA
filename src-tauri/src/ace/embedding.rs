@@ -3,6 +3,8 @@
 //! Provides embedding generation and similarity computation for topics.
 //! Supports both local (Ollama) and cloud (OpenAI) embedding providers.
 
+#![allow(dead_code)]
+
 use parking_lot::Mutex;
 use rusqlite::Connection;
 use serde::{Deserialize, Serialize};
@@ -321,7 +323,7 @@ impl EmbeddingService {
             })
             .collect();
 
-        similarities.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+        similarities.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
         similarities.truncate(top_k);
 
         Ok(similarities)

@@ -1,7 +1,11 @@
 # Phase 0: Relevance Microscope
 
+> **STATUS: COMPLETED** (2026-01-25)
+> Hypothesis validated. Embedding similarity works for relevance scoring.
+> 16/30 → 25/30+ relevant items achieved with PASIFA improvements.
+
 **Version:** 1.0.0
-**Status:** Active
+**Status:** ~~Active~~ **COMPLETED**
 **Purpose:** Scientific instrument, not prototype
 
 ---
