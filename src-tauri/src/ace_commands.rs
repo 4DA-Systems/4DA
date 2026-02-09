@@ -971,7 +971,7 @@ pub(crate) async fn index_discovered_readmes(context_dirs: &[PathBuf]) -> usize 
                                 }
 
                                 // Generate embedding
-                                match embed_texts(&[chunk_content.clone()]) {
+                                match embed_texts(std::slice::from_ref(&chunk_content)) {
                                     Ok(embeddings) if !embeddings.is_empty() => {
                                         // Store with weight in context_chunks table
                                         match db.upsert_context_weighted(

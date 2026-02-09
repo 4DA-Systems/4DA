@@ -189,13 +189,17 @@ export interface DocumentSearchResult {
 
 // Void Engine types
 export interface VoidSignal {
-  pulse: number;      // 0-1: source fetch activity
-  heat: number;       // 0-1: avg relevance from last analysis
-  burst: number;      // 0-1: discovery flash (score > 0.7)
-  morph: number;      // 0-1: ACE file change activity
-  error: number;      // 0-1: recent error indicator
-  staleness: number;  // 0-1: hours since last analysis / 24
-  item_count: number; // total cached items
+  pulse: number;             // 0-1: source fetch activity
+  heat: number;              // 0-1: avg relevance from last analysis
+  burst: number;             // 0-1: discovery flash (score > 0.7)
+  morph: number;             // 0-1: ACE file change activity
+  error: number;             // 0-1: recent error indicator
+  staleness: number;         // 0-1: hours since last analysis / 24
+  item_count: number;        // total cached items
+  signal_intensity: number;  // 0-1: highest signal priority / 4
+  signal_urgency: number;    // 0-1: weighted urgency from signal types
+  critical_count: number;    // count of critical-priority signals
+  signal_color_shift: number; // -1 to +1: cool (learning) to warm (alert)
 }
 
 // Void Universe types (Phase 2)

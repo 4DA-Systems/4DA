@@ -135,6 +135,7 @@ pub struct ActivityPatterns {
 // ============================================================================
 
 /// The Autonomous Context Engine (simplified)
+#[allow(clippy::upper_case_acronyms)]
 pub struct ACE {
     conn: Arc<Mutex<Connection>>,
     scanner: ProjectScanner,

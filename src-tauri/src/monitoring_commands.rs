@@ -18,7 +18,7 @@ pub async fn get_monitoring_status() -> Result<serde_json::Value, String> {
     let state = get_monitoring_state();
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
-        .unwrap()
+        .unwrap_or_default()
         .as_secs();
     let last_check = state.last_check.load(std::sync::atomic::Ordering::Relaxed);
     let secs_since_check = if last_check > 0 { now - last_check } else { 0 };

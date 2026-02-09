@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback, useRef, Component, ErrorInfo, ReactNode } from 'react';
+import { useState, useEffect, useCallback, useRef, Component, ErrorInfo, ReactNode } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import './App.css';
 import { SplashScreen } from './components/SplashScreen';
@@ -16,6 +16,7 @@ import {
   useFeedback,
   useSystemHealth,
   useUserContext,
+  useResultFilters,
 } from './hooks';
 import { getStageLabel } from './utils/score';
 
@@ -86,11 +87,6 @@ function App() {
   // Local UI state
   const [showSplash, setShowSplash] = useState(true);
   const [showSettings, setShowSettings] = useState(false);
-  // Result filtering and sorting state
-  const [sourceFilters, setSourceFilters] = useState<Set<string>>(new Set(['hackernews', 'arxiv', 'reddit', 'github', 'rss', 'youtube', 'twitter', 'producthunt']));
-  const [sortBy, setSortBy] = useState<'score' | 'date'>('score');
-  const [showOnlyRelevant, setShowOnlyRelevant] = useState(false);
-
   // All application state via hooks
   const {
     settings,
@@ -181,6 +177,18 @@ function App() {
     updateRole,
   } = useUserContext(setSettingsStatus);
 
+  const {
+    sourceFilters,
+    sortBy,
+    setSortBy,
+    showOnlyRelevant,
+    setShowOnlyRelevant,
+    toggleSourceFilter,
+    filteredResults,
+    dismissAllBelow,
+    saveAllAbove,
+  } = useResultFilters(state.relevanceResults, feedbackGiven, recordInteraction, setSettingsStatus);
+
   // Check Ollama status when provider changes to "ollama"
   useEffect(() => {
     if (settingsForm.provider === 'ollama') {
@@ -243,63 +251,6 @@ function App() {
     }
   }, []);
 
-  // Toggle source filter
-  const toggleSourceFilter = useCallback((source: string) => {
-    setSourceFilters(prev => {
-      const next = new Set(prev);
-      if (next.has(source)) {
-        if (next.size > 1) next.delete(source); // Keep at least one
-      } else {
-        next.add(source);
-      }
-      return next;
-    });
-  }, []);
-
-  // Filtered and sorted results (memoized to avoid recomputing on unrelated state changes)
-  const filteredResults = useMemo(() =>
-    state.relevanceResults
-      .filter(item => {
-        // Source filter
-        const source = item.source_type || 'hackernews';
-        if (!sourceFilters.has(source)) return false;
-        // Relevance filter
-        if (showOnlyRelevant && !item.relevant) return false;
-        return true;
-      })
-      .sort((a, b) => {
-        if (sortBy === 'score') {
-          return b.top_score - a.top_score;
-        }
-        // Sort by ID as proxy for date (higher ID = more recent)
-        return b.id - a.id;
-      }),
-    [state.relevanceResults, sourceFilters, showOnlyRelevant, sortBy]
-  );
-
-  // Batch operations
-  const dismissAllBelow = useCallback(async (threshold: number) => {
-    const itemsToDismiss = filteredResults.filter(
-      item => item.top_score < threshold && !feedbackGiven[item.id],
-    );
-    for (const item of itemsToDismiss) {
-      await recordInteraction(item.id, 'dismiss', item);
-    }
-    setSettingsStatus(`Dismissed ${itemsToDismiss.length} items below ${Math.round(threshold * 100)}%`);
-    setTimeout(() => setSettingsStatus(''), 3000);
-  }, [filteredResults, feedbackGiven, recordInteraction]);
-
-  const saveAllAbove = useCallback(async (threshold: number) => {
-    const itemsToSave = filteredResults.filter(
-      item => item.top_score >= threshold && !feedbackGiven[item.id],
-    );
-    for (const item of itemsToSave) {
-      await recordInteraction(item.id, 'save', item);
-    }
-    setSettingsStatus(`Saved ${itemsToSave.length} items above ${Math.round(threshold * 100)}%`);
-    setTimeout(() => setSettingsStatus(''), 3000);
-  }, [filteredResults, feedbackGiven, recordInteraction]);
-
   // Auto-analyze on first load if monitoring enabled
   useEffect(() => {
     let cancelled = false;
@@ -312,7 +263,7 @@ function App() {
           // Auto-trigger initial analysis
           await invoke('run_cached_analysis');
         }
-      } catch (error) {
+      } catch {
         // Silently ignore auto-analyze failures
       }
     }, 3000);
@@ -399,7 +350,7 @@ function App() {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [showSettings, showBriefing, expandedItem, state.loading, state.analysisComplete, aiBriefing.content, startAnalysis, setExpandedItem]);
+  }, [showSettings, showBriefing, expandedItem, state.loading, state.analysisComplete, aiBriefing.content, startAnalysis, setExpandedItem, setShowOnlyRelevant]);
 
   return (
     <>

@@ -28,13 +28,15 @@ export function VoidHeartbeat({ signal, size = 200 }: VoidHeartbeatProps) {
   const pulseSpeed = useMemo(() => {
     if (signal.error > 0.5) return 0.3; // Fast flicker
     if (signal.staleness > 0.8) return 6.0; // Very slow
+    // Critical signals make pulse faster
+    if (signal.critical_count > 0) return 1.0;
     // Map pulse: idle=4s, active=0.8s
     return 4.0 - signal.pulse * 3.2;
-  }, [signal.pulse, signal.error, signal.staleness]);
+  }, [signal.pulse, signal.error, signal.staleness, signal.critical_count]);
 
   const coreColor = useMemo(
-    () => computeCoreColor(signal.heat, signal.error, signal.staleness),
-    [signal.heat, signal.error, signal.staleness],
+    () => computeCoreColor(signal.heat, signal.error, signal.staleness, signal.signal_color_shift),
+    [signal.heat, signal.error, signal.staleness, signal.signal_color_shift],
   );
 
   const glowRadius = useMemo(() => {
@@ -123,6 +125,9 @@ export function VoidHeartbeat({ signal, size = 200 }: VoidHeartbeatProps) {
       gl.uniform1f(gl.getUniformLocation(program, 'u_error'), signal.error);
       gl.uniform1f(gl.getUniformLocation(program, 'u_staleness'), signal.staleness);
       gl.uniform1f(gl.getUniformLocation(program, 'u_opacity'), opacity);
+      gl.uniform1f(gl.getUniformLocation(program, 'u_signal_intensity'), signal.signal_intensity);
+      gl.uniform1f(gl.getUniformLocation(program, 'u_signal_color_shift'), signal.signal_color_shift);
+      gl.uniform1i(gl.getUniformLocation(program, 'u_critical_count'), signal.critical_count);
 
       gl.clearColor(0, 0, 0, 0);
       gl.clear(gl.COLOR_BUFFER_BIT);
@@ -133,8 +138,17 @@ export function VoidHeartbeat({ signal, size = 200 }: VoidHeartbeatProps) {
     return () => cancelAnimationFrame(rafRef.current);
   }, [signal, opacity, size]);
 
-  // Cold start state label
+  // State label: signal-aware labels take priority over legacy labels
   const stateLabel = useMemo(() => {
+    // Signal-aware labels (highest priority)
+    if (signal.critical_count > 0 && signal.signal_intensity > 0.75) {
+      return signal.critical_count > 1 ? `${signal.critical_count} Alerts` : 'Alert';
+    }
+    if (signal.signal_color_shift > 0.5) return 'Breaking';
+    if (signal.signal_color_shift > 0.2) return 'Discovery';
+    if (signal.signal_color_shift < -0.3) return 'Learning';
+
+    // Legacy labels (fallback)
     if (signal.item_count === 0 && signal.heat === 0) {
       return signal.staleness > 0.9 ? 'Dormant' : 'Awakening';
     }
@@ -196,7 +210,10 @@ export function VoidHeartbeat({ signal, size = 200 }: VoidHeartbeatProps) {
             position: 'absolute',
             bottom: 8,
             fontSize: 10,
-            color: signal.error > 0.5 ? '#EF4444' : '#666666',
+            color: signal.error > 0.5 || signal.critical_count > 0 ? '#EF4444'
+              : signal.signal_color_shift > 0.5 ? '#D4AF37'
+              : signal.signal_color_shift < -0.3 ? '#4A90D9'
+              : '#666666',
             letterSpacing: '0.1em',
             textTransform: 'uppercase',
             fontFamily: 'JetBrains Mono, monospace',
@@ -238,6 +255,9 @@ uniform float u_burst;
 uniform float u_error;
 uniform float u_staleness;
 uniform float u_opacity;
+uniform float u_signal_intensity;
+uniform float u_signal_color_shift;
+uniform int u_critical_count;
 
 // Simplex-like noise (2D)
 vec3 mod289(vec3 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
@@ -298,6 +318,23 @@ void main() {
   vec3 color = mix(idle_color, active_color, u_heat);
   color = mix(color, error_color, u_error);
 
+  // Signal color shift: blend toward cool blue or warm gold/red
+  vec3 cool_color = vec3(0.102, 0.227, 0.431);    // #1a3a6e deep blue
+  vec3 warm_color = vec3(0.831, 0.686, 0.216);     // #D4AF37 gold
+  vec3 alert_color = vec3(0.937, 0.267, 0.267);    // #EF4444 red
+
+  if (u_signal_color_shift < 0.0) {
+    // Cool shift: blend toward deep blue
+    color = mix(color, cool_color, -u_signal_color_shift * u_signal_intensity);
+  } else if (u_signal_color_shift > 0.8) {
+    // Hot shift: blend toward red for high alert
+    float alert_t = (u_signal_color_shift - 0.8) / 0.2 * u_signal_intensity;
+    color = mix(color, alert_color, alert_t);
+  } else if (u_signal_color_shift > 0.0) {
+    // Warm shift: blend toward gold
+    color = mix(color, warm_color, u_signal_color_shift * u_signal_intensity);
+  }
+
   // Stale: desaturate and dim
   float stale_dim = 1.0 - u_staleness * 0.7;
   color *= stale_dim;
@@ -305,6 +342,13 @@ void main() {
   // Burst: additive flash
   float burst_flash = u_burst * exp(-dist * 4.0) * (0.5 + 0.5 * sin(u_time * 8.0));
   color += vec3(1.0, 0.9, 0.6) * burst_flash;
+
+  // Critical double-pulse: add second pulse at 2x frequency
+  if (u_critical_count > 0) {
+    float double_pulse = sin(t * 6.28318 * 2.0) * 0.3;
+    float critical_glow = smoothstep(radius + 0.2, radius - 0.05, dist);
+    color += alert_color * max(double_pulse, 0.0) * critical_glow * u_signal_intensity;
+  }
 
   // Final alpha
   float alpha = glow * u_opacity;

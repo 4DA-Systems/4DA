@@ -180,6 +180,7 @@ pub enum SentimentFilter {
 
 #[allow(dead_code)]
 impl SentimentFilter {
+    #[allow(clippy::should_implement_trait)]
     pub fn from_str(s: &str) -> Self {
         match s.to_lowercase().as_str() {
             "positive" | "good" | "great" => Self::Positive,

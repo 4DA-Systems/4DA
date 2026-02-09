@@ -474,7 +474,7 @@ fn embedding_to_blob(embedding: &[f32]) -> Vec<u8> {
 fn blob_to_embedding(blob: &[u8]) -> Vec<f32> {
     blob.chunks_exact(4)
         .map(|chunk| {
-            let arr: [u8; 4] = chunk.try_into().unwrap();
+            let arr: [u8; 4] = chunk.try_into().expect("chunks_exact guarantees 4 bytes");
             f32::from_le_bytes(arr)
         })
         .collect()

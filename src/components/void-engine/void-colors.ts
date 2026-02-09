@@ -11,6 +11,10 @@ export const VOID_COLORS = {
   error: { r: 239, g: 68, b: 68 },       // #EF4444
   // Stale: dim gray
   stale: { r: 42, g: 42, b: 42 },        // #2A2A2A
+  // Cool: deep blue (learning signals)
+  cool: { r: 26, g: 58, b: 110 },        // #1a3a6e
+  // Alert: red (critical signals)
+  alert: { r: 239, g: 68, b: 68 },       // #EF4444
 } as const;
 
 /** Lerp between two RGB colors based on t (0-1) */
@@ -27,12 +31,31 @@ export function lerpColor(
 }
 
 /** Compute the core glow color from signal values */
-export function computeCoreColor(heat: number, error: number, staleness: number): string {
+export function computeCoreColor(
+  heat: number,
+  error: number,
+  staleness: number,
+  colorShift: number = 0,
+): string {
   if (error > 0.5) {
     return lerpColor(VOID_COLORS.idle, VOID_COLORS.error, error);
   }
   if (staleness > 0.8) {
     return lerpColor(VOID_COLORS.idle, VOID_COLORS.stale, staleness);
   }
-  return lerpColor(VOID_COLORS.idle, VOID_COLORS.active, heat);
+  // Base color from heat
+  let base = lerpColor(VOID_COLORS.idle, VOID_COLORS.active, heat);
+
+  // Apply signal color shift
+  if (colorShift < -0.1) {
+    // Cool shift: blend toward deep blue
+    const t = Math.min(1, -colorShift);
+    base = lerpColor(VOID_COLORS.active, VOID_COLORS.cool, t * heat);
+  } else if (colorShift > 0.8) {
+    // Hot shift: blend toward red/alert
+    const t = (colorShift - 0.8) / 0.2;
+    base = lerpColor(VOID_COLORS.active, VOID_COLORS.alert, t * heat);
+  }
+
+  return base;
 }

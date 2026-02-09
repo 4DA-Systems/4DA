@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::sync::atomic::Ordering;
 use tauri::{AppHandle, Emitter};
 use tracing::{debug, info};
@@ -26,6 +27,14 @@ pub struct VoidSignal {
     pub staleness: f32,
     /// Total cached items (for cold start detection)
     pub item_count: u32,
+    /// Signal intensity: 0.0-1.0, derived from highest signal priority / 4.0
+    pub signal_intensity: f32,
+    /// Signal urgency: 0.0-1.0, weighted urgency from signal types
+    pub signal_urgency: f32,
+    /// Count of critical-priority signals
+    pub critical_count: u32,
+    /// Color shift: -1.0 (cool/learning) to +1.0 (warm/alert)
+    pub signal_color_shift: f32,
 }
 
 impl Default for VoidSignal {
@@ -38,6 +47,10 @@ impl Default for VoidSignal {
             error: 0.0,
             staleness: 1.0,
             item_count: 0,
+            signal_intensity: 0.0,
+            signal_urgency: 0.0,
+            critical_count: 0,
+            signal_color_shift: 0.0,
         }
     }
 }
@@ -53,7 +66,28 @@ impl VoidSignal {
             || (self.error - other.error).abs() > threshold
             || (self.staleness - other.staleness).abs() > threshold
             || self.item_count != other.item_count
+            || (self.signal_intensity - other.signal_intensity).abs() > threshold
+            || (self.signal_urgency - other.signal_urgency).abs() > threshold
+            || self.critical_count != other.critical_count
+            || (self.signal_color_shift - other.signal_color_shift).abs() > threshold
     }
+}
+
+/// Aggregate signal summary from analysis results.
+/// Used to drive the heartbeat's signal-aware color and intensity.
+#[derive(Debug, Clone)]
+#[allow(dead_code)]
+pub struct SignalSummary {
+    /// Highest priority level seen (1=low, 2=medium, 3=high, 4=critical)
+    pub max_priority: u8,
+    /// Count of critical-priority signals
+    pub critical_count: u32,
+    /// Count per signal type slug (e.g. "security_alert" -> 2)
+    pub signal_type_counts: HashMap<String, u32>,
+    /// The signal type with the most occurrences
+    pub dominant_type: Option<String>,
+    /// Weighted urgency score 0.0-1.0
+    pub urgency_score: f32,
 }
 
 /// Last emitted signal, used for deduplication.
@@ -104,15 +138,35 @@ pub fn compute_signal(db: &Database, monitoring: &MonitoringState) -> VoidSignal
         error,
         staleness,
         item_count,
+        signal_intensity: 0.0,
+        signal_urgency: 0.0,
+        critical_count: 0,
+        signal_color_shift: 0.0,
+    }
+}
+
+/// Map a signal type slug to a color shift value.
+/// Negative = cool (blue), Positive = warm (gold/red).
+fn signal_type_color_shift(slug: &str) -> f32 {
+    match slug {
+        "security_alert" => 1.0,
+        "breaking_change" => 0.6,
+        "tool_discovery" => 0.3,
+        "tech_trend" => 0.0,
+        "competitive_intel" => -0.2,
+        "learning" => -0.4,
+        _ => 0.0,
     }
 }
 
 /// Compute signal after an analysis completes.
-/// Takes the analysis results to derive heat and burst.
+/// Takes the analysis results to derive heat and burst,
+/// and an optional SignalSummary to drive signal-aware fields.
 pub fn signal_after_analysis(
     db: &Database,
     monitoring: &MonitoringState,
     top_scores: &[f32],
+    summary: Option<&SignalSummary>,
 ) -> VoidSignal {
     let mut signal = compute_signal(db, monitoring);
 
@@ -126,11 +180,29 @@ pub fn signal_after_analysis(
             .iter()
             .copied()
             .fold(0.0f32, |a, b| if a > b { a } else { b });
-        signal.burst = (max_score - 0.7).max(0.0).min(1.0);
+        signal.burst = (max_score - 0.7).clamp(0.0, 1.0);
     }
 
     // Staleness should be near zero right after analysis
     signal.staleness = 0.0;
+
+    // Signal-aware fields from classification summary
+    if let Some(s) = summary {
+        signal.signal_intensity = (s.max_priority as f32 / 4.0).clamp(0.0, 1.0);
+        signal.signal_urgency = s.urgency_score;
+        signal.critical_count = s.critical_count;
+
+        // Color shift: weighted average across all signal types
+        let total_signals: u32 = s.signal_type_counts.values().sum();
+        if total_signals > 0 {
+            let weighted_sum: f32 = s
+                .signal_type_counts
+                .iter()
+                .map(|(slug, count)| signal_type_color_shift(slug) * (*count as f32))
+                .sum();
+            signal.signal_color_shift = (weighted_sum / total_signals as f32).clamp(-1.0, 1.0);
+        }
+    }
 
     signal
 }
@@ -557,6 +629,7 @@ fn build_cluster_nodes(
     assignments: &[usize],
     k: usize,
 ) -> Vec<ClusterNode> {
+    #[allow(clippy::type_complexity)]
     let mut clusters: Vec<(Vec<[f32; 3]>, Vec<f32>, String, Vec<String>)> = (0..k)
         .map(|_| (vec![], vec![], String::new(), vec![]))
         .collect();
@@ -681,6 +754,10 @@ mod tests {
         assert_eq!(s.error, 0.0);
         assert_eq!(s.staleness, 1.0);
         assert_eq!(s.item_count, 0);
+        assert_eq!(s.signal_intensity, 0.0);
+        assert_eq!(s.signal_urgency, 0.0);
+        assert_eq!(s.critical_count, 0);
+        assert_eq!(s.signal_color_shift, 0.0);
     }
 
     #[test]
@@ -961,5 +1038,132 @@ mod tests {
         assert_eq!(clusters[1].count, 1);
         assert_eq!(clusters[0].dominant_source, "hn");
         assert_eq!(clusters[1].dominant_source, "arxiv");
+    }
+
+    // ====================================================================
+    // Signal-Aware Heartbeat Tests
+    // ====================================================================
+
+    #[test]
+    fn test_signal_color_shift_mapping() {
+        assert_eq!(signal_type_color_shift("security_alert"), 1.0);
+        assert_eq!(signal_type_color_shift("breaking_change"), 0.6);
+        assert_eq!(signal_type_color_shift("tool_discovery"), 0.3);
+        assert_eq!(signal_type_color_shift("tech_trend"), 0.0);
+        assert_eq!(signal_type_color_shift("competitive_intel"), -0.2);
+        assert_eq!(signal_type_color_shift("learning"), -0.4);
+        assert_eq!(signal_type_color_shift("unknown_type"), 0.0);
+    }
+
+    #[test]
+    fn test_signal_summary_security_dominant() {
+        let mut counts = HashMap::new();
+        counts.insert("security_alert".to_string(), 3);
+        counts.insert("learning".to_string(), 1);
+        let summary = SignalSummary {
+            max_priority: 4,
+            critical_count: 2,
+            signal_type_counts: counts,
+            dominant_type: Some("security_alert".to_string()),
+            urgency_score: 0.8,
+        };
+
+        // Verify intensity from max_priority
+        let intensity = (summary.max_priority as f32 / 4.0).clamp(0.0, 1.0);
+        assert_eq!(intensity, 1.0);
+
+        // Verify color shift is warm (security dominant)
+        let total: u32 = summary.signal_type_counts.values().sum();
+        let weighted: f32 = summary
+            .signal_type_counts
+            .iter()
+            .map(|(s, c)| signal_type_color_shift(s) * (*c as f32))
+            .sum();
+        let shift = weighted / total as f32;
+        // 3*1.0 + 1*(-0.4) = 2.6 / 4 = 0.65
+        assert!((shift - 0.65).abs() < 0.01);
+    }
+
+    #[test]
+    fn test_signal_summary_learning_dominant() {
+        let mut counts = HashMap::new();
+        counts.insert("learning".to_string(), 5);
+        let summary = SignalSummary {
+            max_priority: 1,
+            critical_count: 0,
+            signal_type_counts: counts,
+            dominant_type: Some("learning".to_string()),
+            urgency_score: 0.25,
+        };
+
+        let intensity = (summary.max_priority as f32 / 4.0).clamp(0.0, 1.0);
+        assert_eq!(intensity, 0.25);
+
+        let total: u32 = summary.signal_type_counts.values().sum();
+        let weighted: f32 = summary
+            .signal_type_counts
+            .iter()
+            .map(|(s, c)| signal_type_color_shift(s) * (*c as f32))
+            .sum();
+        let shift = weighted / total as f32;
+        // 5*(-0.4) = -2.0 / 5 = -0.4
+        assert!((shift - (-0.4)).abs() < 0.01);
+    }
+
+    #[test]
+    fn test_signal_summary_mixed_signals() {
+        let mut counts = HashMap::new();
+        counts.insert("security_alert".to_string(), 1);
+        counts.insert("tool_discovery".to_string(), 2);
+        counts.insert("learning".to_string(), 1);
+        let summary = SignalSummary {
+            max_priority: 4,
+            critical_count: 1,
+            signal_type_counts: counts,
+            dominant_type: Some("tool_discovery".to_string()),
+            urgency_score: 0.5,
+        };
+
+        // Color shift: 1*1.0 + 2*0.3 + 1*(-0.4) = 1.2 / 4 = 0.3
+        let total: u32 = summary.signal_type_counts.values().sum();
+        let weighted: f32 = summary
+            .signal_type_counts
+            .iter()
+            .map(|(s, c)| signal_type_color_shift(s) * (*c as f32))
+            .sum();
+        let shift = weighted / total as f32;
+        assert!((shift - 0.3).abs() < 0.01);
+    }
+
+    #[test]
+    fn test_differs_from_signal_intensity() {
+        let a = VoidSignal::default();
+        let mut b = VoidSignal::default();
+        b.signal_intensity = 0.5;
+        assert!(a.differs_from(&b, 0.01));
+    }
+
+    #[test]
+    fn test_differs_from_critical_count() {
+        let a = VoidSignal::default();
+        let mut b = VoidSignal::default();
+        b.critical_count = 1;
+        assert!(a.differs_from(&b, 0.01));
+    }
+
+    #[test]
+    fn test_differs_from_color_shift() {
+        let a = VoidSignal::default();
+        let mut b = VoidSignal::default();
+        b.signal_color_shift = 0.5;
+        assert!(a.differs_from(&b, 0.01));
+    }
+
+    #[test]
+    fn test_differs_from_signal_urgency() {
+        let a = VoidSignal::default();
+        let mut b = VoidSignal::default();
+        b.signal_urgency = 0.3;
+        assert!(a.differs_from(&b, 0.01));
     }
 }

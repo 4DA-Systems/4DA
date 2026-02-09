@@ -195,7 +195,7 @@ pub struct SettingsManager {
 
 impl SettingsManager {
     /// Create a new settings manager, loading from disk if available
-    pub fn new(data_dir: &PathBuf) -> Self {
+    pub fn new(data_dir: &std::path::Path) -> Self {
         let settings_path = data_dir.join("settings.json");
 
         let settings = if settings_path.exists() {

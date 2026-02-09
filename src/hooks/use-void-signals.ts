@@ -11,6 +11,10 @@ const IDLE_SIGNAL: VoidSignal = {
   error: 0,
   staleness: 1,
   item_count: 0,
+  signal_intensity: 0,
+  signal_urgency: 0,
+  critical_count: 0,
+  signal_color_shift: 0,
 };
 
 /** Lerp a single value toward target */
@@ -86,6 +90,10 @@ export function useVoidSignals() {
         error: lerp(current.error, target.error, speed * 2), // Error appears/disappears faster
         staleness: lerp(current.staleness, target.staleness, speed * 0.5), // Staleness changes slowly
         item_count: target.item_count, // No interpolation for integer
+        signal_intensity: lerp(current.signal_intensity, target.signal_intensity, speed * 2), // Fast response
+        signal_urgency: lerp(current.signal_urgency, target.signal_urgency, speed),
+        critical_count: target.critical_count, // No interpolation for integer
+        signal_color_shift: lerp(current.signal_color_shift, target.signal_color_shift, speed * 1.5),
       };
 
       // Only trigger re-render if values actually changed visually
@@ -96,7 +104,10 @@ export function useVoidSignals() {
         Math.abs(next.morph - current.morph) > 0.001 ||
         Math.abs(next.error - current.error) > 0.001 ||
         Math.abs(next.staleness - current.staleness) > 0.001 ||
-        next.item_count !== current.item_count;
+        next.item_count !== current.item_count ||
+        Math.abs(next.signal_intensity - current.signal_intensity) > 0.001 ||
+        Math.abs(next.signal_color_shift - current.signal_color_shift) > 0.001 ||
+        next.critical_count !== current.critical_count;
 
       currentRef.current = next;
 

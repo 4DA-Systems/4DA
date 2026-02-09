@@ -5,5 +5,6 @@ export { useContextDiscovery } from './use-context-discovery';
 export { useFeedback } from './use-feedback';
 export { useSystemHealth } from './use-system-health';
 export { useUserContext } from './use-user-context';
+export { useResultFilters } from './use-result-filters';
 export { useVoidSignals } from './use-void-signals';
 export { useVoidUniverse } from './use-void-universe';

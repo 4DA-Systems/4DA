@@ -421,8 +421,8 @@ impl ProjectScanner {
         // Extract module name
         for line in content.lines() {
             let trimmed = line.trim();
-            if trimmed.starts_with("module ") {
-                signal.project_name = Some(trimmed[7..].trim().to_string());
+            if let Some(name) = trimmed.strip_prefix("module ") {
+                signal.project_name = Some(name.trim().to_string());
                 break;
             }
         }

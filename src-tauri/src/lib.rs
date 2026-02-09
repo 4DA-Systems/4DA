@@ -1141,6 +1141,7 @@ fn init_ace_engine() -> Result<Arc<parking_lot::RwLock<ace::ACE>>, String> {
     }
 
     // Ensure sqlite-vec is registered for KNN search on topic embeddings
+    #[allow(clippy::missing_transmute_annotations)]
     unsafe {
         rusqlite::ffi::sqlite3_auto_extension(Some(std::mem::transmute(
             sqlite_vec::sqlite3_vec_init as *const (),
@@ -2248,6 +2249,70 @@ fn void_signal_cache_filled(app: &AppHandle) {
     }
 }
 
+/// Extract a SignalSummary from analysis results.
+fn extract_signal_summary(results: &[HNRelevance]) -> Option<void_engine::SignalSummary> {
+    let mut type_counts: std::collections::HashMap<String, u32> = std::collections::HashMap::new();
+    let mut max_priority: u8 = 0;
+    let mut critical_count: u32 = 0;
+
+    for r in results {
+        if let Some(ref st) = r.signal_type {
+            *type_counts.entry(st.clone()).or_insert(0) += 1;
+        }
+        if let Some(ref sp) = r.signal_priority {
+            let pval = match sp.as_str() {
+                "critical" => 4u8,
+                "high" => 3,
+                "medium" => 2,
+                "low" => 1,
+                _ => 0,
+            };
+            if pval > max_priority {
+                max_priority = pval;
+            }
+            if pval == 4 {
+                critical_count += 1;
+            }
+        }
+    }
+
+    let total_signals: u32 = type_counts.values().sum();
+    if total_signals == 0 {
+        return None;
+    }
+
+    // Urgency: weighted sum / (total * max_weight)
+    let weighted_sum: f32 = type_counts
+        .iter()
+        .map(|(slug, count)| {
+            let weight = match slug.as_str() {
+                "security_alert" => 4.0,
+                "breaking_change" => 3.0,
+                "tool_discovery" => 2.0,
+                "tech_trend" => 2.0,
+                "competitive_intel" => 2.0,
+                "learning" => 1.0,
+                _ => 1.0,
+            };
+            weight * (*count as f32)
+        })
+        .sum();
+    let urgency = (weighted_sum / (total_signals as f32 * 4.0)).min(1.0);
+
+    let dominant_type = type_counts
+        .iter()
+        .max_by_key(|(_, c)| *c)
+        .map(|(s, _)| s.clone());
+
+    Some(void_engine::SignalSummary {
+        max_priority,
+        critical_count,
+        signal_type_counts: type_counts,
+        dominant_type,
+        urgency_score: urgency,
+    })
+}
+
 /// Emit void signal: analysis complete with scores
 fn void_signal_analysis_complete(app: &AppHandle, results: &[HNRelevance]) {
     if let Ok(db) = get_database() {
@@ -2257,7 +2322,9 @@ fn void_signal_analysis_complete(app: &AppHandle, results: &[HNRelevance]) {
             .filter(|r| r.relevant)
             .map(|r| r.top_score)
             .collect();
-        let signal = void_engine::signal_after_analysis(db, monitoring, &top_scores);
+        let summary = extract_signal_summary(results);
+        let signal =
+            void_engine::signal_after_analysis(db, monitoring, &top_scores, summary.as_ref());
         void_engine::emit_if_changed(app, signal);
     }
 }
@@ -2459,7 +2526,13 @@ async fn get_context_settings() -> Result<ContextSettings, String> {
 fn convert_windows_to_wsl_path(path: &str) -> String {
     // Check if it looks like a Windows path (e.g., "D:\something" or "D:/something")
     if path.len() >= 2 && path.chars().nth(1) == Some(':') {
-        let drive = path.chars().next().unwrap().to_lowercase().next().unwrap();
+        let drive = path
+            .chars()
+            .next()
+            .unwrap_or('c')
+            .to_lowercase()
+            .next()
+            .unwrap_or('c');
         let rest = &path[2..].replace('\\', "/");
         format!("/mnt/{}{}", drive, rest)
     } else {
@@ -6610,7 +6683,7 @@ async fn add_interest(topic: String, weight: Option<f32>) -> Result<serde_json::
     let weight = weight.unwrap_or(1.0);
 
     // Generate embedding for the topic
-    let embedding = embed_texts(&[topic.clone()])?;
+    let embedding = embed_texts(std::slice::from_ref(&topic))?;
     let emb = embedding.first().map(|e| e.as_slice());
 
     let id = engine

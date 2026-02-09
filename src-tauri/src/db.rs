@@ -73,6 +73,7 @@ impl Database {
 
         // Register sqlite-vec extension BEFORE opening connection
         // This must be done once globally and before any connection is opened
+        #[allow(clippy::missing_transmute_annotations)]
         unsafe {
             sqlite3_auto_extension(Some(std::mem::transmute(
                 sqlite_vec::sqlite3_vec_init as *const (),
@@ -987,6 +988,7 @@ impl Database {
 
     /// Get all cached positions for a given projection version
     #[allow(dead_code)]
+    #[allow(clippy::type_complexity)]
     pub fn get_void_positions(
         &self,
         projection_version: i64,
@@ -1042,7 +1044,7 @@ impl Database {
 
     /// Get source items with embeddings for projection (lightweight: no content text).
     /// Returns (id, source_type, title, url, embedding, age_hours).
-    #[allow(dead_code)]
+    #[allow(dead_code, clippy::type_complexity)]
     pub fn get_source_items_for_projection(
         &self,
         limit: usize,
@@ -1073,7 +1075,7 @@ impl Database {
 
     /// Get context chunks with embeddings for projection (lightweight).
     /// Returns (id, source_file, text_preview, embedding).
-    #[allow(dead_code)]
+    #[allow(dead_code, clippy::type_complexity)]
     pub fn get_context_chunks_for_projection(
         &self,
         limit: usize,
@@ -1154,7 +1156,7 @@ fn embedding_to_blob(embedding: &[f32]) -> Vec<u8> {
 fn blob_to_embedding(blob: &[u8]) -> Vec<f32> {
     blob.chunks_exact(4)
         .map(|chunk| {
-            let arr: [u8; 4] = chunk.try_into().unwrap();
+            let arr: [u8; 4] = chunk.try_into().expect("chunks_exact guarantees 4 bytes");
             f32::from_le_bytes(arr)
         })
         .collect()
