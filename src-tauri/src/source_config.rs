@@ -417,3 +417,65 @@ pub async fn set_github_languages(languages: Vec<String>) -> Result<serde_json::
         "count": languages.len()
     }))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Validate an RSS feed URL
+    fn is_valid_rss_url(url: &str) -> bool {
+        url.starts_with("http://") || url.starts_with("https://")
+    }
+
+    /// Clean a Twitter handle (remove @ prefix)
+    fn clean_twitter_handle(handle: &str) -> String {
+        handle.trim_start_matches('@').to_string()
+    }
+
+    #[test]
+    fn test_sanitize_x_api_key_trim() {
+        assert_eq!(sanitize_x_api_key("  abc123  "), "abc123");
+    }
+
+    #[test]
+    fn test_sanitize_x_api_key_url_decode() {
+        assert_eq!(sanitize_x_api_key("hello%20world"), "hello world");
+    }
+
+    #[test]
+    fn test_sanitize_x_api_key_extract_bearer() {
+        let pasted = "Bearer AAAAAAAAAAAAAAAAAAAAAA%2FsomeToken";
+        let result = sanitize_x_api_key(pasted);
+        // After URL-decode: "Bearer AAAAAAAAAAAAAAAAAAAAAA/someToken"
+        // Extract from "AAAA..." portion
+        assert!(result.starts_with("AAAAAAAAAAAAAAAAAAAAAA"));
+    }
+
+    #[test]
+    fn test_sanitize_x_api_key_empty() {
+        assert_eq!(sanitize_x_api_key(""), "");
+        assert_eq!(sanitize_x_api_key("   "), "");
+    }
+
+    #[test]
+    fn test_sanitize_x_api_key_passthrough() {
+        let token = "AAAAAAAAAAAAAAAAAAAAAAAAtoken123";
+        assert_eq!(sanitize_x_api_key(token), token);
+    }
+
+    #[test]
+    fn test_is_valid_rss_url() {
+        assert!(is_valid_rss_url("https://example.com/feed"));
+        assert!(is_valid_rss_url("http://example.com/rss"));
+        assert!(!is_valid_rss_url("ftp://example.com"));
+        assert!(!is_valid_rss_url("example.com/feed"));
+        assert!(!is_valid_rss_url(""));
+    }
+
+    #[test]
+    fn test_clean_twitter_handle() {
+        assert_eq!(clean_twitter_handle("@elonmusk"), "elonmusk");
+        assert_eq!(clean_twitter_handle("elonmusk"), "elonmusk");
+        assert_eq!(clean_twitter_handle("@@double"), "double");
+    }
+}

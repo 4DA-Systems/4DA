@@ -11,9 +11,10 @@ use tracing::{debug, info, warn};
 
 use crate::ace;
 use crate::context_engine::InterestSource;
+use crate::scoring::get_ace_context;
 use crate::{
-    chunk_text, embed_texts, get_ace_context, get_ace_engine, get_ace_engine_mut,
-    get_context_engine, get_database, get_settings_manager,
+    chunk_text, embed_texts, get_ace_engine, get_ace_engine_mut, get_context_engine, get_database,
+    get_settings_manager,
 };
 
 // ============================================================================
