@@ -7098,7 +7098,7 @@ mod tests {
             .anti_topic_confidence
             .insert("spam".to_string(), 1.0);
 
-        let score_neg = compute_unified_relevance(0.5, &vec!["spam".to_string()], &ctx_neg);
+        let score_neg = compute_unified_relevance(0.5, &["spam".to_string()], &ctx_neg);
         assert!(score_neg >= 0.0, "Score should be clamped to 0.0");
     }
 

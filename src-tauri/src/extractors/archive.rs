@@ -357,7 +357,7 @@ mod tests {
         let options =
             zip::write::FileOptions::default().compression_method(zip::CompressionMethod::Stored);
 
-        zip.start_file("readme.txt", options.clone()).unwrap();
+        zip.start_file("readme.txt", options).unwrap();
         zip.write_all(b"This is a test README file.").unwrap();
 
         zip.start_file("src/main.rs", options).unwrap();
