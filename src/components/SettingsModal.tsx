@@ -62,6 +62,7 @@ interface SettingsModalProps {
   testConnection: () => void;
   ollamaStatus: OllamaStatus | null;
   ollamaModels: string[];
+  checkOllamaStatus: (baseUrl?: string) => void;
 
   // Monitoring hook
   monitoring: MonitoringStatus | null;
@@ -136,6 +137,7 @@ export function SettingsModal({
   testConnection,
   ollamaStatus,
   ollamaModels,
+  checkOllamaStatus,
   monitoring,
   monitoringInterval,
   setMonitoringInterval,
@@ -254,7 +256,7 @@ export function SettingsModal({
   };
 
   return (
-    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4" role="dialog" aria-modal="true" aria-labelledby="settings-modal-title">
       <div className="bg-[#141414] border border-[#2A2A2A] rounded-xl w-full max-w-lg max-h-[90vh] overflow-y-auto shadow-2xl">
         {/* Modal Header */}
         <div className="px-6 py-4 border-b border-[#2A2A2A] flex items-center justify-between sticky top-0 bg-[#141414] z-10">
@@ -262,10 +264,11 @@ export function SettingsModal({
             <div className="w-8 h-8 bg-orange-500/20 rounded-lg flex items-center justify-center">
               <span>⚙️</span>
             </div>
-            <h2 className="text-lg font-medium text-white">Settings</h2>
+            <h2 id="settings-modal-title" className="text-lg font-medium text-white">Settings</h2>
           </div>
           <button
             onClick={onClose}
+            aria-label="Close settings"
             className="w-8 h-8 rounded-lg bg-[#1F1F1F] text-gray-500 hover:text-white hover:bg-[#2A2A2A] flex items-center justify-center transition-all"
           >
             ×
@@ -337,12 +340,20 @@ export function SettingsModal({
                     <option key={m} value={m}>{m}</option>
                   ))}
                 </select>
-                {settingsForm.provider === 'ollama' && ollamaStatus && (
-                  <p className="text-xs text-gray-500 mt-2">
-                    {ollamaStatus.running
-                      ? <span className="text-green-400">✓ Ollama v{ollamaStatus.version} - {ollamaModels.length} models</span>
-                      : <span className="text-yellow-400">○ Ollama not running</span>}
-                  </p>
+                {settingsForm.provider === 'ollama' && (
+                  <div className="flex items-center gap-2 mt-2">
+                    <p className="text-xs text-gray-500">
+                      {ollamaStatus?.running
+                        ? <span className="text-green-400">✓ Ollama v{ollamaStatus.version} - {ollamaModels.length} models</span>
+                        : <span className="text-yellow-400">○ Ollama not detected</span>}
+                    </p>
+                    <button
+                      onClick={() => checkOllamaStatus(settingsForm.baseUrl || undefined)}
+                      className="text-[10px] px-2 py-0.5 text-gray-500 hover:text-orange-400 bg-[#1F1F1F] rounded transition-colors"
+                    >
+                      Re-check
+                    </button>
+                  </div>
                 )}
               </div>
 

@@ -9,27 +9,31 @@ export function SourceConfigPanel({ onStatusChange }: SourceConfigPanelProps) {
   const [rssFeeds, setRssFeeds] = useState<string[]>([]);
   const [youtubeChannels, setYoutubeChannels] = useState<string[]>([]);
   const [twitterHandles, setTwitterHandles] = useState<string[]>([]);
+  const [githubLanguages, setGithubLanguages] = useState<string[]>([]);
   const [hasXApiKey, setHasXApiKey] = useState(false);
 
   const [newRssFeed, setNewRssFeed] = useState('');
   const [newYoutubeChannel, setNewYoutubeChannel] = useState('');
   const [newTwitterHandle, setNewTwitterHandle] = useState('');
+  const [newGithubLanguage, setNewGithubLanguage] = useState('');
   const [xApiKey, setXApiKey] = useState('');
 
   const [expanded, setExpanded] = useState(false);
 
   const loadSources = useCallback(async () => {
     try {
-      const [rss, youtube, twitter, xKey] = await Promise.all([
+      const [rss, youtube, twitter, xKey, github] = await Promise.all([
         invoke<{ feeds: string[]; count: number }>('get_rss_feeds'),
         invoke<{ channels: string[]; count: number }>('get_youtube_channels'),
         invoke<{ handles: string[]; count: number }>('get_twitter_handles'),
         invoke<string>('get_x_api_key'),
+        invoke<{ languages: string[]; count: number }>('get_github_languages'),
       ]);
       setRssFeeds(rss.feeds);
       setYoutubeChannels(youtube.channels);
       setTwitterHandles(twitter.handles);
       setHasXApiKey(xKey.length > 0);
+      setGithubLanguages(github.languages);
     } catch (error) {
       console.error('Failed to load source config:', error);
     }
@@ -130,6 +134,33 @@ export function SourceConfigPanel({ onStatusChange }: SourceConfigPanelProps) {
     }
   };
 
+  const addGithubLanguage = async () => {
+    const lang = newGithubLanguage.trim().toLowerCase();
+    if (!lang || githubLanguages.includes(lang)) return;
+    const updated = [...githubLanguages, lang];
+    try {
+      await invoke('set_github_languages', { languages: updated });
+      setGithubLanguages(updated);
+      setNewGithubLanguage('');
+      onStatusChange('GitHub language added');
+      setTimeout(() => onStatusChange(''), 2000);
+    } catch (error) {
+      onStatusChange(`Error: ${error}`);
+    }
+  };
+
+  const removeGithubLanguage = async (lang: string) => {
+    const updated = githubLanguages.filter((l) => l !== lang);
+    try {
+      await invoke('set_github_languages', { languages: updated });
+      setGithubLanguages(updated);
+      onStatusChange('GitHub language removed');
+      setTimeout(() => onStatusChange(''), 2000);
+    } catch (error) {
+      onStatusChange(`Error: ${error}`);
+    }
+  };
+
   const totalSources = rssFeeds.length + youtubeChannels.length + twitterHandles.length;
 
   return (
@@ -149,7 +180,7 @@ export function SourceConfigPanel({ onStatusChange }: SourceConfigPanelProps) {
             </span>
           </div>
           <p className="text-gray-500 text-sm mt-0.5">
-            RSS feeds, YouTube channels, Twitter/X accounts
+            RSS feeds, YouTube, GitHub languages, Twitter/X
           </p>
         </div>
         <span className="text-gray-500 text-xs">{expanded ? '−' : '+'}</span>
@@ -244,6 +275,46 @@ export function SourceConfigPanel({ onStatusChange }: SourceConfigPanelProps) {
                 Using default tech channels (Fireship, ThePrimeagen, etc.)
               </p>
             )}
+          </div>
+
+          {/* GitHub Languages */}
+          <div>
+            <label className="text-xs text-gray-400 block mb-2">
+              GitHub Languages
+              <span className="text-gray-600 ml-1">(trending repos filter)</span>
+            </label>
+            <div className="flex gap-2 mb-2">
+              <input
+                type="text"
+                value={newGithubLanguage}
+                onChange={(e) => setNewGithubLanguage(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && addGithubLanguage()}
+                placeholder="e.g. go, java, swift"
+                className="flex-1 px-3 py-2 bg-[#141414] border border-[#2A2A2A] rounded-lg text-sm text-white placeholder:text-gray-600 focus:border-cyan-500/50 focus:outline-none"
+              />
+              <button
+                onClick={addGithubLanguage}
+                className="px-3 py-2 text-sm bg-[#141414] border border-[#2A2A2A] rounded-lg text-gray-400 hover:text-white hover:border-cyan-500/30 transition-all"
+              >
+                Add
+              </button>
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              {githubLanguages.map((lang) => (
+                <span
+                  key={lang}
+                  className="inline-flex items-center gap-1 px-2 py-1 bg-purple-500/10 text-purple-400 text-xs rounded border border-purple-500/20 group"
+                >
+                  {lang}
+                  <button
+                    onClick={() => removeGithubLanguage(lang)}
+                    className="text-purple-400/40 hover:text-red-400 transition-colors"
+                  >
+                    x
+                  </button>
+                </span>
+              ))}
+            </div>
           </div>
 
           {/* Twitter/X */}

@@ -59,20 +59,24 @@ export function NaturalLanguageSearch({ onStatusChange, defaultExpanded = true }
   const [result, setResult] = useState<QueryResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [expanded, setExpanded] = useState(defaultExpanded);
+  const [error, setError] = useState<string | null>(null);
 
   const handleSearch = async () => {
     if (!query.trim()) return;
 
     setLoading(true);
+    setError(null);
     try {
       const searchResult = await invoke<QueryResult>('natural_language_query', {
         queryText: query,
       });
       setResult(searchResult);
       onStatusChange?.(`Found ${searchResult.total_count} results in ${searchResult.execution_ms}ms`);
-    } catch (error) {
-      console.error('Search failed:', error);
-      onStatusChange?.(`Search error: ${error}`);
+    } catch (err) {
+      const msg = String(err);
+      console.error('Search failed:', err);
+      setError(msg.includes('No context') ? 'Index your files first (Settings → Context)' : msg);
+      onStatusChange?.(`Search error: ${err}`);
     } finally {
       setLoading(false);
     }
@@ -128,8 +132,17 @@ export function NaturalLanguageSearch({ onStatusChange, defaultExpanded = true }
             </button>
           </div>
 
+          {/* Error display */}
+          {error && (
+            <div className="flex items-center gap-2 px-3 py-2 bg-red-900/20 border border-red-500/30 rounded-lg">
+              <span className="text-red-400 text-xs">⚠</span>
+              <span className="text-xs text-red-300 flex-1">{error}</span>
+              <button onClick={() => setError(null)} className="text-red-400/60 hover:text-red-400 text-xs">✕</button>
+            </div>
+          )}
+
           {/* Example queries */}
-          {!result && (
+          {!result && !error && (
             <div className="space-y-2">
               <span className="text-xs text-gray-400 font-medium">Try these:</span>
               <div className="flex flex-wrap gap-2">

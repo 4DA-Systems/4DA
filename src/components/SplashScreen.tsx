@@ -34,9 +34,6 @@ export function SplashScreen({ onComplete, minimumDisplayTime = 1500 }: SplashSc
   const [minTimeElapsed, setMinTimeElapsed] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Debug: Log when splash screen renders
-  console.log('[SplashScreen] Rendering - stage:', stage, 'backendReady:', backendReady, 'minTimeElapsed:', minTimeElapsed);
-
   // Minimum display time
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -273,7 +270,7 @@ export function SplashScreen({ onComplete, minimumDisplayTime = 1500 }: SplashSc
         fontSize: '0.75rem',
         color: '#4B5563',
       }}>
-        Version 0.1.0
+        Version 1.0.0
       </p>
 
       {/* Subtle refresh button - top right corner */}

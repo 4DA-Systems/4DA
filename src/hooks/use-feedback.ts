@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import type { HNRelevance, FeedbackAction, FeedbackGiven } from '../types';
 
@@ -71,7 +71,7 @@ export function useFeedback(onStatusChange?: (status: string) => void) {
         action_type: actionType,
         action_data: null,
         item_topics: topics,
-        item_source: 'hackernews',
+        item_source: item.source_type || 'hackernews',
       });
 
       const feedbackTypeMap: Record<string, string> = {
@@ -109,6 +109,10 @@ export function useFeedback(onStatusChange?: (status: string) => void) {
       console.error('Failed to record interaction:', error);
     }
   }, [loadLearnedBehavior, onStatusChange]);
+
+  useEffect(() => {
+    loadLearnedBehavior();
+  }, [loadLearnedBehavior]);
 
   return {
     feedbackGiven,

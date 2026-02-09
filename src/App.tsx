@@ -1,4 +1,4 @@
-import { useState, useEffect, Component, ErrorInfo, ReactNode } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef, Component, ErrorInfo, ReactNode } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import './App.css';
 import { SplashScreen } from './components/SplashScreen';
@@ -122,12 +122,10 @@ function App() {
     expandedItem,
     setExpandedItem,
     isBrowserMode,
-    enabledSources,
     loadContextFiles,
     clearContext,
     indexContext,
     startAnalysis,
-    toggleSource,
   } = useAnalysis();
 
   const {
@@ -208,7 +206,7 @@ function App() {
   const [showBriefing, setShowBriefing] = useState(false);
 
   // Generate AI briefing
-  const generateBriefing = async () => {
+  const generateBriefing = useCallback(async () => {
     setAiBriefing(prev => ({ ...prev, loading: true, error: null }));
     try {
       const result = await invoke<{
@@ -243,10 +241,10 @@ function App() {
         error: `Error: ${error}`,
       }));
     }
-  };
+  }, []);
 
   // Toggle source filter
-  const toggleSourceFilter = (source: string) => {
+  const toggleSourceFilter = useCallback((source: string) => {
     setSourceFilters(prev => {
       const next = new Set(prev);
       if (next.has(source)) {
@@ -256,28 +254,31 @@ function App() {
       }
       return next;
     });
-  };
+  }, []);
 
-  // Filtered and sorted results
-  const filteredResults = state.relevanceResults
-    .filter(item => {
-      // Source filter
-      const source = item.source_type || 'hackernews';
-      if (!sourceFilters.has(source)) return false;
-      // Relevance filter
-      if (showOnlyRelevant && !item.relevant) return false;
-      return true;
-    })
-    .sort((a, b) => {
-      if (sortBy === 'score') {
-        return b.top_score - a.top_score;
-      }
-      // Sort by ID as proxy for date (higher ID = more recent)
-      return b.id - a.id;
-    });
+  // Filtered and sorted results (memoized to avoid recomputing on unrelated state changes)
+  const filteredResults = useMemo(() =>
+    state.relevanceResults
+      .filter(item => {
+        // Source filter
+        const source = item.source_type || 'hackernews';
+        if (!sourceFilters.has(source)) return false;
+        // Relevance filter
+        if (showOnlyRelevant && !item.relevant) return false;
+        return true;
+      })
+      .sort((a, b) => {
+        if (sortBy === 'score') {
+          return b.top_score - a.top_score;
+        }
+        // Sort by ID as proxy for date (higher ID = more recent)
+        return b.id - a.id;
+      }),
+    [state.relevanceResults, sourceFilters, showOnlyRelevant, sortBy]
+  );
 
   // Batch operations
-  const dismissAllBelow = async (threshold: number) => {
+  const dismissAllBelow = useCallback(async (threshold: number) => {
     const itemsToDismiss = filteredResults.filter(
       item => item.top_score < threshold && !feedbackGiven[item.id],
     );
@@ -286,9 +287,9 @@ function App() {
     }
     setSettingsStatus(`Dismissed ${itemsToDismiss.length} items below ${Math.round(threshold * 100)}%`);
     setTimeout(() => setSettingsStatus(''), 3000);
-  };
+  }, [filteredResults, feedbackGiven, recordInteraction]);
 
-  const saveAllAbove = async (threshold: number) => {
+  const saveAllAbove = useCallback(async (threshold: number) => {
     const itemsToSave = filteredResults.filter(
       item => item.top_score >= threshold && !feedbackGiven[item.id],
     );
@@ -297,59 +298,108 @@ function App() {
     }
     setSettingsStatus(`Saved ${itemsToSave.length} items above ${Math.round(threshold * 100)}%`);
     setTimeout(() => setSettingsStatus(''), 3000);
-  };
+  }, [filteredResults, feedbackGiven, recordInteraction]);
 
   // Auto-analyze on first load if monitoring enabled
   useEffect(() => {
+    let cancelled = false;
     const autoAnalyzeTimer = setTimeout(async () => {
+      if (cancelled) return;
       try {
         const status = await invoke<{ enabled: boolean; total_checks: number }>('get_monitoring_status');
+        if (cancelled) return;
         if (status.enabled && status.total_checks === 0) {
-          console.log('[4DA] Auto-triggering initial analysis (cache-first)...');
+          // Auto-trigger initial analysis
           await invoke('run_cached_analysis');
         }
       } catch (error) {
-        console.log('Auto-analyze check failed:', error);
+        // Silently ignore auto-analyze failures
       }
     }, 3000);
 
-    return () => clearTimeout(autoAnalyzeTimer);
+    return () => {
+      cancelled = true;
+      clearTimeout(autoAnalyzeTimer);
+    };
   }, []);
 
   // Auto-briefing state
   const [autoBriefingEnabled, setAutoBriefingEnabled] = useState(true);
   const [lastBriefingCount, setLastBriefingCount] = useState(0);
+  const generatingBriefingRef = useRef(false);
 
   // Autonomous AI Briefing - triggers when analysis completes with new relevant items
   useEffect(() => {
-    // Only trigger if:
-    // 1. Auto-briefing is enabled
-    // 2. Analysis just completed (analysisComplete is true)
-    // 3. We have results
-    // 4. Not already loading a briefing
-    // 5. Results count changed (new analysis, not re-render)
     const totalCount = state.relevanceResults.length;
-    const relevantCount = state.relevanceResults.filter(r => r.relevant).length;
 
     if (
       autoBriefingEnabled &&
       state.analysisComplete &&
       totalCount > 0 &&
       !aiBriefing.loading &&
+      !generatingBriefingRef.current &&
       totalCount !== lastBriefingCount
     ) {
-      console.log(`[4DA] Analysis complete (${relevantCount}/${totalCount} relevant), auto-generating AI briefing...`);
+      // Auto-generate briefing after analysis completes
       setLastBriefingCount(totalCount);
+      generatingBriefingRef.current = true;
 
-      // Small delay to let UI settle
       const briefingTimer = setTimeout(() => {
-        generateBriefing();
+        generateBriefing().finally(() => {
+          generatingBriefingRef.current = false;
+        });
       }, 500);
 
-      return () => clearTimeout(briefingTimer);
+      return () => {
+        clearTimeout(briefingTimer);
+        generatingBriefingRef.current = false;
+      };
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps -- trigger on analysis complete and count change, not on full results array
   }, [state.analysisComplete, state.relevanceResults.length, autoBriefingEnabled, aiBriefing.loading]);
+
+  // Global keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Don't trigger when typing in inputs
+      const tag = (e.target as HTMLElement).tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+
+      // Esc - close modals/panels
+      if (e.key === 'Escape') {
+        if (showSettings) { setShowSettings(false); return; }
+        if (showBriefing) { setShowBriefing(false); return; }
+        if (expandedItem !== null) { setExpandedItem(null); return; }
+      }
+
+      // r - re-analyze (not when Ctrl/Meta held for browser refresh)
+      if (e.key === 'r' && !e.ctrlKey && !e.metaKey && !state.loading) {
+        startAnalysis();
+        return;
+      }
+
+      // b - toggle AI briefing panel
+      if (e.key === 'b' && aiBriefing.content) {
+        setShowBriefing(prev => !prev);
+        return;
+      }
+
+      // , (comma) - open settings
+      if (e.key === ',') {
+        setShowSettings(true);
+        return;
+      }
+
+      // f - toggle "relevant only" filter
+      if (e.key === 'f' && state.analysisComplete) {
+        setShowOnlyRelevant(prev => !prev);
+        return;
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [showSettings, showBriefing, expandedItem, state.loading, state.analysisComplete, aiBriefing.content, startAnalysis, setExpandedItem]);
 
   return (
     <>
@@ -425,37 +475,41 @@ function App() {
                 </div>
               )}
               <div className="min-w-0">
-                <p className="text-sm text-white font-medium truncate">{state.loading ? 'Analyzing...' : 'Ready to analyze'}</p>
-                <p className="text-xs text-gray-500 truncate">{state.status}</p>
+                <p className="text-sm text-white font-medium truncate">
+                  {state.loading ? 'Analyzing...' : state.analysisComplete ? 'Analysis Complete' : 'Ready to analyze'}
+                </p>
+                <p className="text-xs text-gray-500 truncate">
+                  {state.status}
+                  {state.lastAnalyzedAt && !state.loading && (
+                    <span className="ml-2 text-gray-600">
+                      · {state.lastAnalyzedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </span>
+                  )}
+                </p>
               </div>
-            </div>
-
-            {/* Source Toggles */}
-            <div className="flex items-center gap-2 px-3 py-1.5 bg-[#1F1F1F] rounded-lg">
-              {[
-                { id: 'hackernews', label: 'HN', icon: '🔶' },
-                { id: 'arxiv', label: 'arXiv', icon: '📄' },
-                { id: 'reddit', label: 'Reddit', icon: '🔴' },
-              ].map(source => (
-                <button
-                  key={source.id}
-                  onClick={() => toggleSource(source.id)}
-                  disabled={state.loading}
-                  className={`px-3 py-1.5 text-xs rounded-lg transition-all ${
-                    enabledSources.includes(source.id)
-                      ? 'bg-orange-500/20 text-orange-400 border border-orange-500/30'
-                      : 'bg-transparent text-gray-500 border border-transparent hover:text-gray-300'
-                  } disabled:opacity-50`}
-                >
-                  {source.label}
-                </button>
-              ))}
             </div>
 
             {/* LLM Badge */}
             {settings?.rerank.enabled && settings?.llm.has_api_key && (
               <div className="px-3 py-1.5 bg-orange-500/10 text-orange-400 text-xs rounded-lg border border-orange-500/20">
                 🤖 LLM Active
+              </div>
+            )}
+
+            {/* Summary Badges */}
+            {state.analysisComplete && !state.loading && (
+              <div className="flex items-center gap-1.5">
+                <span className="px-2 py-1 text-[11px] bg-[#1F1F1F] text-gray-400 rounded-lg font-mono">
+                  {state.relevanceResults.length}
+                </span>
+                <span className="px-2 py-1 text-[11px] bg-green-500/10 text-green-400 rounded-lg font-mono">
+                  {state.relevanceResults.filter(r => r.relevant).length} rel
+                </span>
+                {state.relevanceResults.filter(r => r.top_score >= 0.6).length > 0 && (
+                  <span className="px-2 py-1 text-[11px] bg-orange-500/10 text-orange-400 rounded-lg font-mono">
+                    {state.relevanceResults.filter(r => r.top_score >= 0.6).length} top
+                  </span>
+                )}
               </div>
             )}
 
@@ -745,9 +799,9 @@ function App() {
 
               {/* Filter Bar - Polished */}
               {state.analysisComplete && (
-                <div className="flex flex-wrap items-center gap-3 pt-3 border-t border-[#2A2A2A]">
+                <div className="flex flex-wrap items-center gap-3 pt-3 border-t border-[#2A2A2A]" role="toolbar" aria-label="Filter and sort controls">
                   {/* Source Filters - dynamic based on results */}
-                  <div className="flex items-center gap-2 bg-[#1F1F1F] px-3 py-1.5 rounded-lg flex-wrap">
+                  <div className="flex items-center gap-2 bg-[#1F1F1F] px-3 py-1.5 rounded-lg flex-wrap" role="group" aria-label="Source filters">
                     <span className="text-xs text-gray-500">Sources:</span>
                     {(() => {
                       const sourceLabels: Record<string, string> = {
@@ -762,6 +816,8 @@ function App() {
                         <button
                           key={id}
                           onClick={() => toggleSourceFilter(id)}
+                          aria-pressed={sourceFilters.has(id)}
+                          aria-label={`Filter ${sourceLabels[id] || id} source`}
                           className={`px-2 py-1 text-xs rounded-lg transition-all ${
                             sourceFilters.has(id)
                               ? 'bg-orange-500/20 text-orange-400 border border-orange-500/30'
@@ -775,10 +831,11 @@ function App() {
                   </div>
 
                   {/* Sort */}
-                  <div className="flex items-center gap-2 bg-[#1F1F1F] px-3 py-1.5 rounded-lg">
+                  <div className="flex items-center gap-2 bg-[#1F1F1F] px-3 py-1.5 rounded-lg" role="group" aria-label="Sort order">
                     <span className="text-xs text-gray-500">Sort:</span>
                     <button
                       onClick={() => setSortBy('score')}
+                      aria-pressed={sortBy === 'score'}
                       className={`px-2 py-1 text-xs rounded-lg transition-all ${
                         sortBy === 'score'
                           ? 'bg-white/10 text-white'
@@ -789,6 +846,7 @@ function App() {
                     </button>
                     <button
                       onClick={() => setSortBy('date')}
+                      aria-pressed={sortBy === 'date'}
                       className={`px-2 py-1 text-xs rounded-lg transition-all ${
                         sortBy === 'date'
                           ? 'bg-white/10 text-white'
@@ -802,6 +860,8 @@ function App() {
                   {/* Relevance Toggle */}
                   <button
                     onClick={() => setShowOnlyRelevant(!showOnlyRelevant)}
+                    aria-pressed={showOnlyRelevant}
+                    aria-label="Toggle relevant items only"
                     className={`px-3 py-1.5 text-xs rounded-lg transition-all ${
                       showOnlyRelevant
                         ? 'bg-green-500/20 text-green-400 border border-green-500/30'
@@ -886,8 +946,19 @@ function App() {
         </div>
 
         {/* Footer - Polished */}
-        <footer className="mt-8 text-center">
+        <footer className="mt-8 text-center space-y-1">
           <p className="text-xs text-gray-600">The internet searches for you</p>
+          <p className="text-[10px] text-gray-700">
+            <kbd className="px-1 py-0.5 bg-[#1F1F1F] rounded text-gray-500">R</kbd> Analyze
+            <span className="mx-1.5">·</span>
+            <kbd className="px-1 py-0.5 bg-[#1F1F1F] rounded text-gray-500">F</kbd> Filter
+            <span className="mx-1.5">·</span>
+            <kbd className="px-1 py-0.5 bg-[#1F1F1F] rounded text-gray-500">B</kbd> Briefing
+            <span className="mx-1.5">·</span>
+            <kbd className="px-1 py-0.5 bg-[#1F1F1F] rounded text-gray-500">,</kbd> Settings
+            <span className="mx-1.5">·</span>
+            <kbd className="px-1 py-0.5 bg-[#1F1F1F] rounded text-gray-500">Esc</kbd> Close
+          </p>
         </footer>
 
         {/* Settings Modal */}
@@ -903,6 +974,7 @@ function App() {
             testConnection={testConnection}
             ollamaStatus={ollamaStatus}
             ollamaModels={ollamaModels}
+            checkOllamaStatus={checkOllamaStatus}
             monitoring={monitoring}
             monitoringInterval={monitoringInterval}
             setMonitoringInterval={setMonitoringInterval}

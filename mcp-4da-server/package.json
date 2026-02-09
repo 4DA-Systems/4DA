@@ -1,7 +1,7 @@
 {
   "name": "mcp-4da-server",
-  "version": "3.1.0",
-  "description": "MCP server for 4DA - 11 AI-powered tools for content filtering, analysis, and insights",
+  "version": "3.2.0",
+  "description": "MCP server for 4DA - 13 AI-powered tools for content filtering, analysis, signals, and insights",
   "type": "module",
   "main": "dist/index.js",
   "scripts": {

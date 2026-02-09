@@ -40,6 +40,7 @@ export function ResultItem({
       {/* Main Row */}
       <button
         onClick={onToggleExpand}
+        aria-expanded={isExpanded}
         className="w-full px-4 py-3 text-left"
       >
         <div className="flex items-start gap-3">
@@ -58,12 +59,16 @@ export function ResultItem({
               item.source_type === 'hackernews' ? 'bg-orange-500/20 text-orange-400' :
               item.source_type === 'arxiv' ? 'bg-purple-500/20 text-purple-400' :
               item.source_type === 'reddit' ? 'bg-blue-500/20 text-blue-400' :
+              item.source_type === 'github' ? 'bg-gray-300/20 text-gray-300' :
+              item.source_type === 'rss' ? 'bg-amber-500/20 text-amber-400' :
+              item.source_type === 'youtube' ? 'bg-red-500/20 text-red-400' :
+              item.source_type === 'twitter' ? 'bg-sky-500/20 text-sky-400' :
+              item.source_type === 'producthunt' ? 'bg-orange-600/20 text-orange-300' :
               'bg-gray-500/20 text-gray-400'
             }`}>
-              {item.source_type === 'hackernews' ? 'HN' :
-               item.source_type === 'arxiv' ? 'arXiv' :
-               item.source_type === 'reddit' ? 'Reddit' :
-               item.source_type || 'Unknown'}
+              {{ hackernews: 'HN', arxiv: 'arXiv', reddit: 'Reddit', github: 'GitHub',
+                 rss: 'RSS', youtube: 'YouTube', twitter: 'Twitter', producthunt: 'PH',
+              }[item.source_type || ''] || item.source_type || 'Unknown'}
             </div>
           </div>
 
@@ -81,6 +86,18 @@ export function ResultItem({
               {isTopPick && (
                 <span className="flex-shrink-0 text-[10px] px-1.5 py-0.5 bg-orange-500/20 text-orange-400 rounded font-medium">
                   {isHighConfidence ? '⭐ Top Pick' : '🔥 Hot'}
+                </span>
+              )}
+              {/* Signal Badge */}
+              {item.signal_type && (
+                <span className={`flex-shrink-0 text-[10px] px-1.5 py-0.5 rounded font-medium ${
+                  item.signal_priority === 'critical' ? 'bg-red-500/20 text-red-400' :
+                  item.signal_priority === 'high' ? 'bg-amber-500/20 text-amber-400' :
+                  'bg-cyan-500/20 text-cyan-400'
+                }`}>
+                  {{ security_alert: 'Security', breaking_change: 'Breaking', tool_discovery: 'Tool',
+                     tech_trend: 'Trend', learning: 'Learn', competitive_intel: 'Intel',
+                  }[item.signal_type] || item.signal_type}
                 </span>
               )}
             </div>

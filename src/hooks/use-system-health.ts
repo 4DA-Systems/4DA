@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import type { Anomaly, SystemHealth } from '../types';
 
@@ -108,6 +108,10 @@ export function useSystemHealth(onStatusChange?: (status: string) => void) {
       setStatus(`Error: ${error}`);
     }
   }, [setStatus]);
+
+  useEffect(() => {
+    loadSystemHealth();
+  }, [loadSystemHealth]);
 
   return {
     systemHealth,

@@ -261,7 +261,7 @@ impl Source for HackerNewsSource {
         // Fetch the page
         let response = client
             .get(url)
-            .header("User-Agent", "Mozilla/5.0 (compatible; 4DA/0.1)")
+            .header("User-Agent", "Mozilla/5.0 (compatible; 4DA/1.0)")
             .send()
             .await
             .map_err(|e| SourceError::Network(e.to_string()))?;

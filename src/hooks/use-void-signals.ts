@@ -64,9 +64,11 @@ export function useVoidSignals() {
   // Animation loop: interpolate current toward target at ~30fps
   useEffect(() => {
     let lastTime = 0;
+    let cancelled = false;
     const FRAME_INTERVAL = 1000 / 30; // 30fps
 
     const animate = (time: number) => {
+      if (cancelled) return;
       rafRef.current = requestAnimationFrame(animate);
 
       if (time - lastTime < FRAME_INTERVAL) return;
@@ -104,7 +106,10 @@ export function useVoidSignals() {
     };
 
     rafRef.current = requestAnimationFrame(animate);
-    return () => cancelAnimationFrame(rafRef.current);
+    return () => {
+      cancelled = true;
+      cancelAnimationFrame(rafRef.current);
+    };
   }, []);
 
   return signal;

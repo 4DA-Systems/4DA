@@ -12,13 +12,13 @@ const initialState: AppState = {
   progress: 0,
   progressMessage: '',
   progressStage: '',
+  lastAnalyzedAt: null,
 };
 
 export function useAnalysis() {
   const [state, setState] = useState<AppState>(initialState);
   const [expandedItem, setExpandedItem] = useState<number | null>(null);
   const [isBrowserMode, setIsBrowserMode] = useState(false);
-  const [enabledSources, setEnabledSources] = useState<string[]>(['hackernews']);
 
   // Set up event listeners for background analysis
   useEffect(() => {
@@ -46,11 +46,12 @@ export function useAnalysis() {
         setState((s) => ({
           ...s,
           relevanceResults: results,
-          status: `Analysis complete: ${relevantCount}/${results.length} items relevant`,
+          status: `${relevantCount}/${results.length} items relevant`,
           loading: false,
           analysisComplete: true,
           progress: 1,
           progressStage: 'complete',
+          lastAnalyzedAt: new Date(),
         }));
       });
 
@@ -176,17 +177,6 @@ export function useAnalysis() {
     }
   }, []);
 
-  const toggleSource = useCallback((source: string) => {
-    setEnabledSources(prev => {
-      if (prev.includes(source)) {
-        if (prev.length === 1) return prev;
-        return prev.filter(s => s !== source);
-      } else {
-        return [...prev, source];
-      }
-    });
-  }, []);
-
   const setStatus = useCallback((status: string) => {
     setState(s => ({ ...s, status }));
   }, []);
@@ -201,12 +191,10 @@ export function useAnalysis() {
     expandedItem,
     setExpandedItem,
     isBrowserMode,
-    enabledSources,
     loadContextFiles,
     clearContext,
     indexContext,
     startAnalysis,
-    toggleSource,
     setStatus,
   };
 }

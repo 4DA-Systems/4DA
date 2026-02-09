@@ -83,6 +83,27 @@ This file provides a quick reference. For detailed design, read the specs.
 - **Purpose:** Improve over time
 - **Signals:** Clicks, dismissals, saves, explicit feedback
 
+### 6. Void Engine (Ambient Visualization)
+- **Location:** `src-tauri/src/void_engine.rs`, `src-tauri/src/void_commands.rs`
+- **Frontend:** `src/components/void-engine/`
+- **Purpose:** Communicate system state through ambient visual signals
+- **Status:**
+  - **Heartbeat (Production):** 48px WebGL2/CSS glow in header. Driven by real backend events. Maps pulse/heat/burst/morph/error/staleness to visual changes. Zero-cost when idle (change-driven, not polled).
+  - **Universe (Experimental):** Full-screen Three.js 3D visualization. Code-split via React.lazy (~908KB, loads only on click). Projects embeddings to 3D via Johnson-Lindenstrauss random projection. Particle selection, search, camera fly-to, neighbor discovery. **Not actively maintained** - see AD-012 in DECISIONS.md.
+- **Key Files:**
+  - `void_engine.rs` - Signal system, projection math, universe builder, k-means, 22 tests
+  - `void_commands.rs` - 4 Tauri commands (get_void_signal, void_get_universe, void_get_particle_detail, void_get_neighbors)
+  - `VoidHeartbeat.tsx` - WebGL2 fragment shader with CSS fallback
+  - `VoidEngine.tsx` - Orchestrator (heartbeat click -> lazy-load universe)
+
+### 7. Signal Classifier
+- **Location:** `src-tauri/src/signals.rs`
+- **Frontend:** `src/components/SignalsPanel.tsx`
+- **Purpose:** Classify scored items into actionable signal types (security_alert, breaking_change, tool_discovery, tech_trend, learning, competitive_intel) with priority levels
+- **Key Files:**
+  - `signals.rs` - Pattern-matching classifier, no external deps
+  - `SignalsPanel.tsx` - Filterable, color-coded signal display
+
 ---
 
 ## Tech Stack Summary

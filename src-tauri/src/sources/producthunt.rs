@@ -45,7 +45,7 @@ impl ProductHuntSource {
             },
             client: reqwest::Client::builder()
                 .timeout(std::time::Duration::from_secs(30))
-                .user_agent("4DA/0.1")
+                .user_agent("4DA/1.0")
                 .build()
                 .expect("Failed to create HTTP client"),
             categories: vec!["tech".into(), "developer-tools".into()],

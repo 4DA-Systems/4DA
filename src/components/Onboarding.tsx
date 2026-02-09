@@ -247,7 +247,7 @@ export function Onboarding({ onComplete }: OnboardingProps) {
       setIsScanning(true);
       setScanProgress({
         phase: 'fetching',
-        message: 'Deep scanning HN (5 categories), arXiv (16 fields), Reddit (40+ subs)...',
+        message: 'Deep scanning HN, arXiv, Reddit, GitHub, RSS, YouTube, Twitter...',
       });
 
       // Run DEEP initial scan - fetches 300-500+ items from multiple endpoints
@@ -274,10 +274,9 @@ export function Onboarding({ onComplete }: OnboardingProps) {
         .map((r) => ({
           title: r.title,
           score: Math.round(r.top_score * 100),
-          source: r.source_type === 'hackernews' ? 'HN' :
-                  r.source_type === 'arxiv' ? 'arXiv' :
-                  r.source_type === 'reddit' ? 'Reddit' :
-                  r.source_type === 'github' ? 'GitHub' : r.source_type,
+          source: ({ hackernews: 'HN', arxiv: 'arXiv', reddit: 'Reddit', github: 'GitHub',
+                     rss: 'RSS', youtube: 'YouTube', twitter: 'Twitter', producthunt: 'PH',
+                  } as Record<string, string>)[r.source_type] || r.source_type,
         }));
 
       setScanProgress({
@@ -1179,7 +1178,7 @@ export function Onboarding({ onComplete }: OnboardingProps) {
       </div>
 
       {/* Version */}
-      <p className="absolute bottom-6 text-xs text-gray-600">Version 0.1.0</p>
+      <p className="absolute bottom-6 text-xs text-gray-600">Version 1.0.0</p>
     </div>
   );
 }

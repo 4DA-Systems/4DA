@@ -133,6 +133,7 @@ export interface AppState {
   progress: number;
   progressMessage: string;
   progressStage: string;
+  lastAnalyzedAt: Date | null;
 }
 
 export interface LearnedBehavior {

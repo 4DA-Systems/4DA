@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import type { UserContext } from '../types';
 
@@ -103,6 +103,10 @@ export function useUserContext(onStatusChange?: (status: string) => void) {
       setStatus(`Error: ${error}`);
     }
   }, [newRole, loadUserContext, setStatus]);
+
+  useEffect(() => {
+    loadUserContext();
+  }, [loadUserContext]);
 
   return {
     userContext,
