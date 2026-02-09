@@ -473,8 +473,10 @@ mod tests {
 
     #[test]
     fn test_embedding_caching() {
-        let mut config = EmbeddingConfig::default();
-        config.cache_enabled = true;
+        let config = EmbeddingConfig {
+            cache_enabled: true,
+            ..Default::default()
+        };
         let conn = setup_test_db();
         let service = EmbeddingService::new(config, conn.clone());
 
@@ -488,7 +490,7 @@ mod tests {
 
     #[test]
     fn test_bytes_conversion() {
-        let original = vec![1.5, -2.0, 0.0, 3.14159];
+        let original = vec![1.5, -2.0, 0.0, std::f32::consts::PI];
         let bytes = f32_vec_to_bytes(&original);
         let recovered = bytes_to_f32_vec(&bytes);
         assert_eq!(original, recovered);

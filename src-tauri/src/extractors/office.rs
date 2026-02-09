@@ -251,7 +251,7 @@ mod tests {
 
     #[test]
     fn test_cell_to_string_float() {
-        let cell = calamine::Data::Float(3.14159);
+        let cell = calamine::Data::Float(std::f64::consts::PI);
         assert_eq!(cell_to_string(&cell), "3.14");
     }
 

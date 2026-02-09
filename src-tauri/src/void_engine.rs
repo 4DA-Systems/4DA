@@ -723,24 +723,30 @@ mod tests {
     #[test]
     fn test_differs_from_changed() {
         let a = VoidSignal::default();
-        let mut b = VoidSignal::default();
-        b.pulse = 0.5;
+        let b = VoidSignal {
+            pulse: 0.5,
+            ..Default::default()
+        };
         assert!(a.differs_from(&b, 0.01));
     }
 
     #[test]
     fn test_differs_from_within_threshold() {
         let a = VoidSignal::default();
-        let mut b = VoidSignal::default();
-        b.pulse = 0.005;
+        let b = VoidSignal {
+            pulse: 0.005,
+            ..Default::default()
+        };
         assert!(!a.differs_from(&b, 0.01));
     }
 
     #[test]
     fn test_differs_from_item_count() {
         let a = VoidSignal::default();
-        let mut b = VoidSignal::default();
-        b.item_count = 1;
+        let b = VoidSignal {
+            item_count: 1,
+            ..Default::default()
+        };
         assert!(a.differs_from(&b, 0.01));
     }
 
@@ -764,14 +770,14 @@ mod tests {
     fn test_signal_after_analysis_heat_and_burst() {
         // We can't easily create a real Database and MonitoringState in unit tests,
         // so test the logic directly
-        let scores = vec![0.8, 0.6, 0.75];
+        let scores = [0.8, 0.6, 0.75];
         let sum: f32 = scores.iter().sum();
         let heat = (sum / scores.len() as f32).min(1.0);
         let max_score = scores
             .iter()
             .copied()
             .fold(0.0f32, |a, b| if a > b { a } else { b });
-        let burst = (max_score - 0.7).max(0.0).min(1.0);
+        let burst = (max_score - 0.7).clamp(0.0, 1.0);
 
         assert!((heat - 0.7167).abs() < 0.01);
         assert!((burst - 0.1).abs() < 0.001);
@@ -1138,32 +1144,40 @@ mod tests {
     #[test]
     fn test_differs_from_signal_intensity() {
         let a = VoidSignal::default();
-        let mut b = VoidSignal::default();
-        b.signal_intensity = 0.5;
+        let b = VoidSignal {
+            signal_intensity: 0.5,
+            ..Default::default()
+        };
         assert!(a.differs_from(&b, 0.01));
     }
 
     #[test]
     fn test_differs_from_critical_count() {
         let a = VoidSignal::default();
-        let mut b = VoidSignal::default();
-        b.critical_count = 1;
+        let b = VoidSignal {
+            critical_count: 1,
+            ..Default::default()
+        };
         assert!(a.differs_from(&b, 0.01));
     }
 
     #[test]
     fn test_differs_from_color_shift() {
         let a = VoidSignal::default();
-        let mut b = VoidSignal::default();
-        b.signal_color_shift = 0.5;
+        let b = VoidSignal {
+            signal_color_shift: 0.5,
+            ..Default::default()
+        };
         assert!(a.differs_from(&b, 0.01));
     }
 
     #[test]
     fn test_differs_from_signal_urgency() {
         let a = VoidSignal::default();
-        let mut b = VoidSignal::default();
-        b.signal_urgency = 0.3;
+        let b = VoidSignal {
+            signal_urgency: 0.3,
+            ..Default::default()
+        };
         assert!(a.differs_from(&b, 0.01));
     }
 }
