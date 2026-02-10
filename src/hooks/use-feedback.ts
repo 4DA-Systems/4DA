@@ -2,7 +2,18 @@ import { useState, useCallback, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import type { SourceRelevance, FeedbackAction, FeedbackGiven } from '../types';
 
-export function useFeedback(onStatusChange?: (status: string) => void) {
+// Client-side score adjustment multipliers for immediate feedback
+const FEEDBACK_ADJUSTMENTS: Record<FeedbackAction, number> = {
+  save: 0.10,           // Boost saved items
+  click: 0.05,          // Small boost for engagement
+  dismiss: -0.10,       // Sink dismissed items
+  mark_irrelevant: -0.20, // Strong penalty for irrelevant
+};
+
+export function useFeedback(
+  onStatusChange?: (status: string) => void,
+  onScoreAdjust?: (itemId: number, delta: number) => void,
+) {
   const [feedbackGiven, setFeedbackGiven] = useState<FeedbackGiven>({});
   const [learnedAffinities, setLearnedAffinities] = useState<Array<{
     topic: string;
@@ -50,7 +61,7 @@ export function useFeedback(onStatusChange?: (status: string) => void) {
         setAntiTopics(antiResult.anti_topics);
       }
     } catch (error) {
-      console.log('Learned behavior not available:', error);
+      console.debug('Learned behavior not available:', error);
     }
   }, []);
 
@@ -89,6 +100,12 @@ export function useFeedback(onStatusChange?: (status: string) => void) {
 
       setFeedbackGiven(prev => ({ ...prev, [itemId]: actionType }));
 
+      // Immediate score adjustment for visual feedback
+      const delta = FEEDBACK_ADJUSTMENTS[actionType] ?? 0;
+      if (delta !== 0 && onScoreAdjust) {
+        onScoreAdjust(itemId, delta);
+      }
+
       if (onStatusChange) {
         // Show what was learned with specific topics
         const topTopics = topics.slice(0, 3).join(', ');
@@ -108,7 +125,7 @@ export function useFeedback(onStatusChange?: (status: string) => void) {
     } catch (error) {
       console.error('Failed to record interaction:', error);
     }
-  }, [loadLearnedBehavior, onStatusChange]);
+  }, [loadLearnedBehavior, onStatusChange, onScoreAdjust]);
 
   useEffect(() => {
     loadLearnedBehavior();

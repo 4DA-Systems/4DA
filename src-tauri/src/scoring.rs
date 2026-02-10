@@ -21,6 +21,9 @@ pub(crate) fn compute_interest_score(
 
     // Pre-compute item embedding norm once (hot loop optimization)
     let item_norm = crate::vector_norm(item_embedding);
+    if item_norm < f32::EPSILON {
+        return 0.0; // Zero-norm embedding can't produce meaningful similarity
+    }
     let mut max_score: f32 = 0.0;
 
     for interest in interests {
@@ -214,6 +217,9 @@ pub(crate) fn compute_semantic_ace_boost(
 
     // Pre-compute item embedding norm once (hot loop optimization)
     let item_norm = crate::vector_norm(item_embedding);
+    if item_norm < f32::EPSILON {
+        return None; // Zero-norm embedding can't produce meaningful similarity
+    }
 
     let mut max_similarity: f32 = 0.0;
     let mut weighted_sum: f32 = 0.0;
@@ -485,7 +491,7 @@ pub(crate) fn compute_unified_relevance(
 ///   - Items 36-48 hours old: 0.90x decay
 ///   - Items > 48 hours old: 0.85x floor
 pub(crate) fn compute_temporal_freshness(created_at: &chrono::DateTime<chrono::Utc>) -> f32 {
-    let age_hours = (chrono::Utc::now() - *created_at).num_minutes() as f32 / 60.0;
+    let age_hours = ((chrono::Utc::now() - *created_at).num_minutes() as f32 / 60.0).max(0.0);
 
     if age_hours < 2.0 {
         1.15

@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { LearnedBehaviorPanel } from './LearnedBehaviorPanel';
 import { SystemHealthPanel } from './SystemHealthPanel';
 import { IndexedDocumentsPanel } from './IndexedDocumentsPanel';
@@ -8,176 +9,97 @@ import { MonitoringSection } from './settings/MonitoringSection';
 import { DigestSection } from './settings/DigestSection';
 import { ContextDiscoverySection } from './settings/ContextDiscoverySection';
 import { PersonalizationSection } from './settings/PersonalizationSection';
-import type { Settings, MonitoringStatus, UserContext, SystemHealth } from '../types';
-import type { OllamaStatus } from '../hooks/use-settings';
-
-// Types for feedback data (matches LearnedBehaviorPanel props)
-interface TopicAffinity {
-  topic: string;
-  positive_signals: number;
-  negative_signals: number;
-  affinity_score: number;
-}
-
-interface AntiTopic {
-  topic: string;
-  rejection_count: number;
-  confidence: number;
-  auto_detected: boolean;
-}
-
-interface SimilarTopicResult {
-  topic: string;
-  similarity: number;
-}
+import { useAppStore } from '../store';
 
 // ============================================================================
-// Props
+// Props - now minimal after Zustand migration
 // ============================================================================
 
 interface SettingsModalProps {
   onClose: () => void;
-
-  // Settings hook
-  settings: Settings | null;
-  settingsForm: {
-    provider: string;
-    apiKey: string;
-    model: string;
-    baseUrl: string;
-    rerankEnabled: boolean;
-    maxItems: number;
-    minScore: number;
-    dailyTokenLimit: number;
-    dailyCostLimit: number;
-  };
-  setSettingsForm: React.Dispatch<React.SetStateAction<SettingsModalProps['settingsForm']>>;
-  settingsStatus: string;
-  setSettingsStatus: (status: string) => void;
-  saveSettings: () => void;
-  testConnection: () => void;
-  ollamaStatus: OllamaStatus | null;
-  ollamaModels: string[];
-  checkOllamaStatus: (baseUrl?: string) => void;
-
-  // Monitoring hook
-  monitoring: MonitoringStatus | null;
-  monitoringInterval: number;
-  setMonitoringInterval: (val: number) => void;
-  toggleMonitoring: () => Promise<string>;
-  updateMonitoringInterval: () => Promise<string>;
-  testNotification: () => Promise<string>;
-
-  // Context discovery hook
-  scanDirectories: string[];
-  newScanDir: string;
-  setNewScanDir: (val: string) => void;
-  isScanning: boolean;
-  discoveredContext: {
-    tech: { name: string; category: string; confidence: number }[];
-    topics: string[];
-    lastScan: string | null;
-  };
-  runAutoDiscovery: () => void;
-  runFullScan: () => void;
-  addScanDirectory: () => void;
-  removeScanDirectory: (dir: string) => void;
-
-  // Feedback hook
-  learnedAffinities: TopicAffinity[];
-  antiTopics: AntiTopic[];
-  loadLearnedBehavior: () => void;
-
-  // System health hook
-  systemHealth: SystemHealth | null;
-  similarTopicQuery: string;
-  setSimilarTopicQuery: (q: string) => void;
-  similarTopicResults: SimilarTopicResult[];
-  runAnomalyDetection: () => void;
-  resolveAnomaly: (anomalyId: number) => void;
-  findSimilarTopics: () => void;
-  saveWatcherState: () => void;
-  loadSystemHealth: () => void;
-
-  // User context hook
-  userContext: UserContext | null;
-  newInterest: string;
-  setNewInterest: (val: string) => void;
-  newExclusion: string;
-  setNewExclusion: (val: string) => void;
-  newTechStack: string;
-  setNewTechStack: (val: string) => void;
-  newRole: string;
-  setNewRole: (val: string) => void;
-  addInterest: () => void;
-  removeInterest: (topic: string) => void;
-  addExclusion: () => void;
-  removeExclusion: (exclusion: string) => void;
-  addTechStack: () => void;
-  removeTechStack: (tech: string) => void;
-  updateRole: () => void;
 }
 
 // ============================================================================
 // SettingsModal Component
 // ============================================================================
 
-export function SettingsModal({
-  onClose,
-  settings,
-  settingsForm,
-  setSettingsForm,
-  settingsStatus,
-  setSettingsStatus,
-  saveSettings,
-  testConnection,
-  ollamaStatus,
-  ollamaModels,
-  checkOllamaStatus,
-  monitoring,
-  monitoringInterval,
-  setMonitoringInterval,
-  toggleMonitoring,
-  updateMonitoringInterval,
-  testNotification,
-  scanDirectories,
-  newScanDir,
-  setNewScanDir,
-  isScanning,
-  discoveredContext,
-  runAutoDiscovery,
-  runFullScan,
-  addScanDirectory,
-  removeScanDirectory,
-  learnedAffinities,
-  antiTopics,
-  loadLearnedBehavior,
-  systemHealth,
-  similarTopicQuery,
-  setSimilarTopicQuery,
-  similarTopicResults,
-  runAnomalyDetection,
-  resolveAnomaly,
-  findSimilarTopics,
-  saveWatcherState,
-  loadSystemHealth,
-  userContext,
-  newInterest,
-  setNewInterest,
-  newExclusion,
-  setNewExclusion,
-  newTechStack,
-  setNewTechStack,
-  newRole,
-  setNewRole,
-  addInterest,
-  removeInterest,
-  addExclusion,
-  removeExclusion,
-  addTechStack,
-  removeTechStack,
-  updateRole,
-}: SettingsModalProps) {
+export function SettingsModal({ onClose }: SettingsModalProps) {
+  // Pull all needed state from Zustand store
+  const settings = useAppStore(s => s.settings);
+  const settingsForm = useAppStore(s => s.settingsForm);
+  const setSettingsFormFull = useAppStore(s => s.setSettingsFormFull);
+  const settingsStatus = useAppStore(s => s.settingsStatus);
+  const setSettingsStatus = useAppStore(s => s.setSettingsStatus);
+  const saveSettings = useAppStore(s => s.saveSettings);
+  const testConnection = useAppStore(s => s.testConnection);
+  const ollamaStatus = useAppStore(s => s.ollamaStatus);
+  const ollamaModels = useAppStore(s => s.ollamaModels);
+  const checkOllamaStatus = useAppStore(s => s.checkOllamaStatus);
+
+  const monitoring = useAppStore(s => s.monitoring);
+  const monitoringInterval = useAppStore(s => s.monitoringInterval);
+  const setMonitoringInterval = useAppStore(s => s.setMonitoringInterval);
+  const toggleMonitoring = useAppStore(s => s.toggleMonitoring);
+  const updateMonitoringInterval = useAppStore(s => s.updateMonitoringInterval);
+  const testNotification = useAppStore(s => s.testNotification);
+
+  const scanDirectories = useAppStore(s => s.scanDirectories);
+  const newScanDir = useAppStore(s => s.newScanDir);
+  const setNewScanDir = useAppStore(s => s.setNewScanDir);
+  const isScanning = useAppStore(s => s.isScanning);
+  const discoveredContext = useAppStore(s => s.discoveredContext);
+  const runAutoDiscovery = useAppStore(s => s.runAutoDiscovery);
+  const runFullScan = useAppStore(s => s.runFullScan);
+  const addScanDirectory = useAppStore(s => s.addScanDirectory);
+  const removeScanDirectory = useAppStore(s => s.removeScanDirectory);
+
+  const learnedAffinities = useAppStore(s => s.learnedAffinities);
+  const antiTopics = useAppStore(s => s.antiTopics);
+  const loadLearnedBehavior = useAppStore(s => s.loadLearnedBehavior);
+
+  const systemHealth = useAppStore(s => s.systemHealth);
+  const similarTopicQuery = useAppStore(s => s.similarTopicQuery);
+  const setSimilarTopicQuery = useAppStore(s => s.setSimilarTopicQuery);
+  const similarTopicResults = useAppStore(s => s.similarTopicResults);
+  const runAnomalyDetection = useAppStore(s => s.runAnomalyDetection);
+  const resolveAnomaly = useAppStore(s => s.resolveAnomaly);
+  const findSimilarTopics = useAppStore(s => s.findSimilarTopics);
+  const saveWatcherState = useAppStore(s => s.saveWatcherState);
+  const loadSystemHealth = useAppStore(s => s.loadSystemHealth);
+
+  const userContext = useAppStore(s => s.userContext);
+  const newInterest = useAppStore(s => s.newInterest);
+  const setNewInterest = useAppStore(s => s.setNewInterest);
+  const newExclusion = useAppStore(s => s.newExclusion);
+  const setNewExclusion = useAppStore(s => s.setNewExclusion);
+  const newTechStack = useAppStore(s => s.newTechStack);
+  const setNewTechStack = useAppStore(s => s.setNewTechStack);
+  const newRole = useAppStore(s => s.newRole);
+  const setNewRole = useAppStore(s => s.setNewRole);
+  const addInterest = useAppStore(s => s.addInterest);
+  const removeInterest = useAppStore(s => s.removeInterest);
+  const addExclusion = useAppStore(s => s.addExclusion);
+  const removeExclusion = useAppStore(s => s.removeExclusion);
+  const addTechStack = useAppStore(s => s.addTechStack);
+  const removeTechStack = useAppStore(s => s.removeTechStack);
+  const updateRole = useAppStore(s => s.updateRole);
+
+  // Load all settings data into the store when modal opens
+  const loadSettings = useAppStore(s => s.loadSettings);
+  const loadMonitoringStatus = useAppStore(s => s.loadMonitoringStatus);
+  const loadDiscoveredContext = useAppStore(s => s.loadDiscoveredContext);
+  const loadUserContext = useAppStore(s => s.loadUserContext);
+
+  useEffect(() => {
+    loadSettings();
+    loadMonitoringStatus();
+    loadDiscoveredContext();
+    loadLearnedBehavior();
+    loadSystemHealth();
+    loadUserContext();
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- load once on mount
+  }, []);
+
   // Monitoring action wrappers (add status messages)
   const handleToggleMonitoring = async () => {
     try {
@@ -233,7 +155,7 @@ export function SettingsModal({
           <AIProviderSection
             settings={settings}
             settingsForm={settingsForm}
-            setSettingsForm={setSettingsForm}
+            setSettingsForm={setSettingsFormFull}
             ollamaStatus={ollamaStatus}
             ollamaModels={ollamaModels}
             checkOllamaStatus={checkOllamaStatus}

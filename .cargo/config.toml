@@ -1,0 +1,6 @@
+[target.x86_64-pc-windows-msvc]
+rustflags = ["-C", "target-feature=+crt-static"]
+
+# This forces static linking of the C++ runtime, which should resolve
+# the ONNX runtime linking errors by embedding the C++ runtime in the binary
+# instead of trying to link dynamically against MSVC libraries.

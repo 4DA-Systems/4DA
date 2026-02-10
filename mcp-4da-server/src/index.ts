@@ -101,7 +101,7 @@ import type { GetActionableSignalsParams } from "./tools/get-actionable-signals.
 const server = new Server(
   {
     name: "4da-server",
-    version: "3.1.0", // Dynamic Context Discovery Edition
+    version: "3.2.0", // Dynamic Context Discovery Edition
   },
   {
     capabilities: {

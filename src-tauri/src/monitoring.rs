@@ -267,15 +267,16 @@ pub fn start_scheduler<R: Runtime>(app: AppHandle<R>, state: Arc<MonitoringState
                 continue;
             }
 
-            info!(target: "4da::monitor", "Running scheduled analysis...");
+            info!(target: "4da::monitor", "Running background analysis...");
             state.last_check.store(now, Ordering::Relaxed);
             state.total_checks.fetch_add(1, Ordering::Relaxed);
 
-            // Emit event to run analysis
-            let _ = app.emit("scheduled-analysis", ());
-
-            // Analysis completion will be handled by the main analysis flow
-            // and will call complete_scheduled_check when done
+            // Run analysis directly (silently, with differential scoring)
+            let bg_app = app.clone();
+            let bg_state = state.clone();
+            tauri::async_runtime::spawn(async move {
+                crate::analysis::run_background_analysis(&bg_app, &bg_state).await;
+            });
         }
     });
 }

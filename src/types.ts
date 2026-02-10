@@ -204,42 +204,6 @@ export interface VoidSignal {
   signal_color_shift: number; // -1 to +1: cool (learning) to warm (alert)
 }
 
-// Void Universe types (Phase 2)
-export interface VoidUniverse {
-  core: [number, number, number];
-  interests: VoidInterestNode[];
-  particles: VoidParticle[];
-  clusters: VoidClusterNode[];
-  total_items: number;
-  projection_version: number;
-}
-
-export interface VoidInterestNode {
-  name: string;
-  position: [number, number, number];
-  weight: number;
-  item_count: number;
-}
-
-export interface VoidParticle {
-  id: number;
-  layer: 'source' | 'context' | 'document';
-  position: [number, number, number];
-  label: string;
-  url: string | null;
-  relevance: number;
-  source_type: string;
-  age_hours: number;
-}
-
-export interface VoidClusterNode {
-  centroid: [number, number, number];
-  count: number;
-  avg_relevance: number;
-  top_label: string;
-  dominant_source: string;
-}
-
 export interface IndexedStats {
   total_documents: number;
   total_chunks: number;
