@@ -253,13 +253,18 @@ function extractThemes(
     { name: "Developer Tools", keywords: ["ide", "editor", "cli", "terminal", "git", "testing"] },
   ];
 
+  // Pre-compute lowercased text for each item ONCE
+  const itemsWithText = items.map(item => ({
+    ...item,
+    textLower: (item.title + " " + item.content).toLowerCase(),
+  }));
+
   const themes: Theme[] = [];
 
   for (const pattern of themePatterns) {
-    const matchingItems = items.filter(item => {
-      const text = (item.title + " " + item.content).toLowerCase();
-      return pattern.keywords.some(kw => text.includes(kw));
-    });
+    const matchingItems = itemsWithText.filter(item =>
+      pattern.keywords.some(kw => item.textLower.includes(kw))
+    );
 
     if (matchingItems.length > 0) {
       const avgScore = matchingItems.reduce((sum, i) => sum + i.relevance_score, 0) / matchingItems.length;

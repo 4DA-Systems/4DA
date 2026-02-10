@@ -10,6 +10,7 @@
 //! - Parallel fetching across sources
 
 use async_trait::async_trait;
+use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
 use tracing::info;
 
@@ -21,6 +22,22 @@ pub mod reddit;
 pub mod rss;
 pub mod twitter;
 pub mod youtube;
+
+/// Shared HTTP client for all source adapters.
+/// reqwest::Client uses Arc internally, so cloning is free.
+/// Avoids creating 7+ clients per analysis run (TLS setup, connection pool init).
+static SHARED_CLIENT: Lazy<reqwest::Client> = Lazy::new(|| {
+    reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(30))
+        .user_agent("4DA/1.0")
+        .build()
+        .expect("Failed to create shared HTTP client")
+});
+
+/// Get the shared HTTP client (clone is free - Arc-based)
+pub fn shared_client() -> reqwest::Client {
+    SHARED_CLIENT.clone()
+}
 
 // ============================================================================
 // Source Item - Universal representation of content from any source

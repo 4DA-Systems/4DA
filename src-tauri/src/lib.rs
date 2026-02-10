@@ -320,49 +320,111 @@ fn embed_texts_ollama(
         .timeout(std::time::Duration::from_secs(60))
         .build();
 
-    // Ollama embeddings API doesn't support batch, so we process one at a time
-    let mut all_embeddings = Vec::with_capacity(texts.len());
+    // Try batch API first (/api/embed) - supported since Ollama v0.1.26
+    let batch_result = client
+        .post(&format!("{}/api/embed", base))
+        .set("Content-Type", "application/json")
+        .send_json(ureq::json!({
+            "model": "nomic-embed-text",
+            "input": texts,
+        }));
 
-    for text in texts {
-        let response = client
-            .post(&format!("{}/api/embeddings", base))
-            .set("Content-Type", "application/json")
-            .send_json(ureq::json!({
-                "model": "nomic-embed-text",
-                "prompt": text,
-            }))
-            .map_err(|e| format!("Ollama API request failed: {}. Make sure Ollama is running with 'nomic-embed-text' model installed (run: ollama pull nomic-embed-text)", e))?;
+    match batch_result {
+        Ok(response) => {
+            // Batch succeeded - parse embeddings array
+            let json: serde_json::Value = response
+                .into_json()
+                .map_err(|e| format!("Failed to parse Ollama batch response: {}", e))?;
 
-        let json: serde_json::Value = response
-            .into_json()
-            .map_err(|e| format!("Failed to parse Ollama response: {}", e))?;
+            let embeddings_array = json["embeddings"].as_array().ok_or_else(|| {
+                "Invalid Ollama batch response: missing 'embeddings' array".to_string()
+            })?;
 
-        let embedding = json["embedding"]
-            .as_array()
-            .ok_or_else(|| "Invalid Ollama response: missing 'embedding' array".to_string())?
-            .iter()
-            .map(|v| {
-                v.as_f64()
-                    .map(|f| f as f32)
-                    .ok_or_else(|| "Invalid embedding value".to_string())
-            })
-            .collect::<Result<Vec<f32>, String>>()?;
+            embeddings_array
+                .iter()
+                .map(|emb_val| {
+                    emb_val
+                        .as_array()
+                        .ok_or_else(|| "Invalid embedding in batch response".to_string())?
+                        .iter()
+                        .map(|v| {
+                            v.as_f64()
+                                .map(|f| f as f32)
+                                .ok_or_else(|| "Invalid embedding value".to_string())
+                        })
+                        .collect::<Result<Vec<f32>, String>>()
+                })
+                .collect()
+        }
+        Err(_) => {
+            // Batch failed (old Ollama version) - fallback to one-at-a-time
+            let mut all_embeddings = Vec::with_capacity(texts.len());
 
-        all_embeddings.push(embedding);
+            for text in texts {
+                let response = client
+                    .post(&format!("{}/api/embeddings", base))
+                    .set("Content-Type", "application/json")
+                    .send_json(ureq::json!({
+                        "model": "nomic-embed-text",
+                        "prompt": text,
+                    }))
+                    .map_err(|e| format!("Ollama API request failed: {}. Make sure Ollama is running with 'nomic-embed-text' model installed (run: ollama pull nomic-embed-text)", e))?;
+
+                let json: serde_json::Value = response
+                    .into_json()
+                    .map_err(|e| format!("Failed to parse Ollama response: {}", e))?;
+
+                let embedding = json["embedding"]
+                    .as_array()
+                    .ok_or_else(|| {
+                        "Invalid Ollama response: missing 'embedding' array".to_string()
+                    })?
+                    .iter()
+                    .map(|v| {
+                        v.as_f64()
+                            .map(|f| f as f32)
+                            .ok_or_else(|| "Invalid embedding value".to_string())
+                    })
+                    .collect::<Result<Vec<f32>, String>>()?;
+
+                all_embeddings.push(embedding);
+            }
+
+            Ok(all_embeddings)
+        }
     }
-
-    Ok(all_embeddings)
 }
 
 /// Cosine similarity between two vectors
+/// Compute L2 norm of a vector
+pub(crate) fn vector_norm(v: &[f32]) -> f32 {
+    v.iter().map(|x| x * x).sum::<f32>().sqrt()
+}
+
+/// Cosine similarity with precomputed norm for vector `a`
+/// Use this in hot loops where you compare the same vector `a` against many `b` vectors
+pub(crate) fn cosine_similarity_with_norm(a: &[f32], a_norm: f32, b: &[f32]) -> f32 {
+    if a.len() != b.len() || a.is_empty() {
+        return 0.0;
+    }
+    let dot: f32 = a.iter().zip(b.iter()).map(|(x, y)| x * y).sum();
+    let norm_b: f32 = vector_norm(b);
+    if a_norm == 0.0 || norm_b == 0.0 {
+        return 0.0;
+    }
+    dot / (a_norm * norm_b)
+}
+
+/// Cosine similarity between two vectors (used by tests; hot path uses cosine_similarity_with_norm)
+#[allow(dead_code)]
 pub(crate) fn cosine_similarity(a: &[f32], b: &[f32]) -> f32 {
     if a.len() != b.len() || a.is_empty() {
         return 0.0;
     }
 
     let dot: f32 = a.iter().zip(b.iter()).map(|(x, y)| x * y).sum();
-    let norm_a: f32 = a.iter().map(|x| x * x).sum::<f32>().sqrt();
-    let norm_b: f32 = b.iter().map(|x| x * x).sum::<f32>().sqrt();
+    let norm_a: f32 = vector_norm(a);
+    let norm_b: f32 = vector_norm(b);
 
     if norm_a == 0.0 || norm_b == 0.0 {
         return 0.0;
@@ -1053,7 +1115,10 @@ pub(crate) fn void_signal_context_change(app: &AppHandle, intensity: f32) {
 #[tauri::command]
 async fn get_hn_top_stories() -> Result<Vec<HNItem>, String> {
     info!(target: "4da::sources", "Fetching HN top stories");
-    let client = reqwest::Client::new();
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(30))
+        .build()
+        .map_err(|e| format!("Failed to create HTTP client: {}", e))?;
 
     let top_ids: Vec<u64> = client
         .get("https://hacker-news.firebaseio.com/v0/topstories.json")
@@ -1135,7 +1200,10 @@ async fn compute_relevance() -> Result<Vec<HNRelevance>, String> {
     // Step 2: Fetch HN story IDs and process incrementally
     debug!(target: "4da::analysis", "Step 2: Fetching HN stories (incremental)");
 
-    let client = reqwest::Client::new();
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(30))
+        .build()
+        .map_err(|e| format!("Failed to create HTTP client: {}", e))?;
     let top_ids: Vec<u64> = client
         .get("https://hacker-news.firebaseio.com/v0/topstories.json")
         .send()

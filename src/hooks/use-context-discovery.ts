@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 
 interface DiscoveredContext {
@@ -16,12 +16,21 @@ export function useContextDiscovery(onStatusChange?: (status: string) => void) {
     topics: [],
     lastScan: null,
   });
+  const statusTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const setStatus = useCallback((status: string, duration = 3000) => {
     if (onStatusChange) {
+      // Clear previous timeout to prevent accumulation
+      if (statusTimeoutRef.current) {
+        clearTimeout(statusTimeoutRef.current);
+        statusTimeoutRef.current = null;
+      }
       onStatusChange(status);
       if (duration > 0) {
-        setTimeout(() => onStatusChange(''), duration);
+        statusTimeoutRef.current = setTimeout(() => {
+          onStatusChange('');
+          statusTimeoutRef.current = null;
+        }, duration);
       }
     }
   }, [onStatusChange]);
@@ -182,6 +191,9 @@ export function useContextDiscovery(onStatusChange?: (status: string) => void) {
 
   useEffect(() => {
     loadDiscoveredContext();
+    return () => {
+      if (statusTimeoutRef.current) clearTimeout(statusTimeoutRef.current);
+    };
   }, [loadDiscoveredContext]);
 
   return {

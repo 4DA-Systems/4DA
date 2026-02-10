@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import type { HNRelevance } from '../types';
 
 // ============================================================================
@@ -59,47 +59,43 @@ export const SignalsPanel = ({ results }: SignalsPanelProps) => {
   const [typeFilter, setTypeFilter] = useState<string | null>(null);
   const [priorityFilter, setPriorityFilter] = useState<string | null>(null);
 
-  // Extract items with signal classifications
-  const signals: SignalItem[] = results
-    .filter((r) => r.signal_type && r.signal_priority && r.signal_action)
-    .map((r) => ({
-      id: r.id,
-      title: r.title,
-      url: r.url,
-      top_score: r.top_score,
-      source_type: r.source_type || 'unknown',
-      signal_type: r.signal_type!,
-      signal_priority: r.signal_priority!,
-      signal_action: r.signal_action!,
-      signal_triggers: r.signal_triggers || [],
-    }));
+  const { signals, filtered, typeCounts, priorityCounts } = useMemo(() => {
+    const signals: SignalItem[] = results
+      .filter((r) => r.signal_type && r.signal_priority && r.signal_action)
+      .map((r) => ({
+        id: r.id,
+        title: r.title,
+        url: r.url,
+        top_score: r.top_score,
+        source_type: r.source_type || 'unknown',
+        signal_type: r.signal_type!,
+        signal_priority: r.signal_priority!,
+        signal_action: r.signal_action!,
+        signal_triggers: r.signal_triggers || [],
+      }));
+
+    const priorityOrder: Record<string, number> = { critical: 4, high: 3, medium: 2, low: 1 };
+    const sorted = [...signals].sort((a, b) => {
+      const pd = (priorityOrder[b.signal_priority] || 0) - (priorityOrder[a.signal_priority] || 0);
+      if (pd !== 0) return pd;
+      return b.top_score - a.top_score;
+    });
+
+    const filtered = sorted
+      .filter((s) => !typeFilter || s.signal_type === typeFilter)
+      .filter((s) => !priorityFilter || s.signal_priority === priorityFilter);
+
+    const typeCounts: Record<string, number> = {};
+    const priorityCounts: Record<string, number> = {};
+    for (const s of signals) {
+      typeCounts[s.signal_type] = (typeCounts[s.signal_type] || 0) + 1;
+      priorityCounts[s.signal_priority] = (priorityCounts[s.signal_priority] || 0) + 1;
+    }
+
+    return { signals, sorted, filtered, typeCounts, priorityCounts };
+  }, [results, typeFilter, priorityFilter]);
 
   if (signals.length === 0) return null;
-
-  // Sort by priority then score
-  const priorityOrder: Record<string, number> = { critical: 4, high: 3, medium: 2, low: 1 };
-  const sorted = [...signals].sort((a, b) => {
-    const pd = (priorityOrder[b.signal_priority] || 0) - (priorityOrder[a.signal_priority] || 0);
-    if (pd !== 0) return pd;
-    return b.top_score - a.top_score;
-  });
-
-  // Apply filters
-  const filtered = sorted
-    .filter((s) => !typeFilter || s.signal_type === typeFilter)
-    .filter((s) => !priorityFilter || s.signal_priority === priorityFilter);
-
-  // Counts by type
-  const typeCounts: Record<string, number> = {};
-  for (const s of signals) {
-    typeCounts[s.signal_type] = (typeCounts[s.signal_type] || 0) + 1;
-  }
-
-  // Counts by priority
-  const priorityCounts: Record<string, number> = {};
-  for (const s of signals) {
-    priorityCounts[s.signal_priority] = (priorityCounts[s.signal_priority] || 0) + 1;
-  }
 
   const criticalCount = priorityCounts['critical'] || 0;
   const highCount = priorityCounts['high'] || 0;

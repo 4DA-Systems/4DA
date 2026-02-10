@@ -20,6 +20,8 @@ export function VoidHeartbeat({ signal, size = 200 }: VoidHeartbeatProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const glRef = useRef<WebGL2RenderingContext | null>(null);
   const programRef = useRef<WebGLProgram | null>(null);
+  // eslint-disable-next-line no-undef
+  const uniformLocationsRef = useRef<Record<string, WebGLUniformLocation | null>>({});
   const startTimeRef = useRef(Date.now());
   const rafRef = useRef<number>(0);
   const webglAvailable = useRef<boolean | null>(null);
@@ -79,6 +81,21 @@ export function VoidHeartbeat({ signal, size = 200 }: VoidHeartbeatProps) {
     programRef.current = program;
     webglAvailable.current = true;
 
+    // Cache uniform locations
+    uniformLocationsRef.current = {
+      u_time: gl.getUniformLocation(program, 'u_time'),
+      u_resolution: gl.getUniformLocation(program, 'u_resolution'),
+      u_pulse: gl.getUniformLocation(program, 'u_pulse'),
+      u_heat: gl.getUniformLocation(program, 'u_heat'),
+      u_burst: gl.getUniformLocation(program, 'u_burst'),
+      u_error: gl.getUniformLocation(program, 'u_error'),
+      u_staleness: gl.getUniformLocation(program, 'u_staleness'),
+      u_opacity: gl.getUniformLocation(program, 'u_opacity'),
+      u_signal_intensity: gl.getUniformLocation(program, 'u_signal_intensity'),
+      u_signal_color_shift: gl.getUniformLocation(program, 'u_signal_color_shift'),
+      u_critical_count: gl.getUniformLocation(program, 'u_critical_count'),
+    };
+
     // Set up fullscreen quad
     const vertices = new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]);
     const buffer = gl.createBuffer();
@@ -116,18 +133,18 @@ export function VoidHeartbeat({ signal, size = 200 }: VoidHeartbeatProps) {
       canvas.height = size * window.devicePixelRatio;
       gl.viewport(0, 0, canvas.width, canvas.height);
 
-      // Set uniforms
-      gl.uniform1f(gl.getUniformLocation(program, 'u_time'), elapsed);
-      gl.uniform2f(gl.getUniformLocation(program, 'u_resolution'), canvas.width, canvas.height);
-      gl.uniform1f(gl.getUniformLocation(program, 'u_pulse'), signal.pulse);
-      gl.uniform1f(gl.getUniformLocation(program, 'u_heat'), signal.heat);
-      gl.uniform1f(gl.getUniformLocation(program, 'u_burst'), signal.burst);
-      gl.uniform1f(gl.getUniformLocation(program, 'u_error'), signal.error);
-      gl.uniform1f(gl.getUniformLocation(program, 'u_staleness'), signal.staleness);
-      gl.uniform1f(gl.getUniformLocation(program, 'u_opacity'), opacity);
-      gl.uniform1f(gl.getUniformLocation(program, 'u_signal_intensity'), signal.signal_intensity);
-      gl.uniform1f(gl.getUniformLocation(program, 'u_signal_color_shift'), signal.signal_color_shift);
-      gl.uniform1i(gl.getUniformLocation(program, 'u_critical_count'), signal.critical_count);
+      const locs = uniformLocationsRef.current;
+      gl.uniform1f(locs.u_time, elapsed);
+      gl.uniform2f(locs.u_resolution, canvas.width, canvas.height);
+      gl.uniform1f(locs.u_pulse, signal.pulse);
+      gl.uniform1f(locs.u_heat, signal.heat);
+      gl.uniform1f(locs.u_burst, signal.burst);
+      gl.uniform1f(locs.u_error, signal.error);
+      gl.uniform1f(locs.u_staleness, signal.staleness);
+      gl.uniform1f(locs.u_opacity, opacity);
+      gl.uniform1f(locs.u_signal_intensity, signal.signal_intensity);
+      gl.uniform1f(locs.u_signal_color_shift, signal.signal_color_shift);
+      gl.uniform1i(locs.u_critical_count, signal.critical_count);
 
       gl.clearColor(0, 0, 0, 0);
       gl.clear(gl.COLOR_BUFFER_BIT);

@@ -44,10 +44,7 @@ impl HackerNewsSource {
                 fetch_interval_secs: 300,
                 custom: None,
             },
-            client: reqwest::Client::builder()
-                .timeout(std::time::Duration::from_secs(30))
-                .build()
-                .expect("Failed to create HTTP client"),
+            client: super::shared_client(),
         }
     }
 
@@ -56,10 +53,7 @@ impl HackerNewsSource {
     pub fn with_config(config: SourceConfig) -> Self {
         Self {
             config,
-            client: reqwest::Client::builder()
-                .timeout(std::time::Duration::from_secs(30))
-                .build()
-                .expect("Failed to create HTTP client"),
+            client: super::shared_client(),
         }
     }
 }

@@ -92,11 +92,7 @@ impl TwitterSource {
                 fetch_interval_secs: 900, // 15 minutes
                 custom: None,
             },
-            client: reqwest::Client::builder()
-                .timeout(std::time::Duration::from_secs(30))
-                .user_agent("4DA/1.0")
-                .build()
-                .expect("Failed to create HTTP client"),
+            client: super::shared_client(),
             handles: vec![
                 "ThePrimeagen".into(),
                 "dan_abramov".into(),

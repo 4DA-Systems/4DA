@@ -62,11 +62,7 @@ impl RedditSource {
                 fetch_interval_secs: 600, // 10 minutes
                 custom: None,
             },
-            client: reqwest::Client::builder()
-                .timeout(std::time::Duration::from_secs(30))
-                .user_agent("4DA/1.0 (Ambient Intelligence)")
-                .build()
-                .expect("Failed to create HTTP client"),
+            client: super::shared_client(),
             subreddits: vec![
                 "programming",
                 "technology",

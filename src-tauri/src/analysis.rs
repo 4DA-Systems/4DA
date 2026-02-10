@@ -4,6 +4,7 @@
 //! run_deep_initial_scan, run_cached_analysis, get_analysis_status,
 //! get_actionable_signals, and their implementation helpers.
 
+use once_cell::sync::Lazy;
 use tauri::{AppHandle, Emitter};
 use tracing::{debug, error, info, warn};
 
@@ -17,22 +18,20 @@ use crate::{
     RELEVANCE_THRESHOLD,
 };
 
+// Singleton SignalClassifier - created once and reused across all analyses
+static SIGNAL_CLASSIFIER: Lazy<signals::SignalClassifier> =
+    Lazy::new(signals::SignalClassifier::new);
+
 /// Start background analysis - returns immediately, emits progress events
 #[tauri::command]
 pub(crate) async fn start_background_analysis(app: AppHandle) -> Result<(), String> {
-    // Check if already running
-    {
-        let state = get_analysis_state();
-        let guard = state.lock();
-        if guard.running {
-            return Err("Analysis already running".to_string());
-        }
-    }
-
-    // Mark as running
+    // Atomic check-and-set: prevents TOCTOU race from double-clicks
     {
         let state = get_analysis_state();
         let mut guard = state.lock();
+        if guard.running {
+            return Err("Analysis already running".to_string());
+        }
         guard.running = true;
         guard.completed = false;
         guard.error = None;
@@ -52,20 +51,17 @@ pub(crate) async fn start_background_analysis(app: AppHandle) -> Result<(), Stri
             Ok(results) => {
                 guard.completed = true;
                 guard.results = Some(results.clone());
+                drop(guard);
 
-                // Emit completion event
+                // Use original results for downstream operations
                 let _ = app.emit("analysis-complete", &results);
-
-                // Save digest if enabled
                 maybe_save_digest(&results);
 
-                // Send notification if relevant items found
                 let relevant_count = results.iter().filter(|r| r.relevant).count();
                 if relevant_count > 0 {
                     monitoring::send_notification(&app, relevant_count, results.len());
                 }
 
-                // Update void engine heartbeat
                 void_signal_analysis_complete(&app, &results);
             }
             Err(e) => {
@@ -185,7 +181,10 @@ pub(crate) async fn run_background_analysis(app: &AppHandle) -> Result<Vec<HNRel
     // Step 2: Fetch HN story IDs
     emit_progress(app, "fetch", 0.15, "Fetching story IDs...", 0, 30);
 
-    let client = reqwest::Client::new();
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(30))
+        .build()
+        .map_err(|e| format!("Failed to create HTTP client: {}", e))?;
     let top_ids: Vec<u64> = client
         .get("https://hacker-news.firebaseio.com/v0/topstories.json")
         .send()
@@ -205,15 +204,15 @@ pub(crate) async fn run_background_analysis(app: &AppHandle) -> Result<Vec<HNRel
         total_items,
     );
 
-    // Step 3: Process items incrementally with progress updates
+    // Step 3: Process items - check cache first, then fetch uncached in parallel
     let mut cached_items: Vec<(HNItem, Vec<f32>)> = Vec::new();
-    let mut new_items: Vec<HNItem> = Vec::new();
+    let mut ids_to_fetch: Vec<u64> = Vec::new();
 
+    // First pass: collect cached items and IDs that need fetching
     for (idx, id) in top_ids.into_iter().take(total_items).enumerate() {
         let id_str = id.to_string();
-        let progress = 0.2 + (0.5 * (idx as f32 / total_items as f32));
+        let progress = 0.2 + (0.3 * (idx as f32 / total_items as f32));
 
-        // Check cache first
         if let Ok(Some(cached)) = db.get_source_item("hackernews", &id_str) {
             emit_progress(
                 app,
@@ -234,31 +233,35 @@ pub(crate) async fn run_background_analysis(app: &AppHandle) -> Result<Vec<HNRel
                 cached.embedding,
             ));
         } else {
-            // Fetch from API
-            let url = format!("https://hacker-news.firebaseio.com/v0/item/{}.json", id);
-            if let Ok(response) = client.get(&url).send().await {
-                if let Ok(story) = response.json::<HNStory>().await {
-                    let title = story.title.unwrap_or_else(|| "[No title]".to_string());
-                    emit_progress(
-                        app,
-                        "fetch",
-                        progress,
-                        &format!("Fetching: {}", &truncate_utf8(&title, 35)),
-                        idx + 1,
-                        total_items,
-                    );
+            ids_to_fetch.push(id);
+        }
+    }
 
+    // Second pass: fetch uncached items in parallel (up to 10 concurrent)
+    let new_items = if !ids_to_fetch.is_empty() {
+        emit_progress(
+            app,
+            "fetch",
+            0.5,
+            &format!("Fetching {} new stories...", ids_to_fetch.len()),
+            cached_items.len(),
+            total_items,
+        );
+
+        let fetch_tasks: Vec<_> = ids_to_fetch
+            .iter()
+            .map(|&id| {
+                let client = client.clone();
+                let _app_handle = app.clone();
+                async move {
+                    let url = format!("https://hacker-news.firebaseio.com/v0/item/{}.json", id);
+                    let response = client.get(&url).send().await.ok()?;
+                    let story: HNStory = response.json().await.ok()?;
+
+                    let title = story.title.unwrap_or_else(|| "[No title]".to_string());
                     let content = if let Some(text) = story.text {
                         text
                     } else if let Some(ref article_url) = story.url {
-                        emit_progress(
-                            app,
-                            "scrape",
-                            progress,
-                            &format!("Scraping: {}", &truncate_utf8(&title, 35)),
-                            idx + 1,
-                            total_items,
-                        );
                         scrape_article_content(article_url)
                             .await
                             .unwrap_or_default()
@@ -266,16 +269,22 @@ pub(crate) async fn run_background_analysis(app: &AppHandle) -> Result<Vec<HNRel
                         String::new()
                     };
 
-                    new_items.push(HNItem {
+                    Some(HNItem {
                         id: story.id,
                         title,
                         url: story.url,
                         content,
-                    });
+                    })
                 }
-            }
-        }
-    }
+            })
+            .collect();
+
+        // Execute all fetches concurrently
+        let results = futures::future::join_all(fetch_tasks).await;
+        results.into_iter().flatten().collect::<Vec<_>>()
+    } else {
+        vec![]
+    };
 
     // Step 4: Embed new items
     let new_embeddings = if !new_items.is_empty() {
@@ -813,12 +822,12 @@ pub(crate) async fn run_multi_source_analysis(app: AppHandle) -> Result<(), Stri
             Ok(results) => {
                 guard.completed = true;
                 guard.results = Some(results.clone());
-                let _ = app.emit("analysis-complete", &results);
+                drop(guard);
 
-                // Save digest if enabled
+                // Use original results for downstream operations
+                let _ = app.emit("analysis-complete", &results);
                 maybe_save_digest(&results);
 
-                // Send notification if relevant items found
                 let relevant_count = results.iter().filter(|r| r.relevant).count();
                 if relevant_count > 0 {
                     monitoring::send_notification(&app, relevant_count, results.len());
@@ -873,12 +882,12 @@ pub(crate) async fn run_deep_initial_scan(app: AppHandle) -> Result<(), String> 
             Ok(results) => {
                 guard.completed = true;
                 guard.results = Some(results.clone());
-                let _ = app.emit("analysis-complete", &results);
+                drop(guard);
 
-                // Save digest
+                // Use original results for downstream operations
+                let _ = app.emit("analysis-complete", &results);
                 maybe_save_digest(&results);
 
-                // Send notification
                 let relevant_count = results.iter().filter(|r| r.relevant).count();
                 let top_picks = results.iter().filter(|r| r.top_score >= 0.6).count();
                 info!(target: "4da::analysis",
@@ -1522,19 +1531,13 @@ pub(crate) async fn run_multi_source_analysis_impl(
 /// This is INSTANT because it doesn't fetch from APIs, just scores cached items
 #[tauri::command]
 pub(crate) async fn run_cached_analysis(app: AppHandle) -> Result<(), String> {
-    // Check if already running
-    {
-        let state = get_analysis_state();
-        let guard = state.lock();
-        if guard.running {
-            return Err("Analysis already running".to_string());
-        }
-    }
-
-    // Mark as running
+    // Atomic check-and-set: prevents TOCTOU race from double-clicks
     {
         let state = get_analysis_state();
         let mut guard = state.lock();
+        if guard.running {
+            return Err("Analysis already running".to_string());
+        }
         guard.running = true;
         guard.completed = false;
         guard.error = None;
@@ -1554,20 +1557,17 @@ pub(crate) async fn run_cached_analysis(app: AppHandle) -> Result<(), String> {
             Ok(results) => {
                 guard.completed = true;
                 guard.results = Some(results.clone());
+                drop(guard);
 
-                // Emit completion event
+                // Use original results for downstream operations
                 let _ = app.emit("analysis-complete", &results);
-
-                // Save digest if enabled
                 maybe_save_digest(&results);
 
-                // Send notification if relevant items found
                 let relevant_count = results.iter().filter(|r| r.relevant).count();
                 if relevant_count > 0 {
                     monitoring::send_notification(&app, relevant_count, results.len());
                 }
 
-                // Update void engine heartbeat
                 void_signal_analysis_complete(&app, &results);
             }
             Err(e) => {
@@ -1654,7 +1654,6 @@ pub(crate) async fn analyze_cached_content_impl(
     );
 
     // Score all cached items
-    let signal_classifier = signals::SignalClassifier::new();
     let mut results: Vec<HNRelevance> = Vec::new();
     let mut excluded_count = 0;
 
@@ -1833,7 +1832,7 @@ pub(crate) async fn analyze_cached_content_impl(
 
         // Signal classification
         let content_text = &item.content;
-        let classification = signal_classifier.classify(
+        let classification = SIGNAL_CLASSIFIER.classify(
             &item.title,
             content_text,
             combined_score,

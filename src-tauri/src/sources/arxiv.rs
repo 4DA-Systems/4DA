@@ -45,10 +45,7 @@ impl ArxivSource {
                 fetch_interval_secs: 3600, // 1 hour (arXiv updates daily)
                 custom: None,
             },
-            client: reqwest::Client::builder()
-                .timeout(std::time::Duration::from_secs(30))
-                .build()
-                .expect("Failed to create HTTP client"),
+            client: super::shared_client(),
             // Default to AI/ML/NLP categories
             categories: vec![
                 "cs.AI".to_string(), // Artificial Intelligence

@@ -71,19 +71,22 @@ pub async fn get_current_version() -> Result<serde_json::Value, String> {
 /// Get digest configuration
 #[tauri::command]
 pub async fn get_digest_config() -> Result<serde_json::Value, String> {
-    let settings_guard = get_settings_manager().lock();
-    let digest = &settings_guard.get().digest;
-
-    Ok(serde_json::json!({
-        "enabled": digest.enabled,
-        "frequency": digest.frequency,
-        "email": digest.email,
-        "save_local": digest.save_local,
-        "min_score": digest.min_score,
-        "max_items": digest.max_items,
-        "last_sent": digest.last_sent,
-        "generate_summaries": digest.generate_summaries
-    }))
+    // Clone data out of lock immediately to avoid holding across async boundary
+    let json = {
+        let settings_guard = get_settings_manager().lock();
+        let digest = &settings_guard.get().digest;
+        serde_json::json!({
+            "enabled": digest.enabled,
+            "frequency": digest.frequency,
+            "email": digest.email,
+            "save_local": digest.save_local,
+            "min_score": digest.min_score,
+            "max_items": digest.max_items,
+            "last_sent": digest.last_sent,
+            "generate_summaries": digest.generate_summaries
+        })
+    };
+    Ok(json)
 }
 
 /// Update digest configuration
@@ -96,49 +99,53 @@ pub async fn set_digest_config(
     min_score: Option<f64>,
     max_items: Option<usize>,
 ) -> Result<serde_json::Value, String> {
-    let mut settings_guard = get_settings_manager().lock();
-    let digest = &mut settings_guard.get_mut().digest;
+    // Mutate and save within scoped lock, then release before returning
+    let json = {
+        let mut settings_guard = get_settings_manager().lock();
+        let digest = &mut settings_guard.get_mut().digest;
 
-    if let Some(e) = enabled {
-        digest.enabled = e;
-    }
-    if let Some(f) = frequency {
-        digest.frequency = f;
-    }
-    if let Some(e) = email {
-        digest.email = Some(e);
-    }
-    if let Some(s) = save_local {
-        digest.save_local = s;
-    }
-    if let Some(s) = min_score {
-        digest.min_score = s;
-    }
-    if let Some(m) = max_items {
-        digest.max_items = m;
-    }
-
-    settings_guard.save()?;
-
-    let digest = &settings_guard.get().digest;
-    info!(
-        target: "4da::digest",
-        enabled = digest.enabled,
-        frequency = %digest.frequency,
-        "Digest config updated"
-    );
-
-    Ok(serde_json::json!({
-        "success": true,
-        "config": {
-            "enabled": digest.enabled,
-            "frequency": digest.frequency,
-            "email": digest.email,
-            "save_local": digest.save_local,
-            "min_score": digest.min_score,
-            "max_items": digest.max_items
+        if let Some(e) = enabled {
+            digest.enabled = e;
         }
-    }))
+        if let Some(f) = frequency {
+            digest.frequency = f;
+        }
+        if let Some(e) = email {
+            digest.email = Some(e);
+        }
+        if let Some(s) = save_local {
+            digest.save_local = s;
+        }
+        if let Some(s) = min_score {
+            digest.min_score = s;
+        }
+        if let Some(m) = max_items {
+            digest.max_items = m;
+        }
+
+        settings_guard.save()?;
+
+        let digest = &settings_guard.get().digest;
+        info!(
+            target: "4da::digest",
+            enabled = digest.enabled,
+            frequency = %digest.frequency,
+            "Digest config updated"
+        );
+
+        serde_json::json!({
+            "success": true,
+            "config": {
+                "enabled": digest.enabled,
+                "frequency": digest.frequency,
+                "email": digest.email,
+                "save_local": digest.save_local,
+                "min_score": digest.min_score,
+                "max_items": digest.max_items
+            }
+        })
+    };
+    Ok(json)
 }
 
 /// Generate a digest from recent relevant items

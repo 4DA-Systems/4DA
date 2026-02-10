@@ -90,6 +90,18 @@ impl Database {
 
             -- WAL mode for better concurrency
             PRAGMA journal_mode = WAL;
+
+            -- Performance: fsync less often (safe with WAL)
+            PRAGMA synchronous = NORMAL;
+
+            -- Performance: 64MB page cache
+            PRAGMA cache_size = -64000;
+
+            -- Performance: 256MB memory-mapped I/O
+            PRAGMA mmap_size = 268435456;
+
+            -- Performance: temp tables in RAM
+            PRAGMA temp_store = MEMORY;
         ",
         )?;
 
@@ -652,6 +664,72 @@ impl Database {
         }
     }
 
+    /// Batch upsert source items in a transaction (much faster than individual calls)
+    pub fn batch_upsert_source_items(
+        &self,
+        items: &[(String, String, Option<String>, String, String, Vec<f32>)],
+    ) -> SqliteResult<usize> {
+        let conn = self.conn.lock();
+        let mut count = 0;
+        let tx = conn.unchecked_transaction()?;
+        {
+            // Prepare statements once for reuse
+            let mut check_stmt = tx.prepare_cached(
+                "SELECT id FROM source_items WHERE source_type = ?1 AND source_id = ?2",
+            )?;
+            let mut update_stmt = tx.prepare_cached(
+                "UPDATE source_items SET url = ?1, title = ?2, content = ?3, content_hash = ?4, embedding = ?5, last_seen = datetime('now') WHERE id = ?6",
+            )?;
+            let mut update_vec_stmt =
+                tx.prepare_cached("UPDATE source_vec SET embedding = ?1 WHERE rowid = ?2")?;
+            let mut insert_stmt = tx.prepare_cached(
+                "INSERT INTO source_items (source_type, source_id, url, title, content, content_hash, embedding, last_seen)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, datetime('now'))",
+            )?;
+            let mut insert_vec_stmt =
+                tx.prepare_cached("INSERT INTO source_vec (rowid, embedding) VALUES (?1, ?2)")?;
+
+            for (source_type, source_id, url, title, content, embedding) in items {
+                let content_hash = hash_content(&format!("{}{}", title, content));
+                let embedding_blob = embedding_to_blob(embedding);
+
+                // Check if exists
+                let existing_id: Option<i64> = check_stmt
+                    .query_row(params![source_type, source_id], |row| row.get(0))
+                    .ok();
+
+                if let Some(id) = existing_id {
+                    // Update existing
+                    update_stmt.execute(params![
+                        url.as_deref(),
+                        title,
+                        content,
+                        content_hash,
+                        embedding_blob,
+                        id
+                    ])?;
+                    update_vec_stmt.execute(params![embedding_blob, id])?;
+                } else {
+                    // Insert new
+                    insert_stmt.execute(params![
+                        source_type,
+                        source_id,
+                        url.as_deref(),
+                        title,
+                        content,
+                        content_hash,
+                        embedding_blob
+                    ])?;
+                    let id = tx.last_insert_rowid();
+                    insert_vec_stmt.execute(params![id, embedding_blob])?;
+                }
+                count += 1;
+            }
+        }
+        tx.commit()?;
+        Ok(count)
+    }
+
     /// Check if a source item exists (for incremental updates)
     #[allow(dead_code)] // Future: incremental fetch optimization
     pub fn source_item_exists(&self, source_type: &str, source_id: &str) -> SqliteResult<bool> {
@@ -753,15 +831,19 @@ impl Database {
         limit: usize,
     ) -> SqliteResult<Vec<StoredSourceItem>> {
         let conn = self.conn.lock();
+        // Use strftime to compute cutoff as ISO string, then compare directly
+        // This allows the index on last_seen to be used (no function wrapping the column)
+        let cutoff = chrono::Utc::now() - chrono::Duration::hours(hours);
+        let cutoff_str = cutoff.format("%Y-%m-%d %H:%M:%S").to_string();
         let mut stmt = conn.prepare(
             "SELECT id, source_type, source_id, url, title, content, content_hash, embedding, created_at, last_seen
              FROM source_items
-             WHERE datetime(last_seen) >= datetime('now', ?1)
+             WHERE last_seen >= ?1
              ORDER BY last_seen DESC
              LIMIT ?2"
         )?;
 
-        let hours_param = format!("-{} hours", hours);
+        let hours_param = cutoff_str;
         let rows = stmt.query_map(params![hours_param, limit as i64], |row| {
             let embedding_blob: Vec<u8> = row.get(7)?;
             Ok(StoredSourceItem {
@@ -884,7 +966,7 @@ impl Database {
         let mut stmt = conn.prepare(
             "SELECT id, title, url, source_type, created_at, content
              FROM source_items
-             WHERE datetime(created_at) >= datetime(?1)
+             WHERE created_at >= ?1
              ORDER BY created_at DESC
              LIMIT ?2",
         )?;

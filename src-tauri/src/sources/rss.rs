@@ -44,10 +44,7 @@ impl RssSource {
                 fetch_interval_secs: 1800, // 30 minutes
                 custom: None,
             },
-            client: reqwest::Client::builder()
-                .timeout(std::time::Duration::from_secs(30))
-                .build()
-                .expect("Failed to create HTTP client"),
+            client: super::shared_client(),
             // Default to some popular tech feeds
             feed_urls: vec![
                 // Users can add their own feeds via config

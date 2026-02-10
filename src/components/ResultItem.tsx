@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import type { HNRelevance, FeedbackAction, FeedbackGiven } from '../types';
 import { formatScore, getScoreColor } from '../utils/score';
 import { ConfidenceIndicator } from './ConfidenceIndicator';
@@ -15,7 +16,7 @@ interface ResultItemProps {
   ) => void;
 }
 
-export function ResultItem({
+export const ResultItem = memo(function ResultItem({
   item,
   isExpanded,
   onToggleExpand,
@@ -293,4 +294,4 @@ export function ResultItem({
       )}
     </li>
   );
-}
+});

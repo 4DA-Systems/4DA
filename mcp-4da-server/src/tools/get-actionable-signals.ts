@@ -127,8 +127,33 @@ const PRIORITY_LABELS: Record<string, string> = {
 };
 
 // ============================================================================
-// Classifier
+// Classifier - Optimized with flat keyword map
 // ============================================================================
+
+// Build flat keyword→signal_type lookup map at module load (one-time cost)
+interface KeywordEntry {
+  type: SignalType;
+  weight: number;
+  isBoost: boolean;
+}
+
+const KEYWORD_MAP: Map<string, KeywordEntry[]> = new Map();
+
+// Initialize keyword map
+for (const [type, pattern] of Object.entries(SIGNAL_PATTERNS) as [SignalType, SignalPattern][]) {
+  for (const kw of pattern.keywords) {
+    if (!KEYWORD_MAP.has(kw)) {
+      KEYWORD_MAP.set(kw, []);
+    }
+    KEYWORD_MAP.get(kw)!.push({ type, weight: pattern.weight, isBoost: false });
+  }
+  for (const bw of pattern.boostWords) {
+    if (!KEYWORD_MAP.has(bw)) {
+      KEYWORD_MAP.set(bw, []);
+    }
+    KEYWORD_MAP.get(bw)!.push({ type, weight: 0.2, isBoost: true });
+  }
+}
 
 function classify(
   title: string,
@@ -142,41 +167,43 @@ function classify(
   action: string;
   triggers: string[];
 } | null {
+  // Pre-compute lowercased text once
   const textLower = `${title} ${content}`.toLowerCase();
   const titleLower = title.toLowerCase();
 
+  // Track scores per signal type
+  const typeScores: Record<string, { score: number; matched: string[] }> = {};
+
+  // Single pass through keyword map
+  for (const [keyword, entries] of KEYWORD_MAP.entries()) {
+    if (textLower.includes(keyword)) {
+      for (const entry of entries) {
+        if (!typeScores[entry.type]) {
+          typeScores[entry.type] = { score: 0, matched: [] };
+        }
+
+        typeScores[entry.type].score += entry.weight;
+        typeScores[entry.type].matched.push(keyword);
+
+        // Boost if keyword is in title (only for non-boost words)
+        if (!entry.isBoost && titleLower.includes(keyword)) {
+          typeScores[entry.type].score += entry.weight * 0.5;
+        }
+      }
+    }
+  }
+
+  // Find best type
   let bestType: SignalType | null = null;
   let bestConfidence = 0;
   let bestTriggers: string[] = [];
 
-  for (const [type, pattern] of Object.entries(SIGNAL_PATTERNS) as [SignalType, SignalPattern][]) {
-    const matched: string[] = [];
-    let score = 0;
-
-    for (const kw of pattern.keywords) {
-      if (textLower.includes(kw)) {
-        score += pattern.weight;
-        matched.push(kw);
-        if (titleLower.includes(kw)) {
-          score += pattern.weight * 0.5;
-        }
-      }
-    }
-
-    for (const bw of pattern.boostWords) {
-      if (textLower.includes(bw)) {
-        score += 0.2;
-        matched.push(bw);
-      }
-    }
-
-    if (matched.length > 0) {
-      const confidence = Math.min(score / 3.0, 1.0);
-      if (confidence > bestConfidence) {
-        bestType = type;
-        bestConfidence = confidence;
-        bestTriggers = matched;
-      }
+  for (const [type, data] of Object.entries(typeScores)) {
+    const confidence = Math.min(data.score / 3.0, 1.0);
+    if (confidence > bestConfidence) {
+      bestType = type as SignalType;
+      bestConfidence = confidence;
+      bestTriggers = data.matched;
     }
   }
 

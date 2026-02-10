@@ -310,39 +310,49 @@ function App() {
   }, [state.analysisComplete, state.relevanceResults.length, autoBriefingEnabled, aiBriefing.loading]);
 
   // Global keyboard shortcuts
+  const showSettingsRef = useRef(showSettings);
+  const showBriefingRef = useRef(showBriefing);
+  const expandedItemRef = useRef(expandedItem);
+  const aiBriefingContentRef = useRef(aiBriefing.content);
+  const analysisCompleteRef = useRef(state.analysisComplete);
+  const loadingRef = useRef(state.loading);
+
+  useEffect(() => {
+    showSettingsRef.current = showSettings;
+    showBriefingRef.current = showBriefing;
+    expandedItemRef.current = expandedItem;
+    aiBriefingContentRef.current = aiBriefing.content;
+    analysisCompleteRef.current = state.analysisComplete;
+    loadingRef.current = state.loading;
+  });
+
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Don't trigger when typing in inputs
       const tag = (e.target as HTMLElement).tagName;
       if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
 
-      // Esc - close modals/panels
       if (e.key === 'Escape') {
-        if (showSettings) { setShowSettings(false); return; }
-        if (showBriefing) { setShowBriefing(false); return; }
-        if (expandedItem !== null) { setExpandedItem(null); return; }
+        if (showSettingsRef.current) { setShowSettings(false); return; }
+        if (showBriefingRef.current) { setShowBriefing(false); return; }
+        if (expandedItemRef.current !== null) { setExpandedItem(null); return; }
       }
 
-      // r - re-analyze (not when Ctrl/Meta held for browser refresh)
-      if (e.key === 'r' && !e.ctrlKey && !e.metaKey && !state.loading) {
+      if (e.key === 'r' && !e.ctrlKey && !e.metaKey && !loadingRef.current) {
         startAnalysis();
         return;
       }
 
-      // b - toggle AI briefing panel
-      if (e.key === 'b' && aiBriefing.content) {
+      if (e.key === 'b' && aiBriefingContentRef.current) {
         setShowBriefing(prev => !prev);
         return;
       }
 
-      // , (comma) - open settings
       if (e.key === ',') {
         setShowSettings(true);
         return;
       }
 
-      // f - toggle "relevant only" filter
-      if (e.key === 'f' && state.analysisComplete) {
+      if (e.key === 'f' && analysisCompleteRef.current) {
         setShowOnlyRelevant(prev => !prev);
         return;
       }
@@ -350,7 +360,7 @@ function App() {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [showSettings, showBriefing, expandedItem, state.loading, state.analysisComplete, aiBriefing.content, startAnalysis, setExpandedItem, setShowOnlyRelevant]);
+  }, [startAnalysis, setExpandedItem, setShowOnlyRelevant]);
 
   return (
     <>
@@ -448,21 +458,28 @@ function App() {
             )}
 
             {/* Summary Badges */}
-            {state.analysisComplete && !state.loading && (
-              <div className="flex items-center gap-1.5">
-                <span className="px-2 py-1 text-[11px] bg-[#1F1F1F] text-gray-400 rounded-lg font-mono">
-                  {state.relevanceResults.length}
-                </span>
-                <span className="px-2 py-1 text-[11px] bg-green-500/10 text-green-400 rounded-lg font-mono">
-                  {state.relevanceResults.filter(r => r.relevant).length} rel
-                </span>
-                {state.relevanceResults.filter(r => r.top_score >= 0.6).length > 0 && (
-                  <span className="px-2 py-1 text-[11px] bg-orange-500/10 text-orange-400 rounded-lg font-mono">
-                    {state.relevanceResults.filter(r => r.top_score >= 0.6).length} top
+            {state.analysisComplete && !state.loading && (() => {
+              let relevantCount = 0, topCount = 0;
+              for (const r of state.relevanceResults) {
+                if (r.relevant) relevantCount++;
+                if (r.top_score >= 0.6) topCount++;
+              }
+              return (
+                <div className="flex items-center gap-1.5">
+                  <span className="px-2 py-1 text-[11px] bg-[#1F1F1F] text-gray-400 rounded-lg font-mono">
+                    {state.relevanceResults.length}
                   </span>
-                )}
-              </div>
-            )}
+                  <span className="px-2 py-1 text-[11px] bg-green-500/10 text-green-400 rounded-lg font-mono">
+                    {relevantCount} rel
+                  </span>
+                  {topCount > 0 && (
+                    <span className="px-2 py-1 text-[11px] bg-orange-500/10 text-orange-400 rounded-lg font-mono">
+                      {topCount} top
+                    </span>
+                  )}
+                </div>
+              );
+            })()}
 
             {/* Actions */}
             <div className="flex items-center gap-2">

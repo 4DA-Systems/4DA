@@ -95,7 +95,9 @@ pub(crate) async fn fetch_all_sources(
 
                     // Check cache first
                     if let Ok(Some(cached)) = db.get_source_item(source_type, &item.source_id) {
-                        db.touch_source_item(source_type, &item.source_id).ok();
+                        if let Err(e) = db.touch_source_item(source_type, &item.source_id) {
+                            warn!(target: "4da::sources", source_type, source_id = %item.source_id, error = %e, "Failed to touch source item");
+                        }
                         all_items.push((
                             GenericSourceItem {
                                 id,
@@ -180,22 +182,27 @@ pub(crate) async fn fetch_all_sources(
             }
         };
 
+        // Batch upsert: collect non-fallback items for transaction
+        let mut items_to_insert = Vec::new();
         for ((item, _), embedding) in new_items_to_embed.into_iter().zip(embeddings.into_iter()) {
-            // Cache in database (skip if embedding failed - zero vector)
+            // Skip zero vectors (embedding fallback)
             let is_fallback = embedding.iter().all(|&v| v == 0.0);
             if !is_fallback {
-                db.upsert_source_item(
-                    &item.source_type,
-                    &item.source_id,
-                    item.url.as_deref(),
-                    &item.title,
-                    &item.content,
-                    &embedding,
-                )
-                .ok();
+                items_to_insert.push((
+                    item.source_type.clone(),
+                    item.source_id.clone(),
+                    item.url.clone(),
+                    item.title.clone(),
+                    item.content.clone(),
+                    embedding.clone(),
+                ));
             }
-
             all_items.push((item, embedding));
+        }
+
+        // Batch insert in single transaction
+        if !items_to_insert.is_empty() {
+            db.batch_upsert_source_items(&items_to_insert).ok();
         }
     }
 
@@ -232,17 +239,36 @@ pub(crate) async fn fetch_all_sources_deep(
     let mut all_items: Vec<(GenericSourceItem, Vec<f32>)> = Vec::new();
     let mut new_items_to_embed: Vec<(GenericSourceItem, String)> = Vec::new();
 
-    // Fetch from each source using deep fetch where available
-    // HN deep fetch (top + new + best + ask + show = ~200+ unique items)
+    // Fetch from all sources in parallel using tokio::join!
     emit_progress(
         app,
         "fetch",
         0.12,
-        "Deep fetching Hacker News (5 categories)...",
+        "Deep fetching from all sources in parallel...",
         0,
         0,
     );
-    match hn_source.fetch_items_deep(items_per_category).await {
+
+    let (
+        hn_result,
+        arxiv_result,
+        reddit_result,
+        github_result,
+        rss_result,
+        twitter_result,
+        youtube_result,
+    ) = tokio::join!(
+        hn_source.fetch_items_deep(items_per_category),
+        arxiv_source.fetch_items_deep(items_per_category),
+        reddit_source.fetch_items_deep(items_per_category),
+        github_source.fetch_items(),
+        rss_source.fetch_items(),
+        twitter_source.fetch_items_deep(items_per_category),
+        youtube_source.fetch_items(),
+    );
+
+    // Process HN results
+    match hn_result {
         Ok(items) => {
             info!(target: "4da::sources", source = "hackernews", count = items.len(), "Deep fetched HN items");
             process_source_items(
@@ -258,16 +284,8 @@ pub(crate) async fn fetch_all_sources_deep(
         }
     }
 
-    // arXiv deep fetch (16 categories = ~100+ papers)
-    emit_progress(
-        app,
-        "fetch",
-        0.25,
-        "Deep fetching arXiv (16 categories)...",
-        all_items.len(),
-        0,
-    );
-    match arxiv_source.fetch_items_deep(items_per_category).await {
+    // Process arXiv results
+    match arxiv_result {
         Ok(items) => {
             info!(target: "4da::sources", source = "arxiv", count = items.len(), "Deep fetched arXiv papers");
             process_source_items(db, &mut all_items, &mut new_items_to_embed, items, "arxiv");
@@ -277,16 +295,8 @@ pub(crate) async fn fetch_all_sources_deep(
         }
     }
 
-    // Reddit deep fetch (40+ subreddits = ~200+ posts)
-    emit_progress(
-        app,
-        "fetch",
-        0.35,
-        "Deep fetching Reddit (40+ subreddits)...",
-        all_items.len(),
-        0,
-    );
-    match reddit_source.fetch_items_deep(items_per_category).await {
+    // Process Reddit results
+    match reddit_result {
         Ok(items) => {
             info!(target: "4da::sources", source = "reddit", count = items.len(), "Deep fetched Reddit posts");
             process_source_items(db, &mut all_items, &mut new_items_to_embed, items, "reddit");
@@ -296,16 +306,8 @@ pub(crate) async fn fetch_all_sources_deep(
         }
     }
 
-    // GitHub (regular fetch - trending is already comprehensive)
-    emit_progress(
-        app,
-        "fetch",
-        0.45,
-        "Fetching GitHub trending...",
-        all_items.len(),
-        0,
-    );
-    match github_source.fetch_items().await {
+    // Process GitHub results
+    match github_result {
         Ok(items) => {
             info!(target: "4da::sources", source = "github", count = items.len(), "Fetched GitHub repos");
             process_source_items(db, &mut all_items, &mut new_items_to_embed, items, "github");
@@ -315,16 +317,8 @@ pub(crate) async fn fetch_all_sources_deep(
         }
     }
 
-    // RSS (regular fetch)
-    emit_progress(
-        app,
-        "fetch",
-        0.45,
-        "Fetching RSS feeds...",
-        all_items.len(),
-        0,
-    );
-    match rss_source.fetch_items().await {
+    // Process RSS results
+    match rss_result {
         Ok(items) => {
             info!(target: "4da::sources", source = "rss", count = items.len(), "Fetched RSS items");
             process_source_items(db, &mut all_items, &mut new_items_to_embed, items, "rss");
@@ -334,16 +328,8 @@ pub(crate) async fn fetch_all_sources_deep(
         }
     }
 
-    // Twitter/X deep fetch (timeline + search)
-    emit_progress(
-        app,
-        "fetch",
-        0.55,
-        "Fetching Twitter/X...",
-        all_items.len(),
-        0,
-    );
-    match twitter_source.fetch_items_deep(items_per_category).await {
+    // Process Twitter results
+    match twitter_result {
         Ok(items) => {
             info!(target: "4da::sources", source = "twitter", count = items.len(), "Deep fetched Twitter items");
             process_source_items(
@@ -359,16 +345,8 @@ pub(crate) async fn fetch_all_sources_deep(
         }
     }
 
-    // YouTube (regular fetch - RSS feeds)
-    emit_progress(
-        app,
-        "fetch",
-        0.60,
-        "Fetching YouTube feeds...",
-        all_items.len(),
-        0,
-    );
-    match youtube_source.fetch_items().await {
+    // Process YouTube results
+    match youtube_result {
         Ok(items) => {
             info!(target: "4da::sources", source = "youtube", count = items.len(), "Fetched YouTube videos");
             process_source_items(
@@ -471,8 +449,27 @@ pub(crate) async fn fill_cache_background(app: &AppHandle) -> Result<usize, Stri
     let mut total_cached = 0;
     let mut new_items_to_embed: Vec<(String, String, Option<String>, String, String)> = Vec::new();
 
-    // HN deep fetch
-    match hn_source.fetch_items_deep(50).await {
+    // Fetch from all sources in parallel
+    let (
+        hn_result,
+        arxiv_result,
+        reddit_result,
+        github_result,
+        rss_result,
+        twitter_result,
+        youtube_result,
+    ) = tokio::join!(
+        hn_source.fetch_items_deep(50),
+        arxiv_source.fetch_items_deep(50),
+        reddit_source.fetch_items_deep(50),
+        github_source.fetch_items(),
+        rss_source.fetch_items(),
+        twitter_source.fetch_items_deep(50),
+        youtube_source.fetch_items(),
+    );
+
+    // Process HN results
+    match hn_result {
         Ok(items) => {
             info!(target: "4da::cache", source = "hackernews", count = items.len(), "Fetched HN items");
             for item in items {
@@ -498,8 +495,8 @@ pub(crate) async fn fill_cache_background(app: &AppHandle) -> Result<usize, Stri
         Err(e) => warn!(target: "4da::cache", source = "hackernews", error = ?e, "Fetch failed"),
     }
 
-    // arXiv deep fetch
-    match arxiv_source.fetch_items_deep(50).await {
+    // Process arXiv results
+    match arxiv_result {
         Ok(items) => {
             info!(target: "4da::cache", source = "arxiv", count = items.len(), "Fetched arXiv items");
             for item in items {
@@ -525,8 +522,8 @@ pub(crate) async fn fill_cache_background(app: &AppHandle) -> Result<usize, Stri
         Err(e) => warn!(target: "4da::cache", source = "arxiv", error = ?e, "Fetch failed"),
     }
 
-    // Reddit deep fetch
-    match reddit_source.fetch_items_deep(50).await {
+    // Process Reddit results
+    match reddit_result {
         Ok(items) => {
             info!(target: "4da::cache", source = "reddit", count = items.len(), "Fetched Reddit items");
             for item in items {
@@ -552,8 +549,8 @@ pub(crate) async fn fill_cache_background(app: &AppHandle) -> Result<usize, Stri
         Err(e) => warn!(target: "4da::cache", source = "reddit", error = ?e, "Fetch failed"),
     }
 
-    // GitHub fetch
-    match github_source.fetch_items().await {
+    // Process GitHub results
+    match github_result {
         Ok(items) => {
             info!(target: "4da::cache", source = "github", count = items.len(), "Fetched GitHub items");
             for item in items {
@@ -579,8 +576,8 @@ pub(crate) async fn fill_cache_background(app: &AppHandle) -> Result<usize, Stri
         Err(e) => warn!(target: "4da::cache", source = "github", error = ?e, "Fetch failed"),
     }
 
-    // RSS fetch
-    match rss_source.fetch_items().await {
+    // Process RSS results
+    match rss_result {
         Ok(items) => {
             info!(target: "4da::cache", source = "rss", count = items.len(), "Fetched RSS items");
             for item in items {
@@ -606,8 +603,8 @@ pub(crate) async fn fill_cache_background(app: &AppHandle) -> Result<usize, Stri
         Err(e) => warn!(target: "4da::cache", source = "rss", error = ?e, "Fetch failed"),
     }
 
-    // Twitter/X deep fetch
-    match twitter_source.fetch_items_deep(50).await {
+    // Process Twitter results
+    match twitter_result {
         Ok(items) => {
             info!(target: "4da::cache", source = "twitter", count = items.len(), "Fetched Twitter items");
             for item in items {
@@ -633,8 +630,8 @@ pub(crate) async fn fill_cache_background(app: &AppHandle) -> Result<usize, Stri
         Err(e) => warn!(target: "4da::cache", source = "twitter", error = ?e, "Fetch failed"),
     }
 
-    // YouTube fetch
-    match youtube_source.fetch_items().await {
+    // Process YouTube results
+    match youtube_result {
         Ok(items) => {
             info!(target: "4da::cache", source = "youtube", count = items.len(), "Fetched YouTube items");
             for item in items {
@@ -671,21 +668,29 @@ pub(crate) async fn fill_cache_background(app: &AppHandle) -> Result<usize, Stri
 
         match embed_texts(&texts) {
             Ok(embeddings) => {
-                for ((source_type, source_id, url, title, content), embedding) in
-                    new_items_to_embed.into_iter().zip(embeddings.into_iter())
-                {
-                    if !embedding.iter().all(|&v| v == 0.0) {
-                        db.upsert_source_item(
-                            &source_type,
-                            &source_id,
-                            url.as_deref(),
-                            &title,
-                            &content,
-                            &embedding,
-                        )
-                        .ok();
-                        total_cached += 1;
-                    }
+                // Batch upsert: collect non-fallback items for transaction
+                let items_to_insert: Vec<(
+                    String,
+                    String,
+                    Option<String>,
+                    String,
+                    String,
+                    Vec<f32>,
+                )> = new_items_to_embed
+                    .into_iter()
+                    .zip(embeddings.into_iter())
+                    .filter(|(_, embedding)| !embedding.iter().all(|&v| v == 0.0))
+                    .map(
+                        |((source_type, source_id, url, title, content), embedding)| {
+                            (source_type, source_id, url, title, content, embedding)
+                        },
+                    )
+                    .collect();
+
+                let count = items_to_insert.len();
+                if !items_to_insert.is_empty() {
+                    db.batch_upsert_source_items(&items_to_insert).ok();
+                    total_cached += count;
                 }
             }
             Err(e) => {
@@ -721,7 +726,9 @@ pub(crate) fn process_source_items(
         };
 
         if let Ok(Some(cached)) = db.get_source_item(source_type, &item.source_id) {
-            db.touch_source_item(source_type, &item.source_id).ok();
+            if let Err(e) = db.touch_source_item(source_type, &item.source_id) {
+                warn!(target: "4da::sources", source_type, source_id = %item.source_id, error = %e, "Failed to touch source item");
+            }
             all_items.push((
                 GenericSourceItem {
                     id,

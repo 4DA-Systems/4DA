@@ -14,11 +14,14 @@ pub(crate) fn compute_interest_score(
         return 0.0;
     }
 
+    // Pre-compute item embedding norm once (hot loop optimization)
+    let item_norm = crate::vector_norm(item_embedding);
     let mut max_score: f32 = 0.0;
 
     for interest in interests {
         if let Some(ref interest_embedding) = interest.embedding {
-            let similarity = crate::cosine_similarity(item_embedding, interest_embedding);
+            let similarity =
+                crate::cosine_similarity_with_norm(item_embedding, item_norm, interest_embedding);
             let weighted = similarity * interest.weight;
             max_score = max_score.max(weighted);
         }
@@ -210,6 +213,9 @@ pub(crate) fn compute_semantic_ace_boost(
         return None; // Fall back to keyword matching
     }
 
+    // Pre-compute item embedding norm once (hot loop optimization)
+    let item_norm = crate::vector_norm(item_embedding);
+
     let mut max_similarity: f32 = 0.0;
     let mut weighted_sum: f32 = 0.0;
     let mut weight_total: f32 = 0.0;
@@ -217,7 +223,7 @@ pub(crate) fn compute_semantic_ace_boost(
     // Compute similarity with active topics
     for topic in &ace_ctx.active_topics {
         if let Some(topic_emb) = topic_embeddings.get(topic) {
-            let sim = crate::cosine_similarity(item_embedding, topic_emb);
+            let sim = crate::cosine_similarity_with_norm(item_embedding, item_norm, topic_emb);
             let conf = ace_ctx.topic_confidence.get(topic).copied().unwrap_or(0.5);
             weighted_sum += sim * conf;
             weight_total += conf;
@@ -228,7 +234,7 @@ pub(crate) fn compute_semantic_ace_boost(
     // Compute similarity with detected tech
     for tech in &ace_ctx.detected_tech {
         if let Some(tech_emb) = topic_embeddings.get(tech) {
-            let sim = crate::cosine_similarity(item_embedding, tech_emb);
+            let sim = crate::cosine_similarity_with_norm(item_embedding, item_norm, tech_emb);
             weighted_sum += sim * 0.8; // Tech is strong signal
             weight_total += 0.8;
             max_similarity = max_similarity.max(sim);
@@ -246,7 +252,7 @@ pub(crate) fn compute_semantic_ace_boost(
     let mut affinity_mult: f32 = 1.0;
     for (topic, &(affinity, confidence)) in &ace_ctx.topic_affinities {
         if let Some(topic_emb) = topic_embeddings.get(topic) {
-            let sim = crate::cosine_similarity(item_embedding, topic_emb);
+            let sim = crate::cosine_similarity_with_norm(item_embedding, item_norm, topic_emb);
             if sim > 0.5 {
                 // Item is similar to a topic we have affinity data for
                 // Scale by both similarity and confidence

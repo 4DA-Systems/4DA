@@ -37,11 +37,7 @@ impl YouTubeSource {
                 fetch_interval_secs: 1800, // 30 minutes
                 custom: None,
             },
-            client: reqwest::Client::builder()
-                .timeout(std::time::Duration::from_secs(30))
-                .user_agent("Mozilla/5.0 (compatible; 4DA/1.0)")
-                .build()
-                .expect("Failed to create HTTP client"),
+            client: super::shared_client(),
             channels: default_channels(),
         }
     }
