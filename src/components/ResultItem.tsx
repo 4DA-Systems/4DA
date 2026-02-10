@@ -1,18 +1,18 @@
 import { memo } from 'react';
-import type { HNRelevance, FeedbackAction, FeedbackGiven } from '../types';
+import type { SourceRelevance, FeedbackAction, FeedbackGiven } from '../types';
 import { formatScore, getScoreColor } from '../utils/score';
 import { ConfidenceIndicator } from './ConfidenceIndicator';
 import { ScoreAutopsy } from './ScoreAutopsy';
 
 interface ResultItemProps {
-  item: HNRelevance;
+  item: SourceRelevance;
   isExpanded: boolean;
   onToggleExpand: () => void;
   feedbackGiven: FeedbackGiven;
   onRecordInteraction: (
     itemId: number,
     actionType: FeedbackAction,
-    item: HNRelevance
+    item: SourceRelevance
   ) => void;
 }
 
@@ -99,6 +99,15 @@ export const ResultItem = memo(function ResultItem({
                   {{ security_alert: 'Security', breaking_change: 'Breaking', tool_discovery: 'Tool',
                      tech_trend: 'Trend', learning: 'Learn', competitive_intel: 'Intel',
                   }[item.signal_type] || item.signal_type}
+                </span>
+              )}
+              {/* Multi-source badge (deduplication) */}
+              {item.seen_on && item.seen_on.length > 1 && (
+                <span className="flex-shrink-0 text-[10px] px-1.5 py-0.5 bg-indigo-500/20 text-indigo-400 rounded font-medium">
+                  {item.seen_on.map(s => ({
+                    hackernews: 'HN', arxiv: 'arXiv', reddit: 'Reddit', github: 'GitHub',
+                    rss: 'RSS', youtube: 'YouTube', twitter: 'Twitter', producthunt: 'PH',
+                  }[s] || s)).join(' + ')}
                 </span>
               )}
             </div>

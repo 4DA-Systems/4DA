@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import type { ApiKeyState, OllamaStatus } from './types';
 
 interface ApiKeysStepProps {
@@ -37,22 +38,41 @@ export function ApiKeysStep({
   onSkip,
   onBack,
 }: ApiKeysStepProps) {
+  // Auto-detect Ollama on mount
+  useEffect(() => {
+    checkOllamaStatus();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const hasEmbeddingService = apiKeys.openai || (ollamaStatus?.running ?? false);
+
   return (
     <div className={`transition-all duration-300 ${isAnimating ? 'opacity-0 translate-y-4' : 'opacity-100 translate-y-0'}`}>
       <h2 className="text-3xl font-semibold text-white mb-2 text-center">API Keys</h2>
       <p className="text-gray-400 mb-6 text-center">
-        4DA needs API keys to analyze content and understand relevance.
+        Configure API keys for best results, or try keyword-only mode.
       </p>
 
       <div className="space-y-4 mb-6">
-        {/* OpenAI Key - REQUIRED for embeddings */}
+        {/* Ollama detected banner */}
+        {ollamaStatus?.running && !apiKeys.openai && (
+          <div className="p-3 bg-green-900/20 border border-green-500/30 rounded-lg text-sm text-green-300 flex items-center gap-2">
+            <span className="text-green-500">&#x2713;</span>
+            Ollama detected! You can proceed without API keys using local models.
+          </div>
+        )}
+
+        {/* OpenAI Key */}
         <div className="bg-[#141414] p-5 rounded-lg">
           <div className="flex items-center gap-2 mb-3">
-            <span className="px-2 py-0.5 bg-red-500/20 text-red-400 text-xs rounded font-medium">Required</span>
+            {hasEmbeddingService ? (
+              <span className="px-2 py-0.5 bg-green-500/20 text-green-400 text-xs rounded font-medium">Recommended</span>
+            ) : (
+              <span className="px-2 py-0.5 bg-yellow-500/20 text-yellow-400 text-xs rounded font-medium">Recommended</span>
+            )}
             <h3 className="text-white font-medium">OpenAI API Key</h3>
           </div>
           <p className="text-sm text-gray-400 mb-3">
-            Used for semantic understanding (embeddings). This is required for 4DA to work.
+            Used for semantic understanding (embeddings). Provides the best relevance scoring.
           </p>
           <div className="flex items-center justify-between mb-2">
             <label className="text-xs text-gray-500">API Key</label>
@@ -223,7 +243,7 @@ export function ApiKeysStep({
         {/* Test connection button */}
         <button
           onClick={onTest}
-          disabled={isTesting || (!apiKeys.openai && apiKeys.provider !== 'ollama')}
+          disabled={isTesting || (!apiKeys.openai && apiKeys.provider !== 'ollama' && !ollamaStatus?.running)}
           className="w-full px-4 py-3 bg-[#1F1F1F] border border-[#2A2A2A] text-gray-300 rounded-lg hover:bg-[#2A2A2A] transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
         >
           {isTesting ? (
@@ -261,6 +281,18 @@ export function ApiKeysStep({
         )}
       </div>
 
+      {/* Keyword-only mode info */}
+      {!hasEmbeddingService && (
+        <div className="p-3 bg-[#1F1F1F] border border-[#2A2A2A] rounded-lg text-sm">
+          <div className="text-yellow-400 font-medium mb-1">Keyword-only mode available</div>
+          <p className="text-gray-400 text-xs">
+            Without an API key or Ollama, 4DA can still work using keyword matching.
+            Results will be less precise than semantic search, but still useful.
+            You can add API keys later in Settings.
+          </p>
+        </div>
+      )}
+
       {/* Navigation */}
       <div className="flex justify-between items-center">
         <button
@@ -270,12 +302,22 @@ export function ApiKeysStep({
           &larr; Back
         </button>
         <div className="flex items-center gap-3">
-          <button
-            onClick={onSkip}
-            className="px-4 py-2 text-gray-500 hover:text-gray-300 text-sm transition-colors"
-          >
-            Skip for now
-          </button>
+          {!hasEmbeddingService && (
+            <button
+              onClick={onSkip}
+              className="px-4 py-2 text-yellow-500 hover:text-yellow-300 text-sm transition-colors"
+            >
+              Try keyword-only mode
+            </button>
+          )}
+          {hasEmbeddingService && !apiKeys.openai && apiKeys.provider !== 'ollama' && (
+            <button
+              onClick={onSkip}
+              className="px-4 py-2 text-gray-500 hover:text-gray-300 text-sm transition-colors"
+            >
+              Skip for now
+            </button>
+          )}
           <button
             onClick={onSave}
             disabled={!apiKeys.openai && apiKeys.provider !== 'ollama'}

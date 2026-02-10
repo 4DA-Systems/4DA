@@ -1610,7 +1610,9 @@ pub fn load_topic_embeddings(
 /// Generate embeddings for topics that don't have them
 /// Returns count of topics updated
 #[allow(dead_code)] // Future: batch embedding generation on startup
-pub fn generate_missing_topic_embeddings(conn: &Arc<Mutex<Connection>>) -> Result<usize, String> {
+pub async fn generate_missing_topic_embeddings(
+    conn: &Arc<Mutex<Connection>>,
+) -> Result<usize, String> {
     // Find topics without embeddings
     let topics_without_embeddings: Vec<(i64, String)> = {
         let conn_guard = conn.lock();
@@ -1647,7 +1649,7 @@ pub fn generate_missing_topic_embeddings(conn: &Arc<Mutex<Connection>>) -> Resul
         .map(|(_, t)| t.clone())
         .collect();
 
-    let embeddings = crate::embed_texts(&topic_texts)?;
+    let embeddings = crate::embed_texts(&topic_texts).await?;
 
     // Store embeddings
     let mut updated = 0;

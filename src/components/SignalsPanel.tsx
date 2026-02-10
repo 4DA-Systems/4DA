@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import type { HNRelevance } from '../types';
+import type { SourceRelevance } from '../types';
 
 // ============================================================================
 // Types
@@ -18,7 +18,7 @@ interface SignalItem {
 }
 
 interface SignalsPanelProps {
-  results: HNRelevance[];
+  results: SourceRelevance[];
 }
 
 // ============================================================================

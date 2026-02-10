@@ -171,14 +171,7 @@ pub async fn ace_analyze_git(paths: Vec<String>) -> Result<serde_json::Value, St
 pub async fn ace_get_realtime_context() -> Result<serde_json::Value, String> {
     let _ace = get_ace_engine()?;
 
-    // Get the connection from ACE (we need to access it)
-    let mut db_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    db_path.pop();
-    db_path.push("data");
-    db_path.push("4da.db");
-
-    let conn = rusqlite::Connection::open(&db_path)
-        .map_err(|e| format!("Failed to open database: {}", e))?;
+    let conn = crate::open_db_connection()?;
     let conn = Arc::new(parking_lot::Mutex::new(conn));
 
     let context = ace::get_realtime_context(&conn)?;
@@ -194,13 +187,7 @@ pub async fn ace_get_realtime_context() -> Result<serde_json::Value, String> {
 /// Apply freshness decay to active topics
 #[tauri::command]
 pub async fn ace_apply_decay() -> Result<serde_json::Value, String> {
-    let mut db_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    db_path.pop();
-    db_path.push("data");
-    db_path.push("4da.db");
-
-    let conn = rusqlite::Connection::open(&db_path)
-        .map_err(|e| format!("Failed to open database: {}", e))?;
+    let conn = crate::open_db_connection()?;
     let conn = Arc::new(parking_lot::Mutex::new(conn));
 
     let updated = ace::apply_freshness_decay(&conn)?;
@@ -972,7 +959,7 @@ pub(crate) async fn index_discovered_readmes(context_dirs: &[PathBuf]) -> usize 
                                 }
 
                                 // Generate embedding
-                                match embed_texts(std::slice::from_ref(&chunk_content)) {
+                                match embed_texts(std::slice::from_ref(&chunk_content)).await {
                                     Ok(embeddings) if !embeddings.is_empty() => {
                                         // Store with weight in context_chunks table
                                         match db.upsert_context_weighted(
@@ -1115,7 +1102,7 @@ pub(crate) async fn auto_seed_interests_from_ace() -> Result<(), String> {
 
     // Generate embeddings for all topics at once
     let topic_strings: Vec<String> = topics_to_seed.iter().map(|(t, _)| t.clone()).collect();
-    let embeddings = embed_texts(&topic_strings)?;
+    let embeddings = embed_texts(&topic_strings).await?;
 
     // Add each topic as an inferred interest
     let mut seeded_count = 0;

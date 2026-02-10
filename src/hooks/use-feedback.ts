@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
-import type { HNRelevance, FeedbackAction, FeedbackGiven } from '../types';
+import type { SourceRelevance, FeedbackAction, FeedbackGiven } from '../types';
 
 export function useFeedback(onStatusChange?: (status: string) => void) {
   const [feedbackGiven, setFeedbackGiven] = useState<FeedbackGiven>({});
@@ -57,7 +57,7 @@ export function useFeedback(onStatusChange?: (status: string) => void) {
   const recordInteraction = useCallback(async (
     itemId: number,
     actionType: FeedbackAction,
-    item: HNRelevance,
+    item: SourceRelevance,
   ) => {
     try {
       const titleWords = item.title.toLowerCase().split(/\s+/);

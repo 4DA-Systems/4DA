@@ -122,7 +122,7 @@ pub async fn index_context() -> Result<String, String> {
     // Generate embeddings
     debug!(target: "4da::embed", chunks = all_chunks.len(), "Generating embeddings for chunks");
     let chunk_texts: Vec<String> = all_chunks.iter().map(|(_, text)| text.clone()).collect();
-    let chunk_embeddings = embed_texts(&chunk_texts)?;
+    let chunk_embeddings = embed_texts(&chunk_texts).await?;
 
     // Store in database
     debug!(target: "4da::context", chunks = all_chunks.len(), "Storing context chunks in database");

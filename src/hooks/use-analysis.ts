@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { listen, UnlistenFn } from '@tauri-apps/api/event';
-import type { ContextFile, HNRelevance, AnalysisProgress, AppState } from '../types';
+import type { ContextFile, SourceRelevance, AnalysisProgress, AppState } from '../types';
+import type { ToastType } from './use-toasts';
 
 const initialState: AppState = {
   contextFiles: [],
@@ -15,7 +16,7 @@ const initialState: AppState = {
   lastAnalyzedAt: null,
 };
 
-export function useAnalysis() {
+export function useAnalysis(addToast?: (type: ToastType, message: string) => void) {
   const [state, setState] = useState<AppState>(initialState);
   const [expandedItem, setExpandedItem] = useState<number | null>(null);
   const [isBrowserMode, setIsBrowserMode] = useState(false);
@@ -25,6 +26,10 @@ export function useAnalysis() {
     let unlistenProgress: UnlistenFn | null = null;
     let unlistenComplete: UnlistenFn | null = null;
     let unlistenError: UnlistenFn | null = null;
+    let unlistenSourceError: UnlistenFn | null = null;
+    let unlistenSourceFetched: UnlistenFn | null = null;
+    let unlistenNetworkOffline: UnlistenFn | null = null;
+    let unlistenEmbeddingMode: UnlistenFn | null = null;
 
     const setupListeners = async () => {
       unlistenProgress = await listen<AnalysisProgress>('analysis-progress', (event) => {
@@ -40,7 +45,7 @@ export function useAnalysis() {
         }));
       });
 
-      unlistenComplete = await listen<HNRelevance[]>('analysis-complete', (event) => {
+      unlistenComplete = await listen<SourceRelevance[]>('analysis-complete', (event) => {
         const results = event.payload;
         const relevantCount = results.filter((r) => r.relevant).length;
         setState((s) => ({
@@ -53,16 +58,53 @@ export function useAnalysis() {
           progressStage: 'complete',
           lastAnalyzedAt: new Date(),
         }));
+        addToast?.('success', `Analysis complete: ${relevantCount} relevant items found`);
       });
 
       unlistenError = await listen<string>('analysis-error', (event) => {
+        const msg = event.payload;
         setState((s) => ({
           ...s,
-          status: `Error: ${event.payload}`,
+          status: `Error: ${msg}`,
           loading: false,
           progress: 0,
           progressStage: 'error',
         }));
+        // Categorize and show actionable error toast
+        if (msg.includes('API') || msg.includes('key') || msg.includes('401')) {
+          addToast?.('error', 'API error - check your API key in Settings');
+        } else if (msg.includes('network') || msg.includes('timeout') || msg.includes('connect')) {
+          addToast?.('error', 'Network error - check your connection');
+        } else {
+          addToast?.('error', `Analysis failed: ${msg}`);
+        }
+      });
+
+      // Per-source error events (Phase 3)
+      unlistenSourceError = await listen<{ source: string; error: string; retry_count: number }>('source-error', (event) => {
+        const { source, error } = event.payload;
+        const sourceLabels: Record<string, string> = {
+          hackernews: 'HN', arxiv: 'arXiv', reddit: 'Reddit', github: 'GitHub',
+          rss: 'RSS', youtube: 'YouTube', twitter: 'Twitter',
+        };
+        addToast?.('warning', `${sourceLabels[source] || source}: ${error}`);
+      });
+
+      // Per-source success events
+      unlistenSourceFetched = await listen<{ source: string; count: number }>('source-fetched', (_event) => {
+        // Silent — success is the default. Only toast on errors.
+      });
+
+      // Network offline event (Phase 4)
+      unlistenNetworkOffline = await listen('network-offline', () => {
+        addToast?.('warning', 'Offline - showing cached results only');
+      });
+
+      // Embedding mode event (Phase 13: Zero-Config)
+      unlistenEmbeddingMode = await listen<{ mode: string; reason?: string }>('embedding-mode', (event) => {
+        if (event.payload.mode === 'keyword-only') {
+          addToast?.('info', 'Running in keyword-only mode. Add API key for better results.');
+        }
       });
     };
 
@@ -72,7 +114,12 @@ export function useAnalysis() {
       if (unlistenProgress) unlistenProgress();
       if (unlistenComplete) unlistenComplete();
       if (unlistenError) unlistenError();
+      if (unlistenSourceError) unlistenSourceError();
+      if (unlistenSourceFetched) unlistenSourceFetched();
+      if (unlistenNetworkOffline) unlistenNetworkOffline();
+      if (unlistenEmbeddingMode) unlistenEmbeddingMode();
     };
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- addToast is stable from useToasts
   }, []);
 
   const loadContextFiles = useCallback(async () => {
@@ -166,16 +213,19 @@ export function useAnalysis() {
           status: 'Cannot analyze in browser mode. Open through Tauri window.',
           loading: false,
         }));
+        addToast?.('error', 'Cannot analyze in browser mode');
       } else if (errorMsg.includes('already running')) {
         setState((s) => ({
           ...s,
           status: 'Analysis already in progress...',
         }));
+        addToast?.('info', 'Analysis already in progress');
       } else {
         setState((s) => ({ ...s, status: `Error: ${error}`, loading: false }));
+        addToast?.('error', `Analysis failed: ${errorMsg}`);
       }
     }
-  }, []);
+  }, [addToast]);
 
   const setStatus = useCallback((status: string) => {
     setState(s => ({ ...s, status }));

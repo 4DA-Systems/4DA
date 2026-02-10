@@ -27,23 +27,67 @@ pub(crate) async fn fetch_all_sources(
 ) -> Result<Vec<(GenericSourceItem, Vec<f32>)>, String> {
     use sources::Source;
 
+    // Phase 4: Network connectivity check before fetching
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(3))
+        .build()
+        .ok();
+
+    let online = if let Some(c) = &client {
+        c.head("https://httpbin.org/get").send().await.is_ok()
+    } else {
+        true // Assume online if client creation fails
+    };
+
+    if !online {
+        warn!(target: "4da::sources", "Network unavailable - using cached content only");
+        let _ = app.emit("network-offline", ());
+        return Ok(Vec::new()); // Return empty; caller falls back to cache
+    }
+
     // Create sources directly (avoid holding MutexGuard across await)
+    // Filter by enabled status from DB (Phase 2: source enable/disable enforcement)
     let rss_feeds = load_rss_feeds_from_settings();
     let (twitter_handles, x_api_key) = load_twitter_settings();
     let youtube_channels = load_youtube_channels_from_settings();
-    let sources: Vec<Box<dyn Source>> = vec![
-        Box::new(HackerNewsSource::new()),
-        Box::new(ArxivSource::new()),
-        Box::new(RedditSource::new()),
-        Box::new(GitHubSource::with_languages(
-            load_github_languages_from_settings(),
-        )),
-        Box::new(RssSource::with_feeds(rss_feeds)),
-        Box::new(TwitterSource::with_handles(twitter_handles).with_api_key(x_api_key)),
-        Box::new(YouTubeSource::with_channels(youtube_channels)),
+
+    let all_sources: Vec<(&str, Box<dyn Source>)> = vec![
+        (
+            "hackernews",
+            Box::new(HackerNewsSource::new()) as Box<dyn Source>,
+        ),
+        ("arxiv", Box::new(ArxivSource::new())),
+        ("reddit", Box::new(RedditSource::new())),
+        (
+            "github",
+            Box::new(GitHubSource::with_languages(
+                load_github_languages_from_settings(),
+            )),
+        ),
+        ("rss", Box::new(RssSource::with_feeds(rss_feeds))),
+        (
+            "twitter",
+            Box::new(TwitterSource::with_handles(twitter_handles).with_api_key(x_api_key)),
+        ),
+        (
+            "youtube",
+            Box::new(YouTubeSource::with_channels(youtube_channels)),
+        ),
     ];
 
-    info!(target: "4da::sources", count = sources.len(), "Fetching from sources");
+    let sources: Vec<Box<dyn Source>> = all_sources
+        .into_iter()
+        .filter(|(source_type, _)| {
+            let enabled = db.is_source_enabled(source_type);
+            if !enabled {
+                info!(target: "4da::sources", source = source_type, "Skipping disabled source");
+            }
+            enabled
+        })
+        .map(|(_, source)| source)
+        .collect();
+
+    info!(target: "4da::sources", count = sources.len(), "Fetching from enabled sources");
 
     let mut all_items: Vec<(GenericSourceItem, Vec<f32>)> = Vec::new();
     let mut new_items_to_embed: Vec<(GenericSourceItem, String)> = Vec::new();
@@ -62,26 +106,64 @@ pub(crate) async fn fetch_all_sources(
             max_items_per_source * 3,
         );
 
-        // Fetch items from this source with retry
+        // Phase 7: Fetch interval enforcement (skip if fetched recently, default 300s)
+        if let Ok(Some(last_fetch_str)) = db.get_source_last_fetch(source_type) {
+            if let Ok(last_fetch) =
+                chrono::NaiveDateTime::parse_from_str(&last_fetch_str, "%Y-%m-%d %H:%M:%S")
+            {
+                let elapsed = chrono::Utc::now().naive_utc() - last_fetch;
+                if elapsed.num_seconds() < 300 {
+                    debug!(target: "4da::sources", source = source_name, elapsed_secs = elapsed.num_seconds(), "Skipping - fetched recently");
+                    continue;
+                }
+            }
+        }
+
+        // Fetch items from this source with exponential backoff retry
+        let fetch_start = std::time::Instant::now();
+
+        // Circuit breaker: skip sources with 5+ consecutive failures
+        if db.is_circuit_open(source_type) {
+            warn!(target: "4da::sources", source = source_name, "Circuit breaker OPEN - skipping (too many failures)");
+            let _ = app.emit("source-error", serde_json::json!({
+                "source": source_type, "error": "Circuit breaker open (5+ failures)", "retry_count": 0
+            }));
+            continue;
+        }
+
         let fetch_result = {
             let mut attempts = 0;
-            let max_attempts = 2;
+            let max_attempts = 3;
+            let backoff_ms = [500u64, 1000, 2000];
             loop {
                 attempts += 1;
                 match source.fetch_items().await {
                     Ok(items) => break Ok(items),
                     Err(e) if attempts < max_attempts => {
-                        warn!(target: "4da::sources", source = source_name, attempt = attempts, error = ?e, "Fetch failed, retrying...");
-                        tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+                        let delay = backoff_ms.get(attempts - 1).copied().unwrap_or(2000);
+                        warn!(target: "4da::sources", source = source_name, attempt = attempts, error = ?e, delay_ms = delay, "Fetch failed, retrying...");
+                        tokio::time::sleep(std::time::Duration::from_millis(delay)).await;
                     }
                     Err(e) => break Err(e),
                 }
             }
         };
 
+        let elapsed_ms = fetch_start.elapsed().as_millis() as i64;
+
         match fetch_result {
             Ok(items) => {
-                info!(target: "4da::sources", source = source_name, count = items.len(), "Fetched items from source");
+                let item_count = items.len();
+                info!(target: "4da::sources", source = source_name, count = item_count, ms = elapsed_ms, "Fetched items from source");
+                db.record_source_health(source_type, true, item_count as i64, elapsed_ms, None)
+                    .ok();
+                db.update_source_fetch_time(source_type).ok();
+                let _ = app.emit(
+                    "source-fetched",
+                    serde_json::json!({
+                        "source": source_type, "count": item_count
+                    }),
+                );
 
                 for (idx, item) in items.into_iter().take(max_items_per_source).enumerate() {
                     // Generate a numeric ID from source_id hash
@@ -145,6 +227,14 @@ pub(crate) async fn fetch_all_sources(
             }
             Err(e) => {
                 error!(target: "4da::sources", source = source_name, error = ?e, "Source fetch failed after retries - continuing with other sources");
+                db.record_source_health(source_type, false, 0, elapsed_ms, Some(&format!("{}", e)))
+                    .ok();
+                let _ = app.emit(
+                    "source-error",
+                    serde_json::json!({
+                        "source": source_type, "error": format!("{}", e), "retry_count": 3
+                    }),
+                );
             }
         }
     }
@@ -172,11 +262,18 @@ pub(crate) async fn fetch_all_sources(
             .collect();
 
         // Try to embed, with fallback to zero vectors (keyword-only scoring)
-        let embeddings = match embed_texts(&texts) {
-            Ok(emb) => emb,
+        let embeddings = match embed_texts(&texts).await {
+            Ok(emb) => {
+                let _ = app.emit("embedding-mode", serde_json::json!({ "mode": "semantic" }));
+                emb
+            }
             Err(e) => {
                 warn!(target: "4da::embed", error = %e, count = texts.len(),
                     "Embedding service unavailable - using fallback (keyword-only scoring)");
+                let _ = app.emit(
+                    "embedding-mode",
+                    serde_json::json!({ "mode": "keyword-only", "reason": e.to_string() }),
+                );
                 // Create zero vectors as fallback - items will score via keyword matching only
                 vec![vec![0.0f32; 384]; texts.len()]
             }
@@ -393,7 +490,7 @@ pub(crate) async fn fetch_all_sources_deep(
 
             let texts: Vec<String> = chunk.iter().map(|(_, text)| text.clone()).collect();
 
-            let embeddings = match embed_texts(&texts) {
+            let embeddings = match embed_texts(&texts).await {
                 Ok(emb) => emb,
                 Err(e) => {
                     warn!(target: "4da::embed", error = %e, batch = batch_idx, "Embedding batch failed - using fallback");
@@ -666,9 +763,10 @@ pub(crate) async fn fill_cache_background(app: &AppHandle) -> Result<usize, Stri
             .map(|(_, _, _, title, content)| build_embedding_text(title, content))
             .collect();
 
-        match embed_texts(&texts) {
+        match embed_texts(&texts).await {
             Ok(embeddings) => {
                 // Batch upsert: collect non-fallback items for transaction
+                #[allow(clippy::type_complexity)]
                 let items_to_insert: Vec<(
                     String,
                     String,

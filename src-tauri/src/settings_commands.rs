@@ -367,7 +367,7 @@ pub async fn add_interest(topic: String, weight: Option<f32>) -> Result<serde_js
     let weight = weight.unwrap_or(1.0);
 
     // Generate embedding for the topic
-    let embedding = embed_texts(std::slice::from_ref(&topic))?;
+    let embedding = embed_texts(std::slice::from_ref(&topic)).await?;
     let emb = embedding.first().map(|e| e.as_slice());
 
     let id = engine

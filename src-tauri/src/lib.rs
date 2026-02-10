@@ -1,12 +1,22 @@
 // FASTEMBED DISABLED: ONNX linking issues on Windows - using OpenAI only
 // use fastembed::{EmbeddingModel, InitOptions, TextEmbedding};
-use once_cell::sync::OnceCell;
+use once_cell::sync::{Lazy, OnceCell};
 use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
+use std::collections::HashSet;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tauri::{AppHandle, Emitter, Listener, Manager};
 use tracing::{debug, error, info, warn};
+
+/// Shared HTTP client for embedding API calls (reused across requests)
+static EMBEDDING_CLIENT: Lazy<reqwest::Client> = Lazy::new(|| {
+    reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(60))
+        .user_agent("4DA/1.0")
+        .build()
+        .expect("Failed to build embedding HTTP client")
+});
 
 mod ace;
 mod ace_commands;
@@ -76,7 +86,7 @@ pub struct ContextSettings {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct HNItem {
+pub struct FetchedItem {
     pub id: u64,
     pub title: String,
     pub url: Option<String>,
@@ -120,6 +130,8 @@ pub struct ScoreBreakdown {
     pub anti_penalty: f32,
     #[serde(default = "default_freshness")]
     pub freshness_mult: f32,
+    #[serde(default)]
+    pub feedback_boost: f32,
     pub confidence_by_signal: std::collections::HashMap<String, f32>,
 }
 
@@ -129,7 +141,7 @@ fn default_freshness() -> f32 {
 
 /// Full relevance result for a source item (HN, arXiv, Reddit, etc.)
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct HNRelevance {
+pub struct SourceRelevance {
     pub id: u64,
     pub title: String,
     pub url: Option<String>,
@@ -194,7 +206,7 @@ pub struct AnalysisState {
     pub running: bool,
     pub completed: bool,
     pub error: Option<String>,
-    pub results: Option<Vec<HNRelevance>>,
+    pub results: Option<Vec<SourceRelevance>>,
 }
 
 /// LLM judgment attached to a relevance result
@@ -228,34 +240,35 @@ pub struct EnhancedRelevance {
 /// Generate embeddings for a list of texts
 /// Supports OpenAI (text-embedding-3-small) and Ollama (nomic-embed-text)
 /// Provider is determined by settings - uses same provider as LLM when possible
-pub(crate) fn embed_texts(texts: &[String]) -> Result<Vec<Vec<f32>>, String> {
+pub(crate) async fn embed_texts(texts: &[String]) -> Result<Vec<Vec<f32>>, String> {
     if texts.is_empty() {
         return Ok(vec![]);
     }
 
-    // Get settings to determine provider
-    let settings = get_settings_manager().lock();
-    let llm_settings = settings.get().llm.clone();
-    drop(settings);
+    // Get settings to determine provider - clone inside scope so MutexGuard drops before await
+    let llm_settings = {
+        let settings = get_settings_manager().lock();
+        settings.get().llm.clone()
+    };
 
     match llm_settings.provider.as_str() {
-        "openai" => embed_texts_openai(texts, &llm_settings.api_key),
-        "ollama" => embed_texts_ollama(texts, &llm_settings.base_url),
+        "openai" => embed_texts_openai(texts, &llm_settings.api_key).await,
+        "ollama" => embed_texts_ollama(texts, &llm_settings.base_url).await,
         "anthropic" => {
             // Anthropic doesn't have embeddings API - use dedicated OpenAI key or fallback to Ollama
             if !llm_settings.openai_api_key.is_empty() {
-                return embed_texts_openai(texts, &llm_settings.openai_api_key);
+                return embed_texts_openai(texts, &llm_settings.openai_api_key).await;
             }
             // Try Ollama as fallback
             if let Some(base_url) = &llm_settings.base_url {
                 if !base_url.is_empty() {
-                    if let Ok(result) = embed_texts_ollama(texts, &Some(base_url.clone())) {
+                    if let Ok(result) = embed_texts_ollama(texts, &Some(base_url.clone())).await {
                         return Ok(result);
                     }
                 }
             }
             // Try default Ollama
-            embed_texts_ollama(texts, &None)
+            embed_texts_ollama(texts, &None).await
         }
         _ => Err(format!(
             "Unknown provider: {}. Please configure OpenAI or Ollama.",
@@ -265,29 +278,38 @@ pub(crate) fn embed_texts(texts: &[String]) -> Result<Vec<Vec<f32>>, String> {
 }
 
 /// Generate embeddings using OpenAI API
-fn embed_texts_openai(texts: &[String], api_key: &str) -> Result<Vec<Vec<f32>>, String> {
+async fn embed_texts_openai(texts: &[String], api_key: &str) -> Result<Vec<Vec<f32>>, String> {
     if api_key.is_empty() {
         return Err("OpenAI API key not configured".to_string());
     }
 
-    let client = ureq::AgentBuilder::new()
-        .timeout(std::time::Duration::from_secs(30))
-        .build();
+    let body = serde_json::json!({
+        "model": "text-embedding-3-small",
+        "input": texts,
+        "dimensions": 384  // Match DB vec0 schema (384-dim MiniLM-compatible)
+    });
 
-    let response = client
+    let response = EMBEDDING_CLIENT
         .post("https://api.openai.com/v1/embeddings")
-        .set("Authorization", &format!("Bearer {}", api_key))
-        .set("Content-Type", "application/json")
-        .send_json(ureq::json!({
-            "model": "text-embedding-3-small",
-            "input": texts,
-            "dimensions": 384  // Match DB vec0 schema (384-dim MiniLM-compatible)
-        }))
+        .header("Authorization", format!("Bearer {}", api_key))
+        .json(&body)
+        .send()
+        .await
         .map_err(|e| format!("OpenAI API request failed: {}", e))?;
 
     let json: serde_json::Value = response
-        .into_json()
+        .json()
+        .await
         .map_err(|e| format!("Failed to parse OpenAI response: {}", e))?;
+
+    // Phase 5: Record usage from API response
+    if let Some(usage) = json.get("usage") {
+        let total_tokens = usage["total_tokens"].as_u64().unwrap_or(0);
+        // text-embedding-3-small: $0.02 per 1M tokens = 0.002 cents per token
+        let cost_cents = (total_tokens as f64 * 0.002 / 1000.0) as u64;
+        let mut settings = get_settings_manager().lock();
+        settings.record_usage(total_tokens, cost_cents);
+    }
 
     let data = json["data"]
         .as_array()
@@ -310,30 +332,30 @@ fn embed_texts_openai(texts: &[String], api_key: &str) -> Result<Vec<Vec<f32>>, 
 }
 
 /// Generate embeddings using Ollama API
-fn embed_texts_ollama(
+async fn embed_texts_ollama(
     texts: &[String],
     base_url: &Option<String>,
 ) -> Result<Vec<Vec<f32>>, String> {
     let base = base_url.as_deref().unwrap_or("http://localhost:11434");
 
-    let client = ureq::AgentBuilder::new()
-        .timeout(std::time::Duration::from_secs(60))
-        .build();
+    let batch_body = serde_json::json!({
+        "model": "nomic-embed-text",
+        "input": texts,
+    });
 
     // Try batch API first (/api/embed) - supported since Ollama v0.1.26
-    let batch_result = client
-        .post(&format!("{}/api/embed", base))
-        .set("Content-Type", "application/json")
-        .send_json(ureq::json!({
-            "model": "nomic-embed-text",
-            "input": texts,
-        }));
+    let batch_result = EMBEDDING_CLIENT
+        .post(format!("{}/api/embed", base))
+        .json(&batch_body)
+        .send()
+        .await;
 
     match batch_result {
-        Ok(response) => {
+        Ok(response) if response.status().is_success() => {
             // Batch succeeded - parse embeddings array
             let json: serde_json::Value = response
-                .into_json()
+                .json()
+                .await
                 .map_err(|e| format!("Failed to parse Ollama batch response: {}", e))?;
 
             let embeddings_array = json["embeddings"].as_array().ok_or_else(|| {
@@ -356,22 +378,26 @@ fn embed_texts_ollama(
                 })
                 .collect()
         }
-        Err(_) => {
+        _ => {
             // Batch failed (old Ollama version) - fallback to one-at-a-time
             let mut all_embeddings = Vec::with_capacity(texts.len());
 
             for text in texts {
-                let response = client
-                    .post(&format!("{}/api/embeddings", base))
-                    .set("Content-Type", "application/json")
-                    .send_json(ureq::json!({
-                        "model": "nomic-embed-text",
-                        "prompt": text,
-                    }))
+                let single_body = serde_json::json!({
+                    "model": "nomic-embed-text",
+                    "prompt": text,
+                });
+
+                let response = EMBEDDING_CLIENT
+                    .post(format!("{}/api/embeddings", base))
+                    .json(&single_body)
+                    .send()
+                    .await
                     .map_err(|e| format!("Ollama API request failed: {}. Make sure Ollama is running with 'nomic-embed-text' model installed (run: ollama pull nomic-embed-text)", e))?;
 
                 let json: serde_json::Value = response
-                    .into_json()
+                    .json()
+                    .await
                     .map_err(|e| format!("Failed to parse Ollama response: {}", e))?;
 
                 let embedding = json["embedding"]
@@ -397,12 +423,14 @@ fn embed_texts_ollama(
 
 /// Cosine similarity between two vectors
 /// Compute L2 norm of a vector
+#[inline]
 pub(crate) fn vector_norm(v: &[f32]) -> f32 {
     v.iter().map(|x| x * x).sum::<f32>().sqrt()
 }
 
 /// Cosine similarity with precomputed norm for vector `a`
 /// Use this in hot loops where you compare the same vector `a` against many `b` vectors
+#[inline]
 pub(crate) fn cosine_similarity_with_norm(a: &[f32], a_norm: f32, b: &[f32]) -> f32 {
     if a.len() != b.len() || a.is_empty() {
         return 0.0;
@@ -433,21 +461,9 @@ pub(crate) fn cosine_similarity(a: &[f32], b: &[f32]) -> f32 {
     dot / (norm_a * norm_b)
 }
 
-/// Extract topics/keywords from text for context matching
-/// Returns lowercase keywords suitable for exclusion/interest matching
-pub(crate) fn extract_topics(title: &str, content: &str) -> Vec<String> {
-    let mut topics = Vec::new();
-
-    // Combine title and first part of content
-    let text = format!(
-        "{} {}",
-        title,
-        content.chars().take(500).collect::<String>()
-    );
-    let text_lower = text.to_lowercase();
-
-    // Technology keywords to look for
-    let tech_keywords = [
+/// Single-word topic keywords — O(1) lookup via HashSet
+static SINGLE_WORD_TOPICS: Lazy<HashSet<&'static str>> = Lazy::new(|| {
+    [
         "rust",
         "python",
         "javascript",
@@ -455,7 +471,6 @@ pub(crate) fn extract_topics(title: &str, content: &str) -> Vec<String> {
         "go",
         "golang",
         "java",
-        "c++",
         "cpp",
         "react",
         "vue",
@@ -466,8 +481,6 @@ pub(crate) fn extract_topics(title: &str, content: &str) -> Vec<String> {
         "bun",
         "ai",
         "ml",
-        "machine learning",
-        "deep learning",
         "neural",
         "gpt",
         "llm",
@@ -505,7 +518,6 @@ pub(crate) fn extract_topics(title: &str, content: &str) -> Vec<String> {
         "vc",
         "funding",
         "acquisition",
-        "open source",
         "oss",
         "github",
         "git",
@@ -530,7 +542,6 @@ pub(crate) fn extract_topics(title: &str, content: &str) -> Vec<String> {
         "ios",
         "android",
         "flutter",
-        "react native",
         "game",
         "gaming",
         "gamedev",
@@ -549,11 +560,46 @@ pub(crate) fn extract_topics(title: &str, content: &str) -> Vec<String> {
         "politics",
         "election",
         "government",
-    ];
+    ]
+    .into_iter()
+    .collect()
+});
 
-    for keyword in &tech_keywords {
-        if text_lower.contains(keyword) {
-            topics.push(keyword.to_string());
+/// Multi-word topic phrases — small enough for linear scan
+static MULTI_WORD_TOPICS: &[&str] = &[
+    "c++",
+    "machine learning",
+    "deep learning",
+    "open source",
+    "react native",
+];
+
+/// Extract topics/keywords from text for context matching
+/// Returns lowercase keywords suitable for exclusion/interest matching
+/// Optimized: O(1) HashSet lookup for single-word topics, linear scan only for multi-word phrases
+pub(crate) fn extract_topics(title: &str, content: &str) -> Vec<String> {
+    // Combine title and first part of content
+    let text = format!(
+        "{} {}",
+        title,
+        content.chars().take(500).collect::<String>()
+    );
+    let text_lower = text.to_lowercase();
+
+    let mut topics = Vec::new();
+    let mut seen = HashSet::new();
+
+    // O(1) lookup for single-word topics: split into words, check each against HashSet
+    for word in text_lower.split(|c: char| !c.is_alphanumeric() && c != '+' && c != '#') {
+        if word.len() >= 2 && SINGLE_WORD_TOPICS.contains(word) && seen.insert(word.to_string()) {
+            topics.push(word.to_string());
+        }
+    }
+
+    // Linear scan for multi-word phrases (only ~5 entries)
+    for &phrase in MULTI_WORD_TOPICS {
+        if text_lower.contains(phrase) && seen.insert(phrase.to_string()) {
+            topics.push(phrase.to_string());
         }
     }
 
@@ -568,9 +614,10 @@ pub(crate) fn extract_topics(title: &str, content: &str) -> Vec<String> {
                 .unwrap_or(false)
         {
             let lower = clean.to_lowercase();
-            if !topics.contains(&lower)
+            if !seen.contains(&lower)
                 && !["the", "and", "for", "how", "why", "what", "show", "ask"]
                     .contains(&lower.as_str())
+                && seen.insert(lower.clone())
             {
                 topics.push(lower);
             }
@@ -596,6 +643,49 @@ pub(crate) fn check_exclusions(topics: &[String], exclusions: &[String]) -> Opti
 }
 
 // ============================================================================
+// Centralized DB Path & Connection Helpers
+// ============================================================================
+
+/// Get the canonical path to the 4da.db database file.
+/// Single source of truth — all connection opens should use this.
+pub(crate) fn get_db_path() -> PathBuf {
+    let mut base = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    base.pop();
+    base.push("data");
+    base.push("4da.db");
+    base
+}
+
+/// Open a raw SQLite connection with proper configuration.
+/// Registers sqlite-vec auto-extension and sets busy_timeout.
+/// Use this for ad-hoc connection needs outside the Database struct.
+pub(crate) fn open_db_connection() -> Result<rusqlite::Connection, String> {
+    let db_path = get_db_path();
+
+    // Ensure parent directory exists
+    if let Some(parent) = db_path.parent() {
+        std::fs::create_dir_all(parent).ok();
+    }
+
+    // Register sqlite-vec extension globally (idempotent)
+    #[allow(clippy::missing_transmute_annotations)]
+    unsafe {
+        rusqlite::ffi::sqlite3_auto_extension(Some(std::mem::transmute(
+            sqlite_vec::sqlite3_vec_init as *const (),
+        )));
+    }
+
+    let conn = rusqlite::Connection::open(&db_path)
+        .map_err(|e| format!("Failed to open database: {}", e))?;
+
+    // Set busy_timeout to prevent "database is locked" errors
+    conn.execute_batch("PRAGMA busy_timeout = 5000;")
+        .map_err(|e| format!("Failed to set busy_timeout: {}", e))?;
+
+    Ok(conn)
+}
+
+// ============================================================================
 // Global Database (Lazy Initialized)
 // ============================================================================
 
@@ -603,20 +693,21 @@ static DATABASE: OnceCell<Arc<Database>> = OnceCell::new();
 
 pub(crate) fn get_database() -> Result<&'static Arc<Database>, String> {
     DATABASE.get_or_try_init(|| {
-        let mut db_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        db_path.pop();
-        db_path.push("data");
-        db_path.push("4da.db");
+        let db_path = get_db_path();
 
         info!(target: "4da::db", path = ?db_path, "Initializing database");
 
         let db =
             Database::new(&db_path).map_err(|e| format!("Failed to initialize database: {}", e))?;
 
-        // Register default sources
+        // Register all sources at startup (enables source enable/disable enforcement)
         db.register_source("hackernews", "Hacker News").ok();
         db.register_source("arxiv", "arXiv").ok();
         db.register_source("reddit", "Reddit").ok();
+        db.register_source("github", "GitHub").ok();
+        db.register_source("rss", "RSS").ok();
+        db.register_source("youtube", "YouTube").ok();
+        db.register_source("twitter", "Twitter").ok();
 
         info!(target: "4da::db", "Database ready");
         Ok(Arc::new(db))
@@ -631,19 +722,7 @@ static CONTEXT_ENGINE: OnceCell<Arc<ContextEngine>> = OnceCell::new();
 
 pub(crate) fn get_context_engine() -> Result<&'static Arc<ContextEngine>, String> {
     CONTEXT_ENGINE.get_or_try_init(|| {
-        // Context engine shares the database connection
-        let mut db_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        db_path.pop();
-        db_path.push("data");
-        db_path.push("4da.db");
-
-        // Ensure parent directory exists
-        if let Some(parent) = db_path.parent() {
-            std::fs::create_dir_all(parent).ok();
-        }
-
-        let conn = rusqlite::Connection::open(&db_path)
-            .map_err(|e| format!("Failed to open database for context engine: {}", e))?;
+        let conn = open_db_connection()?;
 
         let engine = ContextEngine::new(Arc::new(parking_lot::Mutex::new(conn)))
             .map_err(|e| format!("Failed to initialize context engine: {}", e))?;
@@ -660,27 +739,7 @@ pub(crate) fn get_context_engine() -> Result<&'static Arc<ContextEngine>, String
 static ACE_ENGINE: OnceCell<Arc<parking_lot::RwLock<ace::ACE>>> = OnceCell::new();
 
 fn init_ace_engine() -> Result<Arc<parking_lot::RwLock<ace::ACE>>, String> {
-    // ACE shares the database connection
-    let mut db_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    db_path.pop();
-    db_path.push("data");
-    db_path.push("4da.db");
-
-    // Ensure parent directory exists
-    if let Some(parent) = db_path.parent() {
-        std::fs::create_dir_all(parent).ok();
-    }
-
-    // Ensure sqlite-vec is registered for KNN search on topic embeddings
-    #[allow(clippy::missing_transmute_annotations)]
-    unsafe {
-        rusqlite::ffi::sqlite3_auto_extension(Some(std::mem::transmute(
-            sqlite_vec::sqlite3_vec_init as *const (),
-        )));
-    }
-
-    let conn = rusqlite::Connection::open(&db_path)
-        .map_err(|e| format!("Failed to open database for ACE: {}", e))?;
+    let conn = open_db_connection()?;
 
     let engine = ace::ACE::new(Arc::new(parking_lot::Mutex::new(conn)))
         .map_err(|e| format!("Failed to initialize ACE: {}", e))?;
@@ -747,9 +806,7 @@ static SETTINGS_MANAGER: OnceCell<Mutex<SettingsManager>> = OnceCell::new();
 
 pub(crate) fn get_settings_manager() -> &'static Mutex<SettingsManager> {
     SETTINGS_MANAGER.get_or_init(|| {
-        let mut data_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        data_path.pop();
-        data_path.push("data");
+        let data_path = get_db_path().parent().unwrap().to_path_buf();
 
         info!(target: "4da::settings", "Initializing settings manager");
         let manager = SettingsManager::new(&data_path);
@@ -792,17 +849,7 @@ pub(crate) fn get_monitoring_state() -> &'static Arc<monitoring::MonitoringState
 static JOB_QUEUE: OnceCell<Arc<parking_lot::RwLock<job_queue::JobQueue>>> = OnceCell::new();
 
 fn init_job_queue() -> Result<Arc<parking_lot::RwLock<job_queue::JobQueue>>, String> {
-    let mut db_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    db_path.pop();
-    db_path.push("data");
-    db_path.push("4da.db");
-
-    if let Some(parent) = db_path.parent() {
-        std::fs::create_dir_all(parent).ok();
-    }
-
-    let conn = rusqlite::Connection::open(&db_path)
-        .map_err(|e| format!("Failed to open database for job queue: {}", e))?;
+    let conn = open_db_connection()?;
 
     let queue = job_queue::JobQueue::new(Arc::new(parking_lot::Mutex::new(conn)));
     info!(target: "4da::job_queue", "Job queue initialized");
@@ -1010,7 +1057,7 @@ pub(crate) fn void_signal_cache_filled(app: &AppHandle) {
 }
 
 /// Extract a SignalSummary from analysis results.
-fn extract_signal_summary(results: &[HNRelevance]) -> Option<void_engine::SignalSummary> {
+fn extract_signal_summary(results: &[SourceRelevance]) -> Option<void_engine::SignalSummary> {
     let mut type_counts: std::collections::HashMap<String, u32> = std::collections::HashMap::new();
     let mut max_priority: u8 = 0;
     let mut critical_count: u32 = 0;
@@ -1074,7 +1121,7 @@ fn extract_signal_summary(results: &[HNRelevance]) -> Option<void_engine::Signal
 }
 
 /// Emit void signal: analysis complete with scores
-pub(crate) fn void_signal_analysis_complete(app: &AppHandle, results: &[HNRelevance]) {
+pub(crate) fn void_signal_analysis_complete(app: &AppHandle, results: &[SourceRelevance]) {
     if let Ok(db) = get_database() {
         let monitoring = get_monitoring_state();
         let top_scores: Vec<f32> = results
@@ -1113,7 +1160,7 @@ pub(crate) fn void_signal_context_change(app: &AppHandle, intensity: f32) {
 // ============================================================================
 
 #[tauri::command]
-async fn get_hn_top_stories() -> Result<Vec<HNItem>, String> {
+async fn get_hn_top_stories() -> Result<Vec<FetchedItem>, String> {
     info!(target: "4da::sources", "Fetching HN top stories");
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(30))
@@ -1162,7 +1209,7 @@ async fn get_hn_top_stories() -> Result<Vec<HNItem>, String> {
                         String::new()
                     };
 
-                    items.push(HNItem {
+                    items.push(FetchedItem {
                         id: story.id,
                         title,
                         url: story.url,
@@ -1182,7 +1229,7 @@ async fn get_hn_top_stories() -> Result<Vec<HNItem>, String> {
 }
 
 #[tauri::command]
-async fn compute_relevance() -> Result<Vec<HNRelevance>, String> {
+async fn compute_relevance() -> Result<Vec<SourceRelevance>, String> {
     info!(target: "4da::analysis", "=== COMPUTING RELEVANCE SCORES (Phase 1 - with persistence) ===");
 
     let db = get_database()?;
@@ -1216,8 +1263,8 @@ async fn compute_relevance() -> Result<Vec<HNRelevance>, String> {
     debug!(target: "4da::analysis", story_ids = top_ids.len(), "Processing top 30 stories");
 
     // Categorize: cached vs new
-    let mut cached_items: Vec<(HNItem, Vec<f32>)> = Vec::new();
-    let mut new_items: Vec<HNItem> = Vec::new();
+    let mut cached_items: Vec<(FetchedItem, Vec<f32>)> = Vec::new();
+    let mut new_items: Vec<FetchedItem> = Vec::new();
 
     for id in top_ids.into_iter().take(30) {
         let id_str = id.to_string();
@@ -1227,7 +1274,7 @@ async fn compute_relevance() -> Result<Vec<HNRelevance>, String> {
             debug!(target: "4da::analysis", id = id, title = %&truncate_utf8(&cached.title, 40), "HN story (cached)");
             db.touch_source_item("hackernews", &id_str).ok();
             cached_items.push((
-                HNItem {
+                FetchedItem {
                     id,
                     title: cached.title,
                     url: cached.url,
@@ -1264,7 +1311,7 @@ async fn compute_relevance() -> Result<Vec<HNRelevance>, String> {
                             String::new()
                         };
 
-                        new_items.push(HNItem {
+                        new_items.push(FetchedItem {
                             id: story.id,
                             title,
                             url: story.url,
@@ -1294,7 +1341,7 @@ async fn compute_relevance() -> Result<Vec<HNRelevance>, String> {
             .iter()
             .map(|item| build_embedding_text(&item.title, &item.content))
             .collect();
-        let embeddings = embed_texts(&new_texts)?;
+        let embeddings = embed_texts(&new_texts).await?;
 
         // Cache new items in database
         debug!(target: "4da::analysis", count = new_items.len(), "Caching new items in database");
@@ -1319,7 +1366,7 @@ async fn compute_relevance() -> Result<Vec<HNRelevance>, String> {
     db.update_source_fetch_time("hackernews").ok();
 
     // Combine cached and new items
-    let mut all_items_with_embeddings: Vec<(HNItem, Vec<f32>)> = cached_items;
+    let mut all_items_with_embeddings: Vec<(FetchedItem, Vec<f32>)> = cached_items;
     for (item, embedding) in new_items.into_iter().zip(new_embeddings.into_iter()) {
         all_items_with_embeddings.push((item, embedding));
     }
@@ -1355,7 +1402,7 @@ async fn compute_relevance() -> Result<Vec<HNRelevance>, String> {
     debug!(target: "4da::ace", "Step 4b: Loading ACE discovered context");
     let ace_ctx = scoring::get_ace_context();
     // PASIFA: Pre-compute topic embeddings for semantic matching
-    let topic_embeddings = scoring::get_topic_embeddings(&ace_ctx);
+    let topic_embeddings = scoring::get_topic_embeddings(&ace_ctx).await;
     info!(target: "4da::ace",
         active_topics = ace_ctx.active_topics.len(),
         detected_tech = ace_ctx.detected_tech.len(),
@@ -1374,7 +1421,7 @@ async fn compute_relevance() -> Result<Vec<HNRelevance>, String> {
 
     // Step 5: Compute similarity scores with context integration
     debug!(target: "4da::analysis", items = all_items_with_embeddings.len(), "Step 5: Computing personalized relevance");
-    let mut results: Vec<HNRelevance> = Vec::new();
+    let mut results: Vec<SourceRelevance> = Vec::new();
     let mut excluded_count = 0;
 
     for (item, item_embedding) in &all_items_with_embeddings {
@@ -1390,7 +1437,7 @@ async fn compute_relevance() -> Result<Vec<HNRelevance>, String> {
             excluded_count += 1;
 
             // Still add to results but marked as excluded
-            results.push(HNRelevance {
+            results.push(SourceRelevance {
                 id: item.id,
                 title: item.title.clone(),
                 url: item.url.clone(),
@@ -1587,10 +1634,11 @@ async fn compute_relevance() -> Result<Vec<HNRelevance>, String> {
             affinity_mult,
             anti_penalty,
             freshness_mult: 1.0,
+            feedback_boost: 0.0,
             confidence_by_signal,
         };
 
-        results.push(HNRelevance {
+        results.push(SourceRelevance {
             id: item.id,
             title: item.title.clone(),
             url: item.url.clone(),
@@ -1971,7 +2019,7 @@ async fn mcp_score_autopsy(
 
 /// Build a human-readable narrative for the score autopsy
 fn build_autopsy_narrative(
-    item: &HNRelevance,
+    item: &SourceRelevance,
     matching_tech: &[String],
     matching_active: &[String],
     age_hours: f64,
@@ -2141,8 +2189,6 @@ pub fn run() {
             compute_relevance,
             get_database_stats,
             get_sources,
-            analysis::start_background_analysis,
-            analysis::run_multi_source_analysis,
             analysis::run_deep_initial_scan,
             analysis::run_cached_analysis,
             analysis::get_analysis_status,
@@ -2264,7 +2310,15 @@ pub fn run() {
             void_commands::void_get_particle_detail,
             void_commands::void_get_neighbors,
             // Signal Classifier
-            analysis::get_actionable_signals
+            analysis::get_actionable_signals,
+            // Product Hardening (source management, health, maintenance, export)
+            toggle_source_enabled,
+            get_all_sources_status,
+            get_source_health,
+            check_network_status,
+            run_db_maintenance,
+            get_db_stats_detailed,
+            export_results
         ])
         .setup(|app| {
             // Set up system tray
@@ -2468,6 +2522,201 @@ async fn get_database_stats() -> Result<serde_json::Value, String> {
 // Analysis functions (start_background_analysis, run_multi_source_analysis, etc.) are in analysis.rs
 // Settings and Context Engine commands are in settings_commands.rs
 // ACE commands, PASIFA helpers, and auto-seeding are in ace_commands.rs
+
+// ============================================================================
+// Product Hardening Commands
+// ============================================================================
+
+/// Toggle a source's enabled/disabled status
+#[tauri::command]
+async fn toggle_source_enabled(source_type: String, enabled: bool) -> Result<(), String> {
+    let db = get_database()?;
+    db.toggle_source_enabled(&source_type, enabled)
+        .map_err(|e| format!("Failed to toggle source: {}", e))
+}
+
+/// Get all sources with their enabled status and health
+#[tauri::command]
+async fn get_all_sources_status() -> Result<serde_json::Value, String> {
+    let db = get_database()?;
+    let sources = db.get_all_sources().map_err(|e| e.to_string())?;
+    let health = db.get_source_health().unwrap_or_default();
+
+    let result: Vec<serde_json::Value> = sources
+        .iter()
+        .map(|(source_type, name, enabled, last_fetch)| {
+            let h = health.iter().find(|h| h.source_type == *source_type);
+            serde_json::json!({
+                "source_type": source_type,
+                "name": name,
+                "enabled": enabled,
+                "last_fetch": last_fetch,
+                "status": h.map(|h| h.status.as_str()).unwrap_or("unknown"),
+                "error_count": h.map(|h| h.error_count).unwrap_or(0),
+                "consecutive_failures": h.map(|h| h.consecutive_failures).unwrap_or(0),
+                "items_fetched": h.map(|h| h.items_fetched).unwrap_or(0),
+                "response_time_ms": h.map(|h| h.response_time_ms).unwrap_or(0),
+                "last_success": h.and_then(|h| h.last_success.clone()),
+                "last_error": h.and_then(|h| h.last_error.clone()),
+            })
+        })
+        .collect();
+
+    Ok(serde_json::json!({ "sources": result }))
+}
+
+/// Get source health data
+#[tauri::command]
+async fn get_source_health() -> Result<serde_json::Value, String> {
+    let db = get_database()?;
+    let health = db.get_source_health().map_err(|e| e.to_string())?;
+    Ok(serde_json::json!({ "health": health }))
+}
+
+/// Check network connectivity
+#[tauri::command]
+async fn check_network_status() -> Result<serde_json::Value, String> {
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(3))
+        .build()
+        .map_err(|e| e.to_string())?;
+
+    let online = client.head("https://httpbin.org/get").send().await.is_ok();
+
+    Ok(serde_json::json!({
+        "online": online,
+        "checked_at": chrono::Utc::now().to_rfc3339(),
+    }))
+}
+
+/// Run database maintenance (cleanup old items, vacuum)
+#[tauri::command]
+async fn run_db_maintenance() -> Result<serde_json::Value, String> {
+    let db = get_database()?;
+    let result = db.run_maintenance(90).map_err(|e| e.to_string())?;
+    Ok(serde_json::json!({
+        "deleted_items": result.deleted_items,
+        "deleted_feedback": result.deleted_feedback,
+        "deleted_void": result.deleted_void,
+    }))
+}
+
+/// Get database statistics
+#[tauri::command]
+async fn get_db_stats_detailed() -> Result<serde_json::Value, String> {
+    let db = get_database()?;
+    let stats = db.get_db_stats().map_err(|e| e.to_string())?;
+
+    // Get DB file size
+    let db_path = get_db_path();
+    let file_size = std::fs::metadata(&db_path).map(|m| m.len()).unwrap_or(0);
+
+    Ok(serde_json::json!({
+        "source_items": stats.source_items,
+        "context_chunks": stats.context_chunks,
+        "feedback_count": stats.feedback_count,
+        "sources_count": stats.sources_count,
+        "file_size_bytes": file_size,
+        "file_size_mb": format!("{:.1}", file_size as f64 / 1_048_576.0),
+    }))
+}
+
+/// Export current analysis results in specified format
+#[tauri::command]
+async fn export_results(format: String) -> Result<String, String> {
+    let state = get_analysis_state();
+    let guard = state.lock();
+
+    let results = match &guard.results {
+        Some(r) => r,
+        None => return Err("No analysis results to export".to_string()),
+    };
+
+    let relevant: Vec<&SourceRelevance> = results.iter().filter(|r| r.relevant).collect();
+
+    match format.as_str() {
+        "markdown" => {
+            let mut md = String::from("# 4DA Analysis Results\n\n");
+            md.push_str(&format!(
+                "**Generated:** {}\n",
+                chrono::Utc::now().format("%Y-%m-%d %H:%M UTC")
+            ));
+            md.push_str(&format!(
+                "**Total items:** {} ({} relevant)\n\n",
+                results.len(),
+                relevant.len()
+            ));
+            md.push_str("---\n\n");
+            for item in &relevant {
+                let score_pct = (item.top_score * 100.0) as u32;
+                md.push_str(&format!("### {} ({}%)\n", item.title, score_pct));
+                if let Some(ref url) = item.url {
+                    md.push_str(&format!("- **URL:** {}\n", url));
+                }
+                md.push_str(&format!("- **Source:** {}\n", item.source_type));
+                if let Some(ref explanation) = item.explanation {
+                    md.push_str(&format!("- **Why:** {}\n", explanation));
+                }
+                md.push('\n');
+            }
+            Ok(md)
+        }
+        "text" => {
+            let mut text = format!(
+                "4DA Analysis Results ({})\n",
+                chrono::Utc::now().format("%Y-%m-%d %H:%M UTC")
+            );
+            text.push_str(&format!(
+                "{} items, {} relevant\n\n",
+                results.len(),
+                relevant.len()
+            ));
+            for item in &relevant {
+                let score_pct = (item.top_score * 100.0) as u32;
+                text.push_str(&format!(
+                    "[{}%] {} ({})\n",
+                    score_pct, item.title, item.source_type
+                ));
+                if let Some(ref url) = item.url {
+                    text.push_str(&format!("  {}\n", url));
+                }
+            }
+            Ok(text)
+        }
+        "html" => {
+            let mut html = String::from("<html><head><title>4DA Analysis Results</title></head><body style='font-family:sans-serif;background:#0A0A0A;color:#fff;padding:2rem'>");
+            html.push_str(&format!(
+                "<h1>4DA Analysis Results</h1><p>{} items, {} relevant</p><hr>",
+                results.len(),
+                relevant.len()
+            ));
+            for item in &relevant {
+                let score_pct = (item.top_score * 100.0) as u32;
+                html.push_str("<div style='margin:1rem 0;padding:1rem;background:#141414;border-radius:8px;border:1px solid #2A2A2A'>");
+                html.push_str(&format!("<strong>{}%</strong> ", score_pct));
+                if let Some(ref url) = item.url {
+                    html.push_str(&format!(
+                        "<a href='{}' style='color:#D4AF37'>{}</a>",
+                        url, item.title
+                    ));
+                } else {
+                    html.push_str(&item.title);
+                }
+                html.push_str(&format!(
+                    " <span style='color:#666'>({})</span>",
+                    item.source_type
+                ));
+                html.push_str("</div>");
+            }
+            html.push_str("</body></html>");
+            Ok(html)
+        }
+        _ => Err(format!(
+            "Unknown format: {}. Use 'markdown', 'text', or 'html'",
+            format
+        )),
+    }
+}
 
 // ============================================================================
 // Startup Initialization
@@ -2674,6 +2923,58 @@ mod tests {
     fn test_extract_topics_empty() {
         let topics = extract_topics("", "");
         assert!(topics.is_empty());
+    }
+
+    #[test]
+    fn test_extract_topics_optimized() {
+        // Test single-word keyword extraction
+        let topics = extract_topics(
+            "Building a Rust web server",
+            "Using async/await with PostgreSQL database",
+        );
+        assert!(
+            topics.contains(&"rust".to_string()),
+            "Should extract 'rust'"
+        );
+        assert!(
+            topics.contains(&"postgresql".to_string()),
+            "Should extract 'postgresql'"
+        );
+        assert!(
+            topics.contains(&"database".to_string()),
+            "Should extract 'database'"
+        );
+
+        // Test multi-word phrase extraction
+        let topics2 = extract_topics(
+            "Machine Learning with Python",
+            "Deep learning and open source tools",
+        );
+        assert!(
+            topics2.contains(&"machine learning".to_string()),
+            "Should extract 'machine learning'"
+        );
+        assert!(
+            topics2.contains(&"deep learning".to_string()),
+            "Should extract 'deep learning'"
+        );
+        assert!(
+            topics2.contains(&"open source".to_string()),
+            "Should extract 'open source'"
+        );
+        assert!(
+            topics2.contains(&"python".to_string()),
+            "Should extract 'python'"
+        );
+
+        // Test special character handling (c++)
+        let topics3 = extract_topics("C++ programming", "Using C++ for systems programming");
+        assert!(topics3.contains(&"c++".to_string()), "Should extract 'c++'");
+
+        // Test no duplicates
+        let topics4 = extract_topics("Rust Rust Rust", "rust rust rust everywhere");
+        let rust_count = topics4.iter().filter(|t| *t == "rust").count();
+        assert_eq!(rust_count, 1, "Should not have duplicates");
     }
 
     #[test]

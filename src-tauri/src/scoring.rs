@@ -1,9 +1,14 @@
 use once_cell::sync::OnceCell;
-use tracing::{debug, warn};
+use tracing::{debug, info, warn};
 
 use crate::ace;
 use crate::context_engine;
-use crate::{embed_texts, get_ace_engine, RelevanceMatch};
+use crate::db::Database;
+use crate::signals;
+use crate::{
+    check_exclusions, embed_texts, extract_topics, get_ace_engine, get_context_engine,
+    RelevanceMatch, ScoreBreakdown, SourceRelevance, RELEVANCE_THRESHOLD,
+};
 
 /// Compute interest score by comparing item embedding against interest embeddings
 pub(crate) fn compute_interest_score(
@@ -63,13 +68,9 @@ pub(crate) fn generate_relevance_explanation(
     }
 
     // Check ACE tech stack matches
+    // Note: both item_topics (from extract_topics) and ace_ctx fields are already lowercase
     for topic in item_topics {
-        let topic_lower = topic.to_lowercase();
-        if let Some(tech) = ace_ctx
-            .detected_tech
-            .iter()
-            .find(|t| t.to_lowercase() == topic_lower)
-        {
+        if let Some(tech) = ace_ctx.detected_tech.iter().find(|t| *t == topic) {
             reasons.push(format!("Your project uses {}", tech));
             break;
         }
@@ -77,11 +78,10 @@ pub(crate) fn generate_relevance_explanation(
 
     // Check ACE active topics matches (recent activity)
     for topic in item_topics {
-        let topic_lower = topic.to_lowercase();
         if let Some(active_topic) = ace_ctx
             .active_topics
             .iter()
-            .find(|t| t.to_lowercase() == topic_lower || topic_lower.contains(&t.to_lowercase()))
+            .find(|t| *t == topic || topic.contains(t.as_str()))
         {
             reasons.push(format!("Matches your recent activity: {}", active_topic));
             break;
@@ -90,8 +90,7 @@ pub(crate) fn generate_relevance_explanation(
 
     // Check learned affinity matches
     for topic in item_topics {
-        let topic_lower = topic.to_lowercase();
-        if let Some((score, _conf)) = ace_ctx.topic_affinities.get(&topic_lower) {
+        if let Some((score, _conf)) = ace_ctx.topic_affinities.get(topic.as_str()) {
             if *score > 0.3 {
                 reasons.push(format!("You've shown interest in {}", topic));
                 break;
@@ -191,10 +190,10 @@ pub(crate) fn get_ace_context() -> ACEContext {
 
 /// Check if item should be excluded by ACE anti-topics
 pub(crate) fn check_ace_exclusions(topics: &[String], ace_ctx: &ACEContext) -> Option<String> {
+    // Both topics (from extract_topics) and anti_topics are already lowercase
     for topic in topics {
-        let topic_lower = topic.to_lowercase();
         for anti_topic in &ace_ctx.anti_topics {
-            if topic_lower.contains(anti_topic) || anti_topic.contains(&topic_lower) {
+            if topic.contains(anti_topic.as_str()) || anti_topic.contains(topic.as_str()) {
                 return Some(format!("ACE anti-topic: {}", anti_topic));
             }
         }
@@ -273,7 +272,7 @@ pub(crate) fn compute_semantic_ace_boost(
 /// Embed ACE topics for semantic matching
 /// Uses database-persisted embeddings with in-memory cache fallback
 /// Returns topic -> embedding map
-pub(crate) fn get_topic_embeddings(
+pub(crate) async fn get_topic_embeddings(
     ace_ctx: &ACEContext,
 ) -> std::collections::HashMap<String, Vec<f32>> {
     // Lazy static cache for topic embeddings
@@ -285,65 +284,70 @@ pub(crate) fn get_topic_embeddings(
     let cache = TOPIC_EMBEDDING_CACHE.get_or_init(|| Mutex::new(std::collections::HashMap::new()));
     let db_loaded = DB_LOADED.get_or_init(|| Mutex::new(false));
 
-    let Ok(mut cache_guard) = cache.lock() else {
-        warn!(target: "4da::embeddings", "Topic cache lock poisoned, returning empty");
-        return std::collections::HashMap::new();
-    };
-    let Ok(mut db_loaded_guard) = db_loaded.lock() else {
-        warn!(target: "4da::embeddings", "DB loaded lock poisoned, returning empty");
-        return std::collections::HashMap::new();
-    };
+    // Phase 1 (sync): Load DB cache + collect topics needing embedding
+    // All MutexGuard usage is scoped here so they drop before any .await
+    let topics_to_embed: Vec<String> = {
+        let Ok(mut cache_guard) = cache.lock() else {
+            warn!(target: "4da::embeddings", "Topic cache lock poisoned, returning empty");
+            return std::collections::HashMap::new();
+        };
+        let Ok(mut db_loaded_guard) = db_loaded.lock() else {
+            warn!(target: "4da::embeddings", "DB loaded lock poisoned, returning empty");
+            return std::collections::HashMap::new();
+        };
 
-    // First time: load persisted embeddings from database
-    if !*db_loaded_guard {
-        if let Ok(ace) = get_ace_engine() {
-            if let Ok(db_embeddings) = ace::load_topic_embeddings(ace.get_conn()) {
-                for (topic, embedding) in db_embeddings {
-                    cache_guard.insert(topic, embedding);
+        // First time: load persisted embeddings from database
+        if !*db_loaded_guard {
+            if let Ok(ace) = get_ace_engine() {
+                if let Ok(db_embeddings) = ace::load_topic_embeddings(ace.get_conn()) {
+                    for (topic, embedding) in db_embeddings {
+                        cache_guard.insert(topic, embedding);
+                    }
+                    debug!(
+                        target: "4da::embeddings",
+                        count = cache_guard.len(),
+                        "Loaded topic embeddings from database"
+                    );
                 }
-                debug!(
-                    target: "4da::embeddings",
-                    count = cache_guard.len(),
-                    "Loaded topic embeddings from database"
-                );
+            }
+            *db_loaded_guard = true;
+        }
+
+        // Collect topics that need embedding
+        let mut needed: Vec<String> = Vec::new();
+        for topic in &ace_ctx.active_topics {
+            if !cache_guard.contains_key(topic) {
+                needed.push(topic.clone());
             }
         }
-        *db_loaded_guard = true;
-    }
-
-    // Collect topics that need embedding
-    let mut topics_to_embed: Vec<String> = Vec::new();
-
-    for topic in &ace_ctx.active_topics {
-        if !cache_guard.contains_key(topic) {
-            topics_to_embed.push(topic.clone());
+        for tech in &ace_ctx.detected_tech {
+            if !cache_guard.contains_key(tech) {
+                needed.push(tech.clone());
+            }
         }
-    }
-
-    for tech in &ace_ctx.detected_tech {
-        if !cache_guard.contains_key(tech) {
-            topics_to_embed.push(tech.clone());
+        for topic in ace_ctx.topic_affinities.keys() {
+            if !cache_guard.contains_key(topic) {
+                needed.push(topic.clone());
+            }
         }
-    }
 
-    for topic in ace_ctx.topic_affinities.keys() {
-        if !cache_guard.contains_key(topic) {
-            topics_to_embed.push(topic.clone());
-        }
-    }
+        needed
+    }; // MutexGuards dropped here - safe to .await below
 
-    // Generate embeddings for missing topics and persist to database
+    // Phase 2 (async): Generate embeddings for missing topics
     if !topics_to_embed.is_empty() {
-        // Limit batch size to avoid overwhelming
         let batch: Vec<String> = topics_to_embed.into_iter().take(50).collect();
         let batch_len = batch.len();
 
-        if let Ok(embeddings) = embed_texts(&batch) {
-            // Get ACE connection for persistence
-            let ace_conn = get_ace_engine().ok().map(|ace| ace.get_conn().clone());
+        if let Ok(embeddings) = embed_texts(&batch).await {
+            // Phase 3 (sync): Store results back into cache
+            let Ok(mut cache_guard) = cache.lock() else {
+                warn!(target: "4da::embeddings", "Topic cache lock poisoned after embed, returning empty");
+                return std::collections::HashMap::new();
+            };
 
+            let ace_conn = get_ace_engine().ok().map(|ace| ace.get_conn().clone());
             for (topic, embedding) in batch.into_iter().zip(embeddings.into_iter()) {
-                // Persist to database if possible
                 if let Some(ref conn) = ace_conn {
                     let _ = ace::store_topic_embedding(conn, &topic, &embedding);
                 }
@@ -358,7 +362,12 @@ pub(crate) fn get_topic_embeddings(
         }
     }
 
-    // Return a copy of relevant embeddings
+    // Phase 4 (sync): Build result from cache
+    let Ok(cache_guard) = cache.lock() else {
+        warn!(target: "4da::embeddings", "Topic cache lock poisoned building result, returning empty");
+        return std::collections::HashMap::new();
+    };
+
     let mut result = std::collections::HashMap::new();
     for topic in &ace_ctx.active_topics {
         if let Some(emb) = cache_guard.get(topic) {
@@ -389,12 +398,10 @@ pub(crate) fn compute_affinity_multiplier(topics: &[String], ace_ctx: &ACEContex
     let mut effect_sum: f32 = 0.0;
     let mut match_count: usize = 0;
 
+    // Both topics (from extract_topics) and affinity keys are already lowercase
     for topic in topics {
-        let topic_lower = topic.to_lowercase();
-
         // Check direct match
-        if let Some(&(affinity, confidence)) = ace_ctx.topic_affinities.get(&topic_lower) {
-            // Effect = affinity * confidence (confidence scales the effect directly)
+        if let Some(&(affinity, confidence)) = ace_ctx.topic_affinities.get(topic.as_str()) {
             effect_sum += affinity * confidence;
             match_count += 1;
             continue;
@@ -402,8 +409,7 @@ pub(crate) fn compute_affinity_multiplier(topics: &[String], ace_ctx: &ACEContex
 
         // Check partial matches
         for (aff_topic, &(affinity, confidence)) in &ace_ctx.topic_affinities {
-            if topic_lower.contains(aff_topic) || aff_topic.contains(&topic_lower) {
-                // Partial match: reduce effect by 0.7
+            if topic.contains(aff_topic.as_str()) || aff_topic.contains(topic.as_str()) {
                 effect_sum += affinity * confidence * 0.7;
                 match_count += 1;
                 break;
@@ -432,22 +438,17 @@ pub(crate) fn compute_anti_penalty(topics: &[String], ace_ctx: &ACEContext) -> f
 
     let mut total_penalty: f32 = 0.0;
 
+    // Both topics and anti_topics are already lowercase
     for topic in topics {
-        let topic_lower = topic.to_lowercase();
-
         for anti_topic in &ace_ctx.anti_topics {
-            if topic_lower.contains(anti_topic) || anti_topic.contains(&topic_lower) {
-                // Get confidence for this anti-topic (default 0.5)
+            if topic.contains(anti_topic.as_str()) || anti_topic.contains(topic.as_str()) {
                 let confidence = ace_ctx
                     .anti_topic_confidence
                     .get(anti_topic)
                     .copied()
                     .unwrap_or(0.5);
-
-                // Scale penalty by confidence: higher confidence = stronger penalty
-                // Max penalty per match is 0.3
                 total_penalty += 0.3 * confidence;
-                break; // Only one penalty per topic
+                break;
             }
         }
     }
@@ -528,16 +529,12 @@ pub(crate) fn calculate_confidence(
 
     // ACE topic confidence (average of matched topic confidences)
     let mut topic_confidences: Vec<f32> = Vec::new();
+    // Topics and ace_ctx keys are already lowercase
     for topic in topics {
-        let topic_lower = topic.to_lowercase();
-
-        // Check active topic confidences
-        if let Some(&conf) = ace_ctx.topic_confidence.get(&topic_lower) {
+        if let Some(&conf) = ace_ctx.topic_confidence.get(topic.as_str()) {
             topic_confidences.push(conf);
         }
-
-        // Check affinity confidences
-        if let Some(&(_affinity, conf)) = ace_ctx.topic_affinities.get(&topic_lower) {
+        if let Some(&(_affinity, conf)) = ace_ctx.topic_affinities.get(topic.as_str()) {
             topic_confidences.push(conf);
         }
     }
@@ -557,6 +554,330 @@ pub(crate) fn calculate_confidence(
     let signal_count_bonus = (confidence_signals.len() as f32 * 0.1).min(0.2);
 
     (avg_confidence + signal_count_bonus).clamp(0.0, 1.0)
+}
+
+// ============================================================================
+// Unified Scoring Pipeline
+// ============================================================================
+
+/// Input data for scoring a single item
+pub(crate) struct ScoringInput<'a> {
+    pub id: u64,
+    pub title: &'a str,
+    pub url: Option<&'a str>,
+    pub content: &'a str,
+    pub source_type: &'a str,
+    pub embedding: &'a [f32],
+    pub created_at: Option<&'a chrono::DateTime<chrono::Utc>>,
+}
+
+/// Pre-loaded context for scoring (computed once per analysis run)
+pub(crate) struct ScoringContext {
+    pub cached_context_count: i64,
+    pub interest_count: usize,
+    pub interests: Vec<context_engine::Interest>,
+    pub exclusions: Vec<String>,
+    pub ace_ctx: ACEContext,
+    pub topic_embeddings: std::collections::HashMap<String, Vec<f32>>,
+    /// Feedback-derived topic boosts: topic -> net_score (-1.0 to 1.0)
+    pub feedback_boosts: std::collections::HashMap<String, f64>,
+}
+
+/// Options controlling which scoring stages are applied
+pub(crate) struct ScoringOptions {
+    pub apply_freshness: bool,
+    pub apply_signals: bool,
+}
+
+/// Build a ScoringContext by loading all needed state. Call once per analysis run.
+pub(crate) async fn build_scoring_context(db: &Database) -> Result<ScoringContext, String> {
+    let cached_context_count = db.context_count().map_err(|e| e.to_string())?;
+
+    let context_engine = get_context_engine()?;
+    let static_identity = context_engine
+        .get_static_identity()
+        .map_err(|e| format!("Failed to load context: {}", e))?;
+
+    let ace_ctx = get_ace_context();
+    let topic_embeddings = get_topic_embeddings(&ace_ctx).await;
+
+    // Load feedback-derived topic boosts (Phase 9: feedback learning loop)
+    let feedback_boosts: std::collections::HashMap<String, f64> = db
+        .get_feedback_topic_summary()
+        .unwrap_or_default()
+        .into_iter()
+        .map(|f| (f.topic, f.net_score))
+        .collect();
+
+    info!(target: "4da::ace",
+        topics = ace_ctx.active_topics.len(),
+        tech = ace_ctx.detected_tech.len(),
+        embeddings = topic_embeddings.len(),
+        feedback_topics = feedback_boosts.len(),
+        "ACE context loaded for scoring"
+    );
+
+    Ok(ScoringContext {
+        cached_context_count,
+        interest_count: static_identity.interests.len(),
+        interests: static_identity.interests,
+        exclusions: static_identity.exclusions,
+        ace_ctx,
+        topic_embeddings,
+        feedback_boosts,
+    })
+}
+
+/// Score a single item through the full PASIFA pipeline.
+/// Returns SourceRelevance with all fields populated.
+pub(crate) fn score_item(
+    input: &ScoringInput,
+    ctx: &ScoringContext,
+    db: &Database,
+    options: &ScoringOptions,
+    classifier: Option<&signals::SignalClassifier>,
+) -> SourceRelevance {
+    let topics = extract_topics(input.title, input.content);
+
+    // Check exclusions
+    let excluded_by = check_exclusions(&topics, &ctx.exclusions)
+        .or_else(|| check_ace_exclusions(&topics, &ctx.ace_ctx));
+
+    if let Some(exclusion) = excluded_by {
+        return SourceRelevance {
+            id: input.id,
+            title: input.title.to_string(),
+            url: input.url.map(|s| s.to_string()),
+            top_score: 0.0,
+            matches: vec![],
+            relevant: false,
+            context_score: 0.0,
+            interest_score: 0.0,
+            excluded: true,
+            excluded_by: Some(exclusion),
+            source_type: input.source_type.to_string(),
+            explanation: None,
+            confidence: Some(0.0),
+            score_breakdown: None,
+            signal_type: None,
+            signal_priority: None,
+            signal_action: None,
+            signal_triggers: None,
+        };
+    }
+
+    // KNN context search
+    let matches: Vec<RelevanceMatch> =
+        if ctx.cached_context_count > 0 && !input.embedding.is_empty() {
+            db.find_similar_contexts(input.embedding, 3)
+                .unwrap_or_default()
+                .into_iter()
+                .map(|result| {
+                    let similarity = 1.0 / (1.0 + result.distance);
+                    let matched_text = if result.text.len() > 100 {
+                        let truncated: String = result.text.chars().take(100).collect();
+                        format!("{}...", truncated)
+                    } else {
+                        result.text
+                    };
+                    RelevanceMatch {
+                        source_file: result.source_file,
+                        matched_text,
+                        similarity,
+                    }
+                })
+                .collect()
+        } else {
+            vec![]
+        };
+
+    let context_score = matches.first().map(|m| m.similarity).unwrap_or(0.0);
+    let interest_score = compute_interest_score(input.embedding, &ctx.interests);
+
+    // Semantic boost with keyword fallback
+    let semantic_boost =
+        compute_semantic_ace_boost(input.embedding, &ctx.ace_ctx, &ctx.topic_embeddings)
+            .unwrap_or_else(|| compute_keyword_ace_boost(&topics, &ctx.ace_ctx));
+
+    // Base score weighted by available data
+    let base_score = if ctx.cached_context_count > 0 && ctx.interest_count > 0 {
+        (context_score * 0.5 + interest_score * 0.5 + semantic_boost).min(1.0)
+    } else if ctx.interest_count > 0 {
+        (interest_score * 0.7 + semantic_boost * 1.5).min(1.0)
+    } else if ctx.cached_context_count > 0 {
+        (context_score + semantic_boost).min(1.0)
+    } else {
+        (semantic_boost * 2.0).min(1.0)
+    };
+
+    // Optional freshness
+    let freshness = if options.apply_freshness {
+        if let Some(created_at) = input.created_at {
+            compute_temporal_freshness(created_at)
+        } else {
+            1.0
+        }
+    } else {
+        1.0
+    };
+    let base_score = (base_score * freshness).clamp(0.0, 1.0);
+
+    // Feedback learning boost (Phase 9): apply feedback-derived topic multiplier
+    let feedback_boost = if !ctx.feedback_boosts.is_empty() {
+        let mut boost_sum: f64 = 0.0;
+        let mut match_count = 0;
+        for topic in &topics {
+            if let Some(&net_score) = ctx.feedback_boosts.get(topic.as_str()) {
+                boost_sum += net_score;
+                match_count += 1;
+            }
+        }
+        if match_count > 0 {
+            // Scale: net_score ranges from -1.0 to 1.0
+            // Apply as +-15% boost per matching topic, capped at +-20%
+            ((boost_sum / match_count as f64) * 0.15).clamp(-0.20, 0.20) as f32
+        } else {
+            0.0
+        }
+    } else {
+        0.0
+    };
+    let base_score = (base_score + feedback_boost).clamp(0.0, 1.0);
+
+    // Unified scoring
+    let combined_score = compute_unified_relevance(base_score, &topics, &ctx.ace_ctx);
+    let relevant = combined_score >= RELEVANCE_THRESHOLD;
+
+    let affinity_mult = compute_affinity_multiplier(&topics, &ctx.ace_ctx);
+    let anti_penalty = compute_anti_penalty(&topics, &ctx.ace_ctx);
+
+    // Explanation
+    let explanation = if relevant || combined_score >= 0.3 {
+        Some(generate_relevance_explanation(
+            input.title,
+            context_score,
+            interest_score,
+            &matches,
+            &ctx.ace_ctx,
+            &topics,
+        ))
+    } else {
+        None
+    };
+
+    // Confidence
+    let confidence = calculate_confidence(
+        context_score,
+        interest_score,
+        semantic_boost,
+        &ctx.ace_ctx,
+        &topics,
+        ctx.cached_context_count,
+        ctx.interest_count as i64,
+    );
+
+    let mut confidence_by_signal = std::collections::HashMap::new();
+    if ctx.cached_context_count > 0 {
+        confidence_by_signal.insert("context".to_string(), context_score);
+    }
+    if ctx.interest_count > 0 {
+        confidence_by_signal.insert("interest".to_string(), interest_score);
+    }
+    if semantic_boost > 0.0 {
+        confidence_by_signal.insert("ace_boost".to_string(), semantic_boost);
+    }
+
+    let score_breakdown = ScoreBreakdown {
+        context_score,
+        interest_score,
+        ace_boost: semantic_boost,
+        affinity_mult,
+        anti_penalty,
+        freshness_mult: freshness,
+        feedback_boost,
+        confidence_by_signal,
+    };
+
+    // Optional signal classification
+    let (sig_type, sig_priority, sig_action, sig_triggers) = if options.apply_signals {
+        if let Some(clf) = classifier {
+            match clf.classify(
+                input.title,
+                input.content,
+                combined_score,
+                &ctx.ace_ctx.detected_tech,
+            ) {
+                Some(c) => (
+                    Some(c.signal_type.slug().to_string()),
+                    Some(c.priority.label().to_string()),
+                    Some(c.action),
+                    Some(c.triggers),
+                ),
+                None => (None, None, None, None),
+            }
+        } else {
+            (None, None, None, None)
+        }
+    } else {
+        (None, None, None, None)
+    };
+
+    SourceRelevance {
+        id: input.id,
+        title: input.title.to_string(),
+        url: input.url.map(|s| s.to_string()),
+        top_score: combined_score,
+        matches,
+        relevant,
+        context_score,
+        interest_score,
+        excluded: false,
+        excluded_by: None,
+        source_type: input.source_type.to_string(),
+        explanation,
+        confidence: Some(confidence),
+        score_breakdown: Some(score_breakdown),
+        signal_type: sig_type,
+        signal_priority: sig_priority,
+        signal_action: sig_action,
+        signal_triggers: sig_triggers,
+    }
+}
+
+/// Keyword-based ACE boost fallback when embeddings unavailable
+/// Both topics (from extract_topics) and ace_ctx fields are already lowercase
+fn compute_keyword_ace_boost(topics: &[String], ace_ctx: &ACEContext) -> f32 {
+    let mut boost: f32 = 0.0;
+    for topic in topics {
+        for active in &ace_ctx.active_topics {
+            if topic.contains(active.as_str()) || active.contains(topic.as_str()) {
+                boost += 0.15 * ace_ctx.topic_confidence.get(active).copied().unwrap_or(0.5);
+                break;
+            }
+        }
+        for tech in &ace_ctx.detected_tech {
+            if topic.contains(tech.as_str()) || tech.contains(topic.as_str()) {
+                boost += 0.12;
+                break;
+            }
+        }
+    }
+    boost.clamp(0.0, 0.3)
+}
+
+/// Sort results: excluded items last, then by score descending
+pub(crate) fn sort_results(results: &mut [SourceRelevance]) {
+    results.sort_by(|a, b| {
+        if a.excluded && !b.excluded {
+            return std::cmp::Ordering::Greater;
+        }
+        if !a.excluded && b.excluded {
+            return std::cmp::Ordering::Less;
+        }
+        b.top_score
+            .partial_cmp(&a.top_score)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
 }
 
 // ============================================================================

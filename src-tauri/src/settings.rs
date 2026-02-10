@@ -294,7 +294,7 @@ impl SettingsManager {
         token_ok && cost_ok
     }
 
-    /// Record token usage
+    /// Record token usage (called after LLM/embedding API calls)
     pub fn record_usage(&mut self, tokens: u64, cost_cents: u64) {
         self.settings.usage.tokens_today += tokens;
         self.settings.usage.cost_today_cents += cost_cents;

@@ -12,7 +12,7 @@ export interface RelevanceMatch {
   similarity: number;
 }
 
-export interface HNRelevance {
+export interface SourceRelevance {
   id: number;
   title: string;
   url: string | null;
@@ -27,6 +27,7 @@ export interface HNRelevance {
   signal_priority?: string;
   signal_action?: string;
   signal_triggers?: string[];
+  seen_on?: string[];
 }
 
 export interface ScoreBreakdown {
@@ -36,6 +37,7 @@ export interface ScoreBreakdown {
   affinity_mult: number;
   anti_penalty: number;
   freshness_mult?: number;
+  feedback_boost?: number;
   confidence_by_signal: Record<string, number>;
 }
 
@@ -126,7 +128,7 @@ export interface SystemHealth {
 
 export interface AppState {
   contextFiles: ContextFile[];
-  relevanceResults: HNRelevance[];
+  relevanceResults: SourceRelevance[];
   status: string;
   loading: boolean;
   analysisComplete: boolean;

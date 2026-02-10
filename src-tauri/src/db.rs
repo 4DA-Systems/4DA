@@ -17,6 +17,9 @@ use tracing::info;
 // Types
 // ============================================================================
 
+/// Source info tuple: (source_type, name, enabled, last_fetch)
+pub type SourceInfo = (String, String, bool, Option<String>);
+
 /// A stored context chunk with its embedding
 #[derive(Debug, Clone)]
 #[allow(dead_code)] // Fields populated from SQL, returned via API
@@ -102,6 +105,9 @@ impl Database {
 
             -- Performance: temp tables in RAM
             PRAGMA temp_store = MEMORY;
+
+            -- Concurrency: wait up to 5s when DB is locked
+            PRAGMA busy_timeout = 5000;
         ",
         )?;
 
@@ -505,6 +511,7 @@ impl Database {
     }
 
     /// Get all context embeddings
+    #[allow(dead_code)]
     pub fn get_all_contexts(&self) -> SqliteResult<Vec<StoredContext>> {
         let conn = self.conn.lock();
         let mut stmt = conn.prepare(
@@ -520,7 +527,7 @@ impl Database {
                 content_hash: row.get(2)?,
                 text: row.get(3)?,
                 embedding: blob_to_embedding(&embedding_blob),
-                created_at: Utc::now(), // Simplified for now
+                created_at: parse_datetime(row.get::<_, String>(5)?),
             })
         })?;
 
@@ -600,8 +607,8 @@ impl Database {
                 content: row.get(5)?,
                 content_hash: row.get(6)?,
                 embedding: blob_to_embedding(&embedding_blob),
-                created_at: Utc::now(),
-                last_seen: Utc::now(),
+                created_at: parse_datetime(row.get::<_, String>(8)?),
+                last_seen: parse_datetime(row.get::<_, String>(9)?),
             })
         })?;
 
@@ -665,6 +672,7 @@ impl Database {
     }
 
     /// Batch upsert source items in a transaction (much faster than individual calls)
+    #[allow(clippy::type_complexity)]
     pub fn batch_upsert_source_items(
         &self,
         items: &[(String, String, Option<String>, String, String, Vec<f32>)],
@@ -766,8 +774,8 @@ impl Database {
                 content: row.get(5)?,
                 content_hash: row.get(6)?,
                 embedding: blob_to_embedding(&embedding_blob),
-                created_at: Utc::now(),
-                last_seen: Utc::now(),
+                created_at: parse_datetime(row.get::<_, String>(8)?),
+                last_seen: parse_datetime(row.get::<_, String>(9)?),
             })
         })?;
 
@@ -815,8 +823,8 @@ impl Database {
                 content: row.get(5)?,
                 content_hash: row.get(6)?,
                 embedding: blob_to_embedding(&embedding_blob),
-                created_at: Utc::now(),
-                last_seen: Utc::now(),
+                created_at: parse_datetime(row.get::<_, String>(8)?),
+                last_seen: parse_datetime(row.get::<_, String>(9)?),
             })
         })?;
 
@@ -918,16 +926,330 @@ impl Database {
         Ok(())
     }
 
-    /// Get enabled sources
-    #[allow(dead_code)] // Future: source management UI
-    pub fn get_enabled_sources(&self) -> SqliteResult<Vec<(String, String)>> {
+    /// Check if a specific source is enabled (defaults to true if not in DB)
+    pub fn is_source_enabled(&self, source_type: &str) -> bool {
         let conn = self.conn.lock();
-        let mut stmt = conn.prepare("SELECT source_type, name FROM sources WHERE enabled = 1")?;
+        conn.query_row(
+            "SELECT enabled FROM sources WHERE source_type = ?1",
+            params![source_type],
+            |row| row.get::<_, i64>(0),
+        )
+        .map(|v| v != 0)
+        .unwrap_or(true) // Default to enabled if not in DB
+    }
 
-        let rows = stmt.query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?;
+    /// Toggle source enabled/disabled
+    pub fn toggle_source_enabled(&self, source_type: &str, enabled: bool) -> SqliteResult<()> {
+        let conn = self.conn.lock();
+        conn.execute(
+            "UPDATE sources SET enabled = ?1 WHERE source_type = ?2",
+            params![enabled as i64, source_type],
+        )?;
+        Ok(())
+    }
+
+    /// Get all sources with their enabled status
+    pub fn get_all_sources(&self) -> SqliteResult<Vec<SourceInfo>> {
+        let conn = self.conn.lock();
+        let mut stmt = conn.prepare(
+            "SELECT source_type, name, enabled, last_fetch FROM sources ORDER BY source_type",
+        )?;
+        let rows = stmt.query_map([], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, i64>(2)? != 0,
+                row.get::<_, Option<String>>(3)?,
+            ))
+        })?;
+        rows.collect()
+    }
+
+    /// Get last fetch time for a source
+    pub fn get_source_last_fetch(&self, source_type: &str) -> SqliteResult<Option<String>> {
+        let conn = self.conn.lock();
+        conn.query_row(
+            "SELECT last_fetch FROM sources WHERE source_type = ?1",
+            params![source_type],
+            |row| row.get(0),
+        )
+        .optional()
+        .map(|v| v.flatten())
+    }
+
+    // DB maintenance operations
+
+    /// Run database maintenance: cleanup old items, optimize, vacuum
+    pub fn run_maintenance(&self, retention_days: i64) -> SqliteResult<MaintenanceResult> {
+        let conn = self.conn.lock();
+
+        let deleted_items: usize = conn.execute(
+            "DELETE FROM source_items WHERE last_seen < datetime('now', ?1)",
+            params![format!("-{} days", retention_days)],
+        )?;
+
+        let deleted_feedback: usize = conn.execute(
+            "DELETE FROM feedback WHERE created_at < datetime('now', ?1)",
+            params![format!("-{} days", retention_days * 2)],
+        )?;
+
+        // Clean void_positions (rebuild on next use)
+        let deleted_void: usize = conn.execute("DELETE FROM void_positions", []).unwrap_or(0);
+
+        conn.execute_batch("PRAGMA optimize;")?;
+        conn.execute_batch("VACUUM;")?;
+
+        Ok(MaintenanceResult {
+            deleted_items,
+            deleted_feedback,
+            deleted_void,
+        })
+    }
+
+    /// Get database statistics
+    pub fn get_db_stats(&self) -> SqliteResult<DbStats> {
+        let conn = self.conn.lock();
+
+        let source_items: i64 = conn
+            .query_row("SELECT COUNT(*) FROM source_items", [], |row| row.get(0))
+            .unwrap_or(0);
+
+        let context_chunks: i64 = conn
+            .query_row("SELECT COUNT(*) FROM context_chunks", [], |row| row.get(0))
+            .unwrap_or(0);
+
+        let feedback_count: i64 = conn
+            .query_row("SELECT COUNT(*) FROM feedback", [], |row| row.get(0))
+            .unwrap_or(0);
+
+        let sources_count: i64 = conn
+            .query_row("SELECT COUNT(*) FROM sources", [], |row| row.get(0))
+            .unwrap_or(0);
+
+        Ok(DbStats {
+            source_items,
+            context_chunks,
+            feedback_count,
+            sources_count,
+        })
+    }
+
+    /// Record source health after a fetch
+    pub fn record_source_health(
+        &self,
+        source_type: &str,
+        success: bool,
+        items_fetched: i64,
+        response_time_ms: i64,
+        error_msg: Option<&str>,
+    ) -> SqliteResult<()> {
+        let conn = self.conn.lock();
+
+        // Ensure source_health table exists (migration)
+        conn.execute_batch(
+            "CREATE TABLE IF NOT EXISTS source_health (
+                source_type TEXT PRIMARY KEY,
+                status TEXT NOT NULL DEFAULT 'unknown',
+                last_success TEXT,
+                last_error TEXT,
+                error_count INTEGER NOT NULL DEFAULT 0,
+                consecutive_failures INTEGER NOT NULL DEFAULT 0,
+                items_fetched INTEGER NOT NULL DEFAULT 0,
+                response_time_ms INTEGER NOT NULL DEFAULT 0,
+                checked_at TEXT NOT NULL DEFAULT (datetime('now'))
+            )",
+        )?;
+
+        if success {
+            conn.execute(
+                "INSERT INTO source_health (source_type, status, last_success, items_fetched, response_time_ms, consecutive_failures, checked_at)
+                 VALUES (?1, 'healthy', datetime('now'), ?2, ?3, 0, datetime('now'))
+                 ON CONFLICT(source_type) DO UPDATE SET
+                   status = 'healthy', last_success = datetime('now'),
+                   items_fetched = ?2, response_time_ms = ?3,
+                   consecutive_failures = 0, checked_at = datetime('now')",
+                params![source_type, items_fetched, response_time_ms],
+            )?;
+        } else {
+            conn.execute(
+                "INSERT INTO source_health (source_type, status, last_error, error_count, consecutive_failures, checked_at)
+                 VALUES (?1, 'error', ?2, 1, 1, datetime('now'))
+                 ON CONFLICT(source_type) DO UPDATE SET
+                   status = CASE WHEN consecutive_failures + 1 >= 5 THEN 'circuit_open' ELSE 'error' END,
+                   last_error = ?2,
+                   error_count = error_count + 1,
+                   consecutive_failures = consecutive_failures + 1,
+                   checked_at = datetime('now')",
+                params![source_type, error_msg.unwrap_or("Unknown error")],
+            )?;
+        }
+
+        Ok(())
+    }
+
+    /// Get source health for all sources
+    pub fn get_source_health(&self) -> SqliteResult<Vec<SourceHealthRecord>> {
+        let conn = self.conn.lock();
+
+        // Ensure table exists
+        conn.execute_batch(
+            "CREATE TABLE IF NOT EXISTS source_health (
+                source_type TEXT PRIMARY KEY,
+                status TEXT NOT NULL DEFAULT 'unknown',
+                last_success TEXT,
+                last_error TEXT,
+                error_count INTEGER NOT NULL DEFAULT 0,
+                consecutive_failures INTEGER NOT NULL DEFAULT 0,
+                items_fetched INTEGER NOT NULL DEFAULT 0,
+                response_time_ms INTEGER NOT NULL DEFAULT 0,
+                checked_at TEXT NOT NULL DEFAULT (datetime('now'))
+            )",
+        )?;
+
+        let mut stmt = conn.prepare(
+            "SELECT source_type, status, last_success, last_error, error_count,
+                    consecutive_failures, items_fetched, response_time_ms, checked_at
+             FROM source_health ORDER BY source_type",
+        )?;
+
+        let rows = stmt.query_map([], |row| {
+            Ok(SourceHealthRecord {
+                source_type: row.get(0)?,
+                status: row.get(1)?,
+                last_success: row.get(2)?,
+                last_error: row.get(3)?,
+                error_count: row.get(4)?,
+                consecutive_failures: row.get(5)?,
+                items_fetched: row.get(6)?,
+                response_time_ms: row.get(7)?,
+                checked_at: row.get(8)?,
+            })
+        })?;
 
         rows.collect()
     }
+
+    /// Check if circuit breaker is open for a source (5+ consecutive failures)
+    pub fn is_circuit_open(&self, source_type: &str) -> bool {
+        let conn = self.conn.lock();
+        conn.query_row(
+            "SELECT consecutive_failures FROM source_health WHERE source_type = ?1",
+            params![source_type],
+            |row| row.get::<_, i64>(0),
+        )
+        .map(|count| count >= 5)
+        .unwrap_or(false)
+    }
+
+    /// Get feedback summary aggregated by topic for scoring boost
+    pub fn get_feedback_topic_summary(&self) -> SqliteResult<Vec<FeedbackTopicSummary>> {
+        let conn = self.conn.lock();
+
+        // Join feedback with source_items to get titles for topic extraction
+        let mut stmt = conn.prepare(
+            "SELECT si.title, f.relevant
+             FROM feedback f
+             JOIN source_items si ON f.source_item_id = si.id
+             WHERE f.created_at > datetime('now', '-30 days')
+             ORDER BY f.created_at DESC
+             LIMIT 500",
+        )?;
+
+        let rows: Vec<(String, bool)> = stmt
+            .query_map([], |row| {
+                Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)? != 0))
+            })?
+            .filter_map(|r| r.ok())
+            .collect();
+
+        // Aggregate by extracted topics (simple word-based)
+        let mut topic_map: std::collections::HashMap<String, (i64, i64)> =
+            std::collections::HashMap::new();
+        for (title, relevant) in &rows {
+            let words: Vec<String> = title
+                .to_lowercase()
+                .split_whitespace()
+                .filter(|w| w.len() > 3)
+                .filter(|w| {
+                    ![
+                        "the", "and", "for", "with", "that", "this", "from", "have", "been",
+                        "will", "what", "when", "where", "which", "about", "into", "your", "more",
+                        "some", "show",
+                    ]
+                    .contains(w)
+                })
+                .map(|s| s.to_string())
+                .collect();
+
+            for word in words.into_iter().take(5) {
+                let entry = topic_map.entry(word).or_insert((0, 0));
+                if *relevant {
+                    entry.0 += 1; // saves
+                } else {
+                    entry.1 += 1; // dismissals
+                }
+            }
+        }
+
+        let mut summaries: Vec<FeedbackTopicSummary> = topic_map
+            .into_iter()
+            .filter(|(_, (saves, dismissals))| saves + dismissals >= 2)
+            .map(|(topic, (saves, dismissals))| FeedbackTopicSummary {
+                topic,
+                saves,
+                dismissals,
+                net_score: (saves as f64 - dismissals as f64) / (saves + dismissals) as f64,
+            })
+            .collect();
+
+        summaries.sort_by(|a, b| {
+            b.net_score
+                .partial_cmp(&a.net_score)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
+
+        Ok(summaries)
+    }
+}
+
+// ============================================================================
+// Maintenance & Health Types
+// ============================================================================
+
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct MaintenanceResult {
+    pub deleted_items: usize,
+    pub deleted_feedback: usize,
+    pub deleted_void: usize,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct DbStats {
+    pub source_items: i64,
+    pub context_chunks: i64,
+    pub feedback_count: i64,
+    pub sources_count: i64,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct SourceHealthRecord {
+    pub source_type: String,
+    pub status: String,
+    pub last_success: Option<String>,
+    pub last_error: Option<String>,
+    pub error_count: i64,
+    pub consecutive_failures: i64,
+    pub items_fetched: i64,
+    pub response_time_ms: i64,
+    pub checked_at: String,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct FeedbackTopicSummary {
+    pub topic: String,
+    pub saves: i64,
+    pub dismissals: i64,
+    pub net_score: f64,
 }
 
 // ============================================================================

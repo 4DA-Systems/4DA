@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef, Component, ErrorInfo, ReactNode } from 'react';
+import { useState, useEffect, Component, ErrorInfo, ReactNode } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import './App.css';
 import { SplashScreen } from './components/SplashScreen';
@@ -8,6 +8,7 @@ import { SettingsModal } from './components/SettingsModal';
 import { VoidEngine } from './components/void-engine/VoidEngine';
 import { SignalsPanel } from './components/SignalsPanel';
 import { NaturalLanguageSearch } from './components/NaturalLanguageSearch';
+import { ToastContainer } from './components/Toast';
 import {
   useSettings,
   useMonitoring,
@@ -17,6 +18,9 @@ import {
   useSystemHealth,
   useUserContext,
   useResultFilters,
+  useBriefing,
+  useKeyboardShortcuts,
+  useToasts,
 } from './hooks';
 import { getStageLabel } from './utils/score';
 
@@ -87,6 +91,8 @@ function App() {
   // Local UI state
   const [showSplash, setShowSplash] = useState(true);
   const [showSettings, setShowSettings] = useState(false);
+  // Toast notification system
+  const { toasts, addToast, removeToast } = useToasts();
   // All application state via hooks
   const {
     settings,
@@ -122,7 +128,7 @@ function App() {
     clearContext,
     indexContext,
     startAnalysis,
-  } = useAnalysis();
+  } = useAnalysis(addToast);
 
   const {
     scanDirectories,
@@ -197,59 +203,15 @@ function App() {
   // eslint-disable-next-line react-hooks/exhaustive-deps -- only re-check when provider changes, not on every baseUrl keystroke
   }, [settingsForm.provider, checkOllamaStatus]);
 
-  // AI Briefing state
-  const [aiBriefing, setAiBriefing] = useState<{
-    content: string | null;
-    loading: boolean;
-    error: string | null;
-    model: string | null;
-    lastGenerated: Date | null;
-  }>({
-    content: null,
-    loading: false,
-    error: null,
-    model: null,
-    lastGenerated: null,
-  });
-  const [showBriefing, setShowBriefing] = useState(false);
-
-  // Generate AI briefing
-  const generateBriefing = useCallback(async () => {
-    setAiBriefing(prev => ({ ...prev, loading: true, error: null }));
-    try {
-      const result = await invoke<{
-        success: boolean;
-        briefing: string | null;
-        error?: string;
-        model?: string;
-        item_count?: number;
-        latency_ms?: number;
-      }>('generate_ai_briefing');
-
-      if (result.success && result.briefing) {
-        setAiBriefing({
-          content: result.briefing,
-          loading: false,
-          error: null,
-          model: result.model || null,
-          lastGenerated: new Date(),
-        });
-        setShowBriefing(true);
-      } else {
-        setAiBriefing(prev => ({
-          ...prev,
-          loading: false,
-          error: result.error || 'Failed to generate briefing',
-        }));
-      }
-    } catch (error) {
-      setAiBriefing(prev => ({
-        ...prev,
-        loading: false,
-        error: `Error: ${error}`,
-      }));
-    }
-  }, []);
+  // AI Briefing (extracted hook)
+  const {
+    aiBriefing,
+    showBriefing,
+    setShowBriefing,
+    autoBriefingEnabled,
+    setAutoBriefingEnabled,
+    generateBriefing,
+  } = useBriefing(state.relevanceResults, state.analysisComplete);
 
   // Auto-analyze on first load if monitoring enabled
   useEffect(() => {
@@ -274,93 +236,21 @@ function App() {
     };
   }, []);
 
-  // Auto-briefing state
-  const [autoBriefingEnabled, setAutoBriefingEnabled] = useState(true);
-  const [lastBriefingCount, setLastBriefingCount] = useState(0);
-  const generatingBriefingRef = useRef(false);
-
-  // Autonomous AI Briefing - triggers when analysis completes with new relevant items
-  useEffect(() => {
-    const totalCount = state.relevanceResults.length;
-
-    if (
-      autoBriefingEnabled &&
-      state.analysisComplete &&
-      totalCount > 0 &&
-      !aiBriefing.loading &&
-      !generatingBriefingRef.current &&
-      totalCount !== lastBriefingCount
-    ) {
-      // Auto-generate briefing after analysis completes
-      setLastBriefingCount(totalCount);
-      generatingBriefingRef.current = true;
-
-      const briefingTimer = setTimeout(() => {
-        generateBriefing().finally(() => {
-          generatingBriefingRef.current = false;
-        });
-      }, 500);
-
-      return () => {
-        clearTimeout(briefingTimer);
-        generatingBriefingRef.current = false;
-      };
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- trigger on analysis complete and count change, not on full results array
-  }, [state.analysisComplete, state.relevanceResults.length, autoBriefingEnabled, aiBriefing.loading]);
-
-  // Global keyboard shortcuts
-  const showSettingsRef = useRef(showSettings);
-  const showBriefingRef = useRef(showBriefing);
-  const expandedItemRef = useRef(expandedItem);
-  const aiBriefingContentRef = useRef(aiBriefing.content);
-  const analysisCompleteRef = useRef(state.analysisComplete);
-  const loadingRef = useRef(state.loading);
-
-  useEffect(() => {
-    showSettingsRef.current = showSettings;
-    showBriefingRef.current = showBriefing;
-    expandedItemRef.current = expandedItem;
-    aiBriefingContentRef.current = aiBriefing.content;
-    analysisCompleteRef.current = state.analysisComplete;
-    loadingRef.current = state.loading;
+  // Global keyboard shortcuts (extracted hook)
+  useKeyboardShortcuts({
+    onAnalyze: startAnalysis,
+    onToggleFilters: () => setShowOnlyRelevant(prev => !prev),
+    onToggleBriefing: () => setShowBriefing(prev => !prev),
+    onOpenSettings: () => setShowSettings(true),
+    onEscape: () => {
+      if (showSettings) { setShowSettings(false); return; }
+      if (showBriefing) { setShowBriefing(false); return; }
+      if (expandedItem !== null) { setExpandedItem(null); return; }
+    },
+    analyzeDisabled: state.loading,
+    briefingAvailable: !!aiBriefing.content,
+    filtersAvailable: state.analysisComplete,
   });
-
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      const tag = (e.target as HTMLElement).tagName;
-      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
-
-      if (e.key === 'Escape') {
-        if (showSettingsRef.current) { setShowSettings(false); return; }
-        if (showBriefingRef.current) { setShowBriefing(false); return; }
-        if (expandedItemRef.current !== null) { setExpandedItem(null); return; }
-      }
-
-      if (e.key === 'r' && !e.ctrlKey && !e.metaKey && !loadingRef.current) {
-        startAnalysis();
-        return;
-      }
-
-      if (e.key === 'b' && aiBriefingContentRef.current) {
-        setShowBriefing(prev => !prev);
-        return;
-      }
-
-      if (e.key === ',') {
-        setShowSettings(true);
-        return;
-      }
-
-      if (e.key === 'f' && analysisCompleteRef.current) {
-        setShowOnlyRelevant(prev => !prev);
-        return;
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [startAnalysis, setExpandedItem, setShowOnlyRelevant]);
 
   return (
     <>
@@ -516,6 +406,24 @@ function App() {
               >
                 {autoBriefingEnabled ? '⚡' : '○'}
               </button>
+              {/* Export button */}
+              {state.analysisComplete && (
+                <button
+                  onClick={async () => {
+                    try {
+                      const md = await invoke<string>('export_results', { format: 'markdown' });
+                      await window.navigator.clipboard.writeText(md);
+                      addToast('success', 'Results copied to clipboard (Markdown)');
+                    } catch (e) {
+                      addToast('error', `Export failed: ${e}`);
+                    }
+                  }}
+                  className="w-10 h-10 rounded-lg flex items-center justify-center bg-[#1F1F1F] text-gray-500 border border-[#2A2A2A] hover:text-gray-300 transition-all"
+                  title="Copy results to clipboard (Markdown)"
+                >
+                  ↗
+                </button>
+              )}
             </div>
           </div>
 
@@ -928,6 +836,9 @@ function App() {
             <kbd className="px-1 py-0.5 bg-[#1F1F1F] rounded text-gray-500">Esc</kbd> Close
           </p>
         </footer>
+
+        {/* Toast Notifications */}
+        <ToastContainer toasts={toasts} onDismiss={removeToast} />
 
         {/* Settings Modal */}
         {showSettings && (
