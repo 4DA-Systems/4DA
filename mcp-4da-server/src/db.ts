@@ -7,6 +7,13 @@
 
 import Database from "better-sqlite3";
 import path from "path";
+import * as fs from "fs";
+import * as os from "os";
+import { fileURLToPath } from "node:url";
+import { dirname } from "node:path";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 import type {
   SourceItem,
   RelevantItem,
@@ -23,8 +30,68 @@ import type {
   FeedbackResult,
 } from "./types.js";
 
-// Default database path relative to project root
-const DEFAULT_DB_PATH = "data/4da.db";
+/**
+ * Resolve the database path by checking multiple locations in priority order:
+ * 1. FOURDA_DB_PATH env var
+ * 2. data/4da.db relative to cwd (development)
+ * 3. data/4da.db relative to project root (mcp-4da-server is inside project root)
+ * 4. Platform-specific Tauri app data dirs (production)
+ * 5. Final fallback: data/4da.db relative to cwd
+ */
+function getDefaultDbPath(): string {
+  // 1. Environment variable (highest priority)
+  if (process.env.FOURDA_DB_PATH) {
+    return process.env.FOURDA_DB_PATH;
+  }
+
+  // 2. Relative to cwd (development)
+  const cwdPath = path.resolve(process.cwd(), "data", "4da.db");
+  if (fs.existsSync(cwdPath)) {
+    return cwdPath;
+  }
+
+  // 3. Relative to project root (mcp-4da-server is inside project root)
+  const projectRootPath = path.resolve(__dirname, "..", "..", "data", "4da.db");
+  if (fs.existsSync(projectRootPath)) {
+    return projectRootPath;
+  }
+
+  // 4. Platform-specific Tauri app data dirs (production)
+  const platform = process.platform;
+  let appDataPath: string;
+  if (platform === "win32") {
+    appDataPath = path.join(
+      process.env.APPDATA || path.join(os.homedir(), "AppData", "Roaming"),
+      "com.4da.app",
+      "data",
+      "4da.db"
+    );
+  } else if (platform === "darwin") {
+    appDataPath = path.join(
+      os.homedir(),
+      "Library",
+      "Application Support",
+      "com.4da.app",
+      "data",
+      "4da.db"
+    );
+  } else {
+    appDataPath = path.join(
+      os.homedir(),
+      ".local",
+      "share",
+      "com.4da.app",
+      "data",
+      "4da.db"
+    );
+  }
+  if (fs.existsSync(appDataPath)) {
+    return appDataPath;
+  }
+
+  // 5. Final fallback
+  return path.resolve(process.cwd(), "data", "4da.db");
+}
 
 /**
  * 4DA Database accessor
@@ -33,7 +100,7 @@ export class FourDADatabase {
   private db: Database.Database;
 
   constructor(dbPath?: string) {
-    const resolvedPath = dbPath || process.env.FOURDA_DB_PATH || DEFAULT_DB_PATH;
+    const resolvedPath = dbPath || getDefaultDbPath();
 
     // Resolve path - if relative, resolve from cwd
     const absolutePath = path.isAbsolute(resolvedPath)

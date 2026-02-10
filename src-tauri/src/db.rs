@@ -256,6 +256,18 @@ impl Database {
             info!(target: "4da::db", "Phase 2 migration completed");
         }
 
+        // Phase 3 migration: Embedding status tracking for retry
+        let current_version: i64 = conn
+            .query_row("SELECT version FROM schema_version", [], |row| row.get(0))
+            .unwrap_or(3);
+
+        if current_version < 4 {
+            info!(target: "4da::db", "Running Phase 3 migration (schema version 4)");
+            Self::migrate_to_phase_3(&conn)?;
+            conn.execute("UPDATE schema_version SET version = 4", [])?;
+            info!(target: "4da::db", "Phase 3 migration completed");
+        }
+
         info!(target: "4da::db", "Database schema initialized with sqlite-vec");
         Ok(())
     }
@@ -441,6 +453,31 @@ impl Database {
         ",
         )?;
         info!("Created void_positions table");
+
+        Ok(())
+    }
+
+    /// Phase 3 migration: Embedding status tracking for retry
+    fn migrate_to_phase_3(conn: &Connection) -> SqliteResult<()> {
+        // Add embedding_status column to track pending/complete/failed embeddings
+        let has_status: bool = conn
+            .query_row(
+                "SELECT COUNT(*) FROM pragma_table_info('source_items') WHERE name='embedding_status'",
+                [],
+                |row| row.get::<_, i64>(0).map(|count| count > 0),
+            )
+            .unwrap_or(false);
+
+        if !has_status {
+            conn.execute_batch(
+                "
+                ALTER TABLE source_items ADD COLUMN embedding_status TEXT DEFAULT 'complete';
+                ALTER TABLE source_items ADD COLUMN embed_text TEXT DEFAULT NULL;
+                CREATE INDEX IF NOT EXISTS idx_source_embedding_status ON source_items(embedding_status);
+                ",
+            )?;
+            info!("Added embedding_status and embed_text columns to source_items");
+        }
 
         Ok(())
     }
@@ -738,6 +775,107 @@ impl Database {
         Ok(count)
     }
 
+    /// Batch upsert source items that failed embedding (stored as pending for retry)
+    #[allow(clippy::type_complexity)]
+    pub fn batch_upsert_pending_source_items(
+        &self,
+        items: &[(String, String, Option<String>, String, String, String)], // (source_type, source_id, url, title, content, embed_text)
+    ) -> SqliteResult<usize> {
+        let conn = self.conn.lock();
+        let mut count = 0;
+        let tx = conn.unchecked_transaction()?;
+        {
+            let mut check_stmt = tx.prepare_cached(
+                "SELECT id FROM source_items WHERE source_type = ?1 AND source_id = ?2",
+            )?;
+            let mut update_stmt = tx.prepare_cached(
+                "UPDATE source_items SET url = ?1, title = ?2, content = ?3, content_hash = ?4, embed_text = ?5, embedding_status = 'pending', last_seen = datetime('now') WHERE id = ?6",
+            )?;
+            let mut insert_stmt = tx.prepare_cached(
+                "INSERT INTO source_items (source_type, source_id, url, title, content, content_hash, embedding, embedding_status, embed_text, last_seen)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, X'', 'pending', ?7, datetime('now'))",
+            )?;
+
+            for (source_type, source_id, url, title, content, embed_text) in items {
+                let content_hash = hash_content(&format!("{}{}", title, content));
+
+                let existing_id: Option<i64> = check_stmt
+                    .query_row(params![source_type, source_id], |row| row.get(0))
+                    .ok();
+
+                if let Some(id) = existing_id {
+                    update_stmt.execute(params![
+                        url.as_deref(),
+                        title,
+                        content,
+                        content_hash,
+                        embed_text,
+                        id
+                    ])?;
+                } else {
+                    insert_stmt.execute(params![
+                        source_type,
+                        source_id,
+                        url.as_deref(),
+                        title,
+                        content,
+                        content_hash,
+                        embed_text
+                    ])?;
+                    // Do NOT insert into source_vec - pending items have no valid embedding
+                }
+                count += 1;
+            }
+        }
+        tx.commit()?;
+        Ok(count)
+    }
+
+    /// Get items with pending embeddings for retry
+    pub fn get_pending_embedding_items(
+        &self,
+        limit: usize,
+    ) -> SqliteResult<Vec<(i64, String, String, String)>> {
+        let conn = self.conn.lock();
+        let mut stmt = conn.prepare(
+            "SELECT id, source_type, source_id, COALESCE(embed_text, title || ' ' || content)
+             FROM source_items
+             WHERE embedding_status = 'pending'
+             ORDER BY created_at DESC
+             LIMIT ?1",
+        )?;
+
+        let rows = stmt.query_map(params![limit as i64], |row| {
+            Ok((
+                row.get::<_, i64>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, String>(2)?,
+                row.get::<_, String>(3)?,
+            ))
+        })?;
+
+        rows.collect()
+    }
+
+    /// Upgrade a pending item to complete after successful re-embedding
+    pub fn upgrade_pending_to_complete(&self, id: i64, embedding: &[f32]) -> SqliteResult<()> {
+        let conn = self.conn.lock();
+        let embedding_blob = embedding_to_blob(embedding);
+
+        conn.execute(
+            "UPDATE source_items SET embedding = ?1, embedding_status = 'complete', embed_text = NULL WHERE id = ?2",
+            params![embedding_blob, id],
+        )?;
+
+        // Also insert into source_vec for vector search
+        conn.execute(
+            "INSERT OR REPLACE INTO source_vec (rowid, embedding) VALUES (?1, ?2)",
+            params![id, embedding_blob],
+        )?;
+
+        Ok(())
+    }
+
     /// Check if a source item exists (for incremental updates)
     #[allow(dead_code)] // Future: incremental fetch optimization
     pub fn source_item_exists(&self, source_type: &str, source_id: &str) -> SqliteResult<bool> {
@@ -760,7 +898,8 @@ impl Database {
         let mut stmt = conn.prepare(
             "SELECT id, source_type, source_id, url, title, content, content_hash, embedding, created_at, last_seen
              FROM source_items
-             WHERE source_type = ?1 AND source_id = ?2"
+             WHERE source_type = ?1 AND source_id = ?2
+             AND (embedding_status IS NULL OR embedding_status = 'complete')"
         )?;
 
         let mut rows = stmt.query_map(params![source_type, source_id], |row| {
@@ -853,6 +992,40 @@ impl Database {
 
         let hours_param = cutoff_str;
         let rows = stmt.query_map(params![hours_param, limit as i64], |row| {
+            let embedding_blob: Vec<u8> = row.get(7)?;
+            Ok(StoredSourceItem {
+                id: row.get(0)?,
+                source_type: row.get(1)?,
+                source_id: row.get(2)?,
+                url: row.get(3)?,
+                title: row.get(4)?,
+                content: row.get(5)?,
+                content_hash: row.get(6)?,
+                embedding: blob_to_embedding(&embedding_blob),
+                created_at: parse_datetime(row.get::<_, String>(8)?),
+                last_seen: parse_datetime(row.get::<_, String>(9)?),
+            })
+        })?;
+
+        rows.collect()
+    }
+
+    /// Get items added since a specific ISO timestamp (for differential analysis)
+    pub fn get_items_since_timestamp(
+        &self,
+        since: &str,
+        limit: usize,
+    ) -> SqliteResult<Vec<StoredSourceItem>> {
+        let conn = self.conn.lock();
+        let mut stmt = conn.prepare(
+            "SELECT id, source_type, source_id, url, title, content, content_hash, embedding, created_at, last_seen
+             FROM source_items
+             WHERE last_seen > ?1
+             ORDER BY last_seen DESC
+             LIMIT ?2"
+        )?;
+
+        let rows = stmt.query_map(params![since, limit as i64], |row| {
             let embedding_blob: Vec<u8> = row.get(7)?;
             Ok(StoredSourceItem {
                 id: row.get(0)?,
@@ -1560,7 +1733,7 @@ fn embedding_to_blob(embedding: &[f32]) -> Vec<u8> {
 fn blob_to_embedding(blob: &[u8]) -> Vec<f32> {
     blob.chunks_exact(4)
         .map(|chunk| {
-            let arr: [u8; 4] = chunk.try_into().expect("chunks_exact guarantees 4 bytes");
+            let arr: [u8; 4] = chunk.try_into().unwrap_or([0u8; 4]);
             f32::from_le_bytes(arr)
         })
         .collect()

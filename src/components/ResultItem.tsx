@@ -4,6 +4,32 @@ import { formatScore, getScoreColor } from '../utils/score';
 import { ConfidenceIndicator } from './ConfidenceIndicator';
 import { ScoreAutopsy } from './ScoreAutopsy';
 
+function generateFallbackReason(item: SourceRelevance): string {
+  const parts: string[] = [];
+  const b = item.score_breakdown;
+  if (b) {
+    if (b.context_score > 0.3) parts.push('matches your project context');
+    else if (b.context_score > 0.1) parts.push('loosely related to your project');
+    if (b.interest_score > 0.3) parts.push('aligns with your interests');
+    if (b.ace_boost > 0.1) parts.push('relevant to recent file changes');
+    if (b.affinity_mult > 1.2) parts.push('similar to content you\'ve saved');
+    if (b.anti_penalty < 0.8) parts.push('overlaps with excluded topics');
+    if (b.freshness_mult != null && b.freshness_mult > 1.1) parts.push('recently published');
+  }
+  if (item.signal_type) {
+    const labels: Record<string, string> = {
+      security_alert: 'security alert detected',
+      breaking_change: 'breaking change detected',
+      tool_discovery: 'new tool relevant to your stack',
+      tech_trend: 'emerging trend in your domain',
+      learning: 'learning resource identified',
+      competitive_intel: 'competitive intelligence',
+    };
+    parts.unshift(labels[item.signal_type] || item.signal_type);
+  }
+  return parts.length > 0 ? parts.slice(0, 2).join(' · ') : '';
+}
+
 interface ResultItemProps {
   item: SourceRelevance;
   isExpanded: boolean;
@@ -42,6 +68,7 @@ export const ResultItem = memo(function ResultItem({
       <button
         onClick={onToggleExpand}
         aria-expanded={isExpanded}
+        aria-controls={`result-detail-${item.id}`}
         className="w-full px-4 py-3 text-left"
       >
         <div className="flex items-start gap-3">
@@ -144,9 +171,9 @@ export const ResultItem = memo(function ResultItem({
         </div>
 
         {/* Why This Matters - Preview (shown when not expanded, for ALL items) */}
-        {!isExpanded && item.explanation && (
-          <div className="mt-1.5 text-xs text-text-secondary italic pl-[4.25rem]">
-            {item.explanation}
+        {!isExpanded && (
+          <div className="mt-1.5 text-xs text-text-secondary pl-[4.25rem]">
+            {item.explanation || generateFallbackReason(item)}
           </div>
         )}
 
@@ -189,7 +216,7 @@ export const ResultItem = memo(function ResultItem({
 
       {/* Expanded Matches */}
       {isExpanded && (
-        <div className="px-4 pb-3 border-t border-border/50 mt-2 pt-3">
+        <div id={`result-detail-${item.id}`} className="px-4 pb-3 border-t border-border/50 mt-2 pt-3">
           {/* Why This Matters - Full Display */}
           {item.explanation && (
             <div className="mb-3 p-2 bg-bg-primary/50 rounded border border-accent-gold/30">

@@ -5,6 +5,7 @@ use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::path::PathBuf;
+use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 use tauri::{AppHandle, Emitter, Listener, Manager};
 use tracing::{debug, error, info, warn};
@@ -207,6 +208,22 @@ pub struct AnalysisState {
     pub completed: bool,
     pub error: Option<String>,
     pub results: Option<Vec<SourceRelevance>>,
+    /// When analysis started (unix timestamp seconds)
+    #[serde(default)]
+    pub started_at: Option<i64>,
+    /// When analysis last completed successfully (ISO string for DB query compat)
+    #[serde(default)]
+    pub last_completed_at: Option<String>,
+}
+
+/// Maximum analysis duration in seconds before auto-timeout
+const ANALYSIS_TIMEOUT_SECS: i64 = 300;
+
+/// Shared abort flag for analysis cancellation (separate from AnalysisState to avoid mutex)
+static ANALYSIS_ABORT: Lazy<Arc<AtomicBool>> = Lazy::new(|| Arc::new(AtomicBool::new(false)));
+
+pub(crate) fn get_analysis_abort() -> &'static Arc<AtomicBool> {
+    &ANALYSIS_ABORT
 }
 
 /// LLM judgment attached to a relevance result
@@ -252,23 +269,62 @@ pub(crate) async fn embed_texts(texts: &[String]) -> Result<Vec<Vec<f32>>, Strin
     };
 
     match llm_settings.provider.as_str() {
-        "openai" => embed_texts_openai(texts, &llm_settings.api_key).await,
-        "ollama" => embed_texts_ollama(texts, &llm_settings.base_url).await,
+        "openai" => {
+            let api_key = llm_settings.api_key.clone();
+            let texts = texts.to_vec();
+            retry_with_backoff("embed_openai", 2, || {
+                let key = api_key.clone();
+                let t = texts.clone();
+                async move { embed_texts_openai(&t, &key).await }
+            })
+            .await
+        }
+        "ollama" => {
+            let base_url = llm_settings.base_url.clone();
+            let texts = texts.to_vec();
+            retry_with_backoff("embed_ollama", 2, || {
+                let url = base_url.clone();
+                let t = texts.clone();
+                async move { embed_texts_ollama(&t, &url).await }
+            })
+            .await
+        }
         "anthropic" => {
             // Anthropic doesn't have embeddings API - use dedicated OpenAI key or fallback to Ollama
             if !llm_settings.openai_api_key.is_empty() {
-                return embed_texts_openai(texts, &llm_settings.openai_api_key).await;
+                let api_key = llm_settings.openai_api_key.clone();
+                let texts = texts.to_vec();
+                return retry_with_backoff("embed_openai_anthropic_fallback", 2, || {
+                    let key = api_key.clone();
+                    let t = texts.clone();
+                    async move { embed_texts_openai(&t, &key).await }
+                })
+                .await;
             }
             // Try Ollama as fallback
             if let Some(base_url) = &llm_settings.base_url {
                 if !base_url.is_empty() {
-                    if let Ok(result) = embed_texts_ollama(texts, &Some(base_url.clone())).await {
+                    let url = Some(base_url.clone());
+                    let texts_vec = texts.to_vec();
+                    if let Ok(result) =
+                        retry_with_backoff("embed_ollama_anthropic_fallback", 2, || {
+                            let u = url.clone();
+                            let t = texts_vec.clone();
+                            async move { embed_texts_ollama(&t, &u).await }
+                        })
+                        .await
+                    {
                         return Ok(result);
                     }
                 }
             }
             // Try default Ollama
-            embed_texts_ollama(texts, &None).await
+            let texts = texts.to_vec();
+            retry_with_backoff("embed_ollama_default", 2, || {
+                let t = texts.clone();
+                async move { embed_texts_ollama(&t, &None).await }
+            })
+            .await
         }
         _ => Err(format!(
             "Unknown provider: {}. Please configure OpenAI or Ollama.",
@@ -419,6 +475,42 @@ async fn embed_texts_ollama(
             Ok(all_embeddings)
         }
     }
+}
+
+/// Retry an async operation with exponential backoff.
+/// Returns the first successful result, or the last error after max_retries.
+async fn retry_with_backoff<F, Fut, T>(
+    operation_name: &str,
+    max_retries: u32,
+    f: F,
+) -> Result<T, String>
+where
+    F: Fn() -> Fut,
+    Fut: std::future::Future<Output = Result<T, String>>,
+{
+    let mut last_error = String::new();
+    for attempt in 0..=max_retries {
+        match f().await {
+            Ok(result) => return Ok(result),
+            Err(e) => {
+                last_error = e.clone();
+                if attempt < max_retries {
+                    let delay_secs = 3u64.pow(attempt); // 1s, 3s, 9s
+                    tracing::warn!(
+                        target: "4da::retry",
+                        attempt = attempt + 1,
+                        max = max_retries + 1,
+                        delay_secs,
+                        operation = operation_name,
+                        error = %e,
+                        "Retrying after error"
+                    );
+                    tokio::time::sleep(std::time::Duration::from_secs(delay_secs)).await;
+                }
+            }
+        }
+    }
+    Err(last_error)
 }
 
 /// Cosine similarity between two vectors
@@ -718,18 +810,43 @@ pub(crate) fn get_database() -> Result<&'static Arc<Database>, String> {
 // Global Context Engine (Lazy Initialized)
 // ============================================================================
 
-static CONTEXT_ENGINE: OnceCell<Arc<ContextEngine>> = OnceCell::new();
+static CONTEXT_ENGINE: Lazy<parking_lot::RwLock<Option<Arc<ContextEngine>>>> =
+    Lazy::new(|| parking_lot::RwLock::new(None));
 
-pub(crate) fn get_context_engine() -> Result<&'static Arc<ContextEngine>, String> {
-    CONTEXT_ENGINE.get_or_try_init(|| {
-        let conn = open_db_connection()?;
+fn init_context_engine() -> Result<Arc<ContextEngine>, String> {
+    let conn = open_db_connection()?;
+    let engine = ContextEngine::new(Arc::new(parking_lot::Mutex::new(conn)))
+        .map_err(|e| format!("Failed to initialize context engine: {}", e))?;
+    info!(target: "4da::context", "Context engine initialized");
+    Ok(Arc::new(engine))
+}
 
-        let engine = ContextEngine::new(Arc::new(parking_lot::Mutex::new(conn)))
-            .map_err(|e| format!("Failed to initialize context engine: {}", e))?;
+pub(crate) fn get_context_engine() -> Result<Arc<ContextEngine>, String> {
+    // Fast path: read lock
+    {
+        let guard = CONTEXT_ENGINE.read();
+        if let Some(ref engine) = *guard {
+            return Ok(Arc::clone(engine));
+        }
+    }
+    // Slow path: write lock to initialize
+    let mut guard = CONTEXT_ENGINE.write();
+    if let Some(ref engine) = *guard {
+        return Ok(Arc::clone(engine));
+    }
+    let engine = init_context_engine()?;
+    *guard = Some(Arc::clone(&engine));
+    Ok(engine)
+}
 
-        info!(target: "4da::context", "Context engine ready");
-        Ok(Arc::new(engine))
-    })
+/// Invalidate the context engine so it reinitializes on next access.
+/// Call after settings changes that affect context (interests, exclusions, context dirs).
+pub(crate) fn invalidate_context_engine() {
+    let mut guard = CONTEXT_ENGINE.write();
+    if guard.is_some() {
+        *guard = None;
+        info!(target: "4da::context", "Context engine invalidated, will reinitialize on next access");
+    }
 }
 
 // ============================================================================
@@ -828,6 +945,8 @@ pub(crate) fn get_analysis_state() -> &'static Mutex<AnalysisState> {
             completed: false,
             error: None,
             results: None,
+            started_at: None,
+            last_completed_at: None,
         })
     })
 }
@@ -2192,6 +2311,7 @@ pub fn run() {
             analysis::run_deep_initial_scan,
             analysis::run_cached_analysis,
             analysis::get_analysis_status,
+            analysis::cancel_analysis,
             // Settings commands
             settings_commands::get_settings,
             settings_commands::set_llm_provider,
@@ -2199,6 +2319,7 @@ pub fn run() {
             settings_commands::set_rerank_config,
             settings_commands::test_llm_connection,
             settings_commands::check_ollama_status,
+            settings_commands::pull_ollama_model,
             settings_commands::get_usage_stats,
             // Monitoring commands (Phase 3)
             monitoring_commands::get_monitoring_status,
@@ -2306,9 +2427,6 @@ pub fn run() {
             job_queue_commands::cleanup_extraction_jobs,
             // Void Engine
             void_commands::get_void_signal,
-            void_commands::void_get_universe,
-            void_commands::void_get_particle_detail,
-            void_commands::void_get_neighbors,
             // Signal Classifier
             analysis::get_actionable_signals,
             // Product Hardening (source management, health, maintenance, export)

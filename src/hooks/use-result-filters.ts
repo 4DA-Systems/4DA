@@ -99,22 +99,32 @@ export const useResultFilters = (
     const itemsToDismiss = filteredResults.filter(
       item => item.top_score < threshold && !feedbackGiven[item.id],
     );
-    for (const item of itemsToDismiss) {
-      await recordInteraction(item.id, 'dismiss', item);
-    }
-    setSettingsStatus(`Dismissed ${itemsToDismiss.length} items below ${Math.round(threshold * 100)}%`);
-    setTimeout(() => setSettingsStatus(''), 3000);
+    const results = await Promise.allSettled(
+      itemsToDismiss.map(item => recordInteraction(item.id, 'dismiss', item)),
+    );
+    const failed = results.filter(r => r.status === 'rejected').length;
+    const succeeded = results.length - failed;
+    const msg = failed > 0
+      ? `Dismissed ${succeeded} of ${results.length}. ${failed} failed.`
+      : `Dismissed ${succeeded} items below ${Math.round(threshold * 100)}%`;
+    setSettingsStatus(msg);
+    setTimeout(() => setSettingsStatus(''), 4000);
   }, [filteredResults, feedbackGiven, recordInteraction, setSettingsStatus]);
 
   const saveAllAbove = useCallback(async (threshold: number) => {
     const itemsToSave = filteredResults.filter(
       item => item.top_score >= threshold && !feedbackGiven[item.id],
     );
-    for (const item of itemsToSave) {
-      await recordInteraction(item.id, 'save', item);
-    }
-    setSettingsStatus(`Saved ${itemsToSave.length} items above ${Math.round(threshold * 100)}%`);
-    setTimeout(() => setSettingsStatus(''), 3000);
+    const results = await Promise.allSettled(
+      itemsToSave.map(item => recordInteraction(item.id, 'save', item)),
+    );
+    const failed = results.filter(r => r.status === 'rejected').length;
+    const succeeded = results.length - failed;
+    const msg = failed > 0
+      ? `Saved ${succeeded} of ${results.length}. ${failed} failed.`
+      : `Saved ${succeeded} items above ${Math.round(threshold * 100)}%`;
+    setSettingsStatus(msg);
+    setTimeout(() => setSettingsStatus(''), 4000);
   }, [filteredResults, feedbackGiven, recordInteraction, setSettingsStatus]);
 
   return {

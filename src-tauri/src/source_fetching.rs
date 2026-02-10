@@ -279,12 +279,24 @@ pub(crate) async fn fetch_all_sources(
             }
         };
 
-        // Batch upsert: collect non-fallback items for transaction
+        // Batch upsert: separate successful and failed embeddings
         let mut items_to_insert = Vec::new();
-        for ((item, _), embedding) in new_items_to_embed.into_iter().zip(embeddings.into_iter()) {
-            // Skip zero vectors (embedding fallback)
+        let mut pending_items = Vec::new();
+        for ((item, embed_text), embedding) in
+            new_items_to_embed.into_iter().zip(embeddings.into_iter())
+        {
             let is_fallback = embedding.iter().all(|&v| v == 0.0);
-            if !is_fallback {
+            if is_fallback {
+                // Store as pending for re-embedding on next analysis
+                pending_items.push((
+                    item.source_type.clone(),
+                    item.source_id.clone(),
+                    item.url.clone(),
+                    item.title.clone(),
+                    item.content.clone(),
+                    embed_text,
+                ));
+            } else {
                 items_to_insert.push((
                     item.source_type.clone(),
                     item.source_id.clone(),
@@ -297,9 +309,15 @@ pub(crate) async fn fetch_all_sources(
             all_items.push((item, embedding));
         }
 
-        // Batch insert in single transaction
+        // Batch insert successful embeddings
         if !items_to_insert.is_empty() {
             db.batch_upsert_source_items(&items_to_insert).ok();
+        }
+
+        // Store pending items for retry on next analysis
+        if !pending_items.is_empty() {
+            info!(target: "4da::sources", count = pending_items.len(), "Storing pending items for embedding retry");
+            db.batch_upsert_pending_source_items(&pending_items).ok();
         }
     }
 

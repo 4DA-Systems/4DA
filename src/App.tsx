@@ -1,4 +1,4 @@
-import { useState, useEffect, Component, ErrorInfo, ReactNode } from 'react';
+import { useState, useEffect, useCallback, useMemo, Component, ErrorInfo, ReactNode } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import './App.css';
 import { SplashScreen } from './components/SplashScreen';
@@ -23,6 +23,12 @@ import {
   useToasts,
 } from './hooks';
 import { getStageLabel } from './utils/score';
+
+const SOURCE_LABELS: Record<string, string> = {
+  hackernews: 'HN', arxiv: 'arXiv', reddit: 'Reddit',
+  github: 'GitHub', rss: 'RSS', youtube: 'YouTube',
+  twitter: 'Twitter', producthunt: 'PH',
+};
 
 // Error Boundary to catch rendering errors
 interface ErrorBoundaryState {
@@ -91,36 +97,27 @@ function App() {
   // Local UI state
   const [showSplash, setShowSplash] = useState(true);
   const [showSettings, setShowSettings] = useState(false);
+  const [renderLimit, setRenderLimit] = useState(50);
   // Toast notification system
   const { toasts, addToast, removeToast } = useToasts();
   // All application state via hooks
   const {
     settings,
     settingsForm,
-    setSettingsForm,
-    settingsStatus,
     setSettingsStatus,
     showOnboarding,
     setShowOnboarding,
     loadSettings,
-    saveSettings,
-    testConnection,
-    ollamaStatus,
-    ollamaModels,
     checkOllamaStatus,
   } = useSettings();
 
   const {
     monitoring,
-    monitoringInterval,
-    setMonitoringInterval,
-    toggleMonitoring,
-    updateMonitoringInterval,
-    testNotification,
   } = useMonitoring();
 
   const {
     state,
+    setState,
     expandedItem,
     setExpandedItem,
     isBrowserMode,
@@ -130,57 +127,31 @@ function App() {
     startAnalysis,
   } = useAnalysis(addToast);
 
+  // Immediate score adjustment for feedback (save boosts, dismiss sinks)
+  const handleScoreAdjust = useCallback((itemId: number, delta: number) => {
+    setState(s => ({
+      ...s,
+      relevanceResults: s.relevanceResults
+        .map(r => r.id === itemId ? { ...r, top_score: Math.max(0, Math.min(1, r.top_score + delta)) } : r)
+        .sort((a, b) => b.top_score - a.top_score),
+    }));
+  }, [setState]);
+
   const {
-    scanDirectories,
-    newScanDir,
-    setNewScanDir,
-    isScanning,
     discoveredContext,
     loadDiscoveredContext,
-    runAutoDiscovery,
-    runFullScan,
-    addScanDirectory,
-    removeScanDirectory,
   } = useContextDiscovery(setSettingsStatus);
 
   const {
     feedbackGiven,
-    learnedAffinities,
-    antiTopics,
-    loadLearnedBehavior,
     recordInteraction,
-  } = useFeedback(setSettingsStatus);
+  } = useFeedback(setSettingsStatus, handleScoreAdjust);
+
+  // System health hook - data loaded on mount, consumed by SettingsModal via Zustand
+  useSystemHealth(setSettingsStatus);
 
   const {
-    systemHealth,
-    similarTopicQuery,
-    setSimilarTopicQuery,
-    similarTopicResults,
-    loadSystemHealth,
-    runAnomalyDetection,
-    resolveAnomaly,
-    findSimilarTopics,
-    saveWatcherState,
-  } = useSystemHealth(setSettingsStatus);
-
-  const {
-    userContext,
-    newInterest,
-    setNewInterest,
-    newExclusion,
-    setNewExclusion,
-    newTechStack,
-    setNewTechStack,
-    newRole,
-    setNewRole,
     loadUserContext,
-    addInterest,
-    removeInterest,
-    addExclusion,
-    removeExclusion,
-    addTechStack,
-    removeTechStack,
-    updateRole,
   } = useUserContext(setSettingsStatus);
 
   const {
@@ -203,6 +174,16 @@ function App() {
   // eslint-disable-next-line react-hooks/exhaustive-deps -- only re-check when provider changes, not on every baseUrl keystroke
   }, [settingsForm.provider, checkOllamaStatus]);
 
+  const summaryBadges = useMemo(() => {
+    if (!state.analysisComplete || state.loading) return null;
+    let relevantCount = 0, topCount = 0;
+    for (const r of state.relevanceResults) {
+      if (r.relevant) relevantCount++;
+      if (r.top_score >= 0.6) topCount++;
+    }
+    return { relevantCount, topCount, total: state.relevanceResults.length };
+  }, [state.analysisComplete, state.loading, state.relevanceResults]);
+
   // AI Briefing (extracted hook)
   const {
     aiBriefing,
@@ -212,6 +193,9 @@ function App() {
     setAutoBriefingEnabled,
     generateBriefing,
   } = useBriefing(state.relevanceResults, state.analysisComplete);
+
+  // Reset render limit when new results come in
+  useEffect(() => { setRenderLimit(50); }, [state.relevanceResults]);
 
   // Auto-analyze on first load if monitoring enabled
   useEffect(() => {
@@ -297,16 +281,17 @@ function App() {
           </div>
         </header>
 
-        {/* Browser Mode Warning */}
+        {/* Browser Mode Notice */}
         {isBrowserMode && (
-          <div className="mb-6 px-4 py-4 bg-red-900/20 border border-red-500/30 rounded-lg flex items-center gap-4">
-            <div className="w-10 h-10 bg-red-500/20 rounded-lg flex items-center justify-center flex-shrink-0">
-              <span className="text-red-400">⚠️</span>
-            </div>
-            <div className="flex-1">
-              <p className="text-sm font-medium text-red-300">Running in Browser Mode</p>
-              <p className="text-xs text-gray-500 mt-1">Open 4DA through the desktop app for full functionality.</p>
-            </div>
+          <div className="mb-6 px-4 py-4 bg-[#141414] border border-[#2A2A2A] rounded-lg">
+            <p className="text-sm font-medium text-white mb-2">Desktop App Required</p>
+            <p className="text-xs text-gray-400">
+              4DA runs as a desktop app to access your local files, monitor sources,
+              and keep everything private on your machine.
+            </p>
+            <p className="text-xs text-gray-500 mt-2">
+              Run <code className="text-orange-400">npm run tauri dev</code> or launch the installed app.
+            </p>
           </div>
         )}
 
@@ -348,28 +333,21 @@ function App() {
             )}
 
             {/* Summary Badges */}
-            {state.analysisComplete && !state.loading && (() => {
-              let relevantCount = 0, topCount = 0;
-              for (const r of state.relevanceResults) {
-                if (r.relevant) relevantCount++;
-                if (r.top_score >= 0.6) topCount++;
-              }
-              return (
-                <div className="flex items-center gap-1.5">
-                  <span className="px-2 py-1 text-[11px] bg-[#1F1F1F] text-gray-400 rounded-lg font-mono">
-                    {state.relevanceResults.length}
+            {summaryBadges && (
+              <div className="flex items-center gap-1.5">
+                <span className="px-2 py-1 text-[11px] bg-[#1F1F1F] text-gray-400 rounded-lg font-mono">
+                  {summaryBadges.total}
+                </span>
+                <span className="px-2 py-1 text-[11px] bg-green-500/10 text-green-400 rounded-lg font-mono">
+                  {summaryBadges.relevantCount} rel
+                </span>
+                {summaryBadges.topCount > 0 && (
+                  <span className="px-2 py-1 text-[11px] bg-orange-500/10 text-orange-400 rounded-lg font-mono">
+                    {summaryBadges.topCount} top
                   </span>
-                  <span className="px-2 py-1 text-[11px] bg-green-500/10 text-green-400 rounded-lg font-mono">
-                    {relevantCount} rel
-                  </span>
-                  {topCount > 0 && (
-                    <span className="px-2 py-1 text-[11px] bg-orange-500/10 text-orange-400 rounded-lg font-mono">
-                      {topCount} top
-                    </span>
-                  )}
-                </div>
-              );
-            })()}
+                )}
+              </div>
+            )}
 
             {/* Actions */}
             <div className="flex items-center gap-2">
@@ -380,6 +358,14 @@ function App() {
               >
                 {state.loading ? 'Analyzing...' : '🔍 Analyze'}
               </button>
+              {state.loading && (
+                <button
+                  onClick={() => invoke('cancel_analysis')}
+                  className="px-3 py-2.5 text-sm bg-[#1F1F1F] text-red-400 border border-red-500/30 font-medium rounded-lg hover:bg-red-500/10 transition-all"
+                >
+                  Cancel
+                </button>
+              )}
               <button
                 onClick={generateBriefing}
                 disabled={aiBriefing.loading || state.relevanceResults.length === 0}
@@ -679,31 +665,23 @@ function App() {
                   {/* Source Filters - dynamic based on results */}
                   <div className="flex items-center gap-2 bg-[#1F1F1F] px-3 py-1.5 rounded-lg flex-wrap" role="group" aria-label="Source filters">
                     <span className="text-xs text-gray-500">Sources:</span>
-                    {(() => {
-                      const sourceLabels: Record<string, string> = {
-                        hackernews: 'HN', arxiv: 'arXiv', reddit: 'Reddit',
-                        github: 'GitHub', rss: 'RSS', youtube: 'YouTube',
-                        twitter: 'Twitter', producthunt: 'PH',
-                      };
-                      const presentSources = [...new Set(state.relevanceResults.map(r => r.source_type || 'hackernews'))];
-                      return presentSources
-                        .sort((a, b) => (sourceLabels[a] || a).localeCompare(sourceLabels[b] || b))
-                        .map(id => (
+                    {[...new Set(state.relevanceResults.map(r => r.source_type || 'hackernews'))]
+                      .sort((a, b) => (SOURCE_LABELS[a] || a).localeCompare(SOURCE_LABELS[b] || b))
+                      .map(id => (
                         <button
                           key={id}
                           onClick={() => toggleSourceFilter(id)}
                           aria-pressed={sourceFilters.has(id)}
-                          aria-label={`Filter ${sourceLabels[id] || id} source`}
+                          aria-label={`Filter ${SOURCE_LABELS[id] || id} source`}
                           className={`px-2 py-1 text-xs rounded-lg transition-all ${
                             sourceFilters.has(id)
                               ? 'bg-orange-500/20 text-orange-400 border border-orange-500/30'
                               : 'text-gray-500 hover:text-gray-300'
                           }`}
                         >
-                          {sourceLabels[id] || id}
+                          {SOURCE_LABELS[id] || id}
                         </button>
-                      ));
-                    })()}
+                      ))}
                   </div>
 
                   {/* Sort */}
@@ -804,18 +782,28 @@ function App() {
                   </p>
                 </div>
               ) : (
-                <ul className="space-y-3">
-                  {filteredResults.map((item) => (
-                    <ResultItem
-                      key={item.id}
-                      item={item}
-                      isExpanded={expandedItem === item.id}
-                      onToggleExpand={() => setExpandedItem(expandedItem === item.id ? null : item.id)}
-                      feedbackGiven={feedbackGiven}
-                      onRecordInteraction={recordInteraction}
-                    />
-                  ))}
-                </ul>
+                <>
+                  <ul className="space-y-3">
+                    {filteredResults.slice(0, renderLimit).map((item) => (
+                      <ResultItem
+                        key={item.id}
+                        item={item}
+                        isExpanded={expandedItem === item.id}
+                        onToggleExpand={() => setExpandedItem(expandedItem === item.id ? null : item.id)}
+                        feedbackGiven={feedbackGiven}
+                        onRecordInteraction={recordInteraction}
+                      />
+                    ))}
+                  </ul>
+                  {filteredResults.length > renderLimit && (
+                    <button
+                      onClick={() => setRenderLimit(prev => prev + 50)}
+                      className="w-full mt-3 py-2 text-sm text-orange-400 bg-[#1A1A1A] border border-[#2A2A2A] rounded-lg hover:bg-[#1F1F1F] transition-colors"
+                    >
+                      Show more ({filteredResults.length - renderLimit} remaining)
+                    </button>
+                  )}
+                </>
               )}
             </div>
           </section>
@@ -840,63 +828,10 @@ function App() {
         {/* Toast Notifications */}
         <ToastContainer toasts={toasts} onDismiss={removeToast} />
 
-        {/* Settings Modal */}
+        {/* Settings Modal - now self-sufficient via Zustand store */}
         {showSettings && (
           <SettingsModal
             onClose={() => setShowSettings(false)}
-            settings={settings}
-            settingsForm={settingsForm}
-            setSettingsForm={setSettingsForm}
-            settingsStatus={settingsStatus}
-            setSettingsStatus={setSettingsStatus}
-            saveSettings={saveSettings}
-            testConnection={testConnection}
-            ollamaStatus={ollamaStatus}
-            ollamaModels={ollamaModels}
-            checkOllamaStatus={checkOllamaStatus}
-            monitoring={monitoring}
-            monitoringInterval={monitoringInterval}
-            setMonitoringInterval={setMonitoringInterval}
-            toggleMonitoring={toggleMonitoring}
-            updateMonitoringInterval={updateMonitoringInterval}
-            testNotification={testNotification}
-            scanDirectories={scanDirectories}
-            newScanDir={newScanDir}
-            setNewScanDir={setNewScanDir}
-            isScanning={isScanning}
-            discoveredContext={discoveredContext}
-            runAutoDiscovery={runAutoDiscovery}
-            runFullScan={runFullScan}
-            addScanDirectory={addScanDirectory}
-            removeScanDirectory={removeScanDirectory}
-            learnedAffinities={learnedAffinities}
-            antiTopics={antiTopics}
-            loadLearnedBehavior={loadLearnedBehavior}
-            systemHealth={systemHealth}
-            similarTopicQuery={similarTopicQuery}
-            setSimilarTopicQuery={setSimilarTopicQuery}
-            similarTopicResults={similarTopicResults}
-            runAnomalyDetection={runAnomalyDetection}
-            resolveAnomaly={resolveAnomaly}
-            findSimilarTopics={findSimilarTopics}
-            saveWatcherState={saveWatcherState}
-            loadSystemHealth={loadSystemHealth}
-            userContext={userContext}
-            newInterest={newInterest}
-            setNewInterest={setNewInterest}
-            newExclusion={newExclusion}
-            setNewExclusion={setNewExclusion}
-            newTechStack={newTechStack}
-            setNewTechStack={setNewTechStack}
-            newRole={newRole}
-            setNewRole={setNewRole}
-            addInterest={addInterest}
-            removeInterest={removeInterest}
-            addExclusion={addExclusion}
-            removeExclusion={removeExclusion}
-            addTechStack={addTechStack}
-            removeTechStack={removeTechStack}
-            updateRole={updateRole}
           />
         )}
       </div>

@@ -8,7 +8,9 @@ use tracing::{debug, info, warn};
 use crate::context_engine::{InteractionType, InterestSource};
 use crate::llm::RelevanceJudge;
 use crate::settings::{LLMProvider, RerankConfig};
-use crate::{embed_texts, get_context_engine, get_settings_manager};
+use tauri::{AppHandle, Emitter};
+
+use crate::{embed_texts, get_context_engine, get_settings_manager, invalidate_context_engine};
 
 // ============================================================================
 // Settings Commands
@@ -199,13 +201,18 @@ pub async fn check_ollama_status(base_url: Option<String>) -> Result<serde_json:
                 _ => vec![],
             };
 
-            info!(target: "4da::ollama", version = %version, models = ?models, "Ollama detected");
+            let has_embedding_model = models.iter().any(|m| m.starts_with("nomic-embed-text"));
+            let has_llm_model = models.iter().any(|m| !m.starts_with("nomic-embed-text"));
+
+            info!(target: "4da::ollama", version = %version, models = ?models, has_embedding_model, has_llm_model, "Ollama detected");
 
             Ok(serde_json::json!({
                 "running": true,
                 "version": version,
                 "models": models,
-                "base_url": url
+                "base_url": url,
+                "has_embedding_model": has_embedding_model,
+                "has_llm_model": has_llm_model
             }))
         }
         Ok(response) => {
@@ -224,6 +231,86 @@ pub async fn check_ollama_status(base_url: Option<String>) -> Result<serde_json:
             }))
         }
     }
+}
+
+/// Pull an Ollama model with progress events
+#[tauri::command]
+pub async fn pull_ollama_model(
+    app: AppHandle,
+    model: String,
+    base_url: Option<String>,
+) -> Result<serde_json::Value, String> {
+    let url = base_url.unwrap_or_else(|| "http://localhost:11434".to_string());
+    let pull_url = format!("{}/api/pull", url);
+
+    info!(target: "4da::ollama", model = %model, "Starting model pull");
+
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(600)) // 10 min timeout for large models
+        .build()
+        .map_err(|e| format!("Failed to create HTTP client: {}", e))?;
+
+    let response = client
+        .post(&pull_url)
+        .json(&serde_json::json!({ "name": model, "stream": true }))
+        .send()
+        .await
+        .map_err(|e| format!("Failed to start pull: {}", e))?;
+
+    if !response.status().is_success() {
+        let status = response.status();
+        let body = response.text().await.unwrap_or_default();
+        return Err(format!("Ollama pull failed ({}): {}", status, body));
+    }
+
+    // Read streaming response line by line
+    use futures::StreamExt;
+    let mut stream = response.bytes_stream();
+    let mut buffer = Vec::new();
+
+    while let Some(chunk) = stream.next().await {
+        let chunk = chunk.map_err(|e| format!("Stream error: {}", e))?;
+        buffer.extend_from_slice(&chunk);
+
+        // Process complete lines from buffer
+        while let Some(newline_pos) = buffer.iter().position(|&b| b == b'\n') {
+            let line: Vec<u8> = buffer.drain(..=newline_pos).collect();
+            let line_str = String::from_utf8_lossy(&line);
+            let trimmed = line_str.trim();
+            if trimmed.is_empty() {
+                continue;
+            }
+
+            if let Ok(progress) = serde_json::from_str::<serde_json::Value>(trimmed) {
+                let status = progress["status"].as_str().unwrap_or("").to_string();
+                let total = progress["total"].as_u64().unwrap_or(0);
+                let completed = progress["completed"].as_u64().unwrap_or(0);
+                let percent = if total > 0 {
+                    (completed as f64 / total as f64 * 100.0) as u32
+                } else {
+                    0
+                };
+                let done = status == "success";
+
+                let _ = app.emit(
+                    "ollama-pull-progress",
+                    serde_json::json!({
+                        "model": model,
+                        "status": status,
+                        "percent": percent,
+                        "done": done
+                    }),
+                );
+            }
+        }
+    }
+
+    info!(target: "4da::ollama", model = %model, "Model pull complete");
+
+    Ok(serde_json::json!({
+        "success": true,
+        "model": model
+    }))
 }
 
 /// Get usage statistics
@@ -375,6 +462,7 @@ pub async fn add_interest(topic: String, weight: Option<f32>) -> Result<serde_js
         .map_err(|e| format!("Failed to add interest: {}", e))?;
 
     info!(target: "4da::context", topic = %topic, weight = weight, has_embedding = emb.is_some(), "Added interest");
+    invalidate_context_engine();
 
     Ok(serde_json::json!({
         "success": true,
@@ -394,6 +482,7 @@ pub async fn remove_interest(topic: String) -> Result<serde_json::Value, String>
         .map_err(|e| format!("Failed to remove interest: {}", e))?;
 
     info!(target: "4da::context", topic = %topic, "Removed interest");
+    invalidate_context_engine();
 
     Ok(serde_json::json!({
         "success": true
@@ -409,6 +498,7 @@ pub async fn add_exclusion(topic: String) -> Result<serde_json::Value, String> {
         .map_err(|e| format!("Failed to add exclusion: {}", e))?;
 
     info!(target: "4da::context", topic = %topic, "Added exclusion");
+    invalidate_context_engine();
 
     Ok(serde_json::json!({
         "success": true,
@@ -425,6 +515,7 @@ pub async fn remove_exclusion(topic: String) -> Result<serde_json::Value, String
         .map_err(|e| format!("Failed to remove exclusion: {}", e))?;
 
     info!(target: "4da::context", topic = %topic, "Removed exclusion");
+    invalidate_context_engine();
 
     Ok(serde_json::json!({
         "success": true

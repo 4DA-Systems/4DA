@@ -30,6 +30,7 @@ export function useAnalysis(addToast?: (type: ToastType, message: string) => voi
     let unlistenSourceFetched: UnlistenFn | null = null;
     let unlistenNetworkOffline: UnlistenFn | null = null;
     let unlistenEmbeddingMode: UnlistenFn | null = null;
+    let unlistenBackgroundResults: UnlistenFn | null = null;
 
     const setupListeners = async () => {
       unlistenProgress = await listen<AnalysisProgress>('analysis-progress', (event) => {
@@ -106,6 +107,27 @@ export function useAnalysis(addToast?: (type: ToastType, message: string) => voi
           addToast?.('info', 'Running in keyword-only mode. Add API key for better results.');
         }
       });
+
+      // Background results from scheduled monitoring (silent merge)
+      unlistenBackgroundResults = await listen<SourceRelevance[]>('background-results', (event) => {
+        const newItems = event.payload;
+        if (newItems.length === 0) return;
+        const relevantNew = newItems.filter((r) => r.relevant).length;
+        setState((s) => {
+          const existingIds = new Set(newItems.map((n) => n.id));
+          const kept = s.relevanceResults.filter((r) => !existingIds.has(r.id));
+          const merged = [...kept, ...newItems].sort((a, b) => b.top_score - a.top_score);
+          return {
+            ...s,
+            relevanceResults: merged,
+            analysisComplete: true,
+            lastAnalyzedAt: new Date(),
+          };
+        });
+        if (relevantNew > 0) {
+          addToast?.('info', `${relevantNew} new relevant items found`);
+        }
+      });
     };
 
     setupListeners();
@@ -118,6 +140,7 @@ export function useAnalysis(addToast?: (type: ToastType, message: string) => voi
       if (unlistenSourceFetched) unlistenSourceFetched();
       if (unlistenNetworkOffline) unlistenNetworkOffline();
       if (unlistenEmbeddingMode) unlistenEmbeddingMode();
+      if (unlistenBackgroundResults) unlistenBackgroundResults();
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps -- addToast is stable from useToasts
   }, []);

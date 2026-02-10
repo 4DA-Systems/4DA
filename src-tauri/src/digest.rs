@@ -635,7 +635,7 @@ impl DigestManager {
         let last = self
             .config
             .last_sent
-            .unwrap_or(DateTime::from_timestamp(0, 0).unwrap());
+            .unwrap_or_else(|| DateTime::from_timestamp(0, 0).unwrap_or(Utc::now()));
 
         match self.config.frequency.as_str() {
             "realtime" => true,

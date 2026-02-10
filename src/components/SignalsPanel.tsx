@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, memo } from 'react';
 import type { SourceRelevance } from '../types';
 
 // ============================================================================
@@ -54,7 +54,7 @@ const SIGNAL_LABELS: Record<string, string> = {
 // Component
 // ============================================================================
 
-export const SignalsPanel = ({ results }: SignalsPanelProps) => {
+export const SignalsPanel = memo(function SignalsPanel({ results }: SignalsPanelProps) {
   const [expanded, setExpanded] = useState(true);
   const [typeFilter, setTypeFilter] = useState<string | null>(null);
   const [priorityFilter, setPriorityFilter] = useState<string | null>(null);
@@ -95,7 +95,11 @@ export const SignalsPanel = ({ results }: SignalsPanelProps) => {
     return { signals, sorted, filtered, typeCounts, priorityCounts };
   }, [results, typeFilter, priorityFilter]);
 
-  if (signals.length === 0) return null;
+  if (signals.length === 0) return (
+    <div className="mb-6 bg-[#141414] rounded-lg border border-[#2A2A2A] px-5 py-4">
+      <p className="text-[#666666] text-sm text-center">No actionable signals in this batch</p>
+    </div>
+  );
 
   const criticalCount = priorityCounts['critical'] || 0;
   const highCount = priorityCounts['high'] || 0;
@@ -213,7 +217,7 @@ export const SignalsPanel = ({ results }: SignalsPanelProps) => {
       )}
     </div>
   );
-};
+});
 
 // ============================================================================
 // Signal Row

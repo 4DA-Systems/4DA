@@ -1,7 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { invoke } from '@tauri-apps/api/core';
+import { listen } from '@tauri-apps/api/event';
 
-import type { Step, ApiKeyState, OllamaStatus, ScanProgress } from './onboarding/types';
+import type { Step, ApiKeyState, OllamaStatus, ScanProgress, PullProgress } from './onboarding/types';
 import { WelcomeStep } from './onboarding/WelcomeStep';
 import { ApiKeysStep } from './onboarding/ApiKeysStep';
 import { ContextStep } from './onboarding/ContextStep';
@@ -46,6 +47,8 @@ export function Onboarding({ onComplete }: OnboardingProps) {
   const [isAnimating, setIsAnimating] = useState(true);
   const [isScanning, setIsScanning] = useState(false);
   const [scanProgress, setScanProgress] = useState<ScanProgress | null>(null);
+  const [pullingModels, setPullingModels] = useState(false);
+  const [pullProgress, setPullProgress] = useState<Record<string, PullProgress>>({});
 
   const currentIndex = steps.indexOf(step);
 
@@ -81,6 +84,63 @@ export function Onboarding({ onComplete }: OnboardingProps) {
     if (prev) setStep(prev);
   };
 
+  const pullMissingModels = useCallback(async (status: OllamaStatus) => {
+    if (pullingModels) return;
+    const needsEmbedding = !status.has_embedding_model;
+    const needsLLM = !status.has_llm_model;
+    if (!needsEmbedding && !needsLLM) return;
+
+    setPullingModels(true);
+    const models: string[] = [];
+    if (needsEmbedding) models.push('nomic-embed-text');
+    if (needsLLM) models.push('llama3.2');
+
+    // Initialize progress for all models
+    const initial: Record<string, PullProgress> = {};
+    for (const m of models) initial[m] = { model: m, status: 'waiting', percent: 0, done: false };
+    setPullProgress(initial);
+
+    // Listen for progress events
+    const unlisten = await listen<PullProgress>('ollama-pull-progress', (event) => {
+      setPullProgress((prev) => ({
+        ...prev,
+        [event.payload.model]: event.payload,
+      }));
+    });
+
+    try {
+      // Pull sequentially (embedding first - smaller & always needed)
+      for (const model of models) {
+        setPullProgress((prev) => ({
+          ...prev,
+          [model]: { model, status: 'downloading', percent: 0, done: false },
+        }));
+        await invoke('pull_ollama_model', {
+          model,
+          baseUrl: status.base_url || null,
+        });
+        setPullProgress((prev) => ({
+          ...prev,
+          [model]: { model, status: 'success', percent: 100, done: true },
+        }));
+      }
+
+      // Re-check Ollama status to refresh model list
+      const refreshed = await invoke<OllamaStatus>('check_ollama_status', { baseUrl: null });
+      setOllamaStatus(refreshed);
+      if (refreshed.models.length > 0) {
+        // Select the first LLM model (not the embedding model)
+        const llmModel = refreshed.models.find((m) => !m.startsWith('nomic-embed-text'));
+        setSelectedOllamaModel(llmModel || refreshed.models[0]);
+      }
+    } catch (e) {
+      setError(`Model download failed: ${e}`);
+    } finally {
+      unlisten();
+      setPullingModels(false);
+    }
+  }, [pullingModels]);
+
   const checkOllamaStatus = async () => {
     setIsCheckingOllama(true);
     setError(null);
@@ -88,7 +148,12 @@ export function Onboarding({ onComplete }: OnboardingProps) {
       const status = await invoke<OllamaStatus>('check_ollama_status', { baseUrl: null });
       setOllamaStatus(status);
       if (status.running && status.models.length > 0) {
-        setSelectedOllamaModel(status.models[0]);
+        const llmModel = status.models.find((m) => !m.startsWith('nomic-embed-text'));
+        setSelectedOllamaModel(llmModel || status.models[0]);
+      }
+      // Auto-pull missing models when Ollama is running
+      if (status.running && (!status.has_embedding_model || !status.has_llm_model) && apiKeys.provider === 'ollama') {
+        pullMissingModels(status);
       }
     } catch {
       setOllamaStatus({ running: false, version: null, models: [], base_url: 'http://localhost:11434' });
@@ -105,9 +170,14 @@ export function Onboarding({ onComplete }: OnboardingProps) {
       const provider = apiKeys.provider;
       const apiKey = provider === 'anthropic' ? apiKeys.anthropic :
                      provider === 'openai' ? apiKeys.openai : '';
+      const ollamaModel = selectedOllamaModel || ollamaStatus?.models?.find((m) => !m.startsWith('nomic-embed-text')) || ollamaStatus?.models?.[0];
+      if (provider === 'ollama' && !ollamaModel) {
+        setTestResult({ success: false, message: 'No models available. Wait for model download to complete.' });
+        return;
+      }
       const model = provider === 'anthropic' ? 'claude-3-haiku-20240307' :
                     provider === 'openai' ? 'gpt-4o-mini' :
-                    (selectedOllamaModel || ollamaStatus?.models[0] || 'llama3.2');
+                    (ollamaModel || 'llama3.2');
       const baseUrl = provider === 'ollama' ? (ollamaStatus?.base_url || 'http://localhost:11434') : null;
       const openaiApiKey = provider !== 'openai' ? apiKeys.openai : null;
 
@@ -140,9 +210,14 @@ export function Onboarding({ onComplete }: OnboardingProps) {
       const provider = apiKeys.provider;
       const apiKey = provider === 'anthropic' ? apiKeys.anthropic :
                      provider === 'openai' ? apiKeys.openai : '';
+      const ollamaModel = selectedOllamaModel || ollamaStatus?.models?.find((m) => !m.startsWith('nomic-embed-text')) || ollamaStatus?.models?.[0];
+      if (provider === 'ollama' && !ollamaModel) {
+        setError('No Ollama models available. Please wait for model download to finish.');
+        return;
+      }
       const model = provider === 'anthropic' ? 'claude-3-haiku-20240307' :
                     provider === 'openai' ? 'gpt-4o-mini' :
-                    (selectedOllamaModel || ollamaStatus?.models[0] || 'llama3.2');
+                    (ollamaModel || 'llama3.2');
       const baseUrl = provider === 'ollama' ? (ollamaStatus?.base_url || 'http://localhost:11434') : null;
       const openaiApiKey = provider !== 'openai' ? apiKeys.openai : null;
 
@@ -343,6 +418,8 @@ export function Onboarding({ onComplete }: OnboardingProps) {
             onSave={saveApiKeys}
             onSkip={skipApiSetup}
             onBack={prevStep}
+            pullingModels={pullingModels}
+            pullProgress={pullProgress}
           />
         )}
 

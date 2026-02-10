@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import type { ApiKeyState, OllamaStatus } from './types';
+import type { ApiKeyState, OllamaStatus, PullProgress } from './types';
 
 interface ApiKeysStepProps {
   isAnimating: boolean;
@@ -19,6 +19,8 @@ interface ApiKeysStepProps {
   onSave: () => void;
   onSkip: () => void;
   onBack: () => void;
+  pullingModels: boolean;
+  pullProgress: Record<string, PullProgress>;
 }
 
 export function ApiKeysStep({
@@ -37,6 +39,8 @@ export function ApiKeysStep({
   onSave,
   onSkip,
   onBack,
+  pullingModels,
+  pullProgress,
 }: ApiKeysStepProps) {
   // Auto-detect Ollama on mount
   useEffect(() => {
@@ -53,12 +57,54 @@ export function ApiKeysStep({
       </p>
 
       <div className="space-y-4 mb-6">
-        {/* Ollama detected banner */}
+        {/* Ollama status banner */}
         {ollamaStatus?.running && !apiKeys.openai && (
-          <div className="p-3 bg-green-900/20 border border-green-500/30 rounded-lg text-sm text-green-300 flex items-center gap-2">
-            <span className="text-green-500">&#x2713;</span>
-            Ollama detected! You can proceed without API keys using local models.
-          </div>
+          <>
+            {pullingModels ? (
+              <div className="p-4 bg-[#141414] border border-orange-500/30 rounded-lg space-y-3">
+                <div className="flex items-center gap-2 text-sm text-orange-300">
+                  <div className="w-4 h-4 border-2 border-orange-500 border-t-transparent rounded-full animate-spin" />
+                  Installing models for local AI...
+                </div>
+                {Object.entries(pullProgress).map(([model, p]) => (
+                  <div key={model} className="space-y-1">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-gray-300 font-mono">{model}</span>
+                      <span className="text-gray-500">
+                        {p.done ? 'Complete' : p.status || `${p.percent}%`}
+                      </span>
+                    </div>
+                    <div className="w-full h-1.5 bg-[#1F1F1F] rounded-full overflow-hidden">
+                      <div
+                        className={`h-full rounded-full transition-all duration-300 ${
+                          p.done ? 'bg-green-500' : 'bg-orange-500'
+                        }`}
+                        style={{ width: `${p.done ? 100 : p.percent}%` }}
+                      />
+                    </div>
+                  </div>
+                ))}
+                <p className="text-xs text-gray-500">
+                  This may take a few minutes depending on your connection.
+                </p>
+              </div>
+            ) : ollamaStatus.has_embedding_model && ollamaStatus.has_llm_model ? (
+              <div className="p-3 bg-green-900/20 border border-green-500/30 rounded-lg text-sm text-green-300 flex items-center gap-2">
+                <span className="text-green-500">&#x2713;</span>
+                Ollama ready — no API keys needed.
+              </div>
+            ) : ollamaStatus.models.length === 0 && !pullingModels ? (
+              <div className="p-3 bg-yellow-900/20 border border-yellow-500/30 rounded-lg text-sm text-yellow-300 flex items-center gap-2">
+                <span className="text-yellow-500">&#x26A0;</span>
+                Ollama detected but no models installed. Models will be downloaded automatically.
+              </div>
+            ) : (
+              <div className="p-3 bg-green-900/20 border border-green-500/30 rounded-lg text-sm text-green-300 flex items-center gap-2">
+                <span className="text-green-500">&#x2713;</span>
+                Ollama detected with {ollamaStatus.models.length} model{ollamaStatus.models.length !== 1 ? 's' : ''}.
+              </div>
+            )}
+          </>
         )}
 
         {/* OpenAI Key */}
@@ -320,10 +366,10 @@ export function ApiKeysStep({
           )}
           <button
             onClick={onSave}
-            disabled={!apiKeys.openai && apiKeys.provider !== 'ollama'}
+            disabled={pullingModels || (!apiKeys.openai && apiKeys.provider !== 'ollama')}
             className="px-8 py-3 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            Continue
+            {pullingModels ? 'Installing models...' : 'Continue'}
           </button>
         </div>
       </div>

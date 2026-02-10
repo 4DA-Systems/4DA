@@ -15,17 +15,18 @@
     "test:watch": "vitest",
     "validate": "npm run lint && npm run typecheck && npm run test && npm run build",
     "validate:rust": "cd src-tauri && cargo fmt --check && cargo clippy -- -D warnings && cargo test",
-    "validate:all": "npm run validate && npm run validate:rust",
+    "validate:mcp": "cd mcp-4da-server && npm run build",
+    "validate:all": "npm run validate && npm run validate:rust && npm run validate:mcp",
     "prepare": "husky"
   },
   "dependencies": {
-    "@react-three/drei": "^10.7.7",
-    "@react-three/fiber": "^9.5.0",
     "@tauri-apps/api": "^2",
     "@tauri-apps/plugin-opener": "^2",
+    "@types/react-window": "^1.8.8",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
-    "three": "^0.182.0"
+    "react-window": "^2.2.6",
+    "zustand": "^5.0.11"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.1.18",
