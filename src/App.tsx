@@ -197,7 +197,7 @@ function App() {
     let relevantCount = 0, topCount = 0;
     for (const r of state.relevanceResults) {
       if (r.relevant) relevantCount++;
-      if (r.top_score >= 0.6) topCount++;
+      if (r.top_score >= 0.72) topCount++;
     }
     return { relevantCount, topCount, total: state.relevanceResults.length };
   }, [state.analysisComplete, state.loading, state.relevanceResults]);
@@ -711,9 +711,9 @@ function App() {
                 </div>
                 {state.analysisComplete && (
                   <div className="flex items-center gap-2">
-                    {filteredResults.filter((r) => r.top_score >= 0.6).length > 0 && (
+                    {filteredResults.filter((r) => r.top_score >= 0.72).length > 0 && (
                       <span className="text-xs px-2 py-1 bg-orange-500/10 text-orange-400 rounded-lg">
-                        ⭐ {filteredResults.filter((r) => r.top_score >= 0.6).length} top picks
+                        ⭐ {filteredResults.filter((r) => r.top_score >= 0.72).length} top picks
                       </span>
                     )}
                     <span className="text-xs px-2 py-1 bg-green-500/10 text-green-400 rounded-lg">
@@ -893,14 +893,14 @@ function App() {
                       let groupHeader: string | null = null;
                       if (sortBy === 'score' && idx > 0) {
                         const prev = visibleResults[idx - 1];
-                        if (prev.top_score >= 0.6 && item.top_score < 0.6) {
+                        if (prev.top_score >= 0.72 && item.top_score < 0.72) {
                           groupHeader = 'Relevant';
-                        } else if (prev.top_score >= 0.35 && item.top_score < 0.35) {
+                        } else if (prev.top_score >= 0.50 && item.top_score < 0.50) {
                           groupHeader = 'Below Threshold';
                         }
-                      } else if (sortBy === 'score' && idx === 0 && item.top_score >= 0.6) {
+                      } else if (sortBy === 'score' && idx === 0 && item.top_score >= 0.72) {
                         groupHeader = 'Top Picks';
-                      } else if (sortBy === 'score' && idx === 0 && item.top_score >= 0.35) {
+                      } else if (sortBy === 'score' && idx === 0 && item.top_score >= 0.50) {
                         groupHeader = 'Relevant';
                       }
                       return (

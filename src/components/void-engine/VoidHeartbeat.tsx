@@ -56,7 +56,7 @@ export function VoidHeartbeat({ signal, size = 200 }: VoidHeartbeatProps) {
   // Attempt WebGL2 initialization
   useEffect(() => {
     const canvas = canvasRef.current;
-    if (!canvas || webglAvailable.current !== null) return;
+    if (!canvas) return;
 
     const gl = canvas.getContext('webgl2', {
       alpha: true,
@@ -109,6 +109,10 @@ export function VoidHeartbeat({ signal, size = 200 }: VoidHeartbeatProps) {
       cancelAnimationFrame(rafRef.current);
       gl.deleteProgram(program);
       gl.deleteBuffer(buffer);
+      // Reset so re-mount (StrictMode) re-initializes instead of using deleted objects
+      glRef.current = null;
+      programRef.current = null;
+      webglAvailable.current = null;
     };
   }, []);
 
@@ -120,9 +124,13 @@ export function VoidHeartbeat({ signal, size = 200 }: VoidHeartbeatProps) {
     const program = programRef.current;
     if (!gl || !program) return;
 
+    // Verify program is still valid before using it
+    if (!gl.isProgram(program)) return;
     gl.useProgram(program);
 
     const render = () => {
+      // Check program validity before scheduling next frame
+      if (!programRef.current || !gl.isProgram(programRef.current)) return;
       rafRef.current = requestAnimationFrame(render);
 
       const elapsed = (Date.now() - startTimeRef.current) / 1000.0;

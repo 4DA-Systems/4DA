@@ -140,44 +140,8 @@ fn has_word_boundary_match(text: &str, term: &str) -> bool {
     false
 }
 
-/// Clean a source file path into a human-readable label
-fn clean_source_label(source_file: &str) -> String {
-    let file_name = source_file
-        .rsplit(['/', '\\'])
-        .next()
-        .unwrap_or(source_file);
-    if let Some(section) = file_name
-        .strip_prefix("README.md#")
-        .or_else(|| file_name.strip_prefix("readme.md#"))
-    {
-        return format!("your {} docs", section.to_lowercase().replace('-', " "));
-    }
-    if let Some(hash_pos) = file_name.find('#') {
-        let (name, section) = file_name.split_at(hash_pos);
-        return format!("{} ({})", name, section[1..].replace('-', " "));
-    }
-    file_name.to_string()
-}
-
-/// Extract a meaningful explanation from matched context text
-fn extract_explanation_snippet(matched_text: &str, source_file: &str) -> String {
-    let clean = matched_text.trim().trim_end_matches("...");
-    let phrase = clean
-        .find(['.', '\n'])
-        .filter(|&pos| pos > 10)
-        .map(|pos| &clean[..pos])
-        .unwrap_or(&clean[..clean.len().min(60)])
-        .trim();
-    let label = clean_source_label(source_file);
-    if phrase.len() < 10 {
-        format!("Relates to {}", label)
-    } else {
-        format!("Relates to {} — {}", label, phrase)
-    }
-}
-
-/// Generate a human-readable explanation for why an item was considered relevant
-/// Returns a concise explanation suitable for display in the UI
+/// Generate a human-readable explanation for why an item was considered relevant.
+/// Produces specific, actionable text naming the exact technologies/topics that matched.
 pub(crate) fn generate_relevance_explanation(
     _title: &str,
     context_score: f32,
@@ -185,65 +149,121 @@ pub(crate) fn generate_relevance_explanation(
     matches: &[RelevanceMatch],
     ace_ctx: &ACEContext,
     item_topics: &[String],
+    interests: &[context_engine::Interest],
 ) -> String {
-    let mut reasons: Vec<String> = Vec::new();
+    let mut parts: Vec<String> = Vec::new();
+    let mut used_topics: Vec<&str> = Vec::new();
 
-    // Check context matches (what you're working on)
-    if context_score > 0.2 {
-        if let Some(first_match) = matches.first() {
-            reasons.push(extract_explanation_snippet(
-                &first_match.matched_text,
-                &first_match.source_file,
-            ));
-        } else {
-            reasons.push("Relates to your active projects".to_string());
+    // 1. Tech stack matches (most specific signal)
+    let tech_hits: Vec<&str> = item_topics
+        .iter()
+        .filter_map(|t| {
+            ace_ctx
+                .detected_tech
+                .iter()
+                .find(|tech| *tech == t || t.contains(tech.as_str()))
+                .map(|s| s.as_str())
+        })
+        .collect();
+    if !tech_hits.is_empty() {
+        let names: Vec<&str> = tech_hits.iter().copied().take(3).collect();
+        for &n in &names {
+            used_topics.push(n);
         }
+        parts.push(format!("Uses {} (your stack)", names.join(", ")));
     }
 
-    // Check interest matches (declared interests)
-    if interest_score > 0.2 {
-        reasons.push("Matches your declared interests".to_string());
-    }
-
-    // Check ACE tech stack matches
-    // Note: both item_topics (from extract_topics) and ace_ctx fields are already lowercase
-    for topic in item_topics {
-        if let Some(tech) = ace_ctx.detected_tech.iter().find(|t| *t == topic) {
-            reasons.push(format!("Your project uses {}", tech));
-            break;
+    // 2. Active project topic matches
+    let topic_hits: Vec<&str> = item_topics
+        .iter()
+        .filter_map(|t| {
+            ace_ctx
+                .active_topics
+                .iter()
+                .find(|at| *at == t || t.contains(at.as_str()))
+                .map(|s| s.as_str())
+        })
+        .filter(|t| !used_topics.contains(t))
+        .collect();
+    if !topic_hits.is_empty() {
+        let names: Vec<&str> = topic_hits.iter().copied().take(2).collect();
+        for &n in &names {
+            used_topics.push(n);
         }
+        parts.push(format!("Related to {} (active project)", names.join(", ")));
     }
 
-    // Check ACE active topics matches (recent activity)
-    for topic in item_topics {
-        if let Some(active_topic) = ace_ctx
-            .active_topics
+    // 3. Declared interest matches (name the specific interest)
+    if interest_score > 0.15 {
+        let interest_hits: Vec<&str> = item_topics
             .iter()
-            .find(|t| *t == topic || topic.contains(t.as_str()))
-        {
-            reasons.push(format!("Matches your recent activity: {}", active_topic));
-            break;
-        }
-    }
-
-    // Check learned affinity matches
-    for topic in item_topics {
-        if let Some((score, _conf)) = ace_ctx.topic_affinities.get(topic.as_str()) {
-            if *score > 0.3 {
-                reasons.push(format!("You've shown interest in {}", topic));
-                break;
+            .filter_map(|t| {
+                interests
+                    .iter()
+                    .find(|i| {
+                        let il = i.topic.to_lowercase();
+                        *t == il || t.contains(il.as_str()) || il.contains(t.as_str())
+                    })
+                    .map(|i| i.topic.as_str())
+            })
+            .filter(|t| {
+                let tl = t.to_lowercase();
+                !used_topics.iter().any(|u| *u == tl)
+            })
+            .collect();
+        if !interest_hits.is_empty() {
+            let names: Vec<&str> = interest_hits.iter().copied().take(2).collect();
+            parts.push(format!("Matches interest: {}", names.join(", ")));
+        } else if parts.is_empty() {
+            // Interest score is high but no topic-level match — use context match
+            if let Some(m) = matches.first().filter(|_| context_score > 0.2) {
+                let phrase = extract_short_phrase(&m.matched_text);
+                if !phrase.is_empty() {
+                    parts.push(format!("Matches your project context: \"{}\"", phrase));
+                }
             }
         }
     }
 
-    // Deduplicate and format output
-    if reasons.is_empty() {
-        "Matches your overall profile".to_string()
-    } else if reasons.len() == 1 {
-        reasons[0].clone()
+    // 4. Learned affinity (only if nothing else matched)
+    if parts.is_empty() {
+        for topic in item_topics {
+            if let Some((score, _)) = ace_ctx.topic_affinities.get(topic.as_str()) {
+                if *score > 0.3 {
+                    parts.push(format!("You engage with {} content", topic));
+                    break;
+                }
+            }
+        }
+    }
+
+    // 5. Strong context match fallback
+    if parts.is_empty() && context_score > 0.3 {
+        if let Some(m) = matches.first() {
+            let phrase = extract_short_phrase(&m.matched_text);
+            if !phrase.is_empty() {
+                parts.push(format!("Similar to your code: \"{}\"", phrase));
+            }
+        }
+    }
+
+    // Return empty string instead of vague fallback — the frontend handles empty gracefully
+    parts.join(" · ")
+}
+
+/// Extract a short meaningful phrase from matched context text
+fn extract_short_phrase(matched_text: &str) -> String {
+    let clean = matched_text.trim().trim_end_matches("...");
+    let phrase = clean
+        .find(['.', '\n'])
+        .filter(|&pos| pos > 10)
+        .map(|pos| &clean[..pos])
+        .unwrap_or(&clean[..clean.len().min(80)])
+        .trim();
+    if phrase.len() < 10 {
+        String::new()
     } else {
-        // Return first two reasons joined by semicolon
-        format!("{}; {}", reasons[0], reasons[1])
+        phrase.to_string()
     }
 }
 
@@ -965,6 +985,7 @@ pub(crate) fn score_item(
             &matches,
             &ctx.ace_ctx,
             &topics,
+            &ctx.interests,
         ))
     } else {
         None
@@ -1085,6 +1106,74 @@ pub(crate) fn sort_results(results: &mut [SourceRelevance]) {
             .partial_cmp(&a.top_score)
             .unwrap_or(std::cmp::Ordering::Equal)
     });
+}
+
+/// Deduplicate scored results by URL and normalized title.
+/// Keeps the highest-scoring item when duplicates are found.
+pub(crate) fn dedup_results(results: &mut Vec<SourceRelevance>) {
+    let initial = results.len();
+    let mut seen_urls: std::collections::HashSet<String> = std::collections::HashSet::new();
+    let mut seen_titles: std::collections::HashSet<String> = std::collections::HashSet::new();
+
+    // Sort by score desc first so we keep the highest-scoring version
+    results.sort_by(|a, b| {
+        b.top_score
+            .partial_cmp(&a.top_score)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+
+    results.retain(|item| {
+        // URL-based dedup
+        if let Some(ref url) = item.url {
+            let normalized = normalize_result_url(url);
+            if !normalized.is_empty() && !seen_urls.insert(normalized) {
+                return false;
+            }
+        }
+        // Title-based dedup (strip punctuation, normalize whitespace)
+        let title_key = normalize_result_title(&item.title);
+        if !title_key.is_empty() && !seen_titles.insert(title_key) {
+            return false;
+        }
+        true
+    });
+
+    let removed = initial - results.len();
+    if removed > 0 {
+        info!(target: "4da::scoring", removed = removed, kept = results.len(), "Post-scoring deduplication");
+    }
+}
+
+fn normalize_result_url(url: &str) -> String {
+    url.trim()
+        .split('#')
+        .next()
+        .unwrap_or(url)
+        .split('?')
+        .next()
+        .unwrap_or(url)
+        .replace("http://", "https://")
+        .replace("://www.", "://")
+        .trim_end_matches('/')
+        .to_lowercase()
+}
+
+fn normalize_result_title(title: &str) -> String {
+    let decoded = crate::decode_html_entities(title);
+    decoded
+        .trim()
+        .trim_start_matches("Show HN:")
+        .trim_start_matches("Ask HN:")
+        .trim_start_matches("Tell HN:")
+        .trim_start_matches("Launch HN:")
+        .trim()
+        .chars()
+        .filter(|c| c.is_alphanumeric() || c.is_whitespace())
+        .collect::<String>()
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+        .to_lowercase()
 }
 
 // ============================================================================
@@ -1367,39 +1456,17 @@ mod tests {
     }
 
     #[test]
-    fn test_clean_source_label_readme_section() {
-        assert_eq!(
-            clean_source_label("README.md#Planned-Features"),
-            "your planned features docs"
-        );
-    }
-
-    #[test]
-    fn test_clean_source_label_plain_file() {
-        assert_eq!(clean_source_label("/foo/bar/main.rs"), "main.rs");
-    }
-
-    #[test]
-    fn test_clean_source_label_hash_section() {
-        assert_eq!(
-            clean_source_label("lib.rs#error-handling"),
-            "lib.rs (error handling)"
-        );
-    }
-
-    #[test]
-    fn test_extract_explanation_snippet_long_text() {
-        let snippet = extract_explanation_snippet(
+    fn test_extract_short_phrase_long_text() {
+        let phrase = extract_short_phrase(
             "Vector search implementation using sqlite-vss for fast KNN queries",
-            "README.md#Architecture",
         );
-        assert!(snippet.contains("your architecture docs"));
-        assert!(snippet.contains("Vector search"));
+        assert!(phrase.contains("Vector search"));
+        assert!(!phrase.is_empty());
     }
 
     #[test]
-    fn test_extract_explanation_snippet_short_text() {
-        let snippet = extract_explanation_snippet("short", "lib.rs");
-        assert_eq!(snippet, "Relates to lib.rs");
+    fn test_extract_short_phrase_short_text() {
+        let phrase = extract_short_phrase("short");
+        assert!(phrase.is_empty()); // Too short to be useful
     }
 }

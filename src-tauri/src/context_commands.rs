@@ -25,7 +25,41 @@ const SKIP_DIRS: &[&str] = &[
     "venv",
     ".cache",
     "build",
+    "specs",
+    "_future",
+    "dev-tools",
 ];
+
+/// Files to skip — project meta-docs that pollute context with generic tech terms
+const SKIP_FILES: &[&str] = &[
+    "COMPARISON.md",
+    "CONFIDENCE_SCORE_IMPLEMENTATION.md",
+    "IMPLEMENTATION_PLAN.md",
+    "MISSION_ACCOMPLISHED.md",
+    "SHIP_READINESS_VERIFICATION.md",
+    "README-MARKETING.md",
+    "CHANGELOG.md",
+    "LICENSE",
+    "LICENSE.md",
+];
+
+/// Check if a filename is a project meta-doc (SCREAMING_CASE.md pattern)
+fn is_meta_doc(name: &str) -> bool {
+    if SKIP_FILES.iter().any(|&f| name.eq_ignore_ascii_case(f)) {
+        return true;
+    }
+    // Skip SCREAMING_CASE markdown files (e.g., AI_ENGINEERING_CONTRACT.md, VALIDATION_CHECKLIST.md)
+    // These are project management docs, not code context
+    if let Some(stem) = name.strip_suffix(".md") {
+        let has_upper = stem.chars().any(|c| c.is_ascii_uppercase());
+        let has_lower = stem.chars().any(|c| c.is_ascii_lowercase());
+        // SCREAMING_CASE: has uppercase + underscores, no lowercase
+        if has_upper && !has_lower && stem.contains('_') {
+            return true;
+        }
+    }
+    false
+}
 
 /// Recursively collect context files from a directory (max depth 3)
 fn collect_context_files(dir: &Path, files: &mut Vec<ContextFile>, depth: usize) {
@@ -43,6 +77,12 @@ fn collect_context_files(dir: &Path, files: &mut Vec<ContextFile>, depth: usize)
             if !SKIP_DIRS.contains(&name) && !name.starts_with('.') {
                 collect_context_files(&path, files, depth + 1);
             }
+            continue;
+        }
+
+        // Skip meta-docs that pollute context
+        if is_meta_doc(name) {
+            debug!(target: "4da::context", file = name, "Skipping meta-doc");
             continue;
         }
 

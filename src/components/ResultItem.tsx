@@ -8,22 +8,20 @@ function generateFallbackReason(item: SourceRelevance): string {
   const parts: string[] = [];
   const b = item.score_breakdown;
   if (b) {
-    if (b.context_score > 0.3) parts.push('matches your project context');
-    else if (b.context_score > 0.1) parts.push('loosely related to your project');
-    if (b.interest_score > 0.3) parts.push('aligns with your interests');
-    if (b.ace_boost > 0.1) parts.push('relevant to recent file changes');
-    if (b.affinity_mult > 1.2) parts.push('similar to content you\'ve saved');
-    if (b.anti_penalty < 0.8) parts.push('overlaps with excluded topics');
-    if (b.freshness_mult != null && b.freshness_mult > 1.1) parts.push('recently published');
+    if (b.context_score > 0.3) parts.push('Strong project context match');
+    if (b.interest_score > 0.3) parts.push('Matches declared interests');
+    if (b.ace_boost > 0.1) parts.push('Active in your recent work');
+    if (b.affinity_mult > 1.2) parts.push('Learned preference match');
+    if (b.freshness_mult != null && b.freshness_mult > 1.1) parts.push('Recently published');
   }
   if (item.signal_type) {
     const labels: Record<string, string> = {
-      security_alert: 'security alert detected',
-      breaking_change: 'breaking change detected',
-      tool_discovery: 'new tool relevant to your stack',
-      tech_trend: 'emerging trend in your domain',
-      learning: 'learning resource identified',
-      competitive_intel: 'competitive intelligence',
+      security_alert: 'Security alert',
+      breaking_change: 'Breaking change',
+      tool_discovery: 'Tool discovery',
+      tech_trend: 'Emerging trend',
+      learning: 'Learning resource',
+      competitive_intel: 'Competitive intel',
     };
     parts.unshift(labels[item.signal_type] || item.signal_type);
   }
@@ -55,11 +53,11 @@ export const ResultItem = memo(function ResultItem({
 }: ResultItemProps) {
   const feedback = feedbackGiven[item.id];
 
-  const isTopPick = item.top_score >= 0.6;
+  const isTopPick = item.top_score >= 0.72;
   const isHighConfidence = (item.confidence ?? 0) >= 0.7;
 
   return (
-    <li
+    <div
       id={`result-item-${item.id}`}
       className={`rounded border transition-colors ${
         isFocused
@@ -369,6 +367,6 @@ export const ResultItem = memo(function ResultItem({
           />
         </div>
       )}
-    </li>
+    </div>
   );
 });
