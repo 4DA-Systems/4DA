@@ -4,7 +4,7 @@
 //! clearing, settings, and directory management commands.
 
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use tracing::{debug, info, warn};
 
@@ -13,30 +13,36 @@ use crate::{
     get_settings_manager, ContextFile, ContextSettings, SUPPORTED_EXTENSIONS,
 };
 
-#[tauri::command]
-pub async fn get_context_files() -> Result<Vec<ContextFile>, String> {
-    let context_dir = match get_context_dir() {
-        Some(dir) => dir,
-        None => {
-            debug!(target: "4da::context", "No context directory configured");
-            return Ok(vec![]);
-        }
-    };
-    debug!(target: "4da::context", path = ?context_dir, "Reading context files");
+/// Directories to skip during recursive context scanning
+const SKIP_DIRS: &[&str] = &[
+    "node_modules",
+    ".git",
+    "target",
+    "__pycache__",
+    ".next",
+    "dist",
+    ".venv",
+    "venv",
+    ".cache",
+    "build",
+];
 
-    if !context_dir.exists() {
-        debug!(target: "4da::context", "Context directory does not exist");
-        return Ok(vec![]);
+/// Recursively collect context files from a directory (max depth 3)
+fn collect_context_files(dir: &Path, files: &mut Vec<ContextFile>, depth: usize) {
+    if depth > 3 {
+        return;
     }
-
-    let mut files = Vec::new();
-    let entries = fs::read_dir(&context_dir).map_err(|e| e.to_string())?;
-
-    for entry in entries {
-        let entry = entry.map_err(|e| e.to_string())?;
+    let Ok(entries) = fs::read_dir(dir) else {
+        return;
+    };
+    for entry in entries.flatten() {
         let path = entry.path();
+        let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
 
         if path.is_dir() {
+            if !SKIP_DIRS.contains(&name) && !name.starts_with('.') {
+                collect_context_files(&path, files, depth + 1);
+            }
             continue;
         }
 
@@ -61,8 +67,28 @@ pub async fn get_context_files() -> Result<Vec<ContextFile>, String> {
             }
         }
     }
+}
 
-    info!(target: "4da::context", count = files.len(), "Total context files loaded");
+#[tauri::command]
+pub async fn get_context_files() -> Result<Vec<ContextFile>, String> {
+    let context_dir = match get_context_dir() {
+        Some(dir) => dir,
+        None => {
+            debug!(target: "4da::context", "No context directory configured");
+            return Ok(vec![]);
+        }
+    };
+    debug!(target: "4da::context", path = ?context_dir, "Reading context files (recursive, depth 3)");
+
+    if !context_dir.exists() {
+        debug!(target: "4da::context", path = ?context_dir, "Context directory does not exist");
+        return Ok(vec![]);
+    }
+
+    let mut files = Vec::new();
+    collect_context_files(&context_dir, &mut files, 0);
+
+    info!(target: "4da::context", count = files.len(), "Total context files loaded (recursive)");
     Ok(files)
 }
 

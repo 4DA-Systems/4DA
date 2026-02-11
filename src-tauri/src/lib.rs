@@ -468,9 +468,7 @@ async fn embed_texts_ollama(
             let status = response.status();
             let body = response.text().await.unwrap_or_default();
             if status.as_u16() == 404 || body.contains("not found") {
-                return Err(format!(
-                    "Embedding model 'nomic-embed-text' not found in Ollama. Run: ollama pull nomic-embed-text"
-                ));
+                return Err("Embedding model 'nomic-embed-text' not found in Ollama. Run: ollama pull nomic-embed-text".to_string());
             }
             // Fall through to single-item fallback for other errors (old Ollama version)
             embed_texts_ollama_single(texts, base).await
@@ -484,9 +482,7 @@ async fn embed_texts_ollama(
                 ));
             }
             if msg.contains("timed out") || msg.contains("timeout") {
-                return Err(format!(
-                    "Ollama embedding request timed out. The model may still be loading — try again shortly."
-                ));
+                return Err("Ollama embedding request timed out. The model may still be loading — try again shortly.".to_string());
             }
             // Fall through to single-item fallback
             embed_texts_ollama_single(texts, base).await
@@ -1078,7 +1074,34 @@ pub(crate) fn get_context_dirs() -> Vec<PathBuf> {
     let dirs = settings.get().context_dirs.clone();
     drop(settings);
 
-    dirs.into_iter().map(PathBuf::from).collect()
+    dirs.into_iter()
+        .map(|d| normalize_context_path(&d))
+        .collect()
+}
+
+/// Convert WSL-style paths (/mnt/c/...) to Windows paths (C:\...) when running on Windows.
+/// This handles the common case where paths are stored in settings using WSL conventions
+/// but the app runs as a native Windows process.
+fn normalize_context_path(path: &str) -> PathBuf {
+    if cfg!(windows) && path.starts_with("/mnt/") {
+        let rest = &path[5..]; // strip "/mnt/"
+        let mut chars = rest.chars();
+        if let Some(drive_letter) = chars.next() {
+            if drive_letter.is_ascii_lowercase() {
+                let remainder = chars.as_str();
+                let win_remainder = remainder
+                    .strip_prefix('/')
+                    .unwrap_or(remainder)
+                    .replace('/', "\\");
+                return PathBuf::from(format!(
+                    "{}:\\{}",
+                    drive_letter.to_ascii_uppercase(),
+                    win_remainder
+                ));
+            }
+        }
+    }
+    PathBuf::from(path)
 }
 
 /// Legacy function for single directory (uses first configured dir)
@@ -1094,19 +1117,20 @@ pub(crate) const SUPPORTED_EXTENSIONS: &[&str] = &["md", "txt", "rs", "ts", "js"
 static RELEVANCE_THRESHOLD_BITS: AtomicU32 = AtomicU32::new(0);
 
 /// Get the current relevance threshold (thread-safe).
-/// Returns the auto-tuned value, or 0.45 default if not yet initialized.
+/// Returns the auto-tuned value, or 0.30 default if not yet initialized.
+/// Lowered from 0.45 after calibrate_score() was added to spread scores across full range.
 pub(crate) fn get_relevance_threshold() -> f32 {
     let bits = RELEVANCE_THRESHOLD_BITS.load(Ordering::Relaxed);
     if bits == 0 {
-        0.45 // Default before initialization
+        0.30 // Default before initialization (was 0.45, lowered for calibrated scores)
     } else {
         f32::from_bits(bits)
     }
 }
 
-/// Set the relevance threshold (thread-safe, clamped to [0.15, 0.50]).
+/// Set the relevance threshold (thread-safe, clamped to [0.10, 0.50]).
 pub(crate) fn set_relevance_threshold(value: f32) {
-    let clamped = value.clamp(0.15, 0.50);
+    let clamped = value.clamp(0.10, 0.50);
     RELEVANCE_THRESHOLD_BITS.store(clamped.to_bits(), Ordering::Relaxed);
 }
 
@@ -1231,12 +1255,26 @@ pub(crate) async fn scrape_article_content(url: &str) -> Option<String> {
 }
 
 /// Build embedding text from HN item (title + content)
+/// Decode common HTML entities that sources may include in titles/content.
+/// Applied to all text before embedding and display to prevent `&amp;` literals.
+pub(crate) fn decode_html_entities(text: &str) -> String {
+    text.replace("&amp;", "&")
+        .replace("&lt;", "<")
+        .replace("&gt;", ">")
+        .replace("&quot;", "\"")
+        .replace("&apos;", "'")
+        .replace("&#39;", "'")
+        .replace("&#x27;", "'")
+        .replace("&nbsp;", " ")
+}
+
 pub(crate) fn build_embedding_text(title: &str, content: &str) -> String {
-    if content.is_empty() {
-        title.to_string()
+    let clean_title = decode_html_entities(title);
+    let clean_content = decode_html_entities(content);
+    if clean_content.is_empty() {
+        clean_title
     } else {
-        // Combine title and content with clear separation
-        format!("{}\n\n{}", title, content)
+        format!("{}\n\n{}", clean_title, clean_content)
     }
 }
 
@@ -2375,11 +2413,11 @@ pub fn run() {
             set_relevance_threshold(stored);
             info!(target: "4da::startup", threshold = get_relevance_threshold(), "Loaded stored relevance threshold");
         } else {
-            set_relevance_threshold(0.45);
+            set_relevance_threshold(0.30);
             info!(target: "4da::startup", threshold = get_relevance_threshold(), "Relevance threshold (default)");
         }
     } else {
-        set_relevance_threshold(0.45);
+        set_relevance_threshold(0.30);
         info!(target: "4da::startup", threshold = get_relevance_threshold(), "Relevance threshold (default, ACE unavailable)");
     }
 

@@ -664,13 +664,54 @@ pub(crate) async fn analyze_cached_content_impl(
     score_items_full(app, db, &cached_items).await
 }
 
+/// Deduplicate items by normalized URL and exact title match.
+/// Keeps the first occurrence (usually the oldest/original source).
+fn dedup_stored_items(items: &[crate::db::StoredSourceItem]) -> Vec<usize> {
+    let mut seen_urls: std::collections::HashSet<String> = std::collections::HashSet::new();
+    let mut seen_titles: std::collections::HashSet<String> = std::collections::HashSet::new();
+    let mut keep_indices = Vec::new();
+
+    for (idx, item) in items.iter().enumerate() {
+        // URL-based dedup (normalized)
+        if let Some(ref url) = item.url {
+            let normalized = normalize_url(url);
+            if !normalized.is_empty() && !seen_urls.insert(normalized) {
+                continue; // duplicate URL
+            }
+        }
+        // Title-based dedup (lowercased, trimmed)
+        let title_key = item.title.trim().to_lowercase();
+        if !title_key.is_empty() && !seen_titles.insert(title_key) {
+            continue; // duplicate title
+        }
+        keep_indices.push(idx);
+    }
+
+    keep_indices
+}
+
+/// Normalize a URL for dedup: strip www, trailing slash, query params
+fn normalize_url(url: &str) -> String {
+    let url = url.trim();
+    let base = url.split('?').next().unwrap_or(url);
+    base.trim_end_matches('/')
+        .replace("://www.", "://")
+        .to_lowercase()
+}
+
 /// Score all items in a full analysis pass
 async fn score_items_full(
     app: &AppHandle,
     db: &crate::db::Database,
     cached_items: &[crate::db::StoredSourceItem],
 ) -> Result<Vec<SourceRelevance>, String> {
-    let total_cached = cached_items.len();
+    // Deduplicate before scoring to avoid wasting compute on duplicates
+    let keep_indices = dedup_stored_items(cached_items);
+    let deduped_count = cached_items.len() - keep_indices.len();
+    if deduped_count > 0 {
+        info!(target: "4da::analysis", removed = deduped_count, kept = keep_indices.len(), "Cross-source deduplication");
+    }
+    let total_cached = keep_indices.len();
 
     emit_progress(
         app,
@@ -698,7 +739,8 @@ async fn score_items_full(
 
     let mut results: Vec<SourceRelevance> = Vec::new();
 
-    for (idx, item) in cached_items.iter().enumerate() {
+    for (idx, &item_idx) in keep_indices.iter().enumerate() {
+        let item = &cached_items[item_idx];
         if is_aborted() {
             info!(target: "4da::analysis", scored = idx, "Cached analysis aborted by user");
             return Err("Analysis cancelled".to_string());

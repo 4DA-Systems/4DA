@@ -23,6 +23,7 @@ import {
   useToasts,
 } from './hooks';
 import { getStageLabel } from './utils/score';
+import type { SourceRelevance } from './types';
 
 const SOURCE_LABELS: Record<string, string> = {
   hackernews: 'HN', arxiv: 'arXiv', reddit: 'Reddit',
@@ -198,28 +199,46 @@ function App() {
   // Reset render limit when new results come in
   useEffect(() => { setRenderLimit(50); }, [state.relevanceResults]);
 
-  // Auto-analyze on first load if monitoring enabled
+  // On mount: load cached results from previous session, or auto-analyze
   useEffect(() => {
     let cancelled = false;
-    const autoAnalyzeTimer = setTimeout(async () => {
-      if (cancelled) return;
+    const loadOrAnalyze = async () => {
       try {
-        const status = await invoke<{ enabled: boolean; total_checks: number }>('get_monitoring_status');
-        if (cancelled) return;
-        if (status.enabled && status.total_checks === 0) {
-          // Auto-trigger initial analysis
-          await invoke('run_cached_analysis');
-        }
-      } catch {
-        // Silently ignore auto-analyze failures
-      }
-    }, 3000);
+        // First, try to load cached results from AnalysisState
+        const analysisState = await invoke<{
+          running: boolean;
+          completed: boolean;
+          results: SourceRelevance[] | null;
+        }>('get_analysis_status');
 
-    return () => {
-      cancelled = true;
-      clearTimeout(autoAnalyzeTimer);
+        if (cancelled) return;
+
+        if (analysisState.results && analysisState.results.length > 0) {
+          // Restore previous results
+          const results = analysisState.results;
+          const relevantCount = results.filter(r => r.relevant).length;
+          setState(s => ({
+            ...s,
+            relevanceResults: results,
+            status: `${relevantCount}/${results.length} items relevant (cached)`,
+            analysisComplete: true,
+            loading: false,
+          }));
+          return;
+        }
+
+        // No cached results — auto-trigger analysis after 3s
+        await new Promise(resolve => setTimeout(resolve, 3000));
+        if (cancelled) return;
+        await invoke('run_cached_analysis');
+      } catch {
+        // Silently ignore failures
+      }
     };
-  }, []);
+    loadOrAnalyze();
+
+    return () => { cancelled = true; };
+  }, [setState]);
 
   // Global keyboard shortcuts (extracted hook)
   useKeyboardShortcuts({

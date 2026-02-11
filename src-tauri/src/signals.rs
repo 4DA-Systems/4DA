@@ -17,15 +17,16 @@ pub enum SignalType {
 }
 
 impl SignalType {
-    /// Base priority weight for this signal type (1-4 scale)
+    /// Base priority weight for this signal type (1-4 scale).
+    /// Lowered from 4/3 to 2/2 so single-keyword matches don't auto-Critical.
     fn base_weight(&self) -> u8 {
         match self {
-            SignalType::SecurityAlert => 4,
-            SignalType::BreakingChange => 3,
+            SignalType::SecurityAlert => 2,
+            SignalType::BreakingChange => 2,
             SignalType::ToolDiscovery => 2,
-            SignalType::TechTrend => 2,
+            SignalType::TechTrend => 1,
             SignalType::Learning => 1,
-            SignalType::CompetitiveIntel => 2,
+            SignalType::CompetitiveIntel => 1,
         }
     }
 
@@ -318,22 +319,29 @@ impl SignalClassifier {
 
         let (signal_type, confidence, triggers) = best?;
 
-        // Compute priority
-        let mut priority_score = signal_type.base_weight();
+        // Compute priority — require multiple keyword matches for High/Critical
+        let trigger_count = triggers.len();
 
         // Bonus for ACE tech stack match
         let tech_match = ace_tech.iter().find(|tech| {
             let t = tech.to_lowercase();
             text_lower.contains(&t)
         });
-        if tech_match.is_some() {
-            priority_score = priority_score.saturating_add(1);
-        }
 
-        // Bonus for high relevance score
-        if relevance_score > 0.7 {
-            priority_score = priority_score.saturating_add(1);
-        }
+        let priority_score = if trigger_count < 2 {
+            // Single keyword match: cap at Medium regardless of base weight
+            signal_type.base_weight().min(2)
+        } else {
+            // Multiple matches: allow escalation through bonuses
+            let mut ps = signal_type.base_weight();
+            if tech_match.is_some() {
+                ps = ps.saturating_add(1);
+            }
+            if relevance_score > 0.7 {
+                ps = ps.saturating_add(1);
+            }
+            ps
+        };
 
         let priority = SignalPriority::from_score(priority_score.min(4));
 
