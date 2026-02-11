@@ -13,7 +13,8 @@ use tracing::{debug, error, info, warn};
 /// Shared HTTP client for embedding API calls (reused across requests)
 static EMBEDDING_CLIENT: Lazy<reqwest::Client> = Lazy::new(|| {
     reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(60))
+        .connect_timeout(std::time::Duration::from_secs(10))
+        .timeout(std::time::Duration::from_secs(90))
         .user_agent("4DA/1.0")
         .build()
         .unwrap_or_else(|_| reqwest::Client::new())
@@ -417,6 +418,10 @@ async fn embed_texts_ollama(
 ) -> Result<Vec<Vec<f32>>, String> {
     let base = base_url.as_deref().unwrap_or("http://localhost:11434");
 
+    if texts.is_empty() {
+        return Ok(vec![]);
+    }
+
     let batch_body = serde_json::json!({
         "model": "nomic-embed-text",
         "input": texts,
@@ -458,47 +463,103 @@ async fn embed_texts_ollama(
                 })
                 .collect()
         }
-        _ => {
-            // Batch failed (old Ollama version) - fallback to one-at-a-time
-            let mut all_embeddings = Vec::with_capacity(texts.len());
-
-            for text in texts {
-                let single_body = serde_json::json!({
-                    "model": "nomic-embed-text",
-                    "prompt": text,
-                });
-
-                let response = EMBEDDING_CLIENT
-                    .post(format!("{}/api/embeddings", base))
-                    .json(&single_body)
-                    .send()
-                    .await
-                    .map_err(|e| format!("Ollama API request failed: {}. Make sure Ollama is running with 'nomic-embed-text' model installed (run: ollama pull nomic-embed-text)", e))?;
-
-                let json: serde_json::Value = response
-                    .json()
-                    .await
-                    .map_err(|e| format!("Failed to parse Ollama response: {}", e))?;
-
-                let raw = json["embedding"]
-                    .as_array()
-                    .ok_or_else(|| {
-                        "Invalid Ollama response: missing 'embedding' array".to_string()
-                    })?
-                    .iter()
-                    .map(|v| {
-                        v.as_f64()
-                            .map(|f| f as f32)
-                            .ok_or_else(|| "Invalid embedding value".to_string())
-                    })
-                    .collect::<Result<Vec<f32>, String>>()?;
-
-                all_embeddings.push(truncate_and_normalize(raw));
+        Ok(response) => {
+            // Batch endpoint returned an error - check for model-not-found
+            let status = response.status();
+            let body = response.text().await.unwrap_or_default();
+            if status.as_u16() == 404 || body.contains("not found") {
+                return Err(format!(
+                    "Embedding model 'nomic-embed-text' not found in Ollama. Run: ollama pull nomic-embed-text"
+                ));
             }
-
-            Ok(all_embeddings)
+            // Fall through to single-item fallback for other errors (old Ollama version)
+            embed_texts_ollama_single(texts, base).await
+        }
+        Err(e) => {
+            let msg = e.to_string();
+            if msg.contains("connect") || msg.contains("refused") {
+                return Err(format!(
+                    "Cannot connect to Ollama at {}. Make sure Ollama is running (ollama serve).",
+                    base
+                ));
+            }
+            if msg.contains("timed out") || msg.contains("timeout") {
+                return Err(format!(
+                    "Ollama embedding request timed out. The model may still be loading — try again shortly."
+                ));
+            }
+            // Fall through to single-item fallback
+            embed_texts_ollama_single(texts, base).await
         }
     }
+}
+
+/// Fallback: embed one text at a time using the older /api/embeddings endpoint
+async fn embed_texts_ollama_single(texts: &[String], base: &str) -> Result<Vec<Vec<f32>>, String> {
+    let mut all_embeddings = Vec::with_capacity(texts.len());
+
+    for text in texts {
+        let single_body = serde_json::json!({
+            "model": "nomic-embed-text",
+            "prompt": text,
+        });
+
+        let response = EMBEDDING_CLIENT
+            .post(format!("{}/api/embeddings", base))
+            .json(&single_body)
+            .send()
+            .await
+            .map_err(|e| {
+                let msg = e.to_string();
+                if msg.contains("connect") || msg.contains("refused") {
+                    format!(
+                        "Cannot connect to Ollama at {}. Make sure Ollama is running (ollama serve).",
+                        base
+                    )
+                } else if msg.contains("timed out") || msg.contains("timeout") {
+                    "Ollama embedding timed out. The model may still be loading — try again.".to_string()
+                } else {
+                    format!(
+                        "Ollama embedding request failed: {}. Make sure Ollama is running with 'nomic-embed-text' (run: ollama pull nomic-embed-text)",
+                        e
+                    )
+                }
+            })?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let body = response.text().await.unwrap_or_default();
+            if status.as_u16() == 404 || body.contains("not found") {
+                return Err(
+                    "Embedding model 'nomic-embed-text' not found. Run: ollama pull nomic-embed-text".to_string()
+                );
+            }
+            return Err(format!("Ollama embedding error ({}): {}", status, body));
+        }
+
+        let json: serde_json::Value = response
+            .json()
+            .await
+            .map_err(|e| format!("Failed to parse Ollama response: {}", e))?;
+
+        let raw = json["embedding"]
+            .as_array()
+            .ok_or_else(|| {
+                "Invalid Ollama response: missing 'embedding' array. Is nomic-embed-text installed?"
+                    .to_string()
+            })?
+            .iter()
+            .map(|v| {
+                v.as_f64()
+                    .map(|f| f as f32)
+                    .ok_or_else(|| "Invalid embedding value".to_string())
+            })
+            .collect::<Result<Vec<f32>, String>>()?;
+
+        all_embeddings.push(truncate_and_normalize(raw));
+    }
+
+    Ok(all_embeddings)
 }
 
 /// Retry an async operation with exponential backoff.
