@@ -54,7 +54,7 @@ impl LLMClient {
             client: reqwest::Client::builder()
                 .timeout(std::time::Duration::from_secs(60))
                 .build()
-                .expect("Failed to create HTTP client"),
+                .unwrap_or_else(|_| reqwest::Client::new()),
         }
     }
 

@@ -628,9 +628,7 @@ pub(crate) async fn build_scoring_context(db: &Database) -> Result<ScoringContex
 
     // Check if user has recent file activity (active work window)
     let has_active_work = match get_ace_engine() {
-        Ok(ace) => ace
-            .get_recent_work_topics(2)
-            .map_or(false, |t| !t.is_empty()),
+        Ok(ace) => ace.get_recent_work_topics(2).is_ok_and(|t| !t.is_empty()),
         Err(_) => false,
     };
 

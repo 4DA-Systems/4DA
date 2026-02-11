@@ -703,7 +703,7 @@ pub fn find_project_directories(base_dirs: &[String], max_depth: usize) -> Vec<S
                     return;
                 }
                 let entry_path = entry.path();
-                if entry_path.is_dir() {
+                if entry_path.is_dir() && !entry_path.is_symlink() {
                     let name = entry_path.file_name().unwrap_or_default().to_string_lossy();
                     if !skip.contains(&name.as_ref()) {
                         scan_recursive(

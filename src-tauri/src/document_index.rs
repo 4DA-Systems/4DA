@@ -35,8 +35,8 @@ pub async fn get_indexed_documents(
     let conn = ace.get_conn();
     let conn = conn.lock();
 
-    let limit = limit.unwrap_or(50);
-    let offset = offset.unwrap_or(0);
+    let limit = limit.unwrap_or(50).clamp(1, 1000);
+    let offset = offset.unwrap_or(0).clamp(0, 1_000_000);
 
     let query = if file_type.is_some() {
         format!(

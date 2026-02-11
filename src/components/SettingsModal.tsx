@@ -104,6 +104,38 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
   // eslint-disable-next-line react-hooks/exhaustive-deps -- load once on mount
   }, []);
 
+  // Focus trap: cycle Tab within modal, auto-focus first element
+  useEffect(() => {
+    const modal = document.querySelector('[role="dialog"]') as HTMLElement;
+    if (!modal) return;
+
+    const focusable = modal.querySelectorAll<HTMLElement>(
+      'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
+    );
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+
+    first?.focus();
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== 'Tab') return;
+      if (e.shiftKey) {
+        if (document.activeElement === first) {
+          e.preventDefault();
+          last?.focus();
+        }
+      } else {
+        if (document.activeElement === last) {
+          e.preventDefault();
+          first?.focus();
+        }
+      }
+    };
+
+    modal.addEventListener('keydown', handleKeyDown);
+    return () => modal.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
   // Monitoring action wrappers (add status messages)
   const handleToggleMonitoring = async () => {
     try {

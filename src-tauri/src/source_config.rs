@@ -328,6 +328,10 @@ pub async fn get_youtube_channels() -> Result<serde_json::Value, String> {
 /// Add a YouTube channel ID
 #[tauri::command]
 pub async fn add_youtube_channel(channel_id: String) -> Result<serde_json::Value, String> {
+    if channel_id.trim().is_empty() {
+        return Err("Channel ID cannot be empty".to_string());
+    }
+
     let mut settings_guard = get_settings_manager().lock();
     settings_guard.add_youtube_channel(channel_id.clone())?;
 

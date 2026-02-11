@@ -85,6 +85,10 @@ jobs:
       - name: Build
         run: npm run build
 
+      - name: Security audit
+        run: npm audit --audit-level=moderate
+        continue-on-error: true
+
   # ═══════════════════════════════════════════════════════════════
   # Gate 3: Rust Validation
   # Format, Clippy, Tests, Build
@@ -131,6 +135,10 @@ jobs:
       - name: Build (debug)
         working-directory: src-tauri
         run: cargo build
+
+      - name: Security audit
+        run: cargo install cargo-audit --locked && cargo audit
+        continue-on-error: true
 
   # ═══════════════════════════════════════════════════════════════
   # Gate 4: Invariant Check (Custom)

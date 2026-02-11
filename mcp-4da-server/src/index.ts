@@ -1,5 +1,17 @@
 #!/usr/bin/env node
 /**
+ * 4DA MCP Server - Internal Use Only
+ *
+ * This MCP server provides tool and resource access to 4DA's local database
+ * for use with Claude Desktop and other MCP-compatible hosts.
+ *
+ * IMPORTANT: This server is designed for LOCAL use only. It reads from the
+ * user's local 4DA SQLite database. It does NOT implement authentication
+ * or authorization - it trusts the local environment.
+ *
+ * Do NOT expose this server over a network without adding proper auth.
+ */
+/**
  * 4DA MCP Server v3.0 - AI Superpower Edition
  *
  * Exposes 4DA's personalized content filtering to AI agents via MCP.

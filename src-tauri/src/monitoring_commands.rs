@@ -69,6 +69,7 @@ pub async fn set_monitoring_enabled(enabled: bool) -> Result<serde_json::Value, 
 /// Set monitoring interval
 #[tauri::command]
 pub async fn set_monitoring_interval(minutes: u64) -> Result<serde_json::Value, String> {
+    let minutes = minutes.clamp(1, 1440);
     let state = get_monitoring_state();
     let secs = minutes * 60;
     state.set_interval(secs);

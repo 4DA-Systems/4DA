@@ -56,6 +56,16 @@ pub async fn set_llm_provider(
     base_url: Option<String>,
     openai_api_key: Option<String>,
 ) -> Result<(), String> {
+    // Validate provider
+    let valid_providers = ["anthropic", "openai", "ollama", "none"];
+    if !valid_providers.contains(&provider.as_str()) {
+        return Err(format!(
+            "Invalid provider '{}'. Must be one of: {}",
+            provider,
+            valid_providers.join(", ")
+        ));
+    }
+
     let manager = get_settings_manager();
     let mut guard = manager.lock();
 
@@ -96,10 +106,10 @@ pub async fn set_rerank_config(
 
     let config = RerankConfig {
         enabled,
-        max_items_per_batch: max_items,
-        min_embedding_score: min_score,
-        daily_token_limit,
-        daily_cost_limit_cents: daily_cost_limit,
+        max_items_per_batch: max_items.clamp(1, 1000),
+        min_embedding_score: min_score.clamp(0.0, 1.0),
+        daily_token_limit: daily_token_limit.max(1),
+        daily_cost_limit_cents: daily_cost_limit.max(1),
     };
 
     guard.set_rerank_config(config)?;

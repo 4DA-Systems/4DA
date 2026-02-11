@@ -16,7 +16,7 @@ static EMBEDDING_CLIENT: Lazy<reqwest::Client> = Lazy::new(|| {
         .timeout(std::time::Duration::from_secs(60))
         .user_agent("4DA/1.0")
         .build()
-        .expect("Failed to build embedding HTTP client")
+        .unwrap_or_else(|_| reqwest::Client::new())
 });
 
 mod ace;
@@ -927,7 +927,10 @@ static SETTINGS_MANAGER: OnceCell<Mutex<SettingsManager>> = OnceCell::new();
 
 pub(crate) fn get_settings_manager() -> &'static Mutex<SettingsManager> {
     SETTINGS_MANAGER.get_or_init(|| {
-        let data_path = get_db_path().parent().unwrap().to_path_buf();
+        let data_path = get_db_path()
+            .parent()
+            .expect("Database path must have a parent directory")
+            .to_path_buf();
 
         info!(target: "4da::settings", "Initializing settings manager");
         let manager = SettingsManager::new(&data_path);
@@ -2658,8 +2661,25 @@ pub fn run() {
 
             Ok(())
         })
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        .run(|_app, event| {
+            if let tauri::RunEvent::Exit = event {
+                info!(target: "4da::shutdown", "Application shutting down - cleaning up...");
+                // Disable monitoring to stop scheduler
+                let state = get_monitoring_state();
+                state.set_enabled(false);
+                // Clean up temp extraction directory
+                if let Ok(data_dir) = std::env::var("APPDATA") {
+                    let temp_dir = std::path::PathBuf::from(data_dir).join("4da").join("temp");
+                    if temp_dir.exists() {
+                        let _ = std::fs::remove_dir_all(&temp_dir);
+                        info!(target: "4da::shutdown", "Cleaned up temp directory");
+                    }
+                }
+                info!(target: "4da::shutdown", "Cleanup complete");
+            }
+        });
 }
 
 /// Get registered sources

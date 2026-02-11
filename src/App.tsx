@@ -97,6 +97,7 @@ function App() {
   // Local UI state
   const [showSplash, setShowSplash] = useState(true);
   const [showSettings, setShowSettings] = useState(false);
+  const [showKeyboardHelp, setShowKeyboardHelp] = useState(false);
   const [renderLimit, setRenderLimit] = useState(50);
   // Toast notification system
   const { toasts, addToast, removeToast } = useToasts();
@@ -227,10 +228,12 @@ function App() {
     onToggleBriefing: () => setShowBriefing(prev => !prev),
     onOpenSettings: () => setShowSettings(true),
     onEscape: () => {
+      if (showKeyboardHelp) { setShowKeyboardHelp(false); return; }
       if (showSettings) { setShowSettings(false); return; }
       if (showBriefing) { setShowBriefing(false); return; }
       if (expandedItem !== null) { setExpandedItem(null); return; }
     },
+    onHelp: () => setShowKeyboardHelp(true),
     analyzeDisabled: state.loading,
     briefingAvailable: !!aiBriefing.content,
     filtersAvailable: state.analysisComplete,
@@ -512,7 +515,7 @@ function App() {
 
         {/* Natural Language Search */}
         <div className="mb-6">
-          <NaturalLanguageSearch defaultExpanded={false} />
+          <NaturalLanguageSearch defaultExpanded={true} />
         </div>
 
         {/* Main Content */}
@@ -588,7 +591,7 @@ function App() {
                 <div className="mt-4 pt-4 border-t border-[#2A2A2A]">
                   <div className="text-xs text-gray-500 mb-3 flex items-center gap-2">
                     <span>🔍 Auto-Discovered</span>
-                    <span className="px-1.5 py-0.5 text-[10px] bg-orange-500/20 text-orange-400 rounded">ACE</span>
+                    <span className="px-1.5 py-0.5 text-[10px] bg-orange-500/20 text-orange-400 rounded" title="Auto Context Engine - score boost from your local project context">ACE</span>
                   </div>
                   {discoveredContext.tech.length > 0 && (
                     <div className="mb-3">
@@ -643,6 +646,11 @@ function App() {
                         ? `${filteredResults.length} items • ${filteredResults.filter((r) => r.relevant).length} relevant`
                         : 'Click Analyze to find relevant content'}
                     </p>
+                    {state.analysisComplete && filteredResults.length > renderLimit && (
+                      <span className="text-xs text-[#666666]">
+                        Showing {Math.min(renderLimit, filteredResults.length)} of {filteredResults.length}
+                      </span>
+                    )}
                   </div>
                 </div>
                 {state.analysisComplete && (
@@ -822,11 +830,47 @@ function App() {
             <kbd className="px-1 py-0.5 bg-[#1F1F1F] rounded text-gray-500">,</kbd> Settings
             <span className="mx-1.5">·</span>
             <kbd className="px-1 py-0.5 bg-[#1F1F1F] rounded text-gray-500">Esc</kbd> Close
+            <span className="mx-1.5">·</span>
+            <kbd className="px-1 py-0.5 bg-[#1F1F1F] rounded text-gray-500">?</kbd> Help
           </p>
         </footer>
 
         {/* Toast Notifications */}
         <ToastContainer toasts={toasts} onDismiss={removeToast} />
+
+        {/* Keyboard Shortcuts Help Modal */}
+        {showKeyboardHelp && (
+          <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={() => setShowKeyboardHelp(false)}>
+            <div className="bg-[#141414] border border-[#2A2A2A] rounded-xl w-full max-w-sm shadow-2xl" onClick={e => e.stopPropagation()}>
+              <div className="px-6 py-4 border-b border-[#2A2A2A] flex items-center justify-between">
+                <h2 className="text-lg font-medium text-white">Keyboard Shortcuts</h2>
+                <button
+                  onClick={() => setShowKeyboardHelp(false)}
+                  className="w-8 h-8 rounded-lg bg-[#1F1F1F] text-gray-500 hover:text-white hover:bg-[#2A2A2A] flex items-center justify-center transition-all"
+                >
+                  &times;
+                </button>
+              </div>
+              <div className="p-6 space-y-3">
+                {[
+                  { key: 'R', label: 'Run analysis' },
+                  { key: 'F', label: 'Toggle relevant-only filter' },
+                  { key: 'B', label: 'Toggle AI briefing' },
+                  { key: ',', label: 'Open settings' },
+                  { key: 'Esc', label: 'Close panel / modal' },
+                  { key: '?', label: 'Show this help' },
+                ].map(({ key, label }) => (
+                  <div key={key} className="flex items-center justify-between">
+                    <kbd className="px-2 py-1 bg-[#1F1F1F] border border-[#2A2A2A] rounded text-sm font-mono text-white min-w-[2.5rem] text-center">
+                      {key}
+                    </kbd>
+                    <span className="text-sm text-[#A0A0A0]">{label}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Settings Modal - now self-sufficient via Zustand store */}
         {showSettings && (

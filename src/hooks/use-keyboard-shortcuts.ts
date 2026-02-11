@@ -6,6 +6,7 @@ interface KeyboardShortcutActions {
   onToggleBriefing: () => void;
   onOpenSettings: () => void;
   onEscape: () => void;
+  onHelp?: () => void;
   /** Whether the analyze action is currently disabled (e.g., loading) */
   analyzeDisabled?: boolean;
   /** Whether the briefing toggle is available (has content) */
@@ -50,6 +51,11 @@ export function useKeyboardShortcuts(actions: KeyboardShortcutActions): void {
 
       if (e.key === 'f' && current.filtersAvailable) {
         current.onToggleFilters();
+        return;
+      }
+
+      if (e.key === '?' && current.onHelp) {
+        current.onHelp();
         return;
       }
     };

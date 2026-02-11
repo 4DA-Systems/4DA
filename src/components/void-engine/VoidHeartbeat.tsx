@@ -180,6 +180,8 @@ export function VoidHeartbeat({ signal, size = 200 }: VoidHeartbeatProps) {
   return (
     <div
       className="void-heartbeat-container"
+      title="System pulse - shows 4DA activity state"
+      aria-label={`4DA system state: ${stateLabel}`}
       style={{
         width: size,
         height: size,
