@@ -58,7 +58,7 @@ export function ApiKeysStep({
 
       <div className="space-y-4 mb-6">
         {/* Ollama status banner */}
-        {ollamaStatus?.running && !apiKeys.openai && (
+        {ollamaStatus?.running && apiKeys.provider === 'ollama' && (
           <>
             {pullingModels ? (
               <div className="p-4 bg-[#141414] border border-orange-500/30 rounded-lg space-y-3">

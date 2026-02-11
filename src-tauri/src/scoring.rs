@@ -10,6 +10,22 @@ use crate::{
     get_relevance_threshold, RelevanceMatch, ScoreBreakdown, SourceRelevance,
 };
 
+/// Calibrate a raw similarity score (typically compressed in [0.3-0.6]) into
+/// a spread distribution using a sigmoid stretch. Centers at 0.48 (empirical
+/// midpoint for text-embedding-3-small L2 distances) and scales to use the
+/// full [0.05-0.95] range. This fixes the "everything scores 45-50%" problem.
+fn calibrate_score(raw: f32) -> f32 {
+    if raw <= 0.0 {
+        return 0.0;
+    }
+    if raw >= 1.0 {
+        return 1.0;
+    }
+    // Sigmoid stretch: 1 / (1 + exp((center - raw) * scale))
+    // center=0.48, scale=20 maps the typical [0.40-0.56] band to [0.05-0.95]
+    1.0 / (1.0 + ((0.48 - raw) * 20.0).exp())
+}
+
 /// Compute interest score by comparing item embedding against interest embeddings
 pub(crate) fn compute_interest_score(
     item_embedding: &[f32],
@@ -38,6 +54,48 @@ pub(crate) fn compute_interest_score(
     max_score
 }
 
+/// Keyword-based interest matching: boosts items that literally contain declared interest terms.
+/// Complements semantic matching which can miss exact keyword matches.
+fn compute_keyword_interest_score(
+    title: &str,
+    content: &str,
+    interests: &[context_engine::Interest],
+) -> f32 {
+    if interests.is_empty() {
+        return 0.0;
+    }
+
+    let title_lower = title.to_lowercase();
+    let text_lower = format!("{} {}", title_lower, content.to_lowercase());
+    let mut max_score: f32 = 0.0;
+
+    for interest in interests {
+        let interest_lower = interest.topic.to_lowercase();
+        let terms: Vec<&str> = interest_lower.split_whitespace().collect();
+        if terms.is_empty() {
+            continue;
+        }
+
+        let mut hits = 0.0_f32;
+        for term in &terms {
+            if term.len() < 3 {
+                continue; // skip tiny words like "ai", "ml" — too many false positives
+            }
+            if title_lower.contains(term) {
+                hits += 1.5; // title match = 1.5x weight
+            } else if text_lower.contains(term) {
+                hits += 1.0;
+            }
+        }
+
+        let meaningful_terms = terms.iter().filter(|t| t.len() >= 3).count().max(1) as f32;
+        let score = (hits / meaningful_terms).min(1.0) * interest.weight;
+        max_score = max_score.max(score);
+    }
+
+    max_score
+}
+
 /// Clean a source file path into a human-readable label
 fn clean_source_label(source_file: &str) -> String {
     let file_name = source_file
@@ -61,7 +119,7 @@ fn clean_source_label(source_file: &str) -> String {
 fn extract_explanation_snippet(matched_text: &str, source_file: &str) -> String {
     let clean = matched_text.trim().trim_end_matches("...");
     let phrase = clean
-        .find(|c: char| c == '.' || c == '\n')
+        .find(['.', '\n'])
         .filter(|&pos| pos > 10)
         .map(|pos| &clean[..pos])
         .unwrap_or(&clean[..clean.len().min(60)])
@@ -770,8 +828,16 @@ pub(crate) fn score_item(
             vec![]
         };
 
-    let context_score = matches.first().map(|m| m.similarity).unwrap_or(0.0);
-    let interest_score = compute_interest_score(input.embedding, &ctx.interests);
+    // Raw scores from embedding similarity (compressed in ~0.40-0.56 range)
+    let raw_context = matches.first().map(|m| m.similarity).unwrap_or(0.0);
+    let raw_interest = compute_interest_score(input.embedding, &ctx.interests);
+
+    // Calibrate: stretch compressed similarity scores to use full [0.05-0.95] range
+    let context_score = calibrate_score(raw_context);
+    let interest_score = calibrate_score(raw_interest);
+
+    // Keyword interest matching: boosts items containing declared interest terms
+    let keyword_score = compute_keyword_interest_score(input.title, input.content, &ctx.interests);
 
     // Semantic boost with keyword fallback
     let semantic_boost =
@@ -780,16 +846,17 @@ pub(crate) fn score_item(
 
     // Base score weighted by available data — dynamic weighting spreads the distribution
     let base_score = if ctx.cached_context_count > 0 && ctx.interest_count > 0 {
-        let (ctx_w, int_w) = if context_score > 0.6 {
-            (0.65, 0.35) // Strong context match: trust it more
-        } else if context_score < 0.2 {
-            (0.30, 0.70) // Weak context: let interests dominate
+        let (ctx_w, int_w, kw_w) = if context_score > 0.7 {
+            (0.50, 0.25, 0.25) // Strong context match: trust it more
+        } else if context_score < 0.3 {
+            (0.20, 0.45, 0.35) // Weak context: let interests + keywords dominate
         } else {
-            (0.50, 0.50)
+            (0.35, 0.35, 0.30) // Balanced
         };
-        (context_score * ctx_w + interest_score * int_w + semantic_boost).min(1.0)
+        (context_score * ctx_w + interest_score * int_w + keyword_score * kw_w + semantic_boost)
+            .min(1.0)
     } else if ctx.interest_count > 0 {
-        (interest_score * 0.7 + semantic_boost * 1.5).min(1.0)
+        (interest_score * 0.45 + keyword_score * 0.35 + semantic_boost * 1.2).min(1.0)
     } else if ctx.cached_context_count > 0 {
         (context_score + semantic_boost).min(1.0)
     } else {
@@ -920,7 +987,7 @@ pub(crate) fn score_item(
 
     SourceRelevance {
         id: input.id,
-        title: input.title.to_string(),
+        title: crate::decode_html_entities(input.title),
         url: input.url.map(|s| s.to_string()),
         top_score: combined_score,
         matches,
