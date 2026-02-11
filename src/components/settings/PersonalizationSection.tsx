@@ -1,7 +1,8 @@
-import type { UserContext } from '../../types';
+import type { UserContext, SuggestedInterest } from '../../types';
 
 interface PersonalizationSectionProps {
   userContext: UserContext | null;
+  suggestedInterests: SuggestedInterest[];
   newInterest: string;
   setNewInterest: (val: string) => void;
   newExclusion: string;
@@ -17,10 +18,13 @@ interface PersonalizationSectionProps {
   addTechStack: () => void;
   removeTechStack: (tech: string) => void;
   updateRole: () => void;
+  onAddSuggestion: (topic: string) => void;
+  onDismissSuggestion: (topic: string) => void;
 }
 
 export function PersonalizationSection({
   userContext,
+  suggestedInterests,
   newInterest,
   setNewInterest,
   newExclusion,
@@ -36,7 +40,10 @@ export function PersonalizationSection({
   addTechStack,
   removeTechStack,
   updateRole,
+  onAddSuggestion,
+  onDismissSuggestion,
 }: PersonalizationSectionProps) {
+  const undeclaredSuggestions = suggestedInterests.filter(s => !s.already_declared);
   return (
     <div className="bg-[#1F1F1F] rounded-lg p-5 border border-[#2A2A2A]">
       <div className="flex items-start gap-3 mb-4">
@@ -157,6 +164,40 @@ export function PersonalizationSection({
               )}
             </div>
           </div>
+
+          {/* Suggested Interests */}
+          {undeclaredSuggestions.length > 0 && (
+            <div>
+              <h4 className="text-xs text-[#A0A0A0] font-medium mb-2">Suggested Interests</h4>
+              <p className="text-[10px] text-[#666666] mb-2">
+                Based on your detected tech stack and activity
+              </p>
+              <div className="space-y-1">
+                {undeclaredSuggestions.slice(0, 5).map((suggestion) => (
+                  <div key={suggestion.topic} className="flex items-center justify-between py-1.5 px-2.5 rounded-md bg-[#1F1F1F] border border-[#2A2A2A]">
+                    <div className="min-w-0 flex-1 mr-2">
+                      <span className="text-sm text-white">{suggestion.topic}</span>
+                      <span className="text-[10px] text-[#666666] ml-2 truncate">{suggestion.source}</span>
+                    </div>
+                    <div className="flex gap-1 flex-shrink-0">
+                      <button
+                        onClick={() => onAddSuggestion(suggestion.topic)}
+                        className="text-xs px-2 py-0.5 rounded bg-[#2A2A2A] text-[#22C55E] hover:bg-[#333] transition-colors"
+                      >
+                        Add
+                      </button>
+                      <button
+                        onClick={() => onDismissSuggestion(suggestion.topic)}
+                        className="text-xs px-2 py-0.5 rounded bg-[#2A2A2A] text-[#666666] hover:bg-[#333] transition-colors"
+                      >
+                        Dismiss
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Exclusions */}
           <div>

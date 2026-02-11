@@ -1,4 +1,5 @@
 import { useEffect } from 'react';
+import { invoke } from '@tauri-apps/api/core';
 import { LearnedBehaviorPanel } from './LearnedBehaviorPanel';
 import { SystemHealthPanel } from './SystemHealthPanel';
 import { IndexedDocumentsPanel } from './IndexedDocumentsPanel';
@@ -68,6 +69,7 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
   const loadSystemHealth = useAppStore(s => s.loadSystemHealth);
 
   const userContext = useAppStore(s => s.userContext);
+  const suggestedInterests = useAppStore(s => s.suggestedInterests);
   const newInterest = useAppStore(s => s.newInterest);
   const setNewInterest = useAppStore(s => s.setNewInterest);
   const newExclusion = useAppStore(s => s.newExclusion);
@@ -83,6 +85,7 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
   const addTechStack = useAppStore(s => s.addTechStack);
   const removeTechStack = useAppStore(s => s.removeTechStack);
   const updateRole = useAppStore(s => s.updateRole);
+  const loadSuggestedInterests = useAppStore(s => s.loadSuggestedInterests);
 
   // Load all settings data into the store when modal opens
   const loadSettings = useAppStore(s => s.loadSettings);
@@ -97,6 +100,7 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
     loadLearnedBehavior();
     loadSystemHealth();
     loadUserContext();
+    loadSuggestedInterests();
   // eslint-disable-next-line react-hooks/exhaustive-deps -- load once on mount
   }, []);
 
@@ -128,6 +132,30 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
       setTimeout(() => setSettingsStatus(''), 2000);
     } catch (error) {
       setSettingsStatus(`Notification error: ${error}`);
+    }
+  };
+
+  const handleAddSuggestion = async (topic: string) => {
+    try {
+      await invoke('add_interest', { topic });
+      await loadUserContext();
+      await loadSuggestedInterests();
+      setSettingsStatus('Interest added from suggestion');
+      setTimeout(() => setSettingsStatus(''), 2000);
+    } catch (error) {
+      setSettingsStatus(`Error: ${error}`);
+    }
+  };
+
+  const handleDismissSuggestion = async (topic: string) => {
+    try {
+      await invoke('add_exclusion', { topic });
+      await loadUserContext();
+      await loadSuggestedInterests();
+      setSettingsStatus('Suggestion dismissed');
+      setTimeout(() => setSettingsStatus(''), 2000);
+    } catch (error) {
+      setSettingsStatus(`Error: ${error}`);
     }
   };
 
@@ -188,6 +216,7 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
 
           <PersonalizationSection
             userContext={userContext}
+            suggestedInterests={suggestedInterests}
             newInterest={newInterest}
             setNewInterest={setNewInterest}
             newExclusion={newExclusion}
@@ -203,6 +232,8 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
             addTechStack={addTechStack}
             removeTechStack={removeTechStack}
             updateRole={updateRole}
+            onAddSuggestion={handleAddSuggestion}
+            onDismissSuggestion={handleDismissSuggestion}
           />
 
           <LearnedBehaviorPanel

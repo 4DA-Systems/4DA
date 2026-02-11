@@ -12,7 +12,7 @@ export function useMonitoring() {
       setMonitoring(status);
       setMonitoringInterval(status.interval_minutes);
     } catch (error) {
-      console.log('Monitoring status not available:', error);
+      console.debug('Monitoring status not available:', error);
     }
   }, []);
 

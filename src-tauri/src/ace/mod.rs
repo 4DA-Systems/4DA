@@ -697,6 +697,7 @@ impl ACE {
                         total_exposures = topic_affinities.total_exposures + 1,
                         last_interaction = datetime('now'),
                         decay_applied = 0,
+                        last_decay_at = NULL,
                         updated_at = datetime('now')",
                     rusqlite::params![topic],
                 )
@@ -709,6 +710,7 @@ impl ACE {
                         total_exposures = topic_affinities.total_exposures + 1,
                         last_interaction = datetime('now'),
                         decay_applied = 0,
+                        last_decay_at = NULL,
                         updated_at = datetime('now')",
                     rusqlite::params![topic],
                 )
@@ -933,6 +935,25 @@ impl ACE {
         })
     }
 
+    /// Get source preferences for scoring
+    pub fn get_source_preferences(&self) -> Result<Vec<(String, f32)>, String> {
+        let conn = self.conn.lock();
+        let mut stmt = conn
+            .prepare(
+                "SELECT source, score FROM source_preferences WHERE interactions >= 5 ORDER BY source",
+            )
+            .map_err(|e| e.to_string())?;
+
+        let rows = stmt
+            .query_map([], |row| {
+                Ok((row.get::<_, String>(0)?, row.get::<_, f32>(1)?))
+            })
+            .map_err(|e| e.to_string())?;
+
+        rows.collect::<Result<Vec<_>, _>>()
+            .map_err(|e| e.to_string())
+    }
+
     /// Confirm an anti-topic
     pub fn confirm_anti_topic(&self, topic: &str) -> Result<(), String> {
         let conn = self.conn.lock();
@@ -945,28 +966,32 @@ impl ACE {
         Ok(())
     }
 
-    /// Apply temporal decay
-    /// Note: SQLite doesn't have native POWER() function, so we compute decay in Rust
+    /// Apply temporal decay to topic affinities
+    /// Uses 30-day half-life: after 30 days of no interaction, scores halve.
+    /// Runs continuously based on time since last decay (not a one-shot boolean).
+    /// Deletes fully-decayed affinities (|score| < 0.05).
     pub fn apply_behavior_decay(&self) -> Result<usize, String> {
         let conn = self.conn.lock();
 
-        // First, fetch all topics that need decay applied
+        // Fetch all affinities that haven't been interacted with in >1 day
+        // Use last_decay_at to compute incremental decay (not decay from epoch)
         let mut stmt = conn
             .prepare(
-                "SELECT topic, affinity_score, confidence, julianday('now') - julianday(last_interaction) as days_since
+                "SELECT topic, affinity_score, confidence, last_interaction,
+                        COALESCE(last_decay_at, last_interaction) as decay_baseline
                  FROM topic_affinities
-                 WHERE decay_applied = 0
-                   AND julianday('now') - julianday(last_interaction) > 1",
+                 WHERE julianday('now') - julianday(last_interaction) > 1",
             )
             .map_err(|e| format!("Failed to prepare decay query: {}", e))?;
 
-        let rows: Vec<(String, f32, f32, f64)> = stmt
+        let rows: Vec<(String, f32, f32, String, String)> = stmt
             .query_map([], |row| {
                 Ok((
                     row.get::<_, String>(0)?,
                     row.get::<_, f32>(1)?,
                     row.get::<_, f32>(2)?,
-                    row.get::<_, f64>(3)?,
+                    row.get::<_, String>(3)?,
+                    row.get::<_, String>(4)?,
                 ))
             })
             .map_err(|e| format!("Failed to query topics for decay: {}", e))?
@@ -974,20 +999,50 @@ impl ACE {
             .map_err(|e| format!("Failed to collect decay rows: {}", e))?;
 
         let mut updated = 0;
+        let now = chrono::Utc::now().to_rfc3339();
 
-        // Apply decay using Rust's pow function
-        for (topic, affinity_score, confidence, days_since) in &rows {
-            let decay_factor = 0.5_f32.powf((*days_since as f32) / 30.0);
+        for (topic, affinity_score, confidence, _last_interaction, decay_baseline) in &rows {
+            // Parse the decay baseline timestamp
+            let baseline = chrono::DateTime::parse_from_rfc3339(decay_baseline)
+                .or_else(|_| {
+                    // Try SQLite datetime format: "YYYY-MM-DD HH:MM:SS"
+                    chrono::NaiveDateTime::parse_from_str(decay_baseline, "%Y-%m-%d %H:%M:%S")
+                        .map(|dt| dt.and_utc().fixed_offset())
+                })
+                .unwrap_or_else(|_| chrono::Utc::now().fixed_offset());
+
+            let days_since = (chrono::Utc::now() - baseline.with_timezone(&chrono::Utc)).num_hours()
+                as f32
+                / 24.0;
+            if days_since < 1.0 {
+                continue; // Already decayed recently
+            }
+
+            // 30-day half-life decay
+            let decay_factor = 0.5_f32.powf(days_since / 30.0);
             let new_affinity = affinity_score * decay_factor;
-            let new_confidence = confidence * decay_factor;
+            let new_confidence = confidence.min(1.0) * decay_factor;
 
+            // Delete fully-decayed affinities
+            if new_affinity.abs() < 0.05 {
+                conn.execute(
+                    "DELETE FROM topic_affinities WHERE topic = ?1",
+                    rusqlite::params![topic],
+                )
+                .map_err(|e| format!("Failed to delete decayed topic: {}", e))?;
+                updated += 1;
+                continue;
+            }
+
+            // Update with decayed values and record decay timestamp
             conn.execute(
                 "UPDATE topic_affinities SET
                     affinity_score = ?1,
                     confidence = ?2,
+                    last_decay_at = ?3,
                     decay_applied = 1
-                 WHERE topic = ?3",
-                rusqlite::params![new_affinity, new_confidence, topic],
+                 WHERE topic = ?4",
+                rusqlite::params![new_affinity, new_confidence, now, topic],
             )
             .map_err(|e| format!("Failed to update topic decay: {}", e))?;
 
@@ -995,7 +1050,7 @@ impl ACE {
         }
 
         if updated > 0 {
-            debug!(target: "ace::behavior", updated = updated, "Applied decay to topic affinities");
+            info!(target: "ace::behavior", updated = updated, "Applied temporal decay to topic affinities");
         }
 
         Ok(updated)
@@ -1037,6 +1092,88 @@ impl ACE {
     }
 
     // ========================================================================
+    // Threshold Auto-Tuning Methods
+    // ========================================================================
+
+    /// Compute threshold adjustment based on user engagement rate over the last 7 days.
+    /// Returns `Some(new_threshold)` if adjustment is warranted, `None` if data is
+    /// insufficient or the current threshold is already appropriate.
+    ///
+    /// Logic:
+    /// - High engagement (>50% positive): threshold too strict, lower by 0.02
+    /// - Low engagement (<15% positive): threshold too loose, raise by 0.02
+    /// - Always clamped to [0.15, 0.50]
+    pub fn compute_threshold_adjustment(&self, current_threshold: f32) -> Option<f32> {
+        let conn = self.conn.lock();
+
+        // Count total interactions from the last 7 days
+        let total_shown: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM interactions WHERE timestamp > datetime('now', '-7 days')",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap_or(0);
+
+        // Need at least 20 interactions for meaningful adjustment
+        if total_shown < 20 {
+            return None;
+        }
+
+        let positive: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM interactions
+                 WHERE timestamp > datetime('now', '-7 days')
+                 AND action_type IN ('click', 'save', 'share')",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap_or(0);
+
+        let engagement_rate = positive as f32 / total_shown as f32;
+
+        // High engagement (>50%): threshold may be too strict, lower it to show more
+        if engagement_rate > 0.50 {
+            let new = (current_threshold - 0.02).clamp(0.15, 0.50);
+            if (new - current_threshold).abs() > f32::EPSILON {
+                return Some(new);
+            }
+        }
+
+        // Low engagement (<15%): threshold too loose, raise it to filter more
+        if engagement_rate < 0.15 {
+            let new = (current_threshold + 0.02).clamp(0.15, 0.50);
+            if (new - current_threshold).abs() > f32::EPSILON {
+                return Some(new);
+            }
+        }
+
+        None // No adjustment needed
+    }
+
+    /// Load stored threshold from ACE kv_store
+    pub fn get_stored_threshold(&self) -> Option<f32> {
+        let conn = self.conn.lock();
+        conn.query_row(
+            "SELECT value FROM kv_store WHERE key = 'relevance_threshold'",
+            [],
+            |row| row.get::<_, f64>(0),
+        )
+        .ok()
+        .map(|v| v as f32)
+    }
+
+    /// Persist threshold to ACE kv_store
+    pub fn store_threshold(&self, threshold: f32) {
+        let conn = self.conn.lock();
+        let _ = conn.execute(
+            "INSERT OR REPLACE INTO kv_store (key, value, updated_at)
+             VALUES ('relevance_threshold', ?1, datetime('now'))",
+            [threshold as f64],
+        );
+    }
+
+    // ========================================================================
     // Watcher Persistence Methods
     // ========================================================================
 
@@ -1057,6 +1194,57 @@ impl ACE {
         } else {
             Err("Watcher persistence not initialized".to_string())
         }
+    }
+
+    /// Get topics from recent file changes for "active work" boosting.
+    /// Returns topics with recency-weighted scores (higher = more recent).
+    /// Used by the scoring pipeline to boost content matching what the user
+    /// is actively working on RIGHT NOW.
+    pub fn get_recent_work_topics(&self, hours: u64) -> Result<Vec<(String, f32)>, String> {
+        let conn = self.conn.lock();
+
+        let mut stmt = conn
+            .prepare(
+                "SELECT extracted_topics, timestamp FROM file_signals
+                 WHERE timestamp > datetime('now', ?1)
+                 ORDER BY timestamp DESC LIMIT 50",
+            )
+            .map_err(|e| e.to_string())?;
+
+        let hours_param = format!("-{} hours", hours);
+        let rows = stmt
+            .query_map([&hours_param], |row| {
+                Ok((row.get::<_, Option<String>>(0)?, row.get::<_, String>(1)?))
+            })
+            .map_err(|e| e.to_string())?;
+
+        let mut topic_weights: std::collections::HashMap<String, f32> =
+            std::collections::HashMap::new();
+        let max_hours = hours as f32;
+
+        for row in rows {
+            let (topics_json, timestamp_str) = row.map_err(|e| e.to_string())?;
+
+            if let Some(json_str) = topics_json {
+                // Parse JSON array of topics
+                if let Ok(topics) = serde_json::from_str::<Vec<String>>(&json_str) {
+                    // Compute recency weight: linear decay from 1.0 to 0.5
+                    let hours_ago = parse_hours_ago(&timestamp_str);
+                    let weight = 1.0 - (hours_ago / max_hours) * 0.5;
+                    let weight = weight.clamp(0.5, 1.0);
+
+                    for topic in topics {
+                        let topic_lower = topic.to_lowercase();
+                        let entry = topic_weights.entry(topic_lower).or_insert(0.0);
+                        *entry = entry.max(weight); // Keep highest weight per topic
+                    }
+                }
+            }
+        }
+
+        let mut result: Vec<(String, f32)> = topic_weights.into_iter().collect();
+        result.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+        Ok(result)
     }
 }
 
@@ -1096,6 +1284,19 @@ pub struct AutonomousContext {
 // ============================================================================
 // Helper Functions
 // ============================================================================
+
+/// Parse an ISO timestamp string and return how many hours ago it was.
+/// Falls back to `24.0` if parsing fails (treats unparseable timestamps as old).
+fn parse_hours_ago(timestamp_str: &str) -> f32 {
+    if let Ok(ts) = chrono::NaiveDateTime::parse_from_str(timestamp_str, "%Y-%m-%d %H:%M:%S") {
+        let now = chrono::Utc::now().naive_utc();
+        let duration = now - ts;
+        (duration.num_minutes() as f32 / 60.0).max(0.0)
+    } else {
+        // Fallback: treat as old
+        24.0
+    }
+}
 
 /// Check if a dependency is notable
 fn is_notable_dependency(name: &str) -> bool {
@@ -1730,5 +1931,322 @@ mod tests {
         assert!(is_notable_dependency("tokio"));
         assert!(is_notable_dependency("@prisma/client"));
         assert!(!is_notable_dependency("my-random-lib"));
+    }
+
+    // Temporal decay tests
+
+    #[test]
+    fn test_decay_30_day_half_life() {
+        // After 30 days, score should be ~50% of original
+        let decay_factor = 0.5_f32.powf(30.0 / 30.0);
+        assert!(
+            (decay_factor - 0.5).abs() < 0.01,
+            "30-day decay should halve: got {}",
+            decay_factor
+        );
+    }
+
+    #[test]
+    fn test_decay_recent_untouched() {
+        // Items interacted with recently should have minimal decay
+        let decay_factor = 0.5_f32.powf(0.5 / 30.0); // Half a day
+        assert!(
+            decay_factor > 0.98,
+            "Recent items should barely decay: got {}",
+            decay_factor
+        );
+    }
+
+    #[test]
+    fn test_decay_fully_decayed_deleted() {
+        // Items with very small scores after decay should be cleaned up
+        let original_score = 0.08_f32;
+        let decay_factor = 0.5_f32.powf(30.0 / 30.0); // 30 days
+        let decayed = original_score * decay_factor;
+        assert!(
+            decayed.abs() < 0.05,
+            "Low score after 30 days should be below deletion threshold: got {}",
+            decayed
+        );
+    }
+
+    // ========================================================================
+    // Active Work Window tests
+    // ========================================================================
+
+    /// Helper: create an in-memory ACE instance for testing.
+    /// Loads the sqlite-vec extension so vec0 virtual tables work.
+    fn create_test_ace() -> ACE {
+        // Load sqlite-vec extension for vec0 virtual tables
+        #[allow(clippy::missing_transmute_annotations)]
+        unsafe {
+            rusqlite::ffi::sqlite3_auto_extension(Some(std::mem::transmute(
+                sqlite_vec::sqlite3_vec_init as *const (),
+            )));
+        }
+
+        let conn = Arc::new(Mutex::new(
+            Connection::open_in_memory().expect("in-memory DB"),
+        ));
+        db::migrate(&conn).expect("ACE migration");
+        ACE {
+            conn,
+            scanner: ProjectScanner::new(),
+            git_analyzer: GitAnalyzer::default(),
+            watcher: None,
+            watcher_persistence: None,
+            embedding_service: None,
+            rate_limiter: InteractionRateLimiter::new(1000, 100, 60),
+        }
+    }
+
+    #[test]
+    fn test_recent_work_topics_returns_topics() {
+        let ace = create_test_ace();
+        let conn = ace.get_conn().lock();
+
+        // Insert file_signals with topics within 2 hours (use current timestamp)
+        let now = chrono::Utc::now()
+            .naive_utc()
+            .format("%Y-%m-%d %H:%M:%S")
+            .to_string();
+        conn.execute(
+            "INSERT INTO file_signals (path, change_type, extracted_topics, timestamp)
+             VALUES (?1, 'modified', ?2, ?3)",
+            rusqlite::params!["/src/main.rs", r#"["rust", "tauri", "async"]"#, now,],
+        )
+        .expect("insert file signal");
+
+        // Insert another signal 30 minutes ago
+        let thirty_min_ago = (chrono::Utc::now() - chrono::Duration::minutes(30))
+            .naive_utc()
+            .format("%Y-%m-%d %H:%M:%S")
+            .to_string();
+        conn.execute(
+            "INSERT INTO file_signals (path, change_type, extracted_topics, timestamp)
+             VALUES (?1, 'modified', ?2, ?3)",
+            rusqlite::params!["/src/lib.rs", r#"["sqlite", "embeddings"]"#, thirty_min_ago,],
+        )
+        .expect("insert file signal 2");
+
+        drop(conn); // Release lock before calling method
+
+        let topics = ace
+            .get_recent_work_topics(2)
+            .expect("get_recent_work_topics");
+
+        // Should have 5 unique topics
+        assert_eq!(topics.len(), 5, "Expected 5 topics, got {:?}", topics);
+
+        // Most recent topics should have highest weight (close to 1.0)
+        let rust_weight = topics.iter().find(|(t, _)| t == "rust").map(|(_, w)| *w);
+        assert!(rust_weight.is_some(), "Should contain 'rust' topic");
+        assert!(
+            rust_weight.unwrap() > 0.9,
+            "Recent 'rust' topic should have weight > 0.9, got {}",
+            rust_weight.unwrap()
+        );
+
+        // Slightly older topics should still have decent weight
+        let sqlite_weight = topics.iter().find(|(t, _)| t == "sqlite").map(|(_, w)| *w);
+        assert!(sqlite_weight.is_some(), "Should contain 'sqlite' topic");
+        assert!(
+            sqlite_weight.unwrap() > 0.8,
+            "30-min-old 'sqlite' topic should have weight > 0.8, got {}",
+            sqlite_weight.unwrap()
+        );
+    }
+
+    #[test]
+    fn test_old_work_topics_excluded() {
+        let ace = create_test_ace();
+        let conn = ace.get_conn().lock();
+
+        // Insert file_signals > 2 hours old (3 hours ago)
+        let three_hours_ago = (chrono::Utc::now() - chrono::Duration::hours(3))
+            .naive_utc()
+            .format("%Y-%m-%d %H:%M:%S")
+            .to_string();
+        conn.execute(
+            "INSERT INTO file_signals (path, change_type, extracted_topics, timestamp)
+             VALUES (?1, 'modified', ?2, ?3)",
+            rusqlite::params![
+                "/old/file.rs",
+                r#"["old_topic", "stale_tech"]"#,
+                three_hours_ago,
+            ],
+        )
+        .expect("insert old file signal");
+
+        drop(conn);
+
+        let topics = ace
+            .get_recent_work_topics(2)
+            .expect("get_recent_work_topics");
+
+        assert!(
+            topics.is_empty(),
+            "Topics older than 2 hours should not appear in 2-hour window, got {:?}",
+            topics
+        );
+    }
+
+    #[test]
+    fn test_empty_window_returns_empty() {
+        let ace = create_test_ace();
+
+        // Fresh DB with no file_signals at all
+        let topics = ace
+            .get_recent_work_topics(2)
+            .expect("get_recent_work_topics");
+
+        assert!(
+            topics.is_empty(),
+            "Empty DB should return no work topics, got {:?}",
+            topics
+        );
+    }
+
+    // ========================================================================
+    // Threshold auto-tuning tests
+    // ========================================================================
+
+    /// Helper: insert N interactions with the given action_type into the ACE DB.
+    /// Uses recent timestamps so they fall within the 7-day window.
+    fn insert_interactions(ace: &ACE, action_type: &str, count: usize) {
+        let conn = ace.get_conn().lock();
+        let now = chrono::Utc::now()
+            .naive_utc()
+            .format("%Y-%m-%d %H:%M:%S")
+            .to_string();
+        for i in 0..count {
+            conn.execute(
+                "INSERT INTO interactions (item_id, action_type, action_data, item_topics, item_source, signal_strength, timestamp)
+                 VALUES (?1, ?2, '{}', '[]', 'hackernews', 0.5, ?3)",
+                rusqlite::params![i as i64 + 1, action_type, now],
+            )
+            .expect("insert interaction");
+        }
+    }
+
+    #[test]
+    fn test_high_engagement_lowers_threshold() {
+        let ace = create_test_ace();
+        // 15 clicks + 5 saves = 20 positive out of 25 total => 80% engagement
+        insert_interactions(&ace, "click", 15);
+        insert_interactions(&ace, "save", 5);
+        insert_interactions(&ace, "dismiss", 5);
+
+        let current = 0.30;
+        let result = ace.compute_threshold_adjustment(current);
+        assert!(
+            result.is_some(),
+            "High engagement should trigger adjustment"
+        );
+        let new_threshold = result.unwrap();
+        assert!(
+            new_threshold < current,
+            "High engagement should lower threshold: got {} (was {})",
+            new_threshold,
+            current
+        );
+        assert!(
+            (new_threshold - 0.28).abs() < f32::EPSILON,
+            "Expected 0.28, got {}",
+            new_threshold
+        );
+    }
+
+    #[test]
+    fn test_low_engagement_raises_threshold() {
+        let ace = create_test_ace();
+        // 2 clicks out of 25 total => 8% engagement
+        insert_interactions(&ace, "click", 2);
+        insert_interactions(&ace, "dismiss", 18);
+        insert_interactions(&ace, "ignore", 5);
+
+        let current = 0.30;
+        let result = ace.compute_threshold_adjustment(current);
+        assert!(result.is_some(), "Low engagement should trigger adjustment");
+        let new_threshold = result.unwrap();
+        assert!(
+            new_threshold > current,
+            "Low engagement should raise threshold: got {} (was {})",
+            new_threshold,
+            current
+        );
+        assert!(
+            (new_threshold - 0.32).abs() < f32::EPSILON,
+            "Expected 0.32, got {}",
+            new_threshold
+        );
+    }
+
+    #[test]
+    fn test_threshold_bounds() {
+        let ace = create_test_ace();
+        // High engagement to trigger lowering
+        insert_interactions(&ace, "click", 25);
+
+        // Start at minimum bound - should not go below 0.15
+        let result = ace.compute_threshold_adjustment(0.15);
+        assert!(
+            result.is_none(),
+            "Threshold at minimum (0.15) should not decrease further"
+        );
+
+        // Low engagement to trigger raising
+        let ace2 = create_test_ace();
+        insert_interactions(&ace2, "dismiss", 25);
+
+        // Start at maximum bound - should not go above 0.50
+        let result2 = ace2.compute_threshold_adjustment(0.50);
+        assert!(
+            result2.is_none(),
+            "Threshold at maximum (0.50) should not increase further"
+        );
+    }
+
+    #[test]
+    fn test_insufficient_data_no_change() {
+        let ace = create_test_ace();
+        // Only 5 interactions - below the 20 minimum
+        insert_interactions(&ace, "click", 5);
+
+        let result = ace.compute_threshold_adjustment(0.30);
+        assert!(
+            result.is_none(),
+            "Fewer than 20 interactions should return None"
+        );
+    }
+
+    #[test]
+    fn test_stored_threshold_roundtrip() {
+        let ace = create_test_ace();
+
+        // Initially no stored threshold
+        assert!(
+            ace.get_stored_threshold().is_none(),
+            "Fresh DB should have no stored threshold"
+        );
+
+        // Store a threshold
+        ace.store_threshold(0.42);
+        let loaded = ace.get_stored_threshold();
+        assert!(loaded.is_some(), "Should load stored threshold");
+        assert!(
+            (loaded.unwrap() - 0.42).abs() < 0.001,
+            "Stored threshold should roundtrip: got {}",
+            loaded.unwrap()
+        );
+
+        // Overwrite
+        ace.store_threshold(0.18);
+        let loaded2 = ace.get_stored_threshold();
+        assert!(
+            (loaded2.unwrap() - 0.18).abs() < 0.001,
+            "Updated threshold should persist: got {}",
+            loaded2.unwrap()
+        );
     }
 }

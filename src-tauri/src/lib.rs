@@ -5,7 +5,7 @@ use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::path::PathBuf;
-use std::sync::atomic::AtomicBool;
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::Arc;
 use tauri::{AppHandle, Emitter, Listener, Manager};
 use tracing::{debug, error, info, warn};
@@ -22,6 +22,7 @@ static EMBEDDING_CLIENT: Lazy<reqwest::Client> = Lazy::new(|| {
 mod ace;
 mod ace_commands;
 mod analysis;
+mod anomaly;
 mod context_commands;
 mod context_engine;
 mod db;
@@ -29,6 +30,7 @@ mod digest;
 mod digest_commands;
 mod document_index;
 pub mod extractors;
+mod health;
 mod job_queue;
 mod job_queue_commands;
 mod llm;
@@ -133,6 +135,8 @@ pub struct ScoreBreakdown {
     pub freshness_mult: f32,
     #[serde(default)]
     pub feedback_boost: f32,
+    #[serde(default)]
+    pub source_quality_boost: f32,
     pub confidence_by_signal: std::collections::HashMap<String, f32>,
 }
 
@@ -1001,8 +1005,26 @@ pub(crate) fn get_context_dir() -> Option<PathBuf> {
 /// File extensions we care about for Phase 0
 pub(crate) const SUPPORTED_EXTENSIONS: &[&str] = &["md", "txt", "rs", "ts", "js", "py"];
 
-/// Relevance threshold for "relevant" classification (lowered for content-based matching)
-pub(crate) const RELEVANCE_THRESHOLD: f32 = 0.30;
+/// Relevance threshold stored as atomic u32 bits for thread-safe auto-tuning.
+/// Adjusted daily based on user engagement rate (see `compute_threshold_adjustment`).
+static RELEVANCE_THRESHOLD_BITS: AtomicU32 = AtomicU32::new(0);
+
+/// Get the current relevance threshold (thread-safe).
+/// Returns the auto-tuned value, or 0.30 default if not yet initialized.
+pub(crate) fn get_relevance_threshold() -> f32 {
+    let bits = RELEVANCE_THRESHOLD_BITS.load(Ordering::Relaxed);
+    if bits == 0 {
+        0.30 // Default before initialization
+    } else {
+        f32::from_bits(bits)
+    }
+}
+
+/// Set the relevance threshold (thread-safe, clamped to [0.15, 0.50]).
+pub(crate) fn set_relevance_threshold(value: f32) {
+    let clamped = value.clamp(0.15, 0.50);
+    RELEVANCE_THRESHOLD_BITS.store(clamped.to_bits(), Ordering::Relaxed);
+}
 
 /// Maximum content length for embedding (roughly 1000 words)
 const MAX_CONTENT_LENGTH: usize = 5000;
@@ -1260,16 +1282,6 @@ pub(crate) fn void_signal_error(app: &AppHandle) {
     if let Ok(db) = get_database() {
         let monitoring = get_monitoring_state();
         let signal = void_engine::signal_error(db, monitoring);
-        void_engine::emit_if_changed(app, signal);
-    }
-}
-
-/// Emit void signal: ACE context change
-#[allow(dead_code)]
-pub(crate) fn void_signal_context_change(app: &AppHandle, intensity: f32) {
-    if let Ok(db) = get_database() {
-        let monitoring = get_monitoring_state();
-        let signal = void_engine::signal_context_change(db, monitoring, intensity);
         void_engine::emit_if_changed(app, signal);
     }
 }
@@ -1672,7 +1684,7 @@ async fn compute_relevance() -> Result<Vec<SourceRelevance>, String> {
         // This applies learned affinities and anti-topic penalties multiplicatively
         let combined_score = scoring::compute_unified_relevance(base_score, &topics, &ace_ctx);
 
-        let relevant = combined_score >= RELEVANCE_THRESHOLD;
+        let relevant = combined_score >= get_relevance_threshold();
 
         // Compute debug info for logging
         let affinity_mult = scoring::compute_affinity_multiplier(&topics, &ace_ctx);
@@ -1754,6 +1766,7 @@ async fn compute_relevance() -> Result<Vec<SourceRelevance>, String> {
             anti_penalty,
             freshness_mult: 1.0,
             feedback_boost: 0.0,
+            source_quality_boost: 0.0,
             confidence_by_signal,
         };
 
@@ -1802,7 +1815,7 @@ async fn compute_relevance() -> Result<Vec<SourceRelevance>, String> {
         excluded = excluded_count,
         interests = interest_count,
         exclusions = exclusion_count,
-        threshold = RELEVANCE_THRESHOLD,
+        threshold = get_relevance_threshold(),
         db_cached = db_item_count,
         "Analysis summary"
     );
@@ -1816,30 +1829,40 @@ async fn compute_relevance() -> Result<Vec<SourceRelevance>, String> {
 
 /// Run background health check - called every 5 minutes by scheduler
 pub async fn run_background_health_check() -> Result<serde_json::Value, String> {
-    let _ace = get_ace_engine()?;
+    let ace = get_ace_engine()?;
+    let conn = ace.get_conn().lock();
+    let report = health::check_all_components(&conn)?;
 
-    // Log health check (simplified - full health monitoring removed)
     info!(
         target: "4da::health",
-        status = "healthy",
+        status = ?report.overall_status,
+        quality = ?report.context_quality,
+        fallback = report.fallback_level,
         "Background health check complete"
     );
 
-    Ok(serde_json::json!({
-        "status": "healthy",
-        "timestamp": chrono::Utc::now().to_rfc3339()
-    }))
+    serde_json::to_value(&report).map_err(|e| e.to_string())
 }
 
 /// Run background anomaly detection - called every hour by scheduler
 pub async fn run_background_anomaly_detection() -> Result<serde_json::Value, String> {
-    let _ace = get_ace_engine()?;
+    let ace = get_ace_engine()?;
+    let conn = ace.get_conn().lock();
+    let anomalies = anomaly::detect_all(&conn)?;
 
-    // Simplified - full anomaly detection removed
-    debug!(target: "4da::anomaly", "Background anomaly check (no-op)");
+    // Store any new anomalies
+    let mut new_count = 0;
+    for a in &anomalies {
+        if anomaly::store_anomaly(&conn, a).is_ok() {
+            new_count += 1;
+        }
+    }
+
+    info!(target: "4da::anomaly", found = anomalies.len(), stored = new_count, "Background anomaly detection complete");
 
     Ok(serde_json::json!({
-        "anomalies_found": 0,
+        "anomalies_found": anomalies.len(),
+        "new_stored": new_count,
         "timestamp": chrono::Utc::now().to_rfc3339()
     }))
 }
@@ -1857,8 +1880,28 @@ pub async fn run_background_behavior_decay() -> Result<serde_json::Value, String
         "Background behavior decay applied"
     );
 
+    // Auto-tune relevance threshold based on engagement rate
+    let threshold_adjusted = {
+        let current = get_relevance_threshold();
+        if let Some(new_threshold) = ace.compute_threshold_adjustment(current) {
+            set_relevance_threshold(new_threshold);
+            ace.store_threshold(new_threshold);
+            info!(
+                target: "4da::threshold",
+                old = current,
+                new = new_threshold,
+                "Auto-tuned relevance threshold"
+            );
+            Some(new_threshold)
+        } else {
+            None
+        }
+    };
+
     Ok(serde_json::json!({
         "signals_decayed": decayed_count,
+        "threshold_adjusted": threshold_adjusted,
+        "current_threshold": get_relevance_threshold(),
         "timestamp": chrono::Utc::now().to_rfc3339()
     }))
 }
@@ -2242,7 +2285,19 @@ pub fn run() {
     info!(target: "4da::startup", "========================================");
     info!(target: "4da::startup", context_dir = ?get_context_dir(), "Context directory");
     info!(target: "4da::startup", model = "all-MiniLM-L6-v2", dimensions = 384, "Embedding model");
-    info!(target: "4da::startup", threshold = RELEVANCE_THRESHOLD, "Relevance threshold");
+    // Initialize relevance threshold from ACE storage or default
+    if let Ok(ace) = get_ace_engine() {
+        if let Some(stored) = ace.get_stored_threshold() {
+            set_relevance_threshold(stored);
+            info!(target: "4da::startup", threshold = get_relevance_threshold(), "Loaded stored relevance threshold");
+        } else {
+            set_relevance_threshold(0.30);
+            info!(target: "4da::startup", threshold = get_relevance_threshold(), "Relevance threshold (default)");
+        }
+    } else {
+        set_relevance_threshold(0.30);
+        info!(target: "4da::startup", threshold = get_relevance_threshold(), "Relevance threshold (default, ACE unavailable)");
+    }
 
     // Initialize database early
     match get_database() {
@@ -2339,6 +2394,7 @@ pub fn run() {
             settings_commands::remove_exclusion,
             settings_commands::record_interaction,
             settings_commands::get_context_stats,
+            settings_commands::get_current_threshold,
             // ACE (Autonomous Context Engine) commands - Phase A
             ace_commands::ace_detect_context,
             ace_commands::ace_get_detected_tech,
@@ -2370,6 +2426,16 @@ pub fn run() {
             ace_commands::ace_clear_watcher_state,
             // ACE Phase E: Rate Limiting
             ace_commands::ace_get_rate_limit_status,
+            // ACE Auto-Interest Discovery
+            ace_commands::ace_get_suggested_interests,
+            // ACE Phase 1C: Anomaly Detection
+            ace_commands::ace_get_unresolved_anomalies,
+            ace_commands::ace_detect_anomalies,
+            ace_commands::ace_resolve_anomaly,
+            ace_commands::ace_get_accuracy_metrics,
+            ace_commands::ace_record_accuracy_feedback,
+            // ACE Phase 1D: Health Monitoring
+            ace_commands::ace_get_system_health,
             // ACE Watcher Control
             ace_commands::ace_start_watcher,
             ace_commands::ace_stop_watcher,

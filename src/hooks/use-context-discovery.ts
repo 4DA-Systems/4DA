@@ -64,7 +64,7 @@ export function useContextDiscovery(onStatusChange?: (status: string) => void) {
         }));
       }
     } catch (error) {
-      console.log('No discovered context yet:', error);
+      console.debug('No discovered context yet:', error);
     }
   }, []);
 

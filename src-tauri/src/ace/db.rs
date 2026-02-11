@@ -294,6 +294,31 @@ pub fn migrate(conn: &Arc<Mutex<Connection>>) -> Result<(), String> {
 
     "#).map_err(|e| format!("ACE migration failed: {}", e))?;
 
+    // Phase 1B migration: Add last_decay_at column for continuous decay tracking
+    // This replaces the boolean decay_applied flag with a timestamp
+    conn.execute_batch("ALTER TABLE topic_affinities ADD COLUMN last_decay_at TEXT DEFAULT NULL;")
+        .ok(); // ok() because column may already exist on subsequent runs
+
+    // Phase 1C migration: Anomalies table
+    conn.execute_batch(
+        r#"
+        CREATE TABLE IF NOT EXISTS anomalies (
+            id INTEGER PRIMARY KEY,
+            anomaly_type TEXT NOT NULL,
+            topic TEXT,
+            description TEXT NOT NULL,
+            confidence REAL DEFAULT 0.5,
+            severity TEXT DEFAULT 'medium',
+            evidence TEXT DEFAULT '[]',
+            detected_at TEXT DEFAULT (datetime('now')),
+            resolved INTEGER DEFAULT 0
+        );
+        CREATE INDEX IF NOT EXISTS idx_anomalies_resolved ON anomalies(resolved);
+        CREATE INDEX IF NOT EXISTS idx_anomalies_type ON anomalies(anomaly_type);
+    "#,
+    )
+    .ok();
+
     // Create vec0 virtual table for KNN search on topic embeddings (sqlite-vec)
     // This enables O(log n) semantic similarity search for topics
     conn.execute_batch(
@@ -315,6 +340,16 @@ pub fn migrate(conn: &Arc<Mutex<Connection>>) -> Result<(), String> {
     ",
     )
     .map_err(|e| format!("Failed to create topic vec0 tables: {}", e))?;
+
+    // Key-value store for persisting runtime settings (e.g., auto-tuned relevance threshold)
+    conn.execute_batch(
+        "CREATE TABLE IF NOT EXISTS kv_store (
+            key TEXT PRIMARY KEY NOT NULL,
+            value REAL NOT NULL,
+            updated_at TEXT DEFAULT (datetime('now'))
+        );",
+    )
+    .ok(); // ok() because table may already exist
 
     info!(target: "ace::db", "ACE database schema initialized with sqlite-vec");
     Ok(())

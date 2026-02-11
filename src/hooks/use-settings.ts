@@ -68,7 +68,7 @@ export function useSettings() {
         }
       }
     } catch (error) {
-      console.log('Settings not available:', error);
+      console.debug('Settings not available:', error);
     }
   }, []);
 

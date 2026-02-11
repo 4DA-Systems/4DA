@@ -9,6 +9,7 @@ import type {
   ContextFile,
   SourceRelevance,
   FeedbackGiven,
+  SuggestedInterest,
 } from '../types';
 
 // ============================================================================
@@ -218,6 +219,7 @@ interface AppStore {
 
   // ======= User Context Slice =======
   userContext: UserContext | null;
+  suggestedInterests: SuggestedInterest[];
   newInterest: string;
   newExclusion: string;
   newTechStack: string;
@@ -227,6 +229,7 @@ interface AppStore {
   setNewTechStack: (v: string) => void;
   setNewRole: (v: string) => void;
   loadUserContext: () => Promise<void>;
+  loadSuggestedInterests: () => Promise<void>;
   addInterest: () => Promise<void>;
   removeInterest: (topic: string) => Promise<void>;
   addExclusion: () => Promise<void>;
@@ -911,6 +914,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
   // User Context Slice
   // =========================================================================
   userContext: null,
+  suggestedInterests: [],
   newInterest: '',
   newExclusion: '',
   newTechStack: '',
@@ -928,6 +932,15 @@ export const useAppStore = create<AppStore>((set, get) => ({
       if (ctx.role) set({ newRole: ctx.role });
     } catch (error) {
       console.debug('Context not available:', error);
+    }
+  },
+
+  loadSuggestedInterests: async () => {
+    try {
+      const suggestions = await invoke<SuggestedInterest[]>('ace_get_suggested_interests');
+      set({ suggestedInterests: suggestions });
+    } catch (error) {
+      console.debug('Suggested interests not available:', error);
     }
   },
 
