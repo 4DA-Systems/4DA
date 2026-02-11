@@ -38,6 +38,7 @@ export interface ScoreBreakdown {
   anti_penalty: number;
   freshness_mult?: number;
   feedback_boost?: number;
+  source_quality_boost?: number;
   confidence_by_signal: Record<string, number>;
 }
 
@@ -202,6 +203,13 @@ export interface VoidSignal {
   signal_urgency: number;    // 0-1: weighted urgency from signal types
   critical_count: number;    // count of critical-priority signals
   signal_color_shift: number; // -1 to +1: cool (learning) to warm (alert)
+}
+
+export interface SuggestedInterest {
+  topic: string;
+  source: string;
+  confidence: number;
+  already_declared: boolean;
 }
 
 export interface IndexedStats {

@@ -24,7 +24,7 @@ export function useUserContext(onStatusChange?: (status: string) => void) {
       setUserContext(ctx);
       if (ctx.role) setNewRole(ctx.role);
     } catch (error) {
-      console.log('Context not available:', error);
+      console.debug('Context not available:', error);
     }
   }, []);
 

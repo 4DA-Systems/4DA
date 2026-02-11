@@ -7,7 +7,7 @@ use crate::db::Database;
 use crate::signals;
 use crate::{
     check_exclusions, embed_texts, extract_topics, get_ace_engine, get_context_engine,
-    RelevanceMatch, ScoreBreakdown, SourceRelevance, RELEVANCE_THRESHOLD,
+    get_relevance_threshold, RelevanceMatch, ScoreBreakdown, SourceRelevance,
 };
 
 /// Compute interest score by comparing item embedding against interest embeddings
@@ -186,6 +186,24 @@ pub(crate) fn get_ace_context() -> ACEContext {
                 );
             }
         }
+    }
+
+    // Merge recent work topics (last 2 hours) with high confidence.
+    // These represent what the user is actively working on RIGHT NOW,
+    // so they get elevated confidence to boost related content.
+    if let Ok(work_topics) = ace.get_recent_work_topics(2) {
+        for (topic, weight) in work_topics {
+            if !ctx.active_topics.contains(&topic) {
+                ctx.active_topics.push(topic.clone());
+            }
+            // Recent work topics get high confidence (0.85-0.95 scaled by recency)
+            // weight ranges 0.5-1.0, maps to confidence 0.85-0.95
+            let work_confidence = 0.85 + (weight - 0.5) * 0.2;
+            let existing = ctx.topic_confidence.get(&topic).copied().unwrap_or(0.0);
+            ctx.topic_confidence
+                .insert(topic, existing.max(work_confidence));
+        }
+        debug!(target: "4da::ace", "Merged recent work topics into ACE context");
     }
 
     ctx
@@ -587,6 +605,8 @@ pub(crate) struct ScoringContext {
     pub topic_embeddings: std::collections::HashMap<String, Vec<f32>>,
     /// Feedback-derived topic boosts: topic -> net_score (-1.0 to 1.0)
     pub feedback_boosts: std::collections::HashMap<String, f64>,
+    /// Source quality scores from learned preferences: source_type -> score (-1.0 to 1.0)
+    pub source_quality: std::collections::HashMap<String, f32>,
 }
 
 /// Options controlling which scoring stages are applied
@@ -605,6 +625,15 @@ pub(crate) async fn build_scoring_context(db: &Database) -> Result<ScoringContex
         .map_err(|e| format!("Failed to load context: {}", e))?;
 
     let ace_ctx = get_ace_context();
+
+    // Check if user has recent file activity (active work window)
+    let has_active_work = match get_ace_engine() {
+        Ok(ace) => ace
+            .get_recent_work_topics(2)
+            .map_or(false, |t| !t.is_empty()),
+        Err(_) => false,
+    };
+
     let topic_embeddings = get_topic_embeddings(&ace_ctx).await;
 
     // Load feedback-derived topic boosts (Phase 9: feedback learning loop)
@@ -615,11 +644,23 @@ pub(crate) async fn build_scoring_context(db: &Database) -> Result<ScoringContex
         .map(|f| (f.topic, f.net_score))
         .collect();
 
+    // Load source quality preferences from ACE behavior learning
+    let source_quality: std::collections::HashMap<String, f32> = match get_ace_engine() {
+        Ok(ace) => ace
+            .get_source_preferences()
+            .unwrap_or_default()
+            .into_iter()
+            .collect(),
+        Err(_) => std::collections::HashMap::new(),
+    };
+
     info!(target: "4da::ace",
         topics = ace_ctx.active_topics.len(),
         tech = ace_ctx.detected_tech.len(),
         embeddings = topic_embeddings.len(),
         feedback_topics = feedback_boosts.len(),
+        source_prefs = source_quality.len(),
+        has_active_work,
         "ACE context loaded for scoring"
     );
 
@@ -631,6 +672,7 @@ pub(crate) async fn build_scoring_context(db: &Database) -> Result<ScoringContex
         ace_ctx,
         topic_embeddings,
         feedback_boosts,
+        source_quality,
     })
 }
 
@@ -728,6 +770,15 @@ pub(crate) fn score_item(
     };
     let base_score = (base_score * freshness).clamp(0.0, 1.0);
 
+    // Source quality boost from learned preferences (capped +/-10%)
+    let source_quality_boost = ctx
+        .source_quality
+        .get(input.source_type)
+        .copied()
+        .map(|score| (score * 0.10).clamp(-0.10, 0.10))
+        .unwrap_or(0.0);
+    let base_score = (base_score + source_quality_boost).clamp(0.0, 1.0);
+
     // Feedback learning boost (Phase 9): apply feedback-derived topic multiplier
     let feedback_boost = if !ctx.feedback_boosts.is_empty() {
         let mut boost_sum: f64 = 0.0;
@@ -752,7 +803,7 @@ pub(crate) fn score_item(
 
     // Unified scoring
     let combined_score = compute_unified_relevance(base_score, &topics, &ctx.ace_ctx);
-    let relevant = combined_score >= RELEVANCE_THRESHOLD;
+    let relevant = combined_score >= get_relevance_threshold();
 
     let affinity_mult = compute_affinity_multiplier(&topics, &ctx.ace_ctx);
     let anti_penalty = compute_anti_penalty(&topics, &ctx.ace_ctx);
@@ -801,6 +852,7 @@ pub(crate) fn score_item(
         anti_penalty,
         freshness_mult: freshness,
         feedback_boost,
+        source_quality_boost,
         confidence_by_signal,
     };
 
@@ -1108,5 +1160,60 @@ mod tests {
         let old = chrono::Utc::now() - chrono::Duration::hours(72);
         let freshness = compute_temporal_freshness(&old);
         assert_eq!(freshness, 0.85, "Items 72h old should hit floor at 0.85");
+    }
+
+    // Test source quality boost: positive score
+    #[test]
+    fn test_source_quality_positive_boost() {
+        let score = 0.5_f32;
+        let source_score = 0.8_f32;
+        let boost = (source_score * 0.10).clamp(-0.10, 0.10);
+        let result = (score + boost).clamp(0.0, 1.0);
+        assert!(
+            (result - 0.58).abs() < 0.01,
+            "Positive source should boost by up to 10%: got {}",
+            result
+        );
+    }
+
+    // Test source quality boost: negative reduction
+    #[test]
+    fn test_source_quality_negative_reduction() {
+        let score = 0.5_f32;
+        let source_score = -0.6_f32;
+        let boost = (source_score * 0.10).clamp(-0.10, 0.10);
+        let result = (score + boost).clamp(0.0, 1.0);
+        assert!(
+            (result - 0.44).abs() < 0.01,
+            "Negative source should reduce by up to 10%: got {}",
+            result
+        );
+    }
+
+    // Test source quality boost: unknown source returns 0
+    #[test]
+    fn test_source_quality_unknown_neutral() {
+        let source_quality: std::collections::HashMap<String, f32> =
+            std::collections::HashMap::new();
+        let boost = source_quality
+            .get("unknown_source")
+            .copied()
+            .map(|score| (score * 0.10).clamp(-0.10, 0.10))
+            .unwrap_or(0.0);
+        assert_eq!(boost, 0.0, "Unknown source should be neutral");
+    }
+
+    // Test source quality boost: cap enforcement
+    #[test]
+    fn test_source_quality_cap_enforcement() {
+        // Even with extreme source score, boost capped at +/-10%
+        let extreme_positive = (2.0_f32 * 0.10).clamp(-0.10, 0.10);
+        assert_eq!(extreme_positive, 0.10, "Positive boost should cap at 0.10");
+
+        let extreme_negative = (-2.0_f32 * 0.10).clamp(-0.10, 0.10);
+        assert_eq!(
+            extreme_negative, -0.10,
+            "Negative boost should cap at -0.10"
+        );
     }
 }

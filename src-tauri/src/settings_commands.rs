@@ -569,3 +569,9 @@ pub async fn get_context_stats() -> Result<serde_json::Value, String> {
         "has_role": identity.role.is_some()
     }))
 }
+
+/// Get the current auto-tuned relevance threshold
+#[tauri::command]
+pub async fn get_current_threshold() -> Result<f32, String> {
+    Ok(crate::get_relevance_threshold())
+}

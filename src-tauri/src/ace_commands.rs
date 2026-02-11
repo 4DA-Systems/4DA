@@ -1127,6 +1127,249 @@ pub(crate) async fn auto_seed_interests_from_ace() -> Result<(), String> {
     Ok(())
 }
 
+// ============================================================================
+// Auto-Interest Discovery: Suggested Interests from ACE Context
+// ============================================================================
+
+/// Get suggested interests based on ACE-detected technologies and active topics.
+/// Cross-references with existing interests and exclusions to avoid duplicates.
+#[tauri::command]
+pub async fn ace_get_suggested_interests() -> Result<Vec<serde_json::Value>, String> {
+    let ace = crate::get_ace_engine()?;
+
+    // Get detected tech
+    let detected_tech = ace.get_detected_tech().unwrap_or_default();
+
+    // Get active topics with high confidence (>0.5)
+    let active_topics = ace.get_active_topics().unwrap_or_default();
+    let confident_topics: Vec<_> = active_topics
+        .iter()
+        .filter(|t| t.confidence > 0.5 && t.weight > 0.4)
+        .collect();
+
+    // Get existing interests to cross-reference
+    let existing_interests: Vec<String> = if let Ok(ctx_engine) = crate::get_context_engine() {
+        ctx_engine
+            .get_interests()
+            .unwrap_or_default()
+            .iter()
+            .map(|i| i.topic.to_lowercase())
+            .collect()
+    } else {
+        vec![]
+    };
+
+    // Get exclusions too
+    let exclusions: Vec<String> = if let Ok(ctx_engine) = crate::get_context_engine() {
+        ctx_engine
+            .get_exclusions()
+            .unwrap_or_default()
+            .iter()
+            .map(|e| e.to_lowercase())
+            .collect()
+    } else {
+        vec![]
+    };
+
+    let mut suggestions: Vec<serde_json::Value> = Vec::new();
+    let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
+
+    // Add detected tech as suggestions
+    for tech in &detected_tech {
+        let topic_lower = tech.name.to_lowercase();
+        if seen.contains(&topic_lower) {
+            continue;
+        }
+        let already_declared = existing_interests.contains(&topic_lower);
+        let is_excluded = exclusions.contains(&topic_lower);
+        if is_excluded {
+            continue;
+        }
+
+        seen.insert(topic_lower);
+        let source_label = format!("{:?}", tech.source);
+        suggestions.push(serde_json::json!({
+            "topic": tech.name,
+            "source": format!("Detected in {}", source_label),
+            "confidence": tech.confidence,
+            "already_declared": already_declared,
+        }));
+    }
+
+    // Add confident active topics
+    for topic in &confident_topics {
+        let topic_lower = topic.topic.to_lowercase();
+        if seen.contains(&topic_lower) {
+            continue;
+        }
+        let already_declared = existing_interests.contains(&topic_lower);
+        let is_excluded = exclusions.contains(&topic_lower);
+        if is_excluded {
+            continue;
+        }
+
+        seen.insert(topic_lower);
+        let source_label = format!("{:?}", topic.source);
+        suggestions.push(serde_json::json!({
+            "topic": topic.topic,
+            "source": format!("Active in {} ({})", source_label, topic.last_seen),
+            "confidence": topic.confidence,
+            "already_declared": already_declared,
+        }));
+    }
+
+    // Sort by confidence descending
+    suggestions.sort_by(|a, b| {
+        let ca = a["confidence"].as_f64().unwrap_or(0.0);
+        let cb = b["confidence"].as_f64().unwrap_or(0.0);
+        cb.partial_cmp(&ca).unwrap_or(std::cmp::Ordering::Equal)
+    });
+
+    // Return top 20 suggestions
+    suggestions.truncate(20);
+
+    Ok(suggestions)
+}
+
+// ============================================================================
+// ACE Phase 1C: Anomaly Detection Commands
+// ============================================================================
+
+/// Get all unresolved anomalies
+#[tauri::command]
+pub async fn ace_get_unresolved_anomalies() -> Result<serde_json::Value, String> {
+    let ace = crate::get_ace_engine()?;
+    let conn = ace.get_conn().lock();
+    let anomalies = crate::anomaly::get_unresolved(&conn)?;
+    Ok(serde_json::json!({
+        "anomalies": anomalies,
+        "count": anomalies.len()
+    }))
+}
+
+/// Run anomaly detection and store results
+#[tauri::command]
+pub async fn ace_detect_anomalies() -> Result<serde_json::Value, String> {
+    let ace = crate::get_ace_engine()?;
+    let conn = ace.get_conn().lock();
+    let anomalies = crate::anomaly::detect_all(&conn)?;
+    for a in &anomalies {
+        let _ = crate::anomaly::store_anomaly(&conn, a);
+    }
+    Ok(serde_json::json!({
+        "anomalies": anomalies,
+        "count": anomalies.len()
+    }))
+}
+
+/// Resolve (dismiss) an anomaly by id
+#[tauri::command]
+pub async fn ace_resolve_anomaly(anomaly_id: i64) -> Result<(), String> {
+    let ace = crate::get_ace_engine()?;
+    let conn = ace.get_conn().lock();
+    crate::anomaly::resolve_anomaly(&conn, anomaly_id)
+}
+
+/// Get accuracy metrics calculated from interactions
+#[tauri::command]
+pub async fn ace_get_accuracy_metrics() -> Result<serde_json::Value, String> {
+    let ace = crate::get_ace_engine()?;
+    let conn = ace.get_conn().lock();
+
+    // Calculate from interactions table
+    // The ACE schema uses action_type (not interaction_type)
+    let total_interactions: i64 = conn
+        .query_row("SELECT COUNT(*) FROM interactions", [], |row| row.get(0))
+        .unwrap_or(0);
+
+    let positive_interactions: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM interactions WHERE action_type IN ('click', 'save', 'share')",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap_or(0);
+
+    let negative_interactions: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM interactions WHERE action_type IN ('dismiss', 'mark_irrelevant')",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap_or(0);
+
+    let engagement_rate = if total_interactions > 0 {
+        positive_interactions as f64 / total_interactions as f64
+    } else {
+        0.0
+    };
+
+    let precision = if (positive_interactions + negative_interactions) > 0 {
+        positive_interactions as f64 / (positive_interactions + negative_interactions) as f64
+    } else {
+        0.0
+    };
+
+    // Calculate calibration error from accuracy feedback entries
+    let calibration_error: f64 = conn
+        .query_row(
+            "SELECT AVG(json_extract(action_data, '$.calibration_error')) FROM interactions WHERE action_type = 'accuracy_feedback' AND action_data IS NOT NULL",
+            [],
+            |row| row.get::<_, Option<f64>>(0),
+        )
+        .unwrap_or(None)
+        .unwrap_or(0.0);
+
+    Ok(serde_json::json!({
+        "precision": precision,
+        "engagement_rate": engagement_rate,
+        "calibration_error": calibration_error
+    }))
+}
+
+/// Record accuracy feedback for a scored item (predicted vs actual relevance)
+#[tauri::command]
+pub async fn ace_record_accuracy_feedback(
+    item_id: u64,
+    predicted_score: f64,
+    feedback_type: String,
+) -> Result<(), String> {
+    let ace = crate::get_ace_engine()?;
+    let conn = ace.get_conn().lock();
+
+    // Map feedback to actual relevance score
+    let actual_score: f64 = match feedback_type.as_str() {
+        "save" => 1.0,
+        "click" => 0.7,
+        "dismiss" => 0.2,
+        "thumbs_down" => 0.0,
+        _ => 0.5,
+    };
+
+    let action_data = serde_json::json!({
+        "predicted_score": predicted_score,
+        "actual_score": actual_score,
+        "calibration_error": (predicted_score - actual_score).abs(),
+    });
+
+    conn.execute(
+        "INSERT INTO interactions (item_id, action_type, action_data, signal_strength) VALUES (?1, 'accuracy_feedback', ?2, ?3)",
+        rusqlite::params![item_id as i64, action_data.to_string(), actual_score],
+    )
+    .map_err(|e| format!("Failed to record accuracy feedback: {}", e))?;
+
+    Ok(())
+}
+
+/// Get system health report
+#[tauri::command]
+pub async fn ace_get_system_health() -> Result<serde_json::Value, String> {
+    let ace = crate::get_ace_engine()?;
+    let conn = ace.get_conn().lock();
+    let report = crate::health::check_all_components(&conn)?;
+    serde_json::to_value(&report).map_err(|e| e.to_string())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1236,5 +1479,115 @@ MIT License
             projects.contains(&current_dir),
             "Should discover current project directory"
         );
+    }
+
+    // ========================================================================
+    // Suggested Interests Filtering Tests
+    // ========================================================================
+
+    /// Helper: build a suggestion entry matching the shape produced by ace_get_suggested_interests
+    fn make_suggestion(topic: &str, confidence: f64, already_declared: bool) -> serde_json::Value {
+        serde_json::json!({
+            "topic": topic,
+            "source": "test",
+            "confidence": confidence,
+            "already_declared": already_declared,
+        })
+    }
+
+    #[test]
+    fn test_suggested_interests_filters_excluded() {
+        // Simulate the filtering logic from ace_get_suggested_interests:
+        // excluded topics should not appear in suggestions.
+        let topics = vec!["Rust", "Python", "crypto", "TypeScript"];
+        let exclusions: Vec<String> = vec!["crypto".to_string()];
+        let existing: Vec<String> = vec![];
+
+        let mut suggestions = Vec::new();
+        let mut seen = std::collections::HashSet::new();
+        for topic in &topics {
+            let lower = topic.to_lowercase();
+            if seen.contains(&lower) {
+                continue;
+            }
+            if exclusions.contains(&lower) {
+                continue;
+            }
+            let already_declared = existing.contains(&lower);
+            seen.insert(lower);
+            suggestions.push(make_suggestion(topic, 0.9, already_declared));
+        }
+
+        assert_eq!(suggestions.len(), 3);
+        let suggestion_topics: Vec<&str> = suggestions
+            .iter()
+            .map(|s| s["topic"].as_str().unwrap())
+            .collect();
+        assert!(!suggestion_topics.contains(&"crypto"));
+        assert!(suggestion_topics.contains(&"Rust"));
+        assert!(suggestion_topics.contains(&"Python"));
+        assert!(suggestion_topics.contains(&"TypeScript"));
+    }
+
+    #[test]
+    fn test_suggested_interests_marks_already_declared() {
+        // Topics already in interests should be flagged already_declared=true, not filtered.
+        let topics = vec!["Rust", "Python", "Go"];
+        let exclusions: Vec<String> = vec![];
+        let existing: Vec<String> = vec!["rust".to_string(), "go".to_string()];
+
+        let mut suggestions = Vec::new();
+        let mut seen = std::collections::HashSet::new();
+        for topic in &topics {
+            let lower = topic.to_lowercase();
+            if seen.contains(&lower) {
+                continue;
+            }
+            if exclusions.contains(&lower) {
+                continue;
+            }
+            let already_declared = existing.contains(&lower);
+            seen.insert(lower);
+            suggestions.push(make_suggestion(topic, 0.9, already_declared));
+        }
+
+        assert_eq!(suggestions.len(), 3);
+        // Rust should be marked already_declared
+        let rust_suggestion = suggestions.iter().find(|s| s["topic"] == "Rust").unwrap();
+        assert_eq!(rust_suggestion["already_declared"], true);
+        // Go should be marked already_declared
+        let go_suggestion = suggestions.iter().find(|s| s["topic"] == "Go").unwrap();
+        assert_eq!(go_suggestion["already_declared"], true);
+        // Python should NOT be marked already_declared
+        let py_suggestion = suggestions.iter().find(|s| s["topic"] == "Python").unwrap();
+        assert_eq!(py_suggestion["already_declared"], false);
+    }
+
+    #[test]
+    fn test_suggested_interests_deduplicates() {
+        // Duplicate topics (case-insensitive) should only appear once.
+        let topics = vec!["Rust", "rust", "RUST", "Python"];
+        let exclusions: Vec<String> = vec![];
+        let existing: Vec<String> = vec![];
+
+        let mut suggestions = Vec::new();
+        let mut seen = std::collections::HashSet::new();
+        for topic in &topics {
+            let lower = topic.to_lowercase();
+            if seen.contains(&lower) {
+                continue;
+            }
+            if exclusions.contains(&lower) {
+                continue;
+            }
+            let already_declared = existing.contains(&lower);
+            seen.insert(lower);
+            suggestions.push(make_suggestion(topic, 0.9, already_declared));
+        }
+
+        assert_eq!(suggestions.len(), 2);
+        // First occurrence ("Rust") should be kept
+        assert_eq!(suggestions[0]["topic"], "Rust");
+        assert_eq!(suggestions[1]["topic"], "Python");
     }
 }

@@ -28,7 +28,7 @@ export function useSystemHealth(onStatusChange?: (status: string) => void) {
       anomalies = result.anomalies || [];
       anomalyCount = result.count || 0;
     } catch (error) {
-      console.log('Anomalies not available:', error);
+      console.debug('Anomalies not available:', error);
     }
 
     try {
@@ -54,7 +54,7 @@ export function useSystemHealth(onStatusChange?: (status: string) => void) {
       );
       accuracyMetrics = result;
     } catch (error) {
-      console.log('Accuracy metrics not available:', error);
+      console.debug('Accuracy metrics not available:', error);
     }
 
     setSystemHealth({
