@@ -59,13 +59,6 @@ export function Onboarding({ onComplete }: OnboardingProps) {
     return () => clearTimeout(timer);
   }, [step]);
 
-  // Auto-check Ollama when provider is selected
-  useEffect(() => {
-    if (apiKeys.provider === 'ollama') {
-      checkOllamaStatus();
-    }
-  }, [apiKeys.provider]);
-
   // Auto-run scan when reaching first-scan step
   useEffect(() => {
     if (step === 'first-scan' && !scanProgress && !isScanning) {
@@ -153,7 +146,7 @@ export function Onboarding({ onComplete }: OnboardingProps) {
     }
   }, [pullingModels]);
 
-  const checkOllamaStatus = async () => {
+  const checkOllamaStatus = useCallback(async () => {
     setIsCheckingOllama(true);
     setError(null);
     try {
@@ -171,7 +164,15 @@ export function Onboarding({ onComplete }: OnboardingProps) {
       setOllamaStatus({ running: false, version: null, models: [], base_url: 'http://localhost:11434' });
     }
     setIsCheckingOllama(false);
-  };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- pullMissingModels is stable
+  }, [apiKeys.provider]);
+
+  // Auto-check Ollama when provider is selected
+  useEffect(() => {
+    if (apiKeys.provider === 'ollama') {
+      checkOllamaStatus();
+    }
+  }, [apiKeys.provider, checkOllamaStatus]);
 
   const testApiConnection = async () => {
     try {
@@ -185,6 +186,7 @@ export function Onboarding({ onComplete }: OnboardingProps) {
       const ollamaModel = selectedOllamaModel || ollamaStatus?.models?.find((m) => !m.startsWith('nomic-embed-text')) || ollamaStatus?.models?.[0];
       if (provider === 'ollama' && !ollamaModel) {
         setTestResult({ success: false, message: 'No models available. Wait for model download to complete.' });
+        setIsTesting(false);
         return;
       }
       const model = provider === 'anthropic' ? 'claude-3-haiku-20240307' :
@@ -194,23 +196,47 @@ export function Onboarding({ onComplete }: OnboardingProps) {
       const openaiApiKey = provider !== 'openai' ? apiKeys.openai : null;
 
       await invoke('set_llm_provider', { provider, apiKey, model, baseUrl, openaiApiKey });
-      const result = await invoke<{ success: boolean; message: string }>('test_llm_connection');
+
+      // Race the test against a timeout (90s — generous for Ollama cold starts)
+      const timeoutMs = provider === 'ollama' ? 90_000 : 30_000;
+      const testPromise = invoke<{ success: boolean; message: string }>('test_llm_connection');
+      const timeoutPromise = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error(
+          provider === 'ollama'
+            ? `Ollama did not respond within ${timeoutMs / 1000}s. The model may be too large for your hardware, or Ollama may be stuck. Try restarting Ollama.`
+            : `Connection timed out after ${timeoutMs / 1000}s. Check your internet connection.`,
+        )), timeoutMs),
+      );
+
+      const result = await Promise.race([testPromise, timeoutPromise]);
       setTestResult(result);
 
       if (!result.success) {
+        const msg = result.message.toLowerCase();
         let hint = '';
-        if (result.message.includes('401') || result.message.includes('invalid')) {
+        if (msg.includes('401') || msg.includes('invalid') || msg.includes('unauthorized')) {
           hint = 'Check that your API key is correct and has not expired.';
-        } else if (result.message.includes('429') || result.message.includes('rate')) {
+        } else if (msg.includes('429') || msg.includes('rate')) {
           hint = "You've hit a rate limit. Wait a moment and try again.";
-        } else if (result.message.includes('network') || result.message.includes('connect')) {
-          hint = 'Check your internet connection.';
+        } else if (msg.includes('not found') && provider === 'ollama') {
+          hint = `Run: ollama pull ${model}`;
+        } else if (msg.includes('memory') || msg.includes('oom') || msg.includes('cuda')) {
+          hint = 'Not enough GPU memory. Try a smaller model like phi3:mini.';
+        } else if (msg.includes('connect') || msg.includes('refused')) {
+          hint = provider === 'ollama' ? 'Make sure Ollama is running (ollama serve).' : 'Check your internet connection.';
         }
         if (hint) setError(hint);
       }
     } catch (e) {
-      setTestResult({ success: false, message: String(e) });
-      setError('Connection test failed. Check your settings and try again.');
+      const msg = String(e);
+      setTestResult({ success: false, message: msg });
+      if (msg.includes('did not respond')) {
+        setError(msg);
+      } else if (apiKeys.provider === 'ollama') {
+        setError('Ollama connection test failed. Make sure Ollama is running and the model is installed.');
+      } else {
+        setError('Connection test failed. Check your settings and try again.');
+      }
     } finally {
       setIsTesting(false);
     }

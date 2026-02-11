@@ -49,10 +49,17 @@ pub struct LLMClient {
 
 impl LLMClient {
     pub fn new(provider: LLMProvider) -> Self {
+        // Ollama needs longer timeout for cold model loads
+        let timeout_secs = if provider.provider == "ollama" {
+            120
+        } else {
+            60
+        };
         Self {
             provider,
             client: reqwest::Client::builder()
-                .timeout(std::time::Duration::from_secs(60))
+                .connect_timeout(std::time::Duration::from_secs(10))
+                .timeout(std::time::Duration::from_secs(timeout_secs))
                 .build()
                 .unwrap_or_else(|_| reqwest::Client::new()),
         }
@@ -243,18 +250,45 @@ impl LLMClient {
             .json(&body)
             .send()
             .await
-            .map_err(|e| format!("Ollama request failed: {}", e))?;
+            .map_err(|e| {
+                let msg = e.to_string();
+                if msg.contains("connect") || msg.contains("refused") {
+                    format!(
+                        "Cannot connect to Ollama at {}. Make sure Ollama is running (ollama serve).",
+                        base_url
+                    )
+                } else if msg.contains("timed out") || msg.contains("timeout") {
+                    format!(
+                        "Ollama request timed out. Model '{}' may be loading or the prompt is too large. Try again.",
+                        self.provider.model
+                    )
+                } else {
+                    format!("Ollama request failed: {}", e)
+                }
+            })?;
 
         if !response.status().is_success() {
             let status = response.status();
             let text = response.text().await.unwrap_or_default();
+            if status.as_u16() == 404 || text.contains("not found") {
+                return Err(format!(
+                    "Model '{}' not found in Ollama. Run: ollama pull {}",
+                    self.provider.model, self.provider.model
+                ));
+            }
+            if text.contains("out of memory") || text.contains("OOM") || text.contains("CUDA") {
+                return Err(format!(
+                    "Not enough GPU memory for '{}'. Try a smaller model.",
+                    self.provider.model
+                ));
+            }
             return Err(format!("Ollama error {}: {}", status, text));
         }
 
         let data: serde_json::Value = response
             .json()
             .await
-            .map_err(|e| format!("Failed to parse response: {}", e))?;
+            .map_err(|e| format!("Failed to parse Ollama response: {}", e))?;
 
         let content = data["message"]["content"]
             .as_str()

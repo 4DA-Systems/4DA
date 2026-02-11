@@ -397,11 +397,24 @@ export const useAppStore = create<AppStore>((set, get) => ({
   },
 
   testConnection: async () => {
-    const { saveSettings } = get();
-    set({ settingsStatus: 'Testing connection...' });
+    const { saveSettings, settingsForm } = get();
+    const isOllama = settingsForm.provider === 'ollama';
+    set({ settingsStatus: isOllama ? 'Testing Ollama connection...' : 'Testing connection...' });
     try {
       await saveSettings();
-      const result = await invoke<{ success: boolean; message: string }>('test_llm_connection');
+
+      // Race against timeout (generous for Ollama cold model loads)
+      const timeoutMs = isOllama ? 90_000 : 30_000;
+      const testPromise = invoke<{ success: boolean; message: string }>('test_llm_connection');
+      const timeoutPromise = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error(
+          isOllama
+            ? 'Ollama did not respond in time. Try restarting Ollama or using a smaller model.'
+            : 'Connection timed out. Check your internet connection.',
+        )), timeoutMs),
+      );
+
+      const result = await Promise.race([testPromise, timeoutPromise]);
       set({ settingsStatus: result.message });
     } catch (error) {
       set({ settingsStatus: `Connection failed: ${error}` });
