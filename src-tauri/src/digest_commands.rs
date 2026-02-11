@@ -317,10 +317,14 @@ pub async fn generate_ai_briefing() -> Result<serde_json::Value, String> {
     }
 
     // Use in-memory analysis results (scored + filtered) when available
-    let mem_items: Vec<crate::db::DigestSourceItem> = {
+    // Capture both DigestSourceItem and explanation/score data for richer briefing
+    let (mem_items, explanations): (
+        Vec<crate::db::DigestSourceItem>,
+        std::collections::HashMap<i64, String>,
+    ) = {
         let state = get_analysis_state().lock();
         if let Some(ref results) = state.results {
-            results
+            let items: Vec<crate::db::DigestSourceItem> = results
                 .iter()
                 .filter(|r| r.relevant && !r.excluded)
                 .take(30)
@@ -333,9 +337,15 @@ pub async fn generate_ai_briefing() -> Result<serde_json::Value, String> {
                     relevance_score: Some(r.top_score as f64),
                     topics: vec![],
                 })
-                .collect()
+                .collect();
+            let expl: std::collections::HashMap<i64, String> = results
+                .iter()
+                .filter(|r| r.explanation.is_some())
+                .map(|r| (r.id as i64, r.explanation.clone().unwrap_or_default()))
+                .collect();
+            (items, expl)
         } else {
-            vec![]
+            (vec![], std::collections::HashMap::new())
         }
     };
 
@@ -361,19 +371,24 @@ pub async fn generate_ai_briefing() -> Result<serde_json::Value, String> {
     // Get ACE context for personalization
     let ace_ctx = get_ace_context();
 
-    // Format items for the prompt
+    // Format items with content snippets and explanations
     let items_text: String = items
         .iter()
-        .take(15) // Limit to top 15 for context window
+        .take(20)
         .enumerate()
         .map(|(i, item)| {
+            let explanation = explanations
+                .get(&item.id)
+                .map(|s| s.as_str())
+                .unwrap_or("No context match");
             format!(
-                "{}. [{}] {} (score: {:.0}%)\n   URL: {}",
+                "{}. [{}] {} (score: {:.0}%)\n   URL: {}\n   Why matched: {}",
                 i + 1,
                 item.source_type,
                 item.title,
                 item.relevance_score.unwrap_or(0.0) * 100.0,
-                item.url.as_deref().unwrap_or("N/A")
+                item.url.as_deref().unwrap_or("N/A"),
+                explanation,
             )
         })
         .collect::<Vec<_>>()
@@ -404,37 +419,52 @@ pub async fn generate_ai_briefing() -> Result<serde_json::Value, String> {
             .join(", ")
     };
 
+    let anti_topics = ace_ctx
+        .anti_topics
+        .iter()
+        .take(5)
+        .cloned()
+        .collect::<Vec<_>>()
+        .join(", ");
+
     // Create the prompt
-    let system_prompt = r#"You are a personalized research assistant for a software developer. Your job is to synthesize the day's relevant content into actionable insights.
+    let system_prompt = r#"You are the user's personal intelligence analyst. You have deep knowledge of their active projects and tech stack. Your briefing should feel like a senior colleague who read everything and is telling you what matters.
 
-Be concise, direct, and useful. Focus on:
-1. What's worth reading NOW (pick top 2-3)
-2. Emerging patterns or themes
-3. Anything that needs immediate attention
+Structure your briefing as:
 
-Format your response as:
-## Top Picks
-[2-3 items that deserve attention, with 1-sentence why]
+## Action Required
+[Items the user should read/act on TODAY — max 3. Each gets 2-3 sentences explaining WHY it matters to their specific work, not just what it is.]
 
-## Themes
-[Brief patterns you notice]
+## Worth Knowing
+[3-5 items that are genuinely useful context. One sentence each with the key takeaway.]
 
-## Quick Takes
-[Any other notable items in 1 line each]
+## Filtered Out
+[Brief note on what categories you filtered out and why, so the user trusts the filter.]
 
-Keep it under 300 words. No fluff."#;
+Rules:
+- Reference the user's specific projects and tech by name
+- "This affects your Tauri app" not "This may be relevant to developers"
+- Include concrete details from the articles, not just titles
+- If nothing is truly important, say so — don't manufacture urgency
+- Max 500 words"#;
 
     let user_prompt = format!(
-        r#"Here's my context:
-- Tech stack: {}
-- Active topics: {}
-
-Today's items (sorted by relevance):
-
-{}
-
-Give me my personalized briefing."#,
-        tech_summary, topics_summary, items_text
+        "My active projects and context:\n\
+         - Tech stack: {tech}\n\
+         - Currently working on: {topics}\n\
+         - Skip these topics: {anti}\n\n\
+         Today's {count} items (sorted by relevance):\n\n\
+         {items}\n\n\
+         Give me my intelligence briefing.",
+        tech = tech_summary,
+        topics = topics_summary,
+        anti = if anti_topics.is_empty() {
+            "None specified".to_string()
+        } else {
+            anti_topics
+        },
+        count = items.len(),
+        items = items_text,
     );
 
     // Call the LLM

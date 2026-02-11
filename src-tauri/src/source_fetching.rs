@@ -80,6 +80,10 @@ pub(crate) async fn fetch_all_sources(
             Box::new(LobstersSource::new()) as Box<dyn Source>,
         ),
         ("devto", Box::new(DevtoSource::new()) as Box<dyn Source>),
+        (
+            "producthunt",
+            Box::new(crate::sources::producthunt::ProductHuntSource::new()) as Box<dyn Source>,
+        ),
     ];
 
     let sources: Vec<Box<dyn Source>> = all_sources

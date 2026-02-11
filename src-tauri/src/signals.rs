@@ -332,16 +332,15 @@ impl SignalClassifier {
             text_lower.contains(&t)
         });
 
-        // Priority escalation: base weight + bonuses for tech match and high relevance
+        // Priority escalation: base weight + bonuses
+        // CRITICAL requires both tech match AND high relevance — not just keyword count
         let priority_score = {
             let mut ps = signal_type.base_weight();
-            if trigger_count >= 3 {
-                ps = ps.saturating_add(1); // 3+ keywords = extra escalation
+            if trigger_count >= 4 {
+                ps = ps.saturating_add(1); // 4+ keywords = extra escalation (was 3)
             }
-            if tech_match.is_some() {
-                ps = ps.saturating_add(1);
-            }
-            if relevance_score > 0.7 {
+            // Tech match AND high relevance required together for escalation
+            if tech_match.is_some() && relevance_score > 0.7 {
                 ps = ps.saturating_add(1);
             }
             ps

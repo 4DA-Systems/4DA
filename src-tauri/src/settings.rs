@@ -89,11 +89,11 @@ pub struct RerankConfig {
 impl Default for RerankConfig {
     fn default() -> Self {
         Self {
-            enabled: false,
-            max_items_per_batch: 15,
-            min_embedding_score: 0.25,
-            daily_token_limit: 100_000, // ~$0.10 for Haiku
-            daily_cost_limit_cents: 50, // $0.50/day default limit
+            enabled: true,
+            max_items_per_batch: 50,
+            min_embedding_score: 0.20,
+            daily_token_limit: 500_000, // generous for Ollama (free) and cloud
+            daily_cost_limit_cents: 100, // $1.00/day default limit
         }
     }
 }
@@ -168,7 +168,7 @@ impl Default for Settings {
             rerank: RerankConfig::default(),
             usage: UsageStats::default(),
             context_dirs: vec![],
-            embedding_threshold: 0.30,
+            embedding_threshold: 0.50,
             monitoring: MonitoringConfig::default(),
             auto_discovery_completed: false,
             onboarding_complete: false,
@@ -270,8 +270,8 @@ impl SettingsManager {
     /// Check if LLM re-ranking is configured and enabled
     pub fn is_rerank_enabled(&self) -> bool {
         self.settings.rerank.enabled
-            && !self.settings.llm.api_key.is_empty()
             && self.settings.llm.provider != "none"
+            && (self.settings.llm.provider == "ollama" || !self.settings.llm.api_key.is_empty())
     }
 
     /// Check if within daily limits
@@ -756,9 +756,9 @@ mod tests {
     #[test]
     fn test_default_settings() {
         let settings = Settings::default();
-        assert!(!settings.rerank.enabled);
-        assert_eq!(settings.embedding_threshold, 0.30);
-        assert_eq!(settings.rerank.max_items_per_batch, 15);
+        assert!(settings.rerank.enabled);
+        assert_eq!(settings.embedding_threshold, 0.50);
+        assert_eq!(settings.rerank.max_items_per_batch, 50);
     }
 
     #[test]

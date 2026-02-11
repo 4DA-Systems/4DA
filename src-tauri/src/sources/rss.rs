@@ -63,10 +63,12 @@ impl RssSource {
         }
     }
 
-    /// Create with custom feed URLs
+    /// Create with custom feed URLs (empty vec preserves defaults)
     pub fn with_feeds(feeds: Vec<String>) -> Self {
         let mut source = Self::new();
-        source.feed_urls = feeds;
+        if !feeds.is_empty() {
+            source.feed_urls = feeds;
+        }
         source
     }
 

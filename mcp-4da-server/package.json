@@ -5,7 +5,7 @@
   "type": "module",
   "main": "dist/index.js",
   "scripts": {
-    "build": "tsc && npm run copy-schemas",
+    "build": "tsc && pnpm run copy-schemas",
     "copy-schemas": "node -e \"const fs=require('fs');const path=require('path');const src='src/schemas';const dst='dist/schemas';if(!fs.existsSync(dst))fs.mkdirSync(dst,{recursive:true});fs.readdirSync(src).filter(f=>f.endsWith('.json')).forEach(f=>fs.copyFileSync(path.join(src,f),path.join(dst,f)))\"",
     "dev": "tsc --watch",
     "start": "node dist/index.js",

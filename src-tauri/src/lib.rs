@@ -883,6 +883,9 @@ pub(crate) fn get_database() -> Result<&'static Arc<Database>, String> {
         db.register_source("rss", "RSS").ok();
         db.register_source("youtube", "YouTube").ok();
         db.register_source("twitter", "Twitter").ok();
+        db.register_source("lobsters", "Lobsters").ok();
+        db.register_source("devto", "Dev.to").ok();
+        db.register_source("producthunt", "Product Hunt").ok();
 
         info!(target: "4da::db", "Database ready");
         Ok(Arc::new(db))
@@ -1119,20 +1122,20 @@ pub(crate) const SUPPORTED_EXTENSIONS: &[&str] = &["md", "txt", "rs", "ts", "js"
 static RELEVANCE_THRESHOLD_BITS: AtomicU32 = AtomicU32::new(0);
 
 /// Get the current relevance threshold (thread-safe).
-/// Returns the auto-tuned value, or 0.30 default if not yet initialized.
-/// Lowered from 0.45 after calibrate_score() was added to spread scores across full range.
+/// Returns the auto-tuned value, or 0.50 default if not yet initialized.
+/// Targets ~3-5% pass rate for genuinely relevant items.
 pub(crate) fn get_relevance_threshold() -> f32 {
     let bits = RELEVANCE_THRESHOLD_BITS.load(Ordering::Relaxed);
     if bits == 0 {
-        0.35 // Default: calibrated sigmoid stretches scores, 0.35 gives ~20% pass rate
+        0.50 // Default: only pass items with strong context + interest match
     } else {
         f32::from_bits(bits)
     }
 }
 
-/// Set the relevance threshold (thread-safe, clamped to [0.10, 0.50]).
+/// Set the relevance threshold (thread-safe, clamped to [0.10, 0.70]).
 pub(crate) fn set_relevance_threshold(value: f32) {
-    let clamped = value.clamp(0.10, 0.50);
+    let clamped = value.clamp(0.10, 0.70);
     RELEVANCE_THRESHOLD_BITS.store(clamped.to_bits(), Ordering::Relaxed);
 }
 
@@ -1855,6 +1858,7 @@ async fn compute_relevance() -> Result<Vec<SourceRelevance>, String> {
                 &matches,
                 &ace_ctx,
                 &topics,
+                &static_identity.interests,
             ))
         } else {
             None

@@ -20,6 +20,152 @@ use crate::{
 static SIGNAL_CLASSIFIER: Lazy<signals::SignalClassifier> =
     Lazy::new(signals::SignalClassifier::new);
 
+/// Build a concise context summary for LLM reranking
+fn build_rerank_context_summary(ctx: &scoring::ScoringContext) -> String {
+    let mut parts = Vec::new();
+
+    if !ctx.ace_ctx.detected_tech.is_empty() {
+        parts.push(format!(
+            "Tech stack: {}",
+            ctx.ace_ctx.detected_tech.join(", ")
+        ));
+    }
+
+    if !ctx.ace_ctx.active_topics.is_empty() {
+        parts.push(format!(
+            "Active topics: {}",
+            ctx.ace_ctx.active_topics.join(", ")
+        ));
+    }
+
+    if !ctx.interests.is_empty() {
+        let names: Vec<&str> = ctx.interests.iter().map(|i| i.topic.as_str()).collect();
+        parts.push(format!("Declared interests: {}", names.join(", ")));
+    }
+
+    if !ctx.ace_ctx.anti_topics.is_empty() {
+        parts.push(format!(
+            "NOT interested in: {}",
+            ctx.ace_ctx.anti_topics.join(", ")
+        ));
+    }
+
+    parts.join("\n")
+}
+
+/// Apply LLM reranking to scored results if enabled and within limits.
+/// Returns the number of items judged, or None if skipped.
+async fn apply_llm_reranking(
+    app: &AppHandle,
+    results: &mut [SourceRelevance],
+    scoring_ctx: &scoring::ScoringContext,
+) -> Option<usize> {
+    let (rerank_enabled, rerank_config) = {
+        let mut settings = get_settings_manager().lock();
+        let enabled = settings.is_rerank_enabled() && settings.within_daily_limits();
+        let config = settings.get().rerank.clone();
+        (enabled, config)
+    };
+
+    if !rerank_enabled {
+        return None;
+    }
+
+    let context_summary = build_rerank_context_summary(scoring_ctx);
+    if context_summary.is_empty() {
+        info!(target: "4da::rerank", "No context available for reranking, skipping");
+        return None;
+    }
+
+    // Select candidates: items above min_embedding_score, not excluded
+    let candidates: Vec<(String, String, String)> = results
+        .iter()
+        .filter(|r| r.top_score >= rerank_config.min_embedding_score && !r.excluded)
+        .take(rerank_config.max_items_per_batch)
+        .map(|r| {
+            (
+                r.id.to_string(),
+                r.title.clone(),
+                r.explanation.clone().unwrap_or_default(),
+            )
+        })
+        .collect();
+
+    if candidates.is_empty() {
+        return None;
+    }
+
+    emit_progress(
+        app,
+        "rerank",
+        0.92,
+        &format!("LLM judging {} candidates...", candidates.len()),
+        0,
+        candidates.len(),
+    );
+
+    let llm_settings = {
+        let settings = get_settings_manager().lock();
+        settings.get().llm.clone()
+    };
+    let judge = crate::llm::RelevanceJudge::new(llm_settings);
+
+    match judge.judge_batch(&context_summary, candidates).await {
+        Ok((judgments, input_tokens, output_tokens)) => {
+            let mut confirmed = 0usize;
+            let mut rejected = 0usize;
+
+            for judgment in &judgments {
+                if let Some(result) = results
+                    .iter_mut()
+                    .find(|r| r.id.to_string() == judgment.item_id)
+                {
+                    if !judgment.relevant {
+                        // LLM says not relevant — demote significantly
+                        result.relevant = false;
+                        result.top_score *= 0.4;
+                        result.explanation =
+                            Some(format!("Filtered by AI: {}", judgment.reasoning));
+                        rejected += 1;
+                    } else {
+                        // LLM confirms relevant — blend scores and enrich
+                        result.top_score =
+                            (result.top_score * 0.6 + judgment.confidence * 0.4).clamp(0.0, 1.0);
+                        if !judgment.reasoning.is_empty() {
+                            result.explanation = Some(judgment.reasoning.clone());
+                        }
+                        confirmed += 1;
+                    }
+                }
+            }
+
+            // Re-sort after LLM adjustments
+            scoring::sort_results(results);
+
+            // Track token usage for daily limits
+            {
+                let mut settings = get_settings_manager().lock();
+                let cost = judge.estimate_cost_cents(input_tokens, output_tokens);
+                settings.record_usage(input_tokens + output_tokens, cost);
+            }
+
+            info!(target: "4da::rerank",
+                judged = judgments.len(),
+                confirmed = confirmed,
+                rejected = rejected,
+                tokens = input_tokens + output_tokens,
+                "LLM reranking complete"
+            );
+
+            Some(judgments.len())
+        }
+        Err(e) => {
+            warn!(target: "4da::rerank", error = %e, "LLM reranking failed - using embedding scores only");
+            None
+        }
+    }
+}
+
 /// Check if analysis has been aborted by the user
 #[inline]
 fn is_aborted() -> bool {
@@ -394,6 +540,10 @@ pub(crate) async fn run_multi_source_analysis_impl(
     }
 
     scoring::sort_results(&mut results);
+    scoring::dedup_results(&mut results);
+
+    // LLM Reranking (if enabled and within daily limits)
+    apply_llm_reranking(app, &mut results, &scoring_ctx).await;
 
     emit_progress(
         app,
@@ -610,6 +760,9 @@ pub(crate) async fn analyze_cached_content_impl(
             ));
         }
 
+        // LLM Reranking on new items only (if enabled)
+        apply_llm_reranking(app, &mut new_results, &scoring_ctx).await;
+
         // Merge: take previous results, update/add new ones by ID
         let mut prev = previous_results.unwrap();
         let existing_ids: std::collections::HashSet<u64> =
@@ -813,6 +966,10 @@ async fn score_items_full(
     }
 
     scoring::sort_results(&mut results);
+    scoring::dedup_results(&mut results);
+
+    // LLM Reranking (if enabled and within daily limits)
+    apply_llm_reranking(app, &mut results, &scoring_ctx).await;
 
     emit_progress(
         app,

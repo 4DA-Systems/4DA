@@ -13,10 +13,10 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "validate": "npm run lint && npm run typecheck && npm run test && npm run build",
+    "validate": "pnpm run lint && pnpm run typecheck && pnpm run test && pnpm run build",
     "validate:rust": "cd src-tauri && cargo fmt --check && cargo clippy -- -D warnings && cargo test",
-    "validate:mcp": "cd mcp-4da-server && npm run build",
-    "validate:all": "npm run validate && npm run validate:rust && npm run validate:mcp",
+    "validate:mcp": "cd mcp-4da-server && pnpm run build",
+    "validate:all": "pnpm run validate && pnpm run validate:rust && pnpm run validate:mcp",
     "prepare": "husky"
   },
   "dependencies": {
