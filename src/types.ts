@@ -33,6 +33,7 @@ export interface SourceRelevance {
 export interface ScoreBreakdown {
   context_score: number;
   interest_score: number;
+  keyword_score?: number;
   ace_boost: number;
   affinity_mult: number;
   anti_penalty: number;

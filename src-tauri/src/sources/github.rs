@@ -57,6 +57,15 @@ impl GitHubSource {
             "rust".to_string(),
             "typescript".to_string(),
             "python".to_string(),
+            "go".to_string(),
+            "javascript".to_string(),
+            "java".to_string(),
+            "kotlin".to_string(),
+            "swift".to_string(),
+            "c".to_string(),
+            "cpp".to_string(),
+            "zig".to_string(),
+            "elixir".to_string(),
         ])
     }
 
@@ -89,7 +98,7 @@ impl GitHubSource {
             .join("+OR+");
 
         // Full query: languages + stars filter + recent activity
-        format!("{}+stars:>1000+pushed:>{}", lang_query, week_ago_str)
+        format!("{}+stars:>100+pushed:>{}", lang_query, week_ago_str)
     }
 }
 
@@ -285,10 +294,19 @@ mod tests {
     #[test]
     fn test_default_languages() {
         let source = GitHubSource::new();
-        assert_eq!(source.languages.len(), 3);
+        assert_eq!(source.languages.len(), 12);
         assert!(source.languages.contains(&"rust".to_string()));
         assert!(source.languages.contains(&"typescript".to_string()));
         assert!(source.languages.contains(&"python".to_string()));
+        assert!(source.languages.contains(&"go".to_string()));
+        assert!(source.languages.contains(&"javascript".to_string()));
+        assert!(source.languages.contains(&"java".to_string()));
+        assert!(source.languages.contains(&"kotlin".to_string()));
+        assert!(source.languages.contains(&"swift".to_string()));
+        assert!(source.languages.contains(&"c".to_string()));
+        assert!(source.languages.contains(&"cpp".to_string()));
+        assert!(source.languages.contains(&"zig".to_string()));
+        assert!(source.languages.contains(&"elixir".to_string()));
     }
 
     #[test]
@@ -301,7 +319,7 @@ mod tests {
         assert!(query.contains("language:rust"));
         assert!(query.contains("language:typescript"));
         // Should contain stars filter
-        assert!(query.contains("stars:>1000"));
+        assert!(query.contains("stars:>100"));
         // Should contain date filter
         assert!(query.contains("pushed:>"));
     }

@@ -2,10 +2,16 @@ import { useState, useCallback, useRef } from 'react';
 
 export type ToastType = 'success' | 'error' | 'warning' | 'info';
 
+export interface ToastAction {
+  label: string;
+  onClick: () => void;
+}
+
 export interface Toast {
   id: number;
   type: ToastType;
   message: string;
+  action?: ToastAction;
 }
 
 const MAX_VISIBLE = 3;
@@ -24,12 +30,12 @@ export function useToasts() {
     setToasts(prev => prev.filter(t => t.id !== id));
   }, []);
 
-  const addToast = useCallback((type: ToastType, message: string) => {
+  const addToast = useCallback((type: ToastType, message: string, action?: ToastAction) => {
     const id = nextId++;
-    const duration = type === 'error' ? 8000 : 4000;
+    const duration = action ? 6000 : type === 'error' ? 8000 : 4000;
 
     setToasts(prev => {
-      const next = [...prev, { id, type, message }];
+      const next = [...prev, { id, type, message, action }];
       // FIFO: remove oldest if exceeding max
       while (next.length > MAX_VISIBLE) {
         const removed = next.shift()!;

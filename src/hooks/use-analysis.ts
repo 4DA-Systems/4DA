@@ -16,7 +16,10 @@ const initialState: AppState = {
   lastAnalyzedAt: null,
 };
 
-export function useAnalysis(addToast?: (type: ToastType, message: string) => void) {
+export function useAnalysis(
+  addToast?: (type: ToastType, message: string) => void,
+  onBackgroundItems?: (itemIds: number[]) => void,
+) {
   const [state, setState] = useState<AppState>(initialState);
   const [expandedItem, setExpandedItem] = useState<number | null>(null);
   const [isBrowserMode, setIsBrowserMode] = useState(false);
@@ -126,6 +129,7 @@ export function useAnalysis(addToast?: (type: ToastType, message: string) => voi
         });
         if (relevantNew > 0) {
           addToast?.('info', `${relevantNew} new relevant items found`);
+          onBackgroundItems?.(newItems.map(n => n.id));
         }
       });
     };

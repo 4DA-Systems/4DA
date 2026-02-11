@@ -22,8 +22,9 @@ fn calibrate_score(raw: f32) -> f32 {
         return 1.0;
     }
     // Sigmoid stretch: 1 / (1 + exp((center - raw) * scale))
-    // center=0.48, scale=20 maps the typical [0.40-0.56] band to [0.05-0.95]
-    1.0 / (1.0 + ((0.48 - raw) * 20.0).exp())
+    // center=0.48, scale=12 maps the typical [0.40-0.56] band to [0.15-0.85]
+    // (scale=20 was too aggressive, compressing near edges)
+    1.0 / (1.0 + ((0.48 - raw) * 12.0).exp())
 }
 
 /// Compute interest score by comparing item embedding against interest embeddings
@@ -54,6 +55,13 @@ pub(crate) fn compute_interest_score(
     max_score
 }
 
+/// Short tech keywords that are valid despite being <3 chars.
+/// These are common abbreviations that users declare as interests.
+const SHORT_TECH_KEYWORDS: &[&str] = &[
+    "ai", "ml", "go", "r", "c", "ui", "ux", "db", "os", "ci", "cd", "qa", "js", "ts", "py", "rx",
+    "vm", "k8", "tf", "gcp", "aws", "api", "cli", "css", "sql", "llm", "nlp", "cv",
+];
+
 /// Keyword-based interest matching: boosts items that literally contain declared interest terms.
 /// Complements semantic matching which can miss exact keyword matches.
 fn compute_keyword_interest_score(
@@ -77,23 +85,59 @@ fn compute_keyword_interest_score(
         }
 
         let mut hits = 0.0_f32;
+        let mut counted_terms = 0_usize;
         for term in &terms {
-            if term.len() < 3 {
-                continue; // skip tiny words like "ai", "ml" — too many false positives
+            // Skip generic short words, but allow known tech abbreviations
+            if term.len() < 2 {
+                continue;
             }
-            if title_lower.contains(term) {
+            if term.len() < 3 && !SHORT_TECH_KEYWORDS.contains(term) {
+                continue;
+            }
+            counted_terms += 1;
+
+            // For very short terms (1-2 chars), require word boundary match to avoid false positives
+            // e.g. "go" shouldn't match "google", "algorithm"
+            let matched_title = if term.len() <= 2 {
+                has_word_boundary_match(&title_lower, term)
+            } else {
+                title_lower.contains(term)
+            };
+            let matched_content = if !matched_title && term.len() <= 2 {
+                has_word_boundary_match(&text_lower, term)
+            } else if !matched_title {
+                text_lower.contains(term)
+            } else {
+                false
+            };
+
+            if matched_title {
                 hits += 1.5; // title match = 1.5x weight
-            } else if text_lower.contains(term) {
+            } else if matched_content {
                 hits += 1.0;
             }
         }
 
-        let meaningful_terms = terms.iter().filter(|t| t.len() >= 3).count().max(1) as f32;
-        let score = (hits / meaningful_terms).min(1.0) * interest.weight;
+        let divisor = counted_terms.max(1) as f32;
+        let score = (hits / divisor).min(1.0) * interest.weight;
         max_score = max_score.max(score);
     }
 
     max_score
+}
+
+/// Check if a short term appears as a whole word (bounded by non-alphanumeric chars)
+fn has_word_boundary_match(text: &str, term: &str) -> bool {
+    for (i, _) in text.match_indices(term) {
+        let before_ok = i == 0 || !text.as_bytes()[i - 1].is_ascii_alphanumeric();
+        let after_pos = i + term.len();
+        let after_ok =
+            after_pos >= text.len() || !text.as_bytes()[after_pos].is_ascii_alphanumeric();
+        if before_ok && after_ok {
+            return true;
+        }
+    }
+    false
 }
 
 /// Clean a source file path into a human-readable label
@@ -602,20 +646,20 @@ pub(crate) fn compute_unified_relevance(
 pub(crate) fn compute_temporal_freshness(created_at: &chrono::DateTime<chrono::Utc>) -> f32 {
     let age_hours = ((chrono::Utc::now() - *created_at).num_minutes() as f32 / 60.0).max(0.0);
 
-    if age_hours < 2.0 {
-        1.15
-    } else if age_hours < 6.0 {
-        1.10
+    if age_hours < 3.0 {
+        1.20 // Breaking/fresh: strong boost
     } else if age_hours < 12.0 {
-        1.05
+        1.15
     } else if age_hours < 24.0 {
-        1.0
-    } else if age_hours < 36.0 {
-        0.95
-    } else if age_hours < 48.0 {
-        0.90
+        1.10 // Today: still fresh
+    } else if age_hours < 72.0 {
+        1.0 // 1-3 days: neutral
+    } else if age_hours < 168.0 {
+        0.92 // 3-7 days: mild decay
+    } else if age_hours < 720.0 {
+        0.82 // 1-4 weeks: noticeable decay
     } else {
-        0.85
+        0.70 // >1 month: significant decay
     }
 }
 
@@ -844,15 +888,14 @@ pub(crate) fn score_item(
         compute_semantic_ace_boost(input.embedding, &ctx.ace_ctx, &ctx.topic_embeddings)
             .unwrap_or_else(|| compute_keyword_ace_boost(&topics, &ctx.ace_ctx));
 
-    // Base score weighted by available data — dynamic weighting spreads the distribution
+    // Base score weighted by available data — smooth interpolation avoids cliff effects
     let base_score = if ctx.cached_context_count > 0 && ctx.interest_count > 0 {
-        let (ctx_w, int_w, kw_w) = if context_score > 0.7 {
-            (0.50, 0.25, 0.25) // Strong context match: trust it more
-        } else if context_score < 0.3 {
-            (0.20, 0.45, 0.35) // Weak context: let interests + keywords dominate
-        } else {
-            (0.35, 0.35, 0.30) // Balanced
-        };
+        // Smoothly shift weight toward context as context_score increases
+        // context_score=0.0 → ctx_w=0.15, context_score=1.0 → ctx_w=0.55
+        let ctx_w = (0.15 + context_score * 0.40).clamp(0.15, 0.55);
+        let remaining = 1.0 - ctx_w;
+        let int_w = remaining * 0.55; // interests get ~55% of remainder
+        let kw_w = remaining * 0.45; // keywords get ~45% of remainder
         (context_score * ctx_w + interest_score * int_w + keyword_score * kw_w + semantic_boost)
             .min(1.0)
     } else if ctx.interest_count > 0 {
@@ -952,6 +995,7 @@ pub(crate) fn score_item(
     let score_breakdown = ScoreBreakdown {
         context_score,
         interest_score,
+        keyword_score,
         ace_boost: semantic_boost,
         affinity_mult,
         anti_penalty,
@@ -1229,42 +1273,42 @@ mod tests {
     fn test_temporal_freshness_very_recent() {
         let now = chrono::Utc::now();
         let freshness = compute_temporal_freshness(&now);
-        assert_eq!(freshness, 1.15, "Items just created should get max boost");
+        assert_eq!(freshness, 1.20, "Items just created should get max boost");
     }
 
     #[test]
     fn test_temporal_freshness_few_hours() {
-        let three_hours_ago = chrono::Utc::now() - chrono::Duration::hours(3);
-        let freshness = compute_temporal_freshness(&three_hours_ago);
-        assert_eq!(freshness, 1.10, "Items 3h old should get 1.10x boost");
+        let four_hours_ago = chrono::Utc::now() - chrono::Duration::hours(4);
+        let freshness = compute_temporal_freshness(&four_hours_ago);
+        assert_eq!(freshness, 1.15, "Items 4h old should get 1.15x boost");
     }
 
     #[test]
     fn test_temporal_freshness_half_day() {
-        let nine_hours_ago = chrono::Utc::now() - chrono::Duration::hours(9);
-        let freshness = compute_temporal_freshness(&nine_hours_ago);
-        assert_eq!(freshness, 1.05, "Items 9h old should get 1.05x boost");
+        let thirteen_hours_ago = chrono::Utc::now() - chrono::Duration::hours(13);
+        let freshness = compute_temporal_freshness(&thirteen_hours_ago);
+        assert_eq!(freshness, 1.10, "Items 13h old should get 1.10x boost");
     }
 
     #[test]
     fn test_temporal_freshness_one_day() {
-        let eighteen_hours_ago = chrono::Utc::now() - chrono::Duration::hours(18);
-        let freshness = compute_temporal_freshness(&eighteen_hours_ago);
-        assert_eq!(freshness, 1.0, "Items 18h old should be neutral");
+        let thirty_hours_ago = chrono::Utc::now() - chrono::Duration::hours(30);
+        let freshness = compute_temporal_freshness(&thirty_hours_ago);
+        assert_eq!(freshness, 1.0, "Items 30h old should be neutral");
     }
 
     #[test]
     fn test_temporal_freshness_old() {
-        let two_days_ago = chrono::Utc::now() - chrono::Duration::hours(40);
-        let freshness = compute_temporal_freshness(&two_days_ago);
-        assert_eq!(freshness, 0.90, "Items 40h old should decay to 0.90");
+        let four_days_ago = chrono::Utc::now() - chrono::Duration::hours(96);
+        let freshness = compute_temporal_freshness(&four_days_ago);
+        assert_eq!(freshness, 0.92, "Items 4 days old should decay to 0.92");
     }
 
     #[test]
     fn test_temporal_freshness_very_old() {
-        let old = chrono::Utc::now() - chrono::Duration::hours(72);
+        let old = chrono::Utc::now() - chrono::Duration::hours(200);
         let freshness = compute_temporal_freshness(&old);
-        assert_eq!(freshness, 0.85, "Items 72h old should hit floor at 0.85");
+        assert_eq!(freshness, 0.82, "Items 8+ days old should decay to 0.82");
     }
 
     // Test source quality boost: positive score

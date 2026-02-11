@@ -45,9 +45,20 @@ impl RssSource {
                 custom: None,
             },
             client: super::shared_client(),
-            // Default to some popular tech feeds
+            // Default quality tech feeds — users can add more via settings
             feed_urls: vec![
-                // Users can add their own feeds via config
+                "https://feeds.arstechnica.com/arstechnica/technology-lab".to_string(),
+                "https://www.theverge.com/rss/index.xml".to_string(),
+                "https://techcrunch.com/feed/".to_string(),
+                "https://blog.rust-lang.org/feed.xml".to_string(),
+                "https://engineering.fb.com/feed/".to_string(),
+                "https://netflixtechblog.com/feed".to_string(),
+                "https://github.blog/feed/".to_string(),
+                "https://blog.cloudflare.com/rss/".to_string(),
+                "https://martinfowler.com/feed.atom".to_string(),
+                "https://simonwillison.net/atom/everything/".to_string(),
+                "https://jvns.ca/atom.xml".to_string(),
+                "https://danluu.com/atom.xml".to_string(),
             ],
         }
     }

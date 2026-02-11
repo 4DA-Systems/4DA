@@ -129,6 +129,8 @@ pub struct RelevanceMatch {
 pub struct ScoreBreakdown {
     pub context_score: f32,
     pub interest_score: f32,
+    #[serde(default)]
+    pub keyword_score: f32,
     pub ace_boost: f32,
     pub affinity_mult: f32,
     pub anti_penalty: f32,
@@ -1122,7 +1124,7 @@ static RELEVANCE_THRESHOLD_BITS: AtomicU32 = AtomicU32::new(0);
 pub(crate) fn get_relevance_threshold() -> f32 {
     let bits = RELEVANCE_THRESHOLD_BITS.load(Ordering::Relaxed);
     if bits == 0 {
-        0.30 // Default before initialization (was 0.45, lowered for calibrated scores)
+        0.35 // Default: calibrated sigmoid stretches scores, 0.35 gives ~20% pass rate
     } else {
         f32::from_bits(bits)
     }
@@ -1603,8 +1605,8 @@ async fn compute_relevance() -> Result<Vec<SourceRelevance>, String> {
                 "hackernews",
                 &item.id.to_string(),
                 item.url.as_deref(),
-                &item.title,
-                &item.content,
+                &decode_html_entities(&item.title),
+                &decode_html_entities(&item.content),
                 embedding,
             )
             .ok();
@@ -1883,6 +1885,7 @@ async fn compute_relevance() -> Result<Vec<SourceRelevance>, String> {
         let score_breakdown = ScoreBreakdown {
             context_score,
             interest_score,
+            keyword_score: 0.0,
             ace_boost: semantic_boost,
             affinity_mult,
             anti_penalty,
@@ -2413,11 +2416,11 @@ pub fn run() {
             set_relevance_threshold(stored);
             info!(target: "4da::startup", threshold = get_relevance_threshold(), "Loaded stored relevance threshold");
         } else {
-            set_relevance_threshold(0.30);
+            set_relevance_threshold(0.35);
             info!(target: "4da::startup", threshold = get_relevance_threshold(), "Relevance threshold (default)");
         }
     } else {
-        set_relevance_threshold(0.30);
+        set_relevance_threshold(0.35);
         info!(target: "4da::startup", threshold = get_relevance_threshold(), "Relevance threshold (default, ACE unavailable)");
     }
 

@@ -28,6 +28,14 @@ export function ToastContainer({ toasts, onDismiss }: ToastContainerProps) {
               {style.icon}
             </span>
             <p className="text-sm text-gray-300 flex-1 min-w-0 break-words">{toast.message}</p>
+            {toast.action && (
+              <button
+                onClick={() => { toast.action!.onClick(); onDismiss(toast.id); }}
+                className="text-xs font-medium text-orange-400 hover:text-orange-300 transition-colors flex-shrink-0 ml-1 px-2 py-1 bg-orange-500/10 rounded"
+              >
+                {toast.action.label}
+              </button>
+            )}
             <button
               onClick={() => onDismiss(toast.id)}
               className="text-gray-600 hover:text-gray-300 transition-colors flex-shrink-0 ml-1"

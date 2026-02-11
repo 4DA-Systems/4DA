@@ -8,8 +8,10 @@ use tracing::{debug, error, info, warn};
 
 use crate::db::Database;
 use crate::sources::arxiv::ArxivSource;
+use crate::sources::devto::DevtoSource;
 use crate::sources::github::GitHubSource;
 use crate::sources::hackernews::HackerNewsSource;
+use crate::sources::lobsters::LobstersSource;
 use crate::sources::reddit::RedditSource;
 use crate::sources::rss::RssSource;
 use crate::sources::twitter::TwitterSource;
@@ -73,6 +75,11 @@ pub(crate) async fn fetch_all_sources(
             "youtube",
             Box::new(YouTubeSource::with_channels(youtube_channels)),
         ),
+        (
+            "lobsters",
+            Box::new(LobstersSource::new()) as Box<dyn Source>,
+        ),
+        ("devto", Box::new(DevtoSource::new()) as Box<dyn Source>),
     ];
 
     let sources: Vec<Box<dyn Source>> = all_sources
@@ -285,6 +292,11 @@ pub(crate) async fn fetch_all_sources(
         for ((item, embed_text), embedding) in
             new_items_to_embed.into_iter().zip(embeddings.into_iter())
         {
+            // Decode HTML entities at ingestion time so DB always has clean text.
+            // This ensures dedup, embeddings, and display all see the same clean text.
+            let clean_title = crate::decode_html_entities(&item.title);
+            let clean_content = crate::decode_html_entities(&item.content);
+
             let is_fallback = embedding.iter().all(|&v| v == 0.0);
             if is_fallback {
                 // Store as pending for re-embedding on next analysis
@@ -292,8 +304,8 @@ pub(crate) async fn fetch_all_sources(
                     item.source_type.clone(),
                     item.source_id.clone(),
                     item.url.clone(),
-                    item.title.clone(),
-                    item.content.clone(),
+                    clean_title.clone(),
+                    clean_content.clone(),
                     embed_text,
                 ));
             } else {
@@ -301,8 +313,8 @@ pub(crate) async fn fetch_all_sources(
                     item.source_type.clone(),
                     item.source_id.clone(),
                     item.url.clone(),
-                    item.title.clone(),
-                    item.content.clone(),
+                    clean_title.clone(),
+                    clean_content.clone(),
                     embedding.clone(),
                 ));
             }
@@ -341,7 +353,7 @@ pub(crate) async fn fetch_all_sources_deep(
     let (twitter_handles, x_api_key) = load_twitter_settings();
     let youtube_channels = load_youtube_channels_from_settings();
 
-    // Note: HN, arXiv, and Reddit have fetch_items_deep implementations
+    // Note: HN, arXiv, Reddit, Lobsters, Dev.to have fetch_items_deep implementations
     // GitHub, RSS, YouTube use default (regular fetch). Twitter has deep fetch.
     let hn_source = HackerNewsSource::new();
     let arxiv_source = ArxivSource::new();
@@ -350,6 +362,8 @@ pub(crate) async fn fetch_all_sources_deep(
     let rss_source = RssSource::with_feeds(rss_feeds);
     let twitter_source = TwitterSource::with_handles(twitter_handles).with_api_key(x_api_key);
     let youtube_source = YouTubeSource::with_channels(youtube_channels);
+    let lobsters_source = LobstersSource::new();
+    let devto_source = DevtoSource::new();
 
     let mut all_items: Vec<(GenericSourceItem, Vec<f32>)> = Vec::new();
     let mut new_items_to_embed: Vec<(GenericSourceItem, String)> = Vec::new();
@@ -372,6 +386,8 @@ pub(crate) async fn fetch_all_sources_deep(
         rss_result,
         twitter_result,
         youtube_result,
+        lobsters_result,
+        devto_result,
     ) = tokio::join!(
         hn_source.fetch_items_deep(items_per_category),
         arxiv_source.fetch_items_deep(items_per_category),
@@ -380,6 +396,8 @@ pub(crate) async fn fetch_all_sources_deep(
         rss_source.fetch_items(),
         twitter_source.fetch_items_deep(items_per_category),
         youtube_source.fetch_items(),
+        lobsters_source.fetch_items_deep(items_per_category),
+        devto_source.fetch_items_deep(items_per_category),
     );
 
     // Process HN results
@@ -477,6 +495,34 @@ pub(crate) async fn fetch_all_sources_deep(
         }
     }
 
+    // Process Lobste.rs results
+    match lobsters_result {
+        Ok(items) => {
+            info!(target: "4da::sources", source = "lobsters", count = items.len(), "Deep fetched Lobste.rs stories");
+            process_source_items(
+                db,
+                &mut all_items,
+                &mut new_items_to_embed,
+                items,
+                "lobsters",
+            );
+        }
+        Err(e) => {
+            warn!(target: "4da::sources", source = "lobsters", error = ?e, "Deep fetch failed");
+        }
+    }
+
+    // Process Dev.to results
+    match devto_result {
+        Ok(items) => {
+            info!(target: "4da::sources", source = "devto", count = items.len(), "Deep fetched Dev.to articles");
+            process_source_items(db, &mut all_items, &mut new_items_to_embed, items, "devto");
+        }
+        Err(e) => {
+            warn!(target: "4da::sources", source = "devto", error = ?e, "Deep fetch failed");
+        }
+    }
+
     info!(target: "4da::sources",
         total_cached = all_items.len(),
         new_to_embed = new_items_to_embed.len(),
@@ -560,6 +606,8 @@ pub(crate) async fn fill_cache_background(app: &AppHandle) -> Result<usize, Stri
     let rss_source = RssSource::with_feeds(rss_feeds);
     let twitter_source = TwitterSource::with_handles(twitter_handles).with_api_key(x_api_key);
     let youtube_source = YouTubeSource::with_channels(youtube_channels);
+    let lobsters_source = LobstersSource::new();
+    let devto_source = DevtoSource::new();
 
     let mut total_cached = 0;
     let mut new_items_to_embed: Vec<(String, String, Option<String>, String, String)> = Vec::new();
@@ -573,6 +621,8 @@ pub(crate) async fn fill_cache_background(app: &AppHandle) -> Result<usize, Stri
         rss_result,
         twitter_result,
         youtube_result,
+        lobsters_result,
+        devto_result,
     ) = tokio::join!(
         hn_source.fetch_items_deep(50),
         arxiv_source.fetch_items_deep(50),
@@ -581,6 +631,8 @@ pub(crate) async fn fill_cache_background(app: &AppHandle) -> Result<usize, Stri
         rss_source.fetch_items(),
         twitter_source.fetch_items_deep(50),
         youtube_source.fetch_items(),
+        lobsters_source.fetch_items_deep(50),
+        devto_source.fetch_items_deep(50),
     );
 
     // Process HN results
@@ -772,9 +824,77 @@ pub(crate) async fn fill_cache_background(app: &AppHandle) -> Result<usize, Stri
         Err(e) => warn!(target: "4da::cache", source = "youtube", error = ?e, "Fetch failed"),
     }
 
+    // Process Lobste.rs results
+    match lobsters_result {
+        Ok(items) => {
+            info!(target: "4da::cache", source = "lobsters", count = items.len(), "Fetched Lobste.rs items");
+            for item in items {
+                if db
+                    .get_source_item("lobsters", &item.source_id)
+                    .ok()
+                    .flatten()
+                    .is_none()
+                {
+                    new_items_to_embed.push((
+                        "lobsters".to_string(),
+                        item.source_id,
+                        item.url,
+                        item.title,
+                        item.content,
+                    ));
+                } else {
+                    db.touch_source_item("lobsters", &item.source_id).ok();
+                    total_cached += 1;
+                }
+            }
+        }
+        Err(e) => warn!(target: "4da::cache", source = "lobsters", error = ?e, "Fetch failed"),
+    }
+
+    // Process Dev.to results
+    match devto_result {
+        Ok(items) => {
+            info!(target: "4da::cache", source = "devto", count = items.len(), "Fetched Dev.to items");
+            for item in items {
+                if db
+                    .get_source_item("devto", &item.source_id)
+                    .ok()
+                    .flatten()
+                    .is_none()
+                {
+                    new_items_to_embed.push((
+                        "devto".to_string(),
+                        item.source_id,
+                        item.url,
+                        item.title,
+                        item.content,
+                    ));
+                } else {
+                    db.touch_source_item("devto", &item.source_id).ok();
+                    total_cached += 1;
+                }
+            }
+        }
+        Err(e) => warn!(target: "4da::cache", source = "devto", error = ?e, "Fetch failed"),
+    }
+
     // Embed and cache new items
     if !new_items_to_embed.is_empty() {
         info!(target: "4da::cache", new_items = new_items_to_embed.len(), "Embedding new items");
+
+        // Decode HTML entities at ingestion time
+        let new_items_to_embed: Vec<_> = new_items_to_embed
+            .into_iter()
+            .map(|(st, sid, url, title, content)| {
+                (
+                    st,
+                    sid,
+                    url,
+                    crate::decode_html_entities(&title),
+                    crate::decode_html_entities(&content),
+                )
+            })
+            .collect();
 
         let texts: Vec<String> = new_items_to_embed
             .iter()

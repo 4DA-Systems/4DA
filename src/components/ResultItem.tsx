@@ -33,6 +33,8 @@ function generateFallbackReason(item: SourceRelevance): string {
 interface ResultItemProps {
   item: SourceRelevance;
   isExpanded: boolean;
+  isFocused?: boolean;
+  isNew?: boolean;
   onToggleExpand: () => void;
   feedbackGiven: FeedbackGiven;
   onRecordInteraction: (
@@ -45,6 +47,8 @@ interface ResultItemProps {
 export const ResultItem = memo(function ResultItem({
   item,
   isExpanded,
+  isFocused,
+  isNew,
   onToggleExpand,
   feedbackGiven,
   onRecordInteraction,
@@ -56,7 +60,12 @@ export const ResultItem = memo(function ResultItem({
 
   return (
     <li
+      id={`result-item-${item.id}`}
       className={`rounded border transition-colors ${
+        isFocused
+          ? 'ring-1 ring-orange-500/50'
+          : ''
+      } ${
         isTopPick
           ? 'bg-gradient-to-r from-orange-500/10 to-transparent border-orange-500/30'
           : item.relevant
@@ -64,16 +73,16 @@ export const ResultItem = memo(function ResultItem({
           : 'bg-bg-primary border-border/50'
       }`}
     >
-      {/* Main Row */}
-      <button
-        onClick={onToggleExpand}
-        aria-expanded={isExpanded}
-        aria-controls={`result-detail-${item.id}`}
-        className="w-full px-4 py-3 text-left"
-      >
+      {/* Main Row — click score/expand to toggle, click title to open URL */}
+      <div className="w-full px-4 py-3">
         <div className="flex items-start gap-3">
-          {/* Score Badge + Source */}
-          <div className="flex-shrink-0 flex flex-col items-center gap-1">
+          {/* Score Badge + Source (click to expand) */}
+          <button
+            onClick={onToggleExpand}
+            aria-expanded={isExpanded}
+            aria-controls={`result-detail-${item.id}`}
+            className="flex-shrink-0 flex flex-col items-center gap-1 cursor-pointer"
+          >
             <div
               className={`w-14 text-center py-1 rounded font-mono text-sm font-medium ${getScoreColor(
                 item.top_score,
@@ -91,24 +100,42 @@ export const ResultItem = memo(function ResultItem({
               item.source_type === 'youtube' ? 'bg-red-500/20 text-red-400' :
               item.source_type === 'twitter' ? 'bg-sky-500/20 text-sky-400' :
               item.source_type === 'producthunt' ? 'bg-orange-600/20 text-orange-300' :
+              item.source_type === 'lobsters' ? 'bg-red-600/20 text-red-400' :
+              item.source_type === 'devto' ? 'bg-green-500/20 text-green-400' :
               'bg-gray-500/20 text-gray-400'
             }`}>
               {{ hackernews: 'HN', arxiv: 'arXiv', reddit: 'Reddit', github: 'GitHub',
                  rss: 'RSS', youtube: 'YouTube', twitter: 'Twitter', producthunt: 'PH',
+                 lobsters: 'Lobsters', devto: 'Dev.to',
               }[item.source_type || ''] || item.source_type || 'Unknown'}
             </div>
-          </div>
+          </button>
 
-          {/* Title and URL */}
+          {/* Title and URL — click title to open link */}
           <div className="flex-1 min-w-0">
             <div className="flex items-start gap-2">
-              <div
-                className={`text-sm flex-1 ${
-                  item.relevant ? 'text-text-primary' : 'text-text-secondary'
-                }`}
-              >
-                {item.title}
-              </div>
+              {item.url ? (
+                <a
+                  href={item.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={(e) => e.stopPropagation()}
+                  className={`text-sm flex-1 hover:underline decoration-gray-600 ${
+                    item.relevant ? 'text-text-primary' : 'text-text-secondary'
+                  }`}
+                >
+                  {item.title}
+                </a>
+              ) : (
+                <button
+                  onClick={onToggleExpand}
+                  className={`text-sm flex-1 text-left ${
+                    item.relevant ? 'text-text-primary' : 'text-text-secondary'
+                  }`}
+                >
+                  {item.title}
+                </button>
+              )}
               {/* Signal Badge (always visible) */}
               {item.signal_type && (
                 <span className={`flex-shrink-0 text-[10px] px-1.5 py-0.5 rounded font-medium ${
@@ -148,20 +175,27 @@ export const ResultItem = memo(function ResultItem({
             </div>
           )}
 
-          {/* Expand Indicator */}
-          <div className="text-text-muted text-xs">
+          {/* Expand Button */}
+          <button
+            onClick={onToggleExpand}
+            aria-expanded={isExpanded}
+            aria-controls={`result-detail-${item.id}`}
+            aria-label={isExpanded ? 'Collapse details' : 'Expand details'}
+            className="text-text-muted text-xs hover:text-text-secondary transition-colors px-1"
+          >
             {isExpanded ? '−' : '+'}
-          </div>
+          </button>
         </div>
 
         {/* Why This Matters - Preview (shown when not expanded, for ALL items) */}
         {!isExpanded && (
-          <div className="mt-1.5 text-xs text-text-secondary pl-[4.25rem]">
-            {item.explanation || generateFallbackReason(item)}
-          </div>
+          <button onClick={onToggleExpand} className="w-full text-left">
+            <div className="mt-1.5 text-xs text-text-secondary pl-[4.25rem]">
+              {item.explanation || generateFallbackReason(item)}
+            </div>
+          </button>
         )}
-
-      </button>
+      </div>
 
       {/* Expanded Matches */}
       {isExpanded && (
@@ -181,6 +215,11 @@ export const ResultItem = memo(function ResultItem({
           {/* Quality Indicators (expanded only) */}
           <div className="mb-3 flex flex-wrap items-center gap-2">
             <ConfidenceIndicator confidence={item.confidence} />
+            {isNew && (
+              <span className="text-[10px] px-1.5 py-0.5 bg-blue-500/20 text-blue-400 rounded font-medium animate-pulse">
+                New
+              </span>
+            )}
             {isTopPick && (
               <span className="text-[10px] px-1.5 py-0.5 bg-orange-500/20 text-orange-400 rounded font-medium">
                 {isHighConfidence ? 'Top Pick' : 'Hot'}
@@ -191,6 +230,7 @@ export const ResultItem = memo(function ResultItem({
                 {item.seen_on.map(s => ({
                   hackernews: 'HN', arxiv: 'arXiv', reddit: 'Reddit', github: 'GitHub',
                   rss: 'RSS', youtube: 'YouTube', twitter: 'Twitter', producthunt: 'PH',
+                  lobsters: 'Lobsters', devto: 'Dev.to',
                 }[s] || s)).join(' + ')}
               </span>
             )}

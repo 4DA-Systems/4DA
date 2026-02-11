@@ -15,8 +15,10 @@ use serde::{Deserialize, Serialize};
 use tracing::info;
 
 pub mod arxiv;
+pub mod devto;
 pub mod github;
 pub mod hackernews;
+pub mod lobsters;
 pub mod producthunt;
 pub mod reddit;
 pub mod rss;

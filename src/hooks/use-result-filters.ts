@@ -4,6 +4,7 @@ import type { SourceRelevance, FeedbackAction, FeedbackGiven } from '../types';
 const ALL_SOURCES = new Set([
   'hackernews', 'arxiv', 'reddit', 'github',
   'rss', 'youtube', 'twitter', 'producthunt',
+  'lobsters', 'devto',
 ]);
 
 /** Normalize URL for dedup: strip protocol, www, trailing slash, query params */
@@ -31,6 +32,8 @@ export const useResultFilters = (
   const [sourceFilters, setSourceFilters] = useState<Set<string>>(new Set(ALL_SOURCES));
   const [sortBy, setSortBy] = useState<'score' | 'date'>('score');
   const [showOnlyRelevant, setShowOnlyRelevant] = useState(false);
+  const [showSavedOnly, setShowSavedOnly] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
 
   const toggleSourceFilter = useCallback((source: string) => {
     setSourceFilters(prev => {
@@ -45,11 +48,23 @@ export const useResultFilters = (
   }, []);
 
   const filteredResults = useMemo(() => {
-    // Step 1: Filter by source and relevance
+    const query = searchQuery.toLowerCase().trim();
+
+    // Step 1: Filter by source, relevance, saved, and search query
     const filtered = relevanceResults.filter(item => {
       const source = item.source_type || 'hackernews';
       if (!sourceFilters.has(source)) return false;
       if (showOnlyRelevant && !item.relevant) return false;
+      if (showSavedOnly && feedbackGiven[item.id] !== 'save') return false;
+      // Search filter: match against title, explanation, source type
+      if (query) {
+        const title = (item.title || '').toLowerCase();
+        const explanation = (item.explanation || '').toLowerCase();
+        const sourceLabel = (item.source_type || '').toLowerCase();
+        if (!title.includes(query) && !explanation.includes(query) && !sourceLabel.includes(query)) {
+          return false;
+        }
+      }
       return true;
     });
 
@@ -93,7 +108,7 @@ export const useResultFilters = (
     });
 
     return deduped;
-  }, [relevanceResults, sourceFilters, showOnlyRelevant, sortBy]);
+  }, [relevanceResults, sourceFilters, showOnlyRelevant, showSavedOnly, sortBy, searchQuery, feedbackGiven]);
 
   const dismissAllBelow = useCallback(async (threshold: number) => {
     const itemsToDismiss = filteredResults.filter(
@@ -133,6 +148,10 @@ export const useResultFilters = (
     setSortBy,
     showOnlyRelevant,
     setShowOnlyRelevant,
+    showSavedOnly,
+    setShowSavedOnly,
+    searchQuery,
+    setSearchQuery,
     toggleSourceFilter,
     filteredResults,
     dismissAllBelow,

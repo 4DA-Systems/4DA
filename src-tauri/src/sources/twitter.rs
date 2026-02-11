@@ -94,11 +94,45 @@ impl TwitterSource {
             },
             client: super::shared_client(),
             handles: vec![
+                // Core developer advocates
                 "ThePrimeagen".into(),
                 "dan_abramov".into(),
                 "kentcdodds".into(),
                 "addyosmani".into(),
-                "firaborecodes".into(),
+                "traversymedia".into(),
+                // Rust / systems
+                "jonhoo".into(),
+                "m_ou_se".into(),
+                "fasterthanlime".into(),
+                // AI/ML
+                "karpathy".into(),
+                "ylecun".into(),
+                "svpino".into(),
+                "AndrewYNg".into(),
+                // Web platform
+                "leeerob".into(),
+                "rauchg".into(),
+                "Rich_Harris".into(),
+                "ryanflorence".into(),
+                "wesbos".into(),
+                // DevOps / Cloud
+                "kelseyhightower".into(),
+                "jessfraz".into(),
+                // Security
+                "taviso".into(),
+                "SwiftOnSecurity".into(),
+                // Tech journalists / commentators
+                "benthompson".into(),
+                "dhh".into(),
+                "paulg".into(),
+                // Open source
+                "mitchellh".into(),
+                "antirez".into(),
+                "matklad".into(),
+                // Indie hackers
+                "levelsio".into(),
+                "marc_louvion".into(),
+                "t3dotgg".into(),
             ],
             api_key: String::new(),
         }
@@ -479,7 +513,7 @@ mod tests {
         let source = TwitterSource::new();
         assert_eq!(source.source_type(), "twitter");
         assert_eq!(source.name(), "Twitter/X");
-        assert_eq!(source.handles.len(), 5);
+        assert_eq!(source.handles.len(), 30);
         assert!(source.api_key.is_empty());
     }
 
@@ -493,7 +527,7 @@ mod tests {
     #[test]
     fn test_empty_handles_uses_defaults() {
         let source = TwitterSource::with_handles(vec![]);
-        assert_eq!(source.handles.len(), 5); // Falls back to defaults
+        assert_eq!(source.handles.len(), 30); // Falls back to defaults
     }
 
     #[test]

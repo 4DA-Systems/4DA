@@ -29,6 +29,7 @@ const SOURCE_LABELS: Record<string, string> = {
   hackernews: 'HN', arxiv: 'arXiv', reddit: 'Reddit',
   github: 'GitHub', rss: 'RSS', youtube: 'YouTube',
   twitter: 'Twitter', producthunt: 'PH',
+  lobsters: 'Lobsters', devto: 'Dev.to',
 };
 
 // Error Boundary to catch rendering errors
@@ -100,6 +101,7 @@ function App() {
   const [showSettings, setShowSettings] = useState(false);
   const [showKeyboardHelp, setShowKeyboardHelp] = useState(false);
   const [renderLimit, setRenderLimit] = useState(50);
+  const [newItemIds, setNewItemIds] = useState<Set<number>>(new Set());
   // Toast notification system
   const { toasts, addToast, removeToast } = useToasts();
   // All application state via hooks
@@ -117,6 +119,16 @@ function App() {
     monitoring,
   } = useMonitoring();
 
+  const handleBackgroundItems = useCallback((itemIds: number[]) => {
+    setNewItemIds(prev => {
+      const next = new Set(prev);
+      for (const id of itemIds) next.add(id);
+      return next;
+    });
+    // Auto-clear "New" badges after 60 seconds
+    setTimeout(() => setNewItemIds(new Set()), 60000);
+  }, []);
+
   const {
     state,
     setState,
@@ -127,7 +139,7 @@ function App() {
     clearContext,
     indexContext,
     startAnalysis,
-  } = useAnalysis(addToast);
+  } = useAnalysis(addToast, handleBackgroundItems);
 
   // Immediate score adjustment for feedback (save boosts, dismiss sinks)
   const handleScoreAdjust = useCallback((itemId: number, delta: number) => {
@@ -147,7 +159,7 @@ function App() {
   const {
     feedbackGiven,
     recordInteraction,
-  } = useFeedback(setSettingsStatus, handleScoreAdjust);
+  } = useFeedback(setSettingsStatus, handleScoreAdjust, addToast);
 
   // System health hook - data loaded on mount, consumed by SettingsModal via Zustand
   useSystemHealth(setSettingsStatus);
@@ -162,6 +174,10 @@ function App() {
     setSortBy,
     showOnlyRelevant,
     setShowOnlyRelevant,
+    searchQuery,
+    setSearchQuery,
+    showSavedOnly,
+    setShowSavedOnly,
     toggleSourceFilter,
     filteredResults,
     dismissAllBelow,
@@ -241,7 +257,8 @@ function App() {
   }, [setState]);
 
   // Global keyboard shortcuts (extracted hook)
-  useKeyboardShortcuts({
+  const visibleResults = filteredResults.slice(0, renderLimit);
+  const { focusedIndex } = useKeyboardShortcuts({
     onAnalyze: startAnalysis,
     onToggleFilters: () => setShowOnlyRelevant(prev => !prev),
     onToggleBriefing: () => setShowBriefing(prev => !prev),
@@ -256,6 +273,19 @@ function App() {
     analyzeDisabled: state.loading,
     briefingAvailable: !!aiBriefing.content,
     filtersAvailable: state.analysisComplete,
+    resultCount: visibleResults.length,
+    onFocusResult: (index: number) => {
+      const el = document.getElementById(`result-item-${visibleResults[index]?.id}`);
+      el?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    },
+    onToggleExpandResult: (index: number) => {
+      const item = visibleResults[index];
+      if (item) setExpandedItem(expandedItem === item.id ? null : item.id);
+    },
+    onOpenResult: (index: number) => {
+      const item = visibleResults[index];
+      if (item?.url) window.open(item.url, '_blank', 'noopener,noreferrer');
+    },
   });
 
   return (
@@ -374,7 +404,7 @@ function App() {
             {/* Actions */}
             <div className="flex items-center gap-2">
               <button
-                onClick={startAnalysis}
+                onClick={() => { setNewItemIds(new Set()); startAnalysis(); }}
                 disabled={state.loading}
                 className="px-5 py-2.5 text-sm bg-orange-500 text-white font-medium rounded-lg hover:bg-orange-600 transition-all disabled:opacity-50 disabled:cursor-not-allowed hover:scale-105 active:scale-95"
               >
@@ -659,7 +689,14 @@ function App() {
                     <span className="text-gray-500">📊</span>
                   </div>
                   <div>
-                    <h2 className="font-medium text-white">Results</h2>
+                    <div className="flex items-center gap-2">
+                      <h2 className="font-medium text-white">Results</h2>
+                      {newItemIds.size > 0 && (
+                        <span className="px-2 py-0.5 text-[10px] bg-blue-500/20 text-blue-400 rounded-full font-medium animate-pulse">
+                          {newItemIds.size} new
+                        </span>
+                      )}
+                    </div>
                     <p className="text-xs text-gray-500">
                       {state.analysisComplete
                         ? `${filteredResults.length} items • ${filteredResults.filter((r) => r.relevant).length} relevant`
@@ -689,6 +726,32 @@ function App() {
               {/* Filter Bar - Polished */}
               {state.analysisComplete && (
                 <div className="flex flex-wrap items-center gap-3 pt-3 border-t border-[#2A2A2A]" role="toolbar" aria-label="Filter and sort controls">
+                  {/* Search */}
+                  <div className="relative">
+                    <input
+                      type="text"
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      placeholder="Search results..."
+                      aria-label="Search results by keyword"
+                      className="bg-[#1F1F1F] text-sm text-white placeholder-gray-500 rounded-lg pl-8 pr-3 py-1.5 w-48 border border-transparent focus:border-[#2A2A2A] focus:outline-none transition-all"
+                    />
+                    <svg className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                    </svg>
+                    {searchQuery && (
+                      <button
+                        onClick={() => setSearchQuery('')}
+                        className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-300"
+                        aria-label="Clear search"
+                      >
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                      </button>
+                    )}
+                  </div>
+
                   {/* Source Filters - dynamic based on results */}
                   <div className="flex items-center gap-2 bg-[#1F1F1F] px-3 py-1.5 rounded-lg flex-wrap" role="group" aria-label="Source filters">
                     <span className="text-xs text-gray-500">Sources:</span>
@@ -740,7 +803,7 @@ function App() {
 
                   {/* Relevance Toggle */}
                   <button
-                    onClick={() => setShowOnlyRelevant(!showOnlyRelevant)}
+                    onClick={() => { setShowOnlyRelevant(!showOnlyRelevant); if (!showOnlyRelevant) setShowSavedOnly(false); }}
                     aria-pressed={showOnlyRelevant}
                     aria-label="Toggle relevant items only"
                     className={`px-3 py-1.5 text-xs rounded-lg transition-all ${
@@ -750,6 +813,20 @@ function App() {
                     }`}
                   >
                     {showOnlyRelevant ? '✓ Relevant only' : 'Show all'}
+                  </button>
+
+                  {/* Saved Items Toggle */}
+                  <button
+                    onClick={() => { setShowSavedOnly(!showSavedOnly); if (!showSavedOnly) setShowOnlyRelevant(false); }}
+                    aria-pressed={showSavedOnly}
+                    aria-label="Show saved items only"
+                    className={`px-3 py-1.5 text-xs rounded-lg transition-all ${
+                      showSavedOnly
+                        ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30'
+                        : 'bg-[#1F1F1F] text-gray-500 hover:text-gray-300'
+                    }`}
+                  >
+                    {showSavedOnly ? '✓ Saved' : 'Saved'}
                   </button>
 
                   {/* Spacer */}
@@ -811,16 +888,47 @@ function App() {
               ) : (
                 <>
                   <ul className="space-y-3">
-                    {filteredResults.slice(0, renderLimit).map((item) => (
-                      <ResultItem
-                        key={item.id}
-                        item={item}
-                        isExpanded={expandedItem === item.id}
-                        onToggleExpand={() => setExpandedItem(expandedItem === item.id ? null : item.id)}
-                        feedbackGiven={feedbackGiven}
-                        onRecordInteraction={recordInteraction}
-                      />
-                    ))}
+                    {visibleResults.map((item, idx) => {
+                      // Score group headers (only when sorting by score)
+                      let groupHeader: string | null = null;
+                      if (sortBy === 'score' && idx > 0) {
+                        const prev = visibleResults[idx - 1];
+                        if (prev.top_score >= 0.6 && item.top_score < 0.6) {
+                          groupHeader = 'Relevant';
+                        } else if (prev.top_score >= 0.35 && item.top_score < 0.35) {
+                          groupHeader = 'Below Threshold';
+                        }
+                      } else if (sortBy === 'score' && idx === 0 && item.top_score >= 0.6) {
+                        groupHeader = 'Top Picks';
+                      } else if (sortBy === 'score' && idx === 0 && item.top_score >= 0.35) {
+                        groupHeader = 'Relevant';
+                      }
+                      return (
+                        <li key={item.id}>
+                          {groupHeader && (
+                            <div className="flex items-center gap-3 mb-3 mt-2 first:mt-0">
+                              <span className={`text-xs font-medium px-2 py-1 rounded-lg ${
+                                groupHeader === 'Top Picks' ? 'bg-orange-500/10 text-orange-400' :
+                                groupHeader === 'Relevant' ? 'bg-green-500/10 text-green-400' :
+                                'bg-gray-500/10 text-gray-500'
+                              }`}>
+                                {groupHeader}
+                              </span>
+                              <div className="flex-1 h-px bg-[#2A2A2A]" />
+                            </div>
+                          )}
+                          <ResultItem
+                            item={item}
+                            isExpanded={expandedItem === item.id}
+                            isFocused={focusedIndex === idx}
+                            isNew={newItemIds.has(item.id)}
+                            onToggleExpand={() => setExpandedItem(expandedItem === item.id ? null : item.id)}
+                            feedbackGiven={feedbackGiven}
+                            onRecordInteraction={recordInteraction}
+                          />
+                        </li>
+                      );
+                    })}
                   </ul>
                   {filteredResults.length > renderLimit && (
                     <button

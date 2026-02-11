@@ -354,6 +354,7 @@ export function Onboarding({ onComplete }: OnboardingProps) {
           score: Math.round(r.top_score * 100),
           source: ({ hackernews: 'HN', arxiv: 'arXiv', reddit: 'Reddit', github: 'GitHub',
                      rss: 'RSS', youtube: 'YouTube', twitter: 'Twitter', producthunt: 'PH',
+                     lobsters: 'Lobsters', devto: 'Dev.to',
                   } as Record<string, string>)[r.source_type] || r.source_type,
         }));
 

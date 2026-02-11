@@ -231,6 +231,42 @@ fn default_channels() -> Vec<YouTubeChannel> {
             name: "3Blue1Brown".into(),
             channel_id: "UCYO_jab_esuFRV4b17AJtAw".into(),
         },
+        YouTubeChannel {
+            name: "NetworkChuck".into(),
+            channel_id: "UC9x0AN7BWHpCDHSm9NiJFJQ".into(),
+        },
+        YouTubeChannel {
+            name: "TechLinked".into(),
+            channel_id: "UCeeFfhMcJa1kjtfZAGskOCA".into(),
+        },
+        YouTubeChannel {
+            name: "Coding Train".into(),
+            channel_id: "UCvjgXvBlISQQnCVnCBdLMQw".into(),
+        },
+        YouTubeChannel {
+            name: "ArjanCodes".into(),
+            channel_id: "UCVhQ2NnY5Rskt6UjCUkJ_DA".into(),
+        },
+        YouTubeChannel {
+            name: "DevOps Toolkit".into(),
+            channel_id: "UCfz8x0lVzJpb_dgWm9kPVrw".into(),
+        },
+        YouTubeChannel {
+            name: "Lex Fridman".into(),
+            channel_id: "UCSHZKyawb77ixDdsGog4iWA".into(),
+        },
+        YouTubeChannel {
+            name: "Two Minute Papers".into(),
+            channel_id: "UCbfYPyITQ-7l4upoX8nvctg".into(),
+        },
+        YouTubeChannel {
+            name: "sentdex".into(),
+            channel_id: "UCfzlCWGWYyIQ0aLC5w48gBQ".into(),
+        },
+        YouTubeChannel {
+            name: "LiveOverflow".into(),
+            channel_id: "UClcE-kVhqyiHCcjYwcpfj9w".into(),
+        },
     ]
 }
 
@@ -346,7 +382,7 @@ mod tests {
         let source = YouTubeSource::new();
         assert_eq!(source.source_type(), "youtube");
         assert_eq!(source.name(), "YouTube");
-        assert_eq!(source.channels.len(), 7); // Default channels
+        assert_eq!(source.channels.len(), 16); // Default channels
         assert!(source.config().enabled);
     }
 
@@ -360,7 +396,7 @@ mod tests {
     #[test]
     fn test_empty_channels_uses_defaults() {
         let source = YouTubeSource::with_channels(vec![]);
-        assert_eq!(source.channels.len(), 7); // Falls back to defaults
+        assert_eq!(source.channels.len(), 16); // Falls back to defaults
     }
 
     #[test]

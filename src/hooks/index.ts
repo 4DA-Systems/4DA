@@ -10,4 +10,4 @@ export { useVoidSignals } from './use-void-signals';
 export { useBriefing } from './use-briefing';
 export { useKeyboardShortcuts } from './use-keyboard-shortcuts';
 export { useToasts } from './use-toasts';
-export type { ToastType } from './use-toasts';
+export type { ToastType, ToastAction } from './use-toasts';

@@ -131,7 +131,7 @@ describe('ResultItem', () => {
     expect(screen.queryByText('+')).not.toBeInTheDocument();
   });
 
-  it('calls onToggleExpand when the main button is clicked', () => {
+  it('calls onToggleExpand when the expand button is clicked', () => {
     const onToggle = vi.fn();
     const item = makeItem();
     render(
@@ -144,7 +144,7 @@ describe('ResultItem', () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole('button'));
+    fireEvent.click(screen.getByLabelText('Expand details'));
     expect(onToggle).toHaveBeenCalledTimes(1);
   });
 
@@ -334,7 +334,8 @@ describe('ResultItem', () => {
       />,
     );
 
-    const button = screen.getByRole('button', { expanded: true });
+    const button = screen.getByLabelText('Collapse details');
+    expect(button).toHaveAttribute('aria-expanded', 'true');
     expect(button).toHaveAttribute('aria-controls', 'result-detail-42');
   });
 });

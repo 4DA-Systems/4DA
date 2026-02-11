@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import type { SourceRelevance, FeedbackAction, FeedbackGiven } from '../types';
+import type { ToastAction } from './use-toasts';
 
 // Client-side score adjustment multipliers for immediate feedback
 const FEEDBACK_ADJUSTMENTS: Record<FeedbackAction, number> = {
@@ -13,6 +14,7 @@ const FEEDBACK_ADJUSTMENTS: Record<FeedbackAction, number> = {
 export function useFeedback(
   onStatusChange?: (status: string) => void,
   onScoreAdjust?: (itemId: number, delta: number) => void,
+  addToast?: (type: 'success' | 'error' | 'warning' | 'info', message: string, action?: ToastAction) => void,
 ) {
   const [feedbackGiven, setFeedbackGiven] = useState<FeedbackGiven>({});
   const [learnedAffinities, setLearnedAffinities] = useState<Array<{
@@ -106,26 +108,44 @@ export function useFeedback(
         onScoreAdjust(itemId, delta);
       }
 
-      if (onStatusChange) {
-        // Show what was learned with specific topics
+      // Show toast with undo action (except for click events)
+      if (actionType !== 'click') {
         const topTopics = topics.slice(0, 3).join(', ');
         const learnMessage = actionType === 'save'
-          ? `✓ Saved • Learning: +${topTopics || 'relevance'}`
+          ? `Saved • Learning: +${topTopics || 'relevance'}`
           : actionType === 'mark_irrelevant'
-          ? `⊘ Irrelevant • Learning: -${topTopics || 'this type'}`
-          : actionType === 'dismiss'
-          ? '✗ Dismissed • Noted for future filtering'
-          : 'Opened • Tracking engagement';
+          ? `Irrelevant • Learning: -${topTopics || 'this type'}`
+          : 'Dismissed • Noted for future filtering';
 
-        onStatusChange(learnMessage);
-        setTimeout(() => onStatusChange('Ready'), 3000);
+        const undoAction: ToastAction = {
+          label: 'Undo',
+          onClick: () => {
+            // Revert client-side feedback
+            setFeedbackGiven(prev => {
+              const next = { ...prev };
+              delete next[itemId];
+              return next;
+            });
+            // Revert score adjustment
+            if (delta !== 0 && onScoreAdjust) {
+              onScoreAdjust(itemId, -delta);
+            }
+          },
+        };
+
+        if (addToast) {
+          addToast('success', learnMessage, undoAction);
+        } else if (onStatusChange) {
+          onStatusChange(learnMessage);
+          setTimeout(() => onStatusChange('Ready'), 3000);
+        }
       }
 
       setTimeout(loadLearnedBehavior, 500);
     } catch (error) {
       console.error('Failed to record interaction:', error);
     }
-  }, [loadLearnedBehavior, onStatusChange, onScoreAdjust]);
+  }, [loadLearnedBehavior, onStatusChange, onScoreAdjust, addToast]);
 
   useEffect(() => {
     loadLearnedBehavior();

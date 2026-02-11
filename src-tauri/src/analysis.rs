@@ -664,7 +664,7 @@ pub(crate) async fn analyze_cached_content_impl(
     score_items_full(app, db, &cached_items).await
 }
 
-/// Deduplicate items by normalized URL and exact title match.
+/// Deduplicate items by normalized URL and normalized title.
 /// Keeps the first occurrence (usually the oldest/original source).
 fn dedup_stored_items(items: &[crate::db::StoredSourceItem]) -> Vec<usize> {
     let mut seen_urls: std::collections::HashSet<String> = std::collections::HashSet::new();
@@ -679,8 +679,8 @@ fn dedup_stored_items(items: &[crate::db::StoredSourceItem]) -> Vec<usize> {
                 continue; // duplicate URL
             }
         }
-        // Title-based dedup (lowercased, trimmed)
-        let title_key = item.title.trim().to_lowercase();
+        // Title-based dedup (aggressive normalization)
+        let title_key = normalize_title_for_dedup(&item.title);
         if !title_key.is_empty() && !seen_titles.insert(title_key) {
             continue; // duplicate title
         }
@@ -690,12 +690,48 @@ fn dedup_stored_items(items: &[crate::db::StoredSourceItem]) -> Vec<usize> {
     keep_indices
 }
 
-/// Normalize a URL for dedup: strip www, trailing slash, query params
+/// Normalize a title for dedup: decode entities, strip prefixes, remove punctuation
+fn normalize_title_for_dedup(title: &str) -> String {
+    // Decode HTML entities first so "&amp;" == "&"
+    let decoded = crate::decode_html_entities(title);
+
+    // Strip common source prefixes
+    let stripped = decoded
+        .trim()
+        .trim_start_matches("[HN]")
+        .trim_start_matches("Show HN:")
+        .trim_start_matches("Ask HN:")
+        .trim_start_matches("Tell HN:")
+        .trim_start_matches("Launch HN:")
+        .trim_start_matches("[D]") // Reddit discussion tag
+        .trim_start_matches("[R]")
+        .trim_start_matches("[P]")
+        .trim();
+
+    // Keep only alphanumeric + whitespace, normalize spaces, lowercase
+    stripped
+        .chars()
+        .filter(|c| c.is_alphanumeric() || c.is_whitespace())
+        .collect::<String>()
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+        .to_lowercase()
+}
+
+/// Normalize a URL for dedup: strip www, trailing slash, query params, fragments, protocol
 fn normalize_url(url: &str) -> String {
     let url = url.trim();
-    let base = url.split('?').next().unwrap_or(url);
-    base.trim_end_matches('/')
+    let base = url
+        .split('#')
+        .next()
+        .unwrap_or(url)
+        .split('?')
+        .next()
+        .unwrap_or(url);
+    base.replace("http://", "https://")
         .replace("://www.", "://")
+        .trim_end_matches('/')
         .to_lowercase()
 }
 

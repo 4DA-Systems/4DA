@@ -319,8 +319,12 @@ impl SignalClassifier {
 
         let (signal_type, confidence, triggers) = best?;
 
-        // Compute priority — require multiple keyword matches for High/Critical
+        // Require at least 2 keyword matches to classify any signal.
+        // Single keyword matches produce too many false positives.
         let trigger_count = triggers.len();
+        if trigger_count < 2 {
+            return None;
+        }
 
         // Bonus for ACE tech stack match
         let tech_match = ace_tech.iter().find(|tech| {
@@ -328,12 +332,12 @@ impl SignalClassifier {
             text_lower.contains(&t)
         });
 
-        let priority_score = if trigger_count < 2 {
-            // Single keyword match: cap at Medium regardless of base weight
-            signal_type.base_weight().min(2)
-        } else {
-            // Multiple matches: allow escalation through bonuses
+        // Priority escalation: base weight + bonuses for tech match and high relevance
+        let priority_score = {
             let mut ps = signal_type.base_weight();
+            if trigger_count >= 3 {
+                ps = ps.saturating_add(1); // 3+ keywords = extra escalation
+            }
             if tech_match.is_some() {
                 ps = ps.saturating_add(1);
             }

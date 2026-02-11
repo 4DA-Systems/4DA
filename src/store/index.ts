@@ -128,6 +128,7 @@ const initialBriefingState: BriefingState = {
 const ALL_SOURCES = new Set([
   'hackernews', 'arxiv', 'reddit', 'github',
   'rss', 'youtube', 'twitter', 'producthunt',
+  'lobsters', 'devto',
 ]);
 
 // ============================================================================

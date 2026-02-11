@@ -288,9 +288,66 @@ impl Source for RedditSource {
             return Ok(item.content.clone());
         }
 
-        // For link posts, we could scrape the linked page
-        // but for now, just return the title (Reddit discussions are the value)
-        Ok(String::new())
+        // For link posts, scrape the linked article content
+        let is_self = item
+            .metadata
+            .as_ref()
+            .and_then(|m| m.get("is_self"))
+            .and_then(|v| v.as_bool())
+            .unwrap_or(true);
+
+        if is_self {
+            return Ok(String::new());
+        }
+
+        // Get the link URL
+        let url = match &item.url {
+            Some(u) => u,
+            None => return Ok(String::new()),
+        };
+
+        // Skip reddit internal URLs - they don't have article content to scrape
+        if url.contains("reddit.com") || url.contains("redd.it") {
+            return Ok(String::new());
+        }
+
+        // Skip non-HTTP URLs
+        if !url.starts_with("http") {
+            return Ok(String::new());
+        }
+
+        info!(url = %url, "Scraping linked article for Reddit post");
+
+        // Use a 2 second timeout to avoid slowing down the pipeline
+        match tokio::time::timeout(
+            std::time::Duration::from_secs(2),
+            crate::scrape_article_content(url),
+        )
+        .await
+        {
+            Ok(Some(content)) => {
+                // Truncate to 5000 chars
+                let truncated = if content.len() > 5000 {
+                    content.chars().take(5000).collect()
+                } else {
+                    content
+                };
+                info!(
+                    url = %url,
+                    length = truncated.len(),
+                    "Scraped linked article content"
+                );
+                Ok(truncated)
+            }
+            Ok(None) => {
+                warn!(url = %url, "Failed to extract content from linked article");
+                Ok(String::new())
+            }
+            Err(_) => {
+                warn!(url = %url, "Timed out scraping linked article (2s limit)");
+                Ok(String::new())
+            }
+        }
     }
 }
 
