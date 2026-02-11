@@ -125,12 +125,24 @@ export function Onboarding({ onComplete }: OnboardingProps) {
         }));
       }
 
-      // Re-check Ollama status to refresh model list
-      const refreshed = await invoke<OllamaStatus>('check_ollama_status', { baseUrl: null });
-      setOllamaStatus(refreshed);
-      if (refreshed.models.length > 0) {
-        // Select the first LLM model (not the embedding model)
-        const llmModel = refreshed.models.find((m) => !m.startsWith('nomic-embed-text'));
+      // Re-check Ollama status with retry - Ollama needs time to load the model after pull
+      let refreshed: OllamaStatus | null = null;
+      for (let attempt = 0; attempt < 5; attempt++) {
+        // Wait before checking (model needs time to load into memory)
+        await new Promise(r => setTimeout(r, attempt === 0 ? 2000 : 3000));
+        try {
+          const status = await invoke<OllamaStatus>('check_ollama_status', { baseUrl: null });
+          if (status.running && status.models.length > 0) {
+            refreshed = status;
+            break;
+          }
+        } catch {
+          // Ollama may still be loading, retry
+        }
+      }
+      if (refreshed) {
+        setOllamaStatus(refreshed);
+        const llmModel = refreshed.models.find((m: string) => !m.startsWith('nomic-embed-text'));
         setSelectedOllamaModel(llmModel || refreshed.models[0]);
       }
     } catch (e) {

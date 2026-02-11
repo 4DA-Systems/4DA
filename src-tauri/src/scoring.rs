@@ -38,6 +38,42 @@ pub(crate) fn compute_interest_score(
     max_score
 }
 
+/// Clean a source file path into a human-readable label
+fn clean_source_label(source_file: &str) -> String {
+    let file_name = source_file
+        .rsplit(['/', '\\'])
+        .next()
+        .unwrap_or(source_file);
+    if let Some(section) = file_name
+        .strip_prefix("README.md#")
+        .or_else(|| file_name.strip_prefix("readme.md#"))
+    {
+        return format!("your {} docs", section.to_lowercase().replace('-', " "));
+    }
+    if let Some(hash_pos) = file_name.find('#') {
+        let (name, section) = file_name.split_at(hash_pos);
+        return format!("{} ({})", name, section[1..].replace('-', " "));
+    }
+    file_name.to_string()
+}
+
+/// Extract a meaningful explanation from matched context text
+fn extract_explanation_snippet(matched_text: &str, source_file: &str) -> String {
+    let clean = matched_text.trim().trim_end_matches("...");
+    let phrase = clean
+        .find(|c: char| c == '.' || c == '\n')
+        .filter(|&pos| pos > 10)
+        .map(|pos| &clean[..pos])
+        .unwrap_or(&clean[..clean.len().min(60)])
+        .trim();
+    let label = clean_source_label(source_file);
+    if phrase.len() < 10 {
+        format!("Relates to {}", label)
+    } else {
+        format!("Relates to {} — {}", label, phrase)
+    }
+}
+
 /// Generate a human-readable explanation for why an item was considered relevant
 /// Returns a concise explanation suitable for display in the UI
 pub(crate) fn generate_relevance_explanation(
@@ -53,13 +89,10 @@ pub(crate) fn generate_relevance_explanation(
     // Check context matches (what you're working on)
     if context_score > 0.2 {
         if let Some(first_match) = matches.first() {
-            // Extract just the filename from the path
-            let file_name = first_match
-                .source_file
-                .rsplit(['/', '\\'])
-                .next()
-                .unwrap_or(&first_match.source_file);
-            reasons.push(format!("Matches your current work ({})", file_name));
+            reasons.push(extract_explanation_snippet(
+                &first_match.matched_text,
+                &first_match.source_file,
+            ));
         } else {
             reasons.push("Relates to your active projects".to_string());
         }
@@ -745,9 +778,16 @@ pub(crate) fn score_item(
         compute_semantic_ace_boost(input.embedding, &ctx.ace_ctx, &ctx.topic_embeddings)
             .unwrap_or_else(|| compute_keyword_ace_boost(&topics, &ctx.ace_ctx));
 
-    // Base score weighted by available data
+    // Base score weighted by available data — dynamic weighting spreads the distribution
     let base_score = if ctx.cached_context_count > 0 && ctx.interest_count > 0 {
-        (context_score * 0.5 + interest_score * 0.5 + semantic_boost).min(1.0)
+        let (ctx_w, int_w) = if context_score > 0.6 {
+            (0.65, 0.35) // Strong context match: trust it more
+        } else if context_score < 0.2 {
+            (0.30, 0.70) // Weak context: let interests dominate
+        } else {
+            (0.50, 0.50)
+        };
+        (context_score * ctx_w + interest_score * int_w + semantic_boost).min(1.0)
     } else if ctx.interest_count > 0 {
         (interest_score * 0.7 + semantic_boost * 1.5).min(1.0)
     } else if ctx.cached_context_count > 0 {
@@ -854,8 +894,8 @@ pub(crate) fn score_item(
         confidence_by_signal,
     };
 
-    // Optional signal classification
-    let (sig_type, sig_priority, sig_action, sig_triggers) = if options.apply_signals {
+    // Optional signal classification — only classify items that pass the relevance threshold
+    let (sig_type, sig_priority, sig_action, sig_triggers) = if options.apply_signals && relevant {
         if let Some(clf) = classifier {
             match clf.classify(
                 input.title,
@@ -1213,5 +1253,42 @@ mod tests {
             extreme_negative, -0.10,
             "Negative boost should cap at -0.10"
         );
+    }
+
+    #[test]
+    fn test_clean_source_label_readme_section() {
+        assert_eq!(
+            clean_source_label("README.md#Planned-Features"),
+            "your planned features docs"
+        );
+    }
+
+    #[test]
+    fn test_clean_source_label_plain_file() {
+        assert_eq!(clean_source_label("/foo/bar/main.rs"), "main.rs");
+    }
+
+    #[test]
+    fn test_clean_source_label_hash_section() {
+        assert_eq!(
+            clean_source_label("lib.rs#error-handling"),
+            "lib.rs (error handling)"
+        );
+    }
+
+    #[test]
+    fn test_extract_explanation_snippet_long_text() {
+        let snippet = extract_explanation_snippet(
+            "Vector search implementation using sqlite-vss for fast KNN queries",
+            "README.md#Architecture",
+        );
+        assert!(snippet.contains("your architecture docs"));
+        assert!(snippet.contains("Vector search"));
+    }
+
+    #[test]
+    fn test_extract_explanation_snippet_short_text() {
+        let snippet = extract_explanation_snippet("short", "lib.rs");
+        assert_eq!(snippet, "Relates to lib.rs");
     }
 }

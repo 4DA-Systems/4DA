@@ -912,11 +912,22 @@ pub(crate) async fn index_discovered_readmes(context_dirs: &[PathBuf]) -> usize 
     let mut indexed_chunks = 0;
     let mut found_readme_count = 0;
     let mut section_count = 0;
+    let mut consecutive_failures = 0u32;
+    const MAX_CONSECUTIVE_FAILURES: u32 = 3;
     let readme_names = ["README.md", "README.txt", "README", "readme.md"];
     let total_projects = all_projects.len();
 
     // Process each discovered project
     for project_dir in &all_projects {
+        if consecutive_failures >= MAX_CONSECUTIVE_FAILURES {
+            warn!(target: "4da::pasifa",
+                failures = consecutive_failures,
+                "Stopping README indexing: {} consecutive embedding failures (check embedding provider)",
+                consecutive_failures
+            );
+            break;
+        }
+
         // Find README in this project
         let mut readme_found = false;
         for readme_name in &readme_names {
@@ -941,6 +952,10 @@ pub(crate) async fn index_discovered_readmes(context_dirs: &[PathBuf]) -> usize 
 
                         // Process each section with appropriate weight
                         for section in &sections {
+                            if consecutive_failures >= MAX_CONSECUTIVE_FAILURES {
+                                break;
+                            }
+
                             let weight = section_weight(&section.heading);
 
                             // Skip very short sections
@@ -957,6 +972,9 @@ pub(crate) async fn index_discovered_readmes(context_dirs: &[PathBuf]) -> usize 
                                 if chunk_content.len() < 50 {
                                     continue;
                                 }
+                                if consecutive_failures >= MAX_CONSECUTIVE_FAILURES {
+                                    break;
+                                }
 
                                 // Generate embedding
                                 match embed_texts(std::slice::from_ref(&chunk_content)).await {
@@ -970,6 +988,7 @@ pub(crate) async fn index_discovered_readmes(context_dirs: &[PathBuf]) -> usize 
                                         ) {
                                             Ok(_) => {
                                                 indexed_chunks += 1;
+                                                consecutive_failures = 0; // Reset on success
                                                 debug!(target: "4da::pasifa",
                                                     section = &section.heading,
                                                     weight = weight,
@@ -977,6 +996,7 @@ pub(crate) async fn index_discovered_readmes(context_dirs: &[PathBuf]) -> usize 
                                                 );
                                             }
                                             Err(e) => {
+                                                consecutive_failures += 1;
                                                 warn!(target: "4da::pasifa",
                                                     path = %readme_path.display(),
                                                     section = &section.heading,
@@ -987,14 +1007,18 @@ pub(crate) async fn index_discovered_readmes(context_dirs: &[PathBuf]) -> usize 
                                         }
                                     }
                                     Ok(_) => {
+                                        consecutive_failures += 1;
                                         debug!(target: "4da::pasifa", "Embedding returned empty result");
                                     }
                                     Err(e) => {
+                                        consecutive_failures += 1;
                                         warn!(target: "4da::pasifa",
                                             path = %readme_path.display(),
                                             section = &section.heading,
                                             error = %e,
-                                            "Failed to embed - check API key configuration"
+                                            failures = consecutive_failures,
+                                            "Embedding failed ({}/{})",
+                                            consecutive_failures, MAX_CONSECUTIVE_FAILURES,
                                         );
                                     }
                                 }

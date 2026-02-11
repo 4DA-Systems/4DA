@@ -172,7 +172,7 @@ pub async fn test_llm_connection() -> Result<serde_json::Value, String> {
 pub async fn check_ollama_status(base_url: Option<String>) -> Result<serde_json::Value, String> {
     let url = base_url.unwrap_or_else(|| "http://localhost:11434".to_string());
     let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(5))
+        .timeout(std::time::Duration::from_secs(15))
         .build()
         .map_err(|e| format!("Failed to create HTTP client: {}", e))?;
 

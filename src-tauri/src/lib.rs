@@ -391,6 +391,25 @@ async fn embed_texts_openai(texts: &[String], api_key: &str) -> Result<Vec<Vec<f
         .collect()
 }
 
+/// Target embedding dimensions matching DB vec0 schema
+const TARGET_EMBEDDING_DIMS: usize = 384;
+
+/// Truncate embedding to TARGET_EMBEDDING_DIMS and L2-normalize.
+/// nomic-embed-text is a Matryoshka model so truncation preserves semantic quality.
+fn truncate_and_normalize(mut embedding: Vec<f32>) -> Vec<f32> {
+    if embedding.len() > TARGET_EMBEDDING_DIMS {
+        embedding.truncate(TARGET_EMBEDDING_DIMS);
+        // Re-normalize after truncation (Matryoshka requirement)
+        let norm: f32 = embedding.iter().map(|x| x * x).sum::<f32>().sqrt();
+        if norm > 0.0 {
+            for v in &mut embedding {
+                *v /= norm;
+            }
+        }
+    }
+    embedding
+}
+
 /// Generate embeddings using Ollama API
 async fn embed_texts_ollama(
     texts: &[String],
@@ -425,7 +444,7 @@ async fn embed_texts_ollama(
             embeddings_array
                 .iter()
                 .map(|emb_val| {
-                    emb_val
+                    let raw = emb_val
                         .as_array()
                         .ok_or_else(|| "Invalid embedding in batch response".to_string())?
                         .iter()
@@ -434,7 +453,8 @@ async fn embed_texts_ollama(
                                 .map(|f| f as f32)
                                 .ok_or_else(|| "Invalid embedding value".to_string())
                         })
-                        .collect::<Result<Vec<f32>, String>>()
+                        .collect::<Result<Vec<f32>, String>>()?;
+                    Ok(truncate_and_normalize(raw))
                 })
                 .collect()
         }
@@ -460,7 +480,7 @@ async fn embed_texts_ollama(
                     .await
                     .map_err(|e| format!("Failed to parse Ollama response: {}", e))?;
 
-                let embedding = json["embedding"]
+                let raw = json["embedding"]
                     .as_array()
                     .ok_or_else(|| {
                         "Invalid Ollama response: missing 'embedding' array".to_string()
@@ -473,7 +493,7 @@ async fn embed_texts_ollama(
                     })
                     .collect::<Result<Vec<f32>, String>>()?;
 
-                all_embeddings.push(embedding);
+                all_embeddings.push(truncate_and_normalize(raw));
             }
 
             Ok(all_embeddings)
@@ -1013,11 +1033,11 @@ pub(crate) const SUPPORTED_EXTENSIONS: &[&str] = &["md", "txt", "rs", "ts", "js"
 static RELEVANCE_THRESHOLD_BITS: AtomicU32 = AtomicU32::new(0);
 
 /// Get the current relevance threshold (thread-safe).
-/// Returns the auto-tuned value, or 0.30 default if not yet initialized.
+/// Returns the auto-tuned value, or 0.45 default if not yet initialized.
 pub(crate) fn get_relevance_threshold() -> f32 {
     let bits = RELEVANCE_THRESHOLD_BITS.load(Ordering::Relaxed);
     if bits == 0 {
-        0.30 // Default before initialization
+        0.45 // Default before initialization
     } else {
         f32::from_bits(bits)
     }
@@ -2294,11 +2314,11 @@ pub fn run() {
             set_relevance_threshold(stored);
             info!(target: "4da::startup", threshold = get_relevance_threshold(), "Loaded stored relevance threshold");
         } else {
-            set_relevance_threshold(0.30);
+            set_relevance_threshold(0.45);
             info!(target: "4da::startup", threshold = get_relevance_threshold(), "Relevance threshold (default)");
         }
     } else {
-        set_relevance_threshold(0.30);
+        set_relevance_threshold(0.45);
         info!(target: "4da::startup", threshold = get_relevance_threshold(), "Relevance threshold (default, ACE unavailable)");
     }
 

@@ -6,7 +6,7 @@
 use tracing::{debug, error, info, warn};
 
 use crate::scoring::get_ace_context;
-use crate::{digest, get_database, get_settings_manager};
+use crate::{digest, get_analysis_state, get_database, get_settings_manager};
 
 // ============================================================================
 // Update Commands
@@ -316,19 +316,43 @@ pub async fn generate_ai_briefing() -> Result<serde_json::Value, String> {
         }));
     }
 
-    // Get recent relevant items (last 24 hours, score > 0.1 to include more context)
-    let db = get_database()?;
-    let period_end = Utc::now();
-    let period_start = period_end - Duration::hours(24);
+    // Use in-memory analysis results (scored + filtered) when available
+    let mem_items: Vec<crate::db::DigestSourceItem> = {
+        let state = get_analysis_state().lock();
+        if let Some(ref results) = state.results {
+            results
+                .iter()
+                .filter(|r| r.relevant && !r.excluded)
+                .take(30)
+                .map(|r| crate::db::DigestSourceItem {
+                    id: r.id as i64,
+                    title: r.title.clone(),
+                    url: r.url.clone(),
+                    source_type: r.source_type.clone(),
+                    created_at: Utc::now(),
+                    relevance_score: Some(r.top_score as f64),
+                    topics: vec![],
+                })
+                .collect()
+        } else {
+            vec![]
+        }
+    };
 
-    let items = db
-        .get_relevant_items_since(period_start, 0.1, 30)
-        .map_err(|e| format!("Failed to fetch items: {}", e))?;
+    // Fall back to DB query (wider window) if no in-memory results
+    let items = if mem_items.is_empty() {
+        let db = get_database()?;
+        let period_start = Utc::now() - Duration::hours(72);
+        db.get_relevant_items_since(period_start, 0.1, 30)
+            .map_err(|e| format!("Failed to fetch items: {}", e))?
+    } else {
+        mem_items
+    };
 
     if items.is_empty() {
         return Ok(serde_json::json!({
             "success": true,
-            "briefing": "No items found in the last 24 hours. Run an analysis first to fetch new content.",
+            "briefing": "No items found. Run an analysis first to fetch and score content.",
             "item_count": 0,
             "model": llm_settings.model
         }));
