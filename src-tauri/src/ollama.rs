@@ -10,7 +10,7 @@ use std::collections::{HashMap, HashSet};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Instant;
 use tauri::{AppHandle, Emitter};
-use tracing::{info, warn};
+use tracing::{error, info, warn};
 
 // ============================================================================
 // Types
@@ -206,6 +206,118 @@ pub(crate) fn mark_warm(model: &str) {
     let mut state = OLLAMA_STATE.lock();
     state.warmed_models.insert(model.to_string());
     state.last_use.insert(model.to_string(), Instant::now());
+}
+
+// ============================================================================
+// Startup: Ensure Models Available
+// ============================================================================
+
+/// Ensure required Ollama models are available, auto-pulling any that are missing.
+///
+/// This is the main startup entry point. It:
+/// 1. Checks if Ollama is running
+/// 2. Detects missing models (embedding + LLM)
+/// 3. Auto-pulls missing models with progress events
+/// 4. Warms the LLM model once all models are present
+pub(crate) async fn ensure_models_available(llm_model: &str, base_url: &str, app: &AppHandle) {
+    // Step 1: Check Ollama status
+    let status =
+        match crate::settings_commands::check_ollama_status(Some(base_url.to_string())).await {
+            Ok(s) => s,
+            Err(e) => {
+                error!(target: "4da::ollama", error = %e, "Ollama status check failed");
+                let _ = app.emit(
+                    "ollama-status",
+                    OllamaStatusEvent {
+                        phase: "error".into(),
+                        model: String::new(),
+                        error: Some(format!("Cannot reach Ollama: {}", e)),
+                    },
+                );
+                return;
+            }
+        };
+
+    if !status["running"].as_bool().unwrap_or(false) {
+        let _ = app.emit(
+            "ollama-status",
+            OllamaStatusEvent {
+                phase: "offline".into(),
+                model: String::new(),
+                error: None,
+            },
+        );
+        return;
+    }
+
+    // Step 2: Check which models are present
+    let models: Vec<String> = status["models"]
+        .as_array()
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|m| m.as_str().map(String::from))
+                .collect()
+        })
+        .unwrap_or_default();
+
+    let has_embedding = models.iter().any(|m| m.starts_with("nomic-embed-text"));
+    let has_llm = models
+        .iter()
+        .any(|m| m.starts_with(llm_model) || m.contains(llm_model));
+
+    let mut need_pull: Vec<String> = Vec::new();
+    if !has_embedding {
+        need_pull.push("nomic-embed-text".to_string());
+    }
+    if !has_llm {
+        need_pull.push(llm_model.to_string());
+    }
+
+    // Step 3: Auto-pull missing models
+    if !need_pull.is_empty() {
+        info!(target: "4da::ollama", missing = ?need_pull, "Auto-pulling missing Ollama models");
+
+        let _ = app.emit(
+            "ollama-status",
+            OllamaStatusEvent {
+                phase: "pulling".into(),
+                model: need_pull.join(", "),
+                error: None,
+            },
+        );
+
+        for model in &need_pull {
+            info!(target: "4da::ollama", model = %model, "Pulling model");
+            match crate::settings_commands::pull_ollama_model(
+                app.clone(),
+                model.clone(),
+                Some(base_url.to_string()),
+            )
+            .await
+            {
+                Ok(_) => {
+                    info!(target: "4da::ollama", model = %model, "Model pulled successfully");
+                }
+                Err(e) => {
+                    error!(target: "4da::ollama", model = %model, error = %e, "Failed to auto-pull model");
+                    let _ = app.emit(
+                        "ollama-status",
+                        OllamaStatusEvent {
+                            phase: "error".into(),
+                            model: model.clone(),
+                            error: Some(format!("Failed to pull {}: {}", model, e)),
+                        },
+                    );
+                    return;
+                }
+            }
+        }
+
+        info!(target: "4da::ollama", "All missing models pulled successfully");
+    }
+
+    // Step 4: Warm the LLM model
+    warm_model(llm_model, base_url, app).await;
 }
 
 // ============================================================================

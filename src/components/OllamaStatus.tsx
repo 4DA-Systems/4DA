@@ -6,7 +6,7 @@ import { invoke } from '@tauri-apps/api/core';
 // Types
 // ============================================================================
 
-type OllamaConnectionStatus = 'warming' | 'ready' | 'error' | 'offline';
+type OllamaConnectionStatus = 'pulling' | 'warming' | 'ready' | 'error' | 'offline';
 
 interface OllamaStatusPayload {
   phase: string;
@@ -24,6 +24,8 @@ interface OllamaStatusProps {
 
 function mapPhaseToStatus(phase: string): OllamaConnectionStatus {
   switch (phase) {
+    case 'pulling':
+      return 'pulling';
     case 'warming':
       return 'warming';
     case 'ready':
@@ -45,6 +47,12 @@ const STATUS_CONFIG: Record<OllamaConnectionStatus, {
   label: string;
   animate: boolean;
 }> = {
+  pulling: {
+    dotClass: 'bg-blue-400',
+    textClass: 'text-blue-400',
+    label: 'Pulling models...',
+    animate: true,
+  },
   warming: {
     dotClass: 'bg-orange-400',
     textClass: 'text-orange-400',
@@ -99,9 +107,12 @@ export function OllamaStatus({ provider }: OllamaStatusProps) {
   const isClickable = status === 'error' || status === 'offline';
 
   const handleRetry = async () => {
+    setStatus('warming');
+    setErrorMsg(null);
     try {
-      await invoke('check_ollama_status');
-      await invoke('warm_ollama_model');
+      await invoke('check_ollama_status', { baseUrl: null });
+      // The backend ensure_models_available will handle pulling + warming
+      // via ollama-status events, so we just need to trigger a re-check
     } catch (err) {
       console.debug('Ollama retry failed:', err);
     }
