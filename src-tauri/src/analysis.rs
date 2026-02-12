@@ -1089,6 +1089,27 @@ pub(crate) async fn run_background_analysis<R: tauri::Runtime>(
         .filter(|r| r.relevant && !r.excluded)
         .count();
 
+    // Log signal_count distribution for scoring diagnostics
+    {
+        let mut dist = [0usize; 5]; // 0..4 signals
+        let mut rel_by_sig = [0usize; 5];
+        for r in &new_results {
+            if let Some(ref bd) = r.score_breakdown {
+                let idx = (bd.signal_count as usize).min(4);
+                dist[idx] += 1;
+                if r.relevant && !r.excluded {
+                    rel_by_sig[idx] += 1;
+                }
+            }
+        }
+        info!(target: "4da::scoring",
+            sig0 = dist[0], sig1 = dist[1], sig2 = dist[2], sig3 = dist[3], sig4 = dist[4],
+            rel0 = rel_by_sig[0], rel1 = rel_by_sig[1], rel2 = rel_by_sig[2],
+            rel3 = rel_by_sig[3], rel4 = rel_by_sig[4],
+            "Confirmation gate distribution (total / relevant)"
+        );
+    }
+
     // Build signal summary for notifications
     let signal_summary = {
         let critical = new_results

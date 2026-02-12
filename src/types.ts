@@ -41,6 +41,9 @@ export interface ScoreBreakdown {
   feedback_boost?: number;
   source_quality_boost?: number;
   confidence_by_signal: Record<string, number>;
+  signal_count?: number;
+  confirmed_signals?: string[];
+  confirmation_mult?: number;
 }
 
 export interface AnalysisProgress {

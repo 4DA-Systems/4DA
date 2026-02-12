@@ -55,6 +55,223 @@ pub(crate) fn compute_interest_score(
     max_score
 }
 
+// ============================================================================
+// Multi-Signal Confirmation Gate
+// ============================================================================
+
+/// Known broad/generic interest terms that match too many items.
+/// These get reduced keyword weight to prevent flooding.
+const BROAD_INTEREST_TERMS: &[&str] = &[
+    "open source",
+    "ai",
+    "ml",
+    "cloud",
+    "web",
+    "programming",
+    "software",
+    "technology",
+    "development",
+    "coding",
+    "data",
+    "security",
+    "devops",
+    "backend",
+    "frontend",
+    "fullstack",
+    "machine learning",
+    "artificial intelligence",
+    "deep learning",
+    "tech",
+    "engineering",
+    "developer",
+    "startup",
+    "saas",
+];
+
+/// Compute how specific an interest topic is.
+/// Broad terms ("Open Source", "AI") return low weight (0.25),
+/// single-word terms return moderate weight (0.60),
+/// multi-word specific terms get full weight (1.0).
+fn interest_specificity_weight(interest_topic: &str) -> f32 {
+    let topic_lower = interest_topic.to_lowercase();
+    let word_count = topic_lower.split_whitespace().count();
+
+    let is_broad = BROAD_INTEREST_TERMS
+        .iter()
+        .any(|b| topic_lower == *b || topic_lower.contains(b));
+
+    if is_broad {
+        0.25 // Broad terms contribute 25% of normal weight
+    } else if word_count <= 1 {
+        0.60 // Single-word terms are moderately specific
+    } else {
+        1.00 // Multi-word specific terms get full weight
+    }
+}
+
+/// Find the best-matching interest for an item and return its specificity weight.
+/// Used to attenuate keyword_score for broad interests.
+fn best_interest_specificity_weight(
+    title: &str,
+    content: &str,
+    interests: &[context_engine::Interest],
+) -> f32 {
+    if interests.is_empty() {
+        return 1.0;
+    }
+
+    let title_lower = title.to_lowercase();
+    let text_lower = format!("{} {}", title_lower, content.to_lowercase());
+    let mut best_weight: f32 = 1.0;
+    let mut found_match = false;
+
+    for interest in interests {
+        let interest_lower = interest.topic.to_lowercase();
+        let terms: Vec<&str> = interest_lower.split_whitespace().collect();
+
+        // Check if any term from this interest appears in the item
+        let has_hit = terms.iter().any(|term| {
+            term.len() >= 2 && (title_lower.contains(term) || text_lower.contains(term))
+        });
+
+        if has_hit {
+            let w = interest_specificity_weight(&interest.topic);
+            if !found_match || w < best_weight {
+                // Use the LOWEST specificity weight among matching interests
+                // (conservative: if a broad interest matches, penalize even if a specific one also matches)
+                best_weight = w;
+                found_match = true;
+            }
+        }
+    }
+
+    if found_match {
+        best_weight
+    } else {
+        1.0 // No keyword match → don't attenuate
+    }
+}
+
+/// Result of counting how many independent signal axes confirm relevance
+struct SignalConfirmation {
+    context_confirmed: bool,
+    interest_confirmed: bool,
+    ace_confirmed: bool,
+    learned_confirmed: bool,
+    count: u8,
+}
+
+impl SignalConfirmation {
+    fn confirmed_names(&self) -> Vec<String> {
+        let mut names = Vec::new();
+        if self.context_confirmed {
+            names.push("context".to_string());
+        }
+        if self.interest_confirmed {
+            names.push("interest".to_string());
+        }
+        if self.ace_confirmed {
+            names.push("ace".to_string());
+        }
+        if self.learned_confirmed {
+            names.push("learned".to_string());
+        }
+        names
+    }
+}
+
+/// Count how many independent signal axes confirm this item is relevant.
+/// Each axis answers a different question:
+/// - Context: Does this match code you're actually writing? (KNN embedding similarity)
+/// - Interest: Does this match your declared interests? (interest embedding + keyword)
+/// - ACE/Tech: Does this involve your tech stack or active topics? (semantic boost + tech detection)
+/// - Learned: Has user behavior confirmed this kind of content? (feedback + affinity)
+#[allow(clippy::too_many_arguments)]
+fn count_confirmed_signals(
+    context_score: f32,
+    interest_score: f32,
+    keyword_score: f32,
+    semantic_boost: f32,
+    ace_ctx: &ACEContext,
+    topics: &[String],
+    feedback_boost: f32,
+    affinity_mult: f32,
+) -> SignalConfirmation {
+    let context_confirmed = context_score >= 0.45;
+    let interest_confirmed = interest_score >= 0.50 || keyword_score >= 0.60;
+    // ACE confirmed: require semantic boost OR active topic match (NOT broad detected_tech)
+    // detected_tech has 95+ entries which matches too broadly
+    let ace_confirmed = semantic_boost >= 0.12
+        || topics.iter().any(|t| {
+            ace_ctx
+                .active_topics
+                .iter()
+                .any(|topic| t.contains(topic.as_str()) || topic.contains(t.as_str()))
+        });
+    let learned_confirmed = feedback_boost > 0.05 || affinity_mult >= 1.15;
+
+    let count = [
+        context_confirmed,
+        interest_confirmed,
+        ace_confirmed,
+        learned_confirmed,
+    ]
+    .iter()
+    .filter(|&&x| x)
+    .count() as u8;
+
+    SignalConfirmation {
+        context_confirmed,
+        interest_confirmed,
+        ace_confirmed,
+        learned_confirmed,
+        count,
+    }
+}
+
+/// Apply the multi-signal confirmation gate to a base score.
+/// Returns (gated_score, confirmation_count, confirmation_multiplier, confirmed_signal_names).
+///
+/// Key property: with only 1 confirmed signal, score is capped at 0.45 — below the
+/// 0.50 relevance threshold. This means a single signal (no matter how strong) can
+/// NEVER make an item relevant on its own.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn apply_confirmation_gate(
+    base_score: f32,
+    context_score: f32,
+    interest_score: f32,
+    keyword_score: f32,
+    semantic_boost: f32,
+    ace_ctx: &ACEContext,
+    topics: &[String],
+    feedback_boost: f32,
+    affinity_mult: f32,
+) -> (f32, u8, f32, Vec<String>) {
+    let confirmation = count_confirmed_signals(
+        context_score,
+        interest_score,
+        keyword_score,
+        semantic_boost,
+        ace_ctx,
+        topics,
+        feedback_boost,
+        affinity_mult,
+    );
+
+    let (conf_mult, score_ceiling) = match confirmation.count {
+        0 => (0.25_f32, 0.20_f32), // No signals agree → heavy penalty
+        1 => (0.45, 0.32),         // One signal → ceiling BELOW 0.35 threshold
+        2 => (1.00, 0.80),         // Two signals → pass gate
+        3 => (1.10, 0.92),         // Three signals → mild boost
+        _ => (1.20, 1.00),         // All four → strong boost
+    };
+
+    let gated = (base_score * conf_mult).min(score_ceiling);
+    let names = confirmation.confirmed_names();
+
+    (gated, confirmation.count, conf_mult, names)
+}
+
 /// Short tech keywords that are valid despite being <3 chars.
 /// These are common abbreviations that users declare as interests.
 const SHORT_TECH_KEYWORDS: &[&str] = &[
@@ -124,6 +341,18 @@ fn compute_keyword_interest_score(
     }
 
     max_score
+}
+
+/// Public wrapper for keyword interest scoring with specificity weighting.
+/// Used by the fresh-fetch path in lib.rs.
+pub(crate) fn compute_keyword_interest_score_pub(
+    title: &str,
+    content: &str,
+    interests: &[context_engine::Interest],
+) -> f32 {
+    let raw = compute_keyword_interest_score(title, content, interests);
+    let specificity = best_interest_specificity_weight(title, content, interests);
+    raw * specificity
 }
 
 /// Check if a short term appears as a whole word (bounded by non-alphanumeric chars)
@@ -683,8 +912,10 @@ pub(crate) fn compute_temporal_freshness(created_at: &chrono::DateTime<chrono::U
     }
 }
 
-/// Calculate confidence score based on available signals
-/// Returns a value between 0.0 and 1.0 indicating how confident we are in the scoring
+/// Calculate confidence score based on available signals and confirmation count.
+/// Returns a value between 0.0 and 1.0 indicating how confident we are in the scoring.
+/// The confirmation_count directly scales confidence: more confirmed axes = higher confidence.
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn calculate_confidence(
     context_score: f32,
     interest_score: f32,
@@ -693,6 +924,7 @@ pub(crate) fn calculate_confidence(
     topics: &[String],
     cached_context_count: i64,
     interest_count: i64,
+    confirmation_count: u8,
 ) -> f32 {
     let mut confidence_signals: Vec<f32> = Vec::new();
 
@@ -725,14 +957,23 @@ pub(crate) fn calculate_confidence(
 
     // If we have multiple signals, they reinforce each other
     if confidence_signals.is_empty() {
-        return 0.4; // Low confidence - no strong signals
+        return 0.3; // Low confidence - no strong signals
     }
 
-    // Combine signals: average with bonus for multiple signals
+    // Combine signals: average with bonus for confirmation count
     let avg_confidence = confidence_signals.iter().sum::<f32>() / confidence_signals.len() as f32;
-    let signal_count_bonus = (confidence_signals.len() as f32 * 0.1).min(0.2);
 
-    (avg_confidence + signal_count_bonus).clamp(0.0, 1.0)
+    // Confirmation count directly scales confidence:
+    // 0 confirmed → -0.15, 1 confirmed → 0.0, 2 confirmed → +0.10, 3 → +0.15, 4 → +0.20
+    let confirmation_bonus = match confirmation_count {
+        0 => -0.15,
+        1 => 0.0,
+        2 => 0.10,
+        3 => 0.15,
+        _ => 0.20,
+    };
+
+    (avg_confidence + confirmation_bonus).clamp(0.0, 1.0)
 }
 
 // ============================================================================
@@ -901,7 +1142,12 @@ pub(crate) fn score_item(
     let interest_score = calibrate_score(raw_interest);
 
     // Keyword interest matching: boosts items containing declared interest terms
-    let keyword_score = compute_keyword_interest_score(input.title, input.content, &ctx.interests);
+    let raw_keyword_score =
+        compute_keyword_interest_score(input.title, input.content, &ctx.interests);
+    // Apply specificity weighting — broad interests ("Open Source", "AI") contribute less
+    let specificity_weight =
+        best_interest_specificity_weight(input.title, input.content, &ctx.interests);
+    let keyword_score = raw_keyword_score * specificity_weight;
 
     // Semantic boost with keyword fallback
     let semantic_boost =
@@ -969,11 +1215,24 @@ pub(crate) fn score_item(
     };
     let base_score = (base_score + feedback_boost).clamp(0.0, 1.0);
 
-    // Unified scoring
-    let combined_score = compute_unified_relevance(base_score, &topics, &ctx.ace_ctx);
+    // Multi-signal confirmation gate: require 2+ independent axes to pass
+    let affinity_mult = compute_affinity_multiplier(&topics, &ctx.ace_ctx);
+    let (gated_score, signal_count, confirmation_mult, confirmed_signals) = apply_confirmation_gate(
+        base_score,
+        context_score,
+        interest_score,
+        keyword_score,
+        semantic_boost,
+        &ctx.ace_ctx,
+        &topics,
+        feedback_boost,
+        affinity_mult,
+    );
+
+    // Unified scoring (applies affinity + anti-penalty on gated score)
+    let combined_score = compute_unified_relevance(gated_score, &topics, &ctx.ace_ctx);
     let relevant = combined_score >= get_relevance_threshold();
 
-    let affinity_mult = compute_affinity_multiplier(&topics, &ctx.ace_ctx);
     let anti_penalty = compute_anti_penalty(&topics, &ctx.ace_ctx);
 
     // Explanation
@@ -991,7 +1250,7 @@ pub(crate) fn score_item(
         None
     };
 
-    // Confidence
+    // Confidence (scales with confirmation count)
     let confidence = calculate_confidence(
         context_score,
         interest_score,
@@ -1000,6 +1259,7 @@ pub(crate) fn score_item(
         &topics,
         ctx.cached_context_count,
         ctx.interest_count as i64,
+        signal_count,
     );
 
     let mut confidence_by_signal = std::collections::HashMap::new();
@@ -1024,6 +1284,9 @@ pub(crate) fn score_item(
         feedback_boost,
         source_quality_boost,
         confidence_by_signal,
+        signal_count,
+        confirmed_signals: confirmed_signals.clone(),
+        confirmation_mult,
     };
 
     // Optional signal classification — only classify items that pass the relevance threshold
@@ -1453,6 +1716,242 @@ mod tests {
             extreme_negative, -0.10,
             "Negative boost should cap at -0.10"
         );
+    }
+
+    // ========================================================================
+    // Multi-Signal Confirmation Gate tests
+    // ========================================================================
+
+    #[test]
+    fn test_interest_specificity_weight_broad() {
+        assert_eq!(interest_specificity_weight("Open Source"), 0.25);
+        assert_eq!(interest_specificity_weight("AI"), 0.25);
+        assert_eq!(interest_specificity_weight("machine learning"), 0.25);
+        assert_eq!(interest_specificity_weight("cloud"), 0.25);
+        assert_eq!(interest_specificity_weight("programming"), 0.25);
+    }
+
+    #[test]
+    fn test_interest_specificity_weight_single_word() {
+        // Single non-broad words get moderate weight
+        assert_eq!(interest_specificity_weight("Tauri"), 0.60);
+        assert_eq!(interest_specificity_weight("Kubernetes"), 0.60);
+    }
+
+    #[test]
+    fn test_interest_specificity_weight_specific() {
+        // Multi-word specific terms get full weight
+        assert_eq!(interest_specificity_weight("Tauri plugins"), 1.00);
+        assert_eq!(interest_specificity_weight("sqlite-vss indexing"), 1.00);
+        assert_eq!(interest_specificity_weight("Rust async patterns"), 1.00);
+    }
+
+    #[test]
+    fn test_confirmation_count_no_signals() {
+        let ace_ctx = ACEContext::default();
+        let topics = vec!["test".to_string()];
+        let conf = count_confirmed_signals(
+            0.10, // low context
+            0.10, // low interest
+            0.10, // low keyword
+            0.01, // low semantic
+            &ace_ctx, &topics, 0.0, // no feedback
+            1.0, // neutral affinity
+        );
+        assert_eq!(conf.count, 0);
+        assert!(!conf.context_confirmed);
+        assert!(!conf.interest_confirmed);
+        assert!(!conf.ace_confirmed);
+        assert!(!conf.learned_confirmed);
+    }
+
+    #[test]
+    fn test_confirmation_count_one_signal_interest() {
+        let ace_ctx = ACEContext::default();
+        let topics = vec!["test".to_string()];
+        let conf = count_confirmed_signals(
+            0.10, // low context
+            0.60, // HIGH interest
+            0.10, // low keyword
+            0.01, // low semantic
+            &ace_ctx, &topics, 0.0, // no feedback
+            1.0, // neutral affinity
+        );
+        assert_eq!(conf.count, 1);
+        assert!(!conf.context_confirmed);
+        assert!(conf.interest_confirmed);
+    }
+
+    #[test]
+    fn test_confirmation_count_two_signals() {
+        let mut ace_ctx = ACEContext::default();
+        ace_ctx.active_topics.push("rust".to_string());
+        let topics = vec!["rust".to_string()];
+        let conf = count_confirmed_signals(
+            0.50, // HIGH context
+            0.10, // low interest
+            0.10, // low keyword
+            0.01, // low semantic, but ace_confirmed via active_topics
+            &ace_ctx, &topics, 0.0, // no feedback
+            1.0, // neutral affinity
+        );
+        assert_eq!(conf.count, 2);
+        assert!(conf.context_confirmed);
+        assert!(conf.ace_confirmed);
+    }
+
+    #[test]
+    fn test_single_signal_cannot_pass_threshold() {
+        // The key property: with only 1 confirmed signal, ceiling is 0.45 < 0.50 threshold
+        let ace_ctx = ACEContext::default();
+        let topics = vec!["test".to_string()];
+
+        // Even with high base_score (0.90), single signal caps below threshold
+        let (gated, count, _, _) = apply_confirmation_gate(
+            0.90, // Very high base
+            0.10, // low context
+            0.60, // HIGH interest (1 signal)
+            0.10, // low keyword
+            0.01, // low semantic
+            &ace_ctx, &topics, 0.0, // no feedback
+            1.0, // neutral affinity
+        );
+        assert_eq!(count, 1);
+        assert!(
+            gated <= 0.32,
+            "Single signal should cap at 0.32, got {}",
+            gated
+        );
+        assert!(
+            gated < 0.35,
+            "Single signal score must be below 0.35 threshold"
+        );
+    }
+
+    #[test]
+    fn test_two_signals_can_pass_threshold() {
+        let mut ace_ctx = ACEContext::default();
+        ace_ctx.active_topics.push("rust".to_string());
+        let topics = vec!["rust".to_string()];
+
+        let (gated, count, _, names) = apply_confirmation_gate(
+            0.70, // Good base score
+            0.50, // HIGH context
+            0.55, // HIGH interest
+            0.10, 0.01, // low semantic, but ace_confirmed via detected_tech
+            &ace_ctx, &topics, 0.0, 1.0,
+        );
+        assert!(count >= 2, "Expected 2+ confirmed signals, got {}", count);
+        assert!(
+            gated >= 0.50,
+            "Two signals should allow passing threshold, got {}",
+            gated
+        );
+        assert!(!names.is_empty());
+    }
+
+    #[test]
+    fn test_four_signals_boost() {
+        let mut ace_ctx = ACEContext::default();
+        ace_ctx.active_topics.push("rust".to_string());
+        ace_ctx
+            .topic_affinities
+            .insert("rust".to_string(), (0.8, 0.9));
+        let topics = vec!["rust".to_string()];
+
+        let (gated, count, mult, _) = apply_confirmation_gate(
+            0.70, 0.50, // context confirmed
+            0.55, // interest confirmed
+            0.10, 0.10, // ace confirmed via semantic
+            &ace_ctx, &topics, 0.10, // feedback confirmed
+            1.20, // affinity confirmed
+        );
+        assert_eq!(count, 4);
+        assert_eq!(mult, 1.20);
+        assert!(
+            gated > 0.70,
+            "4 signals should boost above base, got {}",
+            gated
+        );
+    }
+
+    #[test]
+    fn test_zero_signals_heavy_penalty() {
+        let ace_ctx = ACEContext::default();
+        let topics = vec!["test".to_string()];
+
+        let (gated, count, _, _) = apply_confirmation_gate(
+            0.60, 0.10, // low context
+            0.10, // low interest
+            0.10, 0.01, // low semantic
+            &ace_ctx, &topics, 0.0, 1.0,
+        );
+        assert_eq!(count, 0);
+        assert!(
+            gated <= 0.20,
+            "Zero signals should cap at 0.20, got {}",
+            gated
+        );
+    }
+
+    #[test]
+    fn test_broad_interest_specificity_penalty() {
+        // An item matching a broad interest ("open source") should get a lower keyword_score
+        let interests = vec![context_engine::Interest {
+            id: Some(1),
+            topic: "Open Source".to_string(),
+            weight: 1.0,
+            source: context_engine::InterestSource::Explicit,
+            embedding: None,
+        }];
+
+        let specificity = best_interest_specificity_weight(
+            "New open source project for data pipelines",
+            "",
+            &interests,
+        );
+        assert_eq!(
+            specificity, 0.25,
+            "Broad interest should return 0.25 weight"
+        );
+
+        // A specific interest should get full weight
+        let specific_interests = vec![context_engine::Interest {
+            id: Some(2),
+            topic: "Tauri plugins".to_string(),
+            weight: 1.0,
+            source: context_engine::InterestSource::Explicit,
+            embedding: None,
+        }];
+
+        let specificity = best_interest_specificity_weight(
+            "Building Tauri plugins for desktop apps",
+            "",
+            &specific_interests,
+        );
+        assert_eq!(
+            specificity, 1.00,
+            "Specific interest should return 1.0 weight"
+        );
+    }
+
+    #[test]
+    fn test_confirmed_signal_names() {
+        let mut ace_ctx = ACEContext::default();
+        ace_ctx.active_topics.push("rust".to_string());
+        let topics = vec!["rust".to_string()];
+
+        let conf = count_confirmed_signals(
+            0.50, // context confirmed
+            0.10, // interest NOT confirmed
+            0.10, 0.01, // ace confirmed via tech
+            &ace_ctx, &topics, 0.0, 1.0,
+        );
+        let names = conf.confirmed_names();
+        assert!(names.contains(&"context".to_string()));
+        assert!(names.contains(&"ace".to_string()));
+        assert!(!names.contains(&"interest".to_string()));
+        assert!(!names.contains(&"learned".to_string()));
     }
 
     #[test]

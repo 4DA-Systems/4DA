@@ -8,6 +8,9 @@ function generateFallbackReason(item: SourceRelevance): string {
   const parts: string[] = [];
   const b = item.score_breakdown;
   if (b) {
+    if (b.signal_count != null && b.signal_count >= 2) {
+      parts.push(`${b.signal_count} signal${b.signal_count > 1 ? 's' : ''} confirmed`);
+    }
     if (b.context_score > 0.3) parts.push('Strong project context match');
     if (b.interest_score > 0.3) parts.push('Matches declared interests');
     if (b.ace_boost > 0.1) parts.push('Active in your recent work');
@@ -247,6 +250,18 @@ export const ResultItem = memo(function ResultItem({
                 {item.score_breakdown.ace_boost > 0.05 && (
                   <span className="text-amber-400/80" title="Auto Context Engine - score boost from your local project context">
                     ACE +{Math.round(item.score_breakdown.ace_boost * 100)}%
+                  </span>
+                )}
+                {item.score_breakdown.signal_count != null && (
+                  <span
+                    className={`${
+                      (item.score_breakdown.signal_count ?? 0) >= 2
+                        ? 'text-green-400/80'
+                        : 'text-gray-500/80'
+                    }`}
+                    title={item.score_breakdown.confirmed_signals?.join(', ') || 'none'}
+                  >
+                    {item.score_breakdown.signal_count}/4 signals
                   </span>
                 )}
                 {item.score_breakdown.affinity_mult > 1.05 && (

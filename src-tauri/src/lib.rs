@@ -141,9 +141,22 @@ pub struct ScoreBreakdown {
     #[serde(default)]
     pub source_quality_boost: f32,
     pub confidence_by_signal: std::collections::HashMap<String, f32>,
+    /// Number of independent signal axes that confirmed relevance (0-4)
+    #[serde(default)]
+    pub signal_count: u8,
+    /// Names of confirmed signal axes (e.g. ["context", "ace"])
+    #[serde(default)]
+    pub confirmed_signals: Vec<String>,
+    /// Multiplier applied by confirmation gate
+    #[serde(default = "default_confirmation_mult")]
+    pub confirmation_mult: f32,
 }
 
 fn default_freshness() -> f32 {
+    1.0
+}
+
+fn default_confirmation_mult() -> f32 {
     1.0
 }
 
@@ -1790,6 +1803,13 @@ async fn compute_relevance() -> Result<Vec<SourceRelevance>, String> {
                     boost.clamp(0.0, 0.3)
                 });
 
+        // Keyword interest matching (with specificity weighting)
+        let keyword_score = scoring::compute_keyword_interest_score_pub(
+            &item.title,
+            &item.content,
+            &static_identity.interests,
+        );
+
         // Combined score: weighted average of context, interest scores, plus semantic boost
         // Dynamically adjust weights based on what data is available
         let base_score = if cached_context_count > 0 && interest_count > 0 {
@@ -1797,7 +1817,6 @@ async fn compute_relevance() -> Result<Vec<SourceRelevance>, String> {
             (context_score * 0.5 + interest_score * 0.5 + semantic_boost).min(1.0)
         } else if interest_count > 0 {
             // No context indexed: rely on interests + ACE boost (full weight)
-            // This prevents penalizing users who haven't indexed context files
             (interest_score * 0.7 + semantic_boost * 1.5).min(1.0)
         } else if cached_context_count > 0 {
             // No interests: rely on context + ACE boost
@@ -1807,14 +1826,26 @@ async fn compute_relevance() -> Result<Vec<SourceRelevance>, String> {
             (semantic_boost * 2.0).min(1.0)
         };
 
-        // PASIFA: Apply unified multiplicative scoring
-        // This applies learned affinities and anti-topic penalties multiplicatively
-        let combined_score = scoring::compute_unified_relevance(base_score, &topics, &ace_ctx);
+        // Multi-signal confirmation gate (same logic as cached path)
+        let affinity_mult = scoring::compute_affinity_multiplier(&topics, &ace_ctx);
+        let (gated_score, signal_count, confirmation_mult, confirmed_signals) =
+            scoring::apply_confirmation_gate(
+                base_score,
+                context_score,
+                interest_score,
+                keyword_score,
+                semantic_boost,
+                &ace_ctx,
+                &topics,
+                0.0, // No feedback boost in fresh-fetch path
+                affinity_mult,
+            );
+
+        // PASIFA: Apply unified multiplicative scoring on gated score
+        let combined_score = scoring::compute_unified_relevance(gated_score, &topics, &ace_ctx);
 
         let relevant = combined_score >= get_relevance_threshold();
 
-        // Compute debug info for logging
-        let affinity_mult = scoring::compute_affinity_multiplier(&topics, &ace_ctx);
         let anti_penalty = scoring::compute_anti_penalty(&topics, &ace_ctx);
 
         // Log scoring details
@@ -1824,11 +1855,14 @@ async fn compute_relevance() -> Result<Vec<SourceRelevance>, String> {
                 title = %item.title,
                 combined = combined_score,
                 base = base_score,
+                gated = gated_score,
                 context = context_score,
                 interest = interest_score,
+                keyword = keyword_score,
                 semantic_boost = semantic_boost,
                 affinity_mult = affinity_mult,
                 anti_penalty = anti_penalty,
+                signal_count = signal_count,
                 "RELEVANT"
             );
         } else {
@@ -1836,12 +1870,10 @@ async fn compute_relevance() -> Result<Vec<SourceRelevance>, String> {
                 id = item.id,
                 title = %item.title,
                 combined = combined_score,
-                base = base_score,
+                gated = gated_score,
                 context = context_score,
                 interest = interest_score,
-                semantic_boost = semantic_boost,
-                affinity_mult = affinity_mult,
-                anti_penalty = anti_penalty,
+                signal_count = signal_count,
                 "not relevant"
             );
         }
@@ -1873,6 +1905,7 @@ async fn compute_relevance() -> Result<Vec<SourceRelevance>, String> {
             &topics,
             cached_context_count,
             interest_count as i64,
+            signal_count,
         );
 
         let mut confidence_by_signal = std::collections::HashMap::new();
@@ -1889,7 +1922,7 @@ async fn compute_relevance() -> Result<Vec<SourceRelevance>, String> {
         let score_breakdown = ScoreBreakdown {
             context_score,
             interest_score,
-            keyword_score: 0.0,
+            keyword_score,
             ace_boost: semantic_boost,
             affinity_mult,
             anti_penalty,
@@ -1897,6 +1930,9 @@ async fn compute_relevance() -> Result<Vec<SourceRelevance>, String> {
             feedback_boost: 0.0,
             source_quality_boost: 0.0,
             confidence_by_signal,
+            signal_count,
+            confirmed_signals,
+            confirmation_mult,
         };
 
         results.push(SourceRelevance {
