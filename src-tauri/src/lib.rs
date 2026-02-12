@@ -2800,7 +2800,7 @@ pub fn run() {
 
             info!(target: "4da::tray", "System tray and monitoring initialized");
 
-            // Warm Ollama model on startup if configured
+            // Ensure Ollama models are available and warm on startup
             {
                 let settings = get_settings_manager().lock();
                 let llm = &settings.get().llm;
@@ -2809,7 +2809,7 @@ pub fn run() {
                     let base_url = llm.base_url.clone().unwrap_or_else(|| "http://localhost:11434".to_string());
                     let warm_handle = app_handle.clone();
                     tauri::async_runtime::spawn(async move {
-                        ollama::warm_model(&model, &base_url, &warm_handle).await;
+                        ollama::ensure_models_available(&model, &base_url, &warm_handle).await;
                     });
                 }
             }
