@@ -30,4 +30,4 @@ export interface ScanProgress {
   relevant?: number;
 }
 
-export type Step = 'welcome' | 'setup' | 'ready';
+export type Step = 'welcome' | 'setup';

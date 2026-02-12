@@ -1,20 +1,19 @@
 import { useState, useEffect } from 'react';
+import { invoke } from '@tauri-apps/api/core';
 
 import type { Step } from './onboarding/types';
 import { WelcomeStep } from './onboarding/WelcomeStep';
 import { QuickSetupStep } from './onboarding/QuickSetupStep';
-import { QuickResultsStep } from './onboarding/QuickResultsStep';
 
 interface OnboardingProps {
   onComplete: () => void;
 }
 
-const steps: Step[] = ['welcome', 'setup', 'ready'];
+const steps: Step[] = ['welcome', 'setup'];
 
 const stepLabels: Record<Step, string> = {
   welcome: 'Welcome',
   setup: 'Setup',
-  ready: 'Ready!',
 };
 
 export function Onboarding({ onComplete }: OnboardingProps) {
@@ -38,6 +37,15 @@ export function Onboarding({ onComplete }: OnboardingProps) {
   const prevStep = () => {
     const prev = steps[currentIndex - 1];
     if (prev) setStep(prev);
+  };
+
+  const handleSetupComplete = async () => {
+    try {
+      await invoke('mark_onboarding_complete');
+    } catch {
+      // Non-critical — continue anyway
+    }
+    onComplete();
   };
 
   return (
@@ -82,15 +90,7 @@ export function Onboarding({ onComplete }: OnboardingProps) {
         {step === 'setup' && (
           <QuickSetupStep
             isAnimating={isAnimating}
-            onComplete={nextStep}
-            onBack={prevStep}
-          />
-        )}
-
-        {step === 'ready' && (
-          <QuickResultsStep
-            isAnimating={isAnimating}
-            onComplete={onComplete}
+            onComplete={handleSetupComplete}
             onBack={prevStep}
           />
         )}

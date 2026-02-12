@@ -586,7 +586,7 @@ export function QuickSetupStep({ isAnimating, onComplete, onBack }: QuickSetupSt
           disabled={pullingModels}
           className="px-8 py-3 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          {pullingModels ? 'Installing models...' : 'Continue'}
+          {pullingModels ? 'Installing models...' : 'Enter 4DA'}
         </button>
       </div>
     </div>
