@@ -155,6 +155,11 @@ export const ResultItem = memo(function ResultItem({
                 {item.url}
               </div>
             )}
+            {(item.similar_count ?? 0) > 0 && (
+              <div className="text-[10px] text-gray-500 mt-0.5">
+                +{item.similar_count} similar article{item.similar_count === 1 ? '' : 's'} grouped
+              </div>
+            )}
           </div>
 
           {/* Feedback Indicators */}

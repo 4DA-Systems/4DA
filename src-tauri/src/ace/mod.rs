@@ -1102,7 +1102,7 @@ impl ACE {
     /// Logic:
     /// - High engagement (>50% positive): threshold too strict, lower by 0.02
     /// - Low engagement (<15% positive): threshold too loose, raise by 0.02
-    /// - Always clamped to [0.15, 0.50]
+    /// - Always clamped to [0.30, 0.50]
     pub fn compute_threshold_adjustment(&self, current_threshold: f32) -> Option<f32> {
         let conn = self.conn.lock();
 
@@ -1134,7 +1134,7 @@ impl ACE {
 
         // High engagement (>50%): threshold may be too strict, lower it to show more
         if engagement_rate > 0.50 {
-            let new = (current_threshold - 0.02).clamp(0.15, 0.50);
+            let new = (current_threshold - 0.02).clamp(0.30, 0.50);
             if (new - current_threshold).abs() > f32::EPSILON {
                 return Some(new);
             }
@@ -1142,7 +1142,7 @@ impl ACE {
 
         // Low engagement (<15%): threshold too loose, raise it to filter more
         if engagement_rate < 0.15 {
-            let new = (current_threshold + 0.02).clamp(0.15, 0.50);
+            let new = (current_threshold + 0.02).clamp(0.30, 0.50);
             if (new - current_threshold).abs() > f32::EPSILON {
                 return Some(new);
             }
@@ -2137,7 +2137,8 @@ mod tests {
         insert_interactions(&ace, "save", 5);
         insert_interactions(&ace, "dismiss", 5);
 
-        let current = 0.30;
+        // Start above the floor so lowering is possible
+        let current = 0.40;
         let result = ace.compute_threshold_adjustment(current);
         assert!(
             result.is_some(),
@@ -2151,8 +2152,8 @@ mod tests {
             current
         );
         assert!(
-            (new_threshold - 0.28).abs() < f32::EPSILON,
-            "Expected 0.28, got {}",
+            (new_threshold - 0.38).abs() < f32::EPSILON,
+            "Expected 0.38, got {}",
             new_threshold
         );
     }
@@ -2165,7 +2166,7 @@ mod tests {
         insert_interactions(&ace, "dismiss", 18);
         insert_interactions(&ace, "ignore", 5);
 
-        let current = 0.30;
+        let current = 0.36;
         let result = ace.compute_threshold_adjustment(current);
         assert!(result.is_some(), "Low engagement should trigger adjustment");
         let new_threshold = result.unwrap();
@@ -2176,8 +2177,8 @@ mod tests {
             current
         );
         assert!(
-            (new_threshold - 0.32).abs() < f32::EPSILON,
-            "Expected 0.32, got {}",
+            (new_threshold - 0.38).abs() < f32::EPSILON,
+            "Expected 0.38, got {}",
             new_threshold
         );
     }
@@ -2188,11 +2189,11 @@ mod tests {
         // High engagement to trigger lowering
         insert_interactions(&ace, "click", 25);
 
-        // Start at minimum bound - should not go below 0.15
-        let result = ace.compute_threshold_adjustment(0.15);
+        // Start at minimum bound - should not go below 0.30
+        let result = ace.compute_threshold_adjustment(0.30);
         assert!(
             result.is_none(),
-            "Threshold at minimum (0.15) should not decrease further"
+            "Threshold at minimum (0.30) should not decrease further"
         );
 
         // Low engagement to trigger raising

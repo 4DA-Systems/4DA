@@ -541,6 +541,7 @@ pub(crate) async fn run_multi_source_analysis_impl(
 
     scoring::sort_results(&mut results);
     scoring::dedup_results(&mut results);
+    scoring::topic_dedup_results(&mut results);
 
     // LLM Reranking (if enabled and within daily limits)
     apply_llm_reranking(app, &mut results, &scoring_ctx).await;
@@ -967,6 +968,7 @@ async fn score_items_full(
 
     scoring::sort_results(&mut results);
     scoring::dedup_results(&mut results);
+    scoring::topic_dedup_results(&mut results);
 
     // LLM Reranking (if enabled and within daily limits)
     apply_llm_reranking(app, &mut results, &scoring_ctx).await;

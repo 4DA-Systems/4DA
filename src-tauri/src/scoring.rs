@@ -379,12 +379,34 @@ pub(crate) fn generate_relevance_explanation(
     ace_ctx: &ACEContext,
     item_topics: &[String],
     interests: &[context_engine::Interest],
+    declared_tech: &[String],
 ) -> String {
     let mut parts: Vec<String> = Vec::new();
     let mut used_topics: Vec<&str> = Vec::new();
 
-    // 1. Tech stack matches (most specific signal)
-    let tech_hits: Vec<&str> = item_topics
+    // 1. Declared tech stack matches (highest priority — user's explicit stack)
+    let declared_hits: Vec<&str> = item_topics
+        .iter()
+        .filter_map(|t| {
+            declared_tech
+                .iter()
+                .find(|tech| {
+                    let tl = tech.to_lowercase();
+                    *t == tl || t.contains(tl.as_str())
+                })
+                .map(|s| s.as_str())
+        })
+        .collect();
+    if !declared_hits.is_empty() {
+        let names: Vec<&str> = declared_hits.iter().copied().take(3).collect();
+        for &n in &names {
+            used_topics.push(n);
+        }
+        parts.push(format!("Uses {} (your stack)", names.join(", ")));
+    }
+
+    // 1b. Detected-only tech matches (weaker signal — from auto-scan, not user's explicit stack)
+    let detected_only_hits: Vec<&str> = item_topics
         .iter()
         .filter_map(|t| {
             ace_ctx
@@ -393,13 +415,18 @@ pub(crate) fn generate_relevance_explanation(
                 .find(|tech| *tech == t || t.contains(tech.as_str()))
                 .map(|s| s.as_str())
         })
+        .filter(|t| !used_topics.contains(t))
         .collect();
-    if !tech_hits.is_empty() {
-        let names: Vec<&str> = tech_hits.iter().copied().take(3).collect();
+    if !detected_only_hits.is_empty() && declared_hits.is_empty() {
+        // Only show detected tech if no declared tech matched (avoid confusing "python (detected)" next to "rust (your stack)")
+        let names: Vec<&str> = detected_only_hits.iter().copied().take(2).collect();
         for &n in &names {
             used_topics.push(n);
         }
-        parts.push(format!("Uses {} (your stack)", names.join(", ")));
+        parts.push(format!(
+            "Related to {} (detected in project)",
+            names.join(", ")
+        ));
     }
 
     // 2. Active project topic matches
@@ -884,31 +911,31 @@ pub(crate) fn compute_unified_relevance(
 
 /// Temporal freshness multiplier for PASIFA scoring.
 /// Recent items get a slight boost, older items decay gently.
-/// Returns a multiplier in [0.85, 1.15] range:
-///   - Items < 2 hours old: 1.15x boost (very fresh)
-///   - Items 2-6 hours old: 1.10x boost
-///   - Items 6-12 hours old: 1.05x boost
-///   - Items 12-24 hours old: 1.0x (neutral)
-///   - Items 24-36 hours old: 0.95x decay
-///   - Items 36-48 hours old: 0.90x decay
-///   - Items > 48 hours old: 0.85x floor
+/// Returns a multiplier in [0.80, 1.10] range (tightened to reduce freshness bias):
+///   - Items < 3 hours old: 1.10x boost (very fresh)
+///   - Items 3-12 hours old: 1.08x boost
+///   - Items 12-24 hours old: 1.05x boost
+///   - Items 24-72 hours old: 1.0x (neutral)
+///   - Items 3-7 days old: 0.92x decay
+///   - Items 1-4 weeks old: 0.85x decay
+///   - Items > 1 month old: 0.80x floor
 pub(crate) fn compute_temporal_freshness(created_at: &chrono::DateTime<chrono::Utc>) -> f32 {
     let age_hours = ((chrono::Utc::now() - *created_at).num_minutes() as f32 / 60.0).max(0.0);
 
     if age_hours < 3.0 {
-        1.20 // Breaking/fresh: strong boost
+        1.10 // Breaking/fresh: moderate boost (was 1.20)
     } else if age_hours < 12.0 {
-        1.15
+        1.08 // (was 1.15)
     } else if age_hours < 24.0 {
-        1.10 // Today: still fresh
+        1.05 // Today: still fresh (was 1.10)
     } else if age_hours < 72.0 {
         1.0 // 1-3 days: neutral
     } else if age_hours < 168.0 {
         0.92 // 3-7 days: mild decay
     } else if age_hours < 720.0 {
-        0.82 // 1-4 weeks: noticeable decay
+        0.85 // 1-4 weeks: noticeable decay (was 0.82)
     } else {
-        0.70 // >1 month: significant decay
+        0.80 // >1 month: significant decay (was 0.70)
     }
 }
 
@@ -1003,6 +1030,9 @@ pub(crate) struct ScoringContext {
     pub feedback_boosts: std::collections::HashMap<String, f64>,
     /// Source quality scores from learned preferences: source_type -> score (-1.0 to 1.0)
     pub source_quality: std::collections::HashMap<String, f32>,
+    /// User's explicitly declared tech stack (3-5 items from onboarding).
+    /// Used for signal action text and priority escalation — much smaller than detected_tech.
+    pub declared_tech: Vec<String>,
 }
 
 /// Options controlling which scoring stages are applied
@@ -1019,6 +1049,13 @@ pub(crate) async fn build_scoring_context(db: &Database) -> Result<ScoringContex
     let static_identity = context_engine
         .get_static_identity()
         .map_err(|e| format!("Failed to load context: {}", e))?;
+
+    // User's explicit tech stack from onboarding (small, curated list)
+    let declared_tech: Vec<String> = static_identity
+        .tech_stack
+        .iter()
+        .map(|t| t.to_lowercase())
+        .collect();
 
     let ace_ctx = get_ace_context();
 
@@ -1067,6 +1104,7 @@ pub(crate) async fn build_scoring_context(db: &Database) -> Result<ScoringContex
         topic_embeddings,
         feedback_boosts,
         source_quality,
+        declared_tech,
     })
 }
 
@@ -1105,6 +1143,8 @@ pub(crate) fn score_item(
             signal_priority: None,
             signal_action: None,
             signal_triggers: None,
+            similar_count: 0,
+            similar_titles: vec![],
         };
     }
 
@@ -1231,7 +1271,9 @@ pub(crate) fn score_item(
 
     // Unified scoring (applies affinity + anti-penalty on gated score)
     let combined_score = compute_unified_relevance(gated_score, &topics, &ctx.ace_ctx);
-    let relevant = combined_score >= get_relevance_threshold();
+    // Quality floor: must pass threshold AND either have 2+ confirmed signals or strong score
+    let relevant = combined_score >= get_relevance_threshold()
+        && (signal_count >= 2 || combined_score >= 0.55);
 
     let anti_penalty = compute_anti_penalty(&topics, &ctx.ace_ctx);
 
@@ -1245,6 +1287,7 @@ pub(crate) fn score_item(
             &ctx.ace_ctx,
             &topics,
             &ctx.interests,
+            &ctx.declared_tech,
         ))
     } else {
         None
@@ -1296,14 +1339,27 @@ pub(crate) fn score_item(
                 input.title,
                 input.content,
                 combined_score,
+                &ctx.declared_tech,
                 &ctx.ace_ctx.detected_tech,
             ) {
-                Some(c) => (
-                    Some(c.signal_type.slug().to_string()),
-                    Some(c.priority.label().to_string()),
-                    Some(c.action),
-                    Some(c.triggers),
-                ),
+                Some(mut c) => {
+                    // Phase 3: Score-aware priority cap — low scores cannot produce HIGH priority
+                    if combined_score < 0.35 && c.priority > signals::SignalPriority::Low {
+                        c.priority = signals::SignalPriority::Low;
+                    } else if combined_score < 0.45 && c.priority > signals::SignalPriority::Medium
+                    {
+                        c.priority = signals::SignalPriority::Medium;
+                    } else if combined_score > 0.70 && c.priority < signals::SignalPriority::Medium
+                    {
+                        c.priority = signals::SignalPriority::Medium;
+                    }
+                    (
+                        Some(c.signal_type.slug().to_string()),
+                        Some(c.priority.label().to_string()),
+                        Some(c.action),
+                        Some(c.triggers),
+                    )
+                }
                 None => (None, None, None, None),
             }
         } else {
@@ -1332,6 +1388,8 @@ pub(crate) fn score_item(
         signal_priority: sig_priority,
         signal_action: sig_action,
         signal_triggers: sig_triggers,
+        similar_count: 0,
+        similar_titles: vec![],
     }
 }
 
@@ -1437,6 +1495,89 @@ fn normalize_result_title(title: &str) -> String {
         .collect::<Vec<_>>()
         .join(" ")
         .to_lowercase()
+}
+
+/// Topic-level deduplication: groups items sharing the same primary extracted topic.
+/// Keeps the highest-scoring item as representative and annotates with similar count/titles.
+/// Must be called after sort_results() so highest-scored items come first.
+pub(crate) fn topic_dedup_results(results: &mut Vec<SourceRelevance>) {
+    if results.len() < 2 {
+        return;
+    }
+
+    let mut topic_to_representative: std::collections::HashMap<String, usize> =
+        std::collections::HashMap::new();
+    let mut grouped_indices: std::collections::HashSet<usize> = std::collections::HashSet::new();
+
+    // For each item, extract topics from title and find if it shares a primary topic with an earlier item
+    for i in 0..results.len() {
+        if results[i].excluded || grouped_indices.contains(&i) {
+            continue;
+        }
+        let topics = extract_topics(&results[i].title, "");
+        for topic in &topics {
+            // Skip short/stopword topics
+            if topic.len() < 3 {
+                continue;
+            }
+            if let Some(&rep_idx) = topic_to_representative.get(topic.as_str()) {
+                if rep_idx != i {
+                    // This item shares a topic with an earlier (higher-scored) item
+                    grouped_indices.insert(i);
+                    break;
+                }
+            } else {
+                // First time seeing this topic — this item is the representative
+                topic_to_representative.insert(topic.clone(), i);
+            }
+        }
+    }
+
+    if grouped_indices.is_empty() {
+        return;
+    }
+
+    // Collect titles of grouped items and annotate representatives
+    // Build a map: representative_index -> Vec<grouped_title>
+    let mut rep_to_titles: std::collections::HashMap<usize, Vec<String>> =
+        std::collections::HashMap::new();
+
+    for &gi in &grouped_indices {
+        let grouped_topics = extract_topics(&results[gi].title, "");
+        for topic in &grouped_topics {
+            if topic.len() < 3 {
+                continue;
+            }
+            if let Some(&rep_idx) = topic_to_representative.get(topic.as_str()) {
+                if rep_idx != gi {
+                    rep_to_titles
+                        .entry(rep_idx)
+                        .or_default()
+                        .push(results[gi].title.clone());
+                    break;
+                }
+            }
+        }
+    }
+
+    // Annotate representatives
+    for (rep_idx, titles) in &rep_to_titles {
+        results[*rep_idx].similar_count = titles.len() as u32;
+        results[*rep_idx].similar_titles = titles.clone();
+    }
+
+    // Remove grouped items (retain only non-grouped)
+    let mut idx = 0;
+    results.retain(|_| {
+        let keep = !grouped_indices.contains(&idx);
+        idx += 1;
+        keep
+    });
+
+    let total_grouped: usize = rep_to_titles.values().map(|v| v.len()).sum();
+    if total_grouped > 0 {
+        info!(target: "4da::scoring", grouped = total_grouped, representatives = rep_to_titles.len(), "Topic-level deduplication");
+    }
 }
 
 // ============================================================================
@@ -1625,21 +1766,21 @@ mod tests {
     fn test_temporal_freshness_very_recent() {
         let now = chrono::Utc::now();
         let freshness = compute_temporal_freshness(&now);
-        assert_eq!(freshness, 1.20, "Items just created should get max boost");
+        assert_eq!(freshness, 1.10, "Items just created should get max boost");
     }
 
     #[test]
     fn test_temporal_freshness_few_hours() {
         let four_hours_ago = chrono::Utc::now() - chrono::Duration::hours(4);
         let freshness = compute_temporal_freshness(&four_hours_ago);
-        assert_eq!(freshness, 1.15, "Items 4h old should get 1.15x boost");
+        assert_eq!(freshness, 1.08, "Items 4h old should get 1.08x boost");
     }
 
     #[test]
     fn test_temporal_freshness_half_day() {
         let thirteen_hours_ago = chrono::Utc::now() - chrono::Duration::hours(13);
         let freshness = compute_temporal_freshness(&thirteen_hours_ago);
-        assert_eq!(freshness, 1.10, "Items 13h old should get 1.10x boost");
+        assert_eq!(freshness, 1.05, "Items 13h old should get 1.05x boost");
     }
 
     #[test]
@@ -1660,7 +1801,7 @@ mod tests {
     fn test_temporal_freshness_very_old() {
         let old = chrono::Utc::now() - chrono::Duration::hours(200);
         let freshness = compute_temporal_freshness(&old);
-        assert_eq!(freshness, 0.82, "Items 8+ days old should decay to 0.82");
+        assert_eq!(freshness, 0.85, "Items 8+ days old should decay to 0.85");
     }
 
     // Test source quality boost: positive score

@@ -264,13 +264,16 @@ impl SignalClassifier {
         Self { patterns }
     }
 
-    /// Classify an item based on its title, content, relevance score, and ACE tech stack
+    /// Classify an item based on its title, content, relevance score, and two-tier tech stack.
+    /// `declared_tech` = user's explicit 3-5 choices (used for action text + priority escalation).
+    /// `detected_tech` = 95+ auto-scanned entries (used only for weak context awareness, not promotion).
     pub fn classify(
         &self,
         title: &str,
         content: &str,
         relevance_score: f32,
-        ace_tech: &[String],
+        declared_tech: &[String],
+        detected_tech: &[String],
     ) -> Option<SignalClassification> {
         let text_lower = format!("{} {}", title, content).to_lowercase();
         let title_lower = title.to_lowercase();
@@ -326,21 +329,21 @@ impl SignalClassifier {
             return None;
         }
 
-        // Bonus for ACE tech stack match
-        let tech_match = ace_tech.iter().find(|tech| {
+        // Two-tier tech matching: declared_tech for action text + priority, detected_tech for context only
+        let declared_match = declared_tech.iter().find(|tech| {
             let t = tech.to_lowercase();
             text_lower.contains(&t)
         });
 
         // Priority escalation: base weight + bonuses
-        // CRITICAL requires both tech match AND high relevance — not just keyword count
+        // CRITICAL requires DECLARED tech match AND high relevance — detected-only tech doesn't escalate
         let priority_score = {
             let mut ps = signal_type.base_weight();
             if trigger_count >= 4 {
-                ps = ps.saturating_add(1); // 4+ keywords = extra escalation (was 3)
+                ps = ps.saturating_add(1); // 4+ keywords = extra escalation
             }
-            // Tech match AND high relevance required together for escalation
-            if tech_match.is_some() && relevance_score > 0.7 {
+            // Only declared tech match escalates priority (not detected-only)
+            if declared_match.is_some() && relevance_score > 0.7 {
                 ps = ps.saturating_add(1);
             }
             ps
@@ -348,8 +351,11 @@ impl SignalClassifier {
 
         let priority = SignalPriority::from_score(priority_score.min(4));
 
-        // Generate action text
-        let action = self.generate_action(&signal_type, title, tech_match.map(|s| s.as_str()));
+        // Generate action text using ONLY declared tech match (prevents "python workflow" for Rust devs)
+        let action = self.generate_action(&signal_type, title, declared_match.map(|s| s.as_str()));
+
+        // Suppress detected_tech to avoid confusion - we don't use it for action text or escalation
+        let _ = detected_tech;
 
         Some(SignalClassification {
             signal_type,
@@ -419,11 +425,13 @@ mod tests {
     #[test]
     fn test_security_alert_classification() {
         let classifier = SignalClassifier::new();
+        let declared = vec!["sqlite".to_string(), "rust".to_string()];
         let result = classifier.classify(
             "Critical CVE-2026-1234 in SQLite",
             "A severe vulnerability has been found in SQLite allowing remote code execution",
             0.8,
-            &["sqlite".to_string(), "rust".to_string()],
+            &declared,
+            &declared,
         );
         let c = result.expect("should classify as security alert");
         assert_eq!(c.signal_type, SignalType::SecurityAlert);
@@ -436,11 +444,13 @@ mod tests {
     #[test]
     fn test_breaking_change_classification() {
         let classifier = SignalClassifier::new();
+        let declared = vec!["react".to_string()];
         let result = classifier.classify(
             "React 20 drops class components - migration guide",
             "This major release removes support for class components",
             0.6,
-            &["react".to_string()],
+            &declared,
+            &declared,
         );
         let c = result.expect("should classify as breaking change");
         assert_eq!(c.signal_type, SignalType::BreakingChange);
@@ -450,11 +460,13 @@ mod tests {
     #[test]
     fn test_tool_discovery_classification() {
         let classifier = SignalClassifier::new();
+        let declared = vec!["rust".to_string()];
         let result = classifier.classify(
             "Show HN: A new Rust testing framework - blazing fast alternative to cargo test",
             "We just released a lightweight open source tool",
             0.5,
-            &["rust".to_string()],
+            &declared,
+            &declared,
         );
         let c = result.expect("should classify as tool discovery");
         assert_eq!(c.signal_type, SignalType::ToolDiscovery);
@@ -463,11 +475,13 @@ mod tests {
     #[test]
     fn test_learning_classification() {
         let classifier = SignalClassifier::new();
+        let declared = vec!["rust".to_string()];
         let result = classifier.classify(
             "Deep dive: Advanced async patterns in Rust explained",
             "A comprehensive tutorial and best practices guide",
             0.4,
-            &["rust".to_string()],
+            &declared,
+            &declared,
         );
         let c = result.expect("should classify as learning");
         assert_eq!(c.signal_type, SignalType::Learning);
@@ -476,31 +490,35 @@ mod tests {
     #[test]
     fn test_no_classification() {
         let classifier = SignalClassifier::new();
-        let result = classifier.classify("What's your favorite color?", "I like blue", 0.1, &[]);
+        let result =
+            classifier.classify("What's your favorite color?", "I like blue", 0.1, &[], &[]);
         assert!(result.is_none());
     }
 
     #[test]
     fn test_tech_match_boosts_priority() {
         let classifier = SignalClassifier::new();
+        let declared = vec!["rust".to_string()];
 
-        // Without tech match
+        // Without tech match (declared has rust but article doesn't mention it)
         let no_match = classifier
             .classify(
                 "New vulnerability found in obscure library",
                 "A CVE was discovered",
                 0.3,
-                &["rust".to_string()],
+                &declared,
+                &declared,
             )
             .unwrap();
 
-        // With tech match
+        // With tech match (declared has rust and article mentions it)
         let with_match = classifier
             .classify(
                 "New vulnerability found in Rust standard library",
                 "A CVE was discovered in rust",
                 0.3,
-                &["rust".to_string()],
+                &declared,
+                &declared,
             )
             .unwrap();
 
@@ -517,6 +535,7 @@ mod tests {
                 "A guide to best practices",
                 0.2,
                 &[],
+                &[],
             )
             .unwrap();
 
@@ -525,6 +544,7 @@ mod tests {
                 "New tutorial on async patterns",
                 "A guide to best practices",
                 0.9,
+                &[],
                 &[],
             )
             .unwrap();
@@ -535,14 +555,53 @@ mod tests {
     #[test]
     fn test_competitive_intel_classification() {
         let classifier = SignalClassifier::new();
+        let declared = vec!["tauri".to_string()];
         let result = classifier.classify(
             "Electron alternative raises $50M in Series B funding",
             "The company has been acquired for a high valuation",
             0.6,
-            &["tauri".to_string()],
+            &declared,
+            &declared,
         );
         let c = result.expect("should classify as competitive intel");
         assert_eq!(c.signal_type, SignalType::CompetitiveIntel);
+    }
+
+    /// Phase 1: Off-stack tech in detected but NOT declared must not appear in action text.
+    /// This prevents "Evaluate for your python workflow" being shown to Rust/TS developers.
+    #[test]
+    fn test_off_stack_tech_not_promoted() {
+        let classifier = SignalClassifier::new();
+        let declared = vec!["rust".to_string(), "typescript".to_string()];
+        let detected = vec![
+            "rust".to_string(),
+            "typescript".to_string(),
+            "python".to_string(),
+        ];
+
+        let result = classifier.classify(
+            "Show HN: A new Python testing framework - blazing fast alternative to pytest",
+            "We just released a lightweight open source tool for python developers",
+            0.5,
+            &declared,
+            &detected,
+        );
+
+        if let Some(c) = result {
+            // Action text must NOT say "Evaluate for your python workflow" since python is only detected, not declared.
+            // The title may naturally contain "Python" — that's fine. The bug was the personalized "your python workflow" text.
+            assert!(
+                !c.action.to_lowercase().contains("your python workflow"),
+                "Off-stack tech (python) should not produce personalized action text: {}",
+                c.action
+            );
+            // Should get the generic form instead
+            assert!(
+                c.action.contains("Evaluate new tool:"),
+                "Should use generic action text, got: {}",
+                c.action
+            );
+        }
     }
 
     #[test]
