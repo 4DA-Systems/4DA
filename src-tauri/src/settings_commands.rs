@@ -301,6 +301,9 @@ async fn test_ollama_connection_impl(llm: &LLMProvider) -> Result<serde_json::Va
                 "Ollama test successful"
             );
 
+            // Mark model as warm since we just loaded it
+            crate::ollama::mark_warm(model);
+
             Ok(serde_json::json!({
                 "success": true,
                 "input_tokens": 0,

@@ -301,6 +301,20 @@ pub async fn generate_ai_briefing() -> Result<serde_json::Value, String> {
 
     info!(target: "4da::briefing", "Generating AI briefing");
 
+    // Drain batched notifications from monitoring (items that were silently queued)
+    let batched = {
+        let state = crate::get_monitoring_state();
+        crate::monitoring::drain_batched_notifications(state)
+    };
+
+    if !batched.is_empty() {
+        info!(
+            target: "4da::briefing",
+            count = batched.len(),
+            "Including batched notifications in briefing"
+        );
+    }
+
     // Get LLM settings
     let llm_settings = {
         let settings = get_settings_manager().lock();
@@ -448,13 +462,36 @@ Rules:
 - If nothing is truly important, say so — don't manufacture urgency
 - Max 500 words"#;
 
+    // Build batched items section if there are silently queued items
+    let batched_section = if batched.is_empty() {
+        String::new()
+    } else {
+        let items_text: String = batched
+            .iter()
+            .map(|b| {
+                format!(
+                    "- [{}] {} (score: {:.0}%)",
+                    b.source_type,
+                    b.title,
+                    b.score * 100.0
+                )
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+        format!(
+            "\n\nSince your last check, {} items were queued silently:\n{}\n",
+            batched.len(),
+            items_text
+        )
+    };
+
     let user_prompt = format!(
         "My active projects and context:\n\
          - Tech stack: {tech}\n\
          - Currently working on: {topics}\n\
          - Skip these topics: {anti}\n\n\
          Today's {count} items (sorted by relevance):\n\n\
-         {items}\n\n\
+         {items}{batched}\n\n\
          Give me my intelligence briefing.",
         tech = tech_summary,
         topics = topics_summary,
@@ -465,6 +502,7 @@ Rules:
         },
         count = items.len(),
         items = items_text,
+        batched = batched_section,
     );
 
     // Call the LLM

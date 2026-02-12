@@ -40,6 +40,8 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
   const monitoring = useAppStore(s => s.monitoring);
   const monitoringInterval = useAppStore(s => s.monitoringInterval);
   const setMonitoringInterval = useAppStore(s => s.setMonitoringInterval);
+  const notificationThreshold = useAppStore(s => s.notificationThreshold);
+  const setNotificationThreshold = useAppStore(s => s.setNotificationThreshold);
   const toggleMonitoring = useAppStore(s => s.toggleMonitoring);
   const updateMonitoringInterval = useAppStore(s => s.updateMonitoringInterval);
   const testNotification = useAppStore(s => s.testNotification);
@@ -225,6 +227,8 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
             monitoring={monitoring}
             monitoringInterval={monitoringInterval}
             setMonitoringInterval={setMonitoringInterval}
+            notificationThreshold={notificationThreshold}
+            onSetNotificationThreshold={setNotificationThreshold}
             onToggle={handleToggleMonitoring}
             onUpdateInterval={handleUpdateMonitoringInterval}
             onTestNotification={handleTestNotification}

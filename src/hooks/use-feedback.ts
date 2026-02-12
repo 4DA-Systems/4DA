@@ -29,6 +29,11 @@ export function useFeedback(
     confidence: number;
     auto_detected: boolean;
   }>>([]);
+  const [lastLearnedTopic, setLastLearnedTopic] = useState<{
+    topic: string;
+    direction: 'positive' | 'negative';
+    timestamp: number;
+  } | null>(null);
 
   const loadLearnedBehavior = useCallback(async () => {
     try {
@@ -102,20 +107,40 @@ export function useFeedback(
 
       setFeedbackGiven(prev => ({ ...prev, [itemId]: actionType }));
 
+      // Track what was just learned for the visible learning loop
+      const primaryTopic = topics[0] || null;
+      if (primaryTopic) {
+        const direction: 'positive' | 'negative' =
+          (actionType === 'save' || actionType === 'click') ? 'positive' : 'negative';
+        setLastLearnedTopic({ topic: primaryTopic, direction, timestamp: Date.now() });
+      }
+
       // Immediate score adjustment for visual feedback
       const delta = FEEDBACK_ADJUSTMENTS[actionType] ?? 0;
       if (delta !== 0 && onScoreAdjust) {
         onScoreAdjust(itemId, delta);
       }
 
+      // Fetch updated affinity for richer toast (non-critical)
+      let affinityScore: number | null = null;
+      if (primaryTopic) {
+        try {
+          const result = await invoke<{ affinity: { topic: string; positive_signals: number; negative_signals: number; affinity_score: number } | null }>('ace_get_single_affinity', { topic: primaryTopic });
+          if (result.affinity) {
+            affinityScore = Math.round(result.affinity.affinity_score * 100);
+          }
+        } catch { /* non-critical */ }
+      }
+
       // Show toast with undo action (except for click events)
       if (actionType !== 'click') {
-        const topTopics = topics.slice(0, 3).join(', ');
+        const topicLabel = primaryTopic || 'this type';
+        const scoreNote = affinityScore !== null ? ` (${affinityScore > 0 ? '+' : ''}${affinityScore}%)` : '';
         const learnMessage = actionType === 'save'
-          ? `Saved • Learning: +${topTopics || 'relevance'}`
+          ? `Saved — boosting '${topicLabel}' in future results${scoreNote}`
           : actionType === 'mark_irrelevant'
-          ? `Irrelevant • Learning: -${topTopics || 'this type'}`
-          : 'Dismissed • Noted for future filtering';
+          ? `Got it — filtering out '${topicLabel}'${scoreNote}`
+          : `Noted — deprioritizing '${topicLabel}'${scoreNote}`;
 
         const undoAction: ToastAction = {
           label: 'Undo',
@@ -155,6 +180,7 @@ export function useFeedback(
     feedbackGiven,
     learnedAffinities,
     antiTopics,
+    lastLearnedTopic,
     loadLearnedBehavior,
     recordInteraction,
   };

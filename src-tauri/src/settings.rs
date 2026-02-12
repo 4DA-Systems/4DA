@@ -105,6 +105,13 @@ pub struct MonitoringConfig {
     pub enabled: bool,
     /// Interval between checks in minutes
     pub interval_minutes: u64,
+    /// Notification quality threshold: "critical_only", "high_and_above" (default), "all"
+    #[serde(default = "default_notification_threshold")]
+    pub notification_threshold: String,
+}
+
+fn default_notification_threshold() -> String {
+    "high_and_above".to_string()
 }
 
 impl Default for MonitoringConfig {
@@ -112,6 +119,7 @@ impl Default for MonitoringConfig {
         Self {
             enabled: true,        // Autonomous by default - no manual enabling needed
             interval_minutes: 10, // Check every 10 minutes
+            notification_threshold: default_notification_threshold(),
         }
     }
 }

@@ -37,6 +37,7 @@ mod job_queue_commands;
 mod llm;
 mod monitoring;
 mod monitoring_commands;
+mod ollama;
 pub mod query;
 mod scoring;
 mod settings;
@@ -2545,6 +2546,7 @@ pub fn run() {
             monitoring_commands::get_monitoring_status,
             monitoring_commands::set_monitoring_enabled,
             monitoring_commands::set_monitoring_interval,
+            monitoring_commands::set_notification_threshold,
             monitoring_commands::trigger_notification_test,
             // Context Engine commands
             settings_commands::get_user_context,
@@ -2599,6 +2601,8 @@ pub fn run() {
             ace_commands::ace_resolve_anomaly,
             ace_commands::ace_get_accuracy_metrics,
             ace_commands::ace_record_accuracy_feedback,
+            // ACE Phase 4: Visible Learning Loop
+            ace_commands::ace_get_single_affinity,
             // ACE Phase 1D: Health Monitoring
             ace_commands::ace_get_system_health,
             // ACE Watcher Control
@@ -2795,6 +2799,20 @@ pub fn run() {
             });
 
             info!(target: "4da::tray", "System tray and monitoring initialized");
+
+            // Warm Ollama model on startup if configured
+            {
+                let settings = get_settings_manager().lock();
+                let llm = &settings.get().llm;
+                if llm.provider == "ollama" && !llm.model.is_empty() {
+                    let model = llm.model.clone();
+                    let base_url = llm.base_url.clone().unwrap_or_else(|| "http://localhost:11434".to_string());
+                    let warm_handle = app_handle.clone();
+                    tauri::async_runtime::spawn(async move {
+                        ollama::warm_model(&model, &base_url, &warm_handle).await;
+                    });
+                }
+            }
 
             // Emit initial void signal (shows current state to heartbeat)
             if let Ok(db) = get_database() {

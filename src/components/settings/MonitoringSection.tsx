@@ -4,6 +4,8 @@ interface MonitoringSectionProps {
   monitoring: MonitoringStatus | null;
   monitoringInterval: number;
   setMonitoringInterval: (val: number) => void;
+  notificationThreshold: string;
+  onSetNotificationThreshold: (threshold: string) => void;
   onToggle: () => void;
   onUpdateInterval: () => void;
   onTestNotification: () => void;
@@ -13,6 +15,8 @@ export function MonitoringSection({
   monitoring,
   monitoringInterval,
   setMonitoringInterval,
+  notificationThreshold,
+  onSetNotificationThreshold,
   onToggle,
   onUpdateInterval,
   onTestNotification,
@@ -78,6 +82,20 @@ export function MonitoringSection({
             >
               Update
             </button>
+          </div>
+
+          <div className="flex items-center gap-3">
+            <label className="text-sm text-gray-400">Notifications</label>
+            <select
+              value={notificationThreshold}
+              onChange={(e) => onSetNotificationThreshold(e.target.value)}
+              className="px-3 py-2 bg-[#141414] border border-[#2A2A2A] rounded-lg text-sm text-white focus:border-orange-500 focus:outline-none appearance-none cursor-pointer"
+              style={{ backgroundImage: 'url("data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'12\' height=\'12\' fill=\'%23666\' viewBox=\'0 0 16 16\'%3E%3Cpath d=\'M8 11L3 6h10z\'/%3E%3C/svg%3E")', backgroundRepeat: 'no-repeat', backgroundPosition: 'right 0.75rem center', paddingRight: '2rem' }}
+            >
+              <option value="critical_only">Critical only</option>
+              <option value="high_and_above">High and above</option>
+              <option value="all">All items</option>
+            </select>
           </div>
 
           <div className="flex items-center justify-between text-xs text-gray-500 px-1">

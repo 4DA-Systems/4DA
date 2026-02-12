@@ -23,7 +23,8 @@ dist-ssr
 *.sln
 *.sw?
 
-# Context rot defense system
+# Claude Code artifacts
+.claude/sessions/
 .claude/backups/
 .claude/memory.db
 *.local.md

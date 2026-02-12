@@ -30,4 +30,4 @@ export interface ScanProgress {
   relevant?: number;
 }
 
-export type Step = 'welcome' | 'api-keys' | 'context' | 'interests' | 'first-scan' | 'complete';
+export type Step = 'welcome' | 'setup' | 'ready';

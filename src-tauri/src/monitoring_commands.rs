@@ -23,6 +23,12 @@ pub async fn get_monitoring_status() -> Result<serde_json::Value, String> {
     let last_check = state.last_check.load(std::sync::atomic::Ordering::Relaxed);
     let secs_since_check = if last_check > 0 { now - last_check } else { 0 };
 
+    // Include notification threshold from settings
+    let notification_threshold = {
+        let settings = get_settings_manager().lock();
+        settings.get().monitoring.notification_threshold.clone()
+    };
+
     Ok(serde_json::json!({
         "enabled": state.is_enabled(),
         "interval_secs": state.get_interval(),
@@ -31,7 +37,8 @@ pub async fn get_monitoring_status() -> Result<serde_json::Value, String> {
         "last_check": last_check,
         "secs_since_check": secs_since_check,
         "last_relevant_count": state.last_relevant_count.load(std::sync::atomic::Ordering::Relaxed),
-        "total_checks": state.total_checks.load(std::sync::atomic::Ordering::Relaxed)
+        "total_checks": state.total_checks.load(std::sync::atomic::Ordering::Relaxed),
+        "notification_threshold": notification_threshold
     }))
 }
 
@@ -48,13 +55,15 @@ pub async fn set_monitoring_enabled(enabled: bool) -> Result<serde_json::Value, 
             .store(0, std::sync::atomic::Ordering::Relaxed);
     }
 
-    // Persist to settings
+    // Persist to settings (preserve existing notification_threshold)
     {
         let mut settings = get_settings_manager().lock();
         let interval = state.get_interval() / 60;
+        let threshold = settings.get().monitoring.notification_threshold.clone();
         let _ = settings.set_monitoring_config(settings::MonitoringConfig {
             enabled,
             interval_minutes: interval,
+            notification_threshold: threshold,
         });
     }
 
@@ -74,12 +83,14 @@ pub async fn set_monitoring_interval(minutes: u64) -> Result<serde_json::Value, 
     let secs = minutes * 60;
     state.set_interval(secs);
 
-    // Persist to settings
+    // Persist to settings (preserve existing notification_threshold)
     {
         let mut settings = get_settings_manager().lock();
+        let threshold = settings.get().monitoring.notification_threshold.clone();
         let _ = settings.set_monitoring_config(settings::MonitoringConfig {
             enabled: state.is_enabled(),
             interval_minutes: minutes,
+            notification_threshold: threshold,
         });
     }
 
@@ -88,6 +99,38 @@ pub async fn set_monitoring_interval(minutes: u64) -> Result<serde_json::Value, 
     Ok(serde_json::json!({
         "interval_mins": minutes,
         "interval_secs": secs
+    }))
+}
+
+/// Set notification quality threshold
+#[tauri::command]
+pub async fn set_notification_threshold(threshold: String) -> Result<serde_json::Value, String> {
+    // Validate the threshold value
+    let valid = ["critical_only", "high_and_above", "all"];
+    if !valid.contains(&threshold.as_str()) {
+        return Err(format!(
+            "Invalid threshold '{}'. Must be one of: {}",
+            threshold,
+            valid.join(", ")
+        ));
+    }
+
+    // Persist to settings (preserve existing enabled/interval)
+    {
+        let mut settings = get_settings_manager().lock();
+        let state = crate::get_monitoring_state();
+        let _ = settings.set_monitoring_config(settings::MonitoringConfig {
+            enabled: state.is_enabled(),
+            interval_minutes: state.get_interval() / 60,
+            notification_threshold: threshold.clone(),
+        });
+    }
+
+    info!(target: "4da::monitor", threshold = %threshold, "Notification threshold updated");
+
+    Ok(serde_json::json!({
+        "threshold": threshold,
+        "message": format!("Notification threshold set to {}", threshold)
     }))
 }
 

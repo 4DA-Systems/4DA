@@ -1394,6 +1394,31 @@ pub async fn ace_get_system_health() -> Result<serde_json::Value, String> {
     serde_json::to_value(&report).map_err(|e| e.to_string())
 }
 
+/// Get a single topic's affinity score
+#[tauri::command]
+pub async fn ace_get_single_affinity(topic: String) -> Result<serde_json::Value, String> {
+    let ace = get_ace_engine()?;
+    let affinities = ace.get_topic_affinities()?;
+
+    let matching = affinities
+        .iter()
+        .find(|a| a.topic.to_lowercase() == topic.to_lowercase());
+
+    match matching {
+        Some(affinity) => Ok(serde_json::json!({
+            "affinity": {
+                "topic": affinity.topic,
+                "positive_signals": affinity.positive_signals,
+                "negative_signals": affinity.negative_signals,
+                "affinity_score": affinity.affinity_score
+            }
+        })),
+        None => Ok(serde_json::json!({
+            "affinity": null
+        })),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
