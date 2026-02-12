@@ -28,6 +28,8 @@ export interface SourceRelevance {
   signal_action?: string;
   signal_triggers?: string[];
   seen_on?: string[];
+  similar_count?: number;
+  similar_titles?: string[];
 }
 
 export interface ScoreBreakdown {

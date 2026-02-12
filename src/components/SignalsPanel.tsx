@@ -15,6 +15,8 @@ interface SignalItem {
   signal_priority: string;
   signal_action: string;
   signal_triggers: string[];
+  similar_count: number;
+  similar_titles: string[];
 }
 
 interface SignalsPanelProps {
@@ -72,6 +74,8 @@ export const SignalsPanel = memo(function SignalsPanel({ results }: SignalsPanel
         signal_priority: r.signal_priority!,
         signal_action: r.signal_action!,
         signal_triggers: r.signal_triggers || [],
+        similar_count: r.similar_count || 0,
+        similar_titles: r.similar_titles || [],
       }));
 
     const priorityOrder: Record<string, number> = { critical: 4, high: 3, medium: 2, low: 1 };
@@ -284,6 +288,15 @@ const SignalRow = ({ signal }: { signal: SignalItem }) => {
               </button>
             )}
           </div>
+
+          {/* Similar items grouped */}
+          {signal.similar_count > 0 && (
+            <div className="mt-1.5 text-[10px] text-gray-500">
+              +{signal.similar_count} similar{signal.similar_titles.length > 0 && (
+                <span className="text-gray-600"> ({signal.similar_titles.slice(0, 2).join(', ')}{signal.similar_titles.length > 2 ? '...' : ''})</span>
+              )}
+            </div>
+          )}
 
           {/* Trigger keywords */}
           {showTriggers && (

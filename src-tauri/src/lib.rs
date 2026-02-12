@@ -206,6 +206,12 @@ pub struct SourceRelevance {
     /// Keywords that triggered the classification
     #[serde(default)]
     pub signal_triggers: Option<Vec<String>>,
+    /// How many similar items were grouped under this representative (topic dedup)
+    #[serde(default)]
+    pub similar_count: u32,
+    /// Titles of grouped similar items
+    #[serde(default)]
+    pub similar_titles: Vec<String>,
 }
 
 fn default_source_type() -> String {
@@ -1147,9 +1153,9 @@ pub(crate) fn get_relevance_threshold() -> f32 {
     }
 }
 
-/// Set the relevance threshold (thread-safe, clamped to [0.10, 0.70]).
+/// Set the relevance threshold (thread-safe, clamped to [0.30, 0.70]).
 pub(crate) fn set_relevance_threshold(value: f32) {
-    let clamped = value.clamp(0.10, 0.70);
+    let clamped = value.clamp(0.30, 0.70);
     RELEVANCE_THRESHOLD_BITS.store(clamped.to_bits(), Ordering::Relaxed);
 }
 
@@ -1728,6 +1734,8 @@ async fn compute_relevance() -> Result<Vec<SourceRelevance>, String> {
                 signal_priority: None,
                 signal_action: None,
                 signal_triggers: None,
+                similar_count: 0,
+                similar_titles: vec![],
             });
             continue;
         }
@@ -1883,6 +1891,11 @@ async fn compute_relevance() -> Result<Vec<SourceRelevance>, String> {
         }
 
         // Generate explanation for relevant items
+        let declared_tech: Vec<String> = static_identity
+            .tech_stack
+            .iter()
+            .map(|t| t.to_lowercase())
+            .collect();
         let explanation = if relevant {
             Some(scoring::generate_relevance_explanation(
                 &item.title,
@@ -1892,6 +1905,7 @@ async fn compute_relevance() -> Result<Vec<SourceRelevance>, String> {
                 &ace_ctx,
                 &topics,
                 &static_identity.interests,
+                &declared_tech,
             ))
         } else {
             None
@@ -1955,6 +1969,8 @@ async fn compute_relevance() -> Result<Vec<SourceRelevance>, String> {
             signal_priority: None,
             signal_action: None,
             signal_triggers: None,
+            similar_count: 0,
+            similar_titles: vec![],
         });
     }
 
@@ -2457,11 +2473,11 @@ pub fn run() {
             set_relevance_threshold(stored);
             info!(target: "4da::startup", threshold = get_relevance_threshold(), "Loaded stored relevance threshold");
         } else {
-            set_relevance_threshold(0.35);
+            set_relevance_threshold(0.40);
             info!(target: "4da::startup", threshold = get_relevance_threshold(), "Relevance threshold (default)");
         }
     } else {
-        set_relevance_threshold(0.35);
+        set_relevance_threshold(0.40);
         info!(target: "4da::startup", threshold = get_relevance_threshold(), "Relevance threshold (default, ACE unavailable)");
     }
 
