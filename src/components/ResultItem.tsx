@@ -162,6 +162,16 @@ export const ResultItem = memo(function ResultItem({
                   Stack
                 </span>
               )}
+              {item.score_breakdown?.novelty_mult != null && item.score_breakdown.novelty_mult > 1.05 && (
+                <span className="flex-shrink-0 text-[10px] px-1.5 py-0.5 rounded font-medium bg-blue-500/20 text-blue-400">
+                  New
+                </span>
+              )}
+              {item.score_breakdown?.intent_boost != null && item.score_breakdown.intent_boost > 0 && (
+                <span className="flex-shrink-0 text-[10px] px-1.5 py-0.5 rounded font-medium bg-violet-500/20 text-violet-400">
+                  Working on
+                </span>
+              )}
             </div>
             {item.url && (
               <div className="text-xs text-text-muted truncate font-mono mt-1">
@@ -169,9 +179,21 @@ export const ResultItem = memo(function ResultItem({
               </div>
             )}
             {(item.similar_count ?? 0) > 0 && (
-              <div className="text-[10px] text-gray-500 mt-0.5">
-                +{item.similar_count} similar article{item.similar_count === 1 ? '' : 's'} grouped
-              </div>
+              <details className="mt-0.5 group">
+                <summary className="text-[10px] text-gray-500 cursor-pointer hover:text-gray-400 select-none list-none flex items-center gap-1">
+                  <span className="text-[10px] text-gray-600 group-open:rotate-90 transition-transform">&#9654;</span>
+                  +{item.similar_count} related article{item.similar_count === 1 ? '' : 's'}
+                </summary>
+                {item.similar_titles && item.similar_titles.length > 0 && (
+                  <ul className="mt-1 ml-3 space-y-0.5">
+                    {item.similar_titles.map((title, i) => (
+                      <li key={i} className="text-[10px] text-gray-500 truncate">
+                        {title}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </details>
             )}
           </div>
 

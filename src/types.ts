@@ -51,6 +51,14 @@ export interface ScoreBreakdown {
   dep_match_score?: number;
   /** Package names from user's dependency graph that matched this content */
   matched_deps?: string[];
+  /** Domain relevance (0.15 off-domain to 1.0 primary stack match) */
+  domain_relevance?: number;
+  /** Content quality multiplier (0.5 clickbait to 1.2 authoritative) */
+  content_quality_mult?: number;
+  /** Novelty multiplier (0.6 introductory to 1.15 release) */
+  novelty_mult?: number;
+  /** Intent boost from recent work topics (0.0 to 0.15) */
+  intent_boost?: number;
 }
 
 export interface AnalysisProgress {

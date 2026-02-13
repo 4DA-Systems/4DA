@@ -1468,6 +1468,10 @@ pub(crate) struct ScoringContext {
     /// User's explicitly declared tech stack (3-5 items from onboarding).
     /// Used for signal action text and priority escalation — much smaller than detected_tech.
     pub declared_tech: Vec<String>,
+    /// Domain profile: graduated technology identity for domain relevance scoring
+    pub domain_profile: crate::domain_profile::DomainProfile,
+    /// Recent work topics from git activity (last 2h) for intent-aware scoring
+    pub work_topics: Vec<String>,
 }
 
 /// Options controlling which scoring stages are applied
@@ -1494,11 +1498,17 @@ pub(crate) async fn build_scoring_context(db: &Database) -> Result<ScoringContex
 
     let ace_ctx = get_ace_context();
 
-    // Check if user has recent file activity (active work window)
-    let has_active_work = match get_ace_engine() {
-        Ok(ace) => ace.get_recent_work_topics(2).is_ok_and(|t| !t.is_empty()),
-        Err(_) => false,
+    // Load recent work topics for intent-aware scoring (last 2h of git/file activity)
+    let work_topics: Vec<String> = match get_ace_engine() {
+        Ok(ace) => ace
+            .get_recent_work_topics(2)
+            .unwrap_or_default()
+            .into_iter()
+            .map(|(topic, _weight)| topic)
+            .collect(),
+        Err(_) => vec![],
     };
+    let has_active_work = !work_topics.is_empty();
 
     let topic_embeddings = get_topic_embeddings(&ace_ctx).await;
 
@@ -1520,12 +1530,20 @@ pub(crate) async fn build_scoring_context(db: &Database) -> Result<ScoringContex
         Err(_) => std::collections::HashMap::new(),
     };
 
+    // Build domain profile for graduated domain relevance scoring
+    let domain_profile = {
+        let conn = crate::open_db_connection()?;
+        crate::domain_profile::build_domain_profile(&conn)
+    };
+
     info!(target: "4da::ace",
         topics = ace_ctx.active_topics.len(),
         tech = ace_ctx.detected_tech.len(),
         embeddings = topic_embeddings.len(),
         feedback_topics = feedback_boosts.len(),
         source_prefs = source_quality.len(),
+        domain_primary = domain_profile.primary_stack.len(),
+        domain_all = domain_profile.all_tech.len(),
         has_active_work,
         "ACE context loaded for scoring"
     );
@@ -1540,6 +1558,8 @@ pub(crate) async fn build_scoring_context(db: &Database) -> Result<ScoringContex
         feedback_boosts,
         source_quality,
         declared_tech,
+        domain_profile,
+        work_topics,
     })
 }
 
@@ -1690,9 +1710,51 @@ pub(crate) fn score_item(
         .unwrap_or(0.0);
     let base_score = (base_score + source_quality_boost).clamp(0.0, 1.0);
 
-    // Off-domain penalty: mild penalty for items with zero tech/topic overlap
-    let off_domain_penalty = compute_off_domain_penalty(&topics, &ctx.ace_ctx, &ctx.declared_tech);
+    // Domain relevance: graduated penalty based on technology identity
+    // Replaces binary off_domain_penalty with tiered relevance (1.0 primary → 0.15 off-domain)
+    let domain_relevance =
+        crate::domain_profile::compute_domain_relevance(&topics, &ctx.domain_profile);
+    let off_domain_penalty = if domain_relevance >= 0.85 {
+        0.0 // Primary stack or dependency match — no penalty
+    } else if domain_relevance >= 0.50 {
+        // Interest/adjacent match — mild penalty scaling from 0 to half the max
+        scoring_config::OFF_DOMAIN_PENALTY * (1.0 - domain_relevance) * 0.5
+    } else {
+        // Off-domain — full penalty
+        scoring_config::OFF_DOMAIN_PENALTY * (1.0 - domain_relevance)
+    };
     let base_score = (base_score - off_domain_penalty).clamp(0.0, 1.0);
+
+    // Content quality: penalize clickbait, boost authoritative technical content
+    let content_quality =
+        crate::content_quality::compute_content_quality(input.title, input.content, input.url);
+    let base_score = (base_score * content_quality.multiplier).clamp(0.0, 1.0);
+
+    // Novelty: penalize introductory content for known tech, boost releases
+    let novelty = crate::novelty::compute_novelty(
+        input.title,
+        input.content,
+        &topics,
+        &ctx.domain_profile.primary_stack,
+    );
+    let base_score = (base_score * novelty.multiplier).clamp(0.0, 1.0);
+
+    // Intent boost: amplify items matching recent work topics (what you're coding RIGHT NOW)
+    // If you committed code about "scoring" in the last 2h, articles about scoring get boosted
+    let intent_boost: f32 = if !ctx.work_topics.is_empty() {
+        let matching_work_topics = topics
+            .iter()
+            .filter(|t| ctx.work_topics.iter().any(|wt| topic_overlaps(t, wt)))
+            .count();
+        match matching_work_topics {
+            0 => 0.0,
+            1 => 0.08, // Mild boost for 1 work topic match
+            _ => 0.15, // Stronger boost for multiple matches
+        }
+    } else {
+        0.0
+    };
+    let base_score = (base_score + intent_boost).clamp(0.0, 1.0);
 
     // Feedback learning boost (Phase 9): apply feedback-derived topic multiplier
     let feedback_boost = if !ctx.feedback_boosts.is_empty() {
@@ -1806,6 +1868,10 @@ pub(crate) fn score_item(
         confirmation_mult,
         dep_match_score,
         matched_deps: matched_dep_names,
+        domain_relevance,
+        content_quality_mult: content_quality.multiplier,
+        novelty_mult: novelty.multiplier,
+        intent_boost,
     };
 
     // Optional signal classification — only classify items that pass the relevance threshold

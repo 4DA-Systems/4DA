@@ -25,12 +25,14 @@ mod ace_commands;
 mod analysis;
 mod anomaly;
 mod attention;
+mod content_quality;
 mod context_commands;
 mod context_engine;
 mod db;
 mod digest;
 mod digest_commands;
 mod document_index;
+mod domain_profile;
 pub mod extractors;
 mod handoff;
 mod health;
@@ -40,6 +42,7 @@ mod knowledge_decay;
 mod llm;
 mod monitoring;
 mod monitoring_commands;
+mod novelty;
 mod ollama;
 mod predictive;
 mod project_health;
@@ -168,6 +171,18 @@ pub struct ScoreBreakdown {
     /// Package names from user's dependency graph that matched this content
     #[serde(default)]
     pub matched_deps: Vec<String>,
+    /// Domain relevance (0.15 off-domain to 1.0 primary stack match)
+    #[serde(default = "default_domain_relevance")]
+    pub domain_relevance: f32,
+    /// Content quality multiplier (0.5 clickbait to 1.2 authoritative)
+    #[serde(default = "default_quality_mult")]
+    pub content_quality_mult: f32,
+    /// Novelty multiplier (0.6 introductory to 1.15 release)
+    #[serde(default = "default_quality_mult")]
+    pub novelty_mult: f32,
+    /// Intent boost from recent work topics (0.0 to 0.15)
+    #[serde(default)]
+    pub intent_boost: f32,
 }
 
 fn default_freshness() -> f32 {
@@ -175,6 +190,14 @@ fn default_freshness() -> f32 {
 }
 
 fn default_confirmation_mult() -> f32 {
+    1.0
+}
+
+fn default_domain_relevance() -> f32 {
+    1.0
+}
+
+fn default_quality_mult() -> f32 {
     1.0
 }
 
@@ -2092,6 +2115,10 @@ async fn compute_relevance() -> Result<Vec<SourceRelevance>, String> {
             confirmation_mult,
             dep_match_score: 0.0,
             matched_deps: vec![],
+            domain_relevance: 1.0,
+            content_quality_mult: 1.0,
+            novelty_mult: 1.0,
+            intent_boost: 0.0,
         };
 
         results.push(SourceRelevance {
