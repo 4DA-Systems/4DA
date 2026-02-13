@@ -170,17 +170,27 @@ fn extract_mention_context(text: &str, identifier: &str) -> Option<String> {
     let id_lower = identifier.to_lowercase();
 
     if let Some(pos) = lower.find(&id_lower) {
-        let start = pos.saturating_sub(50);
-        let end = (pos + id_lower.len() + 50).min(text.len());
-        // Find safe UTF-8 boundaries
-        let start = text[..start]
-            .rfind(char::is_whitespace)
-            .map(|p| p + 1)
-            .unwrap_or(start);
-        let end = text[end..]
-            .find(char::is_whitespace)
-            .map(|p| end + p)
-            .unwrap_or(end);
+        // Walk backward up to 50 bytes to find a safe char boundary
+        let mut start = pos.saturating_sub(50);
+        while start > 0 && !text.is_char_boundary(start) {
+            start -= 1;
+        }
+        // Walk forward up to 50 bytes past the match end
+        let mut end = (pos + id_lower.len() + 50).min(text.len());
+        while end < text.len() && !text.is_char_boundary(end) {
+            end += 1;
+        }
+        // Snap to word boundaries if possible
+        if let Some(p) = text[..start].rfind(char::is_whitespace) {
+            start = p + 1;
+            // Ensure we're still on a char boundary after +1
+            while start < text.len() && !text.is_char_boundary(start) {
+                start += 1;
+            }
+        }
+        if let Some(p) = text[end..].find(char::is_whitespace) {
+            end += p;
+        }
         Some(format!("...{}...", &text[start..end]))
     } else {
         None

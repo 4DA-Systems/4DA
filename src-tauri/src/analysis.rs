@@ -290,6 +290,9 @@ pub(crate) async fn run_deep_initial_scan(app: AppHandle) -> Result<(), String> 
                 if relevant_count > 0 {
                     monitoring::send_notification(&app, relevant_count, results.len());
                 }
+
+                // Run post-analysis innovation hooks (non-blocking)
+                run_post_analysis_hooks(&results);
             }
             Err(e) => {
                 error!(target: "4da::analysis", error = %e, "Deep initial scan failed");
@@ -635,6 +638,9 @@ pub(crate) async fn run_cached_analysis(app: AppHandle) -> Result<(), String> {
                 }
 
                 void_signal_analysis_complete(&app, &results);
+
+                // Run post-analysis innovation hooks (non-blocking)
+                run_post_analysis_hooks(&results);
             }
             Err(e) => {
                 guard.error = Some(e.clone());
@@ -645,6 +651,67 @@ pub(crate) async fn run_cached_analysis(app: AppHandle) -> Result<(), String> {
     });
 
     Ok(())
+}
+
+/// Run innovation feature hooks after analysis completes
+/// These populate temporal data needed by SignalChains, KnowledgeGaps, etc.
+fn run_post_analysis_hooks(results: &[SourceRelevance]) {
+    if let Ok(conn) = crate::open_db_connection() {
+        // 1. Record attention events for engagement tracking
+        let relevant_count = results.iter().filter(|r| r.relevant && !r.excluded).count();
+        let _ = crate::temporal::record_event(
+            &conn,
+            "attention_event",
+            "analysis_complete",
+            &serde_json::json!({
+                "total_items": results.len(),
+                "relevant_count": relevant_count,
+                "source_types": results.iter()
+                    .map(|r| r.source_type.as_str())
+                    .collect::<std::collections::HashSet<_>>(),
+            }),
+            None,
+            Some(&(chrono::Utc::now() + chrono::Duration::days(30)).to_rfc3339()),
+        );
+
+        // 2. Record topic centroids for semantic drift detection
+        let mut topic_scores: std::collections::HashMap<String, Vec<f32>> =
+            std::collections::HashMap::new();
+        let mut topic_titles: std::collections::HashMap<String, Vec<String>> =
+            std::collections::HashMap::new();
+        for item in results.iter().filter(|r| r.relevant) {
+            let topics = crate::extract_topics(&item.title, "");
+            for topic in topics {
+                topic_scores
+                    .entry(topic.clone())
+                    .or_default()
+                    .push(item.top_score);
+                topic_titles
+                    .entry(topic)
+                    .or_default()
+                    .push(item.title.clone());
+            }
+        }
+        for (topic, scores) in &topic_scores {
+            let avg = scores.iter().sum::<f32>() / scores.len() as f32;
+            let titles = topic_titles
+                .get(topic)
+                .map(|t| t.iter().take(5).cloned().collect::<Vec<_>>())
+                .unwrap_or_default();
+            let _ = crate::semantic_diff::record_topic_centroid(
+                &conn,
+                topic,
+                scores.len() as u32,
+                avg,
+                &titles,
+            );
+        }
+
+        // 3. Scan for reverse mentions of user's projects
+        let _ = crate::reverse_relevance::scan_for_mentions(&conn, 24);
+
+        info!(target: "4da::analysis", "Post-analysis innovation hooks complete");
+    }
 }
 
 /// The actual cache-first analysis implementation
@@ -1205,6 +1272,9 @@ pub(crate) async fn run_background_analysis<R: tauri::Runtime>(
         new_count,
         Some(signal_summary),
     );
+
+    // Run post-analysis innovation hooks for background analysis too
+    run_post_analysis_hooks(&new_results);
 
     info!(target: "4da::monitor",
         new_items = new_count,

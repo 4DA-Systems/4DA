@@ -403,6 +403,40 @@ impl ACE {
                                 }
                             }
 
+                            // Populate project_dependencies table for innovation features
+                            if let Ok(conn) = crate::open_db_connection() {
+                                let project_path = signal
+                                    .manifest_path
+                                    .parent()
+                                    .map(|p| p.to_string_lossy().to_string())
+                                    .unwrap_or_default();
+                                let manifest_type =
+                                    format!("{:?}", signal.manifest_type).to_lowercase();
+                                let language = signal.manifest_type.language();
+                                for dep in &signal.dependencies {
+                                    let _ = crate::temporal::upsert_dependency(
+                                        &conn,
+                                        &project_path,
+                                        &manifest_type,
+                                        dep,
+                                        None,
+                                        false,
+                                        language,
+                                    );
+                                }
+                                for dep in &signal.dev_dependencies {
+                                    let _ = crate::temporal::upsert_dependency(
+                                        &conn,
+                                        &project_path,
+                                        &manifest_type,
+                                        dep,
+                                        None,
+                                        true,
+                                        language,
+                                    );
+                                }
+                            }
+
                             for lang in &signal.languages {
                                 active_topics.push(ActiveTopic {
                                     topic: lang.clone(),
