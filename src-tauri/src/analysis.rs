@@ -7,6 +7,8 @@ use once_cell::sync::Lazy;
 use tauri::{AppHandle, Emitter};
 use tracing::{error, info, warn};
 
+use futures::FutureExt;
+use std::panic::AssertUnwindSafe;
 use std::sync::atomic::Ordering;
 
 use crate::scoring;
@@ -260,17 +262,19 @@ pub(crate) async fn run_deep_initial_scan(app: AppHandle) -> Result<(), String> 
     info!(target: "4da::analysis", "=== DEEP INITIAL SCAN STARTING ===");
     info!(target: "4da::analysis", "This comprehensive scan will fetch 300-500+ items from multiple sources");
 
-    // Spawn background task
+    // Spawn background task with panic recovery
     tokio::spawn(async move {
-        let result = run_deep_initial_scan_impl(&app).await;
+        let result = AssertUnwindSafe(run_deep_initial_scan_impl(&app))
+            .catch_unwind()
+            .await;
 
-        // Update state with result
+        // Update state with result — ALWAYS runs, even after panic
         let state = get_analysis_state();
         let mut guard = state.lock();
         guard.running = false;
 
         match result {
-            Ok(results) => {
+            Ok(Ok(results)) => {
                 guard.completed = true;
                 guard.results = Some(results.clone());
                 guard.last_completed_at =
@@ -294,10 +298,18 @@ pub(crate) async fn run_deep_initial_scan(app: AppHandle) -> Result<(), String> 
                 // Run post-analysis innovation hooks (non-blocking)
                 run_post_analysis_hooks(&results);
             }
-            Err(e) => {
+            Ok(Err(e)) => {
                 error!(target: "4da::analysis", error = %e, "Deep initial scan failed");
                 guard.error = Some(e.clone());
+                drop(guard);
                 let _ = app.emit("analysis-error", &e);
+            }
+            Err(_panic) => {
+                let msg = "Deep scan panicked (internal error)".to_string();
+                error!(target: "4da::analysis", "Deep scan task panicked — running flag cleared");
+                guard.error = Some(msg.clone());
+                drop(guard);
+                let _ = app.emit("analysis-error", &msg);
             }
         }
     });
@@ -611,17 +623,19 @@ pub(crate) async fn run_cached_analysis(app: AppHandle) -> Result<(), String> {
         guard.started_at = Some(chrono::Utc::now().timestamp());
     }
 
-    // Spawn background task
+    // Spawn background task with panic recovery
     tokio::spawn(async move {
-        let result = analyze_cached_content_impl(&app).await;
+        let result = AssertUnwindSafe(analyze_cached_content_impl(&app))
+            .catch_unwind()
+            .await;
 
-        // Update state with result
+        // Update state with result — ALWAYS runs, even after panic
         let state = get_analysis_state();
         let mut guard = state.lock();
         guard.running = false;
 
         match result {
-            Ok(results) => {
+            Ok(Ok(results)) => {
                 guard.completed = true;
                 guard.results = Some(results.clone());
                 guard.last_completed_at =
@@ -642,9 +656,18 @@ pub(crate) async fn run_cached_analysis(app: AppHandle) -> Result<(), String> {
                 // Run post-analysis innovation hooks (non-blocking)
                 run_post_analysis_hooks(&results);
             }
-            Err(e) => {
+            Ok(Err(e)) => {
                 guard.error = Some(e.clone());
+                drop(guard);
                 let _ = app.emit("analysis-error", &e);
+                void_signal_error(&app);
+            }
+            Err(_panic) => {
+                let msg = "Analysis panicked (internal error)".to_string();
+                error!(target: "4da::analysis", "Analysis task panicked — running flag cleared");
+                guard.error = Some(msg.clone());
+                drop(guard);
+                let _ = app.emit("analysis-error", &msg);
                 void_signal_error(&app);
             }
         }

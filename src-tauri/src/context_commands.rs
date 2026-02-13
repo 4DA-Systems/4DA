@@ -28,6 +28,8 @@ const SKIP_DIRS: &[&str] = &[
     "specs",
     "_future",
     "dev-tools",
+    "ton-library",
+    "test-context",
 ];
 
 /// Files to skip — project meta-docs that pollute context with generic tech terms

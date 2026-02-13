@@ -719,8 +719,37 @@ fn extract_search_terms(name: &str) -> Vec<String> {
 fn has_language_context_nearby(text: &str, position: usize, window: usize) -> bool {
     let start = position.saturating_sub(window);
     let end = (position + window).min(text.len());
+    // Snap to char boundaries to avoid panicking on multi-byte UTF-8
+    let start = snap_to_char_boundary(text, start, false);
+    let end = snap_to_char_boundary(text, end, true);
     let context = &text[start..end];
     LANGUAGE_CONTEXT_WORDS.iter().any(|w| context.contains(w))
+}
+
+/// Snap a byte index to the nearest valid char boundary.
+/// If `forward` is true, snaps forward (for end indices); otherwise snaps backward (for start indices).
+fn snap_to_char_boundary(s: &str, index: usize, forward: bool) -> usize {
+    if index >= s.len() {
+        return s.len();
+    }
+    if s.is_char_boundary(index) {
+        return index;
+    }
+    if forward {
+        // Walk forward to next char boundary
+        let mut i = index;
+        while i < s.len() && !s.is_char_boundary(i) {
+            i += 1;
+        }
+        i
+    } else {
+        // Walk backward to previous char boundary
+        let mut i = index;
+        while i > 0 && !s.is_char_boundary(i) {
+            i -= 1;
+        }
+        i
+    }
 }
 
 /// Parse major version from a semver string ("1.2.3" -> Some(1))
@@ -753,6 +782,7 @@ fn compare_version_in_content(
     for (idx, _) in text_lower.match_indices(&pkg_lower) {
         let start = idx;
         let end = (idx + pkg_lower.len() + 40).min(text_lower.len());
+        let end = snap_to_char_boundary(&text_lower, end, true);
         let nearby = &text_lower[start..end];
 
         // Match patterns: "React 19", "tokio 2.0", "v3", "version 5.1"
