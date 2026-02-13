@@ -154,6 +154,14 @@ export const ResultItem = memo(function ResultItem({
                   }[item.signal_type] || item.signal_type}
                 </span>
               )}
+              {item.score_breakdown?.matched_deps && item.score_breakdown.matched_deps.length > 0 && (
+                <span
+                  className="flex-shrink-0 text-[10px] px-1.5 py-0.5 rounded font-medium bg-emerald-500/20 text-emerald-400"
+                  title={`Affects: ${item.score_breakdown.matched_deps.join(', ')}`}
+                >
+                  Stack
+                </span>
+              )}
             </div>
             {item.url && (
               <div className="text-xs text-text-muted truncate font-mono mt-1">

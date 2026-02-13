@@ -54,6 +54,84 @@ impl GapSeverity {
 // Implementation
 // ============================================================================
 
+/// Build the user's tech domain from declared + detected tech.
+/// Only dependencies matching this domain produce knowledge gaps.
+fn build_tech_domain(conn: &rusqlite::Connection) -> std::collections::HashSet<String> {
+    let mut domain = std::collections::HashSet::new();
+
+    // Declared tech from onboarding (tech_stack.technology)
+    if let Ok(mut stmt) = conn.prepare("SELECT technology FROM tech_stack") {
+        if let Ok(rows) = stmt.query_map([], |row| row.get::<_, String>(0)) {
+            for tech in rows.flatten() {
+                domain.insert(tech.to_lowercase());
+            }
+        }
+    }
+
+    // Auto-detected tech (Language, Framework, Database, Library — not Platform)
+    if let Ok(mut stmt) = conn.prepare(
+        "SELECT name FROM detected_tech WHERE category IN ('Language', 'Framework', 'Database', 'Library') AND confidence >= 0.5",
+    ) {
+        if let Ok(rows) = stmt.query_map([], |row| row.get::<_, String>(0)) {
+            for tech in rows.flatten() {
+                domain.insert(tech.to_lowercase());
+            }
+        }
+    }
+
+    // Declared interests (explicit_interests.topic)
+    if let Ok(mut stmt) = conn.prepare("SELECT topic FROM explicit_interests") {
+        if let Ok(rows) = stmt.query_map([], |row| row.get::<_, String>(0)) {
+            for topic in rows.flatten() {
+                domain.insert(topic.to_lowercase());
+            }
+        }
+    }
+
+    domain
+}
+
+/// Check if a dependency name is relevant to the user's tech domain.
+/// A dep is relevant if its name appears in the domain set, or if it's a real
+/// package name (>= 4 chars, not a common English word).
+fn is_dep_in_domain(dep_name: &str, domain: &std::collections::HashSet<String>) -> bool {
+    let lower = dep_name.to_lowercase();
+
+    // Direct match against domain
+    if domain.contains(&lower) {
+        return true;
+    }
+
+    // Check if the dep name is a common non-tech word that produces false positives.
+    // These are real English words that appear as package names but match irrelevant articles.
+    const GENERIC_WORDS: &[&str] = &[
+        "space", "time", "image", "color", "event", "signal", "query", "table", "value", "error",
+        "block", "chain", "field", "point", "path", "link", "node", "tree", "hash", "lock", "pool",
+        "pipe", "ring", "slot", "core", "base", "data", "text", "font", "icon", "form", "grid",
+        "card", "chip", "port", "test", "mock", "seed", "rand", "once", "sync", "glob", "term",
+        "proc", "nano", "meta", "auto", "crypto", "audio", "video", "media", "style", "theme",
+        "toast", "modal", "badge", "alert", "popup",
+        // Common non-tech words that become package names
+        "apple", "fashion", "dining", "sport", "music", "photo", "movie", "cosmos", "stellar",
+        "orbit", "rocket", "matrix", "nova", "pulse", "amber", "coral", "ivory", "slate", "storm",
+    ];
+
+    if GENERIC_WORDS.contains(&lower.as_str()) {
+        return false;
+    }
+
+    // If domain is empty (no onboarding done), allow all deps (backward compat)
+    if domain.is_empty() {
+        return true;
+    }
+
+    // For deps not in domain and not obviously generic: check if any domain tech
+    // is a substring match (e.g., dep "rusqlite" matches domain "rust" or "sqlite")
+    domain
+        .iter()
+        .any(|tech| lower.contains(tech.as_str()) || tech.contains(lower.as_str()))
+}
+
 /// Detect knowledge gaps across all tracked dependencies
 pub fn detect_knowledge_gaps(conn: &rusqlite::Connection) -> Result<Vec<KnowledgeGap>, String> {
     // Get all tracked dependencies
@@ -61,6 +139,9 @@ pub fn detect_knowledge_gaps(conn: &rusqlite::Connection) -> Result<Vec<Knowledg
     if deps.is_empty() {
         return Ok(vec![]);
     }
+
+    // Build user's tech domain for filtering
+    let domain = build_tech_domain(conn);
 
     // Deduplicate deps by package name (same dep across projects → one gap)
     let mut seen_deps: std::collections::HashMap<String, Vec<String>> =
@@ -83,6 +164,11 @@ pub fn detect_knowledge_gaps(conn: &rusqlite::Connection) -> Result<Vec<Knowledg
 
         // Skip deps with very short names — too generic for LIKE matching
         if dep.package_name.len() < 4 {
+            continue;
+        }
+
+        // Domain filter: only show gaps for deps relevant to user's tech stack
+        if !is_dep_in_domain(&dep.package_name, &domain) {
             continue;
         }
 
@@ -130,7 +216,8 @@ pub fn detect_knowledge_gaps(conn: &rusqlite::Connection) -> Result<Vec<Knowledg
             )
     });
 
-    gaps.truncate(20);
+    // Cap at 10 gaps — quality over quantity
+    gaps.truncate(10);
     info!(target: "4da::knowledge_decay", gaps = gaps.len(), "Knowledge gap detection complete");
     Ok(gaps)
 }

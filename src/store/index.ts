@@ -607,7 +607,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
   // =========================================================================
   sourceFilters: new Set(ALL_SOURCES),
   sortBy: 'score',
-  showOnlyRelevant: false,
+  showOnlyRelevant: true,
 
   toggleSourceFilter: (source) => {
     set(state => {

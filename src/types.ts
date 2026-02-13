@@ -47,6 +47,10 @@ export interface ScoreBreakdown {
   signal_count?: number;
   confirmed_signals?: string[];
   confirmation_mult?: number;
+  /** Dependency match score (0.0-1.0): how strongly content matches installed packages */
+  dep_match_score?: number;
+  /** Package names from user's dependency graph that matched this content */
+  matched_deps?: string[];
 }
 
 export interface AnalysisProgress {

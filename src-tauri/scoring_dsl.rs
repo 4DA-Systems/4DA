@@ -849,9 +849,10 @@ fn validate(nodes: &[AstNode]) -> Vec<ValidationError> {
             }
 
             AstNode::ConfirmationGate { entries, lines } => {
-                // Completeness: must have 0-4
+                // Completeness: must have 0-N (N = max key present, minimum 4)
                 let keys: Vec<u8> = entries.iter().map(|e| e.0).collect();
-                for required in 0..=4u8 {
+                let max_level = keys.iter().copied().max().unwrap_or(4).max(4);
+                for required in 0..=max_level {
                     if !keys.contains(&required) {
                         let line = lines.first().copied().unwrap_or(0);
                         errors.push(ValidationError {
@@ -981,9 +982,10 @@ fn validate(nodes: &[AstNode]) -> Vec<ValidationError> {
             }
 
             AstNode::ConfidenceBonuses { entries, lines } => {
-                // Completeness: must have 0-4
+                // Completeness: must have 0-N (N = max key present, minimum 4)
                 let keys: Vec<u8> = entries.iter().map(|e| e.0).collect();
-                for required in 0..=4u8 {
+                let max_level = keys.iter().copied().max().unwrap_or(4).max(4);
+                for required in 0..=max_level {
                     if !keys.contains(&required) {
                         let line = lines.first().copied().unwrap_or(0);
                         errors.push(ValidationError {

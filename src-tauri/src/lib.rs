@@ -153,15 +153,21 @@ pub struct ScoreBreakdown {
     #[serde(default)]
     pub source_quality_boost: f32,
     pub confidence_by_signal: std::collections::HashMap<String, f32>,
-    /// Number of independent signal axes that confirmed relevance (0-4)
+    /// Number of independent signal axes that confirmed relevance (0-5)
     #[serde(default)]
     pub signal_count: u8,
-    /// Names of confirmed signal axes (e.g. ["context", "ace"])
+    /// Names of confirmed signal axes (e.g. ["context", "ace", "dependency"])
     #[serde(default)]
     pub confirmed_signals: Vec<String>,
     /// Multiplier applied by confirmation gate
     #[serde(default = "default_confirmation_mult")]
     pub confirmation_mult: f32,
+    /// Dependency match score (0.0-1.0): how strongly content matches user's installed packages
+    #[serde(default)]
+    pub dep_match_score: f32,
+    /// Package names from user's dependency graph that matched this content
+    #[serde(default)]
+    pub matched_deps: Vec<String>,
 }
 
 fn default_freshness() -> f32 {
@@ -1983,6 +1989,7 @@ async fn compute_relevance() -> Result<Vec<SourceRelevance>, String> {
                 &topics,
                 0.0, // No feedback boost in fresh-fetch path
                 affinity_mult,
+                0.0, // No dep matching in fresh-fetch path (scored in cached analysis)
             );
 
         // PASIFA: Apply unified multiplicative scoring on gated score
@@ -2083,6 +2090,8 @@ async fn compute_relevance() -> Result<Vec<SourceRelevance>, String> {
             signal_count,
             confirmed_signals,
             confirmation_mult,
+            dep_match_score: 0.0,
+            matched_deps: vec![],
         };
 
         results.push(SourceRelevance {
