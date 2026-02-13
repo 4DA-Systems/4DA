@@ -85,7 +85,9 @@ export const KnowledgeGapsPanel = memo(function KnowledgeGapsPanel() {
                   </div>
                 )}
                 <div className="text-[10px] text-gray-600 mt-1">
-                  {gap.days_since_last_engagement} days since last engagement · {gap.project_path}
+                  {gap.days_since_last_engagement >= 999
+                    ? 'No engagement recorded'
+                    : `${gap.days_since_last_engagement}d since last engagement`} · {gap.project_path}
                 </div>
               </div>
             );
