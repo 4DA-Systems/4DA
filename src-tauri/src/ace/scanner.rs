@@ -51,7 +51,7 @@ impl ManifestType {
         }
     }
 
-    fn language(&self) -> &'static str {
+    pub(crate) fn language(&self) -> &'static str {
         match self {
             ManifestType::CargoToml => "rust",
             ManifestType::PackageJson => "javascript",
