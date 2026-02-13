@@ -4,16 +4,19 @@ use tracing::{debug, info, warn};
 use crate::ace;
 use crate::context_engine;
 use crate::db::Database;
+use crate::scoring_config;
 use crate::signals;
 use crate::{
     check_exclusions, embed_texts, extract_topics, get_ace_engine, get_context_engine,
     get_relevance_threshold, RelevanceMatch, ScoreBreakdown, SourceRelevance,
 };
+use fourda_macros::{confirmation_gate, score_component, ScoringBuilder};
 
 /// Calibrate a raw similarity score (typically compressed in [0.3-0.6]) into
 /// a spread distribution using a sigmoid stretch. Centers at 0.48 (empirical
 /// midpoint for text-embedding-3-small L2 distances) and scales to use the
 /// full [0.05-0.95] range. This fixes the "everything scores 45-50%" problem.
+#[score_component(output_range = "0.0..=1.0")]
 fn calibrate_score(raw: f32) -> f32 {
     if raw <= 0.0 {
         return 0.0;
@@ -24,10 +27,11 @@ fn calibrate_score(raw: f32) -> f32 {
     // Sigmoid stretch: 1 / (1 + exp((center - raw) * scale))
     // center=0.48, scale=12 maps the typical [0.40-0.56] band to [0.15-0.85]
     // (scale=20 was too aggressive, compressing near edges)
-    1.0 / (1.0 + ((0.48 - raw) * 12.0).exp())
+    1.0 / (1.0 + ((scoring_config::SIGMOID_CENTER - raw) * scoring_config::SIGMOID_SCALE).exp())
 }
 
 /// Compute interest score by comparing item embedding against interest embeddings
+#[score_component(output_range = "0.0..=1.0")]
 pub(crate) fn compute_interest_score(
     item_embedding: &[f32],
     interests: &[context_engine::Interest],
@@ -102,11 +106,11 @@ fn interest_specificity_weight(interest_topic: &str) -> f32 {
         .any(|b| topic_lower == *b || topic_lower.contains(b));
 
     if is_broad {
-        0.25 // Broad terms contribute 25% of normal weight
+        scoring_config::SPECIFICITY_BROAD // Broad terms contribute 25% of normal weight
     } else if word_count <= 1 {
-        0.60 // Single-word terms are moderately specific
+        scoring_config::SPECIFICITY_SINGLE_WORD // Single-word terms are moderately specific
     } else {
-        1.00 // Multi-word specific terms get full weight
+        scoring_config::SPECIFICITY_MULTI_WORD // Multi-word specific terms get full weight
     }
 }
 
@@ -142,7 +146,7 @@ fn embedding_specificity_weight(interest_topic: &str) -> f32 {
         .iter()
         .any(|b| topic_lower == *b || topic_lower.contains(b));
     if is_broad {
-        0.40
+        scoring_config::SPECIFICITY_EMBEDDING_BROAD
     } else {
         1.0
     }
@@ -192,6 +196,7 @@ fn best_interest_specificity_weight(
 }
 
 /// Result of counting how many independent signal axes confirm relevance
+#[confirmation_gate(axes = ["context", "interest", "ace", "learned"])]
 struct SignalConfirmation {
     context_confirmed: bool,
     interest_confirmed: bool,
@@ -236,15 +241,17 @@ fn count_confirmed_signals(
     feedback_boost: f32,
     affinity_mult: f32,
 ) -> SignalConfirmation {
-    let context_confirmed = context_score >= 0.45;
-    let interest_confirmed = interest_score >= 0.50 || keyword_score >= 0.60;
+    let context_confirmed = context_score >= scoring_config::CONTEXT_THRESHOLD;
+    let interest_confirmed = interest_score >= scoring_config::INTEREST_THRESHOLD
+        || keyword_score >= scoring_config::KEYWORD_THRESHOLD;
     // ACE confirmed: require semantic boost OR active topic match (NOT broad detected_tech).
     // Uses word-boundary-aware matching to prevent "frustrating"→"rust" false positives.
-    let ace_confirmed = semantic_boost >= 0.12
+    let ace_confirmed = semantic_boost >= scoring_config::SEMANTIC_THRESHOLD
         || topics
             .iter()
             .any(|t| ace_ctx.active_topics.iter().any(|at| topic_overlaps(t, at)));
-    let learned_confirmed = feedback_boost > 0.05 || affinity_mult >= 1.15;
+    let learned_confirmed = feedback_boost > scoring_config::FEEDBACK_THRESHOLD
+        || affinity_mult >= scoring_config::AFFINITY_THRESHOLD;
 
     let count = [
         context_confirmed,
@@ -294,13 +301,8 @@ pub(crate) fn apply_confirmation_gate(
         affinity_mult,
     );
 
-    let (conf_mult, score_ceiling) = match confirmation.count {
-        0 => (0.25_f32, 0.20_f32), // No signals agree → heavy penalty
-        1 => (0.45, 0.32),         // One signal → ceiling BELOW 0.35 threshold
-        2 => (1.00, 0.80),         // Two signals → pass gate
-        3 => (1.10, 0.92),         // Three signals → mild boost
-        _ => (1.20, 1.00),         // All four → strong boost
-    };
+    let idx = (confirmation.count as usize).min(scoring_config::CONFIRMATION_GATE.len() - 1);
+    let (conf_mult, score_ceiling) = scoring_config::CONFIRMATION_GATE[idx];
 
     let gated = (base_score * conf_mult).min(score_ceiling);
     let names = confirmation.confirmed_names();
@@ -317,6 +319,7 @@ const SHORT_TECH_KEYWORDS: &[&str] = &[
 
 /// Keyword-based interest matching: boosts items that literally contain declared interest terms.
 /// Complements semantic matching which can miss exact keyword matches.
+#[score_component(output_range = "0.0..=1.0")]
 fn compute_keyword_interest_score(
     title: &str,
     content: &str,
@@ -875,6 +878,7 @@ pub(crate) async fn get_topic_embeddings(
 
 /// Compute affinity multiplier from learned topic preferences
 /// PASIFA: Applies learned affinities as multiplicative factors with confidence scaling
+#[score_component(output_range = "0.3..=1.7")]
 pub(crate) fn compute_affinity_multiplier(topics: &[String], ace_ctx: &ACEContext) -> f32 {
     if ace_ctx.topic_affinities.is_empty() {
         return 1.0; // No learned preferences, neutral
@@ -911,11 +915,15 @@ pub(crate) fn compute_affinity_multiplier(topics: &[String], ace_ctx: &ACEContex
     // High confidence (1.0) + high affinity (0.8) -> effect = 0.8 -> mult = 1.56
     // Low confidence (0.3) + high affinity (0.8) -> effect = 0.24 -> mult = 1.17
     let avg_effect = effect_sum / match_count as f32;
-    (1.0 + avg_effect * 0.7).clamp(0.3, 1.7)
+    (1.0 + avg_effect * scoring_config::AFFINITY_EFFECT).clamp(
+        scoring_config::AFFINITY_MULT_RANGE.0,
+        scoring_config::AFFINITY_MULT_RANGE.1,
+    )
 }
 
 /// Compute anti-topic penalty as a multiplicative factor
 /// PASIFA: Items matching anti-topics get reduced score based on confidence
+#[score_component(output_range = "0.0..=0.7")]
 pub(crate) fn compute_anti_penalty(topics: &[String], ace_ctx: &ACEContext) -> f32 {
     if ace_ctx.anti_topics.is_empty() {
         return 0.0; // No anti-topics, no penalty
@@ -938,13 +946,14 @@ pub(crate) fn compute_anti_penalty(topics: &[String], ace_ctx: &ACEContext) -> f
         }
     }
 
-    // Cap total penalty at 0.7 (never fully zero out)
-    total_penalty.min(0.7)
+    // Cap total penalty at configured max (never fully zero out)
+    total_penalty.min(scoring_config::ANTI_PENALTY_MAX)
 }
 
 /// Implicit penalty for items with zero tech/topic overlap.
 /// If none of the item's extracted topics match ANY of: declared_tech, detected_tech, or active_topics,
 /// apply a mild penalty. Absence of evidence is weak — only 0.12 penalty.
+#[score_component(output_range = "0.0..=0.12")]
 pub(crate) fn compute_off_domain_penalty(
     topics: &[String],
     ace_ctx: &ACEContext,
@@ -973,7 +982,7 @@ pub(crate) fn compute_off_domain_penalty(
     if has_overlap {
         0.0
     } else {
-        0.12
+        scoring_config::OFF_DOMAIN_PENALTY
     }
 }
 
@@ -1004,29 +1013,17 @@ pub(crate) fn compute_unified_relevance(
 ///   - Items 3-7 days old: 0.92x decay
 ///   - Items 1-4 weeks old: 0.85x decay
 ///   - Items > 1 month old: 0.80x floor
+#[score_component(output_range = "0.8..=1.1")]
 pub(crate) fn compute_temporal_freshness(created_at: &chrono::DateTime<chrono::Utc>) -> f32 {
     let age_hours = ((chrono::Utc::now() - *created_at).num_minutes() as f32 / 60.0).max(0.0);
 
-    if age_hours < 3.0 {
-        1.10 // Breaking/fresh: moderate boost (was 1.20)
-    } else if age_hours < 12.0 {
-        1.08 // (was 1.15)
-    } else if age_hours < 24.0 {
-        1.05 // Today: still fresh (was 1.10)
-    } else if age_hours < 72.0 {
-        1.0 // 1-3 days: neutral
-    } else if age_hours < 168.0 {
-        0.92 // 3-7 days: mild decay
-    } else if age_hours < 720.0 {
-        0.85 // 1-4 weeks: noticeable decay (was 0.82)
-    } else {
-        0.80 // >1 month: significant decay (was 0.70)
-    }
+    scoring_config::freshness_multiplier(age_hours)
 }
 
 /// Calculate confidence score based on available signals and confirmation count.
 /// Returns a value between 0.0 and 1.0 indicating how confident we are in the scoring.
 /// The confirmation_count directly scales confidence: more confirmed axes = higher confidence.
+#[score_component(output_range = "0.0..=1.0")]
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn calculate_confidence(
     context_score: f32,
@@ -1069,7 +1066,7 @@ pub(crate) fn calculate_confidence(
 
     // If we have multiple signals, they reinforce each other
     if confidence_signals.is_empty() {
-        return 0.3; // Low confidence - no strong signals
+        return scoring_config::CONFIDENCE_FLOOR_NO_SIGNAL; // Low confidence - no strong signals
     }
 
     // Combine signals: average with bonus for confirmation count
@@ -1077,13 +1074,8 @@ pub(crate) fn calculate_confidence(
 
     // Confirmation count directly scales confidence:
     // 0 confirmed → -0.15, 1 confirmed → 0.0, 2 confirmed → +0.10, 3 → +0.15, 4 → +0.20
-    let confirmation_bonus = match confirmation_count {
-        0 => -0.15,
-        1 => 0.0,
-        2 => 0.10,
-        3 => 0.15,
-        _ => 0.20,
-    };
+    let idx = (confirmation_count as usize).min(scoring_config::CONFIDENCE_BONUSES.len() - 1);
+    let confirmation_bonus = scoring_config::CONFIDENCE_BONUSES[idx];
 
     (avg_confidence + confirmation_bonus).clamp(0.0, 1.0)
 }
@@ -1104,6 +1096,7 @@ pub(crate) struct ScoringInput<'a> {
 }
 
 /// Pre-loaded context for scoring (computed once per analysis run)
+#[derive(ScoringBuilder)]
 pub(crate) struct ScoringContext {
     pub cached_context_count: i64,
     pub interest_count: usize,
@@ -1284,14 +1277,22 @@ pub(crate) fn score_item(
     let base_score = if ctx.cached_context_count > 0 && ctx.interest_count > 0 {
         // Smoothly shift weight toward context as context_score increases
         // context_score=0.0 → ctx_w=0.15, context_score=1.0 → ctx_w=0.55
-        let ctx_w = (0.15 + context_score * 0.40).clamp(0.15, 0.55);
+        let ctx_w = (scoring_config::BASE_BOTH_CONTEXT_BASE
+            + context_score * scoring_config::BASE_BOTH_CONTEXT_SCALE)
+            .clamp(
+                scoring_config::BASE_BOTH_CONTEXT_BASE,
+                scoring_config::BASE_BOTH_CONTEXT_MAX,
+            );
         let remaining = 1.0 - ctx_w;
-        let int_w = remaining * 0.55; // interests get ~55% of remainder
-        let kw_w = remaining * 0.45; // keywords get ~45% of remainder
+        let int_w = remaining * scoring_config::BASE_BOTH_INTEREST_SHARE; // interests get ~55% of remainder
+        let kw_w = remaining * scoring_config::BASE_BOTH_KEYWORD_SHARE; // keywords get ~45% of remainder
         (context_score * ctx_w + interest_score * int_w + keyword_score * kw_w + semantic_boost)
             .min(1.0)
     } else if ctx.interest_count > 0 {
-        (interest_score * 0.45 + keyword_score * 0.35 + semantic_boost * 1.2).min(1.0)
+        (interest_score * scoring_config::INTEREST_ONLY_INTEREST_W
+            + keyword_score * scoring_config::INTEREST_ONLY_KEYWORD_W
+            + semantic_boost * scoring_config::INTEREST_ONLY_SEMANTIC_MULT)
+            .min(1.0)
     } else if ctx.cached_context_count > 0 {
         (context_score + semantic_boost).min(1.0)
     } else {
@@ -1315,7 +1316,12 @@ pub(crate) fn score_item(
         .source_quality
         .get(input.source_type)
         .copied()
-        .map(|score| (score * 0.10).clamp(-0.10, 0.10))
+        .map(|score| {
+            (score * scoring_config::SOURCE_QUALITY_MULT).clamp(
+                scoring_config::SOURCE_QUALITY_CAP_RANGE.0,
+                scoring_config::SOURCE_QUALITY_CAP_RANGE.1,
+            )
+        })
         .unwrap_or(0.0);
     let base_score = (base_score + source_quality_boost).clamp(0.0, 1.0);
 
@@ -1336,7 +1342,10 @@ pub(crate) fn score_item(
         if match_count > 0 {
             // Scale: net_score ranges from -1.0 to 1.0
             // Apply as +-15% boost per matching topic, capped at +-20%
-            ((boost_sum / match_count as f64) * 0.15).clamp(-0.20, 0.20) as f32
+            ((boost_sum / match_count as f64) * scoring_config::FEEDBACK_SCALE as f64).clamp(
+                scoring_config::FEEDBACK_CAP_RANGE.0 as f64,
+                scoring_config::FEEDBACK_CAP_RANGE.1 as f64,
+            ) as f32
         } else {
             0.0
         }
@@ -1363,7 +1372,8 @@ pub(crate) fn score_item(
     let combined_score = compute_unified_relevance(gated_score, &topics, &ctx.ace_ctx);
     // Quality floor: must pass threshold AND either have 2+ confirmed signals or strong score
     let relevant = combined_score >= get_relevance_threshold()
-        && (signal_count >= 2 || combined_score >= 0.55);
+        && (signal_count >= scoring_config::QUALITY_FLOOR_MIN_SIGNALS as u8
+            || combined_score >= scoring_config::QUALITY_FLOOR_MIN_SCORE);
 
     let anti_penalty = compute_anti_penalty(&topics, &ctx.ace_ctx);
 
@@ -1434,12 +1444,16 @@ pub(crate) fn score_item(
             ) {
                 Some(mut c) => {
                     // Phase 3: Score-aware priority cap — low scores cannot produce HIGH priority
-                    if combined_score < 0.35 && c.priority > signals::SignalPriority::Low {
+                    if combined_score < scoring_config::LOW_SCORE_CAP
+                        && c.priority > signals::SignalPriority::Low
+                    {
                         c.priority = signals::SignalPriority::Low;
-                    } else if combined_score < 0.45 && c.priority > signals::SignalPriority::Medium
+                    } else if combined_score < scoring_config::MEDIUM_SCORE_CAP
+                        && c.priority > signals::SignalPriority::Medium
                     {
                         c.priority = signals::SignalPriority::Medium;
-                    } else if combined_score > 0.70 && c.priority < signals::SignalPriority::Medium
+                    } else if combined_score > scoring_config::HIGH_SCORE_FLOOR
+                        && c.priority < signals::SignalPriority::Medium
                     {
                         c.priority = signals::SignalPriority::Medium;
                     }
@@ -1502,8 +1516,8 @@ pub(crate) fn compute_serendipity_candidates(
         .filter(|r| {
             !r.relevant
             && !r.excluded
-            && r.top_score > 0.15 // Had some score
-            && (r.context_score > 0.2 || r.interest_score > 0.2) // Had at least 1 axis
+            && r.top_score > scoring_config::SERENDIPITY_MIN_SCORE // Had some score
+            && (r.context_score > scoring_config::SERENDIPITY_MIN_AXIS_SCORE || r.interest_score > scoring_config::SERENDIPITY_MIN_AXIS_SCORE) // Had at least 1 axis
         })
         .cloned()
         .collect();
@@ -1533,23 +1547,25 @@ pub(crate) fn compute_serendipity_candidates(
 
 /// Keyword-based ACE boost fallback when embeddings unavailable
 /// Both topics (from extract_topics) and ace_ctx fields are already lowercase
+#[score_component(output_range = "0.0..=0.3")]
 fn compute_keyword_ace_boost(topics: &[String], ace_ctx: &ACEContext) -> f32 {
     let mut boost: f32 = 0.0;
     for topic in topics {
         for active in &ace_ctx.active_topics {
             if topic_overlaps(topic, active) {
-                boost += 0.15 * ace_ctx.topic_confidence.get(active).copied().unwrap_or(0.5);
+                boost += scoring_config::ACE_ACTIVE_TOPIC_BOOST
+                    * ace_ctx.topic_confidence.get(active).copied().unwrap_or(0.5);
                 break;
             }
         }
         for tech in &ace_ctx.detected_tech {
             if topic_overlaps(topic, tech) {
-                boost += 0.12;
+                boost += scoring_config::ACE_DETECTED_TECH_BOOST;
                 break;
             }
         }
     }
-    boost.clamp(0.0, 0.3)
+    boost.clamp(0.0, scoring_config::ACE_MAX_BOOST)
 }
 
 /// Sort results: excluded items last, then by score descending

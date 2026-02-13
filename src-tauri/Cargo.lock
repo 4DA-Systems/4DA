@@ -1437,6 +1437,7 @@ dependencies = [
  "dirs 5.0.1",
  "docx-rs",
  "flate2",
+ "fourda-macros",
  "futures",
  "hex",
  "image 0.25.9",
@@ -1467,6 +1468,15 @@ dependencies = [
  "urlencoding",
  "zerocopy",
  "zip 0.6.6",
+]
+
+[[package]]
+name = "fourda-macros"
+version = "1.0.0"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.114",
 ]
 
 [[package]]

@@ -1,0 +1,109 @@
+@version 1
+
+calibration sigmoid {
+    center: 0.48    # [0.30, 0.70]
+    scale: 12.0     # [5.0, 30.0]
+}
+
+confirmation_gate {
+    0 => (0.25, 0.20)
+    1 => (0.45, 0.32)
+    2 => (1.00, 0.80)
+    3 => (1.10, 0.92)
+    4 => (1.20, 1.00)
+}
+
+signal_thresholds {
+    context:  0.45   # [0.20, 0.80]
+    interest: 0.50   # [0.20, 0.80]
+    keyword:  0.60   # [0.30, 0.90]
+    semantic: 0.12   # [0.05, 0.50]
+    feedback: 0.05   # [0.01, 0.30]
+    affinity: 1.15   # [1.01, 2.00]
+}
+
+freshness_tiers {
+    3.0   => 1.10
+    12.0  => 1.08
+    24.0  => 1.05
+    72.0  => 1.00
+    168.0 => 0.92
+    720.0 => 0.85
+    _     => 0.80
+}
+
+weights base_both {
+    context_base: 0.15    # [0.05, 0.50]
+    context_scale: 0.40   # [0.10, 0.60]
+    context_max: 0.55     # [0.30, 0.80]
+    interest_share: 0.55  # [0.30, 0.80]
+    keyword_share: 0.45   # [0.20, 0.70]
+    # constraint: interest_share + keyword_share == 1.0
+}
+
+weights interest_only {
+    interest_w: 0.45     # [0.20, 0.70]
+    keyword_w: 0.35      # [0.15, 0.60]
+    semantic_mult: 1.2   # [0.5, 2.0]
+}
+
+bounds {
+    affinity_mult: [0.3, 1.7]
+    affinity_effect: 0.7       # [0.3, 1.0]
+    anti_penalty_max: 0.7      # [0.3, 1.0]
+    feedback_cap: [-0.20, 0.20]
+    feedback_scale: 0.15       # [0.05, 0.50]
+    source_quality_cap: [-0.10, 0.10]
+    source_quality_mult: 0.10  # [0.01, 0.30]
+    off_domain_penalty: 0.12   # [0.05, 0.30]
+    relevance_default: 0.50    # [0.30, 0.70]
+}
+
+confidence_bonuses {
+    0 => -0.15
+    1 => 0.0
+    2 => 0.10
+    3 => 0.15
+    4 => 0.20
+}
+
+specificity_weights {
+    broad: 0.25              # [0.10, 0.50]
+    single_word: 0.60        # [0.30, 0.80]
+    multi_word: 1.00         # [0.80, 1.00]
+    embedding_broad: 0.40    # [0.20, 0.60]
+}
+
+keyword_ace_boost {
+    topic_confidence_default: 0.5   # [0.30, 0.80]
+    active_topic_boost: 0.15        # [0.05, 0.40]
+    detected_tech_boost: 0.12       # [0.05, 0.30]
+    max_boost: 0.3                  # [0.10, 0.60]
+}
+
+serendipity {
+    min_score: 0.15          # [0.05, 0.30]
+    min_axis_score: 0.2      # [0.10, 0.40]
+    max_items: 5             # [1, 10]
+}
+
+priority_caps {
+    low_score_cap: 0.35      # [0.20, 0.50]
+    medium_score_cap: 0.45   # [0.30, 0.60]
+    high_score_floor: 0.70   # [0.50, 0.90]
+}
+
+quality_floor {
+    min_signals: 2           # [1, 4]
+    min_score: 0.55          # [0.40, 0.70]
+}
+
+semantic_boost {
+    affinity_clamp: [0.5, 1.5]
+    boost_clamp: [-0.3, 0.5]
+    detected_tech_weight: 0.6   # [0.30, 1.00]
+}
+
+confidence_floor {
+    no_signal: 0.3           # [0.10, 0.50]
+}

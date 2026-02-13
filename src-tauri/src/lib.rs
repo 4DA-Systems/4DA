@@ -46,6 +46,7 @@ mod project_health;
 pub mod query;
 mod reverse_relevance;
 mod scoring;
+pub(crate) mod scoring_config;
 mod semantic_diff;
 mod settings;
 mod settings_commands;

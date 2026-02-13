@@ -87,6 +87,9 @@ zip = "0.6"                  # ZIP archive extraction
 tar = "0.4"                  # TAR archive extraction
 flate2 = "1.0"               # Gzip compression/decompression
 
+# Compile-time scoring macros
+fourda-macros = { path = "fourda-macros" }
+
 [features]
 default = []
 void-universe = []

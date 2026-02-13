@@ -34,6 +34,7 @@ src-tauri/.fastembed_cache/
 
 # Tauri build artifacts
 src-tauri/target/
+src-tauri/fourda-macros/target/
 
 # SQLite database files
 data/*.db
