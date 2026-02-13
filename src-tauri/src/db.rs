@@ -268,6 +268,18 @@ impl Database {
             info!(target: "4da::db", "Phase 3 migration completed");
         }
 
+        // Phase 5 migration: Innovation features infrastructure
+        let current_version: i64 = conn
+            .query_row("SELECT version FROM schema_version", [], |row| row.get(0))
+            .unwrap_or(4);
+
+        if current_version < 5 {
+            info!(target: "4da::db", "Running Phase 5 migration (schema version 5)");
+            Self::migrate_to_phase_5(&conn)?;
+            conn.execute("UPDATE schema_version SET version = 5", [])?;
+            info!(target: "4da::db", "Phase 5 migration completed");
+        }
+
         info!(target: "4da::db", "Database schema initialized with sqlite-vec");
         Ok(())
     }
@@ -478,6 +490,71 @@ impl Database {
             )?;
             info!("Added embedding_status and embed_text columns to source_items");
         }
+
+        Ok(())
+    }
+
+    /// Phase 5 migration: Innovation features infrastructure
+    fn migrate_to_phase_5(conn: &Connection) -> SqliteResult<()> {
+        // Temporal event store for tracking events across features
+        conn.execute_batch(
+            "
+            CREATE TABLE IF NOT EXISTS temporal_events (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                event_type TEXT NOT NULL,
+                subject TEXT NOT NULL,
+                data JSON NOT NULL,
+                embedding BLOB,
+                source_item_id INTEGER,
+                created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                expires_at TEXT
+            );
+            CREATE INDEX IF NOT EXISTS idx_temporal_type_time ON temporal_events(event_type, created_at);
+            CREATE INDEX IF NOT EXISTS idx_temporal_subject ON temporal_events(subject);
+            CREATE INDEX IF NOT EXISTS idx_temporal_expires ON temporal_events(expires_at);
+        ",
+        )?;
+        info!(target: "4da::db", "Created temporal_events table");
+
+        // Project dependencies for enhanced tracking
+        conn.execute_batch(
+            "
+            CREATE TABLE IF NOT EXISTS project_dependencies (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                project_path TEXT NOT NULL,
+                manifest_type TEXT NOT NULL,
+                package_name TEXT NOT NULL,
+                version TEXT,
+                is_dev INTEGER DEFAULT 0,
+                language TEXT NOT NULL,
+                last_scanned TEXT NOT NULL DEFAULT (datetime('now')),
+                UNIQUE(project_path, package_name)
+            );
+            CREATE INDEX IF NOT EXISTS idx_deps_package ON project_dependencies(package_name);
+            CREATE INDEX IF NOT EXISTS idx_deps_project ON project_dependencies(project_path);
+        ",
+        )?;
+        info!(target: "4da::db", "Created project_dependencies table");
+
+        // Cross-item relationships for signal chains, diffs, mentions
+        conn.execute_batch(
+            "
+            CREATE TABLE IF NOT EXISTS item_relationships (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                source_item_id INTEGER NOT NULL,
+                related_item_id INTEGER NOT NULL,
+                relationship_type TEXT NOT NULL,
+                strength REAL DEFAULT 1.0,
+                metadata JSON,
+                created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                UNIQUE(source_item_id, related_item_id, relationship_type)
+            );
+            CREATE INDEX IF NOT EXISTS idx_rel_source ON item_relationships(source_item_id);
+            CREATE INDEX IF NOT EXISTS idx_rel_related ON item_relationships(related_item_id);
+            CREATE INDEX IF NOT EXISTS idx_rel_type ON item_relationships(relationship_type);
+        ",
+        )?;
+        info!(target: "4da::db", "Created item_relationships table");
 
         Ok(())
     }

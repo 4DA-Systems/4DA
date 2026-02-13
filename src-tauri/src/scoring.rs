@@ -47,7 +47,8 @@ pub(crate) fn compute_interest_score(
         if let Some(ref interest_embedding) = interest.embedding {
             let similarity =
                 crate::cosine_similarity_with_norm(item_embedding, item_norm, interest_embedding);
-            let weighted = similarity * interest.weight;
+            let specificity = embedding_specificity_weight(&interest.topic);
+            let weighted = similarity * interest.weight * specificity;
             max_score = max_score.max(weighted);
         }
     }
@@ -106,6 +107,44 @@ fn interest_specificity_weight(interest_topic: &str) -> f32 {
         0.60 // Single-word terms are moderately specific
     } else {
         1.00 // Multi-word specific terms get full weight
+    }
+}
+
+/// Word-boundary-aware topic overlap check for positive signal paths.
+/// Prevents false substring matches like "frustrating" containing "rust"
+/// or "digital" containing "git". Splits on word boundaries (hyphen, slash,
+/// dot, underscore, space) and requires at least one part to match exactly.
+fn topic_overlaps(a: &str, b: &str) -> bool {
+    if a == b {
+        return true;
+    }
+    if a.len() < 3 || b.len() < 3 {
+        return false;
+    }
+    let split_chars = |c: char| c == '-' || c == '/' || c == '.' || c == '_' || c == ' ';
+    let parts_a: Vec<&str> = a.split(split_chars).filter(|p| p.len() >= 3).collect();
+    let parts_b: Vec<&str> = b.split(split_chars).filter(|p| p.len() >= 3).collect();
+
+    // Check if any part of a matches any part of b exactly
+    parts_a
+        .iter()
+        .any(|pa| parts_b.iter().any(|pb| pa == pb))
+        // Also check whole-string against individual parts
+        || parts_b.iter().any(|pb| *pb == a)
+        || parts_a.iter().any(|pa| *pa == b)
+}
+
+/// Specificity weight for embedding-based interest matching.
+/// Broad terms get 0.40x to prevent "Open Source" from dominating via embeddings.
+fn embedding_specificity_weight(interest_topic: &str) -> f32 {
+    let topic_lower = interest_topic.to_lowercase();
+    let is_broad = BROAD_INTEREST_TERMS
+        .iter()
+        .any(|b| topic_lower == *b || topic_lower.contains(b));
+    if is_broad {
+        0.40
+    } else {
+        1.0
     }
 }
 
@@ -199,15 +238,12 @@ fn count_confirmed_signals(
 ) -> SignalConfirmation {
     let context_confirmed = context_score >= 0.45;
     let interest_confirmed = interest_score >= 0.50 || keyword_score >= 0.60;
-    // ACE confirmed: require semantic boost OR active topic match (NOT broad detected_tech)
-    // detected_tech has 95+ entries which matches too broadly
+    // ACE confirmed: require semantic boost OR active topic match (NOT broad detected_tech).
+    // Uses word-boundary-aware matching to prevent "frustrating"→"rust" false positives.
     let ace_confirmed = semantic_boost >= 0.12
-        || topics.iter().any(|t| {
-            ace_ctx
-                .active_topics
-                .iter()
-                .any(|topic| t.contains(topic.as_str()) || topic.contains(t.as_str()))
-        });
+        || topics
+            .iter()
+            .any(|t| ace_ctx.active_topics.iter().any(|at| topic_overlaps(t, at)));
     let learned_confirmed = feedback_boost > 0.05 || affinity_mult >= 1.15;
 
     let count = [
@@ -568,9 +604,23 @@ pub(crate) fn get_ace_context() -> ACEContext {
         }
     }
 
-    // Get detected tech
+    // Get detected tech — filter to meaningful categories with decent confidence.
+    // Exclude Platform (e.g. "windows", "macos", "linux") — developing ON a platform
+    // doesn't mean the user is interested in content ABOUT that platform.
     if let Ok(tech) = ace.get_detected_tech() {
-        ctx.detected_tech = tech.iter().map(|t| t.name.to_lowercase()).collect();
+        ctx.detected_tech = tech
+            .iter()
+            .filter(|t| {
+                matches!(
+                    t.category,
+                    crate::ace::TechCategory::Language
+                        | crate::ace::TechCategory::Framework
+                        | crate::ace::TechCategory::Database
+                ) && t.confidence >= 0.5
+            })
+            .take(20)
+            .map(|t| t.name.to_lowercase())
+            .collect();
     }
 
     // Get anti-topics WITH confidence scores
@@ -669,8 +719,8 @@ pub(crate) fn compute_semantic_ace_boost(
     for tech in &ace_ctx.detected_tech {
         if let Some(tech_emb) = topic_embeddings.get(tech) {
             let sim = crate::cosine_similarity_with_norm(item_embedding, item_norm, tech_emb);
-            weighted_sum += sim * 0.8; // Tech is strong signal
-            weight_total += 0.8;
+            weighted_sum += sim * 0.6; // Detected tech is auto-inferred, weaker than declared (1.0)
+            weight_total += 0.6;
             max_similarity = max_similarity.max(sim);
         }
     }
@@ -890,6 +940,41 @@ pub(crate) fn compute_anti_penalty(topics: &[String], ace_ctx: &ACEContext) -> f
 
     // Cap total penalty at 0.7 (never fully zero out)
     total_penalty.min(0.7)
+}
+
+/// Implicit penalty for items with zero tech/topic overlap.
+/// If none of the item's extracted topics match ANY of: declared_tech, detected_tech, or active_topics,
+/// apply a mild penalty. Absence of evidence is weak — only 0.12 penalty.
+pub(crate) fn compute_off_domain_penalty(
+    topics: &[String],
+    ace_ctx: &ACEContext,
+    declared_tech: &[String],
+) -> f32 {
+    if topics.is_empty()
+        || (declared_tech.is_empty()
+            && ace_ctx.detected_tech.is_empty()
+            && ace_ctx.active_topics.is_empty())
+    {
+        return 0.0;
+    }
+
+    let has_overlap = topics.iter().any(|topic| {
+        declared_tech.iter().any(|tech| topic_overlaps(topic, tech))
+            || ace_ctx
+                .detected_tech
+                .iter()
+                .any(|tech| topic_overlaps(topic, tech))
+            || ace_ctx
+                .active_topics
+                .iter()
+                .any(|at| topic_overlaps(topic, at))
+    });
+
+    if has_overlap {
+        0.0
+    } else {
+        0.12
+    }
 }
 
 /// Unified relevance scoring using multiplicative formula
@@ -1145,6 +1230,7 @@ pub(crate) fn score_item(
             signal_triggers: None,
             similar_count: 0,
             similar_titles: vec![],
+            serendipity: false,
         };
     }
 
@@ -1232,6 +1318,10 @@ pub(crate) fn score_item(
         .map(|score| (score * 0.10).clamp(-0.10, 0.10))
         .unwrap_or(0.0);
     let base_score = (base_score + source_quality_boost).clamp(0.0, 1.0);
+
+    // Off-domain penalty: mild penalty for items with zero tech/topic overlap
+    let off_domain_penalty = compute_off_domain_penalty(&topics, &ctx.ace_ctx, &ctx.declared_tech);
+    let base_score = (base_score - off_domain_penalty).clamp(0.0, 1.0);
 
     // Feedback learning boost (Phase 9): apply feedback-derived topic multiplier
     let feedback_boost = if !ctx.feedback_boosts.is_empty() {
@@ -1390,7 +1480,55 @@ pub(crate) fn score_item(
         signal_triggers: sig_triggers,
         similar_count: 0,
         similar_titles: vec![],
+        serendipity: false,
     }
+}
+
+/// Compute serendipity candidates from items that failed the confirmation gate
+/// but scored well on exactly 1 axis (partial relevance, different perspective)
+pub(crate) fn compute_serendipity_candidates(
+    results: &[SourceRelevance],
+    budget_percent: u8,
+) -> Vec<SourceRelevance> {
+    // Budget: how many serendipity items to include
+    let total_relevant = results.iter().filter(|r| r.relevant && !r.excluded).count();
+    let budget = ((total_relevant.max(5) * budget_percent as usize) / 100)
+        .max(1)
+        .min(5);
+
+    // Find items that failed the gate but had some signal
+    let mut candidates: Vec<SourceRelevance> = results
+        .iter()
+        .filter(|r| {
+            !r.relevant
+            && !r.excluded
+            && r.top_score > 0.15 // Had some score
+            && (r.context_score > 0.2 || r.interest_score > 0.2) // Had at least 1 axis
+        })
+        .cloned()
+        .collect();
+
+    // Sort by top_score (highest partial scores first)
+    candidates.sort_by(|a, b| {
+        b.top_score
+            .partial_cmp(&a.top_score)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+
+    // Mark as serendipity and make them "relevant" so they show up
+    candidates
+        .into_iter()
+        .take(budget)
+        .map(|mut item| {
+            item.serendipity = true;
+            item.relevant = true;
+            item.explanation = Some(
+                "Serendipity: outside your usual interests but may offer a fresh perspective"
+                    .to_string(),
+            );
+            item
+        })
+        .collect()
 }
 
 /// Keyword-based ACE boost fallback when embeddings unavailable
@@ -1399,13 +1537,13 @@ fn compute_keyword_ace_boost(topics: &[String], ace_ctx: &ACEContext) -> f32 {
     let mut boost: f32 = 0.0;
     for topic in topics {
         for active in &ace_ctx.active_topics {
-            if topic.contains(active.as_str()) || active.contains(topic.as_str()) {
+            if topic_overlaps(topic, active) {
                 boost += 0.15 * ace_ctx.topic_confidence.get(active).copied().unwrap_or(0.5);
                 break;
             }
         }
         for tech in &ace_ctx.detected_tech {
-            if topic.contains(tech.as_str()) || tech.contains(topic.as_str()) {
+            if topic_overlaps(topic, tech) {
                 boost += 0.12;
                 break;
             }
@@ -2108,5 +2246,156 @@ mod tests {
     fn test_extract_short_phrase_short_text() {
         let phrase = extract_short_phrase("short");
         assert!(phrase.is_empty()); // Too short to be useful
+    }
+
+    // ========================================================================
+    // Phase 2: Dependency prefix filter test
+    // ========================================================================
+
+    #[test]
+    fn test_dependency_prefix_filtered_from_seeding() {
+        let topics = vec![
+            "@radix-ui/react-select",
+            "@types/node",
+            "react",
+            "typescript",
+        ];
+        let filtered: Vec<_> = topics
+            .into_iter()
+            .filter(|t| !t.starts_with('@') && !t.contains('/') && t.len() > 2)
+            .collect();
+        assert_eq!(filtered, vec!["react", "typescript"]);
+    }
+
+    // ========================================================================
+    // Phase 3: Embedding specificity weight tests
+    // ========================================================================
+
+    #[test]
+    fn test_embedding_specificity_broad_attenuated() {
+        assert_eq!(embedding_specificity_weight("Open Source"), 0.40);
+        assert_eq!(embedding_specificity_weight("AI"), 0.40);
+        assert_eq!(embedding_specificity_weight("machine learning"), 0.40);
+    }
+
+    #[test]
+    fn test_embedding_specificity_specific_full() {
+        assert_eq!(embedding_specificity_weight("Tauri"), 1.0);
+        assert_eq!(embedding_specificity_weight("rust"), 1.0);
+        assert_eq!(embedding_specificity_weight("sqlite-vss"), 1.0);
+    }
+
+    // ========================================================================
+    // Phase 4: Off-domain penalty tests
+    // ========================================================================
+
+    #[test]
+    fn test_off_domain_penalty_with_overlap() {
+        let mut ace_ctx = ACEContext::default();
+        ace_ctx.detected_tech = vec!["rust".to_string()];
+        let declared = vec!["rust".to_string()];
+        let topics = vec!["rust".to_string(), "performance".to_string()];
+        assert_eq!(
+            compute_off_domain_penalty(&topics, &ace_ctx, &declared),
+            0.0
+        );
+    }
+
+    #[test]
+    fn test_off_domain_penalty_no_overlap() {
+        let ace_ctx = ACEContext::default();
+        let declared = vec!["rust".to_string(), "react".to_string()];
+        let topics = vec!["windows".to_string(), "automation".to_string()];
+        assert_eq!(
+            compute_off_domain_penalty(&topics, &ace_ctx, &declared),
+            0.12
+        );
+    }
+
+    #[test]
+    fn test_off_domain_penalty_empty_context() {
+        let ace_ctx = ACEContext::default();
+        let declared: Vec<String> = vec![];
+        let topics = vec!["anything".to_string()];
+        assert_eq!(
+            compute_off_domain_penalty(&topics, &ace_ctx, &declared),
+            0.0
+        );
+    }
+
+    #[test]
+    fn test_off_domain_penalty_active_topic_overlap() {
+        let mut ace_ctx = ACEContext::default();
+        ace_ctx.active_topics = vec!["tauri".to_string()];
+        let declared: Vec<String> = vec![];
+        let topics = vec!["tauri".to_string(), "desktop".to_string()];
+        assert_eq!(
+            compute_off_domain_penalty(&topics, &ace_ctx, &declared),
+            0.0
+        );
+    }
+
+    // ========================================================================
+    // topic_overlaps helper tests
+    // ========================================================================
+
+    #[test]
+    fn test_topic_overlaps_exact_match() {
+        assert!(topic_overlaps("rust", "rust"));
+        assert!(topic_overlaps("typescript", "typescript"));
+    }
+
+    #[test]
+    fn test_topic_overlaps_hyphenated_parts() {
+        // "rust-lang" splits to ["rust", "lang"], "rust" matches "rust"
+        assert!(topic_overlaps("rust", "rust-lang"));
+        assert!(topic_overlaps("react", "react-native"));
+        assert!(topic_overlaps("next.js", "next"));
+    }
+
+    #[test]
+    fn test_topic_overlaps_rejects_false_substrings() {
+        // "frustrating" does NOT contain "rust" as a word-boundary part
+        assert!(!topic_overlaps("frustrating", "rust"));
+        // "digital" does NOT contain "git" as a word-boundary part
+        assert!(!topic_overlaps("digital", "git"));
+        // "capital" does NOT contain "api" as a word-boundary part
+        assert!(!topic_overlaps("capital", "api"));
+        // "developing" does NOT match "dev" (too short, < 3 chars)
+        assert!(!topic_overlaps("developing", "dev"));
+        // "intelligence" does NOT match "gen"
+        assert!(!topic_overlaps("intelligence", "gen"));
+    }
+
+    #[test]
+    fn test_topic_overlaps_short_strings_rejected() {
+        // Strings < 3 chars are rejected (too many false positives)
+        assert!(!topic_overlaps("ai", "api"));
+        assert!(!topic_overlaps("go", "golang"));
+        assert!(!topic_overlaps("r", "rust"));
+    }
+
+    #[test]
+    fn test_off_domain_penalty_false_substring_blocked() {
+        // "frustrating" should NOT bypass off-domain penalty via "rust" substring
+        let ace_ctx = ACEContext::default();
+        let declared = vec!["rust".to_string()];
+        let topics = vec!["frustrating".to_string()];
+        assert_eq!(
+            compute_off_domain_penalty(&topics, &ace_ctx, &declared),
+            0.12, // No overlap — "frustrating" != "rust" at word boundaries
+        );
+    }
+
+    #[test]
+    fn test_off_domain_penalty_legitimate_overlap() {
+        // "rust-async" SHOULD match "rust" via word boundary
+        let ace_ctx = ACEContext::default();
+        let declared = vec!["rust".to_string()];
+        let topics = vec!["rust-async".to_string()];
+        assert_eq!(
+            compute_off_domain_penalty(&topics, &ace_ctx, &declared),
+            0.0, // Has overlap via word part
+        );
     }
 }

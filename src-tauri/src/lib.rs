@@ -24,6 +24,7 @@ mod ace;
 mod ace_commands;
 mod analysis;
 mod anomaly;
+mod attention;
 mod context_commands;
 mod context_engine;
 mod db;
@@ -31,21 +32,30 @@ mod digest;
 mod digest_commands;
 mod document_index;
 pub mod extractors;
+mod handoff;
 mod health;
 mod job_queue;
 mod job_queue_commands;
+mod knowledge_decay;
 mod llm;
 mod monitoring;
 mod monitoring_commands;
 mod ollama;
+mod predictive;
+mod project_health;
 pub mod query;
+mod reverse_relevance;
 mod scoring;
+mod semantic_diff;
 mod settings;
 mod settings_commands;
+mod signal_chains;
 mod signals;
 mod source_config;
 mod source_fetching;
 mod sources;
+mod temporal;
+mod tts;
 mod void_commands;
 mod void_engine;
 
@@ -212,6 +222,9 @@ pub struct SourceRelevance {
     /// Titles of grouped similar items
     #[serde(default)]
     pub similar_titles: Vec<String>,
+    /// Whether this item was injected by the serendipity engine (anti-bubble)
+    #[serde(default)]
+    pub serendipity: bool,
 }
 
 fn default_source_type() -> String {
@@ -810,8 +823,128 @@ pub(crate) fn extract_topics(title: &str, content: &str) -> Vec<String> {
         {
             let lower = clean.to_lowercase();
             if !seen.contains(&lower)
-                && !["the", "and", "for", "how", "why", "what", "show", "ask"]
-                    .contains(&lower.as_str())
+                && ![
+                    // Articles, conjunctions, prepositions
+                    "the",
+                    "and",
+                    "for",
+                    "how",
+                    "why",
+                    "what",
+                    "show",
+                    "ask",
+                    "with",
+                    "from",
+                    "into",
+                    "about",
+                    "this",
+                    "that",
+                    "your",
+                    "our",
+                    "their",
+                    "some",
+                    "any",
+                    "all",
+                    "every",
+                    "each",
+                    "more",
+                    "most",
+                    "many",
+                    "much",
+                    "also",
+                    "just",
+                    "very",
+                    "still",
+                    "not",
+                    "but",
+                    "yet",
+                    "here",
+                    "there",
+                    "when",
+                    "where",
+                    "will",
+                    "can",
+                    "should",
+                    "could",
+                    "would",
+                    // Generic verbs / gerunds (capitalized in titles, useless as topics)
+                    "using",
+                    "building",
+                    "working",
+                    "making",
+                    "getting",
+                    "running",
+                    "creating",
+                    "developing",
+                    "announcing",
+                    "introducing",
+                    "launching",
+                    "deploying",
+                    "implementing",
+                    "understanding",
+                    "exploring",
+                    "discussing",
+                    "comparing",
+                    "improving",
+                    "fixing",
+                    "breaking",
+                    "starting",
+                    "looking",
+                    "moving",
+                    "keeping",
+                    "finding",
+                    "writing",
+                    "reading",
+                    "learning",
+                    "teaching",
+                    "testing",
+                    "trying",
+                    "adding",
+                    "removing",
+                    "setting",
+                    "built",
+                    "made",
+                    "released",
+                    // Generic adjectives / nouns
+                    "new",
+                    "best",
+                    "first",
+                    "free",
+                    "fast",
+                    "easy",
+                    "simple",
+                    "better",
+                    "modern",
+                    "full",
+                    "real",
+                    "good",
+                    "great",
+                    "top",
+                    "key",
+                    "big",
+                    "small",
+                    "open",
+                    "way",
+                    "part",
+                    "time",
+                    "year",
+                    "week",
+                    "month",
+                    "day",
+                    "thing",
+                    "guide",
+                    "tips",
+                    "tool",
+                    "tools",
+                    "list",
+                    "need",
+                    "help",
+                    "project",
+                    "projects",
+                    "update",
+                    "version",
+                ]
+                .contains(&lower.as_str())
                 && seen.insert(lower.clone())
             {
                 topics.push(lower);
@@ -1736,6 +1869,7 @@ async fn compute_relevance() -> Result<Vec<SourceRelevance>, String> {
                 signal_triggers: None,
                 similar_count: 0,
                 similar_titles: vec![],
+                serendipity: false,
             });
             continue;
         }
@@ -1971,6 +2105,7 @@ async fn compute_relevance() -> Result<Vec<SourceRelevance>, String> {
             signal_triggers: None,
             similar_count: 0,
             similar_titles: vec![],
+            serendipity: false,
         });
     }
 
@@ -2687,7 +2822,43 @@ pub fn run() {
             check_network_status,
             run_db_maintenance,
             get_db_stats_detailed,
-            export_results
+            export_results,
+            // Attention Economy Dashboard
+            attention::get_attention_report,
+            attention::get_attention_blind_spots,
+            // Temporal Event Store
+            temporal::get_temporal_events,
+            temporal::get_temporal_event_count,
+            temporal::get_dependencies,
+            temporal::cleanup_temporal_events,
+            // Audio Briefings (TTS)
+            tts::generate_audio_briefing,
+            tts::get_audio_briefing_status,
+            tts::get_audio_file_path,
+            // Predictive Context Switching
+            predictive::get_predicted_context,
+            predictive::record_context_switch_event,
+            predictive::get_context_switch_history,
+            // Knowledge Decay Alerting
+            knowledge_decay::get_knowledge_gaps,
+            knowledge_decay::get_knowledge_gap_count,
+            // Context Handoff Protocol
+            handoff::generate_context_packet,
+            handoff::export_context_packet_to_file,
+            handoff::import_context_packet,
+            // Reverse Relevance
+            reverse_relevance::get_reverse_mentions,
+            reverse_relevance::get_my_project_identifiers,
+            // Project Health Radar
+            project_health::get_project_health,
+            project_health::get_project_health_summary,
+            // Semantic Diff Engine
+            semantic_diff::get_semantic_shifts,
+            semantic_diff::get_topic_centroids,
+            // Signal Chains
+            signal_chains::get_signal_chains,
+            signal_chains::resolve_signal_chain,
+            signal_chains::get_signal_chain_count
         ])
         .setup(|app| {
             // Set up system tray

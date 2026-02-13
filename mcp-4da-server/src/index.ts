@@ -87,6 +87,20 @@ import {
   executeLLMStatus,
   getActionableSignalsTool,
   executeGetActionableSignals,
+  exportContextPacketTool,
+  executeExportContextPacket,
+  knowledgeGapsTool,
+  executeKnowledgeGaps,
+  signalChainsTool,
+  executeSignalChains,
+  semanticShiftsTool,
+  executeSemanticShifts,
+  reverseMentionsTool,
+  executeReverseMentions,
+  attentionReportTool,
+  executeAttentionReport,
+  projectHealthTool,
+  executeProjectHealth,
 } from "./tools/index.js";
 
 import type {
@@ -105,6 +119,13 @@ import type { TopicConnectionsParams } from "./tools/topic-connections.js";
 import type { ConfigValidatorParams } from "./tools/config-validator.js";
 import type { LLMStatusParams } from "./tools/llm-status.js";
 import type { GetActionableSignalsParams } from "./tools/get-actionable-signals.js";
+import type { ExportContextParams } from "./tools/export-context.js";
+import type { KnowledgeGapsParams } from "./tools/knowledge-gaps.js";
+import type { SignalChainsParams } from "./tools/signal-chains.js";
+import type { SemanticShiftsParams } from "./tools/semantic-shifts.js";
+import type { ReverseMentionsParams } from "./tools/reverse-mentions.js";
+import type { AttentionReportParams } from "./tools/attention-report.js";
+import type { ProjectHealthParams } from "./tools/project-health.js";
 
 // =============================================================================
 // Server Setup
@@ -412,6 +433,66 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         };
       }
 
+      // =========================================================================
+      // Innovation Feature Tools
+      // =========================================================================
+
+      case "export_context_packet": {
+        const params = (args || {}) as unknown as ExportContextParams;
+        const result = executeExportContextPacket(database, params);
+        return {
+          content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+        };
+      }
+
+      case "knowledge_gaps": {
+        const params = (args || {}) as unknown as KnowledgeGapsParams;
+        const result = executeKnowledgeGaps(database, params);
+        return {
+          content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+        };
+      }
+
+      case "signal_chains": {
+        const params = (args || {}) as unknown as SignalChainsParams;
+        const result = executeSignalChains(database, params);
+        return {
+          content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+        };
+      }
+
+      case "semantic_shifts": {
+        const params = (args || {}) as unknown as SemanticShiftsParams;
+        const result = executeSemanticShifts(database, params);
+        return {
+          content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+        };
+      }
+
+      case "reverse_mentions": {
+        const params = (args || {}) as unknown as ReverseMentionsParams;
+        const result = executeReverseMentions(database, params);
+        return {
+          content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+        };
+      }
+
+      case "attention_report": {
+        const params = (args || {}) as unknown as AttentionReportParams;
+        const result = executeAttentionReport(database, params);
+        return {
+          content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+        };
+      }
+
+      case "project_health": {
+        const params = (args || {}) as unknown as ProjectHealthParams;
+        const result = executeProjectHealth(database, params);
+        return {
+          content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+        };
+      }
+
       default:
         throw new Error(`Unknown tool: ${name}`);
     }
@@ -456,7 +537,7 @@ async function main() {
   });
 
   // Log startup (to stderr so it doesn't interfere with MCP protocol)
-  console.error("4DA MCP Server v3.2 (Signal Classifier) started - 13 tools, compact output, lazy schemas");
+  console.error("4DA MCP Server v3.3 (Intelligence Platform) started - 20 tools, compact output, lazy schemas");
 }
 
 main().catch((error) => {

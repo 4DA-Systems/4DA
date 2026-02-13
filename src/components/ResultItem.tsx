@@ -138,6 +138,11 @@ export const ResultItem = memo(function ResultItem({
                 </button>
               )}
               {/* Signal Badge (always visible) */}
+              {item.serendipity && (
+                <span className="flex-shrink-0 text-[10px] px-1.5 py-0.5 rounded font-medium bg-fuchsia-500/20 text-fuchsia-400">
+                  Serendipity
+                </span>
+              )}
               {item.signal_type && (
                 <span className={`flex-shrink-0 text-[10px] px-1.5 py-0.5 rounded font-medium ${
                   item.signal_priority === 'critical' ? 'bg-red-500/20 text-red-400' :

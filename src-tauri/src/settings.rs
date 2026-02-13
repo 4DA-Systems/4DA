@@ -124,6 +124,84 @@ impl Default for MonitoringConfig {
     }
 }
 
+/// Predictive context switching configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PredictiveConfig {
+    pub enabled: bool,
+    pub prefetch_window_minutes: u32,
+}
+
+impl Default for PredictiveConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            prefetch_window_minutes: 30,
+        }
+    }
+}
+
+/// Serendipity engine configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SerendipityConfig {
+    pub enabled: bool,
+    pub budget_percent: u8,
+}
+
+impl Default for SerendipityConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            budget_percent: 8,
+        }
+    }
+}
+
+/// Audio briefing configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AudioBriefingConfig {
+    pub enabled: bool,
+    pub tts_model: String,
+    pub max_duration_seconds: u32,
+}
+
+impl Default for AudioBriefingConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            tts_model: "auto".to_string(),
+            max_duration_seconds: 180,
+        }
+    }
+}
+
+/// Project health radar configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HealthRadarConfig {
+    pub enabled: bool,
+    pub check_interval_hours: u32,
+}
+
+impl Default for HealthRadarConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            check_interval_hours: 24,
+        }
+    }
+}
+
+/// Attention tracking configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AttentionConfig {
+    pub enabled: bool,
+}
+
+impl Default for AttentionConfig {
+    fn default() -> Self {
+        Self { enabled: true }
+    }
+}
+
 /// Main settings structure
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Settings {
@@ -167,6 +245,21 @@ pub struct Settings {
     /// GitHub programming languages to track trending repos
     #[serde(default)]
     pub github_languages: Vec<String>,
+    /// Predictive context switching
+    #[serde(default)]
+    pub predictive: PredictiveConfig,
+    /// Serendipity engine (anti-bubble)
+    #[serde(default)]
+    pub serendipity: SerendipityConfig,
+    /// Audio briefing
+    #[serde(default)]
+    pub audio_briefing: AudioBriefingConfig,
+    /// Project health radar
+    #[serde(default)]
+    pub health_radar: HealthRadarConfig,
+    /// Attention tracking
+    #[serde(default)]
+    pub attention: AttentionConfig,
 }
 
 impl Default for Settings {
@@ -187,6 +280,11 @@ impl Default for Settings {
             x_api_key: String::new(),
             youtube_channels: vec![],
             github_languages: vec![],
+            predictive: PredictiveConfig::default(),
+            serendipity: SerendipityConfig::default(),
+            audio_briefing: AudioBriefingConfig::default(),
+            health_radar: HealthRadarConfig::default(),
+            attention: AttentionConfig::default(),
         }
     }
 }

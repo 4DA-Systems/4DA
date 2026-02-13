@@ -543,6 +543,23 @@ pub(crate) async fn run_multi_source_analysis_impl(
     scoring::dedup_results(&mut results);
     scoring::topic_dedup_results(&mut results);
 
+    // Serendipity Engine: inject anti-bubble items
+    {
+        let settings = crate::get_settings_manager().lock();
+        let serendipity_config = &settings.get().serendipity;
+        if serendipity_config.enabled {
+            let candidates = scoring::compute_serendipity_candidates(
+                &results,
+                serendipity_config.budget_percent,
+            );
+            if !candidates.is_empty() {
+                tracing::info!(target: "4da::analysis", count = candidates.len(), "Injecting serendipity items");
+                results.extend(candidates);
+                scoring::sort_results(&mut results);
+            }
+        }
+    }
+
     // LLM Reranking (if enabled and within daily limits)
     apply_llm_reranking(app, &mut results, &scoring_ctx).await;
 
@@ -969,6 +986,23 @@ async fn score_items_full(
     scoring::sort_results(&mut results);
     scoring::dedup_results(&mut results);
     scoring::topic_dedup_results(&mut results);
+
+    // Serendipity Engine: inject anti-bubble items
+    {
+        let settings = crate::get_settings_manager().lock();
+        let serendipity_config = &settings.get().serendipity;
+        if serendipity_config.enabled {
+            let candidates = scoring::compute_serendipity_candidates(
+                &results,
+                serendipity_config.budget_percent,
+            );
+            if !candidates.is_empty() {
+                tracing::info!(target: "4da::analysis", count = candidates.len(), "Injecting serendipity items (cached)");
+                results.extend(candidates);
+                scoring::sort_results(&mut results);
+            }
+        }
+    }
 
     // LLM Reranking (if enabled and within daily limits)
     apply_llm_reranking(app, &mut results, &scoring_ctx).await;

@@ -241,6 +241,11 @@ export function QuickSetupStep({ isAnimating, onComplete, onBack }: QuickSetupSt
         await invoke('add_interest', { topic: interest });
       }
 
+      // Save detected technologies as declared tech stack
+      for (const tech of detectedTech) {
+        await invoke('add_tech_stack', { technology: tech });
+      }
+
       onComplete();
     } catch (e) {
       setError(`Failed to save settings: ${e}`);

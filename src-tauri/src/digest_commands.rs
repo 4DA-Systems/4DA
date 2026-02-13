@@ -3,10 +3,20 @@
 //! Extracted from lib.rs to reduce file size. Contains digest generation/preview,
 //! AI briefing synthesis, and app update commands.
 
+use once_cell::sync::Lazy;
+use parking_lot::Mutex;
 use tracing::{debug, error, info, warn};
 
 use crate::scoring::get_ace_context;
 use crate::{digest, get_analysis_state, get_database, get_settings_manager};
+
+/// Cached latest briefing text for TTS and handoff features
+static LATEST_BRIEFING: Lazy<Mutex<Option<String>>> = Lazy::new(|| Mutex::new(None));
+
+/// Get the latest generated briefing text (used by TTS and handoff)
+pub(crate) fn get_latest_briefing_text() -> Option<String> {
+    LATEST_BRIEFING.lock().clone()
+}
 
 // ============================================================================
 // Update Commands
@@ -523,6 +533,9 @@ Rules:
                 elapsed_ms = elapsed.as_millis(),
                 "AI briefing generated"
             );
+
+            // Cache for TTS and handoff
+            *LATEST_BRIEFING.lock() = Some(response.content.clone());
 
             Ok(serde_json::json!({
                 "success": true,

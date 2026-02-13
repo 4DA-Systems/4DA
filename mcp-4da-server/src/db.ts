@@ -118,6 +118,13 @@ export class FourDADatabase {
   }
 
   /**
+   * Get the raw better-sqlite3 database instance for custom queries
+   */
+  getRawDb(): Database.Database {
+    return this.db;
+  }
+
+  /**
    * Close the database connection
    */
   close(): void {

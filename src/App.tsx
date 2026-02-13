@@ -12,6 +12,11 @@ import { ToastContainer } from './components/Toast';
 import { LearningIndicator } from './components/LearningIndicator';
 import { BriefingView } from './components/BriefingView';
 import { ResultsView } from './components/ResultsView';
+import { AudioBriefing } from './components/AudioBriefing';
+import { PredictiveIndicator } from './components/PredictiveIndicator';
+import { SignalChainsPanel } from './components/SignalChains';
+import { KnowledgeGapsPanel } from './components/KnowledgeGapsPanel';
+import { ContextHandoff } from './components/ContextHandoff';
 import {
   useSettings,
   useMonitoring,
@@ -444,6 +449,8 @@ function App() {
               >
                 {autoBriefingEnabled ? '⚡' : '○'}
               </button>
+              <AudioBriefing />
+              <ContextHandoff onStatus={(msg) => addToast(msg.includes('fail') ? 'error' : 'success', msg)} />
               {/* Export button */}
               {state.analysisComplete && (
                 <button
@@ -497,9 +504,16 @@ function App() {
           lastLearnedTopic={lastLearnedTopic}
         />
 
+        {/* Predictive Context */}
+        <PredictiveIndicator />
+
         {/* Actionable Signals */}
         {state.analysisComplete && (
-          <SignalsPanel results={state.relevanceResults} />
+          <>
+            <SignalsPanel results={state.relevanceResults} />
+            <SignalChainsPanel />
+            <KnowledgeGapsPanel />
+          </>
         )}
 
         {/* Natural Language Search */}

@@ -68,6 +68,36 @@ export const TOOL_REGISTRY: Record<string, { summary: string; schemaFile: string
     summary: "Classify content into actionable signals with priority levels",
     schemaFile: "get-actionable-signals.json",
   },
+
+  // Innovation Feature Tools
+  export_context_packet: {
+    summary: "Generate portable context packet for session handoff",
+    schemaFile: "export-context.json",
+  },
+  knowledge_gaps: {
+    summary: "Detect knowledge gaps in your project dependencies",
+    schemaFile: "knowledge-gaps.json",
+  },
+  signal_chains: {
+    summary: "Get causal signal chains connecting related events over time",
+    schemaFile: "signal-chains.json",
+  },
+  semantic_shifts: {
+    summary: "Detect narrative shifts in topics you follow",
+    schemaFile: "semantic-shifts.json",
+  },
+  reverse_mentions: {
+    summary: "Find where your projects are mentioned in sources",
+    schemaFile: "reverse-mentions.json",
+  },
+  attention_report: {
+    summary: "Analyze attention allocation vs codebase needs",
+    schemaFile: "attention-report.json",
+  },
+  project_health: {
+    summary: "Project health radar for dependency freshness and security",
+    schemaFile: "project-health.json",
+  },
 };
 
 /**

@@ -82,3 +82,39 @@ export {
   getActionableSignalsTool,
   executeGetActionableSignals,
 } from "./get-actionable-signals.js";
+
+// Innovation Feature Tools
+export {
+  exportContextPacketTool,
+  executeExportContextPacket,
+} from "./export-context.js";
+
+export {
+  knowledgeGapsTool,
+  executeKnowledgeGaps,
+} from "./knowledge-gaps.js";
+
+export {
+  signalChainsTool,
+  executeSignalChains,
+} from "./signal-chains.js";
+
+export {
+  semanticShiftsTool,
+  executeSemanticShifts,
+} from "./semantic-shifts.js";
+
+export {
+  reverseMentionsTool,
+  executeReverseMentions,
+} from "./reverse-mentions.js";
+
+export {
+  attentionReportTool,
+  executeAttentionReport,
+} from "./attention-report.js";
+
+export {
+  projectHealthTool,
+  executeProjectHealth,
+} from "./project-health.js";

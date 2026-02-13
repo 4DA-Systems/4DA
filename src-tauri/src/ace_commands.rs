@@ -1070,8 +1070,51 @@ pub(crate) async fn index_discovered_readmes(context_dirs: &[PathBuf]) -> usize 
 /// This runs once at startup when interests are empty, providing immediate value
 /// without requiring manual configuration.
 pub(crate) async fn auto_seed_interests_from_ace() -> Result<(), String> {
-    // Check if interests are already configured
     let context_engine = get_context_engine()?;
+
+    // Backfill tech_stack if empty (one-time fix for existing users)
+    let existing_tech = context_engine.get_tech_stack().unwrap_or_default();
+    if existing_tech.is_empty() {
+        if let Ok(ace) = get_ace_engine() {
+            if let Ok(tech_list) = ace.get_detected_tech() {
+                let seeded: Vec<_> = tech_list
+                    .iter()
+                    .filter(|t| {
+                        matches!(
+                            t.category,
+                            crate::ace::TechCategory::Language
+                                | crate::ace::TechCategory::Framework
+                        ) && t.confidence >= 0.7
+                    })
+                    .take(10)
+                    .collect();
+                for t in &seeded {
+                    let _ = context_engine.add_technology(&t.name);
+                }
+                if !seeded.is_empty() {
+                    info!(target: "4da::startup", count = seeded.len(), "Backfilled tech_stack from detected_tech");
+                }
+            }
+        }
+    }
+
+    // One-time cleanup: remove dependency-level inferred interests
+    let existing = context_engine.get_interests().unwrap_or_default();
+    let mut cleaned = 0;
+    for interest in &existing {
+        if interest.source == crate::context_engine::InterestSource::Inferred {
+            let topic = interest.topic.to_lowercase();
+            if topic.starts_with('@') || topic.contains('/') {
+                let _ = context_engine.remove_interest(&interest.topic);
+                cleaned += 1;
+            }
+        }
+    }
+    if cleaned > 0 {
+        info!(target: "4da::startup", cleaned, "Removed dependency-level inferred interests");
+    }
+
+    // Check if interests are already configured
     let existing_interests = context_engine
         .get_interests()
         .map_err(|e| format!("Failed to get interests: {}", e))?;
@@ -1099,9 +1142,14 @@ pub(crate) async fn auto_seed_interests_from_ace() -> Result<(), String> {
         let skip_list = [
             "npm", "yarn", "pnpm", "node", "git", "json", "yaml", "toml", "markdown",
         ];
-        if !skip_list.contains(&tech.as_str()) {
-            topics_to_seed.push((tech.clone(), 0.8));
+        if skip_list.contains(&tech.as_str())
+            || tech.starts_with('@')
+            || tech.contains('/')
+            || tech.len() <= 2
+        {
+            continue;
         }
+        topics_to_seed.push((tech.clone(), 0.8));
     }
 
     // Add high-confidence active topics with weight 0.7
