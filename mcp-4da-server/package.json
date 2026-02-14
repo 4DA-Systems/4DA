@@ -1,25 +1,51 @@
 {
-  "name": "mcp-4da-server",
+  "name": "@4da/mcp-server",
   "version": "3.2.0",
-  "description": "MCP server for 4DA - 13 AI-powered tools for content filtering, analysis, signals, and insights",
+  "description": "MCP server for 4DA — plug your personalized developer intelligence feed into Claude Code, Cursor, or any MCP host. 13 tools for content filtering, signals, briefings, and knowledge gap detection.",
   "type": "module",
   "main": "dist/index.js",
+  "bin": {
+    "4da-mcp": "dist/index.js"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
   "scripts": {
     "build": "tsc && pnpm run copy-schemas",
     "copy-schemas": "node -e \"const fs=require('fs');const path=require('path');const src='src/schemas';const dst='dist/schemas';if(!fs.existsSync(dst))fs.mkdirSync(dst,{recursive:true});fs.readdirSync(src).filter(f=>f.endsWith('.json')).forEach(f=>fs.copyFileSync(path.join(src,f),path.join(dst,f)))\"",
     "dev": "tsc --watch",
     "start": "node dist/index.js",
-    "inspect": "npx @modelcontextprotocol/inspector node dist/index.js"
+    "inspect": "npx @modelcontextprotocol/inspector node dist/index.js",
+    "prepublishOnly": "pnpm run build"
   },
   "keywords": [
     "mcp",
+    "model-context-protocol",
     "4da",
-    "ai",
-    "context",
-    "relevance"
+    "developer-tools",
+    "ai-agent",
+    "content-filtering",
+    "relevance",
+    "intelligence",
+    "claude-code",
+    "cursor",
+    "hacker-news",
+    "arxiv",
+    "developer-productivity"
   ],
-  "author": "",
+  "author": "4DA",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/4da-dev/4da-home.git",
+    "directory": "mcp-4da-server"
+  },
+  "homepage": "https://github.com/4da-dev/4da-home#mcp-integration",
+  "bugs": {
+    "url": "https://github.com/4da-dev/4da-home/issues"
+  },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.0.0",
     "better-sqlite3": "^11.0.0"

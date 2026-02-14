@@ -1,48 +1,86 @@
-# 4DA - The Internet Searches For You
+<div align="center">
 
-**4DA (4 Dimensional Autonomy)** is an ambient intelligence layer that monitors your local context, watches external sources continuously, filters ruthlessly (99.9% rejection), and delivers only what matters - before you know you need it.
+# 4DA
+
+### The internet searches for you.
+
+**Stop scrolling. Start knowing.**
+
+4DA monitors Hacker News, arXiv, Reddit, GitHub, Product Hunt, YouTube, and RSS feeds — then ruthlessly filters out everything that doesn't matter to your specific tech stack, projects, and codebase. What survives is signal.
+
+[Quick Start](#quick-start) &bull; [How It Works](#how-it-works) &bull; [MCP Integration](#mcp-integration) &bull; [Developer DNA](#developer-dna)
+
+</div>
+
+---
+
+## The Problem
+
+You mass 500+ articles a day trying to stay current. You miss the security advisory for a package you actually use. You read three "intro to X" posts about tech you already know. You never see the arXiv paper that's directly relevant to your current project.
+
+Meanwhile, your dependency has a breaking change, and you find out when production breaks.
+
+## The Solution
+
+4DA runs locally on your machine. It scans your projects, reads your `Cargo.toml` / `package.json` / `go.mod`, watches your Git activity, and builds a **domain profile** — a graduated understanding of your technology identity.
+
+Then it scores every piece of incoming content against 5 independent signal axes:
+
+| Axis | What it measures |
+|------|-----------------|
+| **Context** | Semantic similarity to your active codebase |
+| **Interest** | Alignment with your declared and learned topics |
+| **ACE** | Real-time signals from your Git commits and file edits |
+| **Dependency** | Direct matches against your installed packages |
+| **Learned** | Behavioral patterns from your save/dismiss feedback |
+
+An item needs **2+ independent signals** to pass the confirmation gate. Everything else gets rejected. Typical rejection rate: **99%+**.
+
+What survives is scored with content quality analysis (kills clickbait), novelty detection (demotes "intro to X" if you're advanced), competing tech penalties, and intent scoring from your recent work.
+
+<!-- Screenshot placeholder: Add a screenshot of the main results view here -->
+<!-- ![4DA Results View](docs/screenshot-results.png) -->
 
 ## Features
 
-- **Autonomous Context Engine (ACE)** - Scans your projects, Git history, and file activity to understand what you're working on
-- **Multi-Source Analysis** - Monitors Hacker News, arXiv, and Reddit simultaneously
-- **Behavior Learning** - Learns from your interactions to improve relevance over time
-- **BYOK (Bring Your Own Key)** - Use your own API keys for LLM providers (Anthropic, OpenAI, Ollama)
-- **Privacy First** - All data stays local. Raw files never leave your machine.
-- **Cost Conscious** - Transparent cost tracking with configurable daily limits
+**Intelligence**
+- 5-axis scoring with multi-signal confirmation gate
+- Domain profile: graduated tech identity (primary stack → dependencies → detected → interests)
+- Content DNA: classifies content type (security advisory, release, tutorial, hiring, etc.)
+- Novelty detection: demotes introductory content, boosts new releases
+- Intent scoring: recent Git/file activity influences what surfaces
+- Knowledge gap detection: finds blind spots in your dependency understanding
 
-## Tech Stack
+**Sources** — 11 adapters, all running locally
+- Hacker News, Reddit, arXiv, GitHub Releases
+- Product Hunt, YouTube, Twitter/X
+- Dev.to, Lobsters, custom RSS feeds
 
-| Component | Technology |
-|-----------|------------|
-| Application | Tauri 2.0 (Rust + WebView) |
-| Frontend | React 18 + TypeScript + Tailwind CSS |
-| Database | SQLite 3.45+ with sqlite-vec |
-| Embeddings | fastembed (local) or OpenAI |
-| LLM | Anthropic Claude / OpenAI / Ollama |
+**Analysis**
+- Signal chains: tracks evolving stories across sources
+- Semantic shift detection: notices when topics you follow are changing
+- Reverse mentions: finds where your projects are discussed
+- Project health radar: dependency freshness + security monitoring
+- Attention dashboard: where you spend time vs. where you should
+
+**Privacy & Control**
+- All data stays on your machine. Raw content never leaves.
+- BYOK: Anthropic Claude, OpenAI, or fully local with Ollama
+- Transparent cost tracking with daily limits
+- System tray: runs in background, surfaces what matters
 
 ## Quick Start
 
-### Prerequisites
-
-- [Rust](https://rustup.rs/) (1.70+)
-- [Node.js](https://nodejs.org/) (18+)
-- [pnpm](https://pnpm.io/) (or npm/yarn)
-
-### Development
+**Prerequisites:** [Rust](https://rustup.rs/) 1.70+, [Node.js](https://nodejs.org/) 18+, [pnpm](https://pnpm.io/)
 
 ```bash
-# Clone and enter directory
-cd 4da-v3
-
-# Install frontend dependencies
+git clone https://github.com/4da-dev/4da-home.git
+cd 4da-home
 pnpm install
-
-# Run in development mode
 pnpm tauri dev
 ```
 
-The app will open at `localhost:4444` with hot-reload enabled.
+The app opens, walks you through onboarding (pick your stack, add an API key, point at your project directories), and runs your first scan. First useful results in under 3 minutes.
 
 ### Production Build
 
@@ -50,124 +88,120 @@ The app will open at `localhost:4444` with hot-reload enabled.
 pnpm tauri build
 ```
 
-This creates platform-specific installers in `src-tauri/target/release/bundle/`.
-
-## Configuration
-
-### API Keys (BYOK)
-
-4DA requires API keys for LLM functionality. Configure them in Settings:
-
-1. **Anthropic** (recommended) - For Claude-based analysis
-2. **OpenAI** - For GPT-based analysis or embeddings
-3. **Ollama** - For fully local, free operation
-
-Keys are stored locally and never transmitted except to their respective APIs.
-
-### Context Directories
-
-Add directories you want 4DA to monitor:
-
-- Project directories (Cargo.toml, package.json detected)
-- Research folders
-- Note collections
-
-4DA will scan these for context signals automatically.
-
-## Architecture
-
-```
-4DA/
-├── ACE (Autonomous Context Engine)
-│   ├── Scanner - Detects projects, tech stacks, topics
-│   ├── Watcher - Real-time file change monitoring
-│   ├── Behavior - Learns from user interactions
-│   └── Health - System monitoring and fallbacks
-├── Sources
-│   ├── Hacker News - Tech news and discussions
-│   ├── arXiv - Academic papers
-│   └── Reddit - Community discussions
-├── Context Engine - Interest management
-├── LLM Integration - Multi-provider support
-└── Digest System - Email/notification delivery
-```
+Creates platform-specific installers (`.msi` / `.dmg` / `.AppImage`) in `src-tauri/target/release/bundle/`.
 
 ## How It Works
 
-1. **Context Detection** - ACE scans your monitored directories to understand your tech stack, active projects, and topics
-2. **Source Fetching** - Background jobs poll external sources for new content
-3. **Relevance Scoring** - Items are scored using:
-   - Semantic similarity (KNN via sqlite-vec)
-   - Topic affinity (learned from behavior)
-   - Anti-topic filtering (learned rejections)
-4. **Delivery** - High-relevance items surface in the app or via notifications
+```
+Your Codebase                    External Sources
+     │                                │
+     ▼                                ▼
+┌─────────────┐              ┌──────────────┐
+│     ACE     │              │  11 Source    │
+│  Scanner +  │              │  Adapters     │
+│  Git Watch  │              │  (background) │
+└──────┬──────┘              └──────┬───────┘
+       │                            │
+       ▼                            ▼
+┌──────────────────────────────────────────┐
+│           5-Axis Scoring Engine          │
+│                                          │
+│  context ─┐                              │
+│  interest ─┼─ confirmation gate (2+ of 5)│
+│  ace ──────┤                             │
+│  dependency┤   × quality × novelty       │
+│  learned ──┘   × domain × intent         │
+└──────────────────┬───────────────────────┘
+                   │
+                   ▼
+          ┌─────────────────┐
+          │  Signal + Feed  │
+          │  (what survived)│
+          └─────────────────┘
+```
+
+## Developer DNA
+
+4DA builds a **Developer DNA** profile from your codebase and behavior — a quantified snapshot of your technology identity.
+
+- **Primary stack**: what you declared + what ACE detected
+- **Dependency graph**: every package you actually use
+- **Topic engagement**: where your attention goes
+- **Blind spots**: gaps between what you use and what you track
+
+*Shareable as markdown. Coming soon: visual card for Twitter/LinkedIn.*
+
+## MCP Integration
+
+4DA ships with a Model Context Protocol server — plug your intelligence feed directly into Claude Code, Cursor, or any MCP-compatible tool.
+
+```bash
+cd mcp-4da-server
+pnpm install && pnpm build
+```
+
+**13 tools available:**
+- `get_relevant_content` — query filtered content by relevance
+- `get_context` — your interests, tech stack, learned affinities
+- `get_actionable_signals` — classified signals with priority levels
+- `knowledge_gaps` — dependency blind spots
+- `project_health` — dependency freshness + security radar
+- `daily_briefing` — executive summary
+- `topic_connections` — knowledge graph from content
+- `signal_chains` — causal event chains over time
+- `attention_report` — attention allocation vs. codebase needs
+- And 4 more diagnostic/analysis tools
+
+Add to your Claude Code config:
+```json
+{
+  "mcpServers": {
+    "4da": {
+      "command": "node",
+      "args": ["path/to/mcp-4da-server/dist/index.js"]
+    }
+  }
+}
+```
+
+## Tech Stack
+
+| Layer | Technology |
+|-------|-----------|
+| App Shell | Tauri 2.0 (Rust backend + WebView) |
+| Frontend | React 19 + TypeScript + Tailwind CSS v4 |
+| Database | SQLite 3.45+ with sqlite-vec (vector search) |
+| Scoring | Custom DSL → build-time Rust codegen |
+| Embeddings | OpenAI text-embedding-3-small / Ollama |
+| LLM | Anthropic Claude / OpenAI / Ollama |
+
+## Philosophy
+
+1. **Privacy first** — raw data never leaves your machine
+2. **BYOK** — your keys, your models, your choice
+3. **Local first** — works offline with Ollama
+4. **Minimal** — no feature bloat; every element earns its place
+5. **Signal over noise** — 99%+ rejection rate is a feature, not a bug
 
 ## Development
 
-### Running Tests
-
 ```bash
-# Rust tests
-cargo test
-
-# Frontend type checking
-pnpm typecheck
-
-# Lint
-pnpm lint
+pnpm tauri dev              # Dev server (localhost:4444)
+cargo test                  # Rust tests (345+, from src-tauri/)
+pnpm test                   # Frontend tests (49+)
+pnpm validate:all           # Full validation (lint + types + tests + build)
 ```
-
-### Project Structure
-
-```
-4da-v3/
-├── src-tauri/          # Rust backend
-│   ├── src/
-│   │   ├── lib.rs      # Main entry, Tauri commands
-│   │   ├── ace/        # Autonomous Context Engine
-│   │   ├── sources/    # External source adapters
-│   │   ├── context_engine.rs
-│   │   ├── db.rs       # Database operations
-│   │   └── llm.rs      # LLM integration
-│   └── Cargo.toml
-├── src/                # React frontend
-│   ├── App.tsx
-│   └── components/
-├── specs/              # Architecture specifications
-├── .ai/                # CADE engineering docs
-└── .claude/            # Session state tracking
-```
-
-## Status
-
-| Phase | Status |
-|-------|--------|
-| Phase 0: POC | Complete |
-| Phase 1: Core Loop | ~95% |
-| Phase 2: Learning | ~80% |
-| Phase 3: Polish | In Progress |
-
-### What's Built
-
-- 82+ Tauri commands wired
-- 3 source adapters (HN, arXiv, Reddit)
-- Complete ACE scanner (12 manifest types)
-- sqlite-vec KNN search
-- File watcher with debouncing
-- Behavior learning with signal tracking
-- LLM integration (Anthropic/OpenAI/Ollama)
-- System tray + background monitoring
-- All 7 anomaly detectors
-- Unified multiplicative relevance scoring
 
 ## License
 
-Private - Not for redistribution.
-
-## Contributing
-
-This is a private project. Contact the maintainer for access.
+MIT
 
 ---
 
-*Built with Tauri 2.0, React 18, and SQLite*
+<div align="center">
+
+**4DA** — *4 Dimensional Autonomy*
+
+The intelligence layer for developers who'd rather build than scroll.
+
+</div>

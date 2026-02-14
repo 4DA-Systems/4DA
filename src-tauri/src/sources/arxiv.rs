@@ -46,11 +46,12 @@ impl ArxivSource {
                 custom: None,
             },
             client: super::shared_client(),
-            // Default to AI/ML/NLP categories
+            // Default to software-engineering-relevant categories
             categories: vec![
-                "cs.AI".to_string(), // Artificial Intelligence
-                "cs.LG".to_string(), // Machine Learning
-                "cs.CL".to_string(), // Computation and Language (NLP)
+                "cs.SE".to_string(), // Software Engineering
+                "cs.PL".to_string(), // Programming Languages
+                "cs.DB".to_string(), // Databases
+                "cs.CR".to_string(), // Cryptography and Security
             ],
         }
     }
@@ -260,8 +261,7 @@ impl Source for ArxivSource {
         }
 
         let deep_categories = vec![
-            "cs.AI", "cs.LG", "cs.CL", "cs.CV", "cs.SE", "cs.PL", "cs.DB", "cs.DC", "cs.CR",
-            "cs.NE", "cs.IR", "cs.RO", "cs.HC", "stat.ML", "q-bio.QM", "q-fin.ST",
+            "cs.SE", "cs.PL", "cs.DB", "cs.CR", "cs.DC", "cs.HC", "cs.IR",
         ];
 
         info!(
@@ -298,6 +298,11 @@ mod tests {
         assert_eq!(source.name(), "arXiv");
         assert!(source.config().enabled);
         assert_eq!(source.config().max_items, 20);
+        // Default categories should be software-engineering relevant, not ML
+        assert!(source.categories.contains(&"cs.SE".to_string()));
+        assert!(source.categories.contains(&"cs.PL".to_string()));
+        assert!(!source.categories.contains(&"cs.AI".to_string()));
+        assert!(!source.categories.contains(&"cs.LG".to_string()));
     }
 
     #[test]

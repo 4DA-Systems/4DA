@@ -25,10 +25,13 @@ mod ace_commands;
 mod analysis;
 mod anomaly;
 mod attention;
+mod competing_tech;
+mod content_dna;
 mod content_quality;
 mod context_commands;
 mod context_engine;
 mod db;
+mod developer_dna;
 mod digest;
 mod digest_commands;
 mod document_index;
@@ -183,6 +186,21 @@ pub struct ScoreBreakdown {
     /// Intent boost from recent work topics (0.0 to 0.15)
     #[serde(default)]
     pub intent_boost: f32,
+    /// Content type classification (e.g. "security_advisory", "show_and_tell")
+    #[serde(default)]
+    pub content_type: Option<String>,
+    /// Content DNA utility multiplier (0.3 hiring to 1.3 security)
+    #[serde(default = "default_quality_mult")]
+    pub content_dna_mult: f32,
+    /// Competing tech penalty multiplier (0.5 or 1.0)
+    #[serde(default = "default_quality_mult")]
+    pub competing_mult: f32,
+    /// LLM relevance score (1-5 scale, None if LLM skipped)
+    #[serde(default)]
+    pub llm_score: Option<f32>,
+    /// LLM's one-sentence explanation
+    #[serde(default)]
+    pub llm_reason: Option<String>,
 }
 
 fn default_freshness() -> f32 {
@@ -1305,12 +1323,12 @@ pub(crate) const SUPPORTED_EXTENSIONS: &[&str] = &["md", "txt", "rs", "ts", "js"
 static RELEVANCE_THRESHOLD_BITS: AtomicU32 = AtomicU32::new(0);
 
 /// Get the current relevance threshold (thread-safe).
-/// Returns the auto-tuned value, or 0.50 default if not yet initialized.
-/// Targets ~3-5% pass rate for genuinely relevant items.
+/// Returns the auto-tuned value, or 0.35 default if not yet initialized.
+/// Targets ~5-10% pass rate for genuinely relevant items.
 pub(crate) fn get_relevance_threshold() -> f32 {
     let bits = RELEVANCE_THRESHOLD_BITS.load(Ordering::Relaxed);
     if bits == 0 {
-        0.50 // Default: only pass items with strong context + interest match
+        0.35 // Default: accounts for multiplicative compression from quality layers
     } else {
         f32::from_bits(bits)
     }
@@ -2119,6 +2137,11 @@ async fn compute_relevance() -> Result<Vec<SourceRelevance>, String> {
             content_quality_mult: 1.0,
             novelty_mult: 1.0,
             intent_boost: 0.0,
+            content_type: None,
+            content_dna_mult: 1.0,
+            competing_mult: 1.0,
+            llm_score: None,
+            llm_reason: None,
         };
 
         results.push(SourceRelevance {
@@ -2645,11 +2668,11 @@ pub fn run() {
             set_relevance_threshold(stored);
             info!(target: "4da::startup", threshold = get_relevance_threshold(), "Loaded stored relevance threshold");
         } else {
-            set_relevance_threshold(0.40);
+            set_relevance_threshold(0.35);
             info!(target: "4da::startup", threshold = get_relevance_threshold(), "Relevance threshold (default)");
         }
     } else {
-        set_relevance_threshold(0.40);
+        set_relevance_threshold(0.35);
         info!(target: "4da::startup", threshold = get_relevance_threshold(), "Relevance threshold (default, ACE unavailable)");
     }
 
@@ -2895,7 +2918,10 @@ pub fn run() {
             // Signal Chains
             signal_chains::get_signal_chains,
             signal_chains::resolve_signal_chain,
-            signal_chains::get_signal_chain_count
+            signal_chains::get_signal_chain_count,
+            // Developer DNA
+            developer_dna::get_developer_dna,
+            developer_dna::export_developer_dna_markdown
         ])
         .setup(|app| {
             // Set up system tray
@@ -3319,8 +3345,119 @@ async fn export_results(format: String) -> Result<String, String> {
             html.push_str("</body></html>");
             Ok(html)
         }
+        "digest" => {
+            // Rich shareable digest with Developer DNA context
+            let dna = developer_dna::generate_dna().ok();
+            let now = chrono::Utc::now();
+            let date_str = now.format("%B %d, %Y").to_string();
+
+            let mut md = format!("# 4DA Intelligence Digest — {}\n\n", date_str);
+
+            // Developer identity header
+            if let Some(ref dna) = dna {
+                md.push_str(&format!("> **{}**", dna.identity_summary));
+                if !dna.primary_stack.is_empty() {
+                    md.push_str(&format!(" | Stack: {}", dna.primary_stack.join(", ")));
+                }
+                md.push('\n');
+            }
+            md.push('\n');
+
+            // Stats bar
+            let high_signal = relevant.iter().filter(|r| r.top_score >= 0.5).count();
+            let rejection_pct = if !results.is_empty() {
+                ((1.0 - relevant.len() as f64 / results.len() as f64) * 100.0) as u32
+            } else {
+                0
+            };
+            md.push_str(&format!(
+                "**{}** items scored | **{}** relevant | **{}** high-signal | **{}%** filtered as noise\n\n",
+                results.len(), relevant.len(), high_signal, rejection_pct
+            ));
+            md.push_str("---\n\n");
+
+            // High-signal section
+            let high: Vec<&&SourceRelevance> =
+                relevant.iter().filter(|r| r.top_score >= 0.5).collect();
+            if !high.is_empty() {
+                md.push_str("## High-Signal\n\n");
+                for item in &high {
+                    let score_pct = (item.top_score * 100.0) as u32;
+                    if let Some(ref url) = item.url {
+                        md.push_str(&format!("- **[{}]({})** — {}%", item.title, url, score_pct));
+                    } else {
+                        md.push_str(&format!("- **{}** — {}%", item.title, score_pct));
+                    }
+                    if let Some(ref explanation) = item.explanation {
+                        md.push_str(&format!(" — {}", explanation));
+                    }
+                    md.push('\n');
+                }
+                md.push('\n');
+            }
+
+            // Group remaining by source
+            let mut by_source: std::collections::HashMap<&str, Vec<&&SourceRelevance>> =
+                std::collections::HashMap::new();
+            for item in &relevant {
+                if item.top_score < 0.5 {
+                    by_source
+                        .entry(item.source_type.as_str())
+                        .or_default()
+                        .push(item);
+                }
+            }
+
+            if !by_source.is_empty() {
+                fn source_label(s: &str) -> &str {
+                    match s {
+                        "hackernews" => "Hacker News",
+                        "reddit" => "Reddit",
+                        "arxiv" => "arXiv",
+                        "github" => "GitHub",
+                        "producthunt" => "Product Hunt",
+                        "youtube" => "YouTube",
+                        "twitter" => "Twitter/X",
+                        "rss" => "RSS",
+                        "devto" => "Dev.to",
+                        "lobsters" => "Lobsters",
+                        other => other,
+                    }
+                }
+
+                // Sort sources by item count descending
+                let mut sources: Vec<_> = by_source.into_iter().collect();
+                sources.sort_by(|a, b| b.1.len().cmp(&a.1.len()));
+
+                for (source, items) in &sources {
+                    md.push_str(&format!(
+                        "## {} ({})\n\n",
+                        source_label(source),
+                        items.len()
+                    ));
+                    for item in items.iter().take(8) {
+                        let score_pct = (item.top_score * 100.0) as u32;
+                        if let Some(ref url) = item.url {
+                            md.push_str(&format!("- [{}]({}) — {}%\n", item.title, url, score_pct));
+                        } else {
+                            md.push_str(&format!("- {} — {}%\n", item.title, score_pct));
+                        }
+                    }
+                    if items.len() > 8 {
+                        md.push_str(&format!("- *...+{} more*\n", items.len() - 8));
+                    }
+                    md.push('\n');
+                }
+            }
+
+            // Footer
+            md.push_str("---\n\n");
+            md.push_str("*Generated by [4DA](https://github.com/4da-dev/4da-home) — The internet, scored for you.*\n");
+
+            Ok(md)
+        }
         _ => Err(format!(
-            "Unknown format: {}. Use 'markdown', 'text', or 'html'",
+            "Unknown format: {}. Use 'markdown', 'text', 'html', or 'digest'",
             format
         )),
     }

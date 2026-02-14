@@ -43,7 +43,9 @@ pub async fn get_settings() -> Result<serde_json::Value, String> {
             "tokens_total": settings.usage.tokens_total,
             "items_reranked": settings.usage.items_reranked
         },
-        "embedding_threshold": settings.embedding_threshold
+        "embedding_threshold": settings.embedding_threshold,
+        "onboarding_complete": settings.onboarding_complete,
+        "auto_discovery_completed": settings.auto_discovery_completed
     }))
 }
 

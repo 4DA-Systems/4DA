@@ -157,8 +157,8 @@ impl GitAnalyzer {
             recent_commits.len() as f32 / self.config.history_days as f32
         };
 
-        // Get last commit time
-        let last_commit = recent_commits.first().map(|c| c.timestamp.clone());
+        // Get last commit hash
+        let last_commit = recent_commits.first().map(|c| c.hash.clone());
 
         // Calculate confidence based on activity
         let confidence = self.calculate_confidence(&recent_commits, &active_branches);

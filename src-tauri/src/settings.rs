@@ -90,7 +90,7 @@ impl Default for RerankConfig {
     fn default() -> Self {
         Self {
             enabled: true,
-            max_items_per_batch: 50,
+            max_items_per_batch: 48,
             min_embedding_score: 0.20,
             daily_token_limit: 500_000, // generous for Ollama (free) and cloud
             daily_cost_limit_cents: 100, // $1.00/day default limit
@@ -864,7 +864,7 @@ mod tests {
         let settings = Settings::default();
         assert!(settings.rerank.enabled);
         assert_eq!(settings.embedding_threshold, 0.50);
-        assert_eq!(settings.rerank.max_items_per_batch, 50);
+        assert_eq!(settings.rerank.max_items_per_batch, 48);
     }
 
     #[test]

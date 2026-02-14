@@ -91,6 +91,34 @@ fn build_tech_domain(conn: &rusqlite::Connection) -> std::collections::HashSet<S
     domain
 }
 
+/// Load the user's primary stack from onboarding for competing tech filtering
+fn load_primary_stack(conn: &rusqlite::Connection) -> std::collections::HashSet<String> {
+    let mut stack = std::collections::HashSet::new();
+    if let Ok(mut stmt) = conn.prepare("SELECT technology FROM tech_stack") {
+        if let Ok(rows) = stmt.query_map([], |row| row.get::<_, String>(0)) {
+            for tech in rows.flatten() {
+                stack.insert(tech.to_lowercase());
+            }
+        }
+    }
+    stack
+}
+
+/// Get project paths the user has actively committed to in the last 30 days
+fn get_active_project_paths(conn: &rusqlite::Connection) -> std::collections::HashSet<String> {
+    let mut paths = std::collections::HashSet::new();
+    if let Ok(mut stmt) = conn.prepare(
+        "SELECT DISTINCT repo_path FROM git_signals WHERE timestamp > datetime('now', '-30 days')",
+    ) {
+        if let Ok(rows) = stmt.query_map([], |row| row.get::<_, String>(0)) {
+            for path in rows.flatten() {
+                paths.insert(path);
+            }
+        }
+    }
+    paths
+}
+
 /// Check if a dependency name is relevant to the user's tech domain.
 /// A dep is relevant if its name appears in the domain set, or if it's a real
 /// package name (>= 4 chars, not a common English word).
@@ -105,15 +133,149 @@ fn is_dep_in_domain(dep_name: &str, domain: &std::collections::HashSet<String>) 
     // Check if the dep name is a common non-tech word that produces false positives.
     // These are real English words that appear as package names but match irrelevant articles.
     const GENERIC_WORDS: &[&str] = &[
-        "space", "time", "image", "color", "event", "signal", "query", "table", "value", "error",
-        "block", "chain", "field", "point", "path", "link", "node", "tree", "hash", "lock", "pool",
-        "pipe", "ring", "slot", "core", "base", "data", "text", "font", "icon", "form", "grid",
-        "card", "chip", "port", "test", "mock", "seed", "rand", "once", "sync", "glob", "term",
-        "proc", "nano", "meta", "auto", "crypto", "audio", "video", "media", "style", "theme",
-        "toast", "modal", "badge", "alert", "popup",
+        "space",
+        "time",
+        "image",
+        "color",
+        "event",
+        "signal",
+        "query",
+        "table",
+        "value",
+        "error",
+        "block",
+        "chain",
+        "field",
+        "point",
+        "path",
+        "link",
+        "node",
+        "tree",
+        "hash",
+        "lock",
+        "pool",
+        "pipe",
+        "ring",
+        "slot",
+        "core",
+        "base",
+        "data",
+        "text",
+        "font",
+        "icon",
+        "form",
+        "grid",
+        "card",
+        "chip",
+        "port",
+        "test",
+        "mock",
+        "seed",
+        "rand",
+        "once",
+        "sync",
+        "glob",
+        "term",
+        "proc",
+        "nano",
+        "meta",
+        "auto",
+        "crypto",
+        "audio",
+        "video",
+        "media",
+        "style",
+        "theme",
+        "toast",
+        "modal",
+        "badge",
+        "alert",
+        "popup",
         // Common non-tech words that become package names
-        "apple", "fashion", "dining", "sport", "music", "photo", "movie", "cosmos", "stellar",
-        "orbit", "rocket", "matrix", "nova", "pulse", "amber", "coral", "ivory", "slate", "storm",
+        "apple",
+        "fashion",
+        "dining",
+        "sport",
+        "music",
+        "photo",
+        "movie",
+        "cosmos",
+        "stellar",
+        "orbit",
+        "rocket",
+        "matrix",
+        "nova",
+        "pulse",
+        "amber",
+        "coral",
+        "ivory",
+        "slate",
+        "storm",
+        // Words that are real package names but match too many unrelated articles
+        "open",
+        "next",
+        "express",
+        "run",
+        "serve",
+        "mini",
+        "fast",
+        "safe",
+        "pure",
+        "lite",
+        "tiny",
+        "super",
+        "make",
+        "copy",
+        "move",
+        "drop",
+        "match",
+        "type",
+        "kind",
+        "view",
+        "page",
+        "route",
+        "state",
+        "store",
+        "model",
+        "group",
+        "just",
+        "level",
+        "simple",
+        "clean",
+        "fresh",
+        "smart",
+        "sharp",
+        "craft",
+        "prime",
+        "solid",
+        // Cross-ecosystem ambiguous names (exist in Rust, JS, C++, Python etc.)
+        "async",
+        "bytes",
+        "config",
+        "derive",
+        "either",
+        "futures",
+        "http",
+        "lazy",
+        "mutex",
+        "num",
+        "regex",
+        "string",
+        "uuid",
+        "chrono",
+        "toml",
+        "yaml",
+        "build",
+        "bench",
+        "macro",
+        "buffer",
+        "stream",
+        "channel",
+        "runtime",
+        "executor",
+        "scheduler",
+        "parallel",
+        "pin",
     ];
 
     if GENERIC_WORDS.contains(&lower.as_str()) {
@@ -132,6 +294,19 @@ fn is_dep_in_domain(dep_name: &str, domain: &std::collections::HashSet<String>) 
         .any(|tech| lower.contains(tech.as_str()) || tech.contains(lower.as_str()))
 }
 
+/// Normalize a title for deduplication: lowercase, strip punctuation, first 10 words
+fn normalize_gap_title(title: &str) -> String {
+    title
+        .to_lowercase()
+        .chars()
+        .filter(|c| c.is_alphanumeric() || c.is_whitespace())
+        .collect::<String>()
+        .split_whitespace()
+        .take(10)
+        .collect::<Vec<&str>>()
+        .join(" ")
+}
+
 /// Detect knowledge gaps across all tracked dependencies
 pub fn detect_knowledge_gaps(conn: &rusqlite::Connection) -> Result<Vec<KnowledgeGap>, String> {
     // Get all tracked dependencies
@@ -143,6 +318,13 @@ pub fn detect_knowledge_gaps(conn: &rusqlite::Connection) -> Result<Vec<Knowledg
     // Build user's tech domain for filtering
     let domain = build_tech_domain(conn);
 
+    // Load primary stack for competing tech filtering
+    let primary_stack = load_primary_stack(conn);
+    let anti_deps = crate::competing_tech::get_anti_dependencies(&primary_stack);
+
+    // Get active project paths (committed to in last 30 days)
+    let active_projects = get_active_project_paths(conn);
+
     // Deduplicate deps by package name (same dep across projects → one gap)
     let mut seen_deps: std::collections::HashMap<String, Vec<String>> =
         std::collections::HashMap::new();
@@ -153,6 +335,16 @@ pub fn detect_knowledge_gaps(conn: &rusqlite::Connection) -> Result<Vec<Knowledg
             .push(dep.project_path.clone());
     }
 
+    info!(
+        target: "4da::knowledge_decay",
+        unique_deps = seen_deps.len(),
+        total_deps = deps.len(),
+        "Processing dependencies for knowledge gaps"
+    );
+
+    // Hard cap: only process first 50 unique deps to avoid scanning thousands.
+    // The deps are already ordered by project_path so active projects come first.
+    let mut processed_count: usize = 0;
     let mut gaps = Vec::new();
 
     for dep in &deps {
@@ -162,13 +354,32 @@ pub fn detect_knowledge_gaps(conn: &rusqlite::Connection) -> Result<Vec<Knowledg
             None => continue, // Already processed
         };
 
+        processed_count += 1;
+        if processed_count > 50 {
+            break; // Hard cap: don't scan more than 50 unique deps
+        }
+
         // Skip deps with very short names — too generic for LIKE matching
-        if dep.package_name.len() < 4 {
+        if dep.package_name.len() < 5 {
             continue;
         }
 
         // Domain filter: only show gaps for deps relevant to user's tech stack
         if !is_dep_in_domain(&dep.package_name, &domain) {
+            continue;
+        }
+
+        // Competing tech filter: skip deps that are competitors to user's chosen stack
+        if anti_deps.contains(&dep.package_name.to_lowercase()) {
+            continue;
+        }
+
+        // Active project scoping: skip deps from dormant projects
+        if !active_projects.is_empty()
+            && !active_projects
+                .iter()
+                .any(|ap| paths.iter().any(|dp| dp.contains(ap) || ap.contains(dp)))
+        {
             continue;
         }
 
@@ -259,9 +470,16 @@ fn find_missed_items(
     // Post-filter: verify word-boundary match in title to avoid false positives
     // e.g. "next" should match "Next.js" or "next release" but not "unexpected"
     let dep_lower = package_name.to_lowercase();
+
+    // Deduplicate by normalized title (first 10 words, lowercased, stripped punctuation)
+    let mut seen_titles: std::collections::HashSet<String> = std::collections::HashSet::new();
     let items: Vec<MissedItem> = candidates
         .into_iter()
         .filter(|item| has_word_boundary_match(&item.title, &dep_lower))
+        .filter(|item| {
+            let normalized = normalize_gap_title(&item.title);
+            seen_titles.insert(normalized) // true if this is NEW (not a duplicate)
+        })
         .take(5)
         .collect();
 
@@ -387,4 +605,82 @@ pub fn get_knowledge_gap_count() -> Result<usize, String> {
         .filter(|g| g.gap_severity == GapSeverity::Critical || g.gap_severity == GapSeverity::High)
         .count();
     Ok(critical_count)
+}
+
+// ============================================================================
+// Tests
+// ============================================================================
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_normalize_gap_title() {
+        assert_eq!(
+            normalize_gap_title("TypeScript 6.0 Beta: What's New!"),
+            "typescript 60 beta whats new"
+        );
+        assert_eq!(
+            normalize_gap_title("TypeScript 6.0 Beta — What's New?"),
+            "typescript 60 beta whats new"
+        );
+    }
+
+    #[test]
+    fn test_normalize_deduplicates_similar_titles() {
+        // These two titles differ only at word 11+, so first-10-words match
+        let t1 =
+            normalize_gap_title("TypeScript 6.0 Beta: What's New in the Big Release Update Today");
+        let t2 = normalize_gap_title(
+            "TypeScript 6.0 Beta: What's New in the Big Release Update Tomorrow",
+        );
+        assert_eq!(t1, t2);
+
+        // Titles with different content should NOT match
+        let t3 = normalize_gap_title("TypeScript 6.0 Beta: Performance Improvements");
+        assert_ne!(t1, t3);
+    }
+
+    #[test]
+    fn test_generic_words_expanded() {
+        let domain = std::collections::HashSet::new();
+        // New additions should be filtered
+        assert!(!is_dep_in_domain("open", &domain));
+        assert!(!is_dep_in_domain("next", &domain));
+        assert!(!is_dep_in_domain("express", &domain));
+        assert!(!is_dep_in_domain("solid", &domain));
+        assert!(!is_dep_in_domain("fresh", &domain));
+        // Original generics still filtered
+        assert!(!is_dep_in_domain("node", &domain));
+        assert!(!is_dep_in_domain("space", &domain));
+        // Cross-ecosystem ambiguous names should be filtered
+        assert!(!is_dep_in_domain("futures", &domain));
+        assert!(!is_dep_in_domain("async", &domain));
+        assert!(!is_dep_in_domain("bytes", &domain));
+        assert!(!is_dep_in_domain("config", &domain));
+        assert!(!is_dep_in_domain("runtime", &domain));
+    }
+
+    #[test]
+    fn test_domain_match_still_works() {
+        let mut domain = std::collections::HashSet::new();
+        domain.insert("tokio".to_string());
+        domain.insert("serde".to_string());
+        assert!(is_dep_in_domain("tokio", &domain));
+        assert!(is_dep_in_domain("serde", &domain));
+        // Substring match: rusqlite contains "sqlite" if sqlite is in domain
+        domain.insert("sqlite".to_string());
+        assert!(is_dep_in_domain("rusqlite", &domain));
+    }
+
+    #[test]
+    fn test_word_boundary_match() {
+        assert!(has_word_boundary_match("Next.js 15 Released", "next"));
+        assert!(has_word_boundary_match("What's next for Rust", "next"));
+        assert!(!has_word_boundary_match(
+            "Unexpected behavior in Node",
+            "next"
+        ));
+    }
 }

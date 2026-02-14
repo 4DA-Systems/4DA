@@ -57,8 +57,8 @@ bounds {
     feedback_scale: 0.15       # [0.05, 0.50]
     source_quality_cap: [-0.10, 0.10]
     source_quality_mult: 0.10  # [0.01, 0.30]
-    off_domain_penalty: 0.50   # [0.05, 0.70]
-    relevance_default: 0.50    # [0.30, 0.70]
+    off_domain_penalty: 0.25   # [0.05, 0.70]
+    relevance_default: 0.35    # [0.30, 0.70]
 }
 
 confidence_bonuses {
@@ -98,7 +98,7 @@ priority_caps {
 
 quality_floor {
     min_signals: 2           # [1, 4]
-    min_score: 0.70          # [0.40, 0.80]
+    min_score: 0.50          # [0.40, 0.80]
 }
 
 semantic_boost {
