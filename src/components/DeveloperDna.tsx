@@ -1,0 +1,270 @@
+import { useState, useEffect, memo } from 'react';
+import { invoke } from '@tauri-apps/api/core';
+import type { DeveloperDna } from '../types';
+
+const SOURCE_LABELS: Record<string, string> = {
+  hackernews: 'Hacker News',
+  reddit: 'Reddit',
+  arxiv: 'arXiv',
+  github: 'GitHub',
+  producthunt: 'Product Hunt',
+  youtube: 'YouTube',
+  twitter: 'Twitter/X',
+  rss: 'RSS',
+  devto: 'Dev.to',
+  lobsters: 'Lobsters',
+};
+
+export const DeveloperDnaPanel = memo(function DeveloperDnaPanel() {
+  const [dna, setDna] = useState<DeveloperDna | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+  const [expanded, setExpanded] = useState(false);
+
+  const loadDna = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const d = await invoke<DeveloperDna>('get_developer_dna');
+      setDna(d);
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadDna();
+  }, []);
+
+  const copyAsMarkdown = async () => {
+    try {
+      const md = await invoke<string>('export_developer_dna_markdown');
+      await window.navigator.clipboard.writeText(md);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // Clipboard may not be available
+    }
+  };
+
+  return (
+    <div className="bg-[#141414] rounded-lg border border-[#2A2A2A] overflow-hidden">
+      <button
+        onClick={() => setExpanded(!expanded)}
+        className="w-full px-5 py-4 flex items-center justify-between hover:bg-[#1A1A1A] transition-colors"
+      >
+        <div className="flex items-center gap-3">
+          <div className="w-8 h-8 bg-[#1F1F1F] rounded-lg flex items-center justify-center">
+            <span className="text-sm">&#x1F9EC;</span>
+          </div>
+          <div className="text-left">
+            <h2 className="font-medium text-white text-sm">Developer DNA</h2>
+            <p className="text-xs text-gray-500">
+              {dna ? dna.identity_summary : 'Your technology identity profile'}
+            </p>
+          </div>
+        </div>
+        <span className="text-gray-500 text-sm">{expanded ? '\u25BE' : '\u25B8'}</span>
+      </button>
+
+      {expanded && (
+        <div className="border-t border-[#2A2A2A]">
+          {loading && (
+            <div className="flex items-center gap-2 py-8 justify-center">
+              <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+              <span className="text-xs text-gray-500">Building your DNA profile...</span>
+            </div>
+          )}
+
+          {error && (
+            <div className="m-4 text-xs text-red-400 p-3 bg-red-500/10 rounded border border-red-500/20">
+              {error}
+            </div>
+          )}
+
+          {dna && !loading && (
+            <div className="p-5 space-y-6">
+              {/* Identity Header */}
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-lg font-semibold text-white">{dna.identity_summary}</h3>
+                  <p className="text-xs text-gray-500 mt-1">
+                    {dna.stats.days_active}d active &middot; {dna.stats.total_items_processed.toLocaleString()} items processed &middot; {dna.stats.rejection_rate.toFixed(1)}% filtered
+                  </p>
+                </div>
+                <button
+                  onClick={copyAsMarkdown}
+                  className="px-3 py-1.5 text-xs bg-[#1F1F1F] hover:bg-[#2A2A2A] border border-[#2A2A2A] rounded-lg text-gray-300 transition-colors"
+                >
+                  {copied ? 'Copied!' : 'Copy as Markdown'}
+                </button>
+              </div>
+
+              {/* Primary Stack */}
+              {dna.primary_stack.length > 0 && (
+                <Section title="Primary Stack">
+                  <div className="flex flex-wrap gap-2">
+                    {dna.primary_stack.map((tech) => (
+                      <Tag key={tech} label={tech} variant="primary" />
+                    ))}
+                  </div>
+                </Section>
+              )}
+
+              {/* Adjacent Tech */}
+              {dna.adjacent_tech.length > 0 && (
+                <Section title="Ecosystem">
+                  <div className="flex flex-wrap gap-2">
+                    {dna.adjacent_tech.map((tech) => (
+                      <Tag key={tech} label={tech} variant="secondary" />
+                    ))}
+                  </div>
+                </Section>
+              )}
+
+              {/* Top Dependencies */}
+              {dna.top_dependencies.length > 0 && (
+                <Section title="Key Dependencies">
+                  <div className="flex flex-wrap gap-2">
+                    {dna.top_dependencies.slice(0, 20).map((dep) => (
+                      <Tag key={`${dep.name}-${dep.project_path}`} label={dep.name} variant="dep" />
+                    ))}
+                    {dna.top_dependencies.length > 20 && (
+                      <span className="text-xs text-gray-500 self-center">
+                        +{dna.top_dependencies.length - 20} more
+                      </span>
+                    )}
+                  </div>
+                </Section>
+              )}
+
+              {/* Interests */}
+              {dna.interests.length > 0 && (
+                <Section title="Interests">
+                  <div className="flex flex-wrap gap-2">
+                    {dna.interests.map((topic) => (
+                      <Tag key={topic} label={topic} variant="interest" />
+                    ))}
+                  </div>
+                </Section>
+              )}
+
+              {/* Attention Distribution */}
+              {dna.top_engaged_topics.length > 0 && (
+                <Section title="Where Your Attention Goes">
+                  <div className="space-y-2">
+                    {dna.top_engaged_topics.slice(0, 8).map((topic) => (
+                      <div key={topic.topic} className="flex items-center gap-3">
+                        <span className="text-xs text-gray-400 w-28 truncate">{topic.topic}</span>
+                        <div className="flex-1 h-2 bg-[#1F1F1F] rounded-full overflow-hidden">
+                          <div
+                            className="h-full bg-white/20 rounded-full"
+                            style={{ width: `${Math.min(100, topic.percent_of_total)}%` }}
+                          />
+                        </div>
+                        <span className="text-xs text-gray-500 w-10 text-right">
+                          {topic.percent_of_total.toFixed(0)}%
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </Section>
+              )}
+
+              {/* Blind Spots */}
+              {dna.blind_spots.length > 0 && (
+                <Section title="Blind Spots">
+                  <div className="space-y-1">
+                    {dna.blind_spots.slice(0, 5).map((spot) => (
+                      <div
+                        key={spot.dependency}
+                        className="flex items-center justify-between px-3 py-2 bg-amber-500/5 rounded border border-amber-500/10"
+                      >
+                        <span className="text-xs text-amber-300 font-mono">{spot.dependency}</span>
+                        <span className="text-xs text-gray-500">{spot.severity} &middot; {spot.days_stale}d stale</span>
+                      </div>
+                    ))}
+                  </div>
+                </Section>
+              )}
+
+              {/* Source Engagement */}
+              {dna.source_engagement.length > 0 && (
+                <Section title="Source Engagement">
+                  <div className="grid grid-cols-2 gap-2">
+                    {dna.source_engagement.map((src) => (
+                      <div
+                        key={src.source_type}
+                        className="px-3 py-2 bg-[#1A1A1A] rounded border border-[#2A2A2A]"
+                      >
+                        <div className="text-xs font-medium text-gray-300">
+                          {SOURCE_LABELS[src.source_type] || src.source_type}
+                        </div>
+                        <div className="text-xs text-gray-500 mt-0.5">
+                          {src.items_seen.toLocaleString()} seen &middot; {src.items_saved} saved
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </Section>
+              )}
+
+              {/* Stats Footer */}
+              <div className="pt-4 border-t border-[#2A2A2A] flex items-center justify-between">
+                <div className="flex gap-6">
+                  <Stat label="Projects" value={dna.stats.project_count} />
+                  <Stat label="Dependencies" value={dna.stats.dependency_count} />
+                  <Stat label="Rejection Rate" value={`${dna.stats.rejection_rate.toFixed(1)}%`} />
+                </div>
+                <span className="text-xs text-gray-600">
+                  Generated {dna.generated_at.slice(0, 10)}
+                </span>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+});
+
+// ============================================================================
+// Sub-components
+// ============================================================================
+
+function Section({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <h4 className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">{title}</h4>
+      {children}
+    </div>
+  );
+}
+
+const TAG_VARIANTS: Record<string, string> = {
+  primary: 'bg-white/10 text-white border-white/20',
+  secondary: 'bg-white/5 text-gray-400 border-white/10',
+  dep: 'bg-blue-500/10 text-blue-300 border-blue-500/20',
+  interest: 'bg-emerald-500/10 text-emerald-300 border-emerald-500/20',
+};
+
+function Tag({ label, variant }: { label: string; variant: string }) {
+  const cls = TAG_VARIANTS[variant] || TAG_VARIANTS.secondary;
+  return (
+    <span className={`px-2 py-1 text-xs rounded border font-mono ${cls}`}>
+      {label}
+    </span>
+  );
+}
+
+function Stat({ label, value }: { label: string; value: string | number }) {
+  return (
+    <div>
+      <div className="text-sm font-medium text-white">{typeof value === 'number' ? value.toLocaleString() : value}</div>
+      <div className="text-xs text-gray-500">{label}</div>
+    </div>
+  );
+}

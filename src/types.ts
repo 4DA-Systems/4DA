@@ -59,6 +59,16 @@ export interface ScoreBreakdown {
   novelty_mult?: number;
   /** Intent boost from recent work topics (0.0 to 0.15) */
   intent_boost?: number;
+  /** Content type classification (e.g. "security_advisory", "show_and_tell") */
+  content_type?: string;
+  /** Content DNA utility multiplier (0.3 hiring to 1.3 security) */
+  content_dna_mult?: number;
+  /** Competing tech penalty multiplier (0.5 or 1.0) */
+  competing_mult?: number;
+  /** LLM relevance score (1-5 scale) */
+  llm_score?: number;
+  /** LLM's one-sentence explanation */
+  llm_reason?: string;
 }
 
 export interface AnalysisProgress {
@@ -414,4 +424,51 @@ export interface ContextPacket {
     total_interactions: number;
   };
   suggested_actions: string[];
+}
+
+// Developer DNA
+export interface DeveloperDna {
+  generated_at: string;
+  primary_stack: string[];
+  adjacent_tech: string[];
+  top_dependencies: DependencyEntry[];
+  interests: string[];
+  top_engaged_topics: EngagedTopic[];
+  blind_spots: BlindSpotEntry[];
+  source_engagement: SourceEngagement[];
+  stats: DnaStats;
+  identity_summary: string;
+}
+
+export interface DependencyEntry {
+  name: string;
+  project_path: string;
+}
+
+export interface EngagedTopic {
+  topic: string;
+  interactions: number;
+  percent_of_total: number;
+}
+
+export interface BlindSpotEntry {
+  dependency: string;
+  severity: string;
+  days_stale: number;
+}
+
+export interface SourceEngagement {
+  source_type: string;
+  items_seen: number;
+  items_saved: number;
+  engagement_rate: number;
+}
+
+export interface DnaStats {
+  total_items_processed: number;
+  total_relevant: number;
+  rejection_rate: number;
+  project_count: number;
+  dependency_count: number;
+  days_active: number;
 }

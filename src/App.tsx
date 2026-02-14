@@ -451,23 +451,40 @@ function App() {
               </button>
               <AudioBriefing />
               <ContextHandoff onStatus={(msg) => addToast(msg.includes('fail') ? 'error' : 'success', msg)} />
-              {/* Export button */}
+              {/* Export / Share buttons */}
               {state.analysisComplete && (
-                <button
-                  onClick={async () => {
-                    try {
-                      const md = await invoke<string>('export_results', { format: 'markdown' });
-                      await window.navigator.clipboard.writeText(md);
-                      addToast('success', 'Results copied to clipboard (Markdown)');
-                    } catch (e) {
-                      addToast('error', `Export failed: ${e}`);
-                    }
-                  }}
-                  className="w-10 h-10 rounded-lg flex items-center justify-center bg-[#1F1F1F] text-gray-500 border border-[#2A2A2A] hover:text-gray-300 transition-all"
-                  title="Copy results to clipboard (Markdown)"
-                >
-                  ↗
-                </button>
+                <>
+                  <button
+                    onClick={async () => {
+                      try {
+                        const md = await invoke<string>('export_results', { format: 'markdown' });
+                        await window.navigator.clipboard.writeText(md);
+                        addToast('success', 'Results copied to clipboard');
+                      } catch (e) {
+                        addToast('error', `Export failed: ${e}`);
+                      }
+                    }}
+                    className="w-10 h-10 rounded-lg flex items-center justify-center bg-[#1F1F1F] text-gray-500 border border-[#2A2A2A] hover:text-gray-300 transition-all"
+                    title="Copy results (Markdown)"
+                  >
+                    ↗
+                  </button>
+                  <button
+                    onClick={async () => {
+                      try {
+                        const digest = await invoke<string>('export_results', { format: 'digest' });
+                        await window.navigator.clipboard.writeText(digest);
+                        addToast('success', 'Shareable digest copied to clipboard');
+                      } catch (e) {
+                        addToast('error', `Digest export failed: ${e}`);
+                      }
+                    }}
+                    className="w-10 h-10 rounded-lg flex items-center justify-center bg-[#1F1F1F] text-gray-500 border border-[#2A2A2A] hover:text-[#D4AF37] transition-all"
+                    title="Copy shareable digest"
+                  >
+                    📋
+                  </button>
+                </>
               )}
             </div>
           </div>

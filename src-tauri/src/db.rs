@@ -1503,6 +1503,36 @@ pub struct FeedbackTopicSummary {
 }
 
 // ============================================================================
+// LLM Content Retrieval
+// ============================================================================
+
+impl Database {
+    /// Get first N chars of content for an item (for LLM judging)
+    pub fn get_item_content_snippet(
+        &self,
+        item_id: i64,
+        max_chars: usize,
+    ) -> Result<String, String> {
+        let conn = self.conn.lock();
+        let content: String = conn
+            .query_row(
+                "SELECT COALESCE(content, '') FROM source_items WHERE id = ?1",
+                params![item_id],
+                |row| row.get(0),
+            )
+            .map_err(|e| format!("Failed to get content for item {}: {}", item_id, e))?;
+
+        if content.len() <= max_chars {
+            Ok(content)
+        } else {
+            // Truncate at char boundary
+            let truncated: String = content.chars().take(max_chars).collect();
+            Ok(truncated)
+        }
+    }
+}
+
+// ============================================================================
 // Digest Types
 // ============================================================================
 

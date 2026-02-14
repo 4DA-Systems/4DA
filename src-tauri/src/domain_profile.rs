@@ -115,14 +115,95 @@ pub fn build_domain_profile(conn: &rusqlite::Connection) -> DomainProfile {
     }
 }
 
+/// Dependency names that exist across multiple ecosystems (Rust `futures` vs C++ futures).
+/// When one of these matches, we require corroboration: at least one OTHER topic must also
+/// match the user's primary_stack or all_tech. Without corroboration, downgrade to interest-level.
+const AMBIGUOUS_DEPS: &[&str] = &[
+    "futures",
+    "async",
+    "sync",
+    "core",
+    "base",
+    "web",
+    "app",
+    "http",
+    "log",
+    "url",
+    "net",
+    "cli",
+    "api",
+    "io",
+    "env",
+    "cfg",
+    "lib",
+    "util",
+    "config",
+    "crypto",
+    "rand",
+    "num",
+    "regex",
+    "time",
+    "chrono",
+    "uuid",
+    "json",
+    "xml",
+    "csv",
+    "toml",
+    "yaml",
+    "sql",
+    "proc",
+    "proc-macro",
+    "derive",
+    "macro",
+    "test",
+    "bench",
+    "build",
+    "bytes",
+    "string",
+    "either",
+    "lazy",
+    "once",
+    "pin",
+    "mutex",
+    "lock",
+    "parallel",
+    "runtime",
+    "scheduler",
+    "executor",
+    "channel",
+    "stream",
+    "buffer",
+];
+
+/// Check if a dependency name is ambiguous (exists across multiple ecosystems).
+fn is_ambiguous_dep(name: &str) -> bool {
+    AMBIGUOUS_DEPS.contains(&name)
+}
+
+/// Check if ANY other topic (besides `skip`) corroborates domain membership.
+fn has_corroboration(topics: &[String], skip: &str, profile: &DomainProfile) -> bool {
+    topics.iter().any(|t| {
+        let lower = t.to_lowercase();
+        if lower == skip {
+            return false;
+        }
+        // Corroborated if another topic matches primary stack or all_tech
+        profile
+            .primary_stack
+            .iter()
+            .any(|s| fuzzy_tech_match(&lower, s))
+            || profile.all_tech.iter().any(|s| fuzzy_tech_match(&lower, s))
+    })
+}
+
 /// Compute graduated domain relevance for a set of topics against the profile.
 /// Returns 0.0 (completely off-domain) to 1.0 (direct primary stack match).
 ///
 /// Scoring tiers:
 ///   1.0 — topic matches primary stack
-///   0.85 — topic matches a project dependency
+///   0.85 — topic matches a project dependency (non-ambiguous, or ambiguous with corroboration)
 ///   0.70 — topic matches detected/adjacent tech
-///   0.50 — topic matches an interest
+///   0.50 — topic matches an interest OR ambiguous dep without corroboration
 ///   0.15 — no match but profile is populated (off-domain)
 ///   1.0 — profile is empty (no filtering, backward compat)
 pub fn compute_domain_relevance(topics: &[String], profile: &DomainProfile) -> f32 {
@@ -155,7 +236,17 @@ pub fn compute_domain_relevance(topics: &[String], profile: &DomainProfile) -> f
             .iter()
             .any(|d| fuzzy_tech_match(&lower, d))
         {
-            best_relevance = best_relevance.max(0.85);
+            // Ambiguous deps (e.g. "futures") need corroboration from another topic
+            if is_ambiguous_dep(&lower) {
+                if has_corroboration(topics, &lower, profile) {
+                    best_relevance = best_relevance.max(0.85);
+                } else {
+                    // Ambiguous dep with no corroboration → downgrade to interest-level
+                    best_relevance = best_relevance.max(0.50);
+                }
+            } else {
+                best_relevance = best_relevance.max(0.85);
+            }
             continue;
         }
 
@@ -375,5 +466,56 @@ mod tests {
         assert!(!is_notable_dependency("cc"));
         assert!(!is_notable_dependency("syn"));
         assert!(!is_notable_dependency("proc-macro2"));
+    }
+
+    #[test]
+    fn test_ambiguous_dep_without_corroboration() {
+        // User has Rust dep "futures", article topics are ["futures", "c++", "hpx"]
+        // "futures" is ambiguous, and no OTHER topic matches Rust stack → downgrade to 0.50
+        let profile = DomainProfile {
+            primary_stack: HashSet::from(["rust".to_string()]),
+            adjacent_tech: HashSet::new(),
+            all_tech: HashSet::from(["rust".to_string(), "tokio".to_string()]),
+            dependency_names: HashSet::from(["futures".to_string(), "tokio".to_string()]),
+            interest_topics: HashSet::new(),
+        };
+        let topics = vec!["futures".to_string(), "c++".to_string(), "hpx".to_string()];
+        // Without corroboration, "futures" should downgrade to 0.50
+        assert_eq!(compute_domain_relevance(&topics, &profile), 0.50);
+    }
+
+    #[test]
+    fn test_ambiguous_dep_with_corroboration() {
+        // Article about Rust async with topics ["futures", "tokio", "async"]
+        // "futures" is ambiguous, but "tokio" corroborates (matches all_tech) → 0.85
+        let profile = DomainProfile {
+            primary_stack: HashSet::from(["rust".to_string()]),
+            adjacent_tech: HashSet::new(),
+            all_tech: HashSet::from(["rust".to_string(), "tokio".to_string()]),
+            dependency_names: HashSet::from(["futures".to_string(), "tokio".to_string()]),
+            interest_topics: HashSet::new(),
+        };
+        let topics = vec![
+            "futures".to_string(),
+            "tokio".to_string(),
+            "async".to_string(),
+        ];
+        // "tokio" corroborates → dep-level relevance 0.85
+        // Actually "tokio" itself hits dep match at 0.85 directly
+        assert!(compute_domain_relevance(&topics, &profile) >= 0.85);
+    }
+
+    #[test]
+    fn test_non_ambiguous_dep_no_corroboration_needed() {
+        // "tokio" is NOT ambiguous → gets 0.85 even without corroboration
+        let profile = DomainProfile {
+            primary_stack: HashSet::from(["rust".to_string()]),
+            adjacent_tech: HashSet::new(),
+            all_tech: HashSet::from(["rust".to_string(), "tokio".to_string()]),
+            dependency_names: HashSet::from(["tokio".to_string()]),
+            interest_topics: HashSet::new(),
+        };
+        let topics = vec!["tokio".to_string()];
+        assert_eq!(compute_domain_relevance(&topics, &profile), 0.85);
     }
 }

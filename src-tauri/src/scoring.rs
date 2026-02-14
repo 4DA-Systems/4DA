@@ -639,10 +639,16 @@ pub(crate) enum VersionDelta {
 /// Common English words that collide with package names.
 /// These require nearby language-context words to match.
 const COMMON_ENGLISH_WORDS: &[&str] = &[
+    // 2-3 letter
     "is", "it", "or", "and", "the", "got", "set", "get", "put", "has", "run", "use", "can", "will",
+    "ms", "log", "map", "tar", "zip", "hex", "png", "pdf", // 4 letter
     "call", "data", "path", "file", "time", "date", "form", "page", "view", "list", "item", "test",
-    "main", "core", "base", "once", "open", "copy", "send", "body", "log", "map", "read", "sort",
-    "find", "make", "next", "link", "node", "kind", "mark", "ms",
+    "main", "core", "base", "once", "open", "copy", "send", "body", "read", "sort", "dirs", "find",
+    "make", "next", "link", "node", "kind", "mark", "drop", "move", "type", "just",
+    // 5+ letter — real English words that are also package names
+    "image", "sharp", "quote", "level", "model", "state", "store", "route", "group", "serve",
+    "watch", "clean", "fresh", "smart", "craft", "prime", "solid", "super", "simple", "table",
+    "notify", "scraper",
 ];
 
 /// Language-context words that disambiguate package names from English
@@ -1755,10 +1761,20 @@ pub(crate) fn score_item(
     };
     let base_score = (base_score - off_domain_penalty).clamp(0.0, 1.0);
 
+    // Competing tech penalty: content primarily about alternatives gets demoted
+    let competing_mult = crate::competing_tech::compute_competing_penalty(
+        &topics,
+        input.title,
+        &ctx.domain_profile.primary_stack,
+    );
+
     // Content quality: penalize clickbait, boost authoritative technical content
     let content_quality =
         crate::content_quality::compute_content_quality(input.title, input.content, input.url);
-    let base_score = (base_score * content_quality.multiplier).clamp(0.0, 1.0);
+
+    // Content DNA: utility multiplier by content type
+    let (content_type, content_dna_mult) =
+        crate::content_dna::classify_content(input.title, input.content);
 
     // Novelty: penalize introductory content for known tech, boost releases
     let novelty = crate::novelty::compute_novelty(
@@ -1767,7 +1783,23 @@ pub(crate) fn score_item(
         &topics,
         &ctx.domain_profile.primary_stack,
     );
-    let base_score = (base_score * novelty.multiplier).clamp(0.0, 1.0);
+
+    // Combine all quality multipliers as a SINGLE dampened composite.
+    // Asymmetric dampening: penalties keep more teeth than boosts.
+    //   Penalties: 65% strength — raw 0.60 → 0.74, raw 0.85 → 0.9025, raw 0.30 → 0.545
+    //   Boosts:    40% strength — raw 1.15 → 1.06, raw 1.30 → 1.12
+    let dampen = |m: f32| {
+        if m < 1.0 {
+            1.0 + (m - 1.0) * 0.65
+        } else {
+            1.0 + (m - 1.0) * 0.40
+        }
+    };
+    let composite_mult = dampen(competing_mult)
+        * dampen(content_quality.multiplier)
+        * dampen(content_dna_mult)
+        * dampen(novelty.multiplier);
+    let base_score = (base_score * composite_mult).clamp(0.0, 1.0);
 
     // Intent boost: amplify items matching recent work topics (what you're coding RIGHT NOW)
     // If you committed code about "scoring" in the last 2h, articles about scoring get boosted
@@ -1902,6 +1934,11 @@ pub(crate) fn score_item(
         content_quality_mult: content_quality.multiplier,
         novelty_mult: novelty.multiplier,
         intent_boost,
+        content_type: Some(content_type.slug().to_string()),
+        content_dna_mult,
+        competing_mult,
+        llm_score: None,
+        llm_reason: None,
     };
 
     // Optional signal classification — only classify items that pass the relevance threshold

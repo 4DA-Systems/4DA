@@ -325,13 +325,35 @@ impl ACE {
             }
 
             let topics_json = serde_json::to_string(&signal.extracted_topics).unwrap_or_default();
+            // Collect all recent commit messages (not just the first)
+            let messages: String = signal
+                .recent_commits
+                .iter()
+                .take(5)
+                .map(|c| c.message.as_str())
+                .collect::<Vec<_>>()
+                .join(" | ");
+            // Skip if no commit hash (repo has no recent activity)
+            let hash = match &signal.last_commit {
+                Some(h) if !h.is_empty() => h.clone(),
+                _ => continue,
+            };
+            // Deduplicate: skip if this exact commit hash was already stored for this repo
+            let already_stored: bool = conn.query_row(
+                "SELECT EXISTS(SELECT 1 FROM git_signals WHERE repo_path = ?1 AND commit_hash = ?2)",
+                rusqlite::params![signal.repo_path.to_string_lossy(), &hash],
+                |r| r.get(0),
+            ).unwrap_or(false);
+            if already_stored {
+                continue;
+            }
             conn.execute(
                 "INSERT INTO git_signals (repo_path, commit_hash, commit_message, extracted_topics, timestamp)
                  VALUES (?1, ?2, ?3, ?4, datetime('now'))",
                 rusqlite::params![
                     signal.repo_path.to_string_lossy(),
-                    signal.last_commit.clone().unwrap_or_default(),
-                    signal.recent_commits.first().map(|c| c.message.clone()).unwrap_or_default(),
+                    &hash,
+                    &messages,
                     topics_json
                 ],
             ).map_err(|e| format!("Failed to store git signal: {}", e))?;

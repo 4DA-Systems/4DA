@@ -22,40 +22,128 @@ use crate::{
 static SIGNAL_CLASSIFIER: Lazy<signals::SignalClassifier> =
     Lazy::new(signals::SignalClassifier::new);
 
-/// Build a concise context summary for LLM reranking
+/// Build a rich context summary for LLM reranking.
+/// Provides the LLM with everything it needs to judge genuine usefulness.
 fn build_rerank_context_summary(ctx: &scoring::ScoringContext) -> String {
     let mut parts = Vec::new();
 
-    if !ctx.ace_ctx.detected_tech.is_empty() {
+    // 1. Primary tech stack (declared by user, not the 95 auto-detected items)
+    if !ctx.declared_tech.is_empty() {
+        parts.push(format!("Primary tech: {}", ctx.declared_tech.join(", ")));
+    } else if !ctx.ace_ctx.detected_tech.is_empty() {
+        // Fallback to detected, but limit to top 8
+        let top: Vec<&str> = ctx
+            .ace_ctx
+            .detected_tech
+            .iter()
+            .take(8)
+            .map(|s| s.as_str())
+            .collect();
+        parts.push(format!("Tech stack: {}", top.join(", ")));
+    }
+
+    // 2. Key dependencies (non-dev, notable packages)
+    if !ctx.ace_ctx.dependency_info.is_empty() {
+        let notable_deps: Vec<&str> = ctx
+            .ace_ctx
+            .dependency_info
+            .values()
+            .filter(|d| !d.is_dev)
+            .take(15)
+            .map(|d| d.package_name.as_str())
+            .collect();
+        if !notable_deps.is_empty() {
+            parts.push(format!("Key dependencies: {}", notable_deps.join(", ")));
+        }
+    }
+
+    // 3. Current work focus (work topics from recent git activity)
+    if !ctx.work_topics.is_empty() {
         parts.push(format!(
-            "Tech stack: {}",
-            ctx.ace_ctx.detected_tech.join(", ")
+            "Currently working on: {}",
+            ctx.work_topics.join(", ")
         ));
     }
 
-    if !ctx.ace_ctx.active_topics.is_empty() {
-        parts.push(format!(
-            "Active topics: {}",
-            ctx.ace_ctx.active_topics.join(", ")
-        ));
+    // 4. Anti-technologies (competing tech the user has chosen NOT to use)
+    if !ctx.domain_profile.primary_stack.is_empty() {
+        let anti = crate::competing_tech::get_anti_dependencies(&ctx.domain_profile.primary_stack);
+        if !anti.is_empty() {
+            let mut anti_vec: Vec<&str> = anti.iter().map(|s| s.as_str()).collect();
+            anti_vec.sort();
+            anti_vec.truncate(10);
+            parts.push(format!(
+                "Does NOT use (chose alternatives): {}",
+                anti_vec.join(", ")
+            ));
+        }
     }
 
-    if !ctx.interests.is_empty() {
-        let names: Vec<&str> = ctx.interests.iter().map(|i| i.topic.as_str()).collect();
-        parts.push(format!("Declared interests: {}", names.join(", ")));
-    }
-
+    // 5. Anti-topics (learned from behavior)
     if !ctx.ace_ctx.anti_topics.is_empty() {
         parts.push(format!(
-            "NOT interested in: {}",
+            "Consistently rejects: {}",
             ctx.ace_ctx.anti_topics.join(", ")
         ));
+    }
+
+    // 6. Declared interests
+    if !ctx.interests.is_empty() {
+        let names: Vec<&str> = ctx
+            .interests
+            .iter()
+            .take(10)
+            .map(|i| i.topic.as_str())
+            .collect();
+        parts.push(format!("Interests: {}", names.join(", ")));
+    }
+
+    // 7. Recent git commits (from DB)
+    if let Ok(db) = crate::open_db_connection() {
+        // Recent commit messages
+        if let Ok(mut stmt) = db.prepare(
+            "SELECT commit_message FROM git_signals WHERE commit_message IS NOT NULL ORDER BY timestamp DESC LIMIT 5",
+        ) {
+            if let Ok(rows) = stmt.query_map([], |row| row.get::<_, String>(0)) {
+                let commits: Vec<String> = rows.flatten().collect();
+                if !commits.is_empty() {
+                    let commit_lines: Vec<String> = commits
+                        .iter()
+                        .map(|c| {
+                            let truncated: String = c.chars().take(80).collect();
+                            format!("- {}", truncated)
+                        })
+                        .collect();
+                    parts.push(format!("Recent commits:\n{}", commit_lines.join("\n")));
+                }
+            }
+        }
+
+        // Recently engaged topics (from feedback/interactions)
+        if let Ok(mut stmt) = db.prepare(
+            "SELECT DISTINCT si.title FROM feedback f JOIN source_items si ON si.id = f.source_item_id WHERE f.relevant = 1 ORDER BY f.created_at DESC LIMIT 5",
+        ) {
+            if let Ok(rows) = stmt.query_map([], |row| row.get::<_, String>(0)) {
+                let saved: Vec<String> = rows.flatten().collect();
+                if !saved.is_empty() {
+                    let titles: Vec<String> = saved
+                        .iter()
+                        .map(|t| {
+                            let truncated: String = t.chars().take(60).collect();
+                            format!("- {}", truncated)
+                        })
+                        .collect();
+                    parts.push(format!("Recently saved:\n{}", titles.join("\n")));
+                }
+            }
+        }
     }
 
     parts.join("\n")
 }
 
 /// Apply LLM reranking to scored results if enabled and within limits.
+/// Uses smaller batches (8 items) with real article content for accurate judging.
 /// Returns the number of items judged, or None if skipped.
 async fn apply_llm_reranking(
     app: &AppHandle,
@@ -79,16 +167,26 @@ async fn apply_llm_reranking(
         return None;
     }
 
-    // Select candidates: items above min_embedding_score, not excluded
+    // Get database for content snippets
+    let db = match get_database() {
+        Ok(db) => db,
+        Err(_) => return None,
+    };
+
+    // Select candidates with ACTUAL content from the database
     let candidates: Vec<(String, String, String)> = results
         .iter()
         .filter(|r| r.top_score >= rerank_config.min_embedding_score && !r.excluded)
         .take(rerank_config.max_items_per_batch)
         .map(|r| {
+            let content_snippet = db
+                .get_item_content_snippet(r.id as i64, 300)
+                .unwrap_or_default();
+            let source_label = format!("[{}]", r.source_type);
             (
                 r.id.to_string(),
                 r.title.clone(),
-                r.explanation.clone().unwrap_or_default(),
+                format!("{} {}", source_label, content_snippet),
             )
         })
         .collect();
@@ -97,75 +195,112 @@ async fn apply_llm_reranking(
         return None;
     }
 
-    emit_progress(
-        app,
-        "rerank",
-        0.92,
-        &format!("LLM judging {} candidates...", candidates.len()),
-        0,
-        candidates.len(),
-    );
-
     let llm_settings = {
         let settings = get_settings_manager().lock();
         settings.get().llm.clone()
     };
     let judge = crate::llm::RelevanceJudge::new(llm_settings);
 
-    match judge.judge_batch(&context_summary, candidates).await {
-        Ok((judgments, input_tokens, output_tokens)) => {
-            let mut confirmed = 0usize;
-            let mut rejected = 0usize;
+    // Split into batches of 8 for better LLM accuracy
+    const LLM_BATCH_SIZE: usize = 8;
+    let batches: Vec<Vec<(String, String, String)>> = candidates
+        .chunks(LLM_BATCH_SIZE)
+        .map(|c| c.to_vec())
+        .collect();
 
-            for judgment in &judgments {
-                if let Some(result) = results
-                    .iter_mut()
-                    .find(|r| r.id.to_string() == judgment.item_id)
-                {
-                    if !judgment.relevant {
-                        // LLM says not relevant — demote significantly
-                        result.relevant = false;
-                        result.top_score *= 0.4;
-                        result.explanation =
-                            Some(format!("Filtered by AI: {}", judgment.reasoning));
-                        rejected += 1;
-                    } else {
-                        // LLM confirms relevant — blend scores and enrich
-                        result.top_score =
-                            (result.top_score * 0.6 + judgment.confidence * 0.4).clamp(0.0, 1.0);
-                        if !judgment.reasoning.is_empty() {
-                            result.explanation = Some(judgment.reasoning.clone());
-                        }
-                        confirmed += 1;
-                    }
-                }
+    let total_batches = batches.len();
+    let total_candidates = batches.iter().map(|b| b.len()).sum::<usize>();
+    let mut all_judgments = Vec::new();
+    let mut total_input: u64 = 0;
+    let mut total_output: u64 = 0;
+
+    for (batch_idx, batch) in batches.iter().enumerate() {
+        emit_progress(
+            app,
+            "rerank",
+            0.90 + (batch_idx as f32 / total_batches as f32) * 0.08,
+            &format!(
+                "LLM judging batch {}/{} ({} items)...",
+                batch_idx + 1,
+                total_batches,
+                batch.len()
+            ),
+            all_judgments.len(),
+            total_candidates,
+        );
+
+        match judge.judge_batch(&context_summary, batch.clone()).await {
+            Ok((judgments, input_tokens, output_tokens)) => {
+                total_input += input_tokens;
+                total_output += output_tokens;
+                all_judgments.extend(judgments);
             }
-
-            // Re-sort after LLM adjustments
-            scoring::sort_results(results);
-
-            // Track token usage for daily limits
-            {
-                let mut settings = get_settings_manager().lock();
-                let cost = judge.estimate_cost_cents(input_tokens, output_tokens);
-                settings.record_usage(input_tokens + output_tokens, cost);
+            Err(e) => {
+                warn!(target: "4da::rerank", batch = batch_idx, error = %e, "LLM batch failed, continuing");
             }
-
-            info!(target: "4da::rerank",
-                judged = judgments.len(),
-                confirmed = confirmed,
-                rejected = rejected,
-                tokens = input_tokens + output_tokens,
-                "LLM reranking complete"
-            );
-
-            Some(judgments.len())
-        }
-        Err(e) => {
-            warn!(target: "4da::rerank", error = %e, "LLM reranking failed - using embedding scores only");
-            None
         }
     }
+
+    if all_judgments.is_empty() {
+        return None;
+    }
+
+    let mut confirmed = 0usize;
+    let mut rejected = 0usize;
+
+    for judgment in &all_judgments {
+        if let Some(result) = results
+            .iter_mut()
+            .find(|r| r.id.to_string() == judgment.item_id)
+        {
+            // Store LLM score and reason in breakdown
+            if let Some(ref mut breakdown) = result.score_breakdown {
+                breakdown.llm_score = Some(judgment.confidence * 5.0); // Map back to 1-5
+                breakdown.llm_reason = if judgment.reasoning.is_empty() {
+                    None
+                } else {
+                    Some(judgment.reasoning.clone())
+                };
+            }
+
+            if !judgment.relevant {
+                // LLM says not relevant — hard reject
+                result.relevant = false;
+                result.top_score *= 0.15;
+                result.explanation = Some(format!("Filtered: {}", judgment.reasoning));
+                rejected += 1;
+            } else {
+                // LLM confirms — LLM score dominates (70/30 blend)
+                result.top_score =
+                    (result.top_score * 0.3 + judgment.confidence * 0.7).clamp(0.0, 1.0);
+                if !judgment.reasoning.is_empty() {
+                    result.explanation = Some(judgment.reasoning.clone());
+                }
+                confirmed += 1;
+            }
+        }
+    }
+
+    // Re-sort after LLM adjustments
+    scoring::sort_results(results);
+
+    // Track token usage for daily limits
+    {
+        let mut settings = get_settings_manager().lock();
+        let cost = judge.estimate_cost_cents(total_input, total_output);
+        settings.record_usage(total_input + total_output, cost);
+    }
+
+    info!(target: "4da::rerank",
+        judged = all_judgments.len(),
+        confirmed = confirmed,
+        rejected = rejected,
+        batches = total_batches,
+        tokens = total_input + total_output,
+        "LLM reranking complete"
+    );
+
+    Some(all_judgments.len())
 }
 
 /// Check if analysis has been aborted by the user
@@ -777,6 +912,20 @@ pub(crate) async fn analyze_cached_content_impl(
         _ => {} // No pending items or DB error - continue normally
     }
 
+    // Fetch fresh content from all sources before scoring
+    // Without this, manual analysis only re-scores stale cached items
+    emit_progress(app, "fetch", 0.08, "Fetching fresh content...", 0, 0);
+    match crate::source_fetching::fill_cache_background(app).await {
+        Ok(count) => {
+            if count > 0 {
+                info!(target: "4da::analysis", new_items = count, "Fetched fresh content before scoring");
+            }
+        }
+        Err(e) => {
+            warn!(target: "4da::analysis", error = %e, "Cache fill failed, continuing with existing cache");
+        }
+    }
+
     // Check if we can do differential analysis (have previous results + timestamp)
     let (last_completed_at, previous_results) = {
         let state = get_analysis_state();
@@ -795,7 +944,7 @@ pub(crate) async fn analyze_cached_content_impl(
             .map_err(|e| format!("Failed to load new items: {}", e))?;
 
         if new_items.is_empty() {
-            // No new items - return previous results with freshness re-scored
+            // No new items since last analysis — try re-scoring recent cache (7 days)
             info!(target: "4da::analysis", "No new items since last analysis, re-scoring existing for freshness");
             emit_progress(
                 app,
@@ -806,10 +955,24 @@ pub(crate) async fn analyze_cached_content_impl(
                 0,
             );
 
-            // Re-score existing items for updated freshness/affinities
+            // Re-score existing items for updated freshness/affinities (7-day window)
             let all_items = db
-                .get_items_since_hours(48, 1000)
+                .get_items_since_hours(168, 1000)
                 .map_err(|e| format!("Failed to load cached items: {}", e))?;
+
+            if all_items.is_empty() {
+                // Cache is stale — fetch fresh content
+                warn!(target: "4da::analysis", "No items in 7-day window, fetching fresh content");
+                emit_progress(
+                    app,
+                    "fetch",
+                    0.1,
+                    "Cache stale, fetching fresh items...",
+                    0,
+                    0,
+                );
+                return run_multi_source_analysis_impl(app).await;
+            }
 
             return score_items_full(app, db, &all_items).await;
         }
@@ -902,8 +1065,9 @@ pub(crate) async fn analyze_cached_content_impl(
     }
 
     // Full analysis path (no previous results or first run)
+    // Use 7-day window to include items from recent fetches
     let cached_items = db
-        .get_items_since_hours(48, 1000)
+        .get_items_since_hours(168, 1000)
         .map_err(|e| format!("Failed to load cached items: {}", e))?;
 
     let total_cached = cached_items.len();

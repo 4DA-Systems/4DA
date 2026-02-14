@@ -97,6 +97,27 @@ pub struct SignalClassification {
 }
 
 // ============================================================================
+// Helpers
+// ============================================================================
+
+/// Check if `text` contains `term` at a word boundary (not embedded in a larger word).
+/// "rust" matches "Rust 1.80" but not "frustrating".
+fn has_word_boundary(text: &str, term: &str) -> bool {
+    let mut search_from = 0;
+    while let Some(pos) = text[search_from..].find(term) {
+        let abs = search_from + pos;
+        let before_ok = abs == 0 || !text.as_bytes()[abs - 1].is_ascii_alphanumeric();
+        let after = abs + term.len();
+        let after_ok = after >= text.len() || !text.as_bytes()[after].is_ascii_alphanumeric();
+        if before_ok && after_ok {
+            return true;
+        }
+        search_from = abs + 1;
+    }
+    false
+}
+
+// ============================================================================
 // Pattern Matching Engine
 // ============================================================================
 
@@ -330,9 +351,10 @@ impl SignalClassifier {
         }
 
         // Two-tier tech matching: declared_tech for action text + priority, detected_tech for context only
+        // Match against TITLE ONLY (not full content) to avoid false labels like "rust resource" on Fastify articles
         let declared_match = declared_tech.iter().find(|tech| {
             let t = tech.to_lowercase();
-            text_lower.contains(&t)
+            has_word_boundary(&title_lower, &t)
         });
 
         // Priority escalation: base weight + bonuses
@@ -602,6 +624,37 @@ mod tests {
                 c.action
             );
         }
+    }
+
+    /// Fastify article that mentions "rust" once in content should NOT be labeled "rust resource".
+    /// Title-only matching prevents this false positive.
+    #[test]
+    fn test_content_mention_does_not_create_false_label() {
+        let classifier = SignalClassifier::new();
+        let declared = vec!["rust".to_string()];
+        let result = classifier.classify(
+            "Building REST APIs with Fastify: A Deep Dive Tutorial",
+            "A comprehensive guide to best practices. Unlike rust web frameworks, Fastify uses JavaScript patterns for routing.",
+            0.5,
+            &declared,
+            &declared,
+        );
+        if let Some(c) = result {
+            // Action must NOT say "rust resource" — the article is about Fastify, not Rust
+            assert!(
+                !c.action.to_lowercase().contains("rust"),
+                "Fastify article should not be labeled as rust resource, got: {}",
+                c.action
+            );
+        }
+    }
+
+    #[test]
+    fn test_word_boundary_matching() {
+        assert!(has_word_boundary("rust 1.80", "rust"));
+        assert!(has_word_boundary("learn rust today", "rust"));
+        assert!(!has_word_boundary("frustrating bug", "rust"));
+        assert!(!has_word_boundary("entrust your data", "rust"));
     }
 
     #[test]

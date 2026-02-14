@@ -396,7 +396,8 @@ impl RelevanceJudge {
         }
     }
 
-    /// Judge relevance of multiple items against user context
+    /// Judge relevance of multiple items against user context.
+    /// Uses a 1-5 scoring rubric and sends real article content.
     pub async fn judge_batch(
         &self,
         context_summary: &str,
@@ -406,52 +407,42 @@ impl RelevanceJudge {
             return Ok((vec![], 0, 0));
         }
 
-        let system_prompt = r#"You are a STRICT relevance filter for a personalized tech intelligence system.
-Your job is to REJECT items that don't specifically relate to the user's active work.
+        let system_prompt = r#"You are a relevance judge for a developer intelligence tool. Rate each article's genuine usefulness to THIS specific developer — not whether it mentions their tech, but whether they'd actually benefit from reading it.
 
-## STRICT Relevance Criteria
-Mark as RELEVANT (true) ONLY if:
-- DIRECTLY relates to a specific technology/tool in their context
-- Would concretely help a project they're actively building
-- Covers a specific library, API, or pattern they use
+## Scoring Rubric (be strict — most items should score 1-2)
+5 = MUST-READ: Security alert for their dependency, breaking change they must act on, directly solves a problem they're currently working on
+4 = HIGH VALUE: Advanced technique for their core tech, important release for a dependency they use daily, architectural pattern directly applicable to their project
+3 = WORTH KNOWING: Relevant ecosystem news, useful tool that fits their exact stack, technical deep-dive in their specific domain
+2 = MARGINAL: Mentions their tech but isn't actionable, generic advice, tangentially related
+1 = NOISE: Wrong domain, competing tech focused, beginner content for tech they know well, self-promotional "I built X", career/hiring, academic papers outside their domain
 
-Mark as NOT RELEVANT (false) if:
-- Generic tech news (even if about languages they use)
-- "Cool but won't use" content
-- Tangentially related (same broad field but different specialty)
-- Beginner content for technologies they already know
-- Business/funding news unless about tools they depend on
+## Critical Rules
+- "Mentions Rust" does NOT mean relevant. A Supabase SDK in Rust is irrelevant if they don't use Supabase. Judge the TOPIC, not the language.
+- "I built X" and "Show HN" posts are almost always score 1-2 unless X is directly applicable to their specific project.
+- Content about competing/alternative technologies they've chosen against = score 1.
+- Tutorials for technologies they already use expertly = score 1-2.
+- Score >= 3 should mean: "This developer would thank me for showing them this."
 
-## Confidence
-- 0.9-1.0: Exact match to active project/technology
-- 0.7-0.8: Directly useful for their stack
-- 0.5-0.6: Related but not immediately useful
-- 0.1-0.4: Weak connection
-
-DEFAULT TO REJECTING. Only pass items you're confident the user would thank you for surfacing.
-
-Output JSON array:
-[{"id": "item_id", "relevant": true/false, "confidence": 0.0-1.0, "reasoning": "Brief explanation", "key_connections": ["connection1", "connection2"]}]"#;
+Output JSON array (one per article):
+[{"id": N, "score": N, "reason": "one sentence"}]"#;
 
         let items_text = items
             .iter()
-            .map(|(id, title, content)| {
-                format!(
-                    "ID: {}\nTitle: {}\nMatches: {}\n---",
-                    id,
-                    title,
-                    if content.len() > 800 {
-                        &content[..800]
-                    } else {
-                        content
-                    }
-                )
+            .enumerate()
+            .map(|(i, (id, title, content))| {
+                let snippet = if content.len() > 400 {
+                    let truncated: String = content.chars().take(400).collect();
+                    truncated
+                } else {
+                    content.clone()
+                };
+                format!("{}. [ID: {}] \"{}\"\n   {}", i + 1, id, title, snippet)
             })
             .collect::<Vec<_>>()
-            .join("\n");
+            .join("\n\n");
 
         let user_message = format!(
-            "## User Context (their notes and interests):\n{}\n\n## Items to Judge:\n{}\n\nProvide JSON array of judgments:",
+            "## Developer Context\n{}\n\n## Articles to Judge\n{}\n\nRate each article 1-5 per the rubric. Output JSON array:",
             context_summary,
             items_text
         );
@@ -467,7 +458,7 @@ Output JSON array:
             )
             .await?;
 
-        // Parse the JSON response
+        // Parse the score-based JSON response
         let judgments = self.parse_judgments(&response.content, &items)?;
 
         Ok((judgments, response.input_tokens, response.output_tokens))
@@ -507,19 +498,40 @@ Output JSON array:
                 .or_else(|| value["id"].as_i64().map(|n| n.to_string()))
                 .unwrap_or_default();
 
-            let relevant = value["relevant"].as_bool().unwrap_or(false);
-
-            // Handle confidence as number or string
-            let confidence = value["confidence"]
+            // New: parse score (1-5) instead of relevant boolean
+            let score = value["score"]
                 .as_f64()
-                .or_else(|| {
-                    value["confidence"]
-                        .as_str()
-                        .and_then(|s| s.parse::<f64>().ok())
-                })
-                .unwrap_or(0.5) as f32;
+                .or_else(|| value["score"].as_i64().map(|n| n as f64))
+                .or_else(|| value["score"].as_str().and_then(|s| s.parse::<f64>().ok()))
+                .unwrap_or(1.0)
+                .clamp(1.0, 5.0) as f32;
 
-            let reasoning = value["reasoning"].as_str().unwrap_or("").to_string();
+            // Map score to relevant/confidence
+            let relevant = score >= 3.0;
+            let confidence = score / 5.0;
+
+            // Support both "reason" and "reasoning" keys
+            let reasoning = value["reason"]
+                .as_str()
+                .or_else(|| value["reasoning"].as_str())
+                .unwrap_or("")
+                .to_string();
+
+            // Legacy support: if "relevant" field exists and "score" doesn't, use old format
+            let (relevant, confidence) = if value.get("score").is_none() {
+                if let Some(rel) = value["relevant"].as_bool() {
+                    let conf = value["confidence"]
+                        .as_f64()
+                        .unwrap_or(if rel { 0.6 } else { 0.2 })
+                        as f32;
+                    (rel, conf)
+                } else {
+                    (relevant, confidence)
+                }
+            } else {
+                (relevant, confidence)
+            };
+
             let key_connections: Vec<String> = value["key_connections"]
                 .as_array()
                 .map(|arr| {
@@ -534,6 +546,7 @@ Output JSON array:
                 debug!(
                     target: "4da::llm",
                     id = %id,
+                    score = score,
                     relevant = %relevant,
                     confidence = confidence,
                     reason = %&reasoning[..reasoning.len().min(50)],

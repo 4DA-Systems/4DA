@@ -10,6 +10,7 @@ import { MonitoringSection } from './settings/MonitoringSection';
 import { DigestSection } from './settings/DigestSection';
 import { ContextDiscoverySection } from './settings/ContextDiscoverySection';
 import { PersonalizationSection } from './settings/PersonalizationSection';
+import { DeveloperDnaPanel } from './DeveloperDna';
 import { AttentionDashboard } from './settings/AttentionDashboard';
 import { ProjectHealthRadar } from './settings/ProjectHealthRadar';
 import { useAppStore } from '../store';
@@ -273,6 +274,8 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
             onAddSuggestion={handleAddSuggestion}
             onDismissSuggestion={handleDismissSuggestion}
           />
+
+          <DeveloperDnaPanel />
 
           <LearnedBehaviorPanel
             affinities={learnedAffinities}
