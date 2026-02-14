@@ -16,7 +16,7 @@
 
 ## The Problem
 
-You mass 500+ articles a day trying to stay current. You miss the security advisory for a package you actually use. You read three "intro to X" posts about tech you already know. You never see the arXiv paper that's directly relevant to your current project.
+You skim 500+ articles a day trying to stay current. You miss the security advisory for a package you actually use. You read three "intro to X" posts about tech you already know. You never see the arXiv paper that's directly relevant to your current project.
 
 Meanwhile, your dependency has a breaking change, and you find out when production breaks.
 
@@ -37,9 +37,6 @@ Then it scores every piece of incoming content against 5 independent signal axes
 An item needs **2+ independent signals** to pass the confirmation gate. Everything else gets rejected. Typical rejection rate: **99%+**.
 
 What survives is scored with content quality analysis (kills clickbait), novelty detection (demotes "intro to X" if you're advanced), competing tech penalties, and intent scoring from your recent work.
-
-<!-- Screenshot placeholder: Add a screenshot of the main results view here -->
-<!-- ![4DA Results View](docs/screenshot-results.png) -->
 
 ## Features
 
@@ -74,8 +71,8 @@ What survives is scored with content quality analysis (kills clickbait), novelty
 **Prerequisites:** [Rust](https://rustup.rs/) 1.70+, [Node.js](https://nodejs.org/) 18+, [pnpm](https://pnpm.io/)
 
 ```bash
-git clone https://github.com/4da-dev/4da-home.git
-cd 4da-home
+git clone https://github.com/runyourempire/4da-v3.git
+cd 4da-v3
 pnpm install
 pnpm tauri dev
 ```
@@ -129,7 +126,7 @@ Your Codebase                    External Sources
 - **Topic engagement**: where your attention goes
 - **Blind spots**: gaps between what you use and what you track
 
-*Shareable as markdown. Coming soon: visual card for Twitter/LinkedIn.*
+Shareable as markdown.
 
 ## MCP Integration
 

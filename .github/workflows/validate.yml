@@ -1,4 +1,4 @@
-name: CADE Validation Gates
+name: Validate
 
 on:
   push:
@@ -11,92 +11,41 @@ env:
   RUST_BACKTRACE: 1
 
 jobs:
-  # ═══════════════════════════════════════════════════════════════
-  # Gate 1: Cognition Check
-  # Verifies CADE artifacts exist and are valid
-  # ═══════════════════════════════════════════════════════════════
-  cognition-check:
-    name: Cognition Artifacts
+  frontend:
+    name: Frontend
     runs-on: ubuntu-latest
-    continue-on-error: true  # WARNINGS MODE - graduate to blocking later
     steps:
       - uses: actions/checkout@v4
 
-      - name: Check .ai/ directory exists
-        run: |
-          if [ ! -d ".ai" ]; then
-            echo "::warning::Missing .ai/ directory - CADE requires cognition artifacts"
-            exit 1
-          fi
-
-      - name: Verify required files
-        run: |
-          required_files=(
-            ".ai/AI_ENGINEERING_CONTRACT.md"
-            ".ai/INVARIANTS.md"
-            ".ai/ARCHITECTURE.md"
-            ".ai/DECISIONS.md"
-            ".ai/FAILURE_MODES.md"
-            ".ai/TASK_TEMPLATE.md"
-            ".ai/VALIDATION_CHECKLIST.md"
-          )
-          missing=0
-          for file in "${required_files[@]}"; do
-            if [ ! -f "$file" ]; then
-              echo "::warning::Missing required file: $file"
-              missing=$((missing + 1))
-            fi
-          done
-          if [ $missing -gt 0 ]; then
-            echo "::warning::$missing required cognition files missing"
-            exit 1
-          fi
-          echo "All CADE cognition artifacts present"
-
-  # ═══════════════════════════════════════════════════════════════
-  # Gate 2: Frontend Validation
-  # TypeScript, ESLint, Tests, Build
-  # ═══════════════════════════════════════════════════════════════
-  frontend-gate:
-    name: Frontend Validation
-    runs-on: ubuntu-latest
-    continue-on-error: true  # WARNINGS MODE
-    steps:
-      - uses: actions/checkout@v4
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-          cache: 'npm'
+          cache: 'pnpm'
 
       - name: Install dependencies
-        run: npm ci
+        run: pnpm install --frozen-lockfile
 
       - name: TypeScript type check
-        run: npm run typecheck
+        run: pnpm run typecheck
 
       - name: ESLint
-        run: npm run lint
+        run: pnpm run lint
 
       - name: Run tests
-        run: npm run test
+        run: pnpm run test
 
       - name: Build
-        run: npm run build
+        run: pnpm run build
 
-      - name: Security audit
-        run: npm audit --audit-level=moderate
-        continue-on-error: true
-
-  # ═══════════════════════════════════════════════════════════════
-  # Gate 3: Rust Validation
-  # Format, Clippy, Tests, Build
-  # ═══════════════════════════════════════════════════════════════
-  rust-gate:
-    name: Rust Validation
+  rust:
+    name: Rust
     runs-on: ubuntu-latest
-    continue-on-error: true  # WARNINGS MODE
     steps:
       - uses: actions/checkout@v4
 
@@ -132,70 +81,6 @@ jobs:
         working-directory: src-tauri
         run: cargo test --all
 
-      - name: Build (debug)
+      - name: Build
         working-directory: src-tauri
         run: cargo build
-
-      - name: Security audit
-        run: cargo install cargo-audit --locked && cargo audit
-        continue-on-error: true
-
-  # ═══════════════════════════════════════════════════════════════
-  # Gate 4: Invariant Check (Custom)
-  # Runs project-specific invariant validation
-  # ═══════════════════════════════════════════════════════════════
-  invariant-check:
-    name: Invariant Validation
-    runs-on: ubuntu-latest
-    continue-on-error: true  # WARNINGS MODE
-    needs: [frontend-gate]  # Needs node_modules for script
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: 'npm'
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Run invariant validator
-        run: npx tsx scripts/validate-invariants.ts
-        continue-on-error: true  # Script may not exist yet
-
-  # ═══════════════════════════════════════════════════════════════
-  # Summary Job
-  # Reports overall status
-  # ═══════════════════════════════════════════════════════════════
-  validation-summary:
-    name: Validation Summary
-    runs-on: ubuntu-latest
-    needs: [cognition-check, frontend-gate, rust-gate, invariant-check]
-    if: always()
-    steps:
-      - name: Check results
-        run: |
-          echo "## CADE Validation Results" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "| Gate | Status |" >> $GITHUB_STEP_SUMMARY
-          echo "|------|--------|" >> $GITHUB_STEP_SUMMARY
-          echo "| Cognition Check | ${{ needs.cognition-check.result }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Frontend | ${{ needs.frontend-gate.result }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Rust | ${{ needs.rust-gate.result }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Invariants | ${{ needs.invariant-check.result }} |" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "_Note: Gates are in WARNINGS MODE. Failures are logged but don't block._" >> $GITHUB_STEP_SUMMARY
-
-# ═══════════════════════════════════════════════════════════════
-# GRADUATION TO BLOCKING MODE
-#
-# After baseline established (~2 weeks), remove 'continue-on-error: true'
-# from all jobs to make failures blocking.
-#
-# 1. Remove continue-on-error from cognition-check
-# 2. Remove continue-on-error from frontend-gate
-# 3. Remove continue-on-error from rust-gate
-# 4. Remove continue-on-error from invariant-check
-# ═══════════════════════════════════════════════════════════════

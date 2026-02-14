@@ -297,6 +297,28 @@ fn is_hiring(title: &str) -> bool {
         return true;
     }
 
+    // Career/job-switch posts: "Frontend Dev planning switch to MNC"
+    let has_role = title.contains("dev ")
+        || title.contains("developer")
+        || title.contains("engineer")
+        || title.contains("swe ")
+        || title.contains("sde ");
+    let has_career = title.contains("switch")
+        || title.contains("career")
+        || title.contains("moving to")
+        || title.contains("transitioning")
+        || title.contains("job hunt")
+        || title.contains("interview");
+    if has_role && has_career {
+        return true;
+    }
+
+    // Job posting markers: "(f/d)", "(m/f/d)", "full-time", "part-time"
+    let job_markers = ["(f/d)", "(m/f/d)", "(m/w/d)", "full-time", "part-time"];
+    if job_markers.iter().any(|m| title.contains(m)) {
+        return true;
+    }
+
     false
 }
 
@@ -403,5 +425,20 @@ mod tests {
     fn test_ask_hn() {
         let (ct, _) = classify_content("ask hn: what database do you use for side projects?", "");
         assert_eq!(ct, ContentType::Question);
+    }
+
+    #[test]
+    fn test_career_switch_post() {
+        let (ct, _) = classify_content(
+            "startup frontend dev (f/d) planning switch to product mnc",
+            "",
+        );
+        assert_eq!(ct, ContentType::Hiring);
+    }
+
+    #[test]
+    fn test_job_posting_marker() {
+        let (ct, _) = classify_content("senior rust engineer (m/f/d) - berlin", "");
+        assert_eq!(ct, ContentType::Hiring);
     }
 }

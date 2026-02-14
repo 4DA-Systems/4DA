@@ -44,6 +44,16 @@ pub fn compute_content_quality(title: &str, content: &str, url: Option<&str>) ->
 fn assess_title_quality(title: &str) -> f32 {
     let mut score: f32 = 1.0;
 
+    // Penalty: Short/vague titles (fewer than 4 meaningful words)
+    // "where to start", "help please", "a question" — too vague to be useful
+    let word_count = title
+        .split_whitespace()
+        .filter(|w| w.len() >= 2) // skip single-char words
+        .count();
+    if word_count < 4 {
+        score -= 0.35;
+    }
+
     // Penalty: ALL CAPS (more than 50% uppercase letters)
     let alpha_chars: Vec<char> = title.chars().filter(|c| c.is_alphabetic()).collect();
     if alpha_chars.len() >= 5 {
@@ -264,6 +274,23 @@ mod tests {
         assert!(
             low.multiplier < high.multiplier,
             "Low quality should have lower multiplier"
+        );
+    }
+
+    #[test]
+    fn test_short_vague_title_penalty() {
+        let vague = assess_title_quality("where to start");
+        let specific = assess_title_quality("Building REST APIs with Axum and Tokio");
+        assert!(
+            vague < specific,
+            "Vague title ({}) should score lower than specific ({})",
+            vague,
+            specific
+        );
+        assert!(
+            vague <= 0.7,
+            "Vague 3-word title should be penalized: {}",
+            vague
         );
     }
 }

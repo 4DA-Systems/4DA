@@ -35,6 +35,7 @@ src-tauri/.fastembed_cache/
 # Tauri build artifacts
 src-tauri/target/
 src-tauri/fourda-macros/target/
+src-tauri/fourda-macros/Cargo.lock
 
 # SQLite database files
 data/*.db
@@ -48,3 +49,24 @@ src-tauri/models/
 mcp-memory-server/dist/
 mcp-memory-server/node_modules/
 mcp-memory-server/memory.db
+
+# Development scratch files
+dev.sh
+dev-light.sh
+dev-tools/
+test-context/
+ton-library/
+nul
+
+# Python scratch scripts
+src-tauri/src/_*.py
+src-tauri/src/_*.txt
+
+# Session artifacts (not project docs)
+MISSION_ACCOMPLISHED.md
+CONFIDENCE_SCORE_IMPLEMENTATION.md
+SHIP_READINESS_VERIFICATION.md
+README-MARKETING.md
+
+# CLI workspace (not ready)
+cli/

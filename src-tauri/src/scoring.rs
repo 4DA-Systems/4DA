@@ -1795,9 +1795,17 @@ pub(crate) fn score_item(
             1.0 + (m - 1.0) * 0.40
         }
     };
+    // Domain-aware content_dna dampening: "I built [YOUR TECH]" is valuable,
+    // "I built [random thing]" is not. When domain_relevance == 1.0 (primary stack),
+    // reduce content_dna penalty to 30% strength instead of 65%.
+    let content_dna_dampened = if content_dna_mult < 1.0 && domain_relevance >= 1.0 {
+        1.0 + (content_dna_mult - 1.0) * 0.30 // 0.60 → 0.88 for primary stack show-and-tell
+    } else {
+        dampen(content_dna_mult)
+    };
     let composite_mult = dampen(competing_mult)
         * dampen(content_quality.multiplier)
-        * dampen(content_dna_mult)
+        * content_dna_dampened
         * dampen(novelty.multiplier);
     let base_score = (base_score * composite_mult).clamp(0.0, 1.0);
 
@@ -1860,6 +1868,23 @@ pub(crate) fn score_item(
 
     // Unified scoring (applies affinity + anti-penalty on gated score)
     let combined_score = compute_unified_relevance(gated_score, &topics, &ctx.ace_ctx);
+
+    // Domain relevance gate: multiplicative penalty for off-domain content.
+    // The additive off_domain_penalty above is too gentle — items with 2 weak signals
+    // can still pass. This multiplier crushes off-domain scores after the gate.
+    // 1.0 primary → no change, 0.85 dep → no change, 0.70 adjacent → 0.85x,
+    // 0.50 interest → 0.70x, 0.15 off-domain → 0.40x
+    let domain_gate_mult = if domain_relevance >= 0.85 {
+        1.0
+    } else if domain_relevance >= 0.50 {
+        // Scale from 0.85 at relevance=0.70 to 0.70 at relevance=0.50
+        0.70 + (domain_relevance - 0.50) * 0.75 // 0.70→0.85
+    } else {
+        // Off-domain: harsh multiplier
+        0.40
+    };
+    let combined_score = (combined_score * domain_gate_mult).clamp(0.0, 1.0);
+
     // Quality floor: must pass threshold AND either have 2+ confirmed signals or strong score
     let relevant = combined_score >= get_relevance_threshold()
         && (signal_count >= scoring_config::QUALITY_FLOOR_MIN_SIGNALS as u8
