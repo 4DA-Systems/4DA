@@ -49,11 +49,13 @@ impl OllamaState {
 // ============================================================================
 
 /// Duration after which a warmed model is considered stale.
+#[cfg(test)]
 const WARM_STALENESS_SECS: u64 = 300; // 5 minutes
 
 static OLLAMA_STATE: Lazy<Mutex<OllamaState>> = Lazy::new(|| Mutex::new(OllamaState::new()));
 
 /// Access the global Ollama state.
+#[cfg(test)]
 pub(crate) fn get_ollama_state() -> &'static Mutex<OllamaState> {
     &OLLAMA_STATE
 }
@@ -175,6 +177,7 @@ pub(crate) async fn warm_model(model: &str, base_url: &str, app: &AppHandle) {
 ///
 /// A model is considered warm if it was successfully warmed and the last use
 /// was within 5 minutes. Stale models are automatically removed.
+#[cfg(test)]
 pub(crate) fn is_warm(model: &str) -> bool {
     let mut state = OLLAMA_STATE.lock();
 
