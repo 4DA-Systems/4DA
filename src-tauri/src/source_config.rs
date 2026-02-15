@@ -237,13 +237,11 @@ pub async fn set_x_api_key(key: String) -> Result<serde_json::Value, String> {
     }
 
     // Validate the token by making a test API call
-    let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(10))
-        .build()
-        .map_err(|e| format!("HTTP client error: {}", e))?;
+    let client = crate::sources::shared_client();
 
     let resp = client
         .get("https://api.x.com/2/users/by/username/twitter")
+        .timeout(std::time::Duration::from_secs(10))
         .bearer_auth(&cleaned)
         .send()
         .await;

@@ -280,6 +280,30 @@ impl Database {
             info!(target: "4da::db", "Phase 5 migration completed");
         }
 
+        // Phase 6 migration: Source health table (moved from hot-path DDL)
+        let current_version: i64 = conn
+            .query_row("SELECT version FROM schema_version", [], |row| row.get(0))
+            .unwrap_or(5);
+
+        if current_version < 6 {
+            info!(target: "4da::db", "Running Phase 6 migration (schema version 6)");
+            conn.execute_batch(
+                "CREATE TABLE IF NOT EXISTS source_health (
+                    source_type TEXT PRIMARY KEY,
+                    status TEXT NOT NULL DEFAULT 'unknown',
+                    last_success TEXT,
+                    last_error TEXT,
+                    error_count INTEGER NOT NULL DEFAULT 0,
+                    consecutive_failures INTEGER NOT NULL DEFAULT 0,
+                    items_fetched INTEGER NOT NULL DEFAULT 0,
+                    response_time_ms INTEGER NOT NULL DEFAULT 0,
+                    checked_at TEXT NOT NULL DEFAULT (datetime('now'))
+                )",
+            )?;
+            conn.execute("UPDATE schema_version SET version = 6", [])?;
+            info!(target: "4da::db", "Phase 6 migration completed — source_health table");
+        }
+
         info!(target: "4da::db", "Database schema initialized with sqlite-vec");
         Ok(())
     }
@@ -1295,21 +1319,6 @@ impl Database {
     ) -> SqliteResult<()> {
         let conn = self.conn.lock();
 
-        // Ensure source_health table exists (migration)
-        conn.execute_batch(
-            "CREATE TABLE IF NOT EXISTS source_health (
-                source_type TEXT PRIMARY KEY,
-                status TEXT NOT NULL DEFAULT 'unknown',
-                last_success TEXT,
-                last_error TEXT,
-                error_count INTEGER NOT NULL DEFAULT 0,
-                consecutive_failures INTEGER NOT NULL DEFAULT 0,
-                items_fetched INTEGER NOT NULL DEFAULT 0,
-                response_time_ms INTEGER NOT NULL DEFAULT 0,
-                checked_at TEXT NOT NULL DEFAULT (datetime('now'))
-            )",
-        )?;
-
         if success {
             conn.execute(
                 "INSERT INTO source_health (source_type, status, last_success, items_fetched, response_time_ms, consecutive_failures, checked_at)
@@ -1340,21 +1349,6 @@ impl Database {
     /// Get source health for all sources
     pub fn get_source_health(&self) -> SqliteResult<Vec<SourceHealthRecord>> {
         let conn = self.conn.lock();
-
-        // Ensure table exists
-        conn.execute_batch(
-            "CREATE TABLE IF NOT EXISTS source_health (
-                source_type TEXT PRIMARY KEY,
-                status TEXT NOT NULL DEFAULT 'unknown',
-                last_success TEXT,
-                last_error TEXT,
-                error_count INTEGER NOT NULL DEFAULT 0,
-                consecutive_failures INTEGER NOT NULL DEFAULT 0,
-                items_fetched INTEGER NOT NULL DEFAULT 0,
-                response_time_ms INTEGER NOT NULL DEFAULT 0,
-                checked_at TEXT NOT NULL DEFAULT (datetime('now'))
-            )",
-        )?;
 
         let mut stmt = conn.prepare(
             "SELECT source_type, status, last_success, last_error, error_count,

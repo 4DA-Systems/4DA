@@ -246,16 +246,13 @@ impl Source for HackerNewsSource {
             return Ok(String::new());
         }
 
-        // Create a scraping client with shorter timeout
-        let client = reqwest::Client::builder()
-            .timeout(std::time::Duration::from_secs(10))
-            .build()
-            .map_err(|e| SourceError::Other(e.to_string()))?;
+        // Use shared client with per-request timeout for scraping
+        let client = super::shared_client();
 
         // Fetch the page
         let response = client
             .get(url)
-            .header("User-Agent", "Mozilla/5.0 (compatible; 4DA/1.0)")
+            .timeout(std::time::Duration::from_secs(10))
             .send()
             .await
             .map_err(|e| SourceError::Network(e.to_string()))?;
