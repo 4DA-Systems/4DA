@@ -1,7 +1,8 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useCallback, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
-import type { SourceRelevance, FeedbackAction, FeedbackGiven } from '../types';
+import type { SourceRelevance, FeedbackAction } from '../types';
 import type { ToastAction } from './use-toasts';
+import { useAppStore } from '../store';
 
 // Client-side score adjustment multipliers for immediate feedback
 const FEEDBACK_ADJUSTMENTS: Record<FeedbackAction, number> = {
@@ -11,66 +12,20 @@ const FEEDBACK_ADJUSTMENTS: Record<FeedbackAction, number> = {
   mark_irrelevant: -0.20, // Strong penalty for irrelevant
 };
 
+/**
+ * Feedback hook — thin wrapper around Zustand store.
+ * All state lives in the store; this hook adds no local state.
+ */
 export function useFeedback(
   onStatusChange?: (status: string) => void,
   onScoreAdjust?: (itemId: number, delta: number) => void,
   addToast?: (type: 'success' | 'error' | 'warning' | 'info', message: string, action?: ToastAction) => void,
 ) {
-  const [feedbackGiven, setFeedbackGiven] = useState<FeedbackGiven>({});
-  const [learnedAffinities, setLearnedAffinities] = useState<Array<{
-    topic: string;
-    positive_signals: number;
-    negative_signals: number;
-    affinity_score: number;
-  }>>([]);
-  const [antiTopics, setAntiTopics] = useState<Array<{
-    topic: string;
-    rejection_count: number;
-    confidence: number;
-    auto_detected: boolean;
-  }>>([]);
-  const [lastLearnedTopic, setLastLearnedTopic] = useState<{
-    topic: string;
-    direction: 'positive' | 'negative';
-    timestamp: number;
-  } | null>(null);
-
-  const loadLearnedBehavior = useCallback(async () => {
-    try {
-      const affinityResult = await invoke<{
-        affinities: Array<{
-          topic: string;
-          positive_signals: number;
-          negative_signals: number;
-          affinity_score: number;
-        }>;
-        count: number;
-      }>('ace_get_topic_affinities');
-
-      if (affinityResult.affinities) {
-        const sorted = [...affinityResult.affinities].sort(
-          (a, b) => Math.abs(b.affinity_score) - Math.abs(a.affinity_score),
-        );
-        setLearnedAffinities(sorted);
-      }
-
-      const antiResult = await invoke<{
-        anti_topics: Array<{
-          topic: string;
-          rejection_count: number;
-          confidence: number;
-          auto_detected: boolean;
-        }>;
-        count: number;
-      }>('ace_get_anti_topics', { min_rejections: 2 });
-
-      if (antiResult.anti_topics) {
-        setAntiTopics(antiResult.anti_topics);
-      }
-    } catch (error) {
-      console.debug('Learned behavior not available:', error);
-    }
-  }, []);
+  const feedbackGiven = useAppStore(s => s.feedbackGiven);
+  const learnedAffinities = useAppStore(s => s.learnedAffinities);
+  const antiTopics = useAppStore(s => s.antiTopics);
+  const lastLearnedTopic = useAppStore(s => s.lastLearnedTopic);
+  const loadLearnedBehavior = useAppStore(s => s.loadLearnedBehavior);
 
   const recordInteraction = useCallback(async (
     itemId: number,
@@ -105,14 +60,15 @@ export function useFeedback(
         feedback_type: feedbackTypeMap[actionType],
       });
 
-      setFeedbackGiven(prev => ({ ...prev, [itemId]: actionType }));
+      // Write to store instead of local state
+      useAppStore.getState().setFeedbackGivenFull(prev => ({ ...prev, [itemId]: actionType }));
 
       // Track what was just learned for the visible learning loop
       const primaryTopic = topics[0] || null;
       if (primaryTopic) {
         const direction: 'positive' | 'negative' =
           (actionType === 'save' || actionType === 'click') ? 'positive' : 'negative';
-        setLastLearnedTopic({ topic: primaryTopic, direction, timestamp: Date.now() });
+        useAppStore.getState().setLastLearnedTopic({ topic: primaryTopic, direction, timestamp: Date.now() });
       }
 
       // Immediate score adjustment for visual feedback
@@ -145,8 +101,8 @@ export function useFeedback(
         const undoAction: ToastAction = {
           label: 'Undo',
           onClick: () => {
-            // Revert client-side feedback
-            setFeedbackGiven(prev => {
+            // Revert client-side feedback via store
+            useAppStore.getState().setFeedbackGivenFull(prev => {
               const next = { ...prev };
               delete next[itemId];
               return next;
@@ -166,11 +122,11 @@ export function useFeedback(
         }
       }
 
-      setTimeout(loadLearnedBehavior, 500);
+      setTimeout(() => useAppStore.getState().loadLearnedBehavior(), 500);
     } catch (error) {
       console.error('Failed to record interaction:', error);
     }
-  }, [loadLearnedBehavior, onStatusChange, onScoreAdjust, addToast]);
+  }, [onStatusChange, onScoreAdjust, addToast]);
 
   useEffect(() => {
     loadLearnedBehavior();

@@ -1,108 +1,28 @@
-import { useState, useCallback, useEffect } from 'react';
-import { invoke } from '@tauri-apps/api/core';
-import type { UserContext } from '../types';
+import { useEffect } from 'react';
+import { useAppStore } from '../store';
 
-export function useUserContext(onStatusChange?: (status: string) => void) {
-  const [userContext, setUserContext] = useState<UserContext | null>(null);
-  const [newInterest, setNewInterest] = useState('');
-  const [newExclusion, setNewExclusion] = useState('');
-  const [newTechStack, setNewTechStack] = useState('');
-  const [newRole, setNewRole] = useState('');
-
-  const setStatus = useCallback((status: string, duration = 2000) => {
-    if (onStatusChange) {
-      onStatusChange(status);
-      if (duration > 0) {
-        setTimeout(() => onStatusChange(''), duration);
-      }
-    }
-  }, [onStatusChange]);
-
-  const loadUserContext = useCallback(async () => {
-    try {
-      const ctx = await invoke<UserContext>('get_user_context');
-      setUserContext(ctx);
-      if (ctx.role) setNewRole(ctx.role);
-    } catch (error) {
-      console.debug('Context not available:', error);
-    }
-  }, []);
-
-  const addInterest = useCallback(async () => {
-    if (!newInterest.trim()) return;
-    try {
-      await invoke('add_interest', { topic: newInterest.trim() });
-      setNewInterest('');
-      await loadUserContext();
-      setStatus('Interest added');
-    } catch (error) {
-      setStatus(`Error: ${error}`);
-    }
-  }, [newInterest, loadUserContext, setStatus]);
-
-  const removeInterest = useCallback(async (topic: string) => {
-    try {
-      await invoke('remove_interest', { topic });
-      await loadUserContext();
-      setStatus('Interest removed');
-    } catch (error) {
-      setStatus(`Error: ${error}`);
-    }
-  }, [loadUserContext, setStatus]);
-
-  const addExclusion = useCallback(async () => {
-    if (!newExclusion.trim()) return;
-    try {
-      await invoke('add_exclusion', { topic: newExclusion.trim() });
-      setNewExclusion('');
-      await loadUserContext();
-      setStatus('Exclusion added');
-    } catch (error) {
-      setStatus(`Error: ${error}`);
-    }
-  }, [newExclusion, loadUserContext, setStatus]);
-
-  const removeExclusion = useCallback(async (topic: string) => {
-    try {
-      await invoke('remove_exclusion', { topic });
-      await loadUserContext();
-      setStatus('Exclusion removed');
-    } catch (error) {
-      setStatus(`Error: ${error}`);
-    }
-  }, [loadUserContext, setStatus]);
-
-  const addTechStack = useCallback(async () => {
-    if (!newTechStack.trim()) return;
-    try {
-      await invoke('add_tech_stack', { technology: newTechStack.trim() });
-      setNewTechStack('');
-      await loadUserContext();
-      setStatus('Technology added');
-    } catch (error) {
-      setStatus(`Error: ${error}`);
-    }
-  }, [newTechStack, loadUserContext, setStatus]);
-
-  const removeTechStack = useCallback(async (technology: string) => {
-    try {
-      await invoke('remove_tech_stack', { technology });
-      await loadUserContext();
-      setStatus('Technology removed');
-    } catch (error) {
-      setStatus(`Error: ${error}`);
-    }
-  }, [loadUserContext, setStatus]);
-
-  const updateRole = useCallback(async () => {
-    try {
-      await invoke('set_user_role', { role: newRole.trim() || null });
-      await loadUserContext();
-      setStatus('Role updated');
-    } catch (error) {
-      setStatus(`Error: ${error}`);
-    }
-  }, [newRole, loadUserContext, setStatus]);
+/**
+ * User context hook — thin wrapper around Zustand store.
+ * All state lives in the store; this hook adds the init-load effect.
+ */
+export function useUserContext(_onStatusChange?: (status: string) => void) {
+  const userContext = useAppStore(s => s.userContext);
+  const newInterest = useAppStore(s => s.newInterest);
+  const setNewInterest = useAppStore(s => s.setNewInterest);
+  const newExclusion = useAppStore(s => s.newExclusion);
+  const setNewExclusion = useAppStore(s => s.setNewExclusion);
+  const newTechStack = useAppStore(s => s.newTechStack);
+  const setNewTechStack = useAppStore(s => s.setNewTechStack);
+  const newRole = useAppStore(s => s.newRole);
+  const setNewRole = useAppStore(s => s.setNewRole);
+  const loadUserContext = useAppStore(s => s.loadUserContext);
+  const addInterest = useAppStore(s => s.addInterest);
+  const removeInterest = useAppStore(s => s.removeInterest);
+  const addExclusion = useAppStore(s => s.addExclusion);
+  const removeExclusion = useAppStore(s => s.removeExclusion);
+  const addTechStack = useAppStore(s => s.addTechStack);
+  const removeTechStack = useAppStore(s => s.removeTechStack);
+  const updateRole = useAppStore(s => s.updateRole);
 
   useEffect(() => {
     loadUserContext();

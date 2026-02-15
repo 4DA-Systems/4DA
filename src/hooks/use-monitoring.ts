@@ -1,39 +1,18 @@
-import { useState, useEffect, useCallback } from 'react';
-import { invoke } from '@tauri-apps/api/core';
-import type { MonitoringStatus } from '../types';
+import { useEffect } from 'react';
+import { useAppStore } from '../store';
 
+/**
+ * Monitoring hook — thin wrapper around Zustand store.
+ * All state lives in the store; this hook adds the init-load effect.
+ */
 export function useMonitoring() {
-  const [monitoring, setMonitoring] = useState<MonitoringStatus | null>(null);
-  const [monitoringInterval, setMonitoringInterval] = useState(30);
-
-  const loadMonitoringStatus = useCallback(async () => {
-    try {
-      const status = await invoke<MonitoringStatus>('get_monitoring_status');
-      setMonitoring(status);
-      setMonitoringInterval(status.interval_minutes);
-    } catch (error) {
-      console.debug('Monitoring status not available:', error);
-    }
-  }, []);
-
-  const toggleMonitoring = useCallback(async (): Promise<string> => {
-    if (!monitoring) return 'Monitoring not available';
-    const newEnabled = !monitoring.enabled;
-    await invoke('set_monitoring_enabled', { enabled: newEnabled });
-    await loadMonitoringStatus();
-    return newEnabled ? 'Monitoring enabled' : 'Monitoring disabled';
-  }, [monitoring, loadMonitoringStatus]);
-
-  const updateMonitoringInterval = useCallback(async (): Promise<string> => {
-    await invoke('set_monitoring_interval', { minutes: monitoringInterval });
-    await loadMonitoringStatus();
-    return `Interval set to ${monitoringInterval} minutes`;
-  }, [monitoringInterval, loadMonitoringStatus]);
-
-  const testNotification = useCallback(async (): Promise<string> => {
-    await invoke('trigger_notification_test');
-    return 'Test notification sent!';
-  }, []);
+  const monitoring = useAppStore(s => s.monitoring);
+  const monitoringInterval = useAppStore(s => s.monitoringInterval);
+  const setMonitoringInterval = useAppStore(s => s.setMonitoringInterval);
+  const loadMonitoringStatus = useAppStore(s => s.loadMonitoringStatus);
+  const toggleMonitoring = useAppStore(s => s.toggleMonitoring);
+  const updateMonitoringInterval = useAppStore(s => s.updateMonitoringInterval);
+  const testNotification = useAppStore(s => s.testNotification);
 
   useEffect(() => {
     loadMonitoringStatus();

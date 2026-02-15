@@ -7,6 +7,7 @@ use once_cell::sync::Lazy;
 use parking_lot::Mutex;
 use tracing::{error, info};
 
+use crate::error::Result;
 use crate::scoring::get_ace_context;
 use crate::{get_analysis_state, get_database, get_settings_manager};
 
@@ -27,7 +28,7 @@ pub(crate) fn get_latest_briefing_text() -> Option<String> {
 
 /// Get digest configuration
 #[tauri::command]
-pub async fn get_digest_config() -> Result<serde_json::Value, String> {
+pub async fn get_digest_config() -> Result<serde_json::Value> {
     // Clone data out of lock immediately to avoid holding across async boundary
     let json = {
         let settings_guard = get_settings_manager().lock();
@@ -55,7 +56,7 @@ pub async fn set_digest_config(
     save_local: Option<bool>,
     min_score: Option<f64>,
     max_items: Option<usize>,
-) -> Result<serde_json::Value, String> {
+) -> Result<serde_json::Value> {
     // Mutate and save within scoped lock, then release before returning
     let json = {
         let mut settings_guard = get_settings_manager().lock();
@@ -111,7 +112,7 @@ pub async fn set_digest_config(
 /// Generate an AI-powered briefing from recent relevant items
 /// Uses the configured LLM (Ollama by default) to synthesize insights
 #[tauri::command]
-pub async fn generate_ai_briefing() -> Result<serde_json::Value, String> {
+pub async fn generate_ai_briefing() -> Result<serde_json::Value> {
     use chrono::{Duration, Utc};
 
     info!(target: "4da::briefing", "Generating AI briefing");

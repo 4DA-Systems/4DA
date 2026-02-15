@@ -8,6 +8,7 @@ use std::path::{Path, PathBuf};
 
 use tracing::{debug, info, warn};
 
+use crate::error::Result;
 use crate::{
     ace_commands, chunk_text, embed_texts, get_context_dir, get_context_dirs, get_database,
     get_settings_manager, ContextFile, SUPPORTED_EXTENSIONS,
@@ -112,7 +113,7 @@ fn collect_context_files(dir: &Path, files: &mut Vec<ContextFile>, depth: usize)
 }
 
 #[tauri::command]
-pub async fn get_context_files() -> Result<Vec<ContextFile>, String> {
+pub async fn get_context_files() -> Result<Vec<ContextFile>> {
     let context_dir = match get_context_dir() {
         Some(dir) => dir,
         None => {
@@ -136,7 +137,7 @@ pub async fn get_context_files() -> Result<Vec<ContextFile>, String> {
 
 /// Clear all indexed context chunks from the database
 #[tauri::command]
-pub async fn clear_context() -> Result<String, String> {
+pub async fn clear_context() -> Result<String> {
     info!(target: "4da::context", "Clearing indexed context");
 
     // Use the singleton database connection (same one used by analysis)
@@ -155,7 +156,7 @@ pub async fn clear_context() -> Result<String, String> {
 
 /// Index context files - read, chunk, embed, and store in database
 #[tauri::command]
-pub async fn index_context() -> Result<String, String> {
+pub async fn index_context() -> Result<String> {
     info!(target: "4da::context", "Indexing context files");
 
     let db = get_database()?;
@@ -166,7 +167,7 @@ pub async fn index_context() -> Result<String, String> {
     // Read context files from configured directories
     let context_files = get_context_files().await?;
     if context_files.is_empty() {
-        return Err("No context files found. Add files to your context directory.".to_string());
+        return Err("No context files found. Add files to your context directory.".into());
     }
 
     // Chunk the files
@@ -184,7 +185,7 @@ pub async fn index_context() -> Result<String, String> {
     }
 
     if all_chunks.is_empty() {
-        return Err("No content to index from context files.".to_string());
+        return Err("No content to index from context files.".into());
     }
 
     // Generate embeddings
@@ -210,12 +211,12 @@ pub async fn index_context() -> Result<String, String> {
 /// Index READMEs from all configured context directories
 /// This scans all context_dirs and indexes README files for semantic search
 #[tauri::command]
-pub async fn index_project_readmes() -> Result<String, String> {
+pub async fn index_project_readmes() -> Result<String> {
     info!(target: "4da::context", "Indexing READMEs from all configured directories");
 
     let context_dirs = get_context_dirs();
     if context_dirs.is_empty() {
-        return Err("No context directories configured".to_string());
+        return Err("No context directories configured".into());
     }
 
     let indexed_count = ace_commands::index_discovered_readmes(&context_dirs).await;
@@ -250,7 +251,7 @@ fn convert_windows_to_wsl_path(path: &str) -> String {
 }
 
 #[tauri::command]
-pub async fn set_context_dirs(dirs: Vec<String>) -> Result<String, String> {
+pub async fn set_context_dirs(dirs: Vec<String>) -> Result<String> {
     info!(target: "4da::context", dirs = ?dirs, "Setting context directories");
 
     // Convert Windows paths to WSL paths and validate
@@ -263,13 +264,10 @@ pub async fn set_context_dirs(dirs: Vec<String>) -> Result<String, String> {
 
         let path = PathBuf::from(&converted);
         if !path.exists() {
-            return Err(format!(
-                "Directory does not exist: {} (tried: {})",
-                dir, converted
-            ));
+            return Err(format!("Directory does not exist: {} (tried: {})", dir, converted).into());
         }
         if !path.is_dir() {
-            return Err(format!("Path is not a directory: {}", converted));
+            return Err(format!("Path is not a directory: {}", converted).into());
         }
         converted_dirs.push(converted);
     }

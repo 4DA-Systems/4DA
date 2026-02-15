@@ -266,7 +266,7 @@ function App() {
   const visibleResults = filteredResults.slice(0, renderLimit);
   const { focusedIndex } = useKeyboardShortcuts({
     onAnalyze: startAnalysis,
-    onToggleFilters: () => setShowOnlyRelevant(prev => !prev),
+    onToggleFilters: () => setShowOnlyRelevant(!showOnlyRelevant),
     onToggleBriefing: () => setActiveView(activeView === 'briefing' ? 'results' : 'briefing'),
     onOpenSettings: () => setShowSettings(true),
     onEscape: () => {

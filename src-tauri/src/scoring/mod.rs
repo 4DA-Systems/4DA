@@ -282,9 +282,10 @@ pub(crate) fn score_item(
         (semantic_boost * 2.0).min(1.0)
     };
 
-    // Dependency contribution: add 15% of dep_match_score to base score
+    // Dependency contribution: dep_match_score weighted into base score
     // This gives a meaningful boost without dominating the other signals
-    let base_score = (base_score + dep_match_score * 0.15).min(1.0);
+    let base_score =
+        (base_score + dep_match_score * scoring_config::DEPENDENCY_BOOST_WEIGHT).min(1.0);
 
     // Optional freshness
     let freshness = if options.apply_freshness {
@@ -352,21 +353,18 @@ pub(crate) fn score_item(
 
     // Combine all quality multipliers as a SINGLE dampened composite.
     // Asymmetric dampening: penalties keep more teeth than boosts.
-    //   Penalties: 65% strength — raw 0.60 → 0.74, raw 0.85 → 0.9025, raw 0.30 → 0.545
-    //   Boosts:    40% strength — raw 1.15 → 1.06, raw 1.30 → 1.12
     let dampen = |m: f32| {
         if m < 1.0 {
-            1.0 + (m - 1.0) * 0.65
+            1.0 + (m - 1.0) * scoring_config::DAMPENING_PENALTY_STRENGTH
         } else {
-            1.0 + (m - 1.0) * 0.40
+            1.0 + (m - 1.0) * scoring_config::DAMPENING_BOOST_STRENGTH
         }
     };
     // Domain-aware content_dna dampening: "I built [YOUR TECH]" is valuable,
     // "I built [random thing]" is not. When domain_relevance == 1.0 (primary stack),
-    // reduce content_dna penalty to 20% strength instead of 65%.
-    //   ShowAndTell 0.60 → 0.92, Question 0.70 → 0.94, Hiring 0.30 → 0.86
+    // reduce content_dna penalty strength for primary stack items.
     let content_dna_dampened = if content_dna_mult < 1.0 && domain_relevance >= 1.0 {
-        1.0 + (content_dna_mult - 1.0) * 0.20 // 0.60 → 0.92 for primary stack show-and-tell
+        1.0 + (content_dna_mult - 1.0) * scoring_config::DAMPENING_DOMAIN_AWARE_STRENGTH
     } else {
         dampen(content_dna_mult)
     };
@@ -385,8 +383,8 @@ pub(crate) fn score_item(
             .count();
         match matching_work_topics {
             0 => 0.0,
-            1 => 0.08, // Mild boost for 1 work topic match
-            _ => 0.15, // Stronger boost for multiple matches
+            1 => scoring_config::INTENT_BOOST_SINGLE_MATCH,
+            _ => scoring_config::INTENT_BOOST_MULTI_MATCH,
         }
     } else {
         0.0
@@ -446,15 +444,15 @@ pub(crate) fn score_item(
     //   0.50 interest   → 0.82x (moderate discount)
     //   0.15 off-domain → 0.40x (crush)
     let domain_gate_mult = if domain_relevance >= 1.0 {
-        1.10 // Primary stack boost
+        scoring_config::DOMAIN_GATE_PRIMARY_BOOST
     } else if domain_relevance >= 0.85 {
         1.0 // Dependency match — neutral
     } else if domain_relevance >= 0.50 {
-        // Linear ramp: 0.82 at relevance=0.50 → 1.0 at relevance=0.85
-        0.82 + (domain_relevance - 0.50) * (0.18 / 0.35)
+        // Linear ramp: ramp_base at relevance=0.50 → 1.0 at relevance=0.85
+        let gap = 1.0 - scoring_config::DOMAIN_GATE_RAMP_BASE;
+        scoring_config::DOMAIN_GATE_RAMP_BASE + (domain_relevance - 0.50) * (gap / 0.35)
     } else {
-        // Off-domain: harsh multiplier
-        0.40
+        scoring_config::DOMAIN_GATE_OFF_DOMAIN_MULT
     };
     let combined_score = (combined_score * domain_gate_mult).clamp(0.0, 1.0);
 
@@ -467,7 +465,7 @@ pub(crate) fn score_item(
         .filter(|w| w.len() >= 2)
         .count();
     let combined_score = if meaningful_words < 3 {
-        combined_score.min(0.40)
+        combined_score.min(scoring_config::QUALITY_FLOOR_SHORT_TITLE_CAP)
     } else {
         combined_score
     };

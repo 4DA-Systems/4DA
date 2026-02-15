@@ -4,6 +4,7 @@
 use tauri::{Emitter, Listener, Manager};
 use tracing::{debug, error, info, warn};
 
+pub mod error;
 mod types;
 
 // Re-exports from types (preserves `use crate::TypeName` interface)

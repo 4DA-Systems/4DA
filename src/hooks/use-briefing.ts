@@ -1,78 +1,35 @@
-import { useState, useCallback, useEffect, useRef } from 'react';
-import { invoke } from '@tauri-apps/api/core';
+import { useEffect, useRef } from 'react';
 import type { SourceRelevance } from '../types';
-
-interface BriefingState {
-  content: string | null;
-  loading: boolean;
-  error: string | null;
-  model: string | null;
-  lastGenerated: Date | null;
-}
-
-const initialBriefingState: BriefingState = {
-  content: null,
-  loading: false,
-  error: null,
-  model: null,
-  lastGenerated: null,
-};
+import { useAppStore } from '../store';
+import type { BriefingState } from '../store';
 
 interface UseBriefingResult {
   aiBriefing: BriefingState;
   showBriefing: boolean;
-  setShowBriefing: React.Dispatch<React.SetStateAction<boolean>>;
+  setShowBriefing: (show: boolean) => void;
   autoBriefingEnabled: boolean;
-  setAutoBriefingEnabled: React.Dispatch<React.SetStateAction<boolean>>;
+  setAutoBriefingEnabled: (enabled: boolean) => void;
   generateBriefing: () => Promise<void>;
 }
 
+/**
+ * Briefing hook — thin wrapper around Zustand store.
+ * All state lives in the store; this hook adds the auto-briefing trigger effect.
+ */
 export function useBriefing(
   relevanceResults: SourceRelevance[],
   analysisComplete: boolean,
 ): UseBriefingResult {
-  const [aiBriefing, setAiBriefing] = useState<BriefingState>(initialBriefingState);
-  const [showBriefing, setShowBriefing] = useState(false);
-  const [autoBriefingEnabled, setAutoBriefingEnabled] = useState(true);
-  const [lastBriefingCount, setLastBriefingCount] = useState(0);
+  const aiBriefing = useAppStore(s => s.aiBriefing);
+  const showBriefing = useAppStore(s => s.showBriefing);
+  const setShowBriefing = useAppStore(s => s.setShowBriefing);
+  const autoBriefingEnabled = useAppStore(s => s.autoBriefingEnabled);
+  const setAutoBriefingEnabled = useAppStore(s => s.setAutoBriefingEnabled);
+  const generateBriefing = useAppStore(s => s.generateBriefing);
+
+  // Track last briefing count locally (not externally consumed, just for auto-trigger dedup)
+  const lastBriefingCountRef = useRef(0);
   const generatingBriefingRef = useRef(false);
-
-  const generateBriefing = useCallback(async () => {
-    setAiBriefing(prev => ({ ...prev, loading: true, error: null }));
-    try {
-      const result = await invoke<{
-        success: boolean;
-        briefing: string | null;
-        error?: string;
-        model?: string;
-        item_count?: number;
-        latency_ms?: number;
-      }>('generate_ai_briefing');
-
-      if (result.success && result.briefing) {
-        setAiBriefing({
-          content: result.briefing,
-          loading: false,
-          error: null,
-          model: result.model || null,
-          lastGenerated: new Date(),
-        });
-        setShowBriefing(true);
-      } else {
-        setAiBriefing(prev => ({
-          ...prev,
-          loading: false,
-          error: result.error || 'Failed to generate briefing',
-        }));
-      }
-    } catch (error) {
-      setAiBriefing(prev => ({
-        ...prev,
-        loading: false,
-        error: `Error: ${error}`,
-      }));
-    }
-  }, []);
 
   // Autonomous AI Briefing - triggers when analysis completes with new relevant items
   useEffect(() => {
@@ -84,10 +41,10 @@ export function useBriefing(
       totalCount > 0 &&
       !aiBriefing.loading &&
       !generatingBriefingRef.current &&
-      totalCount !== lastBriefingCount
+      totalCount !== lastBriefingCountRef.current
     ) {
       // Auto-generate briefing after analysis completes
-      setLastBriefingCount(totalCount);
+      lastBriefingCountRef.current = totalCount;
       generatingBriefingRef.current = true;
 
       const briefingTimer = setTimeout(() => {
@@ -101,7 +58,7 @@ export function useBriefing(
         generatingBriefingRef.current = false;
       };
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- trigger on analysis complete and count change, not on full results array
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- trigger on analysis complete and count change
   }, [analysisComplete, relevanceResults.length, autoBriefingEnabled, aiBriefing.loading]);
 
   return {

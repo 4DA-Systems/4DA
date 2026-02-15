@@ -3,6 +3,7 @@
 
 use tracing::info;
 
+use crate::error::Result;
 use crate::{
     anomaly, developer_dna, extract_topics, get_ace_engine, get_analysis_state, get_context_engine,
     get_database, get_relevance_threshold, get_source_registry, health, scoring,
@@ -22,7 +23,7 @@ use crate::{
 // ============================================================================
 
 /// Run background health check - called every 5 minutes by scheduler
-pub async fn run_background_health_check() -> Result<serde_json::Value, String> {
+pub async fn run_background_health_check() -> Result<serde_json::Value> {
     let ace = get_ace_engine()?;
     let conn = ace.get_conn().lock();
     let report = health::check_all_components(&conn)?;
@@ -35,11 +36,11 @@ pub async fn run_background_health_check() -> Result<serde_json::Value, String> 
         "Background health check complete"
     );
 
-    serde_json::to_value(&report).map_err(|e| e.to_string())
+    Ok(serde_json::to_value(&report)?)
 }
 
 /// Run background anomaly detection - called every hour by scheduler
-pub async fn run_background_anomaly_detection() -> Result<serde_json::Value, String> {
+pub async fn run_background_anomaly_detection() -> Result<serde_json::Value> {
     let ace = get_ace_engine()?;
     let conn = ace.get_conn().lock();
     let anomalies = anomaly::detect_all(&conn)?;
@@ -62,7 +63,7 @@ pub async fn run_background_anomaly_detection() -> Result<serde_json::Value, Str
 }
 
 /// Run background behavior decay - called daily by scheduler
-pub async fn run_background_behavior_decay() -> Result<serde_json::Value, String> {
+pub async fn run_background_behavior_decay() -> Result<serde_json::Value> {
     let ace = get_ace_engine()?;
 
     // Apply decay to behavior signals
@@ -114,7 +115,7 @@ pub(crate) async fn mcp_score_autopsy(
     source_type: String,
     _synthesize: bool,
     _compact: bool,
-) -> Result<serde_json::Value, String> {
+) -> Result<serde_json::Value> {
     info!(
         target: "4da::autopsy",
         item_id = item_id,
@@ -465,7 +466,7 @@ fn build_autopsy_narrative(
 
 /// Get registered sources
 #[tauri::command]
-pub(crate) async fn get_sources() -> Result<Vec<serde_json::Value>, String> {
+pub(crate) async fn get_sources() -> Result<Vec<serde_json::Value>> {
     let registry = get_source_registry();
     let guard = registry.lock();
 
@@ -498,13 +499,13 @@ fn escape_html(s: &str) -> String {
 
 /// Export current analysis results in specified format
 #[tauri::command]
-pub(crate) async fn export_results(format: String) -> Result<String, String> {
+pub(crate) async fn export_results(format: String) -> Result<String> {
     let state = get_analysis_state();
     let guard = state.lock();
 
     let results = match &guard.results {
         Some(r) => r,
-        None => return Err("No analysis results to export".to_string()),
+        None => return Err("No analysis results to export".into()),
     };
 
     let relevant: Vec<&SourceRelevance> = results.iter().filter(|r| r.relevant).collect();
@@ -701,6 +702,7 @@ pub(crate) async fn export_results(format: String) -> Result<String, String> {
         _ => Err(format!(
             "Unknown format: {}. Use 'markdown', 'text', 'html', or 'digest'",
             format
-        )),
+        )
+        .into()),
     }
 }

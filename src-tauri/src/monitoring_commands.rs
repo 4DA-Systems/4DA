@@ -6,6 +6,7 @@
 use tauri::AppHandle;
 use tracing::info;
 
+use crate::error::Result;
 use crate::{get_monitoring_state, get_settings_manager, monitoring, settings};
 
 // ============================================================================
@@ -14,7 +15,7 @@ use crate::{get_monitoring_state, get_settings_manager, monitoring, settings};
 
 /// Get monitoring status
 #[tauri::command]
-pub async fn get_monitoring_status() -> Result<serde_json::Value, String> {
+pub async fn get_monitoring_status() -> Result<serde_json::Value> {
     let state = get_monitoring_state();
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -44,7 +45,7 @@ pub async fn get_monitoring_status() -> Result<serde_json::Value, String> {
 
 /// Enable or disable monitoring
 #[tauri::command]
-pub async fn set_monitoring_enabled(enabled: bool) -> Result<serde_json::Value, String> {
+pub async fn set_monitoring_enabled(enabled: bool) -> Result<serde_json::Value> {
     let state = get_monitoring_state();
     state.set_enabled(enabled);
 
@@ -77,7 +78,7 @@ pub async fn set_monitoring_enabled(enabled: bool) -> Result<serde_json::Value, 
 
 /// Set monitoring interval
 #[tauri::command]
-pub async fn set_monitoring_interval(minutes: u64) -> Result<serde_json::Value, String> {
+pub async fn set_monitoring_interval(minutes: u64) -> Result<serde_json::Value> {
     let minutes = minutes.clamp(1, 1440);
     let state = get_monitoring_state();
     let secs = minutes * 60;
@@ -104,7 +105,7 @@ pub async fn set_monitoring_interval(minutes: u64) -> Result<serde_json::Value, 
 
 /// Set notification quality threshold
 #[tauri::command]
-pub async fn set_notification_threshold(threshold: String) -> Result<serde_json::Value, String> {
+pub async fn set_notification_threshold(threshold: String) -> Result<serde_json::Value> {
     // Validate the threshold value
     let valid = ["critical_only", "high_and_above", "all"];
     if !valid.contains(&threshold.as_str()) {
@@ -112,7 +113,8 @@ pub async fn set_notification_threshold(threshold: String) -> Result<serde_json:
             "Invalid threshold '{}'. Must be one of: {}",
             threshold,
             valid.join(", ")
-        ));
+        )
+        .into());
     }
 
     // Persist to settings (preserve existing enabled/interval)
@@ -136,7 +138,7 @@ pub async fn set_notification_threshold(threshold: String) -> Result<serde_json:
 
 /// Test notification delivery
 #[tauri::command]
-pub async fn trigger_notification_test(app: AppHandle) -> Result<serde_json::Value, String> {
+pub async fn trigger_notification_test(app: AppHandle) -> Result<serde_json::Value> {
     monitoring::send_notification(&app, 3, 30);
     Ok(serde_json::json!({
         "success": true,

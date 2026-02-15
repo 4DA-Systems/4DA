@@ -10,6 +10,7 @@ use tracing::{debug, info, warn};
 
 use crate::ace;
 use crate::context_engine::InterestSource;
+use crate::error::Result;
 use crate::scoring::get_ace_context;
 use crate::{
     chunk_text, embed_texts, get_ace_engine, get_ace_engine_mut, get_context_engine, get_database,
@@ -21,7 +22,7 @@ use crate::{
 // ============================================================================
 /// Get detected technologies from ACE
 #[tauri::command]
-pub async fn ace_get_detected_tech() -> Result<serde_json::Value, String> {
+pub async fn ace_get_detected_tech() -> Result<serde_json::Value> {
     let ace = get_ace_engine()?;
     let tech = ace.get_detected_tech()?;
 
@@ -32,7 +33,7 @@ pub async fn ace_get_detected_tech() -> Result<serde_json::Value, String> {
 
 /// Get active topics from ACE
 #[tauri::command]
-pub async fn ace_get_active_topics() -> Result<serde_json::Value, String> {
+pub async fn ace_get_active_topics() -> Result<serde_json::Value> {
     let ace = get_ace_engine()?;
     let topics = ace.get_active_topics()?;
 
@@ -83,7 +84,7 @@ pub(crate) fn get_default_scan_paths() -> Vec<PathBuf> {
 // ============================================================================
 /// Run full autonomous context detection (manifests + git)
 #[tauri::command]
-pub async fn ace_full_scan(paths: Vec<String>) -> Result<serde_json::Value, String> {
+pub async fn ace_full_scan(paths: Vec<String>) -> Result<serde_json::Value> {
     let scan_paths: Vec<PathBuf> = if paths.is_empty() {
         get_default_scan_paths()
     } else {
@@ -161,7 +162,7 @@ pub async fn ace_full_scan(paths: Vec<String>) -> Result<serde_json::Value, Stri
 /// Trigger autonomous context discovery - finds dev directories and projects automatically
 /// This is the "just make it work" button - discovers context without user configuration
 #[tauri::command]
-pub async fn ace_auto_discover() -> Result<serde_json::Value, String> {
+pub async fn ace_auto_discover() -> Result<serde_json::Value> {
     info!(target: "4da::ace", "Starting autonomous context discovery");
 
     // Phase 1: Discover common dev directories
@@ -197,7 +198,7 @@ pub async fn ace_auto_discover() -> Result<serde_json::Value, String> {
     {
         let mut settings = get_settings_manager().lock();
         if let Err(e) = settings.add_context_dirs(dirs_to_add.clone()) {
-            return Err(format!("Failed to save discovered directories: {}", e));
+            return Err(format!("Failed to save discovered directories: {}", e).into());
         }
         let _ = settings.mark_auto_discovery_completed();
     }
@@ -227,7 +228,7 @@ pub async fn ace_record_interaction(
     action_data: Option<serde_json::Value>,
     item_topics: Vec<String>,
     item_source: String,
-) -> Result<serde_json::Value, String> {
+) -> Result<serde_json::Value> {
     let ace = get_ace_engine()?;
 
     // Parse action type into BehaviorAction
@@ -251,7 +252,7 @@ pub async fn ace_record_interaction(
             ace::BehaviorAction::Scroll { visible_seconds }
         }
         "ignore" => ace::BehaviorAction::Ignore,
-        _ => return Err(format!("Unknown action type: {}", action_type)),
+        _ => return Err(format!("Unknown action type: {}", action_type).into()),
     };
 
     ace.record_interaction(
@@ -274,7 +275,7 @@ pub async fn ace_record_interaction(
 
 /// Get learned topic affinities
 #[tauri::command]
-pub async fn ace_get_topic_affinities() -> Result<serde_json::Value, String> {
+pub async fn ace_get_topic_affinities() -> Result<serde_json::Value> {
     let ace = get_ace_engine()?;
     let affinities = ace.get_topic_affinities()?;
 
@@ -286,7 +287,7 @@ pub async fn ace_get_topic_affinities() -> Result<serde_json::Value, String> {
 
 /// Get detected anti-topics
 #[tauri::command]
-pub async fn ace_get_anti_topics(min_rejections: Option<u32>) -> Result<serde_json::Value, String> {
+pub async fn ace_get_anti_topics(min_rejections: Option<u32>) -> Result<serde_json::Value> {
     let ace = get_ace_engine()?;
     let threshold = min_rejections.unwrap_or(5);
     let anti_topics = ace.get_anti_topics(threshold)?;
@@ -305,7 +306,7 @@ pub async fn ace_get_anti_topics(min_rejections: Option<u32>) -> Result<serde_js
 pub async fn ace_find_similar_topics(
     query: String,
     top_k: Option<usize>,
-) -> Result<serde_json::Value, String> {
+) -> Result<serde_json::Value> {
     let ace = get_ace_engine()?;
     let top_k = top_k.unwrap_or(5);
     let results = ace.find_similar_topics(&query, top_k)?;
@@ -323,7 +324,7 @@ pub async fn ace_find_similar_topics(
 
 /// Check if embedding service is operational
 #[tauri::command]
-pub async fn ace_embedding_status() -> Result<serde_json::Value, String> {
+pub async fn ace_embedding_status() -> Result<serde_json::Value> {
     let ace = get_ace_engine()?;
     let operational = ace.is_embedding_operational();
 
@@ -338,7 +339,7 @@ pub async fn ace_embedding_status() -> Result<serde_json::Value, String> {
 
 /// Save watcher state for persistence
 #[tauri::command]
-pub async fn ace_save_watcher_state() -> Result<serde_json::Value, String> {
+pub async fn ace_save_watcher_state() -> Result<serde_json::Value> {
     let ace = get_ace_engine()?;
     ace.save_watcher_state()?;
 
@@ -352,7 +353,7 @@ pub async fn ace_save_watcher_state() -> Result<serde_json::Value, String> {
 
 /// Get rate limit status for a source
 #[tauri::command]
-pub async fn ace_get_rate_limit_status(source: String) -> Result<serde_json::Value, String> {
+pub async fn ace_get_rate_limit_status(source: String) -> Result<serde_json::Value> {
     let ace = get_ace_engine()?;
     let status = ace.get_rate_limit_status(&source);
 
@@ -365,7 +366,7 @@ pub async fn ace_get_rate_limit_status(source: String) -> Result<serde_json::Val
 
 /// Start file watching on specified directories
 #[tauri::command]
-pub async fn ace_start_watcher(paths: Vec<String>) -> Result<serde_json::Value, String> {
+pub async fn ace_start_watcher(paths: Vec<String>) -> Result<serde_json::Value> {
     let mut ace = get_ace_engine_mut()?;
 
     let watch_paths: Vec<PathBuf> = paths
@@ -813,7 +814,7 @@ pub(crate) async fn index_discovered_readmes(context_dirs: &[PathBuf]) -> usize 
 /// Automatically seed user interests from ACE-detected technologies
 /// This runs once at startup when interests are empty, providing immediate value
 /// without requiring manual configuration.
-pub(crate) async fn auto_seed_interests_from_ace() -> Result<(), String> {
+pub(crate) async fn auto_seed_interests_from_ace() -> Result<()> {
     let context_engine = get_context_engine()?;
 
     // Backfill tech_stack if empty (one-time fix for existing users)
@@ -950,7 +951,7 @@ pub(crate) async fn auto_seed_interests_from_ace() -> Result<(), String> {
 /// Get suggested interests based on ACE-detected technologies and active topics.
 /// Cross-references with existing interests and exclusions to avoid duplicates.
 #[tauri::command]
-pub async fn ace_get_suggested_interests() -> Result<Vec<serde_json::Value>, String> {
+pub async fn ace_get_suggested_interests() -> Result<Vec<serde_json::Value>> {
     let ace = crate::get_ace_engine()?;
 
     // Get detected tech
@@ -1053,7 +1054,7 @@ pub async fn ace_get_suggested_interests() -> Result<Vec<serde_json::Value>, Str
 
 /// Get all unresolved anomalies
 #[tauri::command]
-pub async fn ace_get_unresolved_anomalies() -> Result<serde_json::Value, String> {
+pub async fn ace_get_unresolved_anomalies() -> Result<serde_json::Value> {
     let ace = crate::get_ace_engine()?;
     let conn = ace.get_conn().lock();
     let anomalies = crate::anomaly::get_unresolved(&conn)?;
@@ -1065,7 +1066,7 @@ pub async fn ace_get_unresolved_anomalies() -> Result<serde_json::Value, String>
 
 /// Run anomaly detection and store results
 #[tauri::command]
-pub async fn ace_detect_anomalies() -> Result<serde_json::Value, String> {
+pub async fn ace_detect_anomalies() -> Result<serde_json::Value> {
     let ace = crate::get_ace_engine()?;
     let conn = ace.get_conn().lock();
     let anomalies = crate::anomaly::detect_all(&conn)?;
@@ -1080,15 +1081,15 @@ pub async fn ace_detect_anomalies() -> Result<serde_json::Value, String> {
 
 /// Resolve (dismiss) an anomaly by id
 #[tauri::command]
-pub async fn ace_resolve_anomaly(anomaly_id: i64) -> Result<(), String> {
+pub async fn ace_resolve_anomaly(anomaly_id: i64) -> Result<()> {
     let ace = crate::get_ace_engine()?;
     let conn = ace.get_conn().lock();
-    crate::anomaly::resolve_anomaly(&conn, anomaly_id)
+    Ok(crate::anomaly::resolve_anomaly(&conn, anomaly_id)?)
 }
 
 /// Get accuracy metrics calculated from interactions
 #[tauri::command]
-pub async fn ace_get_accuracy_metrics() -> Result<serde_json::Value, String> {
+pub async fn ace_get_accuracy_metrics() -> Result<serde_json::Value> {
     let ace = crate::get_ace_engine()?;
     let conn = ace.get_conn().lock();
 
@@ -1149,7 +1150,7 @@ pub async fn ace_record_accuracy_feedback(
     item_id: u64,
     predicted_score: f64,
     feedback_type: String,
-) -> Result<(), String> {
+) -> Result<()> {
     let ace = crate::get_ace_engine()?;
     let conn = ace.get_conn().lock();
 
@@ -1178,7 +1179,7 @@ pub async fn ace_record_accuracy_feedback(
 }
 /// Get a single topic's affinity score
 #[tauri::command]
-pub async fn ace_get_single_affinity(topic: String) -> Result<serde_json::Value, String> {
+pub async fn ace_get_single_affinity(topic: String) -> Result<serde_json::Value> {
     let ace = get_ace_engine()?;
     let affinities = ace.get_topic_affinities()?;
 

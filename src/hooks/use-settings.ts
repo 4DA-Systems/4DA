@@ -1,135 +1,26 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
-import { invoke } from '@tauri-apps/api/core';
-import type { Settings } from '../types';
+import { useEffect } from 'react';
+import { useAppStore } from '../store';
 
-interface SettingsForm {
-  provider: string;
-  apiKey: string;
-  model: string;
-  baseUrl: string;
-  rerankEnabled: boolean;
-  maxItems: number;
-  minScore: number;
-  dailyTokenLimit: number;
-  dailyCostLimit: number;
-}
+export type { OllamaStatus, SettingsForm } from '../store';
 
-export interface OllamaStatus {
-  running: boolean;
-  version: string | null;
-  models: string[];
-  base_url: string;
-  error?: string;
-}
-
-const defaultSettingsForm: SettingsForm = {
-  provider: 'anthropic',
-  apiKey: '',
-  model: 'claude-3-haiku-20240307',
-  baseUrl: '',
-  rerankEnabled: false,
-  maxItems: 15,
-  minScore: 0.25,
-  dailyTokenLimit: 100000,
-  dailyCostLimit: 50,
-};
-
+/**
+ * Settings hook — thin wrapper around Zustand store.
+ * All state lives in the store; this hook adds the init-load effect.
+ */
 export function useSettings() {
-  const [settings, setSettings] = useState<Settings | null>(null);
-  const [settingsForm, setSettingsForm] = useState<SettingsForm>(defaultSettingsForm);
-  const [settingsStatus, setSettingsStatus] = useState('');
-  const [showOnboarding, setShowOnboarding] = useState(false);
-  const [ollamaStatus, setOllamaStatus] = useState<OllamaStatus | null>(null);
-  const [ollamaModels, setOllamaModels] = useState<string[]>([]);
-  const onboardingChecked = useRef(false);
-
-  const loadSettings = useCallback(async () => {
-    try {
-      const s = await invoke<Settings>('get_settings');
-      setSettings(s);
-      setSettingsForm((f) => ({
-        ...f,
-        provider: s.llm.provider !== 'none' ? s.llm.provider : 'anthropic',
-        model: s.llm.model || 'claude-3-haiku-20240307',
-        baseUrl: s.llm.base_url || '',
-        rerankEnabled: s.rerank.enabled,
-        maxItems: s.rerank.max_items_per_batch,
-        minScore: s.rerank.min_embedding_score,
-        dailyTokenLimit: s.rerank.daily_token_limit,
-        dailyCostLimit: s.rerank.daily_cost_limit_cents,
-      }));
-
-      // Check if onboarding is needed (first run) - only check once per session
-      if (!onboardingChecked.current) {
-        onboardingChecked.current = true;
-        const rawSettings = await invoke<Record<string, unknown>>('get_settings');
-        if (!rawSettings.onboarding_complete) {
-          setShowOnboarding(true);
-        }
-      }
-    } catch (error) {
-      console.debug('Settings not available:', error);
-    }
-  }, []);
-
-  const saveSettings = useCallback(async () => {
-    setSettingsStatus('Saving...');
-    try {
-      await invoke('set_llm_provider', {
-        provider: settingsForm.provider,
-        apiKey: settingsForm.apiKey || '',
-        model: settingsForm.model,
-        baseUrl: settingsForm.baseUrl || null,
-      });
-
-      await invoke('set_rerank_config', {
-        enabled: settingsForm.rerankEnabled,
-        maxItems: settingsForm.maxItems,
-        minScore: settingsForm.minScore,
-        dailyTokenLimit: settingsForm.dailyTokenLimit,
-        dailyCostLimit: settingsForm.dailyCostLimit,
-      });
-
-      setSettingsStatus('Settings saved!');
-      await loadSettings();
-      setTimeout(() => setSettingsStatus(''), 2000);
-    } catch (error) {
-      setSettingsStatus(`Error: ${error}`);
-    }
-  }, [settingsForm, loadSettings]);
-
-  const testConnection = useCallback(async () => {
-    setSettingsStatus('Testing connection...');
-    try {
-      await saveSettings();
-      const result = await invoke<{ success: boolean; message: string }>('test_llm_connection');
-      setSettingsStatus(result.message);
-    } catch (error) {
-      setSettingsStatus(`Connection failed: ${error}`);
-    }
-  }, [saveSettings]);
-
-  const checkOllamaStatus = useCallback(async (baseUrl?: string) => {
-    try {
-      const status = await invoke<OllamaStatus>('check_ollama_status', { baseUrl });
-      setOllamaStatus(status);
-      if (status.running && status.models.length > 0) {
-        setOllamaModels(status.models);
-      }
-      return status;
-    } catch (error) {
-      console.error('Failed to check Ollama status:', error);
-      const errorStatus: OllamaStatus = {
-        running: false,
-        version: null,
-        models: [],
-        base_url: baseUrl || 'http://localhost:11434',
-        error: String(error),
-      };
-      setOllamaStatus(errorStatus);
-      return errorStatus;
-    }
-  }, []);
+  const settings = useAppStore(s => s.settings);
+  const settingsForm = useAppStore(s => s.settingsForm);
+  const settingsStatus = useAppStore(s => s.settingsStatus);
+  const setSettingsStatus = useAppStore(s => s.setSettingsStatus);
+  const showOnboarding = useAppStore(s => s.showOnboarding);
+  const setShowOnboarding = useAppStore(s => s.setShowOnboarding);
+  const loadSettings = useAppStore(s => s.loadSettings);
+  const saveSettings = useAppStore(s => s.saveSettings);
+  const testConnection = useAppStore(s => s.testConnection);
+  const ollamaStatus = useAppStore(s => s.ollamaStatus);
+  const ollamaModels = useAppStore(s => s.ollamaModels);
+  const checkOllamaStatus = useAppStore(s => s.checkOllamaStatus);
+  const setSettingsForm = useAppStore(s => s.setSettingsFormFull);
 
   useEffect(() => {
     loadSettings();

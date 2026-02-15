@@ -96,9 +96,31 @@ priority_caps {
     high_score_floor: 0.70   # [0.50, 0.90]
 }
 
+dampening {
+    penalty_strength: 0.65       # [0.30, 0.90]
+    boost_strength: 0.40         # [0.20, 0.70]
+    domain_aware_strength: 0.20  # [0.10, 0.50]
+}
+
+intent_boost {
+    single_match: 0.08   # [0.03, 0.20]
+    multi_match: 0.15    # [0.05, 0.30]
+}
+
+domain_gate {
+    primary_boost: 1.10      # [1.00, 1.30]
+    ramp_base: 0.82          # [0.60, 0.95]
+    off_domain_mult: 0.40    # [0.20, 0.60]
+}
+
+dependency_boost {
+    weight: 0.15    # [0.05, 0.30]
+}
+
 quality_floor {
     min_signals: 2           # [1, 4]
     min_score: 0.50          # [0.40, 0.80]
+    short_title_cap: 0.40    # [0.25, 0.60]
 }
 
 semantic_boost {

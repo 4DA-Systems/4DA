@@ -6,6 +6,7 @@
 use tracing::{debug, info, warn};
 
 use crate::context_engine::{InteractionType, InterestSource};
+use crate::error::Result;
 use crate::llm::RelevanceJudge;
 use crate::settings::{LLMProvider, RerankConfig};
 use tauri::{AppHandle, Emitter};
@@ -18,7 +19,7 @@ use crate::{embed_texts, get_context_engine, get_settings_manager, invalidate_co
 
 /// Get current settings
 #[tauri::command]
-pub async fn get_settings() -> Result<serde_json::Value, String> {
+pub async fn get_settings() -> Result<serde_json::Value> {
     let manager = get_settings_manager();
     let guard = manager.lock();
     let settings = guard.get();
@@ -57,7 +58,7 @@ pub async fn set_llm_provider(
     model: String,
     base_url: Option<String>,
     openai_api_key: Option<String>,
-) -> Result<(), String> {
+) -> Result<()> {
     // Validate provider
     let valid_providers = ["anthropic", "openai", "ollama", "none"];
     if !valid_providers.contains(&provider.as_str()) {
@@ -65,7 +66,8 @@ pub async fn set_llm_provider(
             "Invalid provider '{}'. Must be one of: {}",
             provider,
             valid_providers.join(", ")
-        ));
+        )
+        .into());
     }
 
     let manager = get_settings_manager();
@@ -86,7 +88,7 @@ pub async fn set_llm_provider(
 
 /// Mark onboarding wizard as complete
 #[tauri::command]
-pub async fn mark_onboarding_complete() -> Result<(), String> {
+pub async fn mark_onboarding_complete() -> Result<()> {
     let manager = get_settings_manager();
     let mut guard = manager.lock();
     guard.mark_onboarding_complete()?;
@@ -102,7 +104,7 @@ pub async fn set_rerank_config(
     min_score: f32,
     daily_token_limit: u64,
     daily_cost_limit: u64,
-) -> Result<(), String> {
+) -> Result<()> {
     let manager = get_settings_manager();
     let mut guard = manager.lock();
 
@@ -121,7 +123,7 @@ pub async fn set_rerank_config(
 
 /// Test LLM connection
 #[tauri::command]
-pub async fn test_llm_connection() -> Result<serde_json::Value, String> {
+pub async fn test_llm_connection() -> Result<serde_json::Value> {
     let manager = get_settings_manager();
     let settings = {
         let guard = manager.lock();
@@ -132,7 +134,7 @@ pub async fn test_llm_connection() -> Result<serde_json::Value, String> {
     if settings.llm.provider == "none"
         || (settings.llm.provider != "ollama" && settings.llm.api_key.is_empty())
     {
-        return Err("No LLM provider configured".to_string());
+        return Err("No LLM provider configured".into());
     }
 
     info!(target: "4da::llm", provider = %settings.llm.provider, model = %settings.llm.model, "Testing LLM connection");
@@ -168,7 +170,7 @@ pub async fn test_llm_connection() -> Result<serde_json::Value, String> {
         }
         Err(e) => {
             warn!(target: "4da::llm", error = %e, "LLM test failed");
-            Err(format!("Connection failed: {}", e))
+            Err(format!("Connection failed: {}", e).into())
         }
     }
 }
@@ -176,7 +178,7 @@ pub async fn test_llm_connection() -> Result<serde_json::Value, String> {
 /// Dedicated lightweight Ollama connection test.
 /// Instead of sending a full judge_batch (2KB+ system prompt, slow on local models),
 /// this does a 3-phase test: (1) version check, (2) model check, (3) tiny inference.
-async fn test_ollama_connection_impl(llm: &LLMProvider) -> Result<serde_json::Value, String> {
+async fn test_ollama_connection_impl(llm: &LLMProvider) -> Result<serde_json::Value> {
     let base_url = llm.base_url.as_deref().unwrap_or("http://localhost:11434");
     let model = &llm.model;
 
@@ -199,7 +201,8 @@ async fn test_ollama_connection_impl(llm: &LLMProvider) -> Result<serde_json::Va
             return Err(format!(
                 "Ollama returned HTTP {} — is something else running on {}?",
                 status, base_url
-            ));
+            )
+            .into());
         }
         Err(e) => {
             let msg = e.to_string();
@@ -207,14 +210,16 @@ async fn test_ollama_connection_impl(llm: &LLMProvider) -> Result<serde_json::Va
                 return Err(format!(
                     "Cannot connect to Ollama at {}. Make sure Ollama is running (ollama serve).",
                     base_url
-                ));
+                )
+                .into());
             } else if msg.contains("timed out") || msg.contains("timeout") {
                 return Err(format!(
                     "Connection to {} timed out. Check that the URL is correct and Ollama is running.",
                     base_url
-                ));
+                )
+                .into());
             }
-            return Err(format!("Failed to reach Ollama at {}: {}", base_url, e));
+            return Err(format!("Failed to reach Ollama at {}: {}", base_url, e).into());
         }
     };
     info!(target: "4da::ollama", version = %version, "Ollama is running");
@@ -255,14 +260,12 @@ async fn test_ollama_connection_impl(llm: &LLMProvider) -> Result<serde_json::Va
         return Err(format!(
             "Model '{}' not found in Ollama. Available models: {}. Run: ollama pull {}",
             model, model_list, model
-        ));
+        )
+        .into());
     }
 
     if available_models.is_empty() {
-        return Err(format!(
-            "No models installed in Ollama. Run: ollama pull {}",
-            model
-        ));
+        return Err(format!("No models installed in Ollama. Run: ollama pull {}", model).into());
     }
 
     // Phase 3: Tiny inference test (not the full relevance judge prompt!)
@@ -292,7 +295,8 @@ async fn test_ollama_connection_impl(llm: &LLMProvider) -> Result<serde_json::Va
                 return Err(format!(
                     "Ollama returned empty response for model '{}'. The model may be corrupted. Try: ollama rm {} && ollama pull {}",
                     model, model, model
-                ));
+                )
+                .into());
             }
 
             info!(
@@ -321,10 +325,7 @@ async fn test_ollama_connection_impl(llm: &LLMProvider) -> Result<serde_json::Va
             let status = resp.status();
             let text = resp.text().await.unwrap_or_default();
             if status.as_u16() == 404 || text.contains("not found") {
-                Err(format!(
-                    "Model '{}' not found. Run: ollama pull {}",
-                    model, model
-                ))
+                Err(format!("Model '{}' not found. Run: ollama pull {}", model, model).into())
             } else if text.contains("out of memory")
                 || text.contains("OOM")
                 || text.contains("CUDA")
@@ -332,9 +333,10 @@ async fn test_ollama_connection_impl(llm: &LLMProvider) -> Result<serde_json::Va
                 Err(format!(
                     "Not enough GPU memory for '{}'. Try a smaller model (e.g., llama3.2:1b or phi3:mini).",
                     model
-                ))
+                )
+                .into())
             } else {
-                Err(format!("Ollama inference error ({}): {}", status, text))
+                Err(format!("Ollama inference error ({}): {}", status, text).into())
             }
         }
         Err(e) => {
@@ -343,9 +345,10 @@ async fn test_ollama_connection_impl(llm: &LLMProvider) -> Result<serde_json::Va
                 Err(format!(
                     "Ollama took too long to respond. The model '{}' may still be loading — try again in a few seconds.",
                     model
-                ))
+                )
+                .into())
             } else {
-                Err(format!("Ollama inference request failed: {}", e))
+                Err(format!("Ollama inference request failed: {}", e).into())
             }
         }
     }
@@ -353,7 +356,7 @@ async fn test_ollama_connection_impl(llm: &LLMProvider) -> Result<serde_json::Va
 
 /// Check Ollama status and list available models
 #[tauri::command]
-pub async fn check_ollama_status(base_url: Option<String>) -> Result<serde_json::Value, String> {
+pub async fn check_ollama_status(base_url: Option<String>) -> Result<serde_json::Value> {
     let url = base_url.unwrap_or_else(|| "http://localhost:11434".to_string());
     let client = reqwest::Client::builder()
         .connect_timeout(std::time::Duration::from_secs(5))
@@ -412,7 +415,7 @@ pub async fn check_ollama_status(base_url: Option<String>) -> Result<serde_json:
         }
         Ok(response) => {
             let status = response.status();
-            Err(format!("Ollama returned error status: {}", status))
+            Err(format!("Ollama returned error status: {}", status).into())
         }
         Err(e) => {
             // Connection refused or timeout - Ollama not running
@@ -434,7 +437,7 @@ pub async fn pull_ollama_model(
     app: AppHandle,
     model: String,
     base_url: Option<String>,
-) -> Result<serde_json::Value, String> {
+) -> Result<serde_json::Value> {
     let url = base_url.unwrap_or_else(|| "http://localhost:11434".to_string());
     let pull_url = format!("{}/api/pull", url);
 
@@ -455,7 +458,7 @@ pub async fn pull_ollama_model(
     if !response.status().is_success() {
         let status = response.status();
         let body = response.text().await.unwrap_or_default();
-        return Err(format!("Ollama pull failed ({}): {}", status, body));
+        return Err(format!("Ollama pull failed ({}): {}", status, body).into());
     }
 
     // Read streaming response line by line
@@ -513,7 +516,7 @@ pub async fn pull_ollama_model(
 
 /// Get the user's static identity (interests, exclusions, role, etc.)
 #[tauri::command]
-pub async fn get_user_context() -> Result<serde_json::Value, String> {
+pub async fn get_user_context() -> Result<serde_json::Value> {
     let engine = get_context_engine()?;
 
     let identity = engine
@@ -544,7 +547,7 @@ pub async fn get_user_context() -> Result<serde_json::Value, String> {
 
 /// Set the user's role
 #[tauri::command]
-pub async fn set_user_role(role: Option<String>) -> Result<serde_json::Value, String> {
+pub async fn set_user_role(role: Option<String>) -> Result<serde_json::Value> {
     let engine = get_context_engine()?;
     engine
         .set_role(role.as_deref())
@@ -560,7 +563,7 @@ pub async fn set_user_role(role: Option<String>) -> Result<serde_json::Value, St
 
 /// Add a technology to the user's tech stack
 #[tauri::command]
-pub async fn add_tech_stack(technology: String) -> Result<serde_json::Value, String> {
+pub async fn add_tech_stack(technology: String) -> Result<serde_json::Value> {
     let engine = get_context_engine()?;
     engine
         .add_technology(&technology)
@@ -576,7 +579,7 @@ pub async fn add_tech_stack(technology: String) -> Result<serde_json::Value, Str
 
 /// Remove a technology from the user's tech stack
 #[tauri::command]
-pub async fn remove_tech_stack(technology: String) -> Result<serde_json::Value, String> {
+pub async fn remove_tech_stack(technology: String) -> Result<serde_json::Value> {
     let engine = get_context_engine()?;
     engine
         .remove_technology(&technology)
@@ -590,7 +593,7 @@ pub async fn remove_tech_stack(technology: String) -> Result<serde_json::Value, 
 }
 /// Add an explicit interest (with embedding generation)
 #[tauri::command]
-pub async fn add_interest(topic: String, weight: Option<f32>) -> Result<serde_json::Value, String> {
+pub async fn add_interest(topic: String, weight: Option<f32>) -> Result<serde_json::Value> {
     let engine = get_context_engine()?;
     let weight = weight.unwrap_or(1.0);
 
@@ -616,7 +619,7 @@ pub async fn add_interest(topic: String, weight: Option<f32>) -> Result<serde_js
 
 /// Remove an interest
 #[tauri::command]
-pub async fn remove_interest(topic: String) -> Result<serde_json::Value, String> {
+pub async fn remove_interest(topic: String) -> Result<serde_json::Value> {
     let engine = get_context_engine()?;
     engine
         .remove_interest(&topic)
@@ -632,7 +635,7 @@ pub async fn remove_interest(topic: String) -> Result<serde_json::Value, String>
 
 /// Add an exclusion (topic to never show)
 #[tauri::command]
-pub async fn add_exclusion(topic: String) -> Result<serde_json::Value, String> {
+pub async fn add_exclusion(topic: String) -> Result<serde_json::Value> {
     let engine = get_context_engine()?;
     engine
         .add_exclusion(&topic)
@@ -649,7 +652,7 @@ pub async fn add_exclusion(topic: String) -> Result<serde_json::Value, String> {
 
 /// Remove an exclusion
 #[tauri::command]
-pub async fn remove_exclusion(topic: String) -> Result<serde_json::Value, String> {
+pub async fn remove_exclusion(topic: String) -> Result<serde_json::Value> {
     let engine = get_context_engine()?;
     engine
         .remove_exclusion(&topic)
@@ -665,10 +668,7 @@ pub async fn remove_exclusion(topic: String) -> Result<serde_json::Value, String
 
 /// Record a user interaction (click, save, dismiss)
 #[tauri::command]
-pub async fn record_interaction(
-    source_item_id: i64,
-    action: String,
-) -> Result<serde_json::Value, String> {
+pub async fn record_interaction(source_item_id: i64, action: String) -> Result<serde_json::Value> {
     let engine = get_context_engine()?;
 
     let action_type = match action.to_lowercase().as_str() {
@@ -676,7 +676,7 @@ pub async fn record_interaction(
         "save" => InteractionType::Save,
         "dismiss" => InteractionType::Dismiss,
         "ignore" => InteractionType::Ignore,
-        _ => return Err(format!("Unknown action type: {}", action)),
+        _ => return Err(format!("Unknown action type: {}", action).into()),
     };
 
     engine
@@ -692,7 +692,7 @@ pub async fn record_interaction(
 
 /// Get context engine statistics
 #[tauri::command]
-pub async fn get_context_stats() -> Result<serde_json::Value, String> {
+pub async fn get_context_stats() -> Result<serde_json::Value> {
     let engine = get_context_engine()?;
 
     let interest_count = engine.interest_count().unwrap_or(0);

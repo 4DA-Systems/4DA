@@ -1,0 +1,181 @@
+import type { StateCreator } from 'zustand';
+import { invoke } from '@tauri-apps/api/core';
+import type { AppStore, ContextDiscoverySlice } from './types';
+
+export const createContextDiscoverySlice: StateCreator<AppStore, [], [], ContextDiscoverySlice> = (set, get) => ({
+  scanDirectories: [],
+  newScanDir: '',
+  isScanning: false,
+  discoveredContext: { tech: [], topics: [], lastScan: null },
+
+  setNewScanDir: (dir) => set({ newScanDir: dir }),
+
+  loadDiscoveredContext: async () => {
+    try {
+      const dirs = await invoke<string[]>('get_context_dirs');
+      if (dirs && dirs.length > 0) {
+        set({ scanDirectories: dirs });
+      }
+
+      const techResult = await invoke<{
+        detected_tech: Array<{ name: string; category: string; confidence: number }>;
+      }>('ace_get_detected_tech');
+
+      if (techResult.detected_tech && techResult.detected_tech.length > 0) {
+        set(state => ({
+          discoveredContext: { ...state.discoveredContext, tech: techResult.detected_tech },
+        }));
+      }
+
+      const topicsResult = await invoke<{
+        topics: Array<{ topic: string; weight: number }>;
+      }>('ace_get_active_topics');
+
+      if (topicsResult.topics && topicsResult.topics.length > 0) {
+        set(state => ({
+          discoveredContext: {
+            ...state.discoveredContext,
+            topics: topicsResult.topics.map(t => t.topic),
+          },
+        }));
+      }
+    } catch (error) {
+      console.debug('No discovered context yet:', error);
+    }
+  },
+
+  runAutoDiscovery: async () => {
+    const { setSettingsStatus } = get();
+    set({ isScanning: true });
+    setSettingsStatus('Auto-discovering your development context...');
+
+    try {
+      const result = await invoke<{
+        success: boolean;
+        directories_found: number;
+        projects_found: number;
+        directories_added: number;
+        directories: string[];
+        scan_result: {
+          manifest_scan: { detected_tech: number; confidence: number };
+          git_scan: { repos_analyzed: number; total_commits: number };
+          combined: { total_topics: number; topics: string[] };
+        };
+      }>('ace_auto_discover');
+
+      if (result.success) {
+        set({ scanDirectories: result.directories || [] });
+
+        const techResult = await invoke<{
+          detected_tech: Array<{ name: string; category: string; confidence: number }>;
+        }>('ace_get_detected_tech');
+
+        set({
+          discoveredContext: {
+            tech: techResult.detected_tech || [],
+            topics: result.scan_result?.combined?.topics || [],
+            lastScan: new Date().toISOString(),
+          },
+        });
+
+        setSettingsStatus(
+          `Auto-discovered ${result.directories_found} dev directories, ${result.projects_found} projects, ${techResult.detected_tech?.length || 0} technologies`,
+        );
+        setTimeout(() => set({ settingsStatus: '' }), 5000);
+      } else {
+        setSettingsStatus('No development directories found. Add directories manually below.');
+        setTimeout(() => set({ settingsStatus: '' }), 3000);
+      }
+    } catch (error) {
+      console.error('Auto-discovery failed:', error);
+      setSettingsStatus(`Auto-discovery failed: ${error}`);
+    } finally {
+      set({ isScanning: false });
+    }
+  },
+
+  runFullScan: async () => {
+    const { scanDirectories, runAutoDiscovery, setSettingsStatus } = get();
+
+    if (scanDirectories.length === 0) {
+      return runAutoDiscovery();
+    }
+
+    set({ isScanning: true });
+    setSettingsStatus('Scanning directories for context...');
+
+    try {
+      const result = await invoke<{
+        success: boolean;
+        manifest_scan: { detected_tech: number; confidence: number };
+        git_scan: { repos_analyzed: number; total_commits: number };
+        combined: { total_topics: number; topics: string[] };
+      }>('ace_full_scan', { paths: scanDirectories });
+
+      const techResult = await invoke<{
+        detected_tech: Array<{ name: string; category: string; confidence: number }>;
+      }>('ace_get_detected_tech');
+
+      set({
+        discoveredContext: {
+          tech: techResult.detected_tech || [],
+          topics: result.combined?.topics || [],
+          lastScan: new Date().toISOString(),
+        },
+      });
+
+      setSettingsStatus(
+        `Scan complete: ${techResult.detected_tech?.length || 0} technologies, ${result.combined?.total_topics || 0} topics discovered`,
+      );
+      setTimeout(() => set({ settingsStatus: '' }), 3000);
+    } catch (error) {
+      console.error('Full scan failed:', error);
+      setSettingsStatus(`Scan failed: ${error}`);
+    } finally {
+      set({ isScanning: false });
+    }
+  },
+
+  addScanDirectory: async () => {
+    const { newScanDir, scanDirectories, setSettingsStatus } = get();
+    const dirToAdd = newScanDir.trim();
+    if (!dirToAdd) {
+      setSettingsStatus('Please enter a directory path');
+      setTimeout(() => set({ settingsStatus: '' }), 2000);
+      return;
+    }
+    if (scanDirectories.includes(dirToAdd)) {
+      setSettingsStatus('Directory already added');
+      setTimeout(() => set({ settingsStatus: '' }), 2000);
+      return;
+    }
+
+    const newDirs = [...scanDirectories, dirToAdd];
+
+    try {
+      await invoke('set_context_dirs', { dirs: newDirs });
+      set({ scanDirectories: newDirs, newScanDir: '' });
+      setSettingsStatus(`Added: ${dirToAdd}`);
+      setTimeout(() => set({ settingsStatus: '' }), 2000);
+    } catch (error) {
+      const errorMsg = String(error).replace('Error: ', '');
+      setSettingsStatus(`Error: ${errorMsg}`);
+      console.error('Failed to add directory:', error);
+    }
+  },
+
+  removeScanDirectory: async (dir) => {
+    const { scanDirectories, setSettingsStatus } = get();
+    const newDirs = scanDirectories.filter(d => d !== dir);
+    try {
+      await invoke('set_context_dirs', { dirs: newDirs });
+      set({ scanDirectories: newDirs });
+      setSettingsStatus(`Removed: ${dir}`);
+      setTimeout(() => set({ settingsStatus: '' }), 2000);
+    } catch (error) {
+      const errorMsg = String(error).replace('Error: ', '');
+      setSettingsStatus(`Error removing: ${errorMsg}`);
+      console.error('Failed to remove directory:', error);
+    }
+  },
+});

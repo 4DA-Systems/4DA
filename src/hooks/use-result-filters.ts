@@ -1,11 +1,6 @@
-import { useState, useMemo, useCallback } from 'react';
+import { useMemo, useCallback } from 'react';
 import type { SourceRelevance, FeedbackAction, FeedbackGiven } from '../types';
-
-const ALL_SOURCES = new Set([
-  'hackernews', 'arxiv', 'reddit', 'github',
-  'rss', 'youtube', 'twitter', 'producthunt',
-  'lobsters', 'devto',
-]);
+import { useAppStore } from '../store';
 
 /** Normalize URL for dedup: strip protocol, www, trailing slash, query params */
 function normalizeUrl(url: string | null | undefined): string | null {
@@ -23,29 +18,26 @@ function normalizeUrl(url: string | null | undefined): string | null {
   }
 }
 
+/**
+ * Result filters hook — thin wrapper around Zustand store.
+ * Filter state lives in the store; filteredResults is derived here via useMemo.
+ */
 export const useResultFilters = (
   relevanceResults: SourceRelevance[],
   feedbackGiven: FeedbackGiven,
   recordInteraction: (id: number, action: FeedbackAction, item: SourceRelevance) => Promise<void>,
   setSettingsStatus: (msg: string) => void,
 ) => {
-  const [sourceFilters, setSourceFilters] = useState<Set<string>>(new Set(ALL_SOURCES));
-  const [sortBy, setSortBy] = useState<'score' | 'date'>('score');
-  const [showOnlyRelevant, setShowOnlyRelevant] = useState(false);
-  const [showSavedOnly, setShowSavedOnly] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
-
-  const toggleSourceFilter = useCallback((source: string) => {
-    setSourceFilters(prev => {
-      const next = new Set(prev);
-      if (next.has(source)) {
-        if (next.size > 1) next.delete(source);
-      } else {
-        next.add(source);
-      }
-      return next;
-    });
-  }, []);
+  const sourceFilters = useAppStore(s => s.sourceFilters);
+  const sortBy = useAppStore(s => s.sortBy);
+  const showOnlyRelevant = useAppStore(s => s.showOnlyRelevant);
+  const showSavedOnly = useAppStore(s => s.showSavedOnly);
+  const searchQuery = useAppStore(s => s.searchQuery);
+  const toggleSourceFilter = useAppStore(s => s.toggleSourceFilter);
+  const setSortBy = useAppStore(s => s.setSortBy);
+  const setShowOnlyRelevant = useAppStore(s => s.setShowOnlyRelevant);
+  const setShowSavedOnly = useAppStore(s => s.setShowSavedOnly);
+  const setSearchQuery = useAppStore(s => s.setSearchQuery);
 
   const filteredResults = useMemo(() => {
     const query = searchQuery.toLowerCase().trim();

@@ -83,6 +83,10 @@ enum AstNode {
     QualityFloor { entries: Vec<Param> },
     SemanticBoost { entries: Vec<Param> },
     ConfidenceFloor { entries: Vec<Param> },
+    Dampening { entries: Vec<Param> },
+    IntentBoost { entries: Vec<Param> },
+    DomainGate { entries: Vec<Param> },
+    DependencyBoost { entries: Vec<Param> },
 }
 
 // ============================================================================
@@ -516,6 +520,22 @@ impl Parser {
                         },
                         "confidence_floor" => match self.parse_named_params_section("confidence_floor") {
                             Ok(params) => nodes.push(AstNode::ConfidenceFloor { entries: params }),
+                            Err(mut e) => errors.append(&mut e),
+                        },
+                        "dampening" => match self.parse_named_params_section("dampening") {
+                            Ok(params) => nodes.push(AstNode::Dampening { entries: params }),
+                            Err(mut e) => errors.append(&mut e),
+                        },
+                        "intent_boost" => match self.parse_named_params_section("intent_boost") {
+                            Ok(params) => nodes.push(AstNode::IntentBoost { entries: params }),
+                            Err(mut e) => errors.append(&mut e),
+                        },
+                        "domain_gate" => match self.parse_named_params_section("domain_gate") {
+                            Ok(params) => nodes.push(AstNode::DomainGate { entries: params }),
+                            Err(mut e) => errors.append(&mut e),
+                        },
+                        "dependency_boost" => match self.parse_named_params_section("dependency_boost") {
+                            Ok(params) => nodes.push(AstNode::DependencyBoost { entries: params }),
                             Err(mut e) => errors.append(&mut e),
                         },
                         other => {
@@ -1019,7 +1039,11 @@ fn validate(nodes: &[AstNode]) -> Vec<ValidationError> {
             AstNode::PriorityCaps { entries } |
             AstNode::QualityFloor { entries } |
             AstNode::SemanticBoost { entries } |
-            AstNode::ConfidenceFloor { entries } => {
+            AstNode::ConfidenceFloor { entries } |
+            AstNode::Dampening { entries } |
+            AstNode::IntentBoost { entries } |
+            AstNode::DomainGate { entries } |
+            AstNode::DependencyBoost { entries } => {
                 validate_param_ranges(entries, &mut errors);
             }
 
@@ -1284,6 +1308,54 @@ fn generate(nodes: &[AstNode]) -> String {
                 out.push_str("// === Confidence Floor ===\n");
                 for param in entries {
                     let const_name = format!("CONFIDENCE_FLOOR_{}", to_screaming_snake(&param.name));
+                    out.push_str(&format!(
+                        "pub const {}: f32 = {};\n",
+                        const_name, format_f32(param.value)
+                    ));
+                }
+                out.push('\n');
+            }
+
+            AstNode::Dampening { entries } => {
+                out.push_str("// === Dampening ===\n");
+                for param in entries {
+                    let const_name = format!("DAMPENING_{}", to_screaming_snake(&param.name));
+                    out.push_str(&format!(
+                        "pub const {}: f32 = {};\n",
+                        const_name, format_f32(param.value)
+                    ));
+                }
+                out.push('\n');
+            }
+
+            AstNode::IntentBoost { entries } => {
+                out.push_str("// === Intent Boost ===\n");
+                for param in entries {
+                    let const_name = format!("INTENT_BOOST_{}", to_screaming_snake(&param.name));
+                    out.push_str(&format!(
+                        "pub const {}: f32 = {};\n",
+                        const_name, format_f32(param.value)
+                    ));
+                }
+                out.push('\n');
+            }
+
+            AstNode::DomainGate { entries } => {
+                out.push_str("// === Domain Gate ===\n");
+                for param in entries {
+                    let const_name = format!("DOMAIN_GATE_{}", to_screaming_snake(&param.name));
+                    out.push_str(&format!(
+                        "pub const {}: f32 = {};\n",
+                        const_name, format_f32(param.value)
+                    ));
+                }
+                out.push('\n');
+            }
+
+            AstNode::DependencyBoost { entries } => {
+                out.push_str("// === Dependency Boost ===\n");
+                for param in entries {
+                    let const_name = format!("DEPENDENCY_BOOST_{}", to_screaming_snake(&param.name));
                     out.push_str(&format!(
                         "pub const {}: f32 = {};\n",
                         const_name, format_f32(param.value)
