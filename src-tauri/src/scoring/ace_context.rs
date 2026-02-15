@@ -1,0 +1,155 @@
+use std::collections::{HashMap, HashSet};
+use tracing::{debug, warn};
+
+use super::dependencies::{load_dependency_intelligence, DepInfo};
+use crate::get_ace_engine;
+
+/// ACE-discovered context for relevance scoring
+/// PASIFA: Full context including confidence scores for weighted scoring
+#[derive(Debug, Default)]
+pub(crate) struct ACEContext {
+    /// Active topics detected from project manifests and git history
+    pub active_topics: Vec<String>,
+    /// Confidence scores for active topics (topic -> confidence 0.0-1.0)
+    pub topic_confidence: std::collections::HashMap<String, f32>,
+    /// Detected tech stack (languages, frameworks)
+    pub detected_tech: Vec<String>,
+    /// Anti-topics (topics user has consistently rejected)
+    pub anti_topics: Vec<String>,
+    /// Confidence scores for anti-topics (topic -> confidence 0.0-1.0)
+    pub anti_topic_confidence: std::collections::HashMap<String, f32>,
+    /// Topic affinities from behavior learning (topic -> (affinity_score, confidence))
+    /// PASIFA: Now includes BOTH positive AND negative affinities with confidence
+    pub topic_affinities: std::collections::HashMap<String, (f32, f32)>,
+    /// Normalized dependency package names for O(1) lookup
+    pub dependency_names: HashSet<String>,
+    /// Dependency details: normalized_name -> info (version, language, search terms)
+    pub dependency_info: HashMap<String, DepInfo>,
+}
+
+/// Fetch ACE-discovered context for relevance scoring
+/// PASIFA: Now captures full context including confidence scores
+pub(crate) fn get_ace_context() -> ACEContext {
+    let ace = match get_ace_engine() {
+        Ok(engine) => engine,
+        Err(e) => {
+            warn!(target: "4da::ace", error = %e, "ACE engine unavailable - using empty context");
+            return ACEContext::default();
+        }
+    };
+
+    let mut ctx = ACEContext::default();
+
+    // Get active topics WITH confidence scores
+    if let Ok(topics) = ace.get_active_topics() {
+        for t in topics.iter().filter(|t| t.weight >= 0.55) {
+            let topic_lower = t.topic.to_lowercase();
+            ctx.active_topics.push(topic_lower.clone());
+            ctx.topic_confidence.insert(topic_lower, t.confidence);
+        }
+    }
+
+    // Get detected tech — filter to meaningful categories with decent confidence.
+    // Exclude Platform (e.g. "windows", "macos", "linux") — developing ON a platform
+    // doesn't mean the user is interested in content ABOUT that platform.
+    if let Ok(tech) = ace.get_detected_tech() {
+        ctx.detected_tech = tech
+            .iter()
+            .filter(|t| {
+                matches!(
+                    t.category,
+                    crate::ace::TechCategory::Language
+                        | crate::ace::TechCategory::Framework
+                        | crate::ace::TechCategory::Database
+                ) && t.confidence >= 0.5
+            })
+            .take(20)
+            .map(|t| t.name.to_lowercase())
+            .collect();
+    }
+
+    // Get anti-topics WITH confidence scores
+    if let Ok(anti_topics) = ace.get_anti_topics(3) {
+        for a in anti_topics
+            .iter()
+            .filter(|a| a.user_confirmed || a.confidence >= 0.5)
+        {
+            let topic_lower = a.topic.to_lowercase();
+            ctx.anti_topics.push(topic_lower.clone());
+            ctx.anti_topic_confidence.insert(topic_lower, a.confidence);
+        }
+    }
+
+    // Get topic affinities - BOTH positive AND negative
+    // PASIFA: Negative affinities are valuable learned signals with confidence
+    if let Ok(affinities) = ace.get_topic_affinities() {
+        for aff in affinities {
+            // Include affinities with enough data, regardless of sign
+            if aff.total_exposures >= 3 && aff.affinity_score.abs() > 0.1 {
+                ctx.topic_affinities.insert(
+                    aff.topic.to_lowercase(),
+                    (aff.affinity_score, aff.confidence),
+                );
+            }
+        }
+    }
+
+    // Merge recent work topics (last 2 hours) with high confidence.
+    // These represent what the user is actively working on RIGHT NOW,
+    // so they get elevated confidence to boost related content.
+    if let Ok(work_topics) = ace.get_recent_work_topics(2) {
+        for (topic, weight) in work_topics {
+            if !ctx.active_topics.contains(&topic) {
+                ctx.active_topics.push(topic.clone());
+            }
+            // Recent work topics get high confidence (0.85-0.95 scaled by recency)
+            // weight ranges 0.5-1.0, maps to confidence 0.85-0.95
+            let work_confidence = 0.85 + (weight - 0.5) * 0.2;
+            let existing = ctx.topic_confidence.get(&topic).copied().unwrap_or(0.0);
+            ctx.topic_confidence
+                .insert(topic, existing.max(work_confidence));
+        }
+        debug!(target: "4da::ace", "Merged recent work topics into ACE context");
+    }
+
+    // Load dependency intelligence from project_dependencies table
+    let (dep_names, dep_info) = load_dependency_intelligence();
+    if !dep_names.is_empty() {
+        debug!(target: "4da::ace",
+            packages = dep_info.len(),
+            search_terms = dep_names.len(),
+            "Dependency intelligence loaded for scoring"
+        );
+    }
+    ctx.dependency_names = dep_names;
+    ctx.dependency_info = dep_info;
+
+    ctx
+}
+
+/// Check if item should be excluded by ACE anti-topics
+pub(crate) fn check_ace_exclusions(topics: &[String], ace_ctx: &ACEContext) -> Option<String> {
+    // Both topics (from extract_topics) and anti_topics are already lowercase
+    for topic in topics {
+        for anti_topic in &ace_ctx.anti_topics {
+            if topic.contains(anti_topic.as_str()) || anti_topic.contains(topic.as_str()) {
+                return Some(format!("ACE anti-topic: {}", anti_topic));
+            }
+        }
+    }
+    None
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_ace_context_default() {
+        let ctx = ACEContext::default();
+        assert!(ctx.active_topics.is_empty());
+        assert!(ctx.detected_tech.is_empty());
+        assert!(ctx.anti_topics.is_empty());
+        assert!(ctx.topic_affinities.is_empty());
+    }
+}
