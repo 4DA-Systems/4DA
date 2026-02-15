@@ -45,6 +45,9 @@ data/*.db-wal
 # Runtime usage stats (changes every session)
 data/usage.json
 
+# User settings (contains API keys and local paths)
+data/settings.json
+
 # ONNX models
 src-tauri/models/
 

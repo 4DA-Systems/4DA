@@ -184,7 +184,7 @@ Add to your Claude Code config:
 
 ```bash
 pnpm tauri dev              # Dev server (localhost:4444)
-cargo test                  # Rust tests (345+, from src-tauri/)
+cargo test                  # Rust tests (from src-tauri/)
 pnpm test                   # Frontend tests (49+)
 pnpm validate:all           # Full validation (lint + types + tests + build)
 ```

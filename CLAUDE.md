@@ -42,3 +42,7 @@ Before modifying architecture or invariants, read the relevant `.ai/` file:
 `INVARIANTS.md` | `ARCHITECTURE.md` | `DECISIONS.md` | `FAILURE_MODES.md`
 
 Full spec: `specs/ARCHITECTURE.md`
+
+## Never Commit
+
+- `data/settings.json` — contains user API keys and local paths. Use `data/settings.example.json` as template.

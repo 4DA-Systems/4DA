@@ -1,0 +1,33 @@
+{
+  "llm": {
+    "provider": "none",
+    "api_key": "",
+    "model": "",
+    "base_url": "http://localhost:11434",
+    "openai_api_key": ""
+  },
+  "rerank": {
+    "enabled": true,
+    "max_items_per_batch": 48,
+    "min_embedding_score": 0.25,
+    "daily_token_limit": 100000,
+    "daily_cost_limit_cents": 50
+  },
+  "context_dirs": [],
+  "embedding_threshold": 0.5,
+  "monitoring": {
+    "enabled": true,
+    "interval_minutes": 10,
+    "notification_threshold": "high_and_above"
+  },
+  "onboarding_complete": false,
+  "auto_discovery_completed": false,
+  "rss_feeds": [],
+  "twitter_handles": [],
+  "youtube_channels": [],
+  "github_languages": [],
+  "predictive": { "enabled": true, "prefetch_window_minutes": 30 },
+  "serendipity": { "enabled": true, "budget_percent": 8 },
+  "health_radar": { "enabled": true, "check_interval_hours": 24 },
+  "attention": { "enabled": true }
+}
