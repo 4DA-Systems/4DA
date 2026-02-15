@@ -66,7 +66,7 @@ This file provides a quick reference. For detailed design, read the specs.
   - `reddit.rs` - Reddit adapter
 
 ### 3. Relevance Judge
-- **Location:** `src-tauri/src/llm.rs`, `src-tauri/src/lib.rs`
+- **Location:** `src-tauri/src/scoring/`, `src-tauri/src/commands.rs`, `src-tauri/src/llm.rs`
 - **Purpose:** Score items for relevance
 - **Key Concepts:**
   - Embedding similarity (primary)
@@ -144,8 +144,15 @@ Sources                              ▲
 ├── src-tauri/           # Rust backend
 │   └── src/
 │       ├── ace/         # Autonomic Context Engine
+│       ├── scoring/     # Relevance scoring (mod.rs + 10 submodules)
 │       ├── sources/     # External adapters
-│       ├── lib.rs       # Main library
+│       ├── lib.rs       # App entry (run, setup, re-exports)
+│       ├── commands.rs  # Tauri command handlers + background jobs
+│       ├── types.rs     # Shared struct/enum definitions
+│       ├── state.rs     # Global statics + accessor functions
+│       ├── utils.rs     # Text processing, vector math, topics
+│       ├── embeddings.rs # Embedding generation (OpenAI/Ollama)
+│       ├── events.rs    # Tauri event emission helpers
 │       └── db.rs        # Database layer
 ├── src/                 # React frontend
 ├── specs/               # Design documents (ARCHITECTURE.md, ACE-STONE-TABLET.md)
@@ -159,7 +166,8 @@ Sources                              ▲
 ### Tauri IPC Boundary
 - All Rust↔Frontend communication via IPC commands
 - No direct file access from frontend
-- Commands defined in `lib.rs`
+- Commands defined in `commands.rs` and domain-specific `*_commands.rs` modules
+- `lib.rs` re-exports all public types and accessors via `pub use` / `pub(crate) use`
 
 ### Privacy Boundary
 - Raw data stays local

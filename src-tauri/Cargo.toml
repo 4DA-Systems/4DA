@@ -2,7 +2,8 @@
 name = "fourda"
 version = "1.0.0"
 description = "4DA - The internet searches for you"
-authors = ["4DA Team"]
+authors = ["Antony Lawrence Kiddie Pasifa"]
+license = "BUSL-1.1"
 edition = "2021"
 default-run = "fourda"
 

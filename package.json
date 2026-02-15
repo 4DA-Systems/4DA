@@ -2,6 +2,8 @@
   "name": "4da",
   "private": true,
   "version": "1.0.0",
+  "author": "Antony Lawrence Kiddie Pasifa",
+  "license": "BUSL-1.1",
   "type": "module",
   "scripts": {
     "dev": "vite",
