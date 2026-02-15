@@ -20,15 +20,6 @@ pub struct SemanticShift {
     pub detected_at: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct TopicCentroid {
-    pub topic: String,
-    pub item_count: u32,
-    pub avg_score: f32,
-    pub top_titles: Vec<String>,
-    pub snapshot_at: String,
-}
-
 // ============================================================================
 // Implementation
 // ============================================================================

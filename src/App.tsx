@@ -1,3 +1,6 @@
+// Copyright (c) 2025-2026 4DA Systems. All rights reserved.
+// Licensed under the Business Source License 1.1 (BSL-1.1). See LICENSE file.
+
 import { useState, useEffect, useCallback, useMemo, Component, ErrorInfo, ReactNode } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import './App.css';

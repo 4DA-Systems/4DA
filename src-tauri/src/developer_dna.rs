@@ -259,7 +259,8 @@ fn get_top_engaged_topics(conn: &rusqlite::Connection) -> Result<Vec<EngagedTopi
     // Pull from topic_affinities (learned behavior)
     let mut topics = Vec::new();
 
-    let query = "SELECT topic, weight FROM topic_affinities ORDER BY weight DESC LIMIT 20";
+    let query =
+        "SELECT topic, affinity_score FROM topic_affinities ORDER BY affinity_score DESC LIMIT 20";
     if let Ok(mut stmt) = conn.prepare(query) {
         if let Ok(rows) = stmt.query_map([], |row| {
             Ok((row.get::<_, String>(0)?, row.get::<_, f64>(1)?))
