@@ -6,6 +6,7 @@
 
 /// Novelty assessment result
 #[derive(Debug, Clone)]
+#[allow(dead_code)] // Fields populated for diagnostic/serde use
 pub struct NoveltyScore {
     /// Whether this appears to be introductory/tutorial content
     pub is_introductory: bool,

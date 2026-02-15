@@ -21,6 +21,7 @@ use tracing::{info, warn};
 
 /// A notification that was below the quality threshold and batched for the next briefing
 #[derive(Debug, Clone)]
+#[allow(dead_code)] // Fields populated for diagnostic use
 pub struct BatchedNotification {
     pub title: String,
     pub source_type: String,

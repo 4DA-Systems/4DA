@@ -6,6 +6,7 @@
 
 /// Content quality assessment result
 #[derive(Debug, Clone)]
+#[allow(dead_code)] // Fields populated for diagnostic/serde use
 pub struct ContentQuality {
     /// Title quality score (0.0-1.0)
     pub title_quality: f32,

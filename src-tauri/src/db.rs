@@ -75,7 +75,7 @@ impl Database {
         }
 
         // Register sqlite-vec extension BEFORE opening connection
-        // This must be done once globally and before any connection is opened
+        // One of two registration sites. See also: lib.rs:open_db_connection()
         #[allow(clippy::missing_transmute_annotations)]
         unsafe {
             sqlite3_auto_extension(Some(std::mem::transmute(
