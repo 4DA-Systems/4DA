@@ -209,7 +209,9 @@ pub struct Settings {
     pub llm: LLMProvider,
     /// Re-ranking configuration
     pub rerank: RerankConfig,
-    /// Usage statistics
+    /// Usage statistics — kept for backwards-compatible deserialization, but
+    /// runtime usage is stored in a separate `usage.json` file.
+    #[serde(default, skip_serializing)]
     pub usage: UsageStats,
     /// Context directories to watch
     pub context_dirs: Vec<String>,
@@ -296,15 +298,18 @@ impl Default for Settings {
 /// Manages loading, saving, and accessing settings
 pub struct SettingsManager {
     settings: Settings,
+    usage: UsageStats,
     settings_path: PathBuf,
+    usage_path: PathBuf,
 }
 
 impl SettingsManager {
     /// Create a new settings manager, loading from disk if available
     pub fn new(data_dir: &std::path::Path) -> Self {
         let settings_path = data_dir.join("settings.json");
+        let usage_path = data_dir.join("usage.json");
 
-        let settings = if settings_path.exists() {
+        let mut settings = if settings_path.exists() {
             match fs::read_to_string(&settings_path) {
                 Ok(content) => serde_json::from_str(&content).unwrap_or_else(|e| {
                     warn!(target: "4da::settings", error = %e, "Failed to parse settings");
@@ -320,23 +325,55 @@ impl SettingsManager {
             Settings::default()
         };
 
+        // Load usage from separate file, falling back to settings.usage for migration
+        let usage = if usage_path.exists() {
+            match fs::read_to_string(&usage_path) {
+                Ok(content) => serde_json::from_str(&content).unwrap_or_else(|e| {
+                    warn!(target: "4da::settings", error = %e, "Failed to parse usage.json");
+                    UsageStats::default()
+                }),
+                Err(e) => {
+                    warn!(target: "4da::settings", error = %e, "Failed to read usage.json");
+                    UsageStats::default()
+                }
+            }
+        } else if settings.usage.tokens_total > 0 {
+            // Migrate: usage was in settings.json, move it out
+            info!(target: "4da::settings", "Migrating usage stats from settings.json to usage.json");
+            let migrated = settings.usage.clone();
+            settings.usage = UsageStats::default();
+            migrated
+        } else {
+            UsageStats::default()
+        };
+
         Self {
             settings,
+            usage,
             settings_path,
+            usage_path,
         }
     }
 
-    /// Save settings to disk
+    /// Save settings to disk (excludes usage — that's saved separately)
     pub fn save(&self) -> Result<(), String> {
-        // Ensure parent directory exists
         if let Some(parent) = self.settings_path.parent() {
             fs::create_dir_all(parent).map_err(|e| e.to_string())?;
         }
 
         let json = serde_json::to_string_pretty(&self.settings).map_err(|e| e.to_string())?;
-
         fs::write(&self.settings_path, json).map_err(|e| e.to_string())?;
-        info!(target: "4da::settings", path = ?self.settings_path, "Settings saved");
+        Ok(())
+    }
+
+    /// Save usage stats to disk
+    fn save_usage(&self) -> Result<(), String> {
+        if let Some(parent) = self.usage_path.parent() {
+            fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+        }
+
+        let json = serde_json::to_string_pretty(&self.usage).map_err(|e| e.to_string())?;
+        fs::write(&self.usage_path, json).map_err(|e| e.to_string())?;
         Ok(())
     }
 
@@ -380,43 +417,48 @@ impl SettingsManager {
             && (self.settings.llm.provider == "ollama" || !self.settings.llm.api_key.is_empty())
     }
 
+    /// Get usage stats
+    pub fn get_usage(&self) -> &UsageStats {
+        &self.usage
+    }
+
     /// Check if within daily limits
     pub fn within_daily_limits(&mut self) -> bool {
         // Reset stats if new day
         let today = chrono::Utc::now().format("%Y-%m-%d").to_string();
-        if self.settings.usage.stats_date != today {
-            self.settings.usage.tokens_today = 0;
-            self.settings.usage.cost_today_cents = 0;
-            self.settings.usage.stats_date = today;
-            let _ = self.save();
+        if self.usage.stats_date != today {
+            self.usage.tokens_today = 0;
+            self.usage.cost_today_cents = 0;
+            self.usage.stats_date = today;
+            let _ = self.save_usage();
         }
 
         let token_ok = self.settings.rerank.daily_token_limit == 0
-            || self.settings.usage.tokens_today < self.settings.rerank.daily_token_limit;
+            || self.usage.tokens_today < self.settings.rerank.daily_token_limit;
 
         let cost_ok = self.settings.rerank.daily_cost_limit_cents == 0
-            || self.settings.usage.cost_today_cents < self.settings.rerank.daily_cost_limit_cents;
+            || self.usage.cost_today_cents < self.settings.rerank.daily_cost_limit_cents;
 
         token_ok && cost_ok
     }
 
     /// Record token usage (called after LLM/embedding API calls)
     pub fn record_usage(&mut self, tokens: u64, cost_cents: u64) {
-        self.settings.usage.tokens_today += tokens;
-        self.settings.usage.cost_today_cents += cost_cents;
-        self.settings.usage.tokens_total += tokens;
-        self.settings.usage.items_reranked += 1;
-        let _ = self.save();
+        self.usage.tokens_today += tokens;
+        self.usage.cost_today_cents += cost_cents;
+        self.usage.tokens_total += tokens;
+        self.usage.items_reranked += 1;
+        let _ = self.save_usage();
     }
 
     /// Get usage summary
     pub fn usage_summary(&self) -> String {
         format!(
             "Today: {} tokens (~${:.3}) | Total: {} tokens | {} items re-ranked",
-            self.settings.usage.tokens_today,
-            self.settings.usage.cost_today_cents as f64 / 100.0,
-            self.settings.usage.tokens_total,
-            self.settings.usage.items_reranked
+            self.usage.tokens_today,
+            self.usage.cost_today_cents as f64 / 100.0,
+            self.usage.tokens_total,
+            self.usage.items_reranked
         )
     }
 

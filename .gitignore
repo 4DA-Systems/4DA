@@ -42,6 +42,9 @@ data/*.db
 data/*.db-shm
 data/*.db-wal
 
+# Runtime usage stats (changes every session)
+data/usage.json
+
 # ONNX models
 src-tauri/models/
 

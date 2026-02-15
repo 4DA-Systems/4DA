@@ -38,10 +38,10 @@ pub async fn get_settings() -> Result<serde_json::Value, String> {
             "daily_cost_limit_cents": settings.rerank.daily_cost_limit_cents
         },
         "usage": {
-            "tokens_today": settings.usage.tokens_today,
-            "cost_today_cents": settings.usage.cost_today_cents,
-            "tokens_total": settings.usage.tokens_total,
-            "items_reranked": settings.usage.items_reranked
+            "tokens_today": guard.get_usage().tokens_today,
+            "cost_today_cents": guard.get_usage().cost_today_cents,
+            "tokens_total": guard.get_usage().tokens_total,
+            "items_reranked": guard.get_usage().items_reranked
         },
         "embedding_threshold": settings.embedding_threshold,
         "onboarding_complete": settings.onboarding_complete,
@@ -515,13 +515,14 @@ pub async fn get_usage_stats() -> Result<serde_json::Value, String> {
     let mut guard = manager.lock();
     let within_limits = guard.within_daily_limits();
     let summary = guard.usage_summary();
+    let usage = guard.get_usage().clone();
     let settings = guard.get();
 
     Ok(serde_json::json!({
-        "tokens_today": settings.usage.tokens_today,
-        "cost_today_cents": settings.usage.cost_today_cents,
-        "tokens_total": settings.usage.tokens_total,
-        "items_reranked": settings.usage.items_reranked,
+        "tokens_today": usage.tokens_today,
+        "cost_today_cents": usage.cost_today_cents,
+        "tokens_total": usage.tokens_total,
+        "items_reranked": usage.items_reranked,
         "daily_token_limit": settings.rerank.daily_token_limit,
         "daily_cost_limit_cents": settings.rerank.daily_cost_limit_cents,
         "within_limits": within_limits,
