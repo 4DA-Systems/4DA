@@ -140,18 +140,6 @@ pub(crate) fn compute_keyword_interest_score(
     max_score
 }
 
-/// Public wrapper for keyword interest scoring with specificity weighting.
-/// Used by the fresh-fetch path in lib.rs.
-pub(crate) fn compute_keyword_interest_score_pub(
-    title: &str,
-    content: &str,
-    interests: &[context_engine::Interest],
-) -> f32 {
-    let raw = compute_keyword_interest_score(title, content, interests);
-    let specificity = best_interest_specificity_weight(title, content, interests);
-    raw * specificity
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

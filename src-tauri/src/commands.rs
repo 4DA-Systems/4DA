@@ -1,602 +1,22 @@
 // Copyright (c) 2025-2026 Antony Lawrence Kiddie Pasifa. All rights reserved.
 // Licensed under the Business Source License 1.1 (BSL-1.1). See LICENSE file.
 
-use tracing::{debug, info, warn};
+use tracing::info;
 
 use crate::{
-    anomaly, build_embedding_text, check_exclusions, decode_html_entities, developer_dna,
-    embed_texts, extract_topics, get_ace_engine, get_analysis_state, get_context_engine,
+    anomaly, developer_dna, extract_topics, get_ace_engine, get_analysis_state, get_context_engine,
     get_database, get_db_path, get_relevance_threshold, get_source_registry, health, scoring,
-    scrape_article_content, set_relevance_threshold, truncate_utf8, FetchedItem, HNStory,
-    RelevanceMatch, ScoreBreakdown, SourceRelevance,
+    set_relevance_threshold, SourceRelevance,
 };
 
 // ============================================================================
 // Commands
 // ============================================================================
 
-#[tauri::command]
-pub(crate) async fn get_hn_top_stories() -> Result<Vec<FetchedItem>, String> {
-    info!(target: "4da::sources", "Fetching HN top stories");
-    let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(30))
-        .build()
-        .map_err(|e| format!("Failed to create HTTP client: {}", e))?;
-
-    let top_ids: Vec<u64> = client
-        .get("https://hacker-news.firebaseio.com/v0/topstories.json")
-        .send()
-        .await
-        .map_err(|e| format!("Failed to fetch top stories: {}", e))?
-        .json()
-        .await
-        .map_err(|e| format!("Failed to parse top stories: {}", e))?;
-
-    debug!(target: "4da::sources", count = top_ids.len(), "Got story IDs, fetching top 30");
-
-    let mut items = Vec::new();
-    for id in top_ids.into_iter().take(30) {
-        let url = format!("https://hacker-news.firebaseio.com/v0/item/{}.json", id);
-        match client.get(&url).send().await {
-            Ok(response) => match response.json::<HNStory>().await {
-                Ok(story) => {
-                    let title = story.title.unwrap_or_else(|| "[No title]".to_string());
-
-                    // Get content: prefer HN text field, otherwise scrape URL
-                    let content = if let Some(text) = story.text {
-                        // Ask HN / Show HN / text posts have content directly
-                        debug!(target: "4da::sources", id = id, title = %title, "HN story has text");
-                        text
-                    } else if let Some(ref article_url) = story.url {
-                        // Link posts - scrape the article
-                        debug!(target: "4da::sources", id = id, title = %title, "Scraping HN story");
-                        match scrape_article_content(article_url).await {
-                            Some(scraped) => {
-                                debug!(target: "4da::sources", id = id, chars = scraped.len(), "Scraped content");
-                                scraped
-                            }
-                            None => {
-                                debug!(target: "4da::sources", id = id, "Scrape failed, using title only");
-                                String::new()
-                            }
-                        }
-                    } else {
-                        debug!(target: "4da::sources", id = id, title = %title, "HN story has no content");
-                        String::new()
-                    };
-
-                    items.push(FetchedItem {
-                        id: story.id,
-                        title,
-                        url: story.url,
-                        content,
-                    });
-                }
-                Err(e) => {
-                    warn!(target: "4da::sources", id = id, error = %e, "Failed to parse story")
-                }
-            },
-            Err(e) => warn!(target: "4da::sources", id = id, error = %e, "Failed to fetch story"),
-        }
-    }
-
-    info!(target: "4da::sources", count = items.len(), "Loaded HN stories");
-    Ok(items)
-}
-
-#[tauri::command]
-pub(crate) async fn compute_relevance() -> Result<Vec<SourceRelevance>, String> {
-    info!(target: "4da::analysis", "=== COMPUTING RELEVANCE SCORES (Phase 1 - with persistence) ===");
-
-    let db = get_database()?;
-
-    // Step 1: Check context availability (using sqlite-vec KNN search)
-    debug!(target: "4da::analysis", "Step 1: Checking context (sqlite-vec KNN enabled)");
-    let cached_context_count = db.context_count().map_err(|e| e.to_string())?;
-
-    if cached_context_count > 0 {
-        info!(target: "4da::analysis", context_chunks = cached_context_count, "Context indexed (using KNN search)");
-    } else {
-        warn!(target: "4da::analysis", "No context indexed. Scores will be 0 without context");
-    }
-
-    // Step 2: Fetch HN story IDs and process incrementally
-    debug!(target: "4da::analysis", "Step 2: Fetching HN stories (incremental)");
-
-    let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(30))
-        .build()
-        .map_err(|e| format!("Failed to create HTTP client: {}", e))?;
-    let top_ids: Vec<u64> = client
-        .get("https://hacker-news.firebaseio.com/v0/topstories.json")
-        .send()
-        .await
-        .map_err(|e| format!("Failed to fetch top stories: {}", e))?
-        .json()
-        .await
-        .map_err(|e| format!("Failed to parse top stories: {}", e))?;
-
-    debug!(target: "4da::analysis", story_ids = top_ids.len(), "Processing top 30 stories");
-
-    // Categorize: cached vs new
-    let mut cached_items: Vec<(FetchedItem, Vec<f32>)> = Vec::new();
-    let mut new_items: Vec<FetchedItem> = Vec::new();
-
-    for id in top_ids.into_iter().take(30) {
-        let id_str = id.to_string();
-
-        // Check cache first
-        if let Ok(Some(cached)) = db.get_source_item("hackernews", &id_str) {
-            debug!(target: "4da::analysis", id = id, title = %&truncate_utf8(&cached.title, 40), "HN story (cached)");
-            db.touch_source_item("hackernews", &id_str).ok();
-            cached_items.push((
-                FetchedItem {
-                    id,
-                    title: cached.title,
-                    url: cached.url,
-                    content: cached.content,
-                },
-                cached.embedding,
-            ));
-        } else {
-            // Need to fetch from API
-            let url = format!("https://hacker-news.firebaseio.com/v0/item/{}.json", id);
-            match client.get(&url).send().await {
-                Ok(response) => match response.json::<HNStory>().await {
-                    Ok(story) => {
-                        let title = story.title.unwrap_or_else(|| "[No title]".to_string());
-
-                        // Get content: prefer HN text field, otherwise scrape URL
-                        let content = if let Some(text) = story.text {
-                            debug!(target: "4da::analysis", id = id, title = %&truncate_utf8(&title, 40), "HN story NEW - has text");
-                            text
-                        } else if let Some(ref article_url) = story.url {
-                            debug!(target: "4da::analysis", id = id, title = %&truncate_utf8(&title, 35), "HN story NEW - scraping");
-                            match scrape_article_content(article_url).await {
-                                Some(scraped) => {
-                                    debug!(target: "4da::analysis", id = id, chars = scraped.len(), "Scraped content");
-                                    scraped
-                                }
-                                None => {
-                                    debug!(target: "4da::analysis", id = id, "Scrape failed");
-                                    String::new()
-                                }
-                            }
-                        } else {
-                            debug!(target: "4da::analysis", id = id, title = %&truncate_utf8(&title, 40), "HN story NEW - no content");
-                            String::new()
-                        };
-
-                        new_items.push(FetchedItem {
-                            id: story.id,
-                            title,
-                            url: story.url,
-                            content,
-                        });
-                    }
-                    Err(e) => {
-                        warn!(target: "4da::analysis", id = id, error = %e, "Failed to parse story")
-                    }
-                },
-                Err(e) => {
-                    warn!(target: "4da::analysis", id = id, error = %e, "Failed to fetch story")
-                }
-            }
-        }
-    }
-
-    info!(target: "4da::analysis", cached = cached_items.len(), new = new_items.len(), "Found items");
-
-    // Step 3: Generate embeddings only for NEW items
-    let new_embeddings = if !new_items.is_empty() {
-        debug!(target: "4da::analysis", count = new_items.len(), "Step 3: Generating embeddings for NEW items");
-        let with_content = new_items.iter().filter(|i| !i.content.is_empty()).count();
-        debug!(target: "4da::analysis", with_content = with_content, "Items have scraped content");
-
-        let new_texts: Vec<String> = new_items
-            .iter()
-            .map(|item| build_embedding_text(&item.title, &item.content))
-            .collect();
-        let embeddings = embed_texts(&new_texts).await?;
-
-        // Cache new items in database
-        debug!(target: "4da::analysis", count = new_items.len(), "Caching new items in database");
-        for (item, embedding) in new_items.iter().zip(embeddings.iter()) {
-            db.upsert_source_item(
-                "hackernews",
-                &item.id.to_string(),
-                item.url.as_deref(),
-                &decode_html_entities(&item.title),
-                &decode_html_entities(&item.content),
-                embedding,
-            )
-            .ok();
-        }
-
-        embeddings
-    } else {
-        debug!(target: "4da::analysis", "Step 3: All items cached, no embedding needed");
-        vec![]
-    };
-
-    db.update_source_fetch_time("hackernews").ok();
-
-    // Combine cached and new items
-    let mut all_items_with_embeddings: Vec<(FetchedItem, Vec<f32>)> = cached_items;
-    for (item, embedding) in new_items.into_iter().zip(new_embeddings.into_iter()) {
-        all_items_with_embeddings.push((item, embedding));
-    }
-
-    if all_items_with_embeddings.is_empty() {
-        return Err("No HN stories fetched".to_string());
-    }
-
-    // Step 4: Load user context for personalized scoring
-    debug!(target: "4da::analysis", "Step 4: Loading user context");
-    let context_engine = get_context_engine()?;
-    let static_identity = context_engine
-        .get_static_identity()
-        .map_err(|e| format!("Failed to load context: {}", e))?;
-
-    let interest_count = static_identity.interests.len();
-    let exclusion_count = static_identity.exclusions.len();
-    info!(target: "4da::analysis", interests = interest_count, exclusions = exclusion_count, "User context loaded");
-
-    if !static_identity.exclusions.is_empty() {
-        debug!(target: "4da::analysis", exclusions = %static_identity.exclusions.join(", "), "Active exclusions");
-    }
-    if !static_identity.interests.is_empty() {
-        let topics: Vec<&str> = static_identity
-            .interests
-            .iter()
-            .map(|i| i.topic.as_str())
-            .collect();
-        debug!(target: "4da::analysis", interests = %topics.join(", "), "Active interests");
-    }
-
-    // Step 4b: Load ACE-discovered context
-    debug!(target: "4da::ace", "Step 4b: Loading ACE discovered context");
-    let ace_ctx = scoring::get_ace_context();
-    // PASIFA: Pre-compute topic embeddings for semantic matching
-    let topic_embeddings = scoring::get_topic_embeddings(&ace_ctx).await;
-    info!(target: "4da::ace",
-        active_topics = ace_ctx.active_topics.len(),
-        detected_tech = ace_ctx.detected_tech.len(),
-        anti_topics = ace_ctx.anti_topics.len(),
-        affinities = ace_ctx.topic_affinities.len(),
-        embeddings = topic_embeddings.len(),
-        "ACE context loaded"
-    );
-
-    if !ace_ctx.active_topics.is_empty() {
-        debug!(target: "4da::ace", topics = %ace_ctx.active_topics.iter().take(5).cloned().collect::<Vec<_>>().join(", "), "ACE Topics");
-    }
-    if !ace_ctx.detected_tech.is_empty() {
-        debug!(target: "4da::ace", tech = %ace_ctx.detected_tech.iter().take(5).cloned().collect::<Vec<_>>().join(", "), "ACE Tech");
-    }
-
-    // Step 5: Compute similarity scores with context integration
-    debug!(target: "4da::analysis", items = all_items_with_embeddings.len(), "Step 5: Computing personalized relevance");
-    let mut results: Vec<SourceRelevance> = Vec::new();
-    let mut excluded_count = 0;
-
-    for (item, item_embedding) in &all_items_with_embeddings {
-        // Extract topics from this item
-        let topics = extract_topics(&item.title, &item.content);
-
-        // Check exclusions FIRST (hard filter)
-        let excluded_by = check_exclusions(&topics, &static_identity.exclusions)
-            .or_else(|| scoring::check_ace_exclusions(&topics, &ace_ctx));
-
-        if let Some(ref exclusion) = excluded_by {
-            debug!(target: "4da::analysis", title = %&truncate_utf8(&item.title, 50), exclusion = %exclusion, "EXCLUDED");
-            excluded_count += 1;
-
-            // Still add to results but marked as excluded
-            results.push(SourceRelevance {
-                id: item.id,
-                title: item.title.clone(),
-                url: item.url.clone(),
-                top_score: 0.0,
-                matches: vec![],
-                relevant: false,
-                context_score: 0.0,
-                interest_score: 0.0,
-                excluded: true,
-                excluded_by: Some(exclusion.clone()),
-                source_type: "hackernews".to_string(),
-                explanation: None,     // Excluded items don't need explanations
-                confidence: Some(0.0), // Excluded items have zero confidence
-                score_breakdown: None,
-                signal_type: None,
-                signal_priority: None,
-                signal_action: None,
-                signal_triggers: None,
-                similar_count: 0,
-                similar_titles: vec![],
-                serendipity: false,
-            });
-            continue;
-        }
-
-        // Compute context file score using sqlite-vec KNN search (O(log n))
-        // With graceful fallback to empty matches if KNN fails
-        let matches: Vec<RelevanceMatch> = if cached_context_count > 0 {
-            match db.find_similar_contexts(item_embedding, 3) {
-                Ok(results) => results
-                    .into_iter()
-                    .map(|result| {
-                        // Convert L2 distance to similarity: 1/(1+d) gives [0,1] range
-                        let similarity = 1.0 / (1.0 + result.distance);
-                        // Safely truncate text at character boundary
-                        let matched_text = if result.text.len() > 100 {
-                            let truncated: String = result.text.chars().take(100).collect();
-                            format!("{}...", truncated)
-                        } else {
-                            result.text
-                        };
-                        RelevanceMatch {
-                            source_file: result.source_file,
-                            matched_text,
-                            similarity,
-                        }
-                    })
-                    .collect(),
-                Err(e) => {
-                    warn!(target: "4da::knn", error = %e, "KNN search failed - using interest-only scoring");
-                    vec![]
-                }
-            }
-        } else {
-            vec![]
-        };
-
-        let context_score = matches.first().map(|m| m.similarity).unwrap_or(0.0);
-
-        // Compute interest score (what you care about)
-        let interest_score =
-            scoring::compute_interest_score(item_embedding, &static_identity.interests);
-
-        // Compute semantic ACE boost for topic/tech matching
-        // PASIFA: Use semantic matching when embeddings available, fall back to keywords
-        let semantic_boost =
-            scoring::compute_semantic_ace_boost(item_embedding, &ace_ctx, &topic_embeddings)
-                .unwrap_or_else(|| {
-                    // Fall back to keyword matching for active topics and tech only (not affinities)
-                    let mut boost: f32 = 0.0;
-                    for topic in &topics {
-                        let topic_lower = topic.to_lowercase();
-                        // Active topics boost
-                        for active_topic in &ace_ctx.active_topics {
-                            if topic_lower.contains(active_topic)
-                                || active_topic.contains(&topic_lower)
-                            {
-                                let conf = ace_ctx
-                                    .topic_confidence
-                                    .get(active_topic)
-                                    .copied()
-                                    .unwrap_or(0.5);
-                                boost += 0.15 * conf;
-                                break;
-                            }
-                        }
-                        // Tech stack boost
-                        for tech in &ace_ctx.detected_tech {
-                            if topic_lower.contains(tech) || tech.contains(&topic_lower) {
-                                boost += 0.12;
-                                break;
-                            }
-                        }
-                    }
-                    boost.clamp(0.0, 0.3)
-                });
-
-        // Keyword interest matching (with specificity weighting)
-        let keyword_score = scoring::compute_keyword_interest_score_pub(
-            &item.title,
-            &item.content,
-            &static_identity.interests,
-        );
-
-        // Combined score: weighted average of context, interest scores, plus semantic boost
-        // Dynamically adjust weights based on what data is available
-        let base_score = if cached_context_count > 0 && interest_count > 0 {
-            // Full mode: 50% context + 50% interests + ACE boost
-            (context_score * 0.5 + interest_score * 0.5 + semantic_boost).min(1.0)
-        } else if interest_count > 0 {
-            // No context indexed: rely on interests + ACE boost (full weight)
-            (interest_score * 0.7 + semantic_boost * 1.5).min(1.0)
-        } else if cached_context_count > 0 {
-            // No interests: rely on context + ACE boost
-            (context_score + semantic_boost).min(1.0)
-        } else {
-            // Neither context nor interests: pure ACE topic matching
-            (semantic_boost * 2.0).min(1.0)
-        };
-
-        // Multi-signal confirmation gate (same logic as cached path)
-        let affinity_mult = scoring::compute_affinity_multiplier(&topics, &ace_ctx);
-        let (gated_score, signal_count, confirmation_mult, confirmed_signals) =
-            scoring::apply_confirmation_gate(
-                base_score,
-                context_score,
-                interest_score,
-                keyword_score,
-                semantic_boost,
-                &ace_ctx,
-                &topics,
-                0.0, // No feedback boost in fresh-fetch path
-                affinity_mult,
-                0.0, // No dep matching in fresh-fetch path (scored in cached analysis)
-            );
-
-        // PASIFA: Apply unified multiplicative scoring on gated score
-        let combined_score = scoring::compute_unified_relevance(gated_score, &topics, &ace_ctx);
-
-        let relevant = combined_score >= get_relevance_threshold();
-
-        let anti_penalty = scoring::compute_anti_penalty(&topics, &ace_ctx);
-
-        // Log scoring details
-        if relevant {
-            info!(target: "4da::analysis",
-                id = item.id,
-                title = %item.title,
-                combined = combined_score,
-                base = base_score,
-                gated = gated_score,
-                context = context_score,
-                interest = interest_score,
-                keyword = keyword_score,
-                semantic_boost = semantic_boost,
-                affinity_mult = affinity_mult,
-                anti_penalty = anti_penalty,
-                signal_count = signal_count,
-                "RELEVANT"
-            );
-        } else {
-            debug!(target: "4da::analysis",
-                id = item.id,
-                title = %item.title,
-                combined = combined_score,
-                gated = gated_score,
-                context = context_score,
-                interest = interest_score,
-                signal_count = signal_count,
-                "not relevant"
-            );
-        }
-        if !topics.is_empty() {
-            debug!(target: "4da::analysis", id = item.id, topics = %topics.iter().take(5).cloned().collect::<Vec<_>>().join(", "), "Extracted topics");
-        }
-
-        // Generate explanation for relevant items
-        let declared_tech: Vec<String> = static_identity
-            .tech_stack
-            .iter()
-            .map(|t| t.to_lowercase())
-            .collect();
-        let explanation = if relevant {
-            Some(scoring::generate_relevance_explanation(
-                &item.title,
-                context_score,
-                interest_score,
-                &matches,
-                &ace_ctx,
-                &topics,
-                &static_identity.interests,
-                &declared_tech,
-            ))
-        } else {
-            None
-        };
-
-        // Calculate confidence and score breakdown
-        let confidence = scoring::calculate_confidence(
-            context_score,
-            interest_score,
-            semantic_boost,
-            &ace_ctx,
-            &topics,
-            cached_context_count,
-            interest_count as i64,
-            signal_count,
-        );
-
-        let mut confidence_by_signal = std::collections::HashMap::new();
-        if cached_context_count > 0 {
-            confidence_by_signal.insert("context".to_string(), context_score);
-        }
-        if interest_count > 0 {
-            confidence_by_signal.insert("interest".to_string(), interest_score);
-        }
-        if semantic_boost > 0.0 {
-            confidence_by_signal.insert("ace_boost".to_string(), semantic_boost);
-        }
-
-        let score_breakdown = ScoreBreakdown {
-            context_score,
-            interest_score,
-            keyword_score,
-            ace_boost: semantic_boost,
-            affinity_mult,
-            anti_penalty,
-            freshness_mult: 1.0,
-            feedback_boost: 0.0,
-            source_quality_boost: 0.0,
-            confidence_by_signal,
-            signal_count,
-            confirmed_signals,
-            confirmation_mult,
-            dep_match_score: 0.0,
-            matched_deps: vec![],
-            domain_relevance: 1.0,
-            content_quality_mult: 1.0,
-            novelty_mult: 1.0,
-            intent_boost: 0.0,
-            content_type: None,
-            content_dna_mult: 1.0,
-            competing_mult: 1.0,
-            llm_score: None,
-            llm_reason: None,
-        };
-
-        results.push(SourceRelevance {
-            id: item.id,
-            title: item.title.clone(),
-            url: item.url.clone(),
-            top_score: combined_score,
-            matches,
-            relevant,
-            context_score,
-            interest_score,
-            excluded: false,
-            excluded_by: None,
-            source_type: "hackernews".to_string(),
-            explanation,
-            confidence: Some(confidence),
-            score_breakdown: Some(score_breakdown),
-            signal_type: None,
-            signal_priority: None,
-            signal_action: None,
-            signal_triggers: None,
-            similar_count: 0,
-            similar_titles: vec![],
-            serendipity: false,
-        });
-    }
-
-    // Sort by relevance score descending (excluded items go to bottom)
-    results.sort_by(|a, b| {
-        if a.excluded && !b.excluded {
-            return std::cmp::Ordering::Greater;
-        }
-        if !a.excluded && b.excluded {
-            return std::cmp::Ordering::Less;
-        }
-        b.top_score
-            .partial_cmp(&a.top_score)
-            .unwrap_or(std::cmp::Ordering::Equal)
-    });
-
-    // Summary
-    let relevant_count = results.iter().filter(|r| r.relevant && !r.excluded).count();
-    let db_item_count = db.total_item_count().unwrap_or(0);
-    info!(target: "4da::analysis", "=== PERSONALIZED ANALYSIS COMPLETE ===");
-    info!(target: "4da::analysis",
-        total = results.len(),
-        relevant = relevant_count,
-        excluded = excluded_count,
-        interests = interest_count,
-        exclusions = exclusion_count,
-        threshold = get_relevance_threshold(),
-        db_cached = db_item_count,
-        "Analysis summary"
-    );
-
-    Ok(results)
-}
-
+// get_hn_top_stories + compute_relevance removed: shadow scoring pipeline
+// that duplicated scoring::score_item() but missed calibration, content quality,
+// novelty, content DNA, competing tech, domain relevance, intent boost, dependency intelligence.
+// Onboarding now uses run_cached_analysis + get_analysis_status (unified pipeline).
 // ============================================================================
 // Background Job Functions (called by monitoring scheduler)
 // ============================================================================
@@ -1140,12 +560,14 @@ pub(crate) async fn get_source_health() -> Result<serde_json::Value, String> {
 /// Check network connectivity
 #[tauri::command]
 pub(crate) async fn check_network_status() -> Result<serde_json::Value, String> {
-    let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(3))
-        .build()
-        .map_err(|e| e.to_string())?;
+    let client = crate::sources::shared_client();
 
-    let online = client.head("https://httpbin.org/get").send().await.is_ok();
+    let online = client
+        .head("https://httpbin.org/get")
+        .timeout(std::time::Duration::from_secs(3))
+        .send()
+        .await
+        .is_ok();
 
     Ok(serde_json::json!({
         "online": online,
@@ -1183,6 +605,14 @@ pub(crate) async fn get_db_stats_detailed() -> Result<serde_json::Value, String>
         "file_size_bytes": file_size,
         "file_size_mb": format!("{:.1}", file_size as f64 / 1_048_576.0),
     }))
+}
+
+fn escape_html(s: &str) -> String {
+    s.replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+        .replace('"', "&quot;")
+        .replace('\'', "&#x27;")
 }
 
 /// Export current analysis results in specified format
@@ -1261,14 +691,15 @@ pub(crate) async fn export_results(format: String) -> Result<String, String> {
                 if let Some(ref url) = item.url {
                     html.push_str(&format!(
                         "<a href='{}' style='color:#D4AF37'>{}</a>",
-                        url, item.title
+                        escape_html(url),
+                        escape_html(&item.title)
                     ));
                 } else {
-                    html.push_str(&item.title);
+                    html.push_str(&escape_html(&item.title));
                 }
                 html.push_str(&format!(
                     " <span style='color:#666'>({})</span>",
-                    item.source_type
+                    escape_html(&item.source_type)
                 ));
                 html.push_str("</div>");
             }

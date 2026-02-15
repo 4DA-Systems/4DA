@@ -22,14 +22,6 @@ pub struct ContextSettings {
     pub using_default: bool,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct FetchedItem {
-    pub id: u64,
-    pub title: String,
-    pub url: Option<String>,
-    pub content: String, // Scraped article content or HN text
-}
-
 /// Generic source item for multi-source support
 #[derive(Debug, Clone)]
 pub(crate) struct GenericSourceItem {
@@ -39,14 +31,6 @@ pub(crate) struct GenericSourceItem {
     pub title: String,
     pub url: Option<String>,
     pub content: String,
-}
-
-#[derive(Debug, Deserialize)]
-pub(crate) struct HNStory {
-    pub id: u64,
-    pub title: Option<String>,
-    pub url: Option<String>,
-    pub text: Option<String>, // For Ask HN / Show HN / text posts
 }
 
 /// Relevance match between an HN item and context

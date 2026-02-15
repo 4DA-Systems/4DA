@@ -23,7 +23,6 @@ pub(crate) use explanation::{
     calculate_confidence, compute_temporal_freshness, generate_relevance_explanation,
 };
 pub(crate) use gate::apply_confirmation_gate;
-pub(crate) use keywords::compute_keyword_interest_score_pub;
 pub(crate) use semantic::{compute_semantic_ace_boost, get_topic_embeddings};
 pub(crate) use utils::topic_overlaps;
 

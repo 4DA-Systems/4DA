@@ -8,10 +8,10 @@ mod types;
 
 // Re-exports from types (preserves `use crate::TypeName` interface)
 pub use types::{
-    AnalysisState, AnalysisStatus, ContextFile, ContextSettings, EnhancedRelevance, FetchedItem,
-    LLMJudgment, RelevanceMatch, ScoreBreakdown, SourceRelevance,
+    AnalysisState, AnalysisStatus, ContextFile, ContextSettings, EnhancedRelevance, LLMJudgment,
+    RelevanceMatch, ScoreBreakdown, SourceRelevance,
 };
-pub(crate) use types::{GenericSourceItem, HNStory, ANALYSIS_TIMEOUT_SECS};
+pub(crate) use types::{GenericSourceItem, ANALYSIS_TIMEOUT_SECS};
 
 mod commands;
 mod embeddings;
@@ -189,8 +189,6 @@ pub fn run() {
             context_commands::index_project_readmes,
             context_commands::get_context_settings,
             context_commands::set_context_dirs,
-            commands::get_hn_top_stories,
-            commands::compute_relevance,
             commands::get_database_stats,
             commands::get_sources,
             analysis::run_deep_initial_scan,

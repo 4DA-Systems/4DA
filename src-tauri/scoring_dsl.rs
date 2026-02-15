@@ -397,7 +397,7 @@ impl Parser {
 
     fn expect_u8(&mut self) -> Result<(u8, usize), Vec<String>> {
         let (n, line) = self.expect_number()?;
-        if n < 0.0 || n > 255.0 || n.fract() != 0.0 {
+        if !(0.0..=255.0).contains(&n) || n.fract() != 0.0 {
             return Err(vec![format!("line {}: expected integer 0-255, got {}", line, n)]);
         }
         Ok((n as u8, line))
