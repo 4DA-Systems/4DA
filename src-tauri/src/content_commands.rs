@@ -122,7 +122,7 @@ pub async fn generate_item_summary(item_id: i64) -> Result<ItemSummary> {
     };
 
     if llm_config.provider.is_empty()
-        || llm_config.api_key.is_empty() && llm_config.provider != "ollama"
+        || (llm_config.api_key.is_empty() && llm_config.provider != "ollama")
     {
         return Err(FourDaError::Llm(
             "No LLM configured. Set up a provider in Settings to generate summaries.".to_string(),

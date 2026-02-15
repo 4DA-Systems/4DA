@@ -4,6 +4,13 @@
 
 echo "Running CADE pre-commit validation..."
 
+# File size guardian (fast check)
+echo "Checking file sizes..."
+node scripts/check-file-sizes.cjs || {
+    echo "File size check failed. Split large files or add justified exceptions."
+    exit 1
+}
+
 # Frontend validation (fast checks only)
 echo "Checking TypeScript types..."
 npm run typecheck || {

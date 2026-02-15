@@ -22,16 +22,16 @@ interface SourceMeta {
 }
 
 const SOURCES: Record<SourceId, SourceMeta> = {
-  hackernews: { label: 'HN', fullName: 'Hacker News', colorClass: 'bg-orange-500/20 text-orange-300' },
-  arxiv: { label: 'arXiv', fullName: 'arXiv', colorClass: 'bg-purple-500/20 text-purple-300' },
-  reddit: { label: 'Reddit', fullName: 'Reddit', colorClass: 'bg-blue-500/20 text-blue-300' },
-  github: { label: 'GitHub', fullName: 'GitHub', colorClass: 'bg-green-500/20 text-green-300' },
-  rss: { label: 'RSS', fullName: 'RSS', colorClass: 'bg-yellow-500/20 text-yellow-300' },
-  youtube: { label: 'YouTube', fullName: 'YouTube', colorClass: 'bg-red-500/20 text-red-300' },
-  twitter: { label: 'Twitter', fullName: 'Twitter/X', colorClass: 'bg-sky-500/20 text-sky-300' },
-  producthunt: { label: 'PH', fullName: 'Product Hunt', colorClass: 'bg-orange-500/20 text-orange-300' },
-  lobsters: { label: 'Lobsters', fullName: 'Lobsters', colorClass: 'bg-pink-500/20 text-pink-300' },
-  devto: { label: 'Dev.to', fullName: 'Dev.to', colorClass: 'bg-indigo-500/20 text-indigo-300' },
+  hackernews: { label: 'HN', fullName: 'Hacker News', colorClass: 'bg-orange-500/20 text-orange-400' },
+  arxiv: { label: 'arXiv', fullName: 'arXiv', colorClass: 'bg-purple-500/20 text-purple-400' },
+  reddit: { label: 'Reddit', fullName: 'Reddit', colorClass: 'bg-blue-500/20 text-blue-400' },
+  github: { label: 'GitHub', fullName: 'GitHub', colorClass: 'bg-gray-300/20 text-gray-300' },
+  rss: { label: 'RSS', fullName: 'RSS', colorClass: 'bg-amber-500/20 text-amber-400' },
+  youtube: { label: 'YouTube', fullName: 'YouTube', colorClass: 'bg-red-500/20 text-red-400' },
+  twitter: { label: 'Twitter', fullName: 'Twitter/X', colorClass: 'bg-sky-500/20 text-sky-400' },
+  producthunt: { label: 'PH', fullName: 'Product Hunt', colorClass: 'bg-orange-600/20 text-orange-300' },
+  lobsters: { label: 'Lobsters', fullName: 'Lobsters', colorClass: 'bg-red-600/20 text-red-400' },
+  devto: { label: 'Dev.to', fullName: 'Dev.to', colorClass: 'bg-green-500/20 text-green-400' },
 };
 
 /** All valid source IDs */
@@ -49,5 +49,5 @@ export function getSourceFullName(id: string): string {
 
 /** Get Tailwind color classes for a source badge. Falls back to gray. */
 export function getSourceColorClass(id: string): string {
-  return (SOURCES as Record<string, SourceMeta>)[id]?.colorClass ?? 'bg-gray-500/20 text-gray-300';
+  return (SOURCES as Record<string, SourceMeta>)[id]?.colorClass ?? 'bg-gray-500/20 text-gray-400';
 }

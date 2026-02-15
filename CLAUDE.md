@@ -36,6 +36,15 @@ Fonts: Inter (UI), JetBrains Mono (code) | Weights: 400, 500, 600
 **TS:** React/framework > External packages > Internal (`@/`) > Relative > Types
 **Rust:** std > External crates > `crate::` > `super::`
 
+## File Size Limits
+
+New source files must stay within line-count limits:
+- **TypeScript/TSX**: warn at 350, error at 500 lines
+- **Rust**: warn at 600, error at 1000 lines
+
+Exceeding files must be split or added to exception list in `scripts/check-file-sizes.cjs`.
+Run `pnpm run validate:sizes` to check.
+
 ## Reference
 
 Before modifying architecture or invariants, read the relevant `.ai/` file:
