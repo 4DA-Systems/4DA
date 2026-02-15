@@ -32,6 +32,7 @@ export function useAnalysis(
     let unlistenNetworkOffline: UnlistenFn | null = null;
     let unlistenEmbeddingMode: UnlistenFn | null = null;
     let unlistenBackgroundResults: UnlistenFn | null = null;
+    let unlistenTrayAnalyze: UnlistenFn | null = null;
 
     const setupListeners = async () => {
       unlistenProgress = await listen<AnalysisProgress>('analysis-progress', (event) => {
@@ -106,6 +107,11 @@ export function useAnalysis(
         }
       });
 
+      // Tray menu "Analyze Now" button
+      unlistenTrayAnalyze = await listen('start-analysis-from-tray', () => {
+        useAppStore.getState().startAnalysis();
+      });
+
       // Background results from scheduled monitoring (silent merge)
       unlistenBackgroundResults = await listen<SourceRelevance[]>('background-results', (event) => {
         const newItems = event.payload;
@@ -140,6 +146,7 @@ export function useAnalysis(
       if (unlistenNetworkOffline) unlistenNetworkOffline();
       if (unlistenEmbeddingMode) unlistenEmbeddingMode();
       if (unlistenBackgroundResults) unlistenBackgroundResults();
+      if (unlistenTrayAnalyze) unlistenTrayAnalyze();
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps -- stable callback ref
   }, []);
