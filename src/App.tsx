@@ -15,6 +15,7 @@ import { ToastContainer } from './components/Toast';
 import { LearningIndicator } from './components/LearningIndicator';
 import { BriefingView } from './components/BriefingView';
 import { ResultsView } from './components/ResultsView';
+import { SavedItemsView } from './components/SavedItemsView';
 import { ActionBar } from './components/ActionBar';
 import { PredictiveIndicator } from './components/PredictiveIndicator';
 import { SignalChainsPanel } from './components/SignalChains';
@@ -321,11 +322,23 @@ function App() {
           >
             All Results
           </button>
+          <button
+            onClick={() => setActiveView('saved')}
+            className={`px-4 py-2 text-sm rounded-md transition-all ${
+              activeView === 'saved'
+                ? 'bg-green-500/20 text-green-400 font-medium'
+                : 'text-gray-500 hover:text-gray-300'
+            }`}
+          >
+            Saved
+          </button>
         </div>
 
         {/* Conditional View Rendering */}
         {activeView === 'briefing' ? (
           <BriefingView />
+        ) : activeView === 'saved' ? (
+          <SavedItemsView />
         ) : (
           <ResultsView
             newItemIds={newItemIds}

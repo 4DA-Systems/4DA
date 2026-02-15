@@ -2,6 +2,7 @@ import { memo } from 'react';
 import type { SourceRelevance, FeedbackAction } from '../types';
 import { formatScore, getScoreColor } from '../utils/score';
 import { getSourceLabel, getSourceColorClass } from '../config/sources';
+import { getContentTypeBadge } from '../config/content-types';
 
 interface BriefingCardProps {
   item: SourceRelevance;
@@ -30,6 +31,14 @@ export const BriefingCard = memo(function BriefingCard({
           <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${colorClass}`}>
             {label}
           </span>
+          {(() => {
+            const badge = getContentTypeBadge(item.score_breakdown?.content_type);
+            return badge ? (
+              <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${badge.colorClass}`}>
+                {badge.label}
+              </span>
+            ) : null;
+          })()}
           <span className={`text-xs font-mono font-medium ${getScoreColor(item.top_score)}`}>
             {formatScore(item.top_score)}
           </span>

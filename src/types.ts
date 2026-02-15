@@ -472,3 +472,30 @@ export interface DnaStats {
   dependency_count: number;
   days_active: number;
 }
+
+// ============================================================================
+// Content Reader & AI Summary Types
+// ============================================================================
+
+export interface ItemContent {
+  content: string;
+  source_type: string;
+  word_count: number;
+  has_summary: boolean;
+  summary: string | null;
+}
+
+export interface ItemSummary {
+  summary: string;
+  cached: boolean;
+}
+
+export interface SavedItem {
+  item_id: number;
+  title: string;
+  url: string | null;
+  source_type: string;
+  saved_at: string;
+  summary: string | null;
+  content_preview: string | null;
+}

@@ -1,6 +1,6 @@
 import type { StateCreator } from 'zustand';
 import { invoke } from '@tauri-apps/api/core';
-import type { FeedbackAction } from '../types';
+import type { FeedbackAction, SavedItem } from '../types';
 import type { AppStore, FeedbackSlice, TopicAffinity, AntiTopic } from './types';
 
 // Client-side score adjustment multipliers for immediate feedback
@@ -29,6 +29,25 @@ export const createFeedbackSlice: StateCreator<AppStore, [], [], FeedbackSlice> 
     set(state => ({
       feedbackGiven: typeof updater === 'function' ? updater(state.feedbackGiven) : updater,
     }));
+  },
+
+  loadPersistedSavedIds: async () => {
+    try {
+      const items = await invoke<SavedItem[]>('get_saved_items');
+      if (items.length > 0) {
+        set(state => {
+          const next = { ...state.feedbackGiven };
+          for (const item of items) {
+            if (!next[item.item_id]) {
+              next[item.item_id] = 'save';
+            }
+          }
+          return { feedbackGiven: next };
+        });
+      }
+    } catch (error) {
+      console.debug('Failed to load persisted saved ids:', error);
+    }
   },
 
   loadLearnedBehavior: async () => {
