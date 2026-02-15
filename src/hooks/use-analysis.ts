@@ -3,6 +3,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { listen, UnlistenFn } from '@tauri-apps/api/event';
 import type { ContextFile, SourceRelevance, AnalysisProgress, AppState } from '../types';
 import type { ToastType } from './use-toasts';
+import { getSourceLabel } from '../config/sources';
 
 const initialState: AppState = {
   contextFiles: [],
@@ -87,11 +88,7 @@ export function useAnalysis(
       // Per-source error events (Phase 3)
       unlistenSourceError = await listen<{ source: string; error: string; retry_count: number }>('source-error', (event) => {
         const { source, error } = event.payload;
-        const sourceLabels: Record<string, string> = {
-          hackernews: 'HN', arxiv: 'arXiv', reddit: 'Reddit', github: 'GitHub',
-          rss: 'RSS', youtube: 'YouTube', twitter: 'Twitter',
-        };
-        addToast?.('warning', `${sourceLabels[source] || source}: ${error}`);
+        addToast?.('warning', `${getSourceLabel(source)}: ${error}`);
       });
 
       // Per-source success events

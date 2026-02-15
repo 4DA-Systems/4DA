@@ -1,14 +1,8 @@
 import type { Dispatch, SetStateAction } from 'react';
 import { ResultItem } from './ResultItem';
 import { getStageLabel } from '../utils/score';
+import { getSourceLabel } from '../config/sources';
 import type { SourceRelevance, FeedbackAction, FeedbackGiven, ContextFile } from '../types';
-
-const SOURCE_LABELS: Record<string, string> = {
-  hackernews: 'HN', arxiv: 'arXiv', reddit: 'Reddit',
-  github: 'GitHub', rss: 'RSS', youtube: 'YouTube',
-  twitter: 'Twitter', producthunt: 'PH',
-  lobsters: 'Lobsters', devto: 'Dev.to',
-};
 
 interface ResultsViewProps {
   state: {
@@ -267,20 +261,20 @@ export function ResultsView({
               <div className="flex items-center gap-2 bg-[#1F1F1F] px-3 py-1.5 rounded-lg flex-wrap" role="group" aria-label="Source filters">
                 <span className="text-xs text-gray-500">Sources:</span>
                 {[...new Set(state.relevanceResults.map(r => r.source_type || 'hackernews'))]
-                  .sort((a, b) => (SOURCE_LABELS[a] || a).localeCompare(SOURCE_LABELS[b] || b))
+                  .sort((a, b) => getSourceLabel(a).localeCompare(getSourceLabel(b)))
                   .map(id => (
                     <button
                       key={id}
                       onClick={() => toggleSourceFilter(id)}
                       aria-pressed={sourceFilters.has(id)}
-                      aria-label={`Filter ${SOURCE_LABELS[id] || id} source`}
+                      aria-label={`Filter ${getSourceLabel(id)} source`}
                       className={`px-2 py-1 text-xs rounded-lg transition-all ${
                         sourceFilters.has(id)
                           ? 'bg-orange-500/20 text-orange-400 border border-orange-500/30'
                           : 'text-gray-500 hover:text-gray-300'
                       }`}
                     >
-                      {SOURCE_LABELS[id] || id}
+                      {getSourceLabel(id)}
                     </button>
                   ))}
               </div>
