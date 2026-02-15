@@ -215,14 +215,3 @@ fn has_word_boundary_match(text: &str, identifier: &str) -> bool {
 // ============================================================================
 // Tauri Commands
 // ============================================================================
-
-#[tauri::command]
-pub fn get_reverse_mentions(since_hours: Option<u32>) -> Result<Vec<ReverseMention>, String> {
-    let conn = crate::open_db_connection()?;
-    scan_for_mentions(&conn, since_hours.unwrap_or(72))
-}
-
-#[tauri::command]
-pub fn get_my_project_identifiers() -> Result<Vec<String>, String> {
-    get_my_identifiers()
-}

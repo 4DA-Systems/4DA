@@ -331,24 +331,3 @@ pub fn get_project_health(project_path: Option<String>) -> Result<Vec<ProjectHea
         compute_all_project_health(&conn)
     }
 }
-
-#[tauri::command]
-pub fn get_project_health_summary() -> Result<serde_json::Value, String> {
-    let conn = crate::open_db_connection()?;
-    let health = compute_all_project_health(&conn)?;
-
-    let total = health.len();
-    let healthy = health.iter().filter(|h| h.overall_score >= 0.7).count();
-    let at_risk = health.iter().filter(|h| h.overall_score < 0.5).count();
-    let total_alerts: usize = health.iter().map(|h| h.alerts.len()).sum();
-
-    Ok(serde_json::json!({
-        "total_projects": total,
-        "healthy": healthy,
-        "at_risk": at_risk,
-        "total_alerts": total_alerts,
-        "average_score": if total > 0 {
-            health.iter().map(|h| h.overall_score).sum::<f32>() / total as f32
-        } else { 0.0 }
-    }))
-}

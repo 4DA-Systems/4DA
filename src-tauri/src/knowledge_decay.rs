@@ -584,18 +584,6 @@ pub fn get_knowledge_gaps() -> Result<Vec<KnowledgeGap>, String> {
     let conn = crate::open_db_connection()?;
     detect_knowledge_gaps(&conn)
 }
-
-#[tauri::command]
-pub fn get_knowledge_gap_count() -> Result<usize, String> {
-    let conn = crate::open_db_connection()?;
-    let gaps = detect_knowledge_gaps(&conn)?;
-    let critical_count = gaps
-        .iter()
-        .filter(|g| g.gap_severity == GapSeverity::Critical || g.gap_severity == GapSeverity::High)
-        .count();
-    Ok(critical_count)
-}
-
 // ============================================================================
 // Tests
 // ============================================================================

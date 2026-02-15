@@ -261,13 +261,3 @@ pub fn resolve_signal_chain(chain_id: String, resolution: String) -> Result<(), 
     };
     resolve_chain(&conn, &chain_id, res)
 }
-
-#[tauri::command]
-pub fn get_signal_chain_count() -> Result<usize, String> {
-    let conn = crate::open_db_connection()?;
-    let chains = detect_chains(&conn)?;
-    Ok(chains
-        .iter()
-        .filter(|c| c.resolution == ChainResolution::Open)
-        .count())
-}

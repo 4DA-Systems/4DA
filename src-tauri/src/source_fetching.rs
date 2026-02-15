@@ -936,8 +936,6 @@ pub(crate) async fn fill_cache_background(app: &AppHandle) -> Result<usize, Stri
         }
     }
 
-    // Emit cache update event
-    let _ = app.emit("cache-updated", total_cached);
     void_signal_cache_filled(app);
 
     info!(target: "4da::cache", total = total_cached, "=== BACKGROUND CACHE FILL COMPLETE ===");

@@ -507,29 +507,6 @@ pub async fn pull_ollama_model(
         "model": model
     }))
 }
-
-/// Get usage statistics
-#[tauri::command]
-pub async fn get_usage_stats() -> Result<serde_json::Value, String> {
-    let manager = get_settings_manager();
-    let mut guard = manager.lock();
-    let within_limits = guard.within_daily_limits();
-    let summary = guard.usage_summary();
-    let usage = guard.get_usage().clone();
-    let settings = guard.get();
-
-    Ok(serde_json::json!({
-        "tokens_today": usage.tokens_today,
-        "cost_today_cents": usage.cost_today_cents,
-        "tokens_total": usage.tokens_total,
-        "items_reranked": usage.items_reranked,
-        "daily_token_limit": settings.rerank.daily_token_limit,
-        "daily_cost_limit_cents": settings.rerank.daily_cost_limit_cents,
-        "within_limits": within_limits,
-        "summary": summary
-    }))
-}
-
 // ============================================================================
 // Context Engine Commands
 // ============================================================================
@@ -611,38 +588,6 @@ pub async fn remove_tech_stack(technology: String) -> Result<serde_json::Value, 
         "success": true
     }))
 }
-
-/// Add a domain of interest
-#[tauri::command]
-pub async fn add_domain(domain: String) -> Result<serde_json::Value, String> {
-    let engine = get_context_engine()?;
-    engine
-        .add_domain(&domain)
-        .map_err(|e| format!("Failed to add domain: {}", e))?;
-
-    debug!(target: "4da::context", domain = %domain, "Added domain");
-
-    Ok(serde_json::json!({
-        "success": true,
-        "domain": domain
-    }))
-}
-
-/// Remove a domain of interest
-#[tauri::command]
-pub async fn remove_domain(domain: String) -> Result<serde_json::Value, String> {
-    let engine = get_context_engine()?;
-    engine
-        .remove_domain(&domain)
-        .map_err(|e| format!("Failed to remove domain: {}", e))?;
-
-    debug!(target: "4da::context", domain = %domain, "Removed domain");
-
-    Ok(serde_json::json!({
-        "success": true
-    }))
-}
-
 /// Add an explicit interest (with embedding generation)
 #[tauri::command]
 pub async fn add_interest(topic: String, weight: Option<f32>) -> Result<serde_json::Value, String> {
@@ -764,10 +709,4 @@ pub async fn get_context_stats() -> Result<serde_json::Value, String> {
         "domains": identity.domains.len(),
         "has_role": identity.role.is_some()
     }))
-}
-
-/// Get the current auto-tuned relevance threshold
-#[tauri::command]
-pub async fn get_current_threshold() -> Result<f32, String> {
-    Ok(crate::get_relevance_threshold())
 }

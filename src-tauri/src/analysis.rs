@@ -936,7 +936,8 @@ pub(crate) async fn analyze_cached_content_impl(
     let is_differential = last_completed_at.is_some() && previous_results.is_some();
 
     if is_differential {
-        let since = last_completed_at.as_deref().unwrap();
+        // Safe: guarded by is_differential check above
+        let since = last_completed_at.as_deref().unwrap_or("");
         info!(target: "4da::analysis", since = since, "Differential analysis - checking for new items since last run");
 
         let new_items = db
@@ -1035,7 +1036,7 @@ pub(crate) async fn analyze_cached_content_impl(
         apply_llm_reranking(app, &mut new_results, &scoring_ctx).await;
 
         // Merge: take previous results, update/add new ones by ID
-        let mut prev = previous_results.unwrap();
+        let mut prev = previous_results.unwrap_or_default();
         let existing_ids: std::collections::HashSet<u64> =
             new_results.iter().map(|r| r.id).collect();
         prev.retain(|r| !existing_ids.contains(&r.id));
@@ -1503,96 +1504,5 @@ pub(crate) async fn get_analysis_status() -> Result<AnalysisState, String> {
 
     Ok(guard.clone())
 }
-
-/// Get actionable signals from the latest analysis
-/// Filters to items with signal classifications, sorted by priority
-#[tauri::command]
-pub(crate) async fn get_actionable_signals(
-    priority_filter: Option<String>,
-) -> Result<serde_json::Value, String> {
-    let state = get_analysis_state();
-    let guard = state.lock();
-
-    let results = match &guard.results {
-        Some(r) => r,
-        None => return Ok(serde_json::json!({ "signals": [], "total": 0 })),
-    };
-
-    let priority_order = |p: &str| -> u8 {
-        match p {
-            "critical" => 4,
-            "high" => 3,
-            "medium" => 2,
-            "low" => 1,
-            _ => 0,
-        }
-    };
-
-    let mut signals: Vec<serde_json::Value> = results
-        .iter()
-        .filter(|r| r.signal_type.is_some())
-        .filter(|r| {
-            if let Some(ref filter) = priority_filter {
-                r.signal_priority.as_deref() == Some(filter.as_str())
-            } else {
-                true
-            }
-        })
-        .map(|r| {
-            serde_json::json!({
-                "id": r.id,
-                "title": r.title,
-                "url": r.url,
-                "score": r.top_score,
-                "source_type": r.source_type,
-                "signal_type": r.signal_type,
-                "signal_priority": r.signal_priority,
-                "signal_action": r.signal_action,
-                "signal_triggers": r.signal_triggers,
-            })
-        })
-        .collect();
-
-    // Sort by priority (critical first), then by score
-    signals.sort_by(|a, b| {
-        let pa = priority_order(a["signal_priority"].as_str().unwrap_or(""));
-        let pb = priority_order(b["signal_priority"].as_str().unwrap_or(""));
-        pb.cmp(&pa).then_with(|| {
-            let sa = a["score"].as_f64().unwrap_or(0.0);
-            let sb = b["score"].as_f64().unwrap_or(0.0);
-            sb.partial_cmp(&sa).unwrap_or(std::cmp::Ordering::Equal)
-        })
-    });
-
-    // P4: Dedup by topic cluster — keep highest-scoring signal per (signal_type + primary_trigger).
-    // "Rust 1.85 released" and "What's new in Rust 1.85" are the same signal.
-    // Already sorted by priority+score, so retain() keeps the best one per cluster.
-    {
-        let mut seen_clusters: std::collections::HashSet<String> = std::collections::HashSet::new();
-        signals.retain(|s| {
-            let primary_trigger = s["signal_triggers"]
-                .as_array()
-                .and_then(|a| a.first())
-                .and_then(|v| v.as_str())
-                .unwrap_or("");
-            let cluster_key = format!(
-                "{}:{}",
-                s["signal_type"].as_str().unwrap_or(""),
-                primary_trigger
-            );
-            seen_clusters.insert(cluster_key)
-        });
-    }
-
-    // P3: Signal cap — quality over quantity. Max 8 signals per analysis run.
-    signals.truncate(8);
-
-    let total = signals.len();
-    Ok(serde_json::json!({
-        "signals": signals,
-        "total": total,
-    }))
-}
-
 // Settings and Context Engine commands are in settings_commands.rs
 // ACE commands, PASIFA helpers, and auto-seeding are in ace_commands.rs

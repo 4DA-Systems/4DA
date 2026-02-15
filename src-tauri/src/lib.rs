@@ -42,9 +42,9 @@ pub use commands::{
 // Re-exports from state (preserves `use crate::accessor` interface)
 pub(crate) use state::{
     get_ace_engine, get_ace_engine_mut, get_analysis_abort, get_analysis_state, get_context_dir,
-    get_context_dirs, get_context_engine, get_database, get_db_path, get_job_queue,
-    get_monitoring_state, get_relevance_threshold, get_settings_manager, get_source_registry,
-    invalidate_context_engine, open_db_connection, set_relevance_threshold, SUPPORTED_EXTENSIONS,
+    get_context_dirs, get_context_engine, get_database, get_monitoring_state,
+    get_relevance_threshold, get_settings_manager, get_source_registry, invalidate_context_engine,
+    open_db_connection, set_relevance_threshold, SUPPORTED_EXTENSIONS,
 };
 
 mod ace;
@@ -183,19 +183,18 @@ pub fn run() {
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .invoke_handler(tauri::generate_handler![
+            // Context
             context_commands::get_context_files,
             context_commands::clear_context,
             context_commands::index_context,
             context_commands::index_project_readmes,
-            context_commands::get_context_settings,
             context_commands::set_context_dirs,
-            commands::get_database_stats,
-            commands::get_sources,
+            // Analysis
             analysis::run_deep_initial_scan,
             analysis::run_cached_analysis,
             analysis::get_analysis_status,
             analysis::cancel_analysis,
-            // Settings commands
+            // Settings
             settings_commands::get_settings,
             settings_commands::set_llm_provider,
             settings_commands::mark_onboarding_complete,
@@ -203,176 +202,81 @@ pub fn run() {
             settings_commands::test_llm_connection,
             settings_commands::check_ollama_status,
             settings_commands::pull_ollama_model,
-            settings_commands::get_usage_stats,
-            // Monitoring commands (Phase 3)
-            monitoring_commands::get_monitoring_status,
-            monitoring_commands::set_monitoring_enabled,
-            monitoring_commands::set_monitoring_interval,
-            monitoring_commands::set_notification_threshold,
-            monitoring_commands::trigger_notification_test,
-            // Context Engine commands
             settings_commands::get_user_context,
             settings_commands::set_user_role,
             settings_commands::add_tech_stack,
             settings_commands::remove_tech_stack,
-            settings_commands::add_domain,
-            settings_commands::remove_domain,
             settings_commands::add_interest,
             settings_commands::remove_interest,
             settings_commands::add_exclusion,
             settings_commands::remove_exclusion,
             settings_commands::record_interaction,
             settings_commands::get_context_stats,
-            settings_commands::get_current_threshold,
-            // ACE (Autonomous Context Engine) commands - Phase A
-            ace_commands::ace_detect_context,
+            // Monitoring
+            monitoring_commands::get_monitoring_status,
+            monitoring_commands::set_monitoring_enabled,
+            monitoring_commands::set_monitoring_interval,
+            monitoring_commands::set_notification_threshold,
+            monitoring_commands::trigger_notification_test,
+            // ACE (frontend-used subset)
             ace_commands::ace_get_detected_tech,
             ace_commands::ace_get_active_topics,
-            // ACE Phase B: Real-Time Context
-            ace_commands::ace_analyze_git,
-            ace_commands::ace_get_realtime_context,
-            ace_commands::ace_apply_decay,
             ace_commands::ace_full_scan,
-            // ACE Autonomous Discovery
             ace_commands::ace_auto_discover,
-            ace_commands::ace_reset_discovery,
-            ace_commands::ace_get_discovery_status,
-            // ACE Phase C: Behavior Learning
             ace_commands::ace_record_interaction,
             ace_commands::ace_get_topic_affinities,
             ace_commands::ace_get_anti_topics,
-            ace_commands::ace_confirm_anti_topic,
-            ace_commands::ace_get_behavior_modifier,
-            ace_commands::ace_get_learned_behavior,
-            ace_commands::ace_apply_behavior_decay,
-            // ACE Phase E: Embedding
-            ace_commands::ace_embed_topic,
             ace_commands::ace_find_similar_topics,
             ace_commands::ace_embedding_status,
-            // ACE Phase E: Watcher Persistence
             ace_commands::ace_save_watcher_state,
-            ace_commands::ace_get_watcher_state,
-            ace_commands::ace_clear_watcher_state,
-            // ACE Phase E: Rate Limiting
             ace_commands::ace_get_rate_limit_status,
-            // ACE Auto-Interest Discovery
             ace_commands::ace_get_suggested_interests,
-            // ACE Phase 1C: Anomaly Detection
             ace_commands::ace_get_unresolved_anomalies,
             ace_commands::ace_detect_anomalies,
             ace_commands::ace_resolve_anomaly,
             ace_commands::ace_get_accuracy_metrics,
             ace_commands::ace_record_accuracy_feedback,
-            // ACE Phase 4: Visible Learning Loop
             ace_commands::ace_get_single_affinity,
-            // ACE Phase 1D: Health Monitoring
-            ace_commands::ace_get_system_health,
-            // ACE Watcher Control
-            ace_commands::ace_start_watcher,
-            ace_commands::ace_stop_watcher,
-            ace_commands::ace_is_watching,
-            // Update commands
-            digest_commands::check_for_updates,
-            digest_commands::get_current_version,
-            // Digest commands
-            digest_commands::get_digest_config,
-            digest_commands::set_digest_config,
-            digest_commands::generate_digest,
-            digest_commands::preview_digest,
-            // RSS commands
+            // Source config
             source_config::get_rss_feeds,
-            source_config::add_rss_feed,
-            source_config::remove_rss_feed,
             source_config::set_rss_feeds,
-            // Twitter commands
             source_config::get_twitter_handles,
-            source_config::add_twitter_handle,
-            source_config::remove_twitter_handle,
             source_config::set_twitter_handles,
-            source_config::get_nitter_instance,
-            source_config::set_nitter_instance,
-            // X API key commands
             source_config::get_x_api_key,
             source_config::set_x_api_key,
-            // YouTube commands
             source_config::get_youtube_channels,
-            source_config::add_youtube_channel,
-            source_config::remove_youtube_channel,
             source_config::set_youtube_channels,
-            // GitHub commands
             source_config::get_github_languages,
             source_config::set_github_languages,
-            // AI Briefing commands
+            // Digest & Briefing
+            digest_commands::get_digest_config,
+            digest_commands::set_digest_config,
             digest_commands::generate_ai_briefing,
-            // MCP Score Autopsy
+            // Content
+            commands::get_sources,
             commands::mcp_score_autopsy,
-            // Indexed Documents commands
+            commands::export_results,
             document_index::get_indexed_documents,
             document_index::get_document_content,
             document_index::search_documents,
             document_index::get_indexed_stats,
-            // Natural Language Query (Phase 2)
             document_index::natural_language_query,
-            // Job Queue commands (background extraction)
-            job_queue_commands::create_extraction_job,
-            job_queue_commands::get_extraction_job,
-            job_queue_commands::get_extraction_jobs,
-            job_queue_commands::get_job_queue_stats,
-            job_queue_commands::cancel_extraction_job,
-            job_queue_commands::start_job_queue_worker,
-            job_queue_commands::stop_job_queue_worker,
-            job_queue_commands::cleanup_extraction_jobs,
             // Void Engine
             void_commands::get_void_signal,
-            // Signal Classifier
-            analysis::get_actionable_signals,
-            // Product Hardening (source management, health, maintenance, export)
-            commands::toggle_source_enabled,
-            commands::get_all_sources_status,
-            commands::get_source_health,
-            commands::check_network_status,
-            commands::run_db_maintenance,
-            commands::get_db_stats_detailed,
-            commands::export_results,
-            // Attention Economy Dashboard
+            // Intelligence panels
             attention::get_attention_report,
-            attention::get_attention_blind_spots,
-            // Temporal Event Store
-            temporal::get_temporal_events,
-            temporal::get_temporal_event_count,
-            temporal::get_dependencies,
-            temporal::cleanup_temporal_events,
-            // Audio Briefings (TTS)
-            tts::generate_audio_briefing,
-            tts::get_audio_briefing_status,
-            tts::get_audio_file_path,
-            // Predictive Context Switching
-            predictive::get_predicted_context,
-            predictive::record_context_switch_event,
-            predictive::get_context_switch_history,
-            // Knowledge Decay Alerting
             knowledge_decay::get_knowledge_gaps,
-            knowledge_decay::get_knowledge_gap_count,
-            // Context Handoff Protocol
-            handoff::generate_context_packet,
-            handoff::export_context_packet_to_file,
-            handoff::import_context_packet,
-            // Reverse Relevance
-            reverse_relevance::get_reverse_mentions,
-            reverse_relevance::get_my_project_identifiers,
-            // Project Health Radar
-            project_health::get_project_health,
-            project_health::get_project_health_summary,
-            // Semantic Diff Engine
-            semantic_diff::get_semantic_shifts,
-            semantic_diff::get_topic_centroids,
-            // Signal Chains
             signal_chains::get_signal_chains,
             signal_chains::resolve_signal_chain,
-            signal_chains::get_signal_chain_count,
-            // Developer DNA
+            project_health::get_project_health,
             developer_dna::get_developer_dna,
-            developer_dna::export_developer_dna_markdown
+            developer_dna::export_developer_dna_markdown,
+            // Audio & Handoff
+            tts::generate_audio_briefing,
+            tts::get_audio_briefing_status,
+            handoff::generate_context_packet,
+            // Predictive
+            predictive::get_predicted_context
         ])
         .setup(|app| {
             // Set up system tray
@@ -408,7 +312,7 @@ pub fn run() {
                 let new_enabled = !state.is_enabled();
                 state.set_enabled(new_enabled);
                 info!(target: "4da::monitor", enabled = new_enabled, "Monitoring toggled");
-                let _ = app_handle_toggle.emit("monitoring-toggled", new_enabled);
+                // monitoring-toggled event available for future UI wiring
             });
 
             // Listen for scheduled analysis events
@@ -651,16 +555,12 @@ fn initialize_ace_on_startup(app_handle: tauri::AppHandle) {
 
         // Run full scan - this builds the context profile AUTONOMOUSLY
         info!(target: "4da::startup", "Running AUTONOMOUS ACE context scan");
-        let _ = app_handle.emit("ace-scan-started", "Building your context profile...");
-
         match ace_commands::ace_full_scan(paths.clone()).await {
             Ok(result) => {
                 info!(target: "4da::startup", result = %result, "ACE context scan complete");
-                let _ = app_handle.emit("ace-scan-complete", result);
             }
             Err(e) => {
                 error!(target: "4da::startup", error = %e, "ACE scan failed");
-                let _ = app_handle.emit("ace-scan-error", e.clone());
             }
         }
 
@@ -689,7 +589,7 @@ fn initialize_ace_on_startup(app_handle: tauri::AppHandle) {
         match ace_commands::ace_start_watcher(paths).await {
             Ok(result) => {
                 info!(target: "4da::startup", result = %result, "ACE FileWatcher started");
-                let _ = app_handle.emit("ace-watcher-started", result);
+                // ace-watcher-started event available for future UI wiring
             }
             Err(e) => {
                 warn!(target: "4da::startup", error = %e, "ACE FileWatcher failed");

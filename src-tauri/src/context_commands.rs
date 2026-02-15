@@ -10,7 +10,7 @@ use tracing::{debug, info, warn};
 
 use crate::{
     ace_commands, chunk_text, embed_texts, get_context_dir, get_context_dirs, get_database,
-    get_settings_manager, ContextFile, ContextSettings, SUPPORTED_EXTENSIONS,
+    get_settings_manager, ContextFile, SUPPORTED_EXTENSIONS,
 };
 
 /// Directories to skip during recursive context scanning
@@ -231,26 +231,6 @@ pub async fn index_project_readmes() -> Result<String, String> {
         Ok("No README files found in configured directories".to_string())
     }
 }
-
-/// Get current context directory settings
-#[tauri::command]
-pub async fn get_context_settings() -> Result<ContextSettings, String> {
-    let dirs = get_context_dirs();
-    let settings = get_settings_manager().lock();
-    let configured = settings.get().context_dirs.clone();
-    drop(settings);
-
-    let using_default = configured.is_empty();
-    Ok(ContextSettings {
-        configured_dirs: configured,
-        active_dirs: dirs
-            .into_iter()
-            .map(|p| p.to_string_lossy().to_string())
-            .collect(),
-        using_default,
-    })
-}
-
 /// Convert Windows path to WSL path if needed (e.g., D:\projects -> /mnt/d/projects)
 fn convert_windows_to_wsl_path(path: &str) -> String {
     // Check if it looks like a Windows path (e.g., "D:\something" or "D:/something")

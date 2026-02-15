@@ -5,7 +5,7 @@ use tracing::info;
 
 use crate::{
     anomaly, developer_dna, extract_topics, get_ace_engine, get_analysis_state, get_context_engine,
-    get_database, get_db_path, get_relevance_threshold, get_source_registry, health, scoring,
+    get_database, get_relevance_threshold, get_source_registry, health, scoring,
     set_relevance_threshold, SourceRelevance,
 };
 
@@ -485,128 +485,9 @@ pub(crate) async fn get_sources() -> Result<Vec<serde_json::Value>, String> {
 
     Ok(sources)
 }
-
-/// Get database statistics
-#[tauri::command]
-pub(crate) async fn get_database_stats() -> Result<serde_json::Value, String> {
-    let db = get_database()?;
-
-    let context_count = db.context_count().map_err(|e| e.to_string())?;
-    let hn_count = db
-        .source_item_count("hackernews")
-        .map_err(|e| e.to_string())?;
-    let total_count = db.total_item_count().map_err(|e| e.to_string())?;
-
-    Ok(serde_json::json!({
-        "context_chunks": context_count,
-        "hackernews_items": hn_count,
-        "total_items": total_count
-    }))
-}
-
 // Analysis functions (start_background_analysis, run_multi_source_analysis, etc.) are in analysis.rs
 // Settings and Context Engine commands are in settings_commands.rs
 // ACE commands, PASIFA helpers, and auto-seeding are in ace_commands.rs
-
-/// Toggle a source's enabled/disabled status
-#[tauri::command]
-pub(crate) async fn toggle_source_enabled(
-    source_type: String,
-    enabled: bool,
-) -> Result<(), String> {
-    let db = get_database()?;
-    db.toggle_source_enabled(&source_type, enabled)
-        .map_err(|e| format!("Failed to toggle source: {}", e))
-}
-
-/// Get all sources with their enabled status and health
-#[tauri::command]
-pub(crate) async fn get_all_sources_status() -> Result<serde_json::Value, String> {
-    let db = get_database()?;
-    let sources = db.get_all_sources().map_err(|e| e.to_string())?;
-    let health = db.get_source_health().unwrap_or_default();
-
-    let result: Vec<serde_json::Value> = sources
-        .iter()
-        .map(|(source_type, name, enabled, last_fetch)| {
-            let h = health.iter().find(|h| h.source_type == *source_type);
-            serde_json::json!({
-                "source_type": source_type,
-                "name": name,
-                "enabled": enabled,
-                "last_fetch": last_fetch,
-                "status": h.map(|h| h.status.as_str()).unwrap_or("unknown"),
-                "error_count": h.map(|h| h.error_count).unwrap_or(0),
-                "consecutive_failures": h.map(|h| h.consecutive_failures).unwrap_or(0),
-                "items_fetched": h.map(|h| h.items_fetched).unwrap_or(0),
-                "response_time_ms": h.map(|h| h.response_time_ms).unwrap_or(0),
-                "last_success": h.and_then(|h| h.last_success.clone()),
-                "last_error": h.and_then(|h| h.last_error.clone()),
-            })
-        })
-        .collect();
-
-    Ok(serde_json::json!({ "sources": result }))
-}
-
-/// Get source health data
-#[tauri::command]
-pub(crate) async fn get_source_health() -> Result<serde_json::Value, String> {
-    let db = get_database()?;
-    let health = db.get_source_health().map_err(|e| e.to_string())?;
-    Ok(serde_json::json!({ "health": health }))
-}
-
-/// Check network connectivity
-#[tauri::command]
-pub(crate) async fn check_network_status() -> Result<serde_json::Value, String> {
-    let client = crate::sources::shared_client();
-
-    let online = client
-        .head("https://httpbin.org/get")
-        .timeout(std::time::Duration::from_secs(3))
-        .send()
-        .await
-        .is_ok();
-
-    Ok(serde_json::json!({
-        "online": online,
-        "checked_at": chrono::Utc::now().to_rfc3339(),
-    }))
-}
-
-/// Run database maintenance (cleanup old items, vacuum)
-#[tauri::command]
-pub(crate) async fn run_db_maintenance() -> Result<serde_json::Value, String> {
-    let db = get_database()?;
-    let result = db.run_maintenance(90).map_err(|e| e.to_string())?;
-    Ok(serde_json::json!({
-        "deleted_items": result.deleted_items,
-        "deleted_feedback": result.deleted_feedback,
-        "deleted_void": result.deleted_void,
-    }))
-}
-
-/// Get database statistics
-#[tauri::command]
-pub(crate) async fn get_db_stats_detailed() -> Result<serde_json::Value, String> {
-    let db = get_database()?;
-    let stats = db.get_db_stats().map_err(|e| e.to_string())?;
-
-    // Get DB file size
-    let db_path = get_db_path();
-    let file_size = std::fs::metadata(&db_path).map(|m| m.len()).unwrap_or(0);
-
-    Ok(serde_json::json!({
-        "source_items": stats.source_items,
-        "context_chunks": stats.context_chunks,
-        "feedback_count": stats.feedback_count,
-        "sources_count": stats.sources_count,
-        "file_size_bytes": file_size,
-        "file_size_mb": format!("{:.1}", file_size as f64 / 1_048_576.0),
-    }))
-}
-
 fn escape_html(s: &str) -> String {
     s.replace('&', "&amp;")
         .replace('<', "&lt;")

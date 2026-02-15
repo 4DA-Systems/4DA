@@ -5,7 +5,6 @@
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use tracing::debug;
 
 // ============================================================================
 // Types
@@ -31,42 +30,6 @@ pub struct ContextSwitchEvent {
 // ============================================================================
 // Implementation
 // ============================================================================
-
-/// Record a context switch event in temporal store
-pub fn record_context_switch(
-    conn: &rusqlite::Connection,
-    from_topics: &[String],
-    to_topics: &[String],
-    trigger: &str,
-) -> Result<(), String> {
-    let now = chrono::Utc::now();
-    let event = ContextSwitchEvent {
-        from_topics: from_topics.to_vec(),
-        to_topics: to_topics.to_vec(),
-        hour_of_day: now.format("%H").to_string().parse().unwrap_or(0),
-        day_of_week: now.format("%u").to_string().parse().unwrap_or(1),
-        trigger: trigger.to_string(),
-    };
-
-    let data = serde_json::to_value(&event).map_err(|e| e.to_string())?;
-    let subject = to_topics
-        .first()
-        .cloned()
-        .unwrap_or_else(|| "unknown".to_string());
-
-    crate::temporal::record_event(
-        conn,
-        "context_switch",
-        &subject,
-        &data,
-        None,
-        Some(&(now + chrono::Duration::days(14)).to_rfc3339()),
-    )?;
-
-    debug!(target: "4da::predictive", trigger, to = ?to_topics, "Recorded context switch");
-    Ok(())
-}
-
 /// Predict what the user will work on next based on historical patterns
 pub fn predict_next_context(conn: &rusqlite::Connection) -> Result<PredictedContext, String> {
     let now = chrono::Utc::now();
@@ -167,22 +130,4 @@ pub fn predict_next_context(conn: &rusqlite::Connection) -> Result<PredictedCont
 pub fn get_predicted_context() -> Result<PredictedContext, String> {
     let conn = crate::open_db_connection()?;
     predict_next_context(&conn)
-}
-
-#[tauri::command]
-pub fn record_context_switch_event(
-    from_topics: Vec<String>,
-    to_topics: Vec<String>,
-    trigger: String,
-) -> Result<(), String> {
-    let conn = crate::open_db_connection()?;
-    record_context_switch(&conn, &from_topics, &to_topics, &trigger)
-}
-
-#[tauri::command]
-pub fn get_context_switch_history(
-    limit: Option<usize>,
-) -> Result<Vec<crate::temporal::TemporalEvent>, String> {
-    let conn = crate::open_db_connection()?;
-    crate::temporal::query_events(&conn, "context_switch", None, limit.unwrap_or(20))
 }

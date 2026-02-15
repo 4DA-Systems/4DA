@@ -308,14 +308,3 @@ pub fn get_audio_briefing_status() -> Result<AudioBriefingStatus, String> {
         tts_engine: engine.to_string(),
     })
 }
-
-#[tauri::command]
-pub fn get_audio_file_path(file_name: String) -> Result<String, String> {
-    let audio_dir = get_audio_dir()?;
-    let path = audio_dir.join(&file_name);
-    if path.exists() {
-        Ok(path.to_string_lossy().to_string())
-    } else {
-        Err(format!("Audio file not found: {}", file_name))
-    }
-}

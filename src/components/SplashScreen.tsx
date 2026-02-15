@@ -50,21 +50,14 @@ export function SplashScreen({ onComplete, minimumDisplayTime = 1500 }: SplashSc
       try {
         // Stage 1: Database
         setStage('database');
-        await new Promise(r => setTimeout(r, 300)); // Brief pause for visual feedback
-
-        // Try to get settings (this confirms DB is ready)
         await invoke('get_settings');
         if (cancelled) return;
 
         // Stage 2: Embeddings/AI
         setStage('embeddings');
-        await new Promise(r => setTimeout(r, 300));
 
         // Stage 3: Context engine
         setStage('context');
-        await new Promise(r => setTimeout(r, 300));
-
-        // Try to get context stats (confirms context engine ready)
         try {
           await invoke('get_context_stats');
         } catch {
@@ -74,9 +67,6 @@ export function SplashScreen({ onComplete, minimumDisplayTime = 1500 }: SplashSc
 
         // Stage 4: Sources
         setStage('sources');
-        await new Promise(r => setTimeout(r, 300));
-
-        // Try to get sources (confirms source system ready)
         try {
           await invoke('get_sources');
         } catch {
@@ -107,7 +97,7 @@ export function SplashScreen({ onComplete, minimumDisplayTime = 1500 }: SplashSc
   useEffect(() => {
     if (backendReady && minTimeElapsed) {
       setFadeOut(true);
-      setTimeout(onComplete, 500);
+      setTimeout(onComplete, 300);
     }
   }, [backendReady, minTimeElapsed, onComplete]);
 
@@ -125,7 +115,7 @@ export function SplashScreen({ onComplete, minimumDisplayTime = 1500 }: SplashSc
         alignItems: 'center',
         justifyContent: 'center',
         backgroundColor: '#0A0A0A',
-        transition: 'opacity 500ms',
+        transition: 'opacity 300ms',
         opacity: fadeOut ? 0 : 1,
       }}
     >

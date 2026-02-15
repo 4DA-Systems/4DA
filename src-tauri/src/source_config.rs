@@ -22,48 +22,6 @@ pub async fn get_rss_feeds() -> Result<serde_json::Value, String> {
         "count": feeds.len()
     }))
 }
-
-/// Add an RSS feed URL
-#[tauri::command]
-pub async fn add_rss_feed(url: String) -> Result<serde_json::Value, String> {
-    // Basic URL validation
-    if !url.starts_with("http://") && !url.starts_with("https://") {
-        return Err("Invalid URL: must start with http:// or https://".to_string());
-    }
-
-    let mut settings_guard = get_settings_manager().lock();
-    settings_guard.add_rss_feed(url.clone())?;
-
-    let feeds = settings_guard.get_rss_feeds();
-
-    info!(target: "4da::rss", url = %url, "Added RSS feed");
-
-    Ok(serde_json::json!({
-        "success": true,
-        "added": url,
-        "feeds": feeds,
-        "count": feeds.len()
-    }))
-}
-
-/// Remove an RSS feed URL
-#[tauri::command]
-pub async fn remove_rss_feed(url: String) -> Result<serde_json::Value, String> {
-    let mut settings_guard = get_settings_manager().lock();
-    settings_guard.remove_rss_feed(&url)?;
-
-    let feeds = settings_guard.get_rss_feeds();
-
-    info!(target: "4da::rss", url = %url, "Removed RSS feed");
-
-    Ok(serde_json::json!({
-        "success": true,
-        "removed": url,
-        "feeds": feeds,
-        "count": feeds.len()
-    }))
-}
-
 /// Set all RSS feed URLs (replacing existing)
 #[tauri::command]
 pub async fn set_rss_feeds(feeds: Vec<String>) -> Result<serde_json::Value, String> {
@@ -104,47 +62,6 @@ pub async fn get_twitter_handles() -> Result<serde_json::Value, String> {
         "count": handles.len()
     }))
 }
-
-/// Add a Twitter handle
-#[tauri::command]
-pub async fn add_twitter_handle(handle: String) -> Result<serde_json::Value, String> {
-    let mut settings_guard = get_settings_manager().lock();
-
-    // Validate handle (remove @ if present)
-    let clean_handle = handle.trim_start_matches('@').to_string();
-
-    settings_guard.add_twitter_handle(clean_handle.clone())?;
-
-    let handles = settings_guard.get_twitter_handles();
-
-    info!(target: "4da::twitter", handle = %clean_handle, "Added Twitter handle");
-
-    Ok(serde_json::json!({
-        "success": true,
-        "added": clean_handle,
-        "handles": handles,
-        "count": handles.len()
-    }))
-}
-
-/// Remove a Twitter handle
-#[tauri::command]
-pub async fn remove_twitter_handle(handle: String) -> Result<serde_json::Value, String> {
-    let mut settings_guard = get_settings_manager().lock();
-    settings_guard.remove_twitter_handle(&handle)?;
-
-    let handles = settings_guard.get_twitter_handles();
-
-    info!(target: "4da::twitter", handle = %handle, "Removed Twitter handle");
-
-    Ok(serde_json::json!({
-        "success": true,
-        "removed": handle,
-        "handles": handles,
-        "count": handles.len()
-    }))
-}
-
 /// Set all Twitter handles (replacing existing)
 #[tauri::command]
 pub async fn set_twitter_handles(handles: Vec<String>) -> Result<serde_json::Value, String> {
@@ -165,28 +82,6 @@ pub async fn set_twitter_handles(handles: Vec<String>) -> Result<serde_json::Val
         "count": clean_handles.len()
     }))
 }
-
-/// Get configured Nitter instance
-#[tauri::command]
-pub async fn get_nitter_instance() -> Result<String, String> {
-    let settings_guard = get_settings_manager().lock();
-    Ok(settings_guard.get_nitter_instance())
-}
-
-/// Set Nitter instance
-#[tauri::command]
-pub async fn set_nitter_instance(instance: String) -> Result<serde_json::Value, String> {
-    let mut settings_guard = get_settings_manager().lock();
-    settings_guard.set_nitter_instance(instance.clone())?;
-
-    info!(target: "4da::twitter", instance = %instance, "Set Nitter instance");
-
-    Ok(serde_json::json!({
-        "success": true,
-        "instance": instance
-    }))
-}
-
 // ============================================================================
 // X API Key Commands
 // ============================================================================
@@ -322,47 +217,6 @@ pub async fn get_youtube_channels() -> Result<serde_json::Value, String> {
         "count": channels.len()
     }))
 }
-
-/// Add a YouTube channel ID
-#[tauri::command]
-pub async fn add_youtube_channel(channel_id: String) -> Result<serde_json::Value, String> {
-    if channel_id.trim().is_empty() {
-        return Err("Channel ID cannot be empty".to_string());
-    }
-
-    let mut settings_guard = get_settings_manager().lock();
-    settings_guard.add_youtube_channel(channel_id.clone())?;
-
-    let channels = settings_guard.get_youtube_channels();
-
-    info!(target: "4da::youtube", channel_id = %channel_id, "Added YouTube channel");
-
-    Ok(serde_json::json!({
-        "success": true,
-        "added": channel_id,
-        "channels": channels,
-        "count": channels.len()
-    }))
-}
-
-/// Remove a YouTube channel ID
-#[tauri::command]
-pub async fn remove_youtube_channel(channel_id: String) -> Result<serde_json::Value, String> {
-    let mut settings_guard = get_settings_manager().lock();
-    settings_guard.remove_youtube_channel(&channel_id)?;
-
-    let channels = settings_guard.get_youtube_channels();
-
-    info!(target: "4da::youtube", channel_id = %channel_id, "Removed YouTube channel");
-
-    Ok(serde_json::json!({
-        "success": true,
-        "removed": channel_id,
-        "channels": channels,
-        "count": channels.len()
-    }))
-}
-
 /// Set all YouTube channel IDs (replacing existing)
 #[tauri::command]
 pub async fn set_youtube_channels(channels: Vec<String>) -> Result<serde_json::Value, String> {

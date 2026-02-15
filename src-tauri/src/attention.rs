@@ -266,9 +266,3 @@ pub fn get_attention_report(period_days: Option<u32>) -> Result<AttentionReport,
     info!(target: "4da::attention", period_days = days, "Generating attention report");
     generate_report(days)
 }
-
-#[tauri::command]
-pub fn get_attention_blind_spots() -> Result<Vec<BlindSpot>, String> {
-    let report = generate_report(30)?;
-    Ok(report.blind_spots)
-}

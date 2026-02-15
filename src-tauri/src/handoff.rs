@@ -284,20 +284,3 @@ pub fn generate_context_packet() -> Result<ContextPacket, String> {
     info!(target: "4da::handoff", "Generating context packet");
     generate_packet()
 }
-
-#[tauri::command]
-pub fn export_context_packet_to_file(path: String) -> Result<(), String> {
-    let packet = generate_packet()?;
-    let json = serde_json::to_string_pretty(&packet).map_err(|e| e.to_string())?;
-    std::fs::write(&path, json).map_err(|e| format!("Failed to write context packet: {}", e))?;
-    info!(target: "4da::handoff", path = %path, "Context packet exported");
-    Ok(())
-}
-
-#[tauri::command]
-pub fn import_context_packet(packet_json: String) -> Result<ContextPacket, String> {
-    let packet: ContextPacket =
-        serde_json::from_str(&packet_json).map_err(|e| format!("Invalid context packet: {}", e))?;
-    info!(target: "4da::handoff", generated_at = %packet.generated_at, "Context packet imported");
-    Ok(packet)
-}

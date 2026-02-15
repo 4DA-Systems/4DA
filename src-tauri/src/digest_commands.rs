@@ -5,10 +5,10 @@
 
 use once_cell::sync::Lazy;
 use parking_lot::Mutex;
-use tracing::{debug, error, info, warn};
+use tracing::{error, info};
 
 use crate::scoring::get_ace_context;
-use crate::{digest, get_analysis_state, get_database, get_settings_manager};
+use crate::{get_analysis_state, get_database, get_settings_manager};
 
 /// Cached latest briefing text for TTS and handoff features
 static LATEST_BRIEFING: Lazy<Mutex<Option<String>>> = Lazy::new(|| Mutex::new(None));
@@ -21,59 +21,6 @@ pub(crate) fn get_latest_briefing_text() -> Option<String> {
 // ============================================================================
 // Update Commands
 // ============================================================================
-
-/// Check for available updates
-#[tauri::command]
-pub async fn check_for_updates(app: tauri::AppHandle) -> Result<serde_json::Value, String> {
-    use tauri_plugin_updater::UpdaterExt;
-
-    let updater = app
-        .updater()
-        .map_err(|e| format!("Updater not available: {}", e))?;
-
-    match updater.check().await {
-        Ok(Some(update)) => {
-            info!(
-                target: "4da::updater",
-                current = %update.current_version,
-                available = %update.version,
-                "Update available"
-            );
-            Ok(serde_json::json!({
-                "update_available": true,
-                "current_version": update.current_version,
-                "new_version": update.version,
-                "body": update.body
-            }))
-        }
-        Ok(None) => {
-            debug!(target: "4da::updater", "No update available");
-            Ok(serde_json::json!({
-                "update_available": false,
-                "current_version": env!("CARGO_PKG_VERSION")
-            }))
-        }
-        Err(e) => {
-            warn!(target: "4da::updater", error = %e, "Update check failed");
-            Ok(serde_json::json!({
-                "update_available": false,
-                "error": e.to_string(),
-                "current_version": env!("CARGO_PKG_VERSION")
-            }))
-        }
-    }
-}
-
-/// Get current app version
-#[tauri::command]
-pub async fn get_current_version() -> Result<serde_json::Value, String> {
-    Ok(serde_json::json!({
-        "version": env!("CARGO_PKG_VERSION"),
-        "name": env!("CARGO_PKG_NAME"),
-        "description": env!("CARGO_PKG_DESCRIPTION")
-    }))
-}
-
 // ============================================================================
 // Digest Commands
 // ============================================================================
@@ -157,148 +104,6 @@ pub async fn set_digest_config(
     };
     Ok(json)
 }
-
-/// Generate a digest from recent relevant items
-#[tauri::command]
-pub async fn generate_digest() -> Result<serde_json::Value, String> {
-    use chrono::{Duration, Utc};
-
-    // Get settings (clone to avoid holding lock during DB operations)
-    let digest_config = {
-        let settings_guard = get_settings_manager().lock();
-        settings_guard.get().digest.clone()
-    };
-
-    let db = get_database()?;
-
-    // Get digest period
-    let period_end = Utc::now();
-    let period_start = digest_config
-        .last_sent
-        .unwrap_or(period_end - Duration::hours(24));
-
-    // Fetch recent relevant items from source_items table
-    let items = db
-        .get_relevant_items_since(
-            period_start,
-            digest_config.min_score,
-            digest_config.max_items,
-        )
-        .map_err(|e| format!("Failed to fetch items: {}", e))?;
-
-    if items.is_empty() {
-        return Ok(serde_json::json!({
-            "success": true,
-            "digest": null,
-            "message": "No relevant items found for this period"
-        }));
-    }
-
-    // Convert to digest items
-    let digest_items: Vec<digest::DigestItem> = items
-        .into_iter()
-        .map(|item| digest::DigestItem {
-            id: item.id,
-            title: item.title,
-            url: item.url,
-            source: item.source_type,
-            relevance_score: item.relevance_score.unwrap_or(0.0),
-            matched_topics: item.topics,
-            discovered_at: item.created_at,
-            summary: None,
-            signal_type: None,
-            signal_priority: None,
-            signal_action: None,
-        })
-        .collect();
-
-    // Create digest
-    let digest_obj = digest::Digest::new(digest_items, period_start, period_end);
-
-    // Save locally if configured
-    let saved_path = if digest_config.save_local {
-        let manager = digest::DigestManager::new(digest_config.clone());
-        match manager.save_local(&digest_obj) {
-            Ok(path) => Some(path.to_string_lossy().to_string()),
-            Err(e) => {
-                warn!(target: "4da::digest", error = %e, "Failed to save digest locally");
-                None
-            }
-        }
-    } else {
-        None
-    };
-
-    // Update last_sent timestamp
-    {
-        let mut settings_guard = get_settings_manager().lock();
-        settings_guard.get_mut().digest.last_sent = Some(Utc::now());
-        settings_guard.save()?;
-    }
-
-    info!(
-        target: "4da::digest",
-        items = digest_obj.summary.total_items,
-        avg_relevance = %format!("{:.1}%", digest_obj.summary.avg_relevance * 100.0),
-        "Digest generated"
-    );
-
-    Ok(serde_json::json!({
-        "success": true,
-        "digest": {
-            "id": digest_obj.id,
-            "created_at": digest_obj.created_at,
-            "period_start": digest_obj.period_start,
-            "period_end": digest_obj.period_end,
-            "summary": digest_obj.summary,
-            "item_count": digest_obj.items.len()
-        },
-        "saved_path": saved_path,
-        "text": digest_obj.to_text(),
-        "markdown": digest_obj.to_markdown(),
-        "html": digest_obj.to_html()
-    }))
-}
-
-/// Preview what would be in a digest without generating it
-#[tauri::command]
-pub async fn preview_digest() -> Result<serde_json::Value, String> {
-    use chrono::{Duration, Utc};
-
-    // Get settings (clone to avoid holding lock during DB operations)
-    let digest_config = {
-        let settings_guard = get_settings_manager().lock();
-        settings_guard.get().digest.clone()
-    };
-
-    let db = get_database()?;
-
-    let period_end = Utc::now();
-    let period_start = digest_config
-        .last_sent
-        .unwrap_or(period_end - Duration::hours(24));
-
-    let items = db
-        .get_relevant_items_since(
-            period_start,
-            digest_config.min_score,
-            digest_config.max_items,
-        )
-        .map_err(|e| format!("Failed to fetch items: {}", e))?;
-
-    Ok(serde_json::json!({
-        "period_start": period_start,
-        "period_end": period_end,
-        "item_count": items.len(),
-        "min_score": digest_config.min_score,
-        "items": items.iter().take(5).map(|i| serde_json::json!({
-            "title": i.title,
-            "source": i.source_type,
-            "score": i.relevance_score
-        })).collect::<Vec<_>>()
-    }))
-}
-
 // ============================================================================
 // AI Briefing Commands
 // ============================================================================

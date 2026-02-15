@@ -5,7 +5,6 @@
 //! and auto-seeding of interests from detected context.
 
 use std::path::PathBuf;
-use std::sync::Arc;
 
 use tracing::{debug, info, warn};
 
@@ -20,48 +19,6 @@ use crate::{
 // ============================================================================
 // ACE (Autonomous Context Engine) Commands
 // ============================================================================
-
-/// Trigger autonomous context detection
-/// Scans specified paths for project manifests and extracts tech stack
-#[tauri::command]
-pub async fn ace_detect_context(paths: Vec<String>) -> Result<serde_json::Value, String> {
-    let ace = get_ace_engine()?;
-
-    // Convert string paths to PathBuf, expanding ~ to home directory
-    let scan_paths: Vec<PathBuf> = paths
-        .iter()
-        .map(|p| {
-            if p.starts_with("~") {
-                if let Some(home) = dirs::home_dir() {
-                    home.join(&p[2..]) // Skip "~/"
-                } else {
-                    PathBuf::from(p)
-                }
-            } else {
-                PathBuf::from(p)
-            }
-        })
-        .collect();
-
-    // If no paths provided, use default locations
-    let paths_to_scan = if scan_paths.is_empty() {
-        get_default_scan_paths()
-    } else {
-        scan_paths
-    };
-
-    let context = ace.detect_context(&paths_to_scan)?;
-
-    Ok(serde_json::json!({
-        "success": true,
-        "detected_tech": context.detected_tech,
-        "active_topics": context.active_topics,
-        "projects_scanned": context.projects_scanned,
-        "context_confidence": context.context_confidence,
-        "detection_time": context.detection_time
-    }))
-}
-
 /// Get detected technologies from ACE
 #[tauri::command]
 pub async fn ace_get_detected_tech() -> Result<serde_json::Value, String> {
@@ -124,80 +81,6 @@ pub(crate) fn get_default_scan_paths() -> Vec<PathBuf> {
 // ============================================================================
 // ACE Phase B: Real-Time Context Commands
 // ============================================================================
-
-/// Analyze git repositories for context extraction
-#[tauri::command]
-pub async fn ace_analyze_git(paths: Vec<String>) -> Result<serde_json::Value, String> {
-    let ace = get_ace_engine()?;
-
-    let scan_paths: Vec<PathBuf> = if paths.is_empty() {
-        get_default_scan_paths()
-    } else {
-        paths
-            .iter()
-            .map(|p| {
-                if p.starts_with("~") {
-                    if let Some(home) = dirs::home_dir() {
-                        home.join(&p[2..])
-                    } else {
-                        PathBuf::from(p)
-                    }
-                } else {
-                    PathBuf::from(p)
-                }
-            })
-            .collect()
-    };
-
-    let signals = ace.analyze_git_repos(&scan_paths)?;
-
-    Ok(serde_json::json!({
-        "success": true,
-        "repos_analyzed": signals.len(),
-        "signals": signals.iter().map(|s| serde_json::json!({
-            "repo_name": s.repo_name,
-            "repo_path": s.repo_path,
-            "commit_count": s.recent_commits.len(),
-            "branch_count": s.active_branches.len(),
-            "commit_frequency": s.commit_frequency,
-            "topics": s.extracted_topics,
-            "confidence": s.confidence
-        })).collect::<Vec<_>>()
-    }))
-}
-
-/// Get real-time context (active topics + detected tech)
-#[tauri::command]
-pub async fn ace_get_realtime_context() -> Result<serde_json::Value, String> {
-    let _ace = get_ace_engine()?;
-
-    let conn = crate::open_db_connection()?;
-    let conn = Arc::new(parking_lot::Mutex::new(conn));
-
-    let context = ace::get_realtime_context(&conn)?;
-
-    Ok(serde_json::json!({
-        "active_topics": context.active_topics,
-        "detected_tech": context.detected_tech,
-        "context_confidence": context.context_confidence,
-        "last_updated": context.last_updated
-    }))
-}
-
-/// Apply freshness decay to active topics
-#[tauri::command]
-pub async fn ace_apply_decay() -> Result<serde_json::Value, String> {
-    let conn = crate::open_db_connection()?;
-    let conn = Arc::new(parking_lot::Mutex::new(conn));
-
-    let updated = ace::apply_freshness_decay(&conn)?;
-
-    Ok(serde_json::json!({
-        "success": true,
-        "topics_updated": updated
-    }))
-}
-
 /// Run full autonomous context detection (manifests + git)
 #[tauri::command]
 pub async fn ace_full_scan(paths: Vec<String>) -> Result<serde_json::Value, String> {
@@ -332,34 +215,6 @@ pub async fn ace_auto_discover() -> Result<serde_json::Value, String> {
         "scan_result": scan_result
     }))
 }
-
-/// Reset auto-discovery flag to allow re-discovery
-#[tauri::command]
-pub async fn ace_reset_discovery() -> Result<serde_json::Value, String> {
-    let mut settings = get_settings_manager().lock();
-    settings.get_mut().auto_discovery_completed = false;
-    settings.save()?;
-
-    Ok(serde_json::json!({
-        "success": true,
-        "message": "Auto-discovery reset. Next startup will re-discover directories."
-    }))
-}
-
-/// Get current context directories and discovery status
-#[tauri::command]
-pub async fn ace_get_discovery_status() -> Result<serde_json::Value, String> {
-    let settings = get_settings_manager().lock();
-    let context_dirs = settings.get().context_dirs.clone();
-    let auto_discovery_completed = settings.get().auto_discovery_completed;
-
-    Ok(serde_json::json!({
-        "auto_discovery_completed": auto_discovery_completed,
-        "context_dirs": context_dirs,
-        "context_dirs_count": context_dirs.len()
-    }))
-}
-
 // ============================================================================
 // ACE Phase C: Behavior Learning Commands
 // ============================================================================
@@ -442,73 +297,9 @@ pub async fn ace_get_anti_topics(min_rejections: Option<u32>) -> Result<serde_js
         "threshold": threshold
     }))
 }
-
-/// Confirm an auto-detected anti-topic
-#[tauri::command]
-pub async fn ace_confirm_anti_topic(topic: String) -> Result<serde_json::Value, String> {
-    let ace = get_ace_engine()?;
-    ace.confirm_anti_topic(&topic)?;
-
-    Ok(serde_json::json!({
-        "success": true,
-        "confirmed": topic
-    }))
-}
-
-/// Get behavior modifier for an item
-#[tauri::command]
-pub async fn ace_get_behavior_modifier(
-    topics: Vec<String>,
-    source: String,
-) -> Result<serde_json::Value, String> {
-    let ace = get_ace_engine()?;
-    let modifier = ace.get_behavior_modifier(&topics, &source)?;
-
-    Ok(serde_json::json!({
-        "modifier": modifier,
-        "topics": topics,
-        "source": source
-    }))
-}
-
-/// Get full learned behavior summary
-#[tauri::command]
-pub async fn ace_get_learned_behavior() -> Result<serde_json::Value, String> {
-    let ace = get_ace_engine()?;
-    let summary = ace.get_learned_behavior()?;
-
-    Ok(serde_json::json!(summary))
-}
-
-/// Apply temporal decay to behavior learning
-#[tauri::command]
-pub async fn ace_apply_behavior_decay() -> Result<serde_json::Value, String> {
-    let ace = get_ace_engine()?;
-    let updated = ace.apply_behavior_decay()?;
-
-    Ok(serde_json::json!({
-        "success": true,
-        "affinities_updated": updated
-    }))
-}
-
 // ============================================================================
 // ACE Phase E: Embedding Commands
 // ============================================================================
-
-/// Get embedding for a topic
-#[tauri::command]
-pub async fn ace_embed_topic(topic: String) -> Result<serde_json::Value, String> {
-    let ace = get_ace_engine()?;
-    let embedding = ace.embed_topic(&topic)?;
-
-    Ok(serde_json::json!({
-        "topic": topic,
-        "embedding": embedding,
-        "dimension": embedding.len()
-    }))
-}
-
 /// Find similar topics using embeddings
 #[tauri::command]
 pub async fn ace_find_similar_topics(
@@ -555,29 +346,6 @@ pub async fn ace_save_watcher_state() -> Result<serde_json::Value, String> {
         "saved": true
     }))
 }
-
-/// Restore watcher state from persistence
-/// Note: This returns the saved state info. Actual restoration happens on app restart.
-#[tauri::command]
-pub async fn ace_get_watcher_state() -> Result<serde_json::Value, String> {
-    // Watcher state is restored automatically on ACE initialization
-    // This command provides info about the current state
-    Ok(serde_json::json!({
-        "info": "Watcher state is restored automatically on app startup. Use ace_save_watcher_state to persist current state."
-    }))
-}
-
-/// Clear watcher state
-#[tauri::command]
-pub async fn ace_clear_watcher_state() -> Result<serde_json::Value, String> {
-    let ace = get_ace_engine()?;
-    ace.clear_watcher_state()?;
-
-    Ok(serde_json::json!({
-        "cleared": true
-    }))
-}
-
 // ============================================================================
 // ACE Phase E: Rate Limiting Commands
 // ============================================================================
@@ -632,30 +400,6 @@ pub async fn ace_start_watcher(paths: Vec<String>) -> Result<serde_json::Value, 
         "paths": watch_paths.iter().map(|p| p.display().to_string()).collect::<Vec<_>>()
     }))
 }
-
-/// Stop file watching
-#[tauri::command]
-pub async fn ace_stop_watcher() -> Result<serde_json::Value, String> {
-    let mut ace = get_ace_engine_mut()?;
-    ace.stop_watching();
-
-    Ok(serde_json::json!({
-        "success": true,
-        "watching": false
-    }))
-}
-
-/// Check if watcher is active
-#[tauri::command]
-pub async fn ace_is_watching() -> Result<serde_json::Value, String> {
-    let ace = get_ace_engine()?;
-    let watching = ace.is_watching();
-
-    Ok(serde_json::json!({
-        "watching": watching
-    }))
-}
-
 // ============================================================================
 // PASIFA: Discovered Context Indexing
 // ============================================================================
@@ -1432,16 +1176,6 @@ pub async fn ace_record_accuracy_feedback(
 
     Ok(())
 }
-
-/// Get system health report
-#[tauri::command]
-pub async fn ace_get_system_health() -> Result<serde_json::Value, String> {
-    let ace = crate::get_ace_engine()?;
-    let conn = ace.get_conn().lock();
-    let report = crate::health::check_all_components(&conn)?;
-    serde_json::to_value(&report).map_err(|e| e.to_string())
-}
-
 /// Get a single topic's affinity score
 #[tauri::command]
 pub async fn ace_get_single_affinity(topic: String) -> Result<serde_json::Value, String> {
