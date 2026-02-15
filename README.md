@@ -1,8 +1,8 @@
 <div align="center">
 
-# 4DA
+<img src="assets/4da-hero.png" alt="4DA — All signal. No feed." width="360" />
 
-### All signal. No feed.
+<br />
 
 **Stop scrolling. Start knowing.**
 
