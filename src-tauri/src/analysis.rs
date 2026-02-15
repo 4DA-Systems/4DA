@@ -1564,6 +1564,29 @@ pub(crate) async fn get_actionable_signals(
         })
     });
 
+    // P4: Dedup by topic cluster — keep highest-scoring signal per (signal_type + primary_trigger).
+    // "Rust 1.85 released" and "What's new in Rust 1.85" are the same signal.
+    // Already sorted by priority+score, so retain() keeps the best one per cluster.
+    {
+        let mut seen_clusters: std::collections::HashSet<String> = std::collections::HashSet::new();
+        signals.retain(|s| {
+            let primary_trigger = s["signal_triggers"]
+                .as_array()
+                .and_then(|a| a.first())
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
+            let cluster_key = format!(
+                "{}:{}",
+                s["signal_type"].as_str().unwrap_or(""),
+                primary_trigger
+            );
+            seen_clusters.insert(cluster_key)
+        });
+    }
+
+    // P3: Signal cap — quality over quantity. Max 8 signals per analysis run.
+    signals.truncate(8);
+
     let total = signals.len();
     Ok(serde_json::json!({
         "signals": signals,

@@ -1,3 +1,6 @@
+// Copyright (c) 2025-2026 Antony Lawrence Kiddie Pasifa. All rights reserved.
+// Licensed under the Business Source License 1.1 (BSL-1.1). See LICENSE file.
+
 // FASTEMBED DISABLED: ONNX linking issues on Windows - using OpenAI only
 // use fastembed::{EmbeddingModel, InitOptions, TextEmbedding};
 use once_cell::sync::{Lazy, OnceCell};
@@ -816,6 +819,32 @@ static SINGLE_WORD_TOPICS: Lazy<HashSet<&'static str>> = Lazy::new(|| {
         "politics",
         "election",
         "government",
+        // Cross-cutting developer concerns (universal — every stack cares about these)
+        "architecture",
+        "testing",
+        "deployment",
+        "monitoring",
+        "accessibility",
+        "debugging",
+        "refactoring",
+        "caching",
+        "authentication",
+        "authorization",
+        "observability",
+        "logging",
+        "profiling",
+        "benchmarking",
+        "migration",
+        "concurrency",
+        "parallelism",
+        "networking",
+        "websocket",
+        "streaming",
+        "compiler",
+        "interpreter",
+        "documentation",
+        "linting",
+        "packaging",
     ]
     .into_iter()
     .collect()
@@ -828,6 +857,15 @@ static MULTI_WORD_TOPICS: &[&str] = &[
     "deep learning",
     "open source",
     "react native",
+    // Cross-cutting multi-word concerns
+    "unit testing",
+    "integration testing",
+    "load testing",
+    "design patterns",
+    "best practices",
+    "code review",
+    "continuous integration",
+    "continuous deployment",
 ];
 
 /// Extract topics/keywords from text for context matching
@@ -1044,6 +1082,7 @@ pub(crate) fn open_db_connection() -> Result<rusqlite::Connection, String> {
     }
 
     // Register sqlite-vec extension globally (idempotent)
+    // One of two registration sites. See also: db.rs:Database::new()
     #[allow(clippy::missing_transmute_annotations)]
     unsafe {
         rusqlite::ffi::sqlite3_auto_extension(Some(std::mem::transmute(

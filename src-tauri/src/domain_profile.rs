@@ -23,6 +23,9 @@ pub struct DomainProfile {
     pub dependency_names: HashSet<String>,
     /// Declared interest topics
     pub interest_topics: HashSet<String>,
+    /// Domain concerns: non-tech keywords relevant to this developer type
+    /// e.g. a desktop app dev cares about "packaging", "installer", "auto-update"
+    pub domain_concerns: HashSet<String>,
 }
 
 impl Default for DomainProfile {
@@ -33,6 +36,7 @@ impl Default for DomainProfile {
             all_tech: HashSet::new(),
             dependency_names: HashSet::new(),
             interest_topics: HashSet::new(),
+            domain_concerns: HashSet::new(),
         }
     }
 }
@@ -46,6 +50,39 @@ impl DomainProfile {
             && self.interest_topics.is_empty()
     }
 }
+
+/// Cross-cutting topics that are universally relevant to all developers.
+/// These get 0.60 domain relevance instead of 0.15 (off-domain) for any populated profile.
+const CROSS_CUTTING_TOPICS: &[&str] = &[
+    "architecture",
+    "testing",
+    "deployment",
+    "monitoring",
+    "security",
+    "performance",
+    "accessibility",
+    "debugging",
+    "refactoring",
+    "caching",
+    "authentication",
+    "authorization",
+    "observability",
+    "logging",
+    "documentation",
+    "concurrency",
+    "profiling",
+    "benchmarking",
+    "linting",
+    "packaging",
+    "migration",
+    "open source",
+    "design patterns",
+    "best practices",
+    "code review",
+    "unit testing",
+    "integration testing",
+    "continuous integration",
+];
 
 /// Build a DomainProfile from the database
 pub fn build_domain_profile(conn: &rusqlite::Connection) -> DomainProfile {
@@ -106,12 +143,16 @@ pub fn build_domain_profile(conn: &rusqlite::Connection) -> DomainProfile {
         all_tech.insert(tech.clone());
     }
 
+    // 6. Infer domain concerns from developer archetype
+    let domain_concerns = infer_domain_concerns(&primary_stack, &all_tech);
+
     DomainProfile {
         primary_stack,
         adjacent_tech,
         all_tech,
         dependency_names,
         interest_topics,
+        domain_concerns,
     }
 }
 
@@ -181,18 +222,29 @@ fn is_ambiguous_dep(name: &str) -> bool {
 }
 
 /// Check if ANY other topic (besides `skip`) corroborates domain membership.
+/// Primary stack matches always corroborate. all_tech matches only corroborate
+/// if the corroborating topic itself is NOT ambiguous — otherwise "async" (which
+/// exists in every ecosystem) would falsely corroborate "futures" for C++ articles.
 fn has_corroboration(topics: &[String], skip: &str, profile: &DomainProfile) -> bool {
     topics.iter().any(|t| {
         let lower = t.to_lowercase();
         if lower == skip {
             return false;
         }
-        // Corroborated if another topic matches primary stack or all_tech
-        profile
+        // Primary stack match always corroborates (explicit user declaration)
+        if profile
             .primary_stack
             .iter()
             .any(|s| fuzzy_tech_match(&lower, s))
-            || profile.all_tech.iter().any(|s| fuzzy_tech_match(&lower, s))
+        {
+            return true;
+        }
+        // all_tech match corroborates ONLY if the topic itself isn't ambiguous.
+        // "tokio" corroborates (specific), "async" does NOT (cross-ecosystem).
+        if !is_ambiguous_dep(&lower) {
+            return profile.all_tech.iter().any(|s| fuzzy_tech_match(&lower, s));
+        }
+        false
     })
 }
 
@@ -250,9 +302,35 @@ pub fn compute_domain_relevance(topics: &[String], profile: &DomainProfile) -> f
             continue;
         }
 
-        // Check all tech (detected + adjacent)
+        // Check adjacency-derived tech FIRST (inferred, not declared — weaker evidence).
+        // "desktop" adjacent to "tauri" shouldn't boost a Java desktop article.
+        // "database" adjacent to "sqlite" shouldn't boost a MongoDB article.
+        // ALL adjacency matches require corroboration because they're inferred, not declared.
+        if profile
+            .adjacent_tech
+            .iter()
+            .any(|t| fuzzy_tech_match(&lower, t))
+        {
+            if has_corroboration(topics, &lower, profile) {
+                best_relevance = best_relevance.max(0.70);
+            } else {
+                best_relevance = best_relevance.max(0.50); // downgrade to interest-level
+            }
+            continue;
+        }
+
+        // Check remaining all_tech (detected tech, NOT adjacency — already handled above)
+        // Ambiguous topics (e.g. "async") still need corroboration.
         if profile.all_tech.iter().any(|t| fuzzy_tech_match(&lower, t)) {
-            best_relevance = best_relevance.max(0.70);
+            if is_ambiguous_dep(&lower) {
+                if has_corroboration(topics, &lower, profile) {
+                    best_relevance = best_relevance.max(0.70);
+                } else {
+                    best_relevance = best_relevance.max(0.50);
+                }
+            } else {
+                best_relevance = best_relevance.max(0.70);
+            }
             continue;
         }
 
@@ -263,6 +341,24 @@ pub fn compute_domain_relevance(topics: &[String], profile: &DomainProfile) -> f
             .any(|t| fuzzy_tech_match(&lower, t))
         {
             best_relevance = best_relevance.max(0.50);
+            continue;
+        }
+
+        // Check domain concerns (archetype-inferred non-tech keywords)
+        // "packaging" isn't a tech name, but a Tauri dev should see packaging articles
+        if profile
+            .domain_concerns
+            .iter()
+            .any(|c| fuzzy_tech_match(&lower, c))
+        {
+            best_relevance = best_relevance.max(0.60);
+            continue;
+        }
+
+        // Cross-cutting topics: universally relevant to all developers
+        // "testing", "architecture", "deployment" etc. should never be crushed as off-domain
+        if CROSS_CUTTING_TOPICS.contains(&lower.as_str()) {
+            best_relevance = best_relevance.max(0.60);
             continue;
         }
     }
@@ -324,6 +420,219 @@ fn is_notable_dependency(name: &str) -> bool {
     ];
 
     !UTILITY_DEPS.contains(&name)
+}
+
+/// Infer domain concerns from the user's tech profile.
+/// Domain concerns are non-tech keywords that are contextually relevant based on
+/// what kind of developer the user is. A Tauri dev cares about "packaging" and "installer"
+/// even though those aren't tech names.
+fn infer_domain_concerns(primary: &HashSet<String>, all_tech: &HashSet<String>) -> HashSet<String> {
+    let mut concerns = HashSet::new();
+
+    // Maps: if ANY of these tech signals are present → add these domain concerns.
+    // Each entry: (tech_signals, concerns)
+    let archetype_map: &[(&[&str], &[&str])] = &[
+        // Desktop app developers
+        (
+            &[
+                "tauri",
+                "electron",
+                "wails",
+                "neutralino",
+                "nwjs",
+                "gtk",
+                "qt",
+            ],
+            &[
+                "cross-platform",
+                "packaging",
+                "auto-update",
+                "installer",
+                "notarization",
+                "tray",
+                "native",
+                "window management",
+                "system tray",
+                "file dialog",
+                "drag and drop",
+            ],
+        ),
+        // Frontend web developers
+        (
+            &[
+                "react", "vue", "angular", "svelte", "nextjs", "next.js", "nuxt", "remix", "astro",
+            ],
+            &[
+                "responsive",
+                "ssr",
+                "seo",
+                "bundle size",
+                "lighthouse",
+                "web vitals",
+                "hydration",
+                "lazy loading",
+                "code splitting",
+                "progressive web app",
+                "pwa",
+                "browser compatibility",
+            ],
+        ),
+        // Backend / API developers
+        (
+            &[
+                "express", "fastify", "django", "flask", "fastapi", "rails", "actix", "axum",
+                "gin", "spring",
+            ],
+            &[
+                "api design",
+                "rate limiting",
+                "middleware",
+                "orm",
+                "migrations",
+                "connection pooling",
+                "microservices",
+                "message queue",
+                "event driven",
+            ],
+        ),
+        // DevOps / Infrastructure
+        (
+            &[
+                "docker",
+                "kubernetes",
+                "k8s",
+                "terraform",
+                "ansible",
+                "pulumi",
+            ],
+            &[
+                "infrastructure",
+                "ci/cd",
+                "scaling",
+                "load balancing",
+                "service mesh",
+                "container orchestration",
+                "gitops",
+                "blue-green deployment",
+                "canary",
+                "rollback",
+            ],
+        ),
+        // ML / AI Engineers
+        (
+            &[
+                "pytorch",
+                "tensorflow",
+                "llm",
+                "transformers",
+                "langchain",
+                "openai",
+            ],
+            &[
+                "training",
+                "inference",
+                "fine-tuning",
+                "embeddings",
+                "rag",
+                "vector",
+                "prompt engineering",
+                "model serving",
+                "quantization",
+                "distillation",
+            ],
+        ),
+        // Mobile developers
+        (
+            &[
+                "ios",
+                "android",
+                "flutter",
+                "react native",
+                "swiftui",
+                "kotlin",
+            ],
+            &[
+                "app store",
+                "push notifications",
+                "deep linking",
+                "offline first",
+                "gestures",
+                "navigation",
+                "app size",
+                "launch time",
+                "background tasks",
+            ],
+        ),
+        // Database / Data engineers
+        (
+            &[
+                "postgresql",
+                "postgres",
+                "mongodb",
+                "redis",
+                "elasticsearch",
+                "clickhouse",
+                "cassandra",
+            ],
+            &[
+                "indexing",
+                "replication",
+                "sharding",
+                "backup",
+                "query optimization",
+                "data modeling",
+                "schema design",
+                "data pipeline",
+                "etl",
+                "warehousing",
+            ],
+        ),
+        // Game developers
+        (
+            &["unity", "unreal", "godot", "bevy", "gamedev"],
+            &[
+                "rendering",
+                "physics",
+                "shaders",
+                "ecs",
+                "pathfinding",
+                "procedural generation",
+                "networking",
+                "frame rate",
+                "asset pipeline",
+            ],
+        ),
+        // Systems / Embedded
+        (
+            &["rust", "cpp", "c++"],
+            &[
+                "memory safety",
+                "lifetimes",
+                "ownership",
+                "zero-cost abstractions",
+                "unsafe",
+                "ffi",
+                "linking",
+                "compile time",
+            ],
+        ),
+    ];
+
+    let combined: HashSet<&str> = primary
+        .iter()
+        .chain(all_tech.iter())
+        .map(|s| s.as_str())
+        .collect();
+
+    for (signals, domain_concerns) in archetype_map {
+        if signals.iter().any(|s| combined.contains(s)) {
+            for concern in *domain_concerns {
+                concerns.insert(concern.to_string());
+            }
+        }
+    }
+
+    concerns
 }
 
 /// Infer adjacent technologies from the primary tech stack.
@@ -392,6 +701,7 @@ mod tests {
             all_tech: HashSet::from(["rust".to_string(), "tauri".to_string()]),
             dependency_names: HashSet::new(),
             interest_topics: HashSet::new(),
+            domain_concerns: HashSet::new(),
         };
         let topics = vec!["rust".to_string(), "performance".to_string()];
         assert_eq!(compute_domain_relevance(&topics, &profile), 1.0);
@@ -405,6 +715,7 @@ mod tests {
             all_tech: HashSet::from(["rust".to_string()]),
             dependency_names: HashSet::new(),
             interest_topics: HashSet::new(),
+            domain_concerns: HashSet::new(),
         };
         let topics = vec!["fashion".to_string(), "dining".to_string()];
         assert_eq!(compute_domain_relevance(&topics, &profile), 0.15);
@@ -418,6 +729,7 @@ mod tests {
             all_tech: HashSet::new(),
             dependency_names: HashSet::new(),
             interest_topics: HashSet::new(),
+            domain_concerns: HashSet::new(),
         };
         let topics = vec!["anything".to_string()];
         assert_eq!(compute_domain_relevance(&topics, &profile), 1.0);
@@ -431,6 +743,7 @@ mod tests {
             all_tech: HashSet::from(["rust".to_string(), "tokio".to_string()]),
             dependency_names: HashSet::from(["tokio".to_string()]),
             interest_topics: HashSet::new(),
+            domain_concerns: HashSet::new(),
         };
         let topics = vec!["tokio".to_string()];
         assert_eq!(compute_domain_relevance(&topics, &profile), 0.85);
@@ -444,6 +757,7 @@ mod tests {
             all_tech: HashSet::from(["rust".to_string()]),
             dependency_names: HashSet::new(),
             interest_topics: HashSet::from(["machine learning".to_string()]),
+            domain_concerns: HashSet::new(),
         };
         let topics = vec!["machine learning".to_string()];
         assert_eq!(compute_domain_relevance(&topics, &profile), 0.50);
@@ -470,52 +784,281 @@ mod tests {
 
     #[test]
     fn test_ambiguous_dep_without_corroboration() {
-        // User has Rust dep "futures", article topics are ["futures", "c++", "hpx"]
-        // "futures" is ambiguous, and no OTHER topic matches Rust stack → downgrade to 0.50
         let profile = DomainProfile {
             primary_stack: HashSet::from(["rust".to_string()]),
             adjacent_tech: HashSet::new(),
             all_tech: HashSet::from(["rust".to_string(), "tokio".to_string()]),
             dependency_names: HashSet::from(["futures".to_string(), "tokio".to_string()]),
             interest_topics: HashSet::new(),
+            domain_concerns: HashSet::new(),
         };
         let topics = vec!["futures".to_string(), "c++".to_string(), "hpx".to_string()];
-        // Without corroboration, "futures" should downgrade to 0.50
         assert_eq!(compute_domain_relevance(&topics, &profile), 0.50);
     }
 
     #[test]
     fn test_ambiguous_dep_with_corroboration() {
-        // Article about Rust async with topics ["futures", "tokio", "async"]
-        // "futures" is ambiguous, but "tokio" corroborates (matches all_tech) → 0.85
         let profile = DomainProfile {
             primary_stack: HashSet::from(["rust".to_string()]),
             adjacent_tech: HashSet::new(),
             all_tech: HashSet::from(["rust".to_string(), "tokio".to_string()]),
             dependency_names: HashSet::from(["futures".to_string(), "tokio".to_string()]),
             interest_topics: HashSet::new(),
+            domain_concerns: HashSet::new(),
         };
         let topics = vec![
             "futures".to_string(),
             "tokio".to_string(),
             "async".to_string(),
         ];
-        // "tokio" corroborates → dep-level relevance 0.85
-        // Actually "tokio" itself hits dep match at 0.85 directly
         assert!(compute_domain_relevance(&topics, &profile) >= 0.85);
     }
 
     #[test]
     fn test_non_ambiguous_dep_no_corroboration_needed() {
-        // "tokio" is NOT ambiguous → gets 0.85 even without corroboration
         let profile = DomainProfile {
             primary_stack: HashSet::from(["rust".to_string()]),
             adjacent_tech: HashSet::new(),
             all_tech: HashSet::from(["rust".to_string(), "tokio".to_string()]),
             dependency_names: HashSet::from(["tokio".to_string()]),
             interest_topics: HashSet::new(),
+            domain_concerns: HashSet::new(),
         };
         let topics = vec!["tokio".to_string()];
         assert_eq!(compute_domain_relevance(&topics, &profile), 0.85);
+    }
+
+    #[test]
+    fn test_ambiguous_dep_with_only_ambiguous_corroboration() {
+        let profile = DomainProfile {
+            primary_stack: HashSet::from(["rust".to_string()]),
+            adjacent_tech: HashSet::from(["async".to_string()]),
+            all_tech: HashSet::from(["rust".to_string(), "tokio".to_string(), "async".to_string()]),
+            dependency_names: HashSet::from(["futures".to_string()]),
+            interest_topics: HashSet::new(),
+            domain_concerns: HashSet::new(),
+        };
+        let topics = vec![
+            "futures".to_string(),
+            "async".to_string(),
+            "parallel".to_string(),
+            "hpx".to_string(),
+        ];
+        assert_eq!(compute_domain_relevance(&topics, &profile), 0.50);
+    }
+
+    #[test]
+    fn test_ambiguous_dep_with_primary_stack_corroboration() {
+        let profile = DomainProfile {
+            primary_stack: HashSet::from(["rust".to_string()]),
+            adjacent_tech: HashSet::from(["async".to_string()]),
+            all_tech: HashSet::from(["rust".to_string(), "async".to_string()]),
+            dependency_names: HashSet::from(["futures".to_string()]),
+            interest_topics: HashSet::new(),
+            domain_concerns: HashSet::new(),
+        };
+        let topics = vec![
+            "futures".to_string(),
+            "async".to_string(),
+            "rust".to_string(),
+        ];
+        assert_eq!(compute_domain_relevance(&topics, &profile), 1.0);
+    }
+
+    #[test]
+    fn test_adjacency_without_corroboration() {
+        let profile = DomainProfile {
+            primary_stack: HashSet::from(["tauri".to_string(), "rust".to_string()]),
+            adjacent_tech: HashSet::from([
+                "desktop".to_string(),
+                "webview".to_string(),
+                "ipc".to_string(),
+            ]),
+            all_tech: HashSet::from([
+                "tauri".to_string(),
+                "rust".to_string(),
+                "desktop".to_string(),
+                "webview".to_string(),
+                "ipc".to_string(),
+            ]),
+            dependency_names: HashSet::new(),
+            interest_topics: HashSet::new(),
+            domain_concerns: HashSet::new(),
+        };
+        let topics = vec!["desktop".to_string(), "java".to_string()];
+        assert_eq!(compute_domain_relevance(&topics, &profile), 0.50);
+    }
+
+    #[test]
+    fn test_adjacency_with_corroboration() {
+        let profile = DomainProfile {
+            primary_stack: HashSet::from(["tauri".to_string(), "rust".to_string()]),
+            adjacent_tech: HashSet::from([
+                "desktop".to_string(),
+                "webview".to_string(),
+                "ipc".to_string(),
+            ]),
+            all_tech: HashSet::from([
+                "tauri".to_string(),
+                "rust".to_string(),
+                "desktop".to_string(),
+                "webview".to_string(),
+                "ipc".to_string(),
+            ]),
+            dependency_names: HashSet::new(),
+            interest_topics: HashSet::new(),
+            domain_concerns: HashSet::new(),
+        };
+        let topics = vec!["desktop".to_string(), "rust".to_string()];
+        assert_eq!(compute_domain_relevance(&topics, &profile), 1.0);
+
+        let topics2 = vec!["desktop".to_string(), "webview".to_string()];
+        assert!(compute_domain_relevance(&topics2, &profile) >= 0.70);
+    }
+
+    #[test]
+    fn test_adjacency_general_database() {
+        let profile = DomainProfile {
+            primary_stack: HashSet::from(["sqlite".to_string()]),
+            adjacent_tech: HashSet::from([
+                "sql".to_string(),
+                "database".to_string(),
+                "rusqlite".to_string(),
+            ]),
+            all_tech: HashSet::from([
+                "sqlite".to_string(),
+                "sql".to_string(),
+                "database".to_string(),
+                "rusqlite".to_string(),
+            ]),
+            dependency_names: HashSet::new(),
+            interest_topics: HashSet::new(),
+            domain_concerns: HashSet::new(),
+        };
+        let topics = vec!["database".to_string(), "mongodb".to_string()];
+        assert_eq!(compute_domain_relevance(&topics, &profile), 0.50);
+    }
+
+    // ====================================================================
+    // P1: Developer Archetype Tests
+    // ====================================================================
+
+    #[test]
+    fn test_infer_domain_concerns_desktop_dev() {
+        let primary = HashSet::from(["tauri".to_string(), "rust".to_string()]);
+        let all_tech = primary.clone();
+        let concerns = infer_domain_concerns(&primary, &all_tech);
+        assert!(concerns.contains("packaging"));
+        assert!(concerns.contains("auto-update"));
+        assert!(concerns.contains("installer"));
+        // Also gets systems concerns from "rust"
+        assert!(concerns.contains("memory safety"));
+    }
+
+    #[test]
+    fn test_infer_domain_concerns_frontend_dev() {
+        let primary = HashSet::from(["react".to_string(), "typescript".to_string()]);
+        let all_tech = primary.clone();
+        let concerns = infer_domain_concerns(&primary, &all_tech);
+        assert!(concerns.contains("ssr"));
+        assert!(concerns.contains("hydration"));
+        assert!(concerns.contains("bundle size"));
+    }
+
+    #[test]
+    fn test_infer_domain_concerns_ml_engineer() {
+        let primary = HashSet::from(["python".to_string(), "pytorch".to_string()]);
+        let all_tech = primary.clone();
+        let concerns = infer_domain_concerns(&primary, &all_tech);
+        assert!(concerns.contains("training"));
+        assert!(concerns.contains("inference"));
+        assert!(concerns.contains("embeddings"));
+    }
+
+    #[test]
+    fn test_domain_concern_relevance() {
+        // Tauri dev sees article about "cross-platform packaging strategies"
+        // Topic: "packaging" — matches domain_concerns → 0.60
+        let profile = DomainProfile {
+            primary_stack: HashSet::from(["tauri".to_string(), "rust".to_string()]),
+            adjacent_tech: HashSet::new(),
+            all_tech: HashSet::from(["tauri".to_string(), "rust".to_string()]),
+            dependency_names: HashSet::new(),
+            interest_topics: HashSet::new(),
+            domain_concerns: HashSet::from([
+                "packaging".to_string(),
+                "auto-update".to_string(),
+                "installer".to_string(),
+            ]),
+        };
+        let topics = vec!["packaging".to_string(), "strategies".to_string()];
+        assert_eq!(compute_domain_relevance(&topics, &profile), 0.60);
+    }
+
+    // ====================================================================
+    // P2: Cross-Cutting Topic Tests
+    // ====================================================================
+
+    #[test]
+    fn test_cross_cutting_topic_not_crushed() {
+        // Article about "Best Testing Practices" — "testing" is cross-cutting.
+        // Should get 0.60 for ANY developer, not 0.15.
+        let profile = DomainProfile {
+            primary_stack: HashSet::from(["rust".to_string()]),
+            adjacent_tech: HashSet::new(),
+            all_tech: HashSet::from(["rust".to_string()]),
+            dependency_names: HashSet::new(),
+            interest_topics: HashSet::new(),
+            domain_concerns: HashSet::new(),
+        };
+        let topics = vec!["testing".to_string()];
+        assert_eq!(compute_domain_relevance(&topics, &profile), 0.60);
+    }
+
+    #[test]
+    fn test_cross_cutting_architecture() {
+        let profile = DomainProfile {
+            primary_stack: HashSet::from(["python".to_string()]),
+            adjacent_tech: HashSet::new(),
+            all_tech: HashSet::from(["python".to_string()]),
+            dependency_names: HashSet::new(),
+            interest_topics: HashSet::new(),
+            domain_concerns: HashSet::new(),
+        };
+        let topics = vec!["architecture".to_string()];
+        assert_eq!(compute_domain_relevance(&topics, &profile), 0.60);
+    }
+
+    #[test]
+    fn test_cross_cutting_doesnt_override_primary() {
+        // "security" is cross-cutting (0.60) but also in SINGLE_WORD_TOPICS.
+        // If user's primary stack matches, should still get 1.0.
+        let profile = DomainProfile {
+            primary_stack: HashSet::from(["rust".to_string()]),
+            adjacent_tech: HashSet::new(),
+            all_tech: HashSet::from(["rust".to_string()]),
+            dependency_names: HashSet::new(),
+            interest_topics: HashSet::new(),
+            domain_concerns: HashSet::new(),
+        };
+        let topics = vec!["rust".to_string(), "security".to_string()];
+        // "rust" hits primary → 1.0 (cross-cutting doesn't downgrade)
+        assert_eq!(compute_domain_relevance(&topics, &profile), 1.0);
+    }
+
+    #[test]
+    fn test_domain_concern_beats_cross_cutting() {
+        // A topic matching domain_concern (0.60) and cross-cutting (0.60) → still 0.60
+        // But domain_concern is checked first, which is fine — same tier
+        let profile = DomainProfile {
+            primary_stack: HashSet::from(["react".to_string()]),
+            adjacent_tech: HashSet::new(),
+            all_tech: HashSet::from(["react".to_string()]),
+            dependency_names: HashSet::new(),
+            interest_topics: HashSet::new(),
+            domain_concerns: HashSet::from(["accessibility".to_string()]),
+        };
+        let topics = vec!["accessibility".to_string()];
+        assert_eq!(compute_domain_relevance(&topics, &profile), 0.60);
     }
 }
