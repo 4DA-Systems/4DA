@@ -1427,7 +1427,7 @@ dependencies = [
 
 [[package]]
 name = "fourda"
-version = "1.0.0"
+version = "0.1.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -1472,7 +1472,7 @@ dependencies = [
 
 [[package]]
 name = "fourda-macros"
-version = "1.0.0"
+version = "0.1.0"
 dependencies = [
  "proc-macro2",
  "quote",

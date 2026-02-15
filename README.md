@@ -191,7 +191,7 @@ pnpm validate:all           # Full validation (lint + types + tests + build)
 
 ## License
 
-MIT
+[BUSL-1.1](LICENSE) — free for non-commercial use. Converts to Apache 2.0 on 2029-02-15.
 
 ---
 
