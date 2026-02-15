@@ -1,8 +1,11 @@
-import { memo } from 'react';
-import type { SourceRelevance, FeedbackAction, FeedbackGiven } from '../types';
+import { memo, useState, useEffect, useCallback } from 'react';
+import { invoke } from '@tauri-apps/api/core';
+import type { SourceRelevance, FeedbackAction, FeedbackGiven, ItemSummary } from '../types';
 import { formatScore, getScoreColor } from '../utils/score';
+import { getContentTypeBadge } from '../config/content-types';
 import { ConfidenceIndicator } from './ConfidenceIndicator';
 import { ScoreAutopsy } from './ScoreAutopsy';
+import { ArticleReader } from './ArticleReader';
 
 function generateFallbackReason(item: SourceRelevance): string {
   const parts: string[] = [];
@@ -58,6 +61,34 @@ export const ResultItem = memo(function ResultItem({
 
   const isTopPick = item.top_score >= 0.72;
   const isHighConfidence = (item.confidence ?? 0) >= 0.7;
+
+  // AI Summary state
+  const [summary, setSummary] = useState<string | null>(null);
+  const [summaryLoading, setSummaryLoading] = useState(false);
+  const [summaryError, setSummaryError] = useState<string | null>(null);
+
+  // Fetch cached summary when expanded
+  useEffect(() => {
+    if (!isExpanded) return;
+    let cancelled = false;
+    invoke<ItemSummary>('get_item_summary', { itemId: item.id })
+      .then(result => { if (!cancelled) setSummary(result.summary); })
+      .catch(() => {}); // No cached summary — that's fine
+    return () => { cancelled = true; };
+  }, [isExpanded, item.id]);
+
+  const generateSummary = useCallback(async () => {
+    setSummaryLoading(true);
+    setSummaryError(null);
+    try {
+      const result = await invoke<ItemSummary>('generate_item_summary', { itemId: item.id });
+      setSummary(result.summary);
+    } catch (e) {
+      setSummaryError(String(e));
+    } finally {
+      setSummaryLoading(false);
+    }
+  }, [item.id]);
 
   return (
     <div
@@ -172,6 +203,14 @@ export const ResultItem = memo(function ResultItem({
                   Working on
                 </span>
               )}
+              {(() => {
+                const badge = getContentTypeBadge(item.score_breakdown?.content_type);
+                return badge ? (
+                  <span className={`flex-shrink-0 text-[10px] px-1.5 py-0.5 rounded font-medium ${badge.colorClass}`}>
+                    {badge.label}
+                  </span>
+                ) : null;
+              })()}
             </div>
             {item.url && (
               <div className="text-xs text-text-muted truncate font-mono mt-1">
@@ -252,6 +291,34 @@ export const ResultItem = memo(function ResultItem({
               </div>
             </div>
           )}
+
+          {/* AI Summary */}
+          <div className="mb-3">
+            {summary ? (
+              <div className="p-2 bg-bg-primary/50 rounded border border-cyan-500/20">
+                <div className="text-[10px] text-cyan-400 font-medium mb-1">AI Summary</div>
+                <div className="text-xs text-text-secondary leading-relaxed">{summary}</div>
+              </div>
+            ) : (
+              <button
+                onClick={generateSummary}
+                disabled={summaryLoading}
+                className="text-[11px] px-2.5 py-1.5 rounded border border-cyan-500/20 text-cyan-400 hover:bg-cyan-500/10 transition-colors disabled:opacity-50"
+              >
+                {summaryLoading ? 'Generating...' : 'Generate AI Summary'}
+              </button>
+            )}
+            {summaryError && (
+              <div className="mt-1 text-[10px] text-red-400">{summaryError}</div>
+            )}
+          </div>
+
+          {/* Article Reader */}
+          <ArticleReader
+            itemId={item.id}
+            url={item.url ?? undefined}
+            contentType={item.score_breakdown?.content_type}
+          />
 
           {/* Quality Indicators (expanded only) */}
           <div className="mb-3 flex flex-wrap items-center gap-2">

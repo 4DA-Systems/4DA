@@ -54,6 +54,7 @@ mod analysis;
 mod anomaly;
 mod attention;
 mod competing_tech;
+mod content_commands;
 mod content_dna;
 mod content_quality;
 mod context_commands;
@@ -277,7 +278,13 @@ pub fn run() {
             tts::get_audio_briefing_status,
             handoff::generate_context_packet,
             // Predictive
-            predictive::get_predicted_context
+            predictive::get_predicted_context,
+            // Content (article reader, AI summaries, saved items)
+            content_commands::get_item_content,
+            content_commands::get_item_summary,
+            content_commands::generate_item_summary,
+            content_commands::get_saved_items,
+            content_commands::remove_saved_item
         ])
         .setup(|app| {
             // Set up system tray

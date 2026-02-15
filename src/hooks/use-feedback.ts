@@ -12,11 +12,13 @@ export function useFeedback() {
   const antiTopics = useAppStore(s => s.antiTopics);
   const lastLearnedTopic = useAppStore(s => s.lastLearnedTopic);
   const loadLearnedBehavior = useAppStore(s => s.loadLearnedBehavior);
+  const loadPersistedSavedIds = useAppStore(s => s.loadPersistedSavedIds);
   const recordInteraction = useAppStore(s => s.recordInteraction);
 
   useEffect(() => {
     loadLearnedBehavior();
-  }, [loadLearnedBehavior]);
+    loadPersistedSavedIds();
+  }, [loadLearnedBehavior, loadPersistedSavedIds]);
 
   return {
     feedbackGiven,

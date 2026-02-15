@@ -1,0 +1,214 @@
+//! Content commands for 4DA — article reader, AI summaries, saved items.
+
+use crate::error::{FourDaError, Result};
+use crate::llm::{LLMClient, Message};
+use crate::{get_database, get_settings_manager, open_db_connection};
+use rusqlite::params;
+use serde::Serialize;
+use tracing::{debug, info};
+
+// ============================================================================
+// Types
+// ============================================================================
+
+#[derive(Debug, Serialize)]
+pub struct ItemContent {
+    pub content: String,
+    pub source_type: String,
+    pub word_count: usize,
+    pub has_summary: bool,
+    pub summary: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct ItemSummary {
+    pub summary: String,
+    pub cached: bool,
+}
+
+#[derive(Debug, Serialize)]
+pub struct SavedItem {
+    pub item_id: i64,
+    pub title: String,
+    pub url: Option<String>,
+    pub source_type: String,
+    pub saved_at: String,
+    pub summary: Option<String>,
+    pub content_preview: Option<String>,
+}
+
+// ============================================================================
+// Commands
+// ============================================================================
+
+/// Fetch full article content for a source item.
+#[tauri::command]
+pub async fn get_item_content(item_id: i64) -> Result<ItemContent> {
+    let db = get_database().map_err(|e| FourDaError::Internal(e))?;
+
+    let (content, source_type, _char_count) = db
+        .get_item_content(item_id)
+        .map_err(|e| FourDaError::Internal(e))?
+        .ok_or_else(|| FourDaError::Internal(format!("Item {} not found", item_id)))?;
+
+    let word_count = content.split_whitespace().count();
+
+    let summary = db
+        .get_item_summary(item_id)
+        .map_err(|e| FourDaError::Internal(e))?;
+
+    Ok(ItemContent {
+        content,
+        source_type,
+        word_count,
+        has_summary: summary.is_some(),
+        summary,
+    })
+}
+
+/// Get cached AI summary for an item. Returns error if no summary cached.
+#[tauri::command]
+pub async fn get_item_summary(item_id: i64) -> Result<ItemSummary> {
+    let db = get_database().map_err(|e| FourDaError::Internal(e))?;
+
+    match db
+        .get_item_summary(item_id)
+        .map_err(|e| FourDaError::Internal(e))?
+    {
+        Some(summary) => Ok(ItemSummary {
+            summary,
+            cached: true,
+        }),
+        None => Err(FourDaError::Internal("No summary cached".to_string())),
+    }
+}
+
+/// Generate AI summary for an item. Uses cache if available.
+#[tauri::command]
+pub async fn generate_item_summary(item_id: i64) -> Result<ItemSummary> {
+    let db = get_database().map_err(|e| FourDaError::Internal(e))?;
+
+    // Check cache first
+    if let Some(summary) = db
+        .get_item_summary(item_id)
+        .map_err(|e| FourDaError::Internal(e))?
+    {
+        return Ok(ItemSummary {
+            summary,
+            cached: true,
+        });
+    }
+
+    // Get content snippet for summarization
+    let content_snippet = db
+        .get_item_content_snippet(item_id, 2000)
+        .map_err(|e| FourDaError::Internal(e))?;
+
+    if content_snippet.trim().is_empty() {
+        return Err(FourDaError::Internal(
+            "No content available to summarize".to_string(),
+        ));
+    }
+
+    let title = db
+        .get_item_title(item_id)
+        .map_err(|e| FourDaError::Internal(e))?
+        .unwrap_or_default();
+
+    // Get LLM config
+    let llm_config = {
+        let settings = get_settings_manager().lock();
+        settings.get().llm.clone()
+    };
+
+    if llm_config.provider.is_empty()
+        || llm_config.api_key.is_empty() && llm_config.provider != "ollama"
+    {
+        return Err(FourDaError::Llm(
+            "No LLM configured. Set up a provider in Settings to generate summaries.".to_string(),
+        ));
+    }
+
+    debug!(target: "4da::content", item_id = item_id, "Generating AI summary");
+
+    let client = LLMClient::new(llm_config);
+    let system_prompt = "You are a concise technical summarizer. Given an article title and content, produce a 2-3 sentence summary that captures the key technical insight. Focus on what a developer needs to know. Do not use markdown formatting.";
+
+    let user_message = format!("Title: {}\n\nContent:\n{}", title, content_snippet);
+
+    let response = client
+        .complete(
+            system_prompt,
+            vec![Message {
+                role: "user".to_string(),
+                content: user_message,
+            }],
+        )
+        .await
+        .map_err(|e| FourDaError::Llm(e))?;
+
+    let summary = response.content.trim().to_string();
+
+    // Cache it
+    if let Err(e) = db.set_item_summary(item_id, &summary) {
+        debug!(target: "4da::content", error = %e, "Failed to cache summary (non-fatal)");
+    }
+
+    info!(target: "4da::content", item_id = item_id, tokens = response.input_tokens + response.output_tokens, "Generated AI summary");
+
+    Ok(ItemSummary {
+        summary,
+        cached: false,
+    })
+}
+
+/// Get all saved items (from ACE interactions table).
+#[tauri::command]
+pub async fn get_saved_items() -> Result<Vec<SavedItem>> {
+    let conn = open_db_connection().map_err(|e| FourDaError::Internal(e))?;
+
+    let mut stmt = conn
+        .prepare(
+            "SELECT DISTINCT i.item_id, si.title, si.url, si.source_type,
+                    i.timestamp, si.summary, SUBSTR(si.content, 1, 200) as preview
+             FROM interactions i
+             JOIN source_items si ON si.id = i.item_id
+             WHERE i.action_type = 'save'
+             ORDER BY i.timestamp DESC
+             LIMIT 100",
+        )
+        .map_err(|e| FourDaError::Db(e))?;
+
+    let items = stmt
+        .query_map([], |row| {
+            Ok(SavedItem {
+                item_id: row.get(0)?,
+                title: row.get(1)?,
+                url: row.get(2)?,
+                source_type: row.get(3)?,
+                saved_at: row.get::<_, String>(4).unwrap_or_default(),
+                summary: row.get(5)?,
+                content_preview: row.get(6)?,
+            })
+        })
+        .map_err(|e| FourDaError::Db(e))?
+        .filter_map(|r| r.ok())
+        .collect();
+
+    Ok(items)
+}
+
+/// Remove a saved item (delete save interaction).
+#[tauri::command]
+pub async fn remove_saved_item(item_id: i64) -> Result<()> {
+    let conn = open_db_connection().map_err(|e| FourDaError::Internal(e))?;
+
+    conn.execute(
+        "DELETE FROM interactions WHERE action_type = 'save' AND item_id = ?1",
+        params![item_id],
+    )
+    .map_err(|e| FourDaError::Db(e))?;
+
+    info!(target: "4da::content", item_id = item_id, "Removed saved item");
+    Ok(())
+}

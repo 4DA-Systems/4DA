@@ -5,7 +5,7 @@ import type { SourceRelevance, FeedbackGiven } from '../types';
 
 // Mock child components that use Tauri invoke
 vi.mock('@tauri-apps/api/core', () => ({
-  invoke: vi.fn(),
+  invoke: vi.fn(() => Promise.reject('not mocked')),
 }));
 
 vi.mock('./ScoreAutopsy', () => ({
@@ -14,6 +14,10 @@ vi.mock('./ScoreAutopsy', () => ({
 
 vi.mock('./ConfidenceIndicator', () => ({
   ConfidenceIndicator: () => null,
+}));
+
+vi.mock('./ArticleReader', () => ({
+  ArticleReader: () => <div data-testid="article-reader" />,
 }));
 
 function makeItem(overrides: Partial<SourceRelevance> = {}): SourceRelevance {

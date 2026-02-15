@@ -106,10 +106,10 @@ export interface ToastSlice {
 export interface UiSlice {
   showSettings: boolean;
   showSplash: boolean;
-  activeView: 'briefing' | 'results';
+  activeView: 'briefing' | 'results' | 'saved';
   setShowSettings: (show: boolean) => void;
   setShowSplash: (show: boolean) => void;
-  setActiveView: (view: 'briefing' | 'results') => void;
+  setActiveView: (view: 'briefing' | 'results' | 'saved') => void;
 }
 
 export interface SettingsSlice {
@@ -163,6 +163,7 @@ export interface FeedbackSlice {
   setLastLearnedTopic: (topic: { topic: string; direction: 'positive' | 'negative'; timestamp: number } | null) => void;
   setFeedbackGivenFull: (updater: FeedbackGiven | ((prev: FeedbackGiven) => FeedbackGiven)) => void;
   loadLearnedBehavior: () => Promise<void>;
+  loadPersistedSavedIds: () => Promise<void>;
   recordInteraction: (itemId: number, actionType: FeedbackAction, item: SourceRelevance) => Promise<void>;
 }
 

@@ -304,6 +304,32 @@ impl Database {
             info!(target: "4da::db", "Phase 6 migration completed — source_health table");
         }
 
+        // Phase 7 migration: AI summary column on source_items
+        let current_version: i64 = conn
+            .query_row("SELECT version FROM schema_version", [], |row| row.get(0))
+            .unwrap_or(6);
+
+        if current_version < 7 {
+            info!(target: "4da::db", "Running Phase 7 migration (schema version 7)");
+            let has_summary: bool = conn
+                .query_row(
+                    "SELECT COUNT(*) FROM pragma_table_info('source_items') WHERE name='summary'",
+                    [],
+                    |row| row.get::<_, i64>(0).map(|count| count > 0),
+                )
+                .unwrap_or(false);
+
+            if !has_summary {
+                conn.execute(
+                    "ALTER TABLE source_items ADD COLUMN summary TEXT DEFAULT NULL",
+                    [],
+                )?;
+                info!(target: "4da::db", "Added summary column to source_items");
+            }
+            conn.execute("UPDATE schema_version SET version = 7", [])?;
+            info!(target: "4da::db", "Phase 7 migration completed — summary column");
+        }
+
         info!(target: "4da::db", "Database schema initialized with sqlite-vec");
         Ok(())
     }
@@ -1523,6 +1549,62 @@ impl Database {
             let truncated: String = content.chars().take(max_chars).collect();
             Ok(truncated)
         }
+    }
+
+    /// Get full content + source_type for an item. Returns (content, source_type, char_count).
+    pub fn get_item_content(
+        &self,
+        item_id: i64,
+    ) -> Result<Option<(String, String, usize)>, String> {
+        let conn = self.conn.lock();
+        conn.query_row(
+            "SELECT COALESCE(content, ''), source_type FROM source_items WHERE id = ?1",
+            params![item_id],
+            |row| {
+                let content: String = row.get(0)?;
+                let source_type: String = row.get(1)?;
+                let char_count = content.len();
+                Ok((content, source_type, char_count))
+            },
+        )
+        .optional()
+        .map_err(|e| format!("Failed to get item content: {}", e))
+    }
+
+    /// Get cached AI summary for an item.
+    pub fn get_item_summary(&self, item_id: i64) -> Result<Option<String>, String> {
+        let conn = self.conn.lock();
+        conn.query_row(
+            "SELECT summary FROM source_items WHERE id = ?1",
+            params![item_id],
+            |row| row.get::<_, Option<String>>(0),
+        )
+        .optional()
+        .map(|opt| opt.flatten())
+        .map_err(|e| format!("Failed to get item summary: {}", e))
+    }
+
+    /// Cache an AI summary for an item.
+    pub fn set_item_summary(&self, item_id: i64, summary: &str) -> Result<(), String> {
+        let conn = self.conn.lock();
+        conn.execute(
+            "UPDATE source_items SET summary = ?1 WHERE id = ?2",
+            params![summary, item_id],
+        )
+        .map_err(|e| format!("Failed to set item summary: {}", e))?;
+        Ok(())
+    }
+
+    /// Get title for a source item.
+    pub fn get_item_title(&self, item_id: i64) -> Result<Option<String>, String> {
+        let conn = self.conn.lock();
+        conn.query_row(
+            "SELECT title FROM source_items WHERE id = ?1",
+            params![item_id],
+            |row| row.get(0),
+        )
+        .optional()
+        .map_err(|e| format!("Failed to get item title: {}", e))
     }
 }
 
