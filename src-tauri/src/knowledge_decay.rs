@@ -39,17 +39,6 @@ pub enum GapSeverity {
     Low,
 }
 
-impl GapSeverity {
-    pub fn label(&self) -> &'static str {
-        match self {
-            GapSeverity::Critical => "critical",
-            GapSeverity::High => "high",
-            GapSeverity::Medium => "medium",
-            GapSeverity::Low => "low",
-        }
-    }
-}
-
 // ============================================================================
 // Implementation
 // ============================================================================

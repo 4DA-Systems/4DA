@@ -217,7 +217,18 @@ fn is_release(title: &str) -> bool {
 }
 
 fn is_show_and_tell(title: &str) -> bool {
-    let start_patterns = ["i built", "i made", "i created", "show hn", "launch hn"];
+    let start_patterns = [
+        "i built",
+        "i made",
+        "i created",
+        "i rebuilt",
+        "i rewrote",
+        "i redesigned",
+        "i remade",
+        "i ported",
+        "show hn",
+        "launch hn",
+    ];
     if start_patterns.iter().any(|p| title.starts_with(p)) {
         return true;
     }
@@ -231,6 +242,8 @@ fn is_show_and_tell(title: &str) -> bool {
         "i've been working on",
         "i have been working on",
         "check out my",
+        "here's what i built",
+        "here is what i built",
     ];
     contains_patterns.iter().any(|p| title.contains(p))
 }
@@ -440,5 +453,26 @@ mod tests {
     fn test_job_posting_marker() {
         let (ct, _) = classify_content("senior rust engineer (m/f/d) - berlin", "");
         assert_eq!(ct, ContentType::Hiring);
+    }
+
+    #[test]
+    fn test_rebuilt_is_show_and_tell() {
+        let (ct, _) = classify_content(
+            "i rebuilt my family's clean architecture boilerplate",
+            "short",
+        );
+        assert_eq!(ct, ContentType::ShowAndTell);
+    }
+
+    #[test]
+    fn test_rewrote_is_show_and_tell() {
+        let (ct, _) = classify_content("i rewrote our api gateway in rust", "short");
+        assert_eq!(ct, ContentType::ShowAndTell);
+    }
+
+    #[test]
+    fn test_ported_is_show_and_tell() {
+        let (ct, _) = classify_content("i ported doom to run on a microcontroller", "short");
+        assert_eq!(ct, ContentType::ShowAndTell);
     }
 }

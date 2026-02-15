@@ -325,6 +325,16 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
               Test Connection
             </button>
           </div>
+
+          {/* Copyright */}
+          <div className="pt-4 border-t border-[#2A2A2A] text-center">
+            <p className="text-xs text-[#666666]">
+              4DA v1.0.0 &copy; 2025-2026 Antony Lawrence Kiddie Pasifa. All rights reserved.
+            </p>
+            <p className="text-xs text-[#666666] mt-1">
+              Licensed under BSL-1.1
+            </p>
+          </div>
         </div>
       </div>
     </div>

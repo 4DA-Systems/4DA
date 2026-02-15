@@ -35,17 +35,6 @@ pub struct ProjectDependency {
     pub last_scanned: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ItemRelationship {
-    pub id: i64,
-    pub source_item_id: i64,
-    pub related_item_id: i64,
-    pub relationship_type: String,
-    pub strength: f64,
-    pub metadata: Option<serde_json::Value>,
-    pub created_at: String,
-}
-
 // ============================================================================
 // Temporal Events
 // ============================================================================
@@ -301,39 +290,6 @@ pub fn get_all_dependencies(conn: &rusqlite::Connection) -> Result<Vec<ProjectDe
     Ok(filtered)
 }
 
-/// Search for a specific package across all projects
-pub fn find_dependency(
-    conn: &rusqlite::Connection,
-    package_name: &str,
-) -> Result<Vec<ProjectDependency>, String> {
-    let mut stmt = conn
-        .prepare(
-            "SELECT id, project_path, manifest_type, package_name, version, is_dev, language, last_scanned
-             FROM project_dependencies
-             WHERE package_name = ?1",
-        )
-        .map_err(|e| e.to_string())?;
-
-    let results: Vec<ProjectDependency> = stmt
-        .query_map(params![package_name], |row| {
-            Ok(ProjectDependency {
-                id: row.get(0)?,
-                project_path: row.get(1)?,
-                manifest_type: row.get(2)?,
-                package_name: row.get(3)?,
-                version: row.get(4)?,
-                is_dev: row.get::<_, i32>(5)? != 0,
-                language: row.get(6)?,
-                last_scanned: row.get(7)?,
-            })
-        })
-        .map_err(|e| e.to_string())?
-        .filter_map(|r| r.ok())
-        .collect();
-
-    Ok(results)
-}
-
 // ============================================================================
 // Item Relationships
 // ============================================================================
@@ -357,61 +313,6 @@ pub fn upsert_relationship(
     )
     .map_err(|e| format!("Failed to upsert relationship: {}", e))?;
     Ok(())
-}
-
-/// Get relationships for a source item
-pub fn get_relationships(
-    conn: &rusqlite::Connection,
-    source_item_id: i64,
-    relationship_type: Option<&str>,
-) -> Result<Vec<ItemRelationship>, String> {
-    let (query, use_type) = if relationship_type.is_some() {
-        (
-            "SELECT id, source_item_id, related_item_id, relationship_type, strength, metadata, created_at
-             FROM item_relationships
-             WHERE source_item_id = ?1 AND relationship_type = ?2
-             ORDER BY strength DESC",
-            true,
-        )
-    } else {
-        (
-            "SELECT id, source_item_id, related_item_id, relationship_type, strength, metadata, created_at
-             FROM item_relationships
-             WHERE source_item_id = ?1
-             ORDER BY strength DESC",
-            false,
-        )
-    };
-
-    let mut stmt = conn.prepare(query).map_err(|e| e.to_string())?;
-
-    let results: Vec<ItemRelationship> = if use_type {
-        stmt.query_map(
-            params![source_item_id, relationship_type.unwrap()],
-            map_relationship,
-        )
-    } else {
-        stmt.query_map(params![source_item_id], map_relationship)
-    }
-    .map_err(|e| e.to_string())?
-    .filter_map(|r| r.ok())
-    .collect();
-
-    Ok(results)
-}
-
-fn map_relationship(row: &rusqlite::Row) -> rusqlite::Result<ItemRelationship> {
-    let metadata_str: Option<String> = row.get(5)?;
-    let metadata = metadata_str.and_then(|s| serde_json::from_str(&s).ok());
-    Ok(ItemRelationship {
-        id: row.get(0)?,
-        source_item_id: row.get(1)?,
-        related_item_id: row.get(2)?,
-        relationship_type: row.get(3)?,
-        strength: row.get(4)?,
-        metadata,
-        created_at: row.get(6)?,
-    })
 }
 
 // ============================================================================
