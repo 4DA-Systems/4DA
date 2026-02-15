@@ -138,7 +138,7 @@ pub fn setup_tray<R: Runtime>(app: &AppHandle<R>) -> Result<TrayIcon<R>, String>
                 .clone(),
         )
         .menu(&menu)
-        .tooltip("4DA Home - The internet searches for you")
+        .tooltip("4DA Home - All signal. No feed.")
         .on_menu_event(move |app, event| {
             match event.id.as_ref() {
                 "show" => {
@@ -543,7 +543,7 @@ pub fn update_tray_menu<R: Runtime>(
     let tooltip = if monitoring_enabled {
         "4DA Home - Monitoring active"
     } else {
-        "4DA Home - The internet searches for you"
+        "4DA Home - All signal. No feed."
     };
     tray.set_tooltip(Some(tooltip)).map_err(|e| e.to_string())?;
 

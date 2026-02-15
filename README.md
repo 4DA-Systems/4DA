@@ -2,7 +2,7 @@
 
 # 4DA
 
-### The internet searches for you.
+### All signal. No feed.
 
 **Stop scrolling. Start knowing.**
 

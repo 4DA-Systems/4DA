@@ -48,7 +48,7 @@
 
 ## 2. Core Principle
 
-**The internet searches for you. You don't search for it.**
+**All signal. No feed.** You don't search for it — it finds you.
 
 4DA monitors your local context, understands your work, watches external sources continuously, filters ruthlessly (99.9% rejection rate), and delivers only what matters - before you know you need it.
 

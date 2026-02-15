@@ -111,7 +111,7 @@ pub fn run() {
 
     info!(target: "4da::startup", "========================================");
     info!(target: "4da::startup", "4DA Home - Personalized Intelligence");
-    info!(target: "4da::startup", "The internet searches for you.");
+    info!(target: "4da::startup", "All signal. No feed.");
     info!(target: "4da::startup", "========================================");
     info!(target: "4da::startup", context_dir = ?get_context_dir(), "Context directory");
     info!(target: "4da::startup", model = "all-MiniLM-L6-v2", dimensions = 384, "Embedding model");

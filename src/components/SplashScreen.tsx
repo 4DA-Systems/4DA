@@ -190,7 +190,7 @@ export function SplashScreen({ onComplete, minimumDisplayTime = 1500 }: SplashSc
         marginBottom: '2.5rem',
         fontWeight: 500,
       }}>
-        The internet searches for you
+        All signal. No feed.
       </p>
 
       {/* Progress bar */}

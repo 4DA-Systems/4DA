@@ -1,7 +1,7 @@
 [package]
 name = "fourda"
 version = "1.0.0"
-description = "4DA - The internet searches for you"
+description = "4DA - All signal. No feed."
 authors = ["Antony Lawrence Kiddie Pasifa"]
 license = "BUSL-1.1"
 edition = "2021"

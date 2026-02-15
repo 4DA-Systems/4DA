@@ -321,7 +321,7 @@ function App() {
             </div>
             <div>
               <h1 className="text-2xl font-semibold tracking-tight text-white">4DA</h1>
-              <p className="text-gray-500 text-sm">The internet searches for you</p>
+              <p className="text-gray-500 text-sm">All signal. No feed.</p>
             </div>
           </div>
           <div className="flex items-center gap-3">
@@ -607,7 +607,7 @@ function App() {
 
         {/* Footer - Polished */}
         <footer className="mt-8 text-center space-y-1">
-          <p className="text-xs text-gray-600">The internet searches for you</p>
+          <p className="text-xs text-gray-600">All signal. No feed.</p>
           <p className="text-[10px] text-gray-700">
             <kbd className="px-1 py-0.5 bg-[#1F1F1F] rounded text-gray-500">R</kbd> Analyze
             <span className="mx-1.5">·</span>

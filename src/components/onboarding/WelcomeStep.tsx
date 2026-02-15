@@ -12,7 +12,7 @@ export function WelcomeStep({ isAnimating, onNext }: WelcomeStepProps) {
         <img src={sunLogo} alt="4DA" className="w-full h-full object-cover" />
       </div>
       <h1 className="text-4xl font-semibold text-white mb-3">Welcome to 4DA</h1>
-      <p className="text-xl text-orange-400 mb-2 font-medium">The internet searches for you.</p>
+      <p className="text-xl text-orange-400 mb-2 font-medium">All signal. No feed.</p>
       <p className="text-gray-500 mb-8 max-w-md mx-auto">
         4DA learns what you care about and surfaces relevant content from across the internet - before you know you need it.
       </p>

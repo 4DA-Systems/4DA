@@ -18,7 +18,7 @@ This file provides a quick reference. For detailed design, read the specs.
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │                         4DA v3                                   │
-│                 "The Internet Searches For You"                  │
+│                 "All Signal. No Feed."                           │
 ├─────────────────────────────────────────────────────────────────┤
 │                                                                  │
 │  ┌──────────────┐    ┌──────────────┐    ┌──────────────┐       │
