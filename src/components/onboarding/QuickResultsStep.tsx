@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
+import { getSourceLabel, getSourceColorClass } from '../../config/sources';
 
 interface QuickResultsStepProps {
   isAnimating: boolean;
@@ -11,35 +12,10 @@ interface ScanResult {
   title: string;
   score: number;
   source: string;
+  sourceId: string;
 }
 
 type ScanPhase = 'scanning' | 'scoring' | 'done' | 'error';
-
-const sourceColors: Record<string, string> = {
-  HN: 'bg-orange-500/20 text-orange-300',
-  arXiv: 'bg-purple-500/20 text-purple-300',
-  Reddit: 'bg-blue-500/20 text-blue-300',
-  GitHub: 'bg-green-500/20 text-green-300',
-  RSS: 'bg-yellow-500/20 text-yellow-300',
-  YouTube: 'bg-red-500/20 text-red-300',
-  Twitter: 'bg-sky-500/20 text-sky-300',
-  PH: 'bg-orange-500/20 text-orange-300',
-  Lobsters: 'bg-pink-500/20 text-pink-300',
-  'Dev.to': 'bg-indigo-500/20 text-indigo-300',
-};
-
-const sourceMap: Record<string, string> = {
-  hackernews: 'HN',
-  arxiv: 'arXiv',
-  reddit: 'Reddit',
-  github: 'GitHub',
-  rss: 'RSS',
-  youtube: 'YouTube',
-  twitter: 'Twitter',
-  producthunt: 'PH',
-  lobsters: 'Lobsters',
-  devto: 'Dev.to',
-};
 
 export function QuickResultsStep({ isAnimating, onComplete, onBack }: QuickResultsStepProps) {
   const [phase, setPhase] = useState<ScanPhase>('scanning');
@@ -52,25 +28,56 @@ export function QuickResultsStep({ isAnimating, onComplete, onBack }: QuickResul
 
     (async () => {
       try {
-        // Phase 1: Fetch
+        // Phase 1: Fetch all sources
         setPhase('scanning');
         setMessage('Deep scanning HN, arXiv, Reddit, GitHub, RSS, YouTube...');
 
         await invoke('run_deep_initial_scan');
         if (cancelled) return;
 
-        // Phase 2: Score
+        // Phase 2: Score using the unified pipeline
         setPhase('scoring');
         setMessage('Analyzing hundreds of items for relevance...');
 
-        const items = await invoke<Array<{
+        await invoke('run_cached_analysis');
+        if (cancelled) return;
+
+        // Poll for completion (unified pipeline runs async)
+        const pollForResults = async (): Promise<Array<{
           id: number;
           title: string;
           url: string | null;
           top_score: number;
           source_type: string;
           relevant: boolean;
-        }>>('compute_relevance');
+        }>> => {
+          for (let i = 0; i < 60; i++) { // max 60s
+            if (cancelled) return [];
+            const status = await invoke<{
+              running: boolean;
+              completed: boolean;
+              results: Array<{
+                id: number;
+                title: string;
+                url: string | null;
+                top_score: number;
+                source_type: string;
+                relevant: boolean;
+              }> | null;
+            }>('get_analysis_status');
+
+            if (status.results && status.results.length > 0) {
+              return status.results;
+            }
+            if (!status.running && status.completed) {
+              return status.results || [];
+            }
+            await new Promise(r => setTimeout(r, 1000));
+          }
+          return [];
+        };
+
+        const items = await pollForResults();
         if (cancelled) return;
 
         // Extract top 5 results
@@ -81,7 +88,8 @@ export function QuickResultsStep({ isAnimating, onComplete, onBack }: QuickResul
           .map(r => ({
             title: r.title,
             score: Math.round(r.top_score * 100),
-            source: sourceMap[r.source_type] || r.source_type,
+            source: getSourceLabel(r.source_type),
+            sourceId: r.source_type,
           }));
 
         setResults(topResults);
@@ -176,7 +184,7 @@ export function QuickResultsStep({ isAnimating, onComplete, onBack }: QuickResul
                     className="flex items-center gap-3 p-3 bg-[#1F1F1F] rounded-lg"
                   >
                     <span className={`px-2 py-0.5 text-xs rounded flex-shrink-0 ${
-                      sourceColors[result.source] || 'bg-gray-500/20 text-gray-300'
+                      getSourceColorClass(result.sourceId)
                     }`}>
                       {result.source}
                     </span>

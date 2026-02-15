@@ -1,26 +1,7 @@
 import { memo } from 'react';
 import type { SourceRelevance, FeedbackAction } from '../types';
 import { formatScore, getScoreColor } from '../utils/score';
-
-const SOURCE_COLORS: Record<string, string> = {
-  hackernews: 'bg-orange-500/20 text-orange-400',
-  arxiv: 'bg-green-500/20 text-green-400',
-  reddit: 'bg-blue-500/20 text-blue-400',
-  github: 'bg-purple-500/20 text-purple-400',
-  rss: 'bg-amber-500/20 text-amber-400',
-  youtube: 'bg-red-500/20 text-red-400',
-  twitter: 'bg-sky-500/20 text-sky-400',
-  producthunt: 'bg-orange-600/20 text-orange-300',
-  lobsters: 'bg-red-600/20 text-red-400',
-  devto: 'bg-green-500/20 text-green-400',
-};
-
-const SOURCE_LABELS: Record<string, string> = {
-  hackernews: 'HN', arxiv: 'arXiv', reddit: 'Reddit',
-  github: 'GitHub', rss: 'RSS', youtube: 'YouTube',
-  twitter: 'Twitter', producthunt: 'PH',
-  lobsters: 'Lobsters', devto: 'Dev.to',
-};
+import { getSourceLabel, getSourceColorClass } from '../config/sources';
 
 interface BriefingCardProps {
   item: SourceRelevance;
@@ -38,8 +19,8 @@ export const BriefingCard = memo(function BriefingCard({
   onDismiss,
 }: BriefingCardProps) {
   const source = item.source_type || 'hackernews';
-  const colorClass = SOURCE_COLORS[source] || 'bg-gray-500/20 text-gray-400';
-  const label = SOURCE_LABELS[source] || source;
+  const colorClass = getSourceColorClass(source);
+  const label = getSourceLabel(source);
 
   return (
     <div className="bg-[#1F1F1F] rounded-lg border border-[#2A2A2A] p-4 hover:border-[#3A3A3A] transition-all">

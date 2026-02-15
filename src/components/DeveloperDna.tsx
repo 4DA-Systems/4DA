@@ -1,19 +1,7 @@
 import { useState, useEffect, memo } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import type { DeveloperDna } from '../types';
-
-const SOURCE_LABELS: Record<string, string> = {
-  hackernews: 'Hacker News',
-  reddit: 'Reddit',
-  arxiv: 'arXiv',
-  github: 'GitHub',
-  producthunt: 'Product Hunt',
-  youtube: 'YouTube',
-  twitter: 'Twitter/X',
-  rss: 'RSS',
-  devto: 'Dev.to',
-  lobsters: 'Lobsters',
-};
+import { getSourceFullName } from '../config/sources';
 
 export const DeveloperDnaPanel = memo(function DeveloperDnaPanel() {
   const [dna, setDna] = useState<DeveloperDna | null>(null);
@@ -201,7 +189,7 @@ export const DeveloperDnaPanel = memo(function DeveloperDnaPanel() {
                         className="px-3 py-2 bg-[#1A1A1A] rounded border border-[#2A2A2A]"
                       >
                         <div className="text-xs font-medium text-gray-300">
-                          {SOURCE_LABELS[src.source_type] || src.source_type}
+                          {getSourceFullName(src.source_type)}
                         </div>
                         <div className="text-xs text-gray-500 mt-0.5">
                           {src.items_seen.toLocaleString()} seen &middot; {src.items_saved} saved

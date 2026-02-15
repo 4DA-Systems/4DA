@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { invoke } from '@tauri-apps/api/core';
+import { ALL_SOURCE_IDS } from '../config/sources';
 import type {
   Settings,
   MonitoringStatus,
@@ -125,11 +126,7 @@ const initialBriefingState: BriefingState = {
   lastGenerated: null,
 };
 
-const ALL_SOURCES = new Set([
-  'hackernews', 'arxiv', 'reddit', 'github',
-  'rss', 'youtube', 'twitter', 'producthunt',
-  'lobsters', 'devto',
-]);
+const ALL_SOURCES = ALL_SOURCE_IDS;
 
 // ============================================================================
 // Store Interface
