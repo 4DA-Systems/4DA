@@ -479,16 +479,13 @@ pub(crate) async fn scrape_article_content(url: &str) -> Option<String> {
         return None;
     }
 
-    // Create client with timeout
-    let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(10))
-        .build()
-        .ok()?;
+    // Use shared client with per-request timeout
+    let client = crate::sources::shared_client();
 
     // Fetch the page
     let response = client
         .get(url)
-        .header("User-Agent", "Mozilla/5.0 (compatible; 4DA/1.0)")
+        .timeout(std::time::Duration::from_secs(10))
         .send()
         .await
         .ok()?;

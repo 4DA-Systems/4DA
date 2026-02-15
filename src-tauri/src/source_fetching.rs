@@ -30,16 +30,13 @@ pub(crate) async fn fetch_all_sources(
     use sources::Source;
 
     // Phase 4: Network connectivity check before fetching
-    let client = reqwest::Client::builder()
+    let client = sources::shared_client();
+    let online = client
+        .head("https://httpbin.org/get")
         .timeout(std::time::Duration::from_secs(3))
-        .build()
-        .ok();
-
-    let online = if let Some(c) = &client {
-        c.head("https://httpbin.org/get").send().await.is_ok()
-    } else {
-        true // Assume online if client creation fails
-    };
+        .send()
+        .await
+        .is_ok();
 
     if !online {
         warn!(target: "4da::sources", "Network unavailable - using cached content only");
