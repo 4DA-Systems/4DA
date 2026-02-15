@@ -214,6 +214,14 @@ if self.total_exposures < 5 {
 - Explicit user input: confidence = 1.0 (always wins)
 - **Verification:** Cross-validation tests
 
+### INV-090: File Size Limits
+- New TypeScript/TSX files MUST stay under 500 lines
+- New Rust files MUST stay under 1000 lines
+- Files approaching limits (TS: 350, RS: 600) trigger warnings
+- Files exceeding limits MUST be split or added to exception list with justification
+- **Exception list:** `scripts/check-file-sizes.cjs` EXCEPTIONS constant
+- **Enforcement:** Pre-commit hook, CI pipeline, `pnpm run validate:sizes`
+
 ---
 
 ## How to Use This File
