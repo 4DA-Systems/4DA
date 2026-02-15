@@ -1,5 +1,4 @@
 import { useMemo, useCallback } from 'react';
-import type { SourceRelevance, FeedbackAction, FeedbackGiven } from '../types';
 import { useAppStore } from '../store';
 
 /** Normalize URL for dedup: strip protocol, www, trailing slash, query params */
@@ -19,15 +18,15 @@ function normalizeUrl(url: string | null | undefined): string | null {
 }
 
 /**
- * Result filters hook — thin wrapper around Zustand store.
+ * Result filters hook — reads all state from Zustand store.
  * Filter state lives in the store; filteredResults is derived here via useMemo.
  */
-export const useResultFilters = (
-  relevanceResults: SourceRelevance[],
-  feedbackGiven: FeedbackGiven,
-  recordInteraction: (id: number, action: FeedbackAction, item: SourceRelevance) => Promise<void>,
-  setSettingsStatus: (msg: string) => void,
-) => {
+export const useResultFilters = () => {
+  const relevanceResults = useAppStore(s => s.appState.relevanceResults);
+  const feedbackGiven = useAppStore(s => s.feedbackGiven);
+  const recordInteraction = useAppStore(s => s.recordInteraction);
+  const setSettingsStatus = useAppStore(s => s.setSettingsStatus);
+
   const sourceFilters = useAppStore(s => s.sourceFilters);
   const sortBy = useAppStore(s => s.sortBy);
   const showOnlyRelevant = useAppStore(s => s.showOnlyRelevant);
@@ -61,8 +60,8 @@ export const useResultFilters = (
     });
 
     // Step 2: Cross-source deduplication by normalized URL
-    const urlGroups = new Map<string, SourceRelevance[]>();
-    const noUrl: SourceRelevance[] = [];
+    const urlGroups = new Map<string, typeof filtered>();
+    const noUrl: typeof filtered = [];
 
     for (const item of filtered) {
       const normalized = normalizeUrl(item.url);
@@ -79,7 +78,7 @@ export const useResultFilters = (
     }
 
     // Keep highest-scoring item per URL group, tag with seen_on
-    const deduped: SourceRelevance[] = [];
+    const deduped: typeof filtered = [];
     for (const group of urlGroups.values()) {
       // Sort by score desc, pick best
       group.sort((a, b) => b.top_score - a.top_score);

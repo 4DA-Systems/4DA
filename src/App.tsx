@@ -1,7 +1,7 @@
 // Copyright (c) 2025-2026 Antony Lawrence Kiddie Pasifa. All rights reserved.
 // Licensed under the Business Source License 1.1 (BSL-1.1). See LICENSE file.
 
-import { useState, useEffect, useCallback, useMemo, Component, ErrorInfo, ReactNode } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import './App.css';
 import { SplashScreen } from './components/SplashScreen';
@@ -20,6 +20,7 @@ import { PredictiveIndicator } from './components/PredictiveIndicator';
 import { SignalChainsPanel } from './components/SignalChains';
 import { KnowledgeGapsPanel } from './components/KnowledgeGapsPanel';
 import { KeyboardShortcutsModal } from './components/KeyboardShortcutsModal';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import {
   useSettings,
   useMonitoring,
@@ -28,76 +29,12 @@ import {
   useFeedback,
   useSystemHealth,
   useUserContext,
-  useResultFilters,
   useBriefing,
   useKeyboardShortcuts,
   useToasts,
 } from './hooks';
 import { useAppStore } from './store';
 import type { SourceRelevance } from './types';
-
-// Error Boundary to catch rendering errors
-interface ErrorBoundaryState {
-  hasError: boolean;
-  error: Error | null;
-}
-
-class ErrorBoundary extends Component<{ children: ReactNode }, ErrorBoundaryState> {
-  constructor(props: { children: ReactNode }) {
-    super(props);
-    this.state = { hasError: false, error: null };
-  }
-
-  static getDerivedStateFromError(error: Error): ErrorBoundaryState {
-    return { hasError: true, error };
-  }
-
-  componentDidCatch(error: Error, errorInfo: ErrorInfo) {
-    console.error('React Error Boundary caught:', error, errorInfo);
-  }
-
-  render() {
-    if (this.state.hasError) {
-      return (
-        <div style={{
-          backgroundColor: '#0A0A0A',
-          color: '#fff',
-          minHeight: '100vh',
-          padding: '2rem',
-          fontFamily: 'Inter, sans-serif',
-        }}>
-          <h1 style={{ color: '#EF4444' }}>Something went wrong</h1>
-          <pre style={{
-            backgroundColor: '#141414',
-            padding: '1rem',
-            borderRadius: '8px',
-            overflow: 'auto',
-            color: '#A0A0A0',
-          }}>
-            {this.state.error?.message}
-            {'\n\n'}
-            {this.state.error?.stack}
-          </pre>
-          <button
-            onClick={() => window.location.reload()}
-            style={{
-              marginTop: '1rem',
-              padding: '0.5rem 1rem',
-              backgroundColor: '#2A2A2A',
-              color: '#fff',
-              border: 'none',
-              borderRadius: '4px',
-              cursor: 'pointer',
-            }}
-          >
-            Reload App
-          </button>
-        </div>
-      );
-    }
-    return this.props.children;
-  }
-}
 
 function App() {
   // Local UI state
@@ -141,34 +78,19 @@ function App() {
     expandedItem,
     setExpandedItem,
     isBrowserMode,
-    loadContextFiles,
-    clearContext,
-    indexContext,
     startAnalysis,
   } = useAnalysis(addToast, handleBackgroundItems);
 
-  // Immediate score adjustment for feedback (save boosts, dismiss sinks)
-  const handleScoreAdjust = useCallback((itemId: number, delta: number) => {
-    setState(s => ({
-      ...s,
-      relevanceResults: s.relevanceResults
-        .map(r => r.id === itemId ? { ...r, top_score: Math.max(0, Math.min(1, r.top_score + delta)) } : r)
-        .sort((a, b) => b.top_score - a.top_score),
-    }));
-  }, [setState]);
-
   const {
-    discoveredContext,
     loadDiscoveredContext,
   } = useContextDiscovery(setSettingsStatus);
 
+  // Feedback hook — all state and recordInteraction live in the store
   const {
-    feedbackGiven,
     learnedAffinities,
     antiTopics,
     lastLearnedTopic,
-    recordInteraction,
-  } = useFeedback(setSettingsStatus, handleScoreAdjust, addToast);
+  } = useFeedback();
 
   // System health hook - data loaded on mount, consumed by SettingsModal via Zustand
   useSystemHealth(setSettingsStatus);
@@ -176,22 +98,6 @@ function App() {
   const {
     loadUserContext,
   } = useUserContext(setSettingsStatus);
-
-  const {
-    sourceFilters,
-    sortBy,
-    setSortBy,
-    showOnlyRelevant,
-    setShowOnlyRelevant,
-    searchQuery,
-    setSearchQuery,
-    showSavedOnly,
-    setShowSavedOnly,
-    toggleSourceFilter,
-    filteredResults,
-    dismissAllBelow,
-    saveAllAbove,
-  } = useResultFilters(state.relevanceResults, feedbackGiven, recordInteraction, setSettingsStatus);
 
   // Check Ollama status when provider changes to "ollama"
   useEffect(() => {
@@ -263,6 +169,9 @@ function App() {
   }, [setState]);
 
   // Global keyboard shortcuts (extracted hook)
+  const showOnlyRelevant = useAppStore(s => s.showOnlyRelevant);
+  const setShowOnlyRelevant = useAppStore(s => s.setShowOnlyRelevant);
+  const filteredResults = useAppStore(s => s.appState.relevanceResults);
   const visibleResults = filteredResults.slice(0, renderLimit);
   const { focusedIndex } = useKeyboardShortcuts({
     onAnalyze: startAnalysis,
@@ -416,39 +325,11 @@ function App() {
 
         {/* Conditional View Rendering */}
         {activeView === 'briefing' ? (
-          <BriefingView
-            briefing={aiBriefing}
-            results={state.relevanceResults}
-            onGenerateBriefing={generateBriefing}
-            onRecordInteraction={recordInteraction}
-            feedbackGiven={feedbackGiven}
-          />
+          <BriefingView />
         ) : (
           <ResultsView
-            state={state}
-            filteredResults={filteredResults}
-            feedbackGiven={feedbackGiven}
-            discoveredContext={discoveredContext}
-            expandedItem={expandedItem}
-            setExpandedItem={setExpandedItem}
-            loadContextFiles={loadContextFiles}
-            clearContext={clearContext}
-            indexContext={indexContext}
-            recordInteraction={recordInteraction}
             newItemIds={newItemIds}
             focusedIndex={focusedIndex}
-            sourceFilters={sourceFilters}
-            sortBy={sortBy}
-            showOnlyRelevant={showOnlyRelevant}
-            showSavedOnly={showSavedOnly}
-            searchQuery={searchQuery}
-            setSortBy={setSortBy}
-            setShowOnlyRelevant={setShowOnlyRelevant}
-            setShowSavedOnly={setShowSavedOnly}
-            setSearchQuery={setSearchQuery}
-            toggleSourceFilter={toggleSourceFilter}
-            dismissAllBelow={dismissAllBelow}
-            saveAllAbove={saveAllAbove}
             renderLimit={renderLimit}
             setRenderLimit={setRenderLimit}
           />

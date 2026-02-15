@@ -1,21 +1,6 @@
 import { useMemo } from 'react';
-import type { SourceRelevance, FeedbackAction, FeedbackGiven } from '../types';
 import { BriefingCard } from './BriefingCard';
 import { useAppStore } from '../store';
-
-interface BriefingViewProps {
-  briefing: {
-    content: string | null;
-    loading: boolean;
-    error: string | null;
-    model: string | null;
-    lastGenerated: Date | null;
-  };
-  results: SourceRelevance[];
-  onGenerateBriefing: () => void;
-  onRecordInteraction: (itemId: number, action: FeedbackAction, item: SourceRelevance) => void;
-  feedbackGiven: FeedbackGiven;
-}
 
 interface ParsedSection {
   title: string;
@@ -151,13 +136,13 @@ function renderInlineFormatting(text: string): React.ReactNode {
   });
 }
 
-export function BriefingView({
-  briefing,
-  results,
-  onGenerateBriefing,
-  onRecordInteraction,
-  feedbackGiven,
-}: BriefingViewProps) {
+export function BriefingView() {
+  // Read everything from store — zero props
+  const briefing = useAppStore(s => s.aiBriefing);
+  const results = useAppStore(s => s.appState.relevanceResults);
+  const generateBriefing = useAppStore(s => s.generateBriefing);
+  const recordInteraction = useAppStore(s => s.recordInteraction);
+  const feedbackGiven = useAppStore(s => s.feedbackGiven);
   const setActiveView = useAppStore(s => s.setActiveView);
 
   const sections = useMemo(() => {
@@ -230,7 +215,7 @@ export function BriefingView({
               : ` ${results.length} results ready for analysis.`}
           </p>
           <button
-            onClick={onGenerateBriefing}
+            onClick={generateBriefing}
             disabled={results.length === 0}
             className="px-8 py-3.5 text-base bg-orange-500 text-white font-medium rounded-xl hover:bg-orange-600 transition-all disabled:opacity-30 disabled:cursor-not-allowed hover:scale-105 active:scale-95 shadow-lg shadow-orange-500/20"
           >
@@ -268,7 +253,7 @@ export function BriefingView({
           </div>
           <div className="flex items-center gap-2">
             <button
-              onClick={onGenerateBriefing}
+              onClick={generateBriefing}
               className="px-3 py-1.5 text-xs bg-[#1F1F1F] text-orange-400 border border-orange-500/30 rounded-lg hover:bg-orange-500/10 transition-all font-medium"
               title="Refresh briefing"
             >
@@ -315,8 +300,8 @@ export function BriefingView({
                 item={item}
                 explanation={item.explanation}
                 feedbackGiven={feedbackGiven[item.id]}
-                onSave={(it) => onRecordInteraction(it.id, 'save', it)}
-                onDismiss={(it) => onRecordInteraction(it.id, 'dismiss', it)}
+                onSave={(it) => recordInteraction(it.id, 'save', it)}
+                onDismiss={(it) => recordInteraction(it.id, 'dismiss', it)}
               />
             ))}
           </div>

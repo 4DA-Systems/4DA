@@ -5,6 +5,7 @@ import type {
   SystemHealth,
   ContextFile,
   SourceRelevance,
+  FeedbackAction,
   FeedbackGiven,
   SuggestedInterest,
 } from '../types';
@@ -162,6 +163,7 @@ export interface FeedbackSlice {
   setLastLearnedTopic: (topic: { topic: string; direction: 'positive' | 'negative'; timestamp: number } | null) => void;
   setFeedbackGivenFull: (updater: FeedbackGiven | ((prev: FeedbackGiven) => FeedbackGiven)) => void;
   loadLearnedBehavior: () => Promise<void>;
+  recordInteraction: (itemId: number, actionType: FeedbackAction, item: SourceRelevance) => Promise<void>;
 }
 
 export interface MonitoringSlice {

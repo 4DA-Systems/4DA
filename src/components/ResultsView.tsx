@@ -2,74 +2,50 @@ import type { Dispatch, SetStateAction } from 'react';
 import { ResultItem } from './ResultItem';
 import { getStageLabel } from '../utils/score';
 import { getSourceLabel } from '../config/sources';
-import type { SourceRelevance, FeedbackAction, FeedbackGiven, ContextFile } from '../types';
+import { useAppStore } from '../store';
+import { useResultFilters } from '../hooks';
 
 interface ResultsViewProps {
-  state: {
-    contextFiles: ContextFile[];
-    relevanceResults: SourceRelevance[];
-    analysisComplete: boolean;
-    loading: boolean;
-    progressMessage: string;
-    progress: number;
-    progressStage: string;
-  };
-  filteredResults: SourceRelevance[];
-  feedbackGiven: FeedbackGiven;
-  discoveredContext: { tech: Array<{ name: string; category: string; confidence: number }>; topics: string[] };
-  expandedItem: number | null;
-  setExpandedItem: (id: number | null) => void;
-  loadContextFiles: () => void;
-  clearContext: () => void;
-  indexContext: () => void;
-  recordInteraction: (itemId: number, action: FeedbackAction, item: SourceRelevance) => void;
   newItemIds: Set<number>;
   focusedIndex: number;
-  // Filter controls
-  sourceFilters: Set<string>;
-  sortBy: 'score' | 'date';
-  showOnlyRelevant: boolean;
-  showSavedOnly: boolean;
-  searchQuery: string;
-  setSortBy: (sort: 'score' | 'date') => void;
-  setShowOnlyRelevant: (show: boolean) => void;
-  setShowSavedOnly: (show: boolean) => void;
-  setSearchQuery: (q: string) => void;
-  toggleSourceFilter: (source: string) => void;
-  dismissAllBelow: (threshold: number) => void;
-  saveAllAbove: (threshold: number) => void;
   renderLimit: number;
   setRenderLimit: Dispatch<SetStateAction<number>>;
 }
 
 export function ResultsView({
-  state,
-  filteredResults,
-  feedbackGiven,
-  discoveredContext,
-  expandedItem,
-  setExpandedItem,
-  loadContextFiles,
-  clearContext,
-  indexContext,
-  recordInteraction,
   newItemIds,
   focusedIndex,
-  sourceFilters,
-  sortBy,
-  showOnlyRelevant,
-  showSavedOnly,
-  searchQuery,
-  setSortBy,
-  setShowOnlyRelevant,
-  setShowSavedOnly,
-  setSearchQuery,
-  toggleSourceFilter,
-  dismissAllBelow,
-  saveAllAbove,
   renderLimit,
   setRenderLimit,
 }: ResultsViewProps) {
+  // Read from store
+  const state = useAppStore(s => s.appState);
+  const feedbackGiven = useAppStore(s => s.feedbackGiven);
+  const discoveredContext = useAppStore(s => s.discoveredContext);
+  const expandedItem = useAppStore(s => s.expandedItem);
+  const setExpandedItem = useAppStore(s => s.setExpandedItem);
+  const loadContextFiles = useAppStore(s => s.loadContextFiles);
+  const clearContext = useAppStore(s => s.clearContext);
+  const indexContext = useAppStore(s => s.indexContext);
+  const recordInteraction = useAppStore(s => s.recordInteraction);
+
+  // Filters (zero-param — reads from store internally)
+  const {
+    sourceFilters,
+    sortBy,
+    showOnlyRelevant,
+    showSavedOnly,
+    searchQuery,
+    setSortBy,
+    setShowOnlyRelevant,
+    setShowSavedOnly,
+    setSearchQuery,
+    toggleSourceFilter,
+    filteredResults,
+    dismissAllBelow,
+    saveAllAbove,
+  } = useResultFilters();
+
   const visibleResults = filteredResults.slice(0, renderLimit);
 
   return (
