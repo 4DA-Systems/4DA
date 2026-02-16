@@ -3,12 +3,14 @@
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use ts_rs::TS;
 
 // ============================================================================
 // Types
 // ============================================================================
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "bindings/")]
 pub struct ContextFile {
     pub path: String,
     pub content: String,
@@ -34,7 +36,8 @@ pub(crate) struct GenericSourceItem {
 }
 
 /// Relevance match between an HN item and context
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "bindings/")]
 pub struct RelevanceMatch {
     pub source_file: String,
     pub matched_text: String,
@@ -42,7 +45,8 @@ pub struct RelevanceMatch {
 }
 
 /// Detailed breakdown of score components
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "bindings/")]
 pub struct ScoreBreakdown {
     pub context_score: f32,
     pub interest_score: f32,
@@ -119,7 +123,8 @@ pub(crate) fn default_quality_mult() -> f32 {
 }
 
 /// Full relevance result for a source item (HN, arXiv, Reddit, etc.)
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "bindings/")]
 pub struct SourceRelevance {
     pub id: u64,
     pub title: String,
@@ -179,7 +184,8 @@ pub(crate) fn default_source_type() -> String {
 }
 
 /// Status update for the UI (sent via events)
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "bindings/")]
 pub struct AnalysisStatus {
     pub stage: String,
     pub progress: f32,
@@ -189,7 +195,8 @@ pub struct AnalysisStatus {
 }
 
 /// Background analysis state
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "bindings/")]
 pub struct AnalysisState {
     pub running: bool,
     pub completed: bool,
@@ -207,7 +214,8 @@ pub struct AnalysisState {
 pub(crate) const ANALYSIS_TIMEOUT_SECS: i64 = 300;
 
 /// LLM judgment attached to a relevance result
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "bindings/")]
 pub struct LLMJudgment {
     pub relevant: bool,
     pub confidence: f32,
@@ -216,7 +224,8 @@ pub struct LLMJudgment {
 }
 
 /// Enhanced relevance result with optional LLM judgment
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "bindings/")]
 pub struct EnhancedRelevance {
     pub id: u64,
     pub title: String,
@@ -228,4 +237,23 @@ pub struct EnhancedRelevance {
     pub llm_judgment: Option<LLMJudgment>,
     /// Final relevance after both stages
     pub final_relevant: bool,
+}
+
+#[cfg(test)]
+mod binding_tests {
+    use super::*;
+
+    #[test]
+    fn export_bindings() {
+        // ts-rs auto-exports when the test runs
+        // Just reference the types to ensure they compile
+        let _ = std::any::type_name::<ContextFile>();
+        let _ = std::any::type_name::<RelevanceMatch>();
+        let _ = std::any::type_name::<ScoreBreakdown>();
+        let _ = std::any::type_name::<SourceRelevance>();
+        let _ = std::any::type_name::<AnalysisStatus>();
+        let _ = std::any::type_name::<AnalysisState>();
+        let _ = std::any::type_name::<LLMJudgment>();
+        let _ = std::any::type_name::<EnhancedRelevance>();
+    }
 }

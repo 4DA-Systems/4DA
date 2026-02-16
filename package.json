@@ -20,6 +20,7 @@
     "validate:rust": "cd src-tauri && cargo fmt --check && cargo clippy -- -D warnings && cargo test",
     "validate:mcp": "cd mcp-4da-server && pnpm run build",
     "validate:all": "pnpm run validate && pnpm run validate:rust && pnpm run validate:mcp",
+    "generate:types": "cd src-tauri && cargo test export_bindings --lib 2>/dev/null; if [ -d bindings ]; then mkdir -p ../src/generated && cp bindings/*.ts ../src/generated/; fi",
     "prepare": "husky"
   },
   "dependencies": {
