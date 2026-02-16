@@ -489,6 +489,169 @@ pub async fn export_developer_dna_markdown() -> Result<String, String> {
     Ok(export_as_markdown(&dna))
 }
 
+#[tauri::command]
+pub async fn export_developer_dna_svg() -> Result<String, String> {
+    let dna = generate_dna()?;
+    Ok(export_as_svg(&dna))
+}
+
+/// Export Developer DNA as a shareable SVG badge (GitHub stats card style)
+pub fn export_as_svg(dna: &DeveloperDna) -> String {
+    let date = if dna.generated_at.len() >= 10 {
+        &dna.generated_at[..10]
+    } else {
+        &dna.generated_at
+    };
+    let identity = xml_escape(&dna.identity_summary);
+
+    // Build tech stack pills
+    let pills_svg = build_pills_svg(&dna.primary_stack);
+
+    // Build stats row
+    let stats = &dna.stats;
+    let rejection_pct = format!("{:.1}", stats.rejection_rate);
+    let stats_svg = format!(
+        r##"<g transform="translate(20,96)">
+    <text fill="#FFF" font-family="monospace" font-size="15" font-weight="600">{days}</text>
+    <text fill="#666" font-family="sans-serif" font-size="10" y="14">days active</text>
+    <text fill="#FFF" font-family="monospace" font-size="15" font-weight="600" x="120">{projects}</text>
+    <text fill="#666" font-family="sans-serif" font-size="10" x="120" y="14">projects</text>
+    <text fill="#FFF" font-family="monospace" font-size="15" font-weight="600" x="240">{rejection}%</text>
+    <text fill="#666" font-family="sans-serif" font-size="10" x="240" y="14">noise rejected</text>
+    <text fill="#FFF" font-family="monospace" font-size="15" font-weight="600" x="370">{deps}</text>
+    <text fill="#666" font-family="sans-serif" font-size="10" x="370" y="14">dependencies</text>
+  </g>"##,
+        days = stats.days_active,
+        projects = stats.project_count,
+        rejection = rejection_pct,
+        deps = stats.dependency_count,
+    );
+
+    // Build topic engagement bar (top 3 topics as stacked bar)
+    let topics_svg = build_topics_bar_svg(&dna.top_engaged_topics);
+
+    format!(
+        r##"<svg xmlns="http://www.w3.org/2000/svg" width="495" height="195" viewBox="0 0 495 195">
+  <rect width="495" height="195" rx="8" fill="#0A0A0A" stroke="#2A2A2A"/>
+  <text x="20" y="26" fill="#F97316" font-family="monospace" font-size="10" font-weight="500" letter-spacing="0.08em">4DA DEVELOPER DNA</text>
+  <text x="475" y="26" fill="#666" font-family="sans-serif" font-size="10" text-anchor="end">{date}</text>
+  <text x="20" y="52" fill="#FFF" font-family="sans-serif" font-size="16" font-weight="600">{identity}</text>
+{pills}
+{stats}
+{topics}
+  <text x="20" y="185" fill="#666" font-family="sans-serif" font-size="10">4da.dev</text>
+  <text x="475" y="185" fill="#666" font-family="sans-serif" font-size="10" text-anchor="end">All signal. No feed.</text>
+</svg>"##,
+        date = date,
+        identity = identity,
+        pills = pills_svg,
+        stats = stats_svg,
+        topics = topics_svg,
+    )
+}
+
+/// Build SVG tech stack pills positioned horizontally
+fn build_pills_svg(stack: &[String]) -> String {
+    if stack.is_empty() {
+        return String::new();
+    }
+
+    let mut svg = String::from(r#"  <g transform="translate(20,62)">"#);
+    svg.push('\n');
+
+    let mut x: f64 = 0.0;
+    for tech in stack.iter().take(6) {
+        let label = capitalize(tech);
+        let escaped = xml_escape(&label);
+        // Approximate character width: ~6.6px per char at 10px monospace
+        let text_width = label.len() as f64 * 6.6;
+        let pill_width = text_width + 14.0;
+        let pill_height = 20.0;
+
+        svg.push_str(&format!(
+            r##"    <rect x="{x}" y="0" width="{w}" height="{h}" rx="4" fill="#1F1F1F" stroke="#2A2A2A"/>"##,
+            x = x, w = pill_width, h = pill_height,
+        ));
+        svg.push('\n');
+        svg.push_str(&format!(
+            r##"    <text x="{tx}" y="14" fill="#A0A0A0" font-family="monospace" font-size="11">{label}</text>"##,
+            tx = x + 7.0,
+            label = escaped,
+        ));
+        svg.push('\n');
+
+        x += pill_width + 6.0;
+    }
+
+    svg.push_str("  </g>");
+    svg
+}
+
+/// Build SVG stacked topic engagement bar
+fn build_topics_bar_svg(topics: &[EngagedTopic]) -> String {
+    if topics.is_empty() {
+        return String::new();
+    }
+
+    let top3: Vec<&EngagedTopic> = topics.iter().take(3).collect();
+    let total_pct: f32 = top3.iter().map(|t| t.percent_of_total).sum();
+    let bar_width = 455.0_f32; // Total bar width
+
+    let colors = ["#F97316", "#D4AF37", "#22C55E"]; // orange, gold, green
+
+    let mut svg = String::from(r#"  <g transform="translate(20,135)">"#);
+    svg.push('\n');
+
+    // Background bar
+    svg.push_str(&format!(
+        r##"    <rect x="0" y="0" width="{}" height="10" rx="3" fill="#1F1F1F"/>"##,
+        bar_width
+    ));
+    svg.push('\n');
+
+    // Stacked segments
+    let mut bar_x = 0.0_f32;
+    for (i, topic) in top3.iter().enumerate() {
+        let seg_width = if total_pct > 0.0 {
+            (topic.percent_of_total / total_pct) * bar_width
+        } else {
+            bar_width / top3.len() as f32
+        };
+
+        let rx = if i == 0 { "3" } else { "0" };
+        svg.push_str(&format!(
+            r##"    <rect x="{x}" y="0" width="{w}" height="10" rx="{rx}" fill="{color}" opacity="0.8"/>"##,
+            x = bar_x,
+            w = seg_width,
+            rx = rx,
+            color = colors[i],
+        ));
+        svg.push('\n');
+        bar_x += seg_width;
+    }
+
+    // Topic labels
+    let labels: Vec<String> = top3.iter().map(|t| capitalize(&t.topic)).collect();
+    let label_text = labels.join("  ·  ");
+    svg.push_str(&format!(
+        r##"    <text x="0" y="26" fill="#666" font-family="sans-serif" font-size="10">{}</text>"##,
+        xml_escape(&label_text),
+    ));
+    svg.push('\n');
+
+    svg.push_str("  </g>");
+    svg
+}
+
+/// Escape XML special characters
+fn xml_escape(s: &str) -> String {
+    s.replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+        .replace('"', "&quot;")
+        .replace('\'', "&apos;")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -577,5 +740,53 @@ mod tests {
         assert!(md.contains("## Primary Stack"));
         assert!(md.contains("`tauri`"));
         assert!(md.contains("99.0%"));
+    }
+
+    #[test]
+    fn test_export_svg_structure() {
+        let dna = DeveloperDna {
+            generated_at: "2026-02-17T00:00:00Z".to_string(),
+            primary_stack: vec!["rust".to_string(), "typescript".to_string()],
+            adjacent_tech: vec!["cargo".to_string()],
+            top_dependencies: vec![DependencyEntry {
+                name: "tauri".to_string(),
+                project_path: "/test".to_string(),
+            }],
+            interests: vec!["systems programming".to_string()],
+            top_engaged_topics: vec![
+                EngagedTopic {
+                    topic: "rust".to_string(),
+                    interactions: 50,
+                    percent_of_total: 45.0,
+                },
+                EngagedTopic {
+                    topic: "typescript".to_string(),
+                    interactions: 30,
+                    percent_of_total: 27.0,
+                },
+            ],
+            blind_spots: vec![],
+            source_engagement: vec![],
+            stats: DnaStats {
+                total_items_processed: 5000,
+                total_relevant: 50,
+                rejection_rate: 99.0,
+                project_count: 3,
+                dependency_count: 120,
+                days_active: 30,
+            },
+            identity_summary: "Rust/Typescript desktop developer".to_string(),
+        };
+
+        let svg = export_as_svg(&dna);
+        assert!(svg.starts_with("<svg"));
+        assert!(svg.contains("4DA DEVELOPER DNA"));
+        assert!(svg.contains("Rust/Typescript desktop developer"));
+        assert!(svg.contains("Rust</text>"));
+        assert!(svg.contains("Typescript</text>"));
+        assert!(svg.contains("99.0%"));
+        assert!(svg.contains("4da.dev"));
+        assert!(svg.contains("2026-02-17"));
+        assert!(svg.ends_with("</svg>"));
     }
 }

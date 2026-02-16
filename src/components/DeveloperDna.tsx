@@ -8,6 +8,7 @@ export const DeveloperDnaPanel = memo(function DeveloperDnaPanel() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [badgeCopied, setBadgeCopied] = useState(false);
   const [expanded, setExpanded] = useState(false);
 
   const loadDna = async () => {
@@ -35,6 +36,32 @@ export const DeveloperDnaPanel = memo(function DeveloperDnaPanel() {
       setTimeout(() => setCopied(false), 2000);
     } catch {
       // Clipboard may not be available
+    }
+  };
+
+  const copyBadge = async () => {
+    try {
+      const svg = await invoke<string>('export_developer_dna_svg');
+      await window.navigator.clipboard.writeText(svg);
+      setBadgeCopied(true);
+      setTimeout(() => setBadgeCopied(false), 2000);
+    } catch {
+      // Clipboard may not be available
+    }
+  };
+
+  const downloadBadge = async () => {
+    try {
+      const svg = await invoke<string>('export_developer_dna_svg');
+      const blob = new Blob([svg], { type: 'image/svg+xml' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'developer-dna.svg';
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      // Download may fail in some contexts
     }
   };
 
@@ -83,12 +110,26 @@ export const DeveloperDnaPanel = memo(function DeveloperDnaPanel() {
                     {dna.stats.days_active}d active &middot; {dna.stats.total_items_processed.toLocaleString()} items processed &middot; {dna.stats.rejection_rate.toFixed(1)}% filtered
                   </p>
                 </div>
-                <button
-                  onClick={copyAsMarkdown}
-                  className="px-3 py-1.5 text-xs bg-bg-tertiary hover:bg-border border border-border rounded-lg text-gray-300 transition-colors"
-                >
-                  {copied ? 'Copied!' : 'Copy as Markdown'}
-                </button>
+                <div className="flex gap-2">
+                  <button
+                    onClick={copyBadge}
+                    className="px-3 py-1.5 text-xs bg-orange-500/10 hover:bg-orange-500/20 border border-orange-500/30 rounded-lg text-orange-400 transition-colors"
+                  >
+                    {badgeCopied ? 'Copied!' : 'Copy SVG Badge'}
+                  </button>
+                  <button
+                    onClick={downloadBadge}
+                    className="px-3 py-1.5 text-xs bg-bg-tertiary hover:bg-border border border-border rounded-lg text-gray-300 transition-colors"
+                  >
+                    Download Badge
+                  </button>
+                  <button
+                    onClick={copyAsMarkdown}
+                    className="px-3 py-1.5 text-xs bg-bg-tertiary hover:bg-border border border-border rounded-lg text-gray-300 transition-colors"
+                  >
+                    {copied ? 'Copied!' : 'Markdown'}
+                  </button>
+                </div>
               </div>
 
               {/* Primary Stack */}
