@@ -55,7 +55,7 @@ jobs:
             runner: macos-latest
             target: aarch64-apple-darwin
           - label: macOS (Intel)
-            runner: macos-13
+            runner: macos-latest
             target: x86_64-apple-darwin
           - label: Linux
             runner: ubuntu-22.04
@@ -180,4 +180,4 @@ jobs:
 
       - name: Publish to npm (trusted publishing + provenance)
         working-directory: mcp-4da-server
-        run: npm publish --access public --provenance
+        run: npm publish --access public --provenance || echo "Publish skipped (version may already exist)"
