@@ -6,7 +6,7 @@
 
 ```bash
 # Prerequisites: Rust 1.70+, Node.js 18+, pnpm
-git clone https://github.com/runyourempire/4da-v3.git
+git clone https://github.com/runyourempire/4DA.git
 cd 4da-v3
 pnpm install
 pnpm tauri dev
@@ -100,4 +100,4 @@ By submitting a PR, you agree to the [Contributor License Agreement](CLA.md).
 
 ## Questions?
 
-Open a [Discussion](https://github.com/runyourempire/4da-v3/discussions) on GitHub.
+Open a [Discussion](https://github.com/runyourempire/4DA/discussions) on GitHub.

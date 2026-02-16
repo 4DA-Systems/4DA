@@ -20,9 +20,9 @@
 
 | Platform | Download | Auto-updates |
 |----------|----------|:------------:|
-| **Windows** | [`.msi` installer](https://github.com/runyourempire/4da-v3/releases/latest) | Yes |
-| **macOS** | [`.dmg` (Apple Silicon & Intel)](https://github.com/runyourempire/4da-v3/releases/latest) | Yes |
-| **Linux** | [`.AppImage` / `.deb`](https://github.com/runyourempire/4da-v3/releases/latest) | Yes |
+| **Windows** | [`.msi` installer](https://github.com/runyourempire/4DA/releases/latest) | Yes |
+| **macOS** | [`.dmg` (Apple Silicon & Intel)](https://github.com/runyourempire/4DA/releases/latest) | Yes |
+| **Linux** | [`.AppImage` / `.deb`](https://github.com/runyourempire/4DA/releases/latest) | Yes |
 
 Or install the **MCP server** for Claude Code / Cursor:
 ```bash
@@ -90,7 +90,7 @@ What survives is scored with content quality analysis (kills clickbait), novelty
 **Prerequisites:** [Rust](https://rustup.rs/) 1.70+, [Node.js](https://nodejs.org/) 18+, [pnpm](https://pnpm.io/)
 
 ```bash
-git clone https://github.com/runyourempire/4da-v3.git
+git clone https://github.com/runyourempire/4DA.git
 cd 4da-v3
 pnpm install
 pnpm tauri dev
@@ -212,7 +212,7 @@ The CLI reads from the same database as the desktop app. No extra setup needed.
 4da status                 # Database stats
 ```
 
-Download the CLI binary from [Releases](https://github.com/runyourempire/4da-v3/releases), or build from source:
+Download the CLI binary from [Releases](https://github.com/runyourempire/4DA/releases), or build from source:
 ```bash
 cd src-tauri && cargo build --release --bin 4da
 ```

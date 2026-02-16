@@ -39,12 +39,12 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/runyourempire/4da-v3.git",
+    "url": "git+https://github.com/runyourempire/4DA.git",
     "directory": "mcp-4da-server"
   },
-  "homepage": "https://github.com/runyourempire/4da-v3#mcp-integration",
+  "homepage": "https://github.com/runyourempire/4DA#mcp-integration",
   "bugs": {
-    "url": "https://github.com/runyourempire/4da-v3/issues"
+    "url": "https://github.com/runyourempire/4DA/issues"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.0.0",
