@@ -234,9 +234,15 @@ static SETTINGS_MANAGER: OnceCell<Mutex<SettingsManager>> = OnceCell::new();
 
 pub(crate) fn get_settings_manager() -> &'static Mutex<SettingsManager> {
     SETTINGS_MANAGER.get_or_init(|| {
-        let data_path = get_db_path()
+        let db_path = get_db_path();
+        let data_path = db_path
             .parent()
-            .expect("Database path must have a parent directory")
+            .unwrap_or_else(|| {
+                // get_db_path() always returns <dir>/data/4da.db, so parent is always Some.
+                // If somehow it isn't, fall back to current directory.
+                tracing::error!("Database path has no parent directory, falling back to current dir");
+                std::path::Path::new(".")
+            })
             .to_path_buf();
 
         info!(target: "4da::settings", "Initializing settings manager");
