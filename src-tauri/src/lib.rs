@@ -276,6 +276,7 @@ pub fn run() {
             project_health::get_project_health,
             developer_dna::get_developer_dna,
             developer_dna::export_developer_dna_markdown,
+            developer_dna::export_developer_dna_svg,
             // Audio & Handoff
             tts::generate_audio_briefing,
             tts::get_audio_briefing_status,

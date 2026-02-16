@@ -27,6 +27,7 @@ export default [
         clearInterval: 'readonly',
         fetch: 'readonly',
         URL: 'readonly',
+        Blob: 'readonly',
         HTMLElement: 'readonly',
         Event: 'readonly',
         MouseEvent: 'readonly',
