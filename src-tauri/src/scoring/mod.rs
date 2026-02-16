@@ -75,6 +75,8 @@ pub(crate) struct ScoringContext {
     pub domain_profile: crate::domain_profile::DomainProfile,
     /// Recent work topics from git activity (last 2h) for intent-aware scoring
     pub work_topics: Vec<String>,
+    /// Total feedback interactions — used to detect bootstrap mode for new users
+    pub feedback_interaction_count: i64,
 }
 
 /// Options controlling which scoring stages are applied
@@ -86,6 +88,7 @@ pub(crate) struct ScoringOptions {
 /// Build a ScoringContext by loading all needed state. Call once per analysis run.
 pub(crate) async fn build_scoring_context(db: &Database) -> Result<ScoringContext, String> {
     let cached_context_count = db.context_count().map_err(|e| e.to_string())?;
+    let feedback_interaction_count: i64 = db.query_feedback_count().unwrap_or(0);
 
     let context_engine = get_context_engine()?;
     let static_identity = context_engine
@@ -151,6 +154,10 @@ pub(crate) async fn build_scoring_context(db: &Database) -> Result<ScoringContex
         "ACE context loaded for scoring"
     );
 
+    if feedback_interaction_count < 10 {
+        info!(target: "4da::scoring", feedback_count = feedback_interaction_count, "Bootstrap mode: relaxed 1-signal gate for new user");
+    }
+
     Ok(ScoringContext {
         cached_context_count,
         interest_count: static_identity.interests.len(),
@@ -163,6 +170,7 @@ pub(crate) async fn build_scoring_context(db: &Database) -> Result<ScoringContex
         declared_tech,
         domain_profile,
         work_topics,
+        feedback_interaction_count,
     })
 }
 
@@ -471,9 +479,19 @@ pub(crate) fn score_item(
         combined_score
     };
 
-    // Quality floor: must pass threshold AND either have 2+ confirmed signals or strong score
+    // Quality floor: must pass threshold AND either have N+ confirmed signals or strong score.
+    // Bootstrap mode: relax signal requirement for new users (< 10 feedback interactions).
+    // New users often have only 1 signal axis firing (interest OR dependency), and the
+    // 2-signal confirmation gate would show them nothing. After 10+ interactions,
+    // the behavioral learning loop provides enough data for the full gate.
+    let bootstrap_mode = ctx.feedback_interaction_count < 10;
+    let min_signals = if bootstrap_mode {
+        1u8
+    } else {
+        scoring_config::QUALITY_FLOOR_MIN_SIGNALS as u8
+    };
     let relevant = combined_score >= get_relevance_threshold()
-        && (signal_count >= scoring_config::QUALITY_FLOOR_MIN_SIGNALS as u8
+        && (signal_count >= min_signals
             || combined_score >= scoring_config::QUALITY_FLOOR_MIN_SCORE);
 
     let anti_penalty = compute_anti_penalty(&topics, &ctx.ace_ctx);
@@ -803,6 +821,11 @@ mod tests {
 
     #[test]
     fn test_score_item_single_signal_cannot_pass() {
+        // NOTE: This test uses the default ScoringContext (feedback_interaction_count=0),
+        // which is bootstrap mode (< 10). However, the confirmation gate itself caps
+        // single-signal scores below the relevance threshold, so single-signal items
+        // still fail even in bootstrap mode — bootstrap only relaxes the quality floor
+        // signal_count check, not the gate's score ceiling.
         let db = test_db();
         // Only set up interests, no ACE context, no context chunks
         let interest_embedding = vec![0.5_f32; 384];

@@ -47,6 +47,9 @@ import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { homedir } from "node:os";
 
+import { startHttpServer } from "./http-transport.js";
+import { runSetup } from "./setup.js";
+
 // Schema registry for slim tool listing
 import { getSlimToolList, getSchemaResources, hasToolSchema, getSchemaFilename } from "./schema-registry.js";
 
@@ -134,7 +137,7 @@ import type { ProjectHealthParams } from "./tools/project-health.js";
 const server = new Server(
   {
     name: "4da-server",
-    version: "3.2.0", // Dynamic Context Discovery Edition
+    version: "3.3.0", // MCP Protocol Readiness Edition
   },
   {
     capabilities: {
@@ -516,28 +519,47 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
 /**
  * Start the MCP server
+ *
+ * Supports three modes:
+ *   (default)  stdio transport — classic MCP, works with all hosts
+ *   --http     Streamable HTTP transport (spec 2025-03-26)
+ *   --setup    Configure editors for 4DA MCP
  */
 async function main() {
+  const args = process.argv.slice(2);
+
+  // Setup command: configure editors
+  if (args.includes("--setup") || args.includes("setup")) {
+    runSetup();
+    return;
+  }
+
+  // HTTP transport mode
+  if (args.includes("--http")) {
+    const portIndex = args.indexOf("--port");
+    const port = portIndex !== -1 ? parseInt(args[portIndex + 1], 10) : 4840;
+    const host = args.includes("--host") ? args[args.indexOf("--host") + 1] : "127.0.0.1";
+    await startHttpServer(server, { port, host });
+    return;
+  }
+
+  // Default: stdio transport (existing behavior)
   const transport = new StdioServerTransport();
   await server.connect(transport);
 
   // Handle graceful shutdown
   process.on("SIGINT", () => {
-    if (db) {
-      db.close();
-    }
+    if (db) db.close();
     process.exit(0);
   });
 
   process.on("SIGTERM", () => {
-    if (db) {
-      db.close();
-    }
+    if (db) db.close();
     process.exit(0);
   });
 
-  // Log startup (to stderr so it doesn't interfere with MCP protocol)
-  console.error("4DA MCP Server v3.3 (Intelligence Platform) started - 20 tools, compact output, lazy schemas");
+  console.error("4DA MCP Server v3.3 (Intelligence Platform) started — 20 tools, stdio transport");
+  console.error("  Use --http for Streamable HTTP transport, --setup to configure editors");
 }
 
 main().catch((error) => {

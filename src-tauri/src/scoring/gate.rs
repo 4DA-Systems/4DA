@@ -194,6 +194,9 @@ mod tests {
     #[test]
     fn test_single_signal_cannot_pass_threshold() {
         // The key property: with only 1 confirmed signal, ceiling is 0.45 < 0.50 threshold
+        // NOTE: Bootstrap mode (feedback_interaction_count < 10) in mod.rs relaxes the
+        // quality floor to allow 1-signal items through for new users. This gate test
+        // validates the raw confirmation gate behavior independent of bootstrap mode.
         let ace_ctx = ACEContext::default();
         let topics = vec!["test".to_string()];
 

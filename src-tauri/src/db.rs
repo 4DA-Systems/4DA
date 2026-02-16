@@ -1517,6 +1517,12 @@ impl Database {
 
         Ok(summaries)
     }
+
+    /// Count total feedback interactions (used for bootstrap mode detection)
+    pub fn query_feedback_count(&self) -> SqliteResult<i64> {
+        let conn = self.conn.lock();
+        conn.query_row("SELECT COUNT(*) FROM feedback", [], |row| row.get(0))
+    }
 }
 
 // ============================================================================
