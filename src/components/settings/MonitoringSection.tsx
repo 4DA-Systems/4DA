@@ -22,7 +22,7 @@ export function MonitoringSection({
   onTestNotification,
 }: MonitoringSectionProps) {
   return (
-    <div className="bg-[#1F1F1F] rounded-lg p-5 border border-[#2A2A2A]">
+    <div className="bg-bg-tertiary rounded-lg p-5 border border-border">
       <div className="flex items-center gap-3 mb-4">
         <div className="w-8 h-8 bg-blue-500/20 rounded-lg flex items-center justify-center">
           <span>&#x1f504;</span>
@@ -35,7 +35,7 @@ export function MonitoringSection({
 
       {monitoring ? (
         <div className="space-y-4">
-          <div className="flex items-center justify-between p-3 bg-[#141414] rounded-lg border border-[#2A2A2A]">
+          <div className="flex items-center justify-between p-3 bg-bg-secondary rounded-lg border border-border">
             <div className="flex items-center gap-2">
               {monitoring.enabled ? (
                 <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
@@ -73,12 +73,12 @@ export function MonitoringSection({
               max="1440"
               value={monitoringInterval}
               onChange={(e) => setMonitoringInterval(parseInt(e.target.value) || 30)}
-              className="w-20 px-3 py-2 bg-[#141414] border border-[#2A2A2A] rounded-lg text-sm text-white text-center focus:border-orange-500 focus:outline-none"
+              className="w-20 px-3 py-2 bg-bg-secondary border border-border rounded-lg text-sm text-white text-center focus:border-orange-500 focus:outline-none"
             />
             <span className="text-sm text-gray-400">minutes</span>
             <button
               onClick={onUpdateInterval}
-              className="px-4 py-2 text-sm bg-[#141414] border border-[#2A2A2A] text-gray-400 rounded-lg hover:text-white hover:border-orange-500/30 transition-all"
+              className="px-4 py-2 text-sm bg-bg-secondary border border-border text-gray-400 rounded-lg hover:text-white hover:border-orange-500/30 transition-all"
             >
               Update
             </button>
@@ -89,7 +89,7 @@ export function MonitoringSection({
             <select
               value={notificationThreshold}
               onChange={(e) => onSetNotificationThreshold(e.target.value)}
-              className="px-3 py-2 bg-[#141414] border border-[#2A2A2A] rounded-lg text-sm text-white focus:border-orange-500 focus:outline-none appearance-none cursor-pointer"
+              className="px-3 py-2 bg-bg-secondary border border-border rounded-lg text-sm text-white focus:border-orange-500 focus:outline-none appearance-none cursor-pointer"
               style={{ backgroundImage: 'url("data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'12\' height=\'12\' fill=\'%23666\' viewBox=\'0 0 16 16\'%3E%3Cpath d=\'M8 11L3 6h10z\'/%3E%3C/svg%3E")', backgroundRepeat: 'no-repeat', backgroundPosition: 'right 0.75rem center', paddingRight: '2rem' }}
             >
               <option value="critical_only">Critical only</option>
@@ -107,7 +107,7 @@ export function MonitoringSection({
 
           <button
             onClick={onTestNotification}
-            className="w-full px-4 py-2.5 text-sm bg-[#141414] border border-[#2A2A2A] text-gray-400 rounded-lg hover:text-white hover:border-orange-500/30 transition-all"
+            className="w-full px-4 py-2.5 text-sm bg-bg-secondary border border-border text-gray-400 rounded-lg hover:text-white hover:border-orange-500/30 transition-all"
           >
             Test Notification
           </button>

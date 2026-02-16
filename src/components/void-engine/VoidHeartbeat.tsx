@@ -237,10 +237,10 @@ export function VoidHeartbeat({ signal, size = 200 }: VoidHeartbeatProps) {
             position: 'absolute',
             bottom: 8,
             fontSize: 10,
-            color: signal.error > 0.5 || signal.critical_count > 0 ? '#EF4444'
-              : signal.signal_color_shift > 0.5 ? '#D4AF37'
+            color: signal.error > 0.5 || signal.critical_count > 0 ? 'var(--color-error)'
+              : signal.signal_color_shift > 0.5 ? 'var(--color-accent-gold)'
               : signal.signal_color_shift < -0.3 ? '#4A90D9'
-              : '#666666',
+              : 'var(--color-text-muted)',
             letterSpacing: '0.1em',
             textTransform: 'uppercase',
             fontFamily: 'JetBrains Mono, monospace',

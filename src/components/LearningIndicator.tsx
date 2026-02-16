@@ -73,7 +73,7 @@ export function LearningIndicator({
 
   return (
     <div
-      className="mb-6 bg-[#141414] border border-[#2A2A2A] rounded-lg overflow-hidden transition-all duration-300 ease-in-out"
+      className="mb-6 bg-bg-secondary border border-border rounded-lg overflow-hidden transition-all duration-300 ease-in-out"
     >
       {/* Collapsed / Header Row */}
       <button
@@ -83,7 +83,7 @@ export function LearningIndicator({
         aria-label={expanded ? 'Collapse learning preferences' : 'Expand learning preferences'}
       >
         {/* Brain icon */}
-        <div className="w-6 h-6 bg-[#1F1F1F] rounded flex items-center justify-center flex-shrink-0">
+        <div className="w-6 h-6 bg-bg-tertiary rounded flex items-center justify-center flex-shrink-0">
           <svg
             className="w-3.5 h-3.5 text-orange-400"
             viewBox="0 0 24 24"

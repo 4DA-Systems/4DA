@@ -24,7 +24,7 @@ export const BriefingCard = memo(function BriefingCard({
   const label = getSourceLabel(source);
 
   return (
-    <div className="bg-[#1F1F1F] rounded-lg border border-[#2A2A2A] p-4 hover:border-[#3A3A3A] transition-all">
+    <div className="bg-bg-tertiary rounded-lg border border-border p-4 hover:border-[#3A3A3A] transition-all">
       <div className="flex items-start gap-3">
         {/* Source badge + score */}
         <div className="flex flex-col items-center gap-1 flex-shrink-0">
@@ -85,7 +85,7 @@ export const BriefingCard = memo(function BriefingCard({
               {onDismiss && (
                 <button
                   onClick={() => onDismiss(item)}
-                  className="px-2.5 py-1.5 text-xs bg-[#2A2A2A] text-gray-500 border border-[#333] rounded-lg hover:bg-red-500/10 hover:text-red-400 hover:border-red-500/20 transition-all font-medium"
+                  className="px-2.5 py-1.5 text-xs bg-border text-gray-500 border border-[#333] rounded-lg hover:bg-red-500/10 hover:text-red-400 hover:border-red-500/20 transition-all font-medium"
                 >
                   Dismiss
                 </button>

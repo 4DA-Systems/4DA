@@ -94,7 +94,7 @@ export function NaturalLanguageSearch({ onStatusChange, defaultExpanded = true }
   };
 
   return (
-    <div className="bg-[#1F1F1F] rounded-lg p-5 border border-[#2A2A2A]">
+    <div className="bg-bg-tertiary rounded-lg p-5 border border-border">
       <div
         className="flex items-center justify-between cursor-pointer"
         onClick={() => setExpanded(!expanded)}
@@ -121,7 +121,7 @@ export function NaturalLanguageSearch({ onStatusChange, defaultExpanded = true }
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               onKeyDown={handleKeyDown}
-              className="flex-1 px-4 py-3 text-sm bg-[#141414] border border-[#2A2A2A] rounded-lg text-white placeholder:text-gray-500 focus:outline-none focus:border-cyan-500/50 transition-colors"
+              className="flex-1 px-4 py-3 text-sm bg-bg-secondary border border-border rounded-lg text-white placeholder:text-gray-500 focus:outline-none focus:border-cyan-500/50 transition-colors"
             />
             <button
               onClick={handleSearch}
@@ -155,7 +155,7 @@ export function NaturalLanguageSearch({ onStatusChange, defaultExpanded = true }
                   <button
                     key={example}
                     onClick={() => setQuery(example)}
-                    className="px-3 py-1.5 text-xs bg-[#141414] rounded-lg border border-[#2A2A2A] text-gray-400 hover:text-cyan-400 hover:border-cyan-500/30 transition-all"
+                    className="px-3 py-1.5 text-xs bg-bg-secondary rounded-lg border border-border text-gray-400 hover:text-cyan-400 hover:border-cyan-500/30 transition-all"
                   >
                     {example}
                   </button>
@@ -168,7 +168,7 @@ export function NaturalLanguageSearch({ onStatusChange, defaultExpanded = true }
           {result && (
             <div className="space-y-4">
               {/* Query parsing info */}
-              <div className="flex items-center gap-2 p-3 bg-[#141414] rounded-lg border border-[#2A2A2A]">
+              <div className="flex items-center gap-2 p-3 bg-bg-secondary rounded-lg border border-border">
                 <span className="text-lg">{intentIcons[result.intent] || '🔍'}</span>
                 <span className="text-sm text-gray-400">
                   {result.intent} query
@@ -178,12 +178,12 @@ export function NaturalLanguageSearch({ onStatusChange, defaultExpanded = true }
                   {result.parsed.keywords.join(', ')}
                 </span>
                 {result.parsed.time_range && (
-                  <span className="px-2 py-1 text-xs bg-[#1F1F1F] rounded-md text-gray-300 border border-[#2A2A2A]">
+                  <span className="px-2 py-1 text-xs bg-bg-tertiary rounded-md text-gray-300 border border-border">
                     {result.parsed.time_range.relative || 'custom range'}
                   </span>
                 )}
                 {result.parsed.file_types.length > 0 && (
-                  <span className="px-2 py-1 text-xs bg-[#1F1F1F] rounded-md text-gray-300 border border-[#2A2A2A]">
+                  <span className="px-2 py-1 text-xs bg-bg-tertiary rounded-md text-gray-300 border border-border">
                     {result.parsed.file_types.join(', ')}
                   </span>
                 )}
@@ -197,7 +197,7 @@ export function NaturalLanguageSearch({ onStatusChange, defaultExpanded = true }
 
               {/* Summary */}
               {result.summary && (
-                <div className="text-sm text-gray-300 bg-[#141414] rounded-lg p-4 border border-[#2A2A2A]">
+                <div className="text-sm text-gray-300 bg-bg-secondary rounded-lg p-4 border border-border">
                   {result.summary}
                 </div>
               )}
@@ -207,7 +207,7 @@ export function NaturalLanguageSearch({ onStatusChange, defaultExpanded = true }
                 {result.items.map((item, index) => (
                   <div
                     key={`${item.id}-${index}`}
-                    className="p-3 bg-[#141414] rounded-lg border border-[#2A2A2A] hover:border-cyan-500/30 transition-colors"
+                    className="p-3 bg-bg-secondary rounded-lg border border-border hover:border-cyan-500/30 transition-colors"
                   >
                     <div className="flex items-start gap-3">
                       <span className="text-lg">
@@ -246,7 +246,7 @@ export function NaturalLanguageSearch({ onStatusChange, defaultExpanded = true }
                 ))}
 
                 {result.items.length === 0 && (
-                  <div className="text-center py-6 bg-[#141414] rounded-lg border border-[#2A2A2A]">
+                  <div className="text-center py-6 bg-bg-secondary rounded-lg border border-border">
                     <div className="text-2xl mb-2">🔍</div>
                     <div className="text-sm text-gray-400">No results found</div>
                     <div className="text-xs text-gray-500 mt-1">Try different keywords or a broader query</div>
@@ -255,7 +255,7 @@ export function NaturalLanguageSearch({ onStatusChange, defaultExpanded = true }
               </div>
 
               {/* Stats footer */}
-              <div className="text-xs text-gray-500 text-center pt-2 border-t border-[#2A2A2A]">
+              <div className="text-xs text-gray-500 text-center pt-2 border-t border-border">
                 {result.total_count} results • {result.execution_ms}ms • confidence: {(result.parsed.confidence * 100).toFixed(0)}%
               </div>
             </div>

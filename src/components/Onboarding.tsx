@@ -49,7 +49,7 @@ export function Onboarding({ onComplete }: OnboardingProps) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-[#0A0A0A] p-8">
+    <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-bg-primary p-8">
       {/* Progress indicator */}
       <div className="absolute top-8 flex items-center gap-1">
         {steps.map((s, i) => (
@@ -60,7 +60,7 @@ export function Onboarding({ onComplete }: OnboardingProps) {
                   ? 'bg-orange-500 text-white'
                   : i === currentIndex
                   ? 'bg-orange-500/20 text-orange-400 ring-2 ring-orange-500'
-                  : 'bg-[#1F1F1F] text-gray-600'
+                  : 'bg-bg-tertiary text-gray-600'
               }`}
             >
               {i < currentIndex ? '\u2713' : i + 1}
@@ -68,7 +68,7 @@ export function Onboarding({ onComplete }: OnboardingProps) {
             {i < steps.length - 1 && (
               <div
                 className={`w-8 h-0.5 transition-colors duration-300 ${
-                  i < currentIndex ? 'bg-orange-500' : 'bg-[#1F1F1F]'
+                  i < currentIndex ? 'bg-orange-500' : 'bg-bg-tertiary'
                 }`}
               />
             )}

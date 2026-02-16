@@ -14,7 +14,7 @@ export function CompleteStep({ isAnimating, onComplete }: CompleteStepProps) {
         4DA found relevant content for you. Here&apos;s how to make it even better.
       </p>
 
-      <div className="bg-[#141414] p-5 rounded-lg mb-8 text-left max-w-md mx-auto">
+      <div className="bg-bg-secondary p-5 rounded-lg mb-8 text-left max-w-md mx-auto">
         <h3 className="text-white font-medium mb-4 text-center">Keep improving 4DA</h3>
         <ul className="space-y-4">
           <li className="flex items-start gap-3">
@@ -55,7 +55,7 @@ export function CompleteStep({ isAnimating, onComplete }: CompleteStepProps) {
       </button>
 
       <p className="text-xs text-gray-600 mt-4">
-        Press <kbd className="px-1.5 py-0.5 bg-[#1F1F1F] rounded text-gray-400">Settings</kbd> anytime to adjust your preferences
+        Press <kbd className="px-1.5 py-0.5 bg-bg-tertiary rounded text-gray-400">Settings</kbd> anytime to adjust your preferences
       </p>
     </div>
   );

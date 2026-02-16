@@ -131,7 +131,7 @@ export function IndexedDocumentsPanel({ onStatusChange }: IndexedDocumentsPanelP
   // Document detail view
   if (selectedDoc) {
     return (
-      <div className="bg-[#1F1F1F] rounded-lg p-5 border border-[#2A2A2A]">
+      <div className="bg-bg-tertiary rounded-lg p-5 border border-border">
         <div className="flex items-center gap-3 mb-4">
           <button
             onClick={() => setSelectedDoc(null)}
@@ -145,25 +145,25 @@ export function IndexedDocumentsPanel({ onStatusChange }: IndexedDocumentsPanelP
         </div>
 
         <div className="grid grid-cols-2 gap-3 mb-4">
-          <div className="p-3 bg-[#141414] rounded-lg border border-[#2A2A2A]">
+          <div className="p-3 bg-bg-secondary rounded-lg border border-border">
             <div className="text-xs text-gray-500">Type</div>
             <div className="text-sm text-white font-medium">{selectedDoc.document.file_type.toUpperCase()}</div>
           </div>
-          <div className="p-3 bg-[#141414] rounded-lg border border-[#2A2A2A]">
+          <div className="p-3 bg-bg-secondary rounded-lg border border-border">
             <div className="text-xs text-gray-500">Size</div>
             <div className="text-sm text-white font-medium">{formatFileSize(selectedDoc.document.file_size)}</div>
           </div>
-          <div className="p-3 bg-[#141414] rounded-lg border border-[#2A2A2A]">
+          <div className="p-3 bg-bg-secondary rounded-lg border border-border">
             <div className="text-xs text-gray-500">Words</div>
             <div className="text-sm text-white font-medium">{selectedDoc.document.word_count.toLocaleString()}</div>
           </div>
-          <div className="p-3 bg-[#141414] rounded-lg border border-[#2A2A2A]">
+          <div className="p-3 bg-bg-secondary rounded-lg border border-border">
             <div className="text-xs text-gray-500">Indexed</div>
             <div className="text-sm text-white font-medium">{formatDate(selectedDoc.document.indexed_at)}</div>
           </div>
         </div>
 
-        <div className="border-t border-[#2A2A2A] pt-4">
+        <div className="border-t border-border pt-4">
           <div className="text-xs text-gray-400 mb-3">
             Content ({selectedDoc.chunks.length} chunks)
           </div>
@@ -171,7 +171,7 @@ export function IndexedDocumentsPanel({ onStatusChange }: IndexedDocumentsPanelP
             {selectedDoc.chunks.map((chunk, i) => (
               <div
                 key={i}
-                className="text-xs text-gray-300 bg-[#141414] rounded-lg p-3 border border-[#2A2A2A] whitespace-pre-wrap break-words"
+                className="text-xs text-gray-300 bg-bg-secondary rounded-lg p-3 border border-border whitespace-pre-wrap break-words"
               >
                 {chunk.content.slice(0, 500)}
                 {chunk.content.length > 500 && '...'}
@@ -180,7 +180,7 @@ export function IndexedDocumentsPanel({ onStatusChange }: IndexedDocumentsPanelP
           </div>
         </div>
 
-        <div className="text-xs text-gray-500 truncate mt-4 pt-3 border-t border-[#2A2A2A]" title={selectedDoc.document.file_path}>
+        <div className="text-xs text-gray-500 truncate mt-4 pt-3 border-t border-border" title={selectedDoc.document.file_path}>
           {selectedDoc.document.file_path}
         </div>
       </div>
@@ -188,7 +188,7 @@ export function IndexedDocumentsPanel({ onStatusChange }: IndexedDocumentsPanelP
   }
 
   return (
-    <div className="bg-[#1F1F1F] rounded-lg p-5 border border-[#2A2A2A]">
+    <div className="bg-bg-tertiary rounded-lg p-5 border border-border">
       <div
         className="flex items-center justify-between cursor-pointer"
         onClick={() => setExpanded(!expanded)}
@@ -222,7 +222,7 @@ export function IndexedDocumentsPanel({ onStatusChange }: IndexedDocumentsPanelP
                   className={`px-3 py-1.5 text-xs rounded-lg border transition-all ${
                     filterType === t.file_type
                       ? 'bg-emerald-500/20 border-emerald-500/30 text-emerald-400'
-                      : 'bg-[#141414] border-[#2A2A2A] text-gray-400 hover:text-white hover:border-emerald-500/30'
+                      : 'bg-bg-secondary border-border text-gray-400 hover:text-white hover:border-emerald-500/30'
                   }`}
                 >
                   {fileTypeIcons[t.file_type] || fileTypeIcons.unknown} {t.file_type} ({t.count})
@@ -239,7 +239,7 @@ export function IndexedDocumentsPanel({ onStatusChange }: IndexedDocumentsPanelP
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               onKeyDown={handleKeyDown}
-              className="flex-1 px-3 py-2.5 text-sm bg-[#141414] border border-[#2A2A2A] rounded-lg text-white placeholder:text-gray-500 focus:outline-none focus:border-emerald-500/50 transition-colors"
+              className="flex-1 px-3 py-2.5 text-sm bg-bg-secondary border border-border rounded-lg text-white placeholder:text-gray-500 focus:outline-none focus:border-emerald-500/50 transition-colors"
             />
             <button
               onClick={handleSearch}
@@ -269,7 +269,7 @@ export function IndexedDocumentsPanel({ onStatusChange }: IndexedDocumentsPanelP
                 <div
                   key={result.id}
                   onClick={() => loadDocumentContent(result.id)}
-                  className="p-3 bg-[#141414] rounded-lg border border-[#2A2A2A] cursor-pointer hover:border-emerald-500/30 transition-colors"
+                  className="p-3 bg-bg-secondary rounded-lg border border-border cursor-pointer hover:border-emerald-500/30 transition-colors"
                 >
                   <div className="flex items-center gap-2">
                     <span>{fileTypeIcons[result.file_type] || fileTypeIcons.unknown}</span>
@@ -283,7 +283,7 @@ export function IndexedDocumentsPanel({ onStatusChange }: IndexedDocumentsPanelP
                 </div>
               ))}
               {searchResults.length === 0 && (
-                <div className="text-center py-4 bg-[#141414] rounded-lg border border-[#2A2A2A]">
+                <div className="text-center py-4 bg-bg-secondary rounded-lg border border-border">
                   <div className="text-sm text-gray-400">No documents found</div>
                 </div>
               )}
@@ -299,7 +299,7 @@ export function IndexedDocumentsPanel({ onStatusChange }: IndexedDocumentsPanelP
                     <div
                       key={doc.id}
                       onClick={() => loadDocumentContent(doc.id)}
-                      className="flex items-center gap-3 p-3 bg-[#141414] rounded-lg border border-[#2A2A2A] cursor-pointer hover:border-emerald-500/30 transition-colors"
+                      className="flex items-center gap-3 p-3 bg-bg-secondary rounded-lg border border-border cursor-pointer hover:border-emerald-500/30 transition-colors"
                     >
                       <span className="text-lg">
                         {fileTypeIcons[doc.file_type] || fileTypeIcons.unknown}
@@ -319,7 +319,7 @@ export function IndexedDocumentsPanel({ onStatusChange }: IndexedDocumentsPanelP
                   ))}
                 </div>
               ) : (
-                <div className="text-center py-6 bg-[#141414] rounded-lg border border-[#2A2A2A]">
+                <div className="text-center py-6 bg-bg-secondary rounded-lg border border-border">
                   {loading ? (
                     <div className="text-sm text-gray-400">Loading...</div>
                   ) : (
@@ -336,7 +336,7 @@ export function IndexedDocumentsPanel({ onStatusChange }: IndexedDocumentsPanelP
 
               {/* Stats footer */}
               {stats && stats.total_documents > 0 && (
-                <div className="text-xs text-gray-500 text-center pt-3 border-t border-[#2A2A2A]">
+                <div className="text-xs text-gray-500 text-center pt-3 border-t border-border">
                   {stats.total_words.toLocaleString()} total words in {stats.total_chunks} chunks
                 </div>
               )}
@@ -347,7 +347,7 @@ export function IndexedDocumentsPanel({ onStatusChange }: IndexedDocumentsPanelP
           <button
             onClick={loadDocuments}
             disabled={loading}
-            className="w-full px-4 py-2.5 text-sm bg-[#141414] border border-[#2A2A2A] rounded-lg text-gray-400 hover:text-white hover:border-emerald-500/30 disabled:opacity-50 transition-all"
+            className="w-full px-4 py-2.5 text-sm bg-bg-secondary border border-border rounded-lg text-gray-400 hover:text-white hover:border-emerald-500/30 disabled:opacity-50 transition-all"
           >
             {loading ? 'Loading...' : 'Refresh'}
           </button>

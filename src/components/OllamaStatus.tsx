@@ -125,7 +125,7 @@ export function OllamaStatus({ provider }: OllamaStatusProps) {
       disabled={!isClickable}
       className={`
         inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border
-        bg-[#141414] border-[#2A2A2A]
+        bg-bg-secondary border-border
         text-xs select-none transition-colors
         ${isClickable ? 'cursor-pointer hover:border-[#3A3A3A]' : 'cursor-default'}
       `}

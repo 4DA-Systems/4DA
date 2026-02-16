@@ -24,6 +24,12 @@ npm run lint || {
     exit 1
 }
 
+echo "Running frontend tests..."
+pnpm run test -- --run || {
+    echo "Frontend tests failed. Fix failing tests before committing."
+    exit 1
+}
+
 # Rust validation (format only - full tests in CI)
 echo "Checking Rust formatting..."
 cd src-tauri && cargo fmt --check || {

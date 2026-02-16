@@ -39,13 +39,13 @@ export const DeveloperDnaPanel = memo(function DeveloperDnaPanel() {
   };
 
   return (
-    <div className="bg-[#141414] rounded-lg border border-[#2A2A2A] overflow-hidden">
+    <div className="bg-bg-secondary rounded-lg border border-border overflow-hidden">
       <button
         onClick={() => setExpanded(!expanded)}
         className="w-full px-5 py-4 flex items-center justify-between hover:bg-[#1A1A1A] transition-colors"
       >
         <div className="flex items-center gap-3">
-          <div className="w-8 h-8 bg-[#1F1F1F] rounded-lg flex items-center justify-center">
+          <div className="w-8 h-8 bg-bg-tertiary rounded-lg flex items-center justify-center">
             <span className="text-sm">&#x1F9EC;</span>
           </div>
           <div className="text-left">
@@ -59,7 +59,7 @@ export const DeveloperDnaPanel = memo(function DeveloperDnaPanel() {
       </button>
 
       {expanded && (
-        <div className="border-t border-[#2A2A2A]">
+        <div className="border-t border-border">
           {loading && (
             <div className="flex items-center gap-2 py-8 justify-center">
               <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
@@ -85,7 +85,7 @@ export const DeveloperDnaPanel = memo(function DeveloperDnaPanel() {
                 </div>
                 <button
                   onClick={copyAsMarkdown}
-                  className="px-3 py-1.5 text-xs bg-[#1F1F1F] hover:bg-[#2A2A2A] border border-[#2A2A2A] rounded-lg text-gray-300 transition-colors"
+                  className="px-3 py-1.5 text-xs bg-bg-tertiary hover:bg-border border border-border rounded-lg text-gray-300 transition-colors"
                 >
                   {copied ? 'Copied!' : 'Copy as Markdown'}
                 </button>
@@ -147,7 +147,7 @@ export const DeveloperDnaPanel = memo(function DeveloperDnaPanel() {
                     {dna.top_engaged_topics.slice(0, 8).map((topic) => (
                       <div key={topic.topic} className="flex items-center gap-3">
                         <span className="text-xs text-gray-400 w-28 truncate">{topic.topic}</span>
-                        <div className="flex-1 h-2 bg-[#1F1F1F] rounded-full overflow-hidden">
+                        <div className="flex-1 h-2 bg-bg-tertiary rounded-full overflow-hidden">
                           <div
                             className="h-full bg-white/20 rounded-full"
                             style={{ width: `${Math.min(100, topic.percent_of_total)}%` }}
@@ -186,7 +186,7 @@ export const DeveloperDnaPanel = memo(function DeveloperDnaPanel() {
                     {dna.source_engagement.map((src) => (
                       <div
                         key={src.source_type}
-                        className="px-3 py-2 bg-[#1A1A1A] rounded border border-[#2A2A2A]"
+                        className="px-3 py-2 bg-[#1A1A1A] rounded border border-border"
                       >
                         <div className="text-xs font-medium text-gray-300">
                           {getSourceFullName(src.source_type)}
@@ -201,7 +201,7 @@ export const DeveloperDnaPanel = memo(function DeveloperDnaPanel() {
               )}
 
               {/* Stats Footer */}
-              <div className="pt-4 border-t border-[#2A2A2A] flex items-center justify-between">
+              <div className="pt-4 border-t border-border flex items-center justify-between">
                 <div className="flex gap-6">
                   <Stat label="Projects" value={dna.stats.project_count} />
                   <Stat label="Dependencies" value={dna.stats.dependency_count} />

@@ -6,7 +6,7 @@ function ScoreBar({ label, score, color }: { label: string; score: number; color
   return (
     <div className="flex items-center gap-2">
       <span className="text-[11px] text-gray-400 w-20">{label}</span>
-      <div className="flex-1 h-2.5 bg-[#1F1F1F] rounded-full overflow-hidden">
+      <div className="flex-1 h-2.5 bg-bg-tertiary rounded-full overflow-hidden">
         <div
           className={`h-full rounded-full transition-all ${color}`}
           style={{ width: `${Math.round(score * 100)}%` }}
@@ -67,7 +67,7 @@ export function ProjectHealthRadar() {
       )}
 
       {projects.map((p) => (
-        <div key={p.project_path} className="p-4 bg-[#0A0A0A] rounded-lg border border-[#2A2A2A]">
+        <div key={p.project_path} className="p-4 bg-bg-primary rounded-lg border border-border">
           <div className="flex items-center justify-between mb-3">
             <span className="text-sm text-white font-medium">{p.project_name}</span>
             <span className={`text-xs px-2 py-0.5 rounded ${

@@ -268,7 +268,7 @@ export function QuickSetupStep({ isAnimating, onComplete, onBack }: QuickSetupSt
   }) => (
     <button
       onClick={onToggle}
-      className="w-full flex items-center justify-between p-4 bg-[#141414] rounded-lg border border-[#2A2A2A] hover:border-[#3A3A3A] transition-colors"
+      className="w-full flex items-center justify-between p-4 bg-bg-secondary rounded-lg border border-border hover:border-[#3A3A3A] transition-colors"
     >
       <div className="flex items-center gap-3">
         {done ? (
@@ -276,7 +276,7 @@ export function QuickSetupStep({ isAnimating, onComplete, onBack }: QuickSetupSt
             &#x2713;
           </span>
         ) : (
-          <span className="w-6 h-6 bg-[#1F1F1F] rounded-full flex items-center justify-center text-gray-500 text-xs">
+          <span className="w-6 h-6 bg-bg-tertiary rounded-full flex items-center justify-center text-gray-500 text-xs">
             &#x25CB;
           </span>
         )}
@@ -319,7 +319,7 @@ export function QuickSetupStep({ isAnimating, onComplete, onBack }: QuickSetupSt
             done={aiConfigured}
           />
           {aiOpen && (
-            <div className="mt-2 p-4 bg-[#141414] rounded-lg border border-[#2A2A2A] space-y-3">
+            <div className="mt-2 p-4 bg-bg-secondary rounded-lg border border-border space-y-3">
               {/* Ollama detected and ready */}
               {ollamaStatus?.running && ollamaStatus.has_embedding_model && ollamaStatus.has_llm_model && provider === 'ollama' && (
                 <div className="p-3 bg-green-900/20 border border-green-500/30 rounded-lg text-sm text-green-300 flex items-center gap-2">
@@ -343,7 +343,7 @@ export function QuickSetupStep({ isAnimating, onComplete, onBack }: QuickSetupSt
                           {p.done ? 'Complete' : p.status || `${p.percent}%`}
                         </span>
                       </div>
-                      <div className="w-full h-1.5 bg-[#1F1F1F] rounded-full overflow-hidden">
+                      <div className="w-full h-1.5 bg-bg-tertiary rounded-full overflow-hidden">
                         <div
                           className={`h-full rounded-full transition-all duration-300 ${
                             p.done ? 'bg-green-500' : 'bg-orange-500'
@@ -373,7 +373,7 @@ export function QuickSetupStep({ isAnimating, onComplete, onBack }: QuickSetupSt
                         className={`p-3 rounded-lg text-center transition-all ${
                           provider === p
                             ? 'bg-orange-500/20 border-2 border-orange-500'
-                            : 'bg-[#1F1F1F] border-2 border-transparent hover:border-[#2A2A2A]'
+                            : 'bg-bg-tertiary border-2 border-transparent hover:border-border'
                         }`}
                       >
                         <div className="text-sm font-medium text-white">
@@ -412,14 +412,14 @@ export function QuickSetupStep({ isAnimating, onComplete, onBack }: QuickSetupSt
                           setAiConfigured(e.target.value.trim().length > 0);
                         }}
                         placeholder={provider === 'anthropic' ? 'sk-ant-api03-...' : 'sk-proj-...'}
-                        className="w-full px-4 py-3 bg-[#1F1F1F] border border-[#2A2A2A] rounded-lg text-white placeholder-gray-600 focus:border-orange-500 focus:outline-none font-mono text-sm"
+                        className="w-full px-4 py-3 bg-bg-tertiary border border-border rounded-lg text-white placeholder-gray-600 focus:border-orange-500 focus:outline-none font-mono text-sm"
                       />
                     </div>
                   )}
 
                   {/* Ollama not running hint */}
                   {provider === 'ollama' && !ollamaStatus?.running && (
-                    <div className="text-yellow-400 text-sm p-3 bg-[#1F1F1F] rounded-lg">
+                    <div className="text-yellow-400 text-sm p-3 bg-bg-tertiary rounded-lg">
                       Ollama not detected.{' '}
                       <a href="https://ollama.ai" target="_blank" rel="noopener noreferrer" className="text-orange-500 hover:underline">
                         Install Ollama
@@ -449,7 +449,7 @@ export function QuickSetupStep({ isAnimating, onComplete, onBack }: QuickSetupSt
             done={discoveryDone}
           />
           {projectsOpen && (
-            <div className="mt-2 p-4 bg-[#141414] rounded-lg border border-[#2A2A2A]">
+            <div className="mt-2 p-4 bg-bg-secondary rounded-lg border border-border">
               {!discoveryDone ? (
                 <div className="flex items-center gap-2 text-sm text-gray-400 py-2">
                   <div className="w-4 h-4 border-2 border-orange-500 border-t-transparent rounded-full animate-spin" />
@@ -497,14 +497,14 @@ export function QuickSetupStep({ isAnimating, onComplete, onBack }: QuickSetupSt
             done={interests.length > 0}
           />
           {interestsOpen && (
-            <div className="mt-2 p-4 bg-[#141414] rounded-lg border border-[#2A2A2A] space-y-3">
+            <div className="mt-2 p-4 bg-bg-secondary rounded-lg border border-border space-y-3">
               {/* Role selector */}
               <div>
                 <label className="block text-xs text-gray-500 mb-2">Your role</label>
                 <select
                   value={role}
                   onChange={(e) => setRole(e.target.value)}
-                  className="w-full px-3 py-2 bg-[#1F1F1F] border border-[#2A2A2A] rounded-lg text-white text-sm focus:border-orange-500 focus:outline-none"
+                  className="w-full px-3 py-2 bg-bg-tertiary border border-border rounded-lg text-white text-sm focus:border-orange-500 focus:outline-none"
                 >
                   {roles.map((r) => (
                     <option key={r} value={r}>{r}</option>
@@ -514,7 +514,7 @@ export function QuickSetupStep({ isAnimating, onComplete, onBack }: QuickSetupSt
 
               {/* Selected interests */}
               {interests.length > 0 && (
-                <div className="flex flex-wrap gap-2 p-3 bg-[#1F1F1F] rounded-lg border border-[#2A2A2A]">
+                <div className="flex flex-wrap gap-2 p-3 bg-bg-tertiary rounded-lg border border-border">
                   {interests.map((interest) => (
                     <span
                       key={interest}
@@ -540,7 +540,7 @@ export function QuickSetupStep({ isAnimating, onComplete, onBack }: QuickSetupSt
                   onChange={(e) => setNewInterest(e.target.value)}
                   onKeyDown={(e) => e.key === 'Enter' && addInterest()}
                   placeholder="Type a topic and press Enter..."
-                  className="flex-1 px-4 py-2 bg-[#1F1F1F] border border-[#2A2A2A] rounded-lg text-white placeholder-gray-600 focus:border-orange-500 focus:outline-none text-sm"
+                  className="flex-1 px-4 py-2 bg-bg-tertiary border border-border rounded-lg text-white placeholder-gray-600 focus:border-orange-500 focus:outline-none text-sm"
                 />
                 <button
                   onClick={addInterest}
@@ -562,7 +562,7 @@ export function QuickSetupStep({ isAnimating, onComplete, onBack }: QuickSetupSt
                       <button
                         key={suggestion}
                         onClick={() => toggleInterest(suggestion)}
-                        className="px-3 py-1.5 bg-[#1F1F1F] text-gray-400 rounded-full text-sm hover:bg-[#2A2A2A] hover:text-white transition-all"
+                        className="px-3 py-1.5 bg-bg-tertiary text-gray-400 rounded-full text-sm hover:bg-border hover:text-white transition-all"
                       >
                         + {suggestion}
                       </button>

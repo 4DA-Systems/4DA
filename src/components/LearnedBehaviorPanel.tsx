@@ -24,7 +24,7 @@ export function LearnedBehaviorPanel({
   onRefresh,
 }: LearnedBehaviorPanelProps) {
   return (
-    <div className="bg-[#1F1F1F] rounded-lg p-5 border border-[#2A2A2A]">
+    <div className="bg-bg-tertiary rounded-lg p-5 border border-border">
       <div className="flex items-start gap-3 mb-4">
         <div className="w-8 h-8 bg-indigo-500/20 rounded-lg flex items-center justify-center flex-shrink-0">
           <span className="text-indigo-400">🧠</span>
@@ -47,7 +47,7 @@ export function LearnedBehaviorPanel({
             {affinities.slice(0, 10).map((affinity, i) => (
               <div
                 key={i}
-                className="flex items-center gap-2 text-xs bg-[#141414] rounded-lg px-3 py-2 border border-[#2A2A2A] group hover:border-indigo-500/30 transition-colors"
+                className="flex items-center gap-2 text-xs bg-bg-secondary rounded-lg px-3 py-2 border border-border group hover:border-indigo-500/30 transition-colors"
               >
                 <div
                   className={`w-14 text-center font-mono font-medium ${
@@ -79,7 +79,7 @@ export function LearnedBehaviorPanel({
           )}
         </div>
       ) : (
-        <div className="text-sm text-gray-500 bg-[#141414] rounded-lg p-4 text-center border border-[#2A2A2A]">
+        <div className="text-sm text-gray-500 bg-bg-secondary rounded-lg p-4 text-center border border-border">
           <div className="text-2xl mb-2">📊</div>
           <div>No learned affinities yet</div>
           <div className="text-xs text-gray-600 mt-1">
@@ -116,7 +116,7 @@ export function LearnedBehaviorPanel({
       {/* Refresh button */}
       <button
         onClick={onRefresh}
-        className="mt-4 w-full px-4 py-2.5 text-sm bg-[#141414] border border-[#2A2A2A] rounded-lg text-gray-400 hover:text-white hover:border-indigo-500/30 transition-all"
+        className="mt-4 w-full px-4 py-2.5 text-sm bg-bg-secondary border border-border rounded-lg text-gray-400 hover:text-white hover:border-indigo-500/30 transition-all"
       >
         Refresh Learned Behavior
       </button>

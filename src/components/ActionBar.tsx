@@ -66,7 +66,7 @@ export function ActionBar({
   const isUpToDate = refreshLabel === 'Up to date';
 
   return (
-    <div className="mb-6 bg-[#141414] rounded-lg border border-[#2A2A2A] overflow-hidden">
+    <div className="mb-6 bg-bg-secondary rounded-lg border border-border overflow-hidden">
       {/* Main Action Row */}
       <div className="px-5 py-4 flex items-center gap-4">
         {/* Status */}
@@ -76,7 +76,7 @@ export function ActionBar({
               <div className="w-4 h-4 border-2 border-orange-500 border-t-transparent rounded-full animate-spin" />
             </div>
           ) : (
-            <div className="w-8 h-8 bg-[#1F1F1F] rounded-lg flex items-center justify-center flex-shrink-0">
+            <div className="w-8 h-8 bg-bg-tertiary rounded-lg flex items-center justify-center flex-shrink-0">
               <span className="text-gray-500">*</span>
             </div>
           )}
@@ -105,7 +105,7 @@ export function ActionBar({
         {/* Summary Badges */}
         {summaryBadges && (
           <div className="flex items-center gap-1.5">
-            <span className="px-2 py-1 text-[11px] bg-[#1F1F1F] text-gray-400 rounded-lg font-mono">
+            <span className="px-2 py-1 text-[11px] bg-bg-tertiary text-gray-400 rounded-lg font-mono">
               {summaryBadges.total}
             </span>
             <span className="px-2 py-1 text-[11px] bg-green-500/10 text-green-400 rounded-lg font-mono">
@@ -142,7 +142,7 @@ export function ActionBar({
           {state.loading && (
             <button
               onClick={() => invoke('cancel_analysis')}
-              className="px-3 py-2.5 text-sm bg-[#1F1F1F] text-red-400 border border-red-500/30 font-medium rounded-lg hover:bg-red-500/10 transition-all"
+              className="px-3 py-2.5 text-sm bg-bg-tertiary text-red-400 border border-red-500/30 font-medium rounded-lg hover:bg-red-500/10 transition-all"
             >
               Cancel
             </button>
@@ -152,7 +152,7 @@ export function ActionBar({
           <div className="relative" ref={overflowRef}>
             <button
               onClick={() => setOverflowOpen(!overflowOpen)}
-              className="w-10 h-10 rounded-lg flex items-center justify-center bg-[#1F1F1F] text-gray-400 border border-[#2A2A2A] hover:text-gray-200 hover:border-[#3A3A3A] transition-all"
+              className="w-10 h-10 rounded-lg flex items-center justify-center bg-bg-tertiary text-gray-400 border border-border hover:text-gray-200 hover:border-[#3A3A3A] transition-all"
               title="More actions"
             >
               <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
@@ -162,31 +162,31 @@ export function ActionBar({
               </svg>
             </button>
             {overflowOpen && (
-              <div className="absolute right-0 top-12 z-50 w-56 bg-[#1A1A1A] border border-[#2A2A2A] rounded-lg shadow-xl py-1">
+              <div className="absolute right-0 top-12 z-50 w-56 bg-[#1A1A1A] border border-border rounded-lg shadow-xl py-1">
                 <button
                   onClick={() => { onGenerateBriefing(); setOverflowOpen(false); }}
                   disabled={aiBriefing.loading || state.relevanceResults.length === 0}
-                  className="w-full px-4 py-2.5 text-sm text-left text-gray-300 hover:bg-[#2A2A2A] disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                  className="w-full px-4 py-2.5 text-sm text-left text-gray-300 hover:bg-border disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
                 >
                   Regenerate Briefing
                 </button>
                 <button
                   onClick={() => { onToggleAutoBriefing(); setOverflowOpen(false); }}
-                  className="w-full px-4 py-2.5 text-sm text-left text-gray-300 hover:bg-[#2A2A2A] transition-colors flex items-center justify-between"
+                  className="w-full px-4 py-2.5 text-sm text-left text-gray-300 hover:bg-border transition-colors flex items-center justify-between"
                 >
                   Auto-briefing
-                  <span className={`text-xs px-2 py-0.5 rounded ${autoBriefingEnabled ? 'bg-orange-500/20 text-orange-400' : 'bg-[#2A2A2A] text-gray-500'}`}>
+                  <span className={`text-xs px-2 py-0.5 rounded ${autoBriefingEnabled ? 'bg-orange-500/20 text-orange-400' : 'bg-border text-gray-500'}`}>
                     {autoBriefingEnabled ? 'ON' : 'OFF'}
                   </span>
                 </button>
-                <div className="border-t border-[#2A2A2A] my-1" />
+                <div className="border-t border-border my-1" />
                 <div className="px-4 py-2 flex items-center gap-2">
                   <AudioBriefing />
                   <ContextHandoff onStatus={(msg) => { onToast(msg.includes('fail') ? 'error' : 'success', msg); setOverflowOpen(false); }} />
                 </div>
                 {state.analysisComplete && (
                   <>
-                    <div className="border-t border-[#2A2A2A] my-1" />
+                    <div className="border-t border-border my-1" />
                     <button
                       onClick={async () => {
                         try {
@@ -198,7 +198,7 @@ export function ActionBar({
                         }
                         setOverflowOpen(false);
                       }}
-                      className="w-full px-4 py-2.5 text-sm text-left text-gray-300 hover:bg-[#2A2A2A] transition-colors"
+                      className="w-full px-4 py-2.5 text-sm text-left text-gray-300 hover:bg-border transition-colors"
                     >
                       Export Markdown
                     </button>
@@ -213,7 +213,7 @@ export function ActionBar({
                         }
                         setOverflowOpen(false);
                       }}
-                      className="w-full px-4 py-2.5 text-sm text-left text-gray-300 hover:bg-[#2A2A2A] transition-colors"
+                      className="w-full px-4 py-2.5 text-sm text-left text-gray-300 hover:bg-border transition-colors"
                     >
                       Export Digest
                     </button>
@@ -232,7 +232,7 @@ export function ActionBar({
             <span>{getStageLabel(state.progressStage)}</span>
             <span>{Math.round(state.progress * 100)}%</span>
           </div>
-          <div className="w-full h-2 bg-[#1F1F1F] rounded-full overflow-hidden">
+          <div className="w-full h-2 bg-bg-tertiary rounded-full overflow-hidden">
             <div
               className="h-full bg-gradient-to-r from-orange-600 to-orange-400 transition-all duration-300 ease-out rounded-full"
               style={{ width: `${state.progress * 100}%` }}

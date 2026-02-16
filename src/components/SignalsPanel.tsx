@@ -100,8 +100,8 @@ export const SignalsPanel = memo(function SignalsPanel({ results }: SignalsPanel
   }, [results, typeFilter, priorityFilter]);
 
   if (signals.length === 0) return (
-    <div className="mb-6 bg-[#141414] rounded-lg border border-[#2A2A2A] px-5 py-4">
-      <p className="text-[#666666] text-sm text-center">No actionable signals in this batch</p>
+    <div className="mb-6 bg-bg-secondary rounded-lg border border-border px-5 py-4">
+      <p className="text-text-muted text-sm text-center">No actionable signals in this batch</p>
     </div>
   );
 
@@ -109,14 +109,14 @@ export const SignalsPanel = memo(function SignalsPanel({ results }: SignalsPanel
   const highCount = priorityCounts['high'] || 0;
 
   return (
-    <div className="mb-6 bg-[#141414] rounded-lg border border-[#2A2A2A] overflow-hidden">
+    <div className="mb-6 bg-bg-secondary rounded-lg border border-border overflow-hidden">
       {/* Header */}
       <button
         onClick={() => setExpanded(!expanded)}
-        className="w-full px-5 py-4 border-b border-[#2A2A2A] flex items-center justify-between hover:bg-[#1A1A1A] transition-colors"
+        className="w-full px-5 py-4 border-b border-border flex items-center justify-between hover:bg-[#1A1A1A] transition-colors"
       >
         <div className="flex items-center gap-3">
-          <div className="w-8 h-8 bg-[#1F1F1F] rounded-lg flex items-center justify-center">
+          <div className="w-8 h-8 bg-bg-tertiary rounded-lg flex items-center justify-center">
             <span className="text-gray-400">⚡</span>
           </div>
           <div className="text-left">
@@ -158,7 +158,7 @@ export const SignalsPanel = memo(function SignalsPanel({ results }: SignalsPanel
                   className={`px-2.5 py-1 text-[11px] rounded-lg border transition-all flex items-center gap-1.5 ${
                     isActive
                       ? `${config?.bgColor || 'bg-white/10'} ${config?.color || 'text-white'} ${config?.borderColor || 'border-white/20'}`
-                      : 'bg-[#1F1F1F] text-gray-400 border-[#2A2A2A] hover:border-[#3A3A3A]'
+                      : 'bg-bg-tertiary text-gray-400 border-border hover:border-[#3A3A3A]'
                   }`}
                 >
                   <span>{config?.icon || '?'}</span>
@@ -170,7 +170,7 @@ export const SignalsPanel = memo(function SignalsPanel({ results }: SignalsPanel
 
             {/* Divider */}
             {Object.keys(typeCounts).length > 0 && (
-              <span className="self-center text-[#2A2A2A]">|</span>
+              <span className="self-center text-border">|</span>
             )}
 
             {/* Priority filters */}
@@ -186,7 +186,7 @@ export const SignalsPanel = memo(function SignalsPanel({ results }: SignalsPanel
                   className={`px-2 py-1 text-[10px] font-medium rounded-lg border transition-all flex items-center gap-1.5 ${
                     isActive
                       ? `${config.bgColor} ${config.color} border-current`
-                      : 'bg-[#1F1F1F] text-gray-500 border-[#2A2A2A] hover:border-[#3A3A3A]'
+                      : 'bg-bg-tertiary text-gray-500 border-border hover:border-[#3A3A3A]'
                   }`}
                 >
                   <span className={`w-1.5 h-1.5 rounded-full ${config.dot}`} />
@@ -302,7 +302,7 @@ const SignalRow = ({ signal }: { signal: SignalItem }) => {
           {showTriggers && (
             <div className="flex flex-wrap gap-1 mt-2">
               {signal.signal_triggers.map((t, i) => (
-                <span key={i} className="px-1.5 py-0.5 text-[10px] bg-[#1F1F1F] text-gray-400 rounded border border-[#2A2A2A]">
+                <span key={i} className="px-1.5 py-0.5 text-[10px] bg-bg-tertiary text-gray-400 rounded border border-border">
                   {t}
                 </span>
               ))}

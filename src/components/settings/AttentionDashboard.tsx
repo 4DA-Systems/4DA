@@ -40,7 +40,7 @@ export function AttentionDashboard() {
         <select
           value={period}
           onChange={(e) => setPeriod(Number(e.target.value))}
-          className="bg-[#1F1F1F] border border-[#2A2A2A] rounded px-2 py-1 text-xs text-gray-300"
+          className="bg-bg-tertiary border border-border rounded px-2 py-1 text-xs text-gray-300"
         >
           <option value={7}>7 days</option>
           <option value={14}>14 days</option>
@@ -69,7 +69,7 @@ export function AttentionDashboard() {
                 {report.topic_engagement.slice(0, 8).map((te) => (
                   <div key={te.topic} className="flex items-center gap-2">
                     <span className="text-[11px] text-gray-300 w-24 truncate" title={te.topic}>{te.topic}</span>
-                    <div className="flex-1 h-3 bg-[#1F1F1F] rounded-full overflow-hidden">
+                    <div className="flex-1 h-3 bg-bg-tertiary rounded-full overflow-hidden">
                       <div
                         className="h-full bg-indigo-500/60 rounded-full transition-all"
                         style={{ width: `${Math.min(te.percent_of_total, 100)}%` }}

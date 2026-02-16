@@ -22,11 +22,11 @@ export function ContextStep({
         4DA learns what matters to you by scanning your projects. 100% local, 100% private.
       </p>
 
-      <div className="bg-[#141414] p-6 rounded-lg mb-4">
+      <div className="bg-bg-secondary p-6 rounded-lg mb-4">
         {/* Discovery state visualization */}
         <div className="flex items-center gap-4 mb-6">
           <div className={`w-16 h-16 rounded-full flex items-center justify-center ${
-            discoveryResult ? 'bg-green-500/20' : isDiscovering ? 'bg-orange-500/20' : 'bg-[#1F1F1F]'
+            discoveryResult ? 'bg-green-500/20' : isDiscovering ? 'bg-orange-500/20' : 'bg-bg-tertiary'
           }`}>
             {discoveryResult ? (
               <span className="text-3xl">&#x2713;</span>
@@ -60,7 +60,7 @@ export function ContextStep({
         )}
 
         {isDiscovering && (
-          <div className="w-full h-2 bg-[#1F1F1F] rounded-full overflow-hidden">
+          <div className="w-full h-2 bg-bg-tertiary rounded-full overflow-hidden">
             <div className="h-full bg-orange-500 rounded-full animate-pulse" style={{ width: '60%' }} />
           </div>
         )}
@@ -86,7 +86,7 @@ export function ContextStep({
       </div>
 
       {/* FAQ Section */}
-      <div className="bg-[#141414] rounded-lg p-4 mb-6">
+      <div className="bg-bg-secondary rounded-lg p-4 mb-6">
         <details className="group">
           <summary className="flex items-center justify-between cursor-pointer text-sm text-gray-400 hover:text-gray-300 transition-colors">
             <span className="flex items-center gap-2">
@@ -96,14 +96,14 @@ export function ContextStep({
             <span className="text-xs group-open:rotate-180 transition-transform">&#x25bc;</span>
           </summary>
           <div className="mt-4 space-y-4 text-sm">
-            <div className="bg-[#1F1F1F] rounded-lg p-3">
+            <div className="bg-bg-tertiary rounded-lg p-3">
               <h4 className="text-white font-medium mb-1">What files are being scanned?</h4>
               <p className="text-gray-400 text-xs">
                 4DA looks for project markers (package.json, Cargo.toml, README files, etc.),
                 code files, and documents. It reads file names and contents to understand your work context.
               </p>
             </div>
-            <div className="bg-[#1F1F1F] rounded-lg p-3">
+            <div className="bg-bg-tertiary rounded-lg p-3">
               <h4 className="text-white font-medium mb-1">Is my data sent anywhere?</h4>
               <p className="text-gray-400 text-xs">
                 <span className="text-green-400 font-medium">No.</span> All scanning happens 100% locally on your machine.
@@ -111,7 +111,7 @@ export function ContextStep({
                 small text snippets are sent to your chosen AI provider (and you control that).
               </p>
             </div>
-            <div className="bg-[#1F1F1F] rounded-lg p-3">
+            <div className="bg-bg-tertiary rounded-lg p-3">
               <h4 className="text-white font-medium mb-1">What does 4DA do with this information?</h4>
               <p className="text-gray-400 text-xs">
                 It builds a local understanding of your interests (e.g., &quot;you work with Rust and React&quot;)
@@ -119,14 +119,14 @@ export function ContextStep({
                 local database on your machine.
               </p>
             </div>
-            <div className="bg-[#1F1F1F] rounded-lg p-3">
+            <div className="bg-bg-tertiary rounded-lg p-3">
               <h4 className="text-white font-medium mb-1">Can I control what gets scanned?</h4>
               <p className="text-gray-400 text-xs">
                 Yes! You can add or remove directories anytime in Settings. 4DA automatically
                 ignores sensitive locations like node_modules, .git folders, and hidden system files.
               </p>
             </div>
-            <div className="bg-[#1F1F1F] rounded-lg p-3">
+            <div className="bg-bg-tertiary rounded-lg p-3">
               <h4 className="text-white font-medium mb-1">How long does scanning take?</h4>
               <p className="text-gray-400 text-xs">
                 Usually a few seconds to a minute depending on how many projects you have.
