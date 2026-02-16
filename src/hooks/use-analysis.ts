@@ -1,4 +1,5 @@
 import { useEffect, useCallback } from 'react';
+import { invoke } from '@tauri-apps/api/core';
 import { listen, UnlistenFn } from '@tauri-apps/api/event';
 import type { SourceRelevance, AnalysisProgress } from '../types';
 import { getSourceLabel } from '../config/sources';
@@ -62,6 +63,14 @@ export function useAnalysis(
           lastAnalyzedAt: new Date(),
         }));
         useAppStore.getState().addToast('success', `Analysis complete: ${relevantCount} relevant items found`);
+
+        // Auto-enable monitoring after first successful analysis
+        const { monitoring } = useAppStore.getState();
+        if (monitoring && !monitoring.enabled && relevantCount > 0) {
+          invoke('set_monitoring_enabled', { enabled: true }).then(() => {
+            useAppStore.getState().loadMonitoringStatus();
+          }).catch(() => {});
+        }
       });
 
       unlistenError = await listen<string>('analysis-error', (event) => {

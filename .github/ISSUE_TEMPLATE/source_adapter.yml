@@ -1,0 +1,58 @@
+name: Source Adapter Request
+description: Request a new content source integration
+labels: ["source-adapter", "enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Source adapters are the easiest way to contribute to 4DA. Each adapter is a single Rust file.
+        See `src-tauri/src/sources/` for examples.
+
+  - type: input
+    id: source_name
+    attributes:
+      label: Source name
+      placeholder: "Bluesky, Mastodon, Stack Overflow, etc."
+    validations:
+      required: true
+
+  - type: input
+    id: api_url
+    attributes:
+      label: API or feed URL
+      description: Public API endpoint or RSS/Atom feed URL
+      placeholder: "https://api.example.com/v1/posts or https://example.com/feed.xml"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: auth
+    attributes:
+      label: Authentication required?
+      options:
+        - No (public API/feed)
+        - API key required
+        - OAuth required
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: why
+    attributes:
+      label: Why is this source valuable for developers?
+      description: What kind of signal would this source provide?
+      placeholder: "This source surfaces early discussions about new frameworks before they hit HN..."
+    validations:
+      required: true
+
+  - type: dropdown
+    id: willing
+    attributes:
+      label: Would you be willing to implement this?
+      options:
+        - "Yes, I can submit a PR"
+        - "Maybe, with guidance"
+        - "No, just requesting"
+    validations:
+      required: true

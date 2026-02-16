@@ -1,0 +1,42 @@
+name: Feature Request
+description: Suggest a new capability or improvement
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem does this solve?
+      description: Describe the use case. What are you trying to do that 4DA doesn't support?
+      placeholder: "I want to know when a dependency I use has a new major release, but currently..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed solution
+      description: How do you think this should work?
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Other approaches you've thought about
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Scoring / Relevance
+        - Sources / Adapters
+        - UI / Frontend
+        - Notifications
+        - MCP Server
+        - CLI
+        - Performance
+        - Other
+    validations:
+      required: true
