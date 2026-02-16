@@ -1421,16 +1421,38 @@ impl Database {
         rows.collect()
     }
 
-    /// Check if circuit breaker is open for a source (5+ consecutive failures)
+    /// Check if circuit breaker is open for a source (5+ consecutive failures).
+    /// Auto-resets after 10 minutes cooldown to allow retry after transient outages.
     pub fn is_circuit_open(&self, source_type: &str) -> bool {
         let conn = self.conn.lock();
-        conn.query_row(
-            "SELECT consecutive_failures FROM source_health WHERE source_type = ?1",
+        let result = conn.query_row(
+            "SELECT consecutive_failures, checked_at FROM source_health WHERE source_type = ?1",
             params![source_type],
-            |row| row.get::<_, i64>(0),
-        )
-        .map(|count| count >= 5)
-        .unwrap_or(false)
+            |row| Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?)),
+        );
+        match result {
+            Ok((failures, checked_at)) if failures >= 5 => {
+                // Auto-reset after 10-minute cooldown
+                let stale = conn
+                    .query_row(
+                        "SELECT datetime(?1, '+10 minutes') <= datetime('now')",
+                        params![checked_at],
+                        |row| row.get::<_, bool>(0),
+                    )
+                    .unwrap_or(false);
+                if stale {
+                    let _ = conn.execute(
+                        "UPDATE source_health SET consecutive_failures = 0, status = 'error' WHERE source_type = ?1",
+                        params![source_type],
+                    );
+                    tracing::info!(target: "4da::health", source = source_type, "Circuit breaker auto-reset after cooldown");
+                    false
+                } else {
+                    true
+                }
+            }
+            _ => false,
+        }
     }
 
     /// Get feedback summary aggregated by topic for scoring boost

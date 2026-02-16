@@ -8,6 +8,7 @@ import type {
   FeedbackAction,
   FeedbackGiven,
   SuggestedInterest,
+  SourceHealthStatus,
 } from '../types';
 
 // ============================================================================
@@ -184,11 +185,13 @@ export interface BriefingSlice {
   showBriefing: boolean;
   autoBriefingEnabled: boolean;
   lastBackgroundResultsAt: Date | null;
+  sourceHealth: SourceHealthStatus[];
   setShowBriefing: (show: boolean) => void;
   setAutoBriefingEnabled: (enabled: boolean) => void;
   setLastBackgroundResultsAt: (date: Date) => void;
   generateBriefing: () => Promise<void>;
   loadPersistedBriefing: () => Promise<void>;
+  loadSourceHealth: () => Promise<void>;
 }
 
 export interface ContextDiscoverySlice {

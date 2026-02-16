@@ -18,6 +18,8 @@ function setMockState(overrides: Record<string, unknown>) {
     feedbackGiven: {},
     setActiveView: vi.fn(),
     lastBackgroundResultsAt: null,
+    sourceHealth: [],
+    addToast: vi.fn(),
     ...overrides,
   };
 }
