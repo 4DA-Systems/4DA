@@ -38,7 +38,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 
 // Paths
 const DB_PATH = process.env.MEMORY_DB_PATH || join(__dirname, "..", "memory.db");
-const SESSIONS_DIR = process.env.SESSIONS_DIR || "/mnt/d/4da-v3/.claude/sessions/transcripts";
+const SESSIONS_DIR = process.env.SESSIONS_DIR || "/mnt/d/4DA/.claude/sessions/transcripts";
 
 // Ensure directories exist
 const dbDir = dirname(DB_PATH);

@@ -1,5 +1,5 @@
 # AI Engineering Contract
-## Behavioral Rules for Claude Code in 4DA v3
+## Behavioral Rules for Claude Code in 4DA
 
 **Version:** 1.0.0
 **Status:** CANONICAL - Must be read before any task
@@ -231,4 +231,4 @@ Subagents inherit this contract's authority.
 
 ---
 
-*This contract is active for all Claude Code sessions in the 4DA v3 project. Violations should be corrected immediately.*
+*This contract is active for all Claude Code sessions in the 4DA project. Violations should be corrected immediately.*

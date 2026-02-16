@@ -114,7 +114,7 @@ Decision: NOT RELEVANT (top score < 0.4)
 
 ## Test Context Directory
 
-Create `/mnt/d/4da-v3/test-context/` with intentional content:
+Create `/mnt/d/4DA/test-context/` with intentional content:
 
 ```
 test-context/

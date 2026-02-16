@@ -1,5 +1,5 @@
 # System Invariants
-## What Must ALWAYS or NEVER Happen in 4DA v3
+## What Must ALWAYS or NEVER Happen in 4DA
 
 **Version:** 1.0.0
 **Source:** Extracted from ACE-STONE-TABLET.md and ARCHITECTURE.md

@@ -99,7 +99,7 @@ function findSettingsFile(): string | null {
 
   // Check common locations
   const commonPaths = [
-    "/mnt/d/4da-v3/data/settings.json",
+    "/mnt/d/4DA/data/settings.json",
     join(process.cwd(), "data/settings.json"),
     join(process.cwd(), "../data/settings.json"),
   ];

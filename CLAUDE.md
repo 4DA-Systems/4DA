@@ -1,4 +1,4 @@
-# 4DA v3 — Claude Code Instructions
+# 4DA — Claude Code Instructions
 
 **4DA = 4 Dimensional Autonomy** — Tauri 2.0 (Rust + React + SQLite)
 **Dev:** localhost:4444 | **Package manager:** pnpm | **Decisions log:** `.ai/DECISIONS.md`

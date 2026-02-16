@@ -23,7 +23,7 @@ Or manually add to `.mcp.json`:
       "command": "node",
       "args": ["/path/to/mcp-4da-server/dist/index.js"],
       "env": {
-        "FOURDA_DB_PATH": "/path/to/4da-v3/data/4da.db"
+        "FOURDA_DB_PATH": "/path/to/4DA/data/4da.db"
       }
     }
   }
@@ -40,7 +40,7 @@ Add to `.cursor/mcp.json` or equivalent:
       "command": "node",
       "args": ["/path/to/mcp-4da-server/dist/index.js"],
       "env": {
-        "FOURDA_DB_PATH": "/path/to/4da-v3/data/4da.db"
+        "FOURDA_DB_PATH": "/path/to/4DA/data/4da.db"
       }
     }
   }
@@ -57,7 +57,7 @@ Add to your Claude Desktop config (`~/Library/Application Support/Claude/claude_
       "command": "node",
       "args": ["/path/to/mcp-4da-server/dist/index.js"],
       "env": {
-        "FOURDA_DB_PATH": "/path/to/4da-v3/data/4da.db"
+        "FOURDA_DB_PATH": "/path/to/4DA/data/4da.db"
       }
     }
   }
