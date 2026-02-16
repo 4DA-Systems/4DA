@@ -34,7 +34,10 @@ static SHARED_CLIENT: Lazy<reqwest::Client> = Lazy::new(|| {
         .timeout(std::time::Duration::from_secs(30))
         .user_agent("4DA/1.0")
         .build()
-        .expect("Failed to create shared HTTP client")
+        .unwrap_or_else(|e| {
+            tracing::error!("Failed to create configured HTTP client, using default: {e}");
+            reqwest::Client::new()
+        })
 });
 
 /// Get the shared HTTP client (clone is free - Arc-based)

@@ -15,7 +15,10 @@ impl TimeRange {
     /// Create a time range for today
     pub fn today() -> Self {
         let now = Utc::now();
-        let start = now.date_naive().and_hms_opt(0, 0, 0).unwrap();
+        let start = now
+            .date_naive()
+            .and_hms_opt(0, 0, 0)
+            .expect("midnight is always valid");
         Self {
             start: start.and_utc(),
             end: now,
@@ -27,8 +30,14 @@ impl TimeRange {
     pub fn yesterday() -> Self {
         let now = Utc::now();
         let yesterday = now - Duration::days(1);
-        let start = yesterday.date_naive().and_hms_opt(0, 0, 0).unwrap();
-        let end = yesterday.date_naive().and_hms_opt(23, 59, 59).unwrap();
+        let start = yesterday
+            .date_naive()
+            .and_hms_opt(0, 0, 0)
+            .expect("midnight is always valid");
+        let end = yesterday
+            .date_naive()
+            .and_hms_opt(23, 59, 59)
+            .expect("23:59:59 is always valid");
         Self {
             start: start.and_utc(),
             end: end.and_utc(),

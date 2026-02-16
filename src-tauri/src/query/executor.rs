@@ -80,7 +80,7 @@ impl QueryExecutor {
         match result {
             Ok(embeddings) if !embeddings.is_empty() => {
                 debug!(target: "query::executor", "Generated embedding for query");
-                Some(embeddings.into_iter().next().unwrap())
+                embeddings.into_iter().next()
             }
             Ok(_) => None,
             Err(e) => {

@@ -292,11 +292,17 @@ pub fn run() {
             health_commands::get_source_health_status
         ])
         .setup(|app| {
-            // Set up system tray
-            let tray = monitoring::setup_tray(app.handle()).expect("Failed to set up system tray");
+            // Set up system tray (non-fatal: app works without tray)
+            let tray = match monitoring::setup_tray(app.handle()) {
+                Ok(tray) => Some(tray),
+                Err(e) => {
+                    warn!("System tray setup failed, continuing without tray: {e}");
+                    None
+                }
+            };
 
             // Store tray handle for later updates
-            app.manage(std::sync::Mutex::new(Some(tray)));
+            app.manage(std::sync::Mutex::new(tray));
 
             // Load monitoring settings from persistence
             let monitoring_state = get_monitoring_state().clone();
@@ -460,7 +466,7 @@ pub fn run() {
             Ok(())
         })
         .build(tauri::generate_context!())
-        .expect("error while building tauri application")
+        .expect("Failed to build Tauri application. Check tauri.conf.json and system permissions.")
         .run(|_app, event| {
             if let tauri::RunEvent::Exit = event {
                 info!(target: "4da::shutdown", "Application shutting down - cleaning up...");
