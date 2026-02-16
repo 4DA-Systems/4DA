@@ -48,7 +48,6 @@ const EXCEPTIONS = {
   'src-tauri/src/lib.rs':                  'App entrypoint — Tauri plugin registration',
 
   // TypeScript — complex UI and type definitions
-  'src/types.ts':                                   'Type definitions — inherently large',
   'src/components/onboarding/QuickSetupStep.tsx':    'Onboarding wizard — multi-step form',
   'src/components/ResultsView.tsx':                  'Results list + filters — primary view',
   'src/components/void-engine/VoidHeartbeat.tsx':    'Void visualizer — canvas + animation',
