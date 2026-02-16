@@ -51,6 +51,17 @@ pub(crate) fn get_db_path() -> PathBuf {
     base
 }
 
+/// Register the sqlite-vec extension globally (idempotent).
+/// Single source of truth — all code needing sqlite-vec calls this.
+pub(crate) fn register_sqlite_vec_extension() {
+    #[allow(clippy::missing_transmute_annotations)]
+    unsafe {
+        rusqlite::ffi::sqlite3_auto_extension(Some(std::mem::transmute(
+            sqlite_vec::sqlite3_vec_init as *const (),
+        )));
+    }
+}
+
 /// Open a raw SQLite connection with proper configuration.
 /// Registers sqlite-vec auto-extension and sets busy_timeout.
 /// Use this for ad-hoc connection needs outside the Database struct.
@@ -62,14 +73,7 @@ pub(crate) fn open_db_connection() -> Result<rusqlite::Connection, String> {
         std::fs::create_dir_all(parent).ok();
     }
 
-    // Register sqlite-vec extension globally (idempotent)
-    // One of two registration sites. See also: db.rs:Database::new()
-    #[allow(clippy::missing_transmute_annotations)]
-    unsafe {
-        rusqlite::ffi::sqlite3_auto_extension(Some(std::mem::transmute(
-            sqlite_vec::sqlite3_vec_init as *const (),
-        )));
-    }
+    register_sqlite_vec_extension();
 
     let conn = rusqlite::Connection::open(&db_path)
         .map_err(|e| format!("Failed to open database: {}", e))?;

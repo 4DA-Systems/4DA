@@ -6,9 +6,7 @@
 
 use chrono::{DateTime, Utc};
 use parking_lot::Mutex;
-use rusqlite::{
-    ffi::sqlite3_auto_extension, params, Connection, OptionalExtension, Result as SqliteResult,
-};
+use rusqlite::{params, Connection, OptionalExtension, Result as SqliteResult};
 use sha2::{Digest, Sha256};
 use std::path::Path;
 use std::sync::Arc;
@@ -76,13 +74,7 @@ impl Database {
         }
 
         // Register sqlite-vec extension BEFORE opening connection
-        // One of two registration sites. See also: lib.rs:open_db_connection()
-        #[allow(clippy::missing_transmute_annotations)]
-        unsafe {
-            sqlite3_auto_extension(Some(std::mem::transmute(
-                sqlite_vec::sqlite3_vec_init as *const (),
-            )));
-        }
+        crate::register_sqlite_vec_extension();
 
         let conn = Connection::open(db_path)?;
 

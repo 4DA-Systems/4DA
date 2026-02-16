@@ -392,12 +392,7 @@ mod tests {
     #[test]
     fn test_migration() {
         // Load sqlite-vec extension for vec0 virtual tables
-        #[allow(clippy::missing_transmute_annotations)]
-        unsafe {
-            rusqlite::ffi::sqlite3_auto_extension(Some(std::mem::transmute(
-                sqlite_vec::sqlite3_vec_init as *const (),
-            )));
-        }
+        crate::register_sqlite_vec_extension();
 
         let conn = Arc::new(Mutex::new(Connection::open_in_memory().unwrap()));
         assert!(migrate(&conn).is_ok());

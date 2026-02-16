@@ -45,7 +45,8 @@ pub(crate) use state::{
     get_ace_engine, get_ace_engine_mut, get_analysis_abort, get_analysis_state, get_context_dir,
     get_context_dirs, get_context_engine, get_database, get_monitoring_state,
     get_relevance_threshold, get_settings_manager, get_source_registry, invalidate_context_engine,
-    open_db_connection, set_relevance_threshold, SUPPORTED_EXTENSIONS,
+    open_db_connection, register_sqlite_vec_extension, set_relevance_threshold,
+    SUPPORTED_EXTENSIONS,
 };
 
 mod ace;

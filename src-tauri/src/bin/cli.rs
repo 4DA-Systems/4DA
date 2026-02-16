@@ -96,7 +96,9 @@ fn resolve_db_path() -> Option<PathBuf> {
     None
 }
 
-/// Open SQLite connection with sqlite-vec extension
+/// Open SQLite connection with sqlite-vec extension.
+/// NOTE: Canonical version lives in state.rs::register_sqlite_vec_extension().
+/// Duplicated here because the CLI binary doesn't link against fourda_lib internals.
 fn open_db(path: &PathBuf) -> Result<rusqlite::Connection, String> {
     #[allow(clippy::missing_transmute_annotations)]
     unsafe {
