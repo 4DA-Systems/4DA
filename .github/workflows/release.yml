@@ -151,6 +151,9 @@ jobs:
     name: Publish MCP Server to npm
     needs: create-release
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
     steps:
       - uses: actions/checkout@v4
 
@@ -162,9 +165,12 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
           cache: 'pnpm'
           registry-url: 'https://registry.npmjs.org'
+
+      - name: Upgrade npm for trusted publishing
+        run: npm install -g npm@latest
 
       - name: Install and build MCP server
         working-directory: mcp-4da-server
@@ -172,8 +178,6 @@ jobs:
           pnpm install --frozen-lockfile
           pnpm run build
 
-      - name: Publish to npm
+      - name: Publish to npm (trusted publishing + provenance)
         working-directory: mcp-4da-server
-        run: pnpm publish --access public --no-git-checks
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npm publish --access public --provenance

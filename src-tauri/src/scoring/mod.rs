@@ -659,6 +659,203 @@ pub(crate) fn score_item(
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+    use std::path::Path;
+
+    // ========================================================================
+    // score_item() integration tests
+    // ========================================================================
+
+    /// Helper: create an in-memory Database for testing
+    fn test_db() -> crate::db::Database {
+        crate::register_sqlite_vec_extension();
+        crate::db::Database::new(Path::new(":memory:")).expect("in-memory DB")
+    }
+
+    /// Helper: build a minimal ScoringContext from builder defaults
+    fn empty_scoring_context() -> ScoringContext {
+        ScoringContext::builder().build()
+    }
+
+    /// Helper: build a ScoringInput with a dummy 384-dim embedding
+    fn test_input<'a>(title: &'a str, content: &'a str, embedding: &'a [f32]) -> ScoringInput<'a> {
+        ScoringInput {
+            id: 1,
+            title,
+            url: Some("https://example.com"),
+            content,
+            source_type: "hackernews",
+            embedding,
+            created_at: None,
+        }
+    }
+
+    #[test]
+    fn test_score_item_zero_context_returns_low_score() {
+        let db = test_db();
+        let ctx = empty_scoring_context();
+        let embedding = vec![0.1_f32; 384];
+        let input = test_input(
+            "Some random article about gardening",
+            "Plants and soil",
+            &embedding,
+        );
+        let options = ScoringOptions {
+            apply_freshness: false,
+            apply_signals: false,
+        };
+
+        let result = score_item(&input, &ctx, &db, &options, None);
+
+        assert!(
+            result.top_score < 0.35,
+            "Empty context should produce low score, got {}",
+            result.top_score
+        );
+        assert!(
+            !result.relevant,
+            "Should not be relevant with empty context"
+        );
+        assert!(!result.excluded, "Should not be excluded");
+    }
+
+    #[test]
+    fn test_score_item_excluded_item_returns_zero() {
+        let db = test_db();
+        let ctx = ScoringContext::builder()
+            .exclusions(vec!["blockchain".to_string()])
+            .build();
+        let embedding = vec![0.1_f32; 384];
+        let input = test_input(
+            "Blockchain scaling solutions for enterprise",
+            "blockchain distributed ledger technology",
+            &embedding,
+        );
+        let options = ScoringOptions {
+            apply_freshness: false,
+            apply_signals: false,
+        };
+
+        let result = score_item(&input, &ctx, &db, &options, None);
+
+        assert_eq!(result.top_score, 0.0, "Excluded item should have score 0");
+        assert!(result.excluded, "Should be marked as excluded");
+        assert!(
+            result.excluded_by.is_some(),
+            "Should report what excluded it"
+        );
+        assert!(
+            result.excluded_by.as_ref().unwrap().contains("blockchain"),
+            "Should be excluded by 'blockchain', got {:?}",
+            result.excluded_by
+        );
+    }
+
+    #[test]
+    fn test_score_item_two_signals_can_pass() {
+        let db = test_db();
+        let mut ace_ctx = ace_context::ACEContext::default();
+        ace_ctx.active_topics.push("rust".to_string());
+        ace_ctx.topic_confidence.insert("rust".to_string(), 0.9);
+
+        // Interest embedding matching "rust" — use a distinctive embedding
+        let interest_embedding = vec![0.5_f32; 384];
+        let interests = vec![context_engine::Interest {
+            id: Some(1),
+            topic: "rust".to_string(),
+            weight: 1.0,
+            embedding: Some(interest_embedding.clone()),
+            source: context_engine::InterestSource::Explicit,
+        }];
+
+        let ctx = ScoringContext::builder()
+            .interest_count(1)
+            .interests(interests)
+            .ace_ctx(ace_ctx)
+            .build();
+
+        // Use same embedding as interest so interest_score is high
+        let input = test_input(
+            "Rust async runtime performance improvements",
+            "rust tokio async await performance benchmarks",
+            &interest_embedding,
+        );
+        let options = ScoringOptions {
+            apply_freshness: false,
+            apply_signals: false,
+        };
+
+        let result = score_item(&input, &ctx, &db, &options, None);
+        let breakdown = result
+            .score_breakdown
+            .as_ref()
+            .expect("should have breakdown");
+
+        // Interest should be confirmed (high interest_score via same embedding)
+        // ACE should be confirmed (active_topics contains "rust", title has "rust")
+        assert!(
+            breakdown.signal_count >= 2,
+            "Expected 2+ confirmed signals, got {} ({:?})",
+            breakdown.signal_count,
+            breakdown.confirmed_signals
+        );
+    }
+
+    #[test]
+    fn test_score_item_single_signal_cannot_pass() {
+        let db = test_db();
+        // Only set up interests, no ACE context, no context chunks
+        let interest_embedding = vec![0.5_f32; 384];
+        let interests = vec![context_engine::Interest {
+            id: Some(1),
+            topic: "machine learning".to_string(),
+            weight: 1.0,
+            embedding: Some(interest_embedding.clone()),
+            source: context_engine::InterestSource::Explicit,
+        }];
+
+        let ctx = ScoringContext::builder()
+            .interest_count(1)
+            .interests(interests)
+            .build();
+
+        // Same embedding as interest so interest_score is high,
+        // but no ACE topics, no context, no dependencies
+        let input = test_input(
+            "Machine learning model training tips",
+            "machine learning neural networks training optimization",
+            &interest_embedding,
+        );
+        let options = ScoringOptions {
+            apply_freshness: false,
+            apply_signals: false,
+        };
+
+        let result = score_item(&input, &ctx, &db, &options, None);
+        let breakdown = result
+            .score_breakdown
+            .as_ref()
+            .expect("should have breakdown");
+
+        // Only interest axis should confirm (via keyword or embedding match)
+        // With just 1 signal the confirmation gate caps below the threshold
+        assert!(
+            breakdown.signal_count <= 1,
+            "Expected at most 1 confirmed signal, got {} ({:?})",
+            breakdown.signal_count,
+            breakdown.confirmed_signals
+        );
+        assert!(
+            !result.relevant,
+            "Single-signal item should not pass relevance gate (score={}, signals={})",
+            result.top_score, breakdown.signal_count
+        );
+    }
+
+    // ========================================================================
+    // Existing unit tests
+    // ========================================================================
+
     // Test source quality boost: positive score
     #[test]
     fn test_source_quality_positive_boost() {
