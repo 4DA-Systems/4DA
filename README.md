@@ -8,9 +8,28 @@
 
 4DA monitors Hacker News, arXiv, Reddit, GitHub, Product Hunt, YouTube, and RSS feeds — then ruthlessly filters out everything that doesn't matter to your specific tech stack, projects, and codebase. What survives is signal.
 
-[Quick Start](#quick-start) &bull; [How It Works](#how-it-works) &bull; [MCP Integration](#mcp-integration) &bull; [Developer DNA](#developer-dna)
+[Download](#download) &bull; [Quick Start](#quick-start) &bull; [How It Works](#how-it-works) &bull; [MCP Integration](#mcp-integration)
 
 </div>
+
+---
+
+## Download
+
+> **Pre-built binaries** — no Rust toolchain required.
+
+| Platform | Download | Auto-updates |
+|----------|----------|:------------:|
+| **Windows** | [`.msi` installer](https://github.com/runyourempire/4da-v3/releases/latest) | Yes |
+| **macOS** | [`.dmg` (Apple Silicon & Intel)](https://github.com/runyourempire/4da-v3/releases/latest) | Yes |
+| **Linux** | [`.AppImage` / `.deb`](https://github.com/runyourempire/4da-v3/releases/latest) | Yes |
+
+Or install the **MCP server** for Claude Code / Cursor:
+```bash
+npx @4da/mcp-server
+```
+
+Or build from source — see [Quick Start](#quick-start).
 
 ---
 
@@ -180,12 +199,30 @@ Add to your Claude Code config:
 4. **Minimal** — no feature bloat; every element earns its place
 5. **Signal over noise** — 99%+ rejection rate is a feature, not a bug
 
+## CLI
+
+The CLI reads from the same database as the desktop app. No extra setup needed.
+
+```bash
+4da briefing               # Latest AI briefing
+4da signals                # All classified signals
+4da signals --critical     # Critical/high priority only
+4da gaps                   # Knowledge gaps in your dependencies
+4da health                 # Project dependency health
+4da status                 # Database stats
+```
+
+Download the CLI binary from [Releases](https://github.com/runyourempire/4da-v3/releases), or build from source:
+```bash
+cd src-tauri && cargo build --release --bin 4da
+```
+
 ## Development
 
 ```bash
 pnpm tauri dev              # Dev server (localhost:4444)
 cargo test                  # Rust tests (from src-tauri/)
-pnpm test                   # Frontend tests (49+)
+pnpm test                   # Frontend tests (98)
 pnpm validate:all           # Full validation (lint + types + tests + build)
 ```
 

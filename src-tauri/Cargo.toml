@@ -91,6 +91,10 @@ flate2 = "1.0"               # Gzip compression/decompression
 # Compile-time scoring macros
 fourda-macros = { path = "fourda-macros" }
 
+[[bin]]
+name = "4da"
+path = "src/bin/cli.rs"
+
 [features]
 default = []
 void-universe = []
