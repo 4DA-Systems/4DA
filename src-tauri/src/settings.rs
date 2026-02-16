@@ -744,7 +744,7 @@ pub fn discover_dev_directories() -> Vec<String> {
                 }
 
                 // CRITICAL: Also scan root of mounts for project directories
-                // This finds projects like /mnt/d/4da-v3 that aren't in standard folders
+                // This finds projects like /mnt/d/4DA that aren't in standard folders
                 info!(target: "4da::discovery", mount = mount, "Scanning mount root for projects");
                 if let Ok(entries) = fs::read_dir(&mount_path) {
                     for entry in entries.flatten() {

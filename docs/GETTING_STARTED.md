@@ -21,7 +21,7 @@ This guide will walk you through setting up 4DA for the first time.
 2. **Clone and Build**
    ```bash
    git clone <repository-url>
-   cd 4da-v3
+   cd 4DA
    pnpm install
    pnpm tauri build
    ```

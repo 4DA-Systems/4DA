@@ -7,7 +7,7 @@ use rusqlite::Connection;
 fn main() {
     println!("=== Database Content Check ===\n");
 
-    let db_path = "D:/4da-v3/data/4da.db";
+    let db_path = "D:/4DA/data/4da.db";
     let conn = Connection::open(db_path).expect("Failed to open database");
 
     // Check context_chunks schema

@@ -91,7 +91,7 @@ What survives is scored with content quality analysis (kills clickbait), novelty
 
 ```bash
 git clone https://github.com/runyourempire/4DA.git
-cd 4da-v3
+cd 4DA
 pnpm install
 pnpm tauri dev
 ```

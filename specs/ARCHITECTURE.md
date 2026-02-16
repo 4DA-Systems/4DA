@@ -1,4 +1,4 @@
-# 4DA v3 - Stone Tablet Architecture
+# 4DA - Stone Tablet Architecture
 
 ## Nuke-Proof System Design
 
@@ -13,7 +13,7 @@
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                         4DA v3                                  │
+│                         4DA                                     │
 │                 Ambient Intelligence Layer                      │
 ├─────────────────────────────────────────────────────────────────┤
 │                                                                 │
@@ -502,6 +502,6 @@ Stage 3: Human Feedback Loop
 
 ---
 
-*This document is the canonical reference for 4DA v3 architecture. All implementation decisions should trace back to this specification.*
+*This document is the canonical reference for 4DA architecture. All implementation decisions should trace back to this specification.*
 
 **Approved for Phase 0 POC**

@@ -7,7 +7,7 @@
 ```bash
 # Prerequisites: Rust 1.70+, Node.js 18+, pnpm
 git clone https://github.com/runyourempire/4DA.git
-cd 4da-v3
+cd 4DA
 pnpm install
 pnpm tauri dev
 ```

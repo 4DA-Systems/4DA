@@ -11,8 +11,7 @@ fn main() {
     println!("=== Full NLQ Executor Test ===\n");
 
     // Open database
-    let db_path =
-        std::env::var("FOURDA_DB").unwrap_or_else(|_| "D:/4da-v3/data/4da.db".to_string());
+    let db_path = std::env::var("FOURDA_DB").unwrap_or_else(|_| "D:/4DA/data/4da.db".to_string());
 
     println!("Opening database: {}", db_path);
 

@@ -1,5 +1,5 @@
 # Architecture Reference
-## System Structure for 4DA v3
+## System Structure for 4DA
 
 ---
 
@@ -17,7 +17,7 @@ This file provides a quick reference. For detailed design, read the specs.
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                         4DA v3                                   │
+│                         4DA                                      │
 │                 "All Signal. No Feed."                           │
 ├─────────────────────────────────────────────────────────────────┤
 │                                                                  │
@@ -138,7 +138,7 @@ Sources                              ▲
 ## Key Directories
 
 ```
-4da-v3/
+4DA/
 ├── .ai/                 # CADE cognition artifacts (YOU ARE HERE)
 ├── .claude/             # Runtime hooks and state
 ├── src-tauri/           # Rust backend
