@@ -202,3 +202,133 @@ export interface RecordFeedbackParams {
   source_type: string;
   action: FeedbackAction;
 }
+
+// =============================================================================
+// Database Row Types (for MCP tool queries)
+// =============================================================================
+
+/** Row from: SELECT si.source_type, COUNT(*) as interactions FROM interactions ... GROUP BY si.source_type */
+export interface EngagementRow {
+  source_type: string;
+  interactions: number;
+}
+
+/** Row from: SELECT topic, positive_signals, negative_signals, (computed) as attention_score FROM topic_affinities */
+export interface TopicAffinityRow {
+  topic: string;
+  positive_signals: number;
+  negative_signals: number;
+  attention_score: number;
+}
+
+/** Row from: SELECT name as topic, category, confidence FROM detected_tech */
+export interface CodebaseTopicRow {
+  topic: string;
+  category: string;
+  confidence: number;
+}
+
+/** Row from: SELECT topic FROM interests / exclusions */
+export interface SimpleTopicRow {
+  topic: string;
+}
+
+/** Row from: SELECT DISTINCT name FROM detected_tech */
+export interface SimpleNameRow {
+  name: string;
+}
+
+/** Row from: SELECT id, subject, data, created_at FROM temporal_events */
+export interface TemporalEventRow {
+  id: number;
+  subject: string;
+  data: string;
+  created_at: string;
+}
+
+/** Row from: SELECT id, event_type, subject, data, created_at FROM temporal_events WHERE event_type = 'signal_chain' */
+export interface SignalChainRow {
+  id: number;
+  event_type: string;
+  subject: string;
+  data: string;
+  created_at: string;
+}
+
+/** Row from: SELECT ir.source_item_id, ir.related_item_id, ir.metadata, ir.created_at, si.title, si.url, si.source_type FROM item_relationships ir JOIN source_items si ... */
+export interface MentionRow {
+  source_item_id: number;
+  related_item_id: number;
+  metadata: string;
+  created_at: string;
+  title: string;
+  url: string;
+  source_type: string;
+}
+
+/** Row from: SELECT DISTINCT package_name FROM project_dependencies */
+export interface PackageNameRow {
+  package_name: string;
+}
+
+/** Row from: SELECT project_path, COUNT(*) as dep_count, GROUP_CONCAT(package_name, ', ') as packages FROM project_dependencies ... GROUP BY project_path */
+export interface ProjectSummaryRow {
+  project_path: string;
+  dep_count: number;
+  packages: string;
+}
+
+/** Row from: SELECT package_name, version, language, is_dev FROM project_dependencies WHERE project_path = ? */
+export interface DependencyRow {
+  package_name: string;
+  version: string;
+  language: string;
+  is_dev: number | null;
+}
+
+/** Row from: SELECT package_name, version, project_path, language FROM project_dependencies */
+export interface DependencyWithProjectRow {
+  package_name: string;
+  version: string;
+  project_path: string;
+  language: string;
+}
+
+/** Row from: SELECT COUNT(*) as cnt FROM source_items ... */
+export interface CountRow {
+  cnt: number;
+}
+
+/** Row from: SELECT si.id, si.title, si.url, si.source_type, si.created_at FROM source_items si ... */
+export interface SourceItemBriefRow {
+  id: number;
+  title: string;
+  url: string | null;
+  source_type: string;
+  created_at: string;
+}
+
+/** Row from: SELECT id, title, url, source_type FROM source_items (fallback in export-context) */
+export interface SourceItemMinimalRow {
+  id: number;
+  title: string;
+  url: string | null;
+  source_type: string;
+}
+
+/** Row from: SELECT si.id, si.title, si.url, si.source_type, i.timestamp as saved_at FROM interactions i JOIN source_items si ... */
+export interface SavedItemRow {
+  id: number;
+  title: string;
+  url: string | null;
+  source_type: string;
+  saved_at: string;
+}
+
+/** Row from: SELECT id, subject as title, data, created_at FROM temporal_events WHERE event_type = 'signal_emitted' */
+export interface SignalEventRow {
+  id: number;
+  title: string;
+  data: string;
+  created_at: string;
+}

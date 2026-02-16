@@ -5,6 +5,7 @@
  */
 
 import type { FourDADatabase } from "../db.js";
+import type { DependencyWithProjectRow, SourceItemBriefRow } from "../types.js";
 
 export interface KnowledgeGapsParams {
   min_severity?: string;
@@ -26,6 +27,16 @@ export const knowledgeGapsTool = {
   },
 };
 
+export interface KnowledgeGap {
+  dependency: string;
+  version: string;
+  project_path: string;
+  language: string;
+  missed_items: SourceItemBriefRow[];
+  gap_severity: string;
+  missed_count: number;
+}
+
 export function executeKnowledgeGaps(
   db: FourDADatabase,
   params: KnowledgeGapsParams,
@@ -35,7 +46,7 @@ export function executeKnowledgeGaps(
   // Get all tracked dependencies
   const deps = rawDb
     .prepare("SELECT package_name, version, project_path, language FROM project_dependencies")
-    .all() as any[];
+    .all() as DependencyWithProjectRow[];
 
   if (deps.length === 0) {
     return {
@@ -44,7 +55,7 @@ export function executeKnowledgeGaps(
     };
   }
 
-  const gaps: any[] = [];
+  const gaps: KnowledgeGap[] = [];
 
   for (const dep of deps) {
     // Find source items mentioning this dependency
@@ -55,12 +66,12 @@ export function executeKnowledgeGaps(
         WHERE (si.title LIKE ? OR si.content LIKE ?)
         AND si.id NOT IN (SELECT source_item_id FROM interactions WHERE action IN ('click', 'save'))
         ORDER BY si.created_at DESC LIMIT 5`)
-      .all(pattern, pattern) as any[];
+      .all(pattern, pattern) as SourceItemBriefRow[];
 
     if (mentionedItems.length > 0) {
       // Check if any are security-related
       const hasSecurityMention = mentionedItems.some(
-        (item: any) =>
+        (item) =>
           item.title?.toLowerCase().includes("cve") ||
           item.title?.toLowerCase().includes("security") ||
           item.title?.toLowerCase().includes("vulnerability"),

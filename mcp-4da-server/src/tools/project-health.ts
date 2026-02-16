@@ -5,6 +5,7 @@
  */
 
 import type { FourDADatabase } from "../db.js";
+import type { ProjectSummaryRow, DependencyRow, CountRow } from "../types.js";
 
 export interface ProjectHealthParams {
   project_path?: string;
@@ -35,22 +36,22 @@ export function executeProjectHealth(
                       GROUP_CONCAT(package_name, ', ') as packages
                FROM project_dependencies`;
 
-  const queryParams: any[] = [];
+  const queryParams: string[] = [];
   if (params.project_path) {
     query += " WHERE project_path = ?";
     queryParams.push(params.project_path);
   }
   query += " GROUP BY project_path";
 
-  const projects = rawDb.prepare(query).all(...queryParams) as any[];
+  const projects = rawDb.prepare(query).all(...queryParams) as ProjectSummaryRow[];
 
-  const healthReports = projects.map((proj: any) => {
+  const healthReports = projects.map((proj) => {
     // Get dependencies for this project
     const deps = rawDb
       .prepare(
         "SELECT package_name, version, language, is_dev FROM project_dependencies WHERE project_path = ?",
       )
-      .all(proj.project_path) as any[];
+      .all(proj.project_path) as DependencyRow[];
 
     // Check for security-related source items mentioning these deps
     let securityIssues = 0;
@@ -62,8 +63,8 @@ export function executeProjectHealth(
            WHERE (title LIKE ? OR content LIKE ?)
            AND (signal_type = 'security_alert' OR title LIKE '%CVE%' OR title LIKE '%vulnerability%')`,
         )
-        .get(pattern, pattern) as any;
-      if (securityMentions.cnt > 0) securityIssues++;
+        .get(pattern, pattern) as CountRow | undefined;
+      if (securityMentions && securityMentions.cnt > 0) securityIssues++;
     }
 
     const securityScore = deps.length > 0 ? 1.0 - securityIssues / deps.length : 1.0;
@@ -72,7 +73,7 @@ export function executeProjectHealth(
       project_path: proj.project_path,
       project_name: proj.project_path.split(/[/\\]/).pop() || proj.project_path,
       dependency_count: proj.dep_count,
-      dependencies: deps.slice(0, 20).map((d: any) => ({
+      dependencies: deps.slice(0, 20).map((d) => ({
         name: d.package_name,
         version: d.version,
         language: d.language,

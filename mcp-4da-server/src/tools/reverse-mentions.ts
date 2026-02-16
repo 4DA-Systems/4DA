@@ -5,6 +5,7 @@
  */
 
 import type { FourDADatabase } from "../db.js";
+import type { MentionRow, PackageNameRow } from "../types.js";
 
 export interface ReverseMentionsParams {
   limit?: number;
@@ -43,10 +44,10 @@ export function executeReverseMentions(
        ORDER BY ir.created_at DESC
        LIMIT ?`,
     )
-    .all(limit) as any[];
+    .all(limit) as MentionRow[];
 
-  const results = mentions.map((m: any) => {
-    const metadata = m.metadata ? JSON.parse(m.metadata) : {};
+  const results = mentions.map((m) => {
+    const metadata: { project_name?: string; context?: string } = m.metadata ? JSON.parse(m.metadata) : {};
     return {
       source_item_id: m.source_item_id,
       title: m.title,
@@ -59,10 +60,10 @@ export function executeReverseMentions(
   });
 
   // Also check for mentions via text search of project names from dependencies
-  const projectNames = rawDb
+  const projectNames = (rawDb
     .prepare("SELECT DISTINCT package_name FROM project_dependencies LIMIT 10")
-    .all()
-    .map((r: any) => r.package_name);
+    .all() as PackageNameRow[])
+    .map((r) => r.package_name);
 
   return {
     mentions: results,

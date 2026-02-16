@@ -5,6 +5,7 @@
  */
 
 import type { FourDADatabase } from "../db.js";
+import type { TemporalEventRow } from "../types.js";
 
 export interface SemanticShiftsParams {
   period_days?: number;
@@ -31,6 +32,20 @@ export const semanticShiftsTool = {
   },
 };
 
+export interface CentroidSnapshot {
+  data: { drift_magnitude?: number; direction?: string; [key: string]: unknown };
+  created_at: string;
+}
+
+export interface SemanticShift {
+  topic: string;
+  drift_magnitude: number;
+  direction: string;
+  period: string;
+  snapshots: number;
+  detected_at: string;
+}
+
 export function executeSemanticShifts(
   db: FourDADatabase,
   params: SemanticShiftsParams,
@@ -46,10 +61,10 @@ export function executeSemanticShifts(
        AND created_at >= datetime('now', '-' || ? || ' days')
        ORDER BY created_at DESC`,
     )
-    .all(periodDays) as any[];
+    .all(periodDays) as TemporalEventRow[];
 
   // Group centroids by subject (topic)
-  const byTopic = new Map<string, any[]>();
+  const byTopic = new Map<string, CentroidSnapshot[]>();
   for (const row of rows) {
     const existing = byTopic.get(row.subject) || [];
     existing.push({
@@ -60,7 +75,7 @@ export function executeSemanticShifts(
   }
 
   // Detect shifts where we have at least 2 snapshots
-  const shifts: any[] = [];
+  const shifts: SemanticShift[] = [];
   for (const [topic, snapshots] of byTopic) {
     if (snapshots.length < 2) continue;
     const latest = snapshots[0];

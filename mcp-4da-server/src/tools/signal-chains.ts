@@ -5,6 +5,7 @@
  */
 
 import type { FourDADatabase } from "../db.js";
+import type { SignalChainRow } from "../types.js";
 
 export interface SignalChainsParams {
   resolution?: string;
@@ -33,6 +34,14 @@ export const signalChainsTool = {
   },
 };
 
+export interface ChainData {
+  chain_name?: string;
+  links?: unknown[];
+  overall_priority?: string;
+  resolution?: string;
+  suggested_action?: string;
+}
+
 export function executeSignalChains(
   db: FourDADatabase,
   params: SignalChainsParams,
@@ -49,10 +58,10 @@ export function executeSignalChains(
   }
   query += " ORDER BY created_at DESC LIMIT 50";
 
-  const rows = rawDb.prepare(query).all() as any[];
+  const rows = rawDb.prepare(query).all() as SignalChainRow[];
 
-  const chains = rows.map((row: any) => {
-    const data = JSON.parse(row.data);
+  const chains = rows.map((row) => {
+    const data: ChainData = JSON.parse(row.data);
     return {
       id: row.id,
       chain_name: data.chain_name || row.subject,

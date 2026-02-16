@@ -5,6 +5,7 @@
  */
 
 import type { FourDADatabase } from "../db.js";
+import type { EngagementRow, TopicAffinityRow, CodebaseTopicRow } from "../types.js";
 
 export interface AttentionReportParams {
   period_days?: number;
@@ -42,7 +43,7 @@ export function executeAttentionReport(
        GROUP BY si.source_type
        ORDER BY interactions DESC`,
     )
-    .all(days) as any[];
+    .all(days) as EngagementRow[];
 
   // Get topic affinities (learned attention)
   const topicAffinities = rawDb
@@ -54,7 +55,7 @@ export function executeAttentionReport(
        ORDER BY attention_score DESC
        LIMIT 15`,
     )
-    .all() as any[];
+    .all() as TopicAffinityRow[];
 
   // Get codebase topics from detected tech
   const codebaseTopics = rawDb
@@ -64,18 +65,18 @@ export function executeAttentionReport(
        ORDER BY confidence DESC
        LIMIT 15`,
     )
-    .all() as any[];
+    .all() as CodebaseTopicRow[];
 
   // Identify blind spots: in codebase but low engagement
   const engagedTopics = new Set(
     topicAffinities
-      .filter((t: any) => t.attention_score > 0)
-      .map((t: any) => t.topic.toLowerCase()),
+      .filter((t) => t.attention_score > 0)
+      .map((t) => t.topic.toLowerCase()),
   );
 
   const blindSpots = codebaseTopics
-    .filter((ct: any) => !engagedTopics.has(ct.topic.toLowerCase()))
-    .map((ct: any) => ({
+    .filter((ct) => !engagedTopics.has(ct.topic.toLowerCase()))
+    .map((ct) => ({
       topic: ct.topic,
       in_codebase: true,
       engagement_level: 0,
@@ -84,7 +85,7 @@ export function executeAttentionReport(
     }));
 
   const totalInteractions = engagementRows.reduce(
-    (sum: number, r: any) => sum + r.interactions,
+    (sum, r) => sum + r.interactions,
     0,
   );
 

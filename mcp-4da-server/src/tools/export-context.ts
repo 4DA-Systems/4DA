@@ -5,6 +5,7 @@
  */
 
 import type { FourDADatabase } from "../db.js";
+import type { SimpleTopicRow, SimpleNameRow, SignalEventRow, SourceItemMinimalRow, SavedItemRow } from "../types.js";
 
 export interface ExportContextParams {
   include_signals?: boolean;
@@ -31,6 +32,14 @@ export const exportContextPacketTool = {
   },
 };
 
+export interface OpenSignal {
+  id: number;
+  title: string;
+  signal_type: string;
+  priority: string;
+  source_type: string;
+}
+
 export function executeExportContextPacket(
   db: FourDADatabase,
   params: ExportContextParams,
@@ -42,38 +51,38 @@ export function executeExportContextPacket(
   // Get interests
   const interests = rawDb
     .prepare("SELECT topic FROM interests ORDER BY weight DESC LIMIT 20")
-    .all()
-    .map((r: any) => r.topic);
+    .all() as SimpleTopicRow[];
+  const interestTopics = interests.map((r) => r.topic);
 
   // Get exclusions
-  const exclusions = rawDb
+  const exclusionRows = rawDb
     .prepare("SELECT topic FROM exclusions")
-    .all()
-    .map((r: any) => r.topic);
+    .all() as SimpleTopicRow[];
+  const exclusions = exclusionRows.map((r) => r.topic);
 
   // Get detected tech from ACE
-  const detectedTech = rawDb
+  const detectedTechRows = rawDb
     .prepare("SELECT DISTINCT name FROM detected_tech ORDER BY confidence DESC LIMIT 15")
-    .all()
-    .map((r: any) => r.name);
+    .all() as SimpleNameRow[];
+  const detectedTech = detectedTechRows.map((r) => r.name);
 
   // Get active topics
-  const activeTopics = rawDb
+  const activeTopicRows = rawDb
     .prepare("SELECT DISTINCT topic FROM active_topics ORDER BY last_seen DESC LIMIT 10")
-    .all()
-    .map((r: any) => r.topic);
+    .all() as SimpleTopicRow[];
+  const activeTopics = activeTopicRows.map((r) => r.topic);
 
   // Get open signals from temporal events (signals are computed at runtime, not stored in source_items)
-  let openSignals: any[] = [];
+  let openSignals: (OpenSignal | SourceItemMinimalRow)[] = [];
   if (includeSignals) {
     try {
-      openSignals = rawDb
+      openSignals = (rawDb
         .prepare(`SELECT id, subject as title, data, created_at
           FROM temporal_events
           WHERE event_type = 'signal_emitted'
           ORDER BY created_at DESC LIMIT 20`)
-        .all()
-        .map((row: any) => {
+        .all() as SignalEventRow[])
+        .map((row) => {
           const data = JSON.parse(row.data || '{}');
           return {
             id: row.id,
@@ -89,12 +98,12 @@ export function executeExportContextPacket(
         .prepare(`SELECT id, title, url, source_type
           FROM source_items
           ORDER BY created_at DESC LIMIT 20`)
-        .all();
+        .all() as SourceItemMinimalRow[];
     }
   }
 
   // Get saved items
-  let savedItems: any[] = [];
+  let savedItems: SavedItemRow[] = [];
   if (includeSaved) {
     savedItems = rawDb
       .prepare(`SELECT si.id, si.title, si.url, si.source_type, i.timestamp as saved_at
@@ -102,7 +111,7 @@ export function executeExportContextPacket(
         JOIN source_items si ON i.source_item_id = si.id
         WHERE i.action = 'save'
         ORDER BY i.timestamp DESC LIMIT 20`)
-      .all();
+      .all() as SavedItemRow[];
   }
 
   return {
@@ -111,11 +120,11 @@ export function executeExportContextPacket(
     active_context: {
       detected_tech: detectedTech,
       active_topics: activeTopics,
-      interests,
+      interests: interestTopics,
       exclusions,
     },
     open_signals: openSignals,
     saved_items: savedItems,
-    summary: `${interests.length} interests, ${detectedTech.length} detected tech, ${openSignals.length} open signals, ${savedItems.length} saved items`,
+    summary: `${interestTopics.length} interests, ${detectedTech.length} detected tech, ${openSignals.length} open signals, ${savedItems.length} saved items`,
   };
 }
