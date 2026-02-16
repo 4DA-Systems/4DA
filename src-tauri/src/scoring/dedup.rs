@@ -98,11 +98,11 @@ pub(crate) fn topic_dedup_results(results: &mut Vec<SourceRelevance>) {
     let mut grouped_indices: std::collections::HashSet<usize> = std::collections::HashSet::new();
 
     // For each item, extract topics from title and find if it shares a primary topic with an earlier item
-    for i in 0..results.len() {
-        if results[i].excluded || grouped_indices.contains(&i) {
+    for (i, item) in results.iter().enumerate() {
+        if item.excluded || grouped_indices.contains(&i) {
             continue;
         }
-        let topics = extract_topics(&results[i].title, "");
+        let topics = extract_topics(&item.title, "");
         for topic in &topics {
             // Skip short/stopword topics
             if topic.len() < 3 {
@@ -176,9 +176,7 @@ pub(crate) fn compute_serendipity_candidates(
 ) -> Vec<SourceRelevance> {
     // Budget: how many serendipity items to include
     let total_relevant = results.iter().filter(|r| r.relevant && !r.excluded).count();
-    let budget = ((total_relevant.max(5) * budget_percent as usize) / 100)
-        .max(1)
-        .min(5);
+    let budget = ((total_relevant.max(5) * budget_percent as usize) / 100).clamp(1, 5);
 
     // Find items that failed the gate but had some signal
     let mut candidates: Vec<SourceRelevance> = results

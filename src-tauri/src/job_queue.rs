@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 //! Background Job Queue for Document Extraction
 //!
 //! Handles async processing of document extraction jobs (OCR, audio transcription).

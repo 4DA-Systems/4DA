@@ -1,3 +1,4 @@
+#![allow(clippy::manual_range_contains)]
 mod ace_context;
 mod affinity;
 mod calibration;
@@ -589,10 +590,9 @@ pub(crate) fn score_item(
                             && matched_deps
                                 .iter()
                                 .any(|d| d.version_delta == VersionDelta::NewerMajor)
+                            && c.priority < signals::SignalPriority::High
                         {
-                            if c.priority < signals::SignalPriority::High {
-                                c.priority = signals::SignalPriority::High;
-                            }
+                            c.priority = signals::SignalPriority::High;
                         }
                         // Add dep:package_name triggers
                         for dep in matched_deps.iter().take(2) {
@@ -605,12 +605,10 @@ pub(crate) fn score_item(
                         && c.priority > signals::SignalPriority::Low
                     {
                         c.priority = signals::SignalPriority::Low;
-                    } else if combined_score < scoring_config::MEDIUM_SCORE_CAP
-                        && c.priority > signals::SignalPriority::Medium
-                    {
-                        c.priority = signals::SignalPriority::Medium;
-                    } else if combined_score > scoring_config::HIGH_SCORE_FLOOR
-                        && c.priority < signals::SignalPriority::Medium
+                    } else if (combined_score < scoring_config::MEDIUM_SCORE_CAP
+                        && c.priority > signals::SignalPriority::Medium)
+                        || (combined_score > scoring_config::HIGH_SCORE_FLOOR
+                            && c.priority < signals::SignalPriority::Medium)
                     {
                         c.priority = signals::SignalPriority::Medium;
                     }

@@ -26,7 +26,7 @@ pub struct ContentQuality {
 pub fn compute_content_quality(title: &str, content: &str, url: Option<&str>) -> ContentQuality {
     let title_quality = assess_title_quality(title);
     let content_depth = assess_content_depth(content);
-    let source_authority = url.map(|u| assess_source_authority(u)).unwrap_or(1.0);
+    let source_authority = url.map(assess_source_authority).unwrap_or(1.0);
 
     // Combine: title quality matters most, content depth secondary
     let raw = title_quality * 0.5 + content_depth * 0.3 + source_authority * 0.2;

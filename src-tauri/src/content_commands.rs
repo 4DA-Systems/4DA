@@ -44,18 +44,18 @@ pub struct SavedItem {
 /// Fetch full article content for a source item.
 #[tauri::command]
 pub async fn get_item_content(item_id: i64) -> Result<ItemContent> {
-    let db = get_database().map_err(|e| FourDaError::Internal(e))?;
+    let db = get_database().map_err(FourDaError::Internal)?;
 
     let (content, source_type, _char_count) = db
         .get_item_content(item_id)
-        .map_err(|e| FourDaError::Internal(e))?
+        .map_err(FourDaError::Internal)?
         .ok_or_else(|| FourDaError::Internal(format!("Item {} not found", item_id)))?;
 
     let word_count = content.split_whitespace().count();
 
     let summary = db
         .get_item_summary(item_id)
-        .map_err(|e| FourDaError::Internal(e))?;
+        .map_err(FourDaError::Internal)?;
 
     Ok(ItemContent {
         content,
@@ -69,11 +69,11 @@ pub async fn get_item_content(item_id: i64) -> Result<ItemContent> {
 /// Get cached AI summary for an item. Returns error if no summary cached.
 #[tauri::command]
 pub async fn get_item_summary(item_id: i64) -> Result<ItemSummary> {
-    let db = get_database().map_err(|e| FourDaError::Internal(e))?;
+    let db = get_database().map_err(FourDaError::Internal)?;
 
     match db
         .get_item_summary(item_id)
-        .map_err(|e| FourDaError::Internal(e))?
+        .map_err(FourDaError::Internal)?
     {
         Some(summary) => Ok(ItemSummary {
             summary,
@@ -86,12 +86,12 @@ pub async fn get_item_summary(item_id: i64) -> Result<ItemSummary> {
 /// Generate AI summary for an item. Uses cache if available.
 #[tauri::command]
 pub async fn generate_item_summary(item_id: i64) -> Result<ItemSummary> {
-    let db = get_database().map_err(|e| FourDaError::Internal(e))?;
+    let db = get_database().map_err(FourDaError::Internal)?;
 
     // Check cache first
     if let Some(summary) = db
         .get_item_summary(item_id)
-        .map_err(|e| FourDaError::Internal(e))?
+        .map_err(FourDaError::Internal)?
     {
         return Ok(ItemSummary {
             summary,
@@ -102,7 +102,7 @@ pub async fn generate_item_summary(item_id: i64) -> Result<ItemSummary> {
     // Get content snippet for summarization
     let content_snippet = db
         .get_item_content_snippet(item_id, 2000)
-        .map_err(|e| FourDaError::Internal(e))?;
+        .map_err(FourDaError::Internal)?;
 
     if content_snippet.trim().is_empty() {
         return Err(FourDaError::Internal(
@@ -112,7 +112,7 @@ pub async fn generate_item_summary(item_id: i64) -> Result<ItemSummary> {
 
     let title = db
         .get_item_title(item_id)
-        .map_err(|e| FourDaError::Internal(e))?
+        .map_err(FourDaError::Internal)?
         .unwrap_or_default();
 
     // Get LLM config
@@ -145,7 +145,7 @@ pub async fn generate_item_summary(item_id: i64) -> Result<ItemSummary> {
             }],
         )
         .await
-        .map_err(|e| FourDaError::Llm(e))?;
+        .map_err(FourDaError::Llm)?;
 
     let summary = response.content.trim().to_string();
 
@@ -165,7 +165,7 @@ pub async fn generate_item_summary(item_id: i64) -> Result<ItemSummary> {
 /// Get all saved items (from ACE interactions table).
 #[tauri::command]
 pub async fn get_saved_items() -> Result<Vec<SavedItem>> {
-    let conn = open_db_connection().map_err(|e| FourDaError::Internal(e))?;
+    let conn = open_db_connection().map_err(FourDaError::Internal)?;
 
     let mut stmt = conn
         .prepare(
@@ -177,7 +177,7 @@ pub async fn get_saved_items() -> Result<Vec<SavedItem>> {
              ORDER BY i.timestamp DESC
              LIMIT 100",
         )
-        .map_err(|e| FourDaError::Db(e))?;
+        .map_err(FourDaError::Db)?;
 
     let items = stmt
         .query_map([], |row| {
@@ -191,7 +191,7 @@ pub async fn get_saved_items() -> Result<Vec<SavedItem>> {
                 content_preview: row.get(6)?,
             })
         })
-        .map_err(|e| FourDaError::Db(e))?
+        .map_err(FourDaError::Db)?
         .filter_map(|r| r.ok())
         .collect();
 
@@ -201,13 +201,13 @@ pub async fn get_saved_items() -> Result<Vec<SavedItem>> {
 /// Remove a saved item (delete save interaction).
 #[tauri::command]
 pub async fn remove_saved_item(item_id: i64) -> Result<()> {
-    let conn = open_db_connection().map_err(|e| FourDaError::Internal(e))?;
+    let conn = open_db_connection().map_err(FourDaError::Internal)?;
 
     conn.execute(
         "DELETE FROM interactions WHERE action_type = 'save' AND item_id = ?1",
         params![item_id],
     )
-    .map_err(|e| FourDaError::Db(e))?;
+    .map_err(FourDaError::Db)?;
 
     info!(target: "4da::content", item_id = item_id, "Removed saved item");
     Ok(())

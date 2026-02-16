@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 //! Database module for 4DA - Persistence layer for embeddings and sources
 //!
 //! Uses sqlite-vec for vector similarity search at scale.
@@ -1973,6 +1974,7 @@ impl Database {
 
     /// Get the most recent briefing.
     /// Returns (content, model, item_count, created_at).
+    #[allow(clippy::type_complexity)]
     pub fn get_latest_briefing(
         &self,
     ) -> SqliteResult<Option<(String, Option<String>, i64, String)>> {

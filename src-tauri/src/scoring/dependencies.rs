@@ -194,9 +194,10 @@ fn compare_version_in_content(
             if ch.is_ascii_digit() && i < 20 {
                 // Check this is at a word boundary (preceded by space, v, etc.)
                 if i == 0
-                    || after_name.as_bytes().get(i - 1).map_or(true, |&b| {
-                        !b.is_ascii_alphanumeric() || b == b'v' || b == b'V'
-                    })
+                    || after_name
+                        .as_bytes()
+                        .get(i - 1)
+                        .is_none_or(|&b| !b.is_ascii_alphanumeric() || b == b'v' || b == b'V')
                 {
                     let digit_str: String = after_name[i..]
                         .chars()
@@ -278,7 +279,7 @@ pub(crate) fn match_dependencies(
     let text_lower = format!("{} {}", title_lower, content.to_lowercase());
     let mut matched = Vec::new();
 
-    for (_, info) in &ace_ctx.dependency_info {
+    for info in ace_ctx.dependency_info.values() {
         let mut confidence = 0.0_f32;
 
         for term in &info.search_terms {

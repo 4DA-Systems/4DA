@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 //! Semantic Diff Engine for 4DA
 //!
 //! Tracks how the conversation around topics shifts over time.

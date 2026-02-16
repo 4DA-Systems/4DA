@@ -118,6 +118,7 @@ fn open_db(path: &PathBuf) -> Result<rusqlite::Connection, String> {
 // Commands
 // ============================================================================
 
+#[allow(clippy::type_complexity)]
 fn cmd_briefing(conn: &rusqlite::Connection) {
     let result: Result<Option<(String, Option<String>, i64, String)>, _> = conn
         .query_row(

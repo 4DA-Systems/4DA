@@ -57,7 +57,7 @@ fn gap_message(source: &str, status: &str) -> Option<&'static str> {
 #[tauri::command]
 pub async fn get_source_health_status() -> Result<Vec<SourceHealthStatus>> {
     let db = get_database().map_err(FourDaError::Internal)?;
-    let records = db.get_source_health().map_err(|e| FourDaError::Db(e))?;
+    let records = db.get_source_health().map_err(FourDaError::Db)?;
 
     let statuses = records
         .into_iter()

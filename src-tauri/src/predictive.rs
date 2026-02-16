@@ -71,7 +71,7 @@ pub fn predict_next_context(conn: &rusqlite::Connection) -> Result<PredictedCont
     let mut topic_scores: HashMap<String, f32> = HashMap::new();
     let mut total_weight: f32 = 0.0;
 
-    for (_hour, topics) in &hour_topics {
+    for topics in hour_topics.values() {
         for (topic, count) in topics {
             let score = *count as f32;
             *topic_scores.entry(topic.clone()).or_insert(0.0) += score;
