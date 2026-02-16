@@ -555,9 +555,7 @@ fn classify_severity(missed: &[MissedItem], days_since: u32, dep_name: &str) -> 
 
     if has_security {
         GapSeverity::Critical
-    } else if has_breaking {
-        GapSeverity::High
-    } else if days_since > 30 && missed.len() >= 3 {
+    } else if has_breaking || (days_since > 30 && missed.len() >= 3) {
         GapSeverity::High
     } else if days_since > 14 || missed.len() >= 3 {
         GapSeverity::Medium

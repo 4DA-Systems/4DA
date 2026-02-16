@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 //! Email digest system for 4DA
 //!
 //! Collects relevant items over a time period and formats them into

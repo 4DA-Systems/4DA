@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 //! ACE - Autonomous Context Engine (Simplified)
 //!
 //! The brain of 4DA. Implements autonomous context detection with:

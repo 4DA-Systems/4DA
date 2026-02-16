@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 //! Source abstraction layer for 4DA
 //!
 //! This module defines the trait that all information sources must implement.

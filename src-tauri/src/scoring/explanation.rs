@@ -4,6 +4,7 @@ use fourda_macros::score_component;
 
 /// Generate a human-readable explanation for why an item was considered relevant.
 /// Produces specific, actionable text naming the exact technologies/topics that matched.
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn generate_relevance_explanation(
     _title: &str,
     context_score: f32,

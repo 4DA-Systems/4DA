@@ -260,7 +260,7 @@ impl Source for ArxivSource {
             return Err(SourceError::Disabled);
         }
 
-        let deep_categories = vec![
+        let deep_categories = [
             "cs.SE", "cs.PL", "cs.DB", "cs.CR", "cs.DC", "cs.HC", "cs.IR",
         ];
 

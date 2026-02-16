@@ -18,8 +18,8 @@ pub(crate) fn topic_overlaps(a: &str, b: &str) -> bool {
         .iter()
         .any(|pa| parts_b.iter().any(|pb| pa == pb))
         // Also check whole-string against individual parts
-        || parts_b.iter().any(|pb| *pb == a)
-        || parts_a.iter().any(|pa| *pa == b)
+        || parts_b.contains(&a)
+        || parts_a.contains(&b)
 }
 
 /// Check if a short term appears as a whole word (bounded by non-alphanumeric chars)

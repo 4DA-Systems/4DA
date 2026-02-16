@@ -150,7 +150,7 @@ pub fn generate_audio(text: &str, max_duration_seconds: u32) -> Result<PathBuf, 
 }
 
 #[cfg(target_os = "windows")]
-fn generate_with_sapi(text: &str, output_path: &PathBuf) -> Result<(), String> {
+fn generate_with_sapi(text: &str, output_path: &std::path::Path) -> Result<(), String> {
     let escaped = text.replace('\'', "''").replace('"', "`\"");
     let output_str = output_path.to_string_lossy();
 
@@ -200,7 +200,7 @@ fn generate_with_say(_text: &str, _output_path: &PathBuf) -> Result<(), String> 
     Err("say not available on this platform".to_string())
 }
 
-fn generate_with_espeak(text: &str, output_path: &PathBuf) -> Result<(), String> {
+fn generate_with_espeak(text: &str, output_path: &std::path::Path) -> Result<(), String> {
     let output = std::process::Command::new("espeak")
         .args(["-w", &output_path.to_string_lossy(), text])
         .output()

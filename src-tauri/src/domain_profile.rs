@@ -11,7 +11,7 @@
 use std::collections::{HashMap, HashSet};
 
 /// User's technology identity — what they work with and care about
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct DomainProfile {
     /// Primary tech stack from onboarding (highest weight)
     pub primary_stack: HashSet<String>,
@@ -26,19 +26,6 @@ pub struct DomainProfile {
     /// Domain concerns: non-tech keywords relevant to this developer type
     /// e.g. a desktop app dev cares about "packaging", "installer", "auto-update"
     pub domain_concerns: HashSet<String>,
-}
-
-impl Default for DomainProfile {
-    fn default() -> Self {
-        Self {
-            primary_stack: HashSet::new(),
-            adjacent_tech: HashSet::new(),
-            all_tech: HashSet::new(),
-            dependency_names: HashSet::new(),
-            interest_topics: HashSet::new(),
-            domain_concerns: HashSet::new(),
-        }
-    }
 }
 
 impl DomainProfile {

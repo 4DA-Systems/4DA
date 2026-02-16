@@ -369,7 +369,7 @@ Rules:
                     &response.content,
                     Some(&llm_settings.model),
                     items.len(),
-                    Some(total_tokens as u64),
+                    Some(total_tokens),
                     Some(elapsed.as_millis() as u64),
                 ) {
                     error!(target: "4da::briefing", error = %e, "Failed to persist briefing to DB");
