@@ -254,6 +254,7 @@ pub fn run() {
             digest_commands::get_digest_config,
             digest_commands::set_digest_config,
             digest_commands::generate_ai_briefing,
+            digest_commands::get_latest_briefing,
             // Content
             commands::get_sources,
             commands::mcp_score_autopsy,

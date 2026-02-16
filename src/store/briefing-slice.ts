@@ -14,9 +14,37 @@ export const createBriefingSlice: StateCreator<AppStore, [], [], BriefingSlice> 
   aiBriefing: { ...initialBriefingState },
   showBriefing: false,
   autoBriefingEnabled: true,
+  lastBackgroundResultsAt: null,
 
   setShowBriefing: (show) => set({ showBriefing: show }),
   setAutoBriefingEnabled: (enabled) => set({ autoBriefingEnabled: enabled }),
+  setLastBackgroundResultsAt: (date) => set({ lastBackgroundResultsAt: date }),
+
+  loadPersistedBriefing: async () => {
+    try {
+      const result = await invoke<{
+        content: string;
+        model: string | null;
+        item_count: number;
+        created_at: string;
+      } | null>('get_latest_briefing');
+
+      if (result) {
+        set({
+          aiBriefing: {
+            content: result.content,
+            loading: false,
+            error: null,
+            model: result.model,
+            lastGenerated: new Date(result.created_at + 'Z'),
+          },
+          showBriefing: true,
+        });
+      }
+    } catch {
+      // Silently ignore — no persisted briefing available
+    }
+  },
 
   generateBriefing: async () => {
     set(state => ({

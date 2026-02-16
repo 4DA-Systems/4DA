@@ -27,24 +27,27 @@ export function useBriefing(
   const setAutoBriefingEnabled = useAppStore(s => s.setAutoBriefingEnabled);
   const generateBriefing = useAppStore(s => s.generateBriefing);
 
-  // Track last briefing count locally (not externally consumed, just for auto-trigger dedup)
-  const lastBriefingCountRef = useRef(0);
+  // Track the timestamp of the last auto-briefing trigger (not count)
+  const lastBriefingTriggerRef = useRef(0);
   const generatingBriefingRef = useRef(false);
+  const prevAnalysisCompleteRef = useRef(false);
 
-  // Autonomous AI Briefing - triggers when analysis completes with new relevant items
+  // Autonomous AI Briefing - triggers when analysisComplete transitions false→true
   useEffect(() => {
-    const totalCount = relevanceResults.length;
+    const justCompleted = analysisComplete && !prevAnalysisCompleteRef.current;
+    prevAnalysisCompleteRef.current = analysisComplete;
 
     if (
       autoBriefingEnabled &&
-      analysisComplete &&
-      totalCount > 0 &&
+      justCompleted &&
+      relevanceResults.length > 0 &&
       !aiBriefing.loading &&
-      !generatingBriefingRef.current &&
-      totalCount !== lastBriefingCountRef.current
+      !generatingBriefingRef.current
     ) {
-      // Auto-generate briefing after analysis completes
-      lastBriefingCountRef.current = totalCount;
+      // Debounce: don't re-trigger within 30 seconds
+      const now = Date.now();
+      if (now - lastBriefingTriggerRef.current < 30_000) return;
+      lastBriefingTriggerRef.current = now;
       generatingBriefingRef.current = true;
 
       const briefingTimer = setTimeout(() => {
@@ -58,8 +61,33 @@ export function useBriefing(
         generatingBriefingRef.current = false;
       };
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- trigger on analysis complete and count change
-  }, [analysisComplete, relevanceResults.length, autoBriefingEnabled, aiBriefing.loading]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- trigger on analysis complete transition
+  }, [analysisComplete, autoBriefingEnabled, aiBriefing.loading]);
+
+  // Background auto-refresh: silently regenerate when briefing is >2h old
+  // and new background items have arrived
+  const lastBackgroundResultsAt = useAppStore(s => s.lastBackgroundResultsAt);
+  useEffect(() => {
+    if (
+      !autoBriefingEnabled ||
+      !lastBackgroundResultsAt ||
+      !aiBriefing.lastGenerated ||
+      aiBriefing.loading ||
+      generatingBriefingRef.current
+    ) return;
+
+    const briefingAgeMs = Date.now() - aiBriefing.lastGenerated.getTime();
+    const twoHoursMs = 2 * 60 * 60 * 1000;
+    const hasNewItems = lastBackgroundResultsAt.getTime() > aiBriefing.lastGenerated.getTime();
+
+    if (briefingAgeMs > twoHoursMs && hasNewItems) {
+      generatingBriefingRef.current = true;
+      generateBriefing().finally(() => {
+        generatingBriefingRef.current = false;
+      });
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- trigger on background results
+  }, [lastBackgroundResultsAt]);
 
   return {
     aiBriefing,
