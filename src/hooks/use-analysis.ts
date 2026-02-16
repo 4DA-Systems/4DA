@@ -130,6 +130,7 @@ export function useAnalysis(
         });
         if (relevantNew > 0) {
           useAppStore.getState().addToast('info', `${relevantNew} new relevant items found`);
+          useAppStore.getState().setLastBackgroundResultsAt(new Date());
           onBackgroundItems?.(newItems.map(n => n.id));
         }
       });

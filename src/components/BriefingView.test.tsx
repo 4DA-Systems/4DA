@@ -17,6 +17,7 @@ function setMockState(overrides: Record<string, unknown>) {
     recordInteraction: vi.fn(),
     feedbackGiven: {},
     setActiveView: vi.fn(),
+    lastBackgroundResultsAt: null,
     ...overrides,
   };
 }
@@ -29,6 +30,13 @@ vi.mock('../store', () => ({
 vi.mock('./BriefingCard', () => ({
   BriefingCard: ({ item }: { item: { title: string } }) => (
     <div data-testid="briefing-card">{item.title}</div>
+  ),
+}));
+
+// Mock SignalActionCard
+vi.mock('./briefing/SignalActionCard', () => ({
+  SignalActionCard: ({ item }: { item: { title: string } }) => (
+    <div data-testid="signal-card">{item.title}</div>
   ),
 }));
 
@@ -56,24 +64,22 @@ describe('BriefingView', () => {
   });
 
   describe('empty state', () => {
-    it('shows empty prompt with generate button', () => {
+    it('shows preparing message when no briefing', () => {
       setMockState({
         aiBriefing: { content: null, loading: false, error: null, model: null, lastGenerated: null },
         appState: { relevanceResults: [{ id: 1, title: 'Test', top_score: 0.5 }] },
       });
       render(<BriefingView />);
-      expect(screen.getByText('Your Intelligence Briefing')).toBeInTheDocument();
-      expect(screen.getByText('Generate Briefing')).toBeInTheDocument();
+      expect(screen.getByText('Preparing Your Briefing')).toBeInTheDocument();
     });
 
-    it('disables generate button when no results', () => {
+    it('shows gathering message when no results', () => {
       setMockState({
         aiBriefing: { content: null, loading: false, error: null, model: null, lastGenerated: null },
         appState: { relevanceResults: [] },
       });
       render(<BriefingView />);
-      const button = screen.getByText('Run Analysis First');
-      expect(button).toBeDisabled();
+      expect(screen.getByText(/gathering intelligence/)).toBeInTheDocument();
     });
 
     it('shows result count when results available', () => {
@@ -82,22 +88,10 @@ describe('BriefingView', () => {
         appState: { relevanceResults: Array.from({ length: 15 }, (_, i) => ({ id: i })) },
       });
       render(<BriefingView />);
-      expect(screen.getByText(/15 results ready/)).toBeInTheDocument();
+      expect(screen.getByText(/Analyzing 15 results/)).toBeInTheDocument();
     });
 
-    it('calls generateBriefing when button clicked', () => {
-      const genFn = vi.fn();
-      setMockState({
-        aiBriefing: { content: null, loading: false, error: null, model: null, lastGenerated: null },
-        appState: { relevanceResults: [{ id: 1 }] },
-        generateBriefing: genFn,
-      });
-      render(<BriefingView />);
-      fireEvent.click(screen.getByText('Generate Briefing'));
-      expect(genFn).toHaveBeenCalledTimes(1);
-    });
-
-    it('shows "view results" link when results exist', () => {
+    it('shows "browse results" link when results exist', () => {
       const setView = vi.fn();
       setMockState({
         aiBriefing: { content: null, loading: false, error: null, model: null, lastGenerated: null },
@@ -105,7 +99,7 @@ describe('BriefingView', () => {
         setActiveView: setView,
       });
       render(<BriefingView />);
-      const link = screen.getByText(/view all 2 results/i);
+      const link = screen.getByText(/Browse 2 results/i);
       fireEvent.click(link);
       expect(setView).toHaveBeenCalledWith('results');
     });
@@ -144,13 +138,13 @@ describe('BriefingView', () => {
       expect(screen.getByText(/New Rust compiler/)).toBeInTheDocument();
     });
 
-    it('shows model attribution when available', () => {
+    it('shows model attribution in footer', () => {
       setMockState({
-        aiBriefing: { content: '## Overview\nTest', loading: false, error: null, model: 'claude-3-5-haiku', lastGenerated: null },
+        aiBriefing: { content: '## Overview\nTest', loading: false, error: null, model: 'claude-3-5-haiku', lastGenerated: new Date() },
         appState: { relevanceResults: [] },
       });
       render(<BriefingView />);
-      expect(screen.getByText('via claude-3-5-haiku')).toBeInTheDocument();
+      expect(screen.getByText(/claude-3-5-haiku/)).toBeInTheDocument();
     });
 
     it('shows refresh button', () => {
@@ -190,6 +184,41 @@ describe('BriefingView', () => {
       render(<BriefingView />);
       fireEvent.click(screen.getByText(/View All 3 Results/));
       expect(setView).toHaveBeenCalledWith('results');
+    });
+
+    it('renders signal action cards for critical items', () => {
+      setMockState({
+        aiBriefing: { content: '## Test\nContent', loading: false, error: null, model: null, lastGenerated: null },
+        appState: {
+          relevanceResults: [
+            { id: 1, title: 'Critical CVE', top_score: 0.9, relevant: true, signal_priority: 'critical', signal_type: 'security' },
+            { id: 2, title: 'Normal Item', top_score: 0.5, relevant: true },
+          ],
+        },
+      });
+      render(<BriefingView />);
+      expect(screen.getByTestId('signal-card')).toBeInTheDocument();
+    });
+
+    it('shows freshness badge when lastGenerated is set', () => {
+      setMockState({
+        aiBriefing: { content: '## Test\nContent', loading: false, error: null, model: null, lastGenerated: new Date() },
+        appState: { relevanceResults: [] },
+      });
+      render(<BriefingView />);
+      expect(screen.getByText('Just now')).toBeInTheDocument();
+    });
+
+    it('shows stale indicator when new items arrived after briefing', () => {
+      const briefingTime = new Date(Date.now() - 60000); // 1 min ago
+      const bgTime = new Date(); // now
+      setMockState({
+        aiBriefing: { content: '## Test\nContent', loading: false, error: null, model: null, lastGenerated: briefingTime },
+        appState: { relevanceResults: [] },
+        lastBackgroundResultsAt: bgTime,
+      });
+      render(<BriefingView />);
+      expect(screen.getByText(/New items found/)).toBeInTheDocument();
     });
   });
 

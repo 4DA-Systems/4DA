@@ -330,6 +330,28 @@ impl Database {
             info!(target: "4da::db", "Phase 7 migration completed — summary column");
         }
 
+        // Phase 8 migration: Persistent briefings table
+        let current_version: i64 = conn
+            .query_row("SELECT version FROM schema_version", [], |row| row.get(0))
+            .unwrap_or(7);
+
+        if current_version < 8 {
+            info!(target: "4da::db", "Running Phase 8 migration (schema version 8)");
+            conn.execute_batch(
+                "CREATE TABLE IF NOT EXISTS briefings (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    content TEXT NOT NULL,
+                    model TEXT,
+                    item_count INTEGER NOT NULL DEFAULT 0,
+                    tokens_used INTEGER,
+                    latency_ms INTEGER,
+                    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+                )",
+            )?;
+            conn.execute("UPDATE schema_version SET version = 8", [])?;
+            info!(target: "4da::db", "Phase 8 migration completed — briefings table");
+        }
+
         info!(target: "4da::db", "Database schema initialized with sqlite-vec");
         Ok(())
     }
@@ -1885,6 +1907,68 @@ impl Database {
                 })
             },
         ).optional()
+    }
+}
+
+// ============================================================================
+// Briefing Persistence
+// ============================================================================
+
+impl Database {
+    /// Save a briefing to the database, pruning to keep only the last 10.
+    pub fn save_briefing(
+        &self,
+        content: &str,
+        model: Option<&str>,
+        item_count: usize,
+        tokens_used: Option<u64>,
+        latency_ms: Option<u64>,
+    ) -> SqliteResult<i64> {
+        let conn = self.conn.lock();
+        conn.execute(
+            "INSERT INTO briefings (content, model, item_count, tokens_used, latency_ms)
+             VALUES (?1, ?2, ?3, ?4, ?5)",
+            params![
+                content,
+                model,
+                item_count as i64,
+                tokens_used.map(|v| v as i64),
+                latency_ms.map(|v| v as i64),
+            ],
+        )?;
+        let id = conn.last_insert_rowid();
+
+        // Prune to keep only the 10 most recent
+        conn.execute(
+            "DELETE FROM briefings WHERE id NOT IN (
+                SELECT id FROM briefings ORDER BY created_at DESC LIMIT 10
+            )",
+            [],
+        )?;
+
+        Ok(id)
+    }
+
+    /// Get the most recent briefing.
+    /// Returns (content, model, item_count, created_at).
+    pub fn get_latest_briefing(
+        &self,
+    ) -> SqliteResult<Option<(String, Option<String>, i64, String)>> {
+        let conn = self.conn.lock();
+        conn.query_row(
+            "SELECT content, model, item_count, created_at
+             FROM briefings ORDER BY created_at DESC LIMIT 1",
+            [],
+            |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, Option<String>>(1)?,
+                    row.get::<_, i64>(2)?,
+                    row.get::<_, String>(3)?,
+                ))
+            },
+        )
+        .optional()
     }
 }
 

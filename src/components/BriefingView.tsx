@@ -1,6 +1,26 @@
-import { useMemo } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { BriefingCard } from './BriefingCard';
+import { SignalActionCard } from './briefing/SignalActionCard';
 import { useAppStore } from '../store';
+
+function getRelativeTime(date: Date): string {
+  const diffMs = Date.now() - date.getTime();
+  const mins = Math.floor(diffMs / 60_000);
+  if (mins < 1) return 'Just now';
+  if (mins < 60) return `${mins} min ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  return days === 1 ? 'Yesterday' : `${days}d ago`;
+}
+
+function getFreshnessColor(date: Date): string {
+  const hours = (Date.now() - date.getTime()) / 3_600_000;
+  if (hours < 1) return 'text-green-400';
+  if (hours < 4) return 'text-yellow-400';
+  if (hours < 12) return 'text-orange-400';
+  return 'text-red-400';
+}
 
 interface ParsedSection {
   title: string;
@@ -144,18 +164,40 @@ export function BriefingView() {
   const recordInteraction = useAppStore(s => s.recordInteraction);
   const feedbackGiven = useAppStore(s => s.feedbackGiven);
   const setActiveView = useAppStore(s => s.setActiveView);
+  const lastBackgroundResultsAt = useAppStore(s => s.lastBackgroundResultsAt);
+
+  // Auto-updating relative time (tick every 60s)
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    const interval = setInterval(() => setTick(t => t + 1), 60_000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // Detect stale briefing with new items available
+  const isStale = useMemo(() => {
+    if (!briefing.lastGenerated || !lastBackgroundResultsAt) return false;
+    return lastBackgroundResultsAt.getTime() > briefing.lastGenerated.getTime();
+  }, [briefing.lastGenerated, lastBackgroundResultsAt]);
 
   const sections = useMemo(() => {
     if (!briefing.content) return [];
     return parseBriefingContent(briefing.content);
   }, [briefing.content]);
 
-  // Top picks from results for the briefing cards
-  const topItems = useMemo(() => {
+  // Critical/high signal items for action cards
+  const signalItems = useMemo(() => {
     return results
-      .filter(r => r.relevant && r.top_score >= 0.5)
-      .slice(0, 8);
+      .filter(r => r.signal_priority === 'critical' || r.signal_priority === 'high')
+      .slice(0, 3);
   }, [results]);
+
+  // Top picks from results for the briefing cards (exclude signal items to avoid duplicates)
+  const topItems = useMemo(() => {
+    const signalIds = new Set(signalItems.map(s => s.id));
+    return results
+      .filter(r => r.relevant && r.top_score >= 0.5 && !signalIds.has(r.id))
+      .slice(0, 8);
+  }, [results, signalItems]);
 
   // Loading skeleton
   if (briefing.loading) {
@@ -205,28 +247,20 @@ export function BriefingView() {
       <div className="bg-[#0A0A0A] rounded-lg">
         <div className="flex flex-col items-center justify-center py-20 px-8">
           <div className="w-20 h-20 mb-6 bg-[#141414] rounded-2xl border border-[#2A2A2A] flex items-center justify-center">
-            <span className="text-4xl opacity-40">*</span>
+            <div className="w-6 h-6 border-2 border-orange-400 border-t-transparent rounded-full animate-spin" />
           </div>
-          <h2 className="text-xl font-medium text-white mb-2">Your Intelligence Briefing</h2>
-          <p className="text-sm text-gray-500 text-center max-w-md mb-8">
-            4DA will analyze results and surface what matters most.
+          <h2 className="text-xl font-medium text-white mb-2">Preparing Your Briefing</h2>
+          <p className="text-sm text-gray-500 text-center max-w-md">
             {results.length === 0
-              ? ' Run an analysis first to gather results.'
-              : ` ${results.length} results ready for analysis.`}
+              ? '4DA is gathering intelligence from your sources...'
+              : `Analyzing ${results.length} results to surface what matters most...`}
           </p>
-          <button
-            onClick={generateBriefing}
-            disabled={results.length === 0}
-            className="px-8 py-3.5 text-base bg-orange-500 text-white font-medium rounded-xl hover:bg-orange-600 transition-all disabled:opacity-30 disabled:cursor-not-allowed hover:scale-105 active:scale-95 shadow-lg shadow-orange-500/20"
-          >
-            {results.length === 0 ? 'Run Analysis First' : 'Generate Briefing'}
-          </button>
           {results.length > 0 && (
             <button
               onClick={() => setActiveView('results')}
-              className="mt-4 text-sm text-gray-500 hover:text-gray-300 transition-colors"
+              className="mt-6 text-sm text-gray-500 hover:text-gray-300 transition-colors"
             >
-              or view all {results.length} results directly
+              Browse {results.length} results while you wait
             </button>
           )}
         </div>
@@ -237,6 +271,21 @@ export function BriefingView() {
   // Briefing content view
   return (
     <div className="bg-[#0A0A0A] rounded-lg space-y-6">
+      {/* Signal Action Cards — critical/high priority items */}
+      {signalItems.length > 0 && (
+        <div className="space-y-3">
+          {signalItems.map(item => (
+            <SignalActionCard
+              key={item.id}
+              item={item}
+              feedbackGiven={feedbackGiven[item.id]}
+              onSave={(it) => recordInteraction(it.id, 'save', it)}
+              onDismiss={(it) => recordInteraction(it.id, 'dismiss', it)}
+            />
+          ))}
+        </div>
+      )}
+
       {/* Briefing header */}
       <div className="bg-[#141414] rounded-lg border border-orange-500/20 overflow-hidden">
         <div className="px-5 py-4 border-b border-orange-500/10 flex items-center justify-between bg-orange-500/5">
@@ -246,12 +295,14 @@ export function BriefingView() {
             </div>
             <div>
               <h2 className="font-medium text-orange-400">Intelligence Briefing</h2>
-              {briefing.model && (
-                <span className="text-xs text-gray-500">via {briefing.model}</span>
-              )}
             </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-3">
+            {briefing.lastGenerated && (
+              <span className={`text-xs font-medium ${getFreshnessColor(briefing.lastGenerated)}`}>
+                {getRelativeTime(briefing.lastGenerated)}
+              </span>
+            )}
             <button
               onClick={generateBriefing}
               className="px-3 py-1.5 text-xs bg-[#1F1F1F] text-orange-400 border border-orange-500/30 rounded-lg hover:bg-orange-500/10 transition-all font-medium"
@@ -261,6 +312,19 @@ export function BriefingView() {
             </button>
           </div>
         </div>
+
+        {/* Stale briefing indicator */}
+        {isStale && (
+          <div className="px-5 py-2.5 bg-yellow-500/5 border-b border-yellow-500/10 flex items-center justify-between">
+            <span className="text-xs text-yellow-400">New items found since this briefing.</span>
+            <button
+              onClick={generateBriefing}
+              className="text-xs text-yellow-400 hover:text-yellow-300 underline font-medium"
+            >
+              Refresh
+            </button>
+          </div>
+        )}
 
         {/* Parsed sections */}
         <div className="p-5 space-y-6">
@@ -280,8 +344,9 @@ export function BriefingView() {
         </div>
 
         {briefing.lastGenerated && (
-          <div className="px-5 py-3 border-t border-[#2A2A2A] text-xs text-gray-500">
-            Generated {briefing.lastGenerated.toLocaleTimeString()}
+          <div className="px-5 py-3 border-t border-[#2A2A2A] text-xs text-gray-600">
+            Generated {briefing.lastGenerated.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+            {briefing.model && <span className="ml-2">via {briefing.model}</span>}
           </div>
         )}
       </div>
@@ -294,16 +359,36 @@ export function BriefingView() {
             <span className="text-xs text-gray-500">{topItems.length} items</span>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            {topItems.map(item => (
-              <BriefingCard
-                key={item.id}
-                item={item}
-                explanation={item.explanation}
-                feedbackGiven={feedbackGiven[item.id]}
-                onSave={(it) => recordInteraction(it.id, 'save', it)}
-                onDismiss={(it) => recordInteraction(it.id, 'dismiss', it)}
-              />
-            ))}
+            {topItems.map(item => {
+              const hasWorkMatch = item.score_breakdown?.intent_boost && item.score_breakdown.intent_boost > 0;
+              const hasDep = item.score_breakdown?.dep_match_score && item.score_breakdown.dep_match_score > 0;
+              const matchedDeps = item.score_breakdown?.matched_deps;
+              return (
+                <div key={item.id} className="relative">
+                  {(hasWorkMatch || hasDep) && (
+                    <div className="flex items-center gap-1.5 mb-1.5">
+                      {hasWorkMatch && (
+                        <span className="text-[10px] px-1.5 py-0.5 bg-purple-500/10 text-purple-400 border border-purple-500/20 rounded font-medium">
+                          Working on
+                        </span>
+                      )}
+                      {hasDep && (
+                        <span className="text-[10px] px-1.5 py-0.5 bg-blue-500/10 text-blue-400 border border-blue-500/20 rounded font-medium">
+                          Stack{matchedDeps ? `: ${matchedDeps.slice(0, 3).join(', ')}` : ''}
+                        </span>
+                      )}
+                    </div>
+                  )}
+                  <BriefingCard
+                    item={item}
+                    explanation={item.explanation}
+                    feedbackGiven={feedbackGiven[item.id]}
+                    onSave={(it) => recordInteraction(it.id, 'save', it)}
+                    onDismiss={(it) => recordInteraction(it.id, 'dismiss', it)}
+                  />
+                </div>
+              );
+            })}
           </div>
         </div>
       )}

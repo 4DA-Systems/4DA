@@ -183,9 +183,12 @@ export interface BriefingSlice {
   aiBriefing: BriefingState;
   showBriefing: boolean;
   autoBriefingEnabled: boolean;
+  lastBackgroundResultsAt: Date | null;
   setShowBriefing: (show: boolean) => void;
   setAutoBriefingEnabled: (enabled: boolean) => void;
+  setLastBackgroundResultsAt: (date: Date) => void;
   generateBriefing: () => Promise<void>;
+  loadPersistedBriefing: () => Promise<void>;
 }
 
 export interface ContextDiscoverySlice {

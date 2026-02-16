@@ -109,6 +109,25 @@ pub async fn set_digest_config(
 // AI Briefing Commands
 // ============================================================================
 
+/// Get the latest persisted briefing from the database (survives restarts)
+#[tauri::command]
+pub async fn get_latest_briefing() -> Result<serde_json::Value> {
+    let db = get_database()?;
+    match db.get_latest_briefing() {
+        Ok(Some((content, model, item_count, created_at))) => Ok(serde_json::json!({
+            "content": content,
+            "model": model,
+            "item_count": item_count,
+            "created_at": created_at,
+        })),
+        Ok(None) => Ok(serde_json::Value::Null),
+        Err(e) => {
+            error!(target: "4da::briefing", error = %e, "Failed to load persisted briefing");
+            Ok(serde_json::Value::Null)
+        }
+    }
+}
+
 /// Generate an AI-powered briefing from recent relevant items
 /// Uses the configured LLM (Ollama by default) to synthesize insights
 #[tauri::command]
@@ -342,6 +361,20 @@ Rules:
 
             // Cache for TTS and handoff
             *LATEST_BRIEFING.lock() = Some(response.content.clone());
+
+            // Persist to DB for cross-restart survival
+            if let Ok(db) = get_database() {
+                let total_tokens = response.input_tokens + response.output_tokens;
+                if let Err(e) = db.save_briefing(
+                    &response.content,
+                    Some(&llm_settings.model),
+                    items.len(),
+                    Some(total_tokens as u64),
+                    Some(elapsed.as_millis() as u64),
+                ) {
+                    error!(target: "4da::briefing", error = %e, "Failed to persist briefing to DB");
+                }
+            }
 
             Ok(serde_json::json!({
                 "success": true,

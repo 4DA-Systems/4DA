@@ -129,9 +129,16 @@ function App() {
   // Reset render limit when new results come in
   useEffect(() => { setRenderLimit(50); }, [state.relevanceResults]);
 
+  // Load persisted briefing on mount (instant, from DB)
+  const loadPersistedBriefing = useAppStore(s => s.loadPersistedBriefing);
+  useEffect(() => {
+    loadPersistedBriefing();
+  }, [loadPersistedBriefing]);
+
   // On mount: load cached results from previous session, or auto-analyze
   useEffect(() => {
     let cancelled = false;
+    let autoTimer: ReturnType<typeof setTimeout>;
     const loadOrAnalyze = async () => {
       try {
         // First, try to load cached results from AnalysisState
@@ -157,17 +164,20 @@ function App() {
           return;
         }
 
-        // No cached results — auto-trigger analysis immediately
+        // No cached results — auto-trigger full analysis after splash settles
         if (cancelled) return;
-        await invoke('run_cached_analysis');
+        autoTimer = setTimeout(() => {
+          if (!cancelled) startAnalysis();
+        }, 2000);
       } catch {
         // Silently ignore failures
       }
     };
     loadOrAnalyze();
 
-    return () => { cancelled = true; };
-  }, [setState]);
+    return () => { cancelled = true; clearTimeout(autoTimer); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- mount-only
+  }, []);
 
   // Global keyboard shortcuts (extracted hook)
   const showOnlyRelevant = useAppStore(s => s.showOnlyRelevant);
