@@ -22,7 +22,7 @@ export function ToastContainer({ toasts, onDismiss }: ToastContainerProps) {
         return (
           <div
             key={toast.id}
-            className={`bg-[#141414] border border-[#2A2A2A] ${style.border} border-l-4 rounded-lg px-4 py-3 shadow-lg flex items-start gap-3 animate-slide-in`}
+            className={`bg-bg-secondary border border-border ${style.border} border-l-4 rounded-lg px-4 py-3 shadow-lg flex items-start gap-3 animate-slide-in`}
           >
             <span className={`${style.text} font-bold text-sm flex-shrink-0 mt-0.5`}>
               {style.icon}

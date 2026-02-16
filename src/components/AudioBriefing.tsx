@@ -79,7 +79,7 @@ export function AudioBriefing() {
           className={`w-10 h-10 rounded-lg flex items-center justify-center transition-all ${
             playing
               ? 'bg-orange-500/20 text-orange-400 border border-orange-500/30'
-              : 'bg-[#1F1F1F] text-gray-500 border border-[#2A2A2A] hover:text-gray-300'
+              : 'bg-bg-tertiary text-gray-500 border border-border hover:text-gray-300'
           }`}
           title={playing ? 'Pause audio briefing' : 'Play audio briefing'}
         >
@@ -89,7 +89,7 @@ export function AudioBriefing() {
       <button
         onClick={generate}
         disabled={generating}
-        className="w-10 h-10 rounded-lg flex items-center justify-center bg-[#1F1F1F] text-gray-500 border border-[#2A2A2A] hover:text-gray-300 transition-all disabled:opacity-30"
+        className="w-10 h-10 rounded-lg flex items-center justify-center bg-bg-tertiary text-gray-500 border border-border hover:text-gray-300 transition-all disabled:opacity-30"
         title={generating ? 'Generating audio...' : 'Generate audio briefing'}
       >
         {generating ? (

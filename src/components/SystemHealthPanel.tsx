@@ -30,7 +30,7 @@ export function SystemHealthPanel({
 }: SystemHealthPanelProps) {
   if (!health) {
     return (
-      <div className="bg-[#1F1F1F] rounded-lg p-5 border border-[#2A2A2A]">
+      <div className="bg-bg-tertiary rounded-lg p-5 border border-border">
         <div className="flex items-center gap-3">
           <div className="w-8 h-8 bg-rose-500/20 rounded-lg flex items-center justify-center flex-shrink-0">
             <span className="text-rose-400">💓</span>
@@ -45,7 +45,7 @@ export function SystemHealthPanel({
   }
 
   return (
-    <div className="bg-[#1F1F1F] rounded-lg p-5 border border-[#2A2A2A]">
+    <div className="bg-bg-tertiary rounded-lg p-5 border border-border">
       <div className="flex items-start gap-3 mb-4">
         <div className="w-8 h-8 bg-rose-500/20 rounded-lg flex items-center justify-center flex-shrink-0">
           <span className="text-rose-400">💓</span>
@@ -61,7 +61,7 @@ export function SystemHealthPanel({
       <div className="space-y-4">
         {/* Service Status */}
         <div className="grid grid-cols-2 gap-3">
-          <div className="p-3 bg-[#141414] rounded-lg border border-[#2A2A2A]">
+          <div className="p-3 bg-bg-secondary rounded-lg border border-border">
             <div className="text-xs text-gray-500 mb-1">Embedding Service</div>
             <div className="flex items-center gap-2">
               <div className={`w-2 h-2 rounded-full ${health.embeddingOperational ? 'bg-green-500' : 'bg-red-500'}`} />
@@ -70,7 +70,7 @@ export function SystemHealthPanel({
               </span>
             </div>
           </div>
-          <div className="p-3 bg-[#141414] rounded-lg border border-[#2A2A2A]">
+          <div className="p-3 bg-bg-secondary rounded-lg border border-border">
             <div className="text-xs text-gray-500 mb-1">Rate Limit</div>
             <div className="flex items-center gap-2">
               <div className={`w-2 h-2 rounded-full ${
@@ -99,7 +99,7 @@ export function SystemHealthPanel({
 
         {/* Accuracy Metrics */}
         {health.accuracyMetrics && (
-          <div className="p-4 bg-[#141414] rounded-lg border border-[#2A2A2A]">
+          <div className="p-4 bg-bg-secondary rounded-lg border border-border">
             <div className="text-xs text-gray-400 mb-3 font-medium">Accuracy Metrics</div>
             <div className="grid grid-cols-3 gap-3">
               <div className="text-center">
@@ -145,7 +145,7 @@ export function SystemHealthPanel({
             </div>
             <button
               onClick={onRunAnomalyDetection}
-              className="px-3 py-1.5 text-xs bg-[#141414] border border-[#2A2A2A] rounded-lg text-gray-400 hover:text-white hover:border-rose-500/30 transition-all"
+              className="px-3 py-1.5 text-xs bg-bg-secondary border border-border rounded-lg text-gray-400 hover:text-white hover:border-rose-500/30 transition-all"
             >
               Scan Now
             </button>
@@ -179,7 +179,7 @@ export function SystemHealthPanel({
               onChange={(e) => onSimilarTopicQueryChange(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && onFindSimilarTopics()}
               placeholder="e.g. machine learning"
-              className="flex-1 px-3 py-2.5 bg-[#141414] border border-[#2A2A2A] rounded-lg text-sm text-white placeholder:text-gray-500 focus:border-rose-500/50 focus:outline-none transition-colors"
+              className="flex-1 px-3 py-2.5 bg-bg-secondary border border-border rounded-lg text-sm text-white placeholder:text-gray-500 focus:border-rose-500/50 focus:outline-none transition-colors"
             />
             <button
               onClick={onFindSimilarTopics}
@@ -193,7 +193,7 @@ export function SystemHealthPanel({
               {similarTopicResults.map((result, i) => (
                 <div
                   key={i}
-                  className="flex items-center justify-between p-2.5 bg-[#141414] rounded-lg border border-[#2A2A2A]"
+                  className="flex items-center justify-between p-2.5 bg-bg-secondary rounded-lg border border-border"
                 >
                   <span className="text-sm text-white">{result.topic}</span>
                   <span className="text-sm text-orange-400 font-medium">
@@ -209,13 +209,13 @@ export function SystemHealthPanel({
         <div className="flex gap-2 pt-2">
           <button
             onClick={onSaveWatcherState}
-            className="flex-1 px-4 py-2.5 text-sm bg-[#141414] border border-[#2A2A2A] rounded-lg text-gray-400 hover:text-white hover:border-rose-500/30 transition-all"
+            className="flex-1 px-4 py-2.5 text-sm bg-bg-secondary border border-border rounded-lg text-gray-400 hover:text-white hover:border-rose-500/30 transition-all"
           >
             Save Watcher State
           </button>
           <button
             onClick={onRefresh}
-            className="px-4 py-2.5 text-sm bg-[#141414] border border-[#2A2A2A] rounded-lg text-gray-400 hover:text-white hover:border-rose-500/30 transition-all"
+            className="px-4 py-2.5 text-sm bg-bg-secondary border border-border rounded-lg text-gray-400 hover:text-white hover:border-rose-500/30 transition-all"
           >
             Refresh
           </button>
@@ -240,7 +240,7 @@ function AnomalyItem({ anomaly, onResolve }: AnomalyItemProps) {
         ? 'bg-red-500/10 border-red-500/30'
         : isMediumSeverity
         ? 'bg-yellow-500/10 border-yellow-500/30'
-        : 'bg-[#141414] border-[#2A2A2A]'
+        : 'bg-bg-secondary border-border'
     }`}>
       <div className="flex items-start justify-between gap-2">
         <div>

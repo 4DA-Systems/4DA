@@ -24,7 +24,7 @@ export function FirstScanStep({
         Comprehensive scan of 300-500+ items across all sources to build your personalized feed.
       </p>
 
-      <div className="bg-[#141414] p-6 rounded-lg mb-6">
+      <div className="bg-bg-secondary p-6 rounded-lg mb-6">
         {/* Scanning state visualization */}
         {scanProgress?.phase === 'fetching' && (
           <div className="text-center py-8">
@@ -57,7 +57,7 @@ export function FirstScanStep({
             </div>
             <h3 className="text-white font-medium mb-2">Analyzing Relevance</h3>
             <p className="text-sm text-gray-400">{scanProgress.message}</p>
-            <div className="w-48 h-1 bg-[#1F1F1F] rounded-full mx-auto mt-4 overflow-hidden">
+            <div className="w-48 h-1 bg-bg-tertiary rounded-full mx-auto mt-4 overflow-hidden">
               <div className="h-full bg-gradient-to-r from-cyan-500 to-orange-500 rounded-full animate-pulse" style={{ width: '70%' }} />
             </div>
           </div>
@@ -83,7 +83,7 @@ export function FirstScanStep({
                 {scanProgress.results.map((result, i) => (
                   <div
                     key={i}
-                    className="flex items-center gap-3 p-3 bg-[#1F1F1F] rounded-lg hover:bg-[#2A2A2A] transition-colors"
+                    className="flex items-center gap-3 p-3 bg-bg-tertiary rounded-lg hover:bg-border transition-colors"
                   >
                     <span className={`px-2 py-0.5 text-xs rounded ${
                       result.source === 'HN' ? 'bg-orange-500/20 text-orange-300' :
@@ -98,7 +98,7 @@ export function FirstScanStep({
                 ))}
               </div>
             ) : (
-              <div className="text-center py-4 bg-[#1F1F1F] rounded-lg">
+              <div className="text-center py-4 bg-bg-tertiary rounded-lg">
                 <p className="text-gray-400">No highly relevant items found yet.</p>
                 <p className="text-sm text-gray-500 mt-1">
                   4DA will learn your preferences as you give feedback.
@@ -117,7 +117,7 @@ export function FirstScanStep({
             <p className="text-sm text-gray-400">{scanProgress.message}</p>
             <button
               onClick={onRunScan}
-              className="mt-4 px-4 py-2 bg-[#1F1F1F] text-gray-300 rounded-lg hover:bg-[#2A2A2A] transition-colors"
+              className="mt-4 px-4 py-2 bg-bg-tertiary text-gray-300 rounded-lg hover:bg-border transition-colors"
             >
               Retry Scan
             </button>

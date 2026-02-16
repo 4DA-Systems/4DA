@@ -114,7 +114,7 @@ export function SplashScreen({ onComplete, minimumDisplayTime = 1500 }: SplashSc
         flexDirection: 'column',
         alignItems: 'center',
         justifyContent: 'center',
-        backgroundColor: '#0A0A0A',
+        backgroundColor: 'var(--color-bg-primary)',
         transition: 'opacity 300ms',
         opacity: fadeOut ? 0 : 1,
       }}
@@ -140,7 +140,7 @@ export function SplashScreen({ onComplete, minimumDisplayTime = 1500 }: SplashSc
             <div style={{
               width: '100%',
               height: '100%',
-              backgroundColor: '#D4AF37',
+              backgroundColor: 'var(--color-accent-gold)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
@@ -187,7 +187,7 @@ export function SplashScreen({ onComplete, minimumDisplayTime = 1500 }: SplashSc
       <div style={{
         width: '280px',
         height: '4px',
-        backgroundColor: '#1F1F1F',
+        backgroundColor: 'var(--color-bg-tertiary)',
         borderRadius: '2px',
         overflow: 'hidden',
         marginBottom: '1rem',
@@ -219,14 +219,14 @@ export function SplashScreen({ onComplete, minimumDisplayTime = 1500 }: SplashSc
           }} />
         )}
         {stage === 'ready' && !error && (
-          <span style={{ color: '#22C55E', fontSize: '1rem' }}>✓</span>
+          <span style={{ color: 'var(--color-success)', fontSize: '1rem' }}>✓</span>
         )}
         {error && (
-          <span style={{ color: '#EF4444', fontSize: '1rem' }}>⚠</span>
+          <span style={{ color: 'var(--color-error)', fontSize: '1rem' }}>⚠</span>
         )}
         <span style={{
           fontSize: '0.875rem',
-          color: error ? '#EF4444' : stage === 'ready' ? '#22C55E' : '#9CA3AF',
+          color: error ? 'var(--color-error)' : stage === 'ready' ? 'var(--color-success)' : '#9CA3AF',
           transition: 'color 300ms',
         }}>
           {error ? 'Error during startup' : stageMessages[stage]}
@@ -246,7 +246,7 @@ export function SplashScreen({ onComplete, minimumDisplayTime = 1500 }: SplashSc
               width: '8px',
               height: '8px',
               borderRadius: '50%',
-              backgroundColor: i <= currentStageIndex ? '#F97316' : '#2A2A2A',
+              backgroundColor: i <= currentStageIndex ? '#F97316' : 'var(--color-border)',
               transition: 'background-color 300ms',
             }}
           />
@@ -272,9 +272,9 @@ export function SplashScreen({ onComplete, minimumDisplayTime = 1500 }: SplashSc
           right: '1rem',
           padding: '0.5rem 0.75rem',
           fontSize: '0.75rem',
-          color: '#666666',
+          color: 'var(--color-text-muted)',
           backgroundColor: 'transparent',
-          border: '1px solid #2A2A2A',
+          border: '1px solid var(--color-border)',
           borderRadius: '6px',
           cursor: 'pointer',
           transition: 'all 200ms',
@@ -287,8 +287,8 @@ export function SplashScreen({ onComplete, minimumDisplayTime = 1500 }: SplashSc
           e.currentTarget.style.borderColor = '#4B5563';
         }}
         onMouseLeave={(e) => {
-          e.currentTarget.style.color = '#666666';
-          e.currentTarget.style.borderColor = '#2A2A2A';
+          e.currentTarget.style.color = 'var(--color-text-muted)';
+          e.currentTarget.style.borderColor = 'var(--color-border)';
         }}
         title="Refresh if stuck"
       >

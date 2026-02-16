@@ -44,7 +44,7 @@ export function DigestSection({ setSettingsStatus }: DigestSectionProps) {
   };
 
   return (
-    <div className="bg-[#1F1F1F] rounded-lg p-5 border border-[#2A2A2A]">
+    <div className="bg-bg-tertiary rounded-lg p-5 border border-border">
       <div className="flex items-start gap-3 mb-4">
         <div className="w-8 h-8 bg-purple-500/20 rounded-lg flex items-center justify-center flex-shrink-0">
           <span className="text-purple-400">&#x1f4cb;</span>
@@ -59,7 +59,7 @@ export function DigestSection({ setSettingsStatus }: DigestSectionProps) {
 
       {digestConfig ? (
         <div className="space-y-4">
-          <div className="flex items-center justify-between p-3 bg-[#141414] rounded-lg border border-[#2A2A2A]">
+          <div className="flex items-center justify-between p-3 bg-bg-secondary rounded-lg border border-border">
             <div className="flex items-center gap-3">
               <div className={`w-2 h-2 rounded-full ${digestConfig.enabled ? 'bg-green-500' : 'bg-gray-500'}`} />
               <span className="text-sm text-gray-300">
@@ -80,15 +80,15 @@ export function DigestSection({ setSettingsStatus }: DigestSectionProps) {
 
           {digestConfig.enabled && (
             <div className="grid grid-cols-3 gap-3">
-              <div className="p-3 bg-[#141414] rounded-lg border border-[#2A2A2A] text-center">
+              <div className="p-3 bg-bg-secondary rounded-lg border border-border text-center">
                 <div className="text-xs text-gray-500 mb-1">Frequency</div>
                 <div className="text-sm text-white font-medium">{digestConfig.frequency}</div>
               </div>
-              <div className="p-3 bg-[#141414] rounded-lg border border-[#2A2A2A] text-center">
+              <div className="p-3 bg-bg-secondary rounded-lg border border-border text-center">
                 <div className="text-xs text-gray-500 mb-1">Min Score</div>
                 <div className="text-sm text-white font-medium">{Math.round(digestConfig.min_score * 100)}%</div>
               </div>
-              <div className="p-3 bg-[#141414] rounded-lg border border-[#2A2A2A] text-center">
+              <div className="p-3 bg-bg-secondary rounded-lg border border-border text-center">
                 <div className="text-xs text-gray-500 mb-1">Max Items</div>
                 <div className="text-sm text-white font-medium">{digestConfig.max_items}</div>
               </div>

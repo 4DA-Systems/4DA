@@ -30,13 +30,13 @@ export const KnowledgeGapsPanel = memo(function KnowledgeGapsPanel() {
   const criticalCount = gaps.filter(g => g.gap_severity === 'critical' || g.gap_severity === 'high').length;
 
   return (
-    <div className="mb-6 bg-[#141414] rounded-lg border border-[#2A2A2A] overflow-hidden">
+    <div className="mb-6 bg-bg-secondary rounded-lg border border-border overflow-hidden">
       <button
         onClick={() => setExpanded(!expanded)}
         className="w-full px-5 py-4 flex items-center justify-between hover:bg-[#1A1A1A] transition-colors"
       >
         <div className="flex items-center gap-3">
-          <div className="w-8 h-8 bg-[#1F1F1F] rounded-lg flex items-center justify-center">
+          <div className="w-8 h-8 bg-bg-tertiary rounded-lg flex items-center justify-center">
             <span className="text-gray-400">📖</span>
           </div>
           <div className="text-left">
@@ -51,7 +51,7 @@ export const KnowledgeGapsPanel = memo(function KnowledgeGapsPanel() {
       </button>
 
       {expanded && (
-        <div className="p-4 space-y-2 border-t border-[#2A2A2A]">
+        <div className="p-4 space-y-2 border-t border-border">
           {gaps.map((gap, i) => {
             const sev = SEVERITY_CONFIG[gap.gap_severity] || SEVERITY_CONFIG.low;
             return (

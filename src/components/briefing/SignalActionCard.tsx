@@ -82,7 +82,7 @@ export const SignalActionCard = memo(function SignalActionCard({
               {item.url && (
                 <button
                   onClick={() => window.open(item.url!, '_blank', 'noopener,noreferrer')}
-                  className="px-2.5 py-1.5 text-xs bg-[#1F1F1F] text-gray-300 border border-[#2A2A2A] rounded-lg hover:bg-[#2A2A2A] transition-all font-medium"
+                  className="px-2.5 py-1.5 text-xs bg-bg-tertiary text-gray-300 border border-border rounded-lg hover:bg-border transition-all font-medium"
                 >
                   Read
                 </button>
@@ -95,7 +95,7 @@ export const SignalActionCard = memo(function SignalActionCard({
               </button>
               <button
                 onClick={() => onDismiss(item)}
-                className="px-2.5 py-1.5 text-xs bg-[#2A2A2A] text-gray-500 border border-[#333] rounded-lg hover:bg-red-500/10 hover:text-red-400 hover:border-red-500/20 transition-all font-medium"
+                className="px-2.5 py-1.5 text-xs bg-border text-gray-500 border border-[#333] rounded-lg hover:bg-red-500/10 hover:text-red-400 hover:border-red-500/20 transition-all font-medium"
               >
                 Dismiss
               </button>

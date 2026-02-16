@@ -123,7 +123,7 @@ export function QuickResultsStep({ isAnimating, onComplete, onBack }: QuickResul
           : 'Building your personalized intelligence feed...'}
       </p>
 
-      <div className="bg-[#141414] p-6 rounded-lg mb-6">
+      <div className="bg-bg-secondary p-6 rounded-lg mb-6">
         {/* Scanning phase */}
         {phase === 'scanning' && (
           <div className="text-center py-8">
@@ -157,7 +157,7 @@ export function QuickResultsStep({ isAnimating, onComplete, onBack }: QuickResul
             </div>
             <h3 className="text-white font-medium mb-2">Analyzing Relevance</h3>
             <p className="text-sm text-gray-400">{message}</p>
-            <div className="w-48 h-1 bg-[#1F1F1F] rounded-full mx-auto mt-4 overflow-hidden">
+            <div className="w-48 h-1 bg-bg-tertiary rounded-full mx-auto mt-4 overflow-hidden">
               <div
                 className="h-full bg-gradient-to-r from-cyan-500 to-orange-500 rounded-full animate-pulse"
                 style={{ width: '70%' }}
@@ -181,7 +181,7 @@ export function QuickResultsStep({ isAnimating, onComplete, onBack }: QuickResul
                 {results.map((result, i) => (
                   <div
                     key={i}
-                    className="flex items-center gap-3 p-3 bg-[#1F1F1F] rounded-lg"
+                    className="flex items-center gap-3 p-3 bg-bg-tertiary rounded-lg"
                   >
                     <span className={`px-2 py-0.5 text-xs rounded flex-shrink-0 ${
                       getSourceColorClass(result.sourceId)
@@ -194,7 +194,7 @@ export function QuickResultsStep({ isAnimating, onComplete, onBack }: QuickResul
                 ))}
               </div>
             ) : (
-              <div className="text-center py-4 bg-[#1F1F1F] rounded-lg">
+              <div className="text-center py-4 bg-bg-tertiary rounded-lg">
                 <p className="text-gray-400">No highly relevant items found yet.</p>
                 <p className="text-sm text-gray-500 mt-1">
                   4DA will learn your preferences as you give feedback.

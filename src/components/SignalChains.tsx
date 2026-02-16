@@ -44,9 +44,9 @@ export const SignalChainsPanel = memo(function SignalChainsPanel() {
   if (chains.length === 0) return null;
 
   return (
-    <div className="mb-6 bg-[#141414] rounded-lg border border-[#2A2A2A] overflow-hidden">
-      <div className="px-5 py-4 border-b border-[#2A2A2A] flex items-center gap-3">
-        <div className="w-8 h-8 bg-[#1F1F1F] rounded-lg flex items-center justify-center">
+    <div className="mb-6 bg-bg-secondary rounded-lg border border-border overflow-hidden">
+      <div className="px-5 py-4 border-b border-border flex items-center gap-3">
+        <div className="w-8 h-8 bg-bg-tertiary rounded-lg flex items-center justify-center">
           <span className="text-gray-400">🔗</span>
         </div>
         <div>
@@ -93,7 +93,7 @@ export const SignalChainsPanel = memo(function SignalChainsPanel() {
               </button>
 
               {isExpanded && (
-                <div className="px-4 pb-3 border-t border-[#2A2A2A]/50">
+                <div className="px-4 pb-3 border-t border-border/50">
                   <div className="mt-3 space-y-2">
                     {chain.links.map((link, i) => (
                       <div key={i} className="flex items-start gap-2 pl-2">

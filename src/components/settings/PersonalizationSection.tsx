@@ -45,7 +45,7 @@ export function PersonalizationSection({
 }: PersonalizationSectionProps) {
   const undeclaredSuggestions = suggestedInterests.filter(s => !s.already_declared);
   return (
-    <div className="bg-[#1F1F1F] rounded-lg p-5 border border-[#2A2A2A]">
+    <div className="bg-bg-tertiary rounded-lg p-5 border border-border">
       <div className="flex items-start gap-3 mb-4">
         <div className="w-8 h-8 bg-blue-500/20 rounded-lg flex items-center justify-center flex-shrink-0">
           <span className="text-blue-400">&#x1f3af;</span>
@@ -69,11 +69,11 @@ export function PersonalizationSection({
                 value={newRole}
                 onChange={(e) => setNewRole(e.target.value)}
                 placeholder="e.g. Backend Developer"
-                className="flex-1 px-3 py-2.5 bg-[#141414] border border-[#2A2A2A] rounded-lg text-sm text-white placeholder:text-gray-500 focus:border-blue-500/50 focus:outline-none transition-colors"
+                className="flex-1 px-3 py-2.5 bg-bg-secondary border border-border rounded-lg text-sm text-white placeholder:text-gray-500 focus:border-blue-500/50 focus:outline-none transition-colors"
               />
               <button
                 onClick={updateRole}
-                className="px-4 py-2.5 text-sm bg-[#141414] border border-[#2A2A2A] rounded-lg text-gray-400 hover:text-white hover:border-blue-500/30 transition-all"
+                className="px-4 py-2.5 text-sm bg-bg-secondary border border-border rounded-lg text-gray-400 hover:text-white hover:border-blue-500/30 transition-all"
               >
                 Set
               </button>
@@ -90,11 +90,11 @@ export function PersonalizationSection({
                 onChange={(e) => setNewTechStack(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && addTechStack()}
                 placeholder="e.g. Rust, TypeScript"
-                className="flex-1 px-3 py-2.5 bg-[#141414] border border-[#2A2A2A] rounded-lg text-sm text-white placeholder:text-gray-500 focus:border-blue-500/50 focus:outline-none transition-colors"
+                className="flex-1 px-3 py-2.5 bg-bg-secondary border border-border rounded-lg text-sm text-white placeholder:text-gray-500 focus:border-blue-500/50 focus:outline-none transition-colors"
               />
               <button
                 onClick={addTechStack}
-                className="px-4 py-2.5 text-sm bg-[#141414] border border-[#2A2A2A] rounded-lg text-gray-400 hover:text-white hover:border-blue-500/30 transition-all"
+                className="px-4 py-2.5 text-sm bg-bg-secondary border border-border rounded-lg text-gray-400 hover:text-white hover:border-blue-500/30 transition-all"
               >
                 Add
               </button>
@@ -133,7 +133,7 @@ export function PersonalizationSection({
                 onChange={(e) => setNewInterest(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && addInterest()}
                 placeholder="e.g. machine learning, distributed systems"
-                className="flex-1 px-3 py-2.5 bg-[#141414] border border-[#2A2A2A] rounded-lg text-sm text-white placeholder:text-gray-500 focus:border-green-500/50 focus:outline-none transition-colors"
+                className="flex-1 px-3 py-2.5 bg-bg-secondary border border-border rounded-lg text-sm text-white placeholder:text-gray-500 focus:border-green-500/50 focus:outline-none transition-colors"
               />
               <button
                 onClick={addInterest}
@@ -168,27 +168,27 @@ export function PersonalizationSection({
           {/* Suggested Interests */}
           {undeclaredSuggestions.length > 0 && (
             <div>
-              <h4 className="text-xs text-[#A0A0A0] font-medium mb-2">Suggested Interests</h4>
-              <p className="text-[10px] text-[#666666] mb-2">
+              <h4 className="text-xs text-text-secondary font-medium mb-2">Suggested Interests</h4>
+              <p className="text-[10px] text-text-muted mb-2">
                 Based on your detected tech stack and activity
               </p>
               <div className="space-y-1">
                 {undeclaredSuggestions.slice(0, 5).map((suggestion) => (
-                  <div key={suggestion.topic} className="flex items-center justify-between py-1.5 px-2.5 rounded-md bg-[#1F1F1F] border border-[#2A2A2A]">
+                  <div key={suggestion.topic} className="flex items-center justify-between py-1.5 px-2.5 rounded-md bg-bg-tertiary border border-border">
                     <div className="min-w-0 flex-1 mr-2">
                       <span className="text-sm text-white">{suggestion.topic}</span>
-                      <span className="text-[10px] text-[#666666] ml-2 truncate">{suggestion.source}</span>
+                      <span className="text-[10px] text-text-muted ml-2 truncate">{suggestion.source}</span>
                     </div>
                     <div className="flex gap-1 flex-shrink-0">
                       <button
                         onClick={() => onAddSuggestion(suggestion.topic)}
-                        className="text-xs px-2 py-0.5 rounded bg-[#2A2A2A] text-[#22C55E] hover:bg-[#333] transition-colors"
+                        className="text-xs px-2 py-0.5 rounded bg-border text-success hover:bg-[#333] transition-colors"
                       >
                         Add
                       </button>
                       <button
                         onClick={() => onDismissSuggestion(suggestion.topic)}
-                        className="text-xs px-2 py-0.5 rounded bg-[#2A2A2A] text-[#666666] hover:bg-[#333] transition-colors"
+                        className="text-xs px-2 py-0.5 rounded bg-border text-text-muted hover:bg-[#333] transition-colors"
                       >
                         Dismiss
                       </button>
@@ -212,7 +212,7 @@ export function PersonalizationSection({
                 onChange={(e) => setNewExclusion(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && addExclusion()}
                 placeholder="e.g. crypto, sports"
-                className="flex-1 px-3 py-2.5 bg-[#141414] border border-[#2A2A2A] rounded-lg text-sm text-white placeholder:text-gray-500 focus:border-red-500/50 focus:outline-none transition-colors"
+                className="flex-1 px-3 py-2.5 bg-bg-secondary border border-border rounded-lg text-sm text-white placeholder:text-gray-500 focus:border-red-500/50 focus:outline-none transition-colors"
               />
               <button
                 onClick={addExclusion}

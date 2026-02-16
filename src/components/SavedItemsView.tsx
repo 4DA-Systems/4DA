@@ -56,7 +56,7 @@ export function SavedItemsView() {
 
   if (error) {
     return (
-      <div className="bg-[#141414] rounded-lg border border-red-500/30 p-6 text-center">
+      <div className="bg-bg-secondary rounded-lg border border-red-500/30 p-6 text-center">
         <p className="text-sm text-red-400 mb-3">{error}</p>
         <button
           onClick={loadItems}
@@ -70,7 +70,7 @@ export function SavedItemsView() {
 
   if (items.length === 0) {
     return (
-      <div className="bg-[#141414] rounded-lg border border-[#2A2A2A] p-8 text-center">
+      <div className="bg-bg-secondary rounded-lg border border-border p-8 text-center">
         <p className="text-sm text-gray-400 mb-2">No saved items yet</p>
         <p className="text-xs text-gray-600">
           Save items from the Results view to build your collection.
@@ -95,7 +95,7 @@ export function SavedItemsView() {
         {items.map(item => (
           <div
             key={item.item_id}
-            className="bg-[#1F1F1F] rounded-lg border border-[#2A2A2A] p-3 hover:border-[#3A3A3A] transition-colors"
+            className="bg-bg-tertiary rounded-lg border border-border p-3 hover:border-[#3A3A3A] transition-colors"
           >
             <div className="flex items-start gap-3">
               {/* Source badge */}

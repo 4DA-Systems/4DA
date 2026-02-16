@@ -23,19 +23,19 @@ export class ErrorBoundary extends Component<{ children: ReactNode }, ErrorBound
     if (this.state.hasError) {
       return (
         <div style={{
-          backgroundColor: '#0A0A0A',
+          backgroundColor: 'var(--color-bg-primary)',
           color: '#fff',
           minHeight: '100vh',
           padding: '2rem',
           fontFamily: 'Inter, sans-serif',
         }}>
-          <h1 style={{ color: '#EF4444' }}>Something went wrong</h1>
+          <h1 style={{ color: 'var(--color-error)' }}>Something went wrong</h1>
           <pre style={{
-            backgroundColor: '#141414',
+            backgroundColor: 'var(--color-bg-secondary)',
             padding: '1rem',
             borderRadius: '8px',
             overflow: 'auto',
-            color: '#A0A0A0',
+            color: 'var(--color-text-secondary)',
           }}>
             {this.state.error?.message}
             {'\n\n'}
@@ -46,7 +46,7 @@ export class ErrorBoundary extends Component<{ children: ReactNode }, ErrorBound
             style={{
               marginTop: '1rem',
               padding: '0.5rem 1rem',
-              backgroundColor: '#2A2A2A',
+              backgroundColor: 'var(--color-border)',
               color: '#fff',
               border: 'none',
               borderRadius: '4px',

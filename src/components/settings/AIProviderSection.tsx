@@ -40,7 +40,7 @@ export function AIProviderSection({
   return (
     <>
       {/* LLM Provider Section */}
-      <div className="bg-[#1F1F1F] rounded-lg p-5 border border-[#2A2A2A]">
+      <div className="bg-bg-tertiary rounded-lg p-5 border border-border">
         <div className="flex items-center gap-3 mb-4">
           <div className="w-8 h-8 bg-orange-500/20 rounded-lg flex items-center justify-center">
             <span>&#x1f916;</span>
@@ -68,7 +68,7 @@ export function AIProviderSection({
                   baseUrl: newProvider === 'ollama' ? 'http://localhost:11434' : '',
                 }));
               }}
-              className="w-full px-4 py-3 bg-[#141414] border border-[#2A2A2A] rounded-lg text-sm text-white focus:border-orange-500 focus:outline-none"
+              className="w-full px-4 py-3 bg-bg-secondary border border-border rounded-lg text-sm text-white focus:border-orange-500 focus:outline-none"
             >
               <option value="anthropic">Anthropic Claude</option>
               <option value="openai">OpenAI</option>
@@ -84,7 +84,7 @@ export function AIProviderSection({
                 value={settingsForm.apiKey}
                 onChange={(e) => setSettingsForm((f) => ({ ...f, apiKey: e.target.value }))}
                 placeholder={settings?.llm.has_api_key ? '(key saved)' : 'Enter your API key'}
-                className="w-full px-4 py-3 bg-[#141414] border border-[#2A2A2A] rounded-lg text-sm text-white placeholder:text-gray-600 focus:border-orange-500 focus:outline-none font-mono"
+                className="w-full px-4 py-3 bg-bg-secondary border border-border rounded-lg text-sm text-white placeholder:text-gray-600 focus:border-orange-500 focus:outline-none font-mono"
               />
             </div>
           )}
@@ -94,7 +94,7 @@ export function AIProviderSection({
             <select
               value={settingsForm.model}
               onChange={(e) => setSettingsForm((f) => ({ ...f, model: e.target.value }))}
-              className="w-full px-4 py-3 bg-[#141414] border border-[#2A2A2A] rounded-lg text-sm text-white focus:border-orange-500 focus:outline-none"
+              className="w-full px-4 py-3 bg-bg-secondary border border-border rounded-lg text-sm text-white focus:border-orange-500 focus:outline-none"
             >
               {(settingsForm.provider === 'ollama' && ollamaModels.length > 0
                 ? ollamaModels
@@ -112,7 +112,7 @@ export function AIProviderSection({
                 </p>
                 <button
                   onClick={() => checkOllamaStatus(settingsForm.baseUrl || undefined)}
-                  className="text-[10px] px-2 py-0.5 text-gray-500 hover:text-orange-400 bg-[#1F1F1F] rounded transition-colors"
+                  className="text-[10px] px-2 py-0.5 text-gray-500 hover:text-orange-400 bg-bg-tertiary rounded transition-colors"
                 >
                   Re-check
                 </button>
@@ -128,7 +128,7 @@ export function AIProviderSection({
                 value={settingsForm.baseUrl}
                 onChange={(e) => setSettingsForm((f) => ({ ...f, baseUrl: e.target.value }))}
                 placeholder="http://localhost:11434"
-                className="w-full px-4 py-3 bg-[#141414] border border-[#2A2A2A] rounded-lg text-sm text-white placeholder:text-gray-600 focus:border-orange-500 focus:outline-none font-mono"
+                className="w-full px-4 py-3 bg-bg-secondary border border-border rounded-lg text-sm text-white placeholder:text-gray-600 focus:border-orange-500 focus:outline-none font-mono"
               />
             </div>
           )}
@@ -136,7 +136,7 @@ export function AIProviderSection({
       </div>
 
       {/* Re-ranking Section */}
-      <div className="bg-[#1F1F1F] rounded-lg p-5 border border-[#2A2A2A]">
+      <div className="bg-bg-tertiary rounded-lg p-5 border border-border">
         <div className="flex items-center gap-3 mb-4">
           <div className="w-8 h-8 bg-orange-500/20 rounded-lg flex items-center justify-center">
             <span>&#x26a1;</span>
@@ -148,7 +148,7 @@ export function AIProviderSection({
         </div>
 
         <div className="space-y-4">
-          <label className="flex items-center gap-3 cursor-pointer p-3 bg-[#141414] rounded-lg border border-[#2A2A2A] hover:border-orange-500/30 transition-all">
+          <label className="flex items-center gap-3 cursor-pointer p-3 bg-bg-secondary rounded-lg border border-border hover:border-orange-500/30 transition-all">
             <input
               type="checkbox"
               checked={settingsForm.rerankEnabled}
@@ -168,7 +168,7 @@ export function AIProviderSection({
                 type="number"
                 value={settingsForm.maxItems}
                 onChange={(e) => setSettingsForm((f) => ({ ...f, maxItems: parseInt(e.target.value) || 15 }))}
-                className="w-full px-4 py-3 bg-[#141414] border border-[#2A2A2A] rounded-lg text-sm text-white focus:border-orange-500 focus:outline-none"
+                className="w-full px-4 py-3 bg-bg-secondary border border-border rounded-lg text-sm text-white focus:border-orange-500 focus:outline-none"
               />
             </div>
             <div>
@@ -178,7 +178,7 @@ export function AIProviderSection({
                 step="0.05"
                 value={settingsForm.minScore}
                 onChange={(e) => setSettingsForm((f) => ({ ...f, minScore: parseFloat(e.target.value) || 0.25 }))}
-                className="w-full px-4 py-3 bg-[#141414] border border-[#2A2A2A] rounded-lg text-sm text-white focus:border-orange-500 focus:outline-none"
+                className="w-full px-4 py-3 bg-bg-secondary border border-border rounded-lg text-sm text-white focus:border-orange-500 focus:outline-none"
               />
             </div>
           </div>
@@ -190,7 +190,7 @@ export function AIProviderSection({
                 type="number"
                 value={settingsForm.dailyTokenLimit}
                 onChange={(e) => setSettingsForm((f) => ({ ...f, dailyTokenLimit: parseInt(e.target.value) || 100000 }))}
-                className="w-full px-4 py-3 bg-[#141414] border border-[#2A2A2A] rounded-lg text-sm text-white focus:border-orange-500 focus:outline-none"
+                className="w-full px-4 py-3 bg-bg-secondary border border-border rounded-lg text-sm text-white focus:border-orange-500 focus:outline-none"
               />
             </div>
             <div>
@@ -199,7 +199,7 @@ export function AIProviderSection({
                 type="number"
                 value={settingsForm.dailyCostLimit}
                 onChange={(e) => setSettingsForm((f) => ({ ...f, dailyCostLimit: parseInt(e.target.value) || 50 }))}
-                className="w-full px-4 py-3 bg-[#141414] border border-[#2A2A2A] rounded-lg text-sm text-white focus:border-orange-500 focus:outline-none"
+                className="w-full px-4 py-3 bg-bg-secondary border border-border rounded-lg text-sm text-white focus:border-orange-500 focus:outline-none"
               />
             </div>
           </div>
@@ -208,7 +208,7 @@ export function AIProviderSection({
 
       {/* Usage Stats */}
       {settings && (
-        <div className="bg-[#1F1F1F] rounded-lg p-5 border border-[#2A2A2A]">
+        <div className="bg-bg-tertiary rounded-lg p-5 border border-border">
           <div className="flex items-center gap-3 mb-4">
             <div className="w-8 h-8 bg-green-500/20 rounded-lg flex items-center justify-center">
               <span>&#x1f4c8;</span>
@@ -219,15 +219,15 @@ export function AIProviderSection({
             </div>
           </div>
           <div className="grid grid-cols-3 gap-4">
-            <div className="bg-[#141414] rounded-lg p-3 text-center">
+            <div className="bg-bg-secondary rounded-lg p-3 text-center">
               <p className="text-xl font-semibold text-white">{settings.usage.tokens_today.toLocaleString()}</p>
               <p className="text-xs text-gray-500">Tokens</p>
             </div>
-            <div className="bg-[#141414] rounded-lg p-3 text-center">
+            <div className="bg-bg-secondary rounded-lg p-3 text-center">
               <p className="text-xl font-semibold text-green-400">${(settings.usage.cost_today_cents / 100).toFixed(2)}</p>
               <p className="text-xs text-gray-500">Cost</p>
             </div>
-            <div className="bg-[#141414] rounded-lg p-3 text-center">
+            <div className="bg-bg-secondary rounded-lg p-3 text-center">
               <p className="text-xl font-semibold text-orange-400">{settings.usage.items_reranked}</p>
               <p className="text-xs text-gray-500">Re-ranked</p>
             </div>

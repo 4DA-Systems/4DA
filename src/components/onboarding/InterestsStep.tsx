@@ -45,7 +45,7 @@ export function InterestsStep({
         Help 4DA understand what to surface. This improves over time as you use the app.
       </p>
 
-      <div className="space-y-5 bg-[#141414] p-6 rounded-lg mb-6">
+      <div className="space-y-5 bg-bg-secondary p-6 rounded-lg mb-6">
         {/* Role - simplified */}
         <div>
           <label className="block text-sm text-gray-400 mb-2">
@@ -56,7 +56,7 @@ export function InterestsStep({
             value={role}
             onChange={(e) => setRole(e.target.value)}
             placeholder="e.g., Software Engineer, Product Manager, Researcher"
-            className="w-full px-4 py-3 bg-[#1F1F1F] border border-[#2A2A2A] rounded-lg text-white placeholder-gray-600 focus:border-orange-500 focus:outline-none"
+            className="w-full px-4 py-3 bg-bg-tertiary border border-border rounded-lg text-white placeholder-gray-600 focus:border-orange-500 focus:outline-none"
           />
         </div>
 
@@ -68,7 +68,7 @@ export function InterestsStep({
 
           {/* Selected interests first */}
           {interests.length > 0 && (
-            <div className="flex flex-wrap gap-2 mb-3 p-3 bg-[#1F1F1F] rounded-lg border border-[#2A2A2A]">
+            <div className="flex flex-wrap gap-2 mb-3 p-3 bg-bg-tertiary rounded-lg border border-border">
               {interests.map((interest) => (
                 <span
                   key={interest}
@@ -94,7 +94,7 @@ export function InterestsStep({
               onChange={(e) => setNewInterest(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && addInterest()}
               placeholder="Type a topic and press Enter..."
-              className="flex-1 px-4 py-2 bg-[#1F1F1F] border border-[#2A2A2A] rounded-lg text-white placeholder-gray-600 focus:border-orange-500 focus:outline-none"
+              className="flex-1 px-4 py-2 bg-bg-tertiary border border-border rounded-lg text-white placeholder-gray-600 focus:border-orange-500 focus:outline-none"
             />
             <button
               onClick={addInterest}
@@ -116,7 +116,7 @@ export function InterestsStep({
                   <button
                     key={suggestion}
                     onClick={() => setInterests([...interests, suggestion])}
-                    className="px-3 py-1.5 bg-[#1F1F1F] text-gray-400 rounded-full text-sm hover:bg-[#2A2A2A] hover:text-white transition-all hover:scale-105"
+                    className="px-3 py-1.5 bg-bg-tertiary text-gray-400 rounded-full text-sm hover:bg-border hover:text-white transition-all hover:scale-105"
                   >
                     + {suggestion}
                   </button>

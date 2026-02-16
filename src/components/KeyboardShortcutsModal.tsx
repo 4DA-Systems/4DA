@@ -5,12 +5,12 @@ interface KeyboardShortcutsModalProps {
 export function KeyboardShortcutsModal({ onClose }: KeyboardShortcutsModalProps) {
   return (
     <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={onClose}>
-      <div className="bg-[#141414] border border-[#2A2A2A] rounded-xl w-full max-w-sm shadow-2xl" onClick={e => e.stopPropagation()}>
-        <div className="px-6 py-4 border-b border-[#2A2A2A] flex items-center justify-between">
+      <div className="bg-bg-secondary border border-border rounded-xl w-full max-w-sm shadow-2xl" onClick={e => e.stopPropagation()}>
+        <div className="px-6 py-4 border-b border-border flex items-center justify-between">
           <h2 className="text-lg font-medium text-white">Keyboard Shortcuts</h2>
           <button
             onClick={onClose}
-            className="w-8 h-8 rounded-lg bg-[#1F1F1F] text-gray-500 hover:text-white hover:bg-[#2A2A2A] flex items-center justify-center transition-all"
+            className="w-8 h-8 rounded-lg bg-bg-tertiary text-gray-500 hover:text-white hover:bg-border flex items-center justify-center transition-all"
           >
             &times;
           </button>
@@ -25,10 +25,10 @@ export function KeyboardShortcutsModal({ onClose }: KeyboardShortcutsModalProps)
             { key: '?', label: 'Show this help' },
           ].map(({ key, label }) => (
             <div key={key} className="flex items-center justify-between">
-              <kbd className="px-2 py-1 bg-[#1F1F1F] border border-[#2A2A2A] rounded text-sm font-mono text-white min-w-[2.5rem] text-center">
+              <kbd className="px-2 py-1 bg-bg-tertiary border border-border rounded text-sm font-mono text-white min-w-[2.5rem] text-center">
                 {key}
               </kbd>
-              <span className="text-sm text-[#A0A0A0]">{label}</span>
+              <span className="text-sm text-text-secondary">{label}</span>
             </div>
           ))}
         </div>

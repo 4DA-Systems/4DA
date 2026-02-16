@@ -198,9 +198,9 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
 
   return (
     <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4" role="dialog" aria-modal="true" aria-labelledby="settings-modal-title">
-      <div className="bg-[#141414] border border-[#2A2A2A] rounded-xl w-full max-w-lg max-h-[90vh] overflow-y-auto shadow-2xl">
+      <div className="bg-bg-secondary border border-border rounded-xl w-full max-w-lg max-h-[90vh] overflow-y-auto shadow-2xl">
         {/* Modal Header */}
-        <div className="px-6 py-4 border-b border-[#2A2A2A] flex items-center justify-between sticky top-0 bg-[#141414] z-10">
+        <div className="px-6 py-4 border-b border-border flex items-center justify-between sticky top-0 bg-bg-secondary z-10">
           <div className="flex items-center gap-3">
             <div className="w-8 h-8 bg-orange-500/20 rounded-lg flex items-center justify-center">
               <span>&#x2699;&#xfe0f;</span>
@@ -210,7 +210,7 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
           <button
             onClick={onClose}
             aria-label="Close settings"
-            className="w-8 h-8 rounded-lg bg-[#1F1F1F] text-gray-500 hover:text-white hover:bg-[#2A2A2A] flex items-center justify-center transition-all"
+            className="w-8 h-8 rounded-lg bg-bg-tertiary text-gray-500 hover:text-white hover:bg-border flex items-center justify-center transition-all"
           >
             &times;
           </button>
@@ -320,18 +320,18 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
             </button>
             <button
               onClick={testConnection}
-              className="px-6 py-3 text-sm bg-[#1F1F1F] text-gray-300 border border-[#2A2A2A] rounded-lg hover:text-white hover:border-orange-500/30 transition-all"
+              className="px-6 py-3 text-sm bg-bg-tertiary text-gray-300 border border-border rounded-lg hover:text-white hover:border-orange-500/30 transition-all"
             >
               Test Connection
             </button>
           </div>
 
           {/* Copyright */}
-          <div className="pt-4 border-t border-[#2A2A2A] text-center">
-            <p className="text-xs text-[#666666]">
+          <div className="pt-4 border-t border-border text-center">
+            <p className="text-xs text-text-muted">
               4DA v1.0.0 &copy; 2025-2026 4DA Systems. All rights reserved.
             </p>
-            <p className="text-xs text-[#666666] mt-1">
+            <p className="text-xs text-text-muted mt-1">
               Licensed under BSL-1.1
             </p>
           </div>

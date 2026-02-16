@@ -147,7 +147,7 @@ export const ScoreAutopsy: React.FC<ScoreAutopsyProps> = ({
                 style={{
                   width: `${Math.abs(comp.contribution) * 100}%`,
                   backgroundColor:
-                    comp.contribution >= 0 ? '#22C55E' : '#EF4444',
+                    comp.contribution >= 0 ? 'var(--color-success)' : 'var(--color-error)',
                 }}
               />
             </div>

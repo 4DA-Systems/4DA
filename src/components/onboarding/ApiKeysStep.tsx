@@ -61,7 +61,7 @@ export function ApiKeysStep({
         {ollamaStatus?.running && apiKeys.provider === 'ollama' && (
           <>
             {pullingModels ? (
-              <div className="p-4 bg-[#141414] border border-orange-500/30 rounded-lg space-y-3">
+              <div className="p-4 bg-bg-secondary border border-orange-500/30 rounded-lg space-y-3">
                 <div className="flex items-center gap-2 text-sm text-orange-300">
                   <div className="w-4 h-4 border-2 border-orange-500 border-t-transparent rounded-full animate-spin" />
                   Installing models for local AI...
@@ -74,7 +74,7 @@ export function ApiKeysStep({
                         {p.done ? 'Complete' : p.status || `${p.percent}%`}
                       </span>
                     </div>
-                    <div className="w-full h-1.5 bg-[#1F1F1F] rounded-full overflow-hidden">
+                    <div className="w-full h-1.5 bg-bg-tertiary rounded-full overflow-hidden">
                       <div
                         className={`h-full rounded-full transition-all duration-300 ${
                           p.done ? 'bg-green-500' : 'bg-orange-500'
@@ -108,7 +108,7 @@ export function ApiKeysStep({
         )}
 
         {/* OpenAI Key */}
-        <div className="bg-[#141414] p-5 rounded-lg">
+        <div className="bg-bg-secondary p-5 rounded-lg">
           <div className="flex items-center gap-2 mb-3">
             {hasEmbeddingService ? (
               <span className="px-2 py-0.5 bg-green-500/20 text-green-400 text-xs rounded font-medium">Recommended</span>
@@ -139,7 +139,7 @@ export function ApiKeysStep({
               setTestResult(null);
             }}
             placeholder="sk-proj-..."
-            className="w-full px-4 py-3 bg-[#1F1F1F] border border-[#2A2A2A] rounded-lg text-white placeholder-gray-600 focus:border-orange-500 focus:outline-none font-mono text-sm"
+            className="w-full px-4 py-3 bg-bg-tertiary border border-border rounded-lg text-white placeholder-gray-600 focus:border-orange-500 focus:outline-none font-mono text-sm"
           />
           <p className="text-xs text-gray-500 mt-2">
             ~$0.02/1M tokens for embeddings. Typical usage costs pennies/month.
@@ -147,7 +147,7 @@ export function ApiKeysStep({
         </div>
 
         {/* LLM Provider - for analysis/reasoning */}
-        <div className="bg-[#141414] p-5 rounded-lg">
+        <div className="bg-bg-secondary p-5 rounded-lg">
           <div className="flex items-center gap-2 mb-3">
             <span className="px-2 py-0.5 bg-blue-500/20 text-blue-400 text-xs rounded font-medium">Analysis</span>
             <h3 className="text-white font-medium">LLM Provider</h3>
@@ -169,7 +169,7 @@ export function ApiKeysStep({
                 className={`p-3 rounded-lg text-center transition-all ${
                   apiKeys.provider === p
                     ? 'bg-orange-500/20 border-2 border-orange-500'
-                    : 'bg-[#1F1F1F] border-2 border-transparent hover:border-[#2A2A2A]'
+                    : 'bg-bg-tertiary border-2 border-transparent hover:border-border'
                 }`}
               >
                 <div className="text-sm font-medium text-white">
@@ -204,13 +204,13 @@ export function ApiKeysStep({
                   setTestResult(null);
                 }}
                 placeholder="sk-ant-api03-..."
-                className="w-full px-4 py-3 bg-[#1F1F1F] border border-[#2A2A2A] rounded-lg text-white placeholder-gray-600 focus:border-orange-500 focus:outline-none font-mono text-sm"
+                className="w-full px-4 py-3 bg-bg-tertiary border border-border rounded-lg text-white placeholder-gray-600 focus:border-orange-500 focus:outline-none font-mono text-sm"
               />
             </div>
           )}
 
           {apiKeys.provider === 'ollama' && (
-            <div className="mt-3 p-3 bg-[#1F1F1F] rounded-lg">
+            <div className="mt-3 p-3 bg-bg-tertiary rounded-lg">
               {isCheckingOllama ? (
                 <div className="flex items-center gap-2">
                   <div className="w-4 h-4 border-2 border-orange-500 border-t-transparent rounded-full animate-spin" />
@@ -226,7 +226,7 @@ export function ApiKeysStep({
                     <select
                       value={selectedOllamaModel}
                       onChange={(e) => setSelectedOllamaModel(e.target.value)}
-                      className="w-full px-3 py-2 bg-[#141414] border border-[#2A2A2A] rounded text-white text-sm"
+                      className="w-full px-3 py-2 bg-bg-secondary border border-border rounded text-white text-sm"
                     >
                       {ollamaStatus.models.map((model) => (
                         <option key={model} value={model}>{model}</option>
@@ -255,7 +255,7 @@ export function ApiKeysStep({
         </div>
 
         {/* X/Twitter API Key - Optional */}
-        <div className="bg-[#141414] p-5 rounded-lg">
+        <div className="bg-bg-secondary p-5 rounded-lg">
           <div className="flex items-center gap-2 mb-3">
             <span className="px-2 py-0.5 bg-gray-500/20 text-gray-400 text-xs rounded font-medium">Optional</span>
             <h3 className="text-white font-medium">X / Twitter API Key</h3>
@@ -279,7 +279,7 @@ export function ApiKeysStep({
             value={apiKeys.xApiKey}
             onChange={(e) => setApiKeys({ ...apiKeys, xApiKey: e.target.value })}
             placeholder="Bearer token..."
-            className="w-full px-4 py-3 bg-[#1F1F1F] border border-[#2A2A2A] rounded-lg text-white placeholder-gray-600 focus:border-orange-500 focus:outline-none font-mono text-sm"
+            className="w-full px-4 py-3 bg-bg-tertiary border border-border rounded-lg text-white placeholder-gray-600 focus:border-orange-500 focus:outline-none font-mono text-sm"
           />
           <p className="text-xs text-gray-500 mt-2">
             Skip this if you don't have an X developer account. You can add it later in Settings.
@@ -290,7 +290,7 @@ export function ApiKeysStep({
         <button
           onClick={onTest}
           disabled={isTesting || (!apiKeys.openai && apiKeys.provider !== 'ollama' && !ollamaStatus?.running)}
-          className="w-full px-4 py-3 bg-[#1F1F1F] border border-[#2A2A2A] text-gray-300 rounded-lg hover:bg-[#2A2A2A] transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+          className="w-full px-4 py-3 bg-bg-tertiary border border-border text-gray-300 rounded-lg hover:bg-border transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
         >
           {isTesting ? (
             <>
@@ -329,7 +329,7 @@ export function ApiKeysStep({
 
       {/* Keyword-only mode info */}
       {!hasEmbeddingService && (
-        <div className="p-3 bg-[#1F1F1F] border border-[#2A2A2A] rounded-lg text-sm">
+        <div className="p-3 bg-bg-tertiary border border-border rounded-lg text-sm">
           <div className="text-yellow-400 font-medium mb-1">Keyword-only mode available</div>
           <p className="text-gray-400 text-xs">
             Without an API key or Ollama, 4DA can still work using keyword matching.

@@ -32,7 +32,7 @@ export function PredictiveIndicator() {
     <div className="mb-4">
       <button
         onClick={() => setExpanded(!expanded)}
-        className="flex items-center gap-2 px-3 py-2 bg-[#141414] border border-purple-500/20 rounded-lg hover:border-purple-500/40 transition-all text-left w-full"
+        className="flex items-center gap-2 px-3 py-2 bg-bg-secondary border border-purple-500/20 rounded-lg hover:border-purple-500/40 transition-all text-left w-full"
       >
         <span className="text-purple-400 text-sm">🔮</span>
         <span className="text-xs text-purple-300">
@@ -43,7 +43,7 @@ export function PredictiveIndicator() {
         </span>
       </button>
       {expanded && (
-        <div className="mt-2 px-4 py-3 bg-[#141414] border border-purple-500/20 rounded-lg">
+        <div className="mt-2 px-4 py-3 bg-bg-secondary border border-purple-500/20 rounded-lg">
           <p className="text-xs text-gray-400 mb-2">{prediction.reasoning}</p>
           <div className="flex flex-wrap gap-2">
             {prediction.predicted_topics.map(([topic, score]) => (

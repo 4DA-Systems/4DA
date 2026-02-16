@@ -81,7 +81,7 @@ function SectionAccent({ type }: { type: ParsedSection['type'] }) {
     case 'filtered':
       return <div className="w-1 h-full bg-gray-600 rounded-full flex-shrink-0" />;
     default:
-      return <div className="w-1 h-full bg-[#2A2A2A] rounded-full flex-shrink-0" />;
+      return <div className="w-1 h-full bg-border rounded-full flex-shrink-0" />;
   }
 }
 
@@ -146,7 +146,7 @@ function renderInlineFormatting(text: string): React.ReactNode {
     return codeParts.map((codePart, j) => {
       if (codePart.startsWith('`') && codePart.endsWith('`')) {
         return (
-          <code key={`${i}-${j}`} className="px-1 py-0.5 bg-[#2A2A2A] text-orange-400 rounded text-xs font-mono">
+          <code key={`${i}-${j}`} className="px-1 py-0.5 bg-border text-orange-400 rounded text-xs font-mono">
             {codePart.slice(1, -1)}
           </code>
         );
@@ -236,35 +236,35 @@ export function BriefingView() {
   // Loading skeleton
   if (briefing.loading) {
     return (
-      <div className="bg-[#0A0A0A] rounded-lg">
+      <div className="bg-bg-primary rounded-lg">
         <div className="space-y-4">
           {/* Skeleton header */}
-          <div className="bg-[#141414] rounded-lg border border-[#2A2A2A] p-6">
+          <div className="bg-bg-secondary rounded-lg border border-border p-6">
             <div className="flex items-center gap-3 mb-4">
               <div className="w-8 h-8 bg-orange-500/20 rounded-lg flex items-center justify-center">
                 <div className="w-4 h-4 border-2 border-orange-400 border-t-transparent rounded-full animate-spin" />
               </div>
               <div>
-                <div className="h-5 w-48 bg-[#1F1F1F] rounded animate-pulse" />
-                <div className="h-3 w-32 bg-[#1F1F1F] rounded animate-pulse mt-2" />
+                <div className="h-5 w-48 bg-bg-tertiary rounded animate-pulse" />
+                <div className="h-3 w-32 bg-bg-tertiary rounded animate-pulse mt-2" />
               </div>
             </div>
             {/* Skeleton lines */}
             <div className="space-y-3">
               {Array.from({ length: 6 }).map((_, i) => (
-                <div key={i} className="h-4 bg-[#1F1F1F] rounded animate-pulse" style={{ width: `${75 + Math.random() * 25}%` }} />
+                <div key={i} className="h-4 bg-bg-tertiary rounded animate-pulse" style={{ width: `${75 + Math.random() * 25}%` }} />
               ))}
             </div>
           </div>
           {/* Skeleton cards */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             {Array.from({ length: 4 }).map((_, i) => (
-              <div key={i} className="bg-[#141414] rounded-lg border border-[#2A2A2A] p-4">
+              <div key={i} className="bg-bg-secondary rounded-lg border border-border p-4">
                 <div className="flex gap-3">
-                  <div className="w-10 h-6 bg-[#1F1F1F] rounded animate-pulse" />
+                  <div className="w-10 h-6 bg-bg-tertiary rounded animate-pulse" />
                   <div className="flex-1 space-y-2">
-                    <div className="h-4 bg-[#1F1F1F] rounded animate-pulse" />
-                    <div className="h-3 bg-[#1F1F1F] rounded animate-pulse w-3/4" />
+                    <div className="h-4 bg-bg-tertiary rounded animate-pulse" />
+                    <div className="h-3 bg-bg-tertiary rounded animate-pulse w-3/4" />
                   </div>
                 </div>
               </div>
@@ -278,9 +278,9 @@ export function BriefingView() {
   // Empty state: no briefing content and not loading
   if (!briefing.content) {
     return (
-      <div className="bg-[#0A0A0A] rounded-lg">
+      <div className="bg-bg-primary rounded-lg">
         <div className="flex flex-col items-center justify-center py-20 px-8">
-          <div className="w-20 h-20 mb-6 bg-[#141414] rounded-2xl border border-[#2A2A2A] flex items-center justify-center">
+          <div className="w-20 h-20 mb-6 bg-bg-secondary rounded-2xl border border-border flex items-center justify-center">
             <div className="w-6 h-6 border-2 border-orange-400 border-t-transparent rounded-full animate-spin" />
           </div>
           <h2 className="text-xl font-medium text-white mb-2">Preparing Your Briefing</h2>
@@ -304,7 +304,7 @@ export function BriefingView() {
 
   // Briefing content view
   return (
-    <div className="bg-[#0A0A0A] rounded-lg space-y-6">
+    <div className="bg-bg-primary rounded-lg space-y-6">
       {/* Signal Action Cards — critical/high priority items */}
       {signalItems.length > 0 && (
         <div className="space-y-3">
@@ -321,7 +321,7 @@ export function BriefingView() {
       )}
 
       {/* Briefing header */}
-      <div className="bg-[#141414] rounded-lg border border-orange-500/20 overflow-hidden">
+      <div className="bg-bg-secondary rounded-lg border border-orange-500/20 overflow-hidden">
         <div className="px-5 py-4 border-b border-orange-500/10 flex items-center justify-between bg-orange-500/5">
           <div className="flex items-center gap-3">
             <div className="w-8 h-8 bg-orange-500/20 rounded-lg flex items-center justify-center">
@@ -339,21 +339,21 @@ export function BriefingView() {
             )}
             <button
               onClick={copyBriefing}
-              className="px-2.5 py-1.5 text-xs bg-[#1F1F1F] text-gray-400 border border-[#2A2A2A] rounded-lg hover:text-white hover:border-[#3A3A3A] transition-all"
+              className="px-2.5 py-1.5 text-xs bg-bg-tertiary text-gray-400 border border-border rounded-lg hover:text-white hover:border-[#3A3A3A] transition-all"
               title="Copy briefing markdown"
             >
               Copy
             </button>
             <button
               onClick={shareBriefing}
-              className="px-2.5 py-1.5 text-xs bg-[#1F1F1F] text-gray-400 border border-[#2A2A2A] rounded-lg hover:text-white hover:border-[#3A3A3A] transition-all"
+              className="px-2.5 py-1.5 text-xs bg-bg-tertiary text-gray-400 border border-border rounded-lg hover:text-white hover:border-[#3A3A3A] transition-all"
               title="Copy condensed briefing for sharing"
             >
               Share
             </button>
             <button
               onClick={generateBriefing}
-              className="px-3 py-1.5 text-xs bg-[#1F1F1F] text-orange-400 border border-orange-500/30 rounded-lg hover:bg-orange-500/10 transition-all font-medium"
+              className="px-3 py-1.5 text-xs bg-bg-tertiary text-orange-400 border border-orange-500/30 rounded-lg hover:bg-orange-500/10 transition-all font-medium"
               title="Refresh briefing"
             >
               Refresh
@@ -423,7 +423,7 @@ export function BriefingView() {
         </div>
 
         {briefing.lastGenerated && (
-          <div className="px-5 py-3 border-t border-[#2A2A2A] text-xs text-gray-600">
+          <div className="px-5 py-3 border-t border-border text-xs text-gray-600">
             Generated {briefing.lastGenerated.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
             {briefing.model && <span className="ml-2">via {briefing.model}</span>}
           </div>
@@ -476,7 +476,7 @@ export function BriefingView() {
       <div className="flex justify-center pt-2 pb-4">
         <button
           onClick={() => setActiveView('results')}
-          className="px-6 py-2.5 text-sm text-orange-400 bg-[#141414] border border-orange-500/20 rounded-lg hover:bg-orange-500/10 hover:border-orange-500/30 transition-all font-medium"
+          className="px-6 py-2.5 text-sm text-orange-400 bg-bg-secondary border border-orange-500/20 rounded-lg hover:bg-orange-500/10 hover:border-orange-500/30 transition-all font-medium"
         >
           View All {results.length} Results
         </button>

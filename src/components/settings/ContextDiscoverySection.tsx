@@ -26,7 +26,7 @@ export function ContextDiscoverySection({
   removeScanDirectory,
 }: ContextDiscoverySectionProps) {
   return (
-    <div className="bg-[#1F1F1F] rounded-lg p-5 border border-[#2A2A2A]">
+    <div className="bg-bg-tertiary rounded-lg p-5 border border-border">
       <div className="flex items-start gap-3 mb-4">
         <div className="w-8 h-8 bg-orange-500/20 rounded-lg flex items-center justify-center flex-shrink-0">
           <span className="text-orange-400">&#x1f50d;</span>
@@ -58,11 +58,11 @@ export function ContextDiscoverySection({
             onChange={(e) => setNewScanDir(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && addScanDirectory()}
             placeholder="Or add specific directory: ~/notes, D:\research"
-            className="flex-1 px-3 py-2.5 bg-[#141414] border border-[#2A2A2A] rounded-lg text-sm text-white placeholder:text-gray-500 focus:border-orange-500/50 focus:outline-none transition-colors"
+            className="flex-1 px-3 py-2.5 bg-bg-secondary border border-border rounded-lg text-sm text-white placeholder:text-gray-500 focus:border-orange-500/50 focus:outline-none transition-colors"
           />
           <button
             onClick={addScanDirectory}
-            className="px-4 py-2.5 text-sm bg-[#141414] border border-[#2A2A2A] rounded-lg text-gray-400 hover:text-white hover:border-orange-500/30 transition-all"
+            className="px-4 py-2.5 text-sm bg-bg-secondary border border-border rounded-lg text-gray-400 hover:text-white hover:border-orange-500/30 transition-all"
           >
             Add
           </button>
@@ -76,7 +76,7 @@ export function ContextDiscoverySection({
               <div className="text-xs text-gray-500 mb-2">Configured Directories ({scanDirectories.length})</div>
               <div className="space-y-1.5 max-h-32 overflow-y-auto">
                 {scanDirectories.map((dir) => (
-                  <div key={dir} className="flex items-center justify-between px-3 py-2 bg-[#141414] rounded-lg border border-[#2A2A2A] group">
+                  <div key={dir} className="flex items-center justify-between px-3 py-2 bg-bg-secondary rounded-lg border border-border group">
                     <span className="font-mono text-sm text-white truncate">{dir}</span>
                     <button
                       onClick={() => removeScanDirectory(dir)}
@@ -95,14 +95,14 @@ export function ContextDiscoverySection({
           <button
             onClick={runFullScan}
             disabled={isScanning}
-            className="w-full px-4 py-2.5 text-sm bg-[#141414] border border-[#2A2A2A] rounded-lg text-gray-400 hover:text-white hover:border-orange-500/30 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+            className="w-full px-4 py-2.5 text-sm bg-bg-secondary border border-border rounded-lg text-gray-400 hover:text-white hover:border-orange-500/30 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {isScanning ? 'Scanning...' : 'Re-scan Configured Directories'}
           </button>
         )}
 
         {(discoveredContext.tech.length > 0 || discoveredContext.topics.length > 0) && (
-          <div className="bg-[#141414] rounded-lg p-4 border border-[#2A2A2A] space-y-3">
+          <div className="bg-bg-secondary rounded-lg p-4 border border-border space-y-3">
             <div className="text-xs text-gray-500 flex items-center gap-2">
               <span className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse" />
               Discovered Context {discoveredContext.lastScan && `(${new Date(discoveredContext.lastScan).toLocaleDateString()})`}
