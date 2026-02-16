@@ -129,11 +129,13 @@ function App() {
   // Reset render limit when new results come in
   useEffect(() => { setRenderLimit(50); }, [state.relevanceResults]);
 
-  // Load persisted briefing on mount (instant, from DB)
+  // Load persisted briefing + source health on mount (instant, from DB)
   const loadPersistedBriefing = useAppStore(s => s.loadPersistedBriefing);
+  const loadSourceHealth = useAppStore(s => s.loadSourceHealth);
   useEffect(() => {
     loadPersistedBriefing();
-  }, [loadPersistedBriefing]);
+    loadSourceHealth();
+  }, [loadPersistedBriefing, loadSourceHealth]);
 
   // On mount: load cached results from previous session, or auto-analyze
   useEffect(() => {

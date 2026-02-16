@@ -68,6 +68,7 @@ mod domain_profile;
 pub mod extractors;
 mod handoff;
 mod health;
+mod health_commands;
 mod job_queue;
 mod job_queue_commands;
 mod knowledge_decay;
@@ -285,7 +286,9 @@ pub fn run() {
             content_commands::get_item_summary,
             content_commands::generate_item_summary,
             content_commands::get_saved_items,
-            content_commands::remove_saved_item
+            content_commands::remove_saved_item,
+            // Source Health
+            health_commands::get_source_health_status
         ])
         .setup(|app| {
             // Set up system tray
@@ -315,7 +318,7 @@ pub fn run() {
                 let _ = app_handle_analyze.emit("start-analysis-from-tray", ());
             });
 
-            let app_handle_toggle = app_handle.clone();
+            let _app_handle_toggle = app_handle.clone();
             app.listen("tray-toggle-monitoring", move |_| {
                 let state = get_monitoring_state();
                 let new_enabled = !state.is_enabled();

@@ -1,5 +1,6 @@
 import type { StateCreator } from 'zustand';
 import { invoke } from '@tauri-apps/api/core';
+import type { SourceHealthStatus } from '../types';
 import type { AppStore, BriefingSlice, BriefingState } from './types';
 
 const initialBriefingState: BriefingState = {
@@ -15,6 +16,7 @@ export const createBriefingSlice: StateCreator<AppStore, [], [], BriefingSlice> 
   showBriefing: false,
   autoBriefingEnabled: true,
   lastBackgroundResultsAt: null,
+  sourceHealth: [],
 
   setShowBriefing: (show) => set({ showBriefing: show }),
   setAutoBriefingEnabled: (enabled) => set({ autoBriefingEnabled: enabled }),
@@ -43,6 +45,15 @@ export const createBriefingSlice: StateCreator<AppStore, [], [], BriefingSlice> 
       }
     } catch {
       // Silently ignore — no persisted briefing available
+    }
+  },
+
+  loadSourceHealth: async () => {
+    try {
+      const health = await invoke<SourceHealthStatus[]>('get_source_health_status');
+      set({ sourceHealth: health });
+    } catch {
+      // Silently ignore — source health is supplementary
     }
   },
 

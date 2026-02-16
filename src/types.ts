@@ -499,3 +499,11 @@ export interface SavedItem {
   summary: string | null;
   content_preview: string | null;
 }
+
+export interface SourceHealthStatus {
+  source_type: string;
+  status: 'healthy' | 'error' | 'circuit_open' | 'unknown';
+  last_success_relative: string | null;
+  items_fetched: number;
+  gap_message: string | null;
+}
