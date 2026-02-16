@@ -34,6 +34,8 @@ import {
   useKeyboardShortcuts,
   useToasts,
 } from './hooks';
+import { useShallow } from 'zustand/react/shallow';
+
 import { useAppStore } from './store';
 import type { SourceRelevance } from './types';
 
@@ -44,8 +46,21 @@ function App() {
   const [showKeyboardHelp, setShowKeyboardHelp] = useState(false);
   const [renderLimit, setRenderLimit] = useState(50);
   const [newItemIds, setNewItemIds] = useState<Set<number>>(new Set());
-  const activeView = useAppStore(s => s.activeView);
+  // Data selectors (may change, use useShallow)
+  const { activeView, showOnlyRelevant, filteredResults } = useAppStore(
+    useShallow((s) => ({
+      activeView: s.activeView,
+      showOnlyRelevant: s.showOnlyRelevant,
+      filteredResults: s.appState.relevanceResults,
+    })),
+  );
+
+  // Action selectors (stable references, no need for useShallow)
   const setActiveView = useAppStore(s => s.setActiveView);
+  const setShowOnlyRelevant = useAppStore(s => s.setShowOnlyRelevant);
+  const loadPersistedBriefing = useAppStore(s => s.loadPersistedBriefing);
+  const loadSourceHealth = useAppStore(s => s.loadSourceHealth);
+
   // Toast notification system
   const { toasts, addToast, removeToast } = useToasts();
   // All application state via hooks
@@ -130,8 +145,6 @@ function App() {
   useEffect(() => { setRenderLimit(50); }, [state.relevanceResults]);
 
   // Load persisted briefing + source health on mount (instant, from DB)
-  const loadPersistedBriefing = useAppStore(s => s.loadPersistedBriefing);
-  const loadSourceHealth = useAppStore(s => s.loadSourceHealth);
   useEffect(() => {
     loadPersistedBriefing();
     loadSourceHealth();
@@ -182,9 +195,6 @@ function App() {
   }, []);
 
   // Global keyboard shortcuts (extracted hook)
-  const showOnlyRelevant = useAppStore(s => s.showOnlyRelevant);
-  const setShowOnlyRelevant = useAppStore(s => s.setShowOnlyRelevant);
-  const filteredResults = useAppStore(s => s.appState.relevanceResults);
   const visibleResults = filteredResults.slice(0, renderLimit);
   const { focusedIndex } = useKeyboardShortcuts({
     onAnalyze: startAnalysis,
@@ -232,7 +242,7 @@ function App() {
         }} />
       )}
 
-      <div className={`min-h-screen bg-[#0A0A0A] text-white p-6 ${showSplash || showOnboarding ? 'hidden' : 'opacity-100 transition-opacity duration-300'}`}>
+      <div className={`min-h-screen bg-bg-primary text-white p-6 ${showSplash || showOnboarding ? 'hidden' : 'opacity-100 transition-opacity duration-300'}`}>
         {/* Header - Polished */}
         <header className="mb-8 flex items-center justify-between">
           <div className="flex items-center gap-4">
@@ -254,7 +264,7 @@ function App() {
             <OllamaStatus provider={settingsForm.provider} />
             <button
               onClick={() => setShowSettings(true)}
-              className="px-4 py-2 text-sm bg-[#141414] text-gray-300 border border-[#2A2A2A] rounded-lg hover:bg-[#1F1F1F] hover:border-orange-500/30 transition-all"
+              className="px-4 py-2 text-sm bg-bg-secondary text-gray-300 border border-border rounded-lg hover:bg-bg-tertiary hover:border-orange-500/30 transition-all"
             >
               ⚙️ Settings
             </button>
@@ -263,7 +273,7 @@ function App() {
 
         {/* Browser Mode Notice */}
         {isBrowserMode && (
-          <div className="mb-6 px-4 py-4 bg-[#141414] border border-[#2A2A2A] rounded-lg">
+          <div className="mb-6 px-4 py-4 bg-bg-secondary border border-border rounded-lg">
             <p className="text-sm font-medium text-white mb-2">Desktop App Required</p>
             <p className="text-xs text-gray-400">
               4DA runs as a desktop app to access your local files, monitor sources,
@@ -313,7 +323,7 @@ function App() {
         </div>
 
         {/* View Tab Bar */}
-        <div className="mb-6 flex items-center gap-1 bg-[#141414] rounded-lg p-1 border border-[#2A2A2A] w-fit">
+        <div className="mb-6 flex items-center gap-1 bg-bg-secondary rounded-lg p-1 border border-border w-fit">
           <button
             onClick={() => setActiveView('briefing')}
             className={`px-4 py-2 text-sm rounded-md transition-all ${
@@ -364,17 +374,17 @@ function App() {
         <footer className="mt-8 text-center space-y-1">
           <p className="text-xs text-gray-600">All signal. No feed.</p>
           <p className="text-[10px] text-gray-700">
-            <kbd className="px-1 py-0.5 bg-[#1F1F1F] rounded text-gray-500">R</kbd> Analyze
+            <kbd className="px-1 py-0.5 bg-bg-tertiary rounded text-gray-500">R</kbd> Analyze
             <span className="mx-1.5">·</span>
-            <kbd className="px-1 py-0.5 bg-[#1F1F1F] rounded text-gray-500">F</kbd> Filter
+            <kbd className="px-1 py-0.5 bg-bg-tertiary rounded text-gray-500">F</kbd> Filter
             <span className="mx-1.5">·</span>
-            <kbd className="px-1 py-0.5 bg-[#1F1F1F] rounded text-gray-500">B</kbd> Briefing
+            <kbd className="px-1 py-0.5 bg-bg-tertiary rounded text-gray-500">B</kbd> Briefing
             <span className="mx-1.5">·</span>
-            <kbd className="px-1 py-0.5 bg-[#1F1F1F] rounded text-gray-500">,</kbd> Settings
+            <kbd className="px-1 py-0.5 bg-bg-tertiary rounded text-gray-500">,</kbd> Settings
             <span className="mx-1.5">·</span>
-            <kbd className="px-1 py-0.5 bg-[#1F1F1F] rounded text-gray-500">Esc</kbd> Close
+            <kbd className="px-1 py-0.5 bg-bg-tertiary rounded text-gray-500">Esc</kbd> Close
             <span className="mx-1.5">·</span>
-            <kbd className="px-1 py-0.5 bg-[#1F1F1F] rounded text-gray-500">?</kbd> Help
+            <kbd className="px-1 py-0.5 bg-bg-tertiary rounded text-gray-500">?</kbd> Help
           </p>
         </footer>
 

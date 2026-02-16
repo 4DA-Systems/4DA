@@ -1,4 +1,7 @@
+import { useRef } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
+import { useVirtualizer } from '@tanstack/react-virtual';
+import { useShallow } from 'zustand/react/shallow';
 import { ResultItem } from './ResultItem';
 import { getStageLabel } from '../utils/score';
 import { getSourceLabel } from '../config/sources';
@@ -15,14 +18,20 @@ interface ResultsViewProps {
 export function ResultsView({
   newItemIds,
   focusedIndex,
-  renderLimit,
-  setRenderLimit,
+  renderLimit: _renderLimit,
+  setRenderLimit: _setRenderLimit,
 }: ResultsViewProps) {
-  // Read from store
-  const state = useAppStore(s => s.appState);
-  const feedbackGiven = useAppStore(s => s.feedbackGiven);
-  const discoveredContext = useAppStore(s => s.discoveredContext);
-  const expandedItem = useAppStore(s => s.expandedItem);
+  // Data selectors (may change, use useShallow)
+  const { state, feedbackGiven, discoveredContext, expandedItem } = useAppStore(
+    useShallow((s) => ({
+      state: s.appState,
+      feedbackGiven: s.feedbackGiven,
+      discoveredContext: s.discoveredContext,
+      expandedItem: s.expandedItem,
+    })),
+  );
+
+  // Action selectors (stable references, no need for useShallow)
   const setExpandedItem = useAppStore(s => s.setExpandedItem);
   const loadContextFiles = useAppStore(s => s.loadContextFiles);
   const clearContext = useAppStore(s => s.clearContext);
@@ -46,15 +55,22 @@ export function ResultsView({
     saveAllAbove,
   } = useResultFilters();
 
-  const visibleResults = filteredResults.slice(0, renderLimit);
+  // Virtual scrolling setup
+  const parentRef = useRef<HTMLDivElement>(null);
+  const virtualizer = useVirtualizer({
+    count: filteredResults.length,
+    getScrollElement: () => parentRef.current,
+    estimateSize: () => 120,
+    overscan: 5,
+  });
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
       {/* Context Files Panel */}
-      <section className="bg-[#141414] rounded-lg border border-[#2A2A2A] overflow-hidden">
-        <div className="px-5 py-4 border-b border-[#2A2A2A] flex items-center justify-between">
+      <section className="bg-bg-secondary rounded-lg border border-border overflow-hidden">
+        <div className="px-5 py-4 border-b border-border flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 bg-[#1F1F1F] rounded-lg flex items-center justify-center">
+            <div className="w-8 h-8 bg-bg-tertiary rounded-lg flex items-center justify-center">
               <span className="text-gray-500">F</span>
             </div>
             <div>
@@ -65,7 +81,7 @@ export function ResultsView({
           <div className="flex gap-2">
             <button
               onClick={loadContextFiles}
-              className="w-8 h-8 flex items-center justify-center text-sm bg-[#1F1F1F] text-gray-400 rounded-lg hover:bg-[#2A2A2A] hover:text-white transition-all"
+              className="w-8 h-8 flex items-center justify-center text-sm bg-bg-tertiary text-gray-400 rounded-lg hover:bg-border hover:text-white transition-all"
               title="Reload files"
             >
               R
@@ -94,7 +110,7 @@ export function ResultsView({
         <div className="p-4 max-h-[calc(100vh-320px)] overflow-y-auto">
           {state.contextFiles.length === 0 ? (
             <div className="text-center py-8 px-4">
-              <div className="w-12 h-12 mx-auto mb-3 bg-[#1F1F1F] rounded-full flex items-center justify-center">
+              <div className="w-12 h-12 mx-auto mb-3 bg-bg-tertiary rounded-full flex items-center justify-center">
                 <span className="text-2xl text-gray-500">F</span>
               </div>
               <p className="text-gray-400 text-sm mb-1">No context files yet</p>
@@ -105,7 +121,7 @@ export function ResultsView({
               {state.contextFiles.map((file) => (
                 <li
                   key={file.path}
-                  className="px-3 py-2 bg-[#1F1F1F] rounded-lg border border-[#2A2A2A] hover:border-orange-500/30 transition-all"
+                  className="px-3 py-2 bg-bg-tertiary rounded-lg border border-border hover:border-orange-500/30 transition-all"
                 >
                   <div className="font-mono text-white text-sm truncate">
                     {file.path.split('/').pop()?.split('\\').pop()}
@@ -118,7 +134,7 @@ export function ResultsView({
 
           {/* ACE Discovered Context */}
           {(discoveredContext.tech.length > 0 || discoveredContext.topics.length > 0) && (
-            <div className="mt-4 pt-4 border-t border-[#2A2A2A]">
+            <div className="mt-4 pt-4 border-t border-border">
               <div className="text-xs text-gray-500 mb-3 flex items-center gap-2">
                 <span>Auto-Discovered</span>
                 <span className="px-1.5 py-0.5 text-[10px] bg-orange-500/20 text-orange-400 rounded" title="Auto Context Engine - score boost from your local project context">ACE</span>
@@ -162,11 +178,11 @@ export function ResultsView({
       </section>
 
       {/* Relevance Results Panel */}
-      <section className="lg:col-span-2 bg-[#141414] rounded-lg border border-[#2A2A2A] overflow-hidden">
-        <div className="px-5 py-4 border-b border-[#2A2A2A]">
+      <section className="lg:col-span-2 bg-bg-secondary rounded-lg border border-border overflow-hidden">
+        <div className="px-5 py-4 border-b border-border">
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-3">
-              <div className="w-8 h-8 bg-[#1F1F1F] rounded-lg flex items-center justify-center">
+              <div className="w-8 h-8 bg-bg-tertiary rounded-lg flex items-center justify-center">
                 <span className="text-gray-500">R</span>
               </div>
               <div>
@@ -183,9 +199,9 @@ export function ResultsView({
                     ? `${filteredResults.length} items - ${filteredResults.filter((r) => r.relevant).length} relevant`
                     : 'Click Analyze to find relevant content'}
                 </p>
-                {state.analysisComplete && filteredResults.length > renderLimit && (
-                  <span className="text-xs text-[#666666]">
-                    Showing {Math.min(renderLimit, filteredResults.length)} of {filteredResults.length}
+                {state.analysisComplete && filteredResults.length > 0 && (
+                  <span className="text-xs text-text-muted">
+                    {filteredResults.length} items
                   </span>
                 )}
               </div>
@@ -206,7 +222,7 @@ export function ResultsView({
 
           {/* Filter Bar */}
           {state.analysisComplete && (
-            <div className="flex flex-wrap items-center gap-3 pt-3 border-t border-[#2A2A2A]" role="toolbar" aria-label="Filter and sort controls">
+            <div className="flex flex-wrap items-center gap-3 pt-3 border-t border-border" role="toolbar" aria-label="Filter and sort controls">
               {/* Search */}
               <div className="relative">
                 <input
@@ -215,7 +231,7 @@ export function ResultsView({
                   onChange={(e) => setSearchQuery(e.target.value)}
                   placeholder="Search results..."
                   aria-label="Search results by keyword"
-                  className="bg-[#1F1F1F] text-sm text-white placeholder-gray-500 rounded-lg pl-8 pr-3 py-1.5 w-48 border border-transparent focus:border-[#2A2A2A] focus:outline-none transition-all"
+                  className="bg-bg-tertiary text-sm text-white placeholder-gray-500 rounded-lg pl-8 pr-3 py-1.5 w-48 border border-transparent focus:border-border focus:outline-none transition-all"
                 />
                 <svg className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
@@ -234,7 +250,7 @@ export function ResultsView({
               </div>
 
               {/* Source Filters */}
-              <div className="flex items-center gap-2 bg-[#1F1F1F] px-3 py-1.5 rounded-lg flex-wrap" role="group" aria-label="Source filters">
+              <div className="flex items-center gap-2 bg-bg-tertiary px-3 py-1.5 rounded-lg flex-wrap" role="group" aria-label="Source filters">
                 <span className="text-xs text-gray-500">Sources:</span>
                 {[...new Set(state.relevanceResults.map(r => r.source_type || 'hackernews'))]
                   .sort((a, b) => getSourceLabel(a).localeCompare(getSourceLabel(b)))
@@ -256,7 +272,7 @@ export function ResultsView({
               </div>
 
               {/* Sort */}
-              <div className="flex items-center gap-2 bg-[#1F1F1F] px-3 py-1.5 rounded-lg" role="group" aria-label="Sort order">
+              <div className="flex items-center gap-2 bg-bg-tertiary px-3 py-1.5 rounded-lg" role="group" aria-label="Sort order">
                 <span className="text-xs text-gray-500">Sort:</span>
                 <button
                   onClick={() => setSortBy('score')}
@@ -290,7 +306,7 @@ export function ResultsView({
                 className={`px-3 py-1.5 text-xs rounded-lg transition-all ${
                   showOnlyRelevant
                     ? 'bg-green-500/20 text-green-400 border border-green-500/30'
-                    : 'bg-[#1F1F1F] text-gray-500 hover:text-gray-300'
+                    : 'bg-bg-tertiary text-gray-500 hover:text-gray-300'
                 }`}
               >
                 {showOnlyRelevant ? 'Relevant only' : 'Show all'}
@@ -304,7 +320,7 @@ export function ResultsView({
                 className={`px-3 py-1.5 text-xs rounded-lg transition-all ${
                   showSavedOnly
                     ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30'
-                    : 'bg-[#1F1F1F] text-gray-500 hover:text-gray-300'
+                    : 'bg-bg-tertiary text-gray-500 hover:text-gray-300'
                 }`}
               >
                 {showSavedOnly ? 'Saved' : 'Saved'}
@@ -317,14 +333,14 @@ export function ResultsView({
               <div className="flex items-center gap-2">
                 <button
                   onClick={() => dismissAllBelow(0.3)}
-                  className="px-3 py-1.5 text-xs bg-[#1F1F1F] text-gray-500 rounded-lg hover:bg-red-500/10 hover:text-red-400 transition-all"
+                  className="px-3 py-1.5 text-xs bg-bg-tertiary text-gray-500 rounded-lg hover:bg-red-500/10 hover:text-red-400 transition-all"
                   title="Dismiss all items below 30% relevance"
                 >
                   x &lt;30%
                 </button>
                 <button
                   onClick={() => saveAllAbove(0.6)}
-                  className="px-3 py-1.5 text-xs bg-[#1F1F1F] text-gray-500 rounded-lg hover:bg-green-500/10 hover:text-green-400 transition-all"
+                  className="px-3 py-1.5 text-xs bg-bg-tertiary text-gray-500 rounded-lg hover:bg-green-500/10 hover:text-green-400 transition-all"
                   title="Save all items above 60% relevance"
                 >
                   + &gt;60%
@@ -333,7 +349,7 @@ export function ResultsView({
             </div>
           )}
         </div>
-        <div className="p-4 max-h-[calc(100vh-380px)] overflow-y-auto">
+        <div ref={parentRef} className="p-4 max-h-[calc(100vh-380px)] overflow-y-auto">
           {!state.analysisComplete ? (
             <div className="text-center py-16">
               {state.loading ? (
@@ -349,7 +365,7 @@ export function ResultsView({
                         <span>{getStageLabel(state.progressStage)}</span>
                         <span>{Math.round(state.progress * 100)}%</span>
                       </div>
-                      <div className="w-full h-2 bg-[#1F1F1F] rounded-full overflow-hidden">
+                      <div className="w-full h-2 bg-bg-tertiary rounded-full overflow-hidden">
                         <div
                           className="h-full bg-gradient-to-r from-orange-600 to-orange-400 transition-all duration-300 ease-out rounded-full"
                           style={{ width: `${state.progress * 100}%` }}
@@ -360,7 +376,7 @@ export function ResultsView({
                 </>
               ) : (
                 <>
-                  <div className="w-16 h-16 mx-auto mb-4 bg-[#1F1F1F] rounded-full flex items-center justify-center">
+                  <div className="w-16 h-16 mx-auto mb-4 bg-bg-tertiary rounded-full flex items-center justify-center">
                     <span className="text-3xl text-gray-500">?</span>
                   </div>
                   <p className="text-lg text-white mb-2">Ready to search</p>
@@ -372,7 +388,7 @@ export function ResultsView({
             </div>
           ) : filteredResults.length === 0 ? (
             <div className="text-center py-16">
-              <div className="w-16 h-16 mx-auto mb-4 bg-[#1F1F1F] rounded-full flex items-center justify-center">
+              <div className="w-16 h-16 mx-auto mb-4 bg-bg-tertiary rounded-full flex items-center justify-center">
                 <span className="text-3xl text-gray-500">--</span>
               </div>
               <p className="text-lg text-white mb-2">No results match</p>
@@ -381,37 +397,50 @@ export function ResultsView({
               </p>
             </div>
           ) : (
-            <>
-              <ul className="space-y-3">
-                {visibleResults.map((item, idx) => {
-                  // Score group headers (only when sorting by score)
-                  let groupHeader: string | null = null;
-                  if (sortBy === 'score' && idx > 0) {
-                    const prev = visibleResults[idx - 1];
-                    if (prev.top_score >= 0.72 && item.top_score < 0.72) {
-                      groupHeader = 'Relevant';
-                    } else if (prev.top_score >= 0.50 && item.top_score < 0.50) {
-                      groupHeader = 'Below Threshold';
-                    }
-                  } else if (sortBy === 'score' && idx === 0 && item.top_score >= 0.72) {
-                    groupHeader = 'Top Picks';
-                  } else if (sortBy === 'score' && idx === 0 && item.top_score >= 0.50) {
+            <div style={{ height: `${virtualizer.getTotalSize()}px`, width: '100%', position: 'relative' }}>
+              {virtualizer.getVirtualItems().map((virtualRow) => {
+                const item = filteredResults[virtualRow.index];
+                const idx = virtualRow.index;
+                // Score group headers (only when sorting by score)
+                let groupHeader: string | null = null;
+                if (sortBy === 'score' && idx > 0) {
+                  const prev = filteredResults[idx - 1];
+                  if (prev.top_score >= 0.72 && item.top_score < 0.72) {
                     groupHeader = 'Relevant';
+                  } else if (prev.top_score >= 0.50 && item.top_score < 0.50) {
+                    groupHeader = 'Below Threshold';
                   }
-                  return (
-                    <li key={item.id}>
-                      {groupHeader && (
-                        <div className="flex items-center gap-3 mb-3 mt-2 first:mt-0">
-                          <span className={`text-xs font-medium px-2 py-1 rounded-lg ${
-                            groupHeader === 'Top Picks' ? 'bg-orange-500/10 text-orange-400' :
-                            groupHeader === 'Relevant' ? 'bg-green-500/10 text-green-400' :
-                            'bg-gray-500/10 text-gray-500'
-                          }`}>
-                            {groupHeader}
-                          </span>
-                          <div className="flex-1 h-px bg-[#2A2A2A]" />
-                        </div>
-                      )}
+                } else if (sortBy === 'score' && idx === 0 && item.top_score >= 0.72) {
+                  groupHeader = 'Top Picks';
+                } else if (sortBy === 'score' && idx === 0 && item.top_score >= 0.50) {
+                  groupHeader = 'Relevant';
+                }
+                return (
+                  <div
+                    key={item.id}
+                    style={{
+                      position: 'absolute',
+                      top: 0,
+                      left: 0,
+                      width: '100%',
+                      transform: `translateY(${virtualRow.start}px)`,
+                    }}
+                    ref={virtualizer.measureElement}
+                    data-index={virtualRow.index}
+                  >
+                    {groupHeader && (
+                      <div className="flex items-center gap-3 mb-3 mt-2 first:mt-0">
+                        <span className={`text-xs font-medium px-2 py-1 rounded-lg ${
+                          groupHeader === 'Top Picks' ? 'bg-orange-500/10 text-orange-400' :
+                          groupHeader === 'Relevant' ? 'bg-green-500/10 text-green-400' :
+                          'bg-gray-500/10 text-gray-500'
+                        }`}>
+                          {groupHeader}
+                        </span>
+                        <div className="flex-1 h-px bg-border" />
+                      </div>
+                    )}
+                    <div className="pb-3">
                       <ResultItem
                         item={item}
                         isExpanded={expandedItem === item.id}
@@ -421,19 +450,11 @@ export function ResultsView({
                         feedbackGiven={feedbackGiven}
                         onRecordInteraction={recordInteraction}
                       />
-                    </li>
-                  );
-                })}
-              </ul>
-              {filteredResults.length > renderLimit && (
-                <button
-                  onClick={() => setRenderLimit(prev => prev + 50)}
-                  className="w-full mt-3 py-2 text-sm text-orange-400 bg-[#1A1A1A] border border-[#2A2A2A] rounded-lg hover:bg-[#1F1F1F] transition-colors"
-                >
-                  Show more ({filteredResults.length - renderLimit} remaining)
-                </button>
-              )}
-            </>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           )}
         </div>
       </section>
