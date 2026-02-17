@@ -480,17 +480,20 @@ fn bar_chart(percent: f32) -> String {
 
 #[tauri::command]
 pub async fn get_developer_dna() -> Result<DeveloperDna, String> {
+    crate::settings::require_pro_feature("get_developer_dna")?;
     generate_dna()
 }
 
 #[tauri::command]
 pub async fn export_developer_dna_markdown() -> Result<String, String> {
+    crate::settings::require_pro_feature("export_developer_dna_markdown")?;
     let dna = generate_dna()?;
     Ok(export_as_markdown(&dna))
 }
 
 #[tauri::command]
 pub async fn export_developer_dna_svg() -> Result<String, String> {
+    crate::settings::require_pro_feature("export_developer_dna_svg")?;
     let dna = generate_dna()?;
     Ok(export_as_svg(&dna))
 }

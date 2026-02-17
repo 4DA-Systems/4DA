@@ -212,6 +212,7 @@ pub async fn search_documents(
 /// Phase 2 feature - supports queries like "show me files about rust from last week"
 #[tauri::command]
 pub async fn natural_language_query(query_text: String) -> Result<serde_json::Value, String> {
+    crate::settings::require_pro_feature("natural_language_query")?;
     use crate::query::{parse_simple, QueryExecutor};
 
     let ace = get_ace_engine()?;

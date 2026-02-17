@@ -91,6 +91,7 @@ flate2 = "1.0"               # Gzip compression/decompression
 
 # Compile-time scoring macros
 fourda-macros = { path = "fourda-macros" }
+ed25519-dalek = { version = "2.2.0", features = ["rand_core"] }
 
 [[bin]]
 name = "4da"
