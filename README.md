@@ -8,11 +8,13 @@
 [![MCP Server](https://img.shields.io/npm/v/@4da/mcp-server?label=MCP%20Server&color=gold)](https://www.npmjs.com/package/@4da/mcp-server)
 [![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20macOS%20%7C%20Linux-brightgreen.svg)](#download)
 
-**Stop scrolling. Start knowing.**
+**All signal. No feed.**
 
-4DA monitors Hacker News, arXiv, Reddit, GitHub, Product Hunt, YouTube, and RSS feeds — then ruthlessly filters out everything that doesn't matter to your specific tech stack, projects, and codebase. What survives is signal.
+4DA scores content from 11 sources against your actual codebase using 5-axis relevance scoring. An item needs 2+ independent signals to survive. Everything else is rejected. Typical rejection rate: **99%+**.
 
-[Download](#download) &bull; [Quick Start](#quick-start) &bull; [How It Works](#how-it-works) &bull; [MCP Integration](#mcp-integration)
+Privacy-first. Runs locally. Zero telemetry. BYOK. ~15MB download.
+
+[Download](#download) &bull; [Quick Start](#quick-start) &bull; [How It Works](#how-it-works) &bull; [MCP Integration](#mcp-integration) &bull; [Pricing](#pricing)
 
 </div>
 
@@ -34,6 +36,20 @@ npx @4da/mcp-server
 ```
 
 Or build from source — see [Quick Start](#quick-start).
+
+---
+
+## Screenshots
+
+> **Coming soon** — screenshots of the scored feed, Developer DNA profile, Score Autopsy breakdown, daily briefing, and settings panel will be added here before launch. See the [gallery checklist](docs/marketing/product-hunt-draft.md#gallery-assets-checklist) for the full list.
+
+<!--
+TODO: Replace this section with actual screenshots before launch:
+![Scored Feed](assets/screenshot-feed.png)
+![Score Autopsy](assets/screenshot-autopsy.png)
+![Developer DNA](assets/screenshot-dna.png)
+![Daily Briefing](assets/screenshot-briefing.png)
+-->
 
 ---
 
@@ -235,13 +251,33 @@ cd src-tauri && cargo build --release --bin 4da
 ```bash
 pnpm tauri dev              # Dev server (localhost:4444)
 cargo test                  # Rust tests (from src-tauri/)
-pnpm test                   # Frontend tests (98)
+pnpm test                   # Frontend tests (157)
 pnpm validate:all           # Full validation (lint + types + tests + build)
 ```
 
+## Why Not Just Use...
+
+| Tool | Approach | Limitation |
+|------|----------|------------|
+| **daily.dev** | Personalizes by engagement (what you click) | Optimizes for curiosity, not project relevance. Click on one ZFS article, get storage content for weeks. |
+| **Feedly** | Aggregates by subscription (what feeds you add) | Solves aggregation, not relevance. 100+ feeds = a different firehose. AI features locked behind $156/yr. |
+| **Pocket** | Saves what you manually bookmark | Shut down July 2025. Cloud-dependent tools can disappear. |
+| **TLDR / newsletters** | Someone else curates for "developers" broadly | One person's bias. "Developers" includes React engineers, ML researchers, and game devs — one newsletter fits none. |
+| **4DA** | Scores against your actual codebase (Cargo.toml, package.json, Git) | Requires a local codebase to scan. That's the point. |
+
+4DA doesn't personalize by what you click or subscribe to. It scores by what you **build**. Categorically different.
+
+## Pricing
+
+**Free** — $0 forever. No credit card. No account. No expiration.
+- All 11 sources, full 5-axis scoring engine, confirmation gate, behavior learning, MCP server (27 tools), CLI
+
+**Pro** — $12/month or $99/year. BYOK — you bring your own API key.
+- Everything in Free, plus: AI daily briefings, Developer DNA profiling, Score Autopsy, intelligence panels, signal chain analysis, knowledge gap detection
+
 ## License
 
-[FSL-1.1-Apache-2.0](LICENSE) — free to use. Converts to Apache 2.0 two years after each release.
+[FSL-1.1-Apache-2.0](LICENSE) — free to use. Source available for inspection. Converts to Apache 2.0 two years after each release.
 
 ---
 
@@ -249,6 +285,6 @@ pnpm validate:all           # Full validation (lint + types + tests + build)
 
 **4DA** — *4 Dimensional Autonomy*
 
-The intelligence layer for developers who'd rather build than scroll.
+All signal. No feed.
 
 </div>
