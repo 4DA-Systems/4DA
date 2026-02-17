@@ -104,6 +104,18 @@ import {
   executeAttentionReport,
   projectHealthTool,
   executeProjectHealth,
+  decisionMemoryTool,
+  executeDecisionMemory,
+  techRadarTool,
+  executeTechRadar,
+  checkDecisionAlignmentTool,
+  executeCheckDecisionAlignment,
+  agentMemoryTool,
+  executeAgentMemory,
+  agentSessionBriefTool,
+  executeAgentSessionBrief,
+  delegationScoreTool,
+  executeDelegationScore,
 } from "./tools/index.js";
 
 import type {
@@ -129,6 +141,12 @@ import type { SemanticShiftsParams } from "./tools/semantic-shifts.js";
 import type { ReverseMentionsParams } from "./tools/reverse-mentions.js";
 import type { AttentionReportParams } from "./tools/attention-report.js";
 import type { ProjectHealthParams } from "./tools/project-health.js";
+import type { DecisionMemoryParams } from "./tools/decision-memory.js";
+import type { TechRadarParams } from "./tools/tech-radar.js";
+import type { CheckDecisionAlignmentParams } from "./tools/decision-enforcement.js";
+import type { AgentMemoryParams } from "./tools/agent-memory.js";
+import type { AgentSessionBriefParams } from "./tools/agent-session-brief.js";
+import type { DelegationScoreParams } from "./tools/delegation-score.js";
 
 // =============================================================================
 // Server Setup
@@ -496,6 +514,62 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         };
       }
 
+      // =========================================================================
+      // Decision Intelligence Tools
+      // =========================================================================
+
+      case "decision_memory": {
+        const params = (args || {}) as unknown as DecisionMemoryParams;
+        const result = executeDecisionMemory(database, params);
+        return {
+          content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+        };
+      }
+
+      case "tech_radar": {
+        const params = (args || {}) as unknown as TechRadarParams;
+        const result = executeTechRadar(database, params);
+        return {
+          content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+        };
+      }
+
+      case "check_decision_alignment": {
+        const params = (args || {}) as unknown as CheckDecisionAlignmentParams;
+        const result = executeCheckDecisionAlignment(database, params);
+        return {
+          content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+        };
+      }
+
+      // =========================================================================
+      // Agent Autonomy Tools
+      // =========================================================================
+
+      case "agent_memory": {
+        const params = (args || {}) as unknown as AgentMemoryParams;
+        const result = executeAgentMemory(database, params);
+        return {
+          content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+        };
+      }
+
+      case "agent_session_brief": {
+        const params = (args || {}) as unknown as AgentSessionBriefParams;
+        const result = executeAgentSessionBrief(database, params);
+        return {
+          content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+        };
+      }
+
+      case "delegation_score": {
+        const params = (args || {}) as unknown as DelegationScoreParams;
+        const result = executeDelegationScore(database, params);
+        return {
+          content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+        };
+      }
+
       default:
         throw new Error(`Unknown tool: ${name}`);
     }
@@ -558,7 +632,7 @@ async function main() {
     process.exit(0);
   });
 
-  console.error("4DA MCP Server v3.3 (Intelligence Platform) started — 20 tools, stdio transport");
+  console.error("4DA MCP Server v3.3 (Intelligence Platform) started — 23 tools, stdio transport");
   console.error("  Use --http for Streamable HTTP transport, --setup to configure editors");
 }
 

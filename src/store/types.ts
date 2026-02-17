@@ -241,6 +241,38 @@ export interface SystemHealthSlice {
   saveWatcherState: () => Promise<void>;
 }
 
+export interface DecisionsSlice {
+  decisions: import('./decisions-slice').DeveloperDecision[];
+  decisionsLoading: boolean;
+  loadDecisions: () => Promise<void>;
+  recordDecision: (params: {
+    decision_type: string;
+    subject: string;
+    decision: string;
+    rationale?: string;
+    alternatives_rejected?: string[];
+    context_tags?: string[];
+    confidence?: number;
+  }) => Promise<void>;
+  updateDecision: (id: number, updates: {
+    decision?: string;
+    rationale?: string;
+    status?: string;
+    confidence?: number;
+  }) => Promise<void>;
+}
+
+export interface AgentSlice {
+  agentMemories: import('./agent-slice').AgentMemoryEntry[];
+  delegationScores: import('./agent-slice').DelegationScoreEntry[];
+  agentDataExists: boolean;
+  agentMemoryLoading: boolean;
+  loadAgentMemories: () => Promise<void>;
+  loadDelegationScores: () => Promise<void>;
+  checkAgentDataExists: () => Promise<void>;
+  promoteMemoryToDecision: (memoryId: number) => Promise<void>;
+}
+
 // ============================================================================
 // Combined Store Type
 // ============================================================================
@@ -256,4 +288,6 @@ export type AppStore =
   & BriefingSlice
   & ContextDiscoverySlice
   & UserContextSlice
-  & SystemHealthSlice;
+  & SystemHealthSlice
+  & DecisionsSlice
+  & AgentSlice;

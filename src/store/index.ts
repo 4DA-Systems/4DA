@@ -11,6 +11,8 @@ import { createBriefingSlice } from './briefing-slice';
 import { createContextDiscoverySlice } from './context-discovery-slice';
 import { createUserContextSlice } from './user-context-slice';
 import { createSystemHealthSlice } from './system-health-slice';
+import { createDecisionsSlice } from './decisions-slice';
+import { createAgentSlice } from './agent-slice';
 
 // Re-export all types
 export type {
@@ -40,4 +42,6 @@ export const useAppStore = create<AppStore>()((...a) => ({
   ...createContextDiscoverySlice(...a),
   ...createUserContextSlice(...a),
   ...createSystemHealthSlice(...a),
+  ...createDecisionsSlice(...a),
+  ...createAgentSlice(...a),
 }));

@@ -118,3 +118,35 @@ export {
   projectHealthTool,
   executeProjectHealth,
 } from "./project-health.js";
+
+// Decision Intelligence Tools
+export {
+  decisionMemoryTool,
+  executeDecisionMemory,
+} from "./decision-memory.js";
+
+export {
+  techRadarTool,
+  executeTechRadar,
+} from "./tech-radar.js";
+
+export {
+  checkDecisionAlignmentTool,
+  executeCheckDecisionAlignment,
+} from "./decision-enforcement.js";
+
+// Agent Autonomy Tools
+export {
+  agentMemoryTool,
+  executeAgentMemory,
+} from "./agent-memory.js";
+
+export {
+  agentSessionBriefTool,
+  executeAgentSessionBrief,
+} from "./agent-session-brief.js";
+
+export {
+  delegationScoreTool,
+  executeDelegationScore,
+} from "./delegation-score.js";
