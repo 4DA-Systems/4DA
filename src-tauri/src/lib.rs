@@ -1,5 +1,5 @@
 // Copyright (c) 2025-2026 Antony Lawrence Kiddie Pasifa. All rights reserved.
-// Licensed under the Business Source License 1.1 (BSL-1.1). See LICENSE file.
+// Licensed under the Functional Source License 1.1 (FSL-1.1-Apache-2.0). See LICENSE file.
 
 use tauri::{Emitter, Listener, Manager};
 use tracing::{debug, error, info, warn};
@@ -211,6 +211,8 @@ pub fn run() {
             settings_commands::test_llm_connection,
             settings_commands::check_ollama_status,
             settings_commands::pull_ollama_model,
+            settings_commands::get_license_tier,
+            settings_commands::activate_license,
             settings_commands::get_user_context,
             settings_commands::set_user_role,
             settings_commands::add_tech_stack,

@@ -273,6 +273,15 @@ export interface AgentSlice {
   promoteMemoryToDecision: (memoryId: number) => Promise<void>;
 }
 
+export interface LicenseSlice {
+  tier: 'free' | 'pro' | 'team';
+  licenseKey: string;
+  licenseLoading: boolean;
+  loadLicense: () => Promise<void>;
+  activateLicense: (key: string) => Promise<boolean>;
+  isPro: () => boolean;
+}
+
 // ============================================================================
 // Combined Store Type
 // ============================================================================
@@ -290,4 +299,5 @@ export type AppStore =
   & UserContextSlice
   & SystemHealthSlice
   & DecisionsSlice
-  & AgentSlice;
+  & AgentSlice
+  & LicenseSlice;
