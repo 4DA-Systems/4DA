@@ -320,11 +320,15 @@ Rules:
         )
     };
 
+    // Build Decision Context section for the briefing
+    let decision_context = build_decision_context_for_briefing();
+
     let user_prompt = format!(
         "My active projects and context:\n\
          - Tech stack: {tech}\n\
          - Currently working on: {topics}\n\
-         - Skip these topics: {anti}\n\n\
+         - Skip these topics: {anti}\n\
+         {decisions}\n\n\
          Today's {count} items (sorted by relevance):\n\n\
          {items}{batched}\n\n\
          Give me my intelligence briefing.",
@@ -335,6 +339,7 @@ Rules:
         } else {
             anti_topics
         },
+        decisions = decision_context,
         count = items.len(),
         items = items_text,
         batched = batched_section,
@@ -403,5 +408,104 @@ Rules:
                 "briefing": null
             }))
         }
+    }
+}
+
+// ============================================================================
+// Decision Context for Briefing (Step 1.4)
+// ============================================================================
+
+/// Build a Decision Context section to inject into the AI briefing prompt.
+/// Includes active decisions, radar movement summary, and review prompts.
+fn build_decision_context_for_briefing() -> String {
+    let conn = match crate::open_db_connection() {
+        Ok(c) => c,
+        Err(_) => return String::new(),
+    };
+
+    // Get active decisions (limit 10 most recent)
+    let decisions = match crate::decisions::list_decisions(
+        &conn,
+        None,
+        Some(&crate::decisions::DecisionStatus::Active),
+        10,
+    ) {
+        Ok(d) => d,
+        Err(_) => return String::new(),
+    };
+
+    if decisions.is_empty() {
+        return String::new();
+    }
+
+    let mut sections = Vec::new();
+
+    // Active decisions summary
+    let decision_lines: Vec<String> = decisions
+        .iter()
+        .take(5)
+        .map(|d| {
+            let alts = if d.alternatives_rejected.is_empty() {
+                String::new()
+            } else {
+                format!(" (rejected: {})", d.alternatives_rejected.join(", "))
+            };
+            format!("  - {}: {}{}", d.subject, d.decision, alts)
+        })
+        .collect();
+    sections.push(format!(
+        "- My active decisions:\n{}",
+        decision_lines.join("\n")
+    ));
+
+    // Tech radar movement summary (if tech_radar module available)
+    if let Ok(radar) = crate::tech_radar::compute_radar(&conn) {
+        let moving_up: Vec<&str> = radar
+            .entries
+            .iter()
+            .filter(|e| e.movement == crate::tech_radar::RadarMovement::Up)
+            .map(|e| e.name.as_str())
+            .take(3)
+            .collect();
+        let on_hold: Vec<&str> = radar
+            .entries
+            .iter()
+            .filter(|e| e.ring == crate::tech_radar::RadarRing::Hold)
+            .map(|e| e.name.as_str())
+            .take(3)
+            .collect();
+        if !moving_up.is_empty() || !on_hold.is_empty() {
+            let mut radar_text = String::from("- Radar movement:");
+            if !moving_up.is_empty() {
+                radar_text.push_str(&format!(" rising={}", moving_up.join(",")));
+            }
+            if !on_hold.is_empty() {
+                radar_text.push_str(&format!(" on-hold={}", on_hold.join(",")));
+            }
+            sections.push(radar_text);
+        }
+    }
+
+    // Decision review prompts: tech in "reconsidering" status
+    let reconsidering = decisions
+        .iter()
+        .filter(|d| d.status == crate::decisions::DecisionStatus::Reconsidering)
+        .take(2)
+        .collect::<Vec<_>>();
+    if !reconsidering.is_empty() {
+        let review_lines: Vec<String> = reconsidering
+            .iter()
+            .map(|d| format!("  - Reconsidering: {} ({})", d.subject, d.decision))
+            .collect();
+        sections.push(format!(
+            "- Decisions under review:\n{}",
+            review_lines.join("\n")
+        ));
+    }
+
+    if sections.is_empty() {
+        String::new()
+    } else {
+        format!("\n{}", sections.join("\n"))
     }
 }

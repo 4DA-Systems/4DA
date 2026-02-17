@@ -51,6 +51,8 @@ pub(crate) use state::{
 
 mod ace;
 mod ace_commands;
+mod agent_brief;
+mod agent_memory;
 mod analysis;
 mod anomaly;
 mod attention;
@@ -61,6 +63,8 @@ mod content_quality;
 mod context_commands;
 mod context_engine;
 mod db;
+mod decisions;
+mod delegation;
 mod developer_dna;
 mod digest;
 mod digest_commands;
@@ -92,6 +96,7 @@ mod signals;
 mod source_config;
 mod source_fetching;
 mod sources;
+mod tech_radar;
 mod temporal;
 mod tts;
 mod void_commands;
@@ -290,7 +295,24 @@ pub fn run() {
             content_commands::get_saved_items,
             content_commands::remove_saved_item,
             // Source Health
-            health_commands::get_source_health_status
+            health_commands::get_source_health_status,
+            // Decision Intelligence
+            decisions::get_decisions,
+            decisions::record_developer_decision,
+            decisions::update_developer_decision,
+            // Agent Memory
+            // Tech Radar
+            tech_radar::get_tech_radar,
+            tech_radar::get_radar_entry,
+            // Agent Memory
+            agent_memory::store_agent_memory,
+            agent_memory::recall_agent_memories,
+            agent_memory::promote_memory_to_decision,
+            // Agent Brief
+            agent_brief::generate_agent_brief,
+            // Delegation Scoring
+            delegation::get_delegation_score,
+            delegation::get_all_delegation_scores
         ])
         .setup(|app| {
             // Set up system tray (non-fatal: app works without tray)

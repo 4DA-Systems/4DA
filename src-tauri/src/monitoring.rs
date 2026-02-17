@@ -256,6 +256,13 @@ pub fn start_scheduler<R: Runtime>(app: AppHandle<R>, state: Arc<MonitoringState
                         warn!(target: "4da::monitor", error = %e, "Behavior decay failed");
                     }
                 }
+
+                // Agent memory cleanup - runs with behavior decay (daily)
+                if let Ok(conn) = crate::open_db_connection() {
+                    if let Err(e) = crate::agent_memory::cleanup_expired(&conn) {
+                        warn!(target: "4da::monitor", error = %e, "Agent memory cleanup failed");
+                    }
+                }
             }
 
             // ================================================================
