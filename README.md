@@ -41,15 +41,41 @@ Or build from source — see [Quick Start](#quick-start).
 
 ## Screenshots
 
-> **Coming soon** — screenshots of the scored feed, Developer DNA profile, Score Autopsy breakdown, daily briefing, and settings panel will be added here before launch. See the [gallery checklist](docs/marketing/product-hunt-draft.md#gallery-assets-checklist) for the full list.
+<p align="center">
+  <img src="assets/screenshot-feed.png" alt="Scored Feed — urgent signals, knowledge gaps, and scored content" width="800" />
+  <br />
+  <em>Scored feed with urgent signals, knowledge gaps, and color-coded relevance tags</em>
+</p>
 
-<!--
-TODO: Replace this section with actual screenshots before launch:
-![Scored Feed](assets/screenshot-feed.png)
-![Score Autopsy](assets/screenshot-autopsy.png)
-![Developer DNA](assets/screenshot-dna.png)
-![Daily Briefing](assets/screenshot-briefing.png)
--->
+<p align="center">
+  <img src="assets/screenshot-briefing.png" alt="Intelligence Briefing — AI-generated daily summary with top picks" width="800" />
+  <br />
+  <em>Intelligence Briefing — AI-generated daily summary with top picks</em>
+</p>
+
+<p align="center">
+  <img src="assets/screenshot-results.png" alt="All Results — context sidebar with project files and scored results" width="800" />
+  <br />
+  <em>All Results view with context sidebar showing your project files</em>
+</p>
+
+<p align="center">
+  <img src="assets/screenshot-insights.png" alt="Tech Radar and Decision Memory" width="800" />
+  <br />
+  <em>Insights — Tech Radar (244 technologies tracked) and Decision Memory</em>
+</p>
+
+<p align="center">
+  <img src="assets/screenshot-autopsy.png" alt="Score Autopsy — full 5-axis breakdown of why an item scored" width="800" />
+  <br />
+  <em>Score Autopsy — see exactly why an item scored the way it did</em>
+</p>
+
+<p align="center">
+  <img src="assets/screenshot-dna.png" alt="Developer DNA profile" width="800" />
+  <br />
+  <em>Developer DNA — auto-discovered tech identity from your codebase</em>
+</p>
 
 ---
 

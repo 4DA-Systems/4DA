@@ -231,6 +231,76 @@
       font-style: normal;
     }
 
+    /* ---- Gallery ---- */
+    .gallery { padding: 80px 0; }
+    .gallery .container { max-width: 1080px; }
+    .gallery-header { text-align: center; margin-bottom: 48px; }
+    .gallery-header .section-label { margin-bottom: 16px; }
+    .gallery-header h2 { font-size: 32px; font-weight: 600; letter-spacing: -0.02em; }
+    .gallery-tabs {
+      display: flex;
+      justify-content: center;
+      gap: 8px;
+      margin-bottom: 32px;
+      flex-wrap: wrap;
+    }
+    .gallery-tab {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12px;
+      padding: 8px 16px;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      background: transparent;
+      color: var(--text-muted);
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .gallery-tab:hover { border-color: var(--text-muted); color: var(--text-secondary); }
+    .gallery-tab.active { border-color: var(--accent); color: var(--text); background: rgba(249, 115, 22, 0.08); }
+    .gallery-grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 24px;
+    }
+    .gallery-item {
+      position: relative;
+      border-radius: var(--radius);
+      overflow: hidden;
+      border: 1px solid var(--border);
+      background: var(--bg-card);
+      transition: transform 0.2s, border-color 0.2s;
+      display: none;
+    }
+    .gallery-item.visible { display: block; }
+    .gallery-item:hover { transform: translateY(-2px); border-color: var(--text-muted); }
+    .gallery-item img {
+      width: 100%;
+      height: auto;
+      display: block;
+    }
+    .gallery-caption {
+      padding: 16px 20px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .gallery-caption .caption-tag {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      padding: 4px 8px;
+      border-radius: 4px;
+      background: rgba(249, 115, 22, 0.12);
+      color: var(--accent);
+      white-space: nowrap;
+    }
+    .gallery-caption p {
+      font-size: 14px;
+      color: var(--text-secondary);
+      line-height: 1.5;
+    }
+
     /* ---- Showcase ---- */
     .showcase { padding: 80px 0; }
     .showcase .container { max-width: 1080px; }
@@ -645,6 +715,9 @@
       .hero-logo { width: 56px; height: 56px; }
       .visual-break { padding: 24px 0; }
       .visual-break-inner { width: 200px; height: 200px; }
+      .gallery { padding: 56px 0; }
+      .gallery-tabs { gap: 6px; }
+      .gallery-tab { font-size: 11px; padding: 6px 12px; }
       .showcase { padding: 56px 0; }
       section { padding: 56px 0; }
       .pipeline { flex-direction: column; gap: 0; padding: 32px 20px; }
@@ -663,6 +736,7 @@
     <div class="nav-inner">
       <div class="nav-brand">4DA</div>
       <div class="nav-links">
+        <a href="#gallery">Screenshots</a>
         <a href="#how-it-works">How It Works</a>
         <a href="#features">Features</a>
         <a href="#pricing">Pricing</a>
@@ -722,6 +796,83 @@
       </div>
     </div>
   </section>
+
+  <!-- Screenshot Gallery -->
+  <section class="gallery" id="gallery">
+    <div class="container">
+      <div class="gallery-header">
+        <div class="section-label">See It In Action</div>
+        <h2>Built for developers who build</h2>
+      </div>
+      <div class="gallery-tabs">
+        <button class="gallery-tab active" data-filter="all">All</button>
+        <button class="gallery-tab" data-filter="feed">Feed</button>
+        <button class="gallery-tab" data-filter="intelligence">Intelligence</button>
+        <button class="gallery-tab" data-filter="insights">Insights</button>
+        <button class="gallery-tab" data-filter="settings">Settings</button>
+      </div>
+      <div class="gallery-grid">
+        <div class="gallery-item visible" data-category="feed">
+          <img src="screenshots/feed-signals.png" alt="Scored feed with urgent signals and knowledge gaps" loading="lazy" />
+          <div class="gallery-caption">
+            <span class="caption-tag">Feed</span>
+            <p>Scored feed with urgent signals, knowledge gaps, and color-coded relevance tags. Every item earns its place.</p>
+          </div>
+        </div>
+        <div class="gallery-item visible" data-category="intelligence">
+          <img src="screenshots/intelligence-briefing.png" alt="Intelligence Briefing with AI summary and top picks" loading="lazy" />
+          <div class="gallery-caption">
+            <span class="caption-tag">Briefing</span>
+            <p>AI-generated daily briefing with actionable insights and curated top picks from all sources.</p>
+          </div>
+        </div>
+        <div class="gallery-item visible" data-category="intelligence">
+          <img src="screenshots/score-autopsy.png" alt="Score Autopsy — full 5-axis scoring breakdown" loading="lazy" />
+          <div class="gallery-caption">
+            <span class="caption-tag">Autopsy</span>
+            <p>Score Autopsy — full 5-axis breakdown showing exactly why an item scored the way it did.</p>
+          </div>
+        </div>
+        <div class="gallery-item visible" data-category="feed">
+          <img src="screenshots/all-results-context.png" alt="All results with context sidebar" loading="lazy" />
+          <div class="gallery-caption">
+            <span class="caption-tag">Results</span>
+            <p>Full results view with your project context sidebar. See how your codebase drives every score.</p>
+          </div>
+        </div>
+        <div class="gallery-item visible" data-category="insights">
+          <img src="screenshots/insights-tech-radar.png" alt="Tech Radar and Decision Memory" loading="lazy" />
+          <div class="gallery-caption">
+            <span class="caption-tag">Insights</span>
+            <p>Tech Radar tracking 244 technologies plus Decision Memory for architectural choices across sessions.</p>
+          </div>
+        </div>
+        <div class="gallery-item visible" data-category="feed">
+          <img src="screenshots/knowledge-gaps.png" alt="Knowledge gaps detection" loading="lazy" />
+          <div class="gallery-caption">
+            <span class="caption-tag">Gaps</span>
+            <p>Knowledge gap detection finds blind spots between what you use and what you track.</p>
+          </div>
+        </div>
+        <div class="gallery-item visible" data-category="settings">
+          <img src="screenshots/settings-profile-developer-dna.png" alt="Developer DNA profile" loading="lazy" />
+          <div class="gallery-caption">
+            <span class="caption-tag">DNA</span>
+            <p>Developer DNA auto-discovers your tech identity from your codebase. Primary stack, dependencies, activity heatmap.</p>
+          </div>
+        </div>
+        <div class="gallery-item visible" data-category="settings">
+          <img src="screenshots/settings-reports.png" alt="System health and reports" loading="lazy" />
+          <div class="gallery-caption">
+            <span class="caption-tag">Health</span>
+            <p>System health monitoring, anomaly metrics, and data quality diagnostics. Full transparency.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <hr class="divider">
 
   <!-- What You Get -->
   <section class="showcase">
@@ -1090,6 +1241,26 @@ npx <span class="string">@4da/mcp-server</span>
           nav.classList.remove('visible');
         }
       }, { passive: true });
+    })();
+
+    // Gallery tab filtering
+    (function() {
+      var tabs = document.querySelectorAll('.gallery-tab');
+      var items = document.querySelectorAll('.gallery-item');
+      tabs.forEach(function(tab) {
+        tab.addEventListener('click', function() {
+          var filter = this.getAttribute('data-filter');
+          tabs.forEach(function(t) { t.classList.remove('active'); });
+          this.classList.add('active');
+          items.forEach(function(item) {
+            if (filter === 'all' || item.getAttribute('data-category') === filter) {
+              item.classList.add('visible');
+            } else {
+              item.classList.remove('visible');
+            }
+          });
+        });
+      });
     })();
 
     // Platform detection for download buttons
