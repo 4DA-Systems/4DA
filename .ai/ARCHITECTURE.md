@@ -112,10 +112,10 @@ This file provides a quick reference. For detailed design, read the specs.
 |-------|------------|
 | Application Shell | Tauri 2.0 |
 | Backend | Rust |
-| Frontend | React 18 + TypeScript |
-| Styling | Tailwind CSS |
-| Database | SQLite + sqlite-vss |
-| Embeddings | fastembed (MiniLM-L6-v2) |
+| Frontend | React 19 + TypeScript |
+| Styling | Tailwind CSS v4 |
+| Database | SQLite + sqlite-vec |
+| Embeddings | OpenAI text-embedding-3-small / Ollama nomic-embed-text (384-dim) |
 | LLM (optional) | Claude, OpenAI, Ollama |
 
 ---
@@ -175,8 +175,8 @@ Sources                              ▲
 - API calls send minimal context
 
 ### Embedding Boundary
-- Embeddings generated locally (fastembed)
-- Same text → same embedding (deterministic)
+- Embeddings via OpenAI text-embedding-3-small (384-dim) or Ollama nomic-embed-text (Matryoshka truncation to 384-dim)
+- Zero-config fallback: tries Ollama at localhost:11434, then degrades to zero vectors
 - Model changes trigger re-embedding
 
 ---

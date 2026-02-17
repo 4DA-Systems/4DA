@@ -91,10 +91,31 @@ pub(crate) async fn embed_texts(texts: &[String]) -> Result<Vec<Vec<f32>>, Strin
             })
             .await
         }
-        _ => Err(format!(
-            "Unknown provider: {}. Please configure OpenAI or Ollama.",
-            llm_settings.provider
-        )),
+        // "none" or unknown provider: try Ollama at default localhost as zero-config fallback
+        // This enables scoring for users who have Ollama installed but haven't configured a provider
+        _ => {
+            let texts = texts.to_vec();
+            match retry_with_backoff("embed_ollama_zeroconfig", 1, || {
+                let t = texts.clone();
+                async move { embed_texts_ollama(&t, &None).await }
+            })
+            .await
+            {
+                Ok(result) => Ok(result),
+                Err(_) => {
+                    // Ollama not available — return zero vectors as graceful fallback
+                    // Scoring will work on non-embedding axes (keyword, dependency, source affinity)
+                    tracing::debug!(
+                        target: "4da::embeddings",
+                        "No embedding provider configured and Ollama not reachable. Using zero vectors."
+                    );
+                    Ok(texts
+                        .iter()
+                        .map(|_| vec![0.0f32; TARGET_EMBEDDING_DIMS])
+                        .collect())
+                }
+            }
+        }
     }
 }
 
