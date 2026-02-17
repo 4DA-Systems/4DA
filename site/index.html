@@ -3,13 +3,42 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>4DA — All signal. No feed.</title>
-  <meta name="description" content="Privacy-first developer intelligence. 5-axis scoring against your codebase. All local. BYOK.">
+  <title>4DA -- All signal. No feed. Developer intelligence scored against your codebase.</title>
+  <meta name="description" content="4DA scores content from 11 sources against your actual codebase using 5-axis relevance scoring. Privacy-first. Runs locally. BYOK. 99%+ noise rejected.">
+  <meta name="keywords" content="developer tools, content curation, relevance scoring, privacy-first, local-first, Rust, Tauri, MCP, Claude Code, Cursor, developer intelligence">
   <meta name="theme-color" content="#0A0A0A">
-  <meta property="og:title" content="4DA — All signal. No feed.">
-  <meta property="og:description" content="Privacy-first developer intelligence. 5-axis scoring against your codebase. All local. BYOK.">
+  <link rel="canonical" href="https://4da.ai">
+
+  <!-- Open Graph -->
+  <meta property="og:title" content="4DA -- All signal. No feed.">
+  <meta property="og:description" content="Developer intelligence that scores content from 11 sources against your actual codebase. Privacy-first. Runs 100% locally. Free tier with full scoring engine.">
   <meta property="og:type" content="website">
   <meta property="og:url" content="https://4da.ai">
+  <meta property="og:image" content="https://4da.ai/og-image.png">
+  <meta property="og:site_name" content="4DA">
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="4DA -- All signal. No feed.">
+  <meta name="twitter:description" content="5-axis relevance scoring against your codebase. 11 sources. 99%+ noise rejected. Privacy-first. Free.">
+  <meta name="twitter:image" content="https://4da.ai/og-image.png">
+
+  <!-- Structured Data -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    "name": "4DA",
+    "applicationCategory": "DeveloperApplication",
+    "operatingSystem": "Windows, macOS, Linux",
+    "description": "Privacy-first developer intelligence. Scores content from 11 sources against your codebase using 5-axis relevance scoring.",
+    "offers": [
+      { "@type": "Offer", "price": "0", "priceCurrency": "USD", "description": "Free -- all 11 sources, full scoring engine" },
+      { "@type": "Offer", "price": "12", "priceCurrency": "USD", "description": "Pro -- AI briefings, Developer DNA, Score Autopsy" }
+    ]
+  }
+  </script>
+
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -44,6 +73,43 @@
     a:hover { opacity: 0.8; }
 
     .container { max-width: 960px; margin: 0 auto; padding: 0 24px; }
+
+    /* ---- Sticky Nav ---- */
+    .nav {
+      position: fixed;
+      top: -60px;
+      left: 0;
+      right: 0;
+      height: 56px;
+      background: rgba(10, 10, 10, 0.92);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border);
+      z-index: 100;
+      transition: top 0.3s ease;
+    }
+    .nav.visible { top: 0; }
+    .nav-inner {
+      max-width: 960px;
+      margin: 0 auto;
+      padding: 0 24px;
+      height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .nav-brand { font-weight: 600; font-size: 15px; color: var(--text); }
+    .nav-links { display: flex; gap: 24px; align-items: center; }
+    .nav-links a { color: var(--text-muted); font-size: 14px; }
+    .nav-links a:hover { color: var(--text); opacity: 1; }
+    .nav-cta {
+      background: var(--text);
+      color: var(--bg);
+      padding: 7px 16px;
+      border-radius: 6px;
+      font-size: 13px;
+      font-weight: 500;
+    }
+    .nav-cta:hover { opacity: 0.9; }
 
     /* ---- Hero ---- */
     .hero {
@@ -122,25 +188,55 @@
       border-radius: 50%;
     }
 
+    /* ---- Traction ---- */
+    .traction { padding: 48px 0 64px; text-align: center; }
+    .traction-badges {
+      display: flex;
+      justify-content: center;
+      gap: 32px;
+      flex-wrap: wrap;
+      margin-bottom: 40px;
+    }
+    .traction-badge {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12px;
+      color: var(--text-muted);
+      letter-spacing: 0.04em;
+    }
+    .traction-badge strong { color: var(--text-secondary); }
+    .traction-quotes {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 16px;
+      max-width: 840px;
+      margin: 0 auto;
+    }
+    .traction-quote {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 24px;
+      text-align: left;
+    }
+    .traction-quote p {
+      font-size: 14px;
+      color: var(--text-secondary);
+      line-height: 1.7;
+      font-style: italic;
+      margin-bottom: 12px;
+    }
+    .traction-quote cite {
+      font-size: 12px;
+      color: var(--text-muted);
+      font-style: normal;
+    }
+
     /* ---- Showcase ---- */
-    .showcase {
-      padding: 80px 0;
-    }
-    .showcase .container {
-      max-width: 1080px;
-    }
-    .showcase-header {
-      text-align: center;
-      margin-bottom: 48px;
-    }
-    .showcase-header .section-label {
-      margin-bottom: 16px;
-    }
-    .showcase-header h2 {
-      font-size: 32px;
-      font-weight: 600;
-      letter-spacing: -0.02em;
-    }
+    .showcase { padding: 80px 0; }
+    .showcase .container { max-width: 1080px; }
+    .showcase-header { text-align: center; margin-bottom: 48px; }
+    .showcase-header .section-label { margin-bottom: 16px; }
+    .showcase-header h2 { font-size: 32px; font-weight: 600; letter-spacing: -0.02em; }
 
     /* ---- Section common ---- */
     section { padding: 80px 0; }
@@ -185,6 +281,20 @@
       height: 8px;
       border-radius: 50%;
       background: var(--accent);
+    }
+    .problem-amplify {
+      margin-top: 32px;
+      padding: 20px 24px;
+      border-left: 3px solid var(--accent);
+      background: var(--bg-card);
+      border-radius: 0 var(--radius) var(--radius) 0;
+      max-width: 640px;
+    }
+    .problem-amplify p {
+      font-size: 15px;
+      color: var(--text-secondary);
+      line-height: 1.7;
+      font-style: italic;
     }
 
     /* ---- How It Works ---- */
@@ -231,6 +341,25 @@
       color: var(--text-muted);
     }
     .pipeline-result strong { color: var(--accent); }
+    .pipeline-details {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 16px;
+      margin-top: 32px;
+    }
+    .pipeline-detail {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 20px;
+    }
+    .pipeline-detail h4 {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 13px;
+      font-weight: 500;
+      margin-bottom: 6px;
+    }
+    .pipeline-detail p { font-size: 13px; color: var(--text-muted); line-height: 1.6; }
 
     /* ---- Features Grid ---- */
     .features-grid {
@@ -265,6 +394,153 @@
       padding: 3px 8px;
       border-radius: 4px;
       margin-bottom: 12px;
+    }
+
+    /* ---- Pricing ---- */
+    .pricing-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 24px;
+      max-width: 720px;
+      margin: 0 auto;
+    }
+    .pricing-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 36px 32px;
+    }
+    .pricing-card.recommended {
+      border-color: var(--accent);
+      position: relative;
+    }
+    .pricing-card.recommended::before {
+      content: 'RECOMMENDED';
+      position: absolute;
+      top: -10px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: var(--accent);
+      color: var(--bg);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      padding: 3px 12px;
+      border-radius: 4px;
+    }
+    .pricing-card h3 {
+      font-size: 20px;
+      font-weight: 600;
+      margin-bottom: 4px;
+    }
+    .pricing-price {
+      font-size: 36px;
+      font-weight: 600;
+      margin: 16px 0 8px;
+    }
+    .pricing-price span { font-size: 16px; color: var(--text-muted); font-weight: 400; }
+    .pricing-note { font-size: 13px; color: var(--text-muted); margin-bottom: 24px; }
+    .pricing-features { list-style: none; display: grid; gap: 10px; }
+    .pricing-features li {
+      font-size: 14px;
+      color: var(--text-secondary);
+      padding-left: 20px;
+      position: relative;
+      line-height: 1.5;
+    }
+    .pricing-features li::before {
+      content: '+';
+      position: absolute;
+      left: 0;
+      color: var(--accent);
+      font-family: 'JetBrains Mono', monospace;
+      font-weight: 600;
+    }
+
+    /* ---- MCP Section ---- */
+    .mcp-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 32px;
+      align-items: start;
+    }
+    .mcp-text p { font-size: 15px; color: var(--text-secondary); line-height: 1.7; margin-bottom: 16px; }
+    .mcp-queries { list-style: none; display: grid; gap: 8px; }
+    .mcp-queries li {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12px;
+      color: var(--text-muted);
+      padding: 8px 12px;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+    }
+    .mcp-code {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 24px;
+    }
+    .mcp-code pre {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 13px;
+      color: var(--text-secondary);
+      line-height: 1.6;
+      overflow-x: auto;
+      white-space: pre;
+    }
+    .mcp-code .comment { color: var(--text-muted); }
+    .mcp-code .string { color: var(--accent); }
+
+    /* ---- Trust ---- */
+    .trust-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 16px;
+    }
+    .trust-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 24px;
+    }
+    .trust-card h3 { font-size: 15px; font-weight: 600; margin-bottom: 6px; }
+    .trust-card p { font-size: 13px; color: var(--text-muted); line-height: 1.6; }
+
+    /* ---- FAQ ---- */
+    .faq-list { display: grid; gap: 8px; max-width: 680px; }
+    .faq-list details {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+    }
+    .faq-list summary {
+      padding: 18px 24px;
+      font-size: 15px;
+      font-weight: 500;
+      cursor: pointer;
+      list-style: none;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .faq-list summary::after {
+      content: '+';
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 18px;
+      color: var(--text-muted);
+      transition: transform 0.2s;
+    }
+    .faq-list details[open] summary::after {
+      content: '-';
+    }
+    .faq-list summary::-webkit-details-marker { display: none; }
+    .faq-list .faq-answer {
+      padding: 0 24px 18px;
+      font-size: 14px;
+      color: var(--text-secondary);
+      line-height: 1.7;
     }
 
     /* ---- Download ---- */
@@ -309,6 +585,30 @@
       user-select: all;
     }
 
+    /* ---- Final CTA ---- */
+    .final-cta {
+      padding: 100px 0;
+      text-align: center;
+    }
+    .final-cta h2 {
+      font-size: clamp(28px, 5vw, 44px);
+      font-weight: 600;
+      letter-spacing: -0.02em;
+      margin-bottom: 16px;
+    }
+    .final-cta p {
+      font-size: 17px;
+      color: var(--text-secondary);
+      max-width: 480px;
+      margin: 0 auto 40px;
+      line-height: 1.7;
+    }
+    .final-cta .trust-line {
+      margin-top: 24px;
+      font-size: 13px;
+      color: var(--text-muted);
+    }
+
     /* ---- Footer ---- */
     footer {
       padding: 48px 0;
@@ -336,6 +636,10 @@
     .footer-links a:hover { color: var(--text); }
 
     /* ---- Responsive ---- */
+    @media (max-width: 768px) {
+      .mcp-grid { grid-template-columns: 1fr; }
+      .nav-links a:not(.nav-cta) { display: none; }
+    }
     @media (max-width: 640px) {
       .hero { padding: 100px 0 56px; }
       .hero-logo { width: 56px; height: 56px; }
@@ -346,11 +650,26 @@
       .pipeline { flex-direction: column; gap: 0; padding: 32px 20px; }
       .pipeline-arrow { transform: rotate(90deg); }
       .features-grid { grid-template-columns: 1fr; }
+      .pricing-grid { grid-template-columns: 1fr; }
+      .trust-grid { grid-template-columns: 1fr 1fr; }
       .footer-inner { flex-direction: column; text-align: center; }
     }
   </style>
 </head>
 <body>
+
+  <!-- Sticky Nav -->
+  <nav class="nav" id="nav">
+    <div class="nav-inner">
+      <div class="nav-brand">4DA</div>
+      <div class="nav-links">
+        <a href="#how-it-works">How It Works</a>
+        <a href="#features">Features</a>
+        <a href="#pricing">Pricing</a>
+        <a href="#download" class="nav-cta">Download</a>
+      </div>
+    </div>
+  </nav>
 
   <!-- Hero -->
   <header class="hero">
@@ -360,8 +679,8 @@
       <h1>All signal.<br><span>No feed.</span></h1>
       <p>4DA scores content from Hacker News, Reddit, arXiv, GitHub, and 7 more sources against your actual codebase. An item needs 2+ independent signals to survive. Everything else is rejected.</p>
       <div class="hero-buttons">
-        <a href="https://www.npmjs.com/package/@4da/mcp-server" class="btn btn-primary"><span class="mono">npx</span> MCP Server</a>
-        <a href="https://github.com/runyourempire/4DA/releases/latest" class="btn btn-secondary">Download Desktop App</a>
+        <a href="https://github.com/runyourempire/4DA/releases/latest" class="btn btn-primary" id="hero-download">Download for Free</a>
+        <a href="https://www.npmjs.com/package/@4da/mcp-server" class="btn btn-secondary"><span class="mono">npx</span> MCP Server</a>
       </div>
       <div style="margin-top: 32px; font-size: 13px; color: var(--text-muted); letter-spacing: 0.02em;">Runs locally &middot; Zero telemetry &middot; BYOK &middot; Works offline with Ollama</div>
     </div>
@@ -376,6 +695,33 @@
       </video>
     </div>
   </div>
+
+  <!-- Traction / Social Proof -->
+  <section class="traction">
+    <div class="container">
+      <div class="traction-badges">
+        <span class="traction-badge"><strong>Rust</strong> + Tauri 2.0</span>
+        <span class="traction-badge"><strong>11</strong> Sources</span>
+        <span class="traction-badge"><strong>5-Axis</strong> Scoring</span>
+        <span class="traction-badge"><strong>26</strong> MCP Tools</span>
+        <span class="traction-badge"><strong>~15MB</strong> Binary</span>
+      </div>
+      <div class="traction-quotes">
+        <div class="traction-quote">
+          <p>"Found a breaking change in a dependency three days before it hit production. 4DA surfaced the GitHub issue because it knew my Cargo.toml."</p>
+          <cite>-- Early access tester, Rust backend developer</cite>
+        </div>
+        <div class="traction-quote">
+          <p>"Went from 45 minutes of morning news skimming to reading 3-5 items that actually matter. The anxiety about missing things is gone."</p>
+          <cite>-- Early access tester, full-stack engineer</cite>
+        </div>
+        <div class="traction-quote">
+          <p>"The MCP integration is wild. I asked Claude about dependency risks and it pulled real signals from my 4DA feed, not generic search results."</p>
+          <cite>-- Early access tester, AI tooling engineer</cite>
+        </div>
+      </div>
+    </div>
+  </section>
 
   <!-- What You Get -->
   <section class="showcase">
@@ -421,13 +767,16 @@
         <li>You read three "intro to X" posts about tech you already know while the arXiv paper relevant to your project scrolls past unseen.</li>
         <li>Your dependency ships a breaking change. You find out when production breaks.</li>
       </ul>
+      <div class="problem-amplify">
+        <p>The average developer spends 2+ hours daily on content consumption. Signal-to-noise ratio: less than 2%. That's 500+ hours a year reading things that don't matter to your work.</p>
+      </div>
     </div>
   </section>
 
   <hr class="divider">
 
   <!-- How It Works -->
-  <section>
+  <section id="how-it-works">
     <div class="container">
       <div class="section-label">How It Works</div>
       <h2>From noise to signal in four stages</h2>
@@ -455,13 +804,31 @@
       <div class="pipeline-result">
         An item needs <strong>2+ independent signals</strong> to pass the confirmation gate. Everything else is rejected.
       </div>
+      <div class="pipeline-details">
+        <div class="pipeline-detail">
+          <h4>Context Axis</h4>
+          <p>KNN embedding similarity against your codebase profile via sqlite-vec vectors.</p>
+        </div>
+        <div class="pipeline-detail">
+          <h4>Interest Axis</h4>
+          <p>Keyword + semantic alignment with your declared and observed interests.</p>
+        </div>
+        <div class="pipeline-detail">
+          <h4>ACE Axis</h4>
+          <p>Does this involve your active technologies, frameworks, and architecture patterns?</p>
+        </div>
+        <div class="pipeline-detail">
+          <h4>Dependency Axis</h4>
+          <p>Direct match against your installed packages. Version bumps, CVEs, deprecations.</p>
+        </div>
+      </div>
     </div>
   </section>
 
   <hr class="divider">
 
   <!-- Features -->
-  <section>
+  <section id="features">
     <div class="container">
       <div class="section-label">Features</div>
       <h2>Everything noise reduction needs</h2>
@@ -473,19 +840,19 @@
           <p>Context, Interest, ACE, Dependency, and Learned axes independently evaluate every item. Multi-signal confirmation gate rejects 99%+ of incoming content.</p>
         </div>
         <div class="feature-card">
-          <div class="feature-tag">context</div>
-          <h3>Auto Context Discovery</h3>
-          <p>Scans your Cargo.toml, package.json, go.mod, and Git activity to build a graduated domain profile of your technology identity.</p>
-        </div>
-        <div class="feature-card">
           <div class="feature-tag">privacy</div>
           <h3>Privacy First</h3>
           <p>All data stays on your machine. Raw content never leaves. BYOK for Anthropic, OpenAI, or fully local with Ollama. Zero telemetry. Transparent cost tracking.</p>
         </div>
         <div class="feature-card">
+          <div class="feature-tag">context</div>
+          <h3>Auto Context Discovery</h3>
+          <p>Scans your Cargo.toml, package.json, go.mod, and Git activity to build a graduated domain profile of your technology identity.</p>
+        </div>
+        <div class="feature-card">
           <div class="feature-tag">integration</div>
           <h3>MCP Integration</h3>
-          <p>26 intelligence tools for Claude Code and Cursor. Briefings, signal chains, knowledge gaps, project health, decisions, and agent memory -- directly in your editor.</p>
+          <p>26 intelligence tools for Claude Code, Cursor, and any MCP-compatible host. Briefings, signal chains, knowledge gaps, and project health in your editor.</p>
         </div>
         <div class="feature-card">
           <div class="feature-tag">learning</div>
@@ -497,6 +864,154 @@
           <h3>CLI Binary</h3>
           <p>Terminal-native access to your intelligence feed. Scriptable, composable, and designed for developers who live in the terminal.</p>
         </div>
+      </div>
+    </div>
+  </section>
+
+  <hr class="divider">
+
+  <!-- Pricing -->
+  <section id="pricing">
+    <div class="container" style="text-align: center;">
+      <div class="section-label">Pricing</div>
+      <h2>Free means free. No trial. No catch.</h2>
+      <p class="subtitle" style="margin: 0 auto 48px; text-align: center;">The free tier is a complete product. Most individual developers will never need more.</p>
+      <div class="pricing-grid">
+        <div class="pricing-card">
+          <h3>Free</h3>
+          <div class="pricing-price">$0 <span>forever</span></div>
+          <div class="pricing-note">No credit card. No account. No expiration.</div>
+          <ul class="pricing-features">
+            <li>All 11 content sources</li>
+            <li>Full 5-axis scoring engine</li>
+            <li>Multi-signal confirmation gate</li>
+            <li>Auto context discovery (ACE)</li>
+            <li>Behavior learning</li>
+            <li>MCP server (26 tools)</li>
+            <li>CLI binary</li>
+            <li>Unlimited use</li>
+          </ul>
+        </div>
+        <div class="pricing-card recommended">
+          <h3>Pro</h3>
+          <div class="pricing-price">$12 <span>/month</span></div>
+          <div class="pricing-note">Or $99/year. BYOK -- you bring your own API key.</div>
+          <ul class="pricing-features">
+            <li>Everything in Free, plus:</li>
+            <li>AI daily briefings</li>
+            <li>Developer DNA profiling</li>
+            <li>Score Autopsy (full 5-axis breakdown)</li>
+            <li>Intelligence panels</li>
+            <li>Signal chain analysis</li>
+            <li>Knowledge gap detection</li>
+            <li>Priority support</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <hr class="divider">
+
+  <!-- MCP Integration -->
+  <section>
+    <div class="container">
+      <div class="section-label">MCP Integration</div>
+      <h2>Your AI assistant gets signal too</h2>
+      <div class="mcp-grid">
+        <div class="mcp-text">
+          <p>4DA ships an MCP server with 26 intelligence tools. Install it with one command and your AI assistant draws from your scored, filtered intelligence feed -- not generic internet search results.</p>
+          <p style="font-size: 14px; color: var(--text-muted);">Works with Claude Code, Cursor, and any MCP-compatible host. MIT licensed. Always free.</p>
+          <ul class="mcp-queries">
+            <li>"What breaking changes affect my deps this week?"</li>
+            <li>"Give me my daily briefing"</li>
+            <li>"What knowledge gaps does my project have?"</li>
+            <li>"Show signal chains for the Tokio update"</li>
+          </ul>
+        </div>
+        <div class="mcp-code">
+<pre><span class="comment">// Install -- one command</span>
+npx <span class="string">@4da/mcp-server</span>
+
+<span class="comment">// Or add to claude_desktop_config.json</span>
+{
+  <span class="string">"mcpServers"</span>: {
+    <span class="string">"4da"</span>: {
+      <span class="string">"command"</span>: <span class="string">"npx"</span>,
+      <span class="string">"args"</span>: [<span class="string">"@4da/mcp-server"</span>]
+    }
+  }
+}</pre>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <hr class="divider">
+
+  <!-- Trust / Risk Reversal -->
+  <section>
+    <div class="container">
+      <div class="section-label">Trust</div>
+      <h2>Built for developers who read the source</h2>
+      <p class="subtitle">No trust-us claims. Verify everything yourself.</p>
+      <div class="trust-grid">
+        <div class="trust-card">
+          <h3>Free means free</h3>
+          <p>No credit card. No account. No 14-day trial. The full scoring engine with all 11 sources, forever.</p>
+        </div>
+        <div class="trust-card">
+          <h3>Source available</h3>
+          <p>FSL-1.1-Apache-2.0 license. Read every line. Converts to Apache 2.0 after 2 years.</p>
+        </div>
+        <div class="trust-card">
+          <h3>Data stays local</h3>
+          <p>We architecturally cannot see your data because we never receive it. No cloud. No sync. No server.</p>
+        </div>
+        <div class="trust-card">
+          <h3>Clean uninstall</h3>
+          <p>Delete the app, delete the data folder. Nothing persists. No residual cloud storage.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <hr class="divider">
+
+  <!-- FAQ -->
+  <section>
+    <div class="container">
+      <div class="section-label">FAQ</div>
+      <h2>Common questions</h2>
+      <div class="faq-list">
+        <details>
+          <summary>How is this different from daily.dev or Feedly?</summary>
+          <div class="faq-answer">daily.dev personalizes by engagement (what you click). Feedly aggregates by subscription (what feeds you add). 4DA scores by relevance to your actual codebase -- your Cargo.toml, package.json, and Git activity define the filter. It's categorically different: project-aware scoring instead of behavioral or topical filtering.</div>
+        </details>
+        <details>
+          <summary>Does 4DA read my source code?</summary>
+          <div class="faq-answer">4DA reads manifest files (Cargo.toml, package.json, go.mod, etc.) and Git metadata to build your technology profile. It does not read your actual source code files. The profile is built and stored locally -- nothing leaves your machine.</div>
+        </details>
+        <details>
+          <summary>Can I use it without any API keys?</summary>
+          <div class="faq-answer">Yes. The free tier works entirely without API keys. For AI-powered features (daily briefings, score autopsy), you can use Ollama for fully local inference or provide your own API key (BYOK) for Anthropic or OpenAI.</div>
+        </details>
+        <details>
+          <summary>What happens if I never pay?</summary>
+          <div class="faq-answer">Nothing changes. The free tier includes all 11 sources, the full 5-axis scoring engine, behavior learning, the MCP server with 26 tools, and the CLI. It's not a trial and it doesn't expire. Most individual developers will never need Pro.</div>
+        </details>
+        <details>
+          <summary>What's the confirmation gate?</summary>
+          <div class="faq-answer">The confirmation gate requires 2+ independent scoring axes to agree before an item enters your feed. A single keyword match isn't enough. A single interest match isn't enough. Independent confirmation from multiple relevance dimensions is required. This is what makes the 99%+ rejection rate possible.</div>
+        </details>
+        <details>
+          <summary>How big is the download?</summary>
+          <div class="faq-answer">About 15MB. 4DA is built with Tauri 2.0 (Rust), not Electron. Pre-built binaries with auto-updates for Windows, macOS, and Linux.</div>
+        </details>
+        <details>
+          <summary>Is it open source?</summary>
+          <div class="faq-answer">Source available under FSL-1.1-Apache-2.0. You can read, audit, and self-host. The license converts to Apache 2.0 (full open source) after 2 years. The MCP server is MIT licensed.</div>
+        </details>
       </div>
     </div>
   </section>
@@ -535,12 +1050,16 @@
           </tr>
         </tbody>
       </table>
-      <div class="mcp-box">
-        <h3 style="font-size: 16px; margin-bottom: 8px;">Developer Intelligence Protocol</h3>
-        <p>26 intelligence tools for Claude Code, Cursor, and any MCP-compatible host. Query scored content, get briefings, detect knowledge gaps, track decisions, and monitor project health -- all from your editor.</p>
-        <code>npx @4da/mcp-server</code>
-        <p style="margin-top: 12px; font-size: 13px; color: var(--text-muted);">MIT licensed &middot; Zero config &middot; Works standalone or alongside the desktop app</p>
-      </div>
+    </div>
+  </section>
+
+  <!-- Final CTA -->
+  <section class="final-cta">
+    <div class="container">
+      <h2>Stop reading everything.<br>Start knowing what matters.</h2>
+      <p>Your codebase already knows what's relevant. Let it decide.</p>
+      <a href="https://github.com/runyourempire/4DA/releases/latest" class="btn btn-primary" id="final-download">Download 4DA -- Free</a>
+      <div class="trust-line">No account &middot; No credit card &middot; No telemetry &middot; ~15MB download</div>
     </div>
   </section>
 
@@ -551,11 +1070,44 @@
         <div class="footer-brand">4DA <span>-- 4 Dimensional Autonomy</span></div>
         <div class="footer-links">
           <a href="https://github.com/runyourempire/4DA">GitHub</a>
-          <span>FSL-1.1-Apache-2.0 -- Apache 2.0 after 2 years</span>
+          <a href="#pricing">Pricing</a>
+          <a href="#how-it-works">How It Works</a>
+          <span>FSL-1.1-Apache-2.0</span>
         </div>
       </div>
     </div>
   </footer>
+
+  <script>
+    // Sticky nav on scroll
+    (function() {
+      var nav = document.getElementById('nav');
+      var hero = document.querySelector('.hero');
+      window.addEventListener('scroll', function() {
+        if (window.scrollY > hero.offsetHeight * 0.6) {
+          nav.classList.add('visible');
+        } else {
+          nav.classList.remove('visible');
+        }
+      }, { passive: true });
+    })();
+
+    // Platform detection for download buttons
+    (function() {
+      var ua = navigator.userAgent.toLowerCase();
+      var platform = 'your platform';
+      if (ua.indexOf('win') !== -1) platform = 'Windows';
+      else if (ua.indexOf('mac') !== -1) platform = 'macOS';
+      else if (ua.indexOf('linux') !== -1) platform = 'Linux';
+
+      var heroBtn = document.getElementById('hero-download');
+      var finalBtn = document.getElementById('final-download');
+      if (platform !== 'your platform') {
+        if (heroBtn) heroBtn.textContent = 'Download for ' + platform;
+        if (finalBtn) finalBtn.textContent = 'Download for ' + platform + ' -- Free';
+      }
+    })();
+  </script>
 
 </body>
 </html>
