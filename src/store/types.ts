@@ -273,12 +273,22 @@ export interface AgentSlice {
   promoteMemoryToDecision: (memoryId: number) => Promise<void>;
 }
 
+export interface TrialStatus {
+  active: boolean;
+  days_remaining: number;
+  started_at: string | null;
+  has_license: boolean;
+}
+
 export interface LicenseSlice {
   tier: 'free' | 'pro' | 'team';
   licenseKey: string;
   licenseLoading: boolean;
+  trialStatus: TrialStatus | null;
   loadLicense: () => Promise<void>;
   activateLicense: (key: string) => Promise<boolean>;
+  loadTrialStatus: () => Promise<void>;
+  startTrial: () => Promise<boolean>;
   isPro: () => boolean;
 }
 

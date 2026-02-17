@@ -66,6 +66,7 @@ function App() {
   const loadPersistedBriefing = useAppStore(s => s.loadPersistedBriefing);
   const loadSourceHealth = useAppStore(s => s.loadSourceHealth);
   const loadLicense = useAppStore(s => s.loadLicense);
+  const loadTrialStatus = useAppStore(s => s.loadTrialStatus);
 
   const { tier, isPro } = useLicense();
 
@@ -157,7 +158,8 @@ function App() {
     loadPersistedBriefing();
     loadSourceHealth();
     loadLicense();
-  }, [loadPersistedBriefing, loadSourceHealth, loadLicense]);
+    loadTrialStatus();
+  }, [loadPersistedBriefing, loadSourceHealth, loadLicense, loadTrialStatus]);
 
   // On mount: load cached results from previous session, or auto-analyze
   useEffect(() => {
