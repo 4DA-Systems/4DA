@@ -42,6 +42,7 @@ import {
 import { useShallow } from 'zustand/react/shallow';
 
 import { useAppStore } from './store';
+import { useUpdateCheck } from './hooks/use-update-check';
 import type { SourceRelevance } from './types';
 
 function App() {
@@ -72,6 +73,9 @@ function App() {
 
   // Toast notification system
   const { toasts, addToast, removeToast } = useToasts();
+
+  // Auto-update check
+  const { update, installing, installUpdate, dismiss: dismissUpdate } = useUpdateCheck();
   // All application state via hooks
   const {
     settings,
@@ -424,6 +428,36 @@ function App() {
             <kbd className="px-1 py-0.5 bg-bg-tertiary rounded text-gray-500">?</kbd> Help
           </p>
         </footer>
+
+        {/* Update Banner */}
+        {update && (
+          <div className="fixed bottom-4 right-4 z-50 bg-bg-secondary border border-[#D4AF37]/40 rounded-xl px-5 py-4 shadow-lg max-w-sm">
+            <div className="flex items-start gap-3">
+              <div className="flex-1">
+                <p className="text-sm font-medium text-white">Update available: v{update.version}</p>
+                <p className="text-xs text-gray-400 mt-1">
+                  {update.body ? update.body.slice(0, 100) : 'A new version is ready to install.'}
+                </p>
+              </div>
+              <button onClick={dismissUpdate} className="text-gray-500 hover:text-white text-lg leading-none">&times;</button>
+            </div>
+            <div className="flex gap-2 mt-3">
+              <button
+                onClick={installUpdate}
+                disabled={installing}
+                className="px-4 py-1.5 text-xs font-medium text-black bg-[#D4AF37] rounded-lg hover:bg-[#C4A030] transition-colors disabled:opacity-50"
+              >
+                {installing ? 'Installing...' : 'Install & Restart'}
+              </button>
+              <button
+                onClick={dismissUpdate}
+                className="px-4 py-1.5 text-xs text-gray-400 hover:text-white transition-colors"
+              >
+                Later
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Toast Notifications */}
         <ToastContainer toasts={toasts} onDismiss={removeToast} />
