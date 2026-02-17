@@ -1,0 +1,49 @@
+{
+  "name": "agent_memory",
+  "description": "Cross-agent persistent memory — store and recall discoveries, decisions, context, and warnings across sessions and tools.\n\nEnables AI agents to build institutional knowledge that persists beyond individual conversations. Supports storing, recalling by topic, filtering by tags, and retrieving recent entries.",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "action": {
+        "type": "string",
+        "enum": ["store", "recall", "recall_by_tags", "get_recent"],
+        "description": "Action to perform"
+      },
+      "session_id": {
+        "type": "string",
+        "description": "Session identifier (for store)"
+      },
+      "agent_type": {
+        "type": "string",
+        "description": "Agent identifier, e.g. claude_code, cursor, windsurf (for store)"
+      },
+      "memory_type": {
+        "type": "string",
+        "enum": ["discovery", "decision", "context", "warning", "preference"],
+        "description": "Type of memory (for store). Default: context"
+      },
+      "content": {
+        "type": "string",
+        "description": "Memory content text (for store)"
+      },
+      "tags": {
+        "type": "array",
+        "items": { "type": "string" },
+        "description": "Tags for categorization and retrieval"
+      },
+      "confidence": {
+        "type": "number",
+        "description": "Confidence level 0.0-1.0 (for store)"
+      },
+      "topic": {
+        "type": "string",
+        "description": "Topic to recall memories about (for recall)"
+      },
+      "limit": {
+        "type": "number",
+        "description": "Maximum memories to return (for recall/get_recent). Default: 10"
+      }
+    },
+    "required": ["action"]
+  }
+}

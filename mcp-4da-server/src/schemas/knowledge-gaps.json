@@ -1,0 +1,14 @@
+{
+  "name": "knowledge_gaps",
+  "description": "Detect knowledge gaps in your project dependencies.\n\nIdentifies dependencies you use but haven't been tracking content about — blind spots where a breaking change, security advisory, or major release could catch you off guard.",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "min_severity": {
+        "type": "string",
+        "enum": ["critical", "high", "medium", "low"],
+        "description": "Minimum gap severity to include. Default: medium"
+      }
+    }
+  }
+}

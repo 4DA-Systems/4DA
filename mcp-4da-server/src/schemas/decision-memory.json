@@ -1,0 +1,54 @@
+{
+  "name": "decision_memory",
+  "description": "Manage developer decisions — record, list, check alignment, update, or supersede.\n\nPersistent decision memory that tracks technology choices, architecture patterns, and workflow preferences. Prevents re-litigation of settled decisions across sessions.",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "action": {
+        "type": "string",
+        "enum": ["record", "list", "check_alignment", "update", "supersede"],
+        "description": "Action to perform"
+      },
+      "decision_type": {
+        "type": "string",
+        "enum": ["tech_choice", "architecture", "workflow", "pattern", "dependency"],
+        "description": "Type of decision (for record)"
+      },
+      "subject": {
+        "type": "string",
+        "description": "Subject of the decision (e.g., 'database', 'auth-strategy')"
+      },
+      "decision": {
+        "type": "string",
+        "description": "The decision made (for record)"
+      },
+      "rationale": {
+        "type": "string",
+        "description": "Why this decision was made (for record)"
+      },
+      "alternatives_rejected": {
+        "type": "array",
+        "items": { "type": "string" },
+        "description": "Alternatives that were considered and rejected"
+      },
+      "context_tags": {
+        "type": "array",
+        "items": { "type": "string" },
+        "description": "Tags for filtering and retrieval"
+      },
+      "confidence": {
+        "type": "number",
+        "description": "Confidence level 0.0-1.0 (for record)"
+      },
+      "id": {
+        "type": "number",
+        "description": "Decision ID (for update/supersede)"
+      },
+      "technology": {
+        "type": "string",
+        "description": "Technology to check alignment for (check_alignment action)"
+      }
+    },
+    "required": ["action"]
+  }
+}

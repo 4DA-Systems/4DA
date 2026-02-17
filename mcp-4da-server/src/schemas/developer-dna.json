@@ -1,0 +1,219 @@
+{
+  "name": "developer_dna",
+  "description": "Export your Developer DNA — a comprehensive profile of your tech identity built from project scans, engagement data, and learned preferences. Includes primary stack, adjacent tech, top dependencies, engaged topics, blind spots, source engagement rates, and aggregate stats.",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "include_blind_spots": {
+        "type": "boolean",
+        "description": "Include blind spot analysis (dependencies with stale engagement). Default: true",
+        "default": true
+      },
+      "max_dependencies": {
+        "type": "number",
+        "description": "Maximum dependencies to include. Default: 30",
+        "default": 30
+      },
+      "max_topics": {
+        "type": "number",
+        "description": "Maximum engaged topics to include. Default: 20",
+        "default": 20
+      }
+    }
+  },
+  "outputSchema": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "DeveloperDna",
+    "description": "Comprehensive developer identity profile built from local project data and engagement signals.",
+    "type": "object",
+    "required": [
+      "generated_at",
+      "primary_stack",
+      "adjacent_tech",
+      "top_dependencies",
+      "interests",
+      "top_engaged_topics",
+      "blind_spots",
+      "source_engagement",
+      "stats",
+      "identity_summary"
+    ],
+    "properties": {
+      "generated_at": {
+        "type": "string",
+        "format": "date-time",
+        "description": "ISO 8601 timestamp when this DNA profile was generated."
+      },
+      "primary_stack": {
+        "type": "array",
+        "items": { "type": "string" },
+        "description": "Technologies from the user's declared tech stack (user_identity + tech_stack tables)."
+      },
+      "adjacent_tech": {
+        "type": "array",
+        "items": { "type": "string" },
+        "description": "Technologies detected by ACE in local projects but not in the declared stack."
+      },
+      "top_dependencies": {
+        "type": "array",
+        "items": { "$ref": "#/outputSchema/definitions/DependencyEntry" },
+        "description": "Most-used project dependencies across scanned projects."
+      },
+      "interests": {
+        "type": "array",
+        "items": { "type": "string" },
+        "description": "Explicit interest topics declared by the user."
+      },
+      "top_engaged_topics": {
+        "type": "array",
+        "items": { "$ref": "#/outputSchema/definitions/EngagedTopic" },
+        "description": "Topics with highest positive engagement from interaction data."
+      },
+      "blind_spots": {
+        "type": "array",
+        "items": { "$ref": "#/outputSchema/definitions/BlindSpotEntry" },
+        "description": "Dependencies in the codebase with stale or zero engagement."
+      },
+      "source_engagement": {
+        "type": "array",
+        "items": { "$ref": "#/outputSchema/definitions/SourceEngagement" },
+        "description": "Engagement rates broken down by content source type."
+      },
+      "stats": {
+        "$ref": "#/outputSchema/definitions/DnaStats",
+        "description": "Aggregate statistics about the developer's 4DA usage."
+      },
+      "identity_summary": {
+        "type": "string",
+        "description": "Human-readable one-paragraph summary of the developer's technical identity."
+      }
+    },
+    "definitions": {
+      "DependencyEntry": {
+        "type": "object",
+        "required": ["name", "project_path"],
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Package or library name."
+          },
+          "project_path": {
+            "type": "string",
+            "description": "Path to the project that uses this dependency."
+          }
+        }
+      },
+      "EngagedTopic": {
+        "type": "object",
+        "required": ["topic", "interactions", "percent_of_total"],
+        "properties": {
+          "topic": {
+            "type": "string",
+            "description": "The topic name."
+          },
+          "interactions": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Total positive interaction count for this topic."
+          },
+          "percent_of_total": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 100,
+            "description": "Percentage of total interactions attributed to this topic."
+          }
+        }
+      },
+      "BlindSpotEntry": {
+        "type": "object",
+        "required": ["dependency", "severity", "days_stale"],
+        "properties": {
+          "dependency": {
+            "type": "string",
+            "description": "The dependency or technology name."
+          },
+          "severity": {
+            "type": "string",
+            "enum": ["critical", "high", "medium", "low"],
+            "description": "How urgent the knowledge gap is."
+          },
+          "days_stale": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Days since last engagement with content about this dependency."
+          }
+        }
+      },
+      "SourceEngagement": {
+        "type": "object",
+        "required": ["source_type", "items_seen", "items_saved", "engagement_rate"],
+        "properties": {
+          "source_type": {
+            "type": "string",
+            "description": "Content source identifier (e.g., hackernews, reddit, arxiv, rss)."
+          },
+          "items_seen": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Total items fetched from this source."
+          },
+          "items_saved": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Items the user explicitly saved from this source."
+          },
+          "engagement_rate": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1,
+            "description": "Ratio of items_saved to items_seen (0..1)."
+          }
+        }
+      },
+      "DnaStats": {
+        "type": "object",
+        "required": [
+          "total_items_processed",
+          "total_relevant",
+          "rejection_rate",
+          "project_count",
+          "dependency_count",
+          "days_active"
+        ],
+        "properties": {
+          "total_items_processed": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Total content items ingested by 4DA."
+          },
+          "total_relevant": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Items that passed the relevance threshold."
+          },
+          "rejection_rate": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1,
+            "description": "Fraction of items rejected as irrelevant (0..1)."
+          },
+          "project_count": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Number of distinct projects scanned by ACE."
+          },
+          "dependency_count": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Total unique dependencies across all projects."
+          },
+          "days_active": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Days since the earliest source item was ingested."
+          }
+        }
+      }
+    }
+  }
+}

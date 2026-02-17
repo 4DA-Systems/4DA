@@ -1,0 +1,22 @@
+{
+  "name": "check_decision_alignment",
+  "description": "Check if a technology or pattern aligns with active decisions before suggesting changes.\n\nPrevents AI agents from recommending technologies or patterns that contradict settled developer decisions. Returns alignment status and relevant decisions.",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "technology": {
+        "type": "string",
+        "description": "Technology name to check (e.g., 'postgresql', 'redis', 'graphql')"
+      },
+      "pattern": {
+        "type": "string",
+        "description": "Architecture pattern to check (e.g., 'microservices', 'event-driven')"
+      },
+      "context": {
+        "type": "string",
+        "description": "Additional context about the proposed change"
+      }
+    },
+    "required": ["technology"]
+  }
+}

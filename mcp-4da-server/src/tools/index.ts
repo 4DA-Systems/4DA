@@ -150,3 +150,9 @@ export {
   delegationScoreTool,
   executeDelegationScore,
 } from "./delegation-score.js";
+
+// Developer DNA
+export {
+  developerDnaTool,
+  executeDeveloperDna,
+} from "./developer-dna.js";
