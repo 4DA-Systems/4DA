@@ -156,13 +156,14 @@ cd mcp-4da-server
 pnpm install && pnpm build
 ```
 
-**26 tools across 6 categories:**
+**27 tools across 7 categories:**
 - **Core** — `get_relevant_content`, `get_context`, `explain_relevance`, `record_feedback`
 - **Intelligence** — `daily_briefing`, `get_actionable_signals`, `score_autopsy`, `trend_analysis`, `context_analysis`, `topic_connections`, `signal_chains`, `semantic_shifts`, `attention_report`
 - **Diagnostic** — `source_health`, `config_validator`, `llm_status`
 - **Innovation** — `knowledge_gaps`, `project_health`, `reverse_mentions`, `export_context_packet`
 - **Decision Intelligence** — `decision_memory`, `tech_radar`, `decision_enforcement`
 - **Agent Autonomy** — `agent_memory`, `agent_session_brief`, `delegation_score`
+- **Developer DNA** — `developer_dna`
 
 Add to your Claude Code config:
 ```json

@@ -1,70 +1,83 @@
 # @4da/mcp-server
 
-Developer Intelligence Protocol for Claude Code, Cursor, Windsurf, or any MCP-compatible host.
+Developer Intelligence Protocol for Claude Code, Cursor, VS Code, and any MCP-compatible host.
 
-4DA scores content from Hacker News, arXiv, Reddit, GitHub, and 7 more sources against your actual codebase and tech stack. This MCP server gives your AI tools access to 26 intelligence tools — from scored content feeds to decision tracking to knowledge gap detection.
+4DA scores content from Hacker News, arXiv, Reddit, GitHub, and 7 more sources against your actual codebase and tech stack. This MCP server gives your AI tools access to 27 intelligence tools — from scored content feeds to decision tracking to knowledge gap detection.
 
-## Quick Setup
+## Install
 
-**Prerequisites:** [4DA](https://github.com/runyourempire/4DA) must be installed and have run at least one analysis.
+**Prerequisites:** [4DA desktop app](https://github.com/runyourempire/4DA) must be installed and have run at least one analysis.
 
-### Claude Code
+### One-command setup (recommended)
 
 ```bash
-# Add to your project's .mcp.json
-claude mcp add 4da node /path/to/mcp-4da-server/dist/index.js
+npx @4da/mcp-server --setup
 ```
 
-Or manually add to `.mcp.json`:
+Auto-detects Claude Code, Cursor, and VS Code — writes the correct MCP config for each.
+
+### Manual: Claude Code
+
+```bash
+claude mcp add 4da -- npx @4da/mcp-server
+```
+
+### Manual: Cursor / Windsurf
+
+Add to `~/.cursor/mcp.json`:
 ```json
 {
   "mcpServers": {
     "4da": {
-      "command": "node",
-      "args": ["/path/to/mcp-4da-server/dist/index.js"],
-      "env": {
-        "FOURDA_DB_PATH": "/path/to/4DA/data/4da.db"
-      }
+      "command": "npx",
+      "args": ["@4da/mcp-server"]
     }
   }
 }
 ```
 
-### Cursor / Windsurf
+### Manual: VS Code (Copilot)
 
-Add to `.cursor/mcp.json` or equivalent:
+Add to `~/.vscode/mcp.json`:
 ```json
 {
-  "mcpServers": {
+  "servers": {
     "4da": {
-      "command": "node",
-      "args": ["/path/to/mcp-4da-server/dist/index.js"],
-      "env": {
-        "FOURDA_DB_PATH": "/path/to/4DA/data/4da.db"
-      }
+      "type": "stdio",
+      "command": "npx",
+      "args": ["@4da/mcp-server"]
     }
   }
 }
 ```
 
-### Claude Desktop
+### Manual: Claude Desktop
 
-Add to your Claude Desktop config (`~/Library/Application Support/Claude/claude_desktop_config.json` on macOS):
+Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
 ```json
 {
   "mcpServers": {
     "4da": {
-      "command": "node",
-      "args": ["/path/to/mcp-4da-server/dist/index.js"],
-      "env": {
-        "FOURDA_DB_PATH": "/path/to/4DA/data/4da.db"
-      }
+      "command": "npx",
+      "args": ["@4da/mcp-server"]
     }
   }
 }
 ```
 
-## Tools (26)
+## Transports
+
+**stdio** (default) — works with all MCP hosts:
+```bash
+npx @4da/mcp-server
+```
+
+**Streamable HTTP** — for remote or multi-client setups:
+```bash
+npx @4da/mcp-server --http --port 4840
+```
+
+## Tools (27)
 
 ### Core (4)
 
@@ -122,11 +135,17 @@ Add to your Claude Desktop config (`~/Library/Application Support/Claude/claude_
 | `agent_session_brief` | Tailored startup context for agent onboarding |
 | `delegation_score` | Composite trust score for task delegation decisions |
 
+### Developer DNA (1)
+
+| Tool | Description |
+|------|-------------|
+| `developer_dna` | Export your tech identity — stack, dependencies, engagement, blind spots |
+
 ## Environment Variables
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `FOURDA_DB_PATH` | Path to 4DA's SQLite database | Auto-detected from `~/.4da/4da.db` or `data/4da.db` |
+| `FOURDA_DB_PATH` | Path to 4DA's SQLite database | Auto-detected from standard locations |
 
 ## Build from Source
 
@@ -139,24 +158,22 @@ pnpm build
 ## Test
 
 ```bash
-# MCP Inspector (interactive)
-pnpm run inspect
-
-# Direct JSON-RPC
-echo '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' | node dist/index.js
+pnpm test                # Run contract tests (38 tests)
+pnpm run inspect         # MCP Inspector (interactive)
 ```
 
-## Example Usage in Claude Code
+## Example Usage
 
-Once configured, you can ask Claude:
+Once configured, ask your AI assistant:
 
 - "What did 4DA find for me today?"
 - "Are there any security alerts in my feed?"
 - "Give me a briefing on what's relevant to my current project"
 - "Why was this item scored highly?"
-- "What are the trending topics in my domain?"
+- "What knowledge gaps do I have in my dependencies?"
+- "Export my Developer DNA"
 
-Claude will use the MCP tools automatically to answer from your personalized feed.
+The AI will use the MCP tools automatically to answer from your personalized feed.
 
 ## License
 

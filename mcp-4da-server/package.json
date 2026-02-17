@@ -1,7 +1,7 @@
 {
   "name": "@4da/mcp-server",
   "version": "3.3.0",
-  "description": "MCP server for 4DA — developer intelligence via stdio or Streamable HTTP. 26 tools for content filtering, signals, briefings, decisions, agent memory, and knowledge gap detection.",
+  "description": "MCP server for 4DA — developer intelligence via stdio or Streamable HTTP. 27 tools for content filtering, signals, briefings, decisions, agent memory, and knowledge gap detection.",
   "type": "module",
   "main": "dist/index.js",
   "bin": {
