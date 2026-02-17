@@ -126,6 +126,12 @@ export const TOOL_REGISTRY: Record<string, { summary: string; schemaFile: string
     summary: "AI-delegatability assessment — should the agent proceed or ask the human?",
     schemaFile: "delegation-score.json",
   },
+
+  // Developer DNA
+  developer_dna: {
+    summary: "Export your Developer DNA — tech identity, dependencies, engagement, blind spots",
+    schemaFile: "developer-dna.json",
+  },
 };
 
 /**

@@ -116,6 +116,8 @@ import {
   executeAgentSessionBrief,
   delegationScoreTool,
   executeDelegationScore,
+  developerDnaTool,
+  executeDeveloperDna,
 } from "./tools/index.js";
 
 import type {
@@ -147,6 +149,7 @@ import type { CheckDecisionAlignmentParams } from "./tools/decision-enforcement.
 import type { AgentMemoryParams } from "./tools/agent-memory.js";
 import type { AgentSessionBriefParams } from "./tools/agent-session-brief.js";
 import type { DelegationScoreParams } from "./tools/delegation-score.js";
+import type { DeveloperDnaParams } from "./tools/developer-dna.js";
 
 // =============================================================================
 // Server Setup
@@ -570,6 +573,14 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         };
       }
 
+      case "developer_dna": {
+        const params = (args || {}) as unknown as DeveloperDnaParams;
+        const result = executeDeveloperDna(database, params);
+        return {
+          content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+        };
+      }
+
       default:
         throw new Error(`Unknown tool: ${name}`);
     }
@@ -632,7 +643,7 @@ async function main() {
     process.exit(0);
   });
 
-  console.error("4DA MCP Server v3.3 (Intelligence Platform) started — 23 tools, stdio transport");
+  console.error("4DA MCP Server v3.3 (Intelligence Platform) started — 27 tools, stdio transport");
   console.error("  Use --http for Streamable HTTP transport, --setup to configure editors");
 }
 

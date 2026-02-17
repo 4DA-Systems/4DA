@@ -1,0 +1,17 @@
+{
+  "name": "semantic_shifts",
+  "description": "Detect narrative shifts in topics you follow.\n\nAnalyzes how the meaning and context of topics are changing over time by comparing content embeddings across time windows. Catches paradigm shifts early.",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "period_days": {
+        "type": "number",
+        "description": "Look-back period in days. Default: 7"
+      },
+      "min_magnitude": {
+        "type": "number",
+        "description": "Minimum drift magnitude (0-1). Default: 0.1"
+      }
+    }
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "name": "tech_radar",
+  "description": "Generate a technology radar from decisions and content signals.\n\nPlaces technologies into quadrants (languages, frameworks, tools, platforms) and rings (adopt, trial, assess, hold) based on your decisions, usage patterns, and content engagement.",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "quadrant": {
+        "type": "string",
+        "enum": ["languages", "frameworks", "tools", "platforms"],
+        "description": "Filter by quadrant. Leave empty for all quadrants."
+      },
+      "ring": {
+        "type": "string",
+        "enum": ["adopt", "trial", "assess", "hold"],
+        "description": "Filter by ring. Leave empty for all rings."
+      },
+      "search": {
+        "type": "string",
+        "description": "Free-text search to filter entries by name."
+      }
+    }
+  }
+}

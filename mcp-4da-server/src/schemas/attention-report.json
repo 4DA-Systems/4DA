@@ -1,0 +1,13 @@
+{
+  "name": "attention_report",
+  "description": "Analyze attention allocation vs codebase needs.\n\nCompares where you spend reading/saving time against what your projects actually depend on. Reveals mismatches between attention and codebase reality.",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "period_days": {
+        "type": "number",
+        "description": "Analysis period in days. Default: 7"
+      }
+    }
+  }
+}
