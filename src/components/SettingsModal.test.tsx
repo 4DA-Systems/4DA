@@ -119,10 +119,20 @@ vi.mock('./settings/PersonalizationSection', () => ({
   PersonalizationSection: () => <div data-testid="personalization-section" />,
 }));
 
+vi.mock('./DeveloperDna', () => ({
+  DeveloperDnaPanel: () => <div data-testid="developer-dna-panel" />,
+}));
+
+vi.mock('./settings/AttentionDashboard', () => ({
+  AttentionDashboard: () => <div data-testid="attention-dashboard" />,
+}));
+
+vi.mock('./settings/ProjectHealthRadar', () => ({
+  ProjectHealthRadar: () => <div data-testid="project-health-radar" />,
+}));
+
 describe('SettingsModal', () => {
   it('does not render when not mounted (parent controls visibility)', () => {
-    // SettingsModal has no isOpen prop - the parent conditionally mounts it.
-    // When the parent does not render it, nothing appears.
     const show = false;
     const { container } = render(<div>{show && <SettingsModal onClose={vi.fn()} />}</div>);
     expect(container.querySelector('[role="dialog"]')).toBeNull();
@@ -160,9 +170,50 @@ describe('SettingsModal', () => {
     expect(screen.getByText('Settings')).toBeInTheDocument();
   });
 
-  it('renders Save Settings and Test Connection buttons', () => {
+  it('renders Save Settings and Test Connection in General tab', () => {
     render(<SettingsModal onClose={vi.fn()} />);
     expect(screen.getByText('Save Settings')).toBeInTheDocument();
     expect(screen.getByText('Test Connection')).toBeInTheDocument();
+  });
+
+  it('renders 5 tab buttons', () => {
+    render(<SettingsModal onClose={vi.fn()} />);
+    const tabs = screen.getAllByRole('tab');
+    expect(tabs).toHaveLength(5);
+    expect(tabs.map(t => t.textContent)).toEqual(['General', 'Sources', 'Profile', 'Discovery', 'Health']);
+  });
+
+  it('General tab is active by default', () => {
+    render(<SettingsModal onClose={vi.fn()} />);
+    const generalTab = screen.getByRole('tab', { name: 'General' });
+    expect(generalTab).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByTestId('ai-provider-section')).toBeInTheDocument();
+  });
+
+  it('switches to Sources tab and shows SourceConfigPanel', () => {
+    render(<SettingsModal onClose={vi.fn()} />);
+    fireEvent.click(screen.getByRole('tab', { name: 'Sources' }));
+    expect(screen.getByTestId('source-config-panel')).toBeInTheDocument();
+    expect(screen.queryByTestId('ai-provider-section')).not.toBeInTheDocument();
+  });
+
+  it('switches to Profile tab and shows PersonalizationSection', () => {
+    render(<SettingsModal onClose={vi.fn()} />);
+    fireEvent.click(screen.getByRole('tab', { name: 'Profile' }));
+    expect(screen.getByTestId('personalization-section')).toBeInTheDocument();
+    expect(screen.getByTestId('developer-dna-panel')).toBeInTheDocument();
+  });
+
+  it('switches to Health tab and shows health panels', () => {
+    render(<SettingsModal onClose={vi.fn()} />);
+    fireEvent.click(screen.getByRole('tab', { name: 'Health' }));
+    expect(screen.getByTestId('attention-dashboard')).toBeInTheDocument();
+    expect(screen.getByTestId('system-health-panel')).toBeInTheDocument();
+  });
+
+  it('hides Save Settings when not on General tab', () => {
+    render(<SettingsModal onClose={vi.fn()} />);
+    fireEvent.click(screen.getByRole('tab', { name: 'Sources' }));
+    expect(screen.queryByText('Save Settings')).not.toBeInTheDocument();
   });
 });

@@ -1,5 +1,4 @@
-import { useEffect } from 'react';
-import { invoke } from '@tauri-apps/api/core';
+import { useEffect, useState, useCallback } from 'react';
 import { LearnedBehaviorPanel } from './LearnedBehaviorPanel';
 import { SystemHealthPanel } from './SystemHealthPanel';
 import { IndexedDocumentsPanel } from './IndexedDocumentsPanel';
@@ -16,7 +15,21 @@ import { ProjectHealthRadar } from './settings/ProjectHealthRadar';
 import { useAppStore } from '../store';
 
 // ============================================================================
-// Props - now minimal after Zustand migration
+// Types
+// ============================================================================
+
+type SettingsTab = 'general' | 'sources' | 'profile' | 'discovery' | 'health';
+
+const TABS: { id: SettingsTab; label: string }[] = [
+  { id: 'general', label: 'General' },
+  { id: 'sources', label: 'Sources' },
+  { id: 'profile', label: 'Profile' },
+  { id: 'discovery', label: 'Discovery' },
+  { id: 'health', label: 'Health' },
+];
+
+// ============================================================================
+// Props
 // ============================================================================
 
 interface SettingsModalProps {
@@ -28,7 +41,10 @@ interface SettingsModalProps {
 // ============================================================================
 
 export function SettingsModal({ onClose }: SettingsModalProps) {
-  // Pull all needed state from Zustand store
+  const [activeTab, setActiveTab] = useState<SettingsTab>('general');
+  const [initialized, setInitialized] = useState<Set<SettingsTab>>(new Set(['general']));
+
+  // Shared state
   const settings = useAppStore(s => s.settings);
   const settingsForm = useAppStore(s => s.settingsForm);
   const setSettingsFormFull = useAppStore(s => s.setSettingsFormFull);
@@ -40,6 +56,7 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
   const ollamaModels = useAppStore(s => s.ollamaModels);
   const checkOllamaStatus = useAppStore(s => s.checkOllamaStatus);
 
+  // Monitoring
   const monitoring = useAppStore(s => s.monitoring);
   const monitoringInterval = useAppStore(s => s.monitoringInterval);
   const setMonitoringInterval = useAppStore(s => s.setMonitoringInterval);
@@ -49,6 +66,7 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
   const updateMonitoringInterval = useAppStore(s => s.updateMonitoringInterval);
   const testNotification = useAppStore(s => s.testNotification);
 
+  // Discovery
   const scanDirectories = useAppStore(s => s.scanDirectories);
   const newScanDir = useAppStore(s => s.newScanDir);
   const setNewScanDir = useAppStore(s => s.setNewScanDir);
@@ -59,10 +77,10 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
   const addScanDirectory = useAppStore(s => s.addScanDirectory);
   const removeScanDirectory = useAppStore(s => s.removeScanDirectory);
 
+  // Health
   const learnedAffinities = useAppStore(s => s.learnedAffinities);
   const antiTopics = useAppStore(s => s.antiTopics);
   const loadLearnedBehavior = useAppStore(s => s.loadLearnedBehavior);
-
   const systemHealth = useAppStore(s => s.systemHealth);
   const similarTopicQuery = useAppStore(s => s.similarTopicQuery);
   const setSimilarTopicQuery = useAppStore(s => s.setSimilarTopicQuery);
@@ -73,41 +91,45 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
   const saveWatcherState = useAppStore(s => s.saveWatcherState);
   const loadSystemHealth = useAppStore(s => s.loadSystemHealth);
 
-  const userContext = useAppStore(s => s.userContext);
-  const suggestedInterests = useAppStore(s => s.suggestedInterests);
-  const newInterest = useAppStore(s => s.newInterest);
-  const setNewInterest = useAppStore(s => s.setNewInterest);
-  const newExclusion = useAppStore(s => s.newExclusion);
-  const setNewExclusion = useAppStore(s => s.setNewExclusion);
-  const newTechStack = useAppStore(s => s.newTechStack);
-  const setNewTechStack = useAppStore(s => s.setNewTechStack);
-  const newRole = useAppStore(s => s.newRole);
-  const setNewRole = useAppStore(s => s.setNewRole);
-  const addInterest = useAppStore(s => s.addInterest);
-  const removeInterest = useAppStore(s => s.removeInterest);
-  const addExclusion = useAppStore(s => s.addExclusion);
-  const removeExclusion = useAppStore(s => s.removeExclusion);
-  const addTechStack = useAppStore(s => s.addTechStack);
-  const removeTechStack = useAppStore(s => s.removeTechStack);
-  const updateRole = useAppStore(s => s.updateRole);
-  const loadSuggestedInterests = useAppStore(s => s.loadSuggestedInterests);
-
-  // Load all settings data into the store when modal opens
+  // Loaders
   const loadSettings = useAppStore(s => s.loadSettings);
   const loadMonitoringStatus = useAppStore(s => s.loadMonitoringStatus);
   const loadDiscoveredContext = useAppStore(s => s.loadDiscoveredContext);
   const loadUserContext = useAppStore(s => s.loadUserContext);
+  const loadSuggestedInterests = useAppStore(s => s.loadSuggestedInterests);
 
+  // General tab loads on mount
   useEffect(() => {
     loadSettings();
     loadMonitoringStatus();
-    loadDiscoveredContext();
-    loadLearnedBehavior();
-    loadSystemHealth();
-    loadUserContext();
-    loadSuggestedInterests();
   // eslint-disable-next-line react-hooks/exhaustive-deps -- load once on mount
   }, []);
+
+  // Lazy load data when a tab is first visited
+  const initTab = useCallback((tab: SettingsTab) => {
+    if (initialized.has(tab)) return;
+    setInitialized(prev => new Set(prev).add(tab));
+
+    switch (tab) {
+      case 'profile':
+        loadUserContext();
+        loadSuggestedInterests();
+        loadLearnedBehavior();
+        break;
+      case 'discovery':
+        loadDiscoveredContext();
+        break;
+      case 'health':
+        loadSystemHealth();
+        break;
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- stable store actions
+  }, [initialized]);
+
+  const handleTabChange = (tab: SettingsTab) => {
+    setActiveTab(tab);
+    initTab(tab);
+  };
 
   // Focus trap: cycle Tab within modal, auto-focus first element
   useEffect(() => {
@@ -139,7 +161,7 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
 
     modal.addEventListener('keydown', handleKeyDown);
     return () => modal.removeEventListener('keydown', handleKeyDown);
-  }, []);
+  }, [activeTab]);
 
   // Monitoring action wrappers (add status messages)
   const handleToggleMonitoring = async () => {
@@ -172,161 +194,179 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
     }
   };
 
-  const handleAddSuggestion = async (topic: string) => {
-    try {
-      await invoke('add_interest', { topic });
-      await loadUserContext();
-      await loadSuggestedInterests();
-      setSettingsStatus('Interest added from suggestion');
-      setTimeout(() => setSettingsStatus(''), 2000);
-    } catch (error) {
-      setSettingsStatus(`Error: ${error}`);
-    }
-  };
-
-  const handleDismissSuggestion = async (topic: string) => {
-    try {
-      await invoke('add_exclusion', { topic });
-      await loadUserContext();
-      await loadSuggestedInterests();
-      setSettingsStatus('Suggestion dismissed');
-      setTimeout(() => setSettingsStatus(''), 2000);
-    } catch (error) {
-      setSettingsStatus(`Error: ${error}`);
-    }
-  };
-
   return (
     <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4" role="dialog" aria-modal="true" aria-labelledby="settings-modal-title">
-      <div className="bg-bg-secondary border border-border rounded-xl w-full max-w-lg max-h-[90vh] overflow-y-auto shadow-2xl">
-        {/* Modal Header */}
-        <div className="px-6 py-4 border-b border-border flex items-center justify-between sticky top-0 bg-bg-secondary z-10">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 bg-orange-500/20 rounded-lg flex items-center justify-center">
-              <span>&#x2699;&#xfe0f;</span>
+      <div className="bg-bg-secondary border border-border rounded-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-2xl">
+        {/* Sticky Header + Tab Bar */}
+        <div className="sticky top-0 bg-bg-secondary z-10">
+          {/* Modal Header */}
+          <div className="px-6 py-4 border-b border-border flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 bg-orange-500/20 rounded-lg flex items-center justify-center">
+                <span>&#x2699;&#xfe0f;</span>
+              </div>
+              <h2 id="settings-modal-title" className="text-lg font-medium text-white">Settings</h2>
             </div>
-            <h2 id="settings-modal-title" className="text-lg font-medium text-white">Settings</h2>
+            <button
+              onClick={onClose}
+              aria-label="Close settings"
+              className="w-8 h-8 rounded-lg bg-bg-tertiary text-gray-500 hover:text-white hover:bg-border flex items-center justify-center transition-all"
+            >
+              &times;
+            </button>
           </div>
-          <button
-            onClick={onClose}
-            aria-label="Close settings"
-            className="w-8 h-8 rounded-lg bg-bg-tertiary text-gray-500 hover:text-white hover:bg-border flex items-center justify-center transition-all"
-          >
-            &times;
-          </button>
+
+          {/* Tab Bar */}
+          <div className="px-6 flex gap-1 border-b border-border" role="tablist">
+            {TABS.map(tab => (
+              <button
+                key={tab.id}
+                role="tab"
+                aria-selected={activeTab === tab.id}
+                aria-controls={`tabpanel-${tab.id}`}
+                onClick={() => handleTabChange(tab.id)}
+                className={`px-4 py-3 text-sm transition-all relative ${
+                  activeTab === tab.id
+                    ? 'text-orange-400 font-medium'
+                    : 'text-gray-500 hover:text-gray-300'
+                }`}
+              >
+                {tab.label}
+                {activeTab === tab.id && (
+                  <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-orange-500" />
+                )}
+              </button>
+            ))}
+          </div>
         </div>
 
+        {/* Status Strip */}
+        {settingsStatus && (
+          <div className={`mx-6 mt-4 text-sm p-3 rounded-lg border ${settingsStatus.includes('Error') || settingsStatus.includes('failed') ? 'bg-red-500/10 text-red-400 border-red-500/30' : 'bg-green-500/10 text-green-400 border-green-500/30'}`}>
+            {settingsStatus}
+          </div>
+        )}
+
+        {/* Tab Content */}
         <div className="p-6 space-y-6">
-          <AIProviderSection
-            settings={settings}
-            settingsForm={settingsForm}
-            setSettingsForm={setSettingsFormFull}
-            ollamaStatus={ollamaStatus}
-            ollamaModels={ollamaModels}
-            checkOllamaStatus={checkOllamaStatus}
-          />
+          {/* General Tab */}
+          {activeTab === 'general' && (
+            <div id="tabpanel-general" role="tabpanel">
+              <div className="space-y-6">
+                <AIProviderSection
+                  settings={settings}
+                  settingsForm={settingsForm}
+                  setSettingsForm={setSettingsFormFull}
+                  ollamaStatus={ollamaStatus}
+                  ollamaModels={ollamaModels}
+                  checkOllamaStatus={checkOllamaStatus}
+                />
 
-          <MonitoringSection
-            monitoring={monitoring}
-            monitoringInterval={monitoringInterval}
-            setMonitoringInterval={setMonitoringInterval}
-            notificationThreshold={notificationThreshold}
-            onSetNotificationThreshold={setNotificationThreshold}
-            onToggle={handleToggleMonitoring}
-            onUpdateInterval={handleUpdateMonitoringInterval}
-            onTestNotification={handleTestNotification}
-          />
+                <MonitoringSection
+                  monitoring={monitoring}
+                  monitoringInterval={monitoringInterval}
+                  setMonitoringInterval={setMonitoringInterval}
+                  notificationThreshold={notificationThreshold}
+                  onSetNotificationThreshold={setNotificationThreshold}
+                  onToggle={handleToggleMonitoring}
+                  onUpdateInterval={handleUpdateMonitoringInterval}
+                  onTestNotification={handleTestNotification}
+                />
 
-          <DigestSection setSettingsStatus={setSettingsStatus} />
+                <DigestSection setSettingsStatus={setSettingsStatus} />
 
-          <SourceConfigPanel onStatusChange={setSettingsStatus} />
-
-          <ContextDiscoverySection
-            scanDirectories={scanDirectories}
-            newScanDir={newScanDir}
-            setNewScanDir={setNewScanDir}
-            isScanning={isScanning}
-            discoveredContext={discoveredContext}
-            runAutoDiscovery={runAutoDiscovery}
-            runFullScan={runFullScan}
-            addScanDirectory={addScanDirectory}
-            removeScanDirectory={removeScanDirectory}
-          />
-
-          <PersonalizationSection
-            userContext={userContext}
-            suggestedInterests={suggestedInterests}
-            newInterest={newInterest}
-            setNewInterest={setNewInterest}
-            newExclusion={newExclusion}
-            setNewExclusion={setNewExclusion}
-            newTechStack={newTechStack}
-            setNewTechStack={setNewTechStack}
-            newRole={newRole}
-            setNewRole={setNewRole}
-            addInterest={addInterest}
-            removeInterest={removeInterest}
-            addExclusion={addExclusion}
-            removeExclusion={removeExclusion}
-            addTechStack={addTechStack}
-            removeTechStack={removeTechStack}
-            updateRole={updateRole}
-            onAddSuggestion={handleAddSuggestion}
-            onDismissSuggestion={handleDismissSuggestion}
-          />
-
-          <DeveloperDnaPanel />
-
-          <LearnedBehaviorPanel
-            affinities={learnedAffinities}
-            antiTopics={antiTopics}
-            onRefresh={loadLearnedBehavior}
-          />
-
-          <NaturalLanguageSearch onStatusChange={setSettingsStatus} />
-
-          <IndexedDocumentsPanel onStatusChange={setSettingsStatus} />
-
-          <AttentionDashboard />
-
-          <ProjectHealthRadar />
-
-          <SystemHealthPanel
-            health={systemHealth}
-            similarTopicQuery={similarTopicQuery}
-            onSimilarTopicQueryChange={setSimilarTopicQuery}
-            similarTopicResults={similarTopicResults}
-            onRunAnomalyDetection={runAnomalyDetection}
-            onResolveAnomaly={resolveAnomaly}
-            onFindSimilarTopics={findSimilarTopics}
-            onSaveWatcherState={saveWatcherState}
-            onRefresh={loadSystemHealth}
-          />
-
-          {/* Status */}
-          {settingsStatus && (
-            <div className={`text-sm p-4 rounded-lg border ${settingsStatus.includes('Error') || settingsStatus.includes('failed') ? 'bg-red-500/10 text-red-400 border-red-500/30' : 'bg-green-500/10 text-green-400 border-green-500/30'}`}>
-              {settingsStatus}
+                {/* Actions */}
+                <div className="flex gap-3 pt-2">
+                  <button
+                    onClick={saveSettings}
+                    className="flex-1 px-4 py-3 text-sm bg-gradient-to-r from-orange-500 to-orange-600 text-white font-medium rounded-lg hover:from-orange-600 hover:to-orange-700 transition-all shadow-lg shadow-orange-500/20"
+                  >
+                    Save Settings
+                  </button>
+                  <button
+                    onClick={testConnection}
+                    className="px-6 py-3 text-sm bg-bg-tertiary text-gray-300 border border-border rounded-lg hover:text-white hover:border-orange-500/30 transition-all"
+                  >
+                    Test Connection
+                  </button>
+                </div>
+              </div>
             </div>
           )}
 
-          {/* Actions */}
-          <div className="flex gap-3 pt-2">
-            <button
-              onClick={saveSettings}
-              className="flex-1 px-4 py-3 text-sm bg-gradient-to-r from-orange-500 to-orange-600 text-white font-medium rounded-lg hover:from-orange-600 hover:to-orange-700 transition-all shadow-lg shadow-orange-500/20"
-            >
-              Save Settings
-            </button>
-            <button
-              onClick={testConnection}
-              className="px-6 py-3 text-sm bg-bg-tertiary text-gray-300 border border-border rounded-lg hover:text-white hover:border-orange-500/30 transition-all"
-            >
-              Test Connection
-            </button>
-          </div>
+          {/* Sources Tab */}
+          {activeTab === 'sources' && (
+            <div id="tabpanel-sources" role="tabpanel">
+              <SourceConfigPanel onStatusChange={setSettingsStatus} />
+            </div>
+          )}
 
-          {/* Copyright */}
+          {/* Profile Tab */}
+          {activeTab === 'profile' && (
+            <div id="tabpanel-profile" role="tabpanel">
+              <div className="space-y-6">
+                <PersonalizationSection />
+
+                <DeveloperDnaPanel />
+
+                <LearnedBehaviorPanel
+                  affinities={learnedAffinities}
+                  antiTopics={antiTopics}
+                  onRefresh={loadLearnedBehavior}
+                />
+              </div>
+            </div>
+          )}
+
+          {/* Discovery Tab */}
+          {activeTab === 'discovery' && (
+            <div id="tabpanel-discovery" role="tabpanel">
+              <div className="space-y-6">
+                <ContextDiscoverySection
+                  scanDirectories={scanDirectories}
+                  newScanDir={newScanDir}
+                  setNewScanDir={setNewScanDir}
+                  isScanning={isScanning}
+                  discoveredContext={discoveredContext}
+                  runAutoDiscovery={runAutoDiscovery}
+                  runFullScan={runFullScan}
+                  addScanDirectory={addScanDirectory}
+                  removeScanDirectory={removeScanDirectory}
+                />
+
+                <IndexedDocumentsPanel onStatusChange={setSettingsStatus} />
+
+                <NaturalLanguageSearch onStatusChange={setSettingsStatus} />
+              </div>
+            </div>
+          )}
+
+          {/* Health Tab */}
+          {activeTab === 'health' && (
+            <div id="tabpanel-health" role="tabpanel">
+              <div className="space-y-6">
+                <AttentionDashboard />
+
+                <ProjectHealthRadar />
+
+                <SystemHealthPanel
+                  health={systemHealth}
+                  similarTopicQuery={similarTopicQuery}
+                  onSimilarTopicQueryChange={setSimilarTopicQuery}
+                  similarTopicResults={similarTopicResults}
+                  onRunAnomalyDetection={runAnomalyDetection}
+                  onResolveAnomaly={resolveAnomaly}
+                  onFindSimilarTopics={findSimilarTopics}
+                  onSaveWatcherState={saveWatcherState}
+                  onRefresh={loadSystemHealth}
+                />
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Copyright - outside tab content */}
+        <div className="px-6 pb-6">
           <div className="pt-4 border-t border-border text-center">
             <p className="text-xs text-text-muted">
               4DA v1.0.0 &copy; 2025-2026 Antony Lawrence Kiddie Pasifa. All rights reserved.

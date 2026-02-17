@@ -1,48 +1,52 @@
-import type { UserContext, SuggestedInterest } from '../../types';
+import { invoke } from '@tauri-apps/api/core';
+import { useAppStore } from '../../store';
 
-interface PersonalizationSectionProps {
-  userContext: UserContext | null;
-  suggestedInterests: SuggestedInterest[];
-  newInterest: string;
-  setNewInterest: (val: string) => void;
-  newExclusion: string;
-  setNewExclusion: (val: string) => void;
-  newTechStack: string;
-  setNewTechStack: (val: string) => void;
-  newRole: string;
-  setNewRole: (val: string) => void;
-  addInterest: () => void;
-  removeInterest: (topic: string) => void;
-  addExclusion: () => void;
-  removeExclusion: (exclusion: string) => void;
-  addTechStack: () => void;
-  removeTechStack: (tech: string) => void;
-  updateRole: () => void;
-  onAddSuggestion: (topic: string) => void;
-  onDismissSuggestion: (topic: string) => void;
-}
+export function PersonalizationSection() {
+  const userContext = useAppStore(s => s.userContext);
+  const suggestedInterests = useAppStore(s => s.suggestedInterests);
+  const newInterest = useAppStore(s => s.newInterest);
+  const setNewInterest = useAppStore(s => s.setNewInterest);
+  const newExclusion = useAppStore(s => s.newExclusion);
+  const setNewExclusion = useAppStore(s => s.setNewExclusion);
+  const newTechStack = useAppStore(s => s.newTechStack);
+  const setNewTechStack = useAppStore(s => s.setNewTechStack);
+  const newRole = useAppStore(s => s.newRole);
+  const setNewRole = useAppStore(s => s.setNewRole);
+  const addInterest = useAppStore(s => s.addInterest);
+  const removeInterest = useAppStore(s => s.removeInterest);
+  const addExclusion = useAppStore(s => s.addExclusion);
+  const removeExclusion = useAppStore(s => s.removeExclusion);
+  const addTechStack = useAppStore(s => s.addTechStack);
+  const removeTechStack = useAppStore(s => s.removeTechStack);
+  const updateRole = useAppStore(s => s.updateRole);
+  const loadUserContext = useAppStore(s => s.loadUserContext);
+  const loadSuggestedInterests = useAppStore(s => s.loadSuggestedInterests);
+  const setSettingsStatus = useAppStore(s => s.setSettingsStatus);
 
-export function PersonalizationSection({
-  userContext,
-  suggestedInterests,
-  newInterest,
-  setNewInterest,
-  newExclusion,
-  setNewExclusion,
-  newTechStack,
-  setNewTechStack,
-  newRole,
-  setNewRole,
-  addInterest,
-  removeInterest,
-  addExclusion,
-  removeExclusion,
-  addTechStack,
-  removeTechStack,
-  updateRole,
-  onAddSuggestion,
-  onDismissSuggestion,
-}: PersonalizationSectionProps) {
+  const handleAddSuggestion = async (topic: string) => {
+    try {
+      await invoke('add_interest', { topic });
+      await loadUserContext();
+      await loadSuggestedInterests();
+      setSettingsStatus('Interest added from suggestion');
+      setTimeout(() => setSettingsStatus(''), 2000);
+    } catch (error) {
+      setSettingsStatus(`Error: ${error}`);
+    }
+  };
+
+  const handleDismissSuggestion = async (topic: string) => {
+    try {
+      await invoke('add_exclusion', { topic });
+      await loadUserContext();
+      await loadSuggestedInterests();
+      setSettingsStatus('Suggestion dismissed');
+      setTimeout(() => setSettingsStatus(''), 2000);
+    } catch (error) {
+      setSettingsStatus(`Error: ${error}`);
+    }
+  };
+
   const undeclaredSuggestions = suggestedInterests.filter(s => !s.already_declared);
   return (
     <div className="bg-bg-tertiary rounded-lg p-5 border border-border">
@@ -181,13 +185,13 @@ export function PersonalizationSection({
                     </div>
                     <div className="flex gap-1 flex-shrink-0">
                       <button
-                        onClick={() => onAddSuggestion(suggestion.topic)}
+                        onClick={() => handleAddSuggestion(suggestion.topic)}
                         className="text-xs px-2 py-0.5 rounded bg-border text-success hover:bg-[#333] transition-colors"
                       >
                         Add
                       </button>
                       <button
-                        onClick={() => onDismissSuggestion(suggestion.topic)}
+                        onClick={() => handleDismissSuggestion(suggestion.topic)}
                         className="text-xs px-2 py-0.5 rounded bg-border text-text-muted hover:bg-[#333] transition-colors"
                       >
                         Dismiss
