@@ -345,6 +345,72 @@ impl Database {
             info!(target: "4da::db", "Phase 8 migration completed — briefings table");
         }
 
+        // Phase 9 migration: Decision Intelligence Layer
+        let current_version: i64 = conn
+            .query_row("SELECT version FROM schema_version", [], |row| row.get(0))
+            .unwrap_or(8);
+
+        if current_version < 9 {
+            info!(target: "4da::db", "Running Phase 9 migration (schema version 9)");
+            conn.execute_batch(
+                "CREATE TABLE IF NOT EXISTS developer_decisions (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    decision_type TEXT NOT NULL,
+                    subject TEXT NOT NULL,
+                    decision TEXT NOT NULL,
+                    rationale TEXT,
+                    alternatives_rejected TEXT DEFAULT '[]',
+                    context_tags TEXT DEFAULT '[]',
+                    confidence REAL NOT NULL DEFAULT 0.8,
+                    status TEXT NOT NULL DEFAULT 'active',
+                    superseded_by INTEGER,
+                    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+                    FOREIGN KEY (superseded_by) REFERENCES developer_decisions(id)
+                );
+                CREATE INDEX IF NOT EXISTS idx_decisions_type ON developer_decisions(decision_type);
+                CREATE INDEX IF NOT EXISTS idx_decisions_subject ON developer_decisions(subject);
+                CREATE INDEX IF NOT EXISTS idx_decisions_status ON developer_decisions(status);",
+            )?;
+            conn.execute("UPDATE schema_version SET version = 9", [])?;
+            info!(target: "4da::db", "Phase 9 migration completed — developer_decisions table");
+
+            // Auto-seed decisions from tech_stack on first run
+            if let Err(e) = crate::decisions::seed_decisions_from_profile(&conn) {
+                tracing::warn!(target: "4da::db", error = %e, "Auto-seed decisions failed (non-fatal)");
+            }
+        }
+
+        // Phase 10 migration: Agent Context Provider
+        let current_version: i64 = conn
+            .query_row("SELECT version FROM schema_version", [], |row| row.get(0))
+            .unwrap_or(9);
+
+        if current_version < 10 {
+            info!(target: "4da::db", "Running Phase 10 migration (schema version 10)");
+            conn.execute_batch(
+                "CREATE TABLE IF NOT EXISTS agent_memory (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    session_id TEXT NOT NULL,
+                    agent_type TEXT NOT NULL,
+                    memory_type TEXT NOT NULL,
+                    subject TEXT NOT NULL,
+                    content TEXT NOT NULL,
+                    context_tags TEXT DEFAULT '[]',
+                    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                    expires_at TEXT,
+                    promoted_to_decision_id INTEGER,
+                    FOREIGN KEY (promoted_to_decision_id) REFERENCES developer_decisions(id)
+                );
+                CREATE INDEX IF NOT EXISTS idx_agent_memory_type ON agent_memory(memory_type);
+                CREATE INDEX IF NOT EXISTS idx_agent_memory_subject ON agent_memory(subject);
+                CREATE INDEX IF NOT EXISTS idx_agent_memory_session ON agent_memory(session_id);
+                CREATE INDEX IF NOT EXISTS idx_agent_memory_expires ON agent_memory(expires_at);",
+            )?;
+            conn.execute("UPDATE schema_version SET version = 10", [])?;
+            info!(target: "4da::db", "Phase 10 migration completed — agent_memory table");
+        }
+
         info!(target: "4da::db", "Database schema initialized with sqlite-vec");
         Ok(())
     }
