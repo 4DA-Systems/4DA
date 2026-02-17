@@ -46,6 +46,10 @@ const EXCEPTIONS = {
   'src-tauri/src/ace/scanner.rs':          'Context scanner — filesystem traversal',
   'src-tauri/src/llm.rs':                  'LLM integration — multi-provider client',
   'src-tauri/src/lib.rs':                  'App entrypoint — Tauri plugin registration',
+  'src-tauri/src/developer_dna.rs':        'Developer DNA — profile generation + SVG export',
+  'src-tauri/src/decisions.rs':            'Decision intelligence — CRUD + alignment checks',
+  'src-tauri/src/bin/cli.rs':              'CLI binary — command parsing + output formatting',
+  'src-tauri/src/delegation.rs':           'Delegation scoring — multi-axis trust assessment',
 
   // TypeScript — complex UI and type definitions
   'src/components/onboarding/QuickSetupStep.tsx':    'Onboarding wizard — multi-step form',
@@ -55,6 +59,10 @@ const EXCEPTIONS = {
   'src/components/SourceConfigPanel.tsx':             'Source config form — per-source fields',
   'src/components/onboarding/ApiKeysStep.tsx':        'API key setup — multi-provider form',
   'src/components/IndexedDocumentsPanel.tsx':          'Document browser — list + detail view',
+  'src/components/BriefingView.tsx':                   'AI briefing — signal cards + synthesis view',
+  'src/components/DecisionMemory.tsx':                 'Decision memory — CRUD interface for tech decisions',
+  'src/components/TechRadar.tsx':                      'Tech radar — technology adoption visualization',
+  'src/components/SettingsModal.tsx':                   'Settings — tabbed configuration panels',
 };
 
 const SCAN_DIRS = ['src', 'src-tauri/src'];

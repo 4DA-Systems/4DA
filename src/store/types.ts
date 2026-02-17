@@ -107,10 +107,10 @@ export interface ToastSlice {
 export interface UiSlice {
   showSettings: boolean;
   showSplash: boolean;
-  activeView: 'briefing' | 'results' | 'saved';
+  activeView: 'briefing' | 'results' | 'saved' | 'insights';
   setShowSettings: (show: boolean) => void;
   setShowSplash: (show: boolean) => void;
-  setActiveView: (view: 'briefing' | 'results' | 'saved') => void;
+  setActiveView: (view: 'briefing' | 'results' | 'saved' | 'insights') => void;
 }
 
 export interface SettingsSlice {
