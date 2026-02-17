@@ -97,6 +97,122 @@
     .btn-secondary { background: transparent; color: var(--text); border: 1px solid var(--border); }
     .btn-secondary:hover { border-color: var(--text-muted); opacity: 1; }
 
+    /* ---- Screenshot Carousel ---- */
+    .showcase {
+      padding: 0 0 80px;
+    }
+    .showcase .container {
+      max-width: 1080px;
+    }
+    .carousel-window {
+      position: relative;
+      background: #111;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
+      box-shadow: 0 24px 80px rgba(0,0,0,0.6), 0 0 0 1px rgba(255,255,255,0.04);
+    }
+    .carousel-titlebar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 12px 16px;
+      background: #1A1A1A;
+      border-bottom: 1px solid var(--border);
+    }
+    .carousel-dot-red,
+    .carousel-dot-yellow,
+    .carousel-dot-green {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+    }
+    .carousel-dot-red { background: #FF5F57; }
+    .carousel-dot-yellow { background: #FEBC2E; }
+    .carousel-dot-green { background: #28C840; }
+    .carousel-titlebar-text {
+      flex: 1;
+      text-align: center;
+      font-size: 12px;
+      color: var(--text-muted);
+      font-family: 'Inter', sans-serif;
+      margin-right: 44px; /* offset for centering (3 dots ~ 44px) */
+    }
+    .carousel-track {
+      display: flex;
+      overflow-x: auto;
+      scroll-snap-type: x mandatory;
+      scroll-behavior: smooth;
+      -ms-overflow-style: none;
+      scrollbar-width: none;
+    }
+    .carousel-track::-webkit-scrollbar { display: none; }
+    .carousel-slide {
+      flex: 0 0 100%;
+      scroll-snap-align: start;
+      position: relative;
+    }
+    .carousel-slide img {
+      width: 100%;
+      height: auto;
+      display: block;
+    }
+    /* Placeholder styling when images not yet added */
+    .carousel-placeholder {
+      width: 100%;
+      aspect-ratio: 16/9;
+      background: linear-gradient(135deg, #0A0A0A 0%, #1A1A1A 50%, #0F0F0F 100%);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      color: var(--text-muted);
+      font-size: 14px;
+    }
+    .carousel-placeholder .placeholder-icon {
+      width: 48px;
+      height: 48px;
+      border: 2px dashed var(--border);
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 20px;
+      color: var(--border);
+    }
+    .carousel-nav {
+      display: flex;
+      justify-content: center;
+      gap: 8px;
+      padding: 16px 0;
+    }
+    .carousel-nav button {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      border: none;
+      background: var(--border);
+      cursor: pointer;
+      padding: 0;
+      transition: background 0.2s, transform 0.2s;
+    }
+    .carousel-nav button.active {
+      background: var(--accent);
+      transform: scale(1.25);
+    }
+    .carousel-nav button:hover {
+      background: var(--text-muted);
+    }
+    .carousel-label {
+      text-align: center;
+      font-size: 13px;
+      color: var(--text-muted);
+      margin-top: 4px;
+      min-height: 20px;
+      transition: opacity 0.2s;
+    }
+
     /* ---- Section common ---- */
     section { padding: 80px 0; }
     .section-label {
@@ -293,6 +409,7 @@
     /* ---- Responsive ---- */
     @media (max-width: 640px) {
       .hero { padding: 80px 0 64px; }
+      .showcase { padding: 0 0 56px; }
       section { padding: 56px 0; }
       .pipeline { flex-direction: column; gap: 0; padding: 32px 20px; }
       .pipeline-arrow { transform: rotate(90deg); }
@@ -315,6 +432,61 @@
       </div>
     </div>
   </header>
+
+  <!-- Screenshot Carousel -->
+  <div class="showcase">
+    <div class="container">
+      <div class="carousel-window">
+        <div class="carousel-titlebar">
+          <div class="carousel-dot-red"></div>
+          <div class="carousel-dot-yellow"></div>
+          <div class="carousel-dot-green"></div>
+          <div class="carousel-titlebar-text">4DA -- Ambient Intelligence</div>
+        </div>
+        <div class="carousel-track" id="carousel-track">
+          <!-- Slide 1: Relevance Analysis -->
+          <div class="carousel-slide">
+            <!-- Replace placeholder with: <img src="screenshots/relevance.png" alt="4DA relevance analysis view showing scored content"> -->
+            <div class="carousel-placeholder">
+              <div class="placeholder-icon">1</div>
+              <span>Relevance Analysis -- scored content feed</span>
+            </div>
+          </div>
+          <!-- Slide 2: Developer DNA -->
+          <div class="carousel-slide">
+            <!-- Replace placeholder with: <img src="screenshots/dna.png" alt="4DA Developer DNA profile"> -->
+            <div class="carousel-placeholder">
+              <div class="placeholder-icon">2</div>
+              <span>Developer DNA -- your technology identity</span>
+            </div>
+          </div>
+          <!-- Slide 3: Daily Briefing -->
+          <div class="carousel-slide">
+            <!-- Replace placeholder with: <img src="screenshots/briefing.png" alt="4DA daily briefing with AI synthesis"> -->
+            <div class="carousel-placeholder">
+              <div class="placeholder-icon">3</div>
+              <span>Daily Briefing -- AI-synthesized digest</span>
+            </div>
+          </div>
+          <!-- Slide 4: Score Autopsy -->
+          <div class="carousel-slide">
+            <!-- Replace placeholder with: <img src="screenshots/autopsy.png" alt="4DA score autopsy showing 5-axis breakdown"> -->
+            <div class="carousel-placeholder">
+              <div class="placeholder-icon">4</div>
+              <span>Score Autopsy -- 5-axis scoring breakdown</span>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="carousel-nav" id="carousel-nav">
+        <button class="active" data-slide="0" aria-label="Slide 1"></button>
+        <button data-slide="1" aria-label="Slide 2"></button>
+        <button data-slide="2" aria-label="Slide 3"></button>
+        <button data-slide="3" aria-label="Slide 4"></button>
+      </div>
+      <div class="carousel-label" id="carousel-label">Relevance Analysis</div>
+    </div>
+  </div>
 
   <hr class="divider">
 
@@ -456,11 +628,56 @@
         <div class="footer-brand">4DA <span>-- 4 Dimensional Autonomy</span></div>
         <div class="footer-links">
           <a href="https://github.com/runyourempire/4DA">GitHub</a>
-          <span>BUSL-1.1 -- Apache 2.0 in 2029</span>
+          <span>FSL-1.1-Apache-2.0 -- Apache 2.0 after 2 years</span>
         </div>
       </div>
     </div>
   </footer>
 
+  <script>
+    (function() {
+      var track = document.getElementById('carousel-track');
+      var nav = document.getElementById('carousel-nav');
+      var label = document.getElementById('carousel-label');
+      var buttons = nav.querySelectorAll('button');
+      var labels = ['Relevance Analysis', 'Developer DNA', 'Daily Briefing', 'Score Autopsy'];
+      var current = 0;
+      var total = buttons.length;
+      var autoTimer;
+
+      function goTo(index) {
+        current = ((index % total) + total) % total;
+        track.scrollTo({ left: track.offsetWidth * current, behavior: 'smooth' });
+        buttons.forEach(function(b, i) { b.classList.toggle('active', i === current); });
+        label.textContent = labels[current] || '';
+      }
+
+      buttons.forEach(function(btn) {
+        btn.addEventListener('click', function() {
+          goTo(parseInt(btn.dataset.slide));
+          resetAuto();
+        });
+      });
+
+      // Auto-advance every 5s
+      function startAuto() { autoTimer = setInterval(function() { goTo(current + 1); }, 5000); }
+      function resetAuto() { clearInterval(autoTimer); startAuto(); }
+      startAuto();
+
+      // Sync dots on manual scroll/swipe
+      track.addEventListener('scroll', function() {
+        var idx = Math.round(track.scrollLeft / track.offsetWidth);
+        if (idx !== current) {
+          current = idx;
+          buttons.forEach(function(b, i) { b.classList.toggle('active', i === current); });
+          label.textContent = labels[current] || '';
+        }
+      });
+
+      // Pause on hover
+      track.addEventListener('mouseenter', function() { clearInterval(autoTimer); });
+      track.addEventListener('mouseleave', function() { startAuto(); });
+    })();
+  </script>
 </body>
 </html>
