@@ -55,6 +55,10 @@ signal_action: string | null,
  */
 signal_triggers: Array<string> | null, 
 /**
+ * Signal time horizon (tactical = act now, strategic = plan ahead)
+ */
+signal_horizon: string | null, 
+/**
  * How many similar items were grouped under this representative (topic dedup)
  */
 similar_count: number, 

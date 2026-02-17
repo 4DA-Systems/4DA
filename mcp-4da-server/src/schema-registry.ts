@@ -98,6 +98,34 @@ export const TOOL_REGISTRY: Record<string, { summary: string; schemaFile: string
     summary: "Project health radar for dependency freshness and security",
     schemaFile: "project-health.json",
   },
+
+  // Decision Intelligence Tools
+  decision_memory: {
+    summary: "Manage developer decisions (record, list, check, update, supersede)",
+    schemaFile: "decision-memory.json",
+  },
+  tech_radar: {
+    summary: "Generate tech radar from decisions and content signals",
+    schemaFile: "tech-radar.json",
+  },
+  check_decision_alignment: {
+    summary: "Check if a technology or pattern aligns with active decisions before suggesting changes",
+    schemaFile: "decision-enforcement.json",
+  },
+
+  // Agent Autonomy Tools
+  agent_memory: {
+    summary: "Cross-agent persistent memory — store and recall across sessions and tools",
+    schemaFile: "agent-memory.json",
+  },
+  agent_session_brief: {
+    summary: "Tailored session startup context for AI agents — decisions, changes, memories",
+    schemaFile: "agent-session-brief.json",
+  },
+  delegation_score: {
+    summary: "AI-delegatability assessment — should the agent proceed or ask the human?",
+    schemaFile: "delegation-score.json",
+  },
 };
 
 /**

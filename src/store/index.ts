@@ -13,6 +13,7 @@ import { createUserContextSlice } from './user-context-slice';
 import { createSystemHealthSlice } from './system-health-slice';
 import { createDecisionsSlice } from './decisions-slice';
 import { createAgentSlice } from './agent-slice';
+import { createLicenseSlice } from './license-slice';
 
 // Re-export all types
 export type {
@@ -28,6 +29,7 @@ export type {
   BriefingState,
   AppState,
   AppStore,
+  LicenseSlice,
 } from './types';
 
 export const useAppStore = create<AppStore>()((...a) => ({
@@ -44,4 +46,5 @@ export const useAppStore = create<AppStore>()((...a) => ({
   ...createSystemHealthSlice(...a),
   ...createDecisionsSlice(...a),
   ...createAgentSlice(...a),
+  ...createLicenseSlice(...a),
 }));
