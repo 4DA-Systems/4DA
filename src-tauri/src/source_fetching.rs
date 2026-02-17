@@ -1031,3 +1031,198 @@ pub(crate) fn load_github_languages_from_settings() -> Vec<String> {
         langs
     }
 }
+
+// ============================================================================
+// Tests
+// ============================================================================
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::collections::hash_map::DefaultHasher;
+    use std::hash::{Hash, Hasher};
+    use std::path::Path;
+
+    /// Helper: replicate the ID hashing logic used in fetch_all_sources and process_source_items
+    fn hash_source_id(source_type: &str, source_id: &str) -> u64 {
+        let mut hasher = DefaultHasher::new();
+        format!("{}:{}", source_type, source_id).hash(&mut hasher);
+        hasher.finish()
+    }
+
+    /// Helper: create an in-memory Database for testing
+    fn test_db() -> Database {
+        crate::register_sqlite_vec_extension();
+        Database::new(Path::new(":memory:")).expect("in-memory DB")
+    }
+
+    // ---------- Test 1: ID hashing is deterministic and collision-resistant ----------
+
+    #[test]
+    fn test_source_id_hashing_deterministic_and_distinct() {
+        // Same inputs must produce the same hash (deterministic)
+        let id_a = hash_source_id("hackernews", "12345");
+        let id_b = hash_source_id("hackernews", "12345");
+        assert_eq!(
+            id_a, id_b,
+            "Same source_type + source_id should yield same hash"
+        );
+
+        // Different source_id should produce different hash
+        let id_c = hash_source_id("hackernews", "99999");
+        assert_ne!(
+            id_a, id_c,
+            "Different source_ids should produce different hashes"
+        );
+
+        // Different source_type with same source_id should produce different hash
+        let id_d = hash_source_id("reddit", "12345");
+        assert_ne!(
+            id_a, id_d,
+            "Different source_types should produce different hashes"
+        );
+    }
+
+    // ---------- Test 2: process_source_items routes uncached items to embed list ----------
+
+    #[test]
+    fn test_process_source_items_new_items_go_to_embed_list() {
+        let db = test_db();
+        let mut all_items: Vec<(GenericSourceItem, Vec<f32>)> = Vec::new();
+        let mut new_items_to_embed: Vec<(GenericSourceItem, String)> = Vec::new();
+
+        let items = vec![
+            sources::SourceItem::new("hackernews", "hn_001", "Rust is great")
+                .with_url(Some("https://example.com/rust".to_string()))
+                .with_content("Rust offers memory safety without a GC.".to_string()),
+            sources::SourceItem::new("hackernews", "hn_002", "TypeScript 6.0 Released")
+                .with_content("Major new features in TS 6.".to_string()),
+        ];
+
+        process_source_items(
+            &db,
+            &mut all_items,
+            &mut new_items_to_embed,
+            items,
+            "hackernews",
+        );
+
+        // Nothing in DB, so all items should be in the embed list
+        assert_eq!(
+            all_items.len(),
+            0,
+            "No cached items should appear in all_items"
+        );
+        assert_eq!(
+            new_items_to_embed.len(),
+            2,
+            "Both items should need embedding"
+        );
+
+        // Verify GenericSourceItem fields
+        let (ref item, ref embed_text) = new_items_to_embed[0];
+        assert_eq!(item.source_type, "hackernews");
+        assert_eq!(item.source_id, "hn_001");
+        assert_eq!(item.title, "Rust is great");
+        assert_eq!(item.url, Some("https://example.com/rust".to_string()));
+        assert_eq!(item.content, "Rust offers memory safety without a GC.");
+
+        // Embedding text should contain both title and content
+        assert!(
+            embed_text.contains("Rust is great"),
+            "Embed text should contain the title"
+        );
+        assert!(
+            embed_text.contains("memory safety"),
+            "Embed text should contain the content"
+        );
+    }
+
+    // ---------- Test 3: process_source_items assigns correct source_type ----------
+
+    #[test]
+    fn test_process_source_items_tags_with_source_type() {
+        let db = test_db();
+        let mut all_items: Vec<(GenericSourceItem, Vec<f32>)> = Vec::new();
+        let mut embed_list: Vec<(GenericSourceItem, String)> = Vec::new();
+
+        let reddit_items = vec![sources::SourceItem::new(
+            "reddit",
+            "t3_abc",
+            "Show Reddit: My CLI tool",
+        )];
+        let arxiv_items = vec![sources::SourceItem::new(
+            "arxiv",
+            "2401.00001",
+            "Attention Is Still All You Need",
+        )];
+
+        process_source_items(&db, &mut all_items, &mut embed_list, reddit_items, "reddit");
+        process_source_items(&db, &mut all_items, &mut embed_list, arxiv_items, "arxiv");
+
+        assert_eq!(embed_list.len(), 2);
+        assert_eq!(embed_list[0].0.source_type, "reddit");
+        assert_eq!(embed_list[1].0.source_type, "arxiv");
+
+        // IDs should differ because source_type differs
+        assert_ne!(embed_list[0].0.id, embed_list[1].0.id);
+    }
+
+    // ---------- Test 4: Fallback zero-vector detection ----------
+
+    #[test]
+    fn test_fallback_zero_vector_detection() {
+        // This tests the pattern used at lines 301 and 567 to detect fallback embeddings
+        let real_embedding = vec![0.1f32, -0.5, 0.3, 0.0, 0.8];
+        let zero_embedding = vec![0.0f32; 384];
+        let empty_embedding: Vec<f32> = vec![];
+
+        let is_fallback_real = real_embedding.iter().all(|&v| v == 0.0);
+        let is_fallback_zero = zero_embedding.iter().all(|&v| v == 0.0);
+        let is_fallback_empty = empty_embedding.iter().all(|&v| v == 0.0);
+
+        assert!(
+            !is_fallback_real,
+            "Real embedding should not be detected as fallback"
+        );
+        assert!(
+            is_fallback_zero,
+            "All-zeros vector should be detected as fallback"
+        );
+        assert!(
+            is_fallback_empty,
+            "Empty vector should satisfy all() vacuously (edge case)"
+        );
+    }
+
+    // ---------- Test 5: Retry backoff array indexing ----------
+
+    #[test]
+    fn test_retry_backoff_delays() {
+        // Mirrors the backoff logic at lines 145-151 in fetch_all_sources
+        let backoff_ms = [500u64, 1000, 2000];
+
+        // attempts is 1-indexed; index into backoff with attempts-1
+        assert_eq!(
+            backoff_ms.get(0).copied().unwrap_or(2000),
+            500,
+            "First retry: 500ms"
+        );
+        assert_eq!(
+            backoff_ms.get(1).copied().unwrap_or(2000),
+            1000,
+            "Second retry: 1000ms"
+        );
+        assert_eq!(
+            backoff_ms.get(2).copied().unwrap_or(2000),
+            2000,
+            "Third retry: 2000ms"
+        );
+        // Beyond array bounds should fallback to 2000
+        assert_eq!(
+            backoff_ms.get(3).copied().unwrap_or(2000),
+            2000,
+            "Out-of-bounds: fallback 2000ms"
+        );
+    }
+}
