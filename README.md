@@ -4,6 +4,10 @@
 
 <br />
 
+[![License: FSL-1.1](https://img.shields.io/badge/License-FSL--1.1--Apache--2.0-blue.svg)](LICENSE)
+[![MCP Server](https://img.shields.io/npm/v/@4da/mcp-server?label=MCP%20Server&color=gold)](https://www.npmjs.com/package/@4da/mcp-server)
+[![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20macOS%20%7C%20Linux-brightgreen.svg)](#download)
+
 **Stop scrolling. Start knowing.**
 
 4DA monitors Hacker News, arXiv, Reddit, GitHub, Product Hunt, YouTube, and RSS feeds — then ruthlessly filters out everything that doesn't matter to your specific tech stack, projects, and codebase. What survives is signal.
@@ -60,7 +64,7 @@ What survives is scored with content quality analysis (kills clickbait), novelty
 ## Features
 
 **Intelligence**
-- 5-axis scoring with multi-signal confirmation gate
+- 5-axis scoring with multi-signal confirmation gate (99%+ rejection rate)
 - Domain profile: graduated tech identity (primary stack → dependencies → detected → interests)
 - Content DNA: classifies content type (security advisory, release, tutorial, hiring, etc.)
 - Novelty detection: demotes introductory content, boosts new releases
@@ -79,10 +83,22 @@ What survives is scored with content quality analysis (kills clickbait), novelty
 - Project health radar: dependency freshness + security monitoring
 - Attention dashboard: where you spend time vs. where you should
 
+**Decision Intelligence**
+- Record and query architectural decisions across sessions
+- Tech radar: adoption signals from decisions + content trends
+- Decision enforcement: AI agents check alignment before suggesting changes
+
+**Agent Autonomy**
+- Cross-session, cross-agent persistent memory
+- Session briefs: tailored startup context for any AI tool
+- Delegation scoring: should the agent proceed or ask you?
+- Developer DNA: exportable tech identity profile
+
 **Privacy & Control**
 - All data stays on your machine. Raw content never leaves.
 - BYOK: Anthropic Claude, OpenAI, or fully local with Ollama
-- Transparent cost tracking with daily limits
+- ed25519 license verification (public key embedded, private key server-side)
+- Auto-updates via Tauri updater with GitHub releases
 - System tray: runs in background, surfaces what matters
 
 ## Quick Start
