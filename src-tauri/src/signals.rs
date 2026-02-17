@@ -83,6 +83,24 @@ impl SignalPriority {
     }
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum SignalHorizon {
+    /// Act now (hours-days)
+    Tactical,
+    /// Plan ahead (weeks-months)
+    Strategic,
+}
+
+impl SignalHorizon {
+    pub fn label(&self) -> &'static str {
+        match self {
+            SignalHorizon::Tactical => "tactical",
+            SignalHorizon::Strategic => "strategic",
+        }
+    }
+}
+
 // ============================================================================
 // Classification Result
 // ============================================================================
@@ -94,6 +112,7 @@ pub struct SignalClassification {
     pub confidence: f32,
     pub action: String,
     pub triggers: Vec<String>,
+    pub horizon: SignalHorizon,
 }
 
 // ============================================================================
@@ -379,12 +398,52 @@ impl SignalClassifier {
         // Suppress detected_tech to avoid confusion - we don't use it for action text or escalation
         let _ = detected_tech;
 
+        // Horizon classification
+        let horizon = match &signal_type {
+            SignalType::SecurityAlert => SignalHorizon::Tactical,
+            SignalType::BreakingChange => {
+                // Major version -> Strategic, patch-level -> Tactical
+                if text_lower.contains("major")
+                    || text_lower.contains("v2")
+                    || text_lower.contains("v3")
+                    || text_lower.contains("v4")
+                    || text_lower.contains("v5")
+                {
+                    SignalHorizon::Strategic
+                } else {
+                    SignalHorizon::Tactical
+                }
+            }
+            SignalType::TechTrend => SignalHorizon::Strategic,
+            SignalType::CompetitiveIntel => SignalHorizon::Strategic,
+            SignalType::ToolDiscovery => {
+                // Tool for primary stack -> Strategic (worth evaluating), otherwise Tactical
+                if declared_match.is_some() {
+                    SignalHorizon::Strategic
+                } else {
+                    SignalHorizon::Tactical
+                }
+            }
+            SignalType::Learning => {
+                // Architecture patterns are Strategic, practical tutorials are Tactical
+                if text_lower.contains("architecture")
+                    || text_lower.contains("design pattern")
+                    || text_lower.contains("system design")
+                {
+                    SignalHorizon::Strategic
+                } else {
+                    SignalHorizon::Tactical
+                }
+            }
+        };
+
         Some(SignalClassification {
             signal_type,
             priority,
             confidence,
             action,
             triggers,
+            horizon,
         })
     }
 

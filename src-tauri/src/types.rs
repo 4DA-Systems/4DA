@@ -168,6 +168,9 @@ pub struct SourceRelevance {
     /// Keywords that triggered the classification
     #[serde(default)]
     pub signal_triggers: Option<Vec<String>>,
+    /// Signal time horizon (tactical = act now, strategic = plan ahead)
+    #[serde(default)]
+    pub signal_horizon: Option<String>,
     /// How many similar items were grouped under this representative (topic dedup)
     #[serde(default)]
     pub similar_count: u32,

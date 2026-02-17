@@ -209,6 +209,7 @@ pub(crate) fn score_item(
             signal_priority: None,
             signal_action: None,
             signal_triggers: None,
+            signal_horizon: None,
             similar_count: 0,
             similar_titles: vec![],
             serendipity: false,
@@ -578,7 +579,7 @@ pub(crate) fn score_item(
     //    "I built [random thing]" shouldn't be a signal unless it's about YOUR tech
     let show_and_tell_blocked =
         content_type == crate::content_dna::ContentType::ShowAndTell && domain_relevance < 1.0;
-    let (sig_type, sig_priority, sig_action, sig_triggers) = if options.apply_signals
+    let (sig_type, sig_priority, sig_action, sig_triggers, sig_horizon) = if options.apply_signals
         && relevant
         && combined_score >= 0.30
         && domain_relevance >= 0.70
@@ -635,15 +636,16 @@ pub(crate) fn score_item(
                         Some(c.priority.label().to_string()),
                         Some(c.action),
                         Some(c.triggers),
+                        Some(c.horizon.label().to_string()),
                     )
                 }
-                None => (None, None, None, None),
+                None => (None, None, None, None, None),
             }
         } else {
-            (None, None, None, None)
+            (None, None, None, None, None)
         }
     } else {
-        (None, None, None, None)
+        (None, None, None, None, None)
     };
 
     SourceRelevance {
@@ -665,6 +667,7 @@ pub(crate) fn score_item(
         signal_priority: sig_priority,
         signal_action: sig_action,
         signal_triggers: sig_triggers,
+        signal_horizon: sig_horizon,
         similar_count: 0,
         similar_titles: vec![],
         serendipity: false,
