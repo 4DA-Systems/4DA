@@ -1,4 +1,4 @@
-# 4DA — Claude Code Instructions
+# 4DA — Copilot Instructions
 
 
 
@@ -106,11 +106,3 @@ Before modifying architecture or invariants, read the relevant `.ai/` file:
 - `data/settings.json` — contains user API keys. Use `data/settings.example.json` as template.
 - `data/*.db` — runtime databases
 - `src-tauri/target/` — Rust build artifacts
-
-## Claude-Specific
-
-- Agent definitions: `.claude/agents/` (4DA-specific agents for source debugging, trend analysis, etc.)
-- Slash commands: `.claude/commands/` (project-specific commands)
-- MCP servers: memory (persistent decisions/learnings) and 4da (21 intelligence tools)
-- Hooks: git hygiene monitor, prompt analyzer, session archiver
-- Subagent rules: spawn for 3+ file changes, searching, debugging, testing, reviewing
