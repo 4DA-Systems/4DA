@@ -22,6 +22,10 @@ import { SignalChainsPanel } from './components/SignalChains';
 import { KnowledgeGapsPanel } from './components/KnowledgeGapsPanel';
 import { KeyboardShortcutsModal } from './components/KeyboardShortcutsModal';
 import { ErrorBoundary } from './components/ErrorBoundary';
+import { TechRadar } from './components/TechRadar';
+import { DecisionMemory } from './components/DecisionMemory';
+import { DelegationDashboard } from './components/DelegationDashboard';
+import { AgentMemoryPanel } from './components/AgentMemoryPanel';
 import {
   useSettings,
   useMonitoring,
@@ -357,6 +361,16 @@ function App() {
             All Results
           </button>
           <button
+            onClick={() => setActiveView('insights')}
+            className={`px-4 py-2 text-sm rounded-md transition-all ${
+              activeView === 'insights'
+                ? 'bg-amber-500/20 text-amber-400 font-medium'
+                : 'text-gray-500 hover:text-gray-300'
+            }`}
+          >
+            Insights
+          </button>
+          <button
             onClick={() => setActiveView('saved')}
             className={`px-4 py-2 text-sm rounded-md transition-all ${
               activeView === 'saved'
@@ -371,6 +385,15 @@ function App() {
         {/* Conditional View Rendering */}
         {activeView === 'briefing' ? (
           <BriefingView />
+        ) : activeView === 'insights' ? (
+          <div className="space-y-6">
+            <TechRadar />
+            <DecisionMemory />
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <DelegationDashboard />
+              <AgentMemoryPanel />
+            </div>
+          </div>
         ) : activeView === 'saved' ? (
           <SavedItemsView />
         ) : (
