@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
+import { ProGate } from './ProGate';
 import type { PredictedContext } from '../types';
 
 export function PredictiveIndicator() {
@@ -29,6 +30,7 @@ export function PredictiveIndicator() {
   const topTopics = prediction.predicted_topics.slice(0, 3);
 
   return (
+    <ProGate feature="Predictive Context">
     <div className="mb-4">
       <button
         onClick={() => setExpanded(!expanded)}
@@ -58,5 +60,6 @@ export function PredictiveIndicator() {
         </div>
       )}
     </div>
+    </ProGate>
   );
 }

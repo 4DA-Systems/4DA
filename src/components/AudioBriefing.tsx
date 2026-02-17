@@ -2,6 +2,7 @@ import { useState, useRef, useCallback } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { convertFileSrc } from '@tauri-apps/api/core';
 import type { AudioBriefingStatus } from '../types';
+import { ProGate } from './ProGate';
 
 export function AudioBriefing() {
   const [status, setStatus] = useState<AudioBriefingStatus | null>(null);
@@ -72,6 +73,7 @@ export function AudioBriefing() {
   }
 
   return (
+    <ProGate feature="Audio Briefings">
     <div className="flex items-center gap-2">
       {status?.file_path && (
         <button
@@ -104,5 +106,6 @@ export function AudioBriefing() {
         </span>
       )}
     </div>
+    </ProGate>
   );
 }

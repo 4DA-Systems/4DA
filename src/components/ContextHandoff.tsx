@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
+import { ProGate } from './ProGate';
 
 interface ContextHandoffProps {
   onStatus: (msg: string) => void;
@@ -23,6 +24,7 @@ export function ContextHandoff({ onStatus }: ContextHandoffProps) {
   };
 
   return (
+    <ProGate feature="Context Handoff">
     <button
       onClick={exportContext}
       disabled={exporting}
@@ -35,5 +37,6 @@ export function ContextHandoff({ onStatus }: ContextHandoffProps) {
         '📋'
       )}
     </button>
+    </ProGate>
   );
 }

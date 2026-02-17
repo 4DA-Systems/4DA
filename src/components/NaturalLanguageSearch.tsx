@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
+import { ProGate } from './ProGate';
 
 interface QueryResultItem {
   id: number;
@@ -94,6 +95,7 @@ export function NaturalLanguageSearch({ onStatusChange, defaultExpanded = true }
   };
 
   return (
+    <ProGate feature="Semantic Search">
     <div className="bg-bg-tertiary rounded-lg p-5 border border-border">
       <div
         className="flex items-center justify-between cursor-pointer"
@@ -263,5 +265,6 @@ export function NaturalLanguageSearch({ onStatusChange, defaultExpanded = true }
         </div>
       )}
     </div>
+    </ProGate>
   );
 }

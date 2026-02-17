@@ -1,5 +1,6 @@
 import { useState, useEffect, memo } from 'react';
 import { invoke } from '@tauri-apps/api/core';
+import { ProGate } from './ProGate';
 import type { KnowledgeGap } from '../types';
 
 const SEVERITY_CONFIG: Record<string, { color: string; bg: string; border: string }> = {
@@ -30,6 +31,7 @@ export const KnowledgeGapsPanel = memo(function KnowledgeGapsPanel() {
   const criticalCount = gaps.filter(g => g.gap_severity === 'critical' || g.gap_severity === 'high').length;
 
   return (
+    <ProGate feature="Knowledge Gaps">
     <div className="mb-6 bg-bg-secondary rounded-lg border border-border overflow-hidden">
       <button
         onClick={() => setExpanded(!expanded)}
@@ -95,5 +97,6 @@ export const KnowledgeGapsPanel = memo(function KnowledgeGapsPanel() {
         </div>
       )}
     </div>
+    </ProGate>
   );
 });

@@ -203,6 +203,27 @@ impl Default for AttentionConfig {
     }
 }
 
+/// License tier configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LicenseConfig {
+    /// Tier: "free", "pro", or "team"
+    pub tier: String,
+    /// License key (empty for free tier)
+    pub license_key: String,
+    /// ISO timestamp when license was activated
+    pub activated_at: Option<String>,
+}
+
+impl Default for LicenseConfig {
+    fn default() -> Self {
+        Self {
+            tier: "free".to_string(),
+            license_key: String::new(),
+            activated_at: None,
+        }
+    }
+}
+
 /// Main settings structure
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Settings {
@@ -263,6 +284,9 @@ pub struct Settings {
     /// Attention tracking
     #[serde(default)]
     pub attention: AttentionConfig,
+    /// License tier configuration
+    #[serde(default)]
+    pub license: LicenseConfig,
 }
 
 impl Default for Settings {
@@ -288,6 +312,7 @@ impl Default for Settings {
             audio_briefing: AudioBriefingConfig::default(),
             health_radar: HealthRadarConfig::default(),
             attention: AttentionConfig::default(),
+            license: LicenseConfig::default(),
         }
     }
 }
@@ -602,6 +627,35 @@ impl SettingsManager {
     pub fn set_github_languages(&mut self, languages: Vec<String>) -> Result<(), String> {
         self.settings.github_languages = languages;
         self.save()
+    }
+}
+
+// ============================================================================
+// Feature Tier Gating
+// ============================================================================
+
+/// Pro-gated features list
+pub const PRO_FEATURES: &[&str] = &[
+    "generate_ai_briefing",
+    "get_latest_briefing",
+    "generate_audio_briefing",
+    "get_attention_report",
+    "get_knowledge_gaps",
+    "get_signal_chains",
+    "get_project_health",
+    "get_developer_dna",
+    "export_developer_dna_markdown",
+    "export_developer_dna_svg",
+    "get_predicted_context",
+    "generate_context_packet",
+    "natural_language_query",
+];
+
+/// Check if a feature is available for the given tier
+pub fn is_pro_feature_available(feature: &str, tier: &str) -> bool {
+    match tier {
+        "pro" | "team" => true,
+        _ => !PRO_FEATURES.contains(&feature),
     }
 }
 

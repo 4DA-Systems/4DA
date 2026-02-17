@@ -29,5 +29,6 @@
   "predictive": { "enabled": true, "prefetch_window_minutes": 30 },
   "serendipity": { "enabled": true, "budget_percent": 8 },
   "health_radar": { "enabled": true, "check_interval_hours": 24 },
-  "attention": { "enabled": true }
+  "attention": { "enabled": true },
+  "license": { "tier": "free", "license_key": "" }
 }

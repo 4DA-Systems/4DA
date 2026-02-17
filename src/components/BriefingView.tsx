@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useState, useEffect } from 'react';
 import { BriefingCard } from './BriefingCard';
 import { SignalActionCard } from './briefing/SignalActionCard';
+import { ProGate } from './ProGate';
 import { useAppStore } from '../store';
 
 function getRelativeTime(date: Date): string {
@@ -304,6 +305,7 @@ export function BriefingView() {
 
   // Briefing content view
   return (
+    <ProGate feature="AI Briefings">
     <div className="bg-bg-primary rounded-lg space-y-6">
       {/* Signal Action Cards — critical/high priority items */}
       {signalItems.length > 0 && (
@@ -490,5 +492,6 @@ export function BriefingView() {
         </div>
       )}
     </div>
+    </ProGate>
   );
 }

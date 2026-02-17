@@ -1,6 +1,6 @@
 #![allow(dead_code)]
 // Copyright (c) 2025-2026 Antony Lawrence Kiddie Pasifa. All rights reserved.
-// Licensed under the Business Source License 1.1 (BSL-1.1). See LICENSE file.
+// Licensed under the Functional Source License 1.1 (FSL-1.1-Apache-2.0). See LICENSE file.
 
 use once_cell::sync::{Lazy, OnceCell};
 use parking_lot::Mutex;

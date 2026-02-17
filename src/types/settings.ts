@@ -1,5 +1,11 @@
 // Settings and monitoring types
 
+export interface LicenseConfig {
+  tier: 'free' | 'pro' | 'team';
+  has_key: boolean;
+  activated_at: string | null;
+}
+
 export interface Settings {
   llm: {
     provider: string;
@@ -21,6 +27,7 @@ export interface Settings {
     items_reranked: number;
   };
   embedding_threshold: number;
+  license: LicenseConfig;
 }
 
 export interface MonitoringStatus {

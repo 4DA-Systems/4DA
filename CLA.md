@@ -1,6 +1,6 @@
 # 4DA Contributor License Agreement (CLA)
 
-Version 1.0 | Effective: 2025-01-01
+Version 1.1 | Effective: 2025-01-01 | License: FSL-1.1-Apache-2.0
 
 ## Purpose
 

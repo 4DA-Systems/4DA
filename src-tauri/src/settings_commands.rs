@@ -46,7 +46,12 @@ pub async fn get_settings() -> Result<serde_json::Value> {
         },
         "embedding_threshold": settings.embedding_threshold,
         "onboarding_complete": settings.onboarding_complete,
-        "auto_discovery_completed": settings.auto_discovery_completed
+        "auto_discovery_completed": settings.auto_discovery_completed,
+        "license": {
+            "tier": settings.license.tier,
+            "has_key": !settings.license.license_key.is_empty(),
+            "activated_at": settings.license.activated_at,
+        }
     }))
 }
 
@@ -510,6 +515,47 @@ pub async fn pull_ollama_model(
         "model": model
     }))
 }
+
+/// Get current license tier and feature availability
+#[tauri::command]
+pub async fn get_license_tier() -> Result<serde_json::Value> {
+    let manager = get_settings_manager();
+    let guard = manager.lock();
+    let license = &guard.get().license;
+
+    Ok(serde_json::json!({
+        "tier": license.tier,
+        "activated_at": license.activated_at,
+        "has_key": !license.license_key.is_empty(),
+        "pro_features": crate::settings::PRO_FEATURES,
+    }))
+}
+
+/// Activate a license key
+#[tauri::command]
+pub async fn activate_license(license_key: String) -> Result<serde_json::Value> {
+    if license_key.trim().is_empty() {
+        return Err("License key cannot be empty".into());
+    }
+
+    let manager = get_settings_manager();
+    let mut guard = manager.lock();
+
+    // Store the key and activate pro tier
+    let settings = guard.get_mut();
+    settings.license.license_key = license_key;
+    settings.license.tier = "pro".to_string();
+    settings.license.activated_at = Some(chrono::Utc::now().to_rfc3339());
+    guard.save()?;
+
+    info!(target: "4da::license", "License activated — tier: pro");
+
+    Ok(serde_json::json!({
+        "success": true,
+        "tier": "pro",
+    }))
+}
+
 // ============================================================================
 // Context Engine Commands
 // ============================================================================

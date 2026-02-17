@@ -1,5 +1,5 @@
 // Copyright (c) 2025-2026 Antony Lawrence Kiddie Pasifa. All rights reserved.
-// Licensed under the Business Source License 1.1 (BSL-1.1). See LICENSE file.
+// Licensed under the Functional Source License 1.1 (FSL-1.1-Apache-2.0). See LICENSE file.
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { invoke } from '@tauri-apps/api/core';
@@ -33,6 +33,7 @@ import {
   useBriefing,
   useKeyboardShortcuts,
   useToasts,
+  useLicense,
 } from './hooks';
 import { useShallow } from 'zustand/react/shallow';
 
@@ -60,6 +61,9 @@ function App() {
   const setShowOnlyRelevant = useAppStore(s => s.setShowOnlyRelevant);
   const loadPersistedBriefing = useAppStore(s => s.loadPersistedBriefing);
   const loadSourceHealth = useAppStore(s => s.loadSourceHealth);
+  const loadLicense = useAppStore(s => s.loadLicense);
+
+  const { tier, isPro } = useLicense();
 
   // Toast notification system
   const { toasts, addToast, removeToast } = useToasts();
@@ -144,11 +148,12 @@ function App() {
   // Reset render limit when new results come in
   useEffect(() => { setRenderLimit(50); }, [state.relevanceResults]);
 
-  // Load persisted briefing + source health on mount (instant, from DB)
+  // Load persisted briefing + source health + license on mount (instant, from DB)
   useEffect(() => {
     loadPersistedBriefing();
     loadSourceHealth();
-  }, [loadPersistedBriefing, loadSourceHealth]);
+    loadLicense();
+  }, [loadPersistedBriefing, loadSourceHealth, loadLicense]);
 
   // On mount: load cached results from previous session, or auto-analyze
   useEffect(() => {
@@ -262,6 +267,13 @@ function App() {
               </div>
             )}
             <OllamaStatus provider={settingsForm.provider} />
+            <span className={`px-2 py-1 text-[10px] font-bold uppercase tracking-wider rounded ${
+              isPro
+                ? 'bg-[#D4AF37]/20 text-[#D4AF37] border border-[#D4AF37]/30'
+                : 'bg-bg-tertiary text-gray-500 border border-border'
+            }`}>
+              {tier}
+            </span>
             <button
               onClick={() => setShowSettings(true)}
               className="px-4 py-2 text-sm bg-bg-secondary text-gray-300 border border-border rounded-lg hover:bg-bg-tertiary hover:border-orange-500/30 transition-all"

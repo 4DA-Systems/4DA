@@ -1,5 +1,6 @@
 import { useState, useEffect, memo } from 'react';
 import { invoke } from '@tauri-apps/api/core';
+import { ProGate } from './ProGate';
 import type { SignalChain } from '../types';
 
 const PRIORITY_COLORS: Record<string, string> = {
@@ -44,6 +45,7 @@ export const SignalChainsPanel = memo(function SignalChainsPanel() {
   if (chains.length === 0) return null;
 
   return (
+    <ProGate feature="Signal Chains">
     <div className="mb-6 bg-bg-secondary rounded-lg border border-border overflow-hidden">
       <div className="px-5 py-4 border-b border-border flex items-center gap-3">
         <div className="w-8 h-8 bg-bg-tertiary rounded-lg flex items-center justify-center">
@@ -129,5 +131,6 @@ export const SignalChainsPanel = memo(function SignalChainsPanel() {
         })}
       </div>
     </div>
+    </ProGate>
   );
 });
