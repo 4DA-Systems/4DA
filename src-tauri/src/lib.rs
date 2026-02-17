@@ -213,6 +213,8 @@ pub fn run() {
             settings_commands::pull_ollama_model,
             settings_commands::get_license_tier,
             settings_commands::activate_license,
+            settings_commands::get_trial_status,
+            settings_commands::start_trial,
             settings_commands::get_user_context,
             settings_commands::set_user_role,
             settings_commands::add_tech_stack,

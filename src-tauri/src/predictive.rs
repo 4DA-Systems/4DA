@@ -128,6 +128,7 @@ pub fn predict_next_context(conn: &rusqlite::Connection) -> Result<PredictedCont
 
 #[tauri::command]
 pub fn get_predicted_context() -> Result<PredictedContext, String> {
+    crate::settings::require_pro_feature("get_predicted_context")?;
     let conn = crate::open_db_connection()?;
     predict_next_context(&conn)
 }

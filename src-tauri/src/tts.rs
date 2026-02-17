@@ -252,6 +252,7 @@ fn cleanup_old_audio(audio_dir: &PathBuf) {
 
 #[tauri::command]
 pub async fn generate_audio_briefing(_app: tauri::AppHandle) -> Result<String, String> {
+    crate::settings::require_pro_feature("generate_audio_briefing")?;
     // Get the latest briefing text from the digest system
     let briefing_text = crate::digest_commands::get_latest_briefing_text()
         .ok_or_else(|| "No briefing available. Generate an AI briefing first.".to_string())?;

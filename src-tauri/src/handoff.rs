@@ -281,6 +281,7 @@ fn generate_suggestions(signals: &[SignalSummary], context: &ActiveContextSnapsh
 
 #[tauri::command]
 pub fn generate_context_packet() -> Result<ContextPacket, String> {
+    crate::settings::require_pro_feature("generate_context_packet")?;
     info!(target: "4da::handoff", "Generating context packet");
     generate_packet()
 }

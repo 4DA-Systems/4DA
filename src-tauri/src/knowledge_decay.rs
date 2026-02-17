@@ -579,6 +579,7 @@ fn severity_rank(severity: &GapSeverity) -> u8 {
 
 #[tauri::command]
 pub fn get_knowledge_gaps() -> Result<Vec<KnowledgeGap>, String> {
+    crate::settings::require_pro_feature("get_knowledge_gaps")?;
     let conn = crate::open_db_connection()?;
     detect_knowledge_gaps(&conn)
 }

@@ -531,28 +531,82 @@ pub async fn get_license_tier() -> Result<serde_json::Value> {
     }))
 }
 
-/// Activate a license key
+/// Activate a license key with ed25519 verification
 #[tauri::command]
 pub async fn activate_license(license_key: String) -> Result<serde_json::Value> {
     if license_key.trim().is_empty() {
         return Err("License key cannot be empty".into());
     }
 
+    let payload = crate::settings::verify_license_key(&license_key)?;
+
     let manager = get_settings_manager();
     let mut guard = manager.lock();
 
-    // Store the key and activate pro tier
     let settings = guard.get_mut();
     settings.license.license_key = license_key;
-    settings.license.tier = "pro".to_string();
+    settings.license.tier = payload.tier.clone();
     settings.license.activated_at = Some(chrono::Utc::now().to_rfc3339());
     guard.save()?;
 
-    info!(target: "4da::license", "License activated — tier: pro");
+    info!(target: "4da::license", "License activated — tier: {}", payload.tier);
 
     Ok(serde_json::json!({
         "success": true,
-        "tier": "pro",
+        "tier": payload.tier,
+        "email": payload.email,
+        "expires_at": payload.expires_at,
+    }))
+}
+
+/// Get trial status
+#[tauri::command]
+pub async fn get_trial_status() -> Result<serde_json::Value> {
+    let manager = get_settings_manager();
+    let guard = manager.lock();
+    let settings = guard.get();
+    let status = crate::settings::get_trial_status(&settings.license);
+
+    Ok(serde_json::json!({
+        "active": status.active,
+        "days_remaining": status.days_remaining,
+        "started_at": status.started_at,
+        "has_license": status.has_license,
+    }))
+}
+
+/// Start a free trial
+#[tauri::command]
+pub async fn start_trial() -> Result<serde_json::Value> {
+    let manager = get_settings_manager();
+    let mut guard = manager.lock();
+    let settings = guard.get_mut();
+
+    if !settings.license.license_key.is_empty() {
+        return Ok(serde_json::json!({
+            "success": false,
+            "reason": "Already have a license key",
+        }));
+    }
+
+    if settings.license.trial_started_at.is_some() {
+        let status = crate::settings::get_trial_status(&settings.license);
+        return Ok(serde_json::json!({
+            "success": false,
+            "reason": "Trial already started",
+            "active": status.active,
+            "days_remaining": status.days_remaining,
+        }));
+    }
+
+    settings.license.trial_started_at = Some(chrono::Utc::now().to_rfc3339());
+    guard.save()?;
+
+    info!(target: "4da::license", "Free trial started");
+
+    Ok(serde_json::json!({
+        "success": true,
+        "days_remaining": 30,
     }))
 }
 

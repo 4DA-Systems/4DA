@@ -246,6 +246,7 @@ pub fn resolve_chain(
 
 #[tauri::command]
 pub fn get_signal_chains() -> Result<Vec<SignalChain>, String> {
+    crate::settings::require_pro_feature("get_signal_chains")?;
     let conn = crate::open_db_connection()?;
     detect_chains(&conn)
 }

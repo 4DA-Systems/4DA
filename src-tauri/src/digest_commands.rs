@@ -112,6 +112,7 @@ pub async fn set_digest_config(
 /// Get the latest persisted briefing from the database (survives restarts)
 #[tauri::command]
 pub async fn get_latest_briefing() -> Result<serde_json::Value> {
+    crate::settings::require_pro_feature("get_latest_briefing")?;
     let db = get_database()?;
     match db.get_latest_briefing() {
         Ok(Some((content, model, item_count, created_at))) => Ok(serde_json::json!({
@@ -132,6 +133,7 @@ pub async fn get_latest_briefing() -> Result<serde_json::Value> {
 /// Uses the configured LLM (Ollama by default) to synthesize insights
 #[tauri::command]
 pub async fn generate_ai_briefing() -> Result<serde_json::Value> {
+    crate::settings::require_pro_feature("generate_ai_briefing")?;
     use chrono::{Duration, Utc};
 
     info!(target: "4da::briefing", "Generating AI briefing");
