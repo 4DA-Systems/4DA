@@ -26,6 +26,7 @@ import { TechRadar } from './components/TechRadar';
 import { DecisionMemory } from './components/DecisionMemory';
 import { DelegationDashboard } from './components/DelegationDashboard';
 import { AgentMemoryPanel } from './components/AgentMemoryPanel';
+import { ToolkitView } from './components/toolkit/ToolkitView';
 import {
   useSettings,
   useMonitoring,
@@ -386,6 +387,16 @@ function App() {
           >
             Saved
           </button>
+          <button
+            onClick={() => setActiveView('toolkit')}
+            className={`px-4 py-2 text-sm rounded-md transition-all ${
+              activeView === 'toolkit'
+                ? 'bg-purple-500/20 text-purple-400 font-medium'
+                : 'text-gray-500 hover:text-gray-300'
+            }`}
+          >
+            Toolkit
+          </button>
         </div>
 
         {/* Conditional View Rendering */}
@@ -402,6 +413,8 @@ function App() {
           </div>
         ) : activeView === 'saved' ? (
           <SavedItemsView />
+        ) : activeView === 'toolkit' ? (
+          <ToolkitView />
         ) : (
           <ResultsView
             newItemIds={newItemIds}

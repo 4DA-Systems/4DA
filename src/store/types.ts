@@ -107,10 +107,17 @@ export interface ToastSlice {
 export interface UiSlice {
   showSettings: boolean;
   showSplash: boolean;
-  activeView: 'briefing' | 'results' | 'saved' | 'insights';
+  activeView: 'briefing' | 'results' | 'saved' | 'insights' | 'toolkit';
   setShowSettings: (show: boolean) => void;
   setShowSplash: (show: boolean) => void;
-  setActiveView: (view: 'briefing' | 'results' | 'saved' | 'insights') => void;
+  setActiveView: (view: 'briefing' | 'results' | 'saved' | 'insights' | 'toolkit') => void;
+}
+
+export interface ToolkitSlice {
+  recentTools: string[];
+  pinnedTools: string[];
+  addRecentTool: (toolId: string) => void;
+  togglePinnedTool: (toolId: string) => void;
 }
 
 export interface SettingsSlice {
@@ -310,4 +317,5 @@ export type AppStore =
   & SystemHealthSlice
   & DecisionsSlice
   & AgentSlice
-  & LicenseSlice;
+  & LicenseSlice
+  & ToolkitSlice;
