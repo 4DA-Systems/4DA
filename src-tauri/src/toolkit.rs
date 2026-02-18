@@ -399,55 +399,26 @@ pub async fn toolkit_http_request(request: HttpProbeRequest) -> Result<HttpProbe
 pub async fn toolkit_get_http_history(limit: Option<u32>) -> Result<Vec<HttpHistoryEntry>> {
     let limit = limit.unwrap_or(50).min(200);
     let db = get_database()?;
-    let conn = db.conn.lock();
 
-    let mut stmt = conn
-        .prepare(
-            "SELECT id, method, url, status, duration_ms, created_at
-             FROM toolkit_http_history
-             ORDER BY created_at DESC
-             LIMIT ?1",
-        )
-        .map_err(FourDaError::Db)?;
+    let rows = db.get_http_history(limit).map_err(FourDaError::Db)?;
 
-    let entries = stmt
-        .query_map([limit], |row| {
-            Ok(HttpHistoryEntry {
-                id: row.get(0)?,
-                method: row.get(1)?,
-                url: row.get(2)?,
-                status: row.get::<_, u32>(3).map(|v| v as u16)?,
-                duration_ms: row.get(4)?,
-                created_at: row.get(5)?,
-            })
+    Ok(rows
+        .into_iter()
+        .map(|r| HttpHistoryEntry {
+            id: r.id,
+            method: r.method,
+            url: r.url,
+            status: r.status,
+            duration_ms: r.duration_ms,
+            created_at: r.created_at,
         })
-        .map_err(FourDaError::Db)?
-        .collect::<std::result::Result<Vec<_>, _>>()
-        .map_err(FourDaError::Db)?;
-
-    Ok(entries)
+        .collect())
 }
 
 /// Persist an HTTP request in the history table.
 fn save_http_history(method: &str, url: &str, status: u16, duration_ms: u64) -> Result<()> {
     let db = get_database()?;
-    let conn = db.conn.lock();
-
-    conn.execute(
-        "INSERT INTO toolkit_http_history (method, url, status, duration_ms)
-         VALUES (?1, ?2, ?3, ?4)",
-        rusqlite::params![method, url, status as u32, duration_ms],
-    )
-    .map_err(FourDaError::Db)?;
-
-    // Auto-prune to 200 entries
-    conn.execute(
-        "DELETE FROM toolkit_http_history WHERE id NOT IN (
-            SELECT id FROM toolkit_http_history ORDER BY created_at DESC LIMIT 200
-        )",
-        [],
-    )
-    .map_err(FourDaError::Db)?;
-
+    db.save_http_history(method, url, status, duration_ms)
+        .map_err(FourDaError::Db)?;
     Ok(())
 }

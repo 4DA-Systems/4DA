@@ -95,7 +95,7 @@ export default function PortScanner() {
     (p) =>
       String(p.port).includes(filterLower) ||
       p.process_name.toLowerCase().includes(filterLower) ||
-      p.address.toLowerCase().includes(filterLower)
+      p.address.toLowerCase().includes(filterLower),
   );
 
   const devCount = filtered.filter((p) => DEV_PORTS.has(p.port)).length;
