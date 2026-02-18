@@ -1,4 +1,4 @@
-import { useEffect, useCallback } from 'react';
+import { useEffect, useCallback, useRef } from 'react';
 import { useAppStore } from '../../store';
 import { useShallow } from 'zustand/react/shallow';
 import { RepoSelector } from './RepoSelector';
@@ -13,22 +13,38 @@ const TABS: { id: CommandDeckTab; label: string; key: string }[] = [
   { id: 'history', label: 'History', key: '3' },
 ];
 
+const GIT_REFRESH_INTERVAL = 5000; // Auto-refresh git status every 5s
+
 export function CommandDeck() {
   const {
     commandDeckOpen,
     commandDeckTab,
     gitStatus,
+    selectedRepoPath,
     toggleCommandDeck,
     setCommandDeckTab,
+    loadGitStatus,
   } = useAppStore(
     useShallow((s) => ({
       commandDeckOpen: s.commandDeckOpen,
       commandDeckTab: s.commandDeckTab,
       gitStatus: s.gitStatus,
+      selectedRepoPath: s.selectedRepoPath,
       toggleCommandDeck: s.toggleCommandDeck,
       setCommandDeckTab: s.setCommandDeckTab,
+      loadGitStatus: s.loadGitStatus,
     })),
   );
+
+  // Auto-refresh git status when deck is open and git tab is active
+  const intervalRef = useRef<ReturnType<typeof setInterval>>(undefined);
+  useEffect(() => {
+    if (commandDeckOpen && commandDeckTab === 'git' && selectedRepoPath) {
+      intervalRef.current = setInterval(loadGitStatus, GIT_REFRESH_INTERVAL);
+      return () => clearInterval(intervalRef.current);
+    }
+    clearInterval(intervalRef.current);
+  }, [commandDeckOpen, commandDeckTab, selectedRepoPath, loadGitStatus]);
 
   // Keyboard shortcuts within the deck
   const handleKeyDown = useCallback(
@@ -61,6 +77,10 @@ export function CommandDeck() {
   }, [handleKeyDown]);
 
   if (!commandDeckOpen) return null;
+
+  const totalChanges = gitStatus
+    ? gitStatus.staged.length + gitStatus.unstaged.length + gitStatus.untracked.length
+    : 0;
 
   return (
     <div
@@ -108,6 +128,11 @@ export function CommandDeck() {
               }`}
             >
               {tab.label}
+              {tab.id === 'git' && totalChanges > 0 && (
+                <span className="ml-1 px-1.5 py-0.5 bg-orange-500/20 text-orange-400 text-[10px] rounded-full">
+                  {totalChanges}
+                </span>
+              )}
               <span className="ml-1 text-[10px] text-gray-600">{tab.key}</span>
             </button>
           ))}

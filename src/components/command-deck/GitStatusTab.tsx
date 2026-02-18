@@ -1,3 +1,5 @@
+import { useState, useEffect } from 'react';
+import { invoke } from '@tauri-apps/api/core';
 import { useAppStore } from '../../store';
 import { useShallow } from 'zustand/react/shallow';
 import { ConfirmGate } from './ConfirmGate';
@@ -21,12 +23,12 @@ export function GitStatusTab() {
     suggestingCommit,
     confirmAction,
     setConfirmAction,
+    selectedRepoPath,
     stageFiles,
     unstageFiles,
     commitChanges,
     pushChanges,
     suggestCommitMessage,
-    loadGitStatus,
   } = useAppStore(
     useShallow((s) => ({
       gitStatus: s.gitStatus,
@@ -37,18 +39,33 @@ export function GitStatusTab() {
       suggestingCommit: s.suggestingCommit,
       confirmAction: s.confirmAction,
       setConfirmAction: s.setConfirmAction,
+      selectedRepoPath: s.selectedRepoPath,
       stageFiles: s.stageFiles,
       unstageFiles: s.unstageFiles,
       commitChanges: s.commitChanges,
       pushChanges: s.pushChanges,
       suggestCommitMessage: s.suggestCommitMessage,
-      loadGitStatus: s.loadGitStatus,
     })),
   );
 
-  if (gitStatusLoading) {
+  // Diff stat preview for staged changes
+  const [diffStat, setDiffStat] = useState<string | null>(null);
+  const [showDiff, setShowDiff] = useState(false);
+
+  useEffect(() => {
+    if (!selectedRepoPath || !gitStatus?.staged.length) {
+      setDiffStat(null);
+      return;
+    }
+    invoke<string>('git_deck_diff_stat', { repoPath: selectedRepoPath, staged: true })
+      .then((stat) => setDiffStat(stat.trim() || null))
+      .catch(() => setDiffStat(null));
+  }, [selectedRepoPath, gitStatus?.staged.length]);
+
+  if (gitStatusLoading && !gitStatus) {
     return (
       <div className="flex items-center justify-center py-8 text-gray-500 text-sm">
+        <div className="w-4 h-4 border-2 border-gray-600 border-t-gray-300 rounded-full animate-spin mr-2" />
         Loading git status...
       </div>
     );
@@ -56,8 +73,9 @@ export function GitStatusTab() {
 
   if (!gitStatus) {
     return (
-      <div className="flex items-center justify-center py-8 text-gray-500 text-sm">
-        Select a repository to view status
+      <div className="flex flex-col items-center justify-center py-8 gap-2">
+        <span className="text-gray-500 text-sm">Select a repository to begin</span>
+        <span className="text-gray-600 text-xs">ACE-discovered repos appear in the selector above</span>
       </div>
     );
   }
@@ -66,6 +84,10 @@ export function GitStatusTab() {
   const hasUnstaged = gitStatus.unstaged.length > 0;
   const hasUntracked = gitStatus.untracked.length > 0;
   const isClean = !hasStaged && !hasUnstaged && !hasUntracked;
+  const allUnstagedPaths = [
+    ...gitStatus.unstaged.map((f) => f.path),
+    ...gitStatus.untracked,
+  ];
 
   return (
     <div className="flex flex-col gap-3 overflow-y-auto max-h-[calc(50vh-120px)]">
@@ -77,19 +99,34 @@ export function GitStatusTab() {
       )}
 
       {isClean && (
-        <div className="text-center py-4 text-gray-500 text-sm">
-          Working tree clean
+        <div className="flex flex-col items-center py-6 gap-1">
+          <span className="text-green-500 text-lg">&#10003;</span>
+          <span className="text-gray-400 text-sm">Working tree clean</span>
+          <span className="text-gray-600 text-xs">Nothing to commit</span>
+        </div>
+      )}
+
+      {/* Stage All bar (when there are unstaged changes) */}
+      {allUnstagedPaths.length > 0 && (
+        <div className="flex items-center justify-between px-2 py-1.5 bg-bg-tertiary/50 rounded">
+          <span className="text-xs text-gray-400">
+            {allUnstagedPaths.length} unstaged change{allUnstagedPaths.length > 1 ? 's' : ''}
+          </span>
+          <button
+            onClick={() => stageFiles(allUnstagedPaths)}
+            className="px-2 py-0.5 text-[10px] font-medium text-white bg-bg-tertiary border border-border rounded hover:border-gray-500 transition-colors"
+          >
+            Stage All
+          </button>
         </div>
       )}
 
       {/* Staged files */}
       {hasStaged && (
         <div>
-          <div className="flex items-center justify-between mb-1">
-            <h4 className="text-xs font-medium text-green-400 uppercase tracking-wider">
-              Staged ({gitStatus.staged.length})
-            </h4>
-          </div>
+          <h4 className="text-xs font-medium text-green-400 uppercase tracking-wider mb-1">
+            Staged ({gitStatus.staged.length})
+          </h4>
           <div className="space-y-0.5">
             {gitStatus.staged.map((f) => (
               <button
@@ -110,17 +147,9 @@ export function GitStatusTab() {
       {/* Unstaged files */}
       {hasUnstaged && (
         <div>
-          <div className="flex items-center justify-between mb-1">
-            <h4 className="text-xs font-medium text-orange-400 uppercase tracking-wider">
-              Modified ({gitStatus.unstaged.length})
-            </h4>
-            <button
-              onClick={() => stageFiles(gitStatus.unstaged.map((f) => f.path))}
-              className="text-[10px] text-gray-500 hover:text-white transition-colors"
-            >
-              Stage All
-            </button>
-          </div>
+          <h4 className="text-xs font-medium text-orange-400 uppercase tracking-wider mb-1">
+            Modified ({gitStatus.unstaged.length})
+          </h4>
           <div className="space-y-0.5">
             {gitStatus.unstaged.map((f) => (
               <button
@@ -141,17 +170,9 @@ export function GitStatusTab() {
       {/* Untracked files */}
       {hasUntracked && (
         <div>
-          <div className="flex items-center justify-between mb-1">
-            <h4 className="text-xs font-medium text-gray-500 uppercase tracking-wider">
-              Untracked ({gitStatus.untracked.length})
-            </h4>
-            <button
-              onClick={() => stageFiles(gitStatus.untracked)}
-              className="text-[10px] text-gray-500 hover:text-white transition-colors"
-            >
-              Stage All
-            </button>
-          </div>
+          <h4 className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">
+            Untracked ({gitStatus.untracked.length})
+          </h4>
           <div className="space-y-0.5">
             {gitStatus.untracked.map((path) => (
               <button
@@ -172,19 +193,35 @@ export function GitStatusTab() {
       {/* Commit Area */}
       {hasStaged && (
         <div className="border-t border-border pt-3 space-y-2">
-          <div className="flex items-center gap-2">
-            <textarea
-              value={commitMessage}
-              onChange={(e) => setCommitMessage(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && e.ctrlKey && commitMessage.trim()) {
-                  setConfirmAction({ type: 'commit' });
-                }
-              }}
-              placeholder="Commit message..."
-              className="flex-1 bg-bg-tertiary border border-border rounded px-3 py-2 text-sm text-white placeholder-gray-600 resize-none h-16 focus:outline-none focus:border-gray-500 font-mono"
-            />
-          </div>
+          {/* Diff stat preview */}
+          {diffStat && (
+            <div>
+              <button
+                onClick={() => setShowDiff(!showDiff)}
+                className="flex items-center gap-1 text-[10px] text-gray-500 hover:text-gray-300 transition-colors mb-1"
+              >
+                <span className={`transition-transform ${showDiff ? 'rotate-90' : ''}`}>&#9654;</span>
+                Diff summary
+              </button>
+              {showDiff && (
+                <pre className="text-[11px] text-gray-400 font-mono bg-bg-primary border border-border rounded p-2 overflow-x-auto max-h-24">
+                  {diffStat}
+                </pre>
+              )}
+            </div>
+          )}
+
+          <textarea
+            value={commitMessage}
+            onChange={(e) => setCommitMessage(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && e.ctrlKey && commitMessage.trim()) {
+                setConfirmAction({ type: 'commit' });
+              }
+            }}
+            placeholder="Commit message..."
+            className="w-full bg-bg-tertiary border border-border rounded px-3 py-2 text-sm text-white placeholder-gray-600 resize-none h-16 focus:outline-none focus:border-gray-500 font-mono"
+          />
           <div className="flex items-center gap-2">
             <button
               onClick={suggestCommitMessage}
@@ -197,6 +234,7 @@ export function GitStatusTab() {
               <span className="text-[10px] text-gray-600">via {suggestedCommitMessage.model}</span>
             )}
             <div className="flex-1" />
+            <span className="text-[10px] text-gray-600">Ctrl+Enter to commit</span>
             <button
               onClick={() => setConfirmAction({ type: 'commit' })}
               disabled={!commitMessage.trim()}
@@ -221,7 +259,7 @@ export function GitStatusTab() {
         <div className="border-t border-border pt-3">
           {confirmAction?.type === 'push' ? (
             <ConfirmGate
-              message={`Push ${gitStatus.ahead} commit(s) to origin?`}
+              message={`Push ${gitStatus.ahead} commit(s) to origin/${gitStatus.branch}?`}
               onConfirm={pushChanges}
               onCancel={() => setConfirmAction(null)}
             />
@@ -232,18 +270,11 @@ export function GitStatusTab() {
             >
               <span className="text-white">Push</span>
               <span className="text-xs text-[#D4AF37]">{gitStatus.ahead} ahead</span>
+              <span className="text-[10px] text-gray-600 ml-auto">origin/{gitStatus.branch}</span>
             </button>
           )}
         </div>
       )}
-
-      {/* Refresh */}
-      <button
-        onClick={loadGitStatus}
-        className="text-[10px] text-gray-600 hover:text-gray-400 transition-colors self-center"
-      >
-        Refresh
-      </button>
     </div>
   );
 }

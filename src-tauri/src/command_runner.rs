@@ -31,6 +31,7 @@ pub struct CommandHistoryEntry {
 const MAX_STDOUT: usize = 50_000; // 50KB
 const MAX_STDERR: usize = 10_000; // 10KB
 const MAX_HISTORY: u32 = 200;
+const TIMEOUT_SECS: u64 = 30;
 
 /// Patterns that are blocked for safety.
 const BLOCKED_PATTERNS: &[&str] = &[
@@ -81,23 +82,59 @@ pub async fn run_shell_command(
         let start = Instant::now();
 
         #[cfg(target_os = "windows")]
-        let result = std::process::Command::new("cmd")
+        let child = std::process::Command::new("cmd")
             .args(["/C", &command_clone])
             .current_dir(&work_dir)
-            .output();
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped())
+            .spawn();
 
         #[cfg(not(target_os = "windows"))]
-        let result = std::process::Command::new("sh")
+        let child = std::process::Command::new("sh")
             .args(["-c", &command_clone])
             .current_dir(&work_dir)
-            .output();
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped())
+            .spawn();
+
+        let mut child = child.map_err(|e| {
+            FourDaError::Internal(format!("Failed to execute command: {}", e))
+        })?;
+
+        let deadline = start + std::time::Duration::from_secs(TIMEOUT_SECS);
+
+        // Poll try_wait until process exits or timeout
+        let status = loop {
+            match child.try_wait() {
+                Ok(Some(status)) => break Some(status),
+                Ok(None) => {
+                    if Instant::now() >= deadline {
+                        break None; // timed out
+                    }
+                    std::thread::sleep(std::time::Duration::from_millis(50));
+                }
+                Err(e) => {
+                    return Err(FourDaError::Internal(format!(
+                        "Failed waiting on command: {}", e
+                    )));
+                }
+            }
+        };
 
         let duration_ms = start.elapsed().as_millis() as u64;
 
-        match result {
-            Ok(out) => {
-                let mut stdout = String::from_utf8_lossy(&out.stdout).to_string();
-                let mut stderr = String::from_utf8_lossy(&out.stderr).to_string();
+        match status {
+            Some(exit_status) => {
+                let mut stdout = String::new();
+                let mut stderr = String::new();
+                if let Some(mut out) = child.stdout.take() {
+                    use std::io::Read;
+                    let _ = out.read_to_string(&mut stdout);
+                }
+                if let Some(mut err) = child.stderr.take() {
+                    use std::io::Read;
+                    let _ = err.read_to_string(&mut stderr);
+                }
 
                 if stdout.len() > MAX_STDOUT {
                     stdout.truncate(MAX_STDOUT);
@@ -111,14 +148,22 @@ pub async fn run_shell_command(
                 Ok(crate::git_deck::CommandOutput {
                     stdout,
                     stderr,
-                    exit_code: out.status.code().unwrap_or(-1),
+                    exit_code: exit_status.code().unwrap_or(-1),
                     duration_ms,
                 })
             }
-            Err(e) => Err(FourDaError::Internal(format!(
-                "Failed to execute command: {}",
-                e
-            ))),
+            None => {
+                // Timeout — kill the process
+                let _ = child.kill();
+                let _ = child.wait();
+                warn!(target: "4da::cmd_runner", timeout_secs = TIMEOUT_SECS, "Command timed out, killed");
+                Ok(crate::git_deck::CommandOutput {
+                    stdout: String::new(),
+                    stderr: format!("Command timed out after {}s and was killed", TIMEOUT_SECS),
+                    exit_code: -1,
+                    duration_ms,
+                })
+            }
         }
     })
     .await
