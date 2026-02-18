@@ -327,7 +327,7 @@ impl Database {
             .query_row("SELECT version FROM schema_version", [], |row| row.get(0))
             .unwrap_or(1);
 
-        const TARGET_VERSION: i64 = 10;
+        const TARGET_VERSION: i64 = 11;
         if current_version < TARGET_VERSION {
             // Drop the conn lock briefly to allow backup (needs filesystem access)
             drop(conn);
@@ -484,6 +484,35 @@ impl Database {
                         CREATE INDEX IF NOT EXISTS idx_agent_memory_subject ON agent_memory(subject);
                         CREATE INDEX IF NOT EXISTS idx_agent_memory_session ON agent_memory(session_id);
                         CREATE INDEX IF NOT EXISTS idx_agent_memory_expires ON agent_memory(expires_at);",
+                    )
+                })?;
+            }
+
+            // Phase 11 migration: Command Deck tables
+            if current_version < 11 {
+                Self::run_versioned_migration(&conn, 10, 11, "Phase 11: command deck", |c| {
+                    c.execute_batch(
+                        "CREATE TABLE IF NOT EXISTS command_history (
+                            id INTEGER PRIMARY KEY AUTOINCREMENT,
+                            command TEXT NOT NULL,
+                            working_dir TEXT NOT NULL,
+                            exit_code INTEGER,
+                            success INTEGER NOT NULL DEFAULT 0,
+                            output_preview TEXT,
+                            created_at TEXT NOT NULL DEFAULT (datetime('now'))
+                        );
+                        CREATE INDEX IF NOT EXISTS idx_cmd_history_created ON command_history(created_at);
+
+                        CREATE TABLE IF NOT EXISTS git_commit_history (
+                            id INTEGER PRIMARY KEY AUTOINCREMENT,
+                            repo_path TEXT NOT NULL,
+                            commit_hash TEXT NOT NULL,
+                            message TEXT NOT NULL,
+                            branch TEXT NOT NULL,
+                            files_changed INTEGER NOT NULL DEFAULT 0,
+                            created_at TEXT NOT NULL DEFAULT (datetime('now'))
+                        );
+                        CREATE INDEX IF NOT EXISTS idx_git_commits_repo ON git_commit_history(repo_path);",
                     )
                 })?;
             }

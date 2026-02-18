@@ -318,4 +318,5 @@ export type AppStore =
   & DecisionsSlice
   & AgentSlice
   & LicenseSlice
-  & ToolkitSlice;
+  & ToolkitSlice
+  & import('./command-deck-slice').CommandDeckSlice;
