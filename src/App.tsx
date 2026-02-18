@@ -27,6 +27,7 @@ import { DecisionMemory } from './components/DecisionMemory';
 import { DelegationDashboard } from './components/DelegationDashboard';
 import { AgentMemoryPanel } from './components/AgentMemoryPanel';
 import { ToolkitView } from './components/toolkit/ToolkitView';
+import { CommandDeck } from './components/command-deck/CommandDeck';
 import {
   useSettings,
   useMonitoring,
@@ -471,6 +472,9 @@ function App() {
             </div>
           </div>
         )}
+
+        {/* Command Deck (slide-up panel) */}
+        <CommandDeck />
 
         {/* Toast Notifications */}
         <ToastContainer toasts={toasts} onDismiss={removeToast} />
