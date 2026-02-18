@@ -440,6 +440,8 @@ function App() {
             <kbd className="px-1 py-0.5 bg-bg-tertiary rounded text-gray-500">Esc</kbd> Close
             <span className="mx-1.5">·</span>
             <kbd className="px-1 py-0.5 bg-bg-tertiary rounded text-gray-500">?</kbd> Help
+            <span className="mx-1.5">·</span>
+            <kbd className="px-1 py-0.5 bg-bg-tertiary rounded text-gray-500">Ctrl+`</kbd> Deck
           </p>
         </footer>
 

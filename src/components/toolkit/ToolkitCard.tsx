@@ -15,6 +15,9 @@ const ICON_PATHS: Record<string, string> = {
   diff: 'M5 4h14M5 8h8M5 12h14M5 16h8M5 20h14',
   clock: 'M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20Zm0 4v6l4 2',
   database: 'M12 2C6.48 2 2 3.79 2 6v12c0 2.21 4.48 4 10 4s10-1.79 10-4V6c0-2.21-4.48-4-10-4Zm0 16c-4.42 0-8-1.34-8-3V6c0-1.66 3.58-3 8-3s8 1.34 8 3v9c0 1.66-3.58 3-8 3Z',
+  network: 'M5 12h14M12 5v14M5 5l14 14M19 5L5 19M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20Z',
+  terminal: 'M4 17l6-5-6-5M12 19h8',
+  globe: 'M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20ZM2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10A15.3 15.3 0 0 1 12 2Z',
 };
 
 export function ToolkitCard({ tool, pinned, onOpen, onTogglePin }: ToolkitCardProps) {

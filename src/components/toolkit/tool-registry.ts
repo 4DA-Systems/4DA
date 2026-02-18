@@ -75,6 +75,37 @@ export const TOOLS: ToolDescriptor[] = [
     component: lazy(() => import('./tools/MockDataGenerator')),
     keywords: ['mock', 'fake', 'data', 'uuid', 'name', 'email', 'generate'],
   },
+  // Phase 2 — System Integration
+  {
+    id: 'port-scanner',
+    name: 'Port Scanner',
+    description: 'Scan listening ports, identify processes, and kill rogue services',
+    icon: 'network',
+    category: 'system',
+    pro: false,
+    component: lazy(() => import('./tools/PortScanner')),
+    keywords: ['port', 'network', 'process', 'pid', 'listen', 'kill', 'netstat'],
+  },
+  {
+    id: 'env-snapshot',
+    name: 'Env Snapshot',
+    description: 'Capture git, runtime versions, and OS info — copy as markdown',
+    icon: 'terminal',
+    category: 'system',
+    pro: false,
+    component: lazy(() => import('./tools/EnvironmentSnapshot')),
+    keywords: ['env', 'environment', 'git', 'node', 'version', 'snapshot', 'system'],
+  },
+  {
+    id: 'http-probe',
+    name: 'HTTP Probe',
+    description: 'Send HTTP requests with full headers, body, and response inspection',
+    icon: 'globe',
+    category: 'system',
+    pro: true,
+    component: lazy(() => import('./tools/HttpProbe')),
+    keywords: ['http', 'api', 'request', 'rest', 'get', 'post', 'curl', 'fetch'],
+  },
 ];
 
 export function getToolById(id: string): ToolDescriptor | undefined {
