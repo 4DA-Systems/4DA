@@ -102,6 +102,9 @@ mod tts;
 mod void_commands;
 mod void_engine;
 
+mod command_runner;
+mod git_deck;
+
 use source_fetching::fill_cache_background;
 
 // ============================================================================
@@ -316,7 +319,20 @@ pub fn run() {
             agent_brief::generate_agent_brief,
             // Delegation Scoring
             delegation::get_delegation_score,
-            delegation::get_all_delegation_scores
+            delegation::get_all_delegation_scores,
+            // Command Deck - Git Operations
+            git_deck::git_deck_status,
+            git_deck::git_deck_stage,
+            git_deck::git_deck_unstage,
+            git_deck::git_deck_commit,
+            git_deck::git_deck_push,
+            git_deck::git_deck_diff_stat,
+            git_deck::git_deck_log,
+            git_deck::git_deck_suggest_commit,
+            git_deck::git_deck_list_repos,
+            // Command Deck - Shell Runner
+            command_runner::run_shell_command,
+            command_runner::get_command_history
         ])
         .setup(|app| {
             // Set up system tray (non-fatal: app works without tray)
