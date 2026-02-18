@@ -93,6 +93,16 @@ function getDefaultDbPath(): string {
   return path.resolve(process.cwd(), "data", "4da.db");
 }
 
+// =============================================================================
+// Database Validation
+// =============================================================================
+
+export interface DatabaseValidationResult {
+  valid: boolean;
+  error?: string;
+  tables?: string[];
+}
+
 /**
  * 4DA Database accessor
  */
@@ -118,6 +128,71 @@ export class FourDADatabase {
   }
 
   /**
+   * Validate that a database file exists, is readable, and passes integrity checks.
+   *
+   * Use this before accepting tool calls to ensure the database is in a good state.
+   *
+   * @param dbPath - Path to the database file. If omitted, uses the default resolution.
+   * @returns Validation result with table list on success, or error details on failure.
+   */
+  static validateDatabase(dbPath?: string): DatabaseValidationResult {
+    const resolvedPath = dbPath || getDefaultDbPath();
+    const absolutePath = path.isAbsolute(resolvedPath)
+      ? resolvedPath
+      : path.resolve(process.cwd(), resolvedPath);
+
+    // Check if file exists and is readable
+    if (!fs.existsSync(absolutePath)) {
+      return {
+        valid: false,
+        error: `Database file not found at ${absolutePath}. `
+          + "Run 4DA at least once to create the database, or set FOURDA_DB_PATH "
+          + "to the correct location.",
+      };
+    }
+
+    // Try to open and run integrity check
+    let testDb: Database.Database | null = null;
+    try {
+      testDb = new Database(absolutePath, { readonly: true });
+
+      // Run integrity check
+      const integrityResult = testDb.pragma("integrity_check") as { integrity_check: string }[];
+      const integrityStatus = integrityResult[0]?.integrity_check;
+
+      if (integrityStatus !== "ok") {
+        return {
+          valid: false,
+          error: `Database integrity check failed: ${integrityStatus}. `
+            + "The database file may be corrupt. Try deleting data/4da.db and restarting 4DA.",
+        };
+      }
+
+      // List tables
+      const tables = testDb
+        .prepare("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")
+        .all() as { name: string }[];
+
+      return {
+        valid: true,
+        tables: tables.map((t) => t.name),
+      };
+    } catch (error) {
+      return {
+        valid: false,
+        error: `Failed to open database at ${absolutePath}: `
+          + (error instanceof Error ? error.message : String(error)),
+      };
+    } finally {
+      try {
+        testDb?.close();
+      } catch {
+        // Ignore close errors during validation
+      }
+    }
+  }
+
+  /**
    * Get the raw better-sqlite3 database instance for custom queries
    */
   getRawDb(): Database.Database {
@@ -129,6 +204,33 @@ export class FourDADatabase {
    */
   close(): void {
     this.db.close();
+  }
+
+  /**
+   * Execute a database operation with retry logic for SQLITE_BUSY / SQLITE_LOCKED.
+   *
+   * better-sqlite3 is synchronous, so contention with the Tauri backend (which
+   * also writes to the same WAL database) can occasionally surface as BUSY/LOCKED.
+   * A single retry after a short pause is sufficient in practice.
+   *
+   * @param fn - The synchronous database operation to execute.
+   * @param maxRetries - Maximum number of retries (default: 1).
+   */
+  queryWithRetry<T>(fn: () => T, maxRetries: number = 1): T {
+    try {
+      return fn();
+    } catch (error: unknown) {
+      const code = (error as { code?: string }).code;
+      if (maxRetries > 0 && (code === "SQLITE_BUSY" || code === "SQLITE_LOCKED")) {
+        // Busy-wait for 100ms then retry
+        const start = Date.now();
+        while (Date.now() - start < 100) {
+          /* busy wait */
+        }
+        return this.queryWithRetry(fn, maxRetries - 1);
+      }
+      throw error;
+    }
   }
 
   // ===========================================================================

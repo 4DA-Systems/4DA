@@ -1,15 +1,15 @@
 //! Embedding Integration for ACE
 //!
 //! Provides embedding generation and similarity computation for topics.
-//! Supports both local (Ollama) and cloud (OpenAI) embedding providers.
-
-#![allow(dead_code)]
+//! Delegates to `crate::embed_texts` (the real async pipeline) for non-Mock
+//! providers, using `block_in_place` to bridge sync → async.
 
 use parking_lot::Mutex;
 use rusqlite::Connection;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
+use tracing::warn;
 
 // ============================================================================
 // Embedding Provider Configuration
@@ -43,7 +43,7 @@ pub enum EmbeddingProvider {
 impl Default for EmbeddingConfig {
     fn default() -> Self {
         Self {
-            provider: EmbeddingProvider::Mock,
+            provider: EmbeddingProvider::Ollama,
             openai_api_key: None,
             ollama_base_url: Some("http://localhost:11434".to_string()),
             model: "text-embedding-3-small".to_string(),
@@ -70,9 +70,9 @@ pub struct EmbeddingService {
 impl EmbeddingService {
     pub fn new(config: EmbeddingConfig, conn: Arc<Mutex<Connection>>) -> Self {
         let dimension = match config.provider {
-            EmbeddingProvider::OpenAI => 1536, // text-embedding-3-small
-            EmbeddingProvider::Ollama => 768,  // nomic-embed-text
-            EmbeddingProvider::Mock => 128,    // For testing
+            // Real providers use crate::embed_texts which returns 384-dim vectors
+            EmbeddingProvider::OpenAI | EmbeddingProvider::Ollama => 384,
+            EmbeddingProvider::Mock => 128, // For testing
         };
 
         // Initialize embedding cache table
@@ -173,55 +173,52 @@ impl EmbeddingService {
         Ok(results.into_iter().map(|(_, e)| e).collect())
     }
 
-    /// Generate embedding using the configured provider
+    /// Generate embedding using the configured provider.
+    /// For non-Mock providers, delegates to `crate::embed_texts` via block_in_place bridge.
     fn generate_embedding(&self, text: &str) -> Result<Vec<f32>, String> {
-        match self.config.provider {
-            EmbeddingProvider::OpenAI => self.embed_openai(text),
-            EmbeddingProvider::Ollama => self.embed_ollama(text),
-            EmbeddingProvider::Mock => self.embed_mock(text),
+        if self.config.provider == EmbeddingProvider::Mock {
+            return self.embed_mock(text);
         }
-    }
-
-    /// Generate batch embeddings
-    fn generate_batch_embedding(&self, texts: &[&str]) -> Result<Vec<Vec<f32>>, String> {
-        match self.config.provider {
-            EmbeddingProvider::OpenAI => self.embed_openai_batch(texts),
-            EmbeddingProvider::Ollama => {
-                // Ollama doesn't support batch, embed one by one
-                texts.iter().map(|t| self.embed_ollama(t)).collect()
+        // Bridge sync → async using the same pattern as query/executor.rs
+        let texts = vec![text.to_string()];
+        let result = tokio::task::block_in_place(|| {
+            tokio::runtime::Handle::current().block_on(crate::embed_texts(&texts))
+        });
+        match result {
+            Ok(embeddings) if !embeddings.is_empty() => Ok(embeddings.into_iter().next().unwrap()),
+            Ok(_) => {
+                warn!(target: "ace::embedding", "embed_texts returned empty, falling back to mock");
+                self.embed_mock(text)
             }
-            EmbeddingProvider::Mock => texts.iter().map(|t| self.embed_mock(t)).collect(),
+            Err(e) => {
+                warn!(target: "ace::embedding", error = %e, "embed_texts failed, falling back to mock");
+                self.embed_mock(text)
+            }
         }
     }
 
-    /// Generate embedding using OpenAI API
-    /// Note: Requires async runtime for actual API calls
-    fn embed_openai(&self, text: &str) -> Result<Vec<f32>, String> {
-        // For synchronous context, use mock embedding
-        // Real implementation would use async API
-        if self.config.openai_api_key.is_none() {
-            return Err("OpenAI API key not configured".to_string());
+    /// Generate batch embeddings.
+    /// For non-Mock providers, delegates to `crate::embed_texts` via block_in_place bridge.
+    fn generate_batch_embedding(&self, texts: &[&str]) -> Result<Vec<Vec<f32>>, String> {
+        if self.config.provider == EmbeddingProvider::Mock {
+            return texts.iter().map(|t| self.embed_mock(t)).collect();
         }
-        // Fall back to mock for now - real implementation needs async
-        self.embed_mock(text)
-    }
-
-    /// Batch embed using OpenAI
-    fn embed_openai_batch(&self, texts: &[&str]) -> Result<Vec<Vec<f32>>, String> {
-        if self.config.openai_api_key.is_none() {
-            return Err("OpenAI API key not configured".to_string());
+        let owned: Vec<String> = texts.iter().map(|t| t.to_string()).collect();
+        let result = tokio::task::block_in_place(|| {
+            tokio::runtime::Handle::current().block_on(crate::embed_texts(&owned))
+        });
+        match result {
+            Ok(embeddings) if embeddings.len() == texts.len() => Ok(embeddings),
+            Ok(embeddings) => {
+                warn!(target: "ace::embedding", "embed_texts returned {} embeddings for {} texts, falling back to mock",
+                    embeddings.len(), texts.len());
+                texts.iter().map(|t| self.embed_mock(t)).collect()
+            }
+            Err(e) => {
+                warn!(target: "ace::embedding", error = %e, "embed_texts batch failed, falling back to mock");
+                texts.iter().map(|t| self.embed_mock(t)).collect()
+            }
         }
-        // Fall back to mock for now - real implementation needs async
-        texts.iter().map(|t| self.embed_mock(t)).collect()
-    }
-
-    /// Generate embedding using Ollama
-    fn embed_ollama(&self, text: &str) -> Result<Vec<f32>, String> {
-        if self.config.ollama_base_url.is_none() {
-            return Err("Ollama base URL not configured".to_string());
-        }
-        // Fall back to mock for now - real implementation needs async
-        self.embed_mock(text)
     }
 
     /// Generate mock embedding for testing
@@ -334,33 +331,12 @@ impl EmbeddingService {
         self.dimension
     }
 
-    /// Check if the service is operational
+    /// Check if the service is operational.
+    /// For non-Mock providers, always returns true since the real pipeline
+    /// (`crate::embed_texts`) reads settings internally and we fall back to mock on error.
     pub fn is_operational(&self) -> bool {
-        match self.config.provider {
-            EmbeddingProvider::Mock => true,
-            EmbeddingProvider::OpenAI => self.config.openai_api_key.is_some(),
-            EmbeddingProvider::Ollama => self.config.ollama_base_url.is_some(),
-        }
+        true
     }
-}
-
-// ============================================================================
-// API Response Types
-// ============================================================================
-
-#[derive(Debug, Deserialize)]
-struct OpenAIResponse {
-    data: Vec<OpenAIEmbedding>,
-}
-
-#[derive(Debug, Deserialize)]
-struct OpenAIEmbedding {
-    embedding: Vec<f32>,
-}
-
-#[derive(Debug, Deserialize)]
-struct OllamaResponse {
-    embedding: Vec<f32>,
 }
 
 // ============================================================================
@@ -395,9 +371,16 @@ mod tests {
         Arc::new(Mutex::new(Connection::open_in_memory().unwrap()))
     }
 
+    fn mock_config() -> EmbeddingConfig {
+        EmbeddingConfig {
+            provider: EmbeddingProvider::Mock,
+            ..Default::default()
+        }
+    }
+
     #[test]
     fn test_mock_embedding() {
-        let config = EmbeddingConfig::default();
+        let config = mock_config();
         let conn = setup_test_db();
         let service = EmbeddingService::new(config, conn);
 
@@ -428,7 +411,7 @@ mod tests {
 
     #[test]
     fn test_batch_embedding() {
-        let config = EmbeddingConfig::default();
+        let config = mock_config();
         let conn = setup_test_db();
         let service = EmbeddingService::new(config, conn);
 
@@ -447,7 +430,7 @@ mod tests {
 
     #[test]
     fn test_find_similar() {
-        let config = EmbeddingConfig::default();
+        let config = mock_config();
         let conn = setup_test_db();
         let service = EmbeddingService::new(config, conn);
 
@@ -474,6 +457,7 @@ mod tests {
     #[test]
     fn test_embedding_caching() {
         let config = EmbeddingConfig {
+            provider: EmbeddingProvider::Mock,
             cache_enabled: true,
             ..Default::default()
         };

@@ -56,7 +56,7 @@ import { getSlimToolList, getSchemaResources, hasToolSchema, getSchemaFilename }
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-import { createDatabase, FourDADatabase } from "./db.js";
+import { createDatabase, FourDADatabase, type DatabaseValidationResult } from "./db.js";
 
 // Core Tools
 import {
@@ -628,22 +628,38 @@ async function main() {
     return;
   }
 
+  // -------------------------------------------------------------------------
+  // Pre-flight: validate the database before accepting tool calls
+  // -------------------------------------------------------------------------
+  const dbPath = process.env.FOURDA_DB_PATH || undefined;
+  const validation: DatabaseValidationResult = FourDADatabase.validateDatabase(dbPath);
+
+  if (validation.valid) {
+    console.error(`[4DA] Database validated — ${validation.tables?.length ?? 0} tables found`);
+  } else {
+    // Log warning but do not abort — tools will surface errors naturally
+    console.error(`[4DA] Database validation warning: ${validation.error}`);
+  }
+
   // Default: stdio transport (existing behavior)
   const transport = new StdioServerTransport();
   await server.connect(transport);
 
   // Handle graceful shutdown
   process.on("SIGINT", () => {
+    console.error("[4DA] Received SIGINT — shutting down gracefully");
     if (db) db.close();
     process.exit(0);
   });
 
   process.on("SIGTERM", () => {
+    console.error("[4DA] Received SIGTERM — shutting down gracefully");
     if (db) db.close();
     process.exit(0);
   });
 
-  console.error("4DA MCP Server v3.3 (Intelligence Platform) started — 27 tools, stdio transport");
+  const toolCount = getSlimToolList().length;
+  console.error(`4DA MCP Server v3.3 (Intelligence Platform) started — ${toolCount} tools, stdio transport`);
   console.error("  Use --http for Streamable HTTP transport, --setup to configure editors");
 }
 

@@ -53,7 +53,7 @@ pub(crate) fn get_db_path() -> PathBuf {
 
 /// Register the sqlite-vec extension globally (idempotent).
 /// Single source of truth — all code needing sqlite-vec calls this.
-pub(crate) fn register_sqlite_vec_extension() {
+pub fn register_sqlite_vec_extension() {
     #[allow(clippy::missing_transmute_annotations)]
     unsafe {
         rusqlite::ffi::sqlite3_auto_extension(Some(std::mem::transmute(

@@ -1194,7 +1194,24 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 async function main() {
   const transport = new StdioServerTransport();
   await server.connect(transport);
-  console.error("MCP Memory Server running on stdio");
+
+  const toolCount = tools.length;
+  console.error(`MCP Memory Server v1.0 started — ${toolCount} tools, stdio transport`);
+  console.error(`  Database: ${DB_PATH}`);
+  console.error(`  Sessions: ${SESSIONS_DIR}`);
 }
 
 main().catch(console.error);
+
+// Handle graceful shutdown
+process.on("SIGINT", () => {
+  console.error("[Memory] Received SIGINT — shutting down gracefully");
+  db.close();
+  process.exit(0);
+});
+
+process.on("SIGTERM", () => {
+  console.error("[Memory] Received SIGTERM — shutting down gracefully");
+  db.close();
+  process.exit(0);
+});

@@ -212,7 +212,20 @@ impl ACE {
         let git_analyzer = GitAnalyzer::default();
         let watcher_persistence = WatcherStatePersistence::new(conn.clone()).ok();
 
-        let embedding_config = EmbeddingConfig::default();
+        // Determine embedding provider from user's LLM settings.
+        // Any non-Mock provider triggers the real embed_texts pipeline.
+        let embedding_provider = {
+            let settings = crate::get_settings_manager().lock();
+            let llm_provider = &settings.get().llm.provider;
+            match llm_provider.as_str() {
+                "openai" | "anthropic" | "ollama" => embedding::EmbeddingProvider::Ollama,
+                _ => embedding::EmbeddingProvider::Ollama,
+            }
+        };
+        let embedding_config = EmbeddingConfig {
+            provider: embedding_provider,
+            ..EmbeddingConfig::default()
+        };
         let embedding_service = EmbeddingService::new(embedding_config, conn.clone());
 
         let rate_limiter = InteractionRateLimiter::new(1000, 100, 60);

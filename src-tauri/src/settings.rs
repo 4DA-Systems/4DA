@@ -293,6 +293,51 @@ pub struct Settings {
     pub license: LicenseConfig,
 }
 
+impl Settings {
+    /// Validate settings values, clamping invalid ranges to safe defaults.
+    /// Logs warnings for any clamped values but never crashes.
+    pub fn validate(&mut self) {
+        // rerank.max_items_per_batch must be > 0
+        if self.rerank.max_items_per_batch == 0 {
+            tracing::warn!(target: "4da::settings", field = "rerank.max_items_per_batch", old = 0, new = 1, "Clamped invalid value");
+            self.rerank.max_items_per_batch = 1;
+        }
+
+        // rerank.min_embedding_score must be in 0.0..=1.0
+        if self.rerank.min_embedding_score < 0.0 || self.rerank.min_embedding_score > 1.0 {
+            let old = self.rerank.min_embedding_score;
+            self.rerank.min_embedding_score = old.clamp(0.0, 1.0);
+            tracing::warn!(target: "4da::settings", field = "rerank.min_embedding_score", old, new = self.rerank.min_embedding_score, "Clamped invalid value");
+        }
+
+        // embedding_threshold must be in 0.0..=1.0
+        if self.embedding_threshold < 0.0 || self.embedding_threshold > 1.0 {
+            let old = self.embedding_threshold;
+            self.embedding_threshold = old.clamp(0.0, 1.0);
+            tracing::warn!(target: "4da::settings", field = "embedding_threshold", old, new = self.embedding_threshold, "Clamped invalid value");
+        }
+
+        // monitoring.interval_minutes must be > 0
+        if self.monitoring.interval_minutes == 0 {
+            tracing::warn!(target: "4da::settings", field = "monitoring.interval_minutes", old = 0, new = 1, "Clamped invalid value");
+            self.monitoring.interval_minutes = 1;
+        }
+
+        // context_dirs paths must be non-empty strings
+        let before = self.context_dirs.len();
+        self.context_dirs.retain(|d| !d.trim().is_empty());
+        if self.context_dirs.len() < before {
+            tracing::warn!(target: "4da::settings", removed = before - self.context_dirs.len(), "Removed empty context_dirs entries");
+        }
+
+        // serendipity.budget_percent should be 0-100
+        if self.serendipity.budget_percent > 100 {
+            tracing::warn!(target: "4da::settings", field = "serendipity.budget_percent", old = self.serendipity.budget_percent, new = 100, "Clamped invalid value");
+            self.serendipity.budget_percent = 100;
+        }
+    }
+}
+
 impl Default for Settings {
     fn default() -> Self {
         Self {
@@ -376,6 +421,9 @@ impl SettingsManager {
         } else {
             UsageStats::default()
         };
+
+        // Validate settings, clamping any out-of-range values
+        settings.validate();
 
         Self {
             settings,

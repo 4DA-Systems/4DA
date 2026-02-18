@@ -14,7 +14,7 @@ export function ContextHandoff({ onStatus }: ContextHandoffProps) {
     try {
       const packet = await invoke<object>('generate_context_packet');
       const json = JSON.stringify(packet, null, 2);
-      await navigator.clipboard.writeText(json); // eslint-disable-line no-undef
+      await navigator.clipboard.writeText(json);  
       onStatus('Context packet copied to clipboard');
     } catch (e) {
       onStatus(`Export failed: ${e}`);

@@ -75,7 +75,7 @@ export const TOOL_COMPLEXITY: Record<string, TaskComplexity> = {
 // Configuration
 // =============================================================================
 
-import { readFileSync, existsSync } from "fs";
+import { readFileSync, existsSync, statSync } from "fs";
 import { join, dirname } from "path";
 
 /**
@@ -113,8 +113,19 @@ function findSettingsFile(): string | null {
   return null;
 }
 
+// =============================================================================
+// Settings Cache — re-read only when file mtime changes
+// =============================================================================
+
+let _cachedConfig: LLMConfig | null = null;
+let _cachedSettingsPath: string | null = null;
+let _cachedMtimeMs: number = 0;
+
 /**
- * Get LLM configuration from settings.json file
+ * Get LLM configuration from settings.json file.
+ *
+ * Uses a cached approach: the file is only re-read if its mtime has changed,
+ * avoiding unnecessary filesystem reads on every tool invocation.
  */
 export function getLLMConfig(
   _db?: { prepare: (sql: string) => { get: (...args: unknown[]) => unknown } }
@@ -134,11 +145,22 @@ export function getLLMConfig(
     };
   }
 
+  // Check if we can use the cached config
   try {
+    const currentMtimeMs = statSync(settingsPath).mtimeMs;
+
+    if (
+      _cachedConfig &&
+      _cachedSettingsPath === settingsPath &&
+      _cachedMtimeMs === currentMtimeMs
+    ) {
+      return _cachedConfig;
+    }
+
     const settings = JSON.parse(readFileSync(settingsPath, "utf-8"));
     const llm = settings.llm || {};
 
-    return {
+    const config: LLMConfig = {
       provider: llm.provider as LLMConfig["provider"],
       anthropic_api_key: llm.api_key || llm.anthropic_api_key,
       openai_api_key: llm.openai_api_key,
@@ -147,6 +169,13 @@ export function getLLMConfig(
       model_light: llm.model_light,
       model_heavy: llm.model_heavy,
     };
+
+    // Update cache
+    _cachedConfig = config;
+    _cachedSettingsPath = settingsPath;
+    _cachedMtimeMs = currentMtimeMs;
+
+    return config;
   } catch (error) {
     console.error("Failed to read settings.json:", error);
     return { provider: null };
@@ -197,10 +226,14 @@ function getModelForComplexity(config: LLMConfig, complexity: TaskComplexity): s
 
 /**
  * Synthesize insights using LLM
+ *
+ * Accepts an optional AbortSignal to allow timeout/cancellation of the
+ * underlying fetch calls.
  */
 export async function synthesize(
   config: LLMConfig,
-  request: SynthesisRequest
+  request: SynthesisRequest,
+  signal?: AbortSignal
 ): Promise<SynthesisResult> {
   if (!canSynthesize(config)) {
     throw new Error("LLM not configured - cannot synthesize");
@@ -213,13 +246,13 @@ export async function synthesize(
 
   switch (config.provider) {
     case "anthropic":
-      result = await synthesizeAnthropic(config, request);
+      result = await synthesizeAnthropic(config, request, signal);
       break;
     case "openai":
-      result = await synthesizeOpenAI(config, request);
+      result = await synthesizeOpenAI(config, request, signal);
       break;
     case "ollama":
-      result = await synthesizeOllama(config, request, complexity);
+      result = await synthesizeOllama(config, request, complexity, signal);
       break;
     default:
       throw new Error(`Unknown LLM provider: ${config.provider}`);
@@ -230,11 +263,43 @@ export async function synthesize(
 }
 
 /**
+ * Synthesize with a timeout wrapper.
+ *
+ * Wraps the LLM API call with an AbortController + configurable timeout.
+ * On timeout, throws a descriptive error so callers can fall back to
+ * data-only results.
+ *
+ * @param config  - LLM provider configuration
+ * @param request - Synthesis request (system prompt, user prompt, etc.)
+ * @param timeoutMs - Timeout in milliseconds (default: 30000)
+ */
+export async function synthesizeWithTimeout(
+  config: LLMConfig,
+  request: SynthesisRequest,
+  timeoutMs: number = 30000
+): Promise<SynthesisResult> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    return await synthesize(config, request, controller.signal);
+  } catch (error) {
+    if (error instanceof Error && error.name === "AbortError") {
+      throw new Error(`LLM timeout after ${timeoutMs / 1000}s`);
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+/**
  * Anthropic Claude synthesis
  */
 async function synthesizeAnthropic(
   config: LLMConfig,
-  request: SynthesisRequest
+  request: SynthesisRequest,
+  signal?: AbortSignal
 ): Promise<SynthesisResult> {
   const model = config.model || "claude-3-5-sonnet-20241022";
   const maxTokens = request.max_tokens || 1024;
@@ -252,6 +317,7 @@ async function synthesizeAnthropic(
       system: request.system,
       messages: [{ role: "user", content: request.prompt }],
     }),
+    signal,
   });
 
   if (!response.ok) {
@@ -276,7 +342,8 @@ async function synthesizeAnthropic(
  */
 async function synthesizeOpenAI(
   config: LLMConfig,
-  request: SynthesisRequest
+  request: SynthesisRequest,
+  signal?: AbortSignal
 ): Promise<SynthesisResult> {
   const model = config.model || "gpt-4o";
   const maxTokens = request.max_tokens || 1024;
@@ -295,6 +362,7 @@ async function synthesizeOpenAI(
         { role: "user", content: request.prompt },
       ],
     }),
+    signal,
   });
 
   if (!response.ok) {
@@ -320,7 +388,8 @@ async function synthesizeOpenAI(
 async function synthesizeOllama(
   config: LLMConfig,
   request: SynthesisRequest,
-  complexity: TaskComplexity
+  complexity: TaskComplexity,
+  signal?: AbortSignal
 ): Promise<SynthesisResult> {
   const model = getModelForComplexity(config, complexity);
   const baseUrl = config.ollama_url || "http://localhost:11434";
@@ -344,6 +413,7 @@ async function synthesizeOllama(
         top_p: 0.9,
       },
     }),
+    signal,
   });
 
   if (!response.ok) {

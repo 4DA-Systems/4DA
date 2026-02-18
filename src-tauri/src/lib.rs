@@ -17,7 +17,7 @@ pub(crate) use types::{GenericSourceItem, ANALYSIS_TIMEOUT_SECS};
 mod commands;
 mod embeddings;
 mod events;
-mod state;
+pub mod state;
 mod utils;
 
 // Re-export from embeddings
@@ -62,7 +62,7 @@ mod content_dna;
 mod content_quality;
 mod context_commands;
 mod context_engine;
-mod db;
+pub mod db;
 mod decisions;
 mod delegation;
 mod developer_dna;
@@ -89,7 +89,7 @@ mod reverse_relevance;
 mod scoring;
 pub(crate) mod scoring_config;
 mod semantic_diff;
-mod settings;
+pub mod settings;
 mod settings_commands;
 mod signal_chains;
 mod signals;

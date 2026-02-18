@@ -8,7 +8,7 @@ use chrono::{DateTime, Utc};
 use parking_lot::Mutex;
 use rusqlite::{params, Connection, OptionalExtension, Result as SqliteResult};
 use sha2::{Digest, Sha256};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tracing::info;
 
@@ -63,6 +63,7 @@ pub struct SimilarityResult {
 
 pub struct Database {
     conn: Arc<Mutex<Connection>>,
+    db_path: PathBuf,
 }
 
 impl Database {
@@ -106,12 +107,98 @@ impl Database {
 
         let db = Self {
             conn: Arc::new(Mutex::new(conn)),
+            db_path: db_path.to_path_buf(),
         };
 
         // Run migrations
         db.migrate()?;
 
         Ok(db)
+    }
+
+    /// Create a pre-migration backup of the database file.
+    /// Keeps only the last 2 backups to avoid disk bloat.
+    fn backup_before_migration(&self, current_version: i64) {
+        let backup_path = self
+            .db_path
+            .with_extension(format!("db.backup.v{}", current_version));
+        // Checkpoint WAL so the main db file is consistent for copy
+        if let Some(conn) = self.conn.try_lock() {
+            let _ = conn.execute_batch("PRAGMA wal_checkpoint(TRUNCATE)");
+        }
+        match std::fs::copy(&self.db_path, &backup_path) {
+            Ok(bytes) => {
+                info!(target: "4da::db", path = %backup_path.display(), bytes, "Pre-migration backup created")
+            }
+            Err(e) => {
+                tracing::warn!(target: "4da::db", error = %e, "Pre-migration backup failed (continuing anyway)")
+            }
+        }
+        // Prune old backups: keep only the 2 most recent
+        if let Some(parent) = self.db_path.parent() {
+            if let Ok(entries) = std::fs::read_dir(parent) {
+                let mut backups: Vec<PathBuf> = entries
+                    .filter_map(|e| e.ok())
+                    .map(|e| e.path())
+                    .filter(|p| p.to_string_lossy().contains(".db.backup.v"))
+                    .collect();
+                backups.sort();
+                if backups.len() > 2 {
+                    for old in &backups[..backups.len() - 2] {
+                        let _ = std::fs::remove_file(old);
+                        info!(target: "4da::db", path = %old.display(), "Pruned old backup");
+                    }
+                }
+            }
+        }
+    }
+
+    /// Run a migration step inside a transaction with history recording.
+    /// If the migration function fails, the transaction rolls back and schema_version is unchanged.
+    fn run_versioned_migration(
+        conn: &Connection,
+        from_version: i64,
+        to_version: i64,
+        name: &str,
+        migration_fn: impl FnOnce(&Connection) -> SqliteResult<()>,
+    ) -> SqliteResult<()> {
+        let start = std::time::Instant::now();
+        info!(target: "4da::db", "Running {} (schema version {} -> {})", name, from_version, to_version);
+
+        // Execute migration inside a transaction
+        let result = {
+            let tx = conn.unchecked_transaction()?;
+            let res = migration_fn(&tx).and_then(|_| {
+                tx.execute(
+                    "UPDATE schema_version SET version = ?1",
+                    params![to_version],
+                )?;
+                Ok(())
+            });
+            match res {
+                Ok(()) => tx.commit(),
+                Err(e) => Err(e), // tx dropped -> auto-rollback
+            }
+        };
+
+        let duration_ms = start.elapsed().as_millis() as i64;
+
+        // Record in migration_history (non-fatal if this fails)
+        let _ = conn.execute(
+            "INSERT INTO migration_history (from_version, to_version, executed_at, duration_ms, success) VALUES (?1, ?2, datetime('now'), ?3, ?4)",
+            params![from_version, to_version, duration_ms, result.is_ok() as i32],
+        );
+
+        match &result {
+            Ok(()) => {
+                info!(target: "4da::db", name, to_version, duration_ms, "{} completed in {}ms", name, duration_ms)
+            }
+            Err(e) => {
+                tracing::error!(target: "4da::db", name, to_version, error = %e, "{} FAILED — rolled back", name)
+            }
+        }
+
+        result
     }
 
     /// Run database migrations
@@ -178,6 +265,16 @@ impl Database {
             CREATE TABLE IF NOT EXISTS schema_version (
                 version INTEGER PRIMARY KEY
             );
+
+            -- Migration history for debugging
+            CREATE TABLE IF NOT EXISTS migration_history (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                from_version INTEGER NOT NULL,
+                to_version INTEGER NOT NULL,
+                executed_at TEXT NOT NULL DEFAULT (datetime('now')),
+                duration_ms INTEGER NOT NULL DEFAULT 0,
+                success INTEGER NOT NULL DEFAULT 0
+            );
         ",
         )?;
 
@@ -225,190 +322,174 @@ impl Database {
         ",
         )?;
 
-        // Phase 1 migration: Multi-format file support
-        let current_version: i64 = conn
+        // Determine current schema version for backup decision
+        let mut current_version: i64 = conn
             .query_row("SELECT version FROM schema_version", [], |row| row.get(0))
             .unwrap_or(1);
 
-        if current_version < 2 {
-            info!(target: "4da::db", "Running Phase 1 migration (schema version 2)");
-            Self::migrate_to_phase_1(&conn)?;
-            conn.execute("UPDATE schema_version SET version = 2", [])?;
-            info!(target: "4da::db", "Phase 1 migration completed");
-        }
+        const TARGET_VERSION: i64 = 10;
+        if current_version < TARGET_VERSION {
+            // Drop the conn lock briefly to allow backup (needs filesystem access)
+            drop(conn);
+            self.backup_before_migration(current_version);
+            // Re-acquire the lock
+            let conn = self.conn.lock();
 
-        // Phase 2 migration: Natural Language Query System
-        let current_version: i64 = conn
-            .query_row("SELECT version FROM schema_version", [], |row| row.get(0))
-            .unwrap_or(2);
+            // Re-read version after re-acquiring lock
+            current_version = conn
+                .query_row("SELECT version FROM schema_version", [], |row| row.get(0))
+                .unwrap_or(1);
 
-        if current_version < 3 {
-            info!(target: "4da::db", "Running Phase 2 migration (schema version 3)");
-            Self::migrate_to_phase_2(&conn)?;
-            conn.execute("UPDATE schema_version SET version = 3", [])?;
-            info!(target: "4da::db", "Phase 2 migration completed");
-        }
-
-        // Phase 3 migration: Embedding status tracking for retry
-        let current_version: i64 = conn
-            .query_row("SELECT version FROM schema_version", [], |row| row.get(0))
-            .unwrap_or(3);
-
-        if current_version < 4 {
-            info!(target: "4da::db", "Running Phase 3 migration (schema version 4)");
-            Self::migrate_to_phase_3(&conn)?;
-            conn.execute("UPDATE schema_version SET version = 4", [])?;
-            info!(target: "4da::db", "Phase 3 migration completed");
-        }
-
-        // Phase 5 migration: Innovation features infrastructure
-        let current_version: i64 = conn
-            .query_row("SELECT version FROM schema_version", [], |row| row.get(0))
-            .unwrap_or(4);
-
-        if current_version < 5 {
-            info!(target: "4da::db", "Running Phase 5 migration (schema version 5)");
-            Self::migrate_to_phase_5(&conn)?;
-            conn.execute("UPDATE schema_version SET version = 5", [])?;
-            info!(target: "4da::db", "Phase 5 migration completed");
-        }
-
-        // Phase 6 migration: Source health table (moved from hot-path DDL)
-        let current_version: i64 = conn
-            .query_row("SELECT version FROM schema_version", [], |row| row.get(0))
-            .unwrap_or(5);
-
-        if current_version < 6 {
-            info!(target: "4da::db", "Running Phase 6 migration (schema version 6)");
-            conn.execute_batch(
-                "CREATE TABLE IF NOT EXISTS source_health (
-                    source_type TEXT PRIMARY KEY,
-                    status TEXT NOT NULL DEFAULT 'unknown',
-                    last_success TEXT,
-                    last_error TEXT,
-                    error_count INTEGER NOT NULL DEFAULT 0,
-                    consecutive_failures INTEGER NOT NULL DEFAULT 0,
-                    items_fetched INTEGER NOT NULL DEFAULT 0,
-                    response_time_ms INTEGER NOT NULL DEFAULT 0,
-                    checked_at TEXT NOT NULL DEFAULT (datetime('now'))
-                )",
-            )?;
-            conn.execute("UPDATE schema_version SET version = 6", [])?;
-            info!(target: "4da::db", "Phase 6 migration completed — source_health table");
-        }
-
-        // Phase 7 migration: AI summary column on source_items
-        let current_version: i64 = conn
-            .query_row("SELECT version FROM schema_version", [], |row| row.get(0))
-            .unwrap_or(6);
-
-        if current_version < 7 {
-            info!(target: "4da::db", "Running Phase 7 migration (schema version 7)");
-            let has_summary: bool = conn
-                .query_row(
-                    "SELECT COUNT(*) FROM pragma_table_info('source_items') WHERE name='summary'",
-                    [],
-                    |row| row.get::<_, i64>(0).map(|count| count > 0),
-                )
-                .unwrap_or(false);
-
-            if !has_summary {
-                conn.execute(
-                    "ALTER TABLE source_items ADD COLUMN summary TEXT DEFAULT NULL",
-                    [],
-                )?;
-                info!(target: "4da::db", "Added summary column to source_items");
+            // Phase 1 migration: Multi-format file support
+            if current_version < 2 {
+                Self::run_versioned_migration(&conn, 1, 2, "Phase 1: multi-format files", |c| {
+                    Self::migrate_to_phase_1(c)
+                })?;
+                current_version = 2;
             }
-            conn.execute("UPDATE schema_version SET version = 7", [])?;
-            info!(target: "4da::db", "Phase 7 migration completed — summary column");
-        }
 
-        // Phase 8 migration: Persistent briefings table
-        let current_version: i64 = conn
-            .query_row("SELECT version FROM schema_version", [], |row| row.get(0))
-            .unwrap_or(7);
-
-        if current_version < 8 {
-            info!(target: "4da::db", "Running Phase 8 migration (schema version 8)");
-            conn.execute_batch(
-                "CREATE TABLE IF NOT EXISTS briefings (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    content TEXT NOT NULL,
-                    model TEXT,
-                    item_count INTEGER NOT NULL DEFAULT 0,
-                    tokens_used INTEGER,
-                    latency_ms INTEGER,
-                    created_at TEXT NOT NULL DEFAULT (datetime('now'))
-                )",
-            )?;
-            conn.execute("UPDATE schema_version SET version = 8", [])?;
-            info!(target: "4da::db", "Phase 8 migration completed — briefings table");
-        }
-
-        // Phase 9 migration: Decision Intelligence Layer
-        let current_version: i64 = conn
-            .query_row("SELECT version FROM schema_version", [], |row| row.get(0))
-            .unwrap_or(8);
-
-        if current_version < 9 {
-            info!(target: "4da::db", "Running Phase 9 migration (schema version 9)");
-            conn.execute_batch(
-                "CREATE TABLE IF NOT EXISTS developer_decisions (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    decision_type TEXT NOT NULL,
-                    subject TEXT NOT NULL,
-                    decision TEXT NOT NULL,
-                    rationale TEXT,
-                    alternatives_rejected TEXT DEFAULT '[]',
-                    context_tags TEXT DEFAULT '[]',
-                    confidence REAL NOT NULL DEFAULT 0.8,
-                    status TEXT NOT NULL DEFAULT 'active',
-                    superseded_by INTEGER,
-                    created_at TEXT NOT NULL DEFAULT (datetime('now')),
-                    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
-                    FOREIGN KEY (superseded_by) REFERENCES developer_decisions(id)
-                );
-                CREATE INDEX IF NOT EXISTS idx_decisions_type ON developer_decisions(decision_type);
-                CREATE INDEX IF NOT EXISTS idx_decisions_subject ON developer_decisions(subject);
-                CREATE INDEX IF NOT EXISTS idx_decisions_status ON developer_decisions(status);",
-            )?;
-            conn.execute("UPDATE schema_version SET version = 9", [])?;
-            info!(target: "4da::db", "Phase 9 migration completed — developer_decisions table");
-
-            // Auto-seed decisions from tech_stack on first run
-            if let Err(e) = crate::decisions::seed_decisions_from_profile(&conn) {
-                tracing::warn!(target: "4da::db", error = %e, "Auto-seed decisions failed (non-fatal)");
+            // Phase 2 migration: Natural Language Query System
+            if current_version < 3 {
+                Self::run_versioned_migration(&conn, 2, 3, "Phase 2: NL query system", |c| {
+                    Self::migrate_to_phase_2(c)
+                })?;
+                current_version = 3;
             }
-        }
 
-        // Phase 10 migration: Agent Context Provider
-        let current_version: i64 = conn
-            .query_row("SELECT version FROM schema_version", [], |row| row.get(0))
-            .unwrap_or(9);
+            // Phase 3 migration: Embedding status tracking for retry
+            if current_version < 4 {
+                Self::run_versioned_migration(&conn, 3, 4, "Phase 3: embedding retry", |c| {
+                    Self::migrate_to_phase_3(c)
+                })?;
+                current_version = 4;
+            }
 
-        if current_version < 10 {
-            info!(target: "4da::db", "Running Phase 10 migration (schema version 10)");
-            conn.execute_batch(
-                "CREATE TABLE IF NOT EXISTS agent_memory (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    session_id TEXT NOT NULL,
-                    agent_type TEXT NOT NULL,
-                    memory_type TEXT NOT NULL,
-                    subject TEXT NOT NULL,
-                    content TEXT NOT NULL,
-                    context_tags TEXT DEFAULT '[]',
-                    created_at TEXT NOT NULL DEFAULT (datetime('now')),
-                    expires_at TEXT,
-                    promoted_to_decision_id INTEGER,
-                    FOREIGN KEY (promoted_to_decision_id) REFERENCES developer_decisions(id)
-                );
-                CREATE INDEX IF NOT EXISTS idx_agent_memory_type ON agent_memory(memory_type);
-                CREATE INDEX IF NOT EXISTS idx_agent_memory_subject ON agent_memory(subject);
-                CREATE INDEX IF NOT EXISTS idx_agent_memory_session ON agent_memory(session_id);
-                CREATE INDEX IF NOT EXISTS idx_agent_memory_expires ON agent_memory(expires_at);",
-            )?;
-            conn.execute("UPDATE schema_version SET version = 10", [])?;
-            info!(target: "4da::db", "Phase 10 migration completed — agent_memory table");
+            // Phase 5 migration: Innovation features infrastructure
+            if current_version < 5 {
+                Self::run_versioned_migration(&conn, 4, 5, "Phase 5: innovation infra", |c| {
+                    Self::migrate_to_phase_5(c)
+                })?;
+                current_version = 5;
+            }
+
+            // Phase 6 migration: Source health table
+            if current_version < 6 {
+                Self::run_versioned_migration(&conn, 5, 6, "Phase 6: source health", |c| {
+                    c.execute_batch(
+                        "CREATE TABLE IF NOT EXISTS source_health (
+                            source_type TEXT PRIMARY KEY,
+                            status TEXT NOT NULL DEFAULT 'unknown',
+                            last_success TEXT,
+                            last_error TEXT,
+                            error_count INTEGER NOT NULL DEFAULT 0,
+                            consecutive_failures INTEGER NOT NULL DEFAULT 0,
+                            items_fetched INTEGER NOT NULL DEFAULT 0,
+                            response_time_ms INTEGER NOT NULL DEFAULT 0,
+                            checked_at TEXT NOT NULL DEFAULT (datetime('now'))
+                        )",
+                    )
+                })?;
+                current_version = 6;
+            }
+
+            // Phase 7 migration: AI summary column on source_items
+            if current_version < 7 {
+                Self::run_versioned_migration(&conn, 6, 7, "Phase 7: summary column", |c| {
+                    let has_summary: bool = c
+                        .query_row(
+                            "SELECT COUNT(*) FROM pragma_table_info('source_items') WHERE name='summary'",
+                            [],
+                            |row| row.get::<_, i64>(0).map(|count| count > 0),
+                        )
+                        .unwrap_or(false);
+                    if !has_summary {
+                        c.execute(
+                            "ALTER TABLE source_items ADD COLUMN summary TEXT DEFAULT NULL",
+                            [],
+                        )?;
+                    }
+                    Ok(())
+                })?;
+                current_version = 7;
+            }
+
+            // Phase 8 migration: Persistent briefings table
+            if current_version < 8 {
+                Self::run_versioned_migration(&conn, 7, 8, "Phase 8: briefings table", |c| {
+                    c.execute_batch(
+                        "CREATE TABLE IF NOT EXISTS briefings (
+                            id INTEGER PRIMARY KEY AUTOINCREMENT,
+                            content TEXT NOT NULL,
+                            model TEXT,
+                            item_count INTEGER NOT NULL DEFAULT 0,
+                            tokens_used INTEGER,
+                            latency_ms INTEGER,
+                            created_at TEXT NOT NULL DEFAULT (datetime('now'))
+                        )",
+                    )
+                })?;
+                current_version = 8;
+            }
+
+            // Phase 9 migration: Decision Intelligence Layer
+            if current_version < 9 {
+                Self::run_versioned_migration(&conn, 8, 9, "Phase 9: decisions", |c| {
+                    c.execute_batch(
+                        "CREATE TABLE IF NOT EXISTS developer_decisions (
+                            id INTEGER PRIMARY KEY AUTOINCREMENT,
+                            decision_type TEXT NOT NULL,
+                            subject TEXT NOT NULL,
+                            decision TEXT NOT NULL,
+                            rationale TEXT,
+                            alternatives_rejected TEXT DEFAULT '[]',
+                            context_tags TEXT DEFAULT '[]',
+                            confidence REAL NOT NULL DEFAULT 0.8,
+                            status TEXT NOT NULL DEFAULT 'active',
+                            superseded_by INTEGER,
+                            created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                            updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+                            FOREIGN KEY (superseded_by) REFERENCES developer_decisions(id)
+                        );
+                        CREATE INDEX IF NOT EXISTS idx_decisions_type ON developer_decisions(decision_type);
+                        CREATE INDEX IF NOT EXISTS idx_decisions_subject ON developer_decisions(subject);
+                        CREATE INDEX IF NOT EXISTS idx_decisions_status ON developer_decisions(status);",
+                    )
+                })?;
+
+                // Auto-seed decisions from tech_stack (outside transaction, non-fatal)
+                if let Err(e) = crate::decisions::seed_decisions_from_profile(&conn) {
+                    tracing::warn!(target: "4da::db", error = %e, "Auto-seed decisions failed (non-fatal)");
+                }
+                current_version = 9;
+            }
+
+            // Phase 10 migration: Agent Context Provider
+            if current_version < 10 {
+                Self::run_versioned_migration(&conn, 9, 10, "Phase 10: agent memory", |c| {
+                    c.execute_batch(
+                        "CREATE TABLE IF NOT EXISTS agent_memory (
+                            id INTEGER PRIMARY KEY AUTOINCREMENT,
+                            session_id TEXT NOT NULL,
+                            agent_type TEXT NOT NULL,
+                            memory_type TEXT NOT NULL,
+                            subject TEXT NOT NULL,
+                            content TEXT NOT NULL,
+                            context_tags TEXT DEFAULT '[]',
+                            created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                            expires_at TEXT,
+                            promoted_to_decision_id INTEGER,
+                            FOREIGN KEY (promoted_to_decision_id) REFERENCES developer_decisions(id)
+                        );
+                        CREATE INDEX IF NOT EXISTS idx_agent_memory_type ON agent_memory(memory_type);
+                        CREATE INDEX IF NOT EXISTS idx_agent_memory_subject ON agent_memory(subject);
+                        CREATE INDEX IF NOT EXISTS idx_agent_memory_session ON agent_memory(session_id);
+                        CREATE INDEX IF NOT EXISTS idx_agent_memory_expires ON agent_memory(expires_at);",
+                    )
+                })?;
+            }
+
+            info!(target: "4da::db", "Database schema initialized with sqlite-vec");
+            return Ok(());
         }
 
         info!(target: "4da::db", "Database schema initialized with sqlite-vec");
@@ -1415,6 +1496,31 @@ impl Database {
         })
     }
 
+    /// Get the current schema version
+    pub fn get_schema_version(&self) -> SqliteResult<i64> {
+        let conn = self.conn.lock();
+        conn.query_row("SELECT version FROM schema_version", [], |row| row.get(0))
+    }
+
+    /// Get migration history records
+    pub fn get_migration_history(&self) -> SqliteResult<Vec<MigrationHistoryEntry>> {
+        let conn = self.conn.lock();
+        let mut stmt = conn.prepare(
+            "SELECT id, from_version, to_version, executed_at, duration_ms, success FROM migration_history ORDER BY id"
+        )?;
+        let rows = stmt.query_map([], |row| {
+            Ok(MigrationHistoryEntry {
+                id: row.get(0)?,
+                from_version: row.get(1)?,
+                to_version: row.get(2)?,
+                executed_at: row.get(3)?,
+                duration_ms: row.get(4)?,
+                success: row.get(5)?,
+            })
+        })?;
+        rows.collect()
+    }
+
     /// Record source health after a fetch
     pub fn record_source_health(
         &self,
@@ -1608,6 +1714,16 @@ pub struct DbStats {
     pub context_chunks: i64,
     pub feedback_count: i64,
     pub sources_count: i64,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct MigrationHistoryEntry {
+    pub id: i64,
+    pub from_version: i64,
+    pub to_version: i64,
+    pub executed_at: String,
+    pub duration_ms: i64,
+    pub success: i64,
 }
 
 #[derive(Debug, Clone, serde::Serialize)]

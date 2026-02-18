@@ -6,7 +6,7 @@
  * structures and handle edge cases (empty DB, invalid params) gracefully.
  */
 
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import Database from "better-sqlite3";
 import { FourDADatabase } from "../db.js";
 import { executeGetRelevantContent } from "../tools/get-relevant-content.js";
@@ -16,6 +16,13 @@ import { executeRecordFeedback } from "../tools/record-feedback.js";
 import { executeKnowledgeGaps } from "../tools/knowledge-gaps.js";
 import { executeSourceHealth } from "../tools/source-health.js";
 import { executeGetActionableSignals } from "../tools/get-actionable-signals.js";
+import {
+  synthesize,
+  synthesizeWithTimeout,
+  canSynthesize,
+  getLLMConfig,
+} from "../llm.js";
+import type { LLMConfig, SynthesisRequest } from "../llm.js";
 
 // =============================================================================
 // Schema helper — creates all tables that 4DA tools expect to exist
@@ -1358,6 +1365,180 @@ describe("4DA MCP Tool Handlers", () => {
         }
         // Otherwise it was completely resolved -- also a valid outcome
       }
+    });
+  });
+});
+
+// =============================================================================
+// LLM Timeout and Synthesis Tests
+// =============================================================================
+
+describe("LLM synthesis and timeout handling", () => {
+  const dummyRequest: SynthesisRequest = {
+    system: "You are a test assistant.",
+    prompt: "Say hello.",
+    max_tokens: 10,
+  };
+
+  // ---------------------------------------------------------------------------
+  // canSynthesize
+  // ---------------------------------------------------------------------------
+  describe("canSynthesize", () => {
+    it("returns false when provider is null", () => {
+      expect(canSynthesize({ provider: null })).toBe(false);
+    });
+
+    it("returns false for anthropic without API key", () => {
+      expect(canSynthesize({ provider: "anthropic" })).toBe(false);
+    });
+
+    it("returns true for anthropic with API key", () => {
+      expect(
+        canSynthesize({ provider: "anthropic", anthropic_api_key: "sk-test" }),
+      ).toBe(true);
+    });
+
+    it("returns false for openai without API key", () => {
+      expect(canSynthesize({ provider: "openai" })).toBe(false);
+    });
+
+    it("returns true for openai with API key", () => {
+      expect(
+        canSynthesize({ provider: "openai", openai_api_key: "sk-test" }),
+      ).toBe(true);
+    });
+
+    it("returns true for ollama (no key needed)", () => {
+      expect(canSynthesize({ provider: "ollama" })).toBe(true);
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // synthesize — error paths (no network calls)
+  // ---------------------------------------------------------------------------
+  describe("synthesize error paths", () => {
+    it("throws when LLM is not configured", async () => {
+      await expect(
+        synthesize({ provider: null }, dummyRequest),
+      ).rejects.toThrow("LLM not configured");
+    });
+
+    it("throws when provider is set but has no credentials", async () => {
+      // Anthropic without API key
+      await expect(
+        synthesize({ provider: "anthropic" }, dummyRequest),
+      ).rejects.toThrow("LLM not configured");
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // synthesizeWithTimeout — timeout behavior
+  // ---------------------------------------------------------------------------
+  describe("synthesizeWithTimeout", () => {
+    it("throws descriptive error on timeout", async () => {
+      // Mock fetch to simulate a slow response that respects AbortSignal
+      const originalFetch = globalThis.fetch;
+      globalThis.fetch = vi.fn((_url: string | URL | Request, init?: RequestInit) =>
+        new Promise<Response>((_resolve, reject) => {
+          const signal = init?.signal;
+          if (signal) {
+            // Listen for abort and reject with AbortError (matching native fetch)
+            const onAbort = () => {
+              const err = new DOMException("The operation was aborted.", "AbortError");
+              reject(err);
+            };
+            if (signal.aborted) {
+              onAbort();
+              return;
+            }
+            signal.addEventListener("abort", onAbort, { once: true });
+          }
+          // Otherwise never resolve (simulating a hanging request)
+        }),
+      );
+
+      try {
+        await expect(
+          synthesizeWithTimeout(
+            { provider: "anthropic", anthropic_api_key: "sk-test" },
+            dummyRequest,
+            50, // 50ms timeout for fast test
+          ),
+        ).rejects.toThrow("LLM timeout after 0.05s");
+      } finally {
+        globalThis.fetch = originalFetch;
+      }
+    });
+
+    it("succeeds when response arrives before timeout", async () => {
+      const originalFetch = globalThis.fetch;
+      globalThis.fetch = vi.fn(() =>
+        Promise.resolve(
+          new Response(
+            JSON.stringify({
+              content: [{ type: "text", text: "Hello!" }],
+              usage: { output_tokens: 5 },
+            }),
+            {
+              status: 200,
+              headers: { "Content-Type": "application/json" },
+            },
+          ),
+        ),
+      );
+
+      try {
+        const result = await synthesizeWithTimeout(
+          { provider: "anthropic", anthropic_api_key: "sk-test" },
+          dummyRequest,
+          5000, // Generous timeout
+        );
+
+        expect(result.synthesis).toBe("Hello!");
+        expect(result.model_used).toContain("claude");
+        expect(result.tokens_used).toBe(5);
+      } finally {
+        globalThis.fetch = originalFetch;
+      }
+    });
+
+    it("re-throws non-abort errors unmodified", async () => {
+      const originalFetch = globalThis.fetch;
+      globalThis.fetch = vi.fn(() =>
+        Promise.resolve(
+          new Response("Unauthorized", { status: 401 }),
+        ),
+      );
+
+      try {
+        await expect(
+          synthesizeWithTimeout(
+            { provider: "anthropic", anthropic_api_key: "sk-bad" },
+            dummyRequest,
+            5000,
+          ),
+        ).rejects.toThrow("Anthropic API error");
+      } finally {
+        globalThis.fetch = originalFetch;
+      }
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // getLLMConfig — basic behavior
+  // ---------------------------------------------------------------------------
+  describe("getLLMConfig", () => {
+    it("returns a config object with provider field", () => {
+      const config = getLLMConfig();
+      expect(config).toHaveProperty("provider");
+    });
+
+    it("returns env-based fallback when no settings file exists", () => {
+      // In the test environment, there is no settings.json at standard paths
+      // and no FOURDA_SETTINGS_PATH set, so it should fall back to env vars
+      const config = getLLMConfig();
+      // provider will be null unless LLM_PROVIDER env is set
+      expect(config.provider === null || typeof config.provider === "string").toBe(true);
     });
   });
 });

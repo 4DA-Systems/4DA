@@ -97,6 +97,9 @@ ed25519-dalek = { version = "2.2.0", features = ["rand_core"] }
 name = "4da"
 path = "src/bin/cli.rs"
 
+[dev-dependencies]
+tempfile = "3"
+
 [features]
 default = []
 void-universe = []
