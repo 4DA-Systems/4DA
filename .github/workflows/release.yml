@@ -110,6 +110,21 @@ jobs:
           releaseId: ${{ needs.create-release.outputs.release_id }}
           args: --target ${{ matrix.target }}
 
+      - name: Report binary sizes
+        shell: bash
+        run: |
+          echo "## Binary Sizes (${{ matrix.label }})" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| File | Size |" >> $GITHUB_STEP_SUMMARY
+          echo "|------|------|" >> $GITHUB_STEP_SUMMARY
+          for f in src-tauri/target/${{ matrix.target }}/release/bundle/**/*; do
+            if [ -f "$f" ]; then
+              SIZE=$(du -h "$f" | cut -f1)
+              NAME=$(basename "$f")
+              echo "| $NAME | $SIZE |" >> $GITHUB_STEP_SUMMARY
+            fi
+          done
+
       - name: Build CLI binary
         working-directory: src-tauri
         run: cargo build --release --bin 4da --target ${{ matrix.target }}

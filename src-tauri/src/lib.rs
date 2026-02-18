@@ -66,6 +66,7 @@ pub mod db;
 mod decisions;
 mod delegation;
 mod developer_dna;
+mod diagnostics;
 mod digest;
 mod digest_commands;
 mod document_index;
@@ -95,7 +96,7 @@ mod signal_chains;
 mod signals;
 mod source_config;
 mod source_fetching;
-mod sources;
+pub mod sources;
 mod tech_radar;
 mod temporal;
 mod tts;
@@ -339,9 +340,14 @@ pub fn run() {
             toolkit::toolkit_kill_process,
             toolkit::toolkit_env_snapshot,
             toolkit::toolkit_http_request,
-            toolkit::toolkit_get_http_history
+            toolkit::toolkit_get_http_history,
+            // Diagnostics
+            commands::get_diagnostics
         ])
         .setup(|app| {
+            // Record app start time for diagnostics uptime tracking
+            diagnostics::record_start_time();
+
             // Set up system tray (non-fatal: app works without tray)
             let tray = match monitoring::setup_tray(app.handle()) {
                 Ok(tray) => Some(tray),

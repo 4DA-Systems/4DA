@@ -109,6 +109,9 @@ pub struct MonitoringConfig {
     /// Notification quality threshold: "critical_only", "high_and_above" (default), "all"
     #[serde(default = "default_notification_threshold")]
     pub notification_threshold: String,
+    /// Max age in days for source_items before cleanup (default: 30)
+    #[serde(default)]
+    pub cleanup_max_age_days: Option<u32>,
 }
 
 fn default_notification_threshold() -> String {
@@ -121,6 +124,7 @@ impl Default for MonitoringConfig {
             enabled: true,        // Autonomous by default - no manual enabling needed
             interval_minutes: 10, // Check every 10 minutes
             notification_threshold: default_notification_threshold(),
+            cleanup_max_age_days: None, // Uses 30 days default in monitoring.rs
         }
     }
 }
@@ -228,6 +232,120 @@ impl Default for LicenseConfig {
     }
 }
 
+/// Per-source circuit breaker / resilience configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SourceResilienceConfig {
+    /// Maximum consecutive failures before the circuit breaker opens
+    #[serde(default = "default_max_failures")]
+    pub max_failures: u32,
+    /// Cooldown period in seconds before retrying after circuit opens
+    #[serde(default = "default_cooldown_seconds")]
+    pub cooldown_seconds: u64,
+}
+
+fn default_max_failures() -> u32 {
+    5
+}
+
+fn default_cooldown_seconds() -> u64 {
+    600
+}
+
+impl Default for SourceResilienceConfig {
+    fn default() -> Self {
+        Self {
+            max_failures: default_max_failures(),
+            cooldown_seconds: default_cooldown_seconds(),
+        }
+    }
+}
+
+/// Per-source rate budget configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RateBudgetConfig {
+    /// Maximum requests allowed per minute for this source
+    pub requests_per_minute: u32,
+}
+
+impl Default for RateBudgetConfig {
+    fn default() -> Self {
+        Self {
+            requests_per_minute: 30,
+        }
+    }
+}
+
+/// Build the default rate budget map for known sources
+fn default_rate_budgets() -> std::collections::HashMap<String, RateBudgetConfig> {
+    let mut map = std::collections::HashMap::new();
+    map.insert(
+        "hackernews".to_string(),
+        RateBudgetConfig {
+            requests_per_minute: 30,
+        },
+    );
+    map.insert(
+        "reddit".to_string(),
+        RateBudgetConfig {
+            requests_per_minute: 10,
+        },
+    );
+    map.insert(
+        "github".to_string(),
+        RateBudgetConfig {
+            requests_per_minute: 25,
+        },
+    );
+    map.insert(
+        "twitter".to_string(),
+        RateBudgetConfig {
+            requests_per_minute: 15,
+        },
+    );
+    map.insert(
+        "arxiv".to_string(),
+        RateBudgetConfig {
+            requests_per_minute: 30,
+        },
+    );
+    map.insert(
+        "rss".to_string(),
+        RateBudgetConfig {
+            requests_per_minute: 30,
+        },
+    );
+    map.insert(
+        "youtube".to_string(),
+        RateBudgetConfig {
+            requests_per_minute: 30,
+        },
+    );
+    map.insert(
+        "lobsters".to_string(),
+        RateBudgetConfig {
+            requests_per_minute: 30,
+        },
+    );
+    map.insert(
+        "devto".to_string(),
+        RateBudgetConfig {
+            requests_per_minute: 30,
+        },
+    );
+    map.insert(
+        "producthunt".to_string(),
+        RateBudgetConfig {
+            requests_per_minute: 30,
+        },
+    );
+    map
+}
+
+/// Build the default source resilience map (empty — all sources use built-in defaults)
+fn default_source_resilience() -> std::collections::HashMap<String, SourceResilienceConfig> {
+    std::collections::HashMap::new()
+}
+
 /// Main settings structure
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Settings {
@@ -291,6 +409,12 @@ pub struct Settings {
     /// License tier configuration
     #[serde(default)]
     pub license: LicenseConfig,
+    /// Per-source circuit breaker configuration overrides
+    #[serde(default = "default_source_resilience")]
+    pub source_resilience: std::collections::HashMap<String, SourceResilienceConfig>,
+    /// Per-source rate budget configuration
+    #[serde(default = "default_rate_budgets")]
+    pub rate_budgets: std::collections::HashMap<String, RateBudgetConfig>,
 }
 
 impl Settings {
@@ -362,6 +486,8 @@ impl Default for Settings {
             health_radar: HealthRadarConfig::default(),
             attention: AttentionConfig::default(),
             license: LicenseConfig::default(),
+            source_resilience: default_source_resilience(),
+            rate_budgets: default_rate_budgets(),
         }
     }
 }

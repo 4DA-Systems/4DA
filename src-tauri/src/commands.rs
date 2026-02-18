@@ -706,3 +706,14 @@ pub(crate) async fn export_results(format: String) -> Result<String> {
         .into()),
     }
 }
+
+// ============================================================================
+// Diagnostics
+// ============================================================================
+
+#[tauri::command]
+pub(crate) async fn get_diagnostics() -> Result<crate::diagnostics::DiagnosticsSnapshot> {
+    let db = get_database()?;
+    let db_path = db.db_path().to_path_buf();
+    Ok(crate::diagnostics::collect_diagnostics(&db, &db_path))
+}

@@ -263,6 +263,28 @@ pub fn start_scheduler<R: Runtime>(app: AppHandle<R>, state: Arc<MonitoringState
                         warn!(target: "4da::monitor", error = %e, "Agent memory cleanup failed");
                     }
                 }
+
+                // Database cleanup - delete items older than configured max age
+                {
+                    let max_age_days = {
+                        let sm = crate::get_settings_manager().lock();
+                        sm.get().monitoring.cleanup_max_age_days.unwrap_or(30)
+                    };
+                    if let Ok(db) = crate::get_database() {
+                        match db.cleanup_old_items(max_age_days) {
+                            Ok(deleted) if deleted > 0 => {
+                                info!(target: "4da::monitor", deleted, max_age_days, "Cleaned up old source items");
+                                if let Err(e) = db.vacuum_if_needed(deleted, 1000) {
+                                    warn!(target: "4da::monitor", error = %e, "VACUUM after cleanup failed");
+                                }
+                            }
+                            Ok(_) => {} // Nothing to clean
+                            Err(e) => {
+                                warn!(target: "4da::monitor", error = %e, "Database cleanup failed");
+                            }
+                        }
+                    }
+                }
             }
 
             // ================================================================

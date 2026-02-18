@@ -1762,7 +1762,7 @@ pub struct MaintenanceResult {
     pub deleted_void: usize,
 }
 
-#[derive(Debug, Clone, serde::Serialize)]
+#[derive(Debug, Clone, Default, serde::Serialize)]
 pub struct DbStats {
     pub source_items: i64,
     pub context_chunks: i64,
@@ -2404,6 +2404,65 @@ pub struct HttpHistoryRow {
     pub status: u16,
     pub duration_ms: u64,
     pub created_at: String,
+}
+
+// ============================================================================
+// Maintenance & Diagnostics
+// ============================================================================
+
+impl Database {
+    /// Delete source_items older than the given number of days.
+    /// Returns the number of rows deleted.
+    pub fn cleanup_old_items(&self, max_age_days: u32) -> SqliteResult<usize> {
+        let conn = self.conn.lock();
+        let deleted = conn.execute(
+            "DELETE FROM source_items WHERE last_seen < datetime('now', ?1)",
+            params![format!("-{} days", max_age_days)],
+        )?;
+        // Also clean up orphaned feedback records
+        let _ = conn.execute(
+            "DELETE FROM feedback WHERE source_item_id NOT IN (SELECT id FROM source_items)",
+            [],
+        );
+        // Clean up orphaned vec entries
+        let _ = conn.execute(
+            "DELETE FROM source_vec WHERE rowid NOT IN (SELECT id FROM source_items)",
+            [],
+        );
+        Ok(deleted)
+    }
+
+    /// Run VACUUM if more than threshold rows were deleted.
+    /// VACUUM reclaims disk space and defragments the database.
+    pub fn vacuum_if_needed(&self, deleted_count: usize, threshold: usize) -> SqliteResult<()> {
+        if deleted_count >= threshold {
+            let conn = self.conn.lock();
+            info!(target: "4da::db", deleted_count, "Running VACUUM after large cleanup");
+            conn.execute_batch("VACUUM")?;
+        }
+        Ok(())
+    }
+
+    /// Get source health summary: (source_type, status, consecutive_failures)
+    pub fn get_source_health_summary(&self) -> SqliteResult<Vec<(String, String, i64)>> {
+        let conn = self.conn.lock();
+        let mut stmt = conn.prepare(
+            "SELECT source_type, status, consecutive_failures FROM source_health ORDER BY source_type",
+        )?;
+        let rows = stmt.query_map([], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, i64>(2)?,
+            ))
+        })?;
+        rows.collect()
+    }
+
+    /// Get the database file path
+    pub fn db_path(&self) -> &std::path::Path {
+        &self.db_path
+    }
 }
 
 #[cfg(test)]

@@ -61,10 +61,12 @@ pub async fn set_monitoring_enabled(enabled: bool) -> Result<serde_json::Value> 
         let mut settings = get_settings_manager().lock();
         let interval = state.get_interval() / 60;
         let threshold = settings.get().monitoring.notification_threshold.clone();
+        let cleanup = settings.get().monitoring.cleanup_max_age_days;
         let _ = settings.set_monitoring_config(settings::MonitoringConfig {
             enabled,
             interval_minutes: interval,
             notification_threshold: threshold,
+            cleanup_max_age_days: cleanup,
         });
     }
 
@@ -88,10 +90,12 @@ pub async fn set_monitoring_interval(minutes: u64) -> Result<serde_json::Value> 
     {
         let mut settings = get_settings_manager().lock();
         let threshold = settings.get().monitoring.notification_threshold.clone();
+        let cleanup = settings.get().monitoring.cleanup_max_age_days;
         let _ = settings.set_monitoring_config(settings::MonitoringConfig {
             enabled: state.is_enabled(),
             interval_minutes: minutes,
             notification_threshold: threshold,
+            cleanup_max_age_days: cleanup,
         });
     }
 
@@ -121,10 +125,12 @@ pub async fn set_notification_threshold(threshold: String) -> Result<serde_json:
     {
         let mut settings = get_settings_manager().lock();
         let state = crate::get_monitoring_state();
+        let cleanup = settings.get().monitoring.cleanup_max_age_days;
         let _ = settings.set_monitoring_config(settings::MonitoringConfig {
             enabled: state.is_enabled(),
             interval_minutes: state.get_interval() / 60,
             notification_threshold: threshold.clone(),
+            cleanup_max_age_days: cleanup,
         });
     }
 
