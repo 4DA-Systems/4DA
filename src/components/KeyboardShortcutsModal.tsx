@@ -21,6 +21,7 @@ export function KeyboardShortcutsModal({ onClose }: KeyboardShortcutsModalProps)
             { key: 'F', label: 'Toggle relevant-only filter' },
             { key: 'B', label: 'Switch view (Intelligence / Results)' },
             { key: ',', label: 'Open settings' },
+            { key: 'Ctrl+`', label: 'Toggle Command Deck' },
             { key: 'Esc', label: 'Close panel / modal' },
             { key: '?', label: 'Show this help' },
           ].map(({ key, label }) => (

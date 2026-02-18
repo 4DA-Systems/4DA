@@ -327,7 +327,7 @@ impl Database {
             .query_row("SELECT version FROM schema_version", [], |row| row.get(0))
             .unwrap_or(1);
 
-        const TARGET_VERSION: i64 = 11;
+        const TARGET_VERSION: i64 = 12;
         if current_version < TARGET_VERSION {
             // Drop the conn lock briefly to allow backup (needs filesystem access)
             drop(conn);
@@ -515,6 +515,31 @@ impl Database {
                         CREATE INDEX IF NOT EXISTS idx_git_commits_repo ON git_commit_history(repo_path);",
                     )
                 })?;
+                current_version = 11;
+            }
+
+            // Phase 12 migration: Toolkit HTTP history
+            if current_version < 12 {
+                Self::run_versioned_migration(
+                    &conn,
+                    11,
+                    12,
+                    "Phase 12: toolkit http history",
+                    |c| {
+                        c.execute_batch(
+                            "CREATE TABLE IF NOT EXISTS toolkit_http_history (
+                                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                                method TEXT NOT NULL,
+                                url TEXT NOT NULL,
+                                status INTEGER NOT NULL,
+                                duration_ms INTEGER NOT NULL DEFAULT 0,
+                                created_at TEXT NOT NULL DEFAULT (datetime('now'))
+                            );
+                            CREATE INDEX IF NOT EXISTS idx_http_history_created
+                                ON toolkit_http_history(created_at);",
+                        )
+                    },
+                )?;
             }
 
             info!(target: "4da::db", "Database schema initialized with sqlite-vec");
@@ -2242,6 +2267,144 @@ fn blob_to_embedding(blob: &[u8]) -> Vec<f32> {
 // ============================================================================
 // Tests
 // ============================================================================
+
+// ============================================================================
+// Command History
+// ============================================================================
+
+impl Database {
+    /// Save a command to history and auto-prune to max entries.
+    pub fn save_command_history(
+        &self,
+        command: &str,
+        working_dir: &str,
+        exit_code: i32,
+        success: bool,
+        output_preview: Option<&str>,
+    ) -> SqliteResult<()> {
+        let conn = self.conn.lock();
+        conn.execute(
+            "INSERT INTO command_history (command, working_dir, exit_code, success, output_preview)
+             VALUES (?1, ?2, ?3, ?4, ?5)",
+            params![
+                command,
+                working_dir,
+                exit_code,
+                success as i32,
+                output_preview
+            ],
+        )?;
+        // Auto-prune to 200 entries
+        conn.execute(
+            "DELETE FROM command_history WHERE id NOT IN (
+                SELECT id FROM command_history ORDER BY created_at DESC LIMIT 200
+            )",
+            [],
+        )?;
+        Ok(())
+    }
+
+    /// Get recent command history entries.
+    pub fn get_command_history(&self, limit: u32) -> SqliteResult<Vec<CommandHistoryRow>> {
+        let conn = self.conn.lock();
+        let mut stmt = conn.prepare(
+            "SELECT id, command, working_dir, exit_code, success, output_preview, created_at
+             FROM command_history
+             ORDER BY created_at DESC
+             LIMIT ?1",
+        )?;
+        let entries = stmt
+            .query_map([limit], |row: &rusqlite::Row| {
+                Ok(CommandHistoryRow {
+                    id: row.get(0)?,
+                    command: row.get(1)?,
+                    working_dir: row.get(2)?,
+                    exit_code: row.get(3)?,
+                    success: row.get::<_, i64>(4).map(|v| v != 0)?,
+                    output_preview: row.get(5)?,
+                    created_at: row.get(6)?,
+                })
+            })?
+            .collect::<SqliteResult<Vec<_>>>()?;
+        Ok(entries)
+    }
+}
+
+/// Row from command_history table
+#[derive(Debug, Clone)]
+pub struct CommandHistoryRow {
+    pub id: i64,
+    pub command: String,
+    pub working_dir: String,
+    pub exit_code: Option<i32>,
+    pub success: bool,
+    pub output_preview: Option<String>,
+    pub created_at: String,
+}
+
+// ============================================================================
+// Toolkit HTTP History
+// ============================================================================
+
+impl Database {
+    /// Save an HTTP request to history.
+    pub fn save_http_history(
+        &self,
+        method: &str,
+        url: &str,
+        status: u16,
+        duration_ms: u64,
+    ) -> SqliteResult<()> {
+        let conn = self.conn.lock();
+        conn.execute(
+            "INSERT INTO toolkit_http_history (method, url, status, duration_ms)
+             VALUES (?1, ?2, ?3, ?4)",
+            params![method, url, status as u32, duration_ms],
+        )?;
+        conn.execute(
+            "DELETE FROM toolkit_http_history WHERE id NOT IN (
+                SELECT id FROM toolkit_http_history ORDER BY created_at DESC LIMIT 200
+            )",
+            [],
+        )?;
+        Ok(())
+    }
+
+    /// Get recent HTTP history entries.
+    pub fn get_http_history(&self, limit: u32) -> SqliteResult<Vec<HttpHistoryRow>> {
+        let conn = self.conn.lock();
+        let mut stmt = conn.prepare(
+            "SELECT id, method, url, status, duration_ms, created_at
+             FROM toolkit_http_history
+             ORDER BY created_at DESC
+             LIMIT ?1",
+        )?;
+        let entries = stmt
+            .query_map([limit], |row: &rusqlite::Row| {
+                Ok(HttpHistoryRow {
+                    id: row.get(0)?,
+                    method: row.get(1)?,
+                    url: row.get(2)?,
+                    status: row.get::<_, u32>(3).map(|v| v as u16)?,
+                    duration_ms: row.get(4)?,
+                    created_at: row.get(5)?,
+                })
+            })?
+            .collect::<SqliteResult<Vec<_>>>()?;
+        Ok(entries)
+    }
+}
+
+/// Row from toolkit_http_history table
+#[derive(Debug, Clone)]
+pub struct HttpHistoryRow {
+    pub id: i64,
+    pub method: String,
+    pub url: String,
+    pub status: u16,
+    pub duration_ms: u64,
+    pub created_at: String,
+}
 
 #[cfg(test)]
 mod tests {

@@ -104,6 +104,7 @@ mod void_engine;
 
 mod command_runner;
 mod git_deck;
+mod toolkit;
 
 use source_fetching::fill_cache_background;
 
@@ -332,7 +333,13 @@ pub fn run() {
             git_deck::git_deck_list_repos,
             // Command Deck - Shell Runner
             command_runner::run_shell_command,
-            command_runner::get_command_history
+            command_runner::get_command_history,
+            // Toolkit
+            toolkit::toolkit_list_ports,
+            toolkit::toolkit_kill_process,
+            toolkit::toolkit_env_snapshot,
+            toolkit::toolkit_http_request,
+            toolkit::toolkit_get_http_history
         ])
         .setup(|app| {
             // Set up system tray (non-fatal: app works without tray)

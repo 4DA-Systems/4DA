@@ -28,7 +28,6 @@ pub struct CommandHistoryEntry {
 // Constants
 // ============================================================================
 
-const TIMEOUT_SECS: u64 = 30;
 const MAX_STDOUT: usize = 50_000; // 50KB
 const MAX_STDERR: usize = 10_000; // 10KB
 const MAX_HISTORY: u32 = 200;
@@ -134,14 +133,16 @@ pub async fn run_shell_command(
         None
     };
 
-    if let Err(e) = save_to_history(
-        &command,
-        &work_dir_str,
-        output.exit_code,
-        output.exit_code == 0,
-        preview,
-    ) {
-        warn!(target: "4da::cmd_runner", error = %e, "Failed to save command history");
+    if let Ok(db) = get_database() {
+        if let Err(e) = db.save_command_history(
+            &command,
+            &work_dir_str,
+            output.exit_code,
+            output.exit_code == 0,
+            preview.as_deref(),
+        ) {
+            warn!(target: "4da::cmd_runner", error = %e, "Failed to save command history");
+        }
     }
 
     debug!(target: "4da::cmd_runner", command = %command, exit_code = output.exit_code, duration_ms = output.duration_ms, "Command executed");
@@ -153,68 +154,19 @@ pub async fn run_shell_command(
 pub async fn get_command_history(limit: Option<u32>) -> Result<Vec<CommandHistoryEntry>> {
     let limit = limit.unwrap_or(50).min(MAX_HISTORY);
     let db = get_database()?;
-    let conn = db.conn.lock();
 
-    let mut stmt = conn
-        .prepare(
-            "SELECT id, command, working_dir, exit_code, success, output_preview, created_at
-             FROM command_history
-             ORDER BY created_at DESC
-             LIMIT ?1",
-        )
-        .map_err(FourDaError::Db)?;
+    let rows = db.get_command_history(limit).map_err(FourDaError::Db)?;
 
-    let entries = stmt
-        .query_map([limit], |row| {
-            Ok(CommandHistoryEntry {
-                id: row.get(0)?,
-                command: row.get(1)?,
-                working_dir: row.get(2)?,
-                exit_code: row.get(3)?,
-                success: row.get::<_, i64>(4).map(|v| v != 0)?,
-                output_preview: row.get(5)?,
-                created_at: row.get(6)?,
-            })
+    Ok(rows
+        .into_iter()
+        .map(|r| CommandHistoryEntry {
+            id: r.id,
+            command: r.command,
+            working_dir: r.working_dir,
+            exit_code: r.exit_code,
+            success: r.success,
+            output_preview: r.output_preview,
+            created_at: r.created_at,
         })
-        .map_err(FourDaError::Db)?
-        .collect::<std::result::Result<Vec<_>, _>>()
-        .map_err(FourDaError::Db)?;
-
-    Ok(entries)
-}
-
-/// Save a command to history and auto-prune old entries.
-fn save_to_history(
-    command: &str,
-    working_dir: &str,
-    exit_code: i32,
-    success: bool,
-    output_preview: Option<String>,
-) -> Result<()> {
-    let db = get_database()?;
-    let conn = db.conn.lock();
-
-    conn.execute(
-        "INSERT INTO command_history (command, working_dir, exit_code, success, output_preview)
-         VALUES (?1, ?2, ?3, ?4, ?5)",
-        rusqlite::params![
-            command,
-            working_dir,
-            exit_code,
-            success as i32,
-            output_preview
-        ],
-    )
-    .map_err(FourDaError::Db)?;
-
-    // Auto-prune to MAX_HISTORY entries
-    conn.execute(
-        "DELETE FROM command_history WHERE id NOT IN (
-            SELECT id FROM command_history ORDER BY created_at DESC LIMIT ?1
-        )",
-        [MAX_HISTORY],
-    )
-    .map_err(FourDaError::Db)?;
-
-    Ok(())
+        .collect())
 }
