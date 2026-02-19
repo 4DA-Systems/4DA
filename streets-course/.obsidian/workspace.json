@@ -1,0 +1,16 @@
+{
+  "main": {
+    "id": "main",
+    "type": "split",
+    "children": [
+      {
+        "id": "sidebar",
+        "type": "leaf",
+        "state": {
+          "type": "file-explorer"
+        }
+      }
+    ],
+    "direction": "vertical"
+  }
+}

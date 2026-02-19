@@ -227,6 +227,7 @@ pub(crate) fn score_item(
             similar_count: 0,
             similar_titles: vec![],
             serendipity: false,
+            streets_engine: None,
         };
     }
 
@@ -695,6 +696,18 @@ pub(crate) fn score_item(
         (None, None, None, None, None)
     };
 
+    // STREETS revenue engine mapping (only for relevant items)
+    let streets_engine = if relevant {
+        crate::streets_engine::map_to_streets_engine(
+            input.title,
+            input.content,
+            Some(content_type.slug()),
+            sig_type.as_deref(),
+        )
+    } else {
+        None
+    };
+
     SourceRelevance {
         id: input.id,
         title: crate::decode_html_entities(input.title),
@@ -718,6 +731,7 @@ pub(crate) fn score_item(
         similar_count: 0,
         similar_titles: vec![],
         serendipity: false,
+        streets_engine,
     }
 }
 

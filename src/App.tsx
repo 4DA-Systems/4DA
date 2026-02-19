@@ -27,7 +27,10 @@ import { DecisionMemory } from './components/DecisionMemory';
 import { DelegationDashboard } from './components/DelegationDashboard';
 import { AgentMemoryPanel } from './components/AgentMemoryPanel';
 import { ToolkitView } from './components/toolkit/ToolkitView';
+import { PlaybookView } from './components/PlaybookView';
 import { CommandDeck } from './components/command-deck/CommandDeck';
+import { FirstRunTransition } from './components/FirstRunTransition';
+import { ViewTabBar } from './components/ViewTabBar';
 import {
   useSettings,
   useMonitoring,
@@ -70,6 +73,12 @@ function App() {
   const loadSourceHealth = useAppStore(s => s.loadSourceHealth);
   const loadLicense = useAppStore(s => s.loadLicense);
   const loadTrialStatus = useAppStore(s => s.loadTrialStatus);
+
+  // First-run state
+  const isFirstRun = useAppStore(s => s.isFirstRun);
+  const firstRunDismissed = useAppStore(s => s.firstRunDismissed);
+  const setIsFirstRun = useAppStore(s => s.setIsFirstRun);
+  const setFirstRunDismissed = useAppStore(s => s.setFirstRunDismissed);
 
   const { tier, isPro } = useLicense();
 
@@ -197,7 +206,8 @@ function App() {
         }
 
         // No cached results — auto-trigger full analysis after splash settles
-        if (cancelled) return;
+        // (Skip if first-run — FirstRunTransition handles analysis trigger)
+        if (cancelled || useAppStore.getState().isFirstRun) return;
         autoTimer = setTimeout(() => {
           if (!cancelled) startAnalysis();
         }, 2000);
@@ -253,9 +263,18 @@ function App() {
       {!showSplash && showOnboarding && (
         <Onboarding onComplete={() => {
           setShowOnboarding(false);
+          setIsFirstRun(true);
           loadSettings();
           loadUserContext();
           loadDiscoveredContext();
+        }} />
+      )}
+
+      {/* First-Run Transition (bridges onboarding to first analysis) */}
+      {!showSplash && !showOnboarding && isFirstRun && !firstRunDismissed && (
+        <FirstRunTransition onComplete={(view) => {
+          setFirstRunDismissed(true);
+          setActiveView(view);
         }} />
       )}
 
@@ -347,58 +366,7 @@ function App() {
         </div>
 
         {/* View Tab Bar */}
-        <div className="mb-6 flex items-center gap-1 bg-bg-secondary rounded-lg p-1 border border-border w-fit">
-          <button
-            onClick={() => setActiveView('briefing')}
-            className={`px-4 py-2 text-sm rounded-md transition-all ${
-              activeView === 'briefing'
-                ? 'bg-orange-500/20 text-orange-400 font-medium'
-                : 'text-gray-500 hover:text-gray-300'
-            }`}
-          >
-            Intelligence
-          </button>
-          <button
-            onClick={() => setActiveView('results')}
-            className={`px-4 py-2 text-sm rounded-md transition-all ${
-              activeView === 'results'
-                ? 'bg-orange-500/20 text-orange-400 font-medium'
-                : 'text-gray-500 hover:text-gray-300'
-            }`}
-          >
-            All Results
-          </button>
-          <button
-            onClick={() => setActiveView('insights')}
-            className={`px-4 py-2 text-sm rounded-md transition-all ${
-              activeView === 'insights'
-                ? 'bg-amber-500/20 text-amber-400 font-medium'
-                : 'text-gray-500 hover:text-gray-300'
-            }`}
-          >
-            Insights
-          </button>
-          <button
-            onClick={() => setActiveView('saved')}
-            className={`px-4 py-2 text-sm rounded-md transition-all ${
-              activeView === 'saved'
-                ? 'bg-green-500/20 text-green-400 font-medium'
-                : 'text-gray-500 hover:text-gray-300'
-            }`}
-          >
-            Saved
-          </button>
-          <button
-            onClick={() => setActiveView('toolkit')}
-            className={`px-4 py-2 text-sm rounded-md transition-all ${
-              activeView === 'toolkit'
-                ? 'bg-purple-500/20 text-purple-400 font-medium'
-                : 'text-gray-500 hover:text-gray-300'
-            }`}
-          >
-            Toolkit
-          </button>
-        </div>
+        <ViewTabBar />
 
         {/* Conditional View Rendering */}
         {activeView === 'briefing' ? (
@@ -416,6 +384,8 @@ function App() {
           <SavedItemsView />
         ) : activeView === 'toolkit' ? (
           <ToolkitView />
+        ) : activeView === 'playbook' ? (
+          <PlaybookView />
         ) : (
           <ResultsView
             newItemIds={newItemIds}

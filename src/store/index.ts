@@ -15,6 +15,7 @@ import { createDecisionsSlice } from './decisions-slice';
 import { createAgentSlice } from './agent-slice';
 import { createLicenseSlice } from './license-slice';
 import { createToolkitSlice } from './toolkit-slice';
+import { createPlaybookSlice } from './playbook-slice';
 import { createCommandDeckSlice } from './command-deck-slice';
 
 // Re-export all types
@@ -51,5 +52,6 @@ export const useAppStore = create<AppStore>()((...a) => ({
   ...createAgentSlice(...a),
   ...createLicenseSlice(...a),
   ...createToolkitSlice(...a),
+  ...createPlaybookSlice(...a),
   ...createCommandDeckSlice(...a),
 }));

@@ -25,6 +25,8 @@ export interface SourceRelevance {
   similar_count?: number;
   similar_titles?: string[];
   serendipity?: boolean;
+  /** STREETS revenue engine match (e.g. "Engine 1: Digital Products") */
+  streets_engine?: string;
 }
 
 export interface ScoreBreakdown {

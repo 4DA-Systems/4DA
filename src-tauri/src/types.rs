@@ -189,6 +189,9 @@ pub struct SourceRelevance {
     /// Whether this item was injected by the serendipity engine (anti-bubble)
     #[serde(default)]
     pub serendipity: bool,
+    /// STREETS revenue engine match (e.g. "Engine 1: Digital Products")
+    #[serde(default)]
+    pub streets_engine: Option<String>,
 }
 
 pub(crate) fn default_source_type() -> String {

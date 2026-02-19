@@ -42,6 +42,14 @@ export function BadgeRow({ item }: BadgeRowProps) {
           Working on
         </span>
       )}
+      {item.streets_engine && (
+        <span
+          className="flex-shrink-0 text-[10px] px-1.5 py-0.5 rounded font-medium bg-yellow-500/15 text-yellow-400"
+          title={`STREETS ${item.streets_engine}`}
+        >
+          {item.streets_engine.replace(/^Engine \d+: /, '')}
+        </span>
+      )}
       {(() => {
         const badge = getContentTypeBadge(item.score_breakdown?.content_type);
         return badge ? (
