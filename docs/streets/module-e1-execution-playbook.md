@@ -876,9 +876,9 @@ A product with spaghetti code that solves a real problem will make money. A prod
 
 This is not an excuse for writing bad code. It is a priority statement. Ship first. Refactor second. The refactoring will be better informed by real usage data anyway.
 
-### The Real Example: $5,000 in Month 1
+### How "Ship, Then Improve" Plays Out
 
-In 2025, a developer launched a Notion template pack for software engineering managers. Here is what it looked like at launch:
+Consider this scenario: a developer launches a Notion template pack for software engineering managers. Here is what it looks like at launch:
 
 - 5 templates (not 50)
 - A Gumroad page with a paragraph of description and 3 screenshots
@@ -887,25 +887,25 @@ In 2025, a developer launched a Notion template pack for software engineering ma
 - No social media following
 - Price: $29
 
-They posted it on Reddit (r/NotionTemplates, r/engineering_managers) and Twitter. That was the entire marketing strategy.
+They post it on Reddit and Twitter. That is the entire marketing strategy.
 
 Month 1 results:
-- 173 sales at $29 = $5,017
-- After Gumroad's cut (10%): $4,515
+- ~170 sales at $29 = ~$5,000
+- After Gumroad's cut (10%): ~$4,500
 - Time invested: ~30 hours total (building templates + writing descriptions)
-- Effective hourly rate: $150/hour
+- Effective hourly rate: ~$150/hour
 
-Was it "perfect"? No. The templates had formatting inconsistencies. Some of the descriptions were generic. Two of the five templates were essentially the same thing with different labels. Customers did not care. They cared that it saved them from building the templates themselves.
+Was it "perfect"? No. The templates had formatting inconsistencies. Some of the descriptions were generic. Customers did not care. They cared that it saved them from building the templates themselves.
 
 By month 3, based on customer feedback, the developer:
 - Fixed the formatting issues
-- Added 5 more templates (the ones customers specifically asked for)
+- Added more templates (the ones customers specifically asked for)
 - Raised the price to $39 (existing customers got updates free)
-- Created a "Pro" tier at $69 with an accompanying video walkthrough
-
-Month 3 revenue: $8,200.
+- Created a "Pro" tier with an accompanying video walkthrough
 
 The product they launched was worse in every way than the product they had 90 days later. But the 90-day version only existed because the launch version generated the feedback and revenue to guide development.
+
+> **NOTE:** For real-world validation of the "ship ugly, improve fast" model: Josh Comeau pre-sold $550K of his CSS for JavaScript Developers course in the first week (Source: failory.com). Wes Bos has generated $10M+ in total developer course sales using iterative launches (Source: foundershut.com). Both started with imperfect v1 products and iterated based on real customer feedback.
 
 ### First 10 Customers Tell You Everything
 

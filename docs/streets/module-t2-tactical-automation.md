@@ -2179,7 +2179,7 @@ if __name__ == "__main__":
 
 **The review habit:** Check your review queue at 8 AM and 4 PM. Two sessions, 10-15 minutes each. Everything else runs autonomously between reviews.
 
-> **Real Talk:** A developer I know fully automated their newsletter in 2025. No human review. The LLM started inserting hallucinated links to pages that didn't exist. Subscribers noticed before he did. He lost 40% of his list in two weeks and it took 6 months to rebuild trust. Another developer automated 80% of the same process — LLM curates and drafts, they spend 10 minutes reviewing — and grew their list 3x in the same period. The difference wasn't the automation. It was the review step.
+> **Real Talk:** Consider what happens when you skip human review: you fully automate your newsletter, the LLM starts inserting hallucinated links to pages that don't exist, and subscribers notice before you do. You lose a chunk of your list and it takes months to rebuild trust. By contrast, the developer who automates 80% of the same process — LLM curates and drafts, they spend 10 minutes reviewing — catches those hallucinations before they ship. The difference isn't the automation. It's the review step.
 
 ### Your Turn
 

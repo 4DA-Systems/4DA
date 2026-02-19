@@ -149,45 +149,7 @@ Then edit the output. The LLM gives you 70% of the docs. Your expertise provides
 
 **Hour 16-20: Create the Listing**
 
-Set up your Lemon Squeezy store. Here's real code for a checkout integration:
-
-```typescript
-// checkout.ts — Lemon Squeezy checkout integration
-const STORE_ID = "your-store-id";
-
-const products = {
-  starter: { variantId: "your-variant-id", name: "Personal License", price: 49 },
-  team:    { variantId: "your-team-variant-id", name: "Team License", price: 149 },
-};
-
-function createCheckoutUrl(productKey: string, email?: string): string {
-  const product = products[productKey];
-  const params = new URLSearchParams({ "checkout[variant_id]": product.variantId });
-  if (email) params.set("checkout[email]", email);
-  return `https://${STORE_ID}.lemonsqueezy.com/checkout?${params}`;
-}
-
-// Webhook handler — Lemon Squeezy sends this after successful payment
-import { createHmac } from "crypto";
-
-async function handleWebhook(req: Request): Promise<Response> {
-  const rawBody = await req.text();
-  const signature = req.headers.get("x-signature") || "";
-  const secret = process.env.LEMON_SQUEEZY_WEBHOOK_SECRET || "";
-
-  // Verify HMAC signature
-  const digest = createHmac("sha256", secret).update(rawBody).digest("hex");
-  if (signature !== digest) return new Response("Invalid signature", { status: 401 });
-
-  const payload = JSON.parse(rawBody);
-  if (payload.meta.event_name === "order_created") {
-    const email = payload.data.attributes.user_email;
-    // Deliver: Lemon Squeezy file delivery (simplest), custom email, or private GitHub repo
-    console.log(`New order from ${email} — delivering product`);
-  }
-  return new Response("OK", { status: 200 });
-}
-```
+Set up your Lemon Squeezy store. The checkout integration is straightforward — create your product, set up a webhook for delivery, and you're live. For the complete payment platform setup walkthrough with code examples, see Module E, Lesson 1.
 
 **Hour 20-24: Write the Sales Page**
 
@@ -255,7 +217,13 @@ To hit $1,000/month: 22 sales/month (less than 1 per day)
 To hit $2,000/month: 44 sales/month (about 1.5 per day)
 ```
 
-These are realistic numbers for a well-positioned product in an active niche. ShipFast (a Next.js boilerplate at $199) reportedly makes $45K+/month. You don't need those numbers. You need 11 sales.
+These are realistic numbers for a well-positioned product in an active niche.
+
+**Real-world benchmarks:**
+- **ShipFast** (Marc Lou): A Next.js boilerplate priced at ~$199-249. Generated $528K in its first 4 months. Marc Lou runs 10 digital products generating ~$83K/month combined. (source: starterstory.com/marc-lou-shipfast)
+- **Tailwind UI** (Adam Wathan): A UI component library that made $500K in its first 3 days and crossed $4M in its first 2 years. However, revenue dropped ~80% year-over-year by late 2025 as AI-generated UI cut into demand — a reminder that even successful products need evolution. (source: adamwathan.me, aibase.com)
+
+You don't need those numbers. You need 11 sales.
 
 ### Your Turn
 
@@ -356,6 +324,13 @@ The 4-step process: (1) Generate outline with local LLM, (2) Draft each section 
 The LLM handles 70% of the work. Your expertise is the 30% that makes people read it, trust it, and click your affiliate links.
 
 > **Common Mistake:** Publishing LLM-generated content without substantial editing. Readers can tell. Google can tell. And it doesn't build the trust that makes affiliate links convert. If you wouldn't put your name on it without the LLM, don't put your name on it with the LLM.
+
+**Real-world newsletter benchmarks to calibrate your expectations:**
+- **TLDR Newsletter** (Dan Ni): 1.2M+ subscribers, generating $5-6.4M/year. Charges up to $18K per sponsor placement. Built on curation, not original reporting. (source: growthinreverse.com/tldr)
+- **Pragmatic Engineer** (Gergely Orosz): 400K+ subscribers, $1.5M+/year from a $15/month subscription alone. Zero sponsors — pure subscriber revenue. (source: growthinreverse.com/gergely)
+- **Cyber Corsairs AI** (Beehiiv case study): Grew to 50K subscribers and $16K/month in under 1 year, demonstrating that new entrants can still break through in focused niches. (source: blog.beehiiv.com)
+
+These are not typical results — they're the top performers. But they prove the model works at scale and the revenue ceiling is real.
 
 ### Channel 2: Newsletter with Premium Tier
 
@@ -501,6 +476,11 @@ A micro-SaaS is not a startup. It's not looking for venture capital. It's not tr
 - Generates $500-5,000/month in revenue
 
 The beauty is in the constraints. One problem. One person. One price point.
+
+**Real-world micro-SaaS benchmarks:**
+- **Pieter Levels** (Nomad List, PhotoAI, etc.): ~$3M/year with zero employees. PhotoAI alone hit $132K/month. Proves the solo-founder micro-SaaS model at scale. (source: fast-saas.com)
+- **Bannerbear** (Jon Yongfook): An image generation API bootstrapped to $50K+ MRR by one person. (source: indiepattern.com)
+- **Reality check:** 70% of micro-SaaS products generate under $1K/month. The survivors above are outliers. Validate before you build, and keep your costs near zero until you have paying customers. (source: softwareseni.com)
 
 ### Finding Your Micro-SaaS Idea
 
@@ -1238,6 +1218,10 @@ You're not selling "programming." You're selling one of these:
 
 The framing matters. "I write Python" is worth $50/hour. "I'll reduce your data pipeline processing time by 60% in two weeks" is worth $300/hour.
 
+**Real rate data for context:**
+- **Rust consulting:** Average $78/hr, with experienced consultants commanding up to $143/hr for standard work. Architecture and migration consulting pushes well above that. (source: ziprecruiter.com)
+- **AI/ML consulting:** $120-250/hr for implementation work. Strategic AI consulting (architecture, deployment planning) commands $250-500/hr at enterprise scale. (source: debutinfotech.com)
+
 ### Hot Consulting Niches in 2026
 
 | Niche | Rate Range | Demand | Why It's Hot |
@@ -1430,13 +1414,19 @@ ENTERPRISE (custom pricing):
 
 ### Real Revenue Examples
 
+**Real-world open-source businesses for calibration:**
+- **Plausible Analytics:** Privacy-first web analytics, AGPL-licensed, fully bootstrapped. Reached $3.1M ARR with 12K subscribers. No venture capital. Proves the AGPL dual-license model works for solo/small-team products. (source: plausible.io/blog)
+- **Ghost:** Open-source publishing platform. $10.4M revenue in 2024, 24K customers. Started as an open-core project and grew through a community-first strategy. (source: getlatka.com)
+
+Here's how growth typically looks for a smaller open-source project with a premium tier:
+
 | Stage | Stars | Pro Users | Team/Enterprise | MRR | Your Time |
 |-------|-------|-----------|----------------|-----|-----------|
 | 6 months | 500 | 12 ($12/mo) | 0 | $144 | 5 hrs/week |
 | 12 months | 2,000 | 48 ($12/mo) | 3 teams ($49/mo) | $723 | 8 hrs/week |
 | 18 months | 5,000 | 150 ($19/mo) | 20 teams + 2 enterprise | $5,430 | 15 hrs/week |
 
-The pattern: slow start, compounding growth. The 18-month tool at $5,430/month MRR = $65K/year. Most of the work is in months 1-6. After that, the community drives growth.
+The pattern: slow start, compounding growth. The 18-month tool at $5,430/month MRR = $65K/year. Most of the work is in months 1-6. After that, the community drives growth. Plausible's trajectory shows what happens when compounding continues beyond 18 months.
 
 ### Setting Up Licensing and Feature Gating
 
@@ -1674,6 +1664,13 @@ Cost to run:  ~$10/mo (email sending + domain)
 Your time:    5-8 hours/week (most automated, you add expertise)
 ```
 
+**Real-world content creator benchmarks for context:**
+- **Fireship** (Jeff Delaney): 4M YouTube subscribers, ~$550K+/year from ads alone. Developer-focused, short-format content. (source: networthspot.com)
+- **Wes Bos:** $10M+ in total course sales, 55K paid students. Proves technical education can scale far beyond newsletter income. (source: foundershut.com)
+- **Josh Comeau:** $550K in the first week of CSS course pre-orders. Demonstrates that focused, high-quality technical education commands premium prices. (source: failory.com)
+
+These are elite outcomes, but the pipeline approach above is how many of them started: consistent, niche-focused content with clear value.
+
 The key: the pipeline does the heavy lifting. Your expertise is the moat. No one else has your specific combination of domain knowledge + curation judgment + processing infrastructure.
 
 ### Your Turn
@@ -1800,18 +1797,20 @@ Don't do these:
 >
 > 4DA's signal detection finds the market gaps your revenue engines fill. Trending framework with no starter kit? Build one (Engine 1). New LLM technique with no tutorial? Write one (Engine 2). Dependency vulnerability with no migration guide? Create one and charge for it (Engine 1, 2, or 8).
 >
-> Every opportunity signal in 4DA maps to at least one revenue engine:
+> 4DA's `get_actionable_signals` tool classifies content by urgency (tactical vs. strategic) with priority levels. Each signal type maps naturally to revenue engines:
 >
-> | 4DA Signal Type | Best Revenue Engine |
-> |----------------|-------------------|
-> | ProductGap | Digital Products, Micro-SaaS |
-> | EducationGap | Content Monetization, Data Products |
-> | MigrationGuide | Digital Products, Consulting |
-> | CommunityDemand | Micro-SaaS, API Products |
-> | SecurityTool | Digital Products, Consulting |
-> | ApiWrapper | API Products |
+> | Signal Classification | Priority | Best Revenue Engine | Example |
+> |----------------------|----------|-------------------|---------|
+> | Tactical / High Priority | Urgent | Consulting, Digital Products | New vulnerability disclosed — write a migration guide or offer remediation consulting |
+> | Tactical / Medium Priority | This week | Content Monetization, Digital Products | Trending library release — write the first tutorial or build a starter kit |
+> | Strategic / High Priority | This quarter | Micro-SaaS, API Products | Emerging pattern across multiple signals — build tooling before the market matures |
+> | Strategic / Medium Priority | This year | Open Source + Premium, Data Products | Narrative shift in a technology area — position yourself as the expert through open-source work or intelligence reports |
 >
-> With 4DA Pro, the daily briefing includes opportunity signals scored against your Developer DNA. The STREETS panel shows you which engine each opportunity maps to and estimates the time window before the market saturates.
+> Pair `get_actionable_signals` with other 4DA tools to go deeper:
+> - **`daily_briefing`** — AI-generated executive summary surfaces the highest-priority signals each morning
+> - **`knowledge_gaps`** — finds gaps in your project's dependencies, revealing opportunities for products that fill those gaps
+> - **`trend_analysis`** — statistical patterns and predictions show which technologies are accelerating
+> - **`semantic_shifts`** — detects when a technology crosses from "experimental" to "production" adoption, signaling market timing
 >
 > The combination is the feedback loop: **4DA detects the opportunity. STREETS gives you the playbook to execute on it. Your revenue engine turns the signal into income.**
 

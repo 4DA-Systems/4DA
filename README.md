@@ -39,42 +39,30 @@ Or build from source — see [Quick Start](#quick-start).
 
 ---
 
-## Screenshots
+## See It In Action
 
 <p align="center">
-  <img src="assets/screenshot-feed.png" alt="Scored Feed — urgent signals, knowledge gaps, and scored content" width="800" />
+  <img src="assets/demo-feed.gif" alt="Scored feed with color-coded signals, knowledge gaps, and relevance tags" width="800" />
   <br />
-  <em>Scored feed with urgent signals, knowledge gaps, and color-coded relevance tags</em>
+  <em>Scored feed — every item earns its place through 5-axis relevance scoring</em>
 </p>
 
 <p align="center">
-  <img src="assets/screenshot-briefing.png" alt="Intelligence Briefing — AI-generated daily summary with top picks" width="800" />
+  <img src="assets/demo-briefing.gif" alt="Intelligence Briefing with AI-generated daily summary and curated top picks" width="800" />
   <br />
-  <em>Intelligence Briefing — AI-generated daily summary with top picks</em>
+  <em>Intelligence Briefing — AI-generated daily summary with curated top picks</em>
 </p>
 
 <p align="center">
-  <img src="assets/screenshot-results.png" alt="All Results — context sidebar with project files and scored results" width="800" />
+  <img src="assets/demo-search-autopsy.gif" alt="Natural language search with Score Autopsy showing full 5-axis breakdown" width="800" />
   <br />
-  <em>All Results view with context sidebar showing your project files</em>
+  <em>Search + Score Autopsy — see exactly why an item scored the way it did</em>
 </p>
 
 <p align="center">
-  <img src="assets/screenshot-insights.png" alt="Tech Radar and Decision Memory" width="800" />
+  <img src="assets/demo-insights.gif" alt="Tech Radar visualization and Decision Memory" width="800" />
   <br />
-  <em>Insights — Tech Radar (244 technologies tracked) and Decision Memory</em>
-</p>
-
-<p align="center">
-  <img src="assets/screenshot-autopsy.png" alt="Score Autopsy — full 5-axis breakdown of why an item scored" width="800" />
-  <br />
-  <em>Score Autopsy — see exactly why an item scored the way it did</em>
-</p>
-
-<p align="center">
-  <img src="assets/screenshot-dna.png" alt="Developer DNA profile" width="800" />
-  <br />
-  <em>Developer DNA — auto-discovered tech identity from your codebase</em>
+  <em>Tech Radar, Decision Memory, and Developer DNA — your full tech identity</em>
 </p>
 
 ---

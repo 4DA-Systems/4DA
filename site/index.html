@@ -273,10 +273,12 @@
     }
     .gallery-item.visible { display: block; }
     .gallery-item:hover { transform: translateY(-2px); border-color: var(--text-muted); }
-    .gallery-item img {
+    .gallery-item img,
+    .gallery-item video {
       width: 100%;
       height: auto;
       display: block;
+      border-radius: var(--radius) var(--radius) 0 0;
     }
     .gallery-caption {
       padding: 16px 20px;
@@ -736,7 +738,7 @@
     <div class="nav-inner">
       <div class="nav-brand">4DA</div>
       <div class="nav-links">
-        <a href="#gallery">Screenshots</a>
+        <a href="#gallery">Demos</a>
         <a href="#how-it-works">How It Works</a>
         <a href="#features">Features</a>
         <a href="#pricing">Pricing</a>
@@ -813,59 +815,57 @@
       </div>
       <div class="gallery-grid">
         <div class="gallery-item visible" data-category="feed">
-          <img src="screenshots/feed-signals.png" alt="Scored feed with urgent signals and knowledge gaps" loading="lazy" />
+          <video autoplay loop muted playsinline poster="media/posters/demo-feed-poster.png">
+            <source src="media/demo-feed.webm" type="video/webm" />
+          </video>
           <div class="gallery-caption">
             <span class="caption-tag">Feed</span>
             <p>Scored feed with urgent signals, knowledge gaps, and color-coded relevance tags. Every item earns its place.</p>
           </div>
         </div>
         <div class="gallery-item visible" data-category="intelligence">
-          <img src="screenshots/intelligence-briefing.png" alt="Intelligence Briefing with AI summary and top picks" loading="lazy" />
+          <video autoplay loop muted playsinline poster="media/posters/demo-briefing-poster.png">
+            <source src="media/demo-briefing.webm" type="video/webm" />
+          </video>
           <div class="gallery-caption">
             <span class="caption-tag">Briefing</span>
             <p>AI-generated daily briefing with actionable insights and curated top picks from all sources.</p>
           </div>
         </div>
         <div class="gallery-item visible" data-category="intelligence">
-          <img src="screenshots/score-autopsy.png" alt="Score Autopsy — full 5-axis scoring breakdown" loading="lazy" />
+          <video autoplay loop muted playsinline poster="media/posters/demo-search-autopsy-poster.png">
+            <source src="media/demo-search-autopsy.webm" type="video/webm" />
+          </video>
           <div class="gallery-caption">
-            <span class="caption-tag">Autopsy</span>
-            <p>Score Autopsy — full 5-axis breakdown showing exactly why an item scored the way it did.</p>
-          </div>
-        </div>
-        <div class="gallery-item visible" data-category="feed">
-          <img src="screenshots/all-results-context.png" alt="All results with context sidebar" loading="lazy" />
-          <div class="gallery-caption">
-            <span class="caption-tag">Results</span>
-            <p>Full results view with your project context sidebar. See how your codebase drives every score.</p>
+            <span class="caption-tag">Search + Autopsy</span>
+            <p>Natural language search with Score Autopsy — full 5-axis breakdown of why an item scored the way it did.</p>
           </div>
         </div>
         <div class="gallery-item visible" data-category="insights">
-          <img src="screenshots/insights-tech-radar.png" alt="Tech Radar and Decision Memory" loading="lazy" />
+          <video autoplay loop muted playsinline poster="media/posters/demo-insights-poster.png">
+            <source src="media/demo-insights.webm" type="video/webm" />
+          </video>
           <div class="gallery-caption">
             <span class="caption-tag">Insights</span>
             <p>Tech Radar tracking 244 technologies plus Decision Memory for architectural choices across sessions.</p>
           </div>
         </div>
         <div class="gallery-item visible" data-category="feed">
-          <img src="screenshots/knowledge-gaps.png" alt="Knowledge gaps detection" loading="lazy" />
+          <video autoplay loop muted playsinline poster="media/posters/demo-knowledge-gaps-poster.png">
+            <source src="media/demo-knowledge-gaps.webm" type="video/webm" />
+          </video>
           <div class="gallery-caption">
             <span class="caption-tag">Gaps</span>
             <p>Knowledge gap detection finds blind spots between what you use and what you track.</p>
           </div>
         </div>
         <div class="gallery-item visible" data-category="settings">
-          <img src="screenshots/settings-profile-developer-dna.png" alt="Developer DNA profile" loading="lazy" />
+          <video autoplay loop muted playsinline poster="media/posters/demo-developer-dna-poster.png">
+            <source src="media/demo-developer-dna.webm" type="video/webm" />
+          </video>
           <div class="gallery-caption">
             <span class="caption-tag">DNA</span>
             <p>Developer DNA auto-discovers your tech identity from your codebase. Primary stack, dependencies, activity heatmap.</p>
-          </div>
-        </div>
-        <div class="gallery-item visible" data-category="settings">
-          <img src="screenshots/settings-reports.png" alt="System health and reports" loading="lazy" />
-          <div class="gallery-caption">
-            <span class="caption-tag">Health</span>
-            <p>System health monitoring, anomaly metrics, and data quality diagnostics. Full transparency.</p>
           </div>
         </div>
       </div>
@@ -1261,6 +1261,22 @@ npx <span class="string">@4da/mcp-server</span>
           });
         });
       });
+    })();
+
+    // Lazy play/pause videos when visible
+    (function() {
+      var videos = document.querySelectorAll('.gallery-item video');
+      if (!videos.length || !('IntersectionObserver' in window)) return;
+      var observer = new IntersectionObserver(function(entries) {
+        entries.forEach(function(entry) {
+          if (entry.isIntersecting) {
+            entry.target.play().catch(function() {});
+          } else {
+            entry.target.pause();
+          }
+        });
+      }, { threshold: 0.3 });
+      videos.forEach(function(v) { observer.observe(v); });
     })();
 
     // Platform detection for download buttons

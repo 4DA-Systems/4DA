@@ -252,7 +252,9 @@ Every consulting gig should produce 2-3 product ideas. Not vague "wouldn't it be
 
 **The "Rule of Three":** If three different clients ask for the same thing, build it as a product. Three is not a coincidence. Three is a market signal.
 
-**Real example:** A developer was doing consulting work for three different fintech companies, each needing to parse bank statement PDFs into structured data. She built a quick script each time. After the third engagement, she turned the script into a hosted API service. It now does $5,200/month with 180 customers. She still consults, but only for companies that become API customers first.
+**Consider this scenario:** You're doing consulting work for three different fintech companies, each needing to parse bank statement PDFs into structured data. You build a quick script each time. After the third engagement, you turn the script into a hosted API service. Within a year, it has 100-200 customers at $25-30/month. You still consult, but only for companies that become API customers first.
+
+For a real-world example of this pattern, Bannerbear (Jon Yongfook) started as automation consulting, evolved into a $50K+ MRR API product by productizing repeating client work (source: indiepattern.com).
 
 ### Connection 2: Content Drives Consulting Leads
 

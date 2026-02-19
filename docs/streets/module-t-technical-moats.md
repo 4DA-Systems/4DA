@@ -204,29 +204,34 @@ Every developer moat falls into one of five categories. Some are quick to build 
 
 **Example 1: Niche Zapier/n8n integrations**
 
-A developer built custom Zapier integrations connecting Clio (legal practice management) with Notion, Slack, and QuickBooks. Law firms were manually copying data between these systems for hours every week.
+Consider this scenario: a developer builds custom Zapier integrations connecting Clio (legal practice management) with Notion, Slack, and QuickBooks. Law firms manually copy data between these systems for hours every week.
 
 - Development time per integration: 40-80 hours
 - Price: $3,000-5,000 per integration
 - Ongoing maintenance retainer: $500/month
-- Revenue in first year: $42,000 from 8 clients
+- Revenue potential in first year: $42,000 from 8 clients
 
-The developer's moat: they understood legal practice management workflows and could speak the language of law firm operations. Another developer could learn the Clio API, sure. But learning the API AND understanding why a law firm needs specific data to flow in a specific order at a specific time in their case lifecycle? That takes domain knowledge most developers don't have.
+The moat: understanding legal practice management workflows and speaking the language of law firm operations. Another developer could learn the Clio API, sure. But learning the API AND understanding why a law firm needs specific data to flow in a specific order at a specific time in their case lifecycle? That takes domain knowledge most developers don't have.
+
+> **NOTE:** For a real reference point on niche integrations, Plausible Analytics bootstrapped a privacy-first analytics tool to $3.1M ARR with 12K paying subscribers by owning one specific wedge (privacy) against a dominant incumbent (Google Analytics). Niche integration plays follow the same pattern: own the bridge nobody else bothers to build. (Source: plausible.io/blog)
 
 **Example 2: MCP servers bridging ecosystems**
 
-A developer built an MCP server connecting Claude Code to Pipedrive (CRM), exposing tools for deal search, stage management, and full deal context retrieval. The server took 3 days to build.
+Here's how this plays out: a developer builds an MCP server connecting Claude Code to Pipedrive (CRM), exposing tools for deal search, stage management, and full deal context retrieval. The server takes 3 days to build.
 
 Revenue model: $19/month per user, or $149/year. Pipedrive has 100,000+ paying companies. Even 0.1% adoption = 100 customers = $1,900/month MRR.
 
+> **NOTE:** This pricing model mirrors real developer tool economics. Marc Lou's ShipFast (a Next.js boilerplate) hit $528K in 4 months at a $199-249 price point by targeting a specific developer need with a focused product. (Source: starterstory.com)
+
 **Example 3: Data pipeline integration**
 
-A developer built a service that takes data from Shopify stores and feeds it into local LLMs for product description generation, SEO optimization, and customer email personalization. The integration handled Shopify webhooks, product schema mapping, image processing, and output formatting — all locally.
+Consider this scenario: a developer builds a service that takes data from Shopify stores and feeds it into local LLMs for product description generation, SEO optimization, and customer email personalization. The integration handles Shopify webhooks, product schema mapping, image processing, and output formatting — all locally.
 
 - Monthly fee: $49/month per store
-- 30 stores after 4 months
-- MRR: $1,470
+- 30 stores after 4 months = $1,470 MRR
 - The moat: deep understanding of Shopify's data model AND local LLM deployment AND e-commerce copywriting patterns. Three domains. Very few people at that intersection.
+
+> **NOTE:** For real-world validation of multi-domain intersection plays, Pieter Levels runs Nomad List, PhotoAI, and other products generating roughly $3M/year with zero employees — each product sits at an intersection of technical skill and niche domain knowledge that few competitors can replicate. (Source: fast-saas.com)
 
 **How to build an integration moat:**
 
@@ -262,7 +267,7 @@ Here's the real math:
 
 **Example: The landing page speedrunner**
 
-A freelance developer built a reputation for delivering complete landing pages — design, copy, responsive layout, contact form, analytics, deployment — in under 6 hours. They charged $1,500 per page.
+Here's how this plays out: a freelance developer builds a reputation for delivering complete landing pages — design, copy, responsive layout, contact form, analytics, deployment — in under 6 hours, charging $1,500 per page.
 
 Their stack:
 - Claude Code for generating the initial layout and copy from a client brief
@@ -277,6 +282,8 @@ This developer: $1,500, delivered same day, client ecstatic.
 Monthly revenue from landing pages alone: $6,000-9,000 (4-6 pages per month).
 
 The moat: the component library and deployment workflow took 6 months to build. A new competitor would need those same 6 months to reach the same speed. By then, the developer has 6 months of client relationships and referrals.
+
+> **NOTE:** The component library approach mirrors Adam Wathan's Tailwind UI, which generated $4M+ in its first 2 years selling pre-built CSS components at $149-299. Speed moats built on reusable assets have proven economics. (Source: adamwathan.me)
 
 **How to build a speed moat:**
 
@@ -339,23 +346,25 @@ This isn't a theory. It's math. Google's index has billions of pages, but for th
 
 **Example: The Rust + WebAssembly consultant**
 
-A developer wrote one blog post per month about Rust + WebAssembly for 6 months. Topics included:
+Consider this scenario: a developer writes one blog post per month about Rust + WebAssembly for 6 months. Topics include:
 
 1. "Compiling Rust to WASM: The Complete Production Guide"
 2. "WASM Performance Benchmarks: Rust vs. Go vs. C++ in 2026"
 3. "Building Browser Extensions in Rust with WebAssembly"
 4. "Debugging WASM Memory Leaks: The Definitive Troubleshooting Guide"
-5. "Rust + WASM in Production: 5 Lessons from Shipping to 1M Users"
+5. "Rust + WASM in Production: Lessons from Shipping to 1M Users"
 6. "The WebAssembly Component Model: What It Means for Rust Developers"
 
-Results after 6 months:
+Projected results after 6 months:
 - Combined monthly views: ~15,000
 - Inbound consulting inquiries: 4-6 per month
 - Consulting rate: $300/hr (up from $150/hr before the blog)
 - Monthly consulting revenue: $6,000-12,000 (20-40 billable hours)
 - Speaking invitations: 2 conferences
 
-The developer's total time investment in writing: about 80 hours over 6 months. The ROI on those 80 hours is absurd.
+The total time investment in writing: about 80 hours over 6 months. The ROI on those 80 hours is absurd.
+
+> **NOTE:** Rust developer consulting rates averaging $78/hr (up to $143/hr on the high end per ZipRecruiter data) are the baseline. Trust moat positioning pushes rates to $200-400/hr. AI/ML specialists with trust moats command $120-250/hr (Source: index.dev). The "3 blog posts" strategy works because in most micro-niches, fewer than 3 deep technical articles exist.
 
 **Building in public as a trust accelerator:**
 
@@ -397,16 +406,18 @@ The same dynamic applies to consulting. Client #1 hired you because of a blog po
 
 **Example: npm trend analytics**
 
-A developer built a data pipeline that tracked npm download statistics, GitHub stars, StackOverflow question frequency, and job posting mentions for every JavaScript framework and library. They ran this pipeline daily for 2 years, accumulating a dataset that simply didn't exist anywhere else in that format.
+Here's how this plays out: a developer builds a data pipeline that tracks npm download statistics, GitHub stars, StackOverflow question frequency, and job posting mentions for every JavaScript framework and library. They run this pipeline daily for 2 years, accumulating a dataset that simply doesn't exist anywhere else in that format.
 
 Products built on this data:
 - Weekly "JavaScript Ecosystem Pulse" newsletter — $7/month, 400 subscribers = $2,800/month
 - Quarterly trend reports sold to developer tool companies — $500 each, 6-8 per quarter = $3,000-4,000/quarter
 - API access to raw data for researchers — $49/month, 20 subscribers = $980/month
 
-Total monthly revenue: ~$4,500
+Total monthly revenue potential: ~$4,500
 
 The moat: replicating that data pipeline would take another developer 2 years of daily collection. The historical data is irreplaceable. You can't go back in time and collect last year's daily npm stats.
+
+> **NOTE:** This model mirrors real data businesses. Plausible Analytics built their competitive moat partly on being the only privacy-first analytics platform with years of accumulated operational data and trust, bootstrapping to $3.1M ARR. Data moats are the hardest to replicate because they require time, not just skill. (Source: plausible.io/blog)
 
 **How to build data moats ethically:**
 
@@ -1362,9 +1373,9 @@ to consider pivoting.*
 
 ### A Completed Example
 
-Here's a condensed real example. Use it as a reference for the level of specificity expected.
+Here's how your Moat Map might look when filled in. This is a template example — use it as a reference for the level of specificity expected.
 
-**Alex Chen — DevBridge Consulting**
+**[Your Name] — [Your Business Name]**
 
 - **T-Shape:** Deep in Rust + local AI deployment. Adjacent: TypeScript, Docker, tech writing. Non-tech: 2 years working IT at a law firm.
 - **Unique Intersection:** "Rust + local AI + law firm operations. Fewer than 50 devs worldwide share this."
@@ -1487,13 +1498,13 @@ Module R is weeks 5-8 and it's the densest module in STREETS. It's where the act
 
 Your Moat Map is a snapshot. 4DA makes it a living radar.
 
-**Use Developer DNA** to see your actual tech identity — not what you think your skills are, but what your codebase, your reading patterns, and your tool usage reveal about your real strengths.
+**Use `developer_dna`** to see your actual tech identity — not what you think your skills are, but what your codebase, your project structure, and your tool usage reveal about your real strengths. This is built from scanning your actual projects, not self-reported surveys.
 
-**Use 4DA's knowledge gap analysis** (`knowledge_gaps` tool) to find niches where demand exceeds supply. When 4DA shows you that a technology has growing adoption but few quality resources, that's your signal to build.
+**Use `knowledge_gaps`** to find niches where demand exceeds supply. When 4DA shows you that a technology has growing adoption but few quality resources or tooling, that's your signal to build.
 
-**Use signal classification** (`get_actionable_signals` tool) to monitor your niche daily. When a new competitor appears, when demand shifts, when a regulation changes — 4DA surfaces it before your competitors notice.
+**Use `get_actionable_signals`** to monitor your niche daily. When a new competitor appears, when demand shifts, when a regulation changes — 4DA classifies content into tactical and strategic signals with priority levels, surfacing what matters before your competitors notice.
 
-**Use the opportunity radar** (STREETS Panel, Pro feature) to get AI-analyzed income opportunities matched to your Developer DNA. Instead of manually scanning Reddit and HN, let 4DA do the scanning and present you with signals that match your Moat Map.
+**Use `semantic_shifts`** to detect when technologies move from experimental to production adoption. This is the timing signal for your 2026-specific moats — knowing when a technology crosses the threshold from "interesting" to "companies are hiring for this" tells you when to build.
 
 Your Sovereign Stack Document (Module S) + your Moat Map (Module T) + 4DA's continuous intelligence = a positioning system that's always on.
 
