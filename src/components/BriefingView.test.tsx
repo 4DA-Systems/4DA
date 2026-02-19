@@ -66,44 +66,44 @@ describe('BriefingView', () => {
   });
 
   describe('empty state', () => {
-    it('shows preparing message when no briefing', () => {
+    it('shows "Gathering Intelligence" when analysis is loading', () => {
       setMockState({
         aiBriefing: { content: null, loading: false, error: null, model: null, lastGenerated: null },
-        appState: { relevanceResults: [{ id: 1, title: 'Test', top_score: 0.5 }] },
+        appState: { relevanceResults: [], loading: true, analysisComplete: false },
       });
       render(<BriefingView />);
-      expect(screen.getByText('Preparing Your Briefing')).toBeInTheDocument();
+      expect(screen.getByText('Gathering Intelligence')).toBeInTheDocument();
     });
 
-    it('shows gathering message when no results', () => {
+    it('shows "Briefing Ready to Generate" when analysis done with results', () => {
       setMockState({
         aiBriefing: { content: null, loading: false, error: null, model: null, lastGenerated: null },
-        appState: { relevanceResults: [] },
+        appState: { relevanceResults: Array.from({ length: 15 }, (_, i) => ({ id: i })), loading: false, analysisComplete: true },
       });
       render(<BriefingView />);
-      expect(screen.getByText(/gathering intelligence/)).toBeInTheDocument();
+      expect(screen.getByText('Briefing Ready to Generate')).toBeInTheDocument();
+      expect(screen.getByText(/15 results analyzed/)).toBeInTheDocument();
     });
 
-    it('shows result count when results available', () => {
+    it('shows "No Intelligence Yet" when no analysis has run', () => {
       setMockState({
         aiBriefing: { content: null, loading: false, error: null, model: null, lastGenerated: null },
-        appState: { relevanceResults: Array.from({ length: 15 }, (_, i) => ({ id: i })) },
+        appState: { relevanceResults: [], loading: false, analysisComplete: false },
       });
       render(<BriefingView />);
-      expect(screen.getByText(/Analyzing 15 results/)).toBeInTheDocument();
+      expect(screen.getByText('No Intelligence Yet')).toBeInTheDocument();
     });
 
-    it('shows "browse results" link when results exist', () => {
-      const setView = vi.fn();
+    it('shows "Analyze Now" button in no-data state', () => {
+      const startFn = vi.fn();
       setMockState({
         aiBriefing: { content: null, loading: false, error: null, model: null, lastGenerated: null },
-        appState: { relevanceResults: [{ id: 1 }, { id: 2 }] },
-        setActiveView: setView,
+        appState: { relevanceResults: [], loading: false, analysisComplete: false },
+        startAnalysis: startFn,
       });
       render(<BriefingView />);
-      const link = screen.getByText(/Browse 2 results/i);
-      fireEvent.click(link);
-      expect(setView).toHaveBeenCalledWith('results');
+      fireEvent.click(screen.getByText('Analyze Now'));
+      expect(startFn).toHaveBeenCalledTimes(1);
     });
   });
 

@@ -3,6 +3,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { AudioBriefing } from './AudioBriefing';
 import { ContextHandoff } from './ContextHandoff';
 import { getStageLabel } from '../utils/score';
+import { useAppStore } from '../store';
 import type { Settings, SourceRelevance } from '../types';
 
 interface ActionBarProps {
@@ -61,6 +62,7 @@ export function ActionBar({
     return () => document.removeEventListener('mousedown', handleClick);
   }, [overflowOpen]);
 
+  const embeddingMode = useAppStore(s => s.embeddingMode);
   const isRefreshing = state.loading || aiBriefing.loading;
   const refreshLabel = getRefreshLabel(state, aiBriefing.loading);
   const isUpToDate = refreshLabel === 'Up to date';
@@ -99,6 +101,16 @@ export function ActionBar({
         {settings?.rerank.enabled && settings?.llm.has_api_key && (
           <div className="px-3 py-1.5 bg-orange-500/10 text-orange-400 text-xs rounded-lg border border-orange-500/20">
             LLM
+          </div>
+        )}
+
+        {/* Keyword-only Mode Badge */}
+        {embeddingMode === 'keyword-only' && (
+          <div
+            className="px-3 py-1.5 bg-amber-500/10 text-amber-400 text-xs rounded-lg border border-amber-500/20 cursor-help"
+            title="No embedding model available. Add Ollama or an API key for semantic matching."
+          >
+            Keyword only
           </div>
         )}
 

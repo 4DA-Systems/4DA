@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useState, useEffect } from 'react';
 import { BriefingCard } from './BriefingCard';
 import { SignalActionCard } from './briefing/SignalActionCard';
+import { BriefingLoadingState, BriefingReadyState, BriefingNoDataState } from './BriefingEmptyStates';
 import { ProGate } from './ProGate';
 import { useAppStore } from '../store';
 
@@ -161,6 +162,8 @@ export function BriefingView() {
   // Read everything from store — zero props
   const briefing = useAppStore(s => s.aiBriefing);
   const results = useAppStore(s => s.appState.relevanceResults);
+  const isLoading = useAppStore(s => s.appState.loading);
+  const analysisComplete = useAppStore(s => s.appState.analysisComplete);
   const generateBriefing = useAppStore(s => s.generateBriefing);
   const recordInteraction = useAppStore(s => s.recordInteraction);
   const feedbackGiven = useAppStore(s => s.feedbackGiven);
@@ -276,31 +279,11 @@ export function BriefingView() {
     );
   }
 
-  // Empty state: no briefing content and not loading
+  // Empty state: no briefing content and not generating
   if (!briefing.content) {
-    return (
-      <div className="bg-bg-primary rounded-lg">
-        <div className="flex flex-col items-center justify-center py-20 px-8">
-          <div className="w-20 h-20 mb-6 bg-bg-secondary rounded-2xl border border-border flex items-center justify-center">
-            <div className="w-6 h-6 border-2 border-orange-400 border-t-transparent rounded-full animate-spin" />
-          </div>
-          <h2 className="text-xl font-medium text-white mb-2">Preparing Your Briefing</h2>
-          <p className="text-sm text-gray-500 text-center max-w-md">
-            {results.length === 0
-              ? '4DA is gathering intelligence from your sources...'
-              : `Analyzing ${results.length} results to surface what matters most...`}
-          </p>
-          {results.length > 0 && (
-            <button
-              onClick={() => setActiveView('results')}
-              className="mt-6 text-sm text-gray-500 hover:text-gray-300 transition-colors"
-            >
-              Browse {results.length} results while you wait
-            </button>
-          )}
-        </div>
-      </div>
-    );
+    if (isLoading) return <BriefingLoadingState />;
+    if (analysisComplete && results.length > 0) return <BriefingReadyState />;
+    return <BriefingNoDataState />;
   }
 
   // Briefing content view

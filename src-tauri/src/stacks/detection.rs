@@ -4,6 +4,7 @@
 //! and core_tech to suggest relevant profiles during onboarding.
 
 use super::profiles::ALL_PROFILES;
+use super::scoring::text_contains_term;
 use crate::scoring::ACEContext;
 
 /// A detected stack profile with confidence.
@@ -45,10 +46,10 @@ pub(crate) fn detect_matching_profiles(ace_ctx: &ACEContext) -> Vec<StackDetecti
                 continue;
             }
 
-            let in_detected = ace_ctx
-                .detected_tech
-                .iter()
-                .any(|dt| dt.to_lowercase().contains(&marker_lower));
+            let in_detected = ace_ctx.detected_tech.iter().any(|dt| {
+                let dt_lower = dt.to_lowercase();
+                dt_lower == marker_lower || text_contains_term(&dt_lower, &marker_lower)
+            });
             let in_deps = ace_ctx.dependency_names.contains(&marker_lower);
 
             if in_detected || in_deps {

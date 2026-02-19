@@ -33,6 +33,7 @@ export function ResultsView({
 
   // Action selectors (stable references, no need for useShallow)
   const setExpandedItem = useAppStore(s => s.setExpandedItem);
+  const startAnalysis = useAppStore(s => s.startAnalysis);
   const loadContextFiles = useAppStore(s => s.loadContextFiles);
   const clearContext = useAppStore(s => s.clearContext);
   const indexContext = useAppStore(s => s.indexContext);
@@ -111,10 +112,12 @@ export function ResultsView({
           {state.contextFiles.length === 0 ? (
             <div className="text-center py-8 px-4">
               <div className="w-12 h-12 mx-auto mb-3 bg-bg-tertiary rounded-full flex items-center justify-center">
-                <span className="text-2xl text-gray-500">F</span>
+                <svg className="w-5 h-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                </svg>
               </div>
-              <p className="text-gray-400 text-sm mb-1">No context files yet</p>
-              <p className="text-xs text-gray-600">Add files to your context directory to enable personalized analysis.</p>
+              <p className="text-gray-400 text-sm mb-1">Context auto-discovered</p>
+              <p className="text-xs text-gray-600">4DA scans your projects automatically. Customize scan paths in Settings.</p>
             </div>
           ) : (
             <ul className="space-y-2">
@@ -377,11 +380,22 @@ export function ResultsView({
               ) : (
                 <>
                   <div className="w-16 h-16 mx-auto mb-4 bg-bg-tertiary rounded-full flex items-center justify-center">
-                    <span className="text-3xl text-gray-500">?</span>
+                    <svg className="w-7 h-7 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                    </svg>
                   </div>
-                  <p className="text-lg text-white mb-2">Ready to search</p>
-                  <p className="text-sm text-gray-500">
-                    Click <span className="text-orange-400">Analyze</span> to find relevant content
+                  <p className="text-lg text-white mb-2">No results yet</p>
+                  <p className="text-sm text-gray-500 mb-5">
+                    Run an analysis to discover relevant content from 7+ sources
+                  </p>
+                  <button
+                    onClick={startAnalysis}
+                    className="px-6 py-2.5 bg-orange-500 text-white text-sm font-medium rounded-lg hover:bg-orange-600 transition-colors"
+                  >
+                    Analyze Now
+                  </button>
+                  <p className="text-xs text-gray-600 mt-3">
+                    or press <kbd className="px-1.5 py-0.5 bg-bg-tertiary rounded text-gray-500">R</kbd>
                   </p>
                 </>
               )}
@@ -389,12 +403,33 @@ export function ResultsView({
           ) : filteredResults.length === 0 ? (
             <div className="text-center py-16">
               <div className="w-16 h-16 mx-auto mb-4 bg-bg-tertiary rounded-full flex items-center justify-center">
-                <span className="text-3xl text-gray-500">--</span>
+                <svg className="w-7 h-7 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
+                </svg>
               </div>
-              <p className="text-lg text-white mb-2">No results match</p>
-              <p className="text-sm text-gray-500">
-                Try enabling more sources or showing all items
+              <p className="text-lg text-white mb-2">No results match your filters</p>
+              <p className="text-sm text-gray-500 mb-5">
+                {state.relevanceResults.length} items analyzed, but none match current filters
               </p>
+              <div className="flex items-center justify-center gap-3">
+                {showOnlyRelevant && (
+                  <button
+                    onClick={() => setShowOnlyRelevant(false)}
+                    className="px-4 py-2 text-sm bg-bg-tertiary text-gray-300 rounded-lg border border-border hover:border-orange-500/30 transition-all"
+                  >
+                    Show all items
+                  </button>
+                )}
+                {sourceFilters.size > 0 && (
+                  <button
+                    onClick={() => sourceFilters.forEach(s => toggleSourceFilter(s))}
+                    className="px-4 py-2 text-sm bg-bg-tertiary text-gray-300 rounded-lg border border-border hover:border-orange-500/30 transition-all"
+                  >
+                    Clear source filters
+                  </button>
+                )}
+                {!showOnlyRelevant && sourceFilters.size === 0 && <p className="text-xs text-gray-600">Try a broader search query or add more interests in Settings</p>}
+              </div>
             </div>
           ) : (
             <div style={{ height: `${virtualizer.getTotalSize()}px`, width: '100%', position: 'relative' }}>

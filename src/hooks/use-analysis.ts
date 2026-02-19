@@ -111,7 +111,10 @@ export function useAnalysis(
 
       // Embedding mode event
       unlistenEmbeddingMode = await listen<{ mode: string; reason?: string }>('embedding-mode', (event) => {
-        if (event.payload.mode === 'keyword-only') {
+        const mode = event.payload.mode as 'semantic' | 'keyword-only';
+        useAppStore.getState().setEmbeddingMode(mode);
+        // Suppress toast during first-run (FirstRunTransition handles it)
+        if (!useAppStore.getState().isFirstRun && mode === 'keyword-only') {
           useAppStore.getState().addToast('info', 'Running in keyword-only mode. Add API key for better results.');
         }
       });

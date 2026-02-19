@@ -104,6 +104,9 @@ pub struct ScoreBreakdown {
     /// Stack intelligence: ecosystem shift multiplier (0.95-1.25, default 1.0)
     #[serde(default = "default_quality_mult")]
     pub ecosystem_shift_mult: f32,
+    /// Stack intelligence: competing tech suppression (0.95 or 1.0)
+    #[serde(default = "default_quality_mult")]
+    pub stack_competing_mult: f32,
     /// LLM relevance score (1-5 scale, None if LLM skipped)
     #[serde(default)]
     pub llm_score: Option<f32>,

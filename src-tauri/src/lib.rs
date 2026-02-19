@@ -108,6 +108,7 @@ pub mod stacks;
 
 mod command_runner;
 mod git_deck;
+mod playbook_commands;
 mod toolkit;
 
 use source_fetching::fill_cache_background;
@@ -350,6 +351,11 @@ pub fn run() {
             stack_commands::set_selected_stacks,
             stack_commands::detect_stack_profiles,
             stack_commands::get_composed_stack,
+            // Playbook (STREETS Course)
+            playbook_commands::get_playbook_modules,
+            playbook_commands::get_playbook_content,
+            playbook_commands::get_playbook_progress,
+            playbook_commands::mark_lesson_complete,
             // Diagnostics
             commands::get_diagnostics
         ])

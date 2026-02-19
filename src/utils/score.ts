@@ -14,11 +14,11 @@ export function getStageLabel(stage: string): string {
   switch (stage) {
     case 'init': return 'Initializing';
     case 'context': return 'Loading Context';
-    case 'fetch': return 'Fetching Stories';
-    case 'scrape': return 'Scraping Content';
-    case 'embed': return 'Embedding';
-    case 'relevance': return 'Computing Relevance';
-    case 'rerank': return 'LLM Re-ranking';
+    case 'fetch': return 'Fetching Sources';
+    case 'scrape': return 'Extracting Content';
+    case 'embed': return 'Building Embeddings';
+    case 'relevance': return 'Scoring Relevance';
+    case 'rerank': return 'AI Re-ranking';
     case 'complete': return 'Complete';
     default: return stage;
   }

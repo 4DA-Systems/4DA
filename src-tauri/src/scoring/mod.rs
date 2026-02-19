@@ -387,6 +387,14 @@ pub(crate) fn score_item(
     let ecosystem_shift_mult =
         crate::stacks::scoring::detect_ecosystem_shift(&topics, input.title, &ctx.composed_stack);
 
+    // Stack-aware competing tech penalty: suppresses content about alternatives
+    // when the user doesn't also mention their own tech (e.g., pure Go article for Rust user)
+    let stack_competing_mult = crate::stacks::scoring::compute_competing_penalty(
+        input.title,
+        input.content,
+        &ctx.composed_stack,
+    );
+
     // Combine all quality multipliers as a SINGLE dampened composite.
     // Asymmetric dampening: penalties keep more teeth than boosts.
     let dampen = |m: f32| {
@@ -408,7 +416,8 @@ pub(crate) fn score_item(
         * dampen(content_quality.multiplier)
         * content_dna_dampened
         * dampen(novelty.multiplier)
-        * dampen(ecosystem_shift_mult);
+        * dampen(ecosystem_shift_mult)
+        * dampen(stack_competing_mult);
     let base_score = (base_score * composite_mult).clamp(0.0, 1.0);
 
     // Intent boost: amplify items matching recent work topics (what you're coding RIGHT NOW)
@@ -604,6 +613,7 @@ pub(crate) fn score_item(
         competing_mult,
         stack_boost,
         ecosystem_shift_mult,
+        stack_competing_mult,
         llm_score: None,
         llm_reason: None,
     };

@@ -61,6 +61,10 @@ stack_boost: number,
  */
 ecosystem_shift_mult: number, 
 /**
+ * Stack intelligence: competing tech suppression (0.95 or 1.0)
+ */
+stack_competing_mult: number, 
+/**
  * LLM relevance score (1-5 scale, None if LLM skipped)
  */
 llm_score: number | null, 
