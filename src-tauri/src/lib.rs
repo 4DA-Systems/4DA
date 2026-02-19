@@ -103,6 +103,9 @@ mod tts;
 mod void_commands;
 mod void_engine;
 
+mod stack_commands;
+pub mod stacks;
+
 mod command_runner;
 mod git_deck;
 mod toolkit;
@@ -341,6 +344,12 @@ pub fn run() {
             toolkit::toolkit_env_snapshot,
             toolkit::toolkit_http_request,
             toolkit::toolkit_get_http_history,
+            // Stack Intelligence
+            stack_commands::get_stack_profiles,
+            stack_commands::get_selected_stacks,
+            stack_commands::set_selected_stacks,
+            stack_commands::detect_stack_profiles,
+            stack_commands::get_composed_stack,
             // Diagnostics
             commands::get_diagnostics
         ])

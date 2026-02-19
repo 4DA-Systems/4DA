@@ -53,6 +53,14 @@ content_dna_mult: number,
  */
 competing_mult: number, 
 /**
+ * Stack intelligence: pain point and keyword boost (0.0-0.20)
+ */
+stack_boost: number, 
+/**
+ * Stack intelligence: ecosystem shift multiplier (0.95-1.25, default 1.0)
+ */
+ecosystem_shift_mult: number, 
+/**
  * LLM relevance score (1-5 scale, None if LLM skipped)
  */
 llm_score: number | null, 

@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import type { OllamaStatus, PullProgress } from './types';
+import { StackSelectStep } from './StackSelectStep';
 
 interface QuickSetupStepProps {
   isAnimating: boolean;
@@ -28,7 +29,11 @@ export function QuickSetupStep({ isAnimating, onComplete, onBack }: QuickSetupSt
   // Section collapse state
   const [aiOpen, setAiOpen] = useState(true);
   const [projectsOpen, setProjectsOpen] = useState(false);
+  const [stacksOpen, setStacksOpen] = useState(false);
   const [interestsOpen, setInterestsOpen] = useState(false);
+
+  // Stack Intelligence state
+  const [selectedStacks, setSelectedStacks] = useState<string[]>([]);
 
   // AI Provider state
   const [ollamaStatus, setOllamaStatus] = useState<OllamaStatus | null>(null);
@@ -244,6 +249,11 @@ export function QuickSetupStep({ isAnimating, onComplete, onBack }: QuickSetupSt
       // Save detected technologies as declared tech stack
       for (const tech of detectedTech) {
         await invoke('add_tech_stack', { technology: tech });
+      }
+
+      // Save selected stack profiles
+      if (selectedStacks.length > 0) {
+        await invoke('set_selected_stacks', { profileIds: selectedStacks });
       }
 
       onComplete();
@@ -487,7 +497,27 @@ export function QuickSetupStep({ isAnimating, onComplete, onBack }: QuickSetupSt
           )}
         </div>
 
-        {/* Section 3: Your Interests */}
+        {/* Section 3: Your Stack */}
+        <div>
+          <SectionHeader
+            title="Your Stack"
+            subtitle={selectedStacks.length > 0 ? `${selectedStacks.length} profile${selectedStacks.length > 1 ? 's' : ''} selected` : 'Auto-detecting...'}
+            isOpen={stacksOpen}
+            onToggle={() => setStacksOpen(!stacksOpen)}
+            done={selectedStacks.length > 0}
+          />
+          {stacksOpen && (
+            <div className="mt-2 p-4 bg-bg-secondary rounded-lg border border-border">
+              <StackSelectStep
+                selected={selectedStacks}
+                onSelectionChange={setSelectedStacks}
+                compact
+              />
+            </div>
+          )}
+        </div>
+
+        {/* Section 4: Your Interests */}
         <div>
           <SectionHeader
             title="Your Interests"
