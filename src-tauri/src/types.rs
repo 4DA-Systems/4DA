@@ -98,6 +98,12 @@ pub struct ScoreBreakdown {
     /// Competing tech penalty multiplier (0.5 or 1.0)
     #[serde(default = "default_quality_mult")]
     pub competing_mult: f32,
+    /// Stack intelligence: pain point and keyword boost (0.0-0.20)
+    #[serde(default)]
+    pub stack_boost: f32,
+    /// Stack intelligence: ecosystem shift multiplier (0.95-1.25, default 1.0)
+    #[serde(default = "default_quality_mult")]
+    pub ecosystem_shift_mult: f32,
     /// LLM relevance score (1-5 scale, None if LLM skipped)
     #[serde(default)]
     pub llm_score: Option<f32>,

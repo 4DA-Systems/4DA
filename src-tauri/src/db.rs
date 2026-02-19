@@ -327,7 +327,7 @@ impl Database {
             .query_row("SELECT version FROM schema_version", [], |row| row.get(0))
             .unwrap_or(1);
 
-        const TARGET_VERSION: i64 = 12;
+        const TARGET_VERSION: i64 = 13;
         if current_version < TARGET_VERSION {
             // Drop the conn lock briefly to allow backup (needs filesystem access)
             drop(conn);
@@ -537,6 +537,30 @@ impl Database {
                             );
                             CREATE INDEX IF NOT EXISTS idx_http_history_created
                                 ON toolkit_http_history(created_at);",
+                        )
+                    },
+                )?;
+                current_version = 12;
+            }
+
+            // Phase 13 migration: Stack Intelligence System
+            if current_version < 13 {
+                Self::run_versioned_migration(
+                    &conn,
+                    12,
+                    13,
+                    "Phase 13: stack intelligence",
+                    |c| {
+                        c.execute_batch(
+                            "CREATE TABLE IF NOT EXISTS selected_stacks (
+                                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                                profile_id TEXT NOT NULL UNIQUE,
+                                auto_detected INTEGER DEFAULT 0,
+                                confidence REAL DEFAULT 1.0,
+                                created_at TEXT DEFAULT (datetime('now'))
+                            );
+                            CREATE INDEX IF NOT EXISTS idx_selected_stacks_profile
+                                ON selected_stacks(profile_id);",
                         )
                     },
                 )?;

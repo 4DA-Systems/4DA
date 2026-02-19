@@ -77,6 +77,8 @@ pub(crate) struct ScoringContext {
     pub work_topics: Vec<String>,
     /// Total feedback interactions — used to detect bootstrap mode for new users
     pub feedback_interaction_count: i64,
+    /// Composed stack profile for stack-aware scoring (inactive when no stacks selected)
+    pub composed_stack: crate::stacks::ComposedStack,
 }
 
 /// Options controlling which scoring stages are applied
@@ -137,10 +139,20 @@ pub(crate) async fn build_scoring_context(db: &Database) -> Result<ScoringContex
     };
 
     // Build domain profile for graduated domain relevance scoring
-    let domain_profile = {
+    let (domain_profile, composed_stack) = {
         let conn = crate::open_db_connection()?;
-        crate::domain_profile::build_domain_profile(&conn)
+        let dp = crate::domain_profile::build_domain_profile(&conn);
+        let cs = crate::stacks::load_composed_stack(&conn);
+        (dp, cs)
     };
+
+    // Warm-start source preferences from stack profiles (only fills gaps)
+    let mut source_quality = source_quality;
+    if composed_stack.active {
+        for (&source, &pref) in &composed_stack.source_preferences {
+            source_quality.entry(source.to_string()).or_insert(pref);
+        }
+    }
 
     info!(target: "4da::ace",
         topics = ace_ctx.active_topics.len(),
@@ -150,6 +162,7 @@ pub(crate) async fn build_scoring_context(db: &Database) -> Result<ScoringContex
         source_prefs = source_quality.len(),
         domain_primary = domain_profile.primary_stack.len(),
         domain_all = domain_profile.all_tech.len(),
+        stack_active = composed_stack.active,
         has_active_work,
         "ACE context loaded for scoring"
     );
@@ -171,6 +184,7 @@ pub(crate) async fn build_scoring_context(db: &Database) -> Result<ScoringContex
         domain_profile,
         work_topics,
         feedback_interaction_count,
+        composed_stack,
     })
 }
 
@@ -297,6 +311,14 @@ pub(crate) fn score_item(
     let base_score =
         (base_score + dep_match_score * scoring_config::DEPENDENCY_BOOST_WEIGHT).min(1.0);
 
+    // Stack intelligence: pain point and keyword boost from selected profiles
+    let stack_boost = crate::stacks::scoring::compute_stack_boost(
+        input.title,
+        input.content,
+        &ctx.composed_stack,
+    );
+    let base_score = (base_score + stack_boost).min(1.0);
+
     // Optional freshness
     let freshness = if options.apply_freshness {
         if let Some(created_at) = input.created_at {
@@ -361,6 +383,10 @@ pub(crate) fn score_item(
         &ctx.domain_profile.primary_stack,
     );
 
+    // Ecosystem shift detection from stack profiles
+    let ecosystem_shift_mult =
+        crate::stacks::scoring::detect_ecosystem_shift(&topics, input.title, &ctx.composed_stack);
+
     // Combine all quality multipliers as a SINGLE dampened composite.
     // Asymmetric dampening: penalties keep more teeth than boosts.
     let dampen = |m: f32| {
@@ -381,7 +407,8 @@ pub(crate) fn score_item(
     let composite_mult = dampen(competing_mult)
         * dampen(content_quality.multiplier)
         * content_dna_dampened
-        * dampen(novelty.multiplier);
+        * dampen(novelty.multiplier)
+        * dampen(ecosystem_shift_mult);
     let base_score = (base_score * composite_mult).clamp(0.0, 1.0);
 
     // Intent boost: amplify items matching recent work topics (what you're coding RIGHT NOW)
@@ -426,6 +453,13 @@ pub(crate) fn score_item(
     };
     let base_score = (base_score + feedback_boost).clamp(0.0, 1.0);
 
+    // Stack pain point match for ACE axis confirmation
+    let stack_pain_match = crate::stacks::scoring::has_pain_point_match(
+        input.title,
+        input.content,
+        &ctx.composed_stack,
+    );
+
     // Multi-signal confirmation gate: require 2+ independent axes to pass
     let affinity_mult = compute_affinity_multiplier(&topics, &ctx.ace_ctx);
     let (gated_score, signal_count, confirmation_mult, confirmed_signals) = apply_confirmation_gate(
@@ -439,6 +473,7 @@ pub(crate) fn score_item(
         feedback_boost,
         affinity_mult,
         dep_match_score,
+        stack_pain_match,
     );
 
     // Unified scoring (applies affinity + anti-penalty on gated score)
@@ -567,6 +602,8 @@ pub(crate) fn score_item(
         content_type: Some(content_type.slug().to_string()),
         content_dna_mult,
         competing_mult,
+        stack_boost,
+        ecosystem_shift_mult,
         llm_score: None,
         llm_reason: None,
     };

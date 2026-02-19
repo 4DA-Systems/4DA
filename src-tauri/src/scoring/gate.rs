@@ -54,16 +54,19 @@ pub(crate) fn count_confirmed_signals(
     feedback_boost: f32,
     affinity_mult: f32,
     dep_match_score: f32,
+    stack_pain_match: bool,
 ) -> SignalConfirmation {
     let context_confirmed = context_score >= scoring_config::CONTEXT_THRESHOLD;
     let interest_confirmed = interest_score >= scoring_config::INTEREST_THRESHOLD
         || keyword_score >= scoring_config::KEYWORD_THRESHOLD;
     // ACE confirmed: require semantic boost OR active topic match (NOT broad detected_tech).
     // Uses word-boundary-aware matching to prevent "frustrating"->"rust" false positives.
+    // Stack pain point match also contributes to ACE axis (content about your stack's problems).
     let ace_confirmed = semantic_boost >= scoring_config::SEMANTIC_THRESHOLD
         || topics
             .iter()
-            .any(|t| ace_ctx.active_topics.iter().any(|at| topic_overlaps(t, at)));
+            .any(|t| ace_ctx.active_topics.iter().any(|at| topic_overlaps(t, at)))
+        || stack_pain_match;
     let learned_confirmed = feedback_boost > scoring_config::FEEDBACK_THRESHOLD
         || affinity_mult >= scoring_config::AFFINITY_THRESHOLD;
     let dependency_confirmed = dep_match_score >= scoring_config::DEPENDENCY_THRESHOLD;
@@ -107,6 +110,7 @@ pub(crate) fn apply_confirmation_gate(
     feedback_boost: f32,
     affinity_mult: f32,
     dep_match_score: f32,
+    stack_pain_match: bool,
 ) -> (f32, u8, f32, Vec<String>) {
     let confirmation = count_confirmed_signals(
         context_score,
@@ -118,6 +122,7 @@ pub(crate) fn apply_confirmation_gate(
         feedback_boost,
         affinity_mult,
         dep_match_score,
+        stack_pain_match,
     );
 
     let idx = (confirmation.count as usize).min(scoring_config::CONFIRMATION_GATE.len() - 1);
@@ -142,9 +147,10 @@ mod tests {
             0.10, // low interest
             0.10, // low keyword
             0.01, // low semantic
-            &ace_ctx, &topics, 0.0, // no feedback
-            1.0, // neutral affinity
-            0.0, // no dep match
+            &ace_ctx, &topics, 0.0,   // no feedback
+            1.0,   // neutral affinity
+            0.0,   // no dep match
+            false, // no stack pain match
         );
         assert_eq!(conf.count, 0);
         assert!(!conf.context_confirmed);
@@ -163,9 +169,10 @@ mod tests {
             0.60, // HIGH interest
             0.10, // low keyword
             0.01, // low semantic
-            &ace_ctx, &topics, 0.0, // no feedback
-            1.0, // neutral affinity
-            0.0, // no dep match
+            &ace_ctx, &topics, 0.0,   // no feedback
+            1.0,   // neutral affinity
+            0.0,   // no dep match
+            false, // no stack pain match
         );
         assert_eq!(conf.count, 1);
         assert!(!conf.context_confirmed);
@@ -182,9 +189,10 @@ mod tests {
             0.10, // low interest
             0.10, // low keyword
             0.01, // low semantic, but ace_confirmed via active_topics
-            &ace_ctx, &topics, 0.0, // no feedback
-            1.0, // neutral affinity
-            0.0, // no dep match
+            &ace_ctx, &topics, 0.0,   // no feedback
+            1.0,   // neutral affinity
+            0.0,   // no dep match
+            false, // no stack pain match
         );
         assert_eq!(conf.count, 2);
         assert!(conf.context_confirmed);
@@ -207,9 +215,10 @@ mod tests {
             0.60, // HIGH interest (1 signal)
             0.10, // low keyword
             0.01, // low semantic
-            &ace_ctx, &topics, 0.0, // no feedback
-            1.0, // neutral affinity
-            0.0, // no dep match
+            &ace_ctx, &topics, 0.0,   // no feedback
+            1.0,   // neutral affinity
+            0.0,   // no dep match
+            false, // no stack pain match
         );
         assert_eq!(count, 1);
         assert!(
@@ -234,7 +243,7 @@ mod tests {
             0.50, // HIGH context
             0.55, // HIGH interest
             0.10, 0.01, // low semantic, but ace_confirmed via detected_tech
-            &ace_ctx, &topics, 0.0, 1.0, 0.0,
+            &ace_ctx, &topics, 0.0, 1.0, 0.0, false, // no stack pain match
         );
         assert!(count >= 2, "Expected 2+ confirmed signals, got {}", count);
         assert!(
@@ -258,9 +267,10 @@ mod tests {
             0.70, 0.50, // context confirmed
             0.55, // interest confirmed
             0.10, 0.10, // ace confirmed via semantic
-            &ace_ctx, &topics, 0.10, // feedback confirmed
-            1.20, // affinity confirmed
-            0.0,  // no dep match
+            &ace_ctx, &topics, 0.10,  // feedback confirmed
+            1.20,  // affinity confirmed
+            0.0,   // no dep match
+            false, // no stack pain match
         );
         assert_eq!(count, 4);
         assert_eq!(mult, 1.20);
@@ -280,7 +290,7 @@ mod tests {
             0.60, 0.10, // low context
             0.10, // low interest
             0.10, 0.01, // low semantic
-            &ace_ctx, &topics, 0.0, 1.0, 0.0,
+            &ace_ctx, &topics, 0.0, 1.0, 0.0, false, // no stack pain match
         );
         assert_eq!(count, 0);
         assert!(
@@ -300,7 +310,7 @@ mod tests {
             0.50, // context confirmed
             0.10, // interest NOT confirmed
             0.10, 0.01, // ace confirmed via tech
-            &ace_ctx, &topics, 0.0, 1.0, 0.0,
+            &ace_ctx, &topics, 0.0, 1.0, 0.0, false, // no stack pain match
         );
         let names = conf.confirmed_names();
         assert!(names.contains(&"context".to_string()));
@@ -320,9 +330,10 @@ mod tests {
             0.50, // interest: confirmed (above 0.25 threshold)
             0.10, // keyword: below threshold
             0.01, // semantic: below threshold
-            &ace_ctx, &topics, 0.0,  // feedback: none
-            1.0,  // affinity: neutral
-            0.30, // dep_match_score: confirmed (above 0.20 threshold)
+            &ace_ctx, &topics, 0.0,   // feedback: none
+            1.0,   // affinity: neutral
+            0.30,  // dep_match_score: confirmed (above 0.20 threshold)
+            false, // no stack pain match
         );
 
         assert!(conf.interest_confirmed, "Interest should be confirmed");
@@ -349,9 +360,10 @@ mod tests {
             0.10, // interest: NOT confirmed
             0.10, // keyword: below threshold
             0.01, // semantic: below threshold
-            &ace_ctx, &topics, 0.0,  // feedback: none
-            1.0,  // affinity: neutral
-            0.30, // dep_match_score: confirmed
+            &ace_ctx, &topics, 0.0,   // feedback: none
+            1.0,   // affinity: neutral
+            0.30,  // dep_match_score: confirmed
+            false, // no stack pain match
         );
 
         assert!(conf.dependency_confirmed, "Dependency should be confirmed");
@@ -377,9 +389,10 @@ mod tests {
             0.50, // context: confirmed
             0.50, // interest: confirmed
             0.10, 0.30, // semantic: confirmed -> ace confirmed
-            &ace_ctx, &topics, 0.20, // feedback: confirmed
-            1.5,  // affinity: confirmed (>= 1.3)
-            0.30, // dep_match_score: confirmed
+            &ace_ctx, &topics, 0.20,  // feedback: confirmed
+            1.5,   // affinity: confirmed (>= 1.3)
+            0.30,  // dep_match_score: confirmed
+            false, // no stack pain match
         );
 
         assert_eq!(conf.count, 5, "All 5 signals should be confirmed");

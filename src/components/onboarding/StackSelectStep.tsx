@@ -1,0 +1,163 @@
+import { useState, useEffect, useCallback } from 'react';
+import { invoke } from '@tauri-apps/api/core';
+import type { StackProfileSummary, StackDetection } from '../../types/stacks';
+
+// Stack profile display metadata
+const STACK_META: Record<string, { icon: string; color: string }> = {
+  nextjs_fullstack: { icon: 'N', color: '#FFFFFF' },
+  rust_systems: { icon: 'Rs', color: '#DEA584' },
+  python_ml: { icon: 'Py', color: '#3776AB' },
+  go_backend: { icon: 'Go', color: '#00ADD8' },
+  react_native: { icon: 'RN', color: '#61DAFB' },
+  laravel: { icon: 'Lv', color: '#FF2D20' },
+  django: { icon: 'Dj', color: '#092E20' },
+  vue_frontend: { icon: 'Vu', color: '#42B883' },
+};
+
+interface StackSelectStepProps {
+  selected: string[];
+  onSelectionChange: (ids: string[]) => void;
+  compact?: boolean;
+}
+
+export function StackSelectStep({ selected, onSelectionChange, compact }: StackSelectStepProps) {
+  const [profiles, setProfiles] = useState<StackProfileSummary[]>([]);
+  const [detections, setDetections] = useState<StackDetection[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  // Load profiles and auto-detect on mount
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const [profileList, detected] = await Promise.all([
+          invoke<StackProfileSummary[]>('get_stack_profiles'),
+          invoke<StackDetection[]>('detect_stack_profiles'),
+        ]);
+        if (cancelled) return;
+        setProfiles(profileList);
+        setDetections(detected);
+
+        // Auto-select detected profiles if nothing selected yet
+        if (selected.length === 0 && detected.length > 0) {
+          const autoIds = detected
+            .filter(d => d.confidence >= 0.25)
+            .map(d => d.profile_id);
+          if (autoIds.length > 0) {
+            onSelectionChange(autoIds);
+          }
+        }
+      } catch {
+        // Non-fatal — profiles will be empty
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const toggleProfile = useCallback((id: string) => {
+    const next = selected.includes(id)
+      ? selected.filter(s => s !== id)
+      : [...selected, id];
+    onSelectionChange(next);
+  }, [selected, onSelectionChange]);
+
+  const getDetection = (id: string) => detections.find(d => d.profile_id === id);
+
+  if (loading) {
+    return (
+      <div className="flex items-center gap-2 text-sm text-gray-400 py-4">
+        <div className="w-4 h-4 border-2 border-orange-500 border-t-transparent rounded-full animate-spin" />
+        Loading stack profiles...
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      {!compact && (
+        <p className="text-xs text-gray-500 mb-3">
+          Select your tech stack for smarter content scoring. Auto-detected stacks are pre-selected.
+        </p>
+      )}
+
+      <div className={`grid ${compact ? 'grid-cols-2' : 'grid-cols-2 sm:grid-cols-4'} gap-2`}>
+        {profiles.map((profile) => {
+          const isSelected = selected.includes(profile.id);
+          const detection = getDetection(profile.id);
+          const meta = STACK_META[profile.id] || { icon: '?', color: '#666' };
+
+          return (
+            <button
+              key={profile.id}
+              onClick={() => toggleProfile(profile.id)}
+              className={`relative p-3 rounded-lg text-left transition-all ${
+                isSelected
+                  ? 'bg-[#1F1F1F] border-2 border-white'
+                  : 'bg-[#141414] border-2 border-transparent hover:border-[#2A2A2A]'
+              }`}
+            >
+              {/* Detection badge */}
+              {detection && (
+                <span className="absolute top-1.5 right-1.5 px-1.5 py-0.5 text-[10px] font-mono bg-green-500/20 text-green-400 rounded">
+                  {Math.round(detection.confidence * 100)}%
+                </span>
+              )}
+
+              {/* Icon */}
+              <div
+                className="w-8 h-8 rounded-md flex items-center justify-center text-xs font-bold mb-2"
+                style={{
+                  backgroundColor: `${meta.color}20`,
+                  color: meta.color,
+                }}
+              >
+                {meta.icon}
+              </div>
+
+              {/* Name */}
+              <div className="text-sm font-medium text-white truncate">
+                {profile.name}
+              </div>
+
+              {/* Tech tags */}
+              <div className="flex flex-wrap gap-1 mt-1.5">
+                {profile.core_tech.slice(0, 3).map((tech) => (
+                  <span
+                    key={tech}
+                    className="text-[10px] px-1.5 py-0.5 bg-[#0A0A0A] text-gray-500 rounded"
+                  >
+                    {tech}
+                  </span>
+                ))}
+              </div>
+
+              {/* Pain points / shifts count */}
+              {!compact && (
+                <div className="mt-2 text-[10px] text-gray-600">
+                  {profile.pain_point_count} pain points &middot; {profile.ecosystem_shift_count} shifts
+                </div>
+              )}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Detection summary */}
+      {detections.length > 0 && !compact && (
+        <p className="text-xs text-gray-500 mt-3">
+          Auto-detected {detections.length} stack{detections.length > 1 ? 's' : ''} from your projects.
+          {' '}Click to toggle.
+        </p>
+      )}
+
+      {selected.length === 0 && !compact && (
+        <p className="text-xs text-gray-600 mt-2">
+          No stacks selected — scoring will use default behavior.
+        </p>
+      )}
+    </div>
+  );
+}
