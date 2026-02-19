@@ -1,0 +1,35 @@
+import { useAppStore } from '../store';
+
+type ViewId = 'briefing' | 'results' | 'insights' | 'saved' | 'toolkit' | 'playbook';
+
+const TABS: Array<{ id: ViewId; label: string; activeColor: string }> = [
+  { id: 'briefing', label: 'Intelligence', activeColor: 'bg-orange-500/20 text-orange-400' },
+  { id: 'results', label: 'All Results', activeColor: 'bg-orange-500/20 text-orange-400' },
+  { id: 'insights', label: 'Insights', activeColor: 'bg-amber-500/20 text-amber-400' },
+  { id: 'saved', label: 'Saved', activeColor: 'bg-green-500/20 text-green-400' },
+  { id: 'toolkit', label: 'Toolkit', activeColor: 'bg-purple-500/20 text-purple-400' },
+  { id: 'playbook', label: 'Playbook', activeColor: 'bg-yellow-500/20 text-yellow-400' },
+];
+
+export function ViewTabBar() {
+  const activeView = useAppStore(s => s.activeView);
+  const setActiveView = useAppStore(s => s.setActiveView);
+
+  return (
+    <div className="mb-6 flex items-center gap-1 bg-bg-secondary rounded-lg p-1 border border-border w-fit">
+      {TABS.map(tab => (
+        <button
+          key={tab.id}
+          onClick={() => setActiveView(tab.id)}
+          className={`px-4 py-2 text-sm rounded-md transition-all ${
+            activeView === tab.id
+              ? `${tab.activeColor} font-medium`
+              : 'text-gray-500 hover:text-gray-300'
+          }`}
+        >
+          {tab.label}
+        </button>
+      ))}
+    </div>
+  );
+}

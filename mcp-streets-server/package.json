@@ -1,0 +1,48 @@
+{
+  "name": "@4da/mcp-streets-server",
+  "version": "1.0.0",
+  "description": "MCP server for STREETS Developer Income Course — course content, project analysis, and progress tracking",
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "streets-mcp": "dist/index.js"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "start": "node dist/index.js",
+    "inspect": "npx @modelcontextprotocol/inspector node dist/index.js"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "streets",
+    "developer-income",
+    "course",
+    "revenue-engines",
+    "claude-code"
+  ],
+  "author": "4DA",
+  "license": "MIT",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.10.0",
+    "better-sqlite3": "^11.0.0"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.11",
+    "@types/node": "^20.11.0",
+    "typescript": "^5.3.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "better-sqlite3"
+    ]
+  }
+}

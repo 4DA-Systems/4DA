@@ -109,6 +109,7 @@ pub mod stacks;
 mod command_runner;
 mod git_deck;
 mod playbook_commands;
+mod streets_engine;
 mod toolkit;
 
 use source_fetching::fill_cache_background;
