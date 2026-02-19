@@ -681,6 +681,48 @@
       color: var(--text-muted);
     }
 
+    /* ---- STREETS Promo ---- */
+    .streets-promo {
+      padding: 80px 0;
+      background: linear-gradient(180deg, rgba(249, 115, 22, 0.04) 0%, transparent 100%);
+      border-top: 1px solid var(--border);
+      text-align: center;
+    }
+    .streets-promo h2 { margin-bottom: 16px; }
+    .streets-promo .subtitle { max-width: 560px; margin: 0 auto 40px; }
+    .streets-cols {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 24px;
+      text-align: left;
+      margin-bottom: 40px;
+    }
+    .streets-col {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 32px;
+    }
+    .streets-col h3 { font-size: 18px; margin-bottom: 8px; }
+    .streets-col p { font-size: 14px; color: var(--text-secondary); line-height: 1.7; }
+    .streets-engines {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 16px;
+    }
+    .streets-engines span {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      padding: 4px 10px;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      color: var(--text-muted);
+    }
+    @media (max-width: 640px) {
+      .streets-cols { grid-template-columns: 1fr; }
+    }
+
     /* ---- Footer ---- */
     footer {
       padding: 48px 0;
@@ -742,6 +784,7 @@
         <a href="#how-it-works">How It Works</a>
         <a href="#features">Features</a>
         <a href="#pricing">Pricing</a>
+        <a href="streets.html" style="color:var(--accent);">STREETS</a>
         <a href="#download" class="nav-cta">Download</a>
       </div>
     </div>
@@ -1204,6 +1247,37 @@ npx <span class="string">@4da/mcp-server</span>
     </div>
   </section>
 
+  <!-- STREETS Promo -->
+  <section class="streets-promo">
+    <div class="container">
+      <div class="section-label">The Playbook</div>
+      <h2>4DA is the radar. STREETS is the playbook.</h2>
+      <p class="subtitle">4DA surfaces the signal. STREETS teaches you to convert it into revenue. 8 engines. 7 modules. Module S is free.</p>
+      <div class="streets-cols">
+        <div class="streets-col">
+          <h3>What STREETS Teaches</h3>
+          <p>A complete income framework for developers. Turn your local LLMs, API keys, and full-stack skills into diversified revenue streams -- without quitting your job.</p>
+          <div class="streets-engines">
+            <span>Digital Products</span>
+            <span>Micro-SaaS</span>
+            <span>API Products</span>
+            <span>Consulting</span>
+            <span>Content</span>
+            <span>Automation</span>
+            <span>Open Source+</span>
+            <span>Data Products</span>
+          </div>
+        </div>
+        <div class="streets-col">
+          <h3>The 4DA + STREETS Flywheel</h3>
+          <p>4DA spots a trending niche in your stack. STREETS gives you the launch framework. You ship in 2 weeks. 4DA monitors the market. STREETS tells you when to scale or pivot. Revenue compounds. Intelligence sharpens.</p>
+          <p style="margin-top: 16px; color: var(--accent); font-size: 13px; font-family: 'JetBrains Mono', monospace;">STREETS buyers get 3 months of 4DA Pro free.</p>
+        </div>
+      </div>
+      <a href="streets.html" class="btn btn-primary">Explore STREETS -- Free Module Available</a>
+    </div>
+  </section>
+
   <!-- Final CTA -->
   <section class="final-cta">
     <div class="container">
@@ -1222,6 +1296,7 @@ npx <span class="string">@4da/mcp-server</span>
         <div class="footer-links">
           <a href="https://github.com/runyourempire/4DA">GitHub</a>
           <a href="#pricing">Pricing</a>
+          <a href="streets.html">STREETS</a>
           <a href="#how-it-works">How It Works</a>
           <span>FSL-1.1-Apache-2.0</span>
         </div>
