@@ -364,7 +364,7 @@ pub static GO_BACKEND: StackProfile = StackProfile {
                 "error handling",
                 "if err != nil",
                 "error wrapping",
-                "errors.Is",
+                "errors.is",
             ],
             severity: 0.10,
             description: "Error handling verbosity",
@@ -383,7 +383,7 @@ pub static GO_BACKEND: StackProfile = StackProfile {
             keywords: &[
                 "context",
                 "context propagation",
-                "context.WithTimeout",
+                "context.withtimeout",
                 "ctx",
             ],
             severity: 0.08,
@@ -411,7 +411,7 @@ pub static GO_BACKEND: StackProfile = StackProfile {
         EcosystemShift {
             from: "for loop",
             to: "range-over-func",
-            keywords: &["range over func", "iterator", "iter.Seq", "go 1.23"],
+            keywords: &["range over func", "iterator", "iter.seq", "go 1.23"],
             boost: 1.15,
         },
         EcosystemShift {
@@ -785,7 +785,7 @@ pub static VUE_FRONTEND: StackProfile = StackProfile {
             keywords: &[
                 "typescript",
                 "type",
-                "defineComponent",
+                "definecomponent",
                 "vue typescript",
                 "vue types",
             ],

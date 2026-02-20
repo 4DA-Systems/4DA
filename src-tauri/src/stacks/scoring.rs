@@ -19,7 +19,7 @@ use super::ComposedStack;
 /// with word boundaries at the start and end only.
 ///
 /// Both `text` and `term` must already be lowercase.
-pub(crate) fn text_contains_term(text: &str, term: &str) -> bool {
+pub fn text_contains_term(text: &str, term: &str) -> bool {
     /// Treat alphanumeric, hyphens, and underscores as word characters.
     /// This prevents "react" from matching inside "react-native" and
     /// "go" from matching inside "go-fiber".

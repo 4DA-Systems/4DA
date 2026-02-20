@@ -1,1178 +1,394 @@
-//! Stack Intelligence simulation harness.
+//! Stack Intelligence — Master Simulation Harness
 //!
-//! For each of the 8 stack profiles, generates synthetic content items and
-//! validates that the scoring functions produce meaningful differentiation:
-//! - Pain point content gets a meaningful lift
-//! - Off-stack (competing) content stays suppressed
-//! - Multi-tech (synergy) content outscores single-tech
-//! - Competing penalty fires on competing-only content
-//! - No stacks selected = all values neutral (backward compat)
+//! Five tiers of validation:
+//!
+//! Tier 1: Frozen real-world corpus — real article titles with per-profile labels
+//! Tier 2: Adversarial battery — items designed to exploit word-boundary weaknesses
+//! Tier 3: Algebraic properties — mathematical invariants the scoring MUST satisfy
+//! Tier 4: Profile data integrity — structural validation of profile definitions
+//! Tier 5: Composition algebra — multi-profile interaction verification
 
 use fourda_lib::stacks;
+use fourda_lib::stacks::scoring;
 
 // ============================================================================
-// Synthetic content generators
+// Tier 1: Frozen Real-World Corpus
 // ============================================================================
+// Every title below is a plausible HN/Reddit/lobsters article. Each is manually
+// labeled for each profile's scoring functions. Labels:
+//   P = Pain point (has_pain_point_match should return true)
+//   K = Keyword boost (compute_stack_boost > 0)
+//   S = Ecosystem shift (detect_ecosystem_shift > 1.0)
+//   C = Competing (compute_competing_penalty < 1.0)
+//   N = Neutral (boost == 0.0, shift == 1.0, penalty == 1.0)
+//   X = Adversarial (MUST NOT trigger — false positive trap)
 
-struct SyntheticItem {
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum L {
+    P, // Pain point
+    K, // Keyword boost
+    S, // Ecosystem shift
+    C, // Competing
+    N, // Neutral / off-domain
+}
+
+struct CorpusItem {
     title: &'static str,
     content: &'static str,
-    category: &'static str,
+    /// Labels per profile: [nextjs, rust, python_ml, go, react_native, laravel, django, vue]
+    labels: [L; 8],
 }
 
-fn nextjs_items() -> Vec<SyntheticItem> {
-    vec![
-        // Direct match
-        SyntheticItem { title: "Next.js 15 Release Notes", content: "nextjs react vercel app router server components improvements", category: "direct" },
-        SyntheticItem { title: "Building with Next.js and TypeScript", content: "nextjs typescript react component patterns best practices", category: "direct" },
-        SyntheticItem { title: "Vercel Edge Functions Deep Dive", content: "vercel edge runtime nextjs middleware deployment strategies", category: "direct" },
-        SyntheticItem { title: "React Server Components Explained", content: "react server components nextjs rsc streaming ssr", category: "direct" },
-        SyntheticItem { title: "TurboPack vs Webpack Performance", content: "turbopack nextjs webpack build performance bundler comparison", category: "direct" },
-        // Pain point
-        SyntheticItem { title: "App Router Migration Guide: Pages to App", content: "app router migration pages router next 13 next 14 breaking changes patterns", category: "pain_point" },
-        SyntheticItem { title: "Server Components vs Client Components Boundaries", content: "server component client component use client directive rsc boundary mistakes", category: "pain_point" },
-        SyntheticItem { title: "ISR Cache Invalidation Strategies", content: "isr revalidate cache stale incremental static regeneration nextjs", category: "pain_point" },
-        SyntheticItem { title: "Edge Runtime Limitations You Should Know", content: "edge runtime middleware cold start limitations node api compatibility", category: "pain_point" },
-        SyntheticItem { title: "Optimizing Next.js Bundle Size", content: "bundle size tree shaking code splitting webpack turbopack optimization", category: "pain_point" },
-        // Ecosystem shift
-        SyntheticItem { title: "Why We Switched from Prisma to Drizzle ORM", content: "drizzle prisma alternative orm migration performance type safety drizzle-orm", category: "ecosystem_shift" },
-        SyntheticItem { title: "Biome: The ESLint Alternative Formatter", content: "biome eslint alternative biome formatter biomejs linter migration", category: "ecosystem_shift" },
-        SyntheticItem { title: "Bun Runtime vs Node: Install and Build", content: "bun runtime bun install bun vs node performance benchmarks bunx", category: "ecosystem_shift" },
-        // Competing
-        SyntheticItem { title: "SvelteKit 2.0 Released", content: "sveltekit svelte framework release features improvements", category: "competing" },
-        SyntheticItem { title: "Remix Framework Performance Guide", content: "remix framework performance routing loader actions", category: "competing" },
-        SyntheticItem { title: "Astro 4.0 Content Collections", content: "astro static site generator content collections islands architecture", category: "competing" },
-        // Off-domain
-        SyntheticItem { title: "Kubernetes Cluster Autoscaling", content: "kubernetes cluster autoscaling pods nodes infrastructure", category: "off_domain" },
-        SyntheticItem { title: "PostgreSQL 17 New Features", content: "postgresql database features improvements performance sql", category: "off_domain" },
-        SyntheticItem { title: "Introduction to Rust Programming", content: "rust programming language beginner guide ownership borrowing", category: "off_domain" },
-        SyntheticItem { title: "Docker Compose Best Practices", content: "docker compose containers orchestration deployment best practices", category: "off_domain" },
-        SyntheticItem { title: "Machine Learning Model Training", content: "machine learning training pytorch neural network optimization", category: "off_domain" },
-        // Cross-cutting
-        SyntheticItem { title: "TypeScript 5.5 Type System Improvements", content: "typescript type system improvements generics inference", category: "cross_cutting" },
-        SyntheticItem { title: "Web Performance Core Vitals 2024", content: "web performance core vitals lighthouse optimization metrics", category: "cross_cutting" },
-        SyntheticItem { title: "OWASP Top 10 Web Security Threats", content: "security owasp web application vulnerabilities xss csrf", category: "cross_cutting" },
-        // Synergy (multi-tech)
-        SyntheticItem { title: "Next.js + Drizzle ORM Full Stack Tutorial", content: "nextjs drizzle typescript react server components full stack database vercel app router", category: "synergy" },
-        SyntheticItem { title: "Deploying Next.js to Vercel with Edge Functions", content: "nextjs vercel deploy edge functions middleware typescript production turbopack app router", category: "synergy" },
-        SyntheticItem { title: "Next.js React Server Components with tRPC and Zod", content: "react server components trpc zod typescript nextjs type-safe api vercel server action", category: "synergy" },
-    ]
+/// Generate topics from title+content (matches real pipeline behavior).
+fn topics_from(item: &CorpusItem) -> Vec<String> {
+    format!("{} {}", item.title, item.content)
+        .to_lowercase()
+        .split_whitespace()
+        .map(|s| s.to_string())
+        .collect()
 }
 
-fn rust_items() -> Vec<SyntheticItem> {
-    vec![
-        // Direct match
-        SyntheticItem {
-            title: "Rust 1.80 Release Highlights",
-            content: "rust release features improvements cargo clippy",
-            category: "direct",
-        },
-        SyntheticItem {
-            title: "Tokio Runtime Internals",
-            content: "tokio runtime async executor task scheduling rust",
-            category: "direct",
-        },
-        SyntheticItem {
-            title: "Serde Serialization Patterns",
-            content: "serde serialization deserialization json rust derive macros",
-            category: "direct",
-        },
-        SyntheticItem {
-            title: "Axum Web Framework Tutorial",
-            content: "axum web framework rust tokio tower middleware routing",
-            category: "direct",
-        },
-        SyntheticItem {
-            title: "Cargo Workspace Organization",
-            content: "cargo workspace organization monorepo rust project structure",
-            category: "direct",
-        },
-        // Pain point
-        SyntheticItem {
-            title: "Understanding Async Lifetimes in Rust",
-            content: "async lifetime future pin send tokio borrow checker complexity",
-            category: "pain_point",
-        },
-        SyntheticItem {
-            title: "Reducing Rust Compile Times",
-            content: "compile time build time incremental compilation cargo build optimization",
-            category: "pain_point",
-        },
-        SyntheticItem {
-            title: "Safe Abstractions Over Unsafe Code",
-            content: "unsafe soundness undefined behavior miri verification safety",
-            category: "pain_point",
-        },
-        SyntheticItem {
-            title: "Error Handling Patterns in Rust",
-            content: "error handling thiserror anyhow result error type custom propagation",
-            category: "pain_point",
-        },
-        SyntheticItem {
-            title: "When the Borrow Checker Fights Back",
-            content: "borrow checker ownership move semantics lifetime annotation tips",
-            category: "pain_point",
-        },
-        // Ecosystem shift
-        SyntheticItem {
-            title: "Native Async Trait: Async Fn in Trait Stabilized",
-            content:
-                "native async trait async fn in trait return position impl trait stabilization",
-            category: "ecosystem_shift",
-        },
-        SyntheticItem {
-            title: "Const Generics Stabilization and Feature Gate Removal",
-            content: "const generics generic const stabilization feature gate stable rust nightly",
-            category: "ecosystem_shift",
-        },
-        SyntheticItem {
-            title: "Return Position Impl Trait and Native Async Trait",
-            content: "return position impl trait native async trait async fn in trait stable",
-            category: "ecosystem_shift",
-        },
-        // Competing
-        SyntheticItem {
-            title: "Go 1.23 Iterator Functions",
-            content: "go golang iterator range-over-func new features",
-            category: "competing",
-        },
-        SyntheticItem {
-            title: "Zig Build System Deep Dive",
-            content: "zig programming language build system comptime safety",
-            category: "competing",
-        },
-        SyntheticItem {
-            title: "Modern C++ Memory Safety",
-            content: "c++ cpp memory safety smart pointers raii modern",
-            category: "competing",
-        },
-        // Off-domain
-        SyntheticItem {
-            title: "React 19 New Features",
-            content: "react frontend javascript components hooks new features",
-            category: "off_domain",
-        },
-        SyntheticItem {
-            title: "Laravel Livewire Tutorial",
-            content: "laravel livewire php web development blade components",
-            category: "off_domain",
-        },
-        SyntheticItem {
-            title: "Django ORM Performance Tips",
-            content: "django orm queryset python database optimization",
-            category: "off_domain",
-        },
-        SyntheticItem {
-            title: "Vue 3 Composition API Guide",
-            content: "vue composition api setup reactive ref computed",
-            category: "off_domain",
-        },
-        SyntheticItem {
-            title: "Mobile App UI Design Patterns",
-            content: "mobile app design ui ux patterns components interface",
-            category: "off_domain",
-        },
-        // Cross-cutting
-        SyntheticItem {
-            title: "WebAssembly 2.0 Specification",
-            content: "webassembly wasm specification runtime browser performance",
-            category: "cross_cutting",
-        },
-        SyntheticItem {
-            title: "Comparing Memory Allocators",
-            content: "memory allocator jemalloc mimalloc performance comparison",
-            category: "cross_cutting",
-        },
-        SyntheticItem {
-            title: "gRPC Best Practices",
-            content: "grpc protocol buffers protobuf api design best practices",
-            category: "cross_cutting",
-        },
-        // Synergy
-        SyntheticItem {
-            title: "Building a Tauri App with Rust and React",
-            content: "tauri rust react typescript desktop app development serde tokio",
-            category: "synergy",
-        },
-        SyntheticItem {
-            title: "Axum + SQLx REST API in Rust",
-            content: "axum sqlx rust tokio rest api database postgresql web server serde",
-            category: "synergy",
-        },
-        SyntheticItem {
-            title: "Rust WASM with Tokio for High-Performance Web",
-            content: "rust wasm tokio async web performance webassembly browser cargo",
-            category: "synergy",
-        },
-    ]
-}
+// Profile index constants for readability
+const NX: usize = 0; // nextjs_fullstack
+const RS: usize = 1; // rust_systems
+const PY: usize = 2; // python_ml
+const GO: usize = 3; // go_backend
+const RN: usize = 4; // react_native
+const LA: usize = 5; // laravel
+const DJ: usize = 6; // django
+const VU: usize = 7; // vue_frontend
 
-fn python_ml_items() -> Vec<SyntheticItem> {
-    vec![
-        // Direct match
-        SyntheticItem {
-            title: "PyTorch 2.3 New Features",
-            content: "pytorch deep learning training model torch tensors",
-            category: "direct",
-        },
-        SyntheticItem {
-            title: "Hugging Face Transformers Tutorial",
-            content: "transformers huggingface model pipeline nlp bert gpt",
-            category: "direct",
-        },
-        SyntheticItem {
-            title: "NumPy Performance Optimization",
-            content: "numpy array vectorization broadcasting performance python",
-            category: "direct",
-        },
-        SyntheticItem {
-            title: "LLM Fine-Tuning with LoRA",
-            content: "llm fine-tuning lora peft huggingface transformers training",
-            category: "direct",
-        },
-        SyntheticItem {
-            title: "Building RAG Pipelines with LangChain",
-            content: "rag retrieval augmented langchain embedding pipeline vector",
-            category: "direct",
-        },
-        // Pain point
-        SyntheticItem {
-            title: "CUDA Version Driver Compatibility Issues",
-            content: "cuda version driver nvcc nvidia gpu compatibility toolkit installation",
-            category: "pain_point",
-        },
-        SyntheticItem {
-            title: "Fixing GPU Out of Memory Errors",
-            content: "gpu oom out of memory vram memory allocation batch size gradient",
-            category: "pain_point",
-        },
-        SyntheticItem {
-            title: "Python Dependency Hell with Conda and Pip",
-            content: "dependency pip conda virtual environment package conflict resolution",
-            category: "pain_point",
-        },
-        SyntheticItem {
-            title: "Reproducibility in Model Training",
-            content: "reproducibility seed deterministic random state pytorch training results",
-            category: "pain_point",
-        },
-        SyntheticItem {
-            title: "Model Serving and Inference Latency",
-            content: "model serving inference latency deployment onnx optimization production",
-            category: "pain_point",
-        },
-        // Ecosystem shift
-        SyntheticItem {
-            title: "JAX for Research: JIT Compilation and XLA",
-            content: "jax flax jit compilation xla jax research tpu accelerator",
-            category: "ecosystem_shift",
-        },
-        SyntheticItem {
-            title: "GGUF Format and llama.cpp Quantization",
-            content: "gguf ggml quantization format llama.cpp local inference efficient",
-            category: "ecosystem_shift",
-        },
-        SyntheticItem {
-            title: "Local LLM with Ollama: Self-Hosted AI",
-            content: "local llm ollama self-hosted on-device edge inference privacy",
-            category: "ecosystem_shift",
-        },
-        // Competing
-        SyntheticItem {
-            title: "TensorFlow 2.16 Release",
-            content: "tensorflow keras deep learning model training google",
-            category: "competing",
-        },
-        SyntheticItem {
-            title: "JAX vs PyTorch Comparison",
-            content: "jax pytorch comparison performance research production",
-            category: "competing",
-        },
-        SyntheticItem {
-            title: "MXNet Architecture Guide",
-            content: "mxnet deep learning framework distributed training",
-            category: "competing",
-        },
-        // Off-domain
-        SyntheticItem {
-            title: "Rust Async Patterns",
-            content: "rust async tokio future pin send systems programming",
-            category: "off_domain",
-        },
-        SyntheticItem {
-            title: "Next.js App Router Guide",
-            content: "nextjs app router react server components vercel",
-            category: "off_domain",
-        },
-        SyntheticItem {
-            title: "Kubernetes Pod Scheduling",
-            content: "kubernetes pods scheduling affinity taints resources",
-            category: "off_domain",
-        },
-        SyntheticItem {
-            title: "Laravel Queue Management",
-            content: "laravel queue jobs workers horizon php redis",
-            category: "off_domain",
-        },
-        SyntheticItem {
-            title: "CSS Grid Layout Patterns",
-            content: "css grid layout responsive design web frontend",
-            category: "off_domain",
-        },
-        // Cross-cutting
-        SyntheticItem {
-            title: "GPU Computing Architecture Overview",
-            content: "gpu computing cuda architecture parallel processing threads",
-            category: "cross_cutting",
-        },
-        SyntheticItem {
-            title: "Data Pipeline Best Practices",
-            content: "data pipeline etl streaming batch processing workflow",
-            category: "cross_cutting",
-        },
-        SyntheticItem {
-            title: "API Design for ML Services",
-            content: "api design rest grpc machine learning service endpoints",
-            category: "cross_cutting",
-        },
-        // Synergy
-        SyntheticItem {
-            title: "PyTorch + Transformers RAG Pipeline",
-            content:
-                "pytorch transformers rag retrieval augmented generation huggingface embedding",
-            category: "synergy",
-        },
-        SyntheticItem {
-            title: "Building LLM Apps with LangChain and Ollama",
-            content: "llm langchain ollama local embedding pytorch transformers rag",
-            category: "synergy",
-        },
-        SyntheticItem {
-            title: "Fine-Tuning with PyTorch and Hugging Face",
-            content:
-                "fine-tuning pytorch huggingface transformers lora training model optimization",
-            category: "synergy",
-        },
-    ]
-}
+static PROFILE_IDS: [&str; 8] = [
+    "nextjs_fullstack",
+    "rust_systems",
+    "python_ml",
+    "go_backend",
+    "react_native",
+    "laravel",
+    "django",
+    "vue_frontend",
+];
 
-fn go_backend_items() -> Vec<SyntheticItem> {
-    vec![
-        // Direct match
-        SyntheticItem {
-            title: "Go 1.23 Release Notes",
-            content: "golang release features improvements standard library",
-            category: "direct",
-        },
-        SyntheticItem {
-            title: "Building gRPC Services in Go",
-            content: "grpc golang protobuf service api microservice",
-            category: "direct",
-        },
-        SyntheticItem {
-            title: "Kubernetes Operator in Go",
-            content: "kubernetes operator golang controller reconciler custom resource",
-            category: "direct",
-        },
-        SyntheticItem {
-            title: "Docker Multi-Stage Builds for Go",
-            content: "docker golang multi-stage build container image optimization",
-            category: "direct",
-        },
-        SyntheticItem {
-            title: "Go Goroutine Patterns",
-            content: "goroutine golang concurrency channel select patterns",
-            category: "direct",
-        },
-        // Pain point
-        SyntheticItem {
-            title: "Go Error Handling: if err != nil Patterns",
-            content: "error handling if err != nil error wrapping errors.Is golang",
-            category: "pain_point",
-        },
-        SyntheticItem {
-            title: "Go Generics Type Parameter Constraints",
-            content: "generics type parameter type constraint interface{} golang limitations",
-            category: "pain_point",
-        },
-        SyntheticItem {
-            title: "Context Propagation in Go Services",
-            content: "context context propagation context.WithTimeout ctx golang patterns",
-            category: "pain_point",
-        },
-        SyntheticItem {
-            title: "Go Module Dependency Conflicts",
-            content: "module go.mod dependency replace directive module conflict resolution",
-            category: "pain_point",
-        },
-        SyntheticItem {
-            title: "Go Error Wrapping and errors.Is Deep Dive",
-            content: "error handling error wrapping errors.Is fmt.Errorf golang stack",
-            category: "pain_point",
-        },
-        // Ecosystem shift
-        SyntheticItem {
-            title: "Slog: Structured Logging with Slog Handler",
-            content: "slog structured logging log/slog slog handler golang standard library",
-            category: "ecosystem_shift",
-        },
-        SyntheticItem {
-            title: "Range Over Func: Go 1.23 Iterator with iter.Seq",
-            content: "range over func iterator iter.Seq go 1.23 golang sequence",
-            category: "ecosystem_shift",
-        },
-        SyntheticItem {
-            title: "Go WASM with Wazero: WebAssembly Runtime",
-            content: "go wasm wazero tinygo webassembly runtime browser edge",
-            category: "ecosystem_shift",
-        },
-        // Competing
-        SyntheticItem {
-            title: "Rust for Backend Services",
-            content: "rust backend web services actix axum systems programming",
-            category: "competing",
-        },
-        SyntheticItem {
-            title: "Java Spring Boot Microservices",
-            content: "java spring boot microservices cloud native enterprise",
-            category: "competing",
-        },
-        SyntheticItem {
-            title: "Node.js Performance Optimization",
-            content: "node javascript backend performance event loop async",
-            category: "competing",
-        },
-        // Off-domain
-        SyntheticItem {
-            title: "React Component Architecture",
-            content: "react components hooks state management frontend design",
-            category: "off_domain",
-        },
-        SyntheticItem {
-            title: "PyTorch Training Pipeline",
-            content: "pytorch training deep learning model gpu optimization",
-            category: "off_domain",
-        },
-        SyntheticItem {
-            title: "Laravel Eloquent Relationships",
-            content: "laravel eloquent orm relationships php database queries",
-            category: "off_domain",
-        },
-        SyntheticItem {
-            title: "Vue Composition API Patterns",
-            content: "vue composition api setup ref reactive computed watchers",
-            category: "off_domain",
-        },
-        SyntheticItem {
-            title: "iOS Swift UI Development",
-            content: "swift ios ui development apple mobile app interface",
-            category: "off_domain",
-        },
-        // Cross-cutting
-        SyntheticItem {
-            title: "Microservice Architecture Patterns",
-            content: "microservice architecture patterns saga circuit breaker",
-            category: "cross_cutting",
-        },
-        SyntheticItem {
-            title: "Observability with Prometheus and Grafana",
-            content: "observability prometheus grafana metrics monitoring alerting",
-            category: "cross_cutting",
-        },
-        SyntheticItem {
-            title: "Container Security Best Practices",
-            content: "container security docker scanning vulnerabilities hardening",
-            category: "cross_cutting",
-        },
-        // Synergy
-        SyntheticItem {
-            title: "Go gRPC Microservice on Kubernetes",
-            content: "golang grpc kubernetes microservice protobuf docker container deployment",
-            category: "synergy",
-        },
-        SyntheticItem {
-            title: "Go Docker Container with Kubernetes Operator",
-            content: "golang docker kubernetes operator custom resource controller reconciler",
-            category: "synergy",
-        },
-        SyntheticItem {
-            title: "Building Go CLI with gRPC and Protobuf",
-            content: "golang grpc protobuf cli tool command line kubernetes api",
-            category: "synergy",
-        },
-    ]
-}
-
-fn react_native_items() -> Vec<SyntheticItem> {
-    vec![
-        // Direct match
-        SyntheticItem {
-            title: "React Native 0.75 Release",
-            content: "react-native release features improvements mobile",
-            category: "direct",
-        },
-        SyntheticItem {
-            title: "Expo SDK 52 New Features",
-            content: "expo sdk mobile development react-native eas build",
-            category: "direct",
-        },
-        SyntheticItem {
-            title: "React Native Navigation Patterns",
-            content: "react-native navigation screens stack tabs drawer",
-            category: "direct",
-        },
-        SyntheticItem {
-            title: "React Native Performance Tips",
-            content: "react-native performance optimization rendering mobile app",
-            category: "direct",
-        },
-        SyntheticItem {
-            title: "Expo Router File-Based Routing",
-            content: "expo router file-based routing react-native navigation mobile",
-            category: "direct",
-        },
-        // Pain point
-        SyntheticItem {
-            title: "React Native New Architecture Migration",
-            content: "new architecture fabric turbo module bridgeless migration upgrade",
-            category: "pain_point",
-        },
-        SyntheticItem {
-            title: "Hermes Engine Quirks and Workarounds",
-            content: "hermes engine jsc javascript core hermes quirk compatibility issues",
-            category: "pain_point",
-        },
-        SyntheticItem {
-            title: "App Store Review Rejection Guide",
-            content: "app store review rejection guideline app review compliance tips",
-            category: "pain_point",
-        },
-        SyntheticItem {
-            title: "OTA Updates with EAS Update",
-            content: "ota over the air eas update expo update code push deployment",
-            category: "pain_point",
-        },
-        SyntheticItem {
-            title: "JS Thread Performance and Frame Drops",
-            content: "js thread ui thread performance frame drop jank optimization",
-            category: "pain_point",
-        },
-        // Ecosystem shift
-        SyntheticItem {
-            title: "Expo Go and EAS Build: Managed Workflow",
-            content: "expo expo go eas build expo managed expo sdk mobile development",
-            category: "ecosystem_shift",
-        },
-        SyntheticItem {
-            title: "Expo Router vs React Navigation",
-            content: "expo router file-based routing react-navigation expo-router navigation",
-            category: "ecosystem_shift",
-        },
-        SyntheticItem {
-            title: "New Architecture with Fabric and Turbo Module",
-            content: "new architecture fabric turbo module bridgeless migration react-native",
-            category: "ecosystem_shift",
-        },
-        // Competing
-        SyntheticItem {
-            title: "Flutter 3.24 Release",
-            content: "flutter dart mobile cross-platform widgets material design",
-            category: "competing",
-        },
-        SyntheticItem {
-            title: "Kotlin Multiplatform Mobile",
-            content: "kotlin mobile cross-platform shared code android ios",
-            category: "competing",
-        },
-        SyntheticItem {
-            title: "Swift UI for iOS Development",
-            content: "swift ios mobile apple ui declarative interface",
-            category: "competing",
-        },
-        // Off-domain
-        SyntheticItem {
-            title: "Rust Systems Programming Guide",
-            content: "rust systems programming ownership borrowing memory safety",
-            category: "off_domain",
-        },
-        SyntheticItem {
-            title: "Django REST Framework Tutorial",
-            content: "django rest framework api python serializers views",
-            category: "off_domain",
-        },
-        SyntheticItem {
-            title: "PostgreSQL Index Optimization",
-            content: "postgresql index optimization query plan btree gin",
-            category: "off_domain",
-        },
-        SyntheticItem {
-            title: "Go Concurrency Patterns",
-            content: "golang goroutine channel concurrency patterns select",
-            category: "off_domain",
-        },
-        SyntheticItem {
-            title: "Machine Learning with Scikit-Learn",
-            content: "scikit-learn machine learning classification regression python",
-            category: "off_domain",
-        },
-        // Cross-cutting
-        SyntheticItem {
-            title: "Mobile App Accessibility Guidelines",
-            content: "accessibility mobile a11y screen reader voiceover talkback",
-            category: "cross_cutting",
-        },
-        SyntheticItem {
-            title: "CI/CD for Mobile Apps",
-            content: "ci cd mobile pipeline build deploy testing automation",
-            category: "cross_cutting",
-        },
-        SyntheticItem {
-            title: "Push Notification Best Practices",
-            content: "push notification mobile engagement user retention messaging",
-            category: "cross_cutting",
-        },
-        // Synergy
-        SyntheticItem {
-            title: "Expo React Native App with TypeScript",
-            content: "expo react-native typescript mobile app eas build navigation nativewind",
-            category: "synergy",
-        },
-        SyntheticItem {
-            title: "React Native Reanimated with Expo Router",
-            content: "react-native reanimated expo router gesture-handler animation mobile expo",
-            category: "synergy",
-        },
-        SyntheticItem {
-            title: "React Native + Zustand State with Expo",
-            content: "react-native zustand state management expo typescript mobile app",
-            category: "synergy",
-        },
-    ]
-}
-
-fn laravel_items() -> Vec<SyntheticItem> {
-    vec![
-        // Direct match
-        SyntheticItem {
-            title: "Laravel 11 Release Notes",
-            content: "laravel release features improvements php framework",
-            category: "direct",
-        },
-        SyntheticItem {
-            title: "Eloquent ORM Advanced Queries",
-            content: "eloquent orm query builder laravel relationships php",
-            category: "direct",
-        },
-        SyntheticItem {
-            title: "Laravel Livewire Components",
-            content: "livewire laravel components reactive php blade",
-            category: "direct",
-        },
-        SyntheticItem {
-            title: "Laravel Horizon Queue Dashboard",
-            content: "horizon queue jobs workers laravel redis monitoring",
-            category: "direct",
-        },
-        SyntheticItem {
-            title: "Blade Template Engine Tips",
-            content: "blade template laravel components directives slots php",
-            category: "direct",
-        },
-        // Pain point
-        SyntheticItem {
-            title: "PHP 8 Version Migration for Laravel",
-            content: "php version php 8 migration upgrade php compatibility laravel",
-            category: "pain_point",
-        },
-        SyntheticItem {
-            title: "Queue Job Reliability with Horizon",
-            content: "queue job failed retry horizon worker laravel reliability",
-            category: "pain_point",
-        },
-        SyntheticItem {
-            title: "N+1 Query Problem and Eager Loading",
-            content: "n+1 eager loading query eloquent performance lazy loading optimization",
-            category: "pain_point",
-        },
-        SyntheticItem {
-            title: "Laravel Deployment with Forge and Docker",
-            content: "deployment forge envoyer vapor docker laravel production server",
-            category: "pain_point",
-        },
-        SyntheticItem {
-            title: "Eloquent N+1 Detection and Fixes",
-            content: "n+1 eager loading eloquent performance query lazy loading laravel",
-            category: "pain_point",
-        },
-        // Ecosystem shift
-        SyntheticItem {
-            title: "Livewire 3: wire:navigate and V3 Upgrade",
-            content: "livewire 3 livewire v3 livewire upgrade wire:navigate alpine morphing",
-            category: "ecosystem_shift",
-        },
-        SyntheticItem {
-            title: "Filament Admin Panel: Filament V3 Guide",
-            content: "filament filament admin filament v3 filament panel laravel admin",
-            category: "ecosystem_shift",
-        },
-        SyntheticItem {
-            title: "Pest V3 Testing: Arch Testing and More",
-            content: "pest pest v3 pest testing arch testing phpunit migration laravel",
-            category: "ecosystem_shift",
-        },
-        // Competing
-        SyntheticItem {
-            title: "Symfony 7 Framework Guide",
-            content: "symfony php framework components bundles enterprise",
-            category: "competing",
-        },
-        SyntheticItem {
-            title: "Django vs Laravel Comparison",
-            content: "django python laravel php framework comparison features",
-            category: "competing",
-        },
-        SyntheticItem {
-            title: "Ruby on Rails 8 Release",
-            content: "rails ruby web framework mvc active record",
-            category: "competing",
-        },
-        // Off-domain
-        SyntheticItem {
-            title: "Rust Ownership and Borrowing",
-            content: "rust ownership borrowing lifetime memory safety systems",
-            category: "off_domain",
-        },
-        SyntheticItem {
-            title: "React Hooks Deep Dive",
-            content: "react hooks usestate useeffect components frontend",
-            category: "off_domain",
-        },
-        SyntheticItem {
-            title: "Go Backend Architecture",
-            content: "golang backend microservices grpc kubernetes api",
-            category: "off_domain",
-        },
-        SyntheticItem {
-            title: "PyTorch Training Pipeline",
-            content: "pytorch training deep learning model gpu cuda",
-            category: "off_domain",
-        },
-        SyntheticItem {
-            title: "Kubernetes Networking Guide",
-            content: "kubernetes networking services ingress load balancing",
-            category: "off_domain",
-        },
-        // Cross-cutting
-        SyntheticItem {
-            title: "PHP Security Best Practices",
-            content: "php security xss csrf sql injection validation sanitization",
-            category: "cross_cutting",
-        },
-        SyntheticItem {
-            title: "Database Migration Strategies",
-            content: "database migration schema versioning rollback strategy",
-            category: "cross_cutting",
-        },
-        SyntheticItem {
-            title: "Redis Caching Patterns",
-            content: "redis caching patterns ttl invalidation pub sub",
-            category: "cross_cutting",
-        },
-        // Synergy
-        SyntheticItem {
-            title: "Laravel Livewire with Filament Admin",
-            content: "laravel livewire filament admin panel php blade components",
-            category: "synergy",
-        },
-        SyntheticItem {
-            title: "Laravel + Inertia + Vue Full Stack",
-            content: "laravel inertia vue php typescript full stack spa",
-            category: "synergy",
-        },
-        SyntheticItem {
-            title: "Laravel Horizon with Redis Queue Jobs",
-            content: "laravel horizon redis queue jobs workers blade monitoring php",
-            category: "synergy",
-        },
-    ]
-}
-
-fn django_items() -> Vec<SyntheticItem> {
-    vec![
-        // Direct match
-        SyntheticItem {
-            title: "Django 5.1 Release Notes",
-            content: "django release features improvements python framework",
-            category: "direct",
-        },
-        SyntheticItem {
-            title: "Django REST Framework Serializers",
-            content: "drf serializers viewsets routers django rest api python",
-            category: "direct",
-        },
-        SyntheticItem {
-            title: "Celery Task Queue with Django",
-            content: "celery task queue django workers redis python async",
-            category: "direct",
-        },
-        SyntheticItem {
-            title: "Django ORM QuerySet Guide",
-            content: "django orm queryset filter annotate aggregate python",
-            category: "direct",
-        },
-        SyntheticItem {
-            title: "PostgreSQL with Django Setup",
-            content: "postgresql django database configuration python migration",
-            category: "direct",
-        },
-        // Pain point
-        SyntheticItem {
-            title: "Django ORM N+1 with select_related",
-            content: "orm queryset n+1 select_related prefetch_related django performance",
-            category: "pain_point",
-        },
-        SyntheticItem {
-            title: "Django Async Views and ASGI Channels",
-            content: "async asgi channels async view django async support python",
-            category: "pain_point",
-        },
-        SyntheticItem {
-            title: "Django Migration Conflict Resolution",
-            content: "migration conflict merge squash makemigrations django database",
-            category: "pain_point",
-        },
-        SyntheticItem {
-            title: "Speeding Up Django Test Suite",
-            content: "test speed pytest fixture factory test database django optimization",
-            category: "pain_point",
-        },
-        SyntheticItem {
-            title: "Django QuerySet Performance Tuning",
-            content: "orm queryset select_related prefetch_related n+1 django optimization",
-            category: "pain_point",
-        },
-        // Ecosystem shift
-        SyntheticItem {
-            title: "Django Ninja API: Pydantic and FastAPI Style",
-            content: "django-ninja ninja api pydantic django ninja fast type-safe",
-            category: "ecosystem_shift",
-        },
-        SyntheticItem {
-            title: "HTMX with Django: Hypermedia and hx-get",
-            content: "htmx hypermedia hx-get hx-post html over the wire django templates",
-            category: "ecosystem_shift",
-        },
-        SyntheticItem {
-            title: "Wagtail CMS: StreamField and Wagtail Page",
-            content: "wagtail wagtail cms streamfield wagtail page content management",
-            category: "ecosystem_shift",
-        },
-        // Competing
-        SyntheticItem {
-            title: "FastAPI Performance Benchmarks",
-            content: "fastapi python async api performance starlette uvicorn",
-            category: "competing",
-        },
-        SyntheticItem {
-            title: "Flask 3.0 New Features",
-            content: "flask python web framework lightweight blueprints",
-            category: "competing",
-        },
-        SyntheticItem {
-            title: "Ruby on Rails Active Record Patterns",
-            content: "rails ruby active record orm database patterns migration",
-            category: "competing",
-        },
-        // Off-domain
-        SyntheticItem {
-            title: "Next.js Server Components",
-            content: "nextjs react server components rsc streaming ssr",
-            category: "off_domain",
-        },
-        SyntheticItem {
-            title: "Rust Cargo Build System",
-            content: "rust cargo build workspace dependencies compilation",
-            category: "off_domain",
-        },
-        SyntheticItem {
-            title: "Go Kubernetes Operator Tutorial",
-            content: "golang kubernetes operator controller custom resource",
-            category: "off_domain",
-        },
-        SyntheticItem {
-            title: "React Native Expo Guide",
-            content: "react-native expo mobile app development typescript",
-            category: "off_domain",
-        },
-        SyntheticItem {
-            title: "Docker Compose Networking",
-            content: "docker compose network containers bridge host overlay",
-            category: "off_domain",
-        },
-        // Cross-cutting
-        SyntheticItem {
-            title: "Python Async Programming",
-            content: "python async asyncio event loop coroutine concurrent",
-            category: "cross_cutting",
-        },
-        SyntheticItem {
-            title: "SQL Query Optimization Techniques",
-            content: "sql query optimization index explain plan performance",
-            category: "cross_cutting",
-        },
-        SyntheticItem {
-            title: "API Authentication Patterns",
-            content: "api authentication oauth jwt token session security",
-            category: "cross_cutting",
-        },
-        // Synergy
-        SyntheticItem {
-            title: "Django REST Framework with Celery Tasks",
-            content: "drf django rest framework celery task queue redis python api",
-            category: "synergy",
-        },
-        SyntheticItem {
-            title: "Django + HTMX + PostgreSQL Full Stack",
-            content: "django htmx postgresql python hypermedia database templates",
-            category: "synergy",
-        },
-        SyntheticItem {
-            title: "Django Ninja with Celery and Redis",
-            content: "django-ninja celery redis python task queue api pydantic",
-            category: "synergy",
-        },
-    ]
-}
-
-fn vue_frontend_items() -> Vec<SyntheticItem> {
-    vec![
-        // Direct match
-        SyntheticItem {
-            title: "Vue 3.5 Release Notes",
-            content: "vue release features improvements reactivity composition",
-            category: "direct",
-        },
-        SyntheticItem {
-            title: "Nuxt 3 Server-Side Rendering",
-            content: "nuxt ssr server rendering vue nitro auto-imports",
-            category: "direct",
-        },
-        SyntheticItem {
-            title: "Pinia State Management Guide",
-            content: "pinia state management vue store reactive getters actions",
-            category: "direct",
-        },
-        SyntheticItem {
-            title: "Vite Build Configuration",
-            content: "vite build configuration plugins vue optimization rollup",
-            category: "direct",
-        },
-        SyntheticItem {
-            title: "VueUse Composables Collection",
-            content: "vueuse composables vue utility hooks reactive helpers",
-            category: "direct",
-        },
-        // Pain point
-        SyntheticItem {
-            title: "Composition API Migration from Options",
-            content: "composition api options api migration setup script setup vue patterns",
-            category: "pain_point",
-        },
-        SyntheticItem {
-            title: "Nuxt SSR Hydration Mismatch Fixes",
-            content: "ssr hydration mismatch nuxt ssr server render client mismatch",
-            category: "pain_point",
-        },
-        SyntheticItem {
-            title: "Vue TypeScript Integration Issues",
-            content: "typescript type defineComponent vue typescript vue types generics",
-            category: "pain_point",
-        },
-        SyntheticItem {
-            title: "Vuex to Pinia Store Migration",
-            content: "vuex pinia state management store migration vuex to pinia patterns",
-            category: "pain_point",
-        },
-        SyntheticItem {
-            title: "Vue Composition API Setup Patterns",
-            content: "composition api setup script setup migration options api vue reactive",
-            category: "pain_point",
-        },
-        // Ecosystem shift
-        SyntheticItem {
-            title: "Vue Vapor Mode: No Virtual DOM Compile-Time",
-            content: "vue vapor vapor mode compile-time no virtual dom performance",
-            category: "ecosystem_shift",
-        },
-        SyntheticItem {
-            title: "Nuxt 4 Upgrade and Nuxt Migration Guide",
-            content: "nuxt 4 nuxt upgrade nuxt migration nuxt next improvements",
-            category: "ecosystem_shift",
-        },
-        SyntheticItem {
-            title: "UnoCSS Atomic CSS with UnoCSS Preset",
-            content: "unocss uno css atomic css unocss preset tailwind alternative",
-            category: "ecosystem_shift",
-        },
-        // Competing
-        SyntheticItem {
-            title: "React 19 Concurrent Features",
-            content: "react concurrent rendering suspense transitions server",
-            category: "competing",
-        },
-        SyntheticItem {
-            title: "Angular 18 Standalone Components",
-            content: "angular standalone components signals zoneless change",
-            category: "competing",
-        },
-        SyntheticItem {
-            title: "Svelte 5 Runes System",
-            content: "svelte runes reactive state signals fine-grained",
-            category: "competing",
-        },
-        // Off-domain
-        SyntheticItem {
-            title: "Rust Error Handling Patterns",
-            content: "rust error handling thiserror anyhow result type",
-            category: "off_domain",
-        },
-        SyntheticItem {
-            title: "Python ML Pipeline Guide",
-            content: "python pytorch training pipeline model data preprocessing",
-            category: "off_domain",
-        },
-        SyntheticItem {
-            title: "Go Microservice Architecture",
-            content: "golang microservice grpc kubernetes docker deployment",
-            category: "off_domain",
-        },
-        SyntheticItem {
-            title: "Laravel Blade Components",
-            content: "laravel blade php components templates slots directives",
-            category: "off_domain",
-        },
-        SyntheticItem {
-            title: "PostgreSQL JSON Operations",
-            content: "postgresql json jsonb query operators indexing storage",
-            category: "off_domain",
-        },
-        // Cross-cutting
-        SyntheticItem {
-            title: "Frontend State Management Patterns",
-            content: "state management frontend patterns flux redux signals stores",
-            category: "cross_cutting",
-        },
-        SyntheticItem {
-            title: "Web Component Standards",
-            content: "web components custom elements shadow dom html templates",
-            category: "cross_cutting",
-        },
-        SyntheticItem {
-            title: "CSS-in-JS vs Utility CSS",
-            content: "css styling utility tailwind styled-components emotion",
-            category: "cross_cutting",
-        },
-        // Synergy
-        SyntheticItem {
-            title: "Nuxt 3 + Pinia + Vue Router App",
-            content: "nuxt pinia vue router state management ssr nitro composables vueuse",
-            category: "synergy",
-        },
-        SyntheticItem {
-            title: "Vue 3 + Vite + UnoCSS Setup",
-            content: "vue vite unocss pinia composition api typescript build tooling",
-            category: "synergy",
-        },
-        SyntheticItem {
-            title: "Nuxt with Vitest and Vue Test Utils",
-            content: "nuxt vitest vue test utils pinia testing composition api vue",
-            category: "synergy",
-        },
-    ]
-}
+//                                                NX  RS  PY  GO  RN  LA  DJ  VU
+static CORPUS: &[CorpusItem] = &[
+    // --- Next.js ecosystem ---
+    CorpusItem {
+        title: "Migrating from Pages Router to App Router in Next.js 14",
+        content: "app router migration pages router next 14 breaking changes patterns",
+        labels: [L::P, L::N, L::N, L::N, L::N, L::N, L::N, L::N],
+    },
+    CorpusItem {
+        title: "Server Components vs Client Components: Where to Draw the Line",
+        content: "server component client component use client rsc boundary directive",
+        labels: [L::P, L::N, L::N, L::N, L::N, L::N, L::N, L::N],
+    },
+    CorpusItem {
+        title: "Next.js ISR Cache Invalidation Is Broken (And How to Fix It)",
+        content: "isr revalidate cache stale incremental static regeneration nextjs",
+        labels: [L::P, L::N, L::N, L::N, L::N, L::N, L::N, L::N],
+    },
+    CorpusItem {
+        title: "Why We Migrated from Prisma to Drizzle ORM",
+        content: "drizzle prisma alternative orm migration drizzle-orm performance",
+        labels: [L::S, L::N, L::N, L::N, L::N, L::N, L::N, L::N],
+    },
+    CorpusItem {
+        title: "Biome: Drop ESLint and Prettier for One Tool",
+        content: "biome eslint alternative biome formatter biomejs linter migration fast",
+        labels: [L::S, L::N, L::N, L::N, L::N, L::N, L::N, L::N],
+    },
+    CorpusItem {
+        title: "TurboPack: Next.js Build Performance Deep Dive",
+        content: "turbopack nextjs build performance bundler webpack comparison",
+        labels: [L::K, L::N, L::N, L::N, L::N, L::N, L::N, L::N],
+    },
+    CorpusItem {
+        title: "Vercel Edge Functions and Middleware Patterns",
+        content: "vercel edge runtime nextjs middleware deployment strategies",
+        labels: [L::K, L::N, L::N, L::N, L::N, L::N, L::N, L::N],
+    },
+    // --- Rust ecosystem ---
+    CorpusItem {
+        title: "Understanding Pin, Send, and Async Lifetimes in Rust",
+        content: "async pin send lifetime future tokio complexity annotations",
+        labels: [L::N, L::P, L::N, L::N, L::N, L::N, L::N, L::N],
+    },
+    CorpusItem {
+        title: "Reducing Rust Compile Times: A Practical Guide",
+        content: "compile time build time incremental compilation cargo build optimization",
+        labels: [L::N, L::P, L::N, L::N, L::N, L::N, L::N, L::N],
+    },
+    CorpusItem {
+        title: "When the Borrow Checker Fights Back: Ownership Patterns",
+        content: "borrow checker ownership move semantics lifetime annotation tips",
+        labels: [L::N, L::P, L::N, L::N, L::N, L::N, L::N, L::N],
+    },
+    CorpusItem {
+        title: "Async Fn in Trait Is Finally Stable",
+        content: "native async trait async fn in trait return position impl trait stabilization",
+        labels: [L::N, L::S, L::N, L::N, L::N, L::N, L::N, L::N],
+    },
+    CorpusItem {
+        title: "Const Generics Stabilization: No More Feature Gates",
+        content: "const generics generic const stabilization feature gate stable rust nightly",
+        labels: [L::N, L::S, L::N, L::N, L::N, L::N, L::N, L::N],
+    },
+    CorpusItem {
+        title: "Tokio 1.40: What's New in the Async Runtime",
+        content: "tokio runtime async executor improvements performance rust",
+        labels: [L::N, L::K, L::N, L::N, L::N, L::N, L::N, L::N],
+    },
+    CorpusItem {
+        title: "Building a REST API with Axum and SQLx",
+        content: "axum sqlx rust tokio web api server serde database postgresql",
+        labels: [L::N, L::K, L::N, L::N, L::N, L::N, L::N, L::N],
+    },
+    // --- Python ML ecosystem ---
+    CorpusItem {
+        title: "CUDA Version Conflicts: A Complete Troubleshooting Guide",
+        content: "cuda version driver nvcc nvidia gpu compatibility toolkit installation",
+        labels: [L::N, L::N, L::P, L::N, L::N, L::N, L::N, L::N],
+    },
+    CorpusItem {
+        title: "Fixing GPU Out of Memory Errors in PyTorch Training",
+        content: "gpu oom out of memory vram memory allocation batch size gradient",
+        labels: [L::N, L::N, L::P, L::N, L::N, L::N, L::N, L::N],
+    },
+    CorpusItem {
+        title: "GGUF Quantization: Running LLMs Locally with llama.cpp",
+        content: "gguf ggml quantization format llama.cpp local inference efficient",
+        labels: [L::N, L::N, L::S, L::N, L::N, L::N, L::N, L::N],
+    },
+    CorpusItem {
+        title: "Local LLM Inference with Ollama: Privacy-First AI",
+        content: "local llm ollama self-hosted on-device edge inference privacy",
+        labels: [L::N, L::N, L::S, L::N, L::N, L::N, L::N, L::N],
+    },
+    CorpusItem {
+        title: "Fine-Tuning LLaMA with LoRA and Hugging Face",
+        content: "llm fine-tuning lora peft huggingface transformers pytorch training",
+        labels: [L::N, L::N, L::K, L::N, L::N, L::N, L::N, L::N],
+    },
+    // --- Go ecosystem ---
+    CorpusItem {
+        title: "Go Error Handling: The if err != nil Debate Continues",
+        content: "error handling if err != nil error wrapping errors.Is golang patterns",
+        labels: [L::N, L::N, L::N, L::P, L::N, L::N, L::N, L::N],
+    },
+    CorpusItem {
+        title: "Go Generics: Type Parameter Constraints in Practice",
+        content: "generics type parameter type constraint interface{} golang limitations",
+        labels: [L::N, L::N, L::N, L::P, L::N, L::N, L::N, L::N],
+    },
+    CorpusItem {
+        title: "Slog: Structured Logging Comes to Go Standard Library",
+        content: "slog structured logging log/slog slog handler golang standard library",
+        labels: [L::N, L::N, L::N, L::S, L::N, L::N, L::N, L::N],
+    },
+    CorpusItem {
+        title: "Range Over Func: Go 1.23 Iterator Pattern with iter.Seq",
+        content: "range over func iterator iter.Seq go 1.23 golang sequence",
+        labels: [L::N, L::N, L::N, L::S, L::N, L::N, L::N, L::N],
+    },
+    CorpusItem {
+        title: "Building gRPC Microservices in Go with Protobuf",
+        content: "grpc golang protobuf service api microservice kubernetes deployment",
+        labels: [L::N, L::N, L::N, L::K, L::N, L::N, L::N, L::N],
+    },
+    // --- React Native ecosystem ---
+    CorpusItem {
+        title: "React Native New Architecture: Fabric and TurboModules Guide",
+        content: "new architecture fabric turbo module bridgeless react-native jsi",
+        labels: [L::N, L::N, L::N, L::N, L::P, L::N, L::N, L::N],
+    },
+    CorpusItem {
+        title: "Hermes Engine Quirks Every RN Developer Should Know",
+        content: "hermes engine jsc javascript core hermes quirk compatibility issues",
+        labels: [L::N, L::N, L::N, L::N, L::P, L::N, L::N, L::N],
+    },
+    CorpusItem {
+        title: "Expo Router: File-Based Routing for React Native Apps",
+        content: "expo router file-based routing expo-router react-native navigation mobile",
+        labels: [L::N, L::N, L::N, L::N, L::S, L::N, L::N, L::N],
+    },
+    CorpusItem {
+        title: "React Native New Architecture: Fabric Renderer and TurboModules",
+        content: "new architecture fabric turbo module bridgeless migration react-native",
+        labels: [L::N, L::N, L::N, L::N, L::S, L::N, L::N, L::N],
+    },
+    CorpusItem {
+        title: "Expo SDK 52: What's New in Managed Workflow",
+        content: "expo sdk mobile development react-native eas build managed workflow",
+        labels: [L::N, L::N, L::N, L::N, L::K, L::N, L::N, L::N],
+    },
+    // --- Laravel ecosystem ---
+    CorpusItem {
+        title: "Laravel Queue Jobs Keep Failing: Debugging Horizon Workers",
+        content: "queue job failed retry horizon worker laravel reliability debugging",
+        labels: [L::N, L::N, L::N, L::N, L::N, L::P, L::N, L::N],
+    },
+    CorpusItem {
+        title: "N+1 Query Problem in Eloquent: Eager Loading Done Right",
+        content: "n+1 eager loading query eloquent performance lazy loading optimization",
+        labels: [L::N, L::N, L::N, L::N, L::N, L::P, L::N, L::N],
+    },
+    CorpusItem {
+        title: "Livewire 3 Migration: wire:navigate and Breaking Changes",
+        content: "livewire 3 livewire v3 livewire upgrade wire:navigate alpine morphing",
+        labels: [L::N, L::N, L::N, L::N, L::N, L::S, L::N, L::N],
+    },
+    CorpusItem {
+        title: "Filament V3: Building Admin Panels in Laravel",
+        content: "filament filament admin filament v3 filament panel laravel admin dashboard",
+        labels: [L::N, L::N, L::N, L::N, L::N, L::S, L::N, L::N],
+    },
+    CorpusItem {
+        title: "Laravel 11 Release: Slimmer Skeleton and New Features",
+        content: "laravel release features improvements php framework routes",
+        labels: [L::N, L::N, L::N, L::N, L::N, L::K, L::N, L::N],
+    },
+    // --- Django ecosystem ---
+    CorpusItem {
+        title: "Django ORM N+1: select_related vs prefetch_related",
+        content: "orm queryset n+1 select_related prefetch_related django performance",
+        labels: [L::N, L::N, L::N, L::N, L::N, L::N, L::P, L::N],
+    },
+    CorpusItem {
+        title: "Django Async Views: ASGI and Channels Deep Dive",
+        content: "async asgi channels async view django async support python httptools",
+        labels: [L::N, L::N, L::N, L::N, L::N, L::N, L::P, L::N],
+    },
+    CorpusItem {
+        title: "Django Ninja: FastAPI-Style APIs with Pydantic Validation",
+        content: "django-ninja ninja api pydantic django ninja fast type-safe",
+        labels: [L::N, L::N, L::N, L::N, L::N, L::N, L::S, L::N],
+    },
+    CorpusItem {
+        title: "HTMX with Django: Hypermedia-Driven Development",
+        content: "htmx hypermedia hx-get hx-post html over the wire django templates",
+        labels: [L::N, L::N, L::N, L::N, L::N, L::N, L::S, L::N],
+    },
+    CorpusItem {
+        title: "Django REST Framework: Serializer Performance Tips",
+        content: "drf django rest framework serializer viewset performance python api",
+        labels: [L::N, L::N, L::N, L::N, L::N, L::N, L::K, L::N],
+    },
+    // --- Vue ecosystem ---
+    CorpusItem {
+        title: "Composition API Migration: From Options to Script Setup",
+        content: "composition api options api migration setup script setup vue patterns",
+        labels: [L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::P],
+    },
+    CorpusItem {
+        title: "Nuxt SSR Hydration Mismatch: Common Causes and Fixes",
+        content: "ssr hydration mismatch nuxt ssr server render client mismatch errors",
+        labels: [L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::P],
+    },
+    CorpusItem {
+        title: "Vue Vapor Mode: Compile-Time Reactivity Without Virtual DOM",
+        content: "vue vapor vapor mode compile-time no virtual dom performance benchmark",
+        labels: [L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::S],
+    },
+    CorpusItem {
+        title: "Nuxt 4 Migration Guide: Breaking Changes and Upgrade Path",
+        content: "nuxt 4 nuxt upgrade nuxt migration nuxt next improvements breaking",
+        labels: [L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::S],
+    },
+    CorpusItem {
+        title: "Pinia Store Patterns: Composable State Management in Vue",
+        content: "pinia state management vue store composable reactive getters actions",
+        labels: [L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::K],
+    },
+    // --- Competing tech items (C labels) ---
+    CorpusItem {
+        title: "SvelteKit 2.0: The Full-Stack Framework Gets Even Better",
+        content: "sveltekit svelte framework release features routing server load",
+        labels: [L::C, L::N, L::N, L::N, L::N, L::N, L::N, L::N],
+    },
+    CorpusItem {
+        title: "Remix Framework: Data Loading Done Right",
+        content: "remix framework performance routing loader actions nested routes",
+        labels: [L::C, L::N, L::N, L::N, L::N, L::N, L::N, L::N],
+    },
+    CorpusItem {
+        title: "Go 1.23 Performance Improvements for Backend Services",
+        content: "go golang backend services performance goroutine scheduling",
+        labels: [L::N, L::C, L::N, L::N, L::N, L::N, L::N, L::N],
+    },
+    CorpusItem {
+        title: "Zig Build System: Comptime and Memory Safety Without GC",
+        content: "zig programming language build system comptime safety allocation",
+        labels: [L::N, L::C, L::N, L::N, L::N, L::N, L::N, L::N],
+    },
+    CorpusItem {
+        title: "TensorFlow 2.17: Keras Integration and Model Garden",
+        content: "tensorflow keras deep learning model training optimization google",
+        labels: [L::N, L::N, L::C, L::N, L::N, L::N, L::N, L::N],
+    },
+    CorpusItem {
+        title: "Rust for Backend: Why We Switched from Go to Axum",
+        content: "rust backend web services axum systems programming performance",
+        labels: [L::N, L::K, L::N, L::N, L::N, L::N, L::N, L::N],
+    },
+    CorpusItem {
+        title: "Java Spring Boot 4.0: Enterprise Microservices",
+        content: "java spring boot microservices cloud native enterprise jpa",
+        labels: [L::N, L::N, L::N, L::C, L::N, L::N, L::N, L::N],
+    },
+    CorpusItem {
+        title: "Flutter 3.24: Material Design and Cross-Platform Widgets",
+        content: "flutter dart mobile cross-platform widgets material design ios android",
+        labels: [L::N, L::N, L::N, L::N, L::C, L::N, L::N, L::N],
+    },
+    CorpusItem {
+        title: "Symfony 7 Components: Enterprise Framework Guide",
+        content: "symfony framework components bundles enterprise architecture hexagonal",
+        labels: [L::N, L::N, L::N, L::N, L::N, L::C, L::N, L::N],
+    },
+    CorpusItem {
+        title: "FastAPI Performance: Async API Framework Benchmark",
+        content: "fastapi async api performance starlette uvicorn benchmark pydantic",
+        labels: [L::N, L::N, L::N, L::N, L::N, L::N, L::C, L::N],
+    },
+    CorpusItem {
+        title: "React 19 Server Components: Concurrent Rendering Deep Dive",
+        content: "react concurrent rendering suspense transitions server components",
+        labels: [L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::C],
+    },
+    CorpusItem {
+        title: "Angular 18 Signals: Zoneless Change Detection",
+        content: "angular standalone components signals zoneless change detection",
+        labels: [L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::C],
+    },
+    // --- Neutral items (off-domain for all) ---
+    CorpusItem {
+        title: "PostgreSQL 17: Incremental Backup and Logical Replication",
+        content: "postgresql database incremental backup logical replication slots",
+        labels: [L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N],
+    },
+    CorpusItem {
+        title: "How We Scaled Our Startup to 10M Users",
+        content: "startup scaling users growth product market fit team hiring",
+        labels: [L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N],
+    },
+    CorpusItem {
+        title: "The State of CSS 2025: Container Queries and Cascade Layers",
+        content: "css container queries cascade layers has selector nesting",
+        labels: [L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N],
+    },
+    CorpusItem {
+        title: "Figma Plugins for Design Systems",
+        content: "figma design system tokens components auto-layout constraints",
+        labels: [L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::N],
+    },
+];
 
 // ============================================================================
-// Test helpers
+// Tier 1 Tests: Corpus Precision
 // ============================================================================
 
-fn compute_category_avg(
-    items: &[SyntheticItem],
-    category: &str,
-    stack: &stacks::ComposedStack,
-) -> f32 {
-    let matching: Vec<_> = items.iter().filter(|i| i.category == category).collect();
-    if matching.is_empty() {
-        return 0.0;
-    }
-    let total: f32 = matching
-        .iter()
-        .map(|item| stacks::scoring::compute_stack_boost(item.title, item.content, stack))
-        .sum();
-    total / matching.len() as f32
-}
-
-fn compute_category_shift_avg(
-    items: &[SyntheticItem],
-    category: &str,
-    stack: &stacks::ComposedStack,
-) -> f32 {
-    let matching: Vec<_> = items.iter().filter(|i| i.category == category).collect();
-    if matching.is_empty() {
-        return 1.0;
-    }
-    let total: f32 = matching
-        .iter()
-        .map(|item| {
-            // Generate topics from both title AND content (matches real pipeline behavior)
-            let topics: Vec<String> = format!("{} {}", item.title, item.content)
-                .to_lowercase()
-                .split_whitespace()
-                .map(|s| s.to_string())
-                .collect();
-            stacks::scoring::detect_ecosystem_shift(&topics, item.title, stack)
-        })
-        .sum();
-    total / matching.len() as f32
-}
-
-fn compute_category_pain_rate(
-    items: &[SyntheticItem],
-    category: &str,
-    stack: &stacks::ComposedStack,
-) -> f32 {
-    let matching: Vec<_> = items.iter().filter(|i| i.category == category).collect();
-    if matching.is_empty() {
-        return 0.0;
-    }
-    let pain_matches = matching
-        .iter()
-        .filter(|item| stacks::scoring::has_pain_point_match(item.title, item.content, stack))
-        .count();
-    pain_matches as f32 / matching.len() as f32
-}
-
-fn compute_category_competing_penalty_avg(
-    items: &[SyntheticItem],
-    category: &str,
-    stack: &stacks::ComposedStack,
-) -> f32 {
-    let matching: Vec<_> = items.iter().filter(|i| i.category == category).collect();
-    if matching.is_empty() {
-        return 1.0;
-    }
-    let total: f32 = matching
-        .iter()
-        .map(|item| stacks::scoring::compute_competing_penalty(item.title, item.content, stack))
-        .sum();
-    total / matching.len() as f32
-}
-
-// ============================================================================
-// Profile simulation tests
-// ============================================================================
-
-macro_rules! profile_simulation {
-    ($name:ident, $profile_id:expr, $items_fn:expr) => {
+macro_rules! corpus_test {
+    ($name:ident, $profile_idx:expr, $profile_id:expr) => {
         mod $name {
             use super::*;
 
@@ -1180,267 +396,1373 @@ macro_rules! profile_simulation {
                 stacks::compose_profiles(&[$profile_id.to_string()])
             }
 
-            fn items() -> Vec<SyntheticItem> {
-                $items_fn()
-            }
-
             #[test]
-            fn pain_point_lift() {
+            fn pain_point_precision() {
                 let s = stack();
-                let i = items();
-                let pain_avg = compute_category_avg(&i, "pain_point", &s);
-                let off_domain_avg = compute_category_avg(&i, "off_domain", &s);
-                let lift = pain_avg - off_domain_avg;
+                let pain_items: Vec<_> = CORPUS
+                    .iter()
+                    .filter(|c| c.labels[$profile_idx] == L::P)
+                    .collect();
                 assert!(
-                    lift >= 0.05,
-                    "{}: Pain point lift ({:.4}) should be >= 0.05 (pain={:.4}, off={:.4})",
+                    !pain_items.is_empty(),
+                    "No P-labeled items for {}",
+                    $profile_id
+                );
+
+                let mut misses = Vec::new();
+                for item in &pain_items {
+                    if !scoring::has_pain_point_match(item.title, item.content, &s) {
+                        misses.push(item.title);
+                    }
+                }
+                assert!(
+                    misses.is_empty(),
+                    "{}: Pain point missed {} items: {:?}",
                     $profile_id,
-                    lift,
-                    pain_avg,
-                    off_domain_avg
+                    misses.len(),
+                    misses
                 );
             }
 
             #[test]
-            fn pain_point_detection_rate() {
+            fn keyword_precision() {
                 let s = stack();
-                let i = items();
-                let rate = compute_category_pain_rate(&i, "pain_point", &s);
+                let kw_items: Vec<_> = CORPUS
+                    .iter()
+                    .filter(|c| c.labels[$profile_idx] == L::K)
+                    .collect();
                 assert!(
-                    rate >= 0.60,
-                    "{}: Pain point detection rate ({:.2}) should be >= 0.60",
+                    !kw_items.is_empty(),
+                    "No K-labeled items for {}",
+                    $profile_id
+                );
+
+                let mut misses = Vec::new();
+                for item in &kw_items {
+                    let boost = scoring::compute_stack_boost(item.title, item.content, &s);
+                    if boost == 0.0 {
+                        misses.push(item.title);
+                    }
+                }
+                assert!(
+                    misses.is_empty(),
+                    "{}: Keyword boost missed {} items: {:?}",
                     $profile_id,
-                    rate
+                    misses.len(),
+                    misses
                 );
             }
 
             #[test]
-            fn off_domain_suppression() {
+            fn shift_precision() {
                 let s = stack();
-                let i = items();
-                let off_avg = compute_category_avg(&i, "off_domain", &s);
+                let shift_items: Vec<_> = CORPUS
+                    .iter()
+                    .filter(|c| c.labels[$profile_idx] == L::S)
+                    .collect();
                 assert!(
-                    off_avg <= 0.10,
-                    "{}: Off-domain avg boost ({:.4}) should be <= 0.10",
+                    !shift_items.is_empty(),
+                    "No S-labeled items for {}",
+                    $profile_id
+                );
+
+                let mut misses = Vec::new();
+                for item in &shift_items {
+                    let topics = topics_from(item);
+                    let mult = scoring::detect_ecosystem_shift(&topics, item.title, &s);
+                    if mult <= 1.0 {
+                        misses.push(item.title);
+                    }
+                }
+                assert!(
+                    misses.is_empty(),
+                    "{}: Shift detection missed {} items: {:?}",
                     $profile_id,
-                    off_avg
+                    misses.len(),
+                    misses
                 );
             }
 
             #[test]
-            fn ecosystem_shift_detection() {
+            fn competing_precision() {
                 let s = stack();
-                let i = items();
-                let shift_avg = compute_category_shift_avg(&i, "ecosystem_shift", &s);
+                let comp_items: Vec<_> = CORPUS
+                    .iter()
+                    .filter(|c| c.labels[$profile_idx] == L::C)
+                    .collect();
                 assert!(
-                    shift_avg > 1.0,
-                    "{}: Ecosystem shift avg ({:.4}) should be > 1.0",
+                    !comp_items.is_empty(),
+                    "No C-labeled items for {}",
+                    $profile_id
+                );
+
+                let mut misses = Vec::new();
+                for item in &comp_items {
+                    let penalty = scoring::compute_competing_penalty(item.title, item.content, &s);
+                    if penalty >= 1.0 {
+                        misses.push(item.title);
+                    }
+                }
+                assert!(
+                    misses.is_empty(),
+                    "{}: Competing penalty missed {} items: {:?}",
                     $profile_id,
-                    shift_avg
+                    misses.len(),
+                    misses
                 );
             }
 
             #[test]
-            fn synergy_boost() {
+            fn neutral_isolation() {
                 let s = stack();
-                let i = items();
-                let synergy_avg = compute_category_avg(&i, "synergy", &s);
-                let direct_avg = compute_category_avg(&i, "direct", &s);
-                assert!(
-                    synergy_avg >= direct_avg,
-                    "{}: Synergy avg ({:.4}) should be >= direct avg ({:.4})",
-                    $profile_id,
-                    synergy_avg,
-                    direct_avg
-                );
-            }
+                let neutral_items: Vec<_> = CORPUS
+                    .iter()
+                    .filter(|c| c.labels[$profile_idx] == L::N)
+                    .collect();
 
-            #[test]
-            fn direct_match_boost() {
-                let s = stack();
-                let i = items();
-                let direct_avg = compute_category_avg(&i, "direct", &s);
+                let mut false_boosts = Vec::new();
+                for item in &neutral_items {
+                    let boost = scoring::compute_stack_boost(item.title, item.content, &s);
+                    let pain = scoring::has_pain_point_match(item.title, item.content, &s);
+                    if boost > 0.10 || pain {
+                        false_boosts.push((item.title, boost, pain));
+                    }
+                }
+                // Allow up to 10% false positive rate on neutrals
+                let rate = false_boosts.len() as f32 / neutral_items.len() as f32;
                 assert!(
-                    direct_avg >= 0.05,
-                    "{}: Direct match avg ({:.4}) should be >= 0.05",
+                    rate <= 0.10,
+                    "{}: Neutral false positive rate {:.0}% ({}/{}) — items: {:?}",
                     $profile_id,
-                    direct_avg
-                );
-            }
-
-            #[test]
-            fn competing_penalty_fires() {
-                let s = stack();
-                let i = items();
-                let competing_avg = compute_category_competing_penalty_avg(&i, "competing", &s);
-                assert!(
-                    competing_avg < 1.0,
-                    "{}: Competing content avg penalty ({:.4}) should be < 1.0",
-                    $profile_id,
-                    competing_avg
+                    rate * 100.0,
+                    false_boosts.len(),
+                    neutral_items.len(),
+                    false_boosts.iter().map(|(t, _, _)| *t).collect::<Vec<_>>()
                 );
             }
         }
     };
 }
 
-profile_simulation!(nextjs_sim, "nextjs_fullstack", nextjs_items);
-profile_simulation!(rust_sim, "rust_systems", rust_items);
-profile_simulation!(python_ml_sim, "python_ml", python_ml_items);
-profile_simulation!(go_backend_sim, "go_backend", go_backend_items);
-profile_simulation!(react_native_sim, "react_native", react_native_items);
-profile_simulation!(laravel_sim, "laravel", laravel_items);
-profile_simulation!(django_sim, "django", django_items);
-profile_simulation!(vue_frontend_sim, "vue_frontend", vue_frontend_items);
+corpus_test!(corpus_nextjs, NX, "nextjs_fullstack");
+corpus_test!(corpus_rust, RS, "rust_systems");
+corpus_test!(corpus_python_ml, PY, "python_ml");
+corpus_test!(corpus_go, GO, "go_backend");
+corpus_test!(corpus_react_native, RN, "react_native");
+corpus_test!(corpus_laravel, LA, "laravel");
+corpus_test!(corpus_django, DJ, "django");
+corpus_test!(corpus_vue, VU, "vue_frontend");
 
 // ============================================================================
-// Backward compatibility — no stack selected = neutral
+// Tier 2: Adversarial Battery
 // ============================================================================
+// Items specifically designed to exploit known word-boundary weaknesses.
+// Every item here MUST produce zero false positives.
+
+static ADVERSARIAL: &[(&str, &str)] = &[
+    // "go" traps
+    (
+        "Google Cloud Platform Announces New Region",
+        "google cloud storage algorithms ergonomic",
+    ),
+    (
+        "Algorithm Design: Dynamic Programming Masterclass",
+        "algorithms programming ergonomic design patterns",
+    ),
+    (
+        "MongoDB Atlas Performance Tuning Guide",
+        "mongodb atlas performance indexing aggregation",
+    ),
+    (
+        "The Good Parts of Modern Web Frameworks",
+        "framework patterns best practices architecture opinions",
+    ),
+    // "rust" traps
+    (
+        "Building Trust in Remote Engineering Teams",
+        "trust building frustrated developers onboarding",
+    ),
+    (
+        "Entrust Certificate Management Solutions",
+        "entrust certificate ssl tls management enterprise",
+    ),
+    (
+        "Frustrated Developers Leave Companies That Ignore DX",
+        "frustrated developer experience frustration burnout",
+    ),
+    // "vue" traps
+    (
+        "Revenue Growth Strategies for SaaS Startups",
+        "revenue metrics growth saas pricing strategy",
+    ),
+    // "react" traps (should not match inside react-native)
+    (
+        "Reactive Programming with RxJS Observables",
+        "reactive programming rxjs observables streams operators",
+    ),
+    // "node" traps
+    (
+        "Understanding Graph Nodes and Tree Traversal",
+        "node tree graph traversal data structure algorithm",
+    ),
+    // "php" trap
+    (
+        "How Graphic Design Shapes User Perception",
+        "graphic design user perception visual hierarchy shapes",
+    ),
+    // "python" in unrelated context
+    (
+        "Monty Python and the Holy Grail Turns 50",
+        "monty python comedy british humor anniversary film",
+    ),
+];
 
 #[test]
-fn backward_compat_no_stack_neutral_boost() {
+fn adversarial_zero_false_positives() {
+    for &profile_id in &PROFILE_IDS {
+        let stack = stacks::compose_profiles(&[profile_id.to_string()]);
+        for &(title, content) in ADVERSARIAL {
+            let boost = scoring::compute_stack_boost(title, content, &stack);
+            assert!(
+                boost == 0.0,
+                "ADVERSARIAL FAIL: profile={}, title={:?}, boost={} (expected 0.0)",
+                profile_id,
+                title,
+                boost
+            );
+            let pain = scoring::has_pain_point_match(title, content, &stack);
+            assert!(
+                !pain,
+                "ADVERSARIAL FAIL: profile={}, title={:?} triggered pain point",
+                profile_id, title
+            );
+        }
+    }
+}
+
+// Exhaustive word-boundary traps for each profile's short keywords
+#[test]
+fn adversarial_word_boundaries_exhaustive() {
+    // go: must not match google, algorithm, golang substring false pos, cargo, ergo, mango
+    let go_stack = stacks::compose_profiles(&["go_backend".to_string()]);
+    for trap in &[
+        "google",
+        "algorithm",
+        "ergo",
+        "mango",
+        "cargo",
+        "logo",
+        "undergo",
+    ] {
+        let text = format!("Article about {} technology", trap);
+        assert!(
+            !scoring::text_contains_term(&text.to_lowercase(), "go"),
+            "'go' matched inside '{}'",
+            trap
+        );
+        assert_eq!(
+            scoring::compute_stack_boost(&text, "", &go_stack),
+            0.0,
+            "Go stack boosted '{}'",
+            trap
+        );
+    }
+
+    // rust: must not match trust, frustrated, rustic, crusty
+    let rust_stack = stacks::compose_profiles(&["rust_systems".to_string()]);
+    for trap in &["trust", "frustrated", "rustic", "crusty", "robust"] {
+        let text = format!("Article about {} in teams", trap);
+        assert!(
+            !scoring::text_contains_term(&text.to_lowercase(), "rust"),
+            "'rust' matched inside '{}'",
+            trap
+        );
+        assert_eq!(
+            scoring::compute_stack_boost(&text, "", &rust_stack),
+            0.0,
+            "Rust stack boosted '{}'",
+            trap
+        );
+    }
+
+    // vue: must not match revenue, venue, revue, value
+    let vue_stack = stacks::compose_profiles(&["vue_frontend".to_string()]);
+    for trap in &["revenue", "venue", "revue", "value", "vuelto"] {
+        let text = format!("Article about {} metrics", trap);
+        assert!(
+            !scoring::text_contains_term(&text.to_lowercase(), "vue"),
+            "'vue' matched inside '{}'",
+            trap
+        );
+        assert_eq!(
+            scoring::compute_stack_boost(&text, "", &vue_stack),
+            0.0,
+            "Vue stack boosted '{}'",
+            trap
+        );
+    }
+}
+
+// Verify true positives still work after adversarial hardening
+#[test]
+fn adversarial_true_positives_survive() {
+    let go_stack = stacks::compose_profiles(&["go_backend".to_string()]);
+    assert!(
+        scoring::compute_stack_boost("Go 1.23 Release Notes", "golang release", &go_stack) > 0.0
+    );
+
+    let rust_stack = stacks::compose_profiles(&["rust_systems".to_string()]);
+    assert!(
+        scoring::compute_stack_boost(
+            "Rust 1.80 Release Highlights",
+            "rust release cargo",
+            &rust_stack
+        ) > 0.0
+    );
+
+    let vue_stack = stacks::compose_profiles(&["vue_frontend".to_string()]);
+    assert!(
+        scoring::compute_stack_boost(
+            "Vue 3.5 Composition API",
+            "vue composition pinia",
+            &vue_stack
+        ) > 0.0
+    );
+}
+
+// Hyphen isolation: "react" must NOT match "react-native"
+#[test]
+fn adversarial_hyphen_isolation() {
+    assert!(!scoring::text_contains_term(
+        "react-native is great",
+        "react"
+    ));
+    assert!(scoring::text_contains_term(
+        "react-native is great",
+        "react-native"
+    ));
+    assert!(!scoring::text_contains_term(
+        "drizzle-orm migration",
+        "drizzle"
+    ));
+    assert!(scoring::text_contains_term(
+        "drizzle-orm migration",
+        "drizzle-orm"
+    ));
+    assert!(!scoring::text_contains_term("go-fiber framework", "go"));
+    assert!(scoring::text_contains_term(
+        "go-fiber framework",
+        "go-fiber"
+    ));
+    assert!(!scoring::text_contains_term("vue-router patterns", "vue"));
+    assert!(scoring::text_contains_term(
+        "vue-router patterns",
+        "vue-router"
+    ));
+}
+
+// ============================================================================
+// Tier 3: Algebraic Properties
+// ============================================================================
+// Mathematical invariants that must hold for ANY input.
+
+#[test]
+fn property_boost_bounded() {
+    // For all profiles and all possible inputs, boost must be in [0.0, 0.20]
+    for &profile_id in &PROFILE_IDS {
+        let stack = stacks::compose_profiles(&[profile_id.to_string()]);
+        // Worst case: every keyword in every pain point in the title
+        let mega_title = "async pin send lifetime future tokio compile time build time \
+            incremental compilation cargo build unsafe soundness undefined behavior miri \
+            error handling thiserror anyhow result error type borrow checker ownership \
+            move semantics lifetime annotation app router migration pages router next 13 \
+            next 14 edge runtime middleware cold start isr revalidate cache stale bundle \
+            size tree shaking code splitting webpack turbopack server component client \
+            component use client rsc server action cuda version driver nvcc nvidia gpu \
+            oom vram memory allocation dependency pip conda virtual environment package \
+            queue job failed retry horizon worker n+1 eager loading eloquent performance \
+            composition api options api setup script setup ssr hydration mismatch nuxt \
+            generics type parameter context ctx module go.mod error wrapping errors.Is \
+            new architecture fabric turbo module hermes jsc app store review ota eas \
+            js thread ui thread frame drop";
+        let boost = scoring::compute_stack_boost(mega_title, mega_title, &stack);
+        assert!(
+            boost >= 0.0 && boost <= 0.20,
+            "{}: boost {} out of [0.0, 0.20] for mega input",
+            profile_id,
+            boost
+        );
+    }
+}
+
+#[test]
+fn property_shift_bounded() {
+    // Ecosystem shift multiplier must be in [0.95, 1.25]
+    for &profile_id in &PROFILE_IDS {
+        let stack = stacks::compose_profiles(&[profile_id.to_string()]);
+        let all_topics: Vec<String> = vec![
+            "drizzle",
+            "prisma alternative",
+            "biome",
+            "biomejs",
+            "bun runtime",
+            "bunx",
+            "native async trait",
+            "async fn in trait",
+            "const generics",
+            "stabilization",
+            "jax",
+            "flax",
+            "gguf",
+            "llama.cpp",
+            "local llm",
+            "ollama",
+            "rag",
+            "slog",
+            "log/slog",
+            "range over func",
+            "iter.Seq",
+            "go wasm",
+            "wazero",
+            "expo",
+            "expo-router",
+            "new architecture",
+            "fabric",
+            "livewire 3",
+            "filament",
+            "pest v3",
+            "django-ninja",
+            "htmx",
+            "wagtail",
+            "vue vapor",
+            "nuxt 4",
+            "unocss",
+        ]
+        .into_iter()
+        .map(|s| s.to_string())
+        .collect();
+        let mega_title = all_topics.join(" ");
+        let mult = scoring::detect_ecosystem_shift(&all_topics, &mega_title, &stack);
+        assert!(
+            mult >= 0.95 && mult <= 1.25,
+            "{}: shift multiplier {} out of [0.95, 1.25]",
+            profile_id,
+            mult
+        );
+    }
+}
+
+#[test]
+fn property_penalty_binary() {
+    // Competing penalty can ONLY be 1.0 or 0.95 — never anything else
+    for &profile_id in &PROFILE_IDS {
+        let stack = stacks::compose_profiles(&[profile_id.to_string()]);
+        for item in CORPUS {
+            let penalty = scoring::compute_competing_penalty(item.title, item.content, &stack);
+            assert!(
+                penalty == 1.0 || penalty == 0.95,
+                "{}: penalty {} is not 1.0 or 0.95 for '{}'",
+                profile_id,
+                penalty,
+                item.title
+            );
+        }
+    }
+}
+
+#[test]
+fn property_inactive_neutrality() {
+    // When no stacks are selected, ALL scoring functions return neutral values
     let empty = stacks::ComposedStack::default();
     assert!(!empty.active);
 
-    let boost = stacks::scoring::compute_stack_boost(
-        "Rust async runtime improvements",
-        "async tokio pin send lifetime improvements",
-        &empty,
-    );
-    assert_eq!(boost, 0.0, "No stack selected should give 0.0 boost");
+    for item in CORPUS {
+        let boost = scoring::compute_stack_boost(item.title, item.content, &empty);
+        assert_eq!(
+            boost, 0.0,
+            "Inactive stack gave boost {} for '{}'",
+            boost, item.title
+        );
+
+        let pain = scoring::has_pain_point_match(item.title, item.content, &empty);
+        assert!(!pain, "Inactive stack gave pain match for '{}'", item.title);
+
+        let topics = topics_from(item);
+        let shift = scoring::detect_ecosystem_shift(&topics, item.title, &empty);
+        assert_eq!(
+            shift, 1.0,
+            "Inactive stack gave shift {} for '{}'",
+            shift, item.title
+        );
+
+        let penalty = scoring::compute_competing_penalty(item.title, item.content, &empty);
+        assert_eq!(
+            penalty, 1.0,
+            "Inactive stack gave penalty {} for '{}'",
+            penalty, item.title
+        );
+    }
 }
 
 #[test]
-fn backward_compat_no_stack_neutral_shift() {
-    let empty = stacks::ComposedStack::default();
-    let mult = stacks::scoring::detect_ecosystem_shift(
-        &["drizzle".to_string()],
-        "Drizzle replacing Prisma",
-        &empty,
-    );
-    assert_eq!(mult, 1.0, "No stack selected should give 1.0 multiplier");
-}
+fn property_pain_beats_keyword() {
+    // For every profile, pain point items should score >= keyword-only items on average
+    for (idx, &profile_id) in PROFILE_IDS.iter().enumerate() {
+        let stack = stacks::compose_profiles(&[profile_id.to_string()]);
 
-#[test]
-fn backward_compat_no_stack_no_pain_match() {
-    let empty = stacks::ComposedStack::default();
-    let matched = stacks::scoring::has_pain_point_match(
-        "Async lifetime challenges",
-        "async pin send lifetime complexity",
-        &empty,
-    );
-    assert!(!matched, "No stack selected should give false pain match");
-}
+        let pain_boosts: Vec<f32> = CORPUS
+            .iter()
+            .filter(|c| c.labels[idx] == L::P)
+            .map(|c| scoring::compute_stack_boost(c.title, c.content, &stack))
+            .collect();
+        let kw_boosts: Vec<f32> = CORPUS
+            .iter()
+            .filter(|c| c.labels[idx] == L::K)
+            .map(|c| scoring::compute_stack_boost(c.title, c.content, &stack))
+            .collect();
 
-#[test]
-fn backward_compat_no_stack_no_competing_penalty() {
-    let empty = stacks::ComposedStack::default();
-    let penalty = stacks::scoring::compute_competing_penalty(
-        "Go Backend Performance",
-        "golang goroutine optimization",
-        &empty,
-    );
-    assert_eq!(
-        penalty, 1.0,
-        "No stack selected should give 1.0 (no penalty)"
-    );
-}
+        if pain_boosts.is_empty() || kw_boosts.is_empty() {
+            continue;
+        }
 
-// ============================================================================
-// Word-boundary regression tests
-// ============================================================================
-
-#[test]
-fn word_boundary_go_not_in_google() {
-    let stack = stacks::compose_profiles(&["go_backend".to_string()]);
-    let boost = stacks::scoring::compute_stack_boost(
-        "Google Cloud Platform New Features",
-        "google cloud storage algorithms ergonomic apis",
-        &stack,
-    );
-    assert_eq!(
-        boost, 0.0,
-        "Go stack should NOT boost Google content (got {})",
-        boost
-    );
-}
-
-#[test]
-fn word_boundary_rust_not_in_trust() {
-    let stack = stacks::compose_profiles(&["rust_systems".to_string()]);
-    let boost = stacks::scoring::compute_stack_boost(
-        "Building Trust in Software Teams",
-        "frustrated developers need better onboarding and trust",
-        &stack,
-    );
-    assert_eq!(
-        boost, 0.0,
-        "Rust stack should NOT boost 'trust' content (got {})",
-        boost
-    );
-}
-
-#[test]
-fn word_boundary_vue_not_in_revenue() {
-    let stack = stacks::compose_profiles(&["vue_frontend".to_string()]);
-    let boost = stacks::scoring::compute_stack_boost(
-        "Revenue Growth Strategies for SaaS",
-        "revenue metrics growth saas pricing strategy",
-        &stack,
-    );
-    assert_eq!(
-        boost, 0.0,
-        "Vue stack should NOT boost 'revenue' content (got {})",
-        boost
-    );
+        let pain_avg: f32 = pain_boosts.iter().sum::<f32>() / pain_boosts.len() as f32;
+        let kw_avg: f32 = kw_boosts.iter().sum::<f32>() / kw_boosts.len() as f32;
+        // Allow 0.02 tolerance: individual keyword boosts can slightly exceed
+        // lower-severity pain points, but pain should never be dramatically below.
+        assert!(
+            pain_avg >= kw_avg - 0.02,
+            "{}: Pain avg ({:.4}) too far below keyword avg ({:.4})",
+            profile_id,
+            pain_avg,
+            kw_avg
+        );
+    }
 }
 
 // ============================================================================
-// Composability tests — multi-profile
+// Tier 4: Profile Data Integrity
 // ============================================================================
 
 #[test]
-fn multi_profile_rust_plus_nextjs() {
+fn integrity_pain_points_minimum_keywords() {
+    // Every pain point must have >= 3 keywords (2-match threshold needs at least 3 to be useful)
+    for profile in stacks::list_profiles() {
+        for pp in profile.pain_points {
+            assert!(
+                pp.keywords.len() >= 3,
+                "{}: pain point '{}' has only {} keywords (need 3+)",
+                profile.id,
+                pp.description,
+                pp.keywords.len()
+            );
+        }
+    }
+}
+
+#[test]
+fn integrity_shifts_minimum_keywords() {
+    // Every ecosystem shift must have >= 2 keywords (2-match threshold)
+    for profile in stacks::list_profiles() {
+        for es in profile.ecosystem_shifts {
+            assert!(
+                es.keywords.len() >= 2,
+                "{}: shift '{}->{}'  has only {} keywords (need 2+)",
+                profile.id,
+                es.from,
+                es.to,
+                es.keywords.len()
+            );
+        }
+    }
+}
+
+#[test]
+fn integrity_no_self_competition() {
+    // No profile should list its own core_tech or companions as competing
+    for profile in stacks::list_profiles() {
+        for &comp in profile.competing {
+            assert!(
+                !profile.core_tech.contains(&comp),
+                "{}: '{}' is both core_tech and competing",
+                profile.id,
+                comp
+            );
+            assert!(
+                !profile.companions.contains(&comp),
+                "{}: '{}' is both companion and competing",
+                profile.id,
+                comp
+            );
+        }
+    }
+}
+
+#[test]
+fn integrity_severity_bounds() {
+    for profile in stacks::list_profiles() {
+        for pp in profile.pain_points {
+            assert!(
+                pp.severity >= 0.05 && pp.severity <= 0.20,
+                "{}: severity {} out of [0.05, 0.20] for '{}'",
+                profile.id,
+                pp.severity,
+                pp.description
+            );
+        }
+    }
+}
+
+#[test]
+fn integrity_shift_boost_bounds() {
+    for profile in stacks::list_profiles() {
+        for es in profile.ecosystem_shifts {
+            assert!(
+                es.boost >= 1.05 && es.boost <= 1.25,
+                "{}: shift boost {} out of [1.05, 1.25] for '{}->{}'",
+                profile.id,
+                es.boost,
+                es.from,
+                es.to
+            );
+        }
+    }
+}
+
+#[test]
+fn integrity_keyword_boost_bounds() {
+    for profile in stacks::list_profiles() {
+        for &(kw, boost) in profile.keyword_boosts {
+            assert!(
+                boost >= 0.04 && boost <= 0.15,
+                "{}: keyword boost {} out of [0.04, 0.15] for '{}'",
+                profile.id,
+                boost,
+                kw
+            );
+        }
+    }
+}
+
+#[test]
+fn integrity_unique_ids() {
+    let mut seen = std::collections::HashSet::new();
+    for profile in stacks::list_profiles() {
+        assert!(
+            seen.insert(profile.id),
+            "Duplicate profile ID: {}",
+            profile.id
+        );
+    }
+    assert_eq!(seen.len(), 8, "Expected 8 profiles, got {}", seen.len());
+}
+
+#[test]
+fn integrity_no_boosted_competitor() {
+    // A profile should never have a keyword_boost for a tech in its competing list
+    for profile in stacks::list_profiles() {
+        for &(kw, _) in profile.keyword_boosts {
+            assert!(
+                !profile.competing.contains(&kw),
+                "{}: keyword boost for competing tech '{}'",
+                profile.id,
+                kw
+            );
+        }
+    }
+}
+
+#[test]
+fn integrity_all_keywords_lowercase() {
+    for profile in stacks::list_profiles() {
+        for pp in profile.pain_points {
+            for &kw in pp.keywords {
+                assert_eq!(
+                    kw,
+                    kw.to_lowercase().as_str(),
+                    "{}: pain point keyword '{}' not lowercase",
+                    profile.id,
+                    kw
+                );
+            }
+        }
+        for es in profile.ecosystem_shifts {
+            for &kw in es.keywords {
+                assert_eq!(
+                    kw,
+                    kw.to_lowercase().as_str(),
+                    "{}: shift keyword '{}' not lowercase",
+                    profile.id,
+                    kw
+                );
+            }
+        }
+        for &(kw, _) in profile.keyword_boosts {
+            assert_eq!(
+                kw,
+                kw.to_lowercase().as_str(),
+                "{}: keyword boost '{}' not lowercase",
+                profile.id,
+                kw
+            );
+        }
+    }
+}
+
+// ============================================================================
+// Tier 5: Composition Algebra
+// ============================================================================
+
+#[test]
+fn composition_all_profiles_valid() {
+    // Composing every individual profile produces an active stack with content
+    for &profile_id in &PROFILE_IDS {
+        let stack = stacks::compose_profiles(&[profile_id.to_string()]);
+        assert!(stack.active, "{} not active", profile_id);
+        assert!(
+            !stack.pain_points.is_empty(),
+            "{} has no pain points",
+            profile_id
+        );
+        assert!(
+            !stack.ecosystem_shifts.is_empty(),
+            "{} has no shifts",
+            profile_id
+        );
+        assert!(
+            !stack.keyword_boosts.is_empty(),
+            "{} has no keyword boosts",
+            profile_id
+        );
+        assert!(!stack.all_tech.is_empty(), "{} has no tech", profile_id);
+    }
+}
+
+#[test]
+fn composition_max_semantics() {
+    // When two profiles share a keyword, composed boost = MAX, not SUM
+    let nextjs = stacks::compose_profiles(&["nextjs_fullstack".to_string()]);
+    let rust = stacks::compose_profiles(&["rust_systems".to_string()]);
     let composed =
-        stacks::compose_profiles(&["rust_systems".to_string(), "nextjs_fullstack".to_string()]);
-    assert!(composed.active);
+        stacks::compose_profiles(&["nextjs_fullstack".to_string(), "rust_systems".to_string()]);
 
-    // Rust pain point should still trigger
-    let rust_pain = stacks::scoring::has_pain_point_match(
-        "Understanding Async Lifetimes",
-        "async lifetime pin send future complexity",
-        &composed,
-    );
-    assert!(rust_pain, "Rust pain point should work in composed stack");
-
-    // Next.js pain point should also trigger
-    let nextjs_pain = stacks::scoring::has_pain_point_match(
-        "App Router Migration Challenges",
-        "app router migration pages router next 14 breaking changes",
-        &composed,
-    );
-    assert!(
-        nextjs_pain,
-        "Next.js pain point should work in composed stack"
-    );
-
-    // Both techs should be in all_tech
-    assert!(composed.all_tech.contains("rust"));
-    assert!(composed.all_tech.contains("nextjs"));
+    for (&kw, &boost) in &composed.keyword_boosts {
+        let nx_boost = nextjs.keyword_boosts.get(kw).copied().unwrap_or(0.0);
+        let rs_boost = rust.keyword_boosts.get(kw).copied().unwrap_or(0.0);
+        let expected_max = nx_boost.max(rs_boost);
+        assert!(
+            (boost - expected_max).abs() < f32::EPSILON,
+            "Composed boost for '{}' is {} but MAX({}, {}) = {}",
+            kw,
+            boost,
+            nx_boost,
+            rs_boost,
+            expected_max
+        );
+    }
 }
 
 #[test]
-fn all_eight_profiles_compose() {
-    let all_ids: Vec<String> = stacks::list_profiles()
-        .iter()
-        .map(|p| p.id.to_string())
-        .collect();
+fn composition_disjoint_own_competing() {
+    // Within a single profile, core_tech/companions and competing must be disjoint.
+    // But across profiles, one profile's core_tech CAN appear in another's competing
+    // (e.g., "rust" is core for rust_systems but competing for go_backend).
+    // Just verify single-profile disjointness.
+    for &profile_id in &PROFILE_IDS {
+        let stack = stacks::compose_profiles(&[profile_id.to_string()]);
+        for tech in &stack.all_tech {
+            assert!(
+                !stack.competing.contains(tech),
+                "{}: '{}' is both own tech and competing in composed stack",
+                profile_id,
+                tech
+            );
+        }
+    }
+}
+
+#[test]
+fn composition_empty_is_neutral() {
+    let empty = stacks::compose_profiles(&[]);
+    assert!(!empty.active);
+    assert!(empty.pain_points.is_empty());
+    assert!(empty.ecosystem_shifts.is_empty());
+    assert!(empty.keyword_boosts.is_empty());
+    assert!(empty.source_preferences.is_empty());
+    assert!(empty.all_tech.is_empty());
+    assert!(empty.competing.is_empty());
+}
+
+#[test]
+fn composition_all_eight_scales() {
+    let all_ids: Vec<String> = PROFILE_IDS.iter().map(|s| s.to_string()).collect();
     let composed = stacks::compose_profiles(&all_ids);
     assert!(composed.active);
+    // 8 profiles with 4-5 pain points each = 34+ total
     assert!(
         composed.pain_points.len() >= 30,
-        "8 profiles should give 30+ pain points"
+        "8 profiles should give 30+ pain points, got {}",
+        composed.pain_points.len()
     );
-    assert!(!composed.all_tech.is_empty());
-    assert!(!composed.competing.is_empty());
+    // Should have techs from all stacks
+    assert!(composed.all_tech.contains("rust"));
+    assert!(composed.all_tech.contains("nextjs"));
+    assert!(composed.all_tech.contains("pytorch"));
+    assert!(composed.all_tech.contains("laravel"));
+    assert!(composed.all_tech.contains("django"));
+    assert!(composed.all_tech.contains("vue"));
+}
+
+#[test]
+fn composition_mixed_content_no_penalty() {
+    // When Rust+Go are both selected, Go content should NOT get a competing penalty
+    let composed =
+        stacks::compose_profiles(&["rust_systems".to_string(), "go_backend".to_string()]);
+    let penalty = scoring::compute_competing_penalty(
+        "Go Backend Performance Tips",
+        "golang goroutine optimization patterns",
+        &composed,
+    );
+    // "go"/"golang" are in composed.all_tech (from go_backend), so no penalty
+    assert_eq!(
+        penalty, 1.0,
+        "Go content should not be penalized when Go profile is selected"
+    );
+}
+
+// ============================================================================
+// Corpus coverage verification
+// ============================================================================
+
+#[test]
+fn corpus_coverage_minimum() {
+    // Verify the corpus has enough items per label type per profile
+    for (idx, &profile_id) in PROFILE_IDS.iter().enumerate() {
+        let p_count = CORPUS.iter().filter(|c| c.labels[idx] == L::P).count();
+        let k_count = CORPUS.iter().filter(|c| c.labels[idx] == L::K).count();
+        let s_count = CORPUS.iter().filter(|c| c.labels[idx] == L::S).count();
+        let c_count = CORPUS.iter().filter(|c| c.labels[idx] == L::C).count();
+        let n_count = CORPUS.iter().filter(|c| c.labels[idx] == L::N).count();
+
+        assert!(
+            p_count >= 2,
+            "{}: needs 2+ P items, got {}",
+            profile_id,
+            p_count
+        );
+        assert!(
+            k_count >= 1,
+            "{}: needs 1+ K items, got {}",
+            profile_id,
+            k_count
+        );
+        assert!(
+            s_count >= 2,
+            "{}: needs 2+ S items, got {}",
+            profile_id,
+            s_count
+        );
+        assert!(
+            c_count >= 1,
+            "{}: needs 1+ C items, got {}",
+            profile_id,
+            c_count
+        );
+        assert!(
+            n_count >= 5,
+            "{}: needs 5+ N items, got {}",
+            profile_id,
+            n_count
+        );
+    }
+}
+
+// ============================================================================
+// Tier 6: Cross-Profile Contamination Matrix
+// ============================================================================
+// For each profile's labeled items, verify they do NOT trigger scoring
+// functions in OTHER profiles. This catches keyword overlap between profiles
+// (e.g., "async" in both Rust and Django) and proves the 2-keyword threshold
+// prevents cross-talk.
+
+#[test]
+fn contamination_pain_points_isolated() {
+    let mut violations = Vec::new();
+
+    for (idx, &profile_id) in PROFILE_IDS.iter().enumerate() {
+        let pain_items: Vec<_> = CORPUS.iter().filter(|c| c.labels[idx] == L::P).collect();
+
+        for (other_idx, &other_id) in PROFILE_IDS.iter().enumerate() {
+            if other_idx == idx {
+                continue;
+            }
+            let other_stack = stacks::compose_profiles(&[other_id.to_string()]);
+
+            for item in &pain_items {
+                // Skip items that are explicitly labeled for the other profile too
+                if item.labels[other_idx] != L::N {
+                    continue;
+                }
+                if scoring::has_pain_point_match(item.title, item.content, &other_stack) {
+                    violations.push(format!(
+                        "  {}'s P-item '{}' also triggers pain in {}",
+                        profile_id, item.title, other_id
+                    ));
+                }
+            }
+        }
+    }
+
+    assert!(
+        violations.is_empty(),
+        "Cross-profile pain point contamination ({} violations):\n{}",
+        violations.len(),
+        violations.join("\n")
+    );
+}
+
+#[test]
+fn contamination_keyword_boost_isolation() {
+    // Items labeled K for one profile (and N for another) should not get
+    // significant boosts from that other profile.
+    let mut violations = Vec::new();
+
+    for (idx, &profile_id) in PROFILE_IDS.iter().enumerate() {
+        let kw_items: Vec<_> = CORPUS.iter().filter(|c| c.labels[idx] == L::K).collect();
+
+        for (other_idx, &other_id) in PROFILE_IDS.iter().enumerate() {
+            if other_idx == idx {
+                continue;
+            }
+            let other_stack = stacks::compose_profiles(&[other_id.to_string()]);
+
+            for item in &kw_items {
+                // Only check items labeled N for the other profile
+                if item.labels[other_idx] != L::N {
+                    continue;
+                }
+                let boost = scoring::compute_stack_boost(item.title, item.content, &other_stack);
+                if boost > 0.08 {
+                    violations.push(format!(
+                        "  {}'s K-item '{}' gets boost {:.3} from {}",
+                        profile_id, item.title, boost, other_id
+                    ));
+                }
+            }
+        }
+    }
+
+    assert!(
+        violations.is_empty(),
+        "Keyword boost contamination ({} violations):\n{}",
+        violations.len(),
+        violations.join("\n")
+    );
+}
+
+#[test]
+fn contamination_competing_symmetry() {
+    // If profile A lists tech X as competing, and profile B has X as core_tech,
+    // then B should list at least one of A's core_tech as competing.
+    // This ensures the competition relationship is bidirectional.
+    let profiles = stacks::list_profiles();
+    let mut asymmetries = Vec::new();
+
+    for a in profiles {
+        for b in profiles {
+            if a.id == b.id {
+                continue;
+            }
+            // Does A compete with any of B's core tech?
+            let a_competes_b = a.competing.iter().any(|c| b.core_tech.contains(c));
+            // Does B compete with any of A's core tech?
+            let b_competes_a = b.competing.iter().any(|c| a.core_tech.contains(c));
+
+            if a_competes_b && !b_competes_a {
+                asymmetries.push(format!(
+                    "  {} lists {}'s tech as competing, but {} doesn't reciprocate",
+                    a.id, b.id, b.id
+                ));
+            }
+        }
+    }
+
+    // This is advisory — asymmetry is sometimes intentional (e.g., Python ML
+    // doesn't compete with Go Backend). Report but allow some asymmetry.
+    assert!(
+        asymmetries.len() <= 4,
+        "Too many asymmetric competition relationships ({}):\n{}",
+        asymmetries.len(),
+        asymmetries.join("\n")
+    );
+}
+
+// ============================================================================
+// Tier 7: Determinism
+// ============================================================================
+// Scoring functions are pure (no hidden mutable state, no randomness).
+// Same inputs MUST always produce identical outputs.
+
+#[test]
+fn determinism_repeated_scoring() {
+    for &profile_id in &PROFILE_IDS {
+        let stack = stacks::compose_profiles(&[profile_id.to_string()]);
+
+        for item in CORPUS {
+            let topics = topics_from(item);
+
+            // Compute reference values
+            let ref_boost = scoring::compute_stack_boost(item.title, item.content, &stack);
+            let ref_pain = scoring::has_pain_point_match(item.title, item.content, &stack);
+            let ref_shift = scoring::detect_ecosystem_shift(&topics, item.title, &stack);
+            let ref_penalty = scoring::compute_competing_penalty(item.title, item.content, &stack);
+
+            // Run 10 more times — every result must be bit-identical
+            for run in 1..=10 {
+                let boost = scoring::compute_stack_boost(item.title, item.content, &stack);
+                assert_eq!(
+                    boost.to_bits(),
+                    ref_boost.to_bits(),
+                    "Non-deterministic boost on run {} for '{}' with {}",
+                    run,
+                    item.title,
+                    profile_id
+                );
+                assert_eq!(
+                    scoring::has_pain_point_match(item.title, item.content, &stack),
+                    ref_pain,
+                    "Non-deterministic pain on run {} for '{}' with {}",
+                    run,
+                    item.title,
+                    profile_id
+                );
+                assert_eq!(
+                    scoring::detect_ecosystem_shift(&topics, item.title, &stack).to_bits(),
+                    ref_shift.to_bits(),
+                    "Non-deterministic shift on run {} for '{}' with {}",
+                    run,
+                    item.title,
+                    profile_id
+                );
+                assert_eq!(
+                    scoring::compute_competing_penalty(item.title, item.content, &stack).to_bits(),
+                    ref_penalty.to_bits(),
+                    "Non-deterministic penalty on run {} for '{}' with {}",
+                    run,
+                    item.title,
+                    profile_id
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn determinism_composition_order_independent() {
+    // compose_profiles([A, B]) should produce identical scoring to compose_profiles([B, A])
+    let pairs = [
+        ("nextjs_fullstack", "rust_systems"),
+        ("python_ml", "go_backend"),
+        ("laravel", "django"),
+        ("react_native", "vue_frontend"),
+    ];
+
+    for (a, b) in pairs {
+        let ab = stacks::compose_profiles(&[a.to_string(), b.to_string()]);
+        let ba = stacks::compose_profiles(&[b.to_string(), a.to_string()]);
+
+        for item in CORPUS {
+            let topics = topics_from(item);
+
+            let boost_ab = scoring::compute_stack_boost(item.title, item.content, &ab);
+            let boost_ba = scoring::compute_stack_boost(item.title, item.content, &ba);
+            assert_eq!(
+                boost_ab.to_bits(),
+                boost_ba.to_bits(),
+                "Composition not commutative for boost: [{},{}] vs [{},{}] on '{}'",
+                a,
+                b,
+                b,
+                a,
+                item.title
+            );
+
+            let shift_ab = scoring::detect_ecosystem_shift(&topics, item.title, &ab);
+            let shift_ba = scoring::detect_ecosystem_shift(&topics, item.title, &ba);
+            assert_eq!(
+                shift_ab.to_bits(),
+                shift_ba.to_bits(),
+                "Composition not commutative for shift: [{},{}] vs [{},{}] on '{}'",
+                a,
+                b,
+                b,
+                a,
+                item.title
+            );
+
+            let pen_ab = scoring::compute_competing_penalty(item.title, item.content, &ab);
+            let pen_ba = scoring::compute_competing_penalty(item.title, item.content, &ba);
+            assert_eq!(
+                pen_ab.to_bits(),
+                pen_ba.to_bits(),
+                "Composition not commutative for penalty: [{},{}] vs [{},{}] on '{}'",
+                a,
+                b,
+                b,
+                a,
+                item.title
+            );
+        }
+    }
+}
+
+// ============================================================================
+// Tier 8: Edge Cases
+// ============================================================================
+// Proves robustness against degenerate inputs that could cause panics,
+// NaN propagation, or undefined behavior.
+
+#[test]
+fn edge_empty_inputs() {
+    for &profile_id in &PROFILE_IDS {
+        let stack = stacks::compose_profiles(&[profile_id.to_string()]);
+
+        assert_eq!(scoring::compute_stack_boost("", "", &stack), 0.0);
+        assert!(!scoring::has_pain_point_match("", "", &stack));
+        assert_eq!(scoring::detect_ecosystem_shift(&[], "", &stack), 1.0);
+        assert_eq!(scoring::compute_competing_penalty("", "", &stack), 1.0);
+    }
+}
+
+#[test]
+fn edge_unicode_inputs() {
+    for &profile_id in &PROFILE_IDS {
+        let stack = stacks::compose_profiles(&[profile_id.to_string()]);
+
+        // Japanese + emoji — must not panic or produce NaN
+        let boost = scoring::compute_stack_boost(
+            "\u{95a2}\u{6570}\u{578b}\u{30d7}\u{30ed}\u{30b0}\u{30e9}\u{30df}\u{30f3}\u{30b0} \u{1f980} Rust async",
+            "\u{975e}\u{540c}\u{671f}\u{51e6}\u{7406}\u{306e}\u{57fa}\u{790e} tokio \u{30e9}\u{30f3}\u{30bf}\u{30a4}\u{30e0}",
+            &stack,
+        );
+        assert!(!boost.is_nan(), "NaN from unicode input for {}", profile_id);
+        assert!(boost >= 0.0 && boost <= 0.20);
+
+        let shift = scoring::detect_ecosystem_shift(
+            &["\u{00e9}moji".to_string(), "caf\u{00e9}".to_string()],
+            "\u{65e5}\u{672c}\u{8a9e}\u{30bf}\u{30a4}\u{30c8}\u{30eb}",
+            &stack,
+        );
+        assert!(!shift.is_nan());
+        assert_eq!(shift, 1.0); // No shift keywords match unicode
+    }
+}
+
+#[test]
+fn edge_very_long_inputs() {
+    let rust_stack = stacks::compose_profiles(&["rust_systems".to_string()]);
+
+    // ~13,000 characters — must not panic or timeout
+    let long_content = "lorem ipsum dolor sit amet consectetur adipiscing elit ".repeat(250);
+    let boost = scoring::compute_stack_boost("Long Article Title", &long_content, &rust_stack);
+    assert!(boost >= 0.0 && boost <= 0.20);
+    assert!(!boost.is_nan());
+}
+
+#[test]
+fn edge_special_characters() {
+    for &profile_id in &PROFILE_IDS {
+        let stack = stacks::compose_profiles(&[profile_id.to_string()]);
+
+        // SQL injection patterns — must not panic, should return zero
+        let boost = scoring::compute_stack_boost(
+            "'; DROP TABLE items; --",
+            "Robert'); DROP TABLE students;--",
+            &stack,
+        );
+        assert_eq!(boost, 0.0);
+
+        // Regex metacharacters — must not panic
+        let boost2 = scoring::compute_stack_boost(
+            "Article about [.*+?^${}()|\\]",
+            "Content with regex chars \\d+ \\w+ .*",
+            &stack,
+        );
+        assert!(boost2 >= 0.0);
+    }
+}
+
+#[test]
+fn edge_whitespace_variations() {
+    let rust_stack = stacks::compose_profiles(&["rust_systems".to_string()]);
+
+    // Tabs, newlines, multiple spaces — text_contains_term treats these
+    // as non-word characters (boundaries), so keywords should still match.
+    let boost = scoring::compute_stack_boost(
+        "Rust\tAsync\nLifetimes",
+        "Understanding\t\tasync\n\nlifetime\n\tpin\nsend",
+        &rust_stack,
+    );
+    assert!(boost >= 0.0 && boost <= 0.20);
+    assert!(!boost.is_nan());
+}
+
+// ============================================================================
+// Tier 9: Monotonicity
+// ============================================================================
+// Scoring must be monotonically non-decreasing as signal strength increases.
+// Adding more relevant keywords should never REDUCE the score.
+
+#[test]
+fn monotonicity_more_keywords_more_boost() {
+    for &profile_id in &PROFILE_IDS {
+        let stack = stacks::compose_profiles(&[profile_id.to_string()]);
+        let profile = stacks::get_profile(profile_id).unwrap();
+
+        // Find a pain point with 4+ keywords for a 2kw vs 3kw vs 4kw comparison
+        if let Some(pp) = profile.pain_points.iter().find(|p| p.keywords.len() >= 4) {
+            let title_2kw = format!("{} {}", pp.keywords[0], pp.keywords[1]);
+            let boost_2 = scoring::compute_stack_boost(&title_2kw, "", &stack);
+
+            let title_3kw = format!("{} {} {}", pp.keywords[0], pp.keywords[1], pp.keywords[2]);
+            let boost_3 = scoring::compute_stack_boost(&title_3kw, "", &stack);
+
+            let title_4kw = format!(
+                "{} {} {} {}",
+                pp.keywords[0], pp.keywords[1], pp.keywords[2], pp.keywords[3]
+            );
+            let boost_4 = scoring::compute_stack_boost(&title_4kw, "", &stack);
+
+            assert!(
+                boost_3 >= boost_2,
+                "{}: 3kw boost ({}) < 2kw boost ({}) for '{}'",
+                profile_id,
+                boost_3,
+                boost_2,
+                pp.description
+            );
+            assert!(
+                boost_4 >= boost_3,
+                "{}: 4kw boost ({}) < 3kw boost ({}) for '{}'",
+                profile_id,
+                boost_4,
+                boost_3,
+                pp.description
+            );
+        }
+    }
+}
+
+#[test]
+fn monotonicity_title_beats_content_only() {
+    // A keyword in the title should produce >= the same keyword in content-only.
+    // The scoring code gives title matches full boost and content-only half boost.
+    for &profile_id in &PROFILE_IDS {
+        let stack = stacks::compose_profiles(&[profile_id.to_string()]);
+        let profile = stacks::get_profile(profile_id).unwrap();
+
+        for &(kw, _boost) in profile.keyword_boosts {
+            let title_score = scoring::compute_stack_boost(kw, "", &stack);
+            let content_score = scoring::compute_stack_boost("Unrelated title here", kw, &stack);
+
+            assert!(
+                title_score >= content_score,
+                "{}: title boost ({:.4}) < content boost ({:.4}) for '{}'",
+                profile_id,
+                title_score,
+                content_score,
+                kw
+            );
+        }
+    }
+}
+
+#[test]
+fn monotonicity_shift_keywords_additive() {
+    // More matching ecosystem shift keywords should never reduce the multiplier.
+    for &profile_id in &PROFILE_IDS {
+        let stack = stacks::compose_profiles(&[profile_id.to_string()]);
+        let profile = stacks::get_profile(profile_id).unwrap();
+
+        for es in profile.ecosystem_shifts {
+            if es.keywords.len() < 3 {
+                continue;
+            }
+            // 2 keywords (threshold)
+            let topics_2: Vec<String> = es.keywords[..2].iter().map(|s| s.to_string()).collect();
+            let title_2 = topics_2.join(" ");
+            let mult_2 = scoring::detect_ecosystem_shift(&topics_2, &title_2, &stack);
+
+            // 3 keywords (above threshold)
+            let topics_3: Vec<String> = es.keywords[..3].iter().map(|s| s.to_string()).collect();
+            let title_3 = topics_3.join(" ");
+            let mult_3 = scoring::detect_ecosystem_shift(&topics_3, &title_3, &stack);
+
+            assert!(
+                mult_3 >= mult_2,
+                "{}: shift mult with 3kw ({}) < 2kw ({}) for '{}->{}'",
+                profile_id,
+                mult_3,
+                mult_2,
+                es.from,
+                es.to
+            );
+        }
+    }
+}
+
+// ============================================================================
+// Tier 10: Snapshot Regression
+// ============================================================================
+// Computes a checksum of ALL scoring outputs for ALL corpus items across ALL
+// profiles. If any profile data, scoring logic, or corpus item changes, this
+// checksum changes. Forces explicit acknowledgment of scoring drift.
+//
+// To update after intentional changes:
+//   cargo test --test stack_simulation snapshot_scoring_checksum -- --nocapture
+// Copy the printed checksum into EXPECTED below.
+
+#[test]
+fn snapshot_scoring_checksum() {
+    use std::collections::hash_map::DefaultHasher;
+    use std::hash::{Hash, Hasher};
+
+    let mut hasher = DefaultHasher::new();
+
+    for &profile_id in &PROFILE_IDS {
+        let stack = stacks::compose_profiles(&[profile_id.to_string()]);
+        for item in CORPUS {
+            let boost = scoring::compute_stack_boost(item.title, item.content, &stack);
+            let pain = scoring::has_pain_point_match(item.title, item.content, &stack);
+            let topics = topics_from(item);
+            let shift = scoring::detect_ecosystem_shift(&topics, item.title, &stack);
+            let penalty = scoring::compute_competing_penalty(item.title, item.content, &stack);
+
+            boost.to_bits().hash(&mut hasher);
+            pain.hash(&mut hasher);
+            shift.to_bits().hash(&mut hasher);
+            penalty.to_bits().hash(&mut hasher);
+        }
+    }
+
+    let checksum = hasher.finish();
+
+    // UPDATE THIS VALUE when scoring logic or profile data intentionally changes.
+    // Set to 0 to discover initial value (test will print it).
+    const EXPECTED: u64 = 6789125736541999321;
+
+    if EXPECTED == 0 {
+        eprintln!(
+            "\n  SNAPSHOT CHECKSUM: {}\n  \
+             Copy this value into EXPECTED in snapshot_scoring_checksum.\n",
+            checksum
+        );
+        panic!("Snapshot not initialized. Current checksum: {}", checksum);
+    }
+
+    assert_eq!(
+        checksum, EXPECTED,
+        "Scoring snapshot drifted! Expected: {}, Got: {}. \
+         If intentional, update EXPECTED.",
+        EXPECTED, checksum
+    );
 }
