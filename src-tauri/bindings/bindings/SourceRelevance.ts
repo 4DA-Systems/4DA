@@ -69,4 +69,8 @@ similar_titles: Array<string>,
 /**
  * Whether this item was injected by the serendipity engine (anti-bubble)
  */
-serendipity: boolean, };
+serendipity: boolean, 
+/**
+ * STREETS revenue engine match (e.g. "Engine 1: Digital Products")
+ */
+streets_engine: string | null, };
