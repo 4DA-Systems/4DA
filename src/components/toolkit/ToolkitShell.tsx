@@ -22,7 +22,7 @@ class ToolErrorBoundary extends Component<{ toolName: string; onBack: () => void
   render() {
     if (this.state.hasError) {
       return (
-        <div className="p-6 bg-bg-secondary border border-red-500/30 rounded-xl">
+        <div role="alert" className="p-6 bg-bg-secondary border border-red-500/30 rounded-xl">
           <h3 className="text-sm font-medium text-red-400 mb-2">
             {this.props.toolName} encountered an error
           </h3>
@@ -52,7 +52,7 @@ class ToolErrorBoundary extends Component<{ toolName: string; onBack: () => void
 
 function LoadingFallback() {
   return (
-    <div className="flex items-center justify-center py-20">
+    <div className="flex items-center justify-center py-20" role="status" aria-busy="true">
       <div className="flex items-center gap-3 text-gray-500">
         <div className="w-4 h-4 border-2 border-gray-600 border-t-white rounded-full animate-spin" />
         <span className="text-sm">Loading tool...</span>

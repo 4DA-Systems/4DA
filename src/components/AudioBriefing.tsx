@@ -78,6 +78,7 @@ export function AudioBriefing() {
       {status?.file_path && (
         <button
           onClick={togglePlay}
+          aria-label={playing ? 'Pause audio briefing' : 'Play audio briefing'}
           className={`w-10 h-10 rounded-lg flex items-center justify-center transition-all ${
             playing
               ? 'bg-orange-500/20 text-orange-400 border border-orange-500/30'
@@ -91,6 +92,8 @@ export function AudioBriefing() {
       <button
         onClick={generate}
         disabled={generating}
+        aria-label={generating ? 'Generating audio briefing' : 'Generate audio briefing'}
+        aria-busy={generating}
         className="w-10 h-10 rounded-lg flex items-center justify-center bg-bg-tertiary text-gray-500 border border-border hover:text-gray-300 transition-all disabled:opacity-30"
         title={generating ? 'Generating audio...' : 'Generate audio briefing'}
       >

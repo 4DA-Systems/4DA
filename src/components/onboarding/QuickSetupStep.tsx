@@ -2,7 +2,10 @@ import { useState, useEffect, useCallback } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import type { OllamaStatus, PullProgress } from './types';
-import { StackSelectStep } from './StackSelectStep';
+import { SetupAIProvider } from './setup-ai-provider';
+import { SetupProjects } from './setup-projects';
+import { SetupStack } from './setup-stack';
+import { SetupInterests } from './setup-interests';
 
 interface QuickSetupStepProps {
   isAnimating: boolean;
@@ -212,6 +215,16 @@ export function QuickSetupStep({ isAnimating, onComplete, onBack }: QuickSetupSt
     }
   };
 
+  const handleProviderChange = (p: 'anthropic' | 'openai' | 'ollama') => {
+    setProvider(p);
+    setAiConfigured(p === 'ollama' && !!ollamaStatus?.running && !!ollamaStatus.has_embedding_model && !!ollamaStatus.has_llm_model);
+  };
+
+  const handleApiKeyChange = (key: string) => {
+    setApiKey(key);
+    setAiConfigured(key.trim().length > 0);
+  };
+
   const handleContinue = async () => {
     setError(null);
     try {
@@ -278,6 +291,7 @@ export function QuickSetupStep({ isAnimating, onComplete, onBack }: QuickSetupSt
   }) => (
     <button
       onClick={onToggle}
+      aria-expanded={isOpen}
       className="w-full flex items-center justify-between p-4 bg-bg-secondary rounded-lg border border-border hover:border-[#3A3A3A] transition-colors"
     >
       <div className="flex items-center gap-3">
@@ -309,10 +323,10 @@ export function QuickSetupStep({ isAnimating, onComplete, onBack }: QuickSetupSt
       </p>
 
       {error && (
-        <div className="mb-4 p-3 bg-red-900/30 border border-red-500/30 rounded-lg text-sm text-red-200 flex items-start gap-2">
-          <span className="text-red-400 flex-shrink-0">&#x26a0;</span>
+        <div role="alert" className="mb-4 p-3 bg-red-900/30 border border-red-500/30 rounded-lg text-sm text-red-200 flex items-start gap-2">
+          <span className="text-red-400 flex-shrink-0" aria-hidden="true">&#x26a0;</span>
           <span className="flex-1">{error}</span>
-          <button onClick={() => setError(null)} className="text-red-400 hover:text-red-300">&times;</button>
+          <button onClick={() => setError(null)} aria-label="Dismiss error" className="text-red-400 hover:text-red-300">&times;</button>
         </div>
       )}
 
@@ -329,121 +343,15 @@ export function QuickSetupStep({ isAnimating, onComplete, onBack }: QuickSetupSt
             done={aiConfigured}
           />
           {aiOpen && (
-            <div className="mt-2 p-4 bg-bg-secondary rounded-lg border border-border space-y-3">
-              {/* Ollama detected and ready */}
-              {ollamaStatus?.running && ollamaStatus.has_embedding_model && ollamaStatus.has_llm_model && provider === 'ollama' && (
-                <div className="p-3 bg-green-900/20 border border-green-500/30 rounded-lg text-sm text-green-300 flex items-center gap-2">
-                  <span className="text-green-500">&#x2713;</span>
-                  Local AI Ready - no API keys needed
-                </div>
-              )}
-
-              {/* Pulling models */}
-              {pullingModels && (
-                <div className="p-4 border border-orange-500/30 rounded-lg space-y-3">
-                  <div className="flex items-center gap-2 text-sm text-orange-300">
-                    <div className="w-4 h-4 border-2 border-orange-500 border-t-transparent rounded-full animate-spin" />
-                    Installing models for local AI...
-                  </div>
-                  {Object.entries(pullProgress).map(([model, p]) => (
-                    <div key={model} className="space-y-1">
-                      <div className="flex items-center justify-between text-xs">
-                        <span className="text-gray-300 font-mono">{model}</span>
-                        <span className="text-gray-500">
-                          {p.done ? 'Complete' : p.status || `${p.percent}%`}
-                        </span>
-                      </div>
-                      <div className="w-full h-1.5 bg-bg-tertiary rounded-full overflow-hidden">
-                        <div
-                          className={`h-full rounded-full transition-all duration-300 ${
-                            p.done ? 'bg-green-500' : 'bg-orange-500'
-                          }`}
-                          style={{ width: `${p.done ? 100 : p.percent}%` }}
-                        />
-                      </div>
-                    </div>
-                  ))}
-                  <p className="text-xs text-gray-500">
-                    This may take a few minutes depending on your connection.
-                  </p>
-                </div>
-              )}
-
-              {/* Provider selector (shown when Ollama not ready) */}
-              {!(ollamaStatus?.running && ollamaStatus.has_embedding_model && ollamaStatus.has_llm_model) && !pullingModels && (
-                <>
-                  <div className="grid grid-cols-3 gap-2">
-                    {(['ollama', 'anthropic', 'openai'] as const).map((p) => (
-                      <button
-                        key={p}
-                        onClick={() => {
-                          setProvider(p);
-                          setAiConfigured(p === 'ollama' && !!ollamaStatus?.running && !!ollamaStatus.has_embedding_model && !!ollamaStatus.has_llm_model);
-                        }}
-                        className={`p-3 rounded-lg text-center transition-all ${
-                          provider === p
-                            ? 'bg-orange-500/20 border-2 border-orange-500'
-                            : 'bg-bg-tertiary border-2 border-transparent hover:border-border'
-                        }`}
-                      >
-                        <div className="text-sm font-medium text-white">
-                          {p === 'ollama' ? 'Ollama' : p === 'anthropic' ? 'Anthropic' : 'OpenAI'}
-                        </div>
-                        <div className="text-xs text-gray-500 mt-1">
-                          {p === 'ollama' ? 'Local' : p === 'anthropic' ? 'Claude' : 'GPT-4o'}
-                        </div>
-                      </button>
-                    ))}
-                  </div>
-
-                  {/* API key input for cloud providers */}
-                  {(provider === 'anthropic' || provider === 'openai') && (
-                    <div>
-                      <div className="flex items-center justify-between mb-2">
-                        <label className="text-xs text-gray-500">
-                          {provider === 'anthropic' ? 'Anthropic' : 'OpenAI'} API Key
-                        </label>
-                        <a
-                          href={provider === 'anthropic'
-                            ? 'https://console.anthropic.com/settings/keys'
-                            : 'https://platform.openai.com/api-keys'}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-xs text-orange-500 hover:underline"
-                        >
-                          Get key &rarr;
-                        </a>
-                      </div>
-                      <input
-                        type="password"
-                        value={apiKey}
-                        onChange={(e) => {
-                          setApiKey(e.target.value);
-                          setAiConfigured(e.target.value.trim().length > 0);
-                        }}
-                        placeholder={provider === 'anthropic' ? 'sk-ant-api03-...' : 'sk-proj-...'}
-                        className="w-full px-4 py-3 bg-bg-tertiary border border-border rounded-lg text-white placeholder-gray-600 focus:border-orange-500 focus:outline-none font-mono text-sm"
-                      />
-                    </div>
-                  )}
-
-                  {/* Ollama not running hint */}
-                  {provider === 'ollama' && !ollamaStatus?.running && (
-                    <div className="text-yellow-400 text-sm p-3 bg-bg-tertiary rounded-lg">
-                      Ollama not detected.{' '}
-                      <a href="https://ollama.ai" target="_blank" rel="noopener noreferrer" className="text-orange-500 hover:underline">
-                        Install Ollama
-                      </a>
-                      {' '}for free local AI, or choose a cloud provider above.
-                    </div>
-                  )}
-                </>
-              )}
-
-              <p className="text-xs text-gray-500">
-                No AI? 4DA still works with keyword-only matching. Add keys later in Settings.
-              </p>
-            </div>
+            <SetupAIProvider
+              ollamaStatus={ollamaStatus}
+              provider={provider}
+              apiKey={apiKey}
+              pullingModels={pullingModels}
+              pullProgress={pullProgress}
+              onProviderChange={handleProviderChange}
+              onApiKeyChange={handleApiKeyChange}
+            />
           )}
         </div>
 
@@ -459,41 +367,11 @@ export function QuickSetupStep({ isAnimating, onComplete, onBack }: QuickSetupSt
             done={discoveryDone}
           />
           {projectsOpen && (
-            <div className="mt-2 p-4 bg-bg-secondary rounded-lg border border-border">
-              {!discoveryDone ? (
-                <div className="flex items-center gap-2 text-sm text-gray-400 py-2">
-                  <div className="w-4 h-4 border-2 border-orange-500 border-t-transparent rounded-full animate-spin" />
-                  Scanning your projects...
-                </div>
-              ) : detectedTech.length > 0 ? (
-                <div>
-                  <p className="text-xs text-gray-500 mb-3">Detected from your local projects:</p>
-                  <div className="flex flex-wrap gap-2">
-                    {detectedTech.map((tech) => (
-                      <span
-                        key={tech}
-                        className="px-3 py-1.5 bg-green-500/10 text-green-400 rounded-lg border border-green-500/20 text-sm flex items-center gap-2"
-                      >
-                        {tech}
-                        <button
-                          onClick={() => removeTag(tech)}
-                          className="hover:text-white text-green-400/70"
-                        >
-                          &times;
-                        </button>
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              ) : (
-                <p className="text-sm text-gray-400 py-2">
-                  No specific technologies detected. 4DA will learn from your activity.
-                </p>
-              )}
-              <p className="text-xs text-gray-500 mt-3">
-                Manage directories anytime in Settings.
-              </p>
-            </div>
+            <SetupProjects
+              discoveryDone={discoveryDone}
+              detectedTech={detectedTech}
+              onRemoveTag={removeTag}
+            />
           )}
         </div>
 
@@ -507,13 +385,10 @@ export function QuickSetupStep({ isAnimating, onComplete, onBack }: QuickSetupSt
             done={selectedStacks.length > 0}
           />
           {stacksOpen && (
-            <div className="mt-2 p-4 bg-bg-secondary rounded-lg border border-border">
-              <StackSelectStep
-                selected={selectedStacks}
-                onSelectionChange={setSelectedStacks}
-                compact
-              />
-            </div>
+            <SetupStack
+              selectedStacks={selectedStacks}
+              onSelectionChange={setSelectedStacks}
+            />
           )}
         </div>
 
@@ -527,83 +402,17 @@ export function QuickSetupStep({ isAnimating, onComplete, onBack }: QuickSetupSt
             done={interests.length > 0}
           />
           {interestsOpen && (
-            <div className="mt-2 p-4 bg-bg-secondary rounded-lg border border-border space-y-3">
-              {/* Role selector */}
-              <div>
-                <label className="block text-xs text-gray-500 mb-2">Your role</label>
-                <select
-                  value={role}
-                  onChange={(e) => setRole(e.target.value)}
-                  className="w-full px-3 py-2 bg-bg-tertiary border border-border rounded-lg text-white text-sm focus:border-orange-500 focus:outline-none"
-                >
-                  {roles.map((r) => (
-                    <option key={r} value={r}>{r}</option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Selected interests */}
-              {interests.length > 0 && (
-                <div className="flex flex-wrap gap-2 p-3 bg-bg-tertiary rounded-lg border border-border">
-                  {interests.map((interest) => (
-                    <span
-                      key={interest}
-                      className="px-3 py-1.5 bg-orange-500/20 text-orange-300 rounded-full text-sm flex items-center gap-2"
-                    >
-                      {interest}
-                      <button
-                        onClick={() => toggleInterest(interest)}
-                        className="hover:text-white text-orange-400/70"
-                      >
-                        &times;
-                      </button>
-                    </span>
-                  ))}
-                </div>
-              )}
-
-              {/* Custom interest input */}
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  value={newInterest}
-                  onChange={(e) => setNewInterest(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && addInterest()}
-                  placeholder="Type a topic and press Enter..."
-                  className="flex-1 px-4 py-2 bg-bg-tertiary border border-border rounded-lg text-white placeholder-gray-600 focus:border-orange-500 focus:outline-none text-sm"
-                />
-                <button
-                  onClick={addInterest}
-                  disabled={!newInterest.trim()}
-                  className="px-4 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm"
-                >
-                  Add
-                </button>
-              </div>
-
-              {/* Suggestions */}
-              <div>
-                <p className="text-xs text-gray-500 mb-2">Quick-add topics:</p>
-                <div className="flex flex-wrap gap-2">
-                  {suggestions
-                    .filter(s => !interests.includes(s))
-                    .slice(0, 10)
-                    .map((suggestion) => (
-                      <button
-                        key={suggestion}
-                        onClick={() => toggleInterest(suggestion)}
-                        className="px-3 py-1.5 bg-bg-tertiary text-gray-400 rounded-full text-sm hover:bg-border hover:text-white transition-all"
-                      >
-                        + {suggestion}
-                      </button>
-                    ))}
-                </div>
-              </div>
-
-              <p className="text-xs text-gray-500">
-                4DA learns from your feedback - these are just starting points.
-              </p>
-            </div>
+            <SetupInterests
+              roles={roles}
+              role={role}
+              interests={interests}
+              newInterest={newInterest}
+              suggestions={suggestions}
+              onRoleChange={setRole}
+              onNewInterestChange={setNewInterest}
+              onAddInterest={addInterest}
+              onToggleInterest={toggleInterest}
+            />
           )}
         </div>
       </div>

@@ -27,7 +27,7 @@ export function ProGate({ children, feature }: ProGateProps) {
 
   return (
     <div className="relative">
-      <div className="opacity-30 pointer-events-none select-none blur-[2px]">
+      <div className="opacity-30 pointer-events-none select-none blur-[2px]" aria-hidden="true">
         {children}
       </div>
       <div className="absolute inset-0 flex items-center justify-center">

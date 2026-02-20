@@ -6,7 +6,7 @@ interface ConfirmGateProps {
 
 export function ConfirmGate({ message, onConfirm, onCancel }: ConfirmGateProps) {
   return (
-    <div className="flex items-center gap-3 px-3 py-2 bg-[#D4AF37]/10 border border-[#D4AF37]/30 rounded-lg animate-in fade-in">
+    <div role="alertdialog" aria-label={message} className="flex items-center gap-3 px-3 py-2 bg-[#D4AF37]/10 border border-[#D4AF37]/30 rounded-lg animate-in fade-in">
       <span className="text-sm text-[#D4AF37] flex-1">{message}</span>
       <button
         onClick={onConfirm}

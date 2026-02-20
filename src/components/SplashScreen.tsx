@@ -106,6 +106,9 @@ export function SplashScreen({ onComplete, minimumDisplayTime = 1500 }: SplashSc
 
   return (
     <div
+      role="status"
+      aria-label={error ? 'Error during startup' : stageMessages[stage]}
+      aria-busy={stage !== 'ready'}
       style={{
         position: 'fixed',
         inset: 0,
@@ -192,13 +195,20 @@ export function SplashScreen({ onComplete, minimumDisplayTime = 1500 }: SplashSc
         overflow: 'hidden',
         marginBottom: '1rem',
       }}>
-        <div style={{
-          height: '100%',
-          width: `${progress}%`,
-          backgroundColor: '#F97316',
-          borderRadius: '2px',
-          transition: 'width 300ms ease-out',
-        }} />
+        <div
+          role="progressbar"
+          aria-valuenow={Math.round(progress)}
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-label={`Startup progress: ${Math.round(progress)}%`}
+          style={{
+            height: '100%',
+            width: `${progress}%`,
+            backgroundColor: '#F97316',
+            borderRadius: '2px',
+            transition: 'width 300ms ease-out',
+          }}
+        />
       </div>
 
       {/* Status message */}

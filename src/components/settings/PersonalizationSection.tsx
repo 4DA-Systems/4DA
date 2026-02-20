@@ -70,6 +70,7 @@ export function PersonalizationSection() {
             <div className="flex gap-2">
               <input
                 type="text"
+                aria-label="Your role"
                 value={newRole}
                 onChange={(e) => setNewRole(e.target.value)}
                 placeholder="e.g. Backend Developer"
@@ -90,6 +91,7 @@ export function PersonalizationSection() {
             <div className="flex gap-2 mb-3">
               <input
                 type="text"
+                aria-label="Add technology"
                 value={newTechStack}
                 onChange={(e) => setNewTechStack(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && addTechStack()}
@@ -112,6 +114,7 @@ export function PersonalizationSection() {
                   {tech}
                   <button
                     onClick={() => removeTechStack(tech)}
+                    aria-label={`Remove ${tech}`}
                     className="text-orange-400/50 hover:text-red-400 transition-colors"
                   >
                     &times;
@@ -133,6 +136,7 @@ export function PersonalizationSection() {
             <div className="flex gap-2 mb-3">
               <input
                 type="text"
+                aria-label="Add interest"
                 value={newInterest}
                 onChange={(e) => setNewInterest(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && addInterest()}
@@ -157,6 +161,7 @@ export function PersonalizationSection() {
                   {interest.topic}
                   <button
                     onClick={() => removeInterest(interest.topic)}
+                    aria-label={`Remove ${interest.topic}`}
                     className="text-green-400/50 hover:text-red-400 transition-colors"
                   >
                     &times;
@@ -212,6 +217,7 @@ export function PersonalizationSection() {
             <div className="flex gap-2 mb-3">
               <input
                 type="text"
+                aria-label="Add exclusion"
                 value={newExclusion}
                 onChange={(e) => setNewExclusion(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && addExclusion()}
@@ -234,6 +240,7 @@ export function PersonalizationSection() {
                   {exclusion}
                   <button
                     onClick={() => removeExclusion(exclusion)}
+                    aria-label={`Remove exclusion ${exclusion}`}
                     className="text-red-400/50 hover:text-white transition-colors"
                   >
                     &times;

@@ -34,6 +34,7 @@ export function PredictiveIndicator() {
     <div className="mb-4">
       <button
         onClick={() => setExpanded(!expanded)}
+        aria-expanded={expanded}
         className="flex items-center gap-2 px-3 py-2 bg-bg-secondary border border-purple-500/20 rounded-lg hover:border-purple-500/40 transition-all text-left w-full"
       >
         <span className="text-purple-400 text-sm">🔮</span>

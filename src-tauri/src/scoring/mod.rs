@@ -1135,6 +1135,293 @@ mod tests {
         );
     }
 
+    // ========================================================================
+    // Phase 2: Pipeline Integration Tests
+    // ========================================================================
+
+    #[test]
+    fn test_pipeline_stack_boost_survives_dampening() {
+        // Verify stack_boost actually changes the final top_score (not dampened to nothing).
+        let db = test_db();
+        let rust_stack = crate::stacks::compose_profiles(&["rust_systems".to_string()]);
+        let embedding = vec![0.1_f32; 384];
+        let input = test_input(
+            "Understanding Pin and Send in Async Rust Lifetimes",
+            "async pin send lifetime future tokio complexity borrow checker annotations",
+            &embedding,
+        );
+        let options = ScoringOptions {
+            apply_freshness: false,
+            apply_signals: false,
+        };
+
+        // With stack
+        let ctx_with_stack = ScoringContext::builder().composed_stack(rust_stack).build();
+        let result_with = score_item(&input, &ctx_with_stack, &db, &options, None);
+
+        // Without stack
+        let ctx_no_stack = empty_scoring_context();
+        let result_without = score_item(&input, &ctx_no_stack, &db, &options, None);
+
+        let bd = result_with.score_breakdown.as_ref().unwrap();
+        assert!(
+            bd.stack_boost > 0.0,
+            "Stack boost should be positive, got {}",
+            bd.stack_boost
+        );
+        assert!(
+            result_with.top_score > result_without.top_score,
+            "Stack boost must survive dampening: with={} > without={}",
+            result_with.top_score,
+            result_without.top_score
+        );
+    }
+
+    #[test]
+    fn test_pipeline_ecosystem_shift_in_composite() {
+        // Rust stack active, content with ecosystem shift keywords → mult > 1.0
+        let db = test_db();
+        let rust_stack = crate::stacks::compose_profiles(&["rust_systems".to_string()]);
+        let ctx = ScoringContext::builder().composed_stack(rust_stack).build();
+        let embedding = vec![0.1_f32; 384];
+        let input = test_input(
+            "Async Fn in Trait Is Finally Stable in Rust",
+            "native async trait async fn in trait return position impl trait stabilization rust",
+            &embedding,
+        );
+        let options = ScoringOptions {
+            apply_freshness: false,
+            apply_signals: false,
+        };
+
+        let result = score_item(&input, &ctx, &db, &options, None);
+        let bd = result
+            .score_breakdown
+            .as_ref()
+            .expect("should have breakdown");
+
+        assert!(
+            bd.ecosystem_shift_mult > 1.0,
+            "Rust shift keywords should trigger ecosystem_shift_mult > 1.0, got {}",
+            bd.ecosystem_shift_mult
+        );
+    }
+
+    #[test]
+    fn test_pipeline_competing_penalty_suppresses() {
+        // Rust stack active, pure Go content → competing penalty < 1.0
+        let db = test_db();
+        let rust_stack = crate::stacks::compose_profiles(&["rust_systems".to_string()]);
+        let ctx = ScoringContext::builder().composed_stack(rust_stack).build();
+        let embedding = vec![0.1_f32; 384];
+        let input = test_input(
+            "Go 1.23 Performance Improvements for Backend Services",
+            "go golang backend services performance goroutine scheduling concurrency",
+            &embedding,
+        );
+        let options = ScoringOptions {
+            apply_freshness: false,
+            apply_signals: false,
+        };
+
+        let result = score_item(&input, &ctx, &db, &options, None);
+        let bd = result
+            .score_breakdown
+            .as_ref()
+            .expect("should have breakdown");
+
+        assert!(
+            bd.stack_competing_mult < 1.0,
+            "Pure Go content with Rust stack should get competing penalty < 1.0, got {}",
+            bd.stack_competing_mult
+        );
+    }
+
+    #[test]
+    fn test_pipeline_bootstrap_mode_relaxes_gate() {
+        // Bootstrap mode (feedback_interaction_count < 10) relaxes the quality floor
+        // to min_signals=1 instead of 2. However, the confirmation gate's SCORE ceiling
+        // for 1-signal items (0.32) is already below the relevance threshold (0.35),
+        // so single-signal items still can't pass even in bootstrap mode.
+        //
+        // This test verifies bootstrap mode doesn't BLOCK 2-signal items that would
+        // otherwise pass, and that the feedback_interaction_count path is exercised.
+        let db = test_db();
+        let mut ace_ctx = ace_context::ACEContext::default();
+        ace_ctx.active_topics.push("rust".to_string());
+
+        let interest_embedding = vec![0.5_f32; 384];
+        let interests = vec![context_engine::Interest {
+            id: Some(1),
+            topic: "rust".to_string(),
+            weight: 1.0,
+            embedding: Some(interest_embedding.clone()),
+            source: context_engine::InterestSource::Explicit,
+        }];
+
+        // Bootstrap mode: feedback_interaction_count = 0
+        let ctx = ScoringContext::builder()
+            .interest_count(1)
+            .interests(interests)
+            .ace_ctx(ace_ctx)
+            .feedback_interaction_count(0) // bootstrap
+            .build();
+
+        let input = test_input(
+            "Rust async runtime performance improvements",
+            "rust tokio async await performance benchmarks",
+            &interest_embedding,
+        );
+        let options = ScoringOptions {
+            apply_freshness: false,
+            apply_signals: false,
+        };
+
+        let result = score_item(&input, &ctx, &db, &options, None);
+        let bd = result
+            .score_breakdown
+            .as_ref()
+            .expect("should have breakdown");
+
+        // With 2+ signals (interest + ace), the gate opens and score passes
+        assert!(
+            bd.signal_count >= 2,
+            "Expected 2+ signals in bootstrap mode, got {}",
+            bd.signal_count
+        );
+        assert!(
+            result.relevant,
+            "2-signal item should pass in bootstrap mode (score={}, signals={})",
+            result.top_score, bd.signal_count
+        );
+    }
+
+    #[test]
+    fn test_pipeline_normal_mode_requires_two_signals() {
+        // Normal mode (feedback_interaction_count >= 10) requires min_signals=2.
+        // A single-signal item is blocked by BOTH the gate ceiling (0.32 < 0.35 threshold)
+        // and the quality floor (signal_count < 2).
+        let db = test_db();
+        let interest_embedding = vec![0.5_f32; 384];
+        let interests = vec![context_engine::Interest {
+            id: Some(1),
+            topic: "machine learning".to_string(),
+            weight: 1.0,
+            embedding: Some(interest_embedding.clone()),
+            source: context_engine::InterestSource::Explicit,
+        }];
+
+        let ctx = ScoringContext::builder()
+            .interest_count(1)
+            .interests(interests)
+            .feedback_interaction_count(50) // normal mode
+            .build();
+
+        let input = test_input(
+            "Machine Learning Model Training Tips",
+            "machine learning neural networks training optimization",
+            &interest_embedding,
+        );
+        let options = ScoringOptions {
+            apply_freshness: false,
+            apply_signals: false,
+        };
+
+        let result = score_item(&input, &ctx, &db, &options, None);
+        let bd = result
+            .score_breakdown
+            .as_ref()
+            .expect("should have breakdown");
+
+        assert!(
+            bd.signal_count <= 1,
+            "Expected at most 1 signal, got {} ({:?})",
+            bd.signal_count,
+            bd.confirmed_signals
+        );
+        assert!(
+            !result.relevant,
+            "Single signal must NOT pass in normal mode (score={}, signals={})",
+            result.top_score, bd.signal_count
+        );
+    }
+
+    #[test]
+    fn test_pipeline_base_score_interest_only_path() {
+        // When cached_context_count = 0 but interests exist, the interest-only
+        // scoring path must produce a positive score.
+        let db = test_db();
+        let interest_embedding = vec![0.5_f32; 384];
+        let interests = vec![context_engine::Interest {
+            id: Some(1),
+            topic: "rust".to_string(),
+            weight: 1.0,
+            embedding: Some(interest_embedding.clone()),
+            source: context_engine::InterestSource::Explicit,
+        }];
+
+        let ctx = ScoringContext::builder()
+            .cached_context_count(0) // no context chunks
+            .interest_count(1)
+            .interests(interests)
+            .build();
+
+        let input = test_input(
+            "Rust Async Performance Guide",
+            "rust tokio async performance optimization",
+            &interest_embedding,
+        );
+        let options = ScoringOptions {
+            apply_freshness: false,
+            apply_signals: false,
+        };
+
+        let result = score_item(&input, &ctx, &db, &options, None);
+
+        assert!(
+            result.top_score > 0.0,
+            "Interest-only path must produce score > 0, got {}",
+            result.top_score
+        );
+    }
+
+    #[test]
+    fn test_pipeline_base_score_context_only_path() {
+        // When cached_context_count > 0 but no interests, the context-only
+        // scoring path must produce a score (even if low due to no embeddings).
+        let db = test_db();
+
+        let ctx = ScoringContext::builder()
+            .cached_context_count(10) // has context chunks
+            .interest_count(0) // no interests
+            .build();
+
+        let embedding = vec![0.1_f32; 384];
+        let input = test_input(
+            "Building REST APIs with Rust and Axum",
+            "axum rust web api server tokio serde",
+            &embedding,
+        );
+        let options = ScoringOptions {
+            apply_freshness: false,
+            apply_signals: false,
+        };
+
+        let result = score_item(&input, &ctx, &db, &options, None);
+
+        // Score should be >= 0 (might be 0 if no matching context in DB, but shouldn't panic)
+        assert!(
+            result.top_score >= 0.0,
+            "Context-only path must not panic, got score {}",
+            result.top_score
+        );
+        assert!(!result.excluded, "Should not be excluded");
+    }
+
+    // ========================================================================
+    // Existing unit tests
+    // ========================================================================
+
     // Phase 2: Dependency prefix filter test
     #[test]
     fn test_dependency_prefix_filtered_from_seeding() {

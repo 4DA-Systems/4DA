@@ -77,6 +77,7 @@ export function InterestsStep({
                   {interest}
                   <button
                     onClick={() => removeInterest(interest)}
+                    aria-label={`Remove ${interest}`}
                     className="hover:text-white text-orange-400/70"
                   >
                     &times;

@@ -84,7 +84,12 @@ export const ScoreAutopsy: React.FC<ScoreAutopsyProps> = ({
           disabled={loading}
           className="autopsy-button px-3 py-1.5 text-xs bg-bg-secondary text-text-primary border border-border rounded hover:bg-bg-tertiary transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          {loading ? '🔍 Analyzing...' : '🔬 Score Autopsy'}
+          {loading ? (
+            <span className="flex items-center gap-1.5">
+              <span className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+              Analyzing...
+            </span>
+          ) : '🔬 Score Autopsy'}
         </button>
         {error && (
           <div className="error-message mt-2 text-error text-xs">{error}</div>

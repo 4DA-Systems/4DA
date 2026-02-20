@@ -154,7 +154,8 @@ export const TechRadar = memo(function TechRadar() {
 
   if (loading) {
     return (
-      <div className="bg-bg-secondary rounded-lg border border-border p-8 text-center">
+      <div className="bg-bg-secondary rounded-lg border border-border p-8 flex flex-col items-center justify-center gap-2">
+        <div className="w-5 h-5 border-2 border-gray-600 border-t-white rounded-full animate-spin" />
         <div className="text-xs text-gray-500">Loading tech radar...</div>
       </div>
     );

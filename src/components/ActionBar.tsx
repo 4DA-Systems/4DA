@@ -68,14 +68,14 @@ export function ActionBar({
   const isUpToDate = refreshLabel === 'Up to date';
 
   return (
-    <div className="mb-6 bg-bg-secondary rounded-lg border border-border overflow-hidden">
+    <div className="mb-6 bg-bg-secondary rounded-lg border border-border overflow-hidden" role="region" aria-label="Analysis controls">
       {/* Main Action Row */}
       <div className="px-5 py-4 flex items-center gap-4">
         {/* Status */}
-        <div className="flex items-center gap-3 flex-1 min-w-0">
+        <div className="flex items-center gap-3 flex-1 min-w-0" role="status" aria-live="polite">
           {state.loading ? (
-            <div className="w-8 h-8 bg-orange-500/20 rounded-lg flex items-center justify-center flex-shrink-0">
-              <div className="w-4 h-4 border-2 border-orange-500 border-t-transparent rounded-full animate-spin" />
+            <div className="w-8 h-8 bg-orange-500/20 rounded-lg flex items-center justify-center flex-shrink-0" aria-busy="true">
+              <div className="w-4 h-4 border-2 border-orange-500 border-t-transparent rounded-full animate-spin" aria-label="Analysis in progress" />
             </div>
           ) : (
             <div className="w-8 h-8 bg-bg-tertiary rounded-lg flex items-center justify-center flex-shrink-0">
@@ -106,12 +106,13 @@ export function ActionBar({
 
         {/* Keyword-only Mode Badge */}
         {embeddingMode === 'keyword-only' && (
-          <div
-            className="px-3 py-1.5 bg-amber-500/10 text-amber-400 text-xs rounded-lg border border-amber-500/20 cursor-help"
-            title="No embedding model available. Add Ollama or an API key for semantic matching."
+          <button
+            className="px-3 py-1.5 bg-amber-500/10 text-amber-400 text-xs rounded-lg border border-amber-500/20 cursor-pointer hover:bg-amber-500/20 transition-colors"
+            title="No embedding model available. Click to configure AI provider for semantic matching."
+            onClick={() => useAppStore.getState().setShowSettings(true)}
           >
             Keyword only
-          </div>
+          </button>
         )}
 
         {/* Summary Badges */}
@@ -164,6 +165,9 @@ export function ActionBar({
           <div className="relative" ref={overflowRef}>
             <button
               onClick={() => setOverflowOpen(!overflowOpen)}
+              aria-label="More actions"
+              aria-expanded={overflowOpen}
+              aria-haspopup="true"
               className="w-10 h-10 rounded-lg flex items-center justify-center bg-bg-tertiary text-gray-400 border border-border hover:text-gray-200 hover:border-[#3A3A3A] transition-all"
               title="More actions"
             >
@@ -174,8 +178,9 @@ export function ActionBar({
               </svg>
             </button>
             {overflowOpen && (
-              <div className="absolute right-0 top-12 z-50 w-56 bg-[#1A1A1A] border border-border rounded-lg shadow-xl py-1">
+              <div className="absolute right-0 top-12 z-50 w-56 bg-[#1A1A1A] border border-border rounded-lg shadow-xl py-1" role="menu">
                 <button
+                  role="menuitem"
                   onClick={() => { onGenerateBriefing(); setOverflowOpen(false); }}
                   disabled={aiBriefing.loading || state.relevanceResults.length === 0}
                   className="w-full px-4 py-2.5 text-sm text-left text-gray-300 hover:bg-border disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
@@ -183,6 +188,7 @@ export function ActionBar({
                   Regenerate Briefing
                 </button>
                 <button
+                  role="menuitem"
                   onClick={() => { onToggleAutoBriefing(); setOverflowOpen(false); }}
                   className="w-full px-4 py-2.5 text-sm text-left text-gray-300 hover:bg-border transition-colors flex items-center justify-between"
                 >
@@ -200,6 +206,7 @@ export function ActionBar({
                   <>
                     <div className="border-t border-border my-1" />
                     <button
+                      role="menuitem"
                       onClick={async () => {
                         try {
                           const md = await invoke<string>('export_results', { format: 'markdown' });
@@ -215,6 +222,7 @@ export function ActionBar({
                       Export Markdown
                     </button>
                     <button
+                      role="menuitem"
                       onClick={async () => {
                         try {
                           const digest = await invoke<string>('export_results', { format: 'digest' });
@@ -246,6 +254,11 @@ export function ActionBar({
           </div>
           <div className="w-full h-2 bg-bg-tertiary rounded-full overflow-hidden">
             <div
+              role="progressbar"
+              aria-valuenow={Math.round(state.progress * 100)}
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-label={`Analysis progress: ${Math.round(state.progress * 100)}%`}
               className="h-full bg-gradient-to-r from-orange-600 to-orange-400 transition-all duration-300 ease-out rounded-full"
               style={{ width: `${state.progress * 100}%` }}
             />
@@ -255,7 +268,7 @@ export function ActionBar({
 
       {/* AI Briefing Error */}
       {aiBriefing.error && (
-        <div className="mx-5 mb-4 p-3 bg-red-900/20 border border-red-500/30 rounded-lg text-red-300 text-sm flex items-center gap-2">
+        <div role="alert" className="mx-5 mb-4 p-3 bg-red-900/20 border border-red-500/30 rounded-lg text-red-300 text-sm flex items-center gap-2">
           <span>!</span>
           {aiBriefing.error}
         </div>

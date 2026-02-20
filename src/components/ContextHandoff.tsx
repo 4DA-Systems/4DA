@@ -28,6 +28,8 @@ export function ContextHandoff({ onStatus }: ContextHandoffProps) {
     <button
       onClick={exportContext}
       disabled={exporting}
+      aria-label={exporting ? 'Exporting context packet' : 'Export context packet to clipboard'}
+      aria-busy={exporting}
       className="w-10 h-10 rounded-lg flex items-center justify-center bg-bg-tertiary text-gray-500 border border-border hover:text-gray-300 transition-all disabled:opacity-30"
       title="Export context packet (clipboard)"
     >

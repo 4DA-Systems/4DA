@@ -1894,12 +1894,20 @@ fn monotonicity_shift_keywords_additive() {
 //   cargo test --test stack_simulation snapshot_scoring_checksum -- --nocapture
 // Copy the printed checksum into EXPECTED below.
 
+/// Stable FNV-1a style checksum — deterministic across Rust versions.
+/// DefaultHasher uses SipHash which is NOT stable across Rust releases.
+/// This uses a fixed-seed multiplicative hash that only depends on the
+/// byte values fed in, not on any platform-specific hasher state.
+fn stable_hash_mix(value: u64, state: &mut u64) {
+    // FNV-1a inspired: XOR then multiply
+    *state ^= value;
+    *state = state.wrapping_mul(1099511628211);
+}
+
 #[test]
 fn snapshot_scoring_checksum() {
-    use std::collections::hash_map::DefaultHasher;
-    use std::hash::{Hash, Hasher};
-
-    let mut hasher = DefaultHasher::new();
+    // Seed: FNV offset basis for 64-bit
+    let mut checksum: u64 = 14695981039346656037;
 
     for &profile_id in &PROFILE_IDS {
         let stack = stacks::compose_profiles(&[profile_id.to_string()]);
@@ -1910,22 +1918,20 @@ fn snapshot_scoring_checksum() {
             let shift = scoring::detect_ecosystem_shift(&topics, item.title, &stack);
             let penalty = scoring::compute_competing_penalty(item.title, item.content, &stack);
 
-            boost.to_bits().hash(&mut hasher);
-            pain.hash(&mut hasher);
-            shift.to_bits().hash(&mut hasher);
-            penalty.to_bits().hash(&mut hasher);
+            stable_hash_mix(boost.to_bits() as u64, &mut checksum);
+            stable_hash_mix(pain as u64, &mut checksum);
+            stable_hash_mix(shift.to_bits() as u64, &mut checksum);
+            stable_hash_mix(penalty.to_bits() as u64, &mut checksum);
         }
     }
 
-    let checksum = hasher.finish();
-
     // UPDATE THIS VALUE when scoring logic or profile data intentionally changes.
     // Set to 0 to discover initial value (test will print it).
-    const EXPECTED: u64 = 5602187936311967394;
+    const EXPECTED: u64 = 3360058783339037823;
 
     if EXPECTED == 0 {
         eprintln!(
-            "\n  SNAPSHOT CHECKSUM: {}\n  \
+            "\n  SNAPSHOT CHECKSUM (stable): {}\n  \
              Copy this value into EXPECTED in snapshot_scoring_checksum.\n",
             checksum
         );
@@ -2027,6 +2033,67 @@ fn threshold_single_keyword_no_ecosystem_shift() {
                 }
             }
         }
+    }
+}
+
+// ============================================================================
+// Tier 12: Simulation Harness Pipeline Verification
+// ============================================================================
+// Verifies stacks functions produce correct inputs for the scoring pipeline.
+
+#[test]
+fn multi_profile_composition_scoring() {
+    // Composing [rust_systems, nextjs_fullstack] should fire pain points from both
+    // when content spans both ecosystems, with no competing penalty (both selected).
+    let composed =
+        stacks::compose_profiles(&["rust_systems".to_string(), "nextjs_fullstack".to_string()]);
+
+    // Content about Rust async problems in Next.js API routes
+    let title = "Async Rust Borrow Checker in Next.js Server Actions";
+    let content = "async lifetime borrow checker ownership server action \
+        nextjs app router migration patterns edge runtime rust";
+
+    // Both profiles' pain points should fire
+    let rust_pain = scoring::has_pain_point_match(title, content, &composed);
+    let boost = scoring::compute_stack_boost(title, content, &composed);
+
+    assert!(rust_pain, "Rust pain points should fire in composed stack");
+    assert!(
+        boost > 0.0,
+        "Composed stack should boost cross-ecosystem content, got {}",
+        boost
+    );
+
+    // No competing penalty — both Rust and Next.js are in all_tech
+    let penalty = scoring::compute_competing_penalty(title, content, &composed);
+    assert_eq!(
+        penalty, 1.0,
+        "No competing penalty when both profiles selected (got {})",
+        penalty
+    );
+}
+
+#[test]
+fn profile_count_dynamic() {
+    // Verify list_profiles().len() matches PROFILE_IDS.len() — prevents silent
+    // breakage when adding or removing profiles without updating the test harness.
+    let profiles = stacks::list_profiles();
+    assert_eq!(
+        profiles.len(),
+        PROFILE_IDS.len(),
+        "list_profiles() returned {} but test harness has {} PROFILE_IDS. \
+         Update PROFILE_IDS when adding/removing profiles.",
+        profiles.len(),
+        PROFILE_IDS.len()
+    );
+
+    // Also verify every PROFILE_ID is actually in list_profiles
+    for &id in &PROFILE_IDS {
+        assert!(
+            stacks::get_profile(id).is_some(),
+            "PROFILE_IDS contains '{}' but get_profile returns None",
+            id
+        );
     }
 }
 

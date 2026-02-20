@@ -85,6 +85,8 @@ export function CommandDeck() {
   return (
     <div
       className="fixed bottom-0 left-0 right-0 z-40 bg-bg-secondary border-t border-border shadow-2xl transition-transform duration-200"
+      role="region"
+      aria-label="Command Deck"
       style={{ height: '50vh' }}
     >
       {/* Header */}
@@ -116,10 +118,12 @@ export function CommandDeck() {
         <div className="flex-1" />
 
         {/* Tab Bar */}
-        <div className="flex items-center gap-0.5 bg-bg-tertiary rounded p-0.5">
+        <div className="flex items-center gap-0.5 bg-bg-tertiary rounded p-0.5" role="tablist" aria-label="Command Deck tabs">
           {TABS.map((tab) => (
             <button
               key={tab.id}
+              role="tab"
+              aria-selected={commandDeckTab === tab.id}
               onClick={() => setCommandDeckTab(tab.id)}
               className={`px-3 py-1 text-xs rounded transition-all ${
                 commandDeckTab === tab.id
@@ -141,6 +145,7 @@ export function CommandDeck() {
         {/* Close */}
         <button
           onClick={toggleCommandDeck}
+          aria-label="Close Command Deck"
           className="w-7 h-7 rounded bg-bg-tertiary text-gray-500 hover:text-white hover:bg-border flex items-center justify-center transition-all text-sm"
         >
           &times;

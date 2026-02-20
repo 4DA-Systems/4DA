@@ -231,11 +231,10 @@ fn cmd_signals(conn: &rusqlite::Connection, critical_only: bool) {
             &deps,
         );
 
-        if priority.is_none() {
-            continue;
-        }
-
-        let pri = priority.unwrap();
+        let pri = match priority {
+            Some(p) => p,
+            None => continue,
+        };
         if critical_only && pri != "critical" && pri != "high" {
             continue;
         }

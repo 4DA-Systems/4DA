@@ -188,8 +188,10 @@ export function VoidHeartbeat({ signal, size = 200 }: VoidHeartbeatProps) {
   return (
     <div
       className="void-heartbeat-container"
+      role="status"
+      aria-live="polite"
       title="System pulse - shows 4DA activity state"
-      aria-label={`4DA system state: ${stateLabel}`}
+      aria-label={`4DA status: ${stateLabel}${signal.item_count > 0 ? `, ${signal.item_count} items found` : ''}`}
       style={{
         width: size,
         height: size,
@@ -218,6 +220,7 @@ export function VoidHeartbeat({ signal, size = 200 }: VoidHeartbeatProps) {
       {/* WebGL2 canvas (overlays CSS when available) */}
       <canvas
         ref={canvasRef}
+        aria-hidden="true"
         style={{
           width: size,
           height: size,

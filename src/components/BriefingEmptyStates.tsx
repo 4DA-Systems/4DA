@@ -6,7 +6,7 @@ export function BriefingLoadingState() {
   const setActiveView = useAppStore(s => s.setActiveView);
 
   return (
-    <div className="bg-bg-primary rounded-lg">
+    <div className="bg-bg-primary rounded-lg" role="status" aria-busy="true" aria-label="Gathering intelligence">
       <div className="flex flex-col items-center justify-center py-20 px-8">
         <div className="w-20 h-20 mb-6 bg-orange-500/10 rounded-2xl border border-orange-500/20 flex items-center justify-center">
           <div className="w-6 h-6 border-2 border-orange-400 border-t-transparent rounded-full animate-spin" />

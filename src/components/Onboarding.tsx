@@ -49,9 +49,9 @@ export function Onboarding({ onComplete }: OnboardingProps) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-bg-primary p-8">
+    <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-bg-primary p-8" role="dialog" aria-modal="true" aria-label="Setup wizard">
       {/* Progress indicator */}
-      <div className="absolute top-8 flex items-center gap-1">
+      <div className="absolute top-8 flex items-center gap-1" role="group" aria-label={`Step ${currentIndex + 1} of ${steps.length}: ${stepLabels[step]}`}>
         {steps.map((s, i) => (
           <div key={s} className="flex items-center">
             <div

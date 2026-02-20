@@ -185,7 +185,10 @@ impl EmbeddingService {
             tokio::runtime::Handle::current().block_on(crate::embed_texts(&texts))
         });
         match result {
-            Ok(embeddings) if !embeddings.is_empty() => Ok(embeddings.into_iter().next().unwrap()),
+            Ok(embeddings) if !embeddings.is_empty() => embeddings
+                .into_iter()
+                .next()
+                .ok_or_else(|| "Embedding vec reported non-empty but yielded no items".to_string()),
             Ok(_) => {
                 warn!(target: "ace::embedding", "embed_texts returned empty, falling back to mock");
                 self.embed_mock(text)

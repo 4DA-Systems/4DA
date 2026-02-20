@@ -22,7 +22,7 @@ export class ErrorBoundary extends Component<{ children: ReactNode }, ErrorBound
   render() {
     if (this.state.hasError) {
       return (
-        <div style={{
+        <div role="alert" style={{
           backgroundColor: 'var(--color-bg-primary)',
           color: '#fff',
           minHeight: '100vh',

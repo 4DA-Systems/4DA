@@ -112,6 +112,16 @@ export function FirstRunTransition({ onComplete }: FirstRunTransitionProps) {
 
   return (
     <div
+      role="status"
+      aria-busy={phase !== 'celebrating' && phase !== 'fading'}
+      aria-label={
+        hasError ? 'Analysis error' :
+        phase === 'preparing' ? 'Preparing analysis' :
+        phase === 'fetching' ? 'Scanning sources' :
+        phase === 'analyzing' ? 'Analyzing results' :
+        phase === 'celebrating' ? `Analysis complete: ${relevantCount} relevant items found` :
+        'Completing'
+      }
       className={`fixed inset-0 z-40 bg-bg-primary flex flex-col items-center justify-center transition-opacity duration-300 ${
         phase === 'fading' ? 'opacity-0' : 'opacity-100'
       }`}

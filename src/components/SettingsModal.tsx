@@ -131,8 +131,9 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
     initTab(tab);
   };
 
-  // Focus trap: cycle Tab within modal, auto-focus first element
+  // Focus trap: cycle Tab within modal, auto-focus first element, restore on close
   useEffect(() => {
+    const previouslyFocused = document.activeElement as HTMLElement | null;
     const modal = document.querySelector('[role="dialog"]') as HTMLElement;
     if (!modal) return;
 
@@ -160,7 +161,10 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
     };
 
     modal.addEventListener('keydown', handleKeyDown);
-    return () => modal.removeEventListener('keydown', handleKeyDown);
+    return () => {
+      modal.removeEventListener('keydown', handleKeyDown);
+      previouslyFocused?.focus();
+    };
   }, [activeTab]);
 
   // Monitoring action wrappers (add status messages)
@@ -242,7 +246,7 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
 
         {/* Status Strip */}
         {settingsStatus && (
-          <div className={`mx-6 mt-4 text-sm p-3 rounded-lg border ${settingsStatus.includes('Error') || settingsStatus.includes('failed') ? 'bg-red-500/10 text-red-400 border-red-500/30' : 'bg-green-500/10 text-green-400 border-green-500/30'}`}>
+          <div role={settingsStatus.includes('Error') || settingsStatus.includes('failed') ? 'alert' : 'status'} className={`mx-6 mt-4 text-sm p-3 rounded-lg border ${settingsStatus.includes('Error') || settingsStatus.includes('failed') ? 'bg-red-500/10 text-red-400 border-red-500/30' : 'bg-green-500/10 text-green-400 border-green-500/30'}`}>
             {settingsStatus}
           </div>
         )}

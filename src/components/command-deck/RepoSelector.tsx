@@ -24,6 +24,7 @@ export function RepoSelector() {
     <select
       value={selectedRepoPath || ''}
       onChange={(e) => setSelectedRepo(e.target.value)}
+      aria-label="Select repository"
       className="bg-bg-tertiary border border-border rounded px-2 py-1 text-sm text-white max-w-[200px] truncate focus:outline-none focus:border-gray-500"
     >
       {repos.map((repo) => (

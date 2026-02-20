@@ -279,6 +279,12 @@ function App() {
       )}
 
       <div className={`min-h-screen bg-bg-primary text-white p-6 ${showSplash || showOnboarding ? 'hidden' : 'opacity-100 transition-opacity duration-300'}`}>
+        <a
+          href="#main-content"
+          className="sr-only focus:not-sr-only focus:absolute focus:z-50 focus:top-2 focus:left-2 focus:px-4 focus:py-2 focus:bg-orange-500 focus:text-white focus:rounded-lg focus:text-sm focus:font-medium"
+        >
+          Skip to main content
+        </a>
         {/* Header - Polished */}
         <header className="mb-8 flex items-center justify-between">
           <div className="flex items-center gap-4">
@@ -328,6 +334,7 @@ function App() {
           </div>
         )}
 
+        <main id="main-content">
         {/* Action Bar */}
         <ActionBar
           state={state}
@@ -395,6 +402,8 @@ function App() {
           />
         )}
 
+        </main>
+
         {/* Footer - Polished */}
         <footer className="mt-8 text-center space-y-1">
           <p className="text-xs text-gray-600">All signal. No feed.</p>
@@ -425,7 +434,7 @@ function App() {
                   {update.body ? update.body.slice(0, 100) : 'A new version is ready to install.'}
                 </p>
               </div>
-              <button onClick={dismissUpdate} className="text-gray-500 hover:text-white text-lg leading-none">&times;</button>
+              <button onClick={dismissUpdate} aria-label="Dismiss update notification" className="text-gray-500 hover:text-white text-lg leading-none">&times;</button>
             </div>
             <div className="flex gap-2 mt-3">
               <button

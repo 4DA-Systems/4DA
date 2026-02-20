@@ -378,6 +378,105 @@ mod tests {
         );
     }
 
+    // ========================================================================
+    // stack_pain_match integration tests
+    // ========================================================================
+
+    #[test]
+    fn test_stack_pain_match_confirms_ace_axis() {
+        // stack_pain_match: true should confirm ACE axis even when no other ACE signal fires.
+        // Removing `|| stack_pain_match` from line 69 must make this fail.
+        let ace_ctx = ACEContext::default(); // no active_topics
+        let topics = vec!["borrow".to_string()];
+
+        let with_pain = count_confirmed_signals(
+            0.10, 0.10, 0.10, 0.01, // all below thresholds
+            &ace_ctx, &topics, 0.0, 1.0, 0.0, true, // stack_pain_match
+        );
+        assert!(
+            with_pain.ace_confirmed,
+            "stack_pain_match=true should confirm ACE axis"
+        );
+        assert_eq!(with_pain.count, 1, "Only ACE axis should be confirmed");
+
+        let without_pain = count_confirmed_signals(
+            0.10, 0.10, 0.10, 0.01, &ace_ctx, &topics, 0.0, 1.0, 0.0,
+            false, // no stack_pain_match
+        );
+        assert!(
+            !without_pain.ace_confirmed,
+            "Without stack_pain_match, ACE should NOT be confirmed"
+        );
+        assert_eq!(without_pain.count, 0);
+    }
+
+    #[test]
+    fn test_stack_pain_match_plus_interest_passes_gate() {
+        // Interest confirmed + ACE confirmed via pain match = 2 signals = passes gate
+        let ace_ctx = ACEContext::default();
+        let topics = vec!["borrow".to_string()];
+
+        let (gated, count, _, _) = apply_confirmation_gate(
+            0.70, // good base score
+            0.10, // low context
+            0.60, // HIGH interest (confirmed)
+            0.10, 0.01, &ace_ctx, &topics, 0.0, 1.0, 0.0,
+            true, // stack_pain_match → ACE confirmed
+        );
+        assert_eq!(count, 2, "Interest + ACE(pain) = 2 signals");
+        assert!(
+            gated >= 0.50,
+            "Two signals should pass relevance threshold, got {}",
+            gated
+        );
+    }
+
+    #[test]
+    fn test_stack_pain_match_alone_cannot_pass() {
+        // Only stack_pain_match=true, everything else below threshold.
+        // Single signal property: score capped below 0.45
+        let ace_ctx = ACEContext::default();
+        let topics = vec!["test".to_string()];
+
+        let (gated, count, _, _) = apply_confirmation_gate(
+            0.90, // very high base
+            0.10, 0.10, 0.10, 0.01, &ace_ctx, &topics, 0.0, 1.0, 0.0, true, // only signal
+        );
+        assert_eq!(count, 1, "Only ACE (via pain match) should be confirmed");
+        assert!(
+            gated < 0.45,
+            "Single signal (pain match) should cap below 0.45, got {}",
+            gated
+        );
+    }
+
+    #[test]
+    fn test_stack_pain_match_does_not_double_count_with_ace() {
+        // ACE already confirmed via topic overlap + stack_pain_match also true.
+        // ACE is ONE axis — count must not increase beyond what topic overlap gives.
+        let mut ace_ctx = ACEContext::default();
+        ace_ctx.active_topics.push("rust".to_string());
+        let topics = vec!["rust".to_string()];
+
+        // ACE confirmed via topic overlap alone
+        let without_pain = count_confirmed_signals(
+            0.10, 0.10, 0.10, 0.01, &ace_ctx, &topics, 0.0, 1.0, 0.0, false,
+        );
+        assert!(without_pain.ace_confirmed);
+        let count_without = without_pain.count;
+
+        // ACE confirmed via topic overlap AND stack_pain_match
+        let with_pain = count_confirmed_signals(
+            0.10, 0.10, 0.10, 0.01, &ace_ctx, &topics, 0.0, 1.0, 0.0, true,
+        );
+        assert!(with_pain.ace_confirmed);
+        assert_eq!(
+            with_pain.count, count_without,
+            "stack_pain_match should not double-count ACE (both {} vs {})",
+            with_pain.count, count_without
+        );
+    }
+
     #[test]
     fn test_5th_axis_gate_all_five_signals() {
         // All 5 signals confirmed

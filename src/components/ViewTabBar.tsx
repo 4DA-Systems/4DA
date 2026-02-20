@@ -16,10 +16,14 @@ export function ViewTabBar() {
   const setActiveView = useAppStore(s => s.setActiveView);
 
   return (
-    <div className="mb-6 flex items-center gap-1 bg-bg-secondary rounded-lg p-1 border border-border w-fit">
+    <nav aria-label="Main views">
+    <div className="mb-6 flex items-center gap-1 bg-bg-secondary rounded-lg p-1 border border-border w-fit" role="tablist" aria-label="Content views">
       {TABS.map(tab => (
         <button
           key={tab.id}
+          role="tab"
+          aria-selected={activeView === tab.id}
+          aria-controls={`view-panel-${tab.id}`}
           onClick={() => setActiveView(tab.id)}
           className={`px-4 py-2 text-sm rounded-md transition-all ${
             activeView === tab.id
@@ -31,5 +35,6 @@ export function ViewTabBar() {
         </button>
       ))}
     </div>
+    </nav>
   );
 }

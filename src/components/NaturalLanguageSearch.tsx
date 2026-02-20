@@ -97,9 +97,10 @@ export function NaturalLanguageSearch({ onStatusChange, defaultExpanded = true }
   return (
     <ProGate feature="Semantic Search">
     <div className="bg-bg-tertiary rounded-lg p-5 border border-border">
-      <div
-        className="flex items-center justify-between cursor-pointer"
+      <button
+        className="flex items-center justify-between cursor-pointer w-full text-left"
         onClick={() => setExpanded(!expanded)}
+        aria-expanded={expanded}
       >
         <div className="flex items-center gap-3">
           <div className="w-8 h-8 bg-cyan-500/20 rounded-lg flex items-center justify-center flex-shrink-0">
@@ -110,15 +111,16 @@ export function NaturalLanguageSearch({ onStatusChange, defaultExpanded = true }
             <p className="text-gray-500 text-sm">Ask questions about your indexed files</p>
           </div>
         </div>
-        <span className="text-gray-500 text-sm">{expanded ? '▼' : '▶'}</span>
-      </div>
+        <span className="text-gray-500 text-sm" aria-hidden="true">{expanded ? '▼' : '▶'}</span>
+      </button>
 
       {expanded && (
         <div className="mt-4 space-y-4">
           {/* Search input */}
-          <div className="flex gap-2">
+          <div className="flex gap-2" role="search">
             <input
               type="text"
+              aria-label="Natural language search query"
               placeholder="Ask anything... e.g., 'files about rust from last week'"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
@@ -130,16 +132,21 @@ export function NaturalLanguageSearch({ onStatusChange, defaultExpanded = true }
               disabled={loading || !query.trim()}
               className="px-5 py-3 text-sm bg-cyan-500/20 border border-cyan-500/30 text-cyan-400 rounded-lg hover:bg-cyan-500/30 disabled:opacity-50 disabled:cursor-not-allowed transition-all font-medium"
             >
-              {loading ? '...' : 'Search'}
+              {loading ? (
+                <span className="flex items-center gap-1.5">
+                  <span className="w-3 h-3 border-2 border-cyan-400/30 border-t-cyan-400 rounded-full animate-spin" />
+                  Searching
+                </span>
+              ) : 'Search'}
             </button>
           </div>
 
           {/* Error display */}
           {error && (
-            <div className="flex items-center gap-2 px-3 py-2 bg-red-900/20 border border-red-500/30 rounded-lg">
-              <span className="text-red-400 text-xs">⚠</span>
+            <div role="alert" className="flex items-center gap-2 px-3 py-2 bg-red-900/20 border border-red-500/30 rounded-lg">
+              <span className="text-red-400 text-xs" aria-hidden="true">⚠</span>
               <span className="text-xs text-red-300 flex-1">{error}</span>
-              <button onClick={() => setError(null)} className="text-red-400/60 hover:text-red-400 text-xs">✕</button>
+              <button onClick={() => setError(null)} aria-label="Dismiss error" className="text-red-400/60 hover:text-red-400 text-xs">✕</button>
             </div>
           )}
 
@@ -191,6 +198,7 @@ export function NaturalLanguageSearch({ onStatusChange, defaultExpanded = true }
                 )}
                 <button
                   onClick={clearResults}
+                  aria-label="Clear search results"
                   className="ml-auto text-gray-500 hover:text-white transition-colors"
                 >
                   ✕

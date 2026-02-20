@@ -54,6 +54,7 @@ export function ContextDiscoverySection({
         <div className="flex gap-2">
           <input
             type="text"
+            aria-label="Directory path to scan"
             value={newScanDir}
             onChange={(e) => setNewScanDir(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && addScanDirectory()}
@@ -80,6 +81,7 @@ export function ContextDiscoverySection({
                     <span className="font-mono text-sm text-white truncate">{dir}</span>
                     <button
                       onClick={() => removeScanDirectory(dir)}
+                      aria-label={`Remove directory ${dir}`}
                       className="text-gray-500 hover:text-red-400 ml-2 opacity-0 group-hover:opacity-100 transition-opacity"
                     >
                       &times;

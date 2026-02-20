@@ -48,7 +48,7 @@ export function SavedItemsView() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center py-12">
+      <div className="flex items-center justify-center py-12" role="status" aria-busy="true" aria-label="Loading saved items">
         <div className="w-5 h-5 border-2 border-gray-600 border-t-white rounded-full animate-spin" />
       </div>
     );
@@ -56,7 +56,7 @@ export function SavedItemsView() {
 
   if (error) {
     return (
-      <div className="bg-bg-secondary rounded-lg border border-red-500/30 p-6 text-center">
+      <div role="alert" className="bg-bg-secondary rounded-lg border border-red-500/30 p-6 text-center">
         <p className="text-sm text-red-400 mb-3">{error}</p>
         <button
           onClick={loadItems}

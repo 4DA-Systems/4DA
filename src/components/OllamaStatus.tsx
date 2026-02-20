@@ -123,6 +123,7 @@ export function OllamaStatus({ provider }: OllamaStatusProps) {
       type="button"
       onClick={isClickable ? handleRetry : undefined}
       disabled={!isClickable}
+      aria-label={`Ollama status: ${config.label}${isClickable ? '. Click to retry.' : ''}`}
       className={`
         inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border
         bg-bg-secondary border-border
