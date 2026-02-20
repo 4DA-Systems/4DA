@@ -81,3 +81,9 @@ cli/
 
 # Raw screen recordings (large, not for repo)
 assets/raw/
+
+# Playwright E2E test artifacts
+e2e-results/
+e2e-report/
+test-results/
+playwright-report/

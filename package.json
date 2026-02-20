@@ -15,6 +15,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui",
     "validate:sizes": "node scripts/check-file-sizes.cjs",
     "validate": "node scripts/check-file-sizes.cjs && pnpm run lint && pnpm run typecheck && pnpm run test && pnpm run build",
     "validate:rust": "cd src-tauri && cargo fmt --check && cargo clippy -- -D warnings && cargo test",
@@ -34,6 +36,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.39.2",
+    "@playwright/test": "^1.58.2",
     "@tailwindcss/vite": "^4.1.18",
     "@tauri-apps/cli": "^2",
     "@testing-library/jest-dom": "^6.9.1",

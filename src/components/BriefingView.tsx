@@ -35,6 +35,14 @@ export function BriefingView() {
     [sourceHealth],
   );
 
+  // Source health summary for header badge
+  const healthSummary = useMemo(() => {
+    if (sourceHealth.length === 0) return null;
+    const healthy = sourceHealth.filter(s => s.status === 'healthy').length;
+    const total = sourceHealth.length;
+    return { healthy, total, allHealthy: healthy === total };
+  }, [sourceHealth]);
+
   // Copy raw briefing markdown
   const copyBriefing = useCallback(async () => {
     if (!briefing.content) return;
@@ -169,6 +177,14 @@ export function BriefingView() {
             </div>
             <div>
               <h2 className="font-medium text-orange-400">Intelligence Briefing</h2>
+              {healthSummary && (
+                <div className="flex items-center gap-1.5 mt-0.5">
+                  <span className={`inline-block w-1.5 h-1.5 rounded-full ${healthSummary.allHealthy ? 'bg-green-400' : 'bg-amber-400'}`} />
+                  <span className={`text-[11px] ${healthSummary.allHealthy ? 'text-green-400/70' : 'text-amber-400/70'}`}>
+                    {healthSummary.healthy}/{healthSummary.total} sources
+                  </span>
+                </div>
+              )}
             </div>
           </div>
           <div className="flex items-center gap-2">
