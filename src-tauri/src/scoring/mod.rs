@@ -940,6 +940,143 @@ mod tests {
     }
 
     // ========================================================================
+    // Stack Intelligence pipeline integration tests
+    // ========================================================================
+
+    #[test]
+    fn test_score_item_stack_boost_in_breakdown() {
+        // When a Rust stack is active and content matches Rust pain points,
+        // the score_breakdown should contain a positive stack_boost.
+        let db = test_db();
+        let rust_stack = crate::stacks::compose_profiles(&["rust_systems".to_string()]);
+        let ctx = ScoringContext::builder().composed_stack(rust_stack).build();
+        let embedding = vec![0.1_f32; 384];
+        let input = test_input(
+            "Understanding Pin and Send in Async Rust Lifetimes",
+            "async pin send lifetime future tokio complexity borrow checker annotations",
+            &embedding,
+        );
+        let options = ScoringOptions {
+            apply_freshness: false,
+            apply_signals: false,
+        };
+
+        let result = score_item(&input, &ctx, &db, &options, None);
+        let breakdown = result
+            .score_breakdown
+            .as_ref()
+            .expect("should have breakdown");
+
+        assert!(
+            breakdown.stack_boost > 0.0,
+            "Rust pain point content should produce stack_boost > 0, got {}",
+            breakdown.stack_boost
+        );
+        // The boost should be capped at 0.20 (max from scoring function)
+        assert!(
+            breakdown.stack_boost <= 0.20,
+            "stack_boost should be capped at 0.20, got {}",
+            breakdown.stack_boost
+        );
+    }
+
+    #[test]
+    fn test_score_item_no_stack_zero_boost() {
+        // When no stack profiles are selected, stack_boost must be exactly 0.0
+        // and ecosystem_shift_mult must be exactly 1.0.
+        let db = test_db();
+        let ctx = empty_scoring_context(); // no composed_stack → inactive
+        let embedding = vec![0.1_f32; 384];
+        let input = test_input(
+            "Understanding Pin and Send in Async Rust Lifetimes",
+            "async pin send lifetime future tokio complexity",
+            &embedding,
+        );
+        let options = ScoringOptions {
+            apply_freshness: false,
+            apply_signals: false,
+        };
+
+        let result = score_item(&input, &ctx, &db, &options, None);
+        let breakdown = result
+            .score_breakdown
+            .as_ref()
+            .expect("should have breakdown");
+
+        assert_eq!(
+            breakdown.stack_boost, 0.0,
+            "No stack selected → stack_boost must be 0.0, got {}",
+            breakdown.stack_boost
+        );
+        assert_eq!(
+            breakdown.ecosystem_shift_mult, 1.0,
+            "No stack selected → ecosystem_shift_mult must be 1.0, got {}",
+            breakdown.ecosystem_shift_mult
+        );
+        assert_eq!(
+            breakdown.stack_competing_mult, 1.0,
+            "No stack selected → stack_competing_mult must be 1.0, got {}",
+            breakdown.stack_competing_mult
+        );
+    }
+
+    #[test]
+    fn test_score_item_stack_pain_match_confirms_ace_axis() {
+        // When stack is active with pain point match, the pain point match should
+        // contribute to ACE axis confirmation in the gate. We verify:
+        // 1. ACE axis is confirmed (via stack_pain_match)
+        // 2. stack_boost > 0 (pain points detected by pipeline)
+        // 3. Score is higher than without stack (the boost matters)
+        let db = test_db();
+        let rust_stack = crate::stacks::compose_profiles(&["rust_systems".to_string()]);
+        let ctx = ScoringContext::builder().composed_stack(rust_stack).build();
+        let embedding = vec![0.1_f32; 384];
+        let input = test_input(
+            "Rust Borrow Checker: Ownership and Move Semantics Deep Dive",
+            "borrow checker ownership move semantics lifetime annotation rust patterns",
+            &embedding,
+        );
+        let options = ScoringOptions {
+            apply_freshness: false,
+            apply_signals: false,
+        };
+
+        let result = score_item(&input, &ctx, &db, &options, None);
+        let breakdown = result
+            .score_breakdown
+            .as_ref()
+            .expect("should have breakdown");
+
+        // ACE should be confirmed (via stack_pain_match or topic overlap)
+        assert!(
+            breakdown.confirmed_signals.contains(&"ace".to_string()),
+            "ACE axis should be confirmed with stack pain point match, got {:?}",
+            breakdown.confirmed_signals
+        );
+
+        // Pain point content should produce a positive stack_boost
+        assert!(
+            breakdown.stack_boost > 0.0,
+            "Borrow checker content should trigger Rust pain point, got stack_boost={}",
+            breakdown.stack_boost
+        );
+
+        // Compare: same content WITHOUT stack should NOT have ACE confirmed
+        let ctx_no_stack = empty_scoring_context();
+        let result_no_stack = score_item(&input, &ctx_no_stack, &db, &options, None);
+        let breakdown_ns = result_no_stack
+            .score_breakdown
+            .as_ref()
+            .expect("should have breakdown");
+
+        assert!(
+            !breakdown_ns.confirmed_signals.contains(&"ace".to_string()),
+            "Without stack, ACE should NOT be confirmed (no topics, no semantic), got {:?}",
+            breakdown_ns.confirmed_signals
+        );
+    }
+
+    // ========================================================================
     // Existing unit tests
     // ========================================================================
 

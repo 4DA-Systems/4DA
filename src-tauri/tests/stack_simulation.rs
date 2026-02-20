@@ -1,12 +1,18 @@
 //! Stack Intelligence — Master Simulation Harness
 //!
-//! Five tiers of validation:
+//! Eleven tiers of validation:
 //!
 //! Tier 1: Frozen real-world corpus — real article titles with per-profile labels
 //! Tier 2: Adversarial battery — items designed to exploit word-boundary weaknesses
 //! Tier 3: Algebraic properties — mathematical invariants the scoring MUST satisfy
 //! Tier 4: Profile data integrity — structural validation of profile definitions
 //! Tier 5: Composition algebra — multi-profile interaction verification
+//! Tier 6: Cross-profile contamination matrix — inter-profile isolation
+//! Tier 7: Determinism — scoring reproducibility across runs
+//! Tier 8: Edge cases — degenerate inputs, unicode, long content
+//! Tier 9: Monotonicity — more signal = more score
+//! Tier 10: Snapshot regression — drift detection via checksum
+//! Tier 11: Threshold boundary — proves 2-keyword minimum is enforced
 
 use fourda_lib::stacks;
 use fourda_lib::stacks::scoring;
@@ -107,6 +113,20 @@ static CORPUS: &[CorpusItem] = &[
         content: "vercel edge runtime nextjs middleware deployment strategies",
         labels: [L::K, L::N, L::N, L::N, L::N, L::N, L::N, L::N],
     },
+    CorpusItem {
+        title: "Edge Runtime Cold Starts Are Killing Our Middleware Performance",
+        content: "our nextjs edge runtime middleware functions take 500ms on cold start which degrades \
+            user experience significantly. investigating workarounds for edge function initialization \
+            overhead in production deployments including warming strategies and code splitting",
+        labels: [L::P, L::N, L::N, L::N, L::N, L::N, L::N, L::N],
+    },
+    CorpusItem {
+        title: "Next.js Server Actions: Type-Safe Data Mutations Without API Routes",
+        content: "server action pattern in nextjs lets you handle form submissions directly from react \
+            server components. no need to build separate api routes when you can colocate your data \
+            mutation logic with your component using the new server action directive",
+        labels: [L::K, L::N, L::N, L::N, L::N, L::N, L::N, L::N],
+    },
     // --- Rust ecosystem ---
     CorpusItem {
         title: "Understanding Pin, Send, and Async Lifetimes in Rust",
@@ -143,6 +163,20 @@ static CORPUS: &[CorpusItem] = &[
         content: "axum sqlx rust tokio web api server serde database postgresql",
         labels: [L::N, L::K, L::N, L::N, L::N, L::N, L::N, L::N],
     },
+    CorpusItem {
+        title: "Auditing Unsafe Rust Code for Soundness Violations with Miri",
+        content: "running miri on our codebase found several soundness holes in unsafe blocks that \
+            could lead to undefined behavior. practical guidelines for auditing ffi boundaries and \
+            raw pointer arithmetic to ensure memory safety guarantees hold",
+        labels: [L::N, L::P, L::N, L::N, L::N, L::N, L::N, L::N],
+    },
+    CorpusItem {
+        title: "Tauri 2.0: Build Cross-Platform Desktop Apps with Rust and Web Tech",
+        content: "tauri desktop application framework combines a rust backend with web frontend \
+            through a secure invoke bridge. building native apps with smaller bundles than electron \
+            while leveraging the rust ecosystem for performance critical operations",
+        labels: [L::N, L::K, L::N, L::N, L::N, L::N, L::N, L::N],
+    },
     // --- Python ML ecosystem ---
     CorpusItem {
         title: "CUDA Version Conflicts: A Complete Troubleshooting Guide",
@@ -167,6 +201,27 @@ static CORPUS: &[CorpusItem] = &[
     CorpusItem {
         title: "Fine-Tuning LLaMA with LoRA and Hugging Face",
         content: "llm fine-tuning lora peft huggingface transformers pytorch training",
+        labels: [L::N, L::N, L::K, L::N, L::N, L::N, L::N, L::N],
+    },
+    CorpusItem {
+        title: "Python Dependency Hell: When pip and Conda Fight Over Packages",
+        content: "spent three days debugging why pytorch would not install because conda and pip had \
+            conflicting numpy versions in the same virtual environment. the dependency resolution \
+            between these package managers creates reproducibility nightmares across machines",
+        labels: [L::N, L::N, L::P, L::N, L::N, L::N, L::N, L::N],
+    },
+    CorpusItem {
+        title: "ONNX Model Serving: Reducing Inference Latency in Production",
+        content: "converting our transformer model to onnx format reduced inference latency by sixty \
+            percent compared to raw pytorch model serving with torchserve. optimizing the deployment \
+            pipeline for real-time predictions requires careful batch sizing and hardware selection",
+        labels: [L::N, L::N, L::P, L::N, L::N, L::N, L::N, L::N],
+    },
+    CorpusItem {
+        title: "Building RAG Pipelines with LangChain and Hugging Face Transformers",
+        content: "implementing a production rag retrieval augmented pipeline that chunks documents \
+            stores embeddings in a vector database and retrieves relevant context before prompting. \
+            using huggingface transformers for embeddings and langchain for orchestration workflow",
         labels: [L::N, L::N, L::K, L::N, L::N, L::N, L::N, L::N],
     },
     // --- Go ecosystem ---
@@ -195,6 +250,20 @@ static CORPUS: &[CorpusItem] = &[
         content: "grpc golang protobuf service api microservice kubernetes deployment",
         labels: [L::N, L::N, L::N, L::K, L::N, L::N, L::N, L::N],
     },
+    CorpusItem {
+        title: "Go Context Propagation: Timeout, Cancellation, and Deadline Patterns",
+        content: "context propagation in golang requires careful handling of context.withtimeout and \
+            cancellation signals across goroutine boundaries. common mistakes include losing the \
+            parent ctx reference and creating context leaks in long running server handlers",
+        labels: [L::N, L::N, L::N, L::P, L::N, L::N, L::N, L::N],
+    },
+    CorpusItem {
+        title: "Building Kubernetes Operators in Go with Custom Controllers",
+        content: "kubernetes operator development in golang using client-go and controller-runtime. \
+            implement custom resource definitions and reconciliation loops to manage complex stateful \
+            applications on k8s clusters with proper leader election and health checks",
+        labels: [L::N, L::N, L::N, L::K, L::N, L::N, L::N, L::N],
+    },
     // --- React Native ecosystem ---
     CorpusItem {
         title: "React Native New Architecture: Fabric and TurboModules Guide",
@@ -219,6 +288,27 @@ static CORPUS: &[CorpusItem] = &[
     CorpusItem {
         title: "Expo SDK 52: What's New in Managed Workflow",
         content: "expo sdk mobile development react-native eas build managed workflow",
+        labels: [L::N, L::N, L::N, L::N, L::K, L::N, L::N, L::N],
+    },
+    CorpusItem {
+        title: "React Native JS Thread Performance: Eliminating Frame Drops and Jank",
+        content: "profiling revealed the js thread was causing performance degradation and frame drop \
+            issues during list scrolling in our react native app. moving heavy computations to native \
+            modules and using reanimated for ui thread animations eliminated the jank entirely",
+        labels: [L::N, L::N, L::N, L::N, L::P, L::N, L::N, L::N],
+    },
+    CorpusItem {
+        title: "EAS Update: Reliable Over-the-Air Deployments for Expo Apps",
+        content: "ota updates with eas update let you push javascript bundle changes to expo apps \
+            without going through app store review. configuring update channels and rollback \
+            strategies ensures reliable over the air deployment for production mobile applications",
+        labels: [L::N, L::N, L::N, L::N, L::P, L::N, L::N, L::N],
+    },
+    CorpusItem {
+        title: "Building Production Mobile Apps with React Native and Expo",
+        content: "react native combined with expo provides a powerful mobile app development platform. \
+            from eas build for compilation to expo go for development previews the complete toolchain \
+            handles everything from initial development through final app store submission",
         labels: [L::N, L::N, L::N, L::N, L::K, L::N, L::N, L::N],
     },
     // --- Laravel ecosystem ---
@@ -247,6 +337,20 @@ static CORPUS: &[CorpusItem] = &[
         content: "laravel release features improvements php framework routes",
         labels: [L::N, L::N, L::N, L::N, L::N, L::K, L::N, L::N],
     },
+    CorpusItem {
+        title: "Upgrading to PHP 8.3: Breaking Changes and Compatibility Guide",
+        content: "php version upgrade from php 7 to php 8 requires careful attention to php \
+            compatibility issues including deprecated functions and type system changes. this guide \
+            covers every breaking change and provides tested strategies for large codebases",
+        labels: [L::N, L::N, L::N, L::N, L::N, L::P, L::N, L::N],
+    },
+    CorpusItem {
+        title: "Eloquent Performance: Advanced Query Optimization in Laravel",
+        content: "eloquent orm provides elegant syntax but can generate inefficient sql without \
+            careful optimization. this deep dive covers indexing strategies query analysis with \
+            telescope and advanced laravel patterns for high traffic applications",
+        labels: [L::N, L::N, L::N, L::N, L::N, L::K, L::N, L::N],
+    },
     // --- Django ecosystem ---
     CorpusItem {
         title: "Django ORM N+1: select_related vs prefetch_related",
@@ -273,6 +377,20 @@ static CORPUS: &[CorpusItem] = &[
         content: "drf django rest framework serializer viewset performance python api",
         labels: [L::N, L::N, L::N, L::N, L::N, L::N, L::K, L::N],
     },
+    CorpusItem {
+        title: "Django Migration Conflicts: Squashing and Resolving in Team Projects",
+        content: "migration conflict resolution in django when multiple developers create migrations \
+            simultaneously. learn when to squash migrations using makemigrations and how to resolve \
+            merge conflicts in the migration graph without losing data or corrupting schema state",
+        labels: [L::N, L::N, L::N, L::N, L::N, L::N, L::P, L::N],
+    },
+    CorpusItem {
+        title: "Wagtail CMS: Building Content-Managed Sites with Django",
+        content: "wagtail provides a powerful content management system built on top of django. \
+            create custom page types streamfields and rich content editing experiences while \
+            leveraging the full django ecosystem for your backend logic and administration",
+        labels: [L::N, L::N, L::N, L::N, L::N, L::N, L::K, L::N],
+    },
     // --- Vue ecosystem ---
     CorpusItem {
         title: "Composition API Migration: From Options to Script Setup",
@@ -297,6 +415,27 @@ static CORPUS: &[CorpusItem] = &[
     CorpusItem {
         title: "Pinia Store Patterns: Composable State Management in Vue",
         content: "pinia state management vue store composable reactive getters actions",
+        labels: [L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::K],
+    },
+    CorpusItem {
+        title: "Vue TypeScript Integration: defineComponent and Type-Safe Props",
+        content: "typescript integration in vue 3 requires understanding definecomponent for proper \
+            type inference. learn how to type your props emits and composables with vue typescript \
+            patterns that provide full ide support and compile time checking for your components",
+        labels: [L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::P],
+    },
+    CorpusItem {
+        title: "Migrating from Vuex to Pinia: State Management Evolution",
+        content: "vuex to pinia migration involves restructuring your state management from mutation \
+            based patterns to a more intuitive store composition api. pinia provides better \
+            typescript support and devtools integration making state management more pleasant",
+        labels: [L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::P],
+    },
+    CorpusItem {
+        title: "Vue 3.5 Composition API: Practical Patterns with VueUse",
+        content: "composition api patterns in vue using vueuse composables for common tasks like \
+            reactive local storage intersection observers and data fetching. combining vue reactive \
+            primitives with utility composables for cleaner component logic throughout your app",
         labels: [L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::K],
     },
     // --- Competing tech items (C labels) ---
@@ -359,6 +498,40 @@ static CORPUS: &[CorpusItem] = &[
         title: "Angular 18 Signals: Zoneless Change Detection",
         content: "angular standalone components signals zoneless change detection",
         labels: [L::N, L::N, L::N, L::N, L::N, L::N, L::N, L::C],
+    },
+    CorpusItem {
+        title: "JAX for Scientific Computing: Functional Approach to Machine Learning",
+        content: "jax brings functional programming and automatic differentiation to scientific \
+            computing with hardware acceleration on tpu. researchers prefer its composable \
+            transformations over imperative frameworks for numerical methods and simulations",
+        labels: [L::N, L::N, L::C, L::N, L::N, L::N, L::N, L::N],
+    },
+    CorpusItem {
+        title: "Node.js 22: Performance Improvements and Event Loop Changes",
+        content: "node.js runtime gets significant performance improvements including faster startup \
+            times and improved event loop handling for backend services and real-time applications",
+        labels: [L::N, L::N, L::N, L::C, L::N, L::N, L::N, L::N],
+    },
+    CorpusItem {
+        title: "Kotlin Multiplatform: Share Code Between Android and iOS Natively",
+        content: "kotlin multiplatform mobile enables sharing business logic between android and ios \
+            apps using a single codebase with native ui rendering on each platform for truly native \
+            mobile experiences without compromising platform specific behavior",
+        labels: [L::N, L::N, L::N, L::N, L::C, L::N, L::N, L::N],
+    },
+    CorpusItem {
+        title: "Ruby on Rails 8: Modern Web Development with Convention over Configuration",
+        content: "rails brings modern web development patterns with hotwire turbo and stimulus. \
+            convention over configuration approach enables rapid application prototyping and \
+            deployment with minimal boilerplate and strong community support",
+        labels: [L::N, L::N, L::N, L::N, L::N, L::C, L::N, L::N],
+    },
+    CorpusItem {
+        title: "Flask 3.0: Lightweight Web Framework Gets Native Async Support",
+        content: "flask micro framework adds native async request handling in version 3. blueprint \
+            improvements and better extension ecosystem for building lightweight web apis and \
+            microservices quickly without heavyweight abstractions or complex configuration",
+        labels: [L::N, L::N, L::N, L::N, L::N, L::N, L::C, L::N],
     },
     // --- Neutral items (off-domain for all) ---
     CorpusItem {
@@ -1244,14 +1417,14 @@ fn corpus_coverage_minimum() {
         let n_count = CORPUS.iter().filter(|c| c.labels[idx] == L::N).count();
 
         assert!(
-            p_count >= 2,
-            "{}: needs 2+ P items, got {}",
+            p_count >= 3,
+            "{}: needs 3+ P items, got {}",
             profile_id,
             p_count
         );
         assert!(
-            k_count >= 1,
-            "{}: needs 1+ K items, got {}",
+            k_count >= 2,
+            "{}: needs 2+ K items, got {}",
             profile_id,
             k_count
         );
@@ -1262,14 +1435,14 @@ fn corpus_coverage_minimum() {
             s_count
         );
         assert!(
-            c_count >= 1,
-            "{}: needs 1+ C items, got {}",
+            c_count >= 2,
+            "{}: needs 2+ C items, got {}",
             profile_id,
             c_count
         );
         assert!(
-            n_count >= 5,
-            "{}: needs 5+ N items, got {}",
+            n_count >= 10,
+            "{}: needs 10+ N items, got {}",
             profile_id,
             n_count
         );
@@ -1748,7 +1921,7 @@ fn snapshot_scoring_checksum() {
 
     // UPDATE THIS VALUE when scoring logic or profile data intentionally changes.
     // Set to 0 to discover initial value (test will print it).
-    const EXPECTED: u64 = 6789125736541999321;
+    const EXPECTED: u64 = 5602187936311967394;
 
     if EXPECTED == 0 {
         eprintln!(
@@ -1765,4 +1938,142 @@ fn snapshot_scoring_checksum() {
          If intentional, update EXPECTED.",
         EXPECTED, checksum
     );
+}
+
+// ============================================================================
+// Tier 11: Threshold Boundary
+// ============================================================================
+// Proves the 2-keyword minimum is enforced for pain points and ecosystem shifts.
+// For every profile, constructs content with exactly 1 keyword from each pain
+// point and verifies it does NOT trigger. This is stronger than fixed test data
+// because it automatically covers every keyword in every profile.
+
+#[test]
+fn threshold_single_keyword_no_pain_point() {
+    for &profile_id in &PROFILE_IDS {
+        let stack = stacks::compose_profiles(&[profile_id.to_string()]);
+        let profile = stacks::get_profile(profile_id).unwrap();
+
+        for pp in profile.pain_points {
+            for &kw in pp.keywords {
+                // Construct content with EXACTLY this one keyword
+                let title = format!("Article discussing {} in depth", kw);
+                let content = "some unrelated content about web development practices";
+
+                if scoring::has_pain_point_match(&title, content, &stack) {
+                    // If it triggered, SOME pain point in this profile must have
+                    // 2+ keyword matches (could be a different pain point than the
+                    // one we're testing, due to keyword overlap — e.g., "script setup"
+                    // from TypeScript pain point also matches "setup" in Composition
+                    // API pain point, giving it 2 matches).
+                    let combined = format!("{} {}", title.to_lowercase(), content.to_lowercase());
+                    let any_pp_justified = profile.pain_points.iter().any(|any_pp| {
+                        let mc = any_pp
+                            .keywords
+                            .iter()
+                            .filter(|k| scoring::text_contains_term(&combined, k))
+                            .count();
+                        mc >= 2
+                    });
+                    assert!(
+                        any_pp_justified,
+                        "{}: pain match triggered with keyword '{}' \
+                         but no pain point has 2+ keyword matches",
+                        profile_id, kw
+                    );
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn threshold_single_keyword_no_ecosystem_shift() {
+    for &profile_id in &PROFILE_IDS {
+        let stack = stacks::compose_profiles(&[profile_id.to_string()]);
+        let profile = stacks::get_profile(profile_id).unwrap();
+
+        for es in profile.ecosystem_shifts {
+            for &kw in es.keywords {
+                let topics = vec![kw.to_string()];
+                let title = format!("Article discussing {} trends", kw);
+                let mult = scoring::detect_ecosystem_shift(&topics, &title, &stack);
+
+                if mult > 1.0 {
+                    // If it triggered, the title must accidentally contain another keyword
+                    let title_lower = title.to_lowercase();
+                    let match_count = es
+                        .keywords
+                        .iter()
+                        .filter(|k| {
+                            scoring::text_contains_term(&title_lower, k)
+                                || topics.iter().any(|t| {
+                                    let t_lower = t.to_lowercase();
+                                    scoring::text_contains_term(&t_lower, k)
+                                        || scoring::text_contains_term(k, &t_lower)
+                                })
+                        })
+                        .count();
+                    assert!(
+                        match_count >= 2,
+                        "{}: shift '{}->{}'  triggered with single keyword '{}' \
+                         (match_count={}, expected >= 2)",
+                        profile_id,
+                        es.from,
+                        es.to,
+                        kw,
+                        match_count
+                    );
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn threshold_two_keywords_from_different_pain_points_no_trigger() {
+    // Having 1 keyword from pain point A and 1 keyword from pain point B
+    // should NOT trigger either pain point. Only 2+ from the SAME pain point triggers.
+    for &profile_id in &PROFILE_IDS {
+        let stack = stacks::compose_profiles(&[profile_id.to_string()]);
+        let profile = stacks::get_profile(profile_id).unwrap();
+
+        if profile.pain_points.len() < 2 {
+            continue;
+        }
+
+        // Take first keyword from each of two different pain points
+        let kw_a = profile.pain_points[0].keywords[0];
+        let kw_b = profile.pain_points[1].keywords[0];
+
+        // Construct content with exactly one keyword from each
+        let title = format!("{} and {} in modern development", kw_a, kw_b);
+        let content = "general software engineering practices";
+
+        // This should NOT trigger because neither pain point has 2+ matches
+        // (unless kw_a or kw_b accidentally appears in the other's keyword list)
+        let combined = format!("{} {}", title.to_lowercase(), content.to_lowercase());
+        let pp0_matches = profile.pain_points[0]
+            .keywords
+            .iter()
+            .filter(|k| scoring::text_contains_term(&combined, k))
+            .count();
+        let pp1_matches = profile.pain_points[1]
+            .keywords
+            .iter()
+            .filter(|k| scoring::text_contains_term(&combined, k))
+            .count();
+
+        // If either pain point has 2+ matches, the keywords overlap between pain points
+        // which is valid behavior. Only assert when each has exactly 1 match.
+        if pp0_matches == 1 && pp1_matches == 1 {
+            assert!(
+                !scoring::has_pain_point_match(&title, content, &stack),
+                "{}: 1kw from '{}' + 1kw from '{}' should not trigger pain match",
+                profile_id,
+                profile.pain_points[0].description,
+                profile.pain_points[1].description,
+            );
+        }
+    }
 }

@@ -568,9 +568,10 @@ pub static LARAVEL: StackProfile = StackProfile {
             keywords: &[
                 "php version",
                 "php 8",
-                "migration",
-                "upgrade",
+                "php 7",
                 "php compatibility",
+                "php deprecation",
+                "php upgrade",
             ],
             severity: 0.10,
             description: "PHP version migration",
@@ -784,10 +785,10 @@ pub static VUE_FRONTEND: StackProfile = StackProfile {
         PainPoint {
             keywords: &[
                 "typescript",
-                "type",
                 "definecomponent",
                 "vue typescript",
                 "vue types",
+                "script setup",
             ],
             severity: 0.08,
             description: "TypeScript integration",
