@@ -1,7 +1,7 @@
 {
   "name": "@4da/mcp-server",
   "version": "3.3.0",
-  "description": "MCP server for 4DA — developer intelligence via stdio or Streamable HTTP. 27 tools for content filtering, signals, briefings, decisions, agent memory, and knowledge gap detection.",
+  "description": "27 MCP tools that connect your AI coding assistant to your actual codebase. Scores content from HN, arXiv, Reddit, GitHub against your tech stack. Privacy-first — everything stays local.",
   "type": "module",
   "main": "dist/index.js",
   "bin": {
@@ -26,17 +26,23 @@
   },
   "keywords": [
     "mcp",
+    "mcp-server",
     "model-context-protocol",
-    "4da",
-    "developer-tools",
-    "ai-agent",
-    "content-filtering",
-    "relevance",
-    "intelligence",
     "claude-code",
     "cursor",
+    "windsurf",
+    "copilot",
+    "developer-tools",
+    "developer-intelligence",
+    "ai-agent",
+    "privacy-first",
+    "local-first",
+    "codebase-awareness",
+    "content-scoring",
     "hacker-news",
     "arxiv",
+    "knowledge-gaps",
+    "tech-radar",
     "developer-productivity"
   ],
   "author": "4DA",
@@ -46,7 +52,7 @@
     "url": "git+https://github.com/runyourempire/4DA.git",
     "directory": "mcp-4da-server"
   },
-  "homepage": "https://github.com/runyourempire/4DA#mcp-integration",
+  "homepage": "https://github.com/runyourempire/4DA/tree/main/mcp-4da-server",
   "bugs": {
     "url": "https://github.com/runyourempire/4DA/issues"
   },
