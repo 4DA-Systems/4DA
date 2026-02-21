@@ -6,6 +6,7 @@ import { SetupAIProvider } from './setup-ai-provider';
 import { SetupProjects } from './setup-projects';
 import { SetupStack } from './setup-stack';
 import { SetupInterests } from './setup-interests';
+import { SetupLocale } from './setup-locale';
 
 interface QuickSetupStepProps {
   isAnimating: boolean;
@@ -34,6 +35,8 @@ export function QuickSetupStep({ isAnimating, onComplete, onBack }: QuickSetupSt
   const [projectsOpen, setProjectsOpen] = useState(false);
   const [stacksOpen, setStacksOpen] = useState(false);
   const [interestsOpen, setInterestsOpen] = useState(false);
+  const [localeOpen, setLocaleOpen] = useState(false);
+  const [localeConfigured, setLocaleConfigured] = useState(false);
 
   // Stack Intelligence state
   const [selectedStacks, setSelectedStacks] = useState<string[]>([]);
@@ -410,6 +413,20 @@ export function QuickSetupStep({ isAnimating, onComplete, onBack }: QuickSetupSt
               selectedStacks={selectedStacks}
               onSelectionChange={setSelectedStacks}
             />
+          </div>
+        </div>
+
+        {/* Section: Your Region */}
+        <div>
+          <SectionHeader
+            title="Your Region"
+            subtitle={localeConfigured ? 'Configured' : 'Auto-detected'}
+            isOpen={localeOpen}
+            onToggle={() => setLocaleOpen(!localeOpen)}
+            done={localeConfigured}
+          />
+          <div style={{ display: localeOpen ? undefined : 'none' }}>
+            <SetupLocale onLocaleChange={() => setLocaleConfigured(true)} />
           </div>
         </div>
 

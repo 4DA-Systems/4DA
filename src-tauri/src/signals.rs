@@ -474,10 +474,13 @@ impl SignalClassifier {
                 format!("Evaluate new tool: {}", short_title)
             }
             (SignalType::TechTrend, Some(tech)) => {
-                format!("Track {} trend: {}", tech, short_title)
+                format!(
+                    "Emerging trend: {} gaining traction — {}",
+                    tech, short_title
+                )
             }
             (SignalType::TechTrend, None) => {
-                format!("{}: {}", signal_type.label(), short_title)
+                format!("Emerging trend: {}", short_title)
             }
             (SignalType::Learning, Some(tech)) => {
                 format!("Learn - {} resource: {}", tech, short_title)

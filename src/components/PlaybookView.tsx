@@ -2,6 +2,7 @@ import { useEffect, useCallback, useMemo } from 'react';
 import { useAppStore } from '../store';
 import { useShallow } from 'zustand/react/shallow';
 import { renderMarkdown } from '../utils/playbook-markdown';
+import { SovereignProfile } from './playbook/SovereignProfile';
 
 // Module metadata (static, mirrors backend MODULE_DEFS)
 const MODULES = [
@@ -255,11 +256,20 @@ export function PlaybookView() {
                   </div>
                   {/* Lesson content */}
                   <div className="px-6 py-5 prose-4da text-sm leading-relaxed text-[#A0A0A0]">
-                    {renderMarkdown(lesson.content)}
+                    {renderMarkdown(lesson.content, { moduleId: playbookContent.module_id, lessonIdx: idx })}
                   </div>
                 </div>
               );
             })}
+
+            {/* Sovereign Profile Panel — show when viewing Module S */}
+            {playbookContent.module_id === 'S' && (
+              <SovereignProfile
+                onGenerateDocument={() => {
+                  /* document rendered inline by SovereignProfile */
+                }}
+              />
+            )}
           </div>
         )}
       </main>

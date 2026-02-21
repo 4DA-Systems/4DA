@@ -4,7 +4,7 @@
 //! No API calls, no cost, instant response.
 
 use crate::error::Result;
-use crate::scoring::get_ace_context;
+use crate::scoring::{get_ace_context, has_word_boundary_match};
 use crate::{get_analysis_state, get_database};
 use std::collections::HashMap;
 use tracing::info;
@@ -67,19 +67,53 @@ pub async fn generate_free_briefing() -> Result<serde_json::Value> {
         }));
     }
 
-    // Top 5 items
-    let top_items: Vec<serde_json::Value> = items
-        .iter()
-        .take(5)
-        .map(|(title, url, source, score)| {
-            serde_json::json!({
-                "title": title,
-                "url": url,
-                "source": source,
-                "score": format!("{:.0}%", score * 100.0),
-            })
-        })
-        .collect();
+    // Noise prefixes to filter out from briefing items
+    const NOISE_PREFIXES: &[&str] = &[
+        "show hn:",
+        "ask hn:",
+        "poll:",
+        "who is hiring",
+        "who wants to be hired",
+        "freelancer? seeking",
+    ];
+
+    // Top 5 items with filtering and source diversity
+    let mut top_items: Vec<serde_json::Value> = Vec::new();
+    let mut diversity_counts: HashMap<String, usize> = HashMap::new();
+
+    for (title, url, source, score) in &items {
+        if top_items.len() >= 5 {
+            break;
+        }
+
+        // Filter out low-score items
+        if *score < 0.15 {
+            continue;
+        }
+
+        // Filter out noise patterns (case-insensitive prefix match)
+        let title_lower = title.to_lowercase();
+        if NOISE_PREFIXES
+            .iter()
+            .any(|prefix| title_lower.starts_with(prefix))
+        {
+            continue;
+        }
+
+        // Source diversity: max 2 items per source_type
+        let count = diversity_counts.entry(source.clone()).or_default();
+        if *count >= 2 {
+            continue;
+        }
+        *count += 1;
+
+        top_items.push(serde_json::json!({
+            "title": title,
+            "url": url,
+            "source": source,
+            "score": format!("{:.0}%", score * 100.0),
+        }));
+    }
 
     // Stack alerts: items that mention detected tech
     let ace_ctx = get_ace_context();
@@ -92,7 +126,9 @@ pub async fn generate_free_briefing() -> Result<serde_json::Value> {
         .iter()
         .filter(|(title, _, _, _)| {
             let t = title.to_lowercase();
-            tech_lower.iter().any(|tech| t.contains(tech))
+            tech_lower
+                .iter()
+                .any(|tech| has_word_boundary_match(&t, tech))
         })
         .take(3)
         .map(|(title, url, source, _)| {

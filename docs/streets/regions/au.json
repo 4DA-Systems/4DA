@@ -1,0 +1,13 @@
+{
+  "country": "AU",
+  "currency": "AUD",
+  "currency_symbol": "$",
+  "electricity_kwh": 0.30,
+  "internet_typical_monthly": 70,
+  "business_registration_cost": 506,
+  "business_entity_type": "Pty Ltd",
+  "tax_note": "Company tax 25%; GST registration required above $75K revenue; ABN required",
+  "payment_processors": ["Stripe", "Square", "Tyro"],
+  "bank_recommendation": "Up Bank (digital), Macquarie (business)",
+  "isp_note": "NBN rollout complete; fibre-to-the-node common, FTTP in newer areas"
+}

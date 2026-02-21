@@ -295,6 +295,19 @@ pub fn start_scheduler<R: Runtime>(app: AppHandle<R>, state: Arc<MonitoringState
             // Smart batching (Improvement E) -- save mini-digest when threshold reached
             crate::monitoring_jobs::maybe_save_mini_digest(&state);
 
+            // Suns: tick all enabled suns
+            {
+                let mut registry = crate::suns_commands::get_sun_registry();
+                let results = registry.tick();
+                for (sun_id, result) in &results {
+                    if result.success {
+                        tracing::debug!(target: "4da::suns", sun = %sun_id, msg = %result.message, "Sun completed");
+                    } else {
+                        warn!(target: "4da::suns", sun = %sun_id, msg = %result.message, "Sun failed");
+                    }
+                }
+            }
+
             // ================================================================
             // Scheduled Analysis (only when monitoring is enabled)
             // ================================================================

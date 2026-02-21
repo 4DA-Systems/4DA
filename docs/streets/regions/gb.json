@@ -1,0 +1,13 @@
+{
+  "country": "GB",
+  "currency": "GBP",
+  "currency_symbol": "£",
+  "electricity_kwh": 0.34,
+  "internet_typical_monthly": 35,
+  "business_registration_cost": 12,
+  "business_entity_type": "Ltd",
+  "tax_note": "Corporation Tax 25%; VAT registration required above £85K revenue",
+  "payment_processors": ["Stripe", "GoCardless", "PayPal"],
+  "bank_recommendation": "Starling (digital-first), Tide (small business)",
+  "isp_note": "Full fibre widely available via BT/Virgin Media"
+}

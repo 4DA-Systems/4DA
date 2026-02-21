@@ -327,7 +327,7 @@ impl Database {
             .query_row("SELECT version FROM schema_version", [], |row| row.get(0))
             .unwrap_or(1);
 
-        const TARGET_VERSION: i64 = 13;
+        const TARGET_VERSION: i64 = 15;
         if current_version < TARGET_VERSION {
             // Drop the conn lock briefly to allow backup (needs filesystem access)
             drop(conn);
@@ -561,6 +561,84 @@ impl Database {
                             );
                             CREATE INDEX IF NOT EXISTS idx_selected_stacks_profile
                                 ON selected_stacks(profile_id);",
+                        )
+                    },
+                )?;
+            }
+
+            // Phase 14 migration: Sovereign Profile
+            if current_version < 14 {
+                Self::run_versioned_migration(&conn, 13, 14, "Phase 14: sovereign profile", |c| {
+                    c.execute_batch(
+                        "CREATE TABLE IF NOT EXISTS sovereign_profile (
+                                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                                category TEXT NOT NULL,
+                                key TEXT NOT NULL,
+                                value TEXT NOT NULL,
+                                raw_output TEXT,
+                                source_command TEXT,
+                                source_lesson TEXT,
+                                confidence REAL DEFAULT 1.0,
+                                created_at TEXT DEFAULT (datetime('now')),
+                                updated_at TEXT DEFAULT (datetime('now')),
+                                UNIQUE(category, key)
+                            );
+                            CREATE INDEX IF NOT EXISTS idx_sovereign_category
+                                ON sovereign_profile(category);
+
+                            CREATE TABLE IF NOT EXISTS command_execution_log (
+                                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                                module_id TEXT NOT NULL,
+                                lesson_idx INTEGER NOT NULL,
+                                command_id TEXT NOT NULL,
+                                command_text TEXT NOT NULL,
+                                success INTEGER NOT NULL,
+                                exit_code INTEGER,
+                                stdout TEXT,
+                                stderr TEXT,
+                                duration_ms INTEGER,
+                                executed_at TEXT DEFAULT (datetime('now'))
+                            );
+                            CREATE INDEX IF NOT EXISTS idx_cmd_log_module
+                                ON command_execution_log(module_id);",
+                    )
+                })?;
+            }
+
+            // Phase 15 migration: Suns Infrastructure
+            if current_version < 15 {
+                Self::run_versioned_migration(
+                    &conn,
+                    14,
+                    15,
+                    "Phase 15: suns infrastructure",
+                    |c| {
+                        c.execute_batch(
+                            "CREATE TABLE IF NOT EXISTS sun_runs (
+                                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                                sun_id TEXT NOT NULL,
+                                module_id TEXT NOT NULL,
+                                success INTEGER NOT NULL,
+                                result_message TEXT,
+                                data_json TEXT,
+                                duration_ms INTEGER,
+                                created_at TEXT DEFAULT (datetime('now'))
+                            );
+                            CREATE INDEX IF NOT EXISTS idx_sun_runs_id
+                                ON sun_runs(sun_id);
+                            CREATE INDEX IF NOT EXISTS idx_sun_runs_created
+                                ON sun_runs(created_at);
+
+                            CREATE TABLE IF NOT EXISTS sun_alerts (
+                                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                                sun_id TEXT NOT NULL,
+                                alert_type TEXT NOT NULL,
+                                message TEXT NOT NULL,
+                                acknowledged INTEGER NOT NULL DEFAULT 0,
+                                created_at TEXT DEFAULT (datetime('now'))
+                            );
+                            CREATE INDEX IF NOT EXISTS idx_sun_alerts_ack
+                                ON sun_alerts(acknowledged);",
                         )
                     },
                 )?;

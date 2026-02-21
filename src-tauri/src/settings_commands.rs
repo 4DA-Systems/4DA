@@ -11,6 +11,7 @@ use crate::llm::RelevanceJudge;
 use crate::settings::{LLMProvider, RerankConfig};
 use tauri::{AppHandle, Emitter};
 
+use crate::error::FourDaError;
 use crate::{embed_texts, get_context_engine, get_settings_manager, invalidate_context_engine};
 
 // ============================================================================
@@ -788,6 +789,36 @@ pub async fn record_interaction(source_item_id: i64, action: String) -> Result<s
     Ok(serde_json::json!({
         "success": true
     }))
+}
+
+/// Get locale configuration
+#[tauri::command]
+pub async fn get_locale() -> Result<serde_json::Value> {
+    let manager = get_settings_manager();
+    let guard = manager.lock();
+    let locale = &guard.get().locale;
+    Ok(serde_json::json!({
+        "country": locale.country,
+        "language": locale.language,
+        "currency": locale.currency
+    }))
+}
+
+/// Update locale configuration
+#[tauri::command]
+pub async fn set_locale(country: String, language: String, currency: String) -> Result<()> {
+    let manager = get_settings_manager();
+    let mut guard = manager.lock();
+    guard.get_mut().locale = crate::settings::LocaleConfig {
+        country,
+        language,
+        currency,
+    };
+    guard
+        .save()
+        .map_err(|e| FourDaError::Config(format!("Failed to save locale: {}", e)))?;
+    info!(target: "4da::settings", "Locale updated");
+    Ok(())
 }
 
 /// Get context engine statistics

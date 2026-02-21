@@ -1,0 +1,13 @@
+{
+  "country": "US",
+  "currency": "USD",
+  "currency_symbol": "$",
+  "electricity_kwh": 0.16,
+  "internet_typical_monthly": 70,
+  "business_registration_cost": 500,
+  "business_entity_type": "LLC",
+  "tax_note": "Consult a local tax professional for your region",
+  "payment_processors": ["Stripe", "PayPal"],
+  "bank_recommendation": "Check local business banking options",
+  "isp_note": "Check local ISP availability"
+}

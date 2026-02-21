@@ -6,6 +6,12 @@ export interface LicenseConfig {
   activated_at: string | null;
 }
 
+export interface LocaleConfig {
+  country: string;
+  language: string;
+  currency: string;
+}
+
 export interface Settings {
   llm: {
     provider: string;

@@ -1,0 +1,13 @@
+{
+  "country": "FR",
+  "currency": "EUR",
+  "currency_symbol": "€",
+  "electricity_kwh": 0.21,
+  "internet_typical_monthly": 30,
+  "business_registration_cost": 0,
+  "business_entity_type": "Micro-entreprise / SASU",
+  "tax_note": "Micro-entreprise: flat rate ~22% social charges; TVA exemption under €36.8K for services",
+  "payment_processors": ["Stripe", "Mollie", "PayPal"],
+  "bank_recommendation": "Qonto (business), Shine (micro-entreprise)",
+  "isp_note": "Fibre FTTH widely available; Free/Orange/SFR competitive pricing"
+}

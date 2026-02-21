@@ -1,0 +1,13 @@
+{
+  "country": "NL",
+  "currency": "EUR",
+  "currency_symbol": "€",
+  "electricity_kwh": 0.28,
+  "internet_typical_monthly": 45,
+  "business_registration_cost": 75,
+  "business_entity_type": "Eenmanszaak (sole prop) / BV",
+  "tax_note": "BTW (VAT) registration required; KOR scheme exempts VAT under €20K revenue; Box 1 progressive tax",
+  "payment_processors": ["Stripe", "Mollie", "Adyen"],
+  "bank_recommendation": "Bunq (digital), Knab (business)",
+  "isp_note": "Near-universal fiber coverage; KPN/Ziggo dominant"
+}

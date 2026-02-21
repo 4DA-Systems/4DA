@@ -1,0 +1,13 @@
+{
+  "country": "BR",
+  "currency": "BRL",
+  "currency_symbol": "R$",
+  "electricity_kwh": 0.15,
+  "internet_typical_monthly": 100,
+  "business_registration_cost": 1500,
+  "business_entity_type": "MEI (Microempreendedor Individual)",
+  "tax_note": "Simples Nacional for small businesses (up to R$4.8M); MEI tax ~R$67/month for income up to R$81K/year",
+  "payment_processors": ["Stripe", "PagSeguro", "Mercado Pago"],
+  "bank_recommendation": "Nubank (digital-first), Inter (business)",
+  "isp_note": "Fiber expanding rapidly; Vivo/Claro/TIM in most urban centers"
+}

@@ -81,7 +81,7 @@ const MODULE_DEFS: &[(&str, &str, &str, bool)] = &[
     ),
 ];
 
-fn module_id_to_filename(id: &str) -> Option<&'static str> {
+pub(crate) fn module_id_to_filename(id: &str) -> Option<&'static str> {
     match id {
         "S" => Some("module-s-sovereign-setup.md"),
         "T" => Some("module-t-technical-moats.md"),
@@ -94,7 +94,7 @@ fn module_id_to_filename(id: &str) -> Option<&'static str> {
     }
 }
 
-fn get_content_dir() -> PathBuf {
+pub(crate) fn get_content_dir() -> PathBuf {
     // Development: docs/streets/ relative to project root (CARGO_MANIFEST_DIR = src-tauri/)
     let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     if let Some(root) = manifest_dir.parent() {
@@ -118,7 +118,7 @@ fn get_content_dir() -> PathBuf {
     PathBuf::from("docs/streets")
 }
 
-fn parse_lessons(content: &str) -> Vec<PlaybookLesson> {
+pub(crate) fn parse_lessons(content: &str) -> Vec<PlaybookLesson> {
     let mut lessons = Vec::new();
     let mut current_title = String::new();
     let mut current_content = String::new();

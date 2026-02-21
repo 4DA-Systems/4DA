@@ -340,4 +340,6 @@ export type AppStore =
   & LicenseSlice
   & ToolkitSlice
   & import('./playbook-slice').PlaybookSlice
-  & import('./command-deck-slice').CommandDeckSlice;
+  & import('./command-deck-slice').CommandDeckSlice
+  & import('./sovereign-profile-slice').SovereignProfileSlice
+  & import('./suns-slice').SunsSlice;

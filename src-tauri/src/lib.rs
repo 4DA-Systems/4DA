@@ -101,6 +101,7 @@ mod source_config;
 mod source_fetching;
 pub mod sources;
 mod tech_radar;
+mod tech_radar_commands;
 mod temporal;
 mod tts;
 mod void_commands;
@@ -112,7 +113,12 @@ pub mod stacks;
 mod command_runner;
 mod git_deck;
 mod playbook_commands;
+mod sovereign_profile;
+mod streets_commands;
+mod streets_localization;
 mod streets_engine;
+mod suns;
+mod suns_commands;
 mod toolkit;
 
 use source_fetching::fill_cache_background;
@@ -228,6 +234,8 @@ pub fn run() {
             settings_commands::activate_license,
             settings_commands::get_trial_status,
             settings_commands::start_trial,
+            settings_commands::get_locale,
+            settings_commands::set_locale,
             settings_commands::get_user_context,
             settings_commands::set_user_role,
             settings_commands::add_tech_stack,
@@ -323,6 +331,9 @@ pub fn run() {
             // Tech Radar
             tech_radar::get_tech_radar,
             tech_radar::get_radar_entry,
+            tech_radar_commands::get_radar_entry_detail,
+            tech_radar_commands::get_radar_snapshots,
+            tech_radar_commands::get_radar_at_snapshot,
             // Agent Memory
             agent_memory::store_agent_memory,
             agent_memory::recall_agent_memories,
@@ -362,6 +373,26 @@ pub fn run() {
             playbook_commands::get_playbook_content,
             playbook_commands::get_playbook_progress,
             playbook_commands::mark_lesson_complete,
+            // STREETS Command Execution
+            streets_commands::parse_lesson_commands,
+            streets_commands::execute_streets_command,
+            streets_commands::execute_lesson_commands,
+            // Sovereign Profile
+            sovereign_profile::get_sovereign_profile,
+            sovereign_profile::get_sovereign_profile_completeness,
+            sovereign_profile::generate_sovereign_stack_document,
+            sovereign_profile::save_sovereign_fact,
+            sovereign_profile::get_execution_log,
+            // STREETS Localization
+            streets_localization::get_regional_data,
+            streets_localization::format_currency,
+            streets_localization::calculate_electricity_cost,
+            // Suns
+            suns_commands::get_sun_statuses,
+            suns_commands::toggle_sun,
+            suns_commands::get_sun_alerts,
+            suns_commands::acknowledge_sun_alert,
+            suns_commands::trigger_sun_manually,
             // Diagnostics
             commands::get_diagnostics
         ])

@@ -51,6 +51,7 @@ const EXCEPTIONS = {
   'src-tauri/src/bin/cli.rs':              'CLI binary — command parsing + output formatting',
   'src-tauri/src/delegation.rs':           'Delegation scoring — multi-axis trust assessment',
   'src-tauri/src/stacks/profiles.rs':      'Stack Intelligence — 8 technology profile definitions',
+  'src-tauri/src/scoring/benchmark.rs':    'Scoring benchmarks — comprehensive test assertions',
 
   // TypeScript — complex UI and type definitions
   'src/components/onboarding/QuickSetupStep.tsx':    'Onboarding wizard — multi-step form',

@@ -1,0 +1,13 @@
+{
+  "country": "JP",
+  "currency": "JPY",
+  "currency_symbol": "¥",
+  "electricity_kwh": 0.27,
+  "internet_typical_monthly": 5000,
+  "business_registration_cost": 60000,
+  "business_entity_type": "合同会社 (GK) / 株式会社 (KK)",
+  "tax_note": "Consumption tax 10%; corporate tax ~23%; simplified filing for small businesses",
+  "payment_processors": ["Stripe", "PAY.JP", "Square"],
+  "bank_recommendation": "PayPay Bank (digital), Shinsei Bank (English-friendly)",
+  "isp_note": "NTT/KDDI fiber widely available; 1Gbps standard in urban areas"
+}

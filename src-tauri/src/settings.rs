@@ -354,6 +354,73 @@ fn default_source_resilience() -> std::collections::HashMap<String, SourceResili
     std::collections::HashMap::new()
 }
 
+/// Locale configuration for regional content
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LocaleConfig {
+    /// ISO 3166-1 alpha-2 country code (e.g., "US", "GB", "DE")
+    pub country: String,
+    /// BCP 47 language tag (e.g., "en", "de", "fr")
+    pub language: String,
+    /// ISO 4217 currency code (e.g., "USD", "EUR", "GBP")
+    pub currency: String,
+}
+
+impl Default for LocaleConfig {
+    fn default() -> Self {
+        Self {
+            country: "US".to_string(),
+            language: "en".to_string(),
+            currency: "USD".to_string(),
+        }
+    }
+}
+
+/// Detect system locale from OS environment
+pub fn detect_system_locale() -> LocaleConfig {
+    // Try LANG/LC_ALL env vars on Unix, or system locale on Windows
+    let lang = std::env::var("LANG")
+        .or_else(|_| std::env::var("LC_ALL"))
+        .unwrap_or_default();
+
+    // Parse "en_US.UTF-8" -> country=US, language=en
+    if let Some((language, rest)) = lang.split_once('_') {
+        let country = rest.split('.').next().unwrap_or("US").to_uppercase();
+        let language = language.to_lowercase();
+        let currency = country_to_currency(&country);
+        return LocaleConfig {
+            country,
+            language,
+            currency,
+        };
+    }
+
+    LocaleConfig::default()
+}
+
+fn country_to_currency(country: &str) -> String {
+    match country {
+        "US" => "USD",
+        "GB" => "GBP",
+        "DE" | "FR" | "NL" | "IT" | "ES" | "AT" | "BE" | "FI" | "IE" | "PT" => "EUR",
+        "CA" => "CAD",
+        "AU" => "AUD",
+        "JP" => "JPY",
+        "IN" => "INR",
+        "BR" => "BRL",
+        "CH" => "CHF",
+        "SE" => "SEK",
+        "NO" => "NOK",
+        "DK" => "DKK",
+        "NZ" => "NZD",
+        "KR" => "KRW",
+        "CN" => "CNY",
+        "SG" => "SGD",
+        "MX" => "MXN",
+        _ => "USD",
+    }
+    .to_string()
+}
+
 /// Main settings structure
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Settings {
@@ -423,6 +490,9 @@ pub struct Settings {
     /// Per-source rate budget configuration
     #[serde(default = "default_rate_budgets")]
     pub rate_budgets: std::collections::HashMap<String, RateBudgetConfig>,
+    /// Locale configuration for regional content
+    #[serde(default)]
+    pub locale: LocaleConfig,
 }
 
 impl Settings {
@@ -496,6 +566,7 @@ impl Default for Settings {
             license: LicenseConfig::default(),
             source_resilience: default_source_resilience(),
             rate_budgets: default_rate_budgets(),
+            locale: LocaleConfig::default(),
         }
     }
 }

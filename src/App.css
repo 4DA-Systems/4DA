@@ -138,3 +138,13 @@ body {
 .animate-slide-in {
   animation: slide-in 0.2s ease-out;
 }
+
+/* Tech Radar glow animation for movers (up/new entries) */
+@keyframes radar-glow {
+  0%, 100% { filter: drop-shadow(0 0 2px #22C55E); }
+  50% { filter: drop-shadow(0 0 6px #22C55E); }
+}
+
+.radar-glow {
+  animation: radar-glow 2s ease-in-out infinite;
+}

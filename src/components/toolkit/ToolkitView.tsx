@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect, useMemo } from 'react';
+import { useShallow } from 'zustand/react/shallow';
 import { useAppStore } from '../../store';
 import { useLicense } from '../../hooks/use-license';
 import { TOOLS, getToolById } from './tool-registry';
@@ -19,11 +20,15 @@ const CATEGORY_LABELS: Record<ToolCategory, string> = {
 export function ToolkitView() {
   const [activeTool, setActiveTool] = useState<string | null>(null);
   const [search, setSearch] = useState('');
-  const { pinnedTools, addRecentTool, togglePinnedTool } = useAppStore((s) => ({
-    pinnedTools: s.pinnedTools,
-    addRecentTool: s.addRecentTool,
-    togglePinnedTool: s.togglePinnedTool,
-  }));
+  // Data selectors (may change, use useShallow)
+  const { pinnedTools } = useAppStore(
+    useShallow((s) => ({
+      pinnedTools: s.pinnedTools,
+    })),
+  );
+  // Action selectors (stable references, no need for useShallow)
+  const addRecentTool = useAppStore((s) => s.addRecentTool);
+  const togglePinnedTool = useAppStore((s) => s.togglePinnedTool);
   const { isPro } = useLicense();
 
   const openTool = useCallback((toolId: string) => {
@@ -69,17 +74,25 @@ export function ToolkitView() {
     return { pinned, categories };
   }, [filtered, pinnedTools]);
 
+  // Derive active tool descriptor (never setState during render)
+  const activeToolDescriptor = activeTool ? getToolById(activeTool) : null;
+
+  // Reset invalid tool ID outside of render
+  useEffect(() => {
+    if (activeTool && !activeToolDescriptor) {
+      setActiveTool(null);
+    }
+  }, [activeTool, activeToolDescriptor]);
+
   // Render active tool
-  if (activeTool) {
-    const tool = getToolById(activeTool);
-    if (!tool) { setActiveTool(null); return null; }
-    const ToolComponent = tool.component;
+  if (activeTool && activeToolDescriptor) {
+    const ToolComponent = activeToolDescriptor.component;
     const content = (
-      <ToolkitShell toolName={tool.name} onBack={closeTool}>
+      <ToolkitShell toolName={activeToolDescriptor.name} onBack={closeTool}>
         <ToolComponent />
       </ToolkitShell>
     );
-    return tool.pro && !isPro ? <ProGate feature={tool.name}>{content}</ProGate> : content;
+    return activeToolDescriptor.pro && !isPro ? <ProGate feature={activeToolDescriptor.name}>{content}</ProGate> : content;
   }
 
   // Render tool grid

@@ -1,0 +1,13 @@
+{
+  "country": "CA",
+  "currency": "CAD",
+  "currency_symbol": "$",
+  "electricity_kwh": 0.13,
+  "internet_typical_monthly": 80,
+  "business_registration_cost": 200,
+  "business_entity_type": "Sole Proprietorship / Corporation",
+  "tax_note": "Federal + Provincial tax; GST/HST registration required above $30K revenue",
+  "payment_processors": ["Stripe", "Square", "Moneris"],
+  "bank_recommendation": "Wealthsimple Cash (digital), RBC (business)",
+  "isp_note": "Rogers/Bell fibre in urban areas; limited rural options"
+}

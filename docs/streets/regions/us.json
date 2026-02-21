@@ -1,0 +1,13 @@
+{
+  "country": "US",
+  "currency": "USD",
+  "currency_symbol": "$",
+  "electricity_kwh": 0.16,
+  "internet_typical_monthly": 70,
+  "business_registration_cost": 500,
+  "business_entity_type": "LLC",
+  "tax_note": "State-dependent tax rates; consider S-Corp election above $40K profit",
+  "payment_processors": ["Stripe", "Square", "PayPal"],
+  "bank_recommendation": "Mercury (startup-friendly), Relay (small business)",
+  "isp_note": "Fiber available in major metros; Starlink for rural areas"
+}

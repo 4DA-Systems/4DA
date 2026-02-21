@@ -1,0 +1,13 @@
+{
+  "country": "DE",
+  "currency": "EUR",
+  "currency_symbol": "€",
+  "electricity_kwh": 0.35,
+  "internet_typical_monthly": 40,
+  "business_registration_cost": 800,
+  "business_entity_type": "UG (haftungsbeschränkt)",
+  "tax_note": "Gewerbesteuer + Körperschaftsteuer; Kleinunternehmerregelung under €22K",
+  "payment_processors": ["Stripe", "Mollie", "PayPal"],
+  "bank_recommendation": "N26 (digital), Qonto (business)",
+  "isp_note": "Deutsche Glasfaser expanding; DSL still common in rural areas"
+}

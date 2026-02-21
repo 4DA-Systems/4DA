@@ -1,6 +1,8 @@
 #![allow(clippy::manual_range_contains)]
 mod ace_context;
 mod affinity;
+#[cfg(test)]
+mod benchmark;
 mod calibration;
 mod dedup;
 mod dependencies;
@@ -25,7 +27,7 @@ pub(crate) use explanation::{
 };
 pub(crate) use gate::apply_confirmation_gate;
 pub(crate) use semantic::{compute_semantic_ace_boost, get_topic_embeddings};
-pub(crate) use utils::topic_overlaps;
+pub(crate) use utils::{has_word_boundary_match, topic_overlaps};
 
 use std::collections::HashMap;
 use tracing::info;

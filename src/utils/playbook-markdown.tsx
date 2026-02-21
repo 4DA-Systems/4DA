@@ -1,9 +1,13 @@
 import type { ReactNode } from 'react';
+import { StreetsCodeBlock } from '../components/playbook/StreetsCodeBlock';
 
 /**
  * Lightweight inline markdown renderer for Playbook content.
  * No external dependencies. Handles: headings, bold, code, code blocks,
  * lists, blockquotes, tables, links, and paragraph breaks.
+ *
+ * When config.moduleId and config.lessonIdx are provided, bash/shell/powershell
+ * code blocks render as interactive StreetsCodeBlock components with run buttons.
  */
 
 function processInline(text: string): ReactNode[] {
@@ -68,7 +72,7 @@ function processInlineSimple(text: string, baseKey: number): ReactNode[] {
   return parts;
 }
 
-export function renderMarkdown(content: string): ReactNode {
+export function renderMarkdown(content: string, config?: { moduleId?: string; lessonIdx?: number }): ReactNode {
   const lines = content.split('\n');
   const elements: ReactNode[] = [];
   let i = 0;
@@ -87,6 +91,24 @@ export function renderMarkdown(content: string): ReactNode {
         i++;
       }
       i++; // skip closing ```
+
+      // Interactive code block for executable languages when config is provided
+      if (config?.moduleId && config?.lessonIdx !== undefined &&
+          ['bash', 'shell', 'powershell', 'sh'].includes(lang.toLowerCase())) {
+        elements.push(
+          <StreetsCodeBlock
+            key={`code-${key++}`}
+            code={codeLines.join('\n')}
+            language={lang}
+            moduleId={config.moduleId}
+            lessonIdx={config.lessonIdx}
+            blockIndex={key}
+          />,
+        );
+        continue;
+      }
+
+      // Default: static code block
       elements.push(
         <pre key={`pre-${key++}`} className="bg-[#0A0A0A] border border-[#2A2A2A] rounded-lg p-4 overflow-x-auto my-3">
           <code className="text-xs font-mono text-[#A0A0A0] leading-relaxed">

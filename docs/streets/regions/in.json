@@ -1,0 +1,13 @@
+{
+  "country": "IN",
+  "currency": "INR",
+  "currency_symbol": "₹",
+  "electricity_kwh": 0.08,
+  "internet_typical_monthly": 500,
+  "business_registration_cost": 7000,
+  "business_entity_type": "Private Limited / LLP",
+  "tax_note": "GST registration required above ₹20L turnover; presumptive taxation for small businesses under ₹50L",
+  "payment_processors": ["Razorpay", "Cashfree", "PayU"],
+  "bank_recommendation": "Jupiter (digital), HDFC (business current account)",
+  "isp_note": "Jio Fiber / Airtel Xstream widely available; 4G fallback everywhere"
+}
