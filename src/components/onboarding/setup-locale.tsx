@@ -131,6 +131,7 @@ export function SetupLocale({ onLocaleChange }: SetupLocaleProps) {
         <select
           value={country}
           onChange={(e) => handleCountryChange(e.target.value)}
+          aria-label="Select country"
           className="w-full bg-[#0A0A0A] border border-[#2A2A2A] rounded-lg px-3 py-2 text-white text-sm focus:border-orange-500 focus:outline-none"
         >
           {COUNTRIES.map((c) => (
@@ -148,6 +149,7 @@ export function SetupLocale({ onLocaleChange }: SetupLocaleProps) {
           <select
             value={language}
             onChange={(e) => handleLanguageChange(e.target.value)}
+            aria-label="Select language"
             className="w-full bg-[#0A0A0A] border border-[#2A2A2A] rounded-lg px-3 py-2 text-white text-sm focus:border-orange-500 focus:outline-none"
           >
             {LANGUAGES.map((l) => (
@@ -162,6 +164,7 @@ export function SetupLocale({ onLocaleChange }: SetupLocaleProps) {
           <select
             value={currency}
             onChange={(e) => handleCurrencyChange(e.target.value)}
+            aria-label="Select currency"
             className="w-full bg-[#0A0A0A] border border-[#2A2A2A] rounded-lg px-3 py-2 text-white text-sm focus:border-orange-500 focus:outline-none"
           >
             {CURRENCIES.map((c) => (

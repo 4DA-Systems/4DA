@@ -300,6 +300,7 @@ export function SplashScreen({ onComplete, minimumDisplayTime = 1500 }: SplashSc
           e.currentTarget.style.color = 'var(--color-text-muted)';
           e.currentTarget.style.borderColor = 'var(--color-border)';
         }}
+        aria-label="Refresh if stuck"
         title="Refresh if stuck"
       >
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">

@@ -49,6 +49,7 @@ export function CompleteStep({ isAnimating, onComplete }: CompleteStepProps) {
 
       <button
         onClick={onComplete}
+        aria-label="Start using 4DA"
         className="px-10 py-3 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-all font-medium hover:scale-105 active:scale-95"
       >
         Start Using 4DA &rarr;
