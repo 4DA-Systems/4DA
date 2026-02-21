@@ -42,15 +42,16 @@ export function VoidHeartbeat({ signal, size = 200 }: VoidHeartbeatProps) {
   );
 
   const glowRadius = useMemo(() => {
-    const base = 8;
+    const base = 16;
+    const heatBoost = signal.heat * 10;
     const burstBoost = signal.burst * 16;
-    return base + burstBoost;
-  }, [signal.burst]);
+    return base + heatBoost + burstBoost;
+  }, [signal.burst, signal.heat]);
 
   const opacity = useMemo(() => {
-    if (signal.item_count === 0 && signal.staleness > 0.9) return 0.15; // Dormant
-    if (signal.staleness > 0.8) return 0.3; // Stale
-    return 0.5 + signal.heat * 0.5; // Active range: 0.5 - 1.0
+    if (signal.item_count === 0 && signal.staleness > 0.9) return 0.85; // Dormant — bright ember
+    if (signal.staleness > 0.8) return 0.9; // Stale — still strong
+    return 0.9 + signal.heat * 0.1; // Active range: 0.9 - 1.0
   }, [signal.item_count, signal.staleness, signal.heat]);
 
   // Attempt WebGL2 initialization
@@ -334,15 +335,15 @@ void main() {
   dist += noise + morph_noise;
 
   // Breathing: pulse the radius
-  float breathe = sin(t * 3.14159) * 0.05 + 0.05;
-  float radius = 0.3 + breathe;
+  float breathe = sin(t * 3.14159) * 0.06 + 0.06;
+  float radius = 0.35 + breathe;
 
-  // Core glow
-  float glow = smoothstep(radius + 0.3, radius - 0.1, dist);
+  // Core glow — wider falloff for richer ember presence
+  float glow = smoothstep(radius + 0.4, radius - 0.15, dist);
 
-  // Color: idle blue -> active gold, error red
-  vec3 idle_color = vec3(0.102, 0.102, 0.243);   // #1a1a3e
-  vec3 active_color = vec3(0.831, 0.686, 0.216);  // #D4AF37
+  // Color: idle bright ember -> active blazing gold, error red
+  vec3 idle_color = vec3(0.55, 0.28, 0.06);       // Bright amber ember
+  vec3 active_color = vec3(1.0, 0.82, 0.30);      // Blazing gold
   vec3 error_color = vec3(0.937, 0.267, 0.267);   // #EF4444
 
   vec3 color = mix(idle_color, active_color, u_heat);
@@ -365,8 +366,8 @@ void main() {
     color = mix(color, warm_color, u_signal_color_shift * u_signal_intensity);
   }
 
-  // Stale: desaturate and dim
-  float stale_dim = 1.0 - u_staleness * 0.7;
+  // Stale: barely dim — ember stays bright
+  float stale_dim = 1.0 - u_staleness * 0.15;
   color *= stale_dim;
 
   // Burst: additive flash

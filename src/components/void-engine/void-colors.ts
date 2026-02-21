@@ -3,14 +3,14 @@
 
 // Core colors for the heartbeat glow
 export const VOID_COLORS = {
-  // Idle: cool blue-black, nearly invisible
-  idle: { r: 26, g: 26, b: 62 },        // #1a1a3e
-  // Active: warm gold (from design system accent)
-  active: { r: 212, g: 175, b: 55 },     // #D4AF37
+  // Idle: bright amber ember (always clearly visible)
+  idle: { r: 140, g: 71, b: 15 },        // #8C470F bright amber
+  // Active: blazing gold
+  active: { r: 255, g: 209, b: 77 },     // #FFD14D blazing gold
   // Error: brief red flicker
   error: { r: 239, g: 68, b: 68 },       // #EF4444
-  // Stale: dim gray
-  stale: { r: 42, g: 42, b: 42 },        // #2A2A2A
+  // Stale: warm amber (still bright, not dead)
+  stale: { r: 115, g: 60, b: 15 },       // #733C0F warm amber
   // Cool: deep blue (learning signals)
   cool: { r: 26, g: 58, b: 110 },        // #1a3a6e
   // Alert: red (critical signals)
