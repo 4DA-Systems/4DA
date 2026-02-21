@@ -8,12 +8,12 @@ import { SunsDashboard } from './playbook/SunsDashboard';
 // Module metadata (static, mirrors backend MODULE_DEFS)
 const MODULES = [
   { id: 'S', label: 'S', title: 'Sovereign Setup', free: true },
-  { id: 'T', label: 'T', title: 'Technical Moats', free: false },
-  { id: 'R', label: 'R', title: 'Revenue Engines', free: false },
-  { id: 'E1', label: 'E1', title: 'Execution Playbook', free: false },
-  { id: 'E2', label: 'E2', title: 'Evolving Edge', free: false },
-  { id: 'T2', label: 'T2', title: 'Tactical Automation', free: false },
-  { id: 'S2', label: 'S2', title: 'Stacking Streams', free: false },
+  { id: 'T', label: 'T', title: 'Technical Moats', free: true },
+  { id: 'R', label: 'R', title: 'Revenue Engines', free: true },
+  { id: 'E1', label: 'E1', title: 'Execution Playbook', free: true },
+  { id: 'E2', label: 'E2', title: 'Evolving Edge', free: true },
+  { id: 'T2', label: 'T2', title: 'Tactical Automation', free: true },
+  { id: 'S2', label: 'S2', title: 'Stacking Streams', free: true },
 ];
 
 function LockIcon() {
@@ -168,10 +168,10 @@ export function PlaybookView() {
           );
         })}
 
-        {/* Free badge */}
+        {/* All modules free */}
         <div className="mt-4 pt-4 border-t border-[#2A2A2A]">
           <p className="text-[10px] text-[#666] text-center">
-            Module S is free. Unlock all with <span className="text-[#D4AF37]">Pro</span>.
+            All 7 modules. Free forever.
           </p>
         </div>
       </aside>

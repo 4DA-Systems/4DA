@@ -284,7 +284,7 @@ pnpm validate:all           # Full validation (lint + types + tests + build)
 ## Pricing
 
 **Free** — $0 forever. No credit card. No account. No expiration.
-- All 11 sources, full 5-axis scoring engine, confirmation gate, behavior learning, MCP server (27 tools), CLI
+- All 11 sources, full 5-axis scoring engine, confirmation gate, behavior learning, STREETS Playbook (all 7 modules), MCP server (27 tools), CLI
 
 **Pro** — $12/month or $99/year. BYOK — you bring your own API key.
 - Everything in Free, plus: AI daily briefings, Developer DNA profiling, Score Autopsy, intelligence panels, signal chain analysis, knowledge gap detection
