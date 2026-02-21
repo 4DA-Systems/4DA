@@ -128,7 +128,7 @@ export function SetupAIProvider({
       )}
 
       <p className="text-xs text-gray-500">
-        No AI? 4DA still works with keyword-only matching. Add keys later in Settings.
+        Keyword matching works out of the box. AI embeddings add deeper semantic matching.
       </p>
     </div>
   );

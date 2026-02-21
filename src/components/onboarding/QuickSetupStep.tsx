@@ -186,9 +186,14 @@ export function QuickSetupStep({ isAnimating, onComplete, onBack }: QuickSetupSt
           .filter(s => !s.already_declared)
           .map(s => s.topic)
           .slice(0, 12);
-        setSuggestions(topics.length > 0 ? topics : fallbackSuggestions);
+        const finalSuggestions = topics.length > 0 ? topics : fallbackSuggestions;
+        setSuggestions(finalSuggestions);
+        // Auto-populate top suggestions as default interests (user removes what doesn't fit)
+        setInterests(prev => prev.length === 0 ? finalSuggestions.slice(0, 5) : prev);
       } catch {
         setSuggestions(fallbackSuggestions);
+        // Ensure first-run always has some interests for scoring
+        setInterests(prev => prev.length === 0 ? fallbackSuggestions.slice(0, 5) : prev);
       }
     })();
     return () => { cancelled = true; };
@@ -228,16 +233,27 @@ export function QuickSetupStep({ isAnimating, onComplete, onBack }: QuickSetupSt
   const handleContinue = async () => {
     setError(null);
     try {
-      // Save provider config
+      // Save provider config — guard against saving 'ollama' when it's not running
       if (provider === 'ollama') {
-        const ollamaModel = ollamaStatus?.models?.find(m => !m.startsWith('nomic-embed-text')) || 'llama3.2';
-        await invoke('set_llm_provider', {
-          provider: 'ollama',
-          apiKey: '',
-          model: ollamaModel,
-          baseUrl: ollamaStatus?.base_url || 'http://localhost:11434',
-          openaiApiKey: null,
-        });
+        if (ollamaStatus?.running) {
+          const ollamaModel = ollamaStatus.models?.find(m => !m.startsWith('nomic-embed-text')) || 'llama3.2';
+          await invoke('set_llm_provider', {
+            provider: 'ollama',
+            apiKey: '',
+            model: ollamaModel,
+            baseUrl: ollamaStatus.base_url || 'http://localhost:11434',
+            openaiApiKey: null,
+          });
+        } else {
+          // Ollama selected but not running — save as 'none' (keyword-only mode)
+          await invoke('set_llm_provider', {
+            provider: 'none',
+            apiKey: '',
+            model: '',
+            baseUrl: null,
+            openaiApiKey: null,
+          });
+        }
       } else {
         const model = provider === 'anthropic' ? 'claude-3-haiku-20240307' : 'gpt-4o-mini';
         await invoke('set_llm_provider', {
@@ -254,8 +270,13 @@ export function QuickSetupStep({ isAnimating, onComplete, onBack }: QuickSetupSt
         await invoke('set_user_role', { role });
       }
 
-      // Save interests
-      for (const interest of interests) {
+      // Save interests (fallback to detected tech or defaults if empty)
+      const interestsToSave = interests.length > 0
+        ? interests
+        : detectedTech.length > 0
+          ? detectedTech.slice(0, 5)
+          : fallbackSuggestions.slice(0, 3);
+      for (const interest of interestsToSave) {
         await invoke('add_interest', { topic: interest });
       }
 
@@ -384,12 +405,12 @@ export function QuickSetupStep({ isAnimating, onComplete, onBack }: QuickSetupSt
             onToggle={() => setStacksOpen(!stacksOpen)}
             done={selectedStacks.length > 0}
           />
-          {stacksOpen && (
+          <div style={{ display: stacksOpen ? undefined : 'none' }}>
             <SetupStack
               selectedStacks={selectedStacks}
               onSelectionChange={setSelectedStacks}
             />
-          )}
+          </div>
         </div>
 
         {/* Section 4: Your Interests */}
@@ -401,7 +422,7 @@ export function QuickSetupStep({ isAnimating, onComplete, onBack }: QuickSetupSt
             onToggle={() => setInterestsOpen(!interestsOpen)}
             done={interests.length > 0}
           />
-          {interestsOpen && (
+          <div style={{ display: interestsOpen ? undefined : 'none' }}>
             <SetupInterests
               roles={roles}
               role={role}
@@ -413,7 +434,7 @@ export function QuickSetupStep({ isAnimating, onComplete, onBack }: QuickSetupSt
               onAddInterest={addInterest}
               onToggleInterest={toggleInterest}
             />
-          )}
+          </div>
         </div>
       </div>
 
@@ -425,13 +446,27 @@ export function QuickSetupStep({ isAnimating, onComplete, onBack }: QuickSetupSt
         >
           &larr; Back
         </button>
-        <button
-          onClick={handleContinue}
-          disabled={pullingModels}
-          className="px-8 py-3 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          {pullingModels ? 'Installing models...' : 'Enter 4DA'}
-        </button>
+        <div className="flex flex-col items-end gap-1.5">
+          <button
+            onClick={handleContinue}
+            className="px-8 py-3 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-colors font-medium"
+          >
+            Enter 4DA
+          </button>
+          {pullingModels && (
+            <button
+              onClick={handleContinue}
+              className="text-xs text-gray-500 hover:text-gray-300 transition-colors"
+            >
+              Skip download &mdash; use keyword matching for now
+            </button>
+          )}
+          {!pullingModels && (
+            <p className="text-[11px] text-gray-600">
+              All sections optional &mdash; configure anytime in Settings
+            </p>
+          )}
+        </div>
       </div>
     </div>
   );

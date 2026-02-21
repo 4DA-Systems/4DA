@@ -53,7 +53,7 @@ export function WelcomeStep({ isAnimating, onNext }: WelcomeStepProps) {
       >
         Get Started &rarr;
       </button>
-      <p className="text-xs text-gray-600 mt-4">Takes about 2 minutes to set up</p>
+      <p className="text-xs text-gray-600 mt-4">Quick setup — most steps are automatic</p>
     </div>
   );
 }

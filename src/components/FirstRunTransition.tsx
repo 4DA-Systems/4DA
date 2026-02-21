@@ -180,8 +180,8 @@ export function FirstRunTransition({ onComplete }: FirstRunTransitionProps) {
 
           {/* Keyword-only note */}
           {embeddingMode === 'keyword-only' && (
-            <div className="mb-6 px-4 py-2.5 bg-amber-500/10 border border-amber-500/20 rounded-lg text-xs text-amber-400 max-w-sm mx-auto">
-              Running in keyword-only mode. Add an Ollama model or API key for semantic matching.
+            <div className="mb-6 px-4 py-2.5 bg-bg-secondary border border-border rounded-lg text-xs text-gray-400 max-w-sm mx-auto">
+              Using keyword matching. Add an AI provider in Settings for deeper semantic results.
             </div>
           )}
 
@@ -264,8 +264,8 @@ export function FirstRunTransition({ onComplete }: FirstRunTransitionProps) {
 
           {/* Analyzing phase — keyword-only note */}
           {phase === 'analyzing' && embeddingMode === 'keyword-only' && (
-            <p className="text-xs text-amber-400 mt-4">
-              Using keyword matching (no embedding model available)
+            <p className="text-xs text-gray-500 mt-4">
+              Matching by keywords and dependencies
             </p>
           )}
         </div>
