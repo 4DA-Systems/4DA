@@ -219,26 +219,42 @@ impl QueryExecutor {
             "#,
         );
 
-        // Add file type filter
+        // Add file type filter (parameterized for defense-in-depth)
+        let mut params: Vec<Box<dyn rusqlite::types::ToSql>> =
+            vec![Box::new(search_pattern.clone())];
+
         if !query.file_types.is_empty() {
-            let types: Vec<String> = query
+            let placeholders: Vec<String> = query
                 .file_types
                 .iter()
-                .map(|t| format!("'{}'", t))
+                .enumerate()
+                .map(|(i, _)| format!("?{}", i + 2)) // ?2, ?3, ...
                 .collect();
-            sql.push_str(&format!(" AND d.file_type IN ({})", types.join(",")));
+            sql.push_str(&format!(" AND d.file_type IN ({})", placeholders.join(",")));
+            for ft in &query.file_types {
+                params.push(Box::new(ft.clone()));
+            }
         }
 
-        // Add time filter
+        // Add time filter (parameterized)
         if let Some(ref tr) = query.time_range {
-            sql.push_str(&format!(" AND {}", tr.to_sql_clause("d.indexed_at")));
+            let next = params.len() + 1;
+            sql.push_str(&format!(
+                " AND d.indexed_at >= ?{} AND d.indexed_at <= ?{}",
+                next,
+                next + 1
+            ));
+            params.push(Box::new(tr.start.format("%Y-%m-%d %H:%M:%S").to_string()));
+            params.push(Box::new(tr.end.format("%Y-%m-%d %H:%M:%S").to_string()));
         }
 
         sql.push_str(" ORDER BY d.indexed_at DESC LIMIT 50");
 
+        let param_refs: Vec<&dyn rusqlite::types::ToSql> =
+            params.iter().map(|p| p.as_ref()).collect();
         let mut stmt = conn.prepare(&sql).map_err(|e| e.to_string())?;
         let rows = stmt
-            .query_map([&search_pattern], |row| {
+            .query_map(param_refs.as_slice(), |row| {
                 Ok((
                     row.get::<_, i64>(0)?,
                     row.get::<_, String>(1)?,

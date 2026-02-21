@@ -86,12 +86,12 @@ export function BriefingView() {
     return lastBackgroundResultsAt.getTime() > briefing.lastGenerated.getTime();
   }, [briefing.lastGenerated, lastBackgroundResultsAt]);
 
-  // Auto-generate free briefing for non-Pro users when analysis completes
+  // Auto-generate free briefing for all users when analysis completes
   useEffect(() => {
-    if (!isPro && analysisComplete && results.length > 0 && !freeBriefing && !freeBriefingLoading) {
+    if (analysisComplete && results.length > 0 && !freeBriefing && !freeBriefingLoading) {
       generateFreeBriefing();
     }
-  }, [isPro, analysisComplete, results.length, freeBriefing, freeBriefingLoading, generateFreeBriefing]);
+  }, [analysisComplete, results.length, freeBriefing, freeBriefingLoading, generateFreeBriefing]);
 
   const sections = useMemo(() => {
     if (!briefing.content) return [];
