@@ -77,18 +77,22 @@ export const TOOL_COMPLEXITY: Record<string, TaskComplexity> = {
 
 import { readFileSync, existsSync, statSync } from "fs";
 import { join, dirname } from "path";
+import { fileURLToPath } from "node:url";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 /**
  * Find settings.json by looking in common locations
  */
 function findSettingsFile(): string | null {
-  // Check environment variable first
+  // 1. Environment variable (highest priority)
   const envPath = process.env.FOURDA_SETTINGS_PATH;
   if (envPath && existsSync(envPath)) {
     return envPath;
   }
 
-  // Check relative to database path
+  // 2. Sibling to database path
   const dbPath = process.env.FOURDA_DB_PATH;
   if (dbPath) {
     const settingsPath = join(dirname(dbPath), "settings.json");
@@ -97,16 +101,16 @@ function findSettingsFile(): string | null {
     }
   }
 
-  // Check common locations
-  const commonPaths = [
-    "/mnt/d/4DA/data/settings.json",
-    join(process.cwd(), "data/settings.json"),
-    join(process.cwd(), "../data/settings.json"),
+  // 3. Common relative locations (portable — no hardcoded dev paths)
+  const searchPaths = [
+    join(process.cwd(), "data", "settings.json"),           // CWD/data/
+    join(__dirname, "..", "..", "data", "settings.json"),    // Project root (mcp-4da-server/../data/)
+    join(process.cwd(), "..", "data", "settings.json"),     // Parent/data/
   ];
 
-  for (const path of commonPaths) {
-    if (existsSync(path)) {
-      return path;
+  for (const candidate of searchPaths) {
+    if (existsSync(candidate)) {
+      return candidate;
     }
   }
 
