@@ -7,23 +7,14 @@ import { SunsDashboard } from './playbook/SunsDashboard';
 
 // Module metadata (static, mirrors backend MODULE_DEFS)
 const MODULES = [
-  { id: 'S', label: 'S', title: 'Sovereign Setup', free: true },
-  { id: 'T', label: 'T', title: 'Technical Moats', free: true },
-  { id: 'R', label: 'R', title: 'Revenue Engines', free: true },
-  { id: 'E1', label: 'E1', title: 'Execution Playbook', free: true },
-  { id: 'E2', label: 'E2', title: 'Evolving Edge', free: true },
-  { id: 'T2', label: 'T2', title: 'Tactical Automation', free: true },
-  { id: 'S2', label: 'S2', title: 'Stacking Streams', free: true },
+  { id: 'S', label: 'S', title: 'Sovereign Setup' },
+  { id: 'T', label: 'T', title: 'Technical Moats' },
+  { id: 'R', label: 'R', title: 'Revenue Engines' },
+  { id: 'E1', label: 'E1', title: 'Execution Playbook' },
+  { id: 'E2', label: 'E2', title: 'Evolving Edge' },
+  { id: 'T2', label: 'T2', title: 'Tactical Automation' },
+  { id: 'S2', label: 'S2', title: 'Stacking Streams' },
 ];
-
-function LockIcon() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-[#666]">
-      <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
-      <path d="M7 11V7a5 5 0 0 1 10 0v4" />
-    </svg>
-  );
-}
 
 function CheckIcon() {
   return (
@@ -80,7 +71,6 @@ export function PlaybookView() {
   const loadContent = useAppStore((s) => s.loadPlaybookContent);
   const loadProgress = useAppStore((s) => s.loadPlaybookProgress);
   const markComplete = useAppStore((s) => s.markLessonComplete);
-  const isPro = useAppStore((s) => s.isPro);
 
   // Load modules and progress on mount
   useEffect(() => {
@@ -89,11 +79,10 @@ export function PlaybookView() {
   }, [loadModules, loadProgress]);
 
   const handleModuleClick = useCallback(
-    (moduleId: string, isFree: boolean) => {
-      if (!isFree && !isPro()) return;
+    (moduleId: string) => {
       loadContent(moduleId);
     },
-    [loadContent, isPro],
+    [loadContent],
   );
 
   const handleLessonToggle = useCallback(
@@ -126,21 +115,17 @@ export function PlaybookView() {
           const progress = playbookProgress?.modules.find((m) => m.module_id === mod.id);
           const pct = progress?.percentage ?? 0;
           const isActive = activeModuleId === mod.id;
-          const isLocked = !mod.free && !isPro();
           const moduleData = playbookModules.find((m) => m.id === mod.id);
           const lessonCount = moduleData?.lesson_count ?? 0;
 
           return (
             <button
               key={mod.id}
-              onClick={() => handleModuleClick(mod.id, mod.free)}
-              disabled={isLocked}
+              onClick={() => handleModuleClick(mod.id)}
               className={`w-full text-left px-3 py-2.5 rounded-lg transition-all flex items-center gap-3 group ${
                 isActive
                   ? 'bg-[#D4AF37]/15 border border-[#D4AF37]/30'
-                  : isLocked
-                    ? 'opacity-50 cursor-not-allowed hover:bg-transparent'
-                    : 'hover:bg-[#1F1F1F] border border-transparent'
+                  : 'hover:bg-[#1F1F1F] border border-transparent'
               }`}
             >
               <span
@@ -163,7 +148,7 @@ export function PlaybookView() {
                   {pct > 0 && pct < 100 && ` - ${Math.round(pct)}%`}
                 </p>
               </div>
-              {isLocked ? <LockIcon /> : pct >= 100 ? <CheckIcon /> : null}
+              {pct >= 100 && <CheckIcon />}
             </button>
           );
         })}
@@ -195,7 +180,7 @@ export function PlaybookView() {
               Select a module from the sidebar to begin.
             </p>
             <button
-              onClick={() => handleModuleClick('S', true)}
+              onClick={() => handleModuleClick('S')}
               className="px-4 py-2 bg-[#D4AF37] text-black text-sm font-medium rounded-lg hover:bg-[#C4A030] transition-colors"
             >
               Start with Sovereign Setup
@@ -217,11 +202,6 @@ export function PlaybookView() {
                 <span className="px-2 py-1 bg-[#D4AF37]/20 text-[#D4AF37] text-xs font-bold rounded">
                   {playbookContent.module_id}
                 </span>
-                {playbookContent.is_free && (
-                  <span className="px-2 py-0.5 bg-[#22C55E]/15 text-[#22C55E] text-[10px] font-medium rounded">
-                    FREE
-                  </span>
-                )}
               </div>
               <h2 className="text-xl font-semibold text-white">{playbookContent.title}</h2>
               <p className="text-sm text-[#A0A0A0] mt-1">{playbookContent.description}</p>
