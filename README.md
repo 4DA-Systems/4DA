@@ -102,9 +102,9 @@ What survives is scored with content quality analysis (kills clickbait), novelty
 - Knowledge gap detection: finds blind spots in your dependency understanding
 
 **Sources** — 11 adapters, all running locally
-- Hacker News, Reddit, arXiv, GitHub Releases
-- Product Hunt, YouTube, Twitter/X
-- Dev.to, Lobsters, custom RSS feeds
+- GitHub, YouTube, Hacker News, Reddit, arXiv
+- Product Hunt, Twitter/X, Dev.to, Lobsters
+- Custom RSS feeds
 
 **Analysis**
 - Signal chains: tracks evolving stories across sources
