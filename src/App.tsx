@@ -4,6 +4,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import './App.css';
+import sunLogo from './assets/sun-logo.jpg';
 import { SplashScreen } from './components/SplashScreen';
 import { Onboarding } from './components/Onboarding';
 import { SettingsModal } from './components/SettingsModal';
@@ -288,6 +289,11 @@ function App() {
         {/* Header - Polished */}
         <header className="mb-8 flex items-center justify-between">
           <div className="flex items-center gap-4">
+            <img
+              src={sunLogo}
+              alt="4DA"
+              className="w-10 h-10 rounded-lg object-cover flex-shrink-0"
+            />
             <div className="w-12 h-12 flex items-center justify-center flex-shrink-0">
               <VoidEngine size={48} />
             </div>
@@ -404,24 +410,12 @@ function App() {
 
         </main>
 
-        {/* Footer - Polished */}
-        <footer className="mt-8 text-center space-y-1">
-          <p className="text-xs text-gray-600">All signal. No feed.</p>
-          <p className="text-[10px] text-gray-700">
-            <kbd className="px-1 py-0.5 bg-bg-tertiary rounded text-gray-500">R</kbd> Analyze
-            <span className="mx-1.5">·</span>
-            <kbd className="px-1 py-0.5 bg-bg-tertiary rounded text-gray-500">F</kbd> Filter
-            <span className="mx-1.5">·</span>
-            <kbd className="px-1 py-0.5 bg-bg-tertiary rounded text-gray-500">B</kbd> Briefing
-            <span className="mx-1.5">·</span>
-            <kbd className="px-1 py-0.5 bg-bg-tertiary rounded text-gray-500">,</kbd> Settings
-            <span className="mx-1.5">·</span>
-            <kbd className="px-1 py-0.5 bg-bg-tertiary rounded text-gray-500">Esc</kbd> Close
-            <span className="mx-1.5">·</span>
-            <kbd className="px-1 py-0.5 bg-bg-tertiary rounded text-gray-500">?</kbd> Help
-            <span className="mx-1.5">·</span>
-            <kbd className="px-1 py-0.5 bg-bg-tertiary rounded text-gray-500">Ctrl+`</kbd> Deck
-          </p>
+        {/* Footer */}
+        <footer className="mt-8 text-center">
+          <div className="flex items-center justify-center gap-2">
+            <img src={sunLogo} alt="" className="w-4 h-4 rounded-sm object-cover opacity-40" />
+            <p className="text-xs text-gray-600">All signal. No feed.</p>
+          </div>
         </footer>
 
         {/* Update Banner */}

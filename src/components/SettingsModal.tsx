@@ -12,13 +12,14 @@ import { PersonalizationSection } from './settings/PersonalizationSection';
 import { DeveloperDnaPanel } from './DeveloperDna';
 import { AttentionDashboard } from './settings/AttentionDashboard';
 import { ProjectHealthRadar } from './settings/ProjectHealthRadar';
+import { AboutPanel } from './AboutPanel';
 import { useAppStore } from '../store';
 
 // ============================================================================
 // Types
 // ============================================================================
 
-type SettingsTab = 'general' | 'sources' | 'profile' | 'discovery' | 'health';
+type SettingsTab = 'general' | 'sources' | 'profile' | 'discovery' | 'health' | 'about';
 
 const TABS: { id: SettingsTab; label: string }[] = [
   { id: 'general', label: 'General' },
@@ -26,6 +27,7 @@ const TABS: { id: SettingsTab; label: string }[] = [
   { id: 'profile', label: 'Profile' },
   { id: 'discovery', label: 'Discovery' },
   { id: 'health', label: 'Health' },
+  { id: 'about', label: 'About' },
 ];
 
 // ============================================================================
@@ -365,6 +367,13 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
                   onRefresh={loadSystemHealth}
                 />
               </div>
+            </div>
+          )}
+
+          {/* About Tab */}
+          {activeTab === 'about' && (
+            <div id="tabpanel-about" role="tabpanel">
+              <AboutPanel />
             </div>
           )}
         </div>

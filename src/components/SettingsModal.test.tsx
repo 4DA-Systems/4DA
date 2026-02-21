@@ -176,11 +176,11 @@ describe('SettingsModal', () => {
     expect(screen.getByText('Test Connection')).toBeInTheDocument();
   });
 
-  it('renders 5 tab buttons', () => {
+  it('renders 6 tab buttons', () => {
     render(<SettingsModal onClose={vi.fn()} />);
     const tabs = screen.getAllByRole('tab');
-    expect(tabs).toHaveLength(5);
-    expect(tabs.map(t => t.textContent)).toEqual(['General', 'Sources', 'Profile', 'Discovery', 'Health']);
+    expect(tabs).toHaveLength(6);
+    expect(tabs.map(t => t.textContent)).toEqual(['General', 'Sources', 'Profile', 'Discovery', 'Health', 'About']);
   });
 
   it('General tab is active by default', () => {
