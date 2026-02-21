@@ -17,9 +17,12 @@ const CATEGORY_LABELS: Record<ToolCategory, string> = {
   capture: 'Capture',
 };
 
+const UTILITY_CATEGORIES: Set<ToolCategory> = new Set(['formatters', 'encoders', 'generators', 'system', 'capture']);
+
 export function ToolkitView() {
   const [activeTool, setActiveTool] = useState<string | null>(null);
   const [search, setSearch] = useState('');
+  const [utilitiesExpanded, setUtilitiesExpanded] = useState(false);
   // Data selectors (may change, use useShallow)
   const { pinnedTools } = useAppStore(
     useShallow((s) => ({
@@ -61,18 +64,33 @@ export function ToolkitView() {
     );
   }, [search]);
 
-  // Group by category
-  const grouped = useMemo(() => {
+  // Split into intelligence vs utility tools
+  const { pinned, intelligenceTools, utilityCategories, utilityCount } = useMemo(() => {
     const pinned = filtered.filter((t) => pinnedTools.includes(t.id));
     const unpinned = filtered.filter((t) => !pinnedTools.includes(t.id));
+
+    const intelligence = unpinned.filter((t) => t.category === 'intelligence');
+    const utilities = unpinned.filter((t) => UTILITY_CATEGORIES.has(t.category));
+
     const categories = new Map<ToolCategory, typeof TOOLS>();
-    for (const tool of unpinned) {
+    for (const tool of utilities) {
       const list = categories.get(tool.category) || [];
       list.push(tool);
       categories.set(tool.category, list);
     }
-    return { pinned, categories };
+
+    return {
+      pinned,
+      intelligenceTools: intelligence,
+      utilityCategories: categories,
+      utilityCount: utilities.length,
+    };
   }, [filtered, pinnedTools]);
+
+  // Auto-expand utilities when searching
+  useEffect(() => {
+    if (search.trim()) setUtilitiesExpanded(true);
+  }, [search]);
 
   // Derive active tool descriptor (never setState during render)
   const activeToolDescriptor = activeTool ? getToolById(activeTool) : null;
@@ -115,11 +133,11 @@ export function ToolkitView() {
       </div>
 
       {/* Pinned tools */}
-      {grouped.pinned.length > 0 && (
+      {pinned.length > 0 && (
         <div className="mb-6">
           <h3 className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-3">Pinned</h3>
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
-            {grouped.pinned.map((tool) => (
+            {pinned.map((tool) => (
               <ToolkitCard
                 key={tool.id}
                 tool={tool}
@@ -132,14 +150,14 @@ export function ToolkitView() {
         </div>
       )}
 
-      {/* Categorized tools */}
-      {Array.from(grouped.categories.entries()).map(([category, tools]) => (
-        <div key={category} className="mb-6">
+      {/* Intelligence tools — always visible */}
+      {intelligenceTools.length > 0 && (
+        <div className="mb-6">
           <h3 className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-3">
-            {CATEGORY_LABELS[category]}
+            {CATEGORY_LABELS.intelligence}
           </h3>
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
-            {tools.map((tool) => (
+            {intelligenceTools.map((tool) => (
               <ToolkitCard
                 key={tool.id}
                 tool={tool}
@@ -150,7 +168,50 @@ export function ToolkitView() {
             ))}
           </div>
         </div>
-      ))}
+      )}
+
+      {/* Utility tools — collapsible */}
+      {utilityCount > 0 && (
+        <div className="mb-6">
+          <button
+            onClick={() => setUtilitiesExpanded(!utilitiesExpanded)}
+            className="flex items-center gap-2 mb-3 group"
+          >
+            <svg
+              width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+              className={`text-gray-500 transition-transform ${utilitiesExpanded ? 'rotate-90' : ''}`}
+            >
+              <path d="m9 18 6-6-6-6"/>
+            </svg>
+            <h3 className="text-xs font-medium text-gray-500 uppercase tracking-wider group-hover:text-gray-400 transition-colors">
+              Utilities ({utilityCount})
+            </h3>
+          </button>
+
+          {utilitiesExpanded && (
+            <div className="space-y-6">
+              {Array.from(utilityCategories.entries()).map(([category, tools]) => (
+                <div key={category}>
+                  <h4 className="text-xs font-medium text-gray-600 uppercase tracking-wider mb-3 pl-5">
+                    {CATEGORY_LABELS[category]}
+                  </h4>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
+                    {tools.map((tool) => (
+                      <ToolkitCard
+                        key={tool.id}
+                        tool={tool}
+                        pinned={false}
+                        onOpen={() => openTool(tool.id)}
+                        onTogglePin={() => togglePinnedTool(tool.id)}
+                      />
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Empty state */}
       {filtered.length === 0 && (

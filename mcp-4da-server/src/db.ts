@@ -5,12 +5,33 @@
  * Only the record_feedback function performs writes.
  */
 
-import Database from "better-sqlite3";
 import path from "path";
 import * as fs from "fs";
 import * as os from "os";
 import { fileURLToPath } from "node:url";
 import { dirname } from "node:path";
+
+// Type-only import (erased at compile time) — keeps Database.Database type usable.
+// Runtime import is dynamic below, so native binding failures get a clear error message.
+import type BetterSqlite3 from "better-sqlite3";
+
+let Database: typeof BetterSqlite3;
+try {
+  Database = (await import("better-sqlite3")).default;
+} catch (err) {
+  const msg = err instanceof Error ? err.message : String(err);
+  console.error(
+    "\n  [4DA] Failed to load better-sqlite3 native bindings.\n\n" +
+    "  This usually means your system is missing C++ build tools.\n" +
+    "  Install the appropriate tools for your platform:\n\n" +
+    "    macOS:   xcode-select --install\n" +
+    "    Ubuntu:  sudo apt install build-essential python3\n" +
+    "    Windows: npm install -g windows-build-tools\n\n" +
+    `  Error: ${msg}\n\n` +
+    "  After installing build tools, run: npm rebuild better-sqlite3\n"
+  );
+  process.exit(1);
+}
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -107,7 +128,7 @@ export interface DatabaseValidationResult {
  * 4DA Database accessor
  */
 export class FourDADatabase {
-  private db: Database.Database;
+  private db: BetterSqlite3.Database;
 
   constructor(dbPath?: string) {
     const resolvedPath = dbPath || getDefaultDbPath();
@@ -152,7 +173,7 @@ export class FourDADatabase {
     }
 
     // Try to open and run integrity check
-    let testDb: Database.Database | null = null;
+    let testDb: BetterSqlite3.Database | null = null;
     try {
       testDb = new Database(absolutePath, { readonly: true });
 
@@ -195,7 +216,7 @@ export class FourDADatabase {
   /**
    * Get the raw better-sqlite3 database instance for custom queries
    */
-  getRawDb(): Database.Database {
+  getRawDb(): BetterSqlite3.Database {
     return this.db;
   }
 

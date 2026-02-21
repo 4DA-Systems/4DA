@@ -120,6 +120,7 @@ mod streets_localization;
 mod suns;
 mod suns_commands;
 mod toolkit;
+mod toolkit_intelligence;
 
 use source_fetching::fill_cache_background;
 
@@ -393,6 +394,10 @@ pub fn run() {
             suns_commands::get_sun_alerts,
             suns_commands::acknowledge_sun_alert,
             suns_commands::trigger_sun_manually,
+            // Toolkit Intelligence
+            toolkit_intelligence::toolkit_test_feed,
+            toolkit_intelligence::toolkit_score_sandbox,
+            toolkit_intelligence::toolkit_generate_export_pack,
             // Diagnostics
             commands::get_diagnostics
         ])

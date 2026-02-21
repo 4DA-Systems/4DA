@@ -13,13 +13,13 @@ use super::{Source, SourceConfig, SourceError, SourceItem, SourceResult};
 // ============================================================================
 
 #[derive(Debug)]
-struct FeedEntry {
-    id: String,
-    title: String,
-    link: String,
-    description: String,
-    pub_date: Option<String>,
-    feed_title: String,
+pub(crate) struct FeedEntry {
+    pub(crate) id: String,
+    pub(crate) title: String,
+    pub(crate) link: String,
+    pub(crate) description: String,
+    pub(crate) pub_date: Option<String>,
+    pub(crate) feed_title: String,
 }
 
 // ============================================================================
@@ -275,7 +275,7 @@ impl RssSource {
     }
 
     /// Detect feed type and parse accordingly
-    fn parse_feed(&self, xml: &str, feed_url: &str) -> Vec<FeedEntry> {
+    pub(crate) fn parse_feed(&self, xml: &str, feed_url: &str) -> Vec<FeedEntry> {
         // Check if it's Atom or RSS
         if xml.contains("<feed") && xml.contains("xmlns=\"http://www.w3.org/2005/Atom\"") {
             debug!(feed_url, "Detected Atom feed");

@@ -2,6 +2,68 @@ import { lazy } from 'react';
 import type { ToolDescriptor } from '../../types/toolkit';
 
 export const TOOLS: ToolDescriptor[] = [
+  // Intelligence Tools — 4DA-connected
+  {
+    id: 'stack-health',
+    name: 'Stack Health',
+    description: 'Tech stack health across projects — freshness, security, momentum',
+    icon: 'heartPulse',
+    category: 'intelligence',
+    pro: true,
+    component: lazy(() => import('./tools/StackHealth')),
+    keywords: ['stack', 'health', 'freshness', 'security', 'momentum', 'dependencies'],
+  },
+  {
+    id: 'sovereign-profile',
+    name: 'Sovereign Profile',
+    description: 'Hardware facts and generated stack document from your sovereign profile',
+    icon: 'shield',
+    category: 'intelligence',
+    pro: false,
+    component: lazy(() => import('./tools/SovereignProfileView')),
+    keywords: ['sovereign', 'profile', 'hardware', 'cpu', 'gpu', 'ram', 'stack', 'document'],
+  },
+  {
+    id: 'source-debugger',
+    name: 'Source Debugger',
+    description: 'Test any RSS/Atom URL and see what 4DA extracts',
+    icon: 'rss',
+    category: 'intelligence',
+    pro: false,
+    component: lazy(() => import('./tools/SourceDebugger')),
+    keywords: ['rss', 'atom', 'feed', 'source', 'debug', 'test', 'xml'],
+  },
+  {
+    id: 'scoring-sandbox',
+    name: 'Scoring Sandbox',
+    description: 'Paste a title and see how your interest profile scores it',
+    icon: 'target',
+    category: 'intelligence',
+    pro: false,
+    component: lazy(() => import('./tools/ScoringSandbox')),
+    keywords: ['score', 'scoring', 'relevance', 'interest', 'pasifa', 'test'],
+  },
+  {
+    id: 'decision-log',
+    name: 'Decision Log',
+    description: 'Track tech decisions with confidence scoring and rationale',
+    icon: 'scale',
+    category: 'intelligence',
+    pro: false,
+    component: lazy(() => import('./tools/DecisionLog')),
+    keywords: ['decision', 'log', 'architecture', 'tech', 'choice', 'rationale'],
+  },
+  {
+    id: 'export-pack',
+    name: 'Export Pack',
+    description: 'Shareable developer profile: DNA, radar, and decisions as markdown',
+    icon: 'package',
+    category: 'intelligence',
+    pro: true,
+    component: lazy(() => import('./tools/ExportPack')),
+    keywords: ['export', 'profile', 'dna', 'radar', 'share', 'markdown', 'download'],
+  },
+  // Utility Tools — Generic developer utilities
   // Phase 1 — Pure Frontend
   {
     id: 'json-yaml',

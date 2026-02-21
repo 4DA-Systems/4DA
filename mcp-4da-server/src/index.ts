@@ -49,6 +49,7 @@ import { homedir } from "node:os";
 
 import { startHttpServer } from "./http-transport.js";
 import { runSetup } from "./setup.js";
+import { runDoctor } from "./doctor.js";
 
 // Schema registry for slim tool listing
 import { getSlimToolList, getSchemaResources, hasToolSchema, getSchemaFilename } from "./schema-registry.js";
@@ -619,6 +620,12 @@ async function main() {
     return;
   }
 
+  // Doctor command: validate installation health
+  if (args.includes("--doctor") || args.includes("doctor")) {
+    runDoctor();
+    return;
+  }
+
   // HTTP transport mode
   if (args.includes("--http")) {
     const portIndex = args.indexOf("--port");
@@ -660,7 +667,7 @@ async function main() {
 
   const toolCount = getSlimToolList().length;
   console.error(`4DA MCP Server v3.3 (Intelligence Platform) started — ${toolCount} tools, stdio transport`);
-  console.error("  Use --http for Streamable HTTP transport, --setup to configure editors");
+  console.error("  Use --http for Streamable HTTP, --setup to configure editors, --doctor to check health");
 }
 
 main().catch((error) => {

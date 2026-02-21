@@ -18,6 +18,13 @@ const ICON_PATHS: Record<string, string> = {
   network: 'M5 12h14M12 5v14M5 5l14 14M19 5L5 19M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20Z',
   terminal: 'M4 17l6-5-6-5M12 19h8',
   globe: 'M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20ZM2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10A15.3 15.3 0 0 1 12 2Z',
+  // Intelligence tool icons
+  heartPulse: 'M19.5 12.6l-7.5 7.4-7.5-7.4A5 5 0 0 1 12 4.5a5 5 0 0 1 7.5 8.1ZM5 12h3l2-4 3 8 2-4h4',
+  shield: 'M12 2l8 4v6c0 5.5-3.8 10.7-8 12-4.2-1.3-8-6.5-8-12V6l8-4Zm0 6v4m0 4h.01',
+  rss: 'M4 11a9 9 0 0 1 9 9M4 4a16 16 0 0 1 16 16M5 20a1 1 0 1 0 0-2 1 1 0 0 0 0 2Z',
+  target: 'M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20Zm0 4a6 6 0 1 0 0 12 6 6 0 0 0 0-12Zm0 4a2 2 0 1 0 0 4 2 2 0 0 0 0-4Z',
+  scale: 'M12 2v20M2 7l10-5 10 5M4 7v5c0 2 3.5 4 8 4s8-2 8-4V7',
+  package: 'M16.5 9.4l-9-5.2M21 16V8a2 2 0 0 0-1-1.7l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.7l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16ZM3.3 7L12 12l8.7-5M12 22V12',
 };
 
 export function ToolkitCard({ tool, pinned, onOpen, onTogglePin }: ToolkitCardProps) {
