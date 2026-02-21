@@ -253,6 +253,7 @@ pub fn run() {
             monitoring_commands::set_monitoring_interval,
             monitoring_commands::set_notification_threshold,
             monitoring_commands::trigger_notification_test,
+            monitoring_commands::set_close_to_tray,
             // ACE (frontend-used subset)
             ace_commands::ace_get_detected_tech,
             ace_commands::ace_get_active_topics,

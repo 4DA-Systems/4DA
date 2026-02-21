@@ -1,3 +1,5 @@
+import { invoke } from '@tauri-apps/api/core';
+import { useState } from 'react';
 import type { MonitoringStatus } from '../../types';
 
 interface MonitoringSectionProps {
@@ -9,6 +11,41 @@ interface MonitoringSectionProps {
   onToggle: () => void;
   onUpdateInterval: () => void;
   onTestNotification: () => void;
+}
+
+function CloseToTrayToggle({ initialValue }: { initialValue: boolean }) {
+  const [enabled, setEnabled] = useState(initialValue);
+
+  const toggle = async () => {
+    const next = !enabled;
+    setEnabled(next);
+    try {
+      await invoke('set_close_to_tray', { enabled: next });
+    } catch {
+      setEnabled(!next); // revert on error
+    }
+  };
+
+  return (
+    <div className="flex items-center justify-between p-3 bg-bg-secondary rounded-lg border border-border">
+      <div>
+        <span className="text-sm text-white">Close to tray</span>
+        <p className="text-xs text-gray-500">Hide window instead of quitting</p>
+      </div>
+      <button
+        onClick={toggle}
+        className={`relative w-10 h-5 rounded-full transition-colors ${
+          enabled ? 'bg-green-500/40' : 'bg-gray-600'
+        }`}
+      >
+        <span
+          className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-transform ${
+            enabled ? 'translate-x-5' : 'translate-x-0.5'
+          }`}
+        />
+      </button>
+    </div>
+  );
 }
 
 export function MonitoringSection({
@@ -97,6 +134,8 @@ export function MonitoringSection({
               <option value="all">All items</option>
             </select>
           </div>
+
+          <CloseToTrayToggle initialValue={monitoring.close_to_tray} />
 
           <div className="flex items-center justify-between text-xs text-gray-500 px-1">
             <span>Total checks: {monitoring.total_checks}</span>

@@ -24,10 +24,14 @@ pub async fn get_monitoring_status() -> Result<serde_json::Value> {
     let last_check = state.last_check.load(std::sync::atomic::Ordering::Relaxed);
     let secs_since_check = if last_check > 0 { now - last_check } else { 0 };
 
-    // Include notification threshold from settings
-    let notification_threshold = {
+    // Include settings from config
+    let (notification_threshold, close_to_tray) = {
         let settings = get_settings_manager().lock();
-        settings.get().monitoring.notification_threshold.clone()
+        let m = &settings.get().monitoring;
+        (
+            m.notification_threshold.clone(),
+            m.close_to_tray.unwrap_or(true),
+        )
     };
 
     Ok(serde_json::json!({
@@ -39,7 +43,8 @@ pub async fn get_monitoring_status() -> Result<serde_json::Value> {
         "secs_since_check": secs_since_check,
         "last_relevant_count": state.last_relevant_count.load(std::sync::atomic::Ordering::Relaxed),
         "total_checks": state.total_checks.load(std::sync::atomic::Ordering::Relaxed),
-        "notification_threshold": notification_threshold
+        "notification_threshold": notification_threshold,
+        "close_to_tray": close_to_tray
     }))
 }
 
@@ -161,5 +166,27 @@ pub async fn trigger_notification_test(app: AppHandle) -> Result<serde_json::Val
     Ok(serde_json::json!({
         "success": true,
         "message": "Test notification sent"
+    }))
+}
+
+/// Toggle close-to-tray behavior
+#[tauri::command]
+pub async fn set_close_to_tray(enabled: bool) -> Result<serde_json::Value> {
+    {
+        let mut settings = get_settings_manager().lock();
+        let state = crate::get_monitoring_state();
+        let m = settings.get().monitoring.clone();
+        let _ = settings.set_monitoring_config(settings::MonitoringConfig {
+            close_to_tray: Some(enabled),
+            ..m
+        });
+        let _ = state; // keep reference alive
+    }
+
+    info!(target: "4da::monitor", close_to_tray = enabled, "Close-to-tray updated");
+
+    Ok(serde_json::json!({
+        "close_to_tray": enabled,
+        "message": if enabled { "Window will hide to tray on close" } else { "Window will quit on close" }
     }))
 }

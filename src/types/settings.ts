@@ -42,6 +42,7 @@ export interface MonitoringStatus {
   is_checking: boolean;
   last_check_ago: string | null;
   total_checks: number;
+  close_to_tray: boolean;
 }
 
 export interface UserContext {
