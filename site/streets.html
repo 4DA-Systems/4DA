@@ -4,13 +4,14 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>STREETS -- The Developer Income Playbook | Your Rig. Your Rules. Your Revenue.</title>
-  <meta name="description" content="8 revenue engines for developers who earn $0 from their private infrastructure. Turn your local LLMs, API keys, and full-stack skills into $10K/mo. All 7 modules free inside 4DA.">
+  <meta name="description" content="8 revenue engines for developers who earn $0 from their private infrastructure. All 7 modules free inside 4DA. No email. No catch.">
   <meta name="keywords" content="developer income, passive income developers, micro-SaaS, API products, developer side income, monetize coding skills, developer playbook, LLM monetization, automation as a service">
   <meta name="theme-color" content="#0A0A0A">
+  <link rel="canonical" href="https://streets.4da.ai">
 
   <!-- Open Graph -->
   <meta property="og:title" content="STREETS -- You're sitting on a money-printing machine. Literally.">
-  <meta property="og:description" content="8 revenue engines. 7 modules. Time-to-first-dollar as fast as 1 week. The developer income playbook for the private infrastructure era. All modules free inside 4DA.">
+  <meta property="og:description" content="8 revenue engines. 7 modules. All free inside 4DA. The developer income playbook for the private infrastructure era.">
   <meta property="og:type" content="website">
   <meta property="og:url" content="https://streets.4da.ai">
   <meta property="og:image" content="https://streets.4da.ai/og-image.png">
@@ -19,7 +20,7 @@
   <!-- Twitter Card -->
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="STREETS -- 8 Revenue Engines for Developers Who Build for Everyone But Themselves">
-  <meta name="twitter:description" content="Your rig. Your rules. Your revenue. The income playbook for developers sitting on untapped private infrastructure. All 7 modules free inside 4DA.">
+  <meta name="twitter:description" content="Your rig. Your rules. Your revenue. The income playbook for developers sitting on untapped private infrastructure. Free module, no email required.">
   <meta name="twitter:image" content="https://streets.4da.ai/og-image.png">
 
   <!-- Structured Data -->
@@ -35,9 +36,9 @@
       "url": "https://4da.ai"
     },
     "offers": [
-      { "@type": "Offer", "price": "0", "priceCurrency": "USD", "description": "All 7 modules free inside 4DA -- complete playbook, no restrictions" },
-      { "@type": "Offer", "price": "29", "priceCurrency": "USD", "description": "Community -- monthly, includes Discord + office hours + case studies" },
-      { "@type": "Offer", "price": "499", "priceCurrency": "USD", "description": "Cohort -- 8-week live cohort + 1-on-1 strategy session" }
+      { "@type": "Offer", "price": "0", "priceCurrency": "USD", "description": "All 7 modules -- free inside 4DA. No email, no account." },
+      { "@type": "Offer", "price": "29", "priceCurrency": "USD", "description": "Community -- Discord, office hours, case studies" },
+      { "@type": "Offer", "price": "499", "priceCurrency": "USD", "description": "Cohort -- 8-week live cohort + 1-on-1" }
     ]
   }
   </script>
@@ -101,7 +102,8 @@
       align-items: center;
       justify-content: space-between;
     }
-    .nav-brand { font-weight: 600; font-size: 15px; color: var(--text); letter-spacing: 0.04em; }
+    .nav-brand { font-weight: 600; font-size: 15px; color: var(--text); }
+    .nav-brand span { color: var(--text-muted); font-weight: 400; font-size: 13px; }
     .nav-links { display: flex; gap: 24px; align-items: center; }
     .nav-links a { color: var(--text-muted); font-size: 14px; }
     .nav-links a:hover { color: var(--text); opacity: 1; }
@@ -115,7 +117,35 @@
     }
     .nav-cta:hover { opacity: 0.9; }
 
-    /* ---- Buttons ---- */
+    /* ---- Hero ---- */
+    .hero {
+      padding: 140px 0 80px;
+      text-align: center;
+    }
+    .hero-label {
+      display: inline-block;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12px;
+      letter-spacing: 0.1em;
+      color: var(--accent);
+      margin-bottom: 24px;
+      text-transform: uppercase;
+    }
+    .hero h1 {
+      font-size: clamp(40px, 7vw, 72px);
+      font-weight: 600;
+      line-height: 1.08;
+      letter-spacing: -0.03em;
+      margin-bottom: 24px;
+    }
+    .hero p {
+      font-size: 18px;
+      color: var(--text-secondary);
+      max-width: 560px;
+      margin: 0 auto 48px;
+      line-height: 1.7;
+    }
+    .hero-buttons { display: flex; gap: 16px; justify-content: center; flex-wrap: wrap; }
     .btn {
       display: inline-flex;
       align-items: center;
@@ -134,18 +164,8 @@
     .btn-primary:hover { opacity: 1; box-shadow: 0 4px 24px rgba(255,255,255,0.12); }
     .btn-secondary { background: transparent; color: var(--text); border: 1px solid var(--border); }
     .btn-secondary:hover { border-color: var(--text-muted); opacity: 1; }
-    .btn-accent { background: transparent; color: var(--accent); border: 1px solid var(--accent); }
-    .btn-accent:hover { background: rgba(249, 115, 22, 0.08); opacity: 1; }
-    .btn-gold { background: transparent; color: var(--gold); border: 1px solid var(--gold); }
-    .btn-gold:hover { background: rgba(212, 175, 55, 0.08); opacity: 1; }
 
-    /* ---- Hero ---- */
-    .hero {
-      padding: 140px 0 80px;
-      text-align: center;
-    }
-
-    /* ---- Section common ---- */
+    /* ---- Section Common ---- */
     section { padding: 80px 0; }
     .section-label {
       font-family: 'JetBrains Mono', monospace;
@@ -164,32 +184,24 @@
     section > .container > p.subtitle {
       font-size: 17px;
       color: var(--text-secondary);
-      max-width: 620px;
+      max-width: 560px;
       line-height: 1.7;
       margin-bottom: 48px;
     }
     .divider { border: none; border-top: 1px solid var(--border); margin: 0; }
 
-    /* ---- Feature Cards ---- */
-    .feature-card {
+    /* ---- Cards ---- */
+    .card {
       background: var(--bg-card);
       border: 1px solid var(--border);
       border-radius: var(--radius);
       padding: 28px;
       transition: border-color 0.2s, background 0.2s;
     }
-    .feature-card:hover { border-color: #3A3A3A; background: var(--bg-hover); }
-    .feature-card h3 {
-      font-size: 16px;
-      font-weight: 600;
-      margin-bottom: 8px;
-    }
-    .feature-card p {
-      font-size: 14px;
-      color: var(--text-secondary);
-      line-height: 1.65;
-    }
-    .feature-tag {
+    .card:hover { border-color: #3A3A3A; background: var(--bg-hover); }
+    .card h3 { font-size: 16px; font-weight: 600; margin-bottom: 8px; }
+    .card p { font-size: 14px; color: var(--text-secondary); line-height: 1.65; }
+    .card-tag {
       display: inline-block;
       font-family: 'JetBrains Mono', monospace;
       font-size: 11px;
@@ -200,7 +212,42 @@
       margin-bottom: 12px;
     }
 
-    /* ---- Problem List ---- */
+    /* ---- Audit Grid ---- */
+    .audit-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 16px;
+    }
+    .audit-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 24px;
+    }
+    .audit-card h4 {
+      font-size: 15px;
+      font-weight: 600;
+      margin-bottom: 8px;
+      color: var(--text);
+    }
+    .audit-card p { font-size: 13px; color: var(--text-muted); line-height: 1.6; }
+
+    /* ---- Callout ---- */
+    .callout {
+      margin-top: 32px;
+      padding: 20px 24px;
+      border-left: 3px solid var(--accent);
+      background: var(--bg-card);
+      border-radius: 0 var(--radius) var(--radius) 0;
+    }
+    .callout p {
+      font-size: 15px;
+      color: var(--text-secondary);
+      line-height: 1.7;
+    }
+    .callout strong { color: var(--text); }
+
+    /* ---- Problem Section ---- */
     .problem-list { list-style: none; display: grid; gap: 20px; max-width: 640px; }
     .problem-list li {
       padding-left: 24px;
@@ -221,151 +268,50 @@
     }
     .problem-list li strong { color: var(--text); }
 
-    /* ---- Callout Box ---- */
-    .callout {
-      padding: 20px 24px;
-      border-left: 3px solid var(--accent);
-      background: var(--bg-card);
-      border-radius: 0 var(--radius) var(--radius) 0;
-      max-width: 680px;
-    }
-    .callout p {
-      font-size: 15px;
-      color: var(--text-secondary);
-      line-height: 1.7;
-      font-style: italic;
-    }
-    .callout p strong { color: var(--text); font-style: normal; }
-    .callout-gold { border-left-color: var(--gold); }
-
-    /* ---- Audit Grid ---- */
-    .audit-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-      gap: 16px;
-      margin-bottom: 40px;
-    }
-    .audit-card {
-      background: var(--bg-card);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      padding: 24px;
-      transition: border-color 0.2s;
-    }
-    .audit-card:hover { border-color: #3A3A3A; }
-    .audit-card .audit-number {
-      font-family: 'JetBrains Mono', monospace;
-      font-size: 14px;
-      color: var(--accent);
-      font-weight: 500;
-      margin-bottom: 10px;
-    }
-    .audit-card h3 {
-      font-size: 15px;
-      font-weight: 600;
-      margin-bottom: 6px;
-    }
-    .audit-card p {
-      font-size: 13px;
-      color: var(--text-muted);
-      line-height: 1.6;
-    }
-
-    /* ---- Module Cards (Accordion) ---- */
-    .module-list { display: grid; gap: 8px; }
+    /* ---- Module Timeline ---- */
+    .module-list { display: grid; gap: 16px; max-width: 680px; }
     .module-item {
       background: var(--bg-card);
       border: 1px solid var(--border);
       border-radius: var(--radius);
-      overflow: hidden;
+      padding: 24px 28px;
+      transition: border-color 0.2s;
     }
-    .module-header {
-      padding: 20px 24px;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      cursor: pointer;
-      user-select: none;
-      transition: background 0.2s;
-    }
-    .module-header:hover { background: var(--bg-hover); }
-    .module-header-left {
-      display: flex;
-      align-items: center;
-      gap: 16px;
-    }
+    .module-item:hover { border-color: #3A3A3A; }
+    .module-item.free-module { border-color: var(--accent); }
     .module-letter {
       font-family: 'JetBrains Mono', monospace;
-      font-size: 20px;
-      font-weight: 600;
+      font-size: 13px;
+      font-weight: 500;
       color: var(--accent);
-      width: 36px;
-      height: 36px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      background: rgba(249, 115, 22, 0.1);
-      border-radius: 8px;
-      flex-shrink: 0;
+      margin-bottom: 4px;
     }
-    .module-letter.free { color: #22C55E; background: rgba(34, 197, 94, 0.1); }
-    .module-title { font-size: 16px; font-weight: 600; }
-    .module-badge {
-      font-family: 'JetBrains Mono', monospace;
-      font-size: 10px;
-      letter-spacing: 0.06em;
-      text-transform: uppercase;
-      padding: 3px 10px;
-      border-radius: 4px;
-      white-space: nowrap;
-    }
-    .module-badge.badge-free {
-      background: rgba(34, 197, 94, 0.12);
-      color: #22C55E;
-    }
-    .module-badge.badge-core {
-      background: rgba(249, 115, 22, 0.1);
-      color: var(--accent);
-    }
-    .module-badge.badge-heart {
-      background: rgba(249, 115, 22, 0.15);
-      color: var(--accent);
-      border: 1px solid rgba(249, 115, 22, 0.3);
-    }
-    .module-toggle {
-      font-family: 'JetBrains Mono', monospace;
-      font-size: 18px;
-      color: var(--text-muted);
-      transition: transform 0.2s;
-      flex-shrink: 0;
-      margin-left: 16px;
-    }
-    .module-item.open .module-toggle { transform: rotate(45deg); }
-    .module-body {
-      max-height: 0;
-      overflow: hidden;
-      transition: max-height 0.3s ease;
-    }
-    .module-body-inner {
-      padding: 0 24px 24px;
-      padding-left: 76px;
-    }
-    .module-body-inner p {
-      font-size: 14px;
-      color: var(--text-secondary);
-      line-height: 1.7;
-      margin-bottom: 12px;
-    }
-    .module-body-inner .module-outcome {
+    .module-item h3 { font-size: 18px; font-weight: 600; margin-bottom: 8px; }
+    .module-item p { font-size: 14px; color: var(--text-secondary); line-height: 1.65; }
+    .module-item .module-outcome {
+      margin-top: 12px;
       font-size: 13px;
       color: var(--text-muted);
       font-style: italic;
     }
+    .module-badge {
+      display: inline-block;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      padding: 3px 10px;
+      border-radius: 4px;
+      margin-bottom: 8px;
+    }
+    .module-badge.free { background: var(--accent); color: var(--bg); }
+    .module-badge.core { background: rgba(249, 115, 22, 0.15); color: var(--accent); }
 
     /* ---- Engine Cards ---- */
     .engine-grid {
       display: grid;
-      grid-template-columns: repeat(2, 1fr);
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
       gap: 16px;
     }
     .engine-card {
@@ -373,167 +319,104 @@
       border: 1px solid var(--border);
       border-radius: var(--radius);
       padding: 28px;
-      transition: border-color 0.2s, background 0.2s;
+      transition: border-color 0.2s;
     }
-    .engine-card:hover { border-color: #3A3A3A; background: var(--bg-hover); }
+    .engine-card:hover { border-color: #3A3A3A; }
+    .engine-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin-bottom: 12px;
+    }
     .engine-number {
       font-family: 'JetBrains Mono', monospace;
       font-size: 11px;
       color: var(--text-muted);
-      letter-spacing: 0.06em;
-      text-transform: uppercase;
-      margin-bottom: 8px;
+      letter-spacing: 0.04em;
     }
-    .engine-card h3 {
-      font-size: 17px;
-      font-weight: 600;
-      margin-bottom: 4px;
-    }
-    .engine-ttfd {
-      display: inline-block;
+    .engine-ttd {
       font-family: 'JetBrains Mono', monospace;
       font-size: 11px;
-      color: #22C55E;
-      background: rgba(34, 197, 94, 0.1);
+      color: var(--accent);
+      background: rgba(249, 115, 22, 0.1);
       padding: 3px 8px;
       border-radius: 4px;
-      margin-bottom: 12px;
     }
-    .engine-card > p {
-      font-size: 14px;
-      color: var(--text-secondary);
-      line-height: 1.65;
-      margin-bottom: 12px;
-    }
+    .engine-card h3 { font-size: 17px; font-weight: 600; margin-bottom: 10px; }
+    .engine-card p { font-size: 14px; color: var(--text-secondary); line-height: 1.65; margin-bottom: 12px; }
     .engine-example {
       font-size: 13px;
       color: var(--text-muted);
       line-height: 1.6;
       padding: 12px 16px;
       background: var(--bg);
+      border: 1px solid var(--border);
       border-radius: 8px;
       margin-bottom: 12px;
     }
-    .engine-example strong { color: var(--text-secondary); }
     .engine-revenue {
       font-family: 'JetBrains Mono', monospace;
       font-size: 12px;
-      color: var(--accent);
+      color: var(--text-muted);
     }
+    .engine-revenue strong { color: var(--accent); }
 
     /* ---- Flywheel ---- */
-    .flywheel-steps {
-      display: grid;
-      gap: 0;
-      max-width: 600px;
-      margin: 0 auto 40px;
-    }
-    .flywheel-step {
-      display: flex;
-      align-items: flex-start;
-      gap: 16px;
-      padding: 16px 0;
-    }
-    .flywheel-step-line {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      flex-shrink: 0;
-      width: 24px;
-    }
-    .flywheel-dot {
-      width: 10px;
-      height: 10px;
-      border-radius: 50%;
-      background: var(--accent);
-      flex-shrink: 0;
-      margin-top: 5px;
-    }
-    .flywheel-connector {
-      width: 2px;
-      flex: 1;
-      background: var(--border);
-      min-height: 20px;
-    }
-    .flywheel-step:last-child .flywheel-connector { display: none; }
-    .flywheel-step p {
-      font-size: 15px;
-      color: var(--text-secondary);
-      line-height: 1.6;
-    }
-
-    .connection-grid {
+    .flywheel-grid {
       display: grid;
       grid-template-columns: 1fr 1fr;
-      gap: 24px;
-      margin-top: 40px;
+      gap: 32px;
+      align-items: start;
     }
-    .connection-card {
+    .flywheel-diagram {
       background: var(--bg-card);
       border: 1px solid var(--border);
       border-radius: var(--radius);
-      padding: 24px;
+      padding: 28px;
     }
-    .connection-card h3 {
-      font-size: 15px;
-      font-weight: 600;
-      margin-bottom: 8px;
+    .flywheel-diagram pre {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12px;
+      color: var(--text-muted);
+      line-height: 1.8;
+      overflow-x: auto;
+      white-space: pre;
     }
-    .connection-card p {
-      font-size: 14px;
-      color: var(--text-secondary);
-      line-height: 1.65;
-    }
+    .flywheel-diagram .highlight { color: var(--accent); }
+    .flywheel-text p { font-size: 15px; color: var(--text-secondary); line-height: 1.7; margin-bottom: 16px; }
+    .flywheel-text strong { color: var(--text); }
 
     /* ---- Offer Cards ---- */
-    .offers-grid {
+    .offer-grid {
       display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 24px;
-      margin-top: 40px;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 16px;
+      margin-top: 32px;
     }
     .offer-card {
       background: var(--bg-card);
       border-radius: var(--radius);
-      padding: 28px;
+      padding: 24px;
     }
-    .offer-card-gold { border: 1px solid var(--gold); }
-    .offer-card-accent { border: 1px solid var(--accent); }
-    .offer-card h3 {
-      font-size: 16px;
-      font-weight: 600;
-      margin-bottom: 8px;
-    }
-    .offer-card p {
-      font-size: 14px;
-      color: var(--text-secondary);
-      line-height: 1.65;
-      margin-bottom: 8px;
-    }
-    .offer-card .offer-price {
-      font-size: 20px;
-      font-weight: 600;
-      margin-bottom: 4px;
-    }
-    .offer-card .offer-price s { color: var(--text-muted); font-weight: 400; font-size: 16px; }
-    .offer-card .offer-code {
+    .offer-card.gold { border: 1px solid var(--gold); }
+    .offer-card.orange { border: 1px solid var(--accent); }
+    .offer-card h4 { font-size: 15px; font-weight: 600; margin-bottom: 8px; }
+    .offer-card p { font-size: 14px; color: var(--text-secondary); line-height: 1.6; }
+    .offer-card .strikethrough { text-decoration: line-through; color: var(--text-muted); }
+    .offer-card .price { color: var(--text); font-weight: 600; }
+    .offer-code {
+      display: inline-block;
       font-family: 'JetBrains Mono', monospace;
       font-size: 12px;
-      color: var(--gold);
-      background: rgba(212, 175, 55, 0.1);
-      padding: 6px 12px;
-      border-radius: 6px;
-      display: inline-block;
+      color: var(--accent);
+      background: rgba(249, 115, 22, 0.1);
+      padding: 4px 10px;
+      border-radius: 4px;
       margin-top: 8px;
     }
 
-    /* ---- Module S Preview ---- */
-    .preview-list {
-      display: grid;
-      gap: 12px;
-      max-width: 680px;
-      margin-bottom: 40px;
-    }
+    /* ---- Preview Content ---- */
+    .preview-list { display: grid; gap: 12px; max-width: 640px; }
     .preview-item {
       background: var(--bg-card);
       border: 1px solid var(--border);
@@ -541,52 +424,19 @@
       padding: 20px 24px;
     }
     .preview-item h4 {
-      font-size: 15px;
+      font-size: 14px;
       font-weight: 600;
       margin-bottom: 6px;
     }
-    .preview-item p {
-      font-size: 14px;
-      color: var(--text-secondary);
-      line-height: 1.65;
-    }
-
-    .tease-grid {
-      max-width: 680px;
-      margin-top: 48px;
-      padding-top: 32px;
-      border-top: 1px solid var(--border);
-    }
-    .tease-grid h3 {
-      font-size: 16px;
-      font-weight: 600;
-      margin-bottom: 16px;
-      color: var(--text-muted);
-    }
-    .tease-table {
-      width: 100%;
-      border-collapse: collapse;
-    }
-    .tease-table td {
-      padding: 12px 16px;
-      border-bottom: 1px solid var(--border);
-      font-size: 14px;
-    }
-    .tease-table td:first-child {
-      font-family: 'JetBrains Mono', monospace;
-      font-size: 13px;
-      color: var(--text-muted);
-      white-space: nowrap;
-      width: 180px;
-    }
-    .tease-table td:last-child { color: var(--text-secondary); }
-    .tease-table tr:last-child td { border-bottom: none; }
+    .preview-item p { font-size: 13px; color: var(--text-muted); line-height: 1.6; }
 
     /* ---- Pricing ---- */
     .pricing-grid {
       display: grid;
-      grid-template-columns: repeat(4, 1fr);
+      grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
       gap: 16px;
+      max-width: 960px;
+      margin: 0 auto;
     }
     .pricing-card {
       background: var(--bg-card);
@@ -613,24 +463,19 @@
       padding: 3px 12px;
       border-radius: 4px;
     }
-    .pricing-card.cohort { border-color: var(--gold); }
-    .pricing-card h3 {
-      font-size: 18px;
-      font-weight: 600;
-      margin-bottom: 4px;
-    }
+    .pricing-card h3 { font-size: 18px; font-weight: 600; margin-bottom: 4px; }
     .pricing-price {
-      font-size: 36px;
+      font-size: 32px;
       font-weight: 600;
-      margin: 16px 0 4px;
+      margin: 12px 0 6px;
     }
-    .pricing-price span { font-size: 16px; color: var(--text-muted); font-weight: 400; }
-    .pricing-note { font-size: 13px; color: var(--text-muted); margin-bottom: 24px; }
-    .pricing-features { list-style: none; display: grid; gap: 10px; margin-bottom: 24px; }
+    .pricing-price span { font-size: 14px; color: var(--text-muted); font-weight: 400; }
+    .pricing-note { font-size: 12px; color: var(--text-muted); margin-bottom: 20px; }
+    .pricing-features { list-style: none; display: grid; gap: 8px; }
     .pricing-features li {
       font-size: 13px;
       color: var(--text-secondary);
-      padding-left: 20px;
+      padding-left: 18px;
       position: relative;
       line-height: 1.5;
     }
@@ -642,55 +487,36 @@
       font-family: 'JetBrains Mono', monospace;
       font-weight: 600;
     }
-    .pricing-card.cohort .pricing-features li::before { color: var(--gold); }
-    .pricing-card .pricing-cta-note {
-      font-size: 12px;
-      color: var(--text-muted);
-      margin-top: 12px;
-      font-style: italic;
+    .pricing-cta {
+      display: block;
+      text-align: center;
+      margin-top: 20px;
+      padding: 10px 20px;
+      border-radius: 6px;
+      font-size: 14px;
+      font-weight: 500;
+      font-family: inherit;
+      border: none;
+      cursor: pointer;
+      transition: transform 0.15s;
     }
+    .pricing-cta:hover { transform: translateY(-1px); }
+    .pricing-cta.primary { background: var(--text); color: var(--bg); }
+    .pricing-cta.secondary { background: transparent; color: var(--text); border: 1px solid var(--border); }
 
     /* ---- Milestone Timeline ---- */
-    .milestone-timeline {
-      display: grid;
-      gap: 0;
-      max-width: 680px;
+    .milestone-list { display: grid; gap: 16px; max-width: 640px; }
+    .milestone-item {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 24px;
+      border-left: 3px solid var(--accent);
     }
-    .milestone {
-      display: flex;
-      gap: 20px;
-      position: relative;
-    }
-    .milestone-line {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      flex-shrink: 0;
-      width: 24px;
-    }
-    .milestone-dot {
-      width: 12px;
-      height: 12px;
-      border-radius: 50%;
-      background: var(--accent);
-      flex-shrink: 0;
-      margin-top: 4px;
-      box-shadow: 0 0 12px rgba(249, 115, 22, 0.3);
-    }
-    .milestone-bar {
-      width: 2px;
-      flex: 1;
-      background: linear-gradient(to bottom, var(--accent), var(--border));
-    }
-    .milestone:last-child .milestone-bar { display: none; }
-    .milestone-content {
-      padding-bottom: 40px;
-    }
-    .milestone-label {
+    .milestone-time {
       font-family: 'JetBrains Mono', monospace;
       font-size: 12px;
       color: var(--accent);
-      letter-spacing: 0.04em;
       margin-bottom: 4px;
     }
     .milestone-revenue {
@@ -699,123 +525,97 @@
       color: var(--text-muted);
       margin-bottom: 8px;
     }
-    .milestone h3 {
-      font-size: 16px;
-      font-weight: 600;
-      margin-bottom: 10px;
-    }
-    .milestone ul {
+    .milestone-item h4 { font-size: 15px; font-weight: 600; margin-bottom: 8px; display: none; }
+    .milestone-item ul {
       list-style: none;
       display: grid;
-      gap: 6px;
+      gap: 4px;
     }
-    .milestone ul li {
-      font-size: 14px;
+    .milestone-item li {
+      font-size: 13px;
       color: var(--text-secondary);
-      line-height: 1.6;
       padding-left: 16px;
       position: relative;
+      line-height: 1.5;
     }
-    .milestone ul li::before {
-      content: '--';
+    .milestone-item li::before {
+      content: '-';
       position: absolute;
       left: 0;
       color: var(--text-muted);
       font-family: 'JetBrains Mono', monospace;
-      font-size: 12px;
     }
 
-    /* ---- Stacking Visual ---- */
-    .stacking-visual {
+    /* ---- Stacking Diagram ---- */
+    .stacking-diagram {
       background: var(--bg-card);
       border: 1px solid var(--border);
       border-radius: var(--radius);
-      padding: 32px;
-      margin-top: 40px;
-      max-width: 680px;
+      padding: 28px;
+      margin-top: 32px;
     }
-    .stacking-header {
-      font-family: 'JetBrains Mono', monospace;
-      font-size: 14px;
-      color: var(--text);
-      margin-bottom: 20px;
-      font-weight: 500;
-    }
-    .stack-row {
+    .stack-bar {
       display: flex;
       align-items: center;
       gap: 12px;
       margin-bottom: 8px;
     }
     .stack-label {
-      font-size: 13px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12px;
       color: var(--text-secondary);
-      width: 100px;
-      flex-shrink: 0;
+      min-width: 120px;
       text-align: right;
     }
-    .stack-bar {
+    .stack-bar-fill {
       height: 24px;
-      background: var(--accent);
       border-radius: 4px;
-      opacity: 0.7;
-      transition: width 0.5s ease;
+      background: var(--accent);
+      opacity: 0.8;
     }
-    .stack-bar-1 { width: 30%; }
-    .stack-bar-2 { width: 28%; }
-    .stack-bar-3 { width: 18%; }
-    .stack-bar-4 { width: 14%; }
-    .stack-bar-5 { width: 10%; }
     .stack-amount {
       font-family: 'JetBrains Mono', monospace;
       font-size: 12px;
       color: var(--text-muted);
-      white-space: nowrap;
     }
-    .stacking-footer {
+    .stack-total {
       margin-top: 16px;
       padding-top: 16px;
       border-top: 1px solid var(--border);
-      font-size: 14px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 13px;
       color: var(--text-muted);
-      line-height: 1.6;
+      text-align: center;
     }
+    .stack-total strong { color: var(--text); }
 
     /* ---- FAQ ---- */
     .faq-list { display: grid; gap: 8px; max-width: 680px; }
-    .faq-item {
+    .faq-list details {
       background: var(--bg-card);
       border: 1px solid var(--border);
       border-radius: var(--radius);
-      overflow: hidden;
     }
-    .faq-question {
+    .faq-list summary {
       padding: 18px 24px;
       font-size: 15px;
       font-weight: 500;
       cursor: pointer;
+      list-style: none;
       display: flex;
       justify-content: space-between;
       align-items: center;
-      user-select: none;
-      transition: background 0.2s;
     }
-    .faq-question:hover { background: var(--bg-hover); }
-    .faq-toggle {
+    .faq-list summary::after {
+      content: '+';
       font-family: 'JetBrains Mono', monospace;
       font-size: 18px;
       color: var(--text-muted);
       transition: transform 0.2s;
-      flex-shrink: 0;
-      margin-left: 16px;
     }
-    .faq-item.open .faq-toggle { transform: rotate(45deg); }
-    .faq-answer {
-      max-height: 0;
-      overflow: hidden;
-      transition: max-height 0.3s ease;
-    }
-    .faq-answer-inner {
+    .faq-list details[open] summary::after { content: '-'; }
+    .faq-list summary::-webkit-details-marker { display: none; }
+    .faq-list .faq-answer {
       padding: 0 24px 18px;
       font-size: 14px;
       color: var(--text-secondary);
@@ -831,10 +631,9 @@
       font-size: clamp(24px, 4vw, 36px);
       font-weight: 600;
       letter-spacing: -0.02em;
-      margin-bottom: 12px;
+      margin-bottom: 16px;
       line-height: 1.3;
     }
-    .final-cta h2 + h2 { margin-bottom: 12px; }
     .final-cta p {
       font-size: 17px;
       color: var(--text-secondary);
@@ -852,15 +651,12 @@
     .ps-section {
       max-width: 560px;
       margin: 0 auto;
-      padding: 40px 0 0;
-      border-top: 1px solid var(--border);
-    }
-    .ps-section p {
+      padding: 0 24px 80px;
       font-size: 14px;
       color: var(--text-muted);
       line-height: 1.7;
-      margin-bottom: 16px;
     }
+    .ps-section p { margin-bottom: 16px; }
     .ps-section strong { color: var(--text-secondary); }
 
     /* ---- Footer ---- */
@@ -870,111 +666,35 @@
     }
     .footer-inner {
       display: flex;
-      flex-direction: column;
+      justify-content: space-between;
       align-items: center;
-      gap: 20px;
-      text-align: center;
+      flex-wrap: wrap;
+      gap: 16px;
     }
-    .footer-brand {
-      font-weight: 600;
-      font-size: 15px;
-    }
+    .footer-brand { font-weight: 600; font-size: 15px; }
+    .footer-brand span { color: var(--text-muted); font-weight: 400; font-size: 13px; }
     .footer-links {
       display: flex;
       gap: 24px;
       font-size: 14px;
-      flex-wrap: wrap;
-      justify-content: center;
+      color: var(--text-muted);
     }
     .footer-links a { color: var(--text-muted); }
     .footer-links a:hover { color: var(--text); }
-    .footer-secondary {
-      display: flex;
-      gap: 24px;
-      font-size: 14px;
-    }
-    .footer-secondary a { color: var(--text-muted); }
-    .footer-secondary a:hover { color: var(--text); }
-    .footer-copy {
-      font-size: 13px;
-      color: var(--text-muted);
-    }
-    .footer-tagline {
-      font-family: 'JetBrains Mono', monospace;
-      font-size: 12px;
-      color: var(--text-muted);
-      letter-spacing: 0.04em;
-    }
-
-    /* ---- Transition Line ---- */
-    .transition-block {
-      text-align: center;
-      padding: 40px 0;
-      max-width: 560px;
-      margin: 0 auto;
-    }
-    .transition-block p {
-      font-size: 20px;
-      color: var(--text-secondary);
-      line-height: 1.6;
-    }
-    .transition-block p strong {
-      color: var(--text);
-      font-size: 24px;
-      display: block;
-      margin-top: 8px;
-    }
-
-    /* ---- Supporting line ---- */
-    .supporting-line {
-      font-size: 15px;
-      color: var(--text-secondary);
-      max-width: 640px;
-      line-height: 1.7;
-      margin-top: 24px;
-    }
-
-    /* ---- Engines Callout ---- */
-    .engines-callout {
-      text-align: center;
-      padding: 40px;
-      background: var(--bg-card);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      margin-top: 40px;
-    }
-    .engines-callout p {
-      font-size: 17px;
-      color: var(--text-secondary);
-      line-height: 1.7;
-      max-width: 560px;
-      margin: 0 auto;
-    }
-    .engines-callout p:first-child {
-      font-size: 20px;
-      color: var(--gold);
-      font-weight: 600;
-      margin-bottom: 12px;
-    }
 
     /* ---- Responsive ---- */
-    @media (max-width: 900px) {
-      .pricing-grid { grid-template-columns: repeat(2, 1fr); }
-    }
     @media (max-width: 768px) {
-      .engine-grid { grid-template-columns: 1fr; }
-      .connection-grid { grid-template-columns: 1fr; }
-      .offers-grid { grid-template-columns: 1fr; }
+      .flywheel-grid { grid-template-columns: 1fr; }
+      .offer-grid { grid-template-columns: 1fr; }
       .nav-links a:not(.nav-cta) { display: none; }
     }
     @media (max-width: 640px) {
       .hero { padding: 100px 0 56px; }
       section { padding: 56px 0; }
       .audit-grid { grid-template-columns: 1fr; }
+      .engine-grid { grid-template-columns: 1fr; }
       .pricing-grid { grid-template-columns: 1fr; }
-      .module-body-inner { padding-left: 24px; }
       .footer-inner { flex-direction: column; text-align: center; }
-      .final-cta { padding: 64px 0; }
     }
   </style>
 </head>
@@ -983,269 +703,151 @@
   <!-- Sticky Nav -->
   <nav class="nav" id="nav">
     <div class="nav-inner">
-      <div class="nav-brand">STREETS</div>
+      <div class="nav-brand"><img src="../hero-sun.jpg" alt="4DA" style="width:24px;height:24px;border-radius:50%;vertical-align:middle;margin-right:8px;opacity:0.8;">STREETS <span>by 4DA</span></div>
       <div class="nav-links">
         <a href="#modules">Modules</a>
         <a href="#engines">Engines</a>
-        <a href="#pricing">Pricing</a>
-        <a href="#free-module">Start Here</a>
-        <a href="#free-module" class="nav-cta">Get Module S Free</a>
+        <a href="#pricing">Access</a>
+        <a href="https://4da.ai" class="nav-cta">Download 4DA -- Free</a>
       </div>
     </div>
   </nav>
 
-  <!-- SECTION 1: Hero -->
+  <!-- Hero -->
   <header class="hero">
     <div class="container">
-      <div class="section-label">THE DEVELOPER INCOME PLAYBOOK</div>
-      <h1 style="font-size: clamp(40px, 7vw, 72px); font-weight: 600; line-height: 1.08; letter-spacing: -0.03em; margin-bottom: 24px;">You're sitting on a<br>money-printing machine.</h1>
-      <p style="font-size: 18px; color: var(--text-secondary); max-width: 560px; margin: 0 auto 48px; line-height: 1.7;">Your local LLMs. Your API keys. Your full-stack skills. Your private infrastructure. In 2026, every developer owns the equivalent of a small software company -- and earns exactly $0 from it. STREETS is the playbook that changes that.</p>
-      <div style="display: flex; gap: 16px; justify-content: center; flex-wrap: wrap;">
-        <a href="#free-module" class="btn btn-primary">Get Module S Free</a>
-        <a href="#pricing" class="btn btn-secondary">Get Full Access -- $149</a>
+      <img src="../hero-sun.jpg" alt="4DA" style="width:72px;height:72px;border-radius:50%;margin:0 auto 40px;display:block;filter:drop-shadow(0 0 32px rgba(249, 115, 22, 0.25));">
+      <div class="hero-label">The Developer Income Playbook</div>
+      <h1>You're sitting on a<br>money-printing machine.</h1>
+      <p>Your local LLMs. Your API keys. Your full-stack skills. Your private infrastructure. In 2026, every developer owns the equivalent of a small software company -- and earns exactly $0 from it. STREETS is the playbook that changes that.</p>
+      <div class="hero-buttons">
+        <a href="https://4da.ai" class="btn btn-primary">Download 4DA -- All 7 Modules Free</a>
+        <a href="#modules" class="btn btn-secondary">Explore the Modules</a>
       </div>
-      <div style="margin-top: 32px; font-family: 'JetBrains Mono', monospace; font-size: 13px; color: var(--text-muted); letter-spacing: 0.02em;">All 7 modules free inside 4DA &nbsp;&middot;&nbsp; 8 revenue engines &nbsp;&middot;&nbsp; Updated for 2026</div>
+      <div style="margin-top: 32px; font-size: 13px; color: var(--text-muted); font-family: 'JetBrains Mono', monospace; letter-spacing: 0.02em;">All 7 modules free inside 4DA &middot; 8 revenue engines &middot; For the streets</div>
     </div>
   </header>
 
   <hr class="divider">
 
-  <!-- SECTION 2: The Reality Check -->
-  <section id="audit">
+  <!-- The Audit -->
+  <section>
     <div class="container">
-      <div class="section-label">THE AUDIT</div>
+      <div class="section-label">The Audit</div>
       <h2>You already own the means of production.</h2>
       <p class="subtitle">Run this audit. Be honest with yourself.</p>
-
       <div class="audit-grid">
         <div class="audit-card">
-          <div class="audit-number">01</div>
-          <h3>A decent machine</h3>
+          <h4>A decent machine</h4>
           <p>16GB+ RAM, GPU, always-on capability. The compute layer behind API products, automation services, and hosted LLM endpoints.</p>
         </div>
         <div class="audit-card">
-          <div class="audit-number">02</div>
-          <h3>Local LLMs</h3>
-          <p>Ollama, llama.cpp, vLLM, or cloud API keys. The intelligence layer that powers content generation, data processing, and AI-as-a-Service offerings.</p>
+          <h4>Local LLMs</h4>
+          <p>Ollama, llama.cpp, vLLM, or cloud API keys. The intelligence layer that powers content generation, data processing, and AI-as-a-Service.</p>
         </div>
         <div class="audit-card">
-          <div class="audit-number">03</div>
-          <h3>Full-stack skills</h3>
+          <h4>Full-stack skills</h4>
           <p>Frontend, backend, deployment, infra. The rarest skill combination on Earth -- you can build, ship, and scale alone.</p>
         </div>
         <div class="audit-card">
-          <div class="audit-number">04</div>
-          <h3>Privacy infrastructure</h3>
+          <h4>Privacy infrastructure</h4>
           <p>VPN, local-first tools, self-hosted services. A competitive moat that enterprise customers will pay a premium for.</p>
         </div>
         <div class="audit-card">
-          <div class="audit-number">05</div>
-          <h3>Time outside work</h3>
-          <p>Evenings, weekends, the 128 hours you don't bill. The only non-renewable resource. Currently generating $0/hr in passive income.</p>
+          <h4>Time outside work</h4>
+          <p>Evenings, weekends, the 128 hours you don't bill. Currently generating $0/hr in passive income.</p>
         </div>
         <div class="audit-card">
-          <div class="audit-number">06</div>
-          <h3>A professional network</h3>
+          <h4>A professional network</h4>
           <p>GitHub followers, colleagues, online presence. Distribution. The thing that turns a product into a business.</p>
         </div>
       </div>
-
       <div class="callout">
-        <p><strong>The 2026 math is simple.</strong> The average developer earns $121K/year from one employer. They own infrastructure that could power multiple revenue streams. The gap between what they <em>have</em> and what they <em>earn from it</em> is the largest arbitrage opportunity in tech. STREETS closes that gap.</p>
+        <p><strong>The 2026 math is simple.</strong> The average developer earns $121K/year from one employer. They own infrastructure that could power multiple revenue streams. The gap between what they have and what they earn from it is the largest arbitrage opportunity in tech. STREETS closes that gap.</p>
       </div>
-
-      <p class="supporting-line">Five years ago, you needed a server rack and a team of 10 to do what your laptop does today. The infrastructure democratized. The playbook didn't. Until now.</p>
     </div>
   </section>
 
   <hr class="divider">
 
-  <!-- SECTION 3: The Problem (PAS) -->
+  <!-- The Problem -->
   <section>
     <div class="container">
-      <div class="section-label">THE PROBLEM</div>
-      <h2>The most monetizable skill set on Earth. The least monetized professionals.</h2>
-
+      <div class="section-label">The Problem</div>
+      <h2>The most monetizable skill set on Earth.<br>The least monetized professionals.</h2>
       <ul class="problem-list">
         <li><strong>You trade time for money at exactly one employer.</strong> Your salary is capped by a comp band someone else decided. Your raises are 3-5% in a world where AI-native founders are 10x-ing their income.</li>
-        <li><strong>You build products that generate millions -- for someone else.</strong> That internal tool you shipped last quarter? It saved your company $400K/year. Your bonus: a gift card and a Slack emoji.</li>
+        <li><strong>You build products that generate millions -- for someone else.</strong> That internal tool you shipped last quarter saved your company $400K/year. Your bonus: a gift card and a Slack emoji.</li>
         <li><strong>You have $0 in passive income.</strong> Despite being one of the few professionals on Earth who can build, deploy, and scale a digital product alone -- from idea to revenue -- in a weekend.</li>
         <li><strong>You scroll past opportunities daily.</strong> A trending API niche. A gap in the tooling market. A problem your team complains about every standup. You see it, you nod, you go back to your sprint tickets.</li>
       </ul>
-
-      <div class="callout" style="margin-top: 32px;">
-        <p>Here is the uncomfortable truth: <strong>junior developers in 2024 started micro-SaaS businesses that now earn more per month than your annual bonus.</strong> Not because they are better engineers. Because they had the playbook. They knew which of the 8 engines to pick, how to validate in 48 hours, and how to price without leaving money on the table. The skills gap isn't the issue. The <em>strategy</em> gap is.</p>
+      <div class="callout">
+        <p>Here is the uncomfortable truth: <strong>junior developers in 2024 started micro-SaaS businesses that now earn more per month than your annual bonus.</strong> Not because they are better engineers. Because they had the playbook. They knew which of the 8 engines to pick, how to validate in 48 hours, and how to price without leaving money on the table. The skills gap isn't the issue. The strategy gap is.</p>
       </div>
-
-      <div class="transition-block">
-        <p>You have the rig. You have the skills. You don't have the playbook.</p>
-        <p><strong>STREETS is the playbook.</strong></p>
+      <div style="margin-top: 48px; text-align: center; max-width: 540px;">
+        <p style="font-size: 20px; font-weight: 600; line-height: 1.4; margin-bottom: 8px;">You have the rig. You have the skills.<br>You don't have the playbook.</p>
+        <p style="font-size: 18px; color: var(--accent); font-weight: 500;">STREETS is the playbook.</p>
       </div>
     </div>
   </section>
 
   <hr class="divider">
 
-  <!-- SECTION 4: The STREETS Breakdown -->
+  <!-- The System (Modules) -->
   <section id="modules">
     <div class="container">
-      <div class="section-label">THE SYSTEM</div>
+      <div class="section-label">The System</div>
       <h2>7 modules. Each one removes an excuse.</h2>
       <p class="subtitle">STREETS is an acronym. Each letter is a module. Each module is a phase. Complete them in order, or skip to what you need.</p>
-
       <div class="module-list">
-        <!-- S - Sovereign Setup -->
-        <div class="module-item">
-          <div class="module-header" onclick="toggleModule(this)">
-            <div class="module-header-left">
-              <div class="module-letter free">S</div>
-              <div>
-                <div class="module-title">Sovereign Setup</div>
-              </div>
-            </div>
-            <div style="display: flex; align-items: center; gap: 12px;">
-              <span class="module-badge badge-free">FREE</span>
-              <span class="module-toggle">+</span>
-            </div>
-          </div>
-          <div class="module-body">
-            <div class="module-body-inner">
-              <p>Your foundation. Configure your machine, your tools, and your infrastructure as a revenue-generating platform -- not just a development environment. Audit what you own. Map it to income potential. Set up the operational layer that every other module builds on.</p>
-              <p class="module-outcome">What you'll have after this module: A complete inventory of your monetizable assets and a configured local stack ready to power revenue engines.</p>
-            </div>
-          </div>
+        <div class="module-item free-module">
+          <div class="module-badge free">Free</div>
+          <div class="module-letter">S</div>
+          <h3>Sovereign Setup</h3>
+          <p>Your foundation. Configure your machine, your tools, and your infrastructure as a revenue-generating platform. Audit what you own. Map it to income potential. Set up the operational layer that every other module builds on.</p>
+          <div class="module-outcome">After this module: A complete inventory of your monetizable assets and a configured local stack ready to power revenue engines.</div>
         </div>
-
-        <!-- T - Technical Moats -->
         <div class="module-item">
-          <div class="module-header" onclick="toggleModule(this)">
-            <div class="module-header-left">
-              <div class="module-letter">T</div>
-              <div>
-                <div class="module-title">Technical Moats</div>
-              </div>
-            </div>
-            <div style="display: flex; align-items: center; gap: 12px;">
-              <span class="module-badge badge-free">FREE</span>
-              <span class="module-toggle">+</span>
-            </div>
-          </div>
-          <div class="module-body">
-            <div class="module-body-inner">
-              <p>The skills you already have are defensible advantages -- if you position them correctly. Learn to identify your unique technical differentiators, build expertise signals that attract premium clients, and create barriers to entry that protect your revenue streams from commoditization.</p>
-              <p class="module-outcome">What you'll have after this module: A positioning document, 3 identified moats, and a public credibility strategy that works while you sleep.</p>
-            </div>
-          </div>
+          <div class="module-badge free">Free</div>
+          <div class="module-letter">T</div>
+          <h3>Technical Moats</h3>
+          <p>The skills you already have are defensible advantages -- if you position them correctly. Identify your unique technical differentiators, build expertise signals that attract premium clients, and create barriers to entry that protect your revenue streams.</p>
+          <div class="module-outcome">After this module: A positioning document, 3 identified moats, and a public credibility strategy that works while you sleep.</div>
         </div>
-
-        <!-- R - Revenue Engines -->
         <div class="module-item">
-          <div class="module-header" onclick="toggleModule(this)">
-            <div class="module-header-left">
-              <div class="module-letter">R</div>
-              <div>
-                <div class="module-title">Revenue Engines</div>
-              </div>
-            </div>
-            <div style="display: flex; align-items: center; gap: 12px;">
-              <span class="module-badge badge-heart">THE HEART</span>
-              <span class="module-toggle">+</span>
-            </div>
-          </div>
-          <div class="module-body">
-            <div class="module-body-inner">
-              <p>The 8 engines, in detail. For each one: how it works, time-to-first-dollar, capital required (usually $0), tools needed, validation framework, pricing strategy, and scaling path. This is not theory. Each engine includes a step-by-step 30-day launch plan.</p>
-              <p class="module-outcome">What you'll have after this module: Two engines selected -- one for fast cash, one for compound growth -- with launch plans for both.</p>
-            </div>
-          </div>
+          <div class="module-badge free">Free -- The Heart of STREETS</div>
+          <div class="module-letter">R</div>
+          <h3>Revenue Engines</h3>
+          <p>The 8 engines, in detail. For each one: how it works, time-to-first-dollar, capital required (usually $0), tools needed, validation framework, pricing strategy, and scaling path. Each engine includes a step-by-step 30-day launch plan.</p>
+          <div class="module-outcome">After this module: Two engines selected -- one for fast cash, one for compound growth -- with launch plans for both.</div>
         </div>
-
-        <!-- E - Execution Playbook -->
         <div class="module-item">
-          <div class="module-header" onclick="toggleModule(this)">
-            <div class="module-header-left">
-              <div class="module-letter">E</div>
-              <div>
-                <div class="module-title">Execution Playbook</div>
-              </div>
-            </div>
-            <div style="display: flex; align-items: center; gap: 12px;">
-              <span class="module-badge badge-free">FREE</span>
-              <span class="module-toggle">+</span>
-            </div>
-          </div>
-          <div class="module-body">
-            <div class="module-body-inner">
-              <p>Strategy without execution is a blog post. This module is the operating system for shipping revenue-generating projects alongside a full-time job. Time-boxing frameworks, MVP scoping templates, "good enough" shipping criteria, and the 10-hour-per-week build schedule that actually works.</p>
-              <p class="module-outcome">What you'll have after this module: A 90-day execution plan with weekly milestones, shipping criteria, and a time budget that doesn't require quitting your job.</p>
-            </div>
-          </div>
+          <div class="module-badge free">Free</div>
+          <div class="module-letter">E</div>
+          <h3>Execution Playbook</h3>
+          <p>Strategy without execution is a blog post. The operating system for shipping revenue-generating projects alongside a full-time job. Time-boxing frameworks, MVP scoping templates, and the 10-hour-per-week build schedule that actually works.</p>
+          <div class="module-outcome">After this module: A 90-day execution plan with weekly milestones, shipping criteria, and a time budget that doesn't require quitting your job.</div>
         </div>
-
-        <!-- E - Evolving Edge -->
         <div class="module-item">
-          <div class="module-header" onclick="toggleModule(this)">
-            <div class="module-header-left">
-              <div class="module-letter">E</div>
-              <div>
-                <div class="module-title">Evolving Edge</div>
-              </div>
-            </div>
-            <div style="display: flex; align-items: center; gap: 12px;">
-              <span class="module-badge badge-free">FREE</span>
-              <span class="module-toggle">+</span>
-            </div>
-          </div>
-          <div class="module-body">
-            <div class="module-body-inner">
-              <p>Markets move. Your engines need to move with them. This module covers trend detection, pivot frameworks, competitive analysis, and how to use tools like 4DA to surface revenue-relevant signals before the market catches up. Updated annually.</p>
-              <p class="module-outcome">What you'll have after this module: A trend monitoring system, 3 leading indicators for your chosen engines, and a quarterly review process.</p>
-            </div>
-          </div>
+          <div class="module-badge free">Free</div>
+          <div class="module-letter">E</div>
+          <h3>Evolving Edge</h3>
+          <p>Markets move. Your engines need to move with them. Trend detection, pivot frameworks, competitive analysis, and how to use tools like 4DA to surface revenue-relevant signals before the market catches up. Updated annually.</p>
+          <div class="module-outcome">After this module: A trend monitoring system, 3 leading indicators for your chosen engines, and a quarterly review process.</div>
         </div>
-
-        <!-- T - Tactical Automation -->
         <div class="module-item">
-          <div class="module-header" onclick="toggleModule(this)">
-            <div class="module-header-left">
-              <div class="module-letter">T</div>
-              <div>
-                <div class="module-title">Tactical Automation</div>
-              </div>
-            </div>
-            <div style="display: flex; align-items: center; gap: 12px;">
-              <span class="module-badge badge-free">FREE</span>
-              <span class="module-toggle">+</span>
-            </div>
-          </div>
-          <div class="module-body">
-            <div class="module-body-inner">
-              <p>The difference between a side hustle and a passive income stream is automation. This module covers: automated delivery pipelines, self-serve onboarding, payment automation, content scheduling, customer support deflection, and the "set it and measure it" monitoring stack.</p>
-              <p class="module-outcome">What you'll have after this module: An automation blueprint for your primary engine and a monitoring dashboard that tells you when to intervene.</p>
-            </div>
-          </div>
+          <div class="module-badge free">Free</div>
+          <div class="module-letter">T</div>
+          <h3>Tactical Automation</h3>
+          <p>The difference between a side hustle and a passive income stream is automation. Automated delivery pipelines, self-serve onboarding, payment automation, content scheduling, and the "set it and measure it" monitoring stack.</p>
+          <div class="module-outcome">After this module: An automation blueprint for your primary engine and a monitoring dashboard that tells you when to intervene.</div>
         </div>
-
-        <!-- S - Stacking Streams -->
         <div class="module-item">
-          <div class="module-header" onclick="toggleModule(this)">
-            <div class="module-header-left">
-              <div class="module-letter">S</div>
-              <div>
-                <div class="module-title">Stacking Streams</div>
-              </div>
-            </div>
-            <div style="display: flex; align-items: center; gap: 12px;">
-              <span class="module-badge badge-free">FREE</span>
-              <span class="module-toggle">+</span>
-            </div>
-          </div>
-          <div class="module-body">
-            <div class="module-body-inner">
-              <p>One stream is fragile. Three is a business. Five is freedom. This module teaches compound income architecture: how streams feed each other, when to add a new engine vs. scale an existing one, portfolio diversification for developers, and the $10K/month stacking framework.</p>
-              <p class="module-outcome">What you'll have after this module: A 12-month stacking roadmap with revenue targets, interdependencies mapped, and a clear path from $0 to $10K/month.</p>
-            </div>
-          </div>
+          <div class="module-badge free">Free</div>
+          <div class="module-letter">S</div>
+          <h3>Stacking Streams</h3>
+          <p>One stream is fragile. Three is a business. Five is freedom. Compound income architecture: how streams feed each other, when to add a new engine vs. scale an existing one, and the $10K/month stacking framework.</p>
+          <div class="module-outcome">After this module: A 12-month stacking roadmap with revenue targets, interdependencies mapped, and a clear path from $0 to $10K/month.</div>
         </div>
       </div>
     </div>
@@ -1253,193 +855,146 @@
 
   <hr class="divider">
 
-  <!-- SECTION 5: Revenue Engines -->
+  <!-- The 8 Engines -->
   <section id="engines">
     <div class="container">
-      <div class="section-label">THE 8 ENGINES</div>
+      <div class="section-label">The 8 Engines</div>
       <h2>Pick 2. Build 1 fast, plan 1 for scale.</h2>
-      <p class="subtitle">Every engine is proven. Every engine works with infrastructure you already own. Time-to-first-dollar assumes 10 hours/week of focused effort.</p>
-
+      <p class="subtitle">Every engine is proven. Every engine works with infrastructure you already own. Time-to-first-dollar assumes 10 hours/week.</p>
       <div class="engine-grid">
-        <!-- Engine 1 -->
         <div class="engine-card">
-          <div class="engine-number">Engine 1</div>
+          <div class="engine-header">
+            <span class="engine-number">ENGINE 1</span>
+            <span class="engine-ttd">1-2 weeks</span>
+          </div>
           <h3>Digital Products</h3>
-          <div class="engine-ttfd">1-2 weeks to first $</div>
-          <p>Templates, starter kits, boilerplates, component libraries, Notion systems, prompt packs. Build once, sell forever. The lowest-friction engine -- most developers ship their first product in a single weekend.</p>
-          <div class="engine-example"><strong>Example:</strong> A Tailwind component kit for SaaS dashboards. Built in 12 hours. Priced at $49. 200+ sales in 6 months on Gumroad. Marginal cost per sale: $0.</div>
-          <div class="engine-revenue">$500 - $5,000/month at scale</div>
+          <p>Templates, starter kits, boilerplates, component libraries, prompt packs. Build once, sell forever. The lowest-friction engine.</p>
+          <div class="engine-example">A Tailwind component kit for SaaS dashboards. Built in 12 hours. Priced at $49. 200+ sales in 6 months. Marginal cost: $0.</div>
+          <div class="engine-revenue">Revenue range: <strong>$500 - $5,000/mo</strong></div>
         </div>
-
-        <!-- Engine 2 -->
         <div class="engine-card">
-          <div class="engine-number">Engine 2</div>
+          <div class="engine-header">
+            <span class="engine-number">ENGINE 2</span>
+            <span class="engine-ttd">2-4 weeks</span>
+          </div>
           <h3>Content Monetization</h3>
-          <div class="engine-ttfd">2-4 weeks to first $</div>
-          <p>Technical blog with affiliate links. YouTube tutorials with sponsorships. A paid newsletter. Developers underestimate this engine because they think "content" means being an influencer. It doesn't. It means being useful in public, consistently.</p>
-          <div class="engine-example"><strong>Example:</strong> A weekly newsletter covering Rust ecosystem updates. 3,000 subscribers in 8 months. Sponsorship rate: $400/issue. Time investment: 4 hours/week.</div>
-          <div class="engine-revenue">$1,000 - $8,000/month at scale</div>
+          <p>Technical blog with affiliate links. YouTube tutorials with sponsorships. A paid newsletter. Being useful in public, consistently.</p>
+          <div class="engine-example">A weekly Rust ecosystem newsletter. 3,000 subscribers in 8 months. Sponsorship rate: $400/issue. Time: 4 hrs/week.</div>
+          <div class="engine-revenue">Revenue range: <strong>$1,000 - $8,000/mo</strong></div>
         </div>
-
-        <!-- Engine 3 -->
         <div class="engine-card">
-          <div class="engine-number">Engine 3</div>
+          <div class="engine-header">
+            <span class="engine-number">ENGINE 3</span>
+            <span class="engine-ttd">4-8 weeks</span>
+          </div>
           <h3>Micro-SaaS</h3>
-          <div class="engine-ttfd">4-8 weeks to first $</div>
-          <p>Small, focused tools priced at $9-29/month. Solve one problem completely. The micro-SaaS market is projected to hit $59.6B by 2030 with 30% annual growth. Most founders spend under $1,000 before first revenue.</p>
-          <div class="engine-example"><strong>Example:</strong> A GitHub Actions monitoring dashboard for teams. $19/month. Built with Next.js + a PostgreSQL database. 47 paying customers = $893/month recurring. Total build cost: your time + $0.</div>
-          <div class="engine-revenue">$500 - $15,000/month at scale</div>
+          <p>Small, focused tools priced at $9-29/month. Solve one problem completely. The micro-SaaS market: $59.6B projected by 2030.</p>
+          <div class="engine-example">GitHub Actions monitoring dashboard. $19/month. 47 paying customers = $893/month recurring. Total build cost: $0.</div>
+          <div class="engine-revenue">Revenue range: <strong>$500 - $15,000/mo</strong></div>
         </div>
-
-        <!-- Engine 4 -->
         <div class="engine-card">
-          <div class="engine-number">Engine 4</div>
+          <div class="engine-header">
+            <span class="engine-number">ENGINE 4</span>
+            <span class="engine-ttd">1-2 weeks</span>
+          </div>
           <h3>Automation-as-a-Service</h3>
-          <div class="engine-ttfd">1-2 weeks to first $</div>
-          <p>Businesses pay $500-5,000+ for automations that take you a few hours to build. Data pipelines, workflow automation, integration scripts, report generation. Your "boring" infrastructure skills are someone else's expensive problem.</p>
-          <div class="engine-example"><strong>Example:</strong> An automated competitor price monitoring system for an e-commerce brand. Built in 6 hours with Python + a cron job. Charged $2,500 setup + $200/month maintenance. Client has been paying for 14 months.</div>
-          <div class="engine-revenue">$2,000 - $10,000/month at scale</div>
+          <p>Businesses pay $500-5,000+ for automations that take you hours to build. Data pipelines, workflow automation, integration scripts.</p>
+          <div class="engine-example">Competitor price monitoring for e-commerce. Built in 6 hours. $2,500 setup + $200/month. Client paying for 14 months.</div>
+          <div class="engine-revenue">Revenue range: <strong>$2,000 - $10,000/mo</strong></div>
         </div>
-
-        <!-- Engine 5 -->
         <div class="engine-card">
-          <div class="engine-number">Engine 5</div>
+          <div class="engine-header">
+            <span class="engine-number">ENGINE 5</span>
+            <span class="engine-ttd">2-4 weeks</span>
+          </div>
           <h3>API Products</h3>
-          <div class="engine-ttfd">2-4 weeks to first $</div>
-          <p>Specialized LLM endpoints. Data enrichment APIs. Niche processing services. In 2026, the fastest-growing developer products have no traditional UI at all -- they're consumed via API. Your local LLMs and compute power become the product.</p>
-          <div class="engine-example"><strong>Example:</strong> A resume-parsing API built on a fine-tuned local LLM. $0.02/parse. Hosted on your own infrastructure. 45,000 API calls/month from 12 customers. Infrastructure cost: electricity.</div>
-          <div class="engine-revenue">$1,000 - $20,000/month at scale</div>
+          <p>Specialized LLM endpoints. Data enrichment APIs. In 2026, the fastest-growing developer products have no UI -- they're consumed via API.</p>
+          <div class="engine-example">Resume-parsing API on fine-tuned local LLM. $0.02/parse. 45,000 calls/month from 12 customers. Infra cost: electricity.</div>
+          <div class="engine-revenue">Revenue range: <strong>$1,000 - $20,000/mo</strong></div>
         </div>
-
-        <!-- Engine 6 -->
         <div class="engine-card">
-          <div class="engine-number">Engine 6</div>
+          <div class="engine-header">
+            <span class="engine-number">ENGINE 6</span>
+            <span class="engine-ttd">1 week</span>
+          </div>
           <h3>Consulting</h3>
-          <div class="engine-ttfd">1 week to first $</div>
-          <p>$150-400/hr for the same skills you sell for $58/hr to your employer. Architecture reviews, code audits, performance optimization, AI integration strategy. Consulting is the fastest path to income, and the credibility you build feeds every other engine.</p>
-          <div class="engine-example"><strong>Example:</strong> Two 10-hour consulting engagements per month at $250/hr. That's $5,000/month -- more than most developers' after-tax raise from a promotion. Sourced from LinkedIn + one conference talk.</div>
-          <div class="engine-revenue">$3,000 - $15,000/month at scale</div>
+          <p>$150-400/hr for the same skills you sell for $58/hr to your employer. Architecture reviews, code audits, AI integration strategy.</p>
+          <div class="engine-example">Two 10-hour engagements/month at $250/hr = $5,000/month. Sourced from LinkedIn + one conference talk.</div>
+          <div class="engine-revenue">Revenue range: <strong>$3,000 - $15,000/mo</strong></div>
         </div>
-
-        <!-- Engine 7 -->
         <div class="engine-card">
-          <div class="engine-number">Engine 7</div>
+          <div class="engine-header">
+            <span class="engine-number">ENGINE 7</span>
+            <span class="engine-ttd">4-12 weeks</span>
+          </div>
           <h3>Open Source + Premium</h3>
-          <div class="engine-ttfd">4-12 weeks to first $</div>
-          <p>Build a useful open-source tool. Offer a premium tier, hosted version, or support plan. The open-source model is the most powerful distribution channel in software -- your users become your marketing team.</p>
-          <div class="engine-example"><strong>Example:</strong> An open-source CLI tool for database migrations. 1,200 GitHub stars. Premium hosted version at $12/month. 89 paying customers. The free tier does the marketing. The premium tier does the revenue.</div>
-          <div class="engine-revenue">$500 - $10,000/month at scale</div>
+          <p>Build a useful OSS tool. Offer a premium tier or hosted version. Your users become your marketing team.</p>
+          <div class="engine-example">OSS CLI for database migrations. 1,200 GitHub stars. Premium hosted at $12/month. 89 paying customers.</div>
+          <div class="engine-revenue">Revenue range: <strong>$500 - $10,000/mo</strong></div>
         </div>
-
-        <!-- Engine 8 -->
         <div class="engine-card">
-          <div class="engine-number">Engine 8</div>
-          <h3>Data Products and Intelligence</h3>
-          <div class="engine-ttfd">4-8 weeks to first $</div>
-          <p>Curated datasets, market intelligence feeds, competitive analysis tools, trend reports. Information asymmetry is the oldest business model in the world. Your ability to collect, process, and present data is the product.</p>
-          <div class="engine-example"><strong>Example:</strong> A weekly AI-generated competitive intelligence report for SaaS founders in the fintech vertical. $79/month. 34 subscribers. 90% automated using local LLMs + web scraping. Your time: 2 hours/week for quality review.</div>
-          <div class="engine-revenue">$1,000 - $12,000/month at scale</div>
+          <div class="engine-header">
+            <span class="engine-number">ENGINE 8</span>
+            <span class="engine-ttd">4-8 weeks</span>
+          </div>
+          <h3>Data Products &amp; Intelligence</h3>
+          <p>Curated datasets, market intelligence feeds, competitive analysis tools. Information asymmetry is the oldest business model.</p>
+          <div class="engine-example">Weekly AI competitive intelligence report for fintech SaaS. $79/month. 34 subscribers. 90% automated via local LLMs.</div>
+          <div class="engine-revenue">Revenue range: <strong>$1,000 - $12,000/mo</strong></div>
         </div>
       </div>
-
-      <div class="engines-callout">
-        <p>You don't need all 8. You need 2.</p>
-        <p>One engine for immediate cash flow (Engines 1, 4, or 6).<br>One engine for compound growth (Engines 3, 5, or 7).<br>STREETS Module R walks you through the selection framework.</p>
+      <div class="callout" style="margin-top: 40px; text-align: center; max-width: 640px; margin-left: auto; margin-right: auto;">
+        <p><strong>You don't need all 8. You need 2.</strong> One engine for immediate cash flow (Engines 1, 4, or 6). One engine for compound growth (Engines 3, 5, or 7). Module R walks you through the selection framework.</p>
       </div>
     </div>
   </section>
 
   <hr class="divider">
 
-  <!-- SECTION 6: The 4DA Connection -->
-  <section id="flywheel">
+  <!-- The 4DA Connection -->
+  <section>
     <div class="container">
-      <div class="section-label">THE FLYWHEEL</div>
+      <div class="section-label">The Flywheel</div>
       <h2>4DA is the radar. STREETS is the playbook.</h2>
-      <p class="subtitle">4DA surfaces developer-relevant signals from 11 sources, scored against your actual codebase and technology profile. STREETS teaches you to convert those signals into revenue. They were built to work together.</p>
-
-      <h3 style="font-size: 18px; font-weight: 600; margin-bottom: 24px;">The Intelligence-to-Income Flywheel</h3>
-
-      <div class="flywheel-steps">
-        <div class="flywheel-step">
-          <div class="flywheel-step-line">
-            <div class="flywheel-dot"></div>
-            <div class="flywheel-connector"></div>
-          </div>
-          <p>4DA surfaces a trending API niche in your stack</p>
+      <p class="subtitle">4DA surfaces developer-relevant signals from 11 sources, scored against your codebase. STREETS teaches you to convert those signals into revenue. They were built to work together.</p>
+      <div class="flywheel-grid">
+        <div class="flywheel-text">
+          <p><strong>If you already use 4DA, you're 70% there.</strong> You already have a scored intelligence feed, auto-detected technology profile, competitive signal monitoring, and trend detection. STREETS adds the missing 30%: the frameworks for turning those signals into products, services, and recurring revenue.</p>
+          <p><strong>If you don't use 4DA yet, STREETS still works standalone.</strong> 4DA is not a prerequisite. STREETS teaches the principles that work with any signal source. But the combination is where the compounding happens.</p>
         </div>
-        <div class="flywheel-step">
-          <div class="flywheel-step-line">
-            <div class="flywheel-dot"></div>
-            <div class="flywheel-connector"></div>
-          </div>
-          <p>STREETS Engine 5 (API Products) gives you the launch framework</p>
-        </div>
-        <div class="flywheel-step">
-          <div class="flywheel-step-line">
-            <div class="flywheel-dot"></div>
-            <div class="flywheel-connector"></div>
-          </div>
-          <p>You ship an MVP in 2 weeks using your local infrastructure</p>
-        </div>
-        <div class="flywheel-step">
-          <div class="flywheel-step-line">
-            <div class="flywheel-dot"></div>
-            <div class="flywheel-connector"></div>
-          </div>
-          <p>4DA monitors competitor activity + market signals</p>
-        </div>
-        <div class="flywheel-step">
-          <div class="flywheel-step-line">
-            <div class="flywheel-dot"></div>
-            <div class="flywheel-connector"></div>
-          </div>
-          <p>STREETS Module E (Evolving Edge) tells you when to pivot or scale</p>
-        </div>
-        <div class="flywheel-step">
-          <div class="flywheel-step-line">
-            <div class="flywheel-dot"></div>
-          </div>
-          <p>Revenue compounds. Intelligence sharpens. The flywheel spins.</p>
+        <div class="flywheel-diagram">
+<pre><span class="highlight">4DA</span> surfaces a trending API niche
+         |
+         v
+<span class="highlight">STREETS</span> Engine 5 gives the launch plan
+         |
+         v
+You ship an MVP in 2 weeks
+         |
+         v
+<span class="highlight">4DA</span> monitors competitor activity
+         |
+         v
+<span class="highlight">STREETS</span> Module E: pivot or scale?
+         |
+         v
+Revenue compounds. Intelligence sharpens.</pre>
         </div>
       </div>
-
-      <div class="connection-grid">
-        <div class="connection-card">
-          <h3>If you already use 4DA, you're 70% there.</h3>
-          <p>You already have: a scored intelligence feed, auto-detected technology profile, competitive signal monitoring, and trend detection. STREETS adds the missing 30%: the frameworks for turning those signals into products, services, and recurring revenue.</p>
-        </div>
-        <div class="connection-card">
-          <h3>If you don't use 4DA yet, STREETS still works standalone.</h3>
-          <p>4DA is not a prerequisite. STREETS teaches the principles, frameworks, and execution playbooks that work with any signal source. But the combination is where the compounding happens.</p>
-        </div>
-      </div>
-
-      <div class="offers-grid">
-        <div class="offer-card offer-card-gold">
-          <h3>STREETS is free inside 4DA. All 7 modules.</h3>
-          <p>No paywall. No teaser. The complete playbook ships with every 4DA install. Your radar and your playbook, working together.</p>
-        </div>
-        <div class="offer-card offer-card-accent">
-          <h3>Community + Cohort for builders who want more.</h3>
-          <p>The playbook teaches the frameworks. Community provides the accountability, case studies, live guidance, and a network of developers building revenue streams alongside you.</p>
-        </div>
+      <div style="margin-top: 40px; text-align: center; padding: 28px; background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius);">
+        <p style="font-size: 15px; color: var(--text-secondary); line-height: 1.7;">Every module. Every engine. Every framework.<br><strong style="color: var(--accent);">Free inside 4DA. For the streets.</strong></p>
       </div>
     </div>
   </section>
 
   <hr class="divider">
 
-  <!-- SECTION 7: Module S Preview -->
+  <!-- Module S Preview -->
   <section id="free-module">
     <div class="container">
-      <div class="section-label">START HERE</div>
-      <h2>Module S: Sovereign Setup</h2>
-      <p class="subtitle" style="font-size: 20px; font-weight: 500; color: var(--text-secondary);">The foundation. Where every STREETS journey begins.</p>
-      <p style="font-size: 16px; color: var(--text-secondary); line-height: 1.7; max-width: 640px; margin-bottom: 40px;">All 7 modules are free inside 4DA. Module S is where you start -- it audits your current setup and identifies every monetizable asset you already own.</p>
-
-      <h3 style="font-size: 17px; font-weight: 600; margin-bottom: 20px;">What's inside Module S:</h3>
-
+      <div class="section-label">Inside Module S</div>
+      <h2>Module S: Sovereign Setup -- Where It Starts</h2>
+      <p class="subtitle">The foundation module. Every STREETS journey starts here. Like all 7 modules, it's free inside 4DA.</p>
       <div class="preview-list">
         <div class="preview-item">
           <h4>S.1: The Infrastructure Audit</h4>
@@ -1451,7 +1006,7 @@
         </div>
         <div class="preview-item">
           <h4>S.3: The Revenue Potential Calculator</h4>
-          <p>Input your hardware specs, skills, available time, and risk tolerance. Output: a ranked list of viable engines with estimated time-to-first-dollar for your specific situation.</p>
+          <p>Input your hardware specs, skills, available time, and risk tolerance. Output: a ranked list of viable engines with estimated time-to-first-dollar.</p>
         </div>
         <div class="preview-item">
           <h4>S.4: The Operational Layer</h4>
@@ -1462,375 +1017,226 @@
           <p>A guided exercise to generate your first $100 from your infrastructure within 7 days. Not a thought experiment. An assignment with a deadline.</p>
         </div>
       </div>
-
-      <div style="margin-bottom: 16px;">
-        <a href="https://github.com/runyourempire/4DA/releases/latest" class="btn btn-primary" style="font-size: 17px; padding: 16px 36px;">Download 4DA -- All Modules Free</a>
-      </div>
-      <p style="font-size: 14px; color: var(--text-muted); font-style: italic; max-width: 560px;">Every module ships with 4DA. Start with S, work through all 7 at your own pace.</p>
-
-      <div class="tease-grid">
-        <h3>The other 6 modules:</h3>
-        <table class="tease-table">
-          <tr>
-            <td>T -- Technical Moats</td>
-            <td>Your positioning document + 3 defensible advantages</td>
-          </tr>
-          <tr>
-            <td>R -- Revenue Engines</td>
-            <td>Selection framework + 30-day launch plans for all 8 engines</td>
-          </tr>
-          <tr>
-            <td>E -- Execution Playbook</td>
-            <td>90-day plan + 10hr/week build schedule + shipping criteria</td>
-          </tr>
-          <tr>
-            <td>E -- Evolving Edge</td>
-            <td>Trend monitoring system + pivot decision framework</td>
-          </tr>
-          <tr>
-            <td>T -- Tactical Automation</td>
-            <td>Automation blueprints + monitoring dashboard templates</td>
-          </tr>
-          <tr>
-            <td>S -- Stacking Streams</td>
-            <td>12-month stacking roadmap + the $10K/month framework</td>
-          </tr>
-        </table>
+      <div style="margin-top: 40px; text-align: center;">
+        <a href="https://4da.ai" class="btn btn-primary" style="font-size: 16px; padding: 16px 32px;">Download 4DA -- Start Module S Now</a>
+        <p style="margin-top: 16px; font-size: 13px; color: var(--text-muted);">All 7 modules. All 8 engine playbooks. Free inside 4DA.</p>
       </div>
     </div>
   </section>
 
   <hr class="divider">
 
-  <!-- SECTION 8: Pricing -->
+  <!-- Pricing -->
   <section id="pricing">
     <div class="container" style="text-align: center;">
-      <div class="section-label">PRICING</div>
-      <h2>The ROI math writes itself.</h2>
-      <p class="subtitle" style="margin: 0 auto 48px; text-align: center;">One consulting gig pays for STREETS. One micro-SaaS customer pays for STREETS. One weekend digital product pays for STREETS. The question isn't whether you can afford it. It's how long you want to keep earning $0 from your infrastructure.</p>
-
-      <div class="pricing-grid">
-        <!-- Free (in 4DA) -->
-        <div class="pricing-card recommended">
-          <h3>Free inside 4DA</h3>
-          <div class="pricing-price">$0</div>
-          <div class="pricing-note">All 7 modules. All lessons. Forever. For the streets.</div>
+      <div class="section-label">Access</div>
+      <h2>For the streets. All of it.</h2>
+      <p class="subtitle" style="margin: 0 auto 48px; text-align: center;">Every module. Every engine playbook. Every framework. Free inside 4DA. No gating. No trials. No paywalls on the knowledge.</p>
+      <div class="pricing-grid" style="grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); max-width: 900px;">
+        <div class="pricing-card" style="border-color: var(--accent);">
+          <h3>STREETS Playbook</h3>
+          <div class="pricing-price">$0 <span>forever</span></div>
+          <div class="pricing-note">Free inside 4DA. No email. No account.</div>
           <ul class="pricing-features">
-            <li>All 7 STREETS modules (complete)</li>
+            <li>All 7 STREETS modules</li>
             <li>All 8 revenue engine playbooks</li>
-            <li>Interactive command execution</li>
-            <li>Sovereign Profile builder</li>
-            <li>Infrastructure audit framework</li>
+            <li>30-day launch plan templates</li>
+            <li>Automation blueprint library</li>
+            <li>The $10K/month stacking framework</li>
             <li>Revenue potential calculator</li>
             <li>The First $100 Challenge</li>
-            <li>The $10K/month stacking framework</li>
+            <li>Updated with every 4DA release</li>
           </ul>
-          <a href="https://github.com/runyourempire/4DA/releases/latest" class="btn btn-primary" style="width: 100%; justify-content: center; padding: 12px 20px; font-size: 14px;">Download 4DA -- Free</a>
-          <div class="pricing-cta-note">The complete playbook. No catch. No email. No account.</div>
+          <a href="https://4da.ai" class="pricing-cta primary">Download 4DA -- Free</a>
         </div>
-
-        <!-- Community -->
         <div class="pricing-card">
           <h3>Community</h3>
           <div class="pricing-price">$29 <span>/month</span></div>
-          <div class="pricing-note">Or $249/year. For builders who want momentum.</div>
+          <div class="pricing-note">Or $249/year (save $99).</div>
           <ul class="pricing-features">
-            <li>Everything in Free, plus:</li>
-            <li>Private community access (Discord)</li>
+            <li>Private community (Discord)</li>
             <li>Monthly office hours (live Q&A)</li>
-            <li>Engine-specific case study library</li>
+            <li>Case study library (quarterly)</li>
             <li>Revenue tracking templates</li>
-            <li>Annual playbook updates</li>
+            <li>Accountability partner matching</li>
             <li>Priority support</li>
           </ul>
-          <a href="#" class="btn btn-secondary" style="width: 100%; justify-content: center; padding: 12px 20px; font-size: 14px;">Join Community</a>
-          <div class="pricing-cta-note">Best for developers actively building and iterating.</div>
+          <a href="#" class="pricing-cta secondary">Join Community</a>
         </div>
-
-        <!-- Cohort -->
-        <div class="pricing-card cohort">
+        <div class="pricing-card" style="border-color: var(--gold);">
           <h3>Cohort</h3>
-          <div class="pricing-price" style="color: var(--gold);">$499</div>
-          <div class="pricing-note">8-week structured program. Limited seats.</div>
+          <div class="pricing-price">$499</div>
+          <div class="pricing-note">8-week program. Limited seats.</div>
           <ul class="pricing-features">
-            <li>Everything in Community (annual)</li>
-            <li>8-week live cohort (2 sessions/week)</li>
-            <li>1-on-1 strategy session (60 minutes)</li>
-            <li>Accountability partner matching</li>
+            <li>Community membership included</li>
+            <li>8-week live cohort (2x/week)</li>
+            <li>1-on-1 strategy session (60 min)</li>
             <li>Live engine launch reviews</li>
-            <li>Direct access to the STREETS team</li>
-            <li>Cohort-exclusive case studies</li>
+            <li>Direct access to the team</li>
           </ul>
-          <a href="#" class="btn btn-gold" style="width: 100%; justify-content: center; padding: 12px 20px; font-size: 14px;">Join Next Cohort</a>
-          <div class="pricing-cta-note">Next cohort starts March 2026. 24 seats per cohort.</div>
+          <a href="#" class="pricing-cta secondary">Join Next Cohort</a>
         </div>
       </div>
-
-      <p style="font-size: 13px; color: var(--text-muted); margin-top: 24px; font-style: italic;">The playbook is free because the knowledge should be accessible. Community and Cohort exist for developers who want accountability, live guidance, and a network of builders doing the same work.</p>
+      <p style="margin-top: 24px; font-size: 13px; color: var(--text-muted); font-style: italic;">The playbook is free. Community and cohorts exist for people who want accountability, live feedback, and a network of builders.</p>
     </div>
   </section>
 
   <hr class="divider">
 
-  <!-- SECTION 9: The $10K/month Framework -->
-  <section id="framework">
+  <!-- The $10K/Month Framework -->
+  <section>
     <div class="container">
-      <div class="section-label">THE STACKING FRAMEWORK</div>
-      <h2>One stream is a side hustle. Three is a business. Five is freedom.</h2>
+      <div class="section-label">The Stacking Framework</div>
+      <h2>One stream is a side hustle.<br>Three is a business. Five is freedom.</h2>
       <p class="subtitle">The $10K/month target isn't aspirational. It's architectural. Here's how the math works when streams compound.</p>
-
-      <h3 style="font-size: 18px; font-weight: 600; margin-bottom: 32px;">The Stacking Milestones</h3>
-
-      <div class="milestone-timeline">
-        <!-- Month 1-2 -->
-        <div class="milestone">
-          <div class="milestone-line">
-            <div class="milestone-dot"></div>
-            <div class="milestone-bar"></div>
-          </div>
-          <div class="milestone-content">
-            <div class="milestone-label">MONTH 1-2</div>
-            <div class="milestone-revenue">$0 - $500/month</div>
-            <h3>Foundation</h3>
-            <ul>
-              <li>Complete Module S (Sovereign Setup)</li>
-              <li>Launch Engine 6 (Consulting) -- your fastest path to first dollar</li>
-              <li>Ship one digital product (Engine 1) -- a template, kit, or boilerplate</li>
-              <li>Target: $500/month from 2 consulting sessions + product sales trickling in</li>
-            </ul>
-          </div>
+      <div class="milestone-list">
+        <div class="milestone-item">
+          <div class="milestone-time">Month 1-2</div>
+          <div class="milestone-revenue">$0 - $500/month</div>
+          <ul>
+            <li>Complete Module S (Sovereign Setup)</li>
+            <li>Launch Engine 6 (Consulting) -- fastest path to first dollar</li>
+            <li>Ship one digital product (Engine 1) -- a template, kit, or boilerplate</li>
+          </ul>
         </div>
-
-        <!-- Month 3-4 -->
-        <div class="milestone">
-          <div class="milestone-line">
-            <div class="milestone-dot"></div>
-            <div class="milestone-bar"></div>
-          </div>
-          <div class="milestone-content">
-            <div class="milestone-label">MONTH 3-4</div>
-            <div class="milestone-revenue">$500 - $2,000/month</div>
-            <h3>Traction</h3>
-            <ul>
-              <li>Consulting generates referrals (word of mouth kicks in)</li>
-              <li>Digital product generates reviews (social proof compounds)</li>
-              <li>Begin Engine 2 (Content) -- a weekly newsletter or technical blog</li>
-              <li>Target: $2,000/month -- consulting stabilized, products growing, content building audience</li>
-            </ul>
-          </div>
+        <div class="milestone-item">
+          <div class="milestone-time">Month 3-4</div>
+          <div class="milestone-revenue">$500 - $2,000/month</div>
+          <ul>
+            <li>Consulting generates referrals (word of mouth kicks in)</li>
+            <li>Digital product generates reviews (social proof compounds)</li>
+            <li>Begin Engine 2 (Content) -- a weekly newsletter or technical blog</li>
+          </ul>
         </div>
-
-        <!-- Month 5-8 -->
-        <div class="milestone">
-          <div class="milestone-line">
-            <div class="milestone-dot"></div>
-            <div class="milestone-bar"></div>
-          </div>
-          <div class="milestone-content">
-            <div class="milestone-label">MONTH 5-8</div>
-            <div class="milestone-revenue">$2,000 - $5,000/month</div>
-            <h3>Compounding</h3>
-            <ul>
-              <li>Launch Engine 3 (Micro-SaaS) or Engine 5 (API Product) -- your compound growth engine</li>
-              <li>Content drives traffic to your products (the flywheel connects)</li>
-              <li>Consulting clients become case studies (authority builds)</li>
-              <li>Target: $5,000/month -- 3 active streams, 1 scaling</li>
-            </ul>
-          </div>
+        <div class="milestone-item">
+          <div class="milestone-time">Month 5-8</div>
+          <div class="milestone-revenue">$2,000 - $5,000/month</div>
+          <ul>
+            <li>Launch Engine 3 (Micro-SaaS) or Engine 5 (API Product)</li>
+            <li>Content drives traffic to your products (the flywheel connects)</li>
+            <li>Consulting clients become case studies (authority builds)</li>
+          </ul>
         </div>
-
-        <!-- Month 9-12 -->
-        <div class="milestone">
-          <div class="milestone-line">
-            <div class="milestone-dot"></div>
-          </div>
-          <div class="milestone-content">
-            <div class="milestone-label">MONTH 9-12</div>
-            <div class="milestone-revenue">$5,000 - $10,000+/month</div>
-            <h3>Scale</h3>
-            <ul>
-              <li>Micro-SaaS or API product reaches product-market fit</li>
-              <li>Add Engine 7 (Open Source + Premium) for distribution leverage</li>
-              <li>Automation (Module T) reduces your time investment per stream</li>
-              <li>Target: $10,000/month -- 4-5 active streams, 2+ on autopilot</li>
-            </ul>
-          </div>
+        <div class="milestone-item">
+          <div class="milestone-time">Month 9-12</div>
+          <div class="milestone-revenue">$5,000 - $10,000+/month</div>
+          <ul>
+            <li>Micro-SaaS or API product reaches product-market fit</li>
+            <li>Add Engine 7 (Open Source + Premium) for distribution</li>
+            <li>Automation (Module T) reduces time per stream</li>
+          </ul>
         </div>
       </div>
-
-      <!-- Stacking Visual -->
-      <div class="stacking-visual">
-        <div class="stacking-header">$10,000/mo -- Revenue Breakdown</div>
-        <div class="stack-row">
-          <div class="stack-label">Consulting</div>
-          <div class="stack-bar stack-bar-1"></div>
-          <div class="stack-amount">$3,000</div>
+      <div class="stacking-diagram">
+        <div class="stack-bar">
+          <span class="stack-label">Consulting</span>
+          <div class="stack-bar-fill" style="width: 30%;"></div>
+          <span class="stack-amount">$3,000</span>
         </div>
-        <div class="stack-row">
-          <div class="stack-label">Micro-SaaS</div>
-          <div class="stack-bar stack-bar-2"></div>
-          <div class="stack-amount">$2,800</div>
+        <div class="stack-bar">
+          <span class="stack-label">Micro-SaaS</span>
+          <div class="stack-bar-fill" style="width: 28%;"></div>
+          <span class="stack-amount">$2,800</span>
         </div>
-        <div class="stack-row">
-          <div class="stack-label">API Product</div>
-          <div class="stack-bar stack-bar-3"></div>
-          <div class="stack-amount">$1,800</div>
+        <div class="stack-bar">
+          <span class="stack-label">API Product</span>
+          <div class="stack-bar-fill" style="width: 18%;"></div>
+          <span class="stack-amount">$1,800</span>
         </div>
-        <div class="stack-row">
-          <div class="stack-label">Digital</div>
-          <div class="stack-bar stack-bar-4"></div>
-          <div class="stack-amount">$1,400</div>
+        <div class="stack-bar">
+          <span class="stack-label">Digital</span>
+          <div class="stack-bar-fill" style="width: 14%;"></div>
+          <span class="stack-amount">$1,400</span>
         </div>
-        <div class="stack-row">
-          <div class="stack-label">Content</div>
-          <div class="stack-bar stack-bar-5"></div>
-          <div class="stack-amount">$1,000</div>
+        <div class="stack-bar">
+          <span class="stack-label">Content</span>
+          <div class="stack-bar-fill" style="width: 10%;"></div>
+          <span class="stack-amount">$1,000</span>
         </div>
-        <div class="stacking-footer">5 streams. None is fragile alone. Together, they replace a salary.</div>
+        <div class="stack-total">5 streams. None fragile alone. Together: <strong>$10,000/month</strong></div>
       </div>
-
-      <div class="callout" style="margin-top: 40px; max-width: 680px;">
-        <p><strong>This is not "quit your job" math.</strong> This is "never depend on a single employer again" math. At $10K/month in diversified income from infrastructure you control, your full-time job becomes a choice, not a necessity. That changes everything -- how you negotiate, what projects you accept, and how much risk you can take on the work that actually matters to you.</p>
+      <div class="callout" style="margin-top: 32px; max-width: 640px;">
+        <p><strong>This is not "quit your job" math.</strong> This is "never depend on a single employer again" math. At $10K/month in diversified income from infrastructure you control, your full-time job becomes a choice, not a necessity. That changes everything.</p>
       </div>
     </div>
   </section>
 
   <hr class="divider">
 
-  <!-- SECTION 10: FAQ -->
-  <section id="faq">
+  <!-- FAQ -->
+  <section>
     <div class="container">
       <div class="section-label">FAQ</div>
       <h2>Common questions</h2>
-
       <div class="faq-list">
-        <div class="faq-item">
-          <div class="faq-question" onclick="toggleFaq(this)">
-            <span>I already have a full-time job. Is this realistic?</span>
-            <span class="faq-toggle">+</span>
-          </div>
-          <div class="faq-answer">
-            <div class="faq-answer-inner">STREETS is designed for developers with full-time jobs. Module E (Execution Playbook) specifically covers the 10-hour-per-week build schedule. Most engines don't require quitting your job -- they require redirecting time you're already spending on side projects that don't generate revenue.</div>
-          </div>
-        </div>
-
-        <div class="faq-item">
-          <div class="faq-question" onclick="toggleFaq(this)">
-            <span>What if I'm not a senior developer?</span>
-            <span class="faq-toggle">+</span>
-          </div>
-          <div class="faq-answer">
-            <div class="faq-answer-inner">You don't need to be senior. You need to have basic full-stack skills and a machine that can run local tools. Engine 1 (Digital Products) and Engine 4 (Automation-as-a-Service) are accessible at any experience level. Engine 6 (Consulting) scales with seniority, but the other 7 engines are skill-agnostic within the developer community.</div>
-          </div>
-        </div>
-
-        <div class="faq-item">
-          <div class="faq-question" onclick="toggleFaq(this)">
-            <span>Is this just another "passive income" course full of vague advice?</span>
-            <span class="faq-toggle">+</span>
-          </div>
-          <div class="faq-answer">
-            <div class="faq-answer-inner">No. Every engine in STREETS includes specific, step-by-step 30-day launch plans with tools, pricing, validation criteria, and real examples. All 7 modules are free inside 4DA so you can verify the level of detail yourself. Read it. If it feels like a blog post, you've lost nothing.</div>
-          </div>
-        </div>
-
-        <div class="faq-item">
-          <div class="faq-question" onclick="toggleFaq(this)">
-            <span>Do I need to use 4DA to get value from STREETS?</span>
-            <span class="faq-toggle">+</span>
-          </div>
-          <div class="faq-answer">
-            <div class="faq-answer-inner">No. 4DA and STREETS are complementary, but independent. STREETS works whether you use 4DA, a different intelligence tool, or no tool at all. The 4DA connection accelerates opportunity discovery, but the revenue engines and execution frameworks stand alone.</div>
-          </div>
-        </div>
-
-        <div class="faq-item">
-          <div class="faq-question" onclick="toggleFaq(this)">
-            <span>What makes this different from generic business courses?</span>
-            <span class="faq-toggle">+</span>
-          </div>
-          <div class="faq-answer">
-            <div class="faq-answer-inner">STREETS is built exclusively for developers. Every example uses developer tools. Every engine leverages developer infrastructure. The pricing strategies account for developer market dynamics. Generic business courses teach you to "find a niche" -- STREETS tells you exactly which niches your existing stack supports and how to ship in them.</div>
-          </div>
-        </div>
-
-        <div class="faq-item">
-          <div class="faq-question" onclick="toggleFaq(this)">
-            <span>What if I try an engine and it doesn't work?</span>
-            <span class="faq-toggle">+</span>
-          </div>
-          <div class="faq-answer">
-            <div class="faq-answer-inner">The STREETS framework assumes not every engine will work for every developer. That's why Module R teaches the 48-hour validation framework -- you validate before you invest serious time. And Module S (Stacking Streams) specifically covers portfolio thinking: diversification protects you from any single engine underperforming.</div>
-          </div>
-        </div>
-
-        <div class="faq-item">
-          <div class="faq-question" onclick="toggleFaq(this)">
-            <span>Is the 2026 edition going to be outdated next year?</span>
-            <span class="faq-toggle">+</span>
-          </div>
-          <div class="faq-answer">
-            <div class="faq-answer-inner">The principles and frameworks in STREETS are durable. The market data, tool recommendations, and engine-specific tactics are updated annually. Core buyers get the 2026 edition permanently. Pro subscribers get every annual update automatically.</div>
-          </div>
-        </div>
-
-        <div class="faq-item">
-          <div class="faq-question" onclick="toggleFaq(this)">
-            <span>Can I get a refund?</span>
-            <span class="faq-toggle">+</span>
-          </div>
-          <div class="faq-answer">
-            <div class="faq-answer-inner">Yes. 30-day money-back guarantee on Core and Pro. If you complete Module S and Module T and don't believe the remaining modules are worth your time, email us. No questions, no hoops.</div>
-          </div>
-        </div>
+        <details>
+          <summary>I already have a full-time job. Is this realistic?</summary>
+          <div class="faq-answer">STREETS is designed for developers with full-time jobs. Module E (Execution Playbook) specifically covers the 10-hour-per-week build schedule. Most engines don't require quitting your job -- they require redirecting time you're already spending on side projects that don't generate revenue.</div>
+        </details>
+        <details>
+          <summary>What if I'm not a senior developer?</summary>
+          <div class="faq-answer">You don't need to be senior. You need basic full-stack skills and a machine that can run local tools. Engine 1 (Digital Products) and Engine 4 (Automation-as-a-Service) are accessible at any experience level. Engine 6 (Consulting) scales with seniority, but the other 7 engines are skill-agnostic within the developer community.</div>
+        </details>
+        <details>
+          <summary>Is this just another "passive income" course full of vague advice?</summary>
+          <div class="faq-answer">No. Every engine includes specific, step-by-step 30-day launch plans with tools, pricing, validation criteria, and real examples. All 7 modules are free so you can verify the level of detail yourself. Read Module S. If it feels like a blog post, don't continue to Module T.</div>
+        </details>
+        <details>
+          <summary>Do I need to use 4DA to get value from STREETS?</summary>
+          <div class="faq-answer">No. 4DA and STREETS are complementary, but independent. STREETS works whether you use 4DA, a different intelligence tool, or no tool at all. The 4DA connection accelerates opportunity discovery, but the revenue engines and execution frameworks stand alone.</div>
+        </details>
+        <details>
+          <summary>What makes this different from generic business courses?</summary>
+          <div class="faq-answer">STREETS is built exclusively for developers. Every example uses developer tools. Every engine leverages developer infrastructure. Generic business courses teach you to "find a niche" -- STREETS tells you exactly which niches your existing stack supports and how to ship in them.</div>
+        </details>
+        <details>
+          <summary>What if I try an engine and it doesn't work?</summary>
+          <div class="faq-answer">The framework assumes not every engine will work for every developer. That's why Module R teaches the 48-hour validation framework -- you validate before you invest serious time. Module S (Stacking Streams) covers portfolio thinking: diversification protects you from any single engine underperforming.</div>
+        </details>
+        <details>
+          <summary>Is the 2026 edition going to be outdated next year?</summary>
+          <div class="faq-answer">The principles and frameworks are durable. The market data, tool recommendations, and engine-specific tactics are updated regularly. STREETS updates ship with every 4DA release. Always current. Always free.</div>
+        </details>
+        <details>
+          <summary>Can I get a refund?</summary>
+          <div class="faq-answer">The playbook is free -- there's nothing to refund. Community and Cohort memberships have a 30-day money-back guarantee. No questions, no hoops.</div>
+        </details>
       </div>
     </div>
   </section>
 
   <hr class="divider">
 
-  <!-- SECTION 11: Final CTA -->
+  <!-- Final CTA -->
   <section class="final-cta">
     <div class="container">
-      <h2>Your infrastructure is depreciating.</h2>
-      <h2>Your skills are compounding.</h2>
-      <h2 style="margin-bottom: 24px;">The gap between them is your opportunity.</h2>
-      <p>Every month you wait, three things happen: your hardware loses value, the market gets more crowded, and the developer next to you gets further ahead. STREETS doesn't ask you to learn new skills. It asks you to <em>monetize the ones you already have</em>.</p>
-      <p style="font-size: 15px; color: var(--text-muted); max-width: 560px; margin: 0 auto 40px; line-height: 1.7;">The 2026 edition reflects this year's market: current AI capabilities, current platform economics, current pricing data. It will be updated for 2027. But the developers who start in February 2026 will be 12 months ahead of the ones who start in February 2027.</p>
-
-      <div style="display: flex; flex-direction: column; align-items: center; gap: 16px;">
-        <a href="#free-module" class="btn btn-primary" style="font-size: 17px; padding: 16px 36px;">Get Module S Free -- Start in 5 Minutes</a>
-        <a href="#pricing" class="btn btn-accent">Get Full Access -- $149 (Includes 3 Months 4DA Pro)</a>
-        <a href="#pricing" style="font-size: 14px; color: var(--text-muted);">Join the next cohort -- March 2026 -- 24 seats</a>
+      <h2>Your infrastructure is depreciating.<br>Your skills are compounding.<br>The gap between them is your opportunity.</h2>
+      <p>STREETS gives you the playbook. 4DA gives you the radar. Both are free. The only cost is the hours you're already spending on side projects that don't generate revenue.</p>
+      <div style="display: flex; flex-direction: column; gap: 16px; align-items: center;">
+        <a href="https://4da.ai" class="btn btn-primary" style="font-size: 16px; padding: 16px 32px;">Download 4DA -- STREETS Included Free</a>
+        <a href="#" style="font-size: 14px; color: var(--text-muted);">Join the next cohort -- March 2026 -- 24 seats</a>
       </div>
-      <div class="trust-line" style="margin-top: 32px;">30-day money-back guarantee &nbsp;&middot;&nbsp; No recurring fees on Core &nbsp;&middot;&nbsp; Updated annually &nbsp;&middot;&nbsp; Module S free forever</div>
-
-      <div class="ps-section">
-        <p><strong>P.S.</strong> -- I built 4DA because developers deserve better intelligence. I built STREETS because intelligence without action is just interesting reading. The developers who tested early drafts of this material didn't have different skills than you. They had different <em>frameworks</em>. Every module is free because I'd rather you prove that to yourself than take my word for it. Download 4DA. Run the audit. Work through all 7 modules at your own pace. The frameworks speak for themselves.</p>
-        <p><strong>P.P.S.</strong> -- If you're a 4DA Pro user, check your email. Your 50% discount code is already there.</p>
-      </div>
+      <div class="trust-line">All 7 modules free &middot; No email required &middot; No paywalls on knowledge &middot; For the streets</div>
     </div>
   </section>
+
+  <!-- P.S. -->
+  <div class="ps-section">
+    <p><strong>P.S.</strong> -- I built 4DA because developers deserve better intelligence. I built STREETS because intelligence without action is just interesting reading. Every module is free because this knowledge shouldn't be gated. The developers who used early drafts didn't have different skills than you. They had different frameworks. Download 4DA. Run the audit in Module S. If the number surprises you, the other 6 modules will too.</p>
+    <p><strong>P.P.S.</strong> -- "For the streets" isn't marketing. It's the philosophy. The playbook is free. The knowledge is free. The community and cohorts exist for people who want accountability and a network. But the playbook? That's yours.</p>
+  </div>
 
   <!-- Footer -->
   <footer>
     <div class="container">
       <div class="footer-inner">
-        <div class="footer-brand">STREETS by 4DA</div>
+        <div class="footer-brand"><img src="../hero-sun.jpg" alt="4DA" style="width:20px;height:20px;border-radius:50%;vertical-align:middle;margin-right:8px;opacity:0.6;">STREETS <span>by 4DA</span></div>
         <div class="footer-links">
           <a href="#modules">Modules</a>
           <a href="#engines">Engines</a>
-          <a href="#pricing">Pricing</a>
-          <a href="#free-module">Start Here</a>
-          <a href="#faq">FAQ</a>
-        </div>
-        <div class="footer-secondary">
           <a href="https://4da.ai">4DA.ai</a>
           <a href="https://github.com/runyourempire/4DA">GitHub</a>
-          <a href="#">Community</a>
         </div>
-        <div class="footer-copy">&copy; 2026 4DA -- 4 Dimensional Autonomy</div>
-        <div class="footer-tagline">"Your rig. Your rules. Your revenue."</div>
       </div>
     </div>
   </footer>
@@ -1848,47 +1254,6 @@
         }
       }, { passive: true });
     })();
-
-    // Module accordion
-    function toggleModule(header) {
-      var item = header.parentElement;
-      var body = item.querySelector('.module-body');
-      var isOpen = item.classList.contains('open');
-
-      if (isOpen) {
-        body.style.maxHeight = null;
-        item.classList.remove('open');
-      } else {
-        body.style.maxHeight = body.scrollHeight + 'px';
-        item.classList.add('open');
-      }
-    }
-
-    // FAQ accordion
-    function toggleFaq(question) {
-      var item = question.parentElement;
-      var answer = item.querySelector('.faq-answer');
-      var isOpen = item.classList.contains('open');
-
-      if (isOpen) {
-        answer.style.maxHeight = null;
-        item.classList.remove('open');
-      } else {
-        answer.style.maxHeight = answer.scrollHeight + 'px';
-        item.classList.add('open');
-      }
-    }
-
-    // Smooth scroll for anchor links
-    document.querySelectorAll('a[href^="#"]').forEach(function(anchor) {
-      anchor.addEventListener('click', function(e) {
-        var target = document.querySelector(this.getAttribute('href'));
-        if (target) {
-          e.preventDefault();
-          target.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        }
-      });
-    });
   </script>
 
 </body>
