@@ -3,6 +3,7 @@ import { useAppStore } from '../store';
 import { useShallow } from 'zustand/react/shallow';
 import { renderMarkdown } from '../utils/playbook-markdown';
 import { SovereignProfile } from './playbook/SovereignProfile';
+import { SunsDashboard } from './playbook/SunsDashboard';
 
 // Module metadata (static, mirrors backend MODULE_DEFS)
 const MODULES = [
@@ -270,6 +271,9 @@ export function PlaybookView() {
                 }}
               />
             )}
+
+            {/* Suns Dashboard — always visible in playbook */}
+            <SunsDashboard />
           </div>
         )}
       </main>
