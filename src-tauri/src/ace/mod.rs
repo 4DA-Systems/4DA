@@ -705,6 +705,7 @@ impl ACE {
         }
 
         self.update_source_preference(&item_source, signal.signal_strength)?;
+        self.update_activity_patterns(&signal)?;
 
         debug!(target: "ace::behavior",
             action = ?action,
@@ -712,6 +713,36 @@ impl ACE {
             strength = signal.signal_strength,
             "Recorded behavior signal"
         );
+
+        Ok(())
+    }
+
+    /// Update hourly and daily activity pattern counters
+    fn update_activity_patterns(&self, signal: &BehaviorSignal) -> Result<(), String> {
+        let conn = self.conn.lock();
+        let now = chrono::Utc::now();
+        let hour = now.format("%H").to_string();
+        let day = now.format("%A").to_string(); // Monday, Tuesday, etc.
+
+        // Upsert hourly pattern
+        conn.execute(
+            "INSERT INTO activity_patterns (pattern_type, pattern_key, interaction_count, last_updated)
+             VALUES ('hourly', ?1, 1, ?2)
+             ON CONFLICT(pattern_type, pattern_key) DO UPDATE SET
+                interaction_count = interaction_count + 1,
+                last_updated = ?2",
+            rusqlite::params![hour, signal.timestamp],
+        ).map_err(|e| format!("Failed to update hourly pattern: {e}"))?;
+
+        // Upsert daily pattern
+        conn.execute(
+            "INSERT INTO activity_patterns (pattern_type, pattern_key, interaction_count, last_updated)
+             VALUES ('daily', ?1, 1, ?2)
+             ON CONFLICT(pattern_type, pattern_key) DO UPDATE SET
+                interaction_count = interaction_count + 1,
+                last_updated = ?2",
+            rusqlite::params![day, signal.timestamp],
+        ).map_err(|e| format!("Failed to update daily pattern: {e}"))?;
 
         Ok(())
     }

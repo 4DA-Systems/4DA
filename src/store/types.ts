@@ -193,16 +193,30 @@ export interface MonitoringSlice {
   testNotification: () => Promise<string>;
 }
 
+export interface FreeBriefingData {
+  success: boolean;
+  empty: boolean;
+  message?: string;
+  top_items?: Array<{ title: string; url: string | null; source: string; score: string }>;
+  stack_alerts?: Array<{ title: string; url: string | null; source: string }>;
+  source_summary?: Record<string, number>;
+  total_items?: number;
+  generated_at?: string;
+}
+
 export interface BriefingSlice {
   aiBriefing: BriefingState;
   showBriefing: boolean;
   autoBriefingEnabled: boolean;
   lastBackgroundResultsAt: Date | null;
   sourceHealth: SourceHealthStatus[];
+  freeBriefing: FreeBriefingData | null;
+  freeBriefingLoading: boolean;
   setShowBriefing: (show: boolean) => void;
   setAutoBriefingEnabled: (enabled: boolean) => void;
   setLastBackgroundResultsAt: (date: Date) => void;
   generateBriefing: () => Promise<void>;
+  generateFreeBriefing: () => Promise<void>;
   loadPersistedBriefing: () => Promise<void>;
   loadSourceHealth: () => Promise<void>;
 }

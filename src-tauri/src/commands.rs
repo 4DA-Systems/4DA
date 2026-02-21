@@ -62,6 +62,25 @@ pub async fn run_background_anomaly_detection() -> Result<serde_json::Value> {
     }))
 }
 
+/// Run background anomaly detection and return the anomaly objects.
+/// Used by monitoring_jobs to process anomalies (bridge to notifications).
+pub async fn run_background_anomaly_detection_with_results() -> Result<Vec<crate::anomaly::Anomaly>>
+{
+    let ace = get_ace_engine()?;
+    let conn = ace.get_conn().lock();
+    let anomalies = anomaly::detect_all(&conn)?;
+
+    let mut new_count = 0;
+    for a in &anomalies {
+        if anomaly::store_anomaly(&conn, a).is_ok() {
+            new_count += 1;
+        }
+    }
+
+    info!(target: "4da::anomaly", found = anomalies.len(), stored = new_count, "Anomaly detection with results complete");
+    Ok(anomalies)
+}
+
 /// Run background behavior decay - called daily by scheduler
 pub async fn run_background_behavior_decay() -> Result<serde_json::Value> {
     let ace = get_ace_engine()?;

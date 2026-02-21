@@ -37,7 +37,8 @@ pub(crate) use utils::{
 
 // Re-exports from commands (pub background jobs called by monitoring scheduler)
 pub use commands::{
-    run_background_anomaly_detection, run_background_behavior_decay, run_background_health_check,
+    run_background_anomaly_detection, run_background_anomaly_detection_with_results,
+    run_background_behavior_decay, run_background_health_check,
 };
 
 // Re-exports from state (preserves `use crate::accessor` interface)
@@ -72,6 +73,7 @@ mod digest_commands;
 mod document_index;
 mod domain_profile;
 pub mod extractors;
+mod free_briefing;
 mod handoff;
 mod health;
 mod health_commands;
@@ -81,6 +83,7 @@ mod knowledge_decay;
 mod llm;
 mod monitoring;
 mod monitoring_commands;
+mod monitoring_jobs;
 mod novelty;
 mod ollama;
 mod predictive;
@@ -259,6 +262,7 @@ pub fn run() {
             ace_commands::ace_resolve_anomaly,
             ace_commands::ace_get_accuracy_metrics,
             ace_commands::ace_record_accuracy_feedback,
+            ace_commands::get_engagement_summary,
             ace_commands::ace_get_single_affinity,
             // Source config
             source_config::get_rss_feeds,
@@ -276,6 +280,7 @@ pub fn run() {
             digest_commands::set_digest_config,
             digest_commands::generate_ai_briefing,
             digest_commands::get_latest_briefing,
+            free_briefing::generate_free_briefing,
             // Content
             commands::get_sources,
             commands::mcp_score_autopsy,
@@ -539,7 +544,21 @@ pub fn run() {
         })
         .build(tauri::generate_context!())
         .expect("Failed to build Tauri application. Check tauri.conf.json and system permissions.")
-        .run(|_app, event| {
+        .run(|app_handle, event| {
+            // Hide-to-tray: intercept window close when enabled
+            if let tauri::RunEvent::WindowEvent { event: tauri::WindowEvent::CloseRequested { api, .. }, .. } = &event {
+                let close_to_tray = {
+                    let settings = get_settings_manager().lock();
+                    settings.get().monitoring.close_to_tray.unwrap_or(true)
+                };
+                if close_to_tray {
+                    api.prevent_close();
+                    if let Some(window) = app_handle.get_webview_window("main") {
+                        let _ = window.hide();
+                        info!(target: "4da::tray", "Window hidden to tray (close_to_tray enabled)");
+                    }
+                }
+            }
             if let tauri::RunEvent::Exit = event {
                 info!(target: "4da::shutdown", "Application shutting down - cleaning up...");
                 // Disable monitoring to stop scheduler

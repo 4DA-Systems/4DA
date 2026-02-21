@@ -24,7 +24,7 @@ export function getSourceNarration(source: string, count: number): string {
 }
 
 export function getCelebrationMessage(relevantCount: number, total: number): string {
-  if (relevantCount === 0) return 'No highly relevant items yet — try adding more interests in Settings.';
+  if (relevantCount === 0) return `Scanned ${total} items. Your profile is learning — results sharpen with use.`;
   if (relevantCount <= 3) return `Found ${relevantCount} items tailored to your interests.`;
   if (relevantCount <= 10) return `${relevantCount} items matched your profile out of ${total} scanned.`;
   return `${relevantCount} relevant items discovered across ${total} stories.`;

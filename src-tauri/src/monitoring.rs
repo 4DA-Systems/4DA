@@ -230,13 +230,15 @@ pub fn start_scheduler<R: Runtime>(app: AppHandle<R>, state: Arc<MonitoringState
                 }
             }
 
-            // Anomaly detection - every hour
+            // Anomaly detection - every hour + anomaly bridge (Fix 5)
             let last_anomaly = state.last_anomaly_check.load(Ordering::Relaxed);
             if now - last_anomaly >= ANOMALY_CHECK_INTERVAL {
                 state.last_anomaly_check.store(now, Ordering::Relaxed);
-                match crate::run_background_anomaly_detection().await {
-                    Ok(result) => {
-                        info!(target: "4da::monitor", result = %result, "Anomaly detection completed");
+                match crate::run_background_anomaly_detection_with_results().await {
+                    Ok(anomalies) => {
+                        info!(target: "4da::monitor", found = anomalies.len(), "Anomaly detection completed");
+                        // Fix 5: Process anomalies (notifications, auto-remediation, auto-briefing)
+                        crate::monitoring_jobs::process_anomalies(&app, &anomalies).await;
                     }
                     Err(e) => {
                         warn!(target: "4da::monitor", error = %e, "Anomaly detection failed");
@@ -286,6 +288,12 @@ pub fn start_scheduler<R: Runtime>(app: AppHandle<R>, state: Arc<MonitoringState
                     }
                 }
             }
+
+            // Digest scheduler (Fix 2) -- check on every tick
+            crate::monitoring_jobs::maybe_generate_digest(&app).await;
+
+            // Smart batching (Improvement E) -- save mini-digest when threshold reached
+            crate::monitoring_jobs::maybe_save_mini_digest(&state);
 
             // ================================================================
             // Scheduled Analysis (only when monitoring is enabled)

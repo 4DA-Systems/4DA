@@ -7,12 +7,22 @@ vi.mock('@tauri-apps/api/core', () => ({
   invoke: vi.fn(),
 }));
 
+// Mock useLicense hook
+vi.mock('../hooks/use-license', () => ({
+  useLicense: () => ({ isPro: true, trialStatus: null }),
+}));
+
+// Mock EngagementPulse (calls invoke on mount)
+vi.mock('./EngagementPulse', () => ({
+  EngagementPulse: () => null,
+}));
+
 // Configurable mock state — tests override via setMockState()
 let mockState: Record<string, unknown> = {};
 function setMockState(overrides: Record<string, unknown>) {
   mockState = {
     aiBriefing: { content: null, loading: false, error: null, model: null, lastGenerated: null },
-    appState: { relevanceResults: [] },
+    appState: { relevanceResults: [], loading: false, analysisComplete: false },
     generateBriefing: vi.fn(),
     recordInteraction: vi.fn(),
     feedbackGiven: {},
@@ -20,6 +30,9 @@ function setMockState(overrides: Record<string, unknown>) {
     lastBackgroundResultsAt: null,
     sourceHealth: [],
     addToast: vi.fn(),
+    freeBriefing: null,
+    freeBriefingLoading: false,
+    generateFreeBriefing: vi.fn(),
     ...overrides,
   };
 }

@@ -129,27 +129,25 @@ pub async fn get_latest_briefing() -> Result<serde_json::Value> {
     }
 }
 
-/// Generate an AI-powered briefing from recent relevant items
-/// Uses the configured LLM (Ollama by default) to synthesize insights
-#[tauri::command]
-pub async fn generate_ai_briefing() -> Result<serde_json::Value> {
-    crate::settings::require_pro_feature("generate_ai_briefing")?;
+/// Internal briefing generation -- called by both the Tauri command and auto-trigger.
+/// `auto_triggered`: when true, suppresses Pro gate check and adjusts logging.
+/// `anomaly_context`: optional unresolved anomaly descriptions to inject into the prompt.
+pub(crate) async fn generate_briefing_internal(
+    auto_triggered: bool,
+    anomaly_context: Option<Vec<String>>,
+) -> Result<serde_json::Value> {
     use chrono::{Duration, Utc};
 
-    info!(target: "4da::briefing", "Generating AI briefing");
+    let trigger = if auto_triggered { "auto" } else { "manual" };
+    info!(target: "4da::briefing", trigger = trigger, "Generating AI briefing");
 
-    // Drain batched notifications from monitoring (items that were silently queued)
+    // Drain batched notifications
     let batched = {
         let state = crate::get_monitoring_state();
         crate::monitoring::drain_batched_notifications(state)
     };
-
     if !batched.is_empty() {
-        info!(
-            target: "4da::briefing",
-            count = batched.len(),
-            "Including batched notifications in briefing"
-        );
+        info!(target: "4da::briefing", count = batched.len(), "Including batched notifications");
     }
 
     // Get LLM settings
@@ -158,7 +156,6 @@ pub async fn generate_ai_briefing() -> Result<serde_json::Value> {
         settings.get().llm.clone()
     };
 
-    // Check if LLM is configured
     if llm_settings.provider != "ollama" && llm_settings.api_key.is_empty() {
         return Ok(serde_json::json!({
             "success": false,
@@ -167,8 +164,7 @@ pub async fn generate_ai_briefing() -> Result<serde_json::Value> {
         }));
     }
 
-    // Use in-memory analysis results (scored + filtered) when available
-    // Capture both DigestSourceItem and explanation/score data for richer briefing
+    // Get items from analysis state or DB
     let (mem_items, explanations): (
         Vec<crate::db::DigestSourceItem>,
         std::collections::HashMap<i64, String>,
@@ -200,7 +196,6 @@ pub async fn generate_ai_briefing() -> Result<serde_json::Value> {
         }
     };
 
-    // Fall back to DB query (wider window) if no in-memory results
     let items = if mem_items.is_empty() {
         let db = get_database()?;
         let period_start = Utc::now() - Duration::hours(72);
@@ -219,10 +214,8 @@ pub async fn generate_ai_briefing() -> Result<serde_json::Value> {
         }));
     }
 
-    // Get ACE context for personalization
     let ace_ctx = get_ace_context();
 
-    // Format items with content snippets and explanations
     let items_text: String = items
         .iter()
         .take(20)
@@ -245,7 +238,6 @@ pub async fn generate_ai_briefing() -> Result<serde_json::Value> {
         .collect::<Vec<_>>()
         .join("\n\n");
 
-    // Build context summary
     let tech_summary = if ace_ctx.detected_tech.is_empty() {
         "Not detected".to_string()
     } else {
@@ -257,7 +249,6 @@ pub async fn generate_ai_briefing() -> Result<serde_json::Value> {
             .collect::<Vec<_>>()
             .join(", ")
     };
-
     let topics_summary = if ace_ctx.active_topics.is_empty() {
         "None active".to_string()
     } else {
@@ -269,7 +260,6 @@ pub async fn generate_ai_briefing() -> Result<serde_json::Value> {
             .collect::<Vec<_>>()
             .join(", ")
     };
-
     let anti_topics = ace_ctx
         .anti_topics
         .iter()
@@ -278,7 +268,6 @@ pub async fn generate_ai_briefing() -> Result<serde_json::Value> {
         .collect::<Vec<_>>()
         .join(", ");
 
-    // Create the prompt
     let system_prompt = r#"You are the user's personal intelligence analyst. You have deep knowledge of their active projects and tech stack. Your briefing should feel like a senior colleague who read everything and is telling you what matters.
 
 Structure your briefing as:
@@ -299,7 +288,6 @@ Rules:
 - If nothing is truly important, say so — don't manufacture urgency
 - Max 500 words"#;
 
-    // Build batched items section if there are silently queued items
     let batched_section = if batched.is_empty() {
         String::new()
     } else {
@@ -322,15 +310,30 @@ Rules:
         )
     };
 
-    // Build Decision Context section for the briefing
     let decision_context = build_decision_context_for_briefing();
+
+    // Improvement C: Inject anomaly context if provided
+    let anomaly_section = match anomaly_context {
+        Some(ref anomalies) if !anomalies.is_empty() => {
+            let list = anomalies
+                .iter()
+                .map(|a| format!("  - {}", a))
+                .collect::<Vec<_>>()
+                .join("\n");
+            format!(
+                "\n- Unresolved system anomalies (mention if relevant):\n{}",
+                list
+            )
+        }
+        _ => String::new(),
+    };
 
     let user_prompt = format!(
         "My active projects and context:\n\
          - Tech stack: {tech}\n\
          - Currently working on: {topics}\n\
          - Skip these topics: {anti}\n\
-         {decisions}\n\n\
+         {decisions}{anomalies}\n\n\
          Today's {count} items (sorted by relevance):\n\n\
          {items}{batched}\n\n\
          Give me my intelligence briefing.",
@@ -342,34 +345,30 @@ Rules:
             anti_topics
         },
         decisions = decision_context,
+        anomalies = anomaly_section,
         count = items.len(),
         items = items_text,
         batched = batched_section,
     );
 
-    // Call the LLM
     let llm_client = crate::llm::LLMClient::new(llm_settings.clone());
     let messages = vec![crate::llm::Message {
         role: "user".to_string(),
         content: user_prompt,
     }];
-
     let start_time = std::time::Instant::now();
 
     match llm_client.complete(system_prompt, messages).await {
         Ok(response) => {
             let elapsed = start_time.elapsed();
-            info!(
-                target: "4da::briefing",
+            info!(target: "4da::briefing",
                 tokens = response.input_tokens + response.output_tokens,
                 elapsed_ms = elapsed.as_millis(),
+                trigger = trigger,
                 "AI briefing generated"
             );
-
-            // Cache for TTS and handoff
             *LATEST_BRIEFING.lock() = Some(response.content.clone());
 
-            // Persist to DB for cross-restart survival
             if let Ok(db) = get_database() {
                 let total_tokens = response.input_tokens + response.output_tokens;
                 if let Err(e) = db.save_briefing(
@@ -379,7 +378,7 @@ Rules:
                     Some(total_tokens),
                     Some(elapsed.as_millis() as u64),
                 ) {
-                    error!(target: "4da::briefing", error = %e, "Failed to persist briefing to DB");
+                    error!(target: "4da::briefing", error = %e, "Failed to persist briefing");
                 }
             }
 
@@ -389,13 +388,12 @@ Rules:
                 "item_count": items.len(),
                 "model": llm_settings.model,
                 "tokens_used": response.input_tokens + response.output_tokens,
-                "latency_ms": elapsed.as_millis()
+                "latency_ms": elapsed.as_millis(),
+                "auto_triggered": auto_triggered,
             }))
         }
         Err(e) => {
             error!(target: "4da::briefing", error = %e, "Failed to generate briefing");
-
-            // Provide helpful error message
             let error_msg = if e.contains("Connection refused") || e.contains("connect") {
                 "Ollama is not running. Start it with 'ollama serve' or check your LLM settings."
             } else if e.contains("model") {
@@ -403,7 +401,6 @@ Rules:
             } else {
                 &e
             };
-
             Ok(serde_json::json!({
                 "success": false,
                 "error": error_msg,
@@ -411,6 +408,27 @@ Rules:
             }))
         }
     }
+}
+
+/// Generate an AI-powered briefing from recent relevant items
+/// Uses the configured LLM (Ollama by default) to synthesize insights
+#[tauri::command]
+pub async fn generate_ai_briefing() -> Result<serde_json::Value> {
+    crate::settings::require_pro_feature("generate_ai_briefing")?;
+    // Improvement C: Gather unresolved anomalies for context injection
+    let anomalies = {
+        if let Ok(ace) = crate::get_ace_engine() {
+            let conn = ace.get_conn().lock();
+            crate::anomaly::get_unresolved(&conn).ok().map(|list| {
+                list.iter()
+                    .map(|a| a.description.clone())
+                    .collect::<Vec<_>>()
+            })
+        } else {
+            None
+        }
+    };
+    generate_briefing_internal(false, anomalies).await
 }
 
 // ============================================================================

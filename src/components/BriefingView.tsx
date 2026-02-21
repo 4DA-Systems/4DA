@@ -12,6 +12,8 @@ import {
   sectionTitleColor,
   renderLine,
 } from '../utils/briefing-parser';
+import { EngagementPulse } from './EngagementPulse';
+import { useLicense } from '../hooks/use-license';
 
 export function BriefingView() {
   // Read everything from store — zero props
@@ -26,6 +28,10 @@ export function BriefingView() {
   const lastBackgroundResultsAt = useAppStore(s => s.lastBackgroundResultsAt);
   const sourceHealth = useAppStore(s => s.sourceHealth);
   const addToast = useAppStore(s => s.addToast);
+  const freeBriefing = useAppStore(s => s.freeBriefing);
+  const freeBriefingLoading = useAppStore(s => s.freeBriefingLoading);
+  const generateFreeBriefing = useAppStore(s => s.generateFreeBriefing);
+  const { isPro } = useLicense();
 
   const [gapExpanded, setGapExpanded] = useState(false);
 
@@ -79,6 +85,13 @@ export function BriefingView() {
     if (!briefing.lastGenerated || !lastBackgroundResultsAt) return false;
     return lastBackgroundResultsAt.getTime() > briefing.lastGenerated.getTime();
   }, [briefing.lastGenerated, lastBackgroundResultsAt]);
+
+  // Auto-generate free briefing for non-Pro users when analysis completes
+  useEffect(() => {
+    if (!isPro && analysisComplete && results.length > 0 && !freeBriefing && !freeBriefingLoading) {
+      generateFreeBriefing();
+    }
+  }, [isPro, analysisComplete, results.length, freeBriefing, freeBriefingLoading, generateFreeBriefing]);
 
   const sections = useMemo(() => {
     if (!briefing.content) return [];
@@ -145,13 +158,64 @@ export function BriefingView() {
   // Empty state: no briefing content and not generating
   if (!briefing.content) {
     if (isLoading) return <BriefingLoadingState />;
+
+    // Free briefing for non-Pro users
+    if (!isPro && freeBriefing && !freeBriefing.empty) {
+      return (
+        <div className="bg-bg-primary rounded-lg space-y-4">
+          <div className="bg-bg-secondary rounded-lg border border-border p-5">
+            <h2 className="font-medium text-white mb-3">Daily Overview</h2>
+            <div className="space-y-3">
+              {freeBriefing.top_items?.map((item, i) => (
+                <div key={i} className="flex items-start gap-3">
+                  <span className="text-xs text-orange-400 font-mono font-medium flex-shrink-0 mt-0.5">{item.score}</span>
+                  <div className="min-w-0">
+                    {item.url ? (
+                      <button
+                        onClick={() => window.open(item.url!, '_blank', 'noopener,noreferrer')}
+                        className="text-sm text-white hover:text-orange-400 text-left transition-colors"
+                      >
+                        {item.title}
+                      </button>
+                    ) : (
+                      <span className="text-sm text-white">{item.title}</span>
+                    )}
+                    <span className="text-xs text-gray-500 ml-2">{item.source}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+            {freeBriefing.stack_alerts && freeBriefing.stack_alerts.length > 0 && (
+              <div className="mt-4 pt-3 border-t border-border">
+                <h3 className="text-xs font-medium text-amber-400 mb-2">Stack Alerts</h3>
+                {freeBriefing.stack_alerts.map((alert, i) => (
+                  <div key={i} className="text-xs text-gray-400 py-0.5">{alert.title}</div>
+                ))}
+              </div>
+            )}
+            <div className="mt-3 pt-3 border-t border-border flex items-center justify-between">
+              <span className="text-xs text-gray-500">{freeBriefing.total_items} items analyzed</span>
+              <ProGate feature="AI Briefings">
+                <button
+                  onClick={generateBriefing}
+                  className="px-3 py-1.5 text-xs bg-orange-500/10 text-orange-400 border border-orange-500/20 rounded-lg hover:bg-orange-500/20 transition-all font-medium"
+                >
+                  Generate AI Briefing
+                </button>
+              </ProGate>
+            </div>
+          </div>
+          <EngagementPulse />
+        </div>
+      );
+    }
+
     if (analysisComplete && results.length > 0) return <BriefingReadyState />;
     return <BriefingNoDataState />;
   }
 
   // Briefing content view
   return (
-    <ProGate feature="AI Briefings">
     <div className="bg-bg-primary rounded-lg space-y-6">
       {/* Signal Action Cards — critical/high priority items */}
       {signalItems.length > 0 && (
@@ -207,13 +271,15 @@ export function BriefingView() {
             >
               Share
             </button>
-            <button
-              onClick={generateBriefing}
-              className="px-3 py-1.5 text-xs bg-bg-tertiary text-orange-400 border border-orange-500/30 rounded-lg hover:bg-orange-500/10 transition-all font-medium"
-              title="Refresh briefing"
-            >
-              Refresh
-            </button>
+            {isPro && (
+              <button
+                onClick={generateBriefing}
+                className="px-3 py-1.5 text-xs bg-bg-tertiary text-orange-400 border border-orange-500/30 rounded-lg hover:bg-orange-500/10 transition-all font-medium"
+                title="Refresh briefing"
+              >
+                Refresh
+              </button>
+            )}
           </div>
         </div>
 
@@ -286,6 +352,9 @@ export function BriefingView() {
         )}
       </div>
 
+      {/* Engagement Pulse */}
+      <EngagementPulse />
+
       {/* Top items as BriefingCards */}
       {topItems.length > 0 && (
         <div>
@@ -320,6 +389,7 @@ export function BriefingView() {
                     feedbackGiven={feedbackGiven[item.id]}
                     onSave={(it) => recordInteraction(it.id, 'save', it)}
                     onDismiss={(it) => recordInteraction(it.id, 'dismiss', it)}
+                    onRecordInteraction={(it) => recordInteraction(it.id, 'click', it)}
                   />
                 </div>
               );
@@ -346,6 +416,5 @@ export function BriefingView() {
         </div>
       )}
     </div>
-    </ProGate>
   );
 }

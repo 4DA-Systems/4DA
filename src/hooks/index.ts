@@ -14,3 +14,4 @@ export type { ToastType, ToastAction } from './use-toasts';
 export { useItemSummary } from './use-item-summary';
 export type { ItemSummaryState } from './use-item-summary';
 export { useLicense } from './use-license';
+export { useViewTracking } from './use-view-tracking';

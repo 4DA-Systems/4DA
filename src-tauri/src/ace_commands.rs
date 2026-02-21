@@ -1202,6 +1202,111 @@ pub async fn ace_get_single_affinity(topic: String) -> Result<serde_json::Value>
     }
 }
 
+/// Get engagement summary for the dashboard (daily count, streak, trend)
+#[tauri::command]
+pub async fn get_engagement_summary() -> Result<serde_json::Value> {
+    let ace = get_ace_engine()?;
+    let conn = ace.get_conn().lock();
+
+    // Today's interaction count
+    let today = chrono::Utc::now().format("%Y-%m-%d").to_string();
+    let today_count: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM interactions WHERE date(timestamp) = ?1",
+            rusqlite::params![today],
+            |row| row.get(0),
+        )
+        .unwrap_or(0);
+
+    // Streak: consecutive days with at least 1 interaction (looking back from today)
+    let mut streak: i64 = 0;
+    let rows: Vec<String> = {
+        let mut stmt = conn
+            .prepare(
+                "SELECT DISTINCT date(timestamp) as d FROM interactions
+                 ORDER BY d DESC LIMIT 30",
+            )
+            .map_err(|e| e.to_string())?;
+        let result = stmt
+            .query_map([], |row| row.get::<_, String>(0))
+            .map_err(|e| e.to_string())?;
+        result.filter_map(|r| r.ok()).collect()
+    };
+
+    if !rows.is_empty() {
+        let mut expected = chrono::Utc::now().date_naive();
+        for date_str in &rows {
+            if let Ok(date) = chrono::NaiveDate::parse_from_str(date_str, "%Y-%m-%d") {
+                if date == expected {
+                    streak += 1;
+                    expected -= chrono::Duration::days(1);
+                } else if date < expected {
+                    break;
+                }
+            }
+        }
+    }
+
+    // 7-day heatmap data (interactions per day for last 7 days)
+    let mut heatmap: Vec<serde_json::Value> = Vec::new();
+    for i in (0..7).rev() {
+        let date = (chrono::Utc::now() - chrono::Duration::days(i))
+            .format("%Y-%m-%d")
+            .to_string();
+        let count: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM interactions WHERE date(timestamp) = ?1",
+                rusqlite::params![date],
+                |row| row.get(0),
+            )
+            .unwrap_or(0);
+        let day_name = (chrono::Utc::now() - chrono::Duration::days(i))
+            .format("%a")
+            .to_string();
+        heatmap.push(serde_json::json!({
+            "date": date,
+            "day": day_name,
+            "count": count,
+        }));
+    }
+
+    // Accuracy trend: average feedback positivity over last 7 vs previous 7 days
+    let recent_positive: f64 = conn
+        .query_row(
+            "SELECT COALESCE(AVG(CASE WHEN signal_strength > 0 THEN 1.0 ELSE 0.0 END), 0.5)
+             FROM interactions WHERE timestamp >= datetime('now', '-7 days')",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap_or(0.5);
+
+    let prev_positive: f64 = conn
+        .query_row(
+            "SELECT COALESCE(AVG(CASE WHEN signal_strength > 0 THEN 1.0 ELSE 0.0 END), 0.5)
+             FROM interactions WHERE timestamp >= datetime('now', '-14 days')
+             AND timestamp < datetime('now', '-7 days')",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap_or(0.5);
+
+    let trend = if recent_positive > prev_positive + 0.05 {
+        "improving"
+    } else if recent_positive < prev_positive - 0.05 {
+        "declining"
+    } else {
+        "stable"
+    };
+
+    Ok(serde_json::json!({
+        "today_interactions": today_count,
+        "streak_days": streak,
+        "heatmap": heatmap,
+        "accuracy_trend": trend,
+        "recent_positive_rate": format!("{:.0}%", recent_positive * 100.0),
+    }))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -1,6 +1,7 @@
 import { memo } from 'react';
 import type { SourceRelevance, FeedbackAction, FeedbackGiven } from '../types';
 import { useItemSummary } from '../hooks/use-item-summary';
+import { useViewTracking } from '../hooks/use-view-tracking';
 import { ResultItemCollapsed } from './result-item/ResultItemCollapsed';
 import { ResultItemExpanded } from './result-item/ResultItemExpanded';
 
@@ -58,9 +59,15 @@ export const ResultItem = memo(function ResultItem({
   const isTopPick = item.top_score >= 0.72;
   const isHighConfidence = (item.confidence ?? 0) >= 0.7;
   const { summary, summaryLoading, summaryError, generateSummary } = useItemSummary(item.id, isExpanded);
+  const viewRef = useViewTracking({
+    itemId: item.id,
+    sourceType: item.source_type || 'unknown',
+    enabled: !isExpanded, // Only track passive scrolling, not expanded viewing
+  });
 
   return (
     <div
+      ref={viewRef}
       id={`result-item-${item.id}`}
       className={`rounded border transition-colors ${
         isFocused

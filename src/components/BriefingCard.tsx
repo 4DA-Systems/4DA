@@ -10,6 +10,7 @@ interface BriefingCardProps {
   feedbackGiven?: FeedbackAction;
   onSave?: (item: SourceRelevance) => void;
   onDismiss?: (item: SourceRelevance) => void;
+  onRecordInteraction?: (item: SourceRelevance) => void;
 }
 
 export const BriefingCard = memo(function BriefingCard({
@@ -18,6 +19,7 @@ export const BriefingCard = memo(function BriefingCard({
   feedbackGiven,
   onSave,
   onDismiss,
+  onRecordInteraction,
 }: BriefingCardProps) {
   const source = item.source_type || 'hackernews';
   const colorClass = getSourceColorClass(source);
@@ -48,7 +50,10 @@ export const BriefingCard = memo(function BriefingCard({
         <div className="flex-1 min-w-0">
           {item.url ? (
             <button
-              onClick={() => window.open(item.url!, '_blank', 'noopener,noreferrer')}
+              onClick={() => {
+                window.open(item.url!, '_blank', 'noopener,noreferrer');
+                onRecordInteraction?.(item);
+              }}
               className="text-sm text-white hover:text-orange-400 hover:underline decoration-orange-400/50 text-left font-medium transition-colors"
             >
               {item.title}

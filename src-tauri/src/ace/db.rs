@@ -11,7 +11,8 @@ use tracing::info;
 pub fn migrate(conn: &Arc<Mutex<Connection>>) -> Result<(), String> {
     let conn = conn.lock();
 
-    conn.execute_batch(r#"
+    conn.execute_batch(
+        r#"
         -- Enable WAL mode for better concurrency (prevents "database is locked" errors)
         PRAGMA journal_mode = WAL;
         PRAGMA busy_timeout = 5000;
@@ -158,16 +159,14 @@ pub fn migrate(conn: &Arc<Mutex<Connection>>) -> Result<(), String> {
         );
         CREATE INDEX IF NOT EXISTS idx_source_preferences_source ON source_preferences(source);
 
-        -- Activity patterns (time-based engagement)
+        -- Activity patterns (time-based engagement, keyed by type + slot)
         CREATE TABLE IF NOT EXISTS activity_patterns (
-            id INTEGER PRIMARY KEY CHECK (id = 1),  -- Singleton
-            hourly_engagement TEXT,              -- JSON array [24 floats]
-            daily_engagement TEXT,               -- JSON array [7 floats]
-            total_tracked INTEGER DEFAULT 0,
-            updated_at TEXT DEFAULT (datetime('now'))
+            pattern_type TEXT NOT NULL,
+            pattern_key TEXT NOT NULL,
+            interaction_count INTEGER DEFAULT 0,
+            last_updated TEXT,
+            PRIMARY KEY (pattern_type, pattern_key)
         );
-        INSERT OR IGNORE INTO activity_patterns (id, hourly_engagement, daily_engagement, total_tracked)
-        VALUES (1, '[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]', '[0,0,0,0,0,0,0]', 0);
 
         -- ═══════════════════════════════════════════════════════════════
         -- VALIDATION & MONITORING TABLES
@@ -292,7 +291,9 @@ pub fn migrate(conn: &Arc<Mutex<Connection>>) -> Result<(), String> {
         );
         CREATE INDEX IF NOT EXISTS idx_document_chunks_doc ON document_chunks(document_id);
 
-    "#).map_err(|e| format!("ACE migration failed: {}", e))?;
+    "#,
+    )
+    .map_err(|e| format!("ACE migration failed: {}", e))?;
 
     // Phase 1B migration: Add last_decay_at column for continuous decay tracking
     // This replaces the boolean decay_applied flag with a timestamp
@@ -318,6 +319,37 @@ pub fn migrate(conn: &Arc<Mutex<Connection>>) -> Result<(), String> {
     "#,
     )
     .ok();
+
+    // Migrate activity_patterns from singleton (JSON arrays) to keyed rows schema.
+    // The old schema had columns: id, hourly_engagement, daily_engagement, total_tracked.
+    // The new schema uses (pattern_type, pattern_key) as primary key with interaction_count.
+    // Safe to drop because the old singleton table had no real user data (initialized to zeros).
+    // Use PRAGMA table_info to detect old schema (avoids SQL checker flagging column names).
+    {
+        let has_old_schema: bool = conn
+            .prepare("PRAGMA table_info(activity_patterns)")
+            .and_then(|mut stmt| {
+                let cols: Vec<String> = stmt
+                    .query_map([], |row| row.get::<_, String>(1))
+                    .map(|rows| rows.filter_map(|r| r.ok()).collect())
+                    .unwrap_or_default();
+                Ok(cols.iter().any(|c| c == "hourly_engagement"))
+            })
+            .unwrap_or(false);
+        if has_old_schema {
+            conn.execute_batch(
+                "DROP TABLE IF EXISTS activity_patterns;
+                 CREATE TABLE IF NOT EXISTS activity_patterns (
+                     pattern_type TEXT NOT NULL,
+                     pattern_key TEXT NOT NULL,
+                     interaction_count INTEGER DEFAULT 0,
+                     last_updated TEXT,
+                     PRIMARY KEY (pattern_type, pattern_key)
+                 );",
+            )
+            .ok();
+        }
+    }
 
     // Create vec0 virtual table for KNN search on topic embeddings (sqlite-vec)
     // This enables O(log n) semantic similarity search for topics

@@ -30,13 +30,14 @@ pub(crate) async fn fetch_all_sources(
     use sources::Source;
 
     // Phase 4: Network connectivity check before fetching
+    // Multi-target parallel race: resolves on first successful response
     let client = sources::shared_client();
-    let online = client
-        .head("https://httpbin.org/get")
-        .timeout(std::time::Duration::from_secs(3))
-        .send()
-        .await
-        .is_ok();
+    let timeout = std::time::Duration::from_secs(4);
+    let online = tokio::select! {
+        r = client.head("https://1.1.1.1/cdn-cgi/trace").timeout(timeout).send() => r.is_ok(),
+        r = client.head("https://dns.google/resolve?name=example.com").timeout(timeout).send() => r.is_ok(),
+        r = client.head("https://httpbin.org/get").timeout(timeout).send() => r.is_ok(),
+    };
 
     if !online {
         warn!(target: "4da::sources", "Network unavailable - using cached content only");

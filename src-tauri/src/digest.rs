@@ -38,7 +38,7 @@ pub struct DigestConfig {
 impl Default for DigestConfig {
     fn default() -> Self {
         Self {
-            enabled: false,
+            enabled: true,
             frequency: "daily".to_string(),
             email: None,
             smtp: None,
@@ -728,7 +728,7 @@ mod tests {
     #[test]
     fn test_digest_config_default() {
         let config = DigestConfig::default();
-        assert!(!config.enabled);
+        assert!(config.enabled);
         assert_eq!(config.frequency, "daily");
         assert_eq!(config.min_score, 0.35);
         assert!(!config.generate_summaries);
