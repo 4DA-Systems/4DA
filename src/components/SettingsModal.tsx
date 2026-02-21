@@ -7,6 +7,7 @@ import { SourceConfigPanel } from './SourceConfigPanel';
 import { AIProviderSection } from './settings/AIProviderSection';
 import { MonitoringSection } from './settings/MonitoringSection';
 import { DigestSection } from './settings/DigestSection';
+import { LocaleSection } from './settings/LocaleSection';
 import { ContextDiscoverySection } from './settings/ContextDiscoverySection';
 import { PersonalizationSection } from './settings/PersonalizationSection';
 import { DeveloperDnaPanel } from './DeveloperDna';
@@ -259,6 +260,8 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
           {activeTab === 'general' && (
             <div id="tabpanel-general" role="tabpanel">
               <div className="space-y-6">
+                <LocaleSection />
+
                 <AIProviderSection
                   settings={settings}
                   settingsForm={settingsForm}
