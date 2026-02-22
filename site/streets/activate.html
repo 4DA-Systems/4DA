@@ -152,38 +152,53 @@
   </div>
 
   <script>
+    function showLicense(data) {
+      var result = document.getElementById('result');
+      result.className = 'result success';
+      result.innerHTML =
+        '<p>License found! Tier: <strong></strong></p>' +
+        '<code class="license-key"></code>' +
+        '<button class="copy-btn" onclick="copyKey()">Copy to Clipboard</button>';
+      result.querySelector('strong').textContent = data.tier;
+      result.querySelector('.license-key').textContent = data.license_key;
+      result.style.display = 'block';
+    }
+
+    function showError(msg) {
+      var result = document.getElementById('result');
+      result.className = 'result error';
+      result.innerHTML = '<p></p>';
+      result.querySelector('p').textContent = msg;
+      result.style.display = 'block';
+    }
+
+    async function fetchLicense(query) {
+      var resp = await fetch('/api/streets/activate?' + query);
+      var data = await resp.json();
+      if (resp.ok && data.license_key) {
+        showLicense(data);
+        return true;
+      } else {
+        showError(data.error || 'No license found.');
+        return false;
+      }
+    }
+
     async function handleSubmit(e) {
       e.preventDefault();
       var email = document.getElementById('email').value.trim();
       var btn = document.getElementById('submit-btn');
-      var result = document.getElementById('result');
 
       if (!email) return false;
 
       btn.disabled = true;
       btn.textContent = 'Retrieving...';
-      result.style.display = 'none';
+      document.getElementById('result').style.display = 'none';
 
       try {
-        var resp = await fetch('/api/streets/activate?email=' + encodeURIComponent(email));
-        var data = await resp.json();
-
-        if (resp.ok && data.license_key) {
-          result.className = 'result success';
-          result.innerHTML =
-            '<p>License found! Tier: <strong>' + data.tier + '</strong></p>' +
-            '<code class="license-key">' + data.license_key + '</code>' +
-            '<button class="copy-btn" onclick="copyKey()">Copy to Clipboard</button>';
-          result.style.display = 'block';
-        } else {
-          result.className = 'result error';
-          result.innerHTML = '<p>' + (data.error || 'No license found for this email.') + '</p>';
-          result.style.display = 'block';
-        }
+        await fetchLicense('email=' + encodeURIComponent(email));
       } catch (err) {
-        result.className = 'result error';
-        result.innerHTML = '<p>Network error. Please try again.</p>';
-        result.style.display = 'block';
+        showError('Network error. Please try again.');
       }
 
       btn.disabled = false;
@@ -201,6 +216,24 @@
         });
       }
     }
+
+    // Auto-retrieve license if arriving from Stripe checkout (session_id in URL)
+    (function() {
+      var params = new URLSearchParams(window.location.search);
+      var sessionId = params.get('session_id');
+      if (sessionId) {
+        document.querySelector('.subtitle').textContent = 'Retrieving your license...';
+        fetchLicense('session_id=' + encodeURIComponent(sessionId)).then(function(ok) {
+          if (ok) {
+            document.querySelector('.subtitle').textContent = 'Your license key is ready. Copy it and paste it into 4DA Settings.';
+          } else {
+            document.querySelector('.subtitle').textContent = 'Could not auto-retrieve. Enter your email below.';
+          }
+        }).catch(function() {
+          document.querySelector('.subtitle').textContent = 'Could not auto-retrieve. Enter your email below.';
+        });
+      }
+    })();
   </script>
 </body>
 </html>

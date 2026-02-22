@@ -1072,7 +1072,8 @@ Revenue compounds. Intelligence sharpens.</pre>
             <li>AI accountability nudges</li>
             <li>Premium template library</li>
           </ul>
-          <a href="#" class="pricing-cta secondary">Join Community</a>
+          <a href="#" class="pricing-cta secondary" onclick="streetsCheckout('community'); return false;">Join Community — $29/mo</a>
+          <a href="#" class="pricing-cta-alt" onclick="streetsCheckout('annual'); return false;" style="display:block;text-align:center;margin-top:8px;font-size:12px;color:var(--text-muted);text-decoration:underline;cursor:pointer;">Or save $99 with annual ($249/yr)</a>
         </div>
         <div class="pricing-card" style="border-color: var(--gold);">
           <h3>Cohort</h3>
@@ -1085,7 +1086,7 @@ Revenue compounds. Intelligence sharpens.</pre>
             <li>AI launch review pipeline</li>
             <li>Quarterly progress narratives</li>
           </ul>
-          <a href="#" class="pricing-cta secondary">Join Next Cohort</a>
+          <a href="#" class="pricing-cta secondary" onclick="streetsCheckout('cohort'); return false;">Join Next Cohort — $499</a>
         </div>
       </div>
       <p style="margin-top: 24px; font-size: 13px; color: var(--text-muted); font-style: italic;">The playbook is free. Community and Cohort unlock AI coaching that uses your own LLM provider -- your data never leaves your machine.</p>
@@ -1229,7 +1230,7 @@ Revenue compounds. Intelligence sharpens.</pre>
       <p>STREETS gives you the playbook. 4DA gives you the radar. Both are free. The only cost is the hours you're already spending on side projects that don't generate revenue.</p>
       <div style="display: flex; flex-direction: column; gap: 16px; align-items: center;">
         <a href="https://4da.ai" class="btn btn-primary" style="font-size: 16px; padding: 16px 32px;">Download 4DA -- STREETS Included Free</a>
-        <a href="#" style="font-size: 14px; color: var(--text-muted);">Join the next cohort -- March 2026 -- 24 seats</a>
+        <a href="#" style="font-size: 14px; color: var(--text-muted);" onclick="streetsCheckout('cohort'); return false;">Join the next cohort — March 2026 — 24 seats</a>
       </div>
       <div class="trust-line">All 7 modules free &middot; No email required &middot; No paywalls on knowledge &middot; For the streets</div>
     </div>
@@ -1272,6 +1273,29 @@ Revenue compounds. Intelligence sharpens.</pre>
         }
       }, { passive: true });
     })();
+
+    // Stripe Checkout
+    async function streetsCheckout(tier) {
+      var btn = event && event.target;
+      if (btn) { btn.style.opacity = '0.5'; btn.style.pointerEvents = 'none'; }
+      try {
+        var res = await fetch('/api/streets/checkout', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ tier: tier }),
+        });
+        var data = await res.json();
+        if (data.url) {
+          window.location.href = data.url;
+        } else {
+          alert('Unable to start checkout. Please try again.');
+        }
+      } catch (err) {
+        alert('Connection error. Please try again.');
+      } finally {
+        if (btn) { btn.style.opacity = '1'; btn.style.pointerEvents = 'auto'; }
+      }
+    }
   </script>
 
 </body>

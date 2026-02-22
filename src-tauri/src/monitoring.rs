@@ -49,6 +49,10 @@ pub struct MonitoringState {
     pub last_anomaly_check: AtomicU64,
     /// Last behavior decay timestamp (unix seconds)
     pub last_decay: AtomicU64,
+    /// Last coach nudge check timestamp (unix seconds)
+    pub last_nudge_check: AtomicU64,
+    /// Last quarterly review timestamp (unix seconds)
+    pub last_quarterly_review: AtomicU64,
     /// Items below notification threshold, batched for next briefing
     pub batched_items: parking_lot::Mutex<Vec<BatchedNotification>>,
 }
@@ -65,6 +69,8 @@ impl Default for MonitoringState {
             last_health_check: AtomicU64::new(0),
             last_anomaly_check: AtomicU64::new(0),
             last_decay: AtomicU64::new(0),
+            last_nudge_check: AtomicU64::new(0),
+            last_quarterly_review: AtomicU64::new(0),
             batched_items: parking_lot::Mutex::new(Vec::new()),
         }
     }
@@ -190,6 +196,8 @@ pub fn setup_tray<R: Runtime>(app: &AppHandle<R>) -> Result<TrayIcon<R>, String>
 const HEALTH_CHECK_INTERVAL: u64 = 300; // 5 minutes
 const ANOMALY_CHECK_INTERVAL: u64 = 3600; // 1 hour
 const BEHAVIOR_DECAY_INTERVAL: u64 = 86400; // 24 hours (daily)
+const NUDGE_CHECK_INTERVAL: u64 = 86400; // 24 hours (daily, runs with decay)
+const QUARTERLY_REVIEW_INTERVAL: u64 = 86400 * 90; // ~90 days
 
 /// Start the background monitoring scheduler
 pub fn start_scheduler<R: Runtime>(app: AppHandle<R>, state: Arc<MonitoringState>) {
@@ -263,6 +271,22 @@ pub fn start_scheduler<R: Runtime>(app: AppHandle<R>, state: Arc<MonitoringState
                 if let Ok(conn) = crate::open_db_connection() {
                     if let Err(e) = crate::agent_memory::cleanup_expired(&conn) {
                         warn!(target: "4da::monitor", error = %e, "Agent memory cleanup failed");
+                    }
+                }
+
+                // Coach nudge check - daily
+                let last_nudge = state.last_nudge_check.load(Ordering::Relaxed);
+                if now - last_nudge >= NUDGE_CHECK_INTERVAL {
+                    state.last_nudge_check.store(now, Ordering::Relaxed);
+                    crate::coach_nudges::run_daily_nudge_check().await;
+                }
+
+                // Quarterly review generation - every ~90 days
+                let last_quarterly = state.last_quarterly_review.load(Ordering::Relaxed);
+                if now - last_quarterly >= QUARTERLY_REVIEW_INTERVAL {
+                    state.last_quarterly_review.store(now, Ordering::Relaxed);
+                    if let Err(e) = crate::coach_nudges::generate_quarterly_review().await {
+                        warn!(target: "4da::monitor", error = %e, "Quarterly review generation failed");
                     }
                 }
 

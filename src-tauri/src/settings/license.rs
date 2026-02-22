@@ -219,7 +219,7 @@ pub fn get_streets_tier(license: &LicenseConfig) -> &'static str {
 /// Ed25519 public key for license verification (hex-encoded)
 /// The private key is held server-side for license generation.
 const LICENSE_PUBLIC_KEY_HEX: &str =
-    "a1b2c3d4e5f6071829304050607080901a2b3c4d5e6f0a1b2c3d4e5f6070809";
+    "084dc1b1b9549bf0ddff11db9186cb623ceb9d72831fbf2e6f01db160388f9d6";
 
 /// License payload embedded in a signed license key
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -236,6 +236,11 @@ pub struct LicensePayload {
 /// Format: `4DA-{base64(json_payload)}.{base64(ed25519_signature)}`
 pub fn verify_license_key(key: &str) -> Result<LicensePayload, String> {
     let key = key.trim();
+
+    // Sanity check: license keys are ~300-400 chars; reject obvious junk early
+    if key.len() > 1024 {
+        return Err("Invalid license: key too long".to_string());
+    }
 
     // Must start with 4DA- prefix
     let body = key
