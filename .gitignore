@@ -50,6 +50,10 @@ data/usage.json
 # User settings (contains API keys and local paths)
 data/settings.json
 
+# Environment files (may contain secrets from `vercel env pull`)
+.env*
+!.env.example
+
 # ONNX models
 src-tauri/models/
 
