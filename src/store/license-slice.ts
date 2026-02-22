@@ -29,6 +29,8 @@ export const createLicenseSlice: StateCreator<AppStore, [], [], LicenseSlice> = 
       });
       if (result.success) {
         set({ tier: result.tier as 'free' | 'pro' | 'team', licenseKey: key, licenseLoading: false });
+        // Also refresh STREETS tier in case this key has STREETS features
+        get().loadStreetsTier?.();
         return true;
       }
       set({ licenseLoading: false });

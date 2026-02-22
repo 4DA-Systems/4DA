@@ -92,7 +92,7 @@ export function StreetsGate({ children }: { children: React.ReactNode }) {
 
           {/* Upgrade Link */}
           <a
-            href="https://streets.4da.ai"
+            href="https://4da.ai/streets"
             target="_blank"
             rel="noopener noreferrer"
             className="inline-block w-full px-5 py-2.5 text-sm font-medium text-black bg-[#D4AF37] rounded-lg hover:bg-[#C4A030] transition-colors"

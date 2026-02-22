@@ -105,21 +105,32 @@ function StreetsGate() {
           Upgrade to unlock AI coaching, engine recommendations, and strategy generation.
         </p>
         <div className="flex flex-col gap-2">
-          <input
-            type="text"
-            value={key}
-            onChange={e => setKey(e.target.value)}
-            placeholder="Enter license key"
-            className="w-full px-3 py-2 bg-[#0A0A0A] border border-[#2A2A2A] rounded-lg text-sm text-white placeholder-[#666] focus:outline-none focus:border-[#D4AF37]/50"
-          />
-          {error && <p className="text-xs text-[#EF4444]">{error}</p>}
-          <button
-            onClick={handleActivate}
-            disabled={activating || !key.trim()}
-            className="px-5 py-2 text-sm font-medium text-black bg-[#D4AF37] rounded-lg hover:bg-[#C4A030] transition-colors disabled:opacity-50"
+          <a
+            href="https://4da.ai/streets"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-block px-5 py-2.5 text-sm font-medium text-black bg-[#D4AF37] rounded-lg hover:bg-[#C4A030] transition-colors"
           >
-            {activating ? 'Activating...' : 'Activate License'}
-          </button>
+            Get Community — $29/mo
+          </a>
+          <div className="flex gap-2">
+            <input
+              type="text"
+              value={key}
+              onChange={e => setKey(e.target.value)}
+              placeholder="Enter license key"
+              onKeyDown={e => e.key === 'Enter' && handleActivate()}
+              className="flex-1 px-3 py-2 bg-[#0A0A0A] border border-[#2A2A2A] rounded-lg text-sm text-white placeholder-[#666] focus:outline-none focus:border-[#D4AF37]/50"
+            />
+            <button
+              onClick={handleActivate}
+              disabled={activating || !key.trim()}
+              className="px-3 py-2 text-sm font-medium bg-[#1F1F1F] text-[#A0A0A0] border border-[#2A2A2A] rounded-lg hover:bg-[#2A2A2A] hover:text-white transition-colors disabled:opacity-50"
+            >
+              {activating ? '...' : 'Activate'}
+            </button>
+          </div>
+          {error && <p className="text-xs text-[#EF4444]">{error}</p>}
         </div>
       </div>
     </div>

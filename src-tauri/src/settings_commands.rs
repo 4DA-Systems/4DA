@@ -541,20 +541,29 @@ pub async fn activate_license(license_key: String) -> Result<serde_json::Value> 
 
     let payload = crate::settings::verify_license_key(&license_key)?;
 
+    // Any paid license (pro, team, community, cohort) maps to "pro" tier
+    // for feature gating purposes. The specific STREETS tier is derived
+    // from features[] when needed by get_streets_tier().
+    let effective_tier = match payload.tier.as_str() {
+        "pro" | "team" => payload.tier.clone(),
+        "community" | "cohort" => "pro".to_string(),
+        _ => payload.tier.clone(),
+    };
+
     let manager = get_settings_manager();
     let mut guard = manager.lock();
 
     let settings = guard.get_mut();
     settings.license.license_key = license_key;
-    settings.license.tier = payload.tier.clone();
+    settings.license.tier = effective_tier.clone();
     settings.license.activated_at = Some(chrono::Utc::now().to_rfc3339());
     guard.save()?;
 
-    info!(target: "4da::license", "License activated — tier: {}", payload.tier);
+    info!(target: "4da::license", "License activated — tier: {}", effective_tier);
 
     Ok(serde_json::json!({
         "success": true,
-        "tier": payload.tier,
+        "tier": effective_tier,
         "email": payload.email,
         "expires_at": payload.expires_at,
     }))
@@ -883,10 +892,16 @@ pub async fn activate_streets_license(license_key: String) -> Result<serde_json:
     let mut guard = manager.lock();
     let settings = guard.get_mut();
     settings.license.license_key = license_key;
-    // Only upgrade tier if the new key provides a higher tier
-    if payload.tier == "pro" || payload.tier == "team" {
-        settings.license.tier = payload.tier.clone();
-    }
+    // Any paid STREETS license (community/cohort) also grants Pro features.
+    // Explicit pro/team tiers in the payload take precedence.
+    let effective_tier = if payload.tier == "pro" || payload.tier == "team" {
+        payload.tier.clone()
+    } else if streets_tier == "community" || streets_tier == "cohort" {
+        "pro".to_string()
+    } else {
+        settings.license.tier.clone() // keep existing
+    };
+    settings.license.tier = effective_tier.clone();
     settings.license.activated_at = Some(chrono::Utc::now().to_rfc3339());
     guard.save()?;
 
@@ -895,7 +910,7 @@ pub async fn activate_streets_license(license_key: String) -> Result<serde_json:
     Ok(serde_json::json!({
         "success": true,
         "streets_tier": streets_tier,
-        "tier": payload.tier,
+        "tier": effective_tier,
         "email": payload.email,
         "expires_at": payload.expires_at,
     }))

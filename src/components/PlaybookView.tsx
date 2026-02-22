@@ -56,6 +56,7 @@ export function PlaybookView() {
     playbookLoading,
     playbookError,
     activeModuleId,
+    streetsTier,
   } = useAppStore(
     useShallow((s) => ({
       playbookModules: s.playbookModules,
@@ -64,6 +65,7 @@ export function PlaybookView() {
       playbookLoading: s.playbookLoading,
       playbookError: s.playbookError,
       activeModuleId: s.activeModuleId,
+      streetsTier: s.streetsTier,
     })),
   );
 
@@ -153,11 +155,29 @@ export function PlaybookView() {
           );
         })}
 
-        {/* All modules free */}
-        <div className="mt-4 pt-4 border-t border-[#2A2A2A]">
+        {/* Coach upgrade nudge */}
+        <div className="mt-4 pt-4 border-t border-[#2A2A2A] space-y-3">
           <p className="text-[10px] text-[#666] text-center">
             All 7 modules. Free forever.
           </p>
+          {streetsTier === 'playbook' && (
+            <div className="bg-[#D4AF37]/5 border border-[#D4AF37]/20 rounded-lg p-3">
+              <p className="text-[10px] font-medium text-[#D4AF37] mb-1.5">
+                Want AI coaching?
+              </p>
+              <p className="text-[10px] text-[#666] mb-2 leading-relaxed">
+                Get personalized engine analysis, strategy generation, and launch reviews.
+              </p>
+              <a
+                href="https://4da.ai/streets"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="block text-center px-3 py-1.5 text-[10px] font-medium text-black bg-[#D4AF37] rounded hover:bg-[#C4A030] transition-colors"
+              >
+                Upgrade — $29/mo
+              </a>
+            </div>
+          )}
         </div>
       </aside>
 

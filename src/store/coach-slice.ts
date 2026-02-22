@@ -82,12 +82,16 @@ export const createCoachSlice: StateCreator<AppStore, [], [], CoachSlice> = (set
 
   activateStreetsLicense: async (key: string) => {
     try {
-      const result = await invoke<{ success: boolean; streets_tier: string }>(
+      const result = await invoke<{ success: boolean; streets_tier: string; tier: string }>(
         'activate_streets_license',
         { licenseKey: key },
       );
       if (result.success) {
-        set({ streetsTier: result.streets_tier as StreetsTier });
+        set({
+          streetsTier: result.streets_tier as StreetsTier,
+          // STREETS licenses also grant Pro tier
+          tier: result.tier as 'free' | 'pro' | 'team',
+        });
         return true;
       }
       return false;

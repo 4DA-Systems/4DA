@@ -8,6 +8,7 @@ import { AIProviderSection } from './settings/AIProviderSection';
 import { MonitoringSection } from './settings/MonitoringSection';
 import { DigestSection } from './settings/DigestSection';
 import { LocaleSection } from './settings/LocaleSection';
+import { LicenseSection } from './settings/LicenseSection';
 import { ContextDiscoverySection } from './settings/ContextDiscoverySection';
 import { PersonalizationSection } from './settings/PersonalizationSection';
 import { DeveloperDnaPanel } from './DeveloperDna';
@@ -349,6 +350,8 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
                 />
 
                 <DigestSection setSettingsStatus={setSettingsStatus} />
+
+                <LicenseSection onStatus={setSettingsStatus} />
 
                 <StreetsMembershipSection onStatus={setSettingsStatus} />
 
