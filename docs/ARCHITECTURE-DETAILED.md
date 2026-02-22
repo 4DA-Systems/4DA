@@ -337,7 +337,7 @@ CREATE TABLE ace_topics (
 
 ## Relevance Scoring Algorithm
 
-### PASIFA Formula (Privacy-Aware Semantic Intelligence for File Analysis)
+### PASIFA Formula (Privacy Aware Semantic Intelligence 4 File Analysis)
 
 ```rust
 // Step 1: Context Similarity (KNN Search)
