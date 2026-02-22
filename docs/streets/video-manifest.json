@@ -1,0 +1,117 @@
+{
+  "version": 1,
+  "curriculum": [
+    {
+      "video_id": "streets-w1-1",
+      "title": "Module S: The Sovereign Setup — Why Infrastructure Independence Matters",
+      "duration_seconds": 900,
+      "drip_day": 1,
+      "week": 1
+    },
+    {
+      "video_id": "streets-w1-2",
+      "title": "Module S: Running Your First Sovereign Audit",
+      "duration_seconds": 720,
+      "drip_day": 3,
+      "week": 1
+    },
+    {
+      "video_id": "streets-w2-1",
+      "title": "Module T: The Revenue Truth — Mapping Your Stack to Revenue Engines",
+      "duration_seconds": 840,
+      "drip_day": 8,
+      "week": 2
+    },
+    {
+      "video_id": "streets-w2-2",
+      "title": "Module T: 48-Hour Validation Framework — Ship or Kill Fast",
+      "duration_seconds": 660,
+      "drip_day": 10,
+      "week": 2
+    },
+    {
+      "video_id": "streets-w3-1",
+      "title": "Module R: Revenue Engine Deep Dive — Engines 1-4",
+      "duration_seconds": 1080,
+      "drip_day": 15,
+      "week": 3
+    },
+    {
+      "video_id": "streets-w3-2",
+      "title": "Module R: Revenue Engine Deep Dive — Engines 5-8",
+      "duration_seconds": 1080,
+      "drip_day": 17,
+      "week": 3
+    },
+    {
+      "video_id": "streets-w4-1",
+      "title": "Module E1: Execution — The 30-Day Launch Plan",
+      "duration_seconds": 780,
+      "drip_day": 22,
+      "week": 4
+    },
+    {
+      "video_id": "streets-w4-2",
+      "title": "Module E1: Execution — Automation Blueprint Walkthrough",
+      "duration_seconds": 660,
+      "drip_day": 24,
+      "week": 4
+    },
+    {
+      "video_id": "streets-w5-1",
+      "title": "Module E2: Evolution — When to Pivot, Scale, or Stack",
+      "duration_seconds": 720,
+      "drip_day": 29,
+      "week": 5
+    },
+    {
+      "video_id": "streets-w5-2",
+      "title": "Module E2: Evolution — Pricing Strategy and Iteration",
+      "duration_seconds": 600,
+      "drip_day": 31,
+      "week": 5
+    },
+    {
+      "video_id": "streets-w6-1",
+      "title": "Module T2: Traction — Building Sustainable Growth Loops",
+      "duration_seconds": 840,
+      "drip_day": 36,
+      "week": 6
+    },
+    {
+      "video_id": "streets-w6-2",
+      "title": "Module T2: Traction — SEO and Content Engine for Developers",
+      "duration_seconds": 720,
+      "drip_day": 38,
+      "week": 6
+    },
+    {
+      "video_id": "streets-w7-1",
+      "title": "Module S2: Stacking Streams — The $10K/Month Architecture",
+      "duration_seconds": 900,
+      "drip_day": 43,
+      "week": 7
+    },
+    {
+      "video_id": "streets-w7-2",
+      "title": "Module S2: Stacking Streams — Risk Diversification and Compounding",
+      "duration_seconds": 660,
+      "drip_day": 45,
+      "week": 7
+    },
+    {
+      "video_id": "streets-w8-1",
+      "title": "Graduation: Building Your Personal Revenue Dashboard",
+      "duration_seconds": 780,
+      "drip_day": 50,
+      "week": 8
+    },
+    {
+      "video_id": "streets-w8-2",
+      "title": "Graduation: From Playbook to Portfolio — Your Next 90 Days",
+      "duration_seconds": 600,
+      "drip_day": 52,
+      "week": 8
+    }
+  ]
+}

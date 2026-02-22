@@ -841,3 +841,62 @@ pub async fn get_context_stats() -> Result<serde_json::Value> {
         "has_role": identity.role.is_some()
     }))
 }
+
+// ============================================================================
+// STREETS Membership Commands
+// ============================================================================
+
+/// Get the user's current STREETS tier and activation info
+#[tauri::command]
+pub async fn get_streets_tier() -> Result<serde_json::Value> {
+    let manager = get_settings_manager();
+    let guard = manager.lock();
+    let license = &guard.get().license;
+    let tier = crate::settings::get_streets_tier(license);
+
+    Ok(serde_json::json!({
+        "tier": tier,
+        "activated_at": license.activated_at,
+    }))
+}
+
+/// Activate a STREETS license key (Community or Cohort)
+#[tauri::command]
+pub async fn activate_streets_license(license_key: String) -> Result<serde_json::Value> {
+    if license_key.trim().is_empty() {
+        return Err("License key cannot be empty".into());
+    }
+
+    let payload = crate::settings::verify_license_key(&license_key)?;
+
+    // Determine STREETS tier from features
+    let streets_tier = if payload.features.contains(&"streets_cohort".to_string()) {
+        "cohort"
+    } else if payload.features.contains(&"streets_community".to_string()) {
+        "community"
+    } else {
+        // Regular 4DA license — apply as normal
+        "playbook"
+    };
+
+    let manager = get_settings_manager();
+    let mut guard = manager.lock();
+    let settings = guard.get_mut();
+    settings.license.license_key = license_key;
+    // Only upgrade tier if the new key provides a higher tier
+    if payload.tier == "pro" || payload.tier == "team" {
+        settings.license.tier = payload.tier.clone();
+    }
+    settings.license.activated_at = Some(chrono::Utc::now().to_rfc3339());
+    guard.save()?;
+
+    info!(target: "4da::streets", streets_tier, "STREETS license activated");
+
+    Ok(serde_json::json!({
+        "success": true,
+        "streets_tier": streets_tier,
+        "tier": payload.tier,
+        "email": payload.email,
+        "expires_at": payload.expires_at,
+    }))
+}

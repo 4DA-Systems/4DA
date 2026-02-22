@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Activate STREETS License -- 4DA</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: #0A0A0A;
+      color: #FFFFFF;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .card {
+      background: #141414;
+      border: 1px solid #2A2A2A;
+      border-radius: 16px;
+      padding: 40px;
+      max-width: 440px;
+      width: 100%;
+      margin: 20px;
+      text-align: center;
+    }
+    h1 {
+      font-size: 20px;
+      font-weight: 600;
+      margin-bottom: 8px;
+      letter-spacing: -0.01em;
+    }
+    .subtitle {
+      font-size: 14px;
+      color: #A0A0A0;
+      margin-bottom: 32px;
+      line-height: 1.5;
+    }
+    label {
+      display: block;
+      text-align: left;
+      font-size: 13px;
+      color: #A0A0A0;
+      margin-bottom: 6px;
+    }
+    input {
+      width: 100%;
+      padding: 12px 16px;
+      background: #0A0A0A;
+      border: 1px solid #2A2A2A;
+      border-radius: 8px;
+      color: #FFFFFF;
+      font-size: 14px;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    input:focus { border-color: #D4AF37; }
+    input::placeholder { color: #666; }
+    .btn {
+      display: inline-block;
+      width: 100%;
+      padding: 12px 24px;
+      margin-top: 16px;
+      font-size: 14px;
+      font-weight: 600;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .btn-primary {
+      background: #D4AF37;
+      color: #000;
+    }
+    .btn-primary:hover { background: #C4A030; }
+    .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+    .result {
+      margin-top: 24px;
+      padding: 16px;
+      border-radius: 8px;
+      text-align: left;
+      font-size: 13px;
+      line-height: 1.6;
+    }
+    .result.success {
+      background: #22C55E10;
+      border: 1px solid #22C55E30;
+      color: #22C55E;
+    }
+    .result.error {
+      background: #EF444410;
+      border: 1px solid #EF444430;
+      color: #EF4444;
+    }
+    .license-key {
+      display: block;
+      margin-top: 8px;
+      padding: 10px;
+      background: #0A0A0A;
+      border: 1px solid #2A2A2A;
+      border-radius: 6px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      color: #D4AF37;
+      word-break: break-all;
+      user-select: all;
+    }
+    .copy-btn {
+      margin-top: 8px;
+      padding: 8px 16px;
+      font-size: 12px;
+      background: #1F1F1F;
+      color: #A0A0A0;
+      border: 1px solid #2A2A2A;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+    .copy-btn:hover { color: #fff; border-color: #D4AF37; }
+    .steps {
+      margin-top: 20px;
+      text-align: left;
+      font-size: 13px;
+      color: #A0A0A0;
+      line-height: 1.8;
+    }
+    .steps strong { color: #fff; }
+    a { color: #D4AF37; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>Activate STREETS License</h1>
+    <p class="subtitle">Enter the email you used at checkout to retrieve your license key.</p>
+
+    <form id="activate-form" onsubmit="return handleSubmit(event)">
+      <label for="email">Email address</label>
+      <input type="email" id="email" placeholder="you@example.com" required>
+      <button type="submit" class="btn btn-primary" id="submit-btn">Retrieve License Key</button>
+    </form>
+
+    <div id="result" style="display:none;"></div>
+
+    <div class="steps">
+      <p><strong>How to activate:</strong></p>
+      <p>1. Retrieve your key above</p>
+      <p>2. Open 4DA &rarr; Settings &rarr; License</p>
+      <p>3. Paste the key and click Activate</p>
+      <p style="margin-top: 12px;"><a href="/streets">Back to STREETS</a></p>
+    </div>
+  </div>
+
+  <script>
+    async function handleSubmit(e) {
+      e.preventDefault();
+      var email = document.getElementById('email').value.trim();
+      var btn = document.getElementById('submit-btn');
+      var result = document.getElementById('result');
+
+      if (!email) return false;
+
+      btn.disabled = true;
+      btn.textContent = 'Retrieving...';
+      result.style.display = 'none';
+
+      try {
+        var resp = await fetch('/api/streets/activate?email=' + encodeURIComponent(email));
+        var data = await resp.json();
+
+        if (resp.ok && data.license_key) {
+          result.className = 'result success';
+          result.innerHTML =
+            '<p>License found! Tier: <strong>' + data.tier + '</strong></p>' +
+            '<code class="license-key">' + data.license_key + '</code>' +
+            '<button class="copy-btn" onclick="copyKey()">Copy to Clipboard</button>';
+          result.style.display = 'block';
+        } else {
+          result.className = 'result error';
+          result.innerHTML = '<p>' + (data.error || 'No license found for this email.') + '</p>';
+          result.style.display = 'block';
+        }
+      } catch (err) {
+        result.className = 'result error';
+        result.innerHTML = '<p>Network error. Please try again.</p>';
+        result.style.display = 'block';
+      }
+
+      btn.disabled = false;
+      btn.textContent = 'Retrieve License Key';
+      return false;
+    }
+
+    function copyKey() {
+      var key = document.querySelector('.license-key');
+      if (key) {
+        navigator.clipboard.writeText(key.textContent).then(function() {
+          var btn = document.querySelector('.copy-btn');
+          btn.textContent = 'Copied!';
+          setTimeout(function() { btn.textContent = 'Copy to Clipboard'; }, 2000);
+        });
+      }
+    }
+  </script>
+</body>
+</html>

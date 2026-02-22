@@ -1,6 +1,6 @@
 import { useAppStore } from '../store';
 
-type ViewId = 'briefing' | 'results' | 'insights' | 'saved' | 'toolkit' | 'playbook';
+type ViewId = 'briefing' | 'results' | 'insights' | 'saved' | 'toolkit' | 'playbook' | 'coach';
 
 const TABS: Array<{ id: ViewId; label: string; subtitle: string; activeColor: string }> = [
   { id: 'briefing', label: 'Intelligence', subtitle: 'AI briefing & signals', activeColor: 'bg-orange-500/20 text-orange-400' },
@@ -9,6 +9,7 @@ const TABS: Array<{ id: ViewId; label: string; subtitle: string; activeColor: st
   { id: 'saved', label: 'Saved', subtitle: 'Bookmarked items', activeColor: 'bg-green-500/20 text-green-400' },
   { id: 'toolkit', label: 'Toolkit', subtitle: 'Dev tools & health', activeColor: 'bg-purple-500/20 text-purple-400' },
   { id: 'playbook', label: 'Playbook', subtitle: 'STREETS modules', activeColor: 'bg-yellow-500/20 text-yellow-400' },
+  { id: 'coach', label: 'Coach', subtitle: 'AI strategy coaching', activeColor: 'bg-emerald-500/20 text-emerald-400' },
 ];
 
 export function ViewTabBar() {

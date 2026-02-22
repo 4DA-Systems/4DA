@@ -1,6 +1,6 @@
 # Module S: Stacking Streams
 
-**STREETS Developer Income Course — Paid Module**
+**STREETS Developer Income Course — Free Module (All 7 Modules Free Inside 4DA)**
 *Weeks 14-16 | 6 Lessons | Deliverable: Your Stream Stack (12-Month Income Plan)*
 
 > "One stream is a side hustle. Three streams is a business. Five streams is freedom."
@@ -827,7 +827,7 @@ Now we're talking. $2,000/month means your streams are generating real, repeatab
 - **Virtual assistant for non-technical tasks: $500-800/month.** This is the highest-ROI hire you can make at this stage. An offshore VA (Philippines, Latin America) for 10-15 hours/month handles: email triage, invoice follow-ups, scheduling, data entry, social media posting, basic customer support first-pass. You save 10-15 hours/month. At your effective rate, those hours are worth $500-3,000/month.
 - **Professional email and billing infrastructure:** Migrate from "send invoices manually" to automated billing (Stripe Billing, Lemon Squeezy). Cost: $0-50/month. Time saved: 3-5 hours/month.
 - **A paid design template for your products:** $49-199 one-time. First impressions matter. A professional landing page converts 2-3x better than a hacked-together one.
-- **$149 for STREETS Core if you haven't already.** Yes, it's meta to recommend the course inside the course. But at $2,000/month, you've proven you can execute. The full course accelerates what's working.
+- **All 7 STREETS modules are free inside 4DA.** If you haven't worked through the full playbook yet, now is the time. At $2,000/month, you've proven you can execute. The remaining modules accelerate what's working. Consider joining the Community ($29/mo) for accountability and case studies from other developers at this stage.
 
 **Your pocket: $800-1,000/month**
 
@@ -1418,7 +1418,7 @@ Systems beat lottery tickets. Every time. Over every timeframe.
 
 ### The Community
 
-STREETS Pro members have access to the private community where developers share:
+STREETS Community members ($29/mo or $249/year) have access to the private community where developers share:
 
 - **Monthly revenue reports:** Real numbers, real streams, real challenges.
 - **Stream launches:** What they built, what they priced, what happened.

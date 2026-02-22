@@ -107,13 +107,13 @@ export interface ToastSlice {
 export interface UiSlice {
   showSettings: boolean;
   showSplash: boolean;
-  activeView: 'briefing' | 'results' | 'saved' | 'insights' | 'toolkit' | 'playbook';
+  activeView: 'briefing' | 'results' | 'saved' | 'insights' | 'toolkit' | 'playbook' | 'coach';
   isFirstRun: boolean;
   firstRunDismissed: boolean;
   embeddingMode: 'semantic' | 'keyword-only' | null;
   setShowSettings: (show: boolean) => void;
   setShowSplash: (show: boolean) => void;
-  setActiveView: (view: 'briefing' | 'results' | 'saved' | 'insights' | 'toolkit' | 'playbook') => void;
+  setActiveView: (view: 'briefing' | 'results' | 'saved' | 'insights' | 'toolkit' | 'playbook' | 'coach') => void;
   setIsFirstRun: (v: boolean) => void;
   setFirstRunDismissed: (v: boolean) => void;
   setEmbeddingMode: (mode: 'semantic' | 'keyword-only' | null) => void;
@@ -342,4 +342,5 @@ export type AppStore =
   & import('./playbook-slice').PlaybookSlice
   & import('./command-deck-slice').CommandDeckSlice
   & import('./sovereign-profile-slice').SovereignProfileSlice
-  & import('./suns-slice').SunsSlice;
+  & import('./suns-slice').SunsSlice
+  & import('./coach-slice').CoachSlice;

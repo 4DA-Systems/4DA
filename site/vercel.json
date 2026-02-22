@@ -1,6 +1,9 @@
 {
   "rewrites": [
-    { "source": "/streets", "destination": "/streets/index.html" },
+    { "source": "/streets", "destination": "/streets.html" },
+    { "source": "/streets/activate", "destination": "/streets/activate.html" },
+    { "source": "/merch", "destination": "/merch.html" },
+    { "source": "/api/streets/:path*", "destination": "/api/streets/:path*" },
     { "source": "/(.*)", "destination": "/index.html" }
   ]
 }
