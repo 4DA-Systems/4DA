@@ -9,6 +9,9 @@ export function LicenseSection({ onStatus }: { onStatus: (s: string) => void }) 
   const startTrial = useAppStore(s => s.startTrial);
   const loadLicense = useAppStore(s => s.loadLicense);
   const loadTrialStatus = useAppStore(s => s.loadTrialStatus);
+  const expired = useAppStore(s => s.expired);
+  const daysRemaining = useAppStore(s => s.daysRemaining);
+  const expiresAt = useAppStore(s => s.expiresAt);
 
   const [key, setKey] = useState('');
   const [starting, setStarting] = useState(false);
@@ -18,10 +21,11 @@ export function LicenseSection({ onStatus }: { onStatus: (s: string) => void }) 
     loadTrialStatus();
   }, [loadLicense, loadTrialStatus]);
 
-  const isPro = tier === 'pro' || tier === 'team';
+  const isPro = !expired && (tier === 'pro' || tier === 'team');
   const trialActive = trialStatus?.active === true;
   const trialExpired = trialStatus != null && !trialStatus.active && trialStatus.started_at != null;
   const canStartTrial = !isPro && !trialStatus?.started_at;
+  const expiryWarning = isPro && daysRemaining > 0 && daysRemaining <= 14;
 
   const handleActivate = async () => {
     if (!key.trim()) return;
@@ -74,15 +78,45 @@ export function LicenseSection({ onStatus }: { onStatus: (s: string) => void }) 
         )}
       </div>
 
+      {/* Expired license banner */}
+      {expired && (
+        <div className="mb-3 p-2.5 rounded-lg bg-[#EF4444]/10 border border-[#EF4444]/30">
+          <p className="text-xs font-medium text-[#EF4444] mb-1">License expired</p>
+          <p className="text-[10px] text-[#EF4444]/70">
+            Your license expired{expiresAt ? ` on ${new Date(expiresAt).toLocaleDateString()}` : ''}. Renew to restore Pro features.
+          </p>
+          <a
+            href="https://4da.ai/streets"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-block mt-2 px-3 py-1.5 text-[10px] font-semibold text-black bg-[#D4AF37] rounded hover:bg-[#C4A030] transition-colors"
+          >
+            Renew License
+          </a>
+        </div>
+      )}
+
+      {/* Expiry warning (< 14 days) */}
+      {expiryWarning && (
+        <div className="mb-3 p-2.5 rounded-lg bg-[#D4AF37]/10 border border-[#D4AF37]/30">
+          <p className="text-[10px] text-[#D4AF37]">
+            License expires in {daysRemaining} day{daysRemaining !== 1 ? 's' : ''}.{' '}
+            <a href="https://4da.ai/streets" target="_blank" rel="noopener noreferrer" className="underline font-medium">
+              Renew now
+            </a>
+          </p>
+        </div>
+      )}
+
       {/* Pro badge — show what's unlocked */}
       {isPro && (
         <p className="text-xs text-gray-500 mb-3">
-          All Pro features unlocked. License verified.
+          All Pro features unlocked.{expiresAt && !expiryWarning ? ` Renews ${new Date(expiresAt).toLocaleDateString()}.` : ' License verified.'}
         </p>
       )}
 
-      {/* License key input — show when not Pro */}
-      {!isPro && (
+      {/* License key input — show when not Pro or expired */}
+      {(!isPro || expired) && (
         <div className="space-y-3">
           <div className="flex gap-2">
             <input

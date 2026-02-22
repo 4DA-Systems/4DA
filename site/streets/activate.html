@@ -75,6 +75,12 @@
     }
     .btn-primary:hover { background: #C4A030; }
     .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+    .btn-open-app {
+      background: #22C55E;
+      color: #000;
+      margin-top: 10px;
+    }
+    .btn-open-app:hover { background: #16A34A; }
     .result {
       margin-top: 24px;
       padding: 16px;
@@ -106,17 +112,32 @@
       word-break: break-all;
       user-select: all;
     }
-    .copy-btn {
-      margin-top: 8px;
-      padding: 8px 16px;
+    .btn-row {
+      display: flex;
+      gap: 8px;
+      margin-top: 10px;
+    }
+    .btn-row button {
+      flex: 1;
+      padding: 10px 16px;
       font-size: 12px;
-      background: #1F1F1F;
-      color: #A0A0A0;
-      border: 1px solid #2A2A2A;
+      font-weight: 600;
+      border: none;
       border-radius: 6px;
       cursor: pointer;
+      transition: all 0.2s;
     }
-    .copy-btn:hover { color: #fff; border-color: #D4AF37; }
+    .copy-btn {
+      background: #1F1F1F;
+      color: #A0A0A0;
+      border: 1px solid #2A2A2A !important;
+    }
+    .copy-btn:hover { color: #fff; border-color: #D4AF37 !important; }
+    .open-btn {
+      background: #22C55E;
+      color: #000;
+    }
+    .open-btn:hover { background: #16A34A; }
     .steps {
       margin-top: 20px;
       text-align: left;
@@ -127,6 +148,11 @@
     .steps strong { color: #fff; }
     a { color: #D4AF37; text-decoration: none; }
     a:hover { text-decoration: underline; }
+    .or-divider {
+      font-size: 11px;
+      color: #666;
+      margin: 4px 0;
+    }
   </style>
 </head>
 <body>
@@ -145,20 +171,28 @@
     <div class="steps">
       <p><strong>How to activate:</strong></p>
       <p>1. Retrieve your key above</p>
-      <p>2. Open 4DA &rarr; Settings &rarr; License</p>
-      <p>3. Paste the key and click Activate</p>
+      <p>2. Click "Open in 4DA" to activate instantly</p>
+      <p>3. Or copy the key and paste it in 4DA Settings</p>
       <p style="margin-top: 12px;"><a href="/streets">Back to STREETS</a></p>
     </div>
   </div>
 
   <script>
+    // Store the current license key for deep-link use
+    var currentLicenseKey = null;
+
     function showLicense(data) {
+      currentLicenseKey = data.license_key;
       var result = document.getElementById('result');
       result.className = 'result success';
       result.innerHTML =
         '<p>License found! Tier: <strong></strong></p>' +
         '<code class="license-key"></code>' +
-        '<button class="copy-btn" onclick="copyKey()">Copy to Clipboard</button>';
+        '<div class="btn-row">' +
+          '<button class="open-btn" onclick="openInApp()">Open in 4DA</button>' +
+          '<button class="copy-btn" onclick="copyKey()">Copy Key</button>' +
+        '</div>' +
+        '<p class="or-divider">The button above will open 4DA and activate your license automatically.</p>';
       result.querySelector('strong').textContent = data.tier;
       result.querySelector('.license-key').textContent = data.license_key;
       result.style.display = 'block';
@@ -170,6 +204,24 @@
       result.innerHTML = '<p></p>';
       result.querySelector('p').textContent = msg;
       result.style.display = 'block';
+    }
+
+    function openInApp() {
+      if (!currentLicenseKey) return;
+      // Deep-link: opens 4DA and auto-activates the license
+      var deepLink = '4da://activate?key=' + encodeURIComponent(currentLicenseKey);
+      window.location.href = deepLink;
+    }
+
+    function copyKey() {
+      var key = document.querySelector('.license-key');
+      if (key) {
+        navigator.clipboard.writeText(key.textContent).then(function() {
+          var btn = document.querySelector('.copy-btn');
+          btn.textContent = 'Copied!';
+          setTimeout(function() { btn.textContent = 'Copy Key'; }, 2000);
+        });
+      }
     }
 
     async function fetchLicense(query) {
@@ -206,17 +258,6 @@
       return false;
     }
 
-    function copyKey() {
-      var key = document.querySelector('.license-key');
-      if (key) {
-        navigator.clipboard.writeText(key.textContent).then(function() {
-          var btn = document.querySelector('.copy-btn');
-          btn.textContent = 'Copied!';
-          setTimeout(function() { btn.textContent = 'Copy to Clipboard'; }, 2000);
-        });
-      }
-    }
-
     // Auto-retrieve license if arriving from Stripe checkout (session_id in URL)
     (function() {
       var params = new URLSearchParams(window.location.search);
@@ -225,7 +266,7 @@
         document.querySelector('.subtitle').textContent = 'Retrieving your license...';
         fetchLicense('session_id=' + encodeURIComponent(sessionId)).then(function(ok) {
           if (ok) {
-            document.querySelector('.subtitle').textContent = 'Your license key is ready. Copy it and paste it into 4DA Settings.';
+            document.querySelector('.subtitle').textContent = 'Your license key is ready. Click "Open in 4DA" to activate instantly.';
           } else {
             document.querySelector('.subtitle').textContent = 'Could not auto-retrieve. Enter your email below.';
           }

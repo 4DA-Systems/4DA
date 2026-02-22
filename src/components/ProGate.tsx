@@ -8,7 +8,7 @@ interface ProGateProps {
 }
 
 export function ProGate({ children, feature }: ProGateProps) {
-  const { isPro, trialStatus } = useLicense();
+  const { isPro, trialStatus, expired, daysRemaining } = useLicense();
   const startTrial = useAppStore((s) => s.startTrial);
   const activateLicense = useAppStore((s) => s.activateLicense);
   const [starting, setStarting] = useState(false);
@@ -17,11 +17,27 @@ export function ProGate({ children, feature }: ProGateProps) {
   const [error, setError] = useState<string | null>(null);
   const [showKeyInput, setShowKeyInput] = useState(false);
 
+  // Active Pro with expiry warning — show content with a banner
+  if (isPro && daysRemaining > 0 && daysRemaining <= 7) {
+    return (
+      <div>
+        <div className="mb-2 px-3 py-1.5 rounded-lg bg-[#D4AF37]/10 border border-[#D4AF37]/20 text-center">
+          <p className="text-[10px] text-[#D4AF37]">
+            License expires in {daysRemaining} day{daysRemaining !== 1 ? 's' : ''}.{' '}
+            <a href="https://4da.ai/streets" target="_blank" rel="noopener noreferrer" className="underline font-medium">Renew</a>
+          </p>
+        </div>
+        {children}
+      </div>
+    );
+  }
+
   if (isPro) {
     return <>{children}</>;
   }
 
   const trialExpired = trialStatus && !trialStatus.active && trialStatus.started_at;
+  const licenseExpired = expired;
   const canStartTrial = !trialStatus?.started_at;
 
   const handleStartTrial = async () => {
@@ -58,7 +74,9 @@ export function ProGate({ children, feature }: ProGateProps) {
             {feature ? `${feature} is a Pro feature` : 'This is a Pro feature'}
           </p>
           <p className="text-xs text-gray-500 mb-4">
-            {trialExpired
+            {licenseExpired
+              ? 'Your license has expired. Renew to restore access.'
+              : trialExpired
               ? 'Your free trial has ended. Upgrade to continue.'
               : 'Upgrade to unlock AI briefings, intelligence panels, and more.'}
           </p>

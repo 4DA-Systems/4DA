@@ -312,6 +312,9 @@ export interface LicenseSlice {
   licenseKey: string;
   licenseLoading: boolean;
   trialStatus: TrialStatus | null;
+  expiresAt: string | null;
+  daysRemaining: number;
+  expired: boolean;
   loadLicense: () => Promise<void>;
   activateLicense: (key: string) => Promise<boolean>;
   loadTrialStatus: () => Promise<void>;
