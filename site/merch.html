@@ -1,0 +1,818 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>4DA Merch -- Developer Gear for the Streets</title>
+  <meta name="description" content="Premium developer merch from 4DA and STREETS. Tees, hoodies, stickers, desk mats, and more. Designed for builders.">
+  <meta name="theme-color" content="#0A0A0A">
+
+  <meta property="og:title" content="4DA Merch -- Developer Gear for the Streets">
+  <meta property="og:description" content="Premium developer merch from 4DA and STREETS. Designed for builders who ship.">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://4da.ai/merch">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+    :root {
+      --bg: #0A0A0A;
+      --bg-card: #141414;
+      --bg-hover: #1A1A1A;
+      --text: #FFFFFF;
+      --text-secondary: #A0A0A0;
+      --text-muted: #666666;
+      --accent: #D4AF37;
+      --orange: #F97316;
+      --border: #2A2A2A;
+      --radius: 12px;
+    }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    code, .mono { font-family: 'JetBrains Mono', monospace; }
+    a { color: var(--accent); text-decoration: none; transition: opacity 0.2s; }
+    a:hover { opacity: 0.8; }
+    .container { max-width: 1100px; margin: 0 auto; padding: 0 24px; }
+
+    /* ---- Nav ---- */
+    .nav {
+      height: 56px;
+      border-bottom: 1px solid var(--border);
+      background: rgba(10, 10, 10, 0.95);
+      backdrop-filter: blur(12px);
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+    .nav-inner {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 0 24px;
+      height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .nav-brand { font-weight: 600; font-size: 15px; color: var(--text); display: flex; align-items: center; gap: 8px; }
+    .nav-brand img { width: 24px; height: 24px; border-radius: 50%; opacity: 0.8; }
+    .nav-brand span { color: var(--text-muted); font-weight: 400; font-size: 13px; }
+    .nav-links { display: flex; gap: 24px; align-items: center; }
+    .nav-links a { color: var(--text-muted); font-size: 14px; }
+    .nav-links a:hover { color: var(--text); opacity: 1; }
+    .nav-cta {
+      background: var(--text);
+      color: var(--bg);
+      padding: 7px 16px;
+      border-radius: 6px;
+      font-size: 13px;
+      font-weight: 500;
+    }
+
+    /* ---- Hero ---- */
+    .hero {
+      padding: 100px 0 60px;
+      text-align: center;
+    }
+    .hero-label {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12px;
+      letter-spacing: 0.1em;
+      color: var(--accent);
+      margin-bottom: 24px;
+      text-transform: uppercase;
+    }
+    .hero h1 {
+      font-size: clamp(36px, 6vw, 56px);
+      font-weight: 600;
+      line-height: 1.1;
+      letter-spacing: -0.03em;
+      margin-bottom: 16px;
+    }
+    .hero p {
+      font-size: 17px;
+      color: var(--text-secondary);
+      max-width: 520px;
+      margin: 0 auto;
+      line-height: 1.7;
+    }
+
+    /* ---- Collection Tabs ---- */
+    .collection-tabs {
+      display: flex;
+      gap: 8px;
+      justify-content: center;
+      margin: 48px 0 40px;
+      flex-wrap: wrap;
+    }
+    .tab {
+      padding: 8px 20px;
+      border-radius: 20px;
+      border: 1px solid var(--border);
+      background: transparent;
+      color: var(--text-muted);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12px;
+      letter-spacing: 0.04em;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .tab:hover { border-color: var(--text-muted); color: var(--text); }
+    .tab.active { border-color: var(--accent); color: var(--accent); background: rgba(212, 175, 55, 0.08); }
+
+    /* ---- Section Labels ---- */
+    .section-label {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12px;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--accent);
+      margin-bottom: 16px;
+    }
+    .section-title {
+      font-size: 28px;
+      font-weight: 600;
+      letter-spacing: -0.02em;
+      margin-bottom: 32px;
+    }
+    .divider { border: none; border-top: 1px solid var(--border); margin: 0; }
+
+    /* ---- Product Grid ---- */
+    .product-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+      gap: 20px;
+      margin-bottom: 80px;
+    }
+    .product-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+      transition: border-color 0.2s, transform 0.2s;
+    }
+    .product-card:hover { border-color: #3A3A3A; transform: translateY(-2px); }
+    .product-preview {
+      aspect-ratio: 1;
+      background: #0A0A0A;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 32px;
+      position: relative;
+      overflow: hidden;
+    }
+    .product-preview img, .product-preview svg { max-width: 100%; max-height: 100%; }
+    .product-preview .product-type-badge {
+      position: absolute;
+      top: 12px;
+      right: 12px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      padding: 3px 10px;
+      border-radius: 4px;
+      background: rgba(212, 175, 55, 0.15);
+      color: var(--accent);
+    }
+    .product-info { padding: 20px; }
+    .product-info h3 { font-size: 16px; font-weight: 600; margin-bottom: 4px; }
+    .product-info .product-line {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      margin-bottom: 8px;
+    }
+    .product-info .product-line.line-4da { color: var(--accent); }
+    .product-info .product-line.line-streets { color: var(--orange); }
+    .product-desc { font-size: 13px; color: var(--text-muted); line-height: 1.6; margin-bottom: 12px; }
+    .product-meta {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding-top: 12px;
+      border-top: 1px solid var(--border);
+    }
+    .product-price {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 14px;
+      font-weight: 500;
+    }
+    .product-colors {
+      display: flex;
+      gap: 6px;
+    }
+    .color-dot {
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      border: 1px solid var(--border);
+    }
+
+    /* ---- Mockup tee shape ---- */
+    .tee-mockup {
+      width: 200px;
+      height: 220px;
+      position: relative;
+    }
+    .tee-body {
+      width: 160px;
+      height: 180px;
+      background: #1A1A1A;
+      border-radius: 4px 4px 8px 8px;
+      margin: 30px auto 0;
+      position: relative;
+    }
+    .tee-neck {
+      width: 50px;
+      height: 16px;
+      background: #1A1A1A;
+      border-radius: 0 0 50% 50%;
+      margin: 0 auto;
+      position: relative;
+      top: 14px;
+    }
+    .tee-sleeve-l, .tee-sleeve-r {
+      width: 45px;
+      height: 55px;
+      background: #1A1A1A;
+      position: absolute;
+      top: 0;
+    }
+    .tee-sleeve-l { left: -30px; border-radius: 0 0 0 20px; transform: skewX(10deg); }
+    .tee-sleeve-r { right: -30px; border-radius: 0 0 20px 0; transform: skewX(-10deg); }
+
+    /* ---- Featured Banner ---- */
+    .featured {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 48px;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 48px;
+      align-items: center;
+      margin-bottom: 80px;
+    }
+    .featured-visual {
+      background: #0A0A0A;
+      border-radius: 8px;
+      aspect-ratio: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 40px;
+      border: 1px solid var(--border);
+    }
+    .featured h2 { font-size: 28px; font-weight: 600; margin-bottom: 12px; }
+    .featured p { font-size: 15px; color: var(--text-secondary); line-height: 1.7; margin-bottom: 16px; }
+    .featured .tag-list { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 20px; }
+    .featured .tag {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      color: var(--text-muted);
+      background: var(--bg);
+      border: 1px solid var(--border);
+      padding: 4px 10px;
+      border-radius: 4px;
+    }
+
+    /* ---- Newsletter / notify ---- */
+    .notify-section {
+      text-align: center;
+      padding: 80px 0;
+    }
+    .notify-section h2 {
+      font-size: 24px;
+      font-weight: 600;
+      margin-bottom: 12px;
+    }
+    .notify-section p {
+      font-size: 15px;
+      color: var(--text-secondary);
+      margin-bottom: 32px;
+    }
+    .notify-form {
+      display: flex;
+      gap: 8px;
+      max-width: 420px;
+      margin: 0 auto;
+    }
+    .notify-form input {
+      flex: 1;
+      padding: 12px 16px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: var(--bg-card);
+      color: var(--text);
+      font-family: inherit;
+      font-size: 14px;
+    }
+    .notify-form input::placeholder { color: var(--text-muted); }
+    .notify-form button {
+      padding: 12px 24px;
+      border-radius: 8px;
+      border: none;
+      background: var(--accent);
+      color: var(--bg);
+      font-family: inherit;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: opacity 0.2s;
+      white-space: nowrap;
+    }
+    .notify-form button:hover { opacity: 0.85; }
+
+    /* ---- Footer ---- */
+    footer {
+      padding: 48px 0;
+      border-top: 1px solid var(--border);
+    }
+    .footer-inner {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 16px;
+    }
+    .footer-brand { font-weight: 600; font-size: 15px; display: flex; align-items: center; gap: 8px; }
+    .footer-brand img { width: 20px; height: 20px; border-radius: 50%; opacity: 0.6; }
+    .footer-brand span { color: var(--text-muted); font-weight: 400; font-size: 13px; }
+    .footer-links { display: flex; gap: 24px; font-size: 14px; align-items: center; }
+    .footer-links a { color: var(--text-muted); }
+    .footer-links a:hover { color: var(--text); }
+    .footer-links .social-icon { display: inline-flex; align-items: center; }
+
+    @media (max-width: 768px) {
+      .featured { grid-template-columns: 1fr; }
+      .product-grid { grid-template-columns: 1fr; }
+      .footer-inner { flex-direction: column; text-align: center; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Nav -->
+  <nav class="nav">
+    <div class="nav-inner">
+      <a href="/" class="nav-brand"><img src="hero-sun.jpg" alt="4DA">4DA <span>Merch</span></a>
+      <div class="nav-links">
+        <a href="#apparel">Apparel</a>
+        <a href="#accessories">Accessories</a>
+        <a href="streets.html">STREETS</a>
+        <a href="https://4da.ai" class="nav-cta">Download 4DA</a>
+      </div>
+    </div>
+  </nav>
+
+  <!-- Hero -->
+  <header class="hero">
+    <div class="container">
+      <div class="hero-label">4DA Merch</div>
+      <h1>Gear for builders<br>who ship.</h1>
+      <p>Premium developer merch from 4DA and STREETS. Minimal when it needs to be. Bold when it doesn't. Every piece designed for the culture.</p>
+    </div>
+  </header>
+
+  <hr class="divider">
+
+  <!-- Collection Tabs -->
+  <div class="container">
+    <div class="collection-tabs">
+      <button class="tab active" data-filter="all">All</button>
+      <button class="tab" data-filter="4da">4DA Collection</button>
+      <button class="tab" data-filter="streets">STREETS Collection</button>
+      <button class="tab" data-filter="stickers">Stickers</button>
+    </div>
+  </div>
+
+  <!-- Featured: Code Fragment Tee -->
+  <div class="container">
+    <div class="featured">
+      <div class="featured-visual">
+        <img src="merch-designs/code-fragment.svg" alt="Code Fragment Tee Design" style="width:100%;border-radius:4px;">
+      </div>
+      <div>
+        <div class="section-label">Featured Design</div>
+        <h2>The Code Fragment Tee</h2>
+        <p>Actual 4DA scoring code — stylized for print. A Rust snippet showing the PASIFA relevance engine. For developers who read t-shirts and understand what they see.</p>
+        <div class="tag-list">
+          <span class="tag">Bella+Canvas 3001</span>
+          <span class="tag">DTG Print</span>
+          <span class="tag">Black</span>
+        </div>
+        <p style="font-family: 'JetBrains Mono', monospace; font-size: 14px;">$38 <span style="color: var(--text-muted); font-size: 12px;">// assert!(data.stays_local())</span></p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Apparel Section -->
+  <section id="apparel">
+    <div class="container">
+      <div class="section-label">Apparel</div>
+      <div class="section-title">Tees, hoodies, caps</div>
+      <div class="product-grid">
+
+        <!-- Product 1: 4DA Logo Tee -->
+        <div class="product-card" data-collection="4da">
+          <div class="product-preview">
+            <span class="product-type-badge">Tee</span>
+            <img src="merch-designs/4da-text-mark.svg" alt="4DA Text Mark" style="width:70%;">
+          </div>
+          <div class="product-info">
+            <div class="product-line line-4da">4DA Collection</div>
+            <h3>4DA Logo Tee</h3>
+            <p class="product-desc">Clean text mark. Small chest print. The daily driver for builders who don't need to explain what they do.</p>
+            <div class="product-meta">
+              <span class="product-price">$34</span>
+              <div class="product-colors">
+                <div class="color-dot" style="background:#0A0A0A;"></div>
+                <div class="color-dot" style="background:#1A1A2E;"></div>
+                <div class="color-dot" style="background:#FFFFFF; border-color:#CCC;"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Product 2: Sun Badge Tee -->
+        <div class="product-card" data-collection="4da">
+          <div class="product-preview">
+            <span class="product-type-badge">Tee</span>
+            <img src="merch-designs/4da-sun-badge.svg" alt="4DA Sun Badge" style="width:65%;">
+          </div>
+          <div class="product-info">
+            <div class="product-line line-4da">4DA Collection</div>
+            <h3>Solar Crown Tee</h3>
+            <p class="product-desc">The 4DA sun — blazing corona with the "4" at center. Full chest print. The icon piece.</p>
+            <div class="product-meta">
+              <span class="product-price">$38</span>
+              <div class="product-colors">
+                <div class="color-dot" style="background:#0A0A0A;"></div>
+                <div class="color-dot" style="background:#1F1F1F;"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Product 3: Void Pulse Tee -->
+        <div class="product-card" data-collection="4da">
+          <div class="product-preview">
+            <span class="product-type-badge">Tee</span>
+            <img src="merch-designs/void-pulse.svg" alt="Void Pulse" style="width:65%;">
+          </div>
+          <div class="product-info">
+            <div class="product-line line-4da">4DA Collection</div>
+            <h3>Void Pulse Tee</h3>
+            <p class="product-desc">The Void Engine heartbeat — concentric rings radiating from an amber core with a signal pulse. Ambient intelligence, visualized.</p>
+            <div class="product-meta">
+              <span class="product-price">$38</span>
+              <div class="product-colors">
+                <div class="color-dot" style="background:#0A0A0A;"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Product 4: Dimensions Tee -->
+        <div class="product-card" data-collection="4da">
+          <div class="product-preview">
+            <span class="product-type-badge">Tee</span>
+            <img src="merch-designs/dimensions.svg" alt="4 Dimensions" style="width:65%;">
+          </div>
+          <div class="product-info">
+            <div class="product-line line-4da">4DA Collection</div>
+            <h3>4 Dimensions Tee</h3>
+            <p class="product-desc">Intelligence. Privacy. Autonomy. Revenue. The four dimensions mapped as a geometric schematic. Clean, architectural.</p>
+            <div class="product-meta">
+              <span class="product-price">$38</span>
+              <div class="product-colors">
+                <div class="color-dot" style="background:#0A0A0A;"></div>
+                <div class="color-dot" style="background:#1A1A2E;"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Product 5: PASIFA Schematic Tee -->
+        <div class="product-card" data-collection="4da">
+          <div class="product-preview">
+            <span class="product-type-badge">Tee</span>
+            <img src="merch-designs/pasifa-schematic.svg" alt="PASIFA Schematic" style="width:65%;">
+          </div>
+          <div class="product-info">
+            <div class="product-line line-4da">4DA Collection</div>
+            <h3>PASIFA Schematic Tee</h3>
+            <p class="product-desc">The scoring algorithm as a blueprint. Stack detect, signal extract, local embed, confidence gate. Systems thinking as wearable art.</p>
+            <div class="product-meta">
+              <span class="product-price">$38</span>
+              <div class="product-colors">
+                <div class="color-dot" style="background:#0A0A0A;"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Product 6: Code Fragment Tee -->
+        <div class="product-card" data-collection="4da">
+          <div class="product-preview">
+            <span class="product-type-badge">Tee</span>
+            <img src="merch-designs/code-fragment.svg" alt="Code Fragment" style="width:65%;">
+          </div>
+          <div class="product-info">
+            <div class="product-line line-4da">4DA Collection</div>
+            <h3>Code Fragment Tee</h3>
+            <p class="product-desc">Actual PASIFA scoring code in a terminal window. Rust syntax highlighting. "Privacy first. Always." For devs who read shirts.</p>
+            <div class="product-meta">
+              <span class="product-price">$38</span>
+              <div class="product-colors">
+                <div class="color-dot" style="background:#0A0A0A;"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Product 7: STREETS Wordmark Tee -->
+        <div class="product-card" data-collection="streets">
+          <div class="product-preview" style="background:#0A0A0A;">
+            <span class="product-type-badge" style="background:rgba(249,115,22,0.15);color:var(--orange);">Tee</span>
+            <img src="merch-designs/streets-wordmark.svg" alt="STREETS Wordmark" style="width:75%;">
+          </div>
+          <div class="product-info">
+            <div class="product-line line-streets">STREETS Collection</div>
+            <h3>STREETS Wordmark Tee</h3>
+            <p class="product-desc">Bold STREETS logo with "The Developer Income Playbook" tagline. Statement front print. On Comfort Colors vintage wash.</p>
+            <div class="product-meta">
+              <span class="product-price">$42</span>
+              <div class="product-colors">
+                <div class="color-dot" style="background:#0A0A0A;"></div>
+                <div class="color-dot" style="background:#2C2C2C;"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Product 8: For the Streets Back Print -->
+        <div class="product-card" data-collection="streets">
+          <div class="product-preview" style="background:#0A0A0A;">
+            <span class="product-type-badge" style="background:rgba(249,115,22,0.15);color:var(--orange);">Tee</span>
+            <img src="merch-designs/for-the-streets.svg" alt="For the Streets" style="width:55%;">
+          </div>
+          <div class="product-info">
+            <div class="product-line line-streets">STREETS Collection</div>
+            <h3>"For the Streets" Back Print Tee</h3>
+            <p class="product-desc">The statement piece. "Your Rig. Your Rules. Your Revenue." on front. Full "FOR THE STREETS" graphic on back. The drop.</p>
+            <div class="product-meta">
+              <span class="product-price">$45</span>
+              <div class="product-colors">
+                <div class="color-dot" style="background:#0A0A0A;"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Product 9: 4DA Hoodie -->
+        <div class="product-card" data-collection="4da">
+          <div class="product-preview">
+            <span class="product-type-badge">Hoodie</span>
+            <img src="merch-designs/4da-text-mark.svg" alt="4DA Hoodie" style="width:50%;">
+          </div>
+          <div class="product-info">
+            <div class="product-line line-4da">4DA Collection</div>
+            <h3>4DA Essential Hoodie</h3>
+            <p class="product-desc">Premium heavyweight hoodie. Small 4DA text mark on chest. Clean, warm, built for late-night coding sessions.</p>
+            <div class="product-meta">
+              <span class="product-price">$62</span>
+              <div class="product-colors">
+                <div class="color-dot" style="background:#0A0A0A;"></div>
+                <div class="color-dot" style="background:#1A1A2E;"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Product 10: STREETS Hoodie -->
+        <div class="product-card" data-collection="streets">
+          <div class="product-preview" style="background:#0A0A0A;">
+            <span class="product-type-badge" style="background:rgba(249,115,22,0.15);color:var(--orange);">Hoodie</span>
+            <img src="merch-designs/streets-wordmark.svg" alt="STREETS Hoodie" style="width:60%;">
+          </div>
+          <div class="product-info">
+            <div class="product-line line-streets">STREETS Collection</div>
+            <h3>STREETS Heavyweight Hoodie</h3>
+            <p class="product-desc">Oversized STREETS wordmark on chest. "8 Engines" on back. Comfort Colors heavyweight. The cold-weather statement.</p>
+            <div class="product-meta">
+              <span class="product-price">$68</span>
+              <div class="product-colors">
+                <div class="color-dot" style="background:#0A0A0A;"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Product 11: 4DA Cap -->
+        <div class="product-card" data-collection="4da">
+          <div class="product-preview">
+            <span class="product-type-badge">Cap</span>
+            <img src="merch-designs/4da-text-mark.svg" alt="4DA Cap" style="width:40%;">
+          </div>
+          <div class="product-info">
+            <div class="product-line line-4da">4DA Collection</div>
+            <h3>4DA Dad Cap</h3>
+            <p class="product-desc">Unstructured dad cap with embroidered 4DA mark. Low-profile, adjustable strap. Understated daily wear.</p>
+            <div class="product-meta">
+              <span class="product-price">$28</span>
+              <div class="product-colors">
+                <div class="color-dot" style="background:#0A0A0A;"></div>
+                <div class="color-dot" style="background:#2C2C2C;"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+  <hr class="divider">
+
+  <!-- Accessories Section -->
+  <section id="accessories">
+    <div class="container">
+      <div class="section-label">Accessories</div>
+      <div class="section-title">Stickers, desk mats, mugs, pins</div>
+      <div class="product-grid">
+
+        <!-- Sticker Pack -->
+        <div class="product-card" data-collection="stickers">
+          <div class="product-preview">
+            <span class="product-type-badge">Stickers</span>
+            <img src="merch-designs/sticker-pack.svg" alt="4DA Sticker Pack" style="width:90%;">
+          </div>
+          <div class="product-info">
+            <div class="product-line line-4da">4DA + STREETS</div>
+            <h3>Sticker Pack (5 pcs)</h3>
+            <p class="product-desc">Die-cut vinyl. Waterproof. Laptop-ready. 4DA badge, Void Pulse, "Privacy First", STREETS pill, and the code assertion.</p>
+            <div class="product-meta">
+              <span class="product-price">$8</span>
+              <span style="font-size:12px;color:var(--text-muted);font-family:'JetBrains Mono',monospace;">5 stickers</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Desk Mat -->
+        <div class="product-card" data-collection="4da">
+          <div class="product-preview">
+            <span class="product-type-badge">Desk Mat</span>
+            <img src="merch-designs/pasifa-schematic.svg" alt="PASIFA Desk Mat" style="width:80%;">
+          </div>
+          <div class="product-info">
+            <div class="product-line line-4da">4DA Collection</div>
+            <h3>PASIFA Schematic Desk Mat</h3>
+            <p class="product-desc">900x400mm extended desk mat. The PASIFA scoring schematic as your workspace surface. Stitched edges, non-slip rubber base.</p>
+            <div class="product-meta">
+              <span class="product-price">$35</span>
+              <span style="font-size:12px;color:var(--text-muted);font-family:'JetBrains Mono',monospace;">900x400mm</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Mug -->
+        <div class="product-card" data-collection="4da">
+          <div class="product-preview">
+            <span class="product-type-badge">Mug</span>
+            <img src="merch-designs/void-pulse.svg" alt="Void Pulse Mug" style="width:50%;">
+          </div>
+          <div class="product-info">
+            <div class="product-line line-4da">4DA Collection</div>
+            <h3>Void Pulse Mug</h3>
+            <p class="product-desc">11oz ceramic mug. Matte black with the Void Engine pulse wrapping the full surface. Fuel for the build.</p>
+            <div class="product-meta">
+              <span class="product-price">$18</span>
+              <span style="font-size:12px;color:var(--text-muted);font-family:'JetBrains Mono',monospace;">11oz ceramic</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Beanie -->
+        <div class="product-card" data-collection="4da">
+          <div class="product-preview">
+            <span class="product-type-badge">Beanie</span>
+            <img src="merch-designs/4da-text-mark.svg" alt="4DA Beanie" style="width:35%;">
+          </div>
+          <div class="product-info">
+            <div class="product-line line-4da">4DA Collection</div>
+            <h3>4DA Embroidered Beanie</h3>
+            <p class="product-desc">Ribbed knit beanie with embroidered 4DA mark. One size. The winter essential for builders.</p>
+            <div class="product-meta">
+              <span class="product-price">$24</span>
+              <div class="product-colors">
+                <div class="color-dot" style="background:#0A0A0A;"></div>
+                <div class="color-dot" style="background:#1A1A2E;"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Enamel Pin -->
+        <div class="product-card" data-collection="4da">
+          <div class="product-preview">
+            <span class="product-type-badge">Pin</span>
+            <img src="merch-designs/4da-sun-badge.svg" alt="Solar Crown Pin" style="width:40%;">
+          </div>
+          <div class="product-info">
+            <div class="product-line line-4da">4DA Collection</div>
+            <h3>Solar Crown Enamel Pin</h3>
+            <p class="product-desc">Hard enamel pin. Gold plating with orange-to-gold gradient fill. 30mm. Butterfly clutch back. Conference-ready.</p>
+            <div class="product-meta">
+              <span class="product-price">$12</span>
+              <span style="font-size:12px;color:var(--text-muted);font-family:'JetBrains Mono',monospace;">30mm enamel</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Tote Bag -->
+        <div class="product-card" data-collection="streets">
+          <div class="product-preview" style="background:#0A0A0A;">
+            <span class="product-type-badge" style="background:rgba(249,115,22,0.15);color:var(--orange);">Tote</span>
+            <img src="merch-designs/for-the-streets.svg" alt="STREETS Tote" style="width:45%;">
+          </div>
+          <div class="product-info">
+            <div class="product-line line-streets">STREETS Collection</div>
+            <h3>STREETS Canvas Tote</h3>
+            <p class="product-desc">Heavy-duty canvas tote with "For the Streets" typography. Carry your laptop, carry the message. Conference essential.</p>
+            <div class="product-meta">
+              <span class="product-price">$22</span>
+              <span style="font-size:12px;color:var(--text-muted);font-family:'JetBrains Mono',monospace;">canvas</span>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+  <hr class="divider">
+
+  <!-- Notify Section -->
+  <section class="notify-section">
+    <div class="container">
+      <h2>Drop notification</h2>
+      <p>First drop coming soon. Get notified when the store goes live.</p>
+      <div class="notify-form">
+        <input type="email" placeholder="your@email.dev" aria-label="Email address">
+        <button type="button">Notify Me</button>
+      </div>
+      <p style="margin-top:16px;font-size:12px;color:var(--text-muted);">No spam. One email when the store opens. That's it.</p>
+    </div>
+  </section>
+
+  <!-- Footer -->
+  <footer>
+    <div class="container">
+      <div class="footer-inner">
+        <a href="/" class="footer-brand"><img src="hero-sun.jpg" alt="4DA">4DA <span>Merch</span></a>
+        <div class="footer-links">
+          <a href="/">Home</a>
+          <a href="streets.html">STREETS</a>
+          <a href="https://github.com/runyourempire/4DA">GitHub</a>
+          <a href="#" aria-label="Twitter/X" class="social-icon" title="X / Twitter">X</a>
+          <a href="#" aria-label="Discord" class="social-icon" title="Discord">Discord</a>
+        </div>
+      </div>
+    </div>
+  </footer>
+
+  <script>
+    // Collection filter tabs
+    document.querySelectorAll('.tab').forEach(function(tab) {
+      tab.addEventListener('click', function() {
+        document.querySelectorAll('.tab').forEach(function(t) { t.classList.remove('active'); });
+        tab.classList.add('active');
+        var filter = tab.dataset.filter;
+        document.querySelectorAll('.product-card').forEach(function(card) {
+          if (filter === 'all' || card.dataset.collection === filter) {
+            card.style.display = '';
+          } else {
+            card.style.display = 'none';
+          }
+        });
+      });
+    });
+  </script>
+
+</body>
+</html>
