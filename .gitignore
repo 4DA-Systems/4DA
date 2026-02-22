@@ -85,5 +85,18 @@ assets/raw/
 # Playwright E2E test artifacts
 e2e-results/
 e2e-report/
+e2e-screenshots/
 test-results/
 playwright-report/
+
+# Test scratch files
+test_stderr.txt
+test_stdout.txt
+tmp_test.txt
+
+# Database backups
+data/*.backup.*
+
+# Merch build outputs (regenerate with: node merch-print-ready/build.mjs)
+merch-print-ready/png/
+merch-print-ready/upscaled/
