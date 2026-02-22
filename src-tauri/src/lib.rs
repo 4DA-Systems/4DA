@@ -26,7 +26,7 @@ pub(crate) use embeddings::embed_texts;
 // Re-exports from events
 pub(crate) use events::{
     emit_progress, void_signal_analysis_complete, void_signal_cache_filled, void_signal_error,
-    void_signal_fetching,
+    void_signal_fetch_progress, void_signal_fetching, void_signal_notification,
 };
 
 // Re-exports from utils (preserves `use crate::fn_name` interface)
@@ -55,6 +55,7 @@ mod ace_commands;
 mod agent_brief;
 mod agent_memory;
 mod analysis;
+mod analysis_rerank;
 mod anomaly;
 mod attention;
 mod competing_tech;
@@ -110,10 +111,13 @@ mod void_engine;
 mod stack_commands;
 pub mod stacks;
 
+mod coach_nudges;
+mod coach_templates;
 mod command_runner;
 mod git_deck;
 mod playbook_commands;
 mod sovereign_profile;
+mod streets_coach;
 mod streets_commands;
 mod streets_engine;
 mod streets_localization;
@@ -121,6 +125,7 @@ mod suns;
 mod suns_commands;
 mod toolkit;
 mod toolkit_intelligence;
+mod video_curriculum;
 
 use source_fetching::fill_cache_background;
 
@@ -237,6 +242,8 @@ pub fn run() {
             settings_commands::start_trial,
             settings_commands::get_locale,
             settings_commands::set_locale,
+            settings_commands::get_streets_tier,
+            settings_commands::activate_streets_license,
             settings_commands::get_user_context,
             settings_commands::set_user_role,
             settings_commands::add_tech_stack,
@@ -395,10 +402,30 @@ pub fn run() {
             suns_commands::get_sun_alerts,
             suns_commands::acknowledge_sun_alert,
             suns_commands::trigger_sun_manually,
+            // Coach Nudges
+            coach_nudges::get_coach_nudges,
+            coach_nudges::dismiss_coach_nudge,
             // Toolkit Intelligence
             toolkit_intelligence::toolkit_test_feed,
             toolkit_intelligence::toolkit_score_sandbox,
             toolkit_intelligence::toolkit_generate_export_pack,
+            // Video Curriculum (STREETS Cohort)
+            video_curriculum::get_video_curriculum,
+            video_curriculum::mark_video_progress,
+            video_curriculum::mark_video_complete,
+            // Coach Templates (STREETS Community)
+            coach_templates::get_templates,
+            coach_templates::get_template_content,
+            // STREETS Coach (AI coaching system)
+            streets_coach::coach_create_session,
+            streets_coach::coach_send_message,
+            streets_coach::coach_get_history,
+            streets_coach::coach_list_sessions,
+            streets_coach::coach_delete_session,
+            streets_coach::coach_recommend_engines,
+            streets_coach::coach_generate_strategy,
+            streets_coach::coach_launch_review,
+            streets_coach::coach_progress_check_in,
             // Diagnostics
             commands::get_diagnostics
         ])
@@ -512,6 +539,9 @@ pub fn run() {
                                 }
                             };
 
+                            // Extract notification info before moving signal_summary
+                            let notification_info = signal_summary.as_ref().map(|s| (s.critical_count, s.high_count));
+
                             let state = get_monitoring_state();
                             monitoring::complete_scheduled_check(
                                 &handle,
@@ -520,6 +550,21 @@ pub fn run() {
                                 results.len(),
                                 signal_summary,
                             );
+
+                            // Pulse heartbeat for notification events
+                            match notification_info {
+                                Some((critical, _)) if critical > 0 => {
+                                    void_signal_notification(&handle, true, critical);
+                                }
+                                Some((_, high)) if high > 0 => {
+                                    void_signal_notification(&handle, false, high);
+                                }
+                                _ if relevant_count > 0 => {
+                                    void_signal_notification(&handle, false, relevant_count);
+                                }
+                                _ => {}
+                            }
+
                             // Emit results to frontend if window is visible
                             void_signal_analysis_complete(&handle, &results);
                             let _ = handle.emit("analysis-complete", results);
@@ -568,7 +613,7 @@ pub fn run() {
                     interval.tick().await;
                     if let Ok(db) = get_database() {
                         let mon = get_monitoring_state();
-                        let signal = void_engine::compute_signal(db, mon);
+                        let signal = void_engine::tick_staleness(db, mon);
                         void_engine::emit_if_changed(&app_handle_staleness, signal);
                     }
                 }
@@ -705,6 +750,8 @@ fn initialize_ace_on_startup(app_handle: tauri::AppHandle) {
         match ace_commands::ace_full_scan(paths.clone()).await {
             Ok(result) => {
                 info!(target: "4da::startup", result = %result, "ACE context scan complete");
+                // Pulse the heartbeat to show context was discovered
+                events::void_signal_context_change(&app_handle, 0.6);
             }
             Err(e) => {
                 error!(target: "4da::startup", error = %e, "ACE scan failed");

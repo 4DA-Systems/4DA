@@ -124,6 +124,98 @@ pub struct TrialStatus {
 // License Key Verification (ed25519)
 // ============================================================================
 
+// ============================================================================
+// STREETS Feature Gating
+// ============================================================================
+
+/// STREETS Community-gated features
+pub const STREETS_COMMUNITY_FEATURES: &[&str] = &[
+    "streets_community",
+    "coach_create_session",
+    "coach_send_message",
+    "coach_recommend_engines",
+    "coach_generate_strategy",
+    "coach_launch_review",
+    "coach_progress_check_in",
+    "streets_premium_templates",
+];
+
+/// STREETS Cohort-gated features (includes Community features)
+pub const STREETS_COHORT_FEATURES: &[&str] = &[
+    "streets_cohort",
+    "video_curriculum_access",
+    "strategy_deep_dive",
+];
+
+/// Check if a STREETS feature is available
+pub fn is_streets_feature_available(feature: &str, license: &LicenseConfig) -> bool {
+    // Pro/team tiers get everything
+    match license.tier.as_str() {
+        "pro" | "team" => return true,
+        _ => {}
+    }
+    // Check license key features
+    if !license.license_key.is_empty() {
+        if let Ok(payload) = verify_license_key(&license.license_key) {
+            // Cohort includes community features
+            if payload.features.contains(&"streets_cohort".to_string()) {
+                return STREETS_COMMUNITY_FEATURES.contains(&feature)
+                    || STREETS_COHORT_FEATURES.contains(&feature);
+            }
+            if payload.features.contains(&"streets_community".to_string()) {
+                return STREETS_COMMUNITY_FEATURES.contains(&feature);
+            }
+            // Direct feature check
+            return payload.features.contains(&feature.to_string());
+        }
+    }
+    false
+}
+
+/// Gate a STREETS feature — returns Ok(()) if allowed, Err if not
+pub fn require_streets_feature(feature: &str) -> Result<(), String> {
+    let manager = crate::get_settings_manager();
+    let guard = manager.lock();
+    let license = &guard.get().license;
+    if is_streets_feature_available(feature, license) {
+        Ok(())
+    } else {
+        let tier_needed = if STREETS_COHORT_FEATURES.contains(&feature) {
+            "STREETS Cohort"
+        } else {
+            "STREETS Community"
+        };
+        Err(format!(
+            "{} requires {} membership — upgrade at streets.4da.ai",
+            feature, tier_needed
+        ))
+    }
+}
+
+/// Get the user's current STREETS tier
+pub fn get_streets_tier(license: &LicenseConfig) -> &'static str {
+    match license.tier.as_str() {
+        "pro" | "team" => "cohort", // Pro/team get everything
+        _ => {
+            if !license.license_key.is_empty() {
+                if let Ok(payload) = verify_license_key(&license.license_key) {
+                    if payload.features.contains(&"streets_cohort".to_string()) {
+                        return "cohort";
+                    }
+                    if payload.features.contains(&"streets_community".to_string()) {
+                        return "community";
+                    }
+                }
+            }
+            "playbook" // Free tier — all modules, no coaching
+        }
+    }
+}
+
+// ============================================================================
+// License Key Verification (ed25519)
+// ============================================================================
+
 /// Ed25519 public key for license verification (hex-encoded)
 /// The private key is held server-side for license generation.
 const LICENSE_PUBLIC_KEY_HEX: &str =

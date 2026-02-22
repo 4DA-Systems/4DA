@@ -259,22 +259,28 @@ get_opportunity_history(options?: {
 - Free tier: small banner in the Opportunity panel — "Learn to act on these signals → STREETS"
 - Pro tier: contextual tip when viewing an opportunity — "STREETS Module R teaches 8 revenue engines for signals like this"
 
-### 3.2 Cross-Sell Pricing Logic
+### 3.2 Pricing Model
 
 ```typescript
-interface CrossSellConfig {
-  // 4DA Pro users get STREETS Core at 50% off
-  streetsDiscountFor4DAPro: 0.50,
-
-  // STREETS buyers get 3 months of 4DA Pro free
-  fourDAProTrialForStreetsBuyers: {
-    months: 3,
-    autoRenew: false,  // Must explicitly opt-in after trial
+interface StreetsPricingConfig {
+  // STREETS Playbook — all 7 modules free inside 4DA
+  playbook: {
+    price: 0,
+    access: "free forever — no email, no account, no paywall",
   },
 
-  // Bundle: 4DA Pro Annual + STREETS Core
-  bundlePrice: 199,  // vs $99 + $149 = $248 separately (20% savings)
-  bundleName: "The Developer Independence Stack",
+  // Community — accountability, networking, ongoing value
+  community: {
+    monthlyPrice: 29,
+    annualPrice: 249,  // save $99/year
+    includes: "Discord, office hours, case studies, templates",
+  },
+
+  // Cohort — structured live program
+  cohort: {
+    price: 499,
+    includes: "8-week live program, 1-on-1 strategy session, accountability group",
+  },
 }
 ```
 
@@ -334,28 +340,28 @@ STREETS Student completes Module T (Technical Moats)
 
 | Metric | Target (Month 1) | Target (Month 3) |
 |--------|-------------------|-------------------|
-| STREETS page visits from 4DA | 500 | 2,000 |
-| STREETS purchases from 4DA users | 10 | 50 |
-| 4DA downloads from STREETS buyers | 20 | 100 |
-| Bundle purchases | 5 | 30 |
+| STREETS playbook opens from 4DA | 500 | 2,000 |
+| Community signups from 4DA users | 10 | 50 |
+| 4DA downloads from STREETS landing page | 20 | 100 |
+| Cohort enrollments | 5 | 24 (full cohort) |
 | Opportunity signals generated/day | 2-5 | 5-15 |
 | Opportunity explore rate | 30%+ | 40%+ |
 
 ### Revenue Attribution
 
 ```
-4DA Pro only:           $12/mo per user
-STREETS Core only:      $149 one-time
-STREETS Pro only:       $29/mo per user
-Bundle (Independence):  $199 one-time (4DA annual + STREETS Core)
+4DA Pro only:              $12/mo per user
+STREETS Playbook:          $0 (free inside 4DA — drives adoption)
+STREETS Community:         $29/mo per user (or $249/year)
+STREETS Cohort:            $499 per participant
 
-At 200 Pro users + 100 STREETS Core + 50 bundles:
-  4DA MRR:      $2,400/mo
-  STREETS Rev:  $14,900 (one-time) + $1,450/mo (Pro subs)
-  Bundles:      $9,950 (one-time)
+At 200 Pro users + 150 Community members + 24 Cohort participants:
+  4DA MRR:         $2,400/mo
+  Community MRR:   $4,350/mo
+  Cohort Rev:      $11,976/quarter (24 seats x $499)
 
-  Combined Month 1: ~$28,700
-  Combined MRR:     ~$3,850/mo
+  Combined MRR:        ~$6,750/mo
+  Combined Annual:     ~$92,976
 ```
 
 ---

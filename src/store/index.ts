@@ -19,6 +19,7 @@ import { createPlaybookSlice } from './playbook-slice';
 import { createCommandDeckSlice } from './command-deck-slice';
 import { createSovereignProfileSlice } from './sovereign-profile-slice';
 import { createSunsSlice } from './suns-slice';
+import { createCoachSlice } from './coach-slice';
 
 // Re-export all types
 export type {
@@ -58,4 +59,5 @@ export const useAppStore = create<AppStore>()((...a) => ({
   ...createCommandDeckSlice(...a),
   ...createSovereignProfileSlice(...a),
   ...createSunsSlice(...a),
+  ...createCoachSlice(...a),
 }));

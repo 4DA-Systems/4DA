@@ -29,6 +29,7 @@ import { DelegationDashboard } from './components/DelegationDashboard';
 import { AgentMemoryPanel } from './components/AgentMemoryPanel';
 import { ToolkitView } from './components/toolkit/ToolkitView';
 import { PlaybookView } from './components/PlaybookView';
+import { CoachView } from './components/coach/CoachView';
 import { CommandDeck } from './components/command-deck/CommandDeck';
 import { FirstRunTransition } from './components/FirstRunTransition';
 import { ViewTabBar } from './components/ViewTabBar';
@@ -399,6 +400,8 @@ function App() {
           <ToolkitView />
         ) : activeView === 'playbook' ? (
           <PlaybookView />
+        ) : activeView === 'coach' ? (
+          <CoachView />
         ) : (
           <ResultsView
             newItemIds={newItemIds}
