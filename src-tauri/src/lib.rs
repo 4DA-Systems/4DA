@@ -111,6 +111,7 @@ mod void_engine;
 mod stack_commands;
 pub mod stacks;
 
+mod coach_context;
 mod coach_nudges;
 mod coach_templates;
 mod command_runner;
