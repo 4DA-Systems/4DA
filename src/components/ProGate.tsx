@@ -10,7 +10,12 @@ interface ProGateProps {
 export function ProGate({ children, feature }: ProGateProps) {
   const { isPro, trialStatus } = useLicense();
   const startTrial = useAppStore((s) => s.startTrial);
+  const activateLicense = useAppStore((s) => s.activateLicense);
   const [starting, setStarting] = useState(false);
+  const [licenseKey, setLicenseKey] = useState('');
+  const [activating, setActivating] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [showKeyInput, setShowKeyInput] = useState(false);
 
   if (isPro) {
     return <>{children}</>;
@@ -23,6 +28,17 @@ export function ProGate({ children, feature }: ProGateProps) {
     setStarting(true);
     await startTrial();
     setStarting(false);
+  };
+
+  const handleActivate = async () => {
+    if (!licenseKey.trim()) return;
+    setActivating(true);
+    setError(null);
+    const success = await activateLicense(licenseKey.trim());
+    setActivating(false);
+    if (!success) {
+      setError('Invalid license key');
+    }
   };
 
   return (
@@ -48,7 +64,7 @@ export function ProGate({ children, feature }: ProGateProps) {
           </p>
           <div className="flex flex-col gap-2">
             <a
-              href="https://4da.ai/pro"
+              href="https://4da.ai/streets"
               target="_blank"
               rel="noopener noreferrer"
               className="inline-block px-5 py-2 text-sm font-medium text-black bg-[#D4AF37] rounded-lg hover:bg-[#C4A030] transition-colors"
@@ -63,6 +79,37 @@ export function ProGate({ children, feature }: ProGateProps) {
               >
                 {starting ? 'Starting...' : 'Start 30-Day Free Trial'}
               </button>
+            )}
+
+            {/* License key activation */}
+            {!showKeyInput ? (
+              <button
+                onClick={() => setShowKeyInput(true)}
+                className="text-xs text-gray-500 hover:text-[#D4AF37] transition-colors"
+              >
+                Have a license key?
+              </button>
+            ) : (
+              <div className="mt-1 space-y-2">
+                <div className="flex gap-1.5">
+                  <input
+                    type="text"
+                    value={licenseKey}
+                    onChange={e => setLicenseKey(e.target.value)}
+                    placeholder="4DA-xxxxx.xxxxx"
+                    onKeyDown={e => e.key === 'Enter' && handleActivate()}
+                    className="flex-1 bg-[#0A0A0A] border border-[#2A2A2A] rounded-lg px-2.5 py-1.5 text-xs text-white placeholder-[#666] focus:border-[#D4AF37] focus:outline-none font-mono"
+                  />
+                  <button
+                    onClick={handleActivate}
+                    disabled={activating || !licenseKey.trim()}
+                    className="px-3 py-1.5 text-xs font-medium bg-[#1F1F1F] text-[#A0A0A0] border border-[#2A2A2A] rounded-lg hover:bg-[#2A2A2A] hover:text-white transition-colors disabled:opacity-50"
+                  >
+                    {activating ? '...' : 'Activate'}
+                  </button>
+                </div>
+                {error && <p className="text-[10px] text-[#EF4444]">{error}</p>}
+              </div>
             )}
           </div>
         </div>

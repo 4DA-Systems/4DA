@@ -76,6 +76,10 @@ vi.mock('../store', () => ({
       streetsTier: 'playbook',
       loadStreetsTier: vi.fn(),
       activateStreetsLicense: vi.fn(),
+      loadLicense: vi.fn(),
+      loadTrialStatus: vi.fn(),
+      license: null,
+      trialStatus: null,
     };
     return selector(mockState);
   }),
