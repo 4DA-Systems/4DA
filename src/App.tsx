@@ -3,6 +3,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { invoke } from '@tauri-apps/api/core';
+import { listen } from '@tauri-apps/api/event';
 import './App.css';
 import sunLogo from './assets/sun-logo.jpg';
 import { SplashScreen } from './components/SplashScreen';
@@ -177,6 +178,33 @@ function App() {
     loadLicense();
     loadTrialStatus();
   }, [loadPersistedBriefing, loadSourceHealth, loadLicense, loadTrialStatus]);
+
+  // Deep-link handler: 4da://activate?key=...
+  const activateLicense = useAppStore(s => s.activateLicense);
+  const activateStreetsLicense = useAppStore(s => s.activateStreetsLicense);
+  useEffect(() => {
+    const unlisten = listen<string>('deep-link-activate', async (event) => {
+      try {
+        const url = new URL(event.payload);
+        if (url.hostname === 'activate' || url.pathname === '/activate') {
+          const key = url.searchParams.get('key');
+          if (key) {
+            // Try both activation paths — the backend figures out the tier
+            const proOk = await activateLicense(key);
+            const streetsOk = await activateStreetsLicense(key);
+            if (proOk || streetsOk) {
+              addToast('success', 'License activated successfully');
+            } else {
+              addToast('error', 'Invalid license key');
+            }
+          }
+        }
+      } catch {
+        // Ignore malformed URLs
+      }
+    });
+    return () => { unlisten.then(fn => fn()); };
+  }, [activateLicense, activateStreetsLicense, addToast]);
 
   // On mount: load cached results from previous session, or auto-analyze
   useEffect(() => {

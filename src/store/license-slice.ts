@@ -7,6 +7,9 @@ export const createLicenseSlice: StateCreator<AppStore, [], [], LicenseSlice> = 
   licenseKey: '',
   licenseLoading: false,
   trialStatus: null,
+  expiresAt: null,
+  daysRemaining: 0,
+  expired: false,
 
   loadLicense: async () => {
     try {
@@ -14,21 +17,36 @@ export const createLicenseSlice: StateCreator<AppStore, [], [], LicenseSlice> = 
         tier: string;
         has_key: boolean;
         activated_at: string | null;
+        expires_at: string | null;
+        days_remaining: number;
+        expired: boolean;
       }>('get_license_tier');
-      set({ tier: result.tier as 'free' | 'pro' | 'team' });
+      set({
+        tier: result.expired ? 'free' : result.tier as 'free' | 'pro' | 'team',
+        expiresAt: result.expires_at,
+        daysRemaining: result.days_remaining,
+        expired: result.expired,
+      });
     } catch {
-      set({ tier: 'free' });
+      set({ tier: 'free', expiresAt: null, daysRemaining: 0, expired: false });
     }
   },
 
   activateLicense: async (key: string) => {
     set({ licenseLoading: true });
     try {
-      const result = await invoke<{ success: boolean; tier: string }>('activate_license', {
+      const result = await invoke<{ success: boolean; tier: string; expires_at?: string }>('activate_license', {
         licenseKey: key,
       });
       if (result.success) {
-        set({ tier: result.tier as 'free' | 'pro' | 'team', licenseKey: key, licenseLoading: false });
+        set({
+          tier: result.tier as 'free' | 'pro' | 'team',
+          licenseKey: key,
+          licenseLoading: false,
+          expired: false,
+          expiresAt: result.expires_at ?? null,
+          daysRemaining: result.expires_at ? 365 : 0,
+        });
         // Also refresh STREETS tier in case this key has STREETS features
         get().loadStreetsTier?.();
         return true;
@@ -71,7 +89,8 @@ export const createLicenseSlice: StateCreator<AppStore, [], [], LicenseSlice> = 
   },
 
   isPro: () => {
-    const { tier, trialStatus } = get();
+    const { tier, trialStatus, expired } = get();
+    if (expired) return false;
     return tier === 'pro' || tier === 'team' || (trialStatus?.active === true);
   },
 });

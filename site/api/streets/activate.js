@@ -1,6 +1,10 @@
 // Vercel Serverless: STREETS License Activation
 //
-// POST: Stripe webhook — generates Ed25519-signed license, stores in Stripe customer metadata
+// POST: Stripe webhook — handles:
+//   - checkout.session.completed  → initial license generation
+//   - invoice.paid                → subscription renewal (fresh license + extended expiry)
+//   - customer.subscription.deleted → cancellation (mark metadata)
+//   - checkout.session.completed with upgrade → cohort upgrade from community
 // GET:  Retrieve license by checkout session_id (secure) or email (fallback)
 //
 // Environment variables required:
@@ -80,6 +84,143 @@ function setCors(req, res) {
 }
 
 // ---------------------------------------------------------------------------
+// Shared: generate + store license for a customer
+// ---------------------------------------------------------------------------
+
+async function generateAndStoreLicense(stripe, customerId, email, tier) {
+  const features = tier === 'cohort'
+    ? ['streets_community', 'streets_cohort']
+    : ['streets_community'];
+
+  const now = new Date();
+  const expiresAt = new Date(now);
+  expiresAt.setFullYear(expiresAt.getFullYear() + 1);
+
+  const payload = {
+    tier,
+    email,
+    expires_at: expiresAt.toISOString(),
+    issued_at: now.toISOString(),
+    features,
+  };
+
+  const licenseKey = generateLicenseKey(payload);
+
+  // Guard: Stripe metadata values max 500 chars
+  if (licenseKey.length > 500) {
+    throw new Error(`License key exceeds Stripe metadata limit: ${licenseKey.length} chars`);
+  }
+
+  await stripe.customers.update(customerId, {
+    metadata: {
+      streets_license: licenseKey,
+      streets_tier: tier,
+      streets_issued_at: now.toISOString(),
+      streets_expires_at: expiresAt.toISOString(),
+      streets_status: 'active',
+    },
+  });
+
+  return { licenseKey, expiresAt };
+}
+
+// ---------------------------------------------------------------------------
+// Shared: resolve customer ID (find or create)
+// ---------------------------------------------------------------------------
+
+async function resolveCustomerId(stripe, customerId, email) {
+  if (customerId) return customerId;
+
+  const existing = await stripe.customers.list({ email: email.toLowerCase(), limit: 1 });
+  if (existing.data.length > 0) return existing.data[0].id;
+
+  const created = await stripe.customers.create({ email: email.toLowerCase() });
+  return created.id;
+}
+
+// ---------------------------------------------------------------------------
+// Webhook event handlers
+// ---------------------------------------------------------------------------
+
+const HANDLED_EVENTS = [
+  'checkout.session.completed',
+  'invoice.paid',
+  'customer.subscription.deleted',
+];
+
+async function handleCheckoutCompleted(stripe, session) {
+  const email = session.customer_email || session.customer_details?.email;
+  const customerId = await resolveCustomerId(stripe, session.customer, email);
+  const tier = session.metadata?.streets_tier || 'community';
+
+  if (!email) {
+    throw new Error(`No customer email in session ${session.id}`);
+  }
+
+  // Check if this is an upgrade: existing customer with community → buying cohort
+  const customer = await stripe.customers.retrieve(customerId);
+  const existingTier = customer.metadata?.streets_tier;
+  const effectiveTier = (existingTier === 'community' && tier === 'cohort') ? 'cohort' : tier;
+
+  const { licenseKey } = await generateAndStoreLicense(stripe, customerId, email, effectiveTier);
+  console.log('License generated:', email, 'tier:', effectiveTier, 'customer:', customerId, 'len:', licenseKey.length);
+  return { license_generated: true };
+}
+
+async function handleInvoicePaid(stripe, invoice) {
+  // Only process subscription invoices (not one-time payments)
+  if (!invoice.subscription) {
+    return { skipped: 'not a subscription invoice' };
+  }
+
+  // Skip the initial invoice — checkout.session.completed handles that
+  if (invoice.billing_reason === 'subscription_create') {
+    return { skipped: 'initial invoice handled by checkout.session.completed' };
+  }
+
+  const customerId = invoice.customer;
+  if (!customerId) {
+    throw new Error('No customer ID on invoice');
+  }
+
+  const customer = await stripe.customers.retrieve(customerId);
+  const email = customer.email;
+  const existingTier = customer.metadata?.streets_tier || 'community';
+
+  if (!email) {
+    throw new Error(`No email for customer ${customerId}`);
+  }
+
+  // Regenerate license with fresh expiry
+  const { licenseKey } = await generateAndStoreLicense(stripe, customerId, email, existingTier);
+  console.log('License renewed:', email, 'tier:', existingTier, 'customer:', customerId, 'reason:', invoice.billing_reason);
+  return { license_renewed: true };
+}
+
+async function handleSubscriptionDeleted(stripe, subscription) {
+  const customerId = subscription.customer;
+  if (!customerId) {
+    return { skipped: 'no customer ID' };
+  }
+
+  const customer = await stripe.customers.retrieve(customerId);
+
+  // Don't revoke immediately — the existing license key is still valid until
+  // its embedded expires_at date. Just mark the status so the app can show
+  // a "subscription cancelled" message and the GET endpoint can inform the user.
+  await stripe.customers.update(customerId, {
+    metadata: {
+      ...customer.metadata,
+      streets_status: 'cancelled',
+      streets_cancelled_at: new Date().toISOString(),
+    },
+  });
+
+  console.log('Subscription cancelled:', customer.email, 'customer:', customerId);
+  return { subscription_cancelled: true };
+}
+
+// ---------------------------------------------------------------------------
 // Handler
 // ---------------------------------------------------------------------------
 
@@ -89,7 +230,7 @@ export default async function handler(req, res) {
   if (req.method === 'OPTIONS') return res.status(200).end();
 
   // -------------------------------------------------------------------------
-  // POST: Stripe webhook — generate license on successful checkout
+  // POST: Stripe webhook
   // -------------------------------------------------------------------------
   if (req.method === 'POST') {
     const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
@@ -113,73 +254,28 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'Invalid signature' });
     }
 
-    if (event.type !== 'checkout.session.completed') {
+    // Ignore events we don't handle
+    if (!HANDLED_EVENTS.includes(event.type)) {
       return res.status(200).json({ received: true });
     }
 
-    const session = event.data.object;
-    const email = session.customer_email || session.customer_details?.email;
-    const customerId = session.customer;
-    const tier = session.metadata?.streets_tier || 'community';
-
-    if (!email) {
-      console.error('Webhook: no customer email in session', session.id);
-      return res.status(400).json({ error: 'No customer email' });
-    }
-
-    const features = tier === 'cohort'
-      ? ['streets_community', 'streets_cohort']
-      : ['streets_community'];
-
-    const now = new Date();
-    const expiresAt = new Date(now);
-    expiresAt.setFullYear(expiresAt.getFullYear() + 1);
-
-    const payload = {
-      tier,
-      email,
-      expires_at: expiresAt.toISOString(),
-      issued_at: now.toISOString(),
-      features,
-    };
-
     try {
-      const licenseKey = generateLicenseKey(payload);
-
-      // Guard: Stripe metadata values max 500 chars
-      if (licenseKey.length > 500) {
-        console.error('License key exceeds Stripe metadata limit:', licenseKey.length, 'chars, email:', email);
-        return res.status(500).json({ error: 'License generation failed' });
+      let result;
+      switch (event.type) {
+        case 'checkout.session.completed':
+          result = await handleCheckoutCompleted(stripe, event.data.object);
+          break;
+        case 'invoice.paid':
+          result = await handleInvoicePaid(stripe, event.data.object);
+          break;
+        case 'customer.subscription.deleted':
+          result = await handleSubscriptionDeleted(stripe, event.data.object);
+          break;
       }
-
-      const licenseMetadata = {
-        streets_license: licenseKey,
-        streets_tier: tier,
-        streets_issued_at: now.toISOString(),
-        streets_expires_at: expiresAt.toISOString(),
-      };
-
-      // Store license in Stripe customer metadata for retrieval.
-      // If customerId is missing (shouldn't happen with our checkout config),
-      // fall back to searching by email and creating a customer if needed.
-      let targetCustomerId = customerId;
-      if (!targetCustomerId) {
-        const existing = await stripe.customers.list({ email: email.toLowerCase(), limit: 1 });
-        if (existing.data.length > 0) {
-          targetCustomerId = existing.data[0].id;
-        } else {
-          const created = await stripe.customers.create({ email: email.toLowerCase() });
-          targetCustomerId = created.id;
-        }
-      }
-
-      await stripe.customers.update(targetCustomerId, { metadata: licenseMetadata });
-
-      console.log('License generated for', email, 'tier:', tier, 'customer:', targetCustomerId);
-      return res.status(200).json({ received: true, license_generated: true });
+      return res.status(200).json({ received: true, ...result });
     } catch (err) {
-      console.error('License generation failed:', err.message);
-      return res.status(500).json({ error: 'License generation failed' });
+      console.error(`Webhook ${event.type} failed:`, err.message);
+      return res.status(500).json({ error: 'Webhook processing failed' });
     }
   }
 
@@ -244,6 +340,7 @@ export default async function handler(req, res) {
         tier: customer.metadata.streets_tier,
         issued_at: customer.metadata.streets_issued_at,
         expires_at: expiresAt,
+        status: customer.metadata.streets_status || 'active',
       });
     } catch (err) {
       console.error('License retrieval failed:', err.message);

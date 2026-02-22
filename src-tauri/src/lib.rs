@@ -217,6 +217,7 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_deep_link::init())
         .invoke_handler(tauri::generate_handler![
             // Context
             context_commands::get_context_files,
@@ -465,6 +466,20 @@ pub fn run() {
             app.listen("tray-analyze", move |_| {
                 info!(target: "4da::tray", "Manual analysis triggered from tray");
                 let _ = app_handle_analyze.emit("start-analysis-from-tray", ());
+            });
+
+            // Handle deep-link URLs (4da://activate?key=...)
+            let deep_link_handle = app_handle.clone();
+            app.listen("deep-link://new-url", move |event| {
+                if let Some(urls) = event.payload().strip_prefix('[').and_then(|s| s.strip_suffix(']')) {
+                    // Payload is a JSON array of URL strings
+                    if let Ok(url_list) = serde_json::from_str::<Vec<String>>(&format!("[{urls}]")) {
+                        for url in url_list {
+                            info!(target: "4da::deeplink", url = %url, "Deep-link received");
+                            let _ = deep_link_handle.emit("deep-link-activate", url);
+                        }
+                    }
+                }
             });
 
             let _app_handle_toggle = app_handle.clone();

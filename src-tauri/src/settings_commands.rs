@@ -524,11 +524,32 @@ pub async fn get_license_tier() -> Result<serde_json::Value> {
     let guard = manager.lock();
     let license = &guard.get().license;
 
+    // Extract expiry from license key payload if present
+    let (expires_at, days_remaining, expired) = if !license.license_key.is_empty() {
+        match crate::settings::verify_license_key(&license.license_key) {
+            Ok(payload) => {
+                if let Ok(exp) = chrono::DateTime::parse_from_rfc3339(&payload.expires_at) {
+                    let now: chrono::DateTime<chrono::Utc> = chrono::Utc::now();
+                    let days = (exp.with_timezone(&chrono::Utc) - now).num_days();
+                    (Some(payload.expires_at), days.max(0) as i32, days < 0)
+                } else {
+                    (Some(payload.expires_at), 0, false)
+                }
+            }
+            Err(_) => (None, 0, true), // Key fails verification — treat as expired
+        }
+    } else {
+        (None, 0, false)
+    };
+
     Ok(serde_json::json!({
         "tier": license.tier,
         "activated_at": license.activated_at,
         "has_key": !license.license_key.is_empty(),
         "pro_features": crate::settings::PRO_FEATURES,
+        "expires_at": expires_at,
+        "days_remaining": days_remaining,
+        "expired": expired,
     }))
 }
 
@@ -861,11 +882,34 @@ pub async fn get_streets_tier() -> Result<serde_json::Value> {
     let manager = get_settings_manager();
     let guard = manager.lock();
     let license = &guard.get().license;
-    let tier = crate::settings::get_streets_tier(license);
+
+    // Check expiry — if key exists but is expired, downgrade to playbook
+    let expired = if !license.license_key.is_empty() {
+        match crate::settings::verify_license_key(&license.license_key) {
+            Ok(payload) => {
+                if let Ok(exp) = chrono::DateTime::parse_from_rfc3339(&payload.expires_at) {
+                    let now: chrono::DateTime<chrono::Utc> = chrono::Utc::now();
+                    (exp.with_timezone(&chrono::Utc) - now).num_days() < 0
+                } else {
+                    false
+                }
+            }
+            Err(_) => true,
+        }
+    } else {
+        false
+    };
+
+    let tier = if expired {
+        "playbook"
+    } else {
+        crate::settings::get_streets_tier(license)
+    };
 
     Ok(serde_json::json!({
         "tier": tier,
         "activated_at": license.activated_at,
+        "expired": expired,
     }))
 }
 

@@ -73,8 +73,8 @@ export const createCoachSlice: StateCreator<AppStore, [], [], CoachSlice> = (set
 
   loadStreetsTier: async () => {
     try {
-      const result = await invoke<{ tier: string }>('get_streets_tier');
-      set({ streetsTier: result.tier as StreetsTier });
+      const result = await invoke<{ tier: string; expired?: boolean }>('get_streets_tier');
+      set({ streetsTier: (result.expired ? 'playbook' : result.tier) as StreetsTier });
     } catch {
       set({ streetsTier: 'playbook' });
     }

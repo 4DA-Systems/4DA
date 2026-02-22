@@ -34,6 +34,11 @@
     }
   },
   "plugins": {
+    "deep-link": {
+      "desktop": {
+        "schemes": ["4da"]
+      }
+    },
     "updater": {
       "endpoints": [
         "https://github.com/runyourempire/4DA/releases/latest/download/latest.json"
