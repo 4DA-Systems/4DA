@@ -189,6 +189,7 @@ Sources                              ▲
 | ACE specification | `specs/ACE-STONE-TABLET.md` |
 | Phase 0 scope | `specs/PHASE-0-SCOPE.md` |
 | Context engine | `specs/CONTEXT-ENGINE.md` |
+| Wisdom layer | `.ai/WISDOM.md` |
 | Invariants | `.ai/INVARIANTS.md` |
 | Decisions | `.ai/DECISIONS.md` |
 | Failure modes | `.ai/FAILURE_MODES.md` |

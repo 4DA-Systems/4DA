@@ -96,6 +96,7 @@ Fonts: Inter (UI), JetBrains Mono (code) | Weights: 400, 500, 600
 ## Reference Docs
 
 Before modifying architecture or invariants, read the relevant `.ai/` file:
+- `WISDOM.md` — the seven principles governing the human-AI development relationship
 - `INVARIANTS.md` — non-negotiable system constraints
 - `DECISIONS.md` — architectural decisions log (prevents re-litigation)
 - `ARCHITECTURE.md` — system structure reference
