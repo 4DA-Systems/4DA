@@ -18,7 +18,8 @@ use crate::sources::twitter::TwitterSource;
 use crate::sources::youtube::YouTubeSource;
 use crate::{
     build_embedding_text, embed_texts, emit_progress, get_database, get_settings_manager, sources,
-    truncate_utf8, void_signal_cache_filled, void_signal_fetching, GenericSourceItem,
+    truncate_utf8, void_signal_cache_filled, void_signal_fetch_progress, void_signal_fetching,
+    GenericSourceItem,
 };
 
 /// Fetch items from all sources (HN, arXiv, Reddit) directly
@@ -663,6 +664,7 @@ pub(crate) async fn fill_cache_background(app: &AppHandle) -> Result<usize, Stri
         }
         Err(e) => warn!(target: "4da::cache", source = "hackernews", error = ?e, "Fetch failed"),
     }
+    void_signal_fetch_progress(app, 1, 9);
 
     // Process arXiv results
     match arxiv_result {
@@ -690,6 +692,7 @@ pub(crate) async fn fill_cache_background(app: &AppHandle) -> Result<usize, Stri
         }
         Err(e) => warn!(target: "4da::cache", source = "arxiv", error = ?e, "Fetch failed"),
     }
+    void_signal_fetch_progress(app, 2, 9);
 
     // Process Reddit results
     match reddit_result {
@@ -717,6 +720,7 @@ pub(crate) async fn fill_cache_background(app: &AppHandle) -> Result<usize, Stri
         }
         Err(e) => warn!(target: "4da::cache", source = "reddit", error = ?e, "Fetch failed"),
     }
+    void_signal_fetch_progress(app, 3, 9);
 
     // Process GitHub results
     match github_result {
@@ -744,6 +748,7 @@ pub(crate) async fn fill_cache_background(app: &AppHandle) -> Result<usize, Stri
         }
         Err(e) => warn!(target: "4da::cache", source = "github", error = ?e, "Fetch failed"),
     }
+    void_signal_fetch_progress(app, 4, 9);
 
     // Process RSS results
     match rss_result {
@@ -771,6 +776,7 @@ pub(crate) async fn fill_cache_background(app: &AppHandle) -> Result<usize, Stri
         }
         Err(e) => warn!(target: "4da::cache", source = "rss", error = ?e, "Fetch failed"),
     }
+    void_signal_fetch_progress(app, 5, 9);
 
     // Process Twitter results
     match twitter_result {
@@ -798,6 +804,7 @@ pub(crate) async fn fill_cache_background(app: &AppHandle) -> Result<usize, Stri
         }
         Err(e) => warn!(target: "4da::cache", source = "twitter", error = ?e, "Fetch failed"),
     }
+    void_signal_fetch_progress(app, 6, 9);
 
     // Process YouTube results
     match youtube_result {
@@ -825,6 +832,7 @@ pub(crate) async fn fill_cache_background(app: &AppHandle) -> Result<usize, Stri
         }
         Err(e) => warn!(target: "4da::cache", source = "youtube", error = ?e, "Fetch failed"),
     }
+    void_signal_fetch_progress(app, 7, 9);
 
     // Process Lobste.rs results
     match lobsters_result {
@@ -852,6 +860,7 @@ pub(crate) async fn fill_cache_background(app: &AppHandle) -> Result<usize, Stri
         }
         Err(e) => warn!(target: "4da::cache", source = "lobsters", error = ?e, "Fetch failed"),
     }
+    void_signal_fetch_progress(app, 8, 9);
 
     // Process Dev.to results
     match devto_result {
@@ -879,6 +888,7 @@ pub(crate) async fn fill_cache_background(app: &AppHandle) -> Result<usize, Stri
         }
         Err(e) => warn!(target: "4da::cache", source = "devto", error = ?e, "Fetch failed"),
     }
+    void_signal_fetch_progress(app, 9, 9);
 
     // Embed and cache new items
     if !new_items_to_embed.is_empty() {

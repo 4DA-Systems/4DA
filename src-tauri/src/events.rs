@@ -126,6 +126,33 @@ pub(crate) fn void_signal_analysis_complete(app: &AppHandle, results: &[SourceRe
     }
 }
 
+/// Emit void signal: notification fired
+pub(crate) fn void_signal_notification(app: &AppHandle, is_critical: bool, count: usize) {
+    if let Ok(db) = get_database() {
+        let monitoring = get_monitoring_state();
+        let signal = void_engine::signal_notification(db, monitoring, is_critical, count);
+        void_engine::emit_if_changed(app, signal);
+    }
+}
+
+/// Emit void signal: source fetch progress
+pub(crate) fn void_signal_fetch_progress(app: &AppHandle, completed: usize, total: usize) {
+    if let Ok(db) = get_database() {
+        let monitoring = get_monitoring_state();
+        let signal = void_engine::signal_fetch_progress(db, monitoring, completed, total);
+        void_engine::emit_if_changed(app, signal);
+    }
+}
+
+/// Emit void signal: ACE context changed
+pub(crate) fn void_signal_context_change(app: &AppHandle, intensity: f32) {
+    if let Ok(db) = get_database() {
+        let monitoring = get_monitoring_state();
+        let signal = void_engine::signal_context_change(db, monitoring, intensity);
+        void_engine::emit_if_changed(app, signal);
+    }
+}
+
 /// Emit void signal: error occurred
 pub(crate) fn void_signal_error(app: &AppHandle) {
     if let Ok(db) = get_database() {

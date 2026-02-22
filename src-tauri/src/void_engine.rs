@@ -228,7 +228,6 @@ pub fn signal_error(db: &Database, monitoring: &MonitoringState) -> VoidSignal {
 }
 
 /// Signal after ACE file changes detected.
-#[allow(dead_code)]
 pub fn signal_context_change(
     db: &Database,
     monitoring: &MonitoringState,
@@ -236,6 +235,75 @@ pub fn signal_context_change(
 ) -> VoidSignal {
     let mut signal = compute_signal(db, monitoring);
     signal.morph = change_intensity.min(1.0);
+    signal
+}
+
+/// Signal when a notification fires — pulse the heartbeat to show awareness.
+pub fn signal_notification(
+    db: &Database,
+    monitoring: &MonitoringState,
+    is_critical: bool,
+    count: usize,
+) -> VoidSignal {
+    let mut signal = compute_signal(db, monitoring);
+    // Merge with last emitted signal to preserve analysis heat
+    if let Some(prev) = LAST_VOID_SIGNAL.lock().as_ref() {
+        signal.heat = prev.heat;
+        signal.signal_intensity = prev.signal_intensity;
+        signal.signal_color_shift = prev.signal_color_shift;
+    }
+    signal.burst = if is_critical { 1.0 } else { 0.6 };
+    signal.critical_count = if is_critical { count as u32 } else { 0 };
+    signal.signal_intensity = if is_critical { 1.0 } else { 0.75 };
+    signal.signal_color_shift = if is_critical { 1.0 } else { 0.4 };
+    signal
+}
+
+/// Update staleness on an existing signal, preserving analysis state.
+/// Heat/burst decay by ~2% per call (once per minute → ~50% in 30 min).
+pub fn tick_staleness(db: &Database, monitoring: &MonitoringState) -> VoidSignal {
+    let base = compute_signal(db, monitoring);
+    let last = LAST_VOID_SIGNAL.lock();
+    match &*last {
+        Some(prev) => {
+            let decay = 0.98; // 2% decay per minute
+            VoidSignal {
+                pulse: prev.pulse * decay,
+                heat: prev.heat * decay,
+                burst: prev.burst * 0.90, // Burst decays faster (10%/min)
+                morph: prev.morph * decay,
+                error: prev.error * 0.95,    // Error clears over ~5 min
+                staleness: base.staleness,   // Always fresh from clock
+                item_count: base.item_count, // Always fresh from DB
+                signal_intensity: prev.signal_intensity * decay,
+                signal_urgency: prev.signal_urgency * decay,
+                critical_count: prev.critical_count, // Integer — stays until next analysis
+                signal_color_shift: prev.signal_color_shift * decay,
+            }
+        }
+        None => base,
+    }
+}
+
+/// Signal during source fetching with progress indication.
+pub fn signal_fetch_progress(
+    db: &Database,
+    monitoring: &MonitoringState,
+    completed: usize,
+    total: usize,
+) -> VoidSignal {
+    let mut signal = compute_signal(db, monitoring);
+    // Merge heat from last signal so fetching doesn't zero it
+    if let Some(prev) = LAST_VOID_SIGNAL.lock().as_ref() {
+        signal.heat = prev.heat;
+        signal.signal_color_shift = prev.signal_color_shift;
+    }
+    let progress = if total > 0 {
+        completed as f32 / total as f32
+    } else {
+        0.0
+    };
+    signal.pulse = 0.4 + progress * 0.6; // 0.4 → 1.0 as sources complete
     signal
 }
 

@@ -45,8 +45,9 @@ export function VoidHeartbeat({ signal, size = 200 }: VoidHeartbeatProps) {
     const base = 16;
     const heatBoost = signal.heat * 10;
     const burstBoost = signal.burst * 16;
-    return base + heatBoost + burstBoost;
-  }, [signal.burst, signal.heat]);
+    const urgencyBoost = signal.signal_urgency * 6;
+    return base + heatBoost + burstBoost + urgencyBoost;
+  }, [signal.burst, signal.heat, signal.signal_urgency]);
 
   const opacity = useMemo(() => {
     if (signal.item_count === 0 && signal.staleness > 0.9) return 0.85; // Dormant — bright ember
@@ -95,6 +96,7 @@ export function VoidHeartbeat({ signal, size = 200 }: VoidHeartbeatProps) {
       u_signal_intensity: gl.getUniformLocation(program, 'u_signal_intensity'),
       u_signal_color_shift: gl.getUniformLocation(program, 'u_signal_color_shift'),
       u_critical_count: gl.getUniformLocation(program, 'u_critical_count'),
+      u_morph: gl.getUniformLocation(program, 'u_morph'),
     };
 
     // Set up fullscreen quad
@@ -154,6 +156,7 @@ export function VoidHeartbeat({ signal, size = 200 }: VoidHeartbeatProps) {
       gl.uniform1f(locs.u_signal_intensity, signal.signal_intensity);
       gl.uniform1f(locs.u_signal_color_shift, signal.signal_color_shift);
       gl.uniform1i(locs.u_critical_count, signal.critical_count);
+      gl.uniform1f(locs.u_morph, signal.morph);
 
       gl.clearColor(0, 0, 0, 0);
       gl.clear(gl.COLOR_BUFFER_BIT);
@@ -173,6 +176,8 @@ export function VoidHeartbeat({ signal, size = 200 }: VoidHeartbeatProps) {
     if (signal.signal_color_shift > 0.5) return 'Breaking';
     if (signal.signal_color_shift > 0.2) return 'Discovery';
     if (signal.signal_color_shift < -0.3) return 'Learning';
+    if (signal.morph > 0.3) return 'Context';
+    if (signal.signal_urgency > 0.6) return 'Urgent';
 
     // Legacy labels (fallback)
     if (signal.item_count === 0 && signal.heat === 0) {
@@ -289,6 +294,7 @@ uniform float u_opacity;
 uniform float u_signal_intensity;
 uniform float u_signal_color_shift;
 uniform int u_critical_count;
+uniform float u_morph;
 
 // Simplex-like noise (2D)
 vec3 mod289(vec3 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
@@ -331,7 +337,7 @@ void main() {
   // SDF circle with noise displacement
   float dist = length(uv);
   float noise = snoise(uv * 2.0 + t * 0.3) * 0.15;
-  float morph_noise = snoise(uv * 3.0 - t * 0.2) * 0.08;
+  float morph_noise = snoise(uv * 3.0 - t * 0.2) * (0.04 + 0.12 * u_morph);
   dist += noise + morph_noise;
 
   // Breathing: pulse the radius
