@@ -14,6 +14,8 @@ import { PersonalizationSection } from './settings/PersonalizationSection';
 import { DeveloperDnaPanel } from './DeveloperDna';
 import { AttentionDashboard } from './settings/AttentionDashboard';
 import { ProjectHealthRadar } from './settings/ProjectHealthRadar';
+import { NaturalLanguageQueryPanel } from './NaturalLanguageQuery';
+import { ProValuePanel } from './ProValuePanel';
 import { AboutPanel } from './AboutPanel';
 import { useAppStore } from '../store';
 import type { StreetsTier } from '../types/coach';
@@ -425,7 +427,11 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
           {activeTab === 'health' && (
             <div id="tabpanel-health" role="tabpanel">
               <div className="space-y-6">
+                <ProValuePanel />
+
                 <AttentionDashboard />
+
+                <NaturalLanguageQueryPanel />
 
                 <ProjectHealthRadar />
 

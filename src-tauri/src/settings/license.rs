@@ -23,6 +23,7 @@ pub const PRO_FEATURES: &[&str] = &[
     "get_predicted_context",
     "generate_context_packet",
     "natural_language_query",
+    "get_semantic_shifts",
 ];
 
 /// Check if a feature is available for the given tier, including trial period

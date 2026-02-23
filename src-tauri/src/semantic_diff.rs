@@ -241,6 +241,7 @@ fn compute_title_overlap(recent: &[String], older: &[String]) -> f32 {
 
 #[tauri::command]
 pub fn get_semantic_shifts(lookback_days: Option<u32>) -> Result<Vec<SemanticShift>, String> {
+    crate::settings::require_pro_feature("get_semantic_shifts")?;
     let conn = crate::open_db_connection()?;
     detect_shifts(&conn, lookback_days.unwrap_or(7))
 }

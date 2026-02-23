@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
+import { ProGate } from '../ProGate';
 import type { ProjectHealth } from '../../types';
 
 function ScoreBar({ label, score, color }: { label: string; score: number; color: string }) {
@@ -38,6 +39,7 @@ export function ProjectHealthRadar() {
   }, []);
 
   return (
+    <ProGate feature="Project Health">
     <div className="space-y-4">
       <div className="flex items-center gap-3">
         <div className="w-8 h-8 bg-teal-500/20 rounded-lg flex items-center justify-center">
@@ -115,5 +117,6 @@ export function ProjectHealthRadar() {
         </div>
       ))}
     </div>
+    </ProGate>
   );
 }

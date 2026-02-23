@@ -88,6 +88,7 @@ mod monitoring_jobs;
 mod novelty;
 mod ollama;
 mod predictive;
+mod pro_value;
 mod project_health;
 pub mod query;
 mod reverse_relevance;
@@ -317,6 +318,7 @@ pub fn run() {
             signal_chains::get_signal_chains,
             signal_chains::resolve_signal_chain,
             project_health::get_project_health,
+            pro_value::get_pro_value_report,
             developer_dna::get_developer_dna,
             developer_dna::export_developer_dna_markdown,
             developer_dna::export_developer_dna_svg,

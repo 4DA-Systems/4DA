@@ -74,3 +74,18 @@ export interface AnalysisProgress {
   items_processed: number;
   items_total: number;
 }
+
+export interface ProValueReport {
+  period_days: number;
+  briefings_generated: number;
+  signals_detected: number;
+  knowledge_gaps_caught: number;
+  predictions_made: number;
+  queries_run: number;
+  items_surfaced: number;
+  attention_insights: number;
+  estimated_hours_saved: number;
+  data_age_days: number;
+  total_feedback_events: number;
+  active_since: string | null;
+}
