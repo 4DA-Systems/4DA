@@ -8,6 +8,12 @@ use tracing::{debug, info, warn};
 
 use super::{Source, SourceConfig, SourceError, SourceItem, SourceResult};
 
+/// Maximum items to parse from a single feed (prevents OOM from malicious feeds)
+const MAX_ITEMS_PER_FEED: usize = 200;
+
+/// Maximum content length per feed item (100KB)
+const MAX_ITEM_CONTENT_LEN: usize = 100_000;
+
 // ============================================================================
 // RSS Feed Entry
 // ============================================================================
@@ -95,6 +101,9 @@ impl RssSource {
 
         // Find <item> blocks (RSS 2.0)
         for item_block in xml.split("<item>").skip(1) {
+            if entries.len() >= MAX_ITEMS_PER_FEED {
+                break;
+            }
             let item_end = item_block.find("</item>").unwrap_or(item_block.len());
             let item_xml = &item_block[..item_end];
 
@@ -110,6 +119,13 @@ impl RssSource {
                 .or_else(|| Self::extract_tag(item_xml, "content:encoded"))
                 .map(|d| Self::strip_html(&Self::decode_html_entities(&d)))
                 .unwrap_or_default();
+
+            // Cap per-item content to prevent memory abuse
+            let description = if description.len() > MAX_ITEM_CONTENT_LEN {
+                description[..MAX_ITEM_CONTENT_LEN].to_string()
+            } else {
+                description
+            };
 
             let pub_date = Self::extract_tag(item_xml, "pubDate")
                 .or_else(|| Self::extract_tag(item_xml, "dc:date"));
@@ -145,6 +161,9 @@ impl RssSource {
 
         // Find <entry> blocks (Atom)
         for entry_block in xml.split("<entry>").skip(1) {
+            if entries.len() >= MAX_ITEMS_PER_FEED {
+                break;
+            }
             let entry_end = entry_block.find("</entry>").unwrap_or(entry_block.len());
             let entry_xml = &entry_block[..entry_end];
 
@@ -161,6 +180,13 @@ impl RssSource {
                 .or_else(|| Self::extract_tag(entry_xml, "content"))
                 .map(|d| Self::strip_html(&Self::decode_html_entities(&d)))
                 .unwrap_or_default();
+
+            // Cap per-item content to prevent memory abuse
+            let description = if description.len() > MAX_ITEM_CONTENT_LEN {
+                description[..MAX_ITEM_CONTENT_LEN].to_string()
+            } else {
+                description
+            };
 
             let pub_date = Self::extract_tag(entry_xml, "published")
                 .or_else(|| Self::extract_tag(entry_xml, "updated"));
@@ -550,5 +576,22 @@ mod tests {
             "https://example.com/feed2".to_string(),
         ]);
         assert_eq!(source.feed_urls().len(), 2);
+    }
+
+    #[test]
+    fn test_parse_rss_max_items_limit() {
+        let source = RssSource::new();
+        // Generate XML with 500 items
+        let mut xml = String::from("<rss><channel><title>Test</title>");
+        for i in 0..500 {
+            xml.push_str(&format!(
+                "<item><title>Item {}</title><link>https://example.com/{}</link><description>Desc</description></item>",
+                i, i
+            ));
+        }
+        xml.push_str("</channel></rss>");
+
+        let entries = source.parse_rss_feed(&xml, "https://test.com/feed");
+        assert!(entries.len() <= 200, "Should limit to MAX_ITEMS_PER_FEED");
     }
 }

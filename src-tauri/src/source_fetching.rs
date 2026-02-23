@@ -213,12 +213,25 @@ pub(crate) async fn fetch_all_sources(
                                     idx,
                                     max_items_per_source,
                                 );
-                                source.scrape_content(&item).await.unwrap_or_default()
+                                let scraped =
+                                    source.scrape_content(&item).await.unwrap_or_default();
+                                // Cap scraped content to 500KB to prevent memory exhaustion
+                                if scraped.len() > 500_000 {
+                                    scraped[..500_000].to_string()
+                                } else {
+                                    scraped
+                                }
                             } else {
                                 String::new()
                             }
                         } else {
-                            item.content.clone()
+                            // Cap item content too
+                            let c = item.content.clone();
+                            if c.len() > 500_000 {
+                                c[..500_000].to_string()
+                            } else {
+                                c
+                            }
                         };
 
                         let generic = GenericSourceItem {

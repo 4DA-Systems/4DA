@@ -7,6 +7,19 @@ use tracing::{info, warn};
 
 use crate::get_settings_manager;
 
+/// Validate string input length
+fn validate_input_length(value: &str, field: &str, max_len: usize) -> Result<(), String> {
+    if value.len() > max_len {
+        return Err(format!(
+            "{} too long ({} chars, max {})",
+            field,
+            value.len(),
+            max_len
+        ));
+    }
+    Ok(())
+}
+
 // ============================================================================
 // RSS Feed Commands
 // ============================================================================
@@ -25,6 +38,12 @@ pub async fn get_rss_feeds() -> Result<serde_json::Value, String> {
 /// Set all RSS feed URLs (replacing existing)
 #[tauri::command]
 pub async fn set_rss_feeds(feeds: Vec<String>) -> Result<serde_json::Value, String> {
+    if feeds.len() > 100 {
+        return Err("Too many RSS feeds (max 100)".to_string());
+    }
+    for url in &feeds {
+        validate_input_length(url, "Feed URL", 2000)?;
+    }
     // Validate all URLs
     for url in &feeds {
         if !url.starts_with("http://") && !url.starts_with("https://") {
@@ -65,6 +84,12 @@ pub async fn get_twitter_handles() -> Result<serde_json::Value, String> {
 /// Set all Twitter handles (replacing existing)
 #[tauri::command]
 pub async fn set_twitter_handles(handles: Vec<String>) -> Result<serde_json::Value, String> {
+    if handles.len() > 100 {
+        return Err("Too many Twitter handles (max 100)".to_string());
+    }
+    for handle in &handles {
+        validate_input_length(handle, "Twitter handle", 50)?;
+    }
     // Clean all handles (remove @ if present)
     let clean_handles: Vec<String> = handles
         .iter()
@@ -220,6 +245,12 @@ pub async fn get_youtube_channels() -> Result<serde_json::Value, String> {
 /// Set all YouTube channel IDs (replacing existing)
 #[tauri::command]
 pub async fn set_youtube_channels(channels: Vec<String>) -> Result<serde_json::Value, String> {
+    if channels.len() > 100 {
+        return Err("Too many YouTube channels (max 100)".to_string());
+    }
+    for channel in &channels {
+        validate_input_length(channel, "YouTube channel ID", 100)?;
+    }
     let mut settings_guard = get_settings_manager().lock();
     settings_guard.set_youtube_channels(channels.clone())?;
 
@@ -262,6 +293,12 @@ pub async fn get_github_languages() -> Result<serde_json::Value, String> {
 /// Set GitHub languages to monitor
 #[tauri::command]
 pub async fn set_github_languages(languages: Vec<String>) -> Result<serde_json::Value, String> {
+    if languages.len() > 50 {
+        return Err("Too many languages (max 50)".to_string());
+    }
+    for lang in &languages {
+        validate_input_length(lang, "Language", 50)?;
+    }
     let mut settings_guard = get_settings_manager().lock();
     settings_guard.set_github_languages(languages.clone())?;
 

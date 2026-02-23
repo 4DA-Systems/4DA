@@ -8,6 +8,9 @@ use tracing::info;
 
 use super::{Source, SourceConfig, SourceError, SourceItem, SourceResult};
 
+/// Maximum entries to parse from a single arXiv query
+const MAX_ENTRIES_PER_QUERY: usize = 200;
+
 // ============================================================================
 // arXiv API Types (Atom feed parsed as JSON via simple extraction)
 // ============================================================================
@@ -70,6 +73,9 @@ impl ArxivSource {
 
         // Simple XML parsing - find <entry> blocks
         for entry_block in xml.split("<entry>").skip(1) {
+            if entries.len() >= MAX_ENTRIES_PER_QUERY {
+                break;
+            }
             let entry_end = entry_block.find("</entry>").unwrap_or(entry_block.len());
             let entry_xml = &entry_block[..entry_end];
 

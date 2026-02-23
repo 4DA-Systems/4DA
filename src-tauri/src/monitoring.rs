@@ -94,7 +94,9 @@ impl MonitoringState {
     }
 
     pub fn set_interval(&self, secs: u64) {
-        self.interval_secs.store(secs, Ordering::Relaxed);
+        // Clamp to [60, 86400] seconds (1 min to 24 hours) for safety
+        let clamped = secs.clamp(60, 86400);
+        self.interval_secs.store(clamped, Ordering::Relaxed);
     }
 }
 
