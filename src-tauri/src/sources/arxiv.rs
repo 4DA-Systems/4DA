@@ -186,7 +186,7 @@ impl ArxivSource {
             .join("+OR+");
 
         let url = format!(
-            "http://export.arxiv.org/api/query?search_query={}&start=0&max_results={}&sortBy=submittedDate&sortOrder=descending",
+            "https://export.arxiv.org/api/query?search_query={}&start=0&max_results={}&sortBy=submittedDate&sortOrder=descending",
             cat_query, max_items
         );
 

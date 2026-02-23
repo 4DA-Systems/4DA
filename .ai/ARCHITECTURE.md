@@ -54,8 +54,10 @@ This file provides a quick reference. For detailed design, read the specs.
   - `watcher.rs` - Real-time file watching
   - `git.rs` - Git history analysis
   - `behavior.rs` - Implicit learning
-  - `validation.rs` - Signal validation
-  - `confidence.rs` - Confidence scoring
+  - `db.rs` - ACE database operations
+  - `embedding.rs` - Local embedding service
+  - `readme_indexing.rs` - README file indexing
+  - `topic_embeddings.rs` - Topic embedding cache
 
 ### 2. World Scanner
 - **Location:** `src-tauri/src/sources/`
