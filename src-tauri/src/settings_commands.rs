@@ -14,6 +14,20 @@ use tauri::{AppHandle, Emitter};
 use crate::error::FourDaError;
 use crate::{embed_texts, get_context_engine, get_settings_manager, invalidate_context_engine};
 
+/// Validate string input length, returning an error if too long
+fn validate_input_length(value: &str, field: &str, max_len: usize) -> Result<()> {
+    if value.len() > max_len {
+        return Err(format!(
+            "{} too long ({} chars, max {})",
+            field,
+            value.len(),
+            max_len
+        )
+        .into());
+    }
+    Ok(())
+}
+
 // ============================================================================
 // Settings Commands
 // ============================================================================
@@ -679,6 +693,9 @@ pub async fn get_user_context() -> Result<serde_json::Value> {
 /// Set the user's role
 #[tauri::command]
 pub async fn set_user_role(role: Option<String>) -> Result<serde_json::Value> {
+    if let Some(ref r) = role {
+        validate_input_length(r, "Role", 100)?;
+    }
     let engine = get_context_engine()?;
     engine
         .set_role(role.as_deref())
@@ -695,6 +712,7 @@ pub async fn set_user_role(role: Option<String>) -> Result<serde_json::Value> {
 /// Add a technology to the user's tech stack
 #[tauri::command]
 pub async fn add_tech_stack(technology: String) -> Result<serde_json::Value> {
+    validate_input_length(&technology, "Technology", 100)?;
     let engine = get_context_engine()?;
     engine
         .add_technology(&technology)
@@ -725,6 +743,7 @@ pub async fn remove_tech_stack(technology: String) -> Result<serde_json::Value> 
 /// Add an explicit interest (with embedding generation)
 #[tauri::command]
 pub async fn add_interest(topic: String, weight: Option<f32>) -> Result<serde_json::Value> {
+    validate_input_length(&topic, "Interest topic", 200)?;
     let engine = get_context_engine()?;
     let weight = weight.unwrap_or(1.0);
 
@@ -767,6 +786,7 @@ pub async fn remove_interest(topic: String) -> Result<serde_json::Value> {
 /// Add an exclusion (topic to never show)
 #[tauri::command]
 pub async fn add_exclusion(topic: String) -> Result<serde_json::Value> {
+    validate_input_length(&topic, "Exclusion topic", 200)?;
     let engine = get_context_engine()?;
     engine
         .add_exclusion(&topic)

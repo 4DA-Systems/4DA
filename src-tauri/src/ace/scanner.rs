@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::fs;
 use std::path::{Path, PathBuf};
+use tracing::warn;
 
 /// Project Scanner - detects projects and their tech stacks
 pub struct ProjectScanner {
@@ -106,10 +107,17 @@ impl ProjectScanner {
     /// Maximum signals to collect (prevents OOM on huge repos)
     const MAX_SIGNALS: usize = 500;
 
+    /// Maximum path length to process (Windows MAX_PATH guard)
+    #[cfg(target_os = "windows")]
+    const MAX_PATH_LEN: usize = 260;
+    #[cfg(not(target_os = "windows"))]
+    const MAX_PATH_LEN: usize = 4096;
+
     /// Scan a directory for project manifests
     pub fn scan_directory(&self, path: &Path) -> Result<Vec<ProjectSignal>, String> {
         let mut signals = Vec::new();
-        self.scan_recursive(path, 0, &mut signals)?;
+        let mut visited = HashSet::new();
+        self.scan_recursive(path, 0, &mut signals, &mut visited)?;
         Ok(signals)
     }
 
@@ -118,6 +126,7 @@ impl ProjectScanner {
         path: &Path,
         depth: usize,
         signals: &mut Vec<ProjectSignal>,
+        visited: &mut HashSet<PathBuf>,
     ) -> Result<(), String> {
         // Bounds check: depth and total signals
         if depth > self.max_depth || signals.len() >= Self::MAX_SIGNALS {
@@ -125,6 +134,22 @@ impl ProjectScanner {
         }
 
         if !path.is_dir() {
+            return Ok(());
+        }
+
+        // Symlink cycle detection: resolve to canonical path and check if already visited
+        let canonical = match fs::canonicalize(path) {
+            Ok(p) => p,
+            Err(_) => return Ok(()), // Can't resolve path, skip
+        };
+        if !visited.insert(canonical.clone()) {
+            warn!(target: "ace::scanner", path = %path.display(), "Symlink cycle detected, skipping");
+            return Ok(());
+        }
+
+        // MAX_PATH guard (primarily for Windows)
+        if path.as_os_str().len() > Self::MAX_PATH_LEN {
+            warn!(target: "ace::scanner", path_len = path.as_os_str().len(), "Path exceeds max length, skipping");
             return Ok(());
         }
 
@@ -146,7 +171,7 @@ impl ProjectScanner {
             let entry_path = entry.path();
             if entry_path.is_dir() {
                 // Don't propagate errors from subdirectories - just skip them
-                let _ = self.scan_recursive(&entry_path, depth + 1, signals);
+                let _ = self.scan_recursive(&entry_path, depth + 1, signals, visited);
             }
         }
 

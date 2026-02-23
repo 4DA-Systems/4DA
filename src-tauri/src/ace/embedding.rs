@@ -103,6 +103,10 @@ impl EmbeddingService {
         Ok(())
     }
 
+    /// Maximum in-memory cache entries (prevents unbounded growth)
+    /// 10,000 entries * ~1.5KB per 384-dim embedding = ~15MB max
+    const MAX_CACHE_ENTRIES: usize = 10_000;
+
     /// Get or generate embedding for a single text
     pub fn embed(&self, text: &str) -> Result<Vec<f32>, String> {
         // Check in-memory cache first
@@ -113,8 +117,12 @@ impl EmbeddingService {
         // Check database cache
         if self.config.cache_enabled {
             if let Some(cached) = self.get_cached_embedding(text)? {
-                // Warm in-memory cache
-                self.cache.lock().insert(text.to_string(), cached.clone());
+                // Warm in-memory cache (with eviction)
+                let mut cache = self.cache.lock();
+                if cache.len() >= Self::MAX_CACHE_ENTRIES {
+                    cache.clear(); // Simple eviction: clear when full
+                }
+                cache.insert(text.to_string(), cached.clone());
                 return Ok(cached);
             }
         }
@@ -126,9 +134,11 @@ impl EmbeddingService {
         if self.config.cache_enabled {
             let _ = self.cache_embedding(text, &embedding);
         }
-        self.cache
-            .lock()
-            .insert(text.to_string(), embedding.clone());
+        let mut cache = self.cache.lock();
+        if cache.len() >= Self::MAX_CACHE_ENTRIES {
+            cache.clear(); // Simple eviction: clear when full
+        }
+        cache.insert(text.to_string(), embedding.clone());
 
         Ok(embedding)
     }

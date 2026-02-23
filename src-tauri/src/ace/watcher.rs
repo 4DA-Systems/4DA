@@ -305,7 +305,13 @@ impl FileWatcher {
                 timestamp: Instant::now(),
             };
 
-            pending_changes.lock().insert(path.clone(), change);
+            let mut pending = pending_changes.lock();
+            // Cap pending changes to prevent memory exhaustion from mass file events
+            if pending.len() >= 10_000 && !pending.contains_key(path) {
+                // At capacity with new path — skip to prevent unbounded growth
+                continue;
+            }
+            pending.insert(path.clone(), change);
         }
     }
 

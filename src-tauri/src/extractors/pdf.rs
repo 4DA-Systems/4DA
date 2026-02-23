@@ -142,8 +142,13 @@ impl DocumentExtractor for PdfExtractor {
             return Err(format!("File does not exist: {:?}", path));
         }
 
-        // Extract text content
+        // Extract text content (cap at 5MB to prevent memory exhaustion)
         let text = self.extract_text(path)?;
+        let text = if text.len() > 5_000_000 {
+            text[..5_000_000].to_string()
+        } else {
+            text
+        };
 
         // If no text extracted, this might be a scanned PDF
         if text.trim().is_empty() {
