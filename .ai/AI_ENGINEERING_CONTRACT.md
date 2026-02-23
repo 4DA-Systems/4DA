@@ -1,9 +1,16 @@
 # AI Engineering Contract
 ## Behavioral Rules for Claude Code in 4DA
 
-**Version:** 1.0.0
-**Status:** CANONICAL - Must be read before any task
-**Authority:** This contract overrides default assistant behavior
+> **SUPERSEDED (AD-019)** — The behavioral rules in this document have been absorbed into
+> `.ai/WISDOM.md` v2.0.0. The Wisdom Layer is now the single behavioral authority for 4DA
+> development. The Two-Phase Protocol lives in the Development Covenant. Forbidden actions
+> live in the Covenant and Zero Zones. Validation artifacts live in Gate 3.
+>
+> This file is retained for historical reference. **Read WISDOM.md instead.**
+
+**Version:** 1.0.0 (superseded by WISDOM.md 2.0.0)
+**Status:** SUPERSEDED — see `.ai/WISDOM.md`
+**Authority:** Superseded by WISDOM.md authority stack
 
 ---
 

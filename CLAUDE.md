@@ -96,7 +96,7 @@ Fonts: Inter (UI), JetBrains Mono (code) | Weights: 400, 500, 600
 ## Reference Docs
 
 Before modifying architecture or invariants, read the relevant `.ai/` file:
-- `WISDOM.md` — the seven principles governing the human-AI development relationship
+- `WISDOM.md` — **the operating system** for 4DA development (authority stack, principles, gates, enforcement)
 - `INVARIANTS.md` — non-negotiable system constraints
 - `DECISIONS.md` — architectural decisions log (prevents re-litigation)
 - `ARCHITECTURE.md` — system structure reference
@@ -113,5 +113,5 @@ Before modifying architecture or invariants, read the relevant `.ai/` file:
 - Agent definitions: `.claude/agents/` (4DA-specific agents for source debugging, trend analysis, etc.)
 - Slash commands: `.claude/commands/` (project-specific commands)
 - MCP servers: memory (persistent decisions/learnings) and 4da (21 intelligence tools)
-- Hooks: git hygiene monitor, prompt analyzer, session archiver
+- Hooks: wisdom gates (PreToolUse), consequence processing (UserPromptSubmit), session capture (Stop), git hygiene, prompt analyzer
 - Subagent rules: spawn for 3+ file changes, searching, debugging, testing, reviewing
