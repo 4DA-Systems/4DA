@@ -4,6 +4,7 @@ import { ArticleReader } from '../ArticleReader';
 import { ScoreAutopsy } from '../ScoreAutopsy';
 import { ScoreBreakdownRow } from './ScoreBreakdownRow';
 import { FeedbackButtons } from './FeedbackButtons';
+import { StreetsEngineLink } from './StreetsEngineLink';
 
 interface ResultItemExpandedProps {
   item: SourceRelevance;
@@ -64,6 +65,9 @@ export function ResultItemExpanded({
           <div className="mt-1 text-[10px] text-red-400">{summaryError}</div>
         )}
       </div>
+
+      {/* STREETS Revenue Engine Connection */}
+      <StreetsEngineLink item={item} />
 
       {/* Article Reader */}
       <ArticleReader

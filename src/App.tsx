@@ -34,6 +34,7 @@ import { CoachView } from './components/coach/CoachView';
 import { CommandDeck } from './components/command-deck/CommandDeck';
 import { FirstRunTransition } from './components/FirstRunTransition';
 import { ViewTabBar } from './components/ViewTabBar';
+import { ProValueBadge } from './components/ProValueBadge';
 import {
   useSettings,
   useMonitoring,
@@ -339,6 +340,7 @@ function App() {
               </div>
             )}
             <OllamaStatus provider={settingsForm.provider} />
+            <ProValueBadge />
             <span className={`px-2 py-1 text-[10px] font-bold uppercase tracking-wider rounded ${
               isPro
                 ? 'bg-[#D4AF37]/20 text-[#D4AF37] border border-[#D4AF37]/30'

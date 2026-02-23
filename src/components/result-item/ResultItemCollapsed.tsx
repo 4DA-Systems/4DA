@@ -2,6 +2,7 @@ import type { SourceRelevance, FeedbackAction } from '../../types';
 import { formatScore, getScoreColor } from '../../utils/score';
 import { getSourceLabel, getSourceColorClass } from '../../config/sources';
 import { BadgeRow } from './BadgeRow';
+import { ProInsightRow } from './ProInsightRow';
 
 interface ResultItemCollapsedProps {
   item: SourceRelevance;
@@ -125,11 +126,14 @@ export function ResultItemCollapsed({
 
       {/* Why This Matters - Preview (shown when not expanded) */}
       {!isExpanded && (
-        <button onClick={onToggleExpand} className="w-full text-left">
-          <div className="mt-1.5 text-xs text-text-secondary pl-[4.25rem]">
-            {item.explanation || fallbackReason}
-          </div>
-        </button>
+        <>
+          <button onClick={onToggleExpand} className="w-full text-left">
+            <div className="mt-1.5 text-xs text-text-secondary pl-[4.25rem]">
+              {item.explanation || fallbackReason}
+            </div>
+          </button>
+          <ProInsightRow item={item} />
+        </>
       )}
     </div>
   );
