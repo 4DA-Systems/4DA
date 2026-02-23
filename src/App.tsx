@@ -77,6 +77,7 @@ function App() {
   const loadSourceHealth = useAppStore(s => s.loadSourceHealth);
   const loadLicense = useAppStore(s => s.loadLicense);
   const loadTrialStatus = useAppStore(s => s.loadTrialStatus);
+  const loadProValueReport = useAppStore(s => s.loadProValueReport);
 
   // First-run state
   const isFirstRun = useAppStore(s => s.isFirstRun);
@@ -172,13 +173,14 @@ function App() {
   // Reset render limit when new results come in
   useEffect(() => { setRenderLimit(50); }, [state.relevanceResults]);
 
-  // Load persisted briefing + source health + license on mount (instant, from DB)
+  // Load persisted briefing + source health + license + pro value on mount (instant, from DB)
   useEffect(() => {
     loadPersistedBriefing();
     loadSourceHealth();
     loadLicense();
     loadTrialStatus();
-  }, [loadPersistedBriefing, loadSourceHealth, loadLicense, loadTrialStatus]);
+    loadProValueReport();
+  }, [loadPersistedBriefing, loadSourceHealth, loadLicense, loadTrialStatus, loadProValueReport]);
 
   // Deep-link handler: 4da://activate?key=...
   const activateLicense = useAppStore(s => s.activateLicense);

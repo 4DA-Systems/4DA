@@ -315,11 +315,13 @@ export interface LicenseSlice {
   expiresAt: string | null;
   daysRemaining: number;
   expired: boolean;
+  proValueReport: import('../types').ProValueReport | null;
   loadLicense: () => Promise<void>;
   activateLicense: (key: string) => Promise<boolean>;
   loadTrialStatus: () => Promise<void>;
   startTrial: () => Promise<boolean>;
   isPro: () => boolean;
+  loadProValueReport: () => Promise<void>;
 }
 
 // ============================================================================

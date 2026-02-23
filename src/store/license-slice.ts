@@ -1,5 +1,6 @@
 import { invoke } from '@tauri-apps/api/core';
 import type { StateCreator } from 'zustand';
+import type { ProValueReport } from '../types';
 import type { AppStore, LicenseSlice, TrialStatus } from './types';
 
 export const createLicenseSlice: StateCreator<AppStore, [], [], LicenseSlice> = (set, get) => ({
@@ -10,6 +11,7 @@ export const createLicenseSlice: StateCreator<AppStore, [], [], LicenseSlice> = 
   expiresAt: null,
   daysRemaining: 0,
   expired: false,
+  proValueReport: null,
 
   loadLicense: async () => {
     try {
@@ -92,5 +94,14 @@ export const createLicenseSlice: StateCreator<AppStore, [], [], LicenseSlice> = 
     const { tier, trialStatus, expired } = get();
     if (expired) return false;
     return tier === 'pro' || tier === 'team' || (trialStatus?.active === true);
+  },
+
+  loadProValueReport: async () => {
+    try {
+      const report = await invoke<ProValueReport>('get_pro_value_report');
+      set({ proValueReport: report });
+    } catch {
+      // Silently ignore — badge just won't show
+    }
   },
 });

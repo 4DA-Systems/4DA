@@ -1,20 +1,14 @@
-import { useState, useEffect, memo } from 'react';
-import { invoke } from '@tauri-apps/api/core';
-import type { ProValueReport } from '../types';
+import { memo } from 'react';
+import { useAppStore } from '../store';
 
 /**
  * Compact Pro value summary shown in the app header.
  * Displays key metrics in a single line: signals, gaps, hours saved.
  * NOT Pro-gated — free users see what they're missing.
+ * Reads from Zustand store (loaded once on mount via loadProValueReport).
  */
 export const ProValueBadge = memo(function ProValueBadge() {
-  const [report, setReport] = useState<ProValueReport | null>(null);
-
-  useEffect(() => {
-    invoke<ProValueReport>('get_pro_value_report')
-      .then(setReport)
-      .catch(() => {/* silently ignore */});
-  }, []);
+  const report = useAppStore((s) => s.proValueReport);
 
   if (!report) return null;
 

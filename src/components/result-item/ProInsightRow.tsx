@@ -1,5 +1,7 @@
+import { useState } from 'react';
 import type { SourceRelevance } from '../../types';
 import { useLicense } from '../../hooks/use-license';
+import { useAppStore } from '../../store';
 import { formatScore } from '../../utils/score';
 
 interface ProInsightRowProps {
@@ -18,11 +20,13 @@ const SIGNAL_LABELS: Record<string, string> = {
 /**
  * Inline Pro intelligence row shown on collapsed feed items.
  *
- * Free users: see signal badges but get "Pro: See why" hint for details.
+ * Free users: see signal badges + contextual upgrade path:
+ *   - Trial not started → "Start trial to see why"
+ *   - Trial expired → "See why" links to 4da.ai/streets
  * Pro users: see relevance breakdown, signal chain context, knowledge gap alerts.
  */
 export function ProInsightRow({ item }: ProInsightRowProps) {
-  const { isPro } = useLicense();
+  const { isPro, trialStatus } = useLicense();
   const b = item.score_breakdown;
 
   // Only show on items that have something interesting to surface
@@ -36,7 +40,9 @@ export function ProInsightRow({ item }: ProInsightRowProps) {
     return <ProInsightDetail item={item} />;
   }
 
-  // Free user: show teaser
+  const canStartTrial = !trialStatus?.started_at;
+
+  // Free user: show teaser with contextual upgrade path
   return (
     <div className="mt-1 pl-[4.25rem] flex items-center gap-2">
       {hasSignal && (
@@ -49,18 +55,52 @@ export function ProInsightRow({ item }: ProInsightRowProps) {
           Affects {b!.matched_deps!.slice(0, 2).join(', ')}
         </span>
       )}
-      <a
-        href="https://4da.ai/streets"
-        target="_blank"
-        rel="noopener noreferrer"
-        className="inline-flex items-center gap-0.5 text-[10px] text-[#D4AF37]/50 hover:text-[#D4AF37] transition-colors ml-auto"
-      >
-        <svg width="8" height="8" viewBox="0 0 16 16" fill="none">
-          <path d="M8 1L10 6H15L11 9.5L12.5 15L8 11.5L3.5 15L5 9.5L1 6H6L8 1Z" fill="currentColor"/>
-        </svg>
-        See why {formatScore(item.top_score)}
-      </a>
+      {canStartTrial ? (
+        <InlineTrialStart score={item.top_score} />
+      ) : (
+        <a
+          href="https://4da.ai/streets"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center gap-0.5 text-[10px] text-[#D4AF37]/50 hover:text-[#D4AF37] transition-colors ml-auto"
+        >
+          <ProStar />
+          See why {formatScore(item.top_score)}
+        </a>
+      )}
     </div>
+  );
+}
+
+/** Inline trial start button — no external redirect */
+function InlineTrialStart({ score }: { score: number }) {
+  const startTrial = useAppStore((s) => s.startTrial);
+  const [starting, setStarting] = useState(false);
+
+  const handleStart = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setStarting(true);
+    await startTrial();
+    setStarting(false);
+  };
+
+  return (
+    <button
+      onClick={handleStart}
+      disabled={starting}
+      className="inline-flex items-center gap-0.5 text-[10px] text-[#D4AF37]/50 hover:text-[#D4AF37] transition-colors ml-auto disabled:opacity-50"
+    >
+      <ProStar />
+      {starting ? 'Starting...' : `Try Pro free — see why ${formatScore(score)}`}
+    </button>
+  );
+}
+
+function ProStar() {
+  return (
+    <svg width="8" height="8" viewBox="0 0 16 16" fill="none">
+      <path d="M8 1L10 6H15L11 9.5L12.5 15L8 11.5L3.5 15L5 9.5L1 6H6L8 1Z" fill="currentColor"/>
+    </svg>
   );
 }
 
