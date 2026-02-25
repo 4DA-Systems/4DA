@@ -68,7 +68,11 @@ pub fn compute_pro_value(
         &[&days_param as &dyn rusqlite::types::ToSql],
     );
 
-    let signals_detected = safe_count(conn, "SELECT COUNT(*) FROM signal_chains", &[]);
+    // Signal chains are computed in-memory from source_items (no persistent table).
+    // Use the detect_chains() function to get the actual count.
+    let signals_detected = crate::signal_chains::detect_chains(conn)
+        .map(|chains| chains.len() as u32)
+        .unwrap_or(0);
 
     let knowledge_gaps_caught = safe_count(
         conn,
@@ -171,16 +175,6 @@ mod tests {
                 created_at TEXT NOT NULL DEFAULT (datetime('now')),
                 expires_at TEXT
             );
-            CREATE TABLE signal_chains (
-                id TEXT PRIMARY KEY,
-                chain_name TEXT NOT NULL,
-                links JSON NOT NULL DEFAULT '[]',
-                overall_priority TEXT DEFAULT 'medium',
-                resolution TEXT DEFAULT 'open',
-                suggested_action TEXT DEFAULT '',
-                created_at TEXT DEFAULT (datetime('now')),
-                updated_at TEXT DEFAULT (datetime('now'))
-            );
             CREATE TABLE project_dependencies (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 project_path TEXT NOT NULL,
@@ -252,7 +246,8 @@ mod tests {
     #[test]
     fn test_hours_saved_calculation() {
         let conn = setup_test_db();
-        // 2 briefings (2*0.5=1.0) + 1 signal (0.25) + 3 deps (3*0.1=0.3) + 1 query (0.15)
+        // 2 briefings (2*0.5=1.0) + 0 signals (0) + 3 deps (3*0.1=0.3) + 1 query (0.15)
+        // Signal chains are computed in-memory from source_items; no matching items = 0 chains.
         conn.execute(
             "INSERT INTO temporal_events (event_type, subject, data) VALUES ('briefing_generated', 'b1', '{}')",
             [],
@@ -265,11 +260,6 @@ mod tests {
             "INSERT INTO temporal_events (event_type, subject, data) VALUES ('nl_query', 'q1', '{}')",
             [],
         ).unwrap();
-        conn.execute(
-            "INSERT INTO signal_chains (id, chain_name) VALUES ('c1', 'chain1')",
-            [],
-        )
-        .unwrap();
         for (name, lang) in [("react", "js"), ("serde", "rust"), ("tokio", "rust")] {
             conn.execute(
                 "INSERT INTO project_dependencies (project_path, manifest_type, package_name, language) VALUES ('/test', 'cargo', ?1, ?2)",
@@ -278,7 +268,7 @@ mod tests {
         }
 
         let report = compute_pro_value(&conn, 30).unwrap();
-        let expected = 2.0 * 0.5 + 1.0 * 0.25 + 3.0 * 0.1 + 1.0 * 0.15;
+        let expected = 2.0 * 0.5 + 0.0 * 0.25 + 3.0 * 0.1 + 1.0 * 0.15;
         assert!((report.estimated_hours_saved - expected).abs() < 0.01);
     }
 

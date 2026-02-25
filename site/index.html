@@ -4,14 +4,14 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>4DA -- All signal. No feed. Developer intelligence scored against your codebase.</title>
-  <meta name="description" content="4DA scores content from 11 sources against your actual codebase using 5-axis relevance scoring. Privacy-first. Runs locally. BYOK. 99%+ noise rejected.">
+  <meta name="description" content="4DA scores content from 10 sources against your actual codebase using 5-axis relevance scoring. Privacy-first. Runs locally. BYOK. 99%+ noise rejected.">
   <meta name="keywords" content="developer tools, content curation, relevance scoring, privacy-first, local-first, Rust, Tauri, MCP, Claude Code, Cursor, developer intelligence">
   <meta name="theme-color" content="#0A0A0A">
   <link rel="canonical" href="https://4da.ai">
 
   <!-- Open Graph -->
   <meta property="og:title" content="4DA -- All signal. No feed.">
-  <meta property="og:description" content="Developer intelligence that scores content from 11 sources against your actual codebase. Privacy-first. Runs 100% locally. Free tier with full scoring engine.">
+  <meta property="og:description" content="Developer intelligence that scores content from 10 sources against your actual codebase. Privacy-first. Runs 100% locally. Free tier with full scoring engine.">
   <meta property="og:type" content="website">
   <meta property="og:url" content="https://4da.ai">
   <meta property="og:image" content="https://4da.ai/og-image.png">
@@ -20,7 +20,7 @@
   <!-- Twitter Card -->
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="4DA -- All signal. No feed.">
-  <meta name="twitter:description" content="5-axis relevance scoring against your codebase. 11 sources. 99%+ noise rejected. Privacy-first. Free.">
+  <meta name="twitter:description" content="5-axis relevance scoring against your codebase. 10 sources. 99%+ noise rejected. Privacy-first. Free.">
   <meta name="twitter:image" content="https://4da.ai/og-image.png">
 
   <!-- Structured Data -->
@@ -31,9 +31,9 @@
     "name": "4DA",
     "applicationCategory": "DeveloperApplication",
     "operatingSystem": "Windows, macOS, Linux",
-    "description": "Privacy-first developer intelligence. Scores content from 11 sources against your codebase using 5-axis relevance scoring.",
+    "description": "Privacy-first developer intelligence. Scores content from 10 sources against your codebase using 5-axis relevance scoring.",
     "offers": [
-      { "@type": "Offer", "price": "0", "priceCurrency": "USD", "description": "Free -- all 11 sources, full scoring engine, STREETS Playbook (7 modules)" },
+      { "@type": "Offer", "price": "0", "priceCurrency": "USD", "description": "Free -- all 10 sources, full scoring engine, STREETS Playbook (7 modules)" },
       { "@type": "Offer", "price": "12", "priceCurrency": "USD", "description": "Pro -- AI briefings, Developer DNA, Score Autopsy" }
     ]
   }
@@ -222,13 +222,15 @@
       font-size: 14px;
       color: var(--text-secondary);
       line-height: 1.7;
-      font-style: italic;
       margin-bottom: 12px;
     }
     .traction-quote cite {
-      font-size: 12px;
-      color: var(--text-muted);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      letter-spacing: 0.04em;
+      color: var(--accent);
       font-style: normal;
+      text-transform: uppercase;
     }
 
     /* ---- Gallery ---- */
@@ -796,7 +798,7 @@
       <img src="hero-sun.jpg" alt="4DA" class="hero-logo" width="72" height="72">
       <div class="hero-label">Developer Intelligence</div>
       <h1>All signal.<br><span>No feed.</span></h1>
-      <p>4DA scores content from GitHub, YouTube, Hacker News, Reddit, arXiv, and 6 more sources against your actual codebase. An item needs 2+ independent signals to survive. Everything else is rejected.</p>
+      <p>4DA scores content from GitHub, YouTube, Hacker News, Reddit, arXiv, and 5 more sources against your actual codebase. An item needs 2+ independent signals to survive. Everything else is rejected.</p>
       <div class="hero-buttons">
         <a href="https://github.com/runyourempire/4DA/releases/latest" class="btn btn-primary" id="hero-download">Download for Free</a>
         <a href="https://www.npmjs.com/package/@4da/mcp-server" class="btn btn-secondary"><span class="mono">npx</span> MCP Server</a>
@@ -820,23 +822,23 @@
     <div class="container">
       <div class="traction-badges">
         <span class="traction-badge"><strong>Rust</strong> + Tauri 2.0</span>
-        <span class="traction-badge"><strong>11</strong> Sources</span>
+        <span class="traction-badge"><strong>10</strong> Sources</span>
         <span class="traction-badge"><strong>5-Axis</strong> Scoring</span>
-        <span class="traction-badge"><strong>26</strong> MCP Tools</span>
+        <span class="traction-badge"><strong>30</strong> MCP Tools</span>
         <span class="traction-badge"><strong>~15MB</strong> Binary</span>
       </div>
       <div class="traction-quotes">
         <div class="traction-quote">
-          <p>"Found a breaking change in a dependency three days before it hit production. 4DA surfaced the GitHub issue because it knew my Cargo.toml."</p>
-          <cite>-- Early access tester, Rust backend developer</cite>
+          <p>Scans your Cargo.toml, package.json, go.mod, and pyproject.toml. Builds a graduated domain profile from your actual stack -- no manual configuration.</p>
+          <cite>Automatic Context Discovery</cite>
         </div>
         <div class="traction-quote">
-          <p>"Went from 45 minutes of morning news skimming to reading 3-5 items that actually matter. The anxiety about missing things is gone."</p>
-          <cite>-- Early access tester, full-stack engineer</cite>
+          <p>Every item is scored across 5 independent axes. An item needs 2+ confirming signals to pass the gate. Typical rejection rate: 99%+ of incoming content.</p>
+          <cite>Multi-Signal Confirmation Gate</cite>
         </div>
         <div class="traction-quote">
-          <p>"The MCP integration is wild. I asked Claude about dependency risks and it pulled real signals from my 4DA feed, not generic search results."</p>
-          <cite>-- Early access tester, AI tooling engineer</cite>
+          <p>Raw data never leaves your machine. BYOK for AI features. Zero telemetry. Full offline mode with Ollama. Architecturally unable to see your data.</p>
+          <cite>Privacy by Architecture</cite>
         </div>
       </div>
     </div>
@@ -977,7 +979,7 @@
       <div class="pipeline">
         <div class="pipeline-step">
           <div class="step-title">Your Codebase</div>
-          <div class="step-desc">Cargo.toml, package.json, go.mod</div>
+          <div class="step-desc">Cargo.toml, package.json, go.mod + 9 more</div>
         </div>
         <div class="pipeline-arrow">--></div>
         <div class="pipeline-step">
@@ -1046,7 +1048,7 @@
         <div class="feature-card">
           <div class="feature-tag">integration</div>
           <h3>MCP Integration</h3>
-          <p>26 intelligence tools for Claude Code, Cursor, and any MCP-compatible host. Briefings, signal chains, knowledge gaps, and project health in your editor.</p>
+          <p>30 intelligence tools for Claude Code, Cursor, and any MCP-compatible host. Briefings, signal chains, knowledge gaps, and project health in your editor.</p>
         </div>
         <div class="feature-card">
           <div class="feature-tag">learning</div>
@@ -1068,7 +1070,7 @@
   <section id="pricing">
     <div class="container" style="text-align: center;">
       <div class="section-label">Pricing</div>
-      <h2>Free means free. No trial. No catch.</h2>
+      <h2>Free means free. No expiration. No catch.</h2>
       <p class="subtitle" style="margin: 0 auto 48px; text-align: center;">The free tier is a complete product. Most individual developers will never need more.</p>
       <div class="pricing-grid">
         <div class="pricing-card">
@@ -1076,13 +1078,13 @@
           <div class="pricing-price">$0 <span>forever</span></div>
           <div class="pricing-note">No credit card. No account. No expiration.</div>
           <ul class="pricing-features">
-            <li>All 11 content sources</li>
+            <li>All 10 content sources</li>
             <li>Full 5-axis scoring engine</li>
             <li>Multi-signal confirmation gate</li>
             <li>Auto context discovery (ACE)</li>
             <li>STREETS Playbook (all 7 modules)</li>
             <li>Behavior learning</li>
-            <li>MCP server (26 tools)</li>
+            <li>MCP server (30 tools)</li>
             <li>CLI binary</li>
             <li>Unlimited use</li>
           </ul>
@@ -1115,7 +1117,7 @@
       <h2>Your AI assistant gets signal too</h2>
       <div class="mcp-grid">
         <div class="mcp-text">
-          <p>4DA ships an MCP server with 26 intelligence tools. Install it with one command and your AI assistant draws from your scored, filtered intelligence feed -- not generic internet search results.</p>
+          <p>4DA ships an MCP server with 30 intelligence tools. Install it with one command and your AI assistant draws from your scored, filtered intelligence feed -- not generic internet search results.</p>
           <p style="font-size: 14px; color: var(--text-muted);">Works with Claude Code, Cursor, and any MCP-compatible host. MIT licensed. Always free.</p>
           <ul class="mcp-queries">
             <li>"What breaking changes affect my deps this week?"</li>
@@ -1153,7 +1155,7 @@ npx <span class="string">@4da/mcp-server</span>
       <div class="trust-grid">
         <div class="trust-card">
           <h3>Free means free</h3>
-          <p>No credit card. No account. No 14-day trial. The full scoring engine with all 11 sources and the complete STREETS Playbook, forever.</p>
+          <p>No credit card. No account. No expiration. The full scoring engine with all 10 sources and the complete STREETS Playbook, forever. Pro features include a 30-day free trial.</p>
         </div>
         <div class="trust-card">
           <h3>Source available</h3>
@@ -1193,7 +1195,7 @@ npx <span class="string">@4da/mcp-server</span>
         </details>
         <details>
           <summary>What happens if I never pay?</summary>
-          <div class="faq-answer">Nothing changes. The free tier includes all 11 sources, the full 5-axis scoring engine, behavior learning, the MCP server with 26 tools, the complete STREETS Playbook (all 7 modules), and the CLI. It's not a trial and it doesn't expire. Most individual developers will never need Pro.</div>
+          <div class="faq-answer">Nothing changes. The free tier includes all 10 sources, the full 5-axis scoring engine, behavior learning, the MCP server with 30 tools, the complete STREETS Playbook (all 7 modules), and the CLI. The free tier never expires. Pro features include a 30-day free trial so you can evaluate before subscribing. Most individual developers will never need Pro.</div>
         </details>
         <details>
           <summary>What's the confirmation gate?</summary>

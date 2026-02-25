@@ -11,9 +11,14 @@ use std::sync::Arc;
 use tracing::{debug, info, warn};
 
 pub mod api_cost_monitor;
+pub mod automation_auditor;
+pub mod edge_detector;
+pub mod execution_tracker;
 pub mod hardware_monitor;
 pub mod market_tracker;
 pub mod price_tracker;
+pub mod stream_monitor;
+pub mod tech_moat_scanner;
 pub mod uptime_monitor;
 
 // ============================================================================
@@ -48,6 +53,26 @@ pub struct SunAlert {
     pub message: String,
     pub acknowledged: bool,
     pub created_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ModuleHealth {
+    pub module_id: String,
+    pub module_name: String,
+    pub score: f32, // 0.0 - 1.0
+    pub sun_count: usize,
+    pub success_rate: f32, // sun success rate over last 7 days
+    pub lessons_completed: usize,
+    pub total_lessons: usize,
+    pub last_activity: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StreetHealthScore {
+    pub overall: f32, // 0.0 - 1.0
+    pub module_scores: Vec<ModuleHealth>,
+    pub trend: String,      // "improving" | "stable" | "declining"
+    pub top_action: String, // Most impactful next action
 }
 
 // ============================================================================
@@ -118,6 +143,46 @@ impl SunRegistry {
             3600,
             api_cost_monitor::execute,
         ); // 1h
+           // T = Technical Moats module
+        registry.register(
+            "tech_moat_scanner",
+            "Tech Moat Scanner",
+            "T",
+            86400,
+            tech_moat_scanner::execute,
+        ); // 24h
+           // E1 = Execution Playbook module
+        registry.register(
+            "execution_tracker",
+            "Execution Tracker",
+            "E1",
+            43200,
+            execution_tracker::execute,
+        ); // 12h
+           // E2 = Evolving Edge module
+        registry.register(
+            "edge_detector",
+            "Edge Detector",
+            "E2",
+            86400,
+            edge_detector::execute,
+        ); // 24h
+           // T2 = Tactical Automation module
+        registry.register(
+            "automation_auditor",
+            "Automation Auditor",
+            "T2",
+            86400,
+            automation_auditor::execute,
+        ); // 24h
+           // S2 = Stacking Streams module
+        registry.register(
+            "stream_monitor",
+            "Stream Monitor",
+            "S2",
+            21600,
+            stream_monitor::execute,
+        ); // 6h
 
         registry
     }
@@ -202,6 +267,15 @@ impl SunRegistry {
                 }
             })
             .collect()
+    }
+
+    /// Get sun definitions grouped by module ID.
+    pub fn get_module_sun_counts(&self) -> HashMap<String, usize> {
+        let mut counts = HashMap::new();
+        for sun in &self.suns {
+            *counts.entry(sun.module_id.clone()).or_insert(0) += 1;
+        }
+        counts
     }
 
     /// Enable or disable a sun by ID.

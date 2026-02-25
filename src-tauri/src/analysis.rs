@@ -247,6 +247,16 @@ pub(crate) async fn run_deep_initial_scan_impl(
         "Deep scan summary"
     );
 
+    // Record rejection rate for verifiable metrics
+    if let Err(e) = db.record_scoring_stats(
+        "deep_initial",
+        results.len(),
+        relevant_count,
+        excluded_count,
+    ) {
+        tracing::warn!(target: "4da::analysis", error = %e, "Failed to record scoring stats");
+    }
+
     Ok(results)
 }
 
@@ -396,6 +406,16 @@ pub(crate) async fn run_multi_source_analysis_impl(
         excluded = excluded_count,
         "Analysis summary"
     );
+
+    // Record rejection rate for verifiable metrics
+    if let Err(e) = db.record_scoring_stats(
+        "multi_source",
+        results.len(),
+        relevant_count,
+        excluded_count,
+    ) {
+        tracing::warn!(target: "4da::analysis", error = %e, "Failed to record scoring stats");
+    }
 
     Ok(results)
 }
@@ -648,10 +668,21 @@ pub(crate) async fn analyze_cached_content_impl(
         scoring::sort_results(&mut prev);
 
         let relevant_count = prev.iter().filter(|r| r.relevant && !r.excluded).count();
+        let excluded_count = prev.iter().filter(|r| r.excluded).count();
         info!(target: "4da::analysis",
             "=== DIFFERENTIAL ANALYSIS COMPLETE === total={}, new={}, relevant={}",
             prev.len(), total_new, relevant_count
         );
+
+        // Record rejection rate for verifiable metrics
+        if let Err(e) = db.record_scoring_stats(
+            "cached_differential",
+            prev.len(),
+            relevant_count,
+            excluded_count,
+        ) {
+            tracing::warn!(target: "4da::analysis", error = %e, "Failed to record scoring stats");
+        }
 
         emit_progress(
             app,
@@ -726,6 +757,13 @@ pub(crate) async fn get_analysis_status() -> Result<AnalysisState, String> {
     }
 
     Ok(guard.clone())
+}
+/// Get scoring rejection rate statistics
+#[tauri::command]
+pub(crate) async fn get_scoring_stats() -> Result<crate::db::ScoringStatsAggregate, String> {
+    let db = get_database()?;
+    db.get_scoring_stats()
+        .map_err(|e| format!("Failed to get scoring stats: {}", e))
 }
 // Settings and Context Engine commands are in settings_commands.rs
 // ACE commands, PASIFA helpers, and auto-seeding are in ace_commands.rs

@@ -237,19 +237,13 @@ This would give OpenClaw users ambient intelligence without leaving chat, and gi
 
 ---
 
-## User Testimonials (Hypothetical - For Show HN)
+## Provable Differentiators (For Show HN)
 
-> "I was spending 2 hours per week scanning HN, Reddit, and arXiv. 4DA reduced it to 15 minutes. The auto-discovery is magic."
-> — *Senior Engineer, FAANG*
-
-> "Finally, a news aggregator that understands what I'm building. The semantic search is leagues ahead of keywords."
-> — *Indie Hacker*
-
-> "I love that 4DA explains why each item is relevant. It builds trust in the system."
-> — *ML Researcher*
-
-> "BYOK + local execution = I can use this at work without security concerns."
-> — *Enterprise Developer*
+- **Automatic context discovery**: Reads Cargo.toml, package.json, go.mod, pyproject.toml — zero manual configuration
+- **5-axis scoring with confirmation gate**: An item needs 2+ independent signals to surface. Typical rejection rate: 99%+
+- **Full score transparency**: Every item shows exactly why it scored the way it did across all 5 axes
+- **Privacy by architecture**: Raw data never leaves the machine. BYOK. Zero telemetry. Offline mode with Ollama.
+- **84 deterministic benchmark tests** validating scoring accuracy, edge cases, and regression prevention
 
 ---
 

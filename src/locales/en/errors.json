@@ -1,0 +1,19 @@
+{
+  "error.db.unavailable": "Database is unavailable",
+  "error.db.query": "Database query failed",
+  "error.llm.notConfigured": "LLM not configured -- set up your API key in Settings",
+  "error.llm.requestFailed": "LLM request failed: {{message}}",
+  "error.llm.timeout": "LLM request timed out",
+  "error.network.offline": "No network connection",
+  "error.network.timeout": "Request timed out",
+  "error.source.fetchFailed": "Failed to fetch from {{source}}",
+  "error.analysis.failed": "Analysis failed: {{message}}",
+  "error.analysis.cancelled": "Analysis was cancelled",
+  "error.settings.saveFailed": "Failed to save settings",
+  "error.license.invalid": "Invalid license key",
+  "error.license.expired": "License has expired",
+  "error.module.notFound": "Module not found: {{id}}",
+  "error.file.readFailed": "Failed to read file: {{path}}",
+  "error.sun.notFound": "Sun '{{id}}' not found",
+  "error.sun.executionFailed": "Sun execution failed: {{message}}"
+}

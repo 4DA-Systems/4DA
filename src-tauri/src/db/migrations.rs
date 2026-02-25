@@ -219,7 +219,7 @@ impl Database {
             .query_row("SELECT version FROM schema_version", [], |row| row.get(0))
             .unwrap_or(1);
 
-        const TARGET_VERSION: i64 = 17;
+        const TARGET_VERSION: i64 = 19;
         if current_version < TARGET_VERSION {
             // Drop the conn lock briefly to allow backup (needs filesystem access)
             drop(conn);
@@ -567,10 +567,8 @@ impl Database {
 
                             CREATE TABLE IF NOT EXISTS coach_documents (
                                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                                document_type TEXT NOT NULL,
-                                title TEXT NOT NULL,
+                                doc_type TEXT NOT NULL,
                                 content TEXT NOT NULL,
-                                metadata TEXT DEFAULT '{}',
                                 created_at TEXT NOT NULL DEFAULT (datetime('now'))
                             );
 
@@ -682,6 +680,36 @@ impl Database {
                         )
                     },
                 )?;
+            }
+
+            // Phase 18 migration: Playbook progress table
+            if current_version < 18 {
+                Self::run_versioned_migration(&conn, 17, 18, "Phase 18: playbook progress", |c| {
+                    c.execute_batch(
+                        "CREATE TABLE IF NOT EXISTS playbook_progress (
+                                module_id TEXT NOT NULL,
+                                lesson_idx INTEGER NOT NULL,
+                                completed_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                                PRIMARY KEY (module_id, lesson_idx)
+                            );",
+                    )
+                })?;
+            }
+
+            if current_version < 19 {
+                Self::run_versioned_migration(&conn, 18, 19, "Phase 19: scoring stats", |c| {
+                    c.execute_batch(
+                        "CREATE TABLE IF NOT EXISTS scoring_stats (
+                                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                                run_type TEXT NOT NULL,
+                                total_scored INTEGER NOT NULL,
+                                relevant_count INTEGER NOT NULL,
+                                excluded_count INTEGER NOT NULL,
+                                rejection_rate REAL NOT NULL,
+                                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                            );",
+                    )
+                })?;
             }
 
             info!(target: "4da::db", "Database schema initialized with sqlite-vec");

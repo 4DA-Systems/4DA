@@ -1,0 +1,17 @@
+{
+  "coach.title": "STREETS Coach",
+  "coach.newSession": "New Session",
+  "coach.sendMessage": "Send",
+  "coach.placeholder": "Ask your coach...",
+  "coach.sessions": "Sessions",
+  "coach.noSessions": "No coaching sessions yet",
+  "coach.deleteSession": "Delete Session",
+  "coach.engineRecommender": "Engine Recommender",
+  "coach.strategy": "Strategy Generator",
+  "coach.launchReview": "Launch Review",
+  "coach.progressCheck": "Progress Check-in",
+  "coach.nudge.profileGap": "Your Sovereign Profile is incomplete. Complete the profile audit in Module S to get more accurate coaching recommendations.",
+  "coach.nudge.progress": "It's been a while since you worked on STREETS modules. Pick up where you left off -- consistency beats intensity.",
+  "coach.nudge.engineSuggestion": "Ready to pick your first revenue engine? Use the Engine Recommender for a personalized analysis.",
+  "coach.nudge.default": "Keep building. The STREETS playbook is your roadmap."
+}

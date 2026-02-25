@@ -5,7 +5,10 @@ use rusqlite::{params, OptionalExtension, Result as SqliteResult};
 use tracing::info;
 
 use super::StoredSourceItem;
-use super::{blob_to_embedding, embedding_to_blob, hash_content, parse_datetime, Database};
+use super::{
+    blob_to_embedding, embedding_to_blob, hash_content, parse_datetime, Database,
+    ScoringStatsAggregate,
+};
 
 // ============================================================================
 // Types
@@ -690,5 +693,74 @@ impl Database {
     pub fn query_feedback_count(&self) -> SqliteResult<i64> {
         let conn = self.conn.lock();
         conn.query_row("SELECT COUNT(*) FROM feedback", [], |row| row.get(0))
+    }
+
+    // ========================================================================
+    // Scoring Stats
+    // ========================================================================
+
+    /// Record scoring run statistics (rejection rate measurement)
+    pub fn record_scoring_stats(
+        &self,
+        run_type: &str,
+        total_scored: usize,
+        relevant_count: usize,
+        excluded_count: usize,
+    ) -> SqliteResult<()> {
+        if total_scored == 0 {
+            return Ok(());
+        }
+        let rejection_rate = (total_scored - relevant_count) as f64 / total_scored as f64;
+        let conn = self.conn.lock();
+        conn.execute(
+            "INSERT INTO scoring_stats (run_type, total_scored, relevant_count, excluded_count, rejection_rate)
+             VALUES (?1, ?2, ?3, ?4, ?5)",
+            params![
+                run_type,
+                total_scored as i64,
+                relevant_count as i64,
+                excluded_count as i64,
+                rejection_rate
+            ],
+        )?;
+        info!(
+            target: "4da::scoring",
+            run_type,
+            total_scored,
+            relevant_count,
+            rejection_rate = format!("{:.1}%", rejection_rate * 100.0),
+            "Scoring stats recorded"
+        );
+        Ok(())
+    }
+
+    /// Get aggregate scoring stats (lifetime rejection rate)
+    pub fn get_scoring_stats(&self) -> SqliteResult<ScoringStatsAggregate> {
+        let conn = self.conn.lock();
+        let (total_runs, total_scored, total_relevant): (i64, i64, i64) = conn.query_row(
+            "SELECT COUNT(*), COALESCE(SUM(total_scored), 0), COALESCE(SUM(relevant_count), 0)
+                 FROM scoring_stats",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+        )?;
+        let lifetime_rejection_rate = if total_scored > 0 {
+            (total_scored - total_relevant) as f64 / total_scored as f64
+        } else {
+            0.0
+        };
+        let last_run_rejection: Option<f64> = conn
+            .query_row(
+                "SELECT rejection_rate FROM scoring_stats ORDER BY id DESC LIMIT 1",
+                [],
+                |row| row.get(0),
+            )
+            .optional()?;
+        Ok(ScoringStatsAggregate {
+            total_runs,
+            total_scored,
+            total_relevant,
+            lifetime_rejection_rate,
+            last_run_rejection_rate: last_run_rejection,
+        })
     }
 }

@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { invoke } from '@tauri-apps/api/core';
+import { useTranslation } from 'react-i18next';
 
 const COUNTRIES = [
   { code: 'US', name: 'United States', lang: 'en', currency: 'USD' },
@@ -48,6 +49,7 @@ const LANGUAGES = [
   { code: 'no', name: 'Norsk' },
   { code: 'da', name: 'Dansk' },
   { code: 'fi', name: 'Suomi' },
+  { code: 'ar', name: '\u0627\u0644\u0639\u0631\u0628\u064A\u0629' },
 ];
 
 function getLanguageName(code: string): string {
@@ -55,6 +57,7 @@ function getLanguageName(code: string): string {
 }
 
 export function LocaleSection() {
+  const { t, i18n } = useTranslation();
   const [country, setCountry] = useState('US');
   const [language, setLanguage] = useState('en');
   const [currency, setCurrency] = useState('USD');
@@ -99,8 +102,9 @@ export function LocaleSection() {
 
   const handleLanguageChange = useCallback((code: string) => {
     setLanguage(code);
+    i18n.changeLanguage(code);
     saveLocale(country, code, currency);
-  }, [country, currency, saveLocale]);
+  }, [country, currency, i18n, saveLocale]);
 
   const handleCurrencyChange = useCallback((cur: string) => {
     setCurrency(cur);
@@ -114,9 +118,9 @@ export function LocaleSection() {
           <span className="text-blue-400">&#x1f310;</span>
         </div>
         <div>
-          <h3 className="text-white font-medium">Language &amp; Region</h3>
+          <h3 className="text-white font-medium">{t('settings.locale.title')}</h3>
           <p className="text-gray-500 text-sm mt-1">
-            Set your country, language, and currency for localized content
+            {t('settings.locale.description')}
           </p>
         </div>
       </div>
@@ -125,7 +129,7 @@ export function LocaleSection() {
         <div className="space-y-3">
           <div>
             <label className="block text-xs text-gray-500 uppercase tracking-wider mb-1.5">
-              Country
+              {t('settings.locale.country')}
             </label>
             <select
               value={country}
@@ -141,7 +145,7 @@ export function LocaleSection() {
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-xs text-gray-500 uppercase tracking-wider mb-1.5">
-                Language
+                {t('settings.locale.language')}
               </label>
               <select
                 value={language}
@@ -155,7 +159,7 @@ export function LocaleSection() {
             </div>
             <div>
               <label className="block text-xs text-gray-500 uppercase tracking-wider mb-1.5">
-                Currency
+                {t('settings.locale.currency')}
               </label>
               <select
                 value={currency}
@@ -170,7 +174,7 @@ export function LocaleSection() {
           </div>
 
           <p className="text-xs text-gray-500 pt-1">
-            Prices in {currency}, content prioritized in {getLanguageName(language)}
+            {t('settings.locale.priceInfo', { currency, language: getLanguageName(language) })}
           </p>
         </div>
       ) : (

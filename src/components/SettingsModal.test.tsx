@@ -160,7 +160,7 @@ describe('SettingsModal', () => {
     render(<SettingsModal onClose={vi.fn()} />);
     const dialog = screen.getByRole('dialog');
     expect(dialog).toHaveAttribute('aria-labelledby', 'settings-modal-title');
-    expect(screen.getByText('Settings')).toHaveAttribute('id', 'settings-modal-title');
+    expect(screen.getByText('settings.title')).toHaveAttribute('id', 'settings-modal-title');
   });
 
   it('calls onClose when close button is clicked', () => {
@@ -174,53 +174,53 @@ describe('SettingsModal', () => {
 
   it('renders the Settings title', () => {
     render(<SettingsModal onClose={vi.fn()} />);
-    expect(screen.getByText('Settings')).toBeInTheDocument();
+    expect(screen.getByText('settings.title')).toBeInTheDocument();
   });
 
   it('renders Save Settings and Test Connection in General tab', () => {
     render(<SettingsModal onClose={vi.fn()} />);
-    expect(screen.getByText('Save Settings')).toBeInTheDocument();
-    expect(screen.getByText('Test Connection')).toBeInTheDocument();
+    expect(screen.getByText('settings.saveSettings')).toBeInTheDocument();
+    expect(screen.getByText('settings.testConnection')).toBeInTheDocument();
   });
 
   it('renders 6 tab buttons', () => {
     render(<SettingsModal onClose={vi.fn()} />);
     const tabs = screen.getAllByRole('tab');
     expect(tabs).toHaveLength(6);
-    expect(tabs.map(t => t.textContent)).toEqual(['General', 'Sources', 'Profile', 'Discovery', 'Health', 'About']);
+    expect(tabs.map(t => t.textContent)).toEqual(['settings.tabs.general', 'settings.tabs.sources', 'settings.tabs.profile', 'settings.tabs.discovery', 'settings.tabs.health', 'settings.tabs.about']);
   });
 
   it('General tab is active by default', () => {
     render(<SettingsModal onClose={vi.fn()} />);
-    const generalTab = screen.getByRole('tab', { name: 'General' });
+    const generalTab = screen.getByRole('tab', { name: 'settings.tabs.general' });
     expect(generalTab).toHaveAttribute('aria-selected', 'true');
     expect(screen.getByTestId('ai-provider-section')).toBeInTheDocument();
   });
 
   it('switches to Sources tab and shows SourceConfigPanel', () => {
     render(<SettingsModal onClose={vi.fn()} />);
-    fireEvent.click(screen.getByRole('tab', { name: 'Sources' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'settings.tabs.sources' }));
     expect(screen.getByTestId('source-config-panel')).toBeInTheDocument();
     expect(screen.queryByTestId('ai-provider-section')).not.toBeInTheDocument();
   });
 
   it('switches to Profile tab and shows PersonalizationSection', () => {
     render(<SettingsModal onClose={vi.fn()} />);
-    fireEvent.click(screen.getByRole('tab', { name: 'Profile' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'settings.tabs.profile' }));
     expect(screen.getByTestId('personalization-section')).toBeInTheDocument();
     expect(screen.getByTestId('developer-dna-panel')).toBeInTheDocument();
   });
 
   it('switches to Health tab and shows health panels', () => {
     render(<SettingsModal onClose={vi.fn()} />);
-    fireEvent.click(screen.getByRole('tab', { name: 'Health' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'settings.tabs.health' }));
     expect(screen.getByTestId('attention-dashboard')).toBeInTheDocument();
     expect(screen.getByTestId('system-health-panel')).toBeInTheDocument();
   });
 
   it('hides Save Settings when not on General tab', () => {
     render(<SettingsModal onClose={vi.fn()} />);
-    fireEvent.click(screen.getByRole('tab', { name: 'Sources' }));
-    expect(screen.queryByText('Save Settings')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('tab', { name: 'settings.tabs.sources' }));
+    expect(screen.queryByText('settings.saveSettings')).not.toBeInTheDocument();
   });
 });

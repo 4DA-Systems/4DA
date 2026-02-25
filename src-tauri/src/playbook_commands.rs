@@ -151,20 +151,6 @@ pub(crate) fn parse_lessons(content: &str) -> Vec<PlaybookLesson> {
     lessons
 }
 
-fn ensure_progress_table(conn: &rusqlite::Connection) -> Result<(), String> {
-    conn.execute(
-        "CREATE TABLE IF NOT EXISTS playbook_progress (
-            module_id TEXT NOT NULL,
-            lesson_idx INTEGER NOT NULL,
-            completed_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-            PRIMARY KEY (module_id, lesson_idx)
-        )",
-        [],
-    )
-    .map_err(|e| e.to_string())?;
-    Ok(())
-}
-
 #[tauri::command]
 pub fn get_playbook_modules() -> Result<Vec<PlaybookModule>, String> {
     let content_dir = get_content_dir();
@@ -229,7 +215,6 @@ pub fn get_playbook_content(module_id: String) -> Result<PlaybookContent, String
 #[tauri::command]
 pub fn get_playbook_progress() -> Result<PlaybookProgress, String> {
     let conn = crate::open_db_connection()?;
-    ensure_progress_table(&conn)?;
 
     let content_dir = get_content_dir();
     let mut modules = Vec::new();
@@ -292,7 +277,6 @@ pub fn get_playbook_progress() -> Result<PlaybookProgress, String> {
 #[tauri::command]
 pub fn mark_lesson_complete(module_id: String, lesson_idx: u32) -> Result<(), String> {
     let conn = crate::open_db_connection()?;
-    ensure_progress_table(&conn)?;
 
     conn.execute(
         "INSERT OR IGNORE INTO playbook_progress (module_id, lesson_idx) VALUES (?1, ?2)",

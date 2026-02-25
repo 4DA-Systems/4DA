@@ -560,6 +560,13 @@ pub(crate) async fn score_items_full(
         "Cache analysis summary"
     );
 
+    // Record rejection rate for verifiable metrics
+    if let Err(e) =
+        db.record_scoring_stats("cached_full", results.len(), relevant_count, excluded_count)
+    {
+        tracing::warn!(target: "4da::analysis", error = %e, "Failed to record scoring stats");
+    }
+
     Ok(results)
 }
 

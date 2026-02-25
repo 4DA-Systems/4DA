@@ -1,6 +1,8 @@
 // Copyright (c) 2025-2026 Antony Lawrence Kiddie Pasifa. All rights reserved.
 // Licensed under the Functional Source License 1.1 (FSL-1.1-Apache-2.0). See LICENSE file.
 
+import './i18n';
+
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
@@ -53,6 +55,7 @@ import { useShallow } from 'zustand/react/shallow';
 
 import { useAppStore } from './store';
 import { useUpdateCheck } from './hooks/use-update-check';
+import { useDirection } from './i18n/rtl';
 import type { SourceRelevance } from './types';
 
 function App() {
@@ -87,6 +90,9 @@ function App() {
   const setFirstRunDismissed = useAppStore(s => s.setFirstRunDismissed);
 
   const { tier, isPro } = useLicense();
+
+  // i18n direction (sets dir/lang on <html>)
+  useDirection();
 
   // Toast notification system
   const { toasts, addToast, removeToast } = useToasts();

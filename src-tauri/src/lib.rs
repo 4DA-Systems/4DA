@@ -234,6 +234,7 @@ pub fn run() {
             analysis::run_deep_initial_scan,
             analysis::run_cached_analysis,
             analysis::get_analysis_status,
+            analysis::get_scoring_stats,
             analysis::cancel_analysis,
             // Settings
             settings_commands::get_settings,

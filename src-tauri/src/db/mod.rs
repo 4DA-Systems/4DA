@@ -62,6 +62,16 @@ pub struct SimilarityResult {
     pub distance: f32,
 }
 
+/// Aggregate scoring statistics (rejection rate measurement)
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct ScoringStatsAggregate {
+    pub total_runs: i64,
+    pub total_scored: i64,
+    pub total_relevant: i64,
+    pub lifetime_rejection_rate: f64,
+    pub last_run_rejection_rate: Option<f64>,
+}
+
 // ============================================================================
 // Database Manager
 // ============================================================================
