@@ -84,6 +84,9 @@ importers:
       jsdom:
         specifier: ^26.0.0
         version: 26.1.0
+      playwright:
+        specifier: ^1.58.2
+        version: 1.58.2
       png-to-ico:
         specifier: ^3.0.1
         version: 3.0.1
