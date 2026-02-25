@@ -32,9 +32,11 @@ export function VoidHeartbeat({ signal, size = 200 }: VoidHeartbeatProps) {
     if (signal.staleness > 0.8) return 6.0; // Very slow
     // Critical signals make pulse faster
     if (signal.critical_count > 0) return 1.0;
+    // Open decision windows increase pulse speed slightly
+    if (signal.open_windows > 0) return 2.5 - Math.min(signal.open_windows, 5) * 0.2;
     // Map pulse: idle=4s, active=0.8s
     return 4.0 - signal.pulse * 3.2;
-  }, [signal.pulse, signal.error, signal.staleness, signal.critical_count]);
+  }, [signal.pulse, signal.error, signal.staleness, signal.critical_count, signal.open_windows]);
 
   const coreColor = useMemo(
     () => computeCoreColor(signal.heat, signal.error, signal.staleness, signal.signal_color_shift),
@@ -45,9 +47,11 @@ export function VoidHeartbeat({ signal, size = 200 }: VoidHeartbeatProps) {
     const base = 16;
     const heatBoost = signal.heat * 10;
     const burstBoost = signal.burst * 16;
+    // Metabolism adds a subtle healthy glow when system is calibrated
+    const metabolismBoost = signal.metabolism * 4;
     const urgencyBoost = signal.signal_urgency * 6;
-    return base + heatBoost + burstBoost + urgencyBoost;
-  }, [signal.burst, signal.heat, signal.signal_urgency]);
+    return base + heatBoost + burstBoost + urgencyBoost + metabolismBoost;
+  }, [signal.burst, signal.heat, signal.signal_urgency, signal.metabolism]);
 
   const opacity = useMemo(() => {
     if (signal.item_count === 0 && signal.staleness > 0.9) return 0.85; // Dormant — bright ember

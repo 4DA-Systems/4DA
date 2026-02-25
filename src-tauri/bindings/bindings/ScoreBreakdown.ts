@@ -71,4 +71,12 @@ llm_score: number | null,
 /**
  * LLM's one-sentence explanation
  */
-llm_reason: string | null, };
+llm_reason: string | null, 
+/**
+ * Decision window boost applied (0.0-0.20)
+ */
+window_boost: number, 
+/**
+ * ID of matched decision window
+ */
+matched_window_id: bigint | null, };

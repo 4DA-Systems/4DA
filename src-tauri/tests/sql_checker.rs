@@ -27,6 +27,7 @@ fn validate_all_sql_queries() {
 
     let schema_files = vec![
         src_dir.join("db.rs"),
+        src_dir.join("db").join("migrations.rs"),
         src_dir.join("ace").join("db.rs"),
         src_dir.join("ace").join("embedding.rs"),
         src_dir.join("ace").join("watcher.rs"),

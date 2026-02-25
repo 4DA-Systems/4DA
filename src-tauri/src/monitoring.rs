@@ -256,6 +256,26 @@ pub fn start_scheduler<R: Runtime>(app: AppHandle<R>, state: Arc<MonitoringState
                 }
             }
 
+            // Decision window detection — runs with anomaly check (hourly).
+            // Expire stale windows, detect new ones from recent content, compute advantage.
+            if now - last_anomaly < 2 {
+                // Only run when anomaly check just fired (within the same tick)
+                if let Ok(conn) = crate::open_db_connection() {
+                    let expired = crate::decision_advantage::expire_stale_windows(&conn);
+                    let detected = crate::decision_advantage::detect_decision_windows(&conn);
+                    if expired > 0 || !detected.is_empty() {
+                        info!(
+                            target: "4da::monitor",
+                            expired, detected = detected.len(),
+                            "Decision windows updated"
+                        );
+                        let _ = app.emit("decision-windows-updated", &detected);
+                    }
+                    // Compute compound advantage score (weekly period)
+                    let _ = crate::decision_advantage::compute_compound_score(&conn, "weekly");
+                }
+            }
+
             // Behavior decay - daily
             let last_decay = state.last_decay.load(Ordering::Relaxed);
             if now - last_decay >= BEHAVIOR_DECAY_INTERVAL {
@@ -292,21 +312,43 @@ pub fn start_scheduler<R: Runtime>(app: AppHandle<R>, state: Arc<MonitoringState
                     }
                 }
 
-                // Database cleanup - delete items older than configured max age
+                // Intelligence Metabolism: Autophagy-powered cleanup.
+                // Instead of blind DELETE, first extract meta-intelligence (calibration
+                // deltas, topic decay, source autopsies, anti-patterns) then prune.
                 {
                     let max_age_days = {
                         let sm = crate::get_settings_manager().lock();
                         sm.get().monitoring.cleanup_max_age_days.unwrap_or(30)
                     };
+                    if let Ok(conn) = crate::open_db_connection() {
+                        match crate::autophagy::run_autophagy_cycle(&conn, max_age_days as i64) {
+                            Ok(cycle) => {
+                                info!(
+                                    target: "4da::monitor",
+                                    items_analyzed = cycle.items_analyzed,
+                                    calibrations = cycle.calibrations_produced,
+                                    anti_patterns = cycle.anti_patterns_detected,
+                                    duration_ms = cycle.duration_ms,
+                                    "Autophagy cycle completed"
+                                );
+                                // Emit event so frontend can refresh insights
+                                let _ = app.emit("autophagy-cycle-complete", &cycle);
+                            }
+                            Err(e) => {
+                                warn!(target: "4da::monitor", error = %e, "Autophagy cycle failed");
+                            }
+                        }
+                    }
+                    // Still run the actual prune after autophagy extracted intelligence
                     if let Ok(db) = crate::get_database() {
                         match db.cleanup_old_items(max_age_days) {
                             Ok(deleted) if deleted > 0 => {
-                                info!(target: "4da::monitor", deleted, max_age_days, "Cleaned up old source items");
+                                info!(target: "4da::monitor", deleted, max_age_days, "Pruned old source items (post-autophagy)");
                                 if let Err(e) = db.vacuum_if_needed(deleted, 1000) {
                                     warn!(target: "4da::monitor", error = %e, "VACUUM after cleanup failed");
                                 }
                             }
-                            Ok(_) => {} // Nothing to clean
+                            Ok(_) => {}
                             Err(e) => {
                                 warn!(target: "4da::monitor", error = %e, "Database cleanup failed");
                             }

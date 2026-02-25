@@ -119,6 +119,12 @@ import {
   executeDelegationScore,
   developerDnaTool,
   executeDeveloperDna,
+  autophagyStatusTool,
+  executeAutophagyStatus,
+  decisionWindowsTool,
+  executeDecisionWindows,
+  compoundAdvantageTool,
+  executeCompoundAdvantage,
 } from "./tools/index.js";
 
 import type {
@@ -151,6 +157,9 @@ import type { AgentMemoryParams } from "./tools/agent-memory.js";
 import type { AgentSessionBriefParams } from "./tools/agent-session-brief.js";
 import type { DelegationScoreParams } from "./tools/delegation-score.js";
 import type { DeveloperDnaParams } from "./tools/developer-dna.js";
+import type { AutophagyStatusParams } from "./tools/autophagy-status.js";
+import type { DecisionWindowsParams } from "./tools/decision-windows.js";
+import type { CompoundAdvantageParams } from "./tools/compound-advantage.js";
 
 // =============================================================================
 // Server Setup
@@ -577,6 +586,34 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       case "developer_dna": {
         const params = (args || {}) as unknown as DeveloperDnaParams;
         const result = executeDeveloperDna(database, params);
+        return {
+          content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+        };
+      }
+
+      // =========================================================================
+      // Intelligence Metabolism Tools
+      // =========================================================================
+
+      case "autophagy_status": {
+        const params = (args || {}) as unknown as AutophagyStatusParams;
+        const result = executeAutophagyStatus(database, params);
+        return {
+          content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+        };
+      }
+
+      case "decision_windows": {
+        const params = (args || {}) as unknown as DecisionWindowsParams;
+        const result = executeDecisionWindows(database, params);
+        return {
+          content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+        };
+      }
+
+      case "compound_advantage": {
+        const params = (args || {}) as unknown as CompoundAdvantageParams;
+        const result = executeCompoundAdvantage(database, params);
         return {
           content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
         };

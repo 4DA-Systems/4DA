@@ -132,6 +132,20 @@ export const TOOL_REGISTRY: Record<string, { summary: string; schemaFile: string
     summary: "Export your Developer DNA — tech identity, dependencies, engagement, blind spots",
     schemaFile: "developer-dna.json",
   },
+
+  // Intelligence Metabolism Tools
+  autophagy_status: {
+    summary: "Get intelligence metabolism status — autophagy cycles, calibration accuracy, anti-patterns",
+    schemaFile: "autophagy-status.json",
+  },
+  decision_windows: {
+    summary: "View and manage decision windows — time-bounded opportunities requiring attention",
+    schemaFile: "decision-windows.json",
+  },
+  compound_advantage: {
+    summary: "Get compound advantage score — measures intelligence leverage for decisions",
+    schemaFile: "compound-advantage.json",
+  },
 };
 
 /**

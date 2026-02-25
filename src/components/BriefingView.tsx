@@ -13,6 +13,8 @@ import {
   renderLine,
 } from '../utils/briefing-parser';
 import { EngagementPulse } from './EngagementPulse';
+import { DecisionWindowsPanel } from './DecisionWindowsPanel';
+import { CompoundAdvantageScore } from './CompoundAdvantageScore';
 import { useLicense } from '../hooks/use-license';
 
 export function BriefingView() {
@@ -231,6 +233,12 @@ export function BriefingView() {
           ))}
         </div>
       )}
+
+      {/* Decision Windows — time-bounded opportunities */}
+      <DecisionWindowsPanel />
+
+      {/* Compound Advantage Score */}
+      <CompoundAdvantageScore />
 
       {/* Briefing header */}
       <div className="bg-bg-secondary rounded-lg border border-orange-500/20 overflow-hidden">

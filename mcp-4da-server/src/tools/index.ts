@@ -156,3 +156,19 @@ export {
   developerDnaTool,
   executeDeveloperDna,
 } from "./developer-dna.js";
+
+// Intelligence Metabolism Tools
+export {
+  autophagyStatusTool,
+  executeAutophagyStatus,
+} from "./autophagy-status.js";
+
+export {
+  decisionWindowsTool,
+  executeDecisionWindows,
+} from "./decision-windows.js";
+
+export {
+  compoundAdvantageTool,
+  executeCompoundAdvantage,
+} from "./compound-advantage.js";

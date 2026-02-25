@@ -34,6 +34,12 @@ pub struct VoidSignal {
     pub critical_count: u32,
     /// Color shift: -1.0 (cool/learning) to +1.0 (warm/alert)
     pub signal_color_shift: f32,
+    /// Intelligence metabolism health: 0 = no autophagy data, 1 = fully calibrated
+    pub metabolism: f32,
+    /// Count of open decision windows requiring attention
+    pub open_windows: u32,
+    /// Compound advantage trend: -1 declining, 0 stable, +1 growing
+    pub advantage_trend: f32,
 }
 
 impl Default for VoidSignal {
@@ -50,6 +56,9 @@ impl Default for VoidSignal {
             signal_urgency: 0.0,
             critical_count: 0,
             signal_color_shift: 0.0,
+            metabolism: 0.0,
+            open_windows: 0,
+            advantage_trend: 0.0,
         }
     }
 }
@@ -69,6 +78,9 @@ impl VoidSignal {
             || (self.signal_urgency - other.signal_urgency).abs() > threshold
             || self.critical_count != other.critical_count
             || (self.signal_color_shift - other.signal_color_shift).abs() > threshold
+            || (self.metabolism - other.metabolism).abs() > threshold
+            || self.open_windows != other.open_windows
+            || (self.advantage_trend - other.advantage_trend).abs() > threshold
     }
 }
 
@@ -129,6 +141,49 @@ pub fn compute_signal(db: &Database, monitoring: &MonitoringState) -> VoidSignal
     // Error: check if monitoring is_checking stuck (simple heuristic)
     let error = 0.0f32;
 
+    // Intelligence metabolism: ratio of calibrations to total autophagy cycles
+    let (metabolism, open_windows_count, advantage_trend) = {
+        let conn = crate::open_db_connection().ok();
+        let met = conn.as_ref().and_then(|c| {
+            c.query_row(
+                "SELECT COALESCE(
+                    CAST((SELECT COUNT(*) FROM digested_intelligence WHERE superseded_by IS NULL) AS REAL)
+                    / NULLIF((SELECT COUNT(*) FROM autophagy_cycles), 0),
+                    0.0
+                )", [], |r| r.get::<_, f64>(0),
+            ).ok()
+        }).unwrap_or(0.0).min(1.0) as f32;
+        let ow = conn
+            .as_ref()
+            .and_then(|c| {
+                c.query_row(
+                    "SELECT COUNT(*) FROM decision_windows WHERE status = 'open'",
+                    [],
+                    |r| r.get::<_, i64>(0),
+                )
+                .ok()
+            })
+            .unwrap_or(0) as u32;
+        let at = conn.as_ref().and_then(|c| {
+            // Compare latest two advantage scores to determine trend
+            let mut stmt = c.prepare(
+                "SELECT score FROM advantage_score WHERE period = 'weekly' ORDER BY computed_at DESC LIMIT 2"
+            ).ok()?;
+            let scores: Vec<f32> = stmt.query_map([], |r| r.get::<_, f32>(0))
+                .ok()?
+                .flatten()
+                .collect();
+            if scores.len() >= 2 && scores[1] > 0.0 {
+                Some(((scores[0] - scores[1]) / scores[1]).clamp(-1.0, 1.0))
+            } else if !scores.is_empty() && scores[0] > 0.0 {
+                Some(1.0) // Growing from zero
+            } else {
+                Some(0.0)
+            }
+        }).unwrap_or(0.0);
+        (met, ow, at)
+    };
+
     VoidSignal {
         pulse: 0.0, // Updated by specific event handlers
         heat: 0.0,  // Updated after analysis
@@ -141,6 +196,9 @@ pub fn compute_signal(db: &Database, monitoring: &MonitoringState) -> VoidSignal
         signal_urgency: 0.0,
         critical_count: 0,
         signal_color_shift: 0.0,
+        metabolism,
+        open_windows: open_windows_count,
+        advantage_trend,
     }
 }
 
@@ -279,6 +337,9 @@ pub fn tick_staleness(db: &Database, monitoring: &MonitoringState) -> VoidSignal
                 signal_urgency: prev.signal_urgency * decay,
                 critical_count: prev.critical_count, // Integer — stays until next analysis
                 signal_color_shift: prev.signal_color_shift * decay,
+                metabolism: base.metabolism,
+                open_windows: base.open_windows,
+                advantage_trend: prev.advantage_trend * decay,
             }
         }
         None => base,

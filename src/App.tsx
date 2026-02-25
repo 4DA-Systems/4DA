@@ -28,6 +28,7 @@ import { TechRadar } from './components/TechRadar';
 import { DecisionMemory } from './components/DecisionMemory';
 import { DelegationDashboard } from './components/DelegationDashboard';
 import { AgentMemoryPanel } from './components/AgentMemoryPanel';
+import { AutophagyInsights } from './components/AutophagyInsights';
 import { ToolkitView } from './components/toolkit/ToolkitView';
 import { PlaybookView } from './components/PlaybookView';
 import { CoachView } from './components/coach/CoachView';
@@ -421,6 +422,7 @@ function App() {
           <div className="space-y-6">
             <TechRadar />
             <DecisionMemory />
+            <AutophagyInsights />
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               <DelegationDashboard />
               <AgentMemoryPanel />

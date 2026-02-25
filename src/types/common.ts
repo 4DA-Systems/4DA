@@ -36,6 +36,9 @@ export interface VoidSignal {
   signal_urgency: number;    // 0-1: weighted urgency from signal types
   critical_count: number;    // count of critical-priority signals
   signal_color_shift: number; // -1 to +1: cool (learning) to warm (alert)
+  metabolism: number;         // 0-1: intelligence metabolism health (autophagy calibration)
+  open_windows: number;       // count of open decision windows
+  advantage_trend: number;    // -1 to +1: compound advantage declining to growing
 }
 
 export interface SuggestedInterest {
