@@ -104,4 +104,8 @@ data/*.backup.*
 # Merch build outputs (regenerate with: node merch-print-ready/build.mjs)
 merch-print-ready/png/
 merch-print-ready/upscaled/
+
+# Test screenshots (artifacts)
+test-screenshots/
+
 .claude/wisdom/

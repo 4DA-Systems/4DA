@@ -33,6 +33,13 @@ function setMockState(overrides: Record<string, unknown>) {
     freeBriefing: null,
     freeBriefingLoading: false,
     generateFreeBriefing: vi.fn(),
+    decisionWindows: [],
+    decisionWindowsLoading: false,
+    loadDecisionWindows: vi.fn(),
+    actOnWindow: vi.fn(),
+    closeWindow: vi.fn(),
+    compoundAdvantage: null,
+    loadCompoundAdvantage: vi.fn(),
     ...overrides,
   };
 }
