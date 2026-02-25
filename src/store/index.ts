@@ -20,6 +20,8 @@ import { createCommandDeckSlice } from './command-deck-slice';
 import { createSovereignProfileSlice } from './sovereign-profile-slice';
 import { createSunsSlice } from './suns-slice';
 import { createCoachSlice } from './coach-slice';
+import { createAutophagySlice } from './autophagy-slice';
+import { createDecisionAdvantageSlice } from './decision-advantage-slice';
 
 // Re-export all types
 export type {
@@ -60,4 +62,6 @@ export const useAppStore = create<AppStore>()((...a) => ({
   ...createSovereignProfileSlice(...a),
   ...createSunsSlice(...a),
   ...createCoachSlice(...a),
+  ...createAutophagySlice(...a),
+  ...createDecisionAdvantageSlice(...a),
 }));

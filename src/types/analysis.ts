@@ -65,6 +65,10 @@ export interface ScoreBreakdown {
   llm_score?: number;
   /** LLM's one-sentence explanation */
   llm_reason?: string;
+  /** Decision window boost applied (0.0-0.20) */
+  window_boost?: number;
+  /** ID of matched decision window */
+  matched_window_id?: number;
 }
 
 export interface AnalysisProgress {

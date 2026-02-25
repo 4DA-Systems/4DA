@@ -81,6 +81,12 @@ pub(crate) struct ScoringContext {
     pub feedback_interaction_count: i64,
     /// Composed stack profile for stack-aware scoring (inactive when no stacks selected)
     pub composed_stack: crate::stacks::ComposedStack,
+    /// Open decision windows for boost injection
+    pub open_windows: Vec<crate::decision_advantage::DecisionWindow>,
+    /// Autophagy calibration deltas: topic -> delta (scoring correction)
+    pub calibration_deltas: HashMap<String, f32>,
+    /// Topic-aware decay half-lives: topic -> half_life_hours
+    pub topic_half_lives: HashMap<String, f32>,
 }
 
 /// Options controlling which scoring stages are applied
@@ -141,11 +147,15 @@ pub(crate) async fn build_scoring_context(db: &Database) -> Result<ScoringContex
     };
 
     // Build domain profile for graduated domain relevance scoring
-    let (domain_profile, composed_stack) = {
+    let (domain_profile, composed_stack, open_windows, calibration_deltas, topic_half_lives) = {
         let conn = crate::open_db_connection()?;
         let dp = crate::domain_profile::build_domain_profile(&conn);
         let cs = crate::stacks::load_composed_stack(&conn);
-        (dp, cs)
+        // Intelligence metabolism: load decision windows and autophagy calibrations
+        let ow = crate::decision_advantage::get_open_windows(&conn);
+        let cd = crate::autophagy::load_calibration_deltas(&conn);
+        let thl = crate::autophagy::load_topic_decay_profiles(&conn);
+        (dp, cs, ow, cd, thl)
     };
 
     // Warm-start source preferences from stack profiles (only fills gaps)
@@ -187,6 +197,9 @@ pub(crate) async fn build_scoring_context(db: &Database) -> Result<ScoringContex
         work_topics,
         feedback_interaction_count,
         composed_stack,
+        open_windows,
+        calibration_deltas,
+        topic_half_lives,
     })
 }
 
@@ -322,10 +335,35 @@ pub(crate) fn score_item(
     );
     let base_score = (base_score + stack_boost).min(1.0);
 
-    // Optional freshness
+    // Optional freshness — topic-aware when autophagy half-lives are available.
+    // Standard freshness uses a global decay curve; calibrated freshness adjusts
+    // per-topic based on learned engagement half-lives from autophagy cycles.
     let freshness = if options.apply_freshness {
         if let Some(created_at) = input.created_at {
-            compute_temporal_freshness(created_at)
+            let base_freshness = compute_temporal_freshness(created_at);
+            // Topic-aware modulation: if autophagy learned that "rust" items stay
+            // relevant for 120h but "javascript" decays in 24h, apply that knowledge
+            if !ctx.topic_half_lives.is_empty() && !topics.is_empty() {
+                let matching_half_lives: Vec<f32> = topics
+                    .iter()
+                    .filter_map(|t| ctx.topic_half_lives.get(t.as_str()).copied())
+                    .collect();
+                if !matching_half_lives.is_empty() {
+                    let avg_half_life =
+                        matching_half_lives.iter().sum::<f32>() / matching_half_lives.len() as f32;
+                    let age_hours =
+                        ((chrono::Utc::now() - *created_at).num_minutes() as f32 / 60.0).max(0.0);
+                    // Calibrated freshness: slower decay for long-lived topics,
+                    // faster decay for fast-decaying topics. Blend 50/50 with base
+                    // to avoid wild swings from limited autophagy data.
+                    let calibrated = (-0.693 * age_hours / avg_half_life.max(1.0)).exp();
+                    (base_freshness * 0.5 + calibrated * 0.5).clamp(0.3, 1.0)
+                } else {
+                    base_freshness
+                }
+            } else {
+                base_freshness
+            }
         } else {
             1.0
         }
@@ -464,6 +502,43 @@ pub(crate) fn score_item(
         0.0
     };
     let base_score = (base_score + feedback_boost).clamp(0.0, 1.0);
+
+    // Decision window boost: items matching open decision windows get a scoring boost.
+    // Security patches get up to +0.20, migrations +0.15, adoption/knowledge +0.10.
+    let (window_boost, matched_window_id) = if !ctx.open_windows.is_empty() {
+        crate::decision_advantage::compute_decision_window_boost(
+            &ctx.open_windows,
+            input.title,
+            input.content,
+            &topics,
+            &matched_deps
+                .iter()
+                .map(|d| d.package_name.clone())
+                .collect::<Vec<_>>(),
+        )
+    } else {
+        (0.0, None)
+    };
+    let base_score = (base_score + window_boost).clamp(0.0, 1.0);
+
+    // Autophagy calibration correction: if autophagy detected systematic under/over-scoring
+    // for topics in this item, apply a correction. Positive delta = under-scored = boost.
+    let calibration_correction: f32 = if !ctx.calibration_deltas.is_empty() && !topics.is_empty() {
+        let matching: Vec<f32> = topics
+            .iter()
+            .filter_map(|t| ctx.calibration_deltas.get(t.as_str()).copied())
+            .collect();
+        if !matching.is_empty() {
+            let avg_delta = matching.iter().sum::<f32>() / matching.len() as f32;
+            // Clamp correction to +/-10% to prevent runaway calibration
+            avg_delta.clamp(-0.10, 0.10)
+        } else {
+            0.0
+        }
+    } else {
+        0.0
+    };
+    let base_score = (base_score + calibration_correction).clamp(0.0, 1.0);
 
     // Stack pain point match for ACE axis confirmation
     let stack_pain_match = crate::stacks::scoring::has_pain_point_match(
@@ -619,6 +694,8 @@ pub(crate) fn score_item(
         stack_competing_mult,
         llm_score: None,
         llm_reason: None,
+        window_boost,
+        matched_window_id,
     };
 
     // Optional signal classification — four gates (all general, tech-stack-agnostic):

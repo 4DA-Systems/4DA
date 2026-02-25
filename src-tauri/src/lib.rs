@@ -58,6 +58,8 @@ mod analysis;
 mod analysis_rerank;
 mod anomaly;
 mod attention;
+mod autophagy;
+mod autophagy_commands;
 mod competing_tech;
 mod content_commands;
 mod content_dna;
@@ -116,6 +118,8 @@ mod coach_context;
 mod coach_nudges;
 mod coach_templates;
 mod command_runner;
+mod decision_advantage;
+mod decision_advantage_commands;
 mod git_deck;
 mod playbook_commands;
 mod sovereign_profile;
@@ -430,8 +434,17 @@ pub fn run() {
             streets_coach::coach_generate_strategy,
             streets_coach::coach_launch_review,
             streets_coach::coach_progress_check_in,
+            // Decision Advantage
+            decision_advantage_commands::get_decision_windows,
+            decision_advantage_commands::act_on_decision_window,
+            decision_advantage_commands::close_decision_window,
+            decision_advantage_commands::get_compound_advantage,
+            decision_advantage_commands::detect_windows,
             // Diagnostics
-            commands::get_diagnostics
+            commands::get_diagnostics,
+            // Autophagy (intelligent content metabolism)
+            autophagy_commands::get_autophagy_status,
+            autophagy_commands::get_autophagy_history
         ])
         .setup(|app| {
             // Record app start time for diagnostics uptime tracking

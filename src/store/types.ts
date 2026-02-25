@@ -348,4 +348,6 @@ export type AppStore =
   & import('./command-deck-slice').CommandDeckSlice
   & import('./sovereign-profile-slice').SovereignProfileSlice
   & import('./suns-slice').SunsSlice
-  & import('./coach-slice').CoachSlice;
+  & import('./coach-slice').CoachSlice
+  & import('./autophagy-slice').AutophagySlice
+  & import('./decision-advantage-slice').DecisionAdvantageSlice;

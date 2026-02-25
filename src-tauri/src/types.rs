@@ -113,6 +113,12 @@ pub struct ScoreBreakdown {
     /// LLM's one-sentence explanation
     #[serde(default)]
     pub llm_reason: Option<String>,
+    /// Decision window boost applied (0.0-0.20)
+    #[serde(default)]
+    pub window_boost: f32,
+    /// ID of matched decision window
+    #[serde(default)]
+    pub matched_window_id: Option<i64>,
 }
 
 pub(crate) fn default_freshness() -> f32 {
