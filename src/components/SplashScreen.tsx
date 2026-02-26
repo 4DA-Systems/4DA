@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
 import sunLogo from '../assets/sun-logo.jpg';
 
@@ -15,18 +16,19 @@ type InitStage =
   | 'sources'
   | 'ready';
 
-const stageMessages: Record<InitStage, string> = {
-  starting: 'Starting up...',
-  database: 'Initializing database...',
-  embeddings: 'Loading AI models...',
-  context: 'Preparing context engine...',
-  sources: 'Connecting to sources...',
-  ready: 'Ready!',
+const stageKeys: Record<InitStage, string> = {
+  starting: 'splash.starting',
+  database: 'splash.database',
+  embeddings: 'splash.models',
+  context: 'splash.context',
+  sources: 'splash.sources',
+  ready: 'splash.ready',
 };
 
 const stageOrder: InitStage[] = ['starting', 'database', 'embeddings', 'context', 'sources', 'ready'];
 
 export function SplashScreen({ onComplete, minimumDisplayTime = 1500 }: SplashScreenProps) {
+  const { t } = useTranslation();
   const [fadeOut, setFadeOut] = useState(false);
   const [imageError, setImageError] = useState(false);
   const [stage, setStage] = useState<InitStage>('starting');
@@ -107,7 +109,7 @@ export function SplashScreen({ onComplete, minimumDisplayTime = 1500 }: SplashSc
   return (
     <div
       role="status"
-      aria-label={error ? 'Error during startup' : stageMessages[stage]}
+      aria-label={error ? t('splash.error') : t(stageKeys[stage])}
       aria-busy={stage !== 'ready'}
       style={{
         position: 'fixed',
@@ -183,7 +185,7 @@ export function SplashScreen({ onComplete, minimumDisplayTime = 1500 }: SplashSc
         marginBottom: '2.5rem',
         fontWeight: 500,
       }}>
-        All signal. No feed.
+        {t('app.tagline')}
       </p>
 
       {/* Progress bar */}
@@ -200,7 +202,7 @@ export function SplashScreen({ onComplete, minimumDisplayTime = 1500 }: SplashSc
           aria-valuenow={Math.round(progress)}
           aria-valuemin={0}
           aria-valuemax={100}
-          aria-label={`Startup progress: ${Math.round(progress)}%`}
+          aria-label={t('splash.progress', { percent: Math.round(progress) })}
           style={{
             height: '100%',
             width: `${progress}%`,
@@ -239,7 +241,7 @@ export function SplashScreen({ onComplete, minimumDisplayTime = 1500 }: SplashSc
           color: error ? 'var(--color-error)' : stage === 'ready' ? 'var(--color-success)' : '#9CA3AF',
           transition: 'color 300ms',
         }}>
-          {error ? 'Error during startup' : stageMessages[stage]}
+          {error ? t('splash.error') : t(stageKeys[stage])}
         </span>
       </div>
 
@@ -270,7 +272,7 @@ export function SplashScreen({ onComplete, minimumDisplayTime = 1500 }: SplashSc
         fontSize: '0.75rem',
         color: '#4B5563',
       }}>
-        Version 1.0.0
+        {t('splash.version', { version: '1.0.0' })}
       </p>
 
       {/* Subtle refresh button - top right corner */}
@@ -300,13 +302,13 @@ export function SplashScreen({ onComplete, minimumDisplayTime = 1500 }: SplashSc
           e.currentTarget.style.color = 'var(--color-text-muted)';
           e.currentTarget.style.borderColor = 'var(--color-border)';
         }}
-        aria-label="Refresh if stuck"
-        title="Refresh if stuck"
+        aria-label={t('splash.refreshIfStuck')}
+        title={t('splash.refreshIfStuck')}
       >
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
           <path d="M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15" />
         </svg>
-        Refresh
+        {t('action.refresh')}
       </button>
 
       {/* Animations */}

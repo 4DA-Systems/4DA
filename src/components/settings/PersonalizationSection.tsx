@@ -1,7 +1,9 @@
 import { invoke } from '@tauri-apps/api/core';
+import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../../store';
 
 export function PersonalizationSection() {
+  const { t } = useTranslation();
   const userContext = useAppStore(s => s.userContext);
   const suggestedInterests = useAppStore(s => s.suggestedInterests);
   const newInterest = useAppStore(s => s.newInterest);
@@ -28,7 +30,7 @@ export function PersonalizationSection() {
       await invoke('add_interest', { topic });
       await loadUserContext();
       await loadSuggestedInterests();
-      setSettingsStatus('Interest added from suggestion');
+      setSettingsStatus(t('settings.personalization.interestAdded'));
       setTimeout(() => setSettingsStatus(''), 2000);
     } catch (error) {
       setSettingsStatus(`Error: ${error}`);
@@ -40,7 +42,7 @@ export function PersonalizationSection() {
       await invoke('add_exclusion', { topic });
       await loadUserContext();
       await loadSuggestedInterests();
-      setSettingsStatus('Suggestion dismissed');
+      setSettingsStatus(t('settings.personalization.suggestionDismissed'));
       setTimeout(() => setSettingsStatus(''), 2000);
     } catch (error) {
       setSettingsStatus(`Error: ${error}`);
@@ -55,9 +57,9 @@ export function PersonalizationSection() {
           <span className="text-blue-400">&#x1f3af;</span>
         </div>
         <div>
-          <h3 className="text-white font-medium">Manual Adjustments</h3>
+          <h3 className="text-white font-medium">{t('settings.personalization.title')}</h3>
           <p className="text-gray-500 text-sm mt-1">
-            Fine-tune your context with interests and exclusions
+            {t('settings.personalization.description')}
           </p>
         </div>
       </div>
@@ -66,43 +68,43 @@ export function PersonalizationSection() {
         <div className="space-y-5">
           {/* Role */}
           <div>
-            <label className="text-xs text-gray-400 block mb-2">Your Role</label>
+            <label className="text-xs text-gray-400 block mb-2">{t('settings.personalization.role')}</label>
             <div className="flex gap-2">
               <input
                 type="text"
-                aria-label="Your role"
+                aria-label={t('settings.personalization.role')}
                 value={newRole}
                 onChange={(e) => setNewRole(e.target.value)}
-                placeholder="e.g. Backend Developer"
+                placeholder={t('settings.personalization.rolePlaceholder')}
                 className="flex-1 px-3 py-2.5 bg-bg-secondary border border-border rounded-lg text-sm text-white placeholder:text-gray-500 focus:border-blue-500/50 focus:outline-none transition-colors"
               />
               <button
                 onClick={updateRole}
                 className="px-4 py-2.5 text-sm bg-bg-secondary border border-border rounded-lg text-gray-400 hover:text-white hover:border-blue-500/30 transition-all"
               >
-                Set
+                {t('settings.personalization.set')}
               </button>
             </div>
           </div>
 
           {/* Tech Stack */}
           <div>
-            <label className="text-xs text-gray-400 block mb-2">Tech Stack</label>
+            <label className="text-xs text-gray-400 block mb-2">{t('settings.personalization.techStack')}</label>
             <div className="flex gap-2 mb-3">
               <input
                 type="text"
-                aria-label="Add technology"
+                aria-label={t('settings.personalization.addTech')}
                 value={newTechStack}
                 onChange={(e) => setNewTechStack(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && addTechStack()}
-                placeholder="e.g. Rust, TypeScript"
+                placeholder={t('settings.personalization.techPlaceholder')}
                 className="flex-1 px-3 py-2.5 bg-bg-secondary border border-border rounded-lg text-sm text-white placeholder:text-gray-500 focus:border-blue-500/50 focus:outline-none transition-colors"
               />
               <button
                 onClick={addTechStack}
                 className="px-4 py-2.5 text-sm bg-bg-secondary border border-border rounded-lg text-gray-400 hover:text-white hover:border-blue-500/30 transition-all"
               >
-                Add
+                {t('action.add')}
               </button>
             </div>
             <div className="flex flex-wrap gap-1.5">
@@ -114,7 +116,7 @@ export function PersonalizationSection() {
                   {tech}
                   <button
                     onClick={() => removeTechStack(tech)}
-                    aria-label={`Remove ${tech}`}
+                    aria-label={t('settings.personalization.removeTech', { name: tech })}
                     className="text-orange-400/50 hover:text-red-400 transition-colors"
                   >
                     &times;
@@ -122,7 +124,7 @@ export function PersonalizationSection() {
                 </span>
               ))}
               {userContext.tech_stack.length === 0 && (
-                <span className="text-sm text-gray-500">No technologies added</span>
+                <span className="text-sm text-gray-500">{t('settings.personalization.noTech')}</span>
               )}
             </div>
           </div>
@@ -130,24 +132,24 @@ export function PersonalizationSection() {
           {/* Interests */}
           <div>
             <div className="flex items-center gap-2 mb-2">
-              <label className="text-xs text-gray-400">Interests</label>
+              <label className="text-xs text-gray-400">{t('settings.personalization.interests')}</label>
               <span className="px-1.5 py-0.5 text-[10px] bg-green-500/20 text-green-400 rounded">{userContext.interests.length}</span>
             </div>
             <div className="flex gap-2 mb-3">
               <input
                 type="text"
-                aria-label="Add interest"
+                aria-label={t('settings.personalization.addInterest')}
                 value={newInterest}
                 onChange={(e) => setNewInterest(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && addInterest()}
-                placeholder="e.g. machine learning, distributed systems"
+                placeholder={t('settings.personalization.interestPlaceholder')}
                 className="flex-1 px-3 py-2.5 bg-bg-secondary border border-border rounded-lg text-sm text-white placeholder:text-gray-500 focus:border-green-500/50 focus:outline-none transition-colors"
               />
               <button
                 onClick={addInterest}
                 className="px-4 py-2.5 text-sm bg-green-500/10 text-green-400 border border-green-500/30 rounded-lg hover:bg-green-500/20 transition-all"
               >
-                Add
+                {t('action.add')}
               </button>
             </div>
             <div className="flex flex-wrap gap-1.5 max-h-28 overflow-y-auto">
@@ -155,13 +157,13 @@ export function PersonalizationSection() {
                 <span
                   key={interest.topic}
                   className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-green-500/10 text-green-400 text-xs rounded-md border border-green-500/20 group"
-                  title={interest.has_embedding ? 'Has embedding' : 'No embedding'}
+                  title={interest.has_embedding ? t('settings.personalization.hasEmbedding') : t('settings.personalization.noEmbedding')}
                 >
                   {interest.has_embedding && <span className="w-1.5 h-1.5 bg-green-400 rounded-full" />}
                   {interest.topic}
                   <button
                     onClick={() => removeInterest(interest.topic)}
-                    aria-label={`Remove ${interest.topic}`}
+                    aria-label={t('settings.personalization.removeInterest', { name: interest.topic })}
                     className="text-green-400/50 hover:text-red-400 transition-colors"
                   >
                     &times;
@@ -169,7 +171,7 @@ export function PersonalizationSection() {
                 </span>
               ))}
               {userContext.interests.length === 0 && (
-                <span className="text-sm text-gray-500">No interests added</span>
+                <span className="text-sm text-gray-500">{t('settings.personalization.noInterests')}</span>
               )}
             </div>
           </div>
@@ -177,9 +179,9 @@ export function PersonalizationSection() {
           {/* Suggested Interests */}
           {undeclaredSuggestions.length > 0 && (
             <div>
-              <h4 className="text-xs text-text-secondary font-medium mb-2">Suggested Interests</h4>
+              <h4 className="text-xs text-text-secondary font-medium mb-2">{t('settings.personalization.suggestedInterests')}</h4>
               <p className="text-[10px] text-text-muted mb-2">
-                Based on your detected tech stack and activity
+                {t('settings.personalization.suggestedDescription')}
               </p>
               <div className="space-y-1">
                 {undeclaredSuggestions.slice(0, 5).map((suggestion) => (
@@ -193,13 +195,13 @@ export function PersonalizationSection() {
                         onClick={() => handleAddSuggestion(suggestion.topic)}
                         className="text-xs px-2 py-0.5 rounded bg-border text-success hover:bg-[#333] transition-colors"
                       >
-                        Add
+                        {t('action.add')}
                       </button>
                       <button
                         onClick={() => handleDismissSuggestion(suggestion.topic)}
                         className="text-xs px-2 py-0.5 rounded bg-border text-text-muted hover:bg-[#333] transition-colors"
                       >
-                        Dismiss
+                        {t('action.dismiss')}
                       </button>
                     </div>
                   </div>
@@ -211,24 +213,24 @@ export function PersonalizationSection() {
           {/* Exclusions */}
           <div>
             <div className="flex items-center gap-2 mb-2">
-              <label className="text-xs text-gray-400">Exclusions</label>
+              <label className="text-xs text-gray-400">{t('settings.personalization.exclusions')}</label>
               <span className="px-1.5 py-0.5 text-[10px] bg-red-500/20 text-red-400 rounded">{userContext.exclusions.length}</span>
             </div>
             <div className="flex gap-2 mb-3">
               <input
                 type="text"
-                aria-label="Add exclusion"
+                aria-label={t('settings.personalization.addExclusion')}
                 value={newExclusion}
                 onChange={(e) => setNewExclusion(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && addExclusion()}
-                placeholder="e.g. crypto, sports"
+                placeholder={t('settings.personalization.exclusionPlaceholder')}
                 className="flex-1 px-3 py-2.5 bg-bg-secondary border border-border rounded-lg text-sm text-white placeholder:text-gray-500 focus:border-red-500/50 focus:outline-none transition-colors"
               />
               <button
                 onClick={addExclusion}
                 className="px-4 py-2.5 text-sm bg-red-500/10 text-red-400 border border-red-500/30 rounded-lg hover:bg-red-500/20 transition-all"
               >
-                Block
+                {t('settings.personalization.block')}
               </button>
             </div>
             <div className="flex flex-wrap gap-1.5">
@@ -240,7 +242,7 @@ export function PersonalizationSection() {
                   {exclusion}
                   <button
                     onClick={() => removeExclusion(exclusion)}
-                    aria-label={`Remove exclusion ${exclusion}`}
+                    aria-label={t('settings.personalization.removeExclusion', { name: exclusion })}
                     className="text-red-400/50 hover:text-white transition-colors"
                   >
                     &times;
@@ -248,13 +250,13 @@ export function PersonalizationSection() {
                 </span>
               ))}
               {userContext.exclusions.length === 0 && (
-                <span className="text-sm text-gray-500">No exclusions set</span>
+                <span className="text-sm text-gray-500">{t('settings.personalization.noExclusions')}</span>
               )}
             </div>
           </div>
         </div>
       ) : (
-        <div className="text-sm text-gray-500">Loading context...</div>
+        <div className="text-sm text-gray-500">{t('settings.personalization.loading')}</div>
       )}
     </div>
   );

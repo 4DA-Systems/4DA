@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
 import type {
   IndexedDocument,
@@ -47,6 +48,7 @@ interface IndexedDocumentsPanelProps {
 }
 
 export function IndexedDocumentsPanel({ onStatusChange }: IndexedDocumentsPanelProps) {
+  const { t } = useTranslation();
   const [documents, setDocuments] = useState<IndexedDocument[]>([]);
   const [stats, setStats] = useState<IndexedStats | null>(null);
   const [loading, setLoading] = useState(false);
@@ -137,7 +139,7 @@ export function IndexedDocumentsPanel({ onStatusChange }: IndexedDocumentsPanelP
             onClick={() => setSelectedDoc(null)}
             className="text-sm text-gray-400 hover:text-white transition-colors"
           >
-            ← Back
+            {t('documents.back')}
           </button>
           <h3 className="text-white font-medium truncate flex-1">
             {selectedDoc.document.file_name}
@@ -146,26 +148,26 @@ export function IndexedDocumentsPanel({ onStatusChange }: IndexedDocumentsPanelP
 
         <div className="grid grid-cols-2 gap-3 mb-4">
           <div className="p-3 bg-bg-secondary rounded-lg border border-border">
-            <div className="text-xs text-gray-500">Type</div>
+            <div className="text-xs text-gray-500">{t('documents.type')}</div>
             <div className="text-sm text-white font-medium">{selectedDoc.document.file_type.toUpperCase()}</div>
           </div>
           <div className="p-3 bg-bg-secondary rounded-lg border border-border">
-            <div className="text-xs text-gray-500">Size</div>
+            <div className="text-xs text-gray-500">{t('documents.size')}</div>
             <div className="text-sm text-white font-medium">{formatFileSize(selectedDoc.document.file_size)}</div>
           </div>
           <div className="p-3 bg-bg-secondary rounded-lg border border-border">
-            <div className="text-xs text-gray-500">Words</div>
+            <div className="text-xs text-gray-500">{t('documents.words')}</div>
             <div className="text-sm text-white font-medium">{selectedDoc.document.word_count.toLocaleString()}</div>
           </div>
           <div className="p-3 bg-bg-secondary rounded-lg border border-border">
-            <div className="text-xs text-gray-500">Indexed</div>
+            <div className="text-xs text-gray-500">{t('documents.indexed')}</div>
             <div className="text-sm text-white font-medium">{formatDate(selectedDoc.document.indexed_at)}</div>
           </div>
         </div>
 
         <div className="border-t border-border pt-4">
           <div className="text-xs text-gray-400 mb-3">
-            Content ({selectedDoc.chunks.length} chunks)
+            {t('documents.content', { count: selectedDoc.chunks.length })}
           </div>
           <div className="max-h-64 overflow-y-auto space-y-2">
             {selectedDoc.chunks.map((chunk, i) => (
@@ -198,9 +200,9 @@ export function IndexedDocumentsPanel({ onStatusChange }: IndexedDocumentsPanelP
             <span className="text-emerald-400">📚</span>
           </div>
           <div>
-            <h3 className="text-white font-medium">Indexed Documents</h3>
+            <h3 className="text-white font-medium">{t('documents.title')}</h3>
             <p className="text-gray-500 text-sm">
-              {stats ? `${stats.total_documents} documents indexed` : 'Loading...'}
+              {stats ? t('documents.documentsIndexed', { count: stats.total_documents }) : t('action.loading')}
             </p>
           </div>
         </div>
@@ -235,7 +237,7 @@ export function IndexedDocumentsPanel({ onStatusChange }: IndexedDocumentsPanelP
           <div className="flex gap-2">
             <input
               type="text"
-              placeholder="Search documents..."
+              placeholder={t('documents.searchPlaceholder')}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               onKeyDown={handleKeyDown}
@@ -246,7 +248,7 @@ export function IndexedDocumentsPanel({ onStatusChange }: IndexedDocumentsPanelP
               disabled={loading}
               className="px-4 py-2.5 text-sm bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 rounded-lg hover:bg-emerald-500/30 disabled:opacity-50 transition-all"
             >
-              {loading ? '...' : 'Search'}
+              {loading ? '...' : t('action.search')}
             </button>
           </div>
 
@@ -254,7 +256,7 @@ export function IndexedDocumentsPanel({ onStatusChange }: IndexedDocumentsPanelP
           {searchResults !== null && (
             <div className="space-y-2">
               <div className="flex items-center justify-between text-xs text-gray-400">
-                <span>{searchResults.length} results for "{searchQuery}"</span>
+                <span>{t('documents.resultsFor', { count: searchResults.length, query: searchQuery })}</span>
                 <button
                   onClick={() => {
                     setSearchResults(null);
@@ -284,7 +286,7 @@ export function IndexedDocumentsPanel({ onStatusChange }: IndexedDocumentsPanelP
               ))}
               {searchResults.length === 0 && (
                 <div className="text-center py-4 bg-bg-secondary rounded-lg border border-border">
-                  <div className="text-sm text-gray-400">No documents found</div>
+                  <div className="text-sm text-gray-400">{t('documents.noResults')}</div>
                 </div>
               )}
             </div>
@@ -321,13 +323,13 @@ export function IndexedDocumentsPanel({ onStatusChange }: IndexedDocumentsPanelP
               ) : (
                 <div className="text-center py-6 bg-bg-secondary rounded-lg border border-border">
                   {loading ? (
-                    <div className="text-sm text-gray-400">Loading...</div>
+                    <div className="text-sm text-gray-400">{t('action.loading')}</div>
                   ) : (
                     <>
                       <div className="text-2xl mb-2">📚</div>
-                      <div className="text-sm text-gray-400">No indexed documents yet</div>
+                      <div className="text-sm text-gray-400">{t('documents.noDocuments')}</div>
                       <div className="text-xs text-gray-500 mt-1">
-                        Add PDF, DOCX, XLSX, or ZIP files to your watched directories
+                        {t('documents.addFiles')}
                       </div>
                     </>
                   )}
@@ -337,7 +339,7 @@ export function IndexedDocumentsPanel({ onStatusChange }: IndexedDocumentsPanelP
               {/* Stats footer */}
               {stats && stats.total_documents > 0 && (
                 <div className="text-xs text-gray-500 text-center pt-3 border-t border-border">
-                  {stats.total_words.toLocaleString()} total words in {stats.total_chunks} chunks
+                  {t('documents.totalStats', { words: stats.total_words.toLocaleString(), chunks: stats.total_chunks })}
                 </div>
               )}
             </>
@@ -349,7 +351,7 @@ export function IndexedDocumentsPanel({ onStatusChange }: IndexedDocumentsPanelP
             disabled={loading}
             className="w-full px-4 py-2.5 text-sm bg-bg-secondary border border-border rounded-lg text-gray-400 hover:text-white hover:border-emerald-500/30 disabled:opacity-50 transition-all"
           >
-            {loading ? 'Loading...' : 'Refresh'}
+            {loading ? t('action.loading') : t('action.refresh')}
           </button>
         </div>
       )}

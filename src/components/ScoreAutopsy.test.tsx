@@ -72,7 +72,7 @@ describe('ScoreAutopsy', () => {
       <ScoreAutopsy itemId={123} sourceType="hackernews" currentScore={0.85} />,
     );
 
-    const button = screen.getByRole('button', { name: /score autopsy/i });
+    const button = screen.getByRole('button', { name: /autopsy\.title/i });
     expect(button).toBeInTheDocument();
   });
 
@@ -83,7 +83,7 @@ describe('ScoreAutopsy', () => {
       <ScoreAutopsy itemId={123} sourceType="hackernews" currentScore={0.85} />,
     );
 
-    const button = screen.getByRole('button', { name: /score autopsy/i });
+    const button = screen.getByRole('button', { name: /autopsy\.title/i });
     fireEvent.click(button);
 
     await waitFor(() => {
@@ -103,11 +103,11 @@ describe('ScoreAutopsy', () => {
       <ScoreAutopsy itemId={123} sourceType="hackernews" currentScore={0.85} />,
     );
 
-    const button = screen.getByRole('button', { name: /score autopsy/i });
+    const button = screen.getByRole('button', { name: /autopsy\.title/i });
     fireEvent.click(button);
 
     await waitFor(() => {
-      expect(screen.getByText(/ai assessment/i)).toBeInTheDocument();
+      expect(screen.getByText(/autopsy\.aiAssessment/)).toBeInTheDocument();
       expect(screen.getByText(/score makes sense/i)).toBeInTheDocument();
       expect(screen.getByText(/interest match/i)).toBeInTheDocument();
       expect(screen.getByText(/tech stack match/i)).toBeInTheDocument();
@@ -121,7 +121,7 @@ describe('ScoreAutopsy', () => {
       <ScoreAutopsy itemId={123} sourceType="hackernews" currentScore={0.85} />,
     );
 
-    fireEvent.click(screen.getByRole('button', { name: /score autopsy/i }));
+    fireEvent.click(screen.getByRole('button', { name: /autopsy\.title/i }));
 
     await waitFor(() => {
       const bars = document.querySelectorAll('.component-bar');
@@ -137,7 +137,7 @@ describe('ScoreAutopsy', () => {
       <ScoreAutopsy itemId={123} sourceType="hackernews" currentScore={0.85} />,
     );
 
-    fireEvent.click(screen.getByRole('button', { name: /score autopsy/i }));
+    fireEvent.click(screen.getByRole('button', { name: /autopsy\.title/i }));
 
     await waitFor(() => {
       expect(screen.getByText('MCP call failed')).toBeInTheDocument();

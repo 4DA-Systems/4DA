@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
+
 import { getSourceLabel, getSourceColorClass } from '../../config/sources';
 
 interface QuickResultsStepProps {
@@ -18,8 +20,9 @@ interface ScanResult {
 type ScanPhase = 'scanning' | 'scoring' | 'done' | 'error';
 
 export function QuickResultsStep({ isAnimating, onComplete, onBack }: QuickResultsStepProps) {
+  const { t } = useTranslation();
   const [phase, setPhase] = useState<ScanPhase>('scanning');
-  const [message, setMessage] = useState('Deep scanning HN, arXiv, Reddit, GitHub, RSS, YouTube...');
+  const [message, setMessage] = useState('');
   const [results, setResults] = useState<ScanResult[]>([]);
   const [errorMessage, setErrorMessage] = useState('');
 
@@ -30,14 +33,14 @@ export function QuickResultsStep({ isAnimating, onComplete, onBack }: QuickResul
       try {
         // Phase 1: Fetch all sources
         setPhase('scanning');
-        setMessage('Deep scanning HN, arXiv, Reddit, GitHub, RSS, YouTube...');
+        setMessage(t('onboarding.results.scanningMessage'));
 
         await invoke('run_deep_initial_scan');
         if (cancelled) return;
 
         // Phase 2: Score using the unified pipeline
         setPhase('scoring');
-        setMessage('Analyzing hundreds of items for relevance...');
+        setMessage(t('onboarding.results.analyzingMessage'));
 
         await invoke('run_cached_analysis');
         if (cancelled) return;
@@ -94,7 +97,7 @@ export function QuickResultsStep({ isAnimating, onComplete, onBack }: QuickResul
 
         setResults(topResults);
         setPhase('done');
-        setMessage(`Found ${items.filter(r => r.relevant || r.top_score >= 0.3).length} relevant items!`);
+        setMessage(t('onboarding.results.foundItems', { count: items.filter(r => r.relevant || r.top_score >= 0.3).length }));
       } catch (e) {
         if (cancelled) return;
         setPhase('error');
@@ -103,6 +106,7 @@ export function QuickResultsStep({ isAnimating, onComplete, onBack }: QuickResul
     })();
 
     return () => { cancelled = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleEnter = async () => {
@@ -116,11 +120,11 @@ export function QuickResultsStep({ isAnimating, onComplete, onBack }: QuickResul
 
   return (
     <div className={`transition-all duration-300 ${isAnimating ? 'opacity-0 translate-y-4' : 'opacity-100 translate-y-0'}`}>
-      <h2 className="text-3xl font-semibold text-white mb-2 text-center">Your Results</h2>
+      <h2 className="text-3xl font-semibold text-white mb-2 text-center">{t('onboarding.results.title')}</h2>
       <p className="text-gray-400 mb-6 text-center">
         {phase === 'done'
-          ? 'Here are your top picks from across the internet.'
-          : 'Building your personalized intelligence feed...'}
+          ? t('onboarding.results.topPicksSubtitle')
+          : t('onboarding.results.building')}
       </p>
 
       <div className="bg-bg-secondary p-6 rounded-lg mb-6">
@@ -135,7 +139,7 @@ export function QuickResultsStep({ isAnimating, onComplete, onBack }: QuickResul
               />
               <span className="absolute inset-0 flex items-center justify-center text-3xl">&#x1f52c;</span>
             </div>
-            <h3 className="text-white font-medium mb-2">Scanning Sources</h3>
+            <h3 className="text-white font-medium mb-2">{t('onboarding.results.scanningSources')}</h3>
             <p className="text-sm text-gray-400">{message}</p>
             <div className="flex flex-wrap justify-center gap-2 mt-4">
               <span className="px-2 py-1 bg-orange-500/20 text-orange-300 text-xs rounded animate-pulse">HN</span>
@@ -143,7 +147,7 @@ export function QuickResultsStep({ isAnimating, onComplete, onBack }: QuickResul
               <span className="px-2 py-1 bg-blue-500/20 text-blue-300 text-xs rounded animate-pulse">Reddit</span>
               <span className="px-2 py-1 bg-green-500/20 text-green-300 text-xs rounded animate-pulse">GitHub</span>
             </div>
-            <p className="text-xs text-gray-500 mt-4">This may take 10-20 seconds</p>
+            <p className="text-xs text-gray-500 mt-4">{t('onboarding.results.scanTimeEstimate')}</p>
           </div>
         )}
 
@@ -155,7 +159,7 @@ export function QuickResultsStep({ isAnimating, onComplete, onBack }: QuickResul
               <div className="absolute inset-0 rounded-full border-4 border-cyan-500 border-t-transparent animate-spin" />
               <span className="absolute inset-0 flex items-center justify-center text-3xl">&#x1f916;</span>
             </div>
-            <h3 className="text-white font-medium mb-2">Analyzing Relevance</h3>
+            <h3 className="text-white font-medium mb-2">{t('onboarding.results.analyzingRelevance')}</h3>
             <p className="text-sm text-gray-400">{message}</p>
             <div className="w-48 h-1 bg-bg-tertiary rounded-full mx-auto mt-4 overflow-hidden">
               <div
@@ -195,9 +199,9 @@ export function QuickResultsStep({ isAnimating, onComplete, onBack }: QuickResul
               </div>
             ) : (
               <div className="text-center py-4 bg-bg-tertiary rounded-lg">
-                <p className="text-gray-400">No highly relevant items found yet.</p>
+                <p className="text-gray-400">{t('onboarding.results.noRelevantItems')}</p>
                 <p className="text-sm text-gray-500 mt-1">
-                  4DA will learn your preferences as you give feedback.
+                  {t('onboarding.results.learnFromFeedback')}
                 </p>
               </div>
             )}
@@ -210,9 +214,9 @@ export function QuickResultsStep({ isAnimating, onComplete, onBack }: QuickResul
             <div className="w-16 h-16 mx-auto mb-4 bg-red-500/20 rounded-full flex items-center justify-center">
               <span className="text-3xl">&#x26a0;</span>
             </div>
-            <h3 className="text-red-300 font-medium mb-2">Scan encountered an issue</h3>
+            <h3 className="text-red-300 font-medium mb-2">{t('onboarding.results.errorTitle')}</h3>
             <p className="text-sm text-gray-400">{errorMessage}</p>
-            <p className="text-xs text-gray-500 mt-2">You can try again from the main app.</p>
+            <p className="text-xs text-gray-500 mt-2">{t('onboarding.results.errorRetryHint')}</p>
           </div>
         )}
       </div>
@@ -224,24 +228,24 @@ export function QuickResultsStep({ isAnimating, onComplete, onBack }: QuickResul
           disabled={phase === 'scanning' || phase === 'scoring'}
           className="px-6 py-2 text-gray-400 hover:text-white transition-colors disabled:opacity-50"
         >
-          &larr; Back
+          &larr; {t('onboarding.nav.back')}
         </button>
         <button
           onClick={handleEnter}
           className="px-10 py-3 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-all font-medium hover:scale-105 active:scale-95"
         >
-          {phase === 'done' || phase === 'error' ? 'Enter 4DA' : 'Enter 4DA'}
+          {t('onboarding.results.enter4DA')}
         </button>
       </div>
 
       {(phase === 'scanning' || phase === 'scoring') && (
         <p className="text-xs text-gray-500 text-center mt-3">
-          Full scan continues in background - you can enter anytime.
+          {t('onboarding.results.backgroundScanHint')}
         </p>
       )}
       {phase === 'done' && (
         <p className="text-xs text-gray-500 text-center mt-3">
-          Full scan continues in background for comprehensive results.
+          {t('onboarding.results.backgroundScanDone')}
         </p>
       )}
     </div>

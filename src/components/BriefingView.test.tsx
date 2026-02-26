@@ -92,7 +92,7 @@ describe('BriefingView', () => {
         appState: { relevanceResults: [], loading: true, analysisComplete: false },
       });
       render(<BriefingView />);
-      expect(screen.getByText('Gathering Intelligence')).toBeInTheDocument();
+      expect(screen.getByText('briefing.gatheringIntelligence')).toBeInTheDocument();
     });
 
     it('shows "Briefing Ready to Generate" when analysis done with results', () => {
@@ -101,8 +101,8 @@ describe('BriefingView', () => {
         appState: { relevanceResults: Array.from({ length: 15 }, (_, i) => ({ id: i })), loading: false, analysisComplete: true },
       });
       render(<BriefingView />);
-      expect(screen.getByText('Briefing Ready to Generate')).toBeInTheDocument();
-      expect(screen.getByText(/15 results analyzed/)).toBeInTheDocument();
+      expect(screen.getByText('briefing.readyToGenerate')).toBeInTheDocument();
+      expect(screen.getByText('briefing.resultsAnalyzed')).toBeInTheDocument();
     });
 
     it('shows "No Intelligence Yet" when no analysis has run', () => {
@@ -111,7 +111,7 @@ describe('BriefingView', () => {
         appState: { relevanceResults: [], loading: false, analysisComplete: false },
       });
       render(<BriefingView />);
-      expect(screen.getByText('No Intelligence Yet')).toBeInTheDocument();
+      expect(screen.getByText('briefing.noIntelligence')).toBeInTheDocument();
     });
 
     it('shows "Analyze Now" button in no-data state', () => {
@@ -122,7 +122,7 @@ describe('BriefingView', () => {
         startAnalysis: startFn,
       });
       render(<BriefingView />);
-      fireEvent.click(screen.getByText('Analyze Now'));
+      fireEvent.click(screen.getByText('results.analyzeNow'));
       expect(startFn).toHaveBeenCalledTimes(1);
     });
   });
@@ -166,7 +166,7 @@ describe('BriefingView', () => {
         appState: { relevanceResults: [] },
       });
       render(<BriefingView />);
-      expect(screen.getByText(/claude-3-5-haiku/)).toBeInTheDocument();
+      expect(screen.getByText('briefing.viaModel')).toBeInTheDocument();
     });
 
     it('shows refresh button', () => {
@@ -177,7 +177,7 @@ describe('BriefingView', () => {
         generateBriefing: genFn,
       });
       render(<BriefingView />);
-      fireEvent.click(screen.getByText('Refresh'));
+      fireEvent.click(screen.getByText('action.refresh'));
       expect(genFn).toHaveBeenCalledTimes(1);
     });
 
@@ -192,7 +192,7 @@ describe('BriefingView', () => {
         },
       });
       render(<BriefingView />);
-      expect(screen.getByText('Top Picks')).toBeInTheDocument();
+      expect(screen.getByText('briefing.topPicks')).toBeInTheDocument();
       expect(screen.getByTestId('briefing-card')).toBeInTheDocument();
     });
 
@@ -204,7 +204,7 @@ describe('BriefingView', () => {
         setActiveView: setView,
       });
       render(<BriefingView />);
-      fireEvent.click(screen.getByText(/View All 3 Results/));
+      fireEvent.click(screen.getByText('briefing.viewAllResults'));
       expect(setView).toHaveBeenCalledWith('results');
     });
 
@@ -240,7 +240,7 @@ describe('BriefingView', () => {
         lastBackgroundResultsAt: bgTime,
       });
       render(<BriefingView />);
-      expect(screen.getByText(/New items found/)).toBeInTheDocument();
+      expect(screen.getByText('briefing.staleNotice')).toBeInTheDocument();
     });
   });
 

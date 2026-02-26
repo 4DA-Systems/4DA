@@ -1,10 +1,12 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
 import type { SavedItem } from '../types';
 import { getSourceLabel, getSourceColorClass } from '../config/sources';
 import { useAppStore } from '../store';
 
 export function SavedItemsView() {
+  const { t } = useTranslation();
   const [items, setItems] = useState<SavedItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -38,13 +40,13 @@ export function SavedItemsView() {
 
     try {
       await invoke('remove_saved_item', { itemId });
-      addToast('success', 'Item removed from saved collection');
+      addToast('success', t('saved.itemRemoved'));
     } catch (e) {
       // Revert on failure
       loadItems();
       addToast('error', `Failed to remove: ${e}`);
     }
-  }, [addToast, setFeedbackGivenFull, loadItems]);
+  }, [addToast, setFeedbackGivenFull, loadItems, t]);
 
   if (loading) {
     return (
@@ -62,7 +64,7 @@ export function SavedItemsView() {
           onClick={loadItems}
           className="px-3 py-1.5 text-xs bg-red-500/10 text-red-400 rounded hover:bg-red-500/20 transition-colors"
         >
-          Retry
+          {t('action.retry')}
         </button>
       </div>
     );
@@ -71,9 +73,9 @@ export function SavedItemsView() {
   if (items.length === 0) {
     return (
       <div className="bg-bg-secondary rounded-lg border border-border p-8 text-center">
-        <p className="text-sm text-gray-400 mb-2">No saved items yet</p>
+        <p className="text-sm text-gray-400 mb-2">{t('saved.empty.title')}</p>
         <p className="text-xs text-gray-600">
-          Save items from the Results view to build your collection.
+          {t('saved.empty.subtitle')}
         </p>
       </div>
     );
@@ -82,12 +84,12 @@ export function SavedItemsView() {
   return (
     <div>
       <div className="flex items-center justify-between mb-4">
-        <span className="text-xs text-gray-500">{items.length} saved item{items.length !== 1 ? 's' : ''}</span>
+        <span className="text-xs text-gray-500">{t('saved.count', { count: items.length })}</span>
         <button
           onClick={loadItems}
           className="text-[10px] text-gray-500 hover:text-gray-300 transition-colors"
         >
-          Refresh
+          {t('action.refresh')}
         </button>
       </div>
 
@@ -133,7 +135,7 @@ export function SavedItemsView() {
                       onClick={() => window.navigator.clipboard.writeText(item.url!)}
                       className="text-[10px] text-gray-600 hover:text-gray-400 transition-colors"
                     >
-                      Copy URL
+                      {t('saved.copyUrl')}
                     </button>
                   )}
                 </div>
@@ -144,7 +146,7 @@ export function SavedItemsView() {
                 onClick={() => handleRemove(item.item_id)}
                 className="flex-shrink-0 text-[10px] px-2 py-1 rounded text-gray-600 hover:text-red-400 hover:bg-red-500/10 transition-colors"
               >
-                Remove
+                {t('saved.remove')}
               </button>
             </div>
           </div>

@@ -1,3 +1,4 @@
+
 interface TopicAffinity {
   topic: string;
   positive_signals: number;

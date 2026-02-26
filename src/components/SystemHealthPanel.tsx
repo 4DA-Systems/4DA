@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import type { Anomaly, SystemHealth } from '../types';
 
 interface SimilarTopicResult {
@@ -28,6 +29,7 @@ export function SystemHealthPanel({
   onSaveWatcherState,
   onRefresh,
 }: SystemHealthPanelProps) {
+  const { t } = useTranslation();
   if (!health) {
     return (
       <div className="bg-bg-tertiary rounded-lg p-5 border border-border">
@@ -36,8 +38,8 @@ export function SystemHealthPanel({
             <span className="text-rose-400">💓</span>
           </div>
           <div>
-            <h3 className="text-white font-medium">System Health</h3>
-            <p className="text-gray-500 text-sm">Loading system health...</p>
+            <h3 className="text-white font-medium">{t('systemHealth.title')}</h3>
+            <p className="text-gray-500 text-sm">{t('systemHealth.loading')}</p>
           </div>
         </div>
       </div>
@@ -51,9 +53,9 @@ export function SystemHealthPanel({
           <span className="text-rose-400">💓</span>
         </div>
         <div>
-          <h3 className="text-white font-medium">System Health</h3>
+          <h3 className="text-white font-medium">{t('systemHealth.title')}</h3>
           <p className="text-gray-500 text-sm">
-            Monitor services, detect anomalies, and explore topic similarities
+            {t('systemHealth.subtitle')}
           </p>
         </div>
       </div>
@@ -62,16 +64,16 @@ export function SystemHealthPanel({
         {/* Service Status */}
         <div className="grid grid-cols-2 gap-3">
           <div className="p-3 bg-bg-secondary rounded-lg border border-border">
-            <div className="text-xs text-gray-500 mb-1">Embedding Service</div>
+            <div className="text-xs text-gray-500 mb-1">{t('systemHealth.embedding')}</div>
             <div className="flex items-center gap-2">
               <div className={`w-2 h-2 rounded-full ${health.embeddingOperational ? 'bg-green-500' : 'bg-red-500'}`} />
               <span className={`text-sm font-medium ${health.embeddingOperational ? 'text-green-400' : 'text-red-400'}`}>
-                {health.embeddingOperational ? 'Operational' : 'Offline'}
+                {health.embeddingOperational ? t('systemHealth.operational') : t('status.offline')}
               </span>
             </div>
           </div>
           <div className="p-3 bg-bg-secondary rounded-lg border border-border">
-            <div className="text-xs text-gray-500 mb-1">Rate Limit</div>
+            <div className="text-xs text-gray-500 mb-1">{t('systemHealth.rateLimit')}</div>
             <div className="flex items-center gap-2">
               <div className={`w-2 h-2 rounded-full ${
                 health.rateLimitStatus
@@ -89,9 +91,9 @@ export function SystemHealthPanel({
               }`}>
                 {health.rateLimitStatus
                   ? health.rateLimitStatus.is_limited
-                    ? 'Limited'
-                    : `${health.rateLimitStatus.global_remaining} remaining`
-                  : 'N/A'}
+                    ? t('systemHealth.limited')
+                    : t('systemHealth.remaining', { count: health.rateLimitStatus.global_remaining })
+                  : t('systemHealth.na')}
               </span>
             </div>
           </div>
@@ -100,7 +102,7 @@ export function SystemHealthPanel({
         {/* Accuracy Metrics */}
         {health.accuracyMetrics && (
           <div className="p-4 bg-bg-secondary rounded-lg border border-border">
-            <div className="text-xs text-gray-400 mb-3 font-medium">Accuracy Metrics</div>
+            <div className="text-xs text-gray-400 mb-3 font-medium">{t('systemHealth.accuracyMetrics')}</div>
             <div className="grid grid-cols-3 gap-3">
               <div className="text-center">
                 <div className="text-lg font-semibold text-white">

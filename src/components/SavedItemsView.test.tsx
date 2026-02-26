@@ -31,7 +31,7 @@ describe('SavedItemsView', () => {
     mockInvoke.mockResolvedValue([]);
     render(<SavedItemsView />);
     await waitFor(() => {
-      expect(screen.getByText('No saved items yet')).toBeTruthy();
+      expect(screen.getByText('saved.empty.title')).toBeTruthy();
     });
   });
 
@@ -63,7 +63,7 @@ describe('SavedItemsView', () => {
     expect(screen.getByText('Saved Article Two')).toBeTruthy();
     expect(screen.getByText('A great article about Rust.')).toBeTruthy();
     expect(screen.getByText('Preview text...')).toBeTruthy();
-    expect(screen.getByText('2 saved items')).toBeTruthy();
+    expect(screen.getByText('saved.count')).toBeTruthy();
   });
 
   it('remove button triggers backend call', async () => {
@@ -85,7 +85,7 @@ describe('SavedItemsView', () => {
     await waitFor(() => {
       expect(screen.getByText('To Remove')).toBeTruthy();
     });
-    fireEvent.click(screen.getByText('Remove'));
+    fireEvent.click(screen.getByText('saved.remove'));
     // Item should be removed optimistically
     await waitFor(() => {
       expect(screen.queryByText('To Remove')).toBeNull();
@@ -106,6 +106,6 @@ describe('SavedItemsView', () => {
     await waitFor(() => {
       expect(screen.getByText('Database error')).toBeTruthy();
     });
-    expect(screen.getByText('Retry')).toBeTruthy();
+    expect(screen.getByText('action.retry')).toBeTruthy();
   });
 });
