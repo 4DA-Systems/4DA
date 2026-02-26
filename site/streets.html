@@ -7,21 +7,22 @@
   <meta name="description" content="8 revenue engines for developers who earn $0 from their private infrastructure. All 7 modules free inside 4DA. No email. No catch.">
   <meta name="keywords" content="developer income, passive income developers, micro-SaaS, API products, developer side income, monetize coding skills, developer playbook, LLM monetization, automation as a service">
   <meta name="theme-color" content="#0A0A0A">
-  <link rel="canonical" href="https://streets.4da.ai">
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='16' fill='%23F97316'/%3E%3Ctext x='16' y='22' text-anchor='middle' font-family='Inter,sans-serif' font-weight='600' font-size='20' fill='white'%3E4%3C/text%3E%3C/svg%3E">
+  <link rel="canonical" href="https://4da.ai/streets">
 
   <!-- Open Graph -->
   <meta property="og:title" content="STREETS -- You're sitting on a money-printing machine. Literally.">
   <meta property="og:description" content="8 revenue engines. 7 modules. All free inside 4DA. The developer income playbook for the private infrastructure era.">
   <meta property="og:type" content="website">
-  <meta property="og:url" content="https://streets.4da.ai">
-  <meta property="og:image" content="https://streets.4da.ai/og-image.png">
+  <meta property="og:url" content="https://4da.ai/streets">
+  <meta property="og:image" content="https://4da.ai/og-image.png">
   <meta property="og:site_name" content="STREETS by 4DA">
 
   <!-- Twitter Card -->
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="STREETS -- 8 Revenue Engines for Developers Who Build for Everyone But Themselves">
   <meta name="twitter:description" content="Your rig. Your rules. Your revenue. The income playbook for developers sitting on untapped private infrastructure. Free module, no email required.">
-  <meta name="twitter:image" content="https://streets.4da.ai/og-image.png">
+  <meta name="twitter:image" content="https://4da.ai/og-image.png">
 
   <!-- Structured Data -->
   <script type="application/ld+json">
@@ -692,11 +693,47 @@
     }
     .footer-links .merch-link:hover { opacity: 0.85; color: var(--bg); }
 
+    /* ---- Hamburger Menu ---- */
+    .nav-hamburger {
+      display: none;
+      background: none;
+      border: none;
+      cursor: pointer;
+      padding: 4px;
+      z-index: 101;
+    }
+    .nav-hamburger span {
+      display: block;
+      width: 20px;
+      height: 2px;
+      background: var(--text);
+      margin: 4px 0;
+      transition: transform 0.3s, opacity 0.3s;
+    }
+    .nav-hamburger.open span:nth-child(1) { transform: translateY(6px) rotate(45deg); }
+    .nav-hamburger.open span:nth-child(2) { opacity: 0; }
+    .nav-hamburger.open span:nth-child(3) { transform: translateY(-6px) rotate(-45deg); }
+
     /* ---- Responsive ---- */
     @media (max-width: 768px) {
       .flywheel-grid { grid-template-columns: 1fr; }
       .offer-grid { grid-template-columns: 1fr; }
-      .nav-links a:not(.nav-cta) { display: none; }
+      .nav-hamburger { display: block; }
+      .nav-links {
+        display: none;
+        position: absolute;
+        top: 56px;
+        left: 0;
+        right: 0;
+        flex-direction: column;
+        background: rgba(10, 10, 10, 0.98);
+        backdrop-filter: blur(12px);
+        border-bottom: 1px solid var(--border);
+        padding: 16px 24px;
+        gap: 12px;
+      }
+      .nav-links.nav-open { display: flex; }
+      .nav-links a { font-size: 15px; padding: 4px 0; }
     }
     @media (max-width: 640px) {
       .hero { padding: 100px 0 56px; }
@@ -714,12 +751,15 @@
   <nav class="nav" id="nav">
     <div class="nav-inner">
       <div class="nav-brand"><img src="../hero-sun.jpg" alt="4DA" style="width:24px;height:24px;border-radius:50%;vertical-align:middle;margin-right:8px;opacity:0.8;">STREETS <span>by 4DA</span></div>
-      <div class="nav-links">
+      <div class="nav-links" id="nav-links">
         <a href="#modules">Modules</a>
         <a href="#engines">Engines</a>
         <a href="#pricing">Access</a>
         <a href="https://4da.ai" class="nav-cta">Download 4DA -- Free</a>
       </div>
+      <button class="nav-hamburger" id="nav-hamburger" aria-label="Toggle menu">
+        <span></span><span></span><span></span>
+      </button>
     </div>
   </nav>
 
@@ -1253,6 +1293,7 @@ Revenue compounds. Intelligence sharpens.</pre>
           <a href="https://4da.ai">4DA.ai</a>
           <a href="merch.html" class="merch-link">Merch</a>
           <a href="https://github.com/runyourempire/4DA">GitHub</a>
+          <a href="https://github.com/runyourempire/4DA#privacy">Privacy</a>
           <a href="https://x.com/4aborhood" aria-label="X / Twitter">X</a>
           <a href="https://discord.gg/4da" aria-label="Discord">Discord</a>
         </div>
@@ -1272,6 +1313,23 @@ Revenue compounds. Intelligence sharpens.</pre>
           nav.classList.remove('visible');
         }
       }, { passive: true });
+    })();
+
+    // Hamburger menu toggle
+    (function() {
+      var btn = document.getElementById('nav-hamburger');
+      var links = document.getElementById('nav-links');
+      if (!btn || !links) return;
+      btn.addEventListener('click', function() {
+        btn.classList.toggle('open');
+        links.classList.toggle('nav-open');
+      });
+      links.querySelectorAll('a').forEach(function(a) {
+        a.addEventListener('click', function() {
+          btn.classList.remove('open');
+          links.classList.remove('nav-open');
+        });
+      });
     })();
 
     // Stripe Checkout
