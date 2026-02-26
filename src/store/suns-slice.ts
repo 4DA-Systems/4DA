@@ -33,6 +33,24 @@ export interface SunRunResult {
   data: Record<string, unknown> | null;
 }
 
+export interface ModuleHealth {
+  module_id: string;
+  module_name: string;
+  score: number;
+  sun_count: number;
+  success_rate: number;
+  lessons_completed: number;
+  total_lessons: number;
+  last_activity: string | null;
+}
+
+export interface StreetHealthScore {
+  overall: number;
+  module_scores: ModuleHealth[];
+  trend: string;
+  top_action: string;
+}
+
 // ============================================================================
 // Slice Interface
 // ============================================================================
@@ -42,11 +60,14 @@ export interface SunsSlice {
   sunAlerts: SunAlert[];
   sunsLoading: boolean;
   sunsError: string | null;
+  streetHealth: StreetHealthScore | null;
+  streetHealthLoading: boolean;
   loadSunStatuses: () => Promise<void>;
   loadSunAlerts: () => Promise<void>;
   toggleSun: (sunId: string, enabled: boolean) => Promise<void>;
   acknowledgeSunAlert: (alertId: number) => Promise<void>;
   triggerSun: (sunId: string) => Promise<SunRunResult | null>;
+  loadStreetHealth: () => Promise<void>;
 }
 
 // ============================================================================
@@ -58,6 +79,8 @@ export const createSunsSlice: StateCreator<AppStore, [], [], SunsSlice> = (set, 
   sunAlerts: [],
   sunsLoading: false,
   sunsError: null,
+  streetHealth: null,
+  streetHealthLoading: false,
 
   loadSunStatuses: async () => {
     try {
@@ -106,6 +129,16 @@ export const createSunsSlice: StateCreator<AppStore, [], [], SunsSlice> = (set, 
     } catch (e) {
       set({ sunsError: String(e), sunsLoading: false });
       return null;
+    }
+  },
+
+  loadStreetHealth: async () => {
+    set({ streetHealthLoading: true });
+    try {
+      const health = await invoke<StreetHealthScore>('get_street_health');
+      set({ streetHealth: health, streetHealthLoading: false });
+    } catch (e) {
+      set({ sunsError: String(e), streetHealthLoading: false });
     }
   },
 });
