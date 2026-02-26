@@ -1,4 +1,5 @@
 import { useEffect, useCallback, useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../../store';
 import { useShallow } from 'zustand/react/shallow';
 import { SunModuleGroup } from './SunModuleGroup';
@@ -38,6 +39,7 @@ function timeAgo(isoStr: string | null): string {
 // ============================================================================
 
 function AlertRow({ alert, onAcknowledge }: { alert: SunAlert; onAcknowledge: (id: number) => void }) {
+  const { t } = useTranslation();
   const isFailure = alert.alert_type === 'failure';
 
   return (
@@ -63,7 +65,7 @@ function AlertRow({ alert, onAcknowledge }: { alert: SunAlert; onAcknowledge: (i
         onMouseEnter={e => { e.currentTarget.style.borderColor = '#D4AF37'; e.currentTarget.style.color = '#FFFFFF'; }}
         onMouseLeave={e => { e.currentTarget.style.borderColor = '#2A2A2A'; e.currentTarget.style.color = '#A0A0A0'; }}
       >
-        Dismiss
+        {t('action.dismiss')}
       </button>
     </div>
   );
@@ -74,6 +76,7 @@ function AlertRow({ alert, onAcknowledge }: { alert: SunAlert; onAcknowledge: (i
 // ============================================================================
 
 export function SunsDashboard() {
+  const { t } = useTranslation();
   const {
     sunStatuses,
     sunAlerts,
@@ -141,22 +144,22 @@ export function SunsDashboard() {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <h3 className="text-base font-semibold" style={{ color: '#FFFFFF' }}>
-            Suns
+            {t('suns.title')}
           </h3>
           <span className="text-xs px-1.5 py-0.5 rounded"
             style={{ background: '#D4AF3720', color: '#D4AF37' }}
           >
-            {activeCount}/{sunStatuses.length} active
+            {t('suns.active', { active: activeCount, total: sunStatuses.length })}
           </span>
           {sunsLoading && (
-            <span className="text-xs" style={{ color: '#666666' }}>Loading...</span>
+            <span className="text-xs" style={{ color: '#666666' }}>{t('action.loading')}</span>
           )}
         </div>
         {alertCount > 0 && (
           <span className="text-xs px-2 py-0.5 rounded-full"
             style={{ background: 'rgba(239,68,68,0.15)', color: '#EF4444' }}
           >
-            {alertCount} alert{alertCount !== 1 ? 's' : ''}
+            {alertCount === 1 ? t('suns.alert', { count: alertCount }) : t('suns.alerts', { count: alertCount })}
           </span>
         )}
       </div>

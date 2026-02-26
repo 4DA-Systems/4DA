@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, memo } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useShallow } from 'zustand/react/shallow';
 import { useAppStore } from '../store';
 import type { AgentMemoryEntry } from '../store/agent-slice';
@@ -52,6 +53,7 @@ function formatTimestamp(iso: string): string {
 }
 
 export const AgentMemoryPanel = memo(function AgentMemoryPanel() {
+  const { t } = useTranslation();
   const [agentFilter, setAgentFilter] = useState<string>('All');
   const [memoryFilter, setMemoryFilter] = useState<string>('All');
   const [expandedId, setExpandedId] = useState<number | null>(null);
@@ -93,12 +95,12 @@ export const AgentMemoryPanel = memo(function AgentMemoryPanel() {
           <div className="w-8 h-8 bg-[#1F1F1F] rounded-lg flex items-center justify-center">
             <span className="text-sm text-[#666666]">A</span>
           </div>
-          <h2 className="font-medium text-white text-sm">Agent Memory</h2>
+          <h2 className="font-medium text-white text-sm">{t('agentMemory.title')}</h2>
         </div>
         <div className="p-8 text-center">
-          <div className="text-sm text-[#A0A0A0]">No agent memories yet</div>
+          <div className="text-sm text-[#A0A0A0]">{t('agentMemory.empty')}</div>
           <div className="text-xs text-[#666666] mt-1">
-            Connect an AI agent via MCP to start building cross-agent context.
+            {t('agentMemory.emptyHint')}
           </div>
         </div>
       </div>
@@ -114,9 +116,9 @@ export const AgentMemoryPanel = memo(function AgentMemoryPanel() {
             <span className="text-sm text-[#666666]">A</span>
           </div>
           <div>
-            <h2 className="font-medium text-white text-sm">Agent Memory</h2>
+            <h2 className="font-medium text-white text-sm">{t('agentMemory.title')}</h2>
             <p className="text-xs text-[#666666]">
-              {agentMemories.length} memor{agentMemories.length !== 1 ? 'ies' : 'y'} across agents
+              {t('agentMemory.count', { count: agentMemories.length })}
             </p>
           </div>
         </div>
@@ -131,7 +133,7 @@ export const AgentMemoryPanel = memo(function AgentMemoryPanel() {
         >
           {AGENT_TYPE_OPTIONS.map((opt) => (
             <option key={opt} value={opt}>
-              {opt === 'All' ? 'All Agents' : opt}
+              {opt === 'All' ? t('agentMemory.allAgents') : opt}
             </option>
           ))}
         </select>
@@ -142,25 +144,25 @@ export const AgentMemoryPanel = memo(function AgentMemoryPanel() {
         >
           {MEMORY_TYPE_OPTIONS.map((opt) => (
             <option key={opt} value={opt}>
-              {opt === 'All' ? 'All Types' : opt}
+              {opt === 'All' ? t('agentMemory.allTypes') : opt}
             </option>
           ))}
         </select>
         <span className="text-[10px] text-[#666666] ml-auto">
-          {filtered.length} result{filtered.length !== 1 ? 's' : ''}
+          {t('agentMemory.results', { count: filtered.length })}
         </span>
       </div>
 
       {/* Loading */}
       {agentMemoryLoading && (
-        <div className="p-4 text-xs text-[#666666] text-center">Loading agent memories...</div>
+        <div className="p-4 text-xs text-[#666666] text-center">{t('agentMemory.loading')}</div>
       )}
 
       {/* Empty filtered state */}
       {!agentMemoryLoading && filtered.length === 0 && (
         <div className="p-8 text-center">
-          <div className="text-sm text-[#A0A0A0]">No matching memories</div>
-          <div className="text-xs text-[#666666] mt-1">Try adjusting your filters.</div>
+          <div className="text-sm text-[#A0A0A0]">{t('agentMemory.noMatch')}</div>
+          <div className="text-xs text-[#666666] mt-1">{t('agentMemory.noMatchHint')}</div>
         </div>
       )}
 
@@ -195,7 +197,7 @@ export const AgentMemoryPanel = memo(function AgentMemoryPanel() {
                       <span className="text-sm text-white font-medium truncate">{m.subject}</span>
                       {expired && (
                         <span className="text-[10px] px-1.5 py-0.5 rounded bg-gray-500/10 text-gray-500 border border-gray-500/20">
-                          [Expired]
+                          {t('agentMemory.expired')}
                         </span>
                       )}
                     </div>
@@ -221,7 +223,7 @@ export const AgentMemoryPanel = memo(function AgentMemoryPanel() {
                     {/* Full content */}
                     <div className="mt-3">
                       <div className="text-[10px] text-[#666666] uppercase tracking-wider mb-1">
-                        Content
+                        {t('agentMemory.content')}
                       </div>
                       <p className="text-xs text-[#A0A0A0] whitespace-pre-wrap">{m.content}</p>
                     </div>
@@ -230,7 +232,7 @@ export const AgentMemoryPanel = memo(function AgentMemoryPanel() {
                     {m.context_tags.length > 0 && (
                       <div>
                         <div className="text-[10px] text-[#666666] uppercase tracking-wider mb-1">
-                          Tags
+                          {t('agentMemory.tags')}
                         </div>
                         <div className="flex flex-wrap gap-1.5">
                           {m.context_tags.map((tag, i) => (
@@ -247,15 +249,15 @@ export const AgentMemoryPanel = memo(function AgentMemoryPanel() {
 
                     {/* Metadata */}
                     <div className="flex items-center gap-3 text-[10px] text-[#666666]">
-                      <span>Session: <span className="font-mono">{m.session_id.slice(0, 8)}</span></span>
-                      <span>Type: {m.memory_type}</span>
-                      <span>Created {new Date(m.created_at).toLocaleDateString()}</span>
+                      <span>{t('agentMemory.session')}: <span className="font-mono">{m.session_id.slice(0, 8)}</span></span>
+                      <span>{t('agentMemory.type')}: {m.memory_type}</span>
+                      <span>{t('agentMemory.created')} {new Date(m.created_at).toLocaleDateString()}</span>
                       {m.expires_at && (
-                        <span>Expires {new Date(m.expires_at).toLocaleDateString()}</span>
+                        <span>{t('agentMemory.expires')} {new Date(m.expires_at).toLocaleDateString()}</span>
                       )}
                       {m.promoted_to_decision_id !== null && (
                         <span className="text-green-400/70">
-                          Promoted to decision #{m.promoted_to_decision_id}
+                          {t('agentMemory.promotedTo', { id: m.promoted_to_decision_id })}
                         </span>
                       )}
                     </div>
@@ -267,7 +269,7 @@ export const AgentMemoryPanel = memo(function AgentMemoryPanel() {
                           onClick={() => promoteMemoryToDecision(m.id)}
                           className="px-3 py-1.5 text-xs bg-green-500/10 text-green-400 border border-green-500/20 rounded hover:bg-green-500/20 transition-colors"
                         >
-                          Promote to Decision
+                          {t('agentMemory.promoteToDecision')}
                         </button>
                       </div>
                     )}

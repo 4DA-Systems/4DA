@@ -1,4 +1,5 @@
 import { useState, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
 
 interface SandboxScoreResult {
@@ -50,6 +51,7 @@ function BreakdownBar({ label, value }: { label: string; value: number }) {
 }
 
 export default function ScoringSandbox() {
+  const { t } = useTranslation();
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
   const [sourceType, setSourceType] = useState('sandbox');
@@ -101,24 +103,24 @@ export default function ScoringSandbox() {
       {/* Input form */}
       <div className="bg-[#141414] border border-[#2A2A2A] rounded-xl p-4 space-y-3">
         <div>
-          <label className="block text-xs text-[#A0A0A0] mb-1.5">Title *</label>
+          <label className="block text-xs text-[#A0A0A0] mb-1.5">{t('toolkit.scoringSandbox.title')} *</label>
           <input
             type="text"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="Enter article title to score..."
+            placeholder={t('toolkit.scoringSandbox.titlePlaceholder')}
             className="w-full px-3 py-2 text-sm bg-[#0A0A0A] border border-[#2A2A2A] rounded-lg text-white placeholder-[#666] focus:outline-none focus:border-white/30 transition-colors"
           />
         </div>
 
         <div>
-          <label className="block text-xs text-[#A0A0A0] mb-1.5">Content (optional)</label>
+          <label className="block text-xs text-[#A0A0A0] mb-1.5">{t('toolkit.scoringSandbox.content')}</label>
           <textarea
             value={content}
             onChange={(e) => setContent(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="Paste article content or summary..."
+            placeholder={t('toolkit.scoringSandbox.contentPlaceholder')}
             rows={3}
             className="w-full px-3 py-2 text-sm bg-[#0A0A0A] border border-[#2A2A2A] rounded-lg text-white placeholder-[#666] focus:outline-none focus:border-white/30 transition-colors resize-y min-h-[60px]"
           />
@@ -126,7 +128,7 @@ export default function ScoringSandbox() {
 
         <div className="flex items-end gap-3">
           <div className="flex-1 max-w-[200px]">
-            <label className="block text-xs text-[#A0A0A0] mb-1.5">Source Type</label>
+            <label className="block text-xs text-[#A0A0A0] mb-1.5">{t('toolkit.scoringSandbox.sourceType')}</label>
             <select
               value={sourceType}
               onChange={(e) => setSourceType(e.target.value)}
@@ -148,7 +150,7 @@ export default function ScoringSandbox() {
             {loading ? (
               <>
                 <div className="w-3.5 h-3.5 border-2 border-[#0A0A0A]/30 border-t-[#0A0A0A] rounded-full animate-spin" />
-                Scoring...
+                {t('toolkit.scoringSandbox.scoring')}
               </>
             ) : (
               <>
@@ -157,7 +159,7 @@ export default function ScoringSandbox() {
                   <line x1="12" y1="8" x2="12" y2="16" />
                   <line x1="8" y1="12" x2="16" y2="12" />
                 </svg>
-                Score
+                {t('toolkit.scoringSandbox.score')}
               </>
             )}
           </button>
@@ -167,7 +169,7 @@ export default function ScoringSandbox() {
               onClick={reset}
               className="px-3 py-2 text-xs text-[#A0A0A0] bg-[#1F1F1F] border border-[#2A2A2A] rounded-lg hover:text-white hover:border-white/20 transition-all"
             >
-              Clear
+              {t('toolkit.scoringSandbox.clear')}
             </button>
           )}
         </div>
@@ -183,7 +185,7 @@ export default function ScoringSandbox() {
           </svg>
           <span className="text-sm text-[#EF4444] flex-1">{error}</span>
           <button onClick={() => setError(null)} className="text-[#EF4444]/60 hover:text-[#EF4444] text-xs">
-            Dismiss
+            {t('action.dismiss')}
           </button>
         </div>
       )}
@@ -208,7 +210,7 @@ export default function ScoringSandbox() {
                   border: `1px solid ${color}30`,
                 }}
               >
-                {result.relevant ? 'Relevant' : 'Not Relevant'}
+                {result.relevant ? t('toolkit.scoringSandbox.relevant') : t('toolkit.scoringSandbox.notRelevant')}
               </span>
             </div>
           </div>
@@ -216,7 +218,7 @@ export default function ScoringSandbox() {
           {/* Breakdown bars */}
           <div>
             <h4 className="text-xs font-medium text-[#A0A0A0] uppercase tracking-wider mb-2">
-              Score Breakdown
+              {t('toolkit.scoringSandbox.scoreBreakdown')}
             </h4>
             <div className="space-y-0.5">
               <BreakdownBar label="Keyword Score" value={result.breakdown.keyword_score} />
@@ -232,7 +234,7 @@ export default function ScoringSandbox() {
           {result.matched_interests.length > 0 && (
             <div>
               <h4 className="text-xs font-medium text-[#A0A0A0] uppercase tracking-wider mb-2">
-                Matched Interests
+                {t('toolkit.scoringSandbox.matchedInterests')}
               </h4>
               <div className="flex flex-wrap gap-1.5">
                 {result.matched_interests.map((interest) => (
@@ -264,9 +266,9 @@ export default function ScoringSandbox() {
             <path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20" />
             <path d="M2 12h20" />
           </svg>
-          <p className="text-sm text-[#A0A0A0] mb-1">Paste a title to test your scoring engine</p>
+          <p className="text-sm text-[#A0A0A0] mb-1">{t('toolkit.scoringSandbox.empty')}</p>
           <p className="text-xs text-[#666]">
-            See how PASIFA scores content against your interest profile
+            {t('toolkit.scoringSandbox.emptyHint')}
           </p>
         </div>
       )}

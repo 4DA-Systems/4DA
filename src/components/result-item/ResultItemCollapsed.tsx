@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import type { SourceRelevance, FeedbackAction } from '../../types';
 import { formatScore, getScoreColor } from '../../utils/score';
 import { getSourceLabel, getSourceColorClass } from '../../config/sources';
@@ -19,6 +20,7 @@ export function ResultItemCollapsed({
   feedback,
   fallbackReason,
 }: ResultItemCollapsedProps) {
+  const { t } = useTranslation();
   return (
     <div className="w-full px-4 py-3">
       <div className="flex items-start gap-3">
@@ -38,7 +40,7 @@ export function ResultItemCollapsed({
           </div>
           {/* Source Badge */}
           <div className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${getSourceColorClass(item.source_type || '')}`}>
-            {getSourceLabel(item.source_type || '') || item.source_type || 'Unknown'}
+            {getSourceLabel(item.source_type || '') || item.source_type || t('results.unknownSource')}
           </div>
         </button>
 
@@ -78,7 +80,7 @@ export function ResultItemCollapsed({
             <details className="mt-0.5 group">
               <summary className="text-[10px] text-gray-500 cursor-pointer hover:text-gray-400 select-none list-none flex items-center gap-1">
                 <span className="text-[10px] text-gray-600 group-open:rotate-90 transition-transform">&#9654;</span>
-                +{item.similar_count} related article{item.similar_count === 1 ? '' : 's'}
+                {t('results.relatedArticles', { count: item.similar_count })}
               </summary>
               {item.similar_titles && item.similar_titles.length > 0 && (
                 <ul className="mt-1 ml-3 space-y-0.5">
@@ -105,10 +107,10 @@ export function ResultItemCollapsed({
             }`}
           >
             {feedback === 'save'
-              ? '\u2713 Saved'
+              ? `\u2713 ${t('feedback.saved')}`
               : feedback === 'dismiss'
-              ? '\u2717 Dismissed'
-              : '\u2298 Irrelevant'}
+              ? `\u2717 ${t('feedback.dismissed')}`
+              : `\u2298 ${t('feedback.irrelevant')}`}
           </div>
         )}
 
@@ -117,7 +119,7 @@ export function ResultItemCollapsed({
           onClick={onToggleExpand}
           aria-expanded={isExpanded}
           aria-controls={`result-detail-${item.id}`}
-          aria-label={isExpanded ? 'Collapse details' : 'Expand details'}
+          aria-label={isExpanded ? t('results.collapseDetails') : t('results.expandDetails')}
           className="text-text-muted text-xs hover:text-text-secondary transition-colors px-1"
         >
           {isExpanded ? '\u2212' : '+'}

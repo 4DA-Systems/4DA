@@ -1,5 +1,6 @@
 import { invoke } from '@tauri-apps/api/core';
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import type { MonitoringStatus } from '../../types';
 
 interface MonitoringSectionProps {
@@ -14,6 +15,7 @@ interface MonitoringSectionProps {
 }
 
 function CloseToTrayToggle({ initialValue }: { initialValue: boolean }) {
+  const { t } = useTranslation();
   const [enabled, setEnabled] = useState(initialValue);
 
   const toggle = async () => {
@@ -29,8 +31,8 @@ function CloseToTrayToggle({ initialValue }: { initialValue: boolean }) {
   return (
     <div className="flex items-center justify-between p-3 bg-bg-secondary rounded-lg border border-border">
       <div>
-        <span className="text-sm text-white">Close to tray</span>
-        <p className="text-xs text-gray-500">Hide window instead of quitting</p>
+        <span className="text-sm text-white">{t('settings.monitoring.closeToTray')}</span>
+        <p className="text-xs text-gray-500">{t('settings.monitoring.closeToTrayDescription')}</p>
       </div>
       <button
         onClick={toggle}
@@ -58,6 +60,7 @@ export function MonitoringSection({
   onUpdateInterval,
   onTestNotification,
 }: MonitoringSectionProps) {
+  const { t } = useTranslation();
   return (
     <div className="bg-bg-tertiary rounded-lg p-5 border border-border">
       <div className="flex items-center gap-3 mb-4">
@@ -65,8 +68,8 @@ export function MonitoringSection({
           <span>&#x1f504;</span>
         </div>
         <div>
-          <h3 className="text-sm font-medium text-white">Background Monitoring</h3>
-          <p className="text-xs text-gray-500">Auto-analyze at intervals</p>
+          <h3 className="text-sm font-medium text-white">{t('settings.monitoring.backgroundTitle')}</h3>
+          <p className="text-xs text-gray-500">{t('settings.monitoring.backgroundDescription')}</p>
         </div>
       </div>
 
@@ -81,13 +84,13 @@ export function MonitoringSection({
               )}
               <span className="text-sm text-white">
                 {monitoring.enabled ? (
-                  <span className="text-green-400">Active</span>
+                  <span className="text-green-400">{t('status.active')}</span>
                 ) : (
-                  <span className="text-gray-500">Inactive</span>
+                  <span className="text-gray-500">{t('status.inactive')}</span>
                 )}
               </span>
               {monitoring.is_checking && (
-                <span className="text-xs text-orange-400 ml-2">(checking...)</span>
+                <span className="text-xs text-orange-400 ml-2">({t('settings.monitoring.checking')})</span>
               )}
             </div>
             <button
@@ -98,12 +101,12 @@ export function MonitoringSection({
                   : 'bg-green-500/20 text-green-400 hover:bg-green-500/30'
               }`}
             >
-              {monitoring.enabled ? 'Stop' : 'Start'}
+              {monitoring.enabled ? t('settings.monitoring.stop') : t('settings.monitoring.start')}
             </button>
           </div>
 
           <div className="flex items-center gap-3">
-            <label className="text-sm text-gray-400">Every</label>
+            <label className="text-sm text-gray-400">{t('settings.monitoring.every')}</label>
             <input
               type="number"
               min="5"
@@ -112,35 +115,35 @@ export function MonitoringSection({
               onChange={(e) => setMonitoringInterval(parseInt(e.target.value) || 30)}
               className="w-20 px-3 py-2 bg-bg-secondary border border-border rounded-lg text-sm text-white text-center focus:border-orange-500 focus:outline-none"
             />
-            <span className="text-sm text-gray-400">minutes</span>
+            <span className="text-sm text-gray-400">{t('settings.monitoring.minutes')}</span>
             <button
               onClick={onUpdateInterval}
               className="px-4 py-2 text-sm bg-bg-secondary border border-border text-gray-400 rounded-lg hover:text-white hover:border-orange-500/30 transition-all"
             >
-              Update
+              {t('settings.monitoring.update')}
             </button>
           </div>
 
           <div className="flex items-center gap-3">
-            <label className="text-sm text-gray-400">Notifications</label>
+            <label className="text-sm text-gray-400">{t('settings.monitoring.notifications')}</label>
             <select
               value={notificationThreshold}
               onChange={(e) => onSetNotificationThreshold(e.target.value)}
               className="px-3 py-2 bg-bg-secondary border border-border rounded-lg text-sm text-white focus:border-orange-500 focus:outline-none appearance-none cursor-pointer"
               style={{ backgroundImage: 'url("data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'12\' height=\'12\' fill=\'%23666\' viewBox=\'0 0 16 16\'%3E%3Cpath d=\'M8 11L3 6h10z\'/%3E%3C/svg%3E")', backgroundRepeat: 'no-repeat', backgroundPosition: 'right 0.75rem center', paddingRight: '2rem' }}
             >
-              <option value="critical_only">Critical only</option>
-              <option value="high_and_above">High and above</option>
-              <option value="all">All items</option>
+              <option value="critical_only">{t('settings.monitoring.criticalOnly')}</option>
+              <option value="high_and_above">{t('settings.monitoring.highAndAbove')}</option>
+              <option value="all">{t('settings.monitoring.allItems')}</option>
             </select>
           </div>
 
           <CloseToTrayToggle initialValue={monitoring.close_to_tray} />
 
           <div className="flex items-center justify-between text-xs text-gray-500 px-1">
-            <span>Total checks: {monitoring.total_checks}</span>
+            <span>{t('settings.monitoring.totalChecks', { count: monitoring.total_checks })}</span>
             {monitoring.last_check_ago && (
-              <span>Last: {monitoring.last_check_ago}</span>
+              <span>{t('settings.monitoring.lastCheck', { time: monitoring.last_check_ago })}</span>
             )}
           </div>
 
@@ -148,11 +151,11 @@ export function MonitoringSection({
             onClick={onTestNotification}
             className="w-full px-4 py-2.5 text-sm bg-bg-secondary border border-border text-gray-400 rounded-lg hover:text-white hover:border-orange-500/30 transition-all"
           >
-            Test Notification
+            {t('settings.monitoring.testNotification')}
           </button>
         </div>
       ) : (
-        <div className="text-xs text-text-muted">Loading monitoring status...</div>
+        <div className="text-xs text-text-muted">{t('settings.monitoring.loading')}</div>
       )}
     </div>
   );

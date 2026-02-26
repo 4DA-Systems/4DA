@@ -1,4 +1,5 @@
 import { useCallback, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../../store';
 
 // ---------------------------------------------------------------------------
@@ -89,6 +90,7 @@ function MarkdownProse({ content }: { content: string }) {
 // ---------------------------------------------------------------------------
 
 export function StrategyViewer() {
+  const { t } = useTranslation();
   const doc = useAppStore((s) => s.strategyDocument);
   const loading = useAppStore((s) => s.coachLoading);
   const generateStrategy = useAppStore((s) => s.generateStrategy);
@@ -111,9 +113,9 @@ export function StrategyViewer() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h3 className="text-sm font-semibold text-white">Strategy Document</h3>
+          <h3 className="text-sm font-semibold text-white">{t('coach.strategy.title')}</h3>
           <p className="text-xs text-[#666] mt-0.5">
-            Personalized revenue strategy based on your profile
+            {t('coach.strategy.subtitle')}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -122,7 +124,7 @@ export function StrategyViewer() {
               onClick={handleCopy}
               className="px-3 py-2 text-xs font-medium text-[#A0A0A0] border border-[#2A2A2A] rounded-lg hover:bg-[#1F1F1F] hover:text-white transition-colors"
             >
-              {copied ? 'Copied' : 'Export'}
+              {copied ? t('action.copied') : t('action.export')}
             </button>
           )}
           <button
@@ -130,7 +132,7 @@ export function StrategyViewer() {
             disabled={loading}
             className="px-4 py-2 text-sm font-medium bg-[#D4AF37] text-black rounded-lg hover:bg-[#C4A030] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {loading ? 'Generating...' : doc ? 'Regenerate' : 'Generate Strategy Document'}
+            {loading ? t('coach.strategy.generating') : doc ? t('coach.strategy.regenerate') : t('coach.strategy.generate')}
           </button>
         </div>
       </div>
@@ -141,10 +143,10 @@ export function StrategyViewer() {
           <div className="flex flex-col items-center gap-3">
             <div className="w-5 h-5 border-2 border-[#D4AF37] border-t-transparent rounded-full animate-spin" />
             <p className="text-xs text-[#A0A0A0]">
-              Generating your personalized strategy document...
+              {t('coach.strategy.generatingDoc')}
             </p>
             <p className="text-[10px] text-[#666]">
-              This may take a moment while the AI analyzes your profile
+              {t('coach.strategy.generatingHint')}
             </p>
           </div>
         </div>
@@ -155,10 +157,10 @@ export function StrategyViewer() {
         <div className="bg-[#141414] border border-[#2A2A2A] rounded-xl overflow-hidden">
           <div className="flex items-center justify-between px-5 py-3 border-b border-[#2A2A2A]">
             <span className="text-[10px] text-[#666] uppercase tracking-wide font-medium">
-              Strategy Document
+              {t('coach.strategy.title')}
             </span>
             <span className="text-[10px] text-[#666]">
-              {doc.split('\n').length} lines
+              {t('coach.strategy.lineCount', { count: doc.split('\n').length })}
             </span>
           </div>
           <div className="px-5 py-4 max-h-[600px] overflow-y-auto">
@@ -189,8 +191,7 @@ export function StrategyViewer() {
             </svg>
           </div>
           <p className="text-sm text-[#A0A0A0] max-w-sm">
-            Generate a comprehensive strategy document tailored to your
-            sovereign profile, recommended engines, and current progress.
+            {t('coach.strategy.emptyDescription')}
           </p>
         </div>
       )}

@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import type { SourceRelevance } from '../../types';
 import { useLicense } from '../../hooks/use-license';
 import { useAppStore } from '../../store';
@@ -26,6 +27,7 @@ const SIGNAL_LABELS: Record<string, string> = {
  * Pro users: see relevance breakdown, signal chain context, knowledge gap alerts.
  */
 export function ProInsightRow({ item }: ProInsightRowProps) {
+  const { t } = useTranslation();
   const { isPro, trialStatus } = useLicense();
   const b = item.score_breakdown;
 
@@ -52,7 +54,7 @@ export function ProInsightRow({ item }: ProInsightRowProps) {
       )}
       {hasDepMatch && (
         <span className="text-[10px] text-emerald-400/70">
-          Affects {b!.matched_deps!.slice(0, 2).join(', ')}
+          {t('results.affects')} {b!.matched_deps!.slice(0, 2).join(', ')}
         </span>
       )}
       {canStartTrial ? (
@@ -65,7 +67,7 @@ export function ProInsightRow({ item }: ProInsightRowProps) {
           className="inline-flex items-center gap-0.5 text-[10px] text-[#D4AF37]/50 hover:text-[#D4AF37] transition-colors ml-auto"
         >
           <ProStar />
-          See why {formatScore(item.top_score)}
+          {t('results.seeWhy')} {formatScore(item.top_score)}
         </a>
       )}
     </div>
@@ -74,6 +76,7 @@ export function ProInsightRow({ item }: ProInsightRowProps) {
 
 /** Inline trial start button — no external redirect */
 function InlineTrialStart({ score }: { score: number }) {
+  const { t } = useTranslation();
   const startTrial = useAppStore((s) => s.startTrial);
   const [starting, setStarting] = useState(false);
 
@@ -91,7 +94,7 @@ function InlineTrialStart({ score }: { score: number }) {
       className="inline-flex items-center gap-0.5 text-[10px] text-[#D4AF37]/50 hover:text-[#D4AF37] transition-colors ml-auto disabled:opacity-50"
     >
       <ProStar />
-      {starting ? 'Starting...' : `Try Pro free — see why ${formatScore(score)}`}
+      {starting ? t('pro.startingTrial') : t('results.tryProFree', { score: formatScore(score) })}
     </button>
   );
 }

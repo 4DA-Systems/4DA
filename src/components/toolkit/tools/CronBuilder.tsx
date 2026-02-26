@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 
 const MINUTE_OPTIONS = ['*', '0', '15', '30', '45'];
 const HOUR_OPTIONS = ['*', ...Array.from({ length: 24 }, (_, i) => String(i))];
@@ -51,6 +52,7 @@ function CronField({ label, value, options, onChange }: FieldProps) {
 }
 
 export default function CronBuilder() {
+  const { t } = useTranslation();
   const [minute, setMinute] = useState('*');
   const [hour, setHour] = useState('*');
   const [dom, setDom] = useState('*');
@@ -78,7 +80,7 @@ export default function CronBuilder() {
       <div className="flex items-center gap-3 p-4 bg-bg-secondary border border-border rounded-xl">
         <code className="flex-1 text-lg font-mono text-white tracking-wider">{expression}</code>
         <button onClick={copy} className="px-3 py-1.5 text-xs bg-bg-tertiary border border-border rounded-lg text-gray-300 hover:text-white hover:border-white/20 transition-all">
-          {copied ? 'Copied' : 'Copy'}
+          {copied ? t('action.copied') : t('action.copy')}
         </button>
       </div>
 
@@ -86,16 +88,16 @@ export default function CronBuilder() {
 
       {/* Fields */}
       <div className="grid grid-cols-5 gap-3">
-        <CronField label="Minute" value={minute} options={MINUTE_OPTIONS} onChange={setMinute} />
-        <CronField label="Hour" value={hour} options={HOUR_OPTIONS} onChange={setHour} />
-        <CronField label="Day (month)" value={dom} options={DOM_OPTIONS} onChange={setDom} />
-        <CronField label="Month" value={month} options={MONTH_OPTIONS} onChange={setMonth} />
-        <CronField label="Day (week)" value={dow} options={DOW_OPTIONS} onChange={setDow} />
+        <CronField label={t('toolkit.cronBuilder.minute')} value={minute} options={MINUTE_OPTIONS} onChange={setMinute} />
+        <CronField label={t('toolkit.cronBuilder.hour')} value={hour} options={HOUR_OPTIONS} onChange={setHour} />
+        <CronField label={t('toolkit.cronBuilder.dayOfMonth')} value={dom} options={DOM_OPTIONS} onChange={setDom} />
+        <CronField label={t('toolkit.cronBuilder.month')} value={month} options={MONTH_OPTIONS} onChange={setMonth} />
+        <CronField label={t('toolkit.cronBuilder.dayOfWeek')} value={dow} options={DOW_OPTIONS} onChange={setDow} />
       </div>
 
       {/* Presets */}
       <div>
-        <h4 className="text-xs text-gray-500 uppercase tracking-wider mb-2">Presets</h4>
+        <h4 className="text-xs text-gray-500 uppercase tracking-wider mb-2">{t('toolkit.cronBuilder.presets')}</h4>
         <div className="flex flex-wrap gap-2">
           {PRESETS.map((p) => (
             <button

@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import { listen, UnlistenFn } from '@tauri-apps/api/event';
 import { VoidEngine } from './void-engine/VoidEngine';
 import { useAppStore } from '../store';
@@ -12,6 +13,7 @@ interface FirstRunTransitionProps {
 }
 
 export function FirstRunTransition({ onComplete }: FirstRunTransitionProps) {
+  const { t } = useTranslation();
   const [phase, setPhase] = useState<Phase>('preparing');
   const [sourceMessages, setSourceMessages] = useState<string[]>([]);
   const [itemCount, setItemCount] = useState(0);
@@ -134,14 +136,14 @@ export function FirstRunTransition({ onComplete }: FirstRunTransitionProps) {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
             </svg>
           </div>
-          <h2 className="text-xl font-medium text-white mb-2">Analysis Hit a Snag</h2>
+          <h2 className="text-xl font-medium text-white mb-2">{t('firstRun.errorTitle')}</h2>
           <p className="text-sm text-gray-400 mb-6">{appState.status}</p>
           <button
             onClick={handleRetry}
             aria-label="Retry analysis"
             className="px-6 py-3 bg-orange-500 text-white font-medium rounded-lg hover:bg-orange-600 transition-colors"
           >
-            Try Again
+            {t('firstRun.tryAgain')}
           </button>
         </div>
       ) : phase === 'celebrating' ? (
@@ -173,7 +175,7 @@ export function FirstRunTransition({ onComplete }: FirstRunTransitionProps) {
           {/* Top signal highlight */}
           {topSignal && (
             <div className="mb-6 p-4 bg-bg-secondary rounded-lg border border-orange-500/20 text-left max-w-sm mx-auto">
-              <p className="text-[10px] text-orange-400 font-medium uppercase tracking-wider mb-1">Top Match</p>
+              <p className="text-[10px] text-orange-400 font-medium uppercase tracking-wider mb-1">{t('firstRun.topMatch')}</p>
               <p className="text-sm text-white font-medium leading-snug line-clamp-2">{topSignal.title}</p>
               <p className="text-xs text-gray-500 mt-1 truncate">{topSignal.url}</p>
             </div>
@@ -182,7 +184,7 @@ export function FirstRunTransition({ onComplete }: FirstRunTransitionProps) {
           {/* Keyword-only note */}
           {embeddingMode === 'keyword-only' && (
             <div className="mb-6 px-4 py-2.5 bg-bg-secondary border border-border rounded-lg text-xs text-gray-400 max-w-sm mx-auto">
-              Using keyword matching. Add an AI provider in Settings for deeper semantic results.
+              {t('firstRun.keywordHint')}
             </div>
           )}
 
@@ -192,13 +194,13 @@ export function FirstRunTransition({ onComplete }: FirstRunTransitionProps) {
               onClick={() => handleDismiss('briefing')}
               className="px-8 py-3 bg-orange-500 text-white font-medium rounded-lg hover:bg-orange-600 hover:scale-105 active:scale-95 transition-all"
             >
-              See Your Intelligence Briefing
+              {t('firstRun.seeBriefing')}
             </button>
             <button
               onClick={() => handleDismiss('results')}
               className="text-sm text-gray-500 hover:text-gray-300 transition-colors"
             >
-              Browse all {totalCount} results
+              {t('firstRun.browseResults', { count: totalCount })}
             </button>
           </div>
         </div>
@@ -210,9 +212,9 @@ export function FirstRunTransition({ onComplete }: FirstRunTransitionProps) {
           </div>
 
           <h2 className="text-xl font-medium text-white mb-2">
-            {phase === 'preparing' && 'Building your intelligence profile...'}
-            {phase === 'fetching' && 'Scanning your sources...'}
-            {phase === 'analyzing' && 'Matching against your interests...'}
+            {phase === 'preparing' && t('firstRun.preparing')}
+            {phase === 'fetching' && t('firstRun.fetching')}
+            {phase === 'analyzing' && t('firstRun.analyzing')}
           </h2>
 
           {/* Stage narration */}
@@ -241,7 +243,7 @@ export function FirstRunTransition({ onComplete }: FirstRunTransitionProps) {
                 />
               </div>
               <div className="flex justify-between text-xs text-gray-600 mt-1.5">
-                <span>{itemCount > 0 ? `${itemCount} items found` : ''}</span>
+                <span>{itemCount > 0 ? t('firstRun.itemsFound', { count: itemCount }) : ''}</span>
                 <span>{Math.round(appState.progress * 100)}%</span>
               </div>
             </div>
@@ -266,7 +268,7 @@ export function FirstRunTransition({ onComplete }: FirstRunTransitionProps) {
           {/* Analyzing phase — keyword-only note */}
           {phase === 'analyzing' && embeddingMode === 'keyword-only' && (
             <p className="text-xs text-gray-500 mt-4">
-              Matching by keywords and dependencies
+              {t('firstRun.keywordMatching')}
             </p>
           )}
         </div>

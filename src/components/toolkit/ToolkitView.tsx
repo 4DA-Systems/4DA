@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect, useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useShallow } from 'zustand/react/shallow';
 import { useAppStore } from '../../store';
 import { useLicense } from '../../hooks/use-license';
@@ -20,6 +21,7 @@ const CATEGORY_LABELS: Record<ToolCategory, string> = {
 const UTILITY_CATEGORIES: Set<ToolCategory> = new Set(['formatters', 'encoders', 'generators', 'system', 'capture']);
 
 export function ToolkitView() {
+  const { t } = useTranslation();
   const [activeTool, setActiveTool] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [utilitiesExpanded, setUtilitiesExpanded] = useState(false);
@@ -126,7 +128,7 @@ export function ToolkitView() {
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search tools..."
+            placeholder={t('toolkit.search')}
             className="w-full pl-9 pr-3 py-2 text-sm bg-bg-secondary border border-border rounded-lg text-white placeholder:text-gray-600 focus:outline-none focus:border-white/30 transition-colors"
           />
         </div>
@@ -135,7 +137,7 @@ export function ToolkitView() {
       {/* Pinned tools */}
       {pinned.length > 0 && (
         <div className="mb-6">
-          <h3 className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-3">Pinned</h3>
+          <h3 className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-3">{t('toolkit.pinned')}</h3>
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
             {pinned.map((tool) => (
               <ToolkitCard
@@ -184,7 +186,7 @@ export function ToolkitView() {
               <path d="m9 18 6-6-6-6"/>
             </svg>
             <h3 className="text-xs font-medium text-gray-500 uppercase tracking-wider group-hover:text-gray-400 transition-colors">
-              Utilities ({utilityCount})
+              {t('toolkit.utilities', { count: utilityCount })}
             </h3>
           </button>
 
@@ -216,7 +218,7 @@ export function ToolkitView() {
       {/* Empty state */}
       {filtered.length === 0 && (
         <div className="text-center py-12">
-          <p className="text-sm text-gray-500">No tools match "{search}"</p>
+          <p className="text-sm text-gray-500">{t('toolkit.noMatch', { query: search })}</p>
         </div>
       )}
     </div>

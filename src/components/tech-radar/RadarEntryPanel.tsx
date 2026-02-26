@@ -1,4 +1,5 @@
 import { memo, useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
 import type { RadarEntry } from './RadarSVG';
 
@@ -66,6 +67,7 @@ function ringColor(ring: string): string {
 // ============================================================================
 
 export const RadarEntryPanel = memo(function RadarEntryPanel({ entry, onClose }: RadarEntryPanelProps) {
+  const { t } = useTranslation();
   const [detail, setDetail] = useState<EntryDetail | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -129,7 +131,7 @@ export const RadarEntryPanel = memo(function RadarEntryPanel({ entry, onClose }:
 
       {/* Score Breakdown */}
       <div className="px-4 py-3 border-b border-[#2A2A2A]">
-        <h3 className="text-[11px] text-[#666666] uppercase tracking-wide mb-2">Score Breakdown</h3>
+        <h3 className="text-[11px] text-[#666666] uppercase tracking-wide mb-2">{t('techRadar.scoreBreakdown')}</h3>
         <div className="space-y-2">
           {SCORE_WEIGHTS.map(({ label, weight, color }) => (
             <div key={label} className="flex items-center gap-2">
@@ -155,7 +157,7 @@ export const RadarEntryPanel = memo(function RadarEntryPanel({ entry, onClose }:
       {/* Signals */}
       {entry.signals.length > 0 && (
         <div className="px-4 py-3 border-b border-[#2A2A2A]">
-          <h3 className="text-[11px] text-[#666666] uppercase tracking-wide mb-2">Signal Trail</h3>
+          <h3 className="text-[11px] text-[#666666] uppercase tracking-wide mb-2">{t('techRadar.signalTrail')}</h3>
           <ul className="space-y-1">
             {entry.signals.map((signal, i) => (
               <li key={i} className="text-xs text-[#A0A0A0] flex items-start gap-1.5">
@@ -170,9 +172,9 @@ export const RadarEntryPanel = memo(function RadarEntryPanel({ entry, onClose }:
       {/* Decision Reference */}
       {entry.decision_ref !== null && (
         <div className="px-4 py-3 border-b border-[#2A2A2A]">
-          <h3 className="text-[11px] text-[#666666] uppercase tracking-wide mb-2">Decision</h3>
+          <h3 className="text-[11px] text-[#666666] uppercase tracking-wide mb-2">{t('techRadar.decision')}</h3>
           {loading ? (
-            <div className="text-xs text-[#666666]">Loading...</div>
+            <div className="text-xs text-[#666666]">{t('action.loading')}</div>
           ) : detail?.decision ? (
             <div className="space-y-1">
               <div className="text-xs text-[#D4AF37] font-medium">
@@ -193,7 +195,7 @@ export const RadarEntryPanel = memo(function RadarEntryPanel({ entry, onClose }:
       {detail && detail.related_items.length > 0 && (
         <div className="px-4 py-3">
           <h3 className="text-[11px] text-[#666666] uppercase tracking-wide mb-2">
-            Recent Mentions ({detail.related_items.length})
+            {t('techRadar.recentMentions', { count: detail.related_items.length })}
           </h3>
           <div className="space-y-2">
             {detail.related_items.slice(0, 5).map((item, i) => (

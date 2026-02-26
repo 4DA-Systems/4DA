@@ -1,4 +1,5 @@
 import { useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../../store';
 import { useShallow } from 'zustand/react/shallow';
 
@@ -9,6 +10,7 @@ const TREND_ICONS: Record<string, { symbol: string; color: string }> = {
 };
 
 export function StreetHealthBadge() {
+  const { t } = useTranslation();
   const { streetHealth } = useAppStore(
     useShallow((s) => ({ streetHealth: s.streetHealth })),
   );
@@ -47,7 +49,7 @@ export function StreetHealthBadge() {
           <div>
             <div className="flex items-center gap-2">
               <span className="text-sm font-semibold text-white">
-                STREETS Health
+                {t('playbook.health.title')}
               </span>
               <span className="text-xs" style={{ color: trendInfo.color }}>
                 {trendInfo.symbol} {streetHealth.trend}

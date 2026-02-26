@@ -1,3 +1,5 @@
+import { useTranslation } from 'react-i18next';
+
 interface SetupInterestsProps {
   roles: string[];
   role: string;
@@ -21,11 +23,12 @@ export function SetupInterests({
   onAddInterest,
   onToggleInterest,
 }: SetupInterestsProps) {
+  const { t } = useTranslation();
   return (
     <div className="mt-2 p-4 bg-bg-secondary rounded-lg border border-border space-y-3">
       {/* Role selector */}
       <div>
-        <label className="block text-xs text-gray-500 mb-2">Your role</label>
+        <label className="block text-xs text-gray-500 mb-2">{t('onboarding.interests.roleLabel')}</label>
         <select
           value={role}
           onChange={(e) => onRoleChange(e.target.value)}
@@ -66,7 +69,7 @@ export function SetupInterests({
           value={newInterest}
           onChange={(e) => onNewInterestChange(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && onAddInterest()}
-          placeholder="Type a topic and press Enter..."
+          placeholder={t('onboarding.interests.placeholder')}
           className="flex-1 px-4 py-2 bg-bg-tertiary border border-border rounded-lg text-white placeholder-gray-600 focus:border-orange-500 focus:outline-none text-sm"
         />
         <button
@@ -74,13 +77,13 @@ export function SetupInterests({
           disabled={!newInterest.trim()}
           className="px-4 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm"
         >
-          Add
+          {t('onboarding.interests.add')}
         </button>
       </div>
 
       {/* Suggestions */}
       <div>
-        <p className="text-xs text-gray-500 mb-2">Quick-add topics:</p>
+        <p className="text-xs text-gray-500 mb-2">{t('onboarding.interests.quickAdd')}:</p>
         <div className="flex flex-wrap gap-2">
           {suggestions
             .filter(s => !interests.includes(s))
@@ -98,7 +101,7 @@ export function SetupInterests({
       </div>
 
       <p className="text-xs text-gray-500">
-        4DA learns from your feedback - these are just starting points.
+        {t('onboarding.interests.hint')}
       </p>
     </div>
   );

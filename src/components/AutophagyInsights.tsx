@@ -1,9 +1,10 @@
 import { useEffect, useMemo, memo } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../store';
 import { ProGate } from './ProGate';
 import type { AutophagyStatus, AutophagyCycleResult } from '../types/autophagy';
 
-function CalibrationHeatmap({ status }: { status: AutophagyStatus }) {
+function CalibrationHeatmap({ status, t }: { status: AutophagyStatus; t: (key: string) => string }) {
   const accuracy = status.total_calibrations > 0
     ? Math.min(status.total_calibrations / 10, 1.0)
     : 0;
@@ -13,7 +14,7 @@ function CalibrationHeatmap({ status }: { status: AutophagyStatus }) {
   return (
     <div>
       <div className="flex items-center justify-between mb-1">
-        <span className="text-xs text-gray-400">Calibration Accuracy</span>
+        <span className="text-xs text-gray-400">{t('autophagy.calibrationAccuracy')}</span>
         <span className="text-xs text-gray-300 tabular-nums">{pct}%</span>
       </div>
       <div className="h-1.5 bg-[#1F1F1F] rounded-full overflow-hidden">
@@ -23,9 +24,9 @@ function CalibrationHeatmap({ status }: { status: AutophagyStatus }) {
   );
 }
 
-function CycleHistory({ history }: { history: AutophagyCycleResult[] }) {
+function CycleHistory({ history, t }: { history: AutophagyCycleResult[]; t: (key: string) => string }) {
   if (history.length === 0) {
-    return <p className="text-xs text-gray-500">No autophagy cycles yet. Runs daily during cleanup.</p>;
+    return <p className="text-xs text-gray-500">{t('autophagy.noCycles')}</p>;
   }
 
   return (
@@ -46,19 +47,20 @@ function CycleHistory({ history }: { history: AutophagyCycleResult[] }) {
   );
 }
 
-function AntiPatternsSummary({ count }: { count: number }) {
+function AntiPatternsSummary({ count, t }: { count: number; t: (key: string, opts?: Record<string, unknown>) => string }) {
   if (count === 0) return null;
   return (
     <div className="flex items-center gap-2 px-3 py-2 bg-amber-500/5 border border-amber-500/15 rounded-lg">
       <span className="text-amber-400 text-xs">!</span>
       <span className="text-xs text-amber-300">
-        {count} anti-pattern{count !== 1 ? 's' : ''} detected — scoring corrections applied
+        {t('autophagy.antiPatternsDetected', { count })}
       </span>
     </div>
   );
 }
 
 const InsightsContent = memo(function InsightsContent() {
+  const { t } = useTranslation();
   const status = useAppStore(s => s.autophagyStatus);
   const history = useAppStore(s => s.autophagyHistory);
   const loading = useAppStore(s => s.autophagyLoading);
@@ -96,44 +98,45 @@ const InsightsContent = memo(function InsightsContent() {
         <div className="grid grid-cols-3 gap-3">
           <div className="text-center">
             <div className="text-lg font-semibold text-white tabular-nums">{stats.cycles}</div>
-            <div className="text-[10px] text-gray-500 uppercase">Cycles</div>
+            <div className="text-[10px] text-gray-500 uppercase">{t('autophagy.cycles')}</div>
           </div>
           <div className="text-center">
             <div className="text-lg font-semibold text-green-400 tabular-nums">{stats.calibrations}</div>
-            <div className="text-[10px] text-gray-500 uppercase">Calibrations</div>
+            <div className="text-[10px] text-gray-500 uppercase">{t('autophagy.calibrations')}</div>
           </div>
           <div className="text-center">
             <div className="text-lg font-semibold text-amber-400 tabular-nums">{stats.antiPatterns}</div>
-            <div className="text-[10px] text-gray-500 uppercase">Anti-Patterns</div>
+            <div className="text-[10px] text-gray-500 uppercase">{t('autophagy.antiPatterns')}</div>
           </div>
         </div>
       )}
 
       {/* Calibration Accuracy */}
-      {status && <CalibrationHeatmap status={status} />}
+      {status && <CalibrationHeatmap status={status} t={t} />}
 
       {/* Anti-Patterns Alert */}
-      {stats && <AntiPatternsSummary count={stats.antiPatterns} />}
+      {stats && <AntiPatternsSummary count={stats.antiPatterns} t={t} />}
 
       {/* Cycle History */}
       <div>
-        <h4 className="text-xs font-medium text-gray-300 mb-2">Recent Cycles</h4>
-        <CycleHistory history={history} />
+        <h4 className="text-xs font-medium text-gray-300 mb-2">{t('autophagy.recentCycles')}</h4>
+        <CycleHistory history={history} t={t} />
       </div>
     </div>
   );
 });
 
 export const AutophagyInsights = memo(function AutophagyInsights() {
+  const { t } = useTranslation();
   return (
     <div className="bg-bg-secondary rounded-lg border border-border p-5">
       <div className="flex items-center gap-2 mb-4">
         <div className="w-6 h-6 bg-purple-500/20 rounded-md flex items-center justify-center">
           <span className="text-purple-400 text-xs">M</span>
         </div>
-        <h3 className="text-sm font-medium text-white">Intelligence Metabolism</h3>
+        <h3 className="text-sm font-medium text-white">{t('autophagy.title')}</h3>
       </div>
-      <ProGate feature="Autophagy Insights">
+      <ProGate feature={t('autophagy.feature')}>
         <InsightsContent />
       </ProGate>
     </div>

@@ -1,10 +1,12 @@
 import { useState, useRef, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
 import { convertFileSrc } from '@tauri-apps/api/core';
 import type { AudioBriefingStatus } from '../types';
 import { ProGate } from './ProGate';
 
 export function AudioBriefing() {
+  const { t } = useTranslation();
   const [status, setStatus] = useState<AudioBriefingStatus | null>(null);
   const [generating, setGenerating] = useState(false);
   const [playing, setPlaying] = useState(false);
@@ -47,10 +49,10 @@ export function AudioBriefing() {
     audio.onpause = () => setPlaying(false);
     audio.onerror = () => {
       setPlaying(false);
-      setError('Failed to play audio');
+      setError(t('audio.playFailed'));
     };
     audioRef.current = audio;
-    audio.play().catch(() => setError('Audio playback blocked'));
+    audio.play().catch(() => setError(t('audio.playbackBlocked')));
   };
 
   const togglePlay = () => {
@@ -73,18 +75,18 @@ export function AudioBriefing() {
   }
 
   return (
-    <ProGate feature="Audio Briefings">
+    <ProGate feature={t('audio.feature')}>
     <div className="flex items-center gap-2">
       {status?.file_path && (
         <button
           onClick={togglePlay}
-          aria-label={playing ? 'Pause audio briefing' : 'Play audio briefing'}
+          aria-label={playing ? t('audio.pause') : t('audio.play')}
           className={`w-10 h-10 rounded-lg flex items-center justify-center transition-all ${
             playing
               ? 'bg-orange-500/20 text-orange-400 border border-orange-500/30'
               : 'bg-bg-tertiary text-gray-500 border border-border hover:text-gray-300'
           }`}
-          title={playing ? 'Pause audio briefing' : 'Play audio briefing'}
+          title={playing ? t('audio.pause') : t('audio.play')}
         >
           {playing ? '⏸' : '🔊'}
         </button>
@@ -92,10 +94,10 @@ export function AudioBriefing() {
       <button
         onClick={generate}
         disabled={generating}
-        aria-label={generating ? 'Generating audio briefing' : 'Generate audio briefing'}
+        aria-label={generating ? t('audio.generating') : t('audio.generate')}
         aria-busy={generating}
         className="w-10 h-10 rounded-lg flex items-center justify-center bg-bg-tertiary text-gray-500 border border-border hover:text-gray-300 transition-all disabled:opacity-30"
-        title={generating ? 'Generating audio...' : 'Generate audio briefing'}
+        title={generating ? t('audio.generating') : t('audio.generate')}
       >
         {generating ? (
           <div className="w-4 h-4 border-2 border-gray-500 border-t-transparent rounded-full animate-spin" />

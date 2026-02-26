@@ -1,4 +1,5 @@
 import { useCallback, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../../store';
 
 // ---------------------------------------------------------------------------
@@ -62,6 +63,7 @@ function ScoreRing({ score }: { score: number }) {
 // ---------------------------------------------------------------------------
 
 export function LaunchReviewForm() {
+  const { t } = useTranslation();
   const review = useAppStore((s) => s.launchReview);
   const loading = useAppStore((s) => s.coachLoading);
   const submitReview = useAppStore((s) => s.submitLaunchReview);
@@ -77,9 +79,9 @@ export function LaunchReviewForm() {
     <div className="space-y-5">
       {/* Header */}
       <div>
-        <h3 className="text-sm font-semibold text-white">Launch Review</h3>
+        <h3 className="text-sm font-semibold text-white">{t('coach.launch.title')}</h3>
         <p className="text-xs text-[#666] mt-0.5">
-          Submit your project for AI-powered launch readiness analysis
+          {t('coach.launch.subtitle')}
         </p>
       </div>
 
@@ -88,20 +90,20 @@ export function LaunchReviewForm() {
         <textarea
           value={description}
           onChange={(e) => setDescription(e.target.value)}
-          placeholder="Describe your project, target audience, pricing model, and current status..."
+          placeholder={t('coach.launch.placeholder')}
           rows={5}
           className="w-full bg-[#0A0A0A] border border-[#2A2A2A] rounded-lg px-4 py-3 text-sm text-[#A0A0A0] placeholder-[#666] resize-none focus:border-[#D4AF37] focus:outline-none transition-colors leading-relaxed"
         />
         <div className="flex items-center justify-between">
           <span className="text-[10px] text-[#666]">
-            {description.length > 0 ? `${description.length} characters` : ''}
+            {description.length > 0 ? t('coach.launch.charCount', { count: description.length }) : ''}
           </span>
           <button
             onClick={handleSubmit}
             disabled={loading || !description.trim()}
             className="px-4 py-2 text-sm font-medium bg-[#D4AF37] text-black rounded-lg hover:bg-[#C4A030] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {loading ? 'Reviewing...' : 'Submit for Review'}
+            {loading ? t('coach.launch.reviewing') : t('coach.launch.submit')}
           </button>
         </div>
       </div>
@@ -112,7 +114,7 @@ export function LaunchReviewForm() {
           <div className="flex flex-col items-center gap-3">
             <div className="w-5 h-5 border-2 border-[#D4AF37] border-t-transparent rounded-full animate-spin" />
             <p className="text-xs text-[#A0A0A0]">
-              Analyzing project launch readiness...
+              {t('coach.launch.analyzingReadiness')}
             </p>
           </div>
         </div>
@@ -125,13 +127,13 @@ export function LaunchReviewForm() {
           <div className="flex items-center gap-6">
             <ScoreRing score={review.overall_score} />
             <div className="flex-1">
-              <p className="text-sm font-semibold text-white">Launch Readiness</p>
+              <p className="text-sm font-semibold text-white">{t('coach.launch.readiness')}</p>
               <p className="text-xs text-[#A0A0A0] mt-1">
                 {review.overall_score >= 80
-                  ? 'Strong position. Address remaining gaps to maximize launch success.'
+                  ? t('coach.launch.readinessHigh')
                   : review.overall_score >= 50
-                    ? 'Promising foundation. Several areas need attention before launch.'
-                    : 'Early stage. Focus on the recommendations below before launching.'}
+                    ? t('coach.launch.readinessMedium')
+                    : t('coach.launch.readinessLow')}
               </p>
             </div>
           </div>
@@ -140,7 +142,7 @@ export function LaunchReviewForm() {
           {review.strengths.length > 0 && (
             <div>
               <p className="text-[10px] text-[#666] uppercase tracking-wide mb-2 font-medium">
-                Strengths
+                {t('coach.launch.strengths')}
               </p>
               <ul className="space-y-1.5">
                 {review.strengths.map((s, i) => (
@@ -157,7 +159,7 @@ export function LaunchReviewForm() {
           {review.gaps.length > 0 && (
             <div>
               <p className="text-[10px] text-[#666] uppercase tracking-wide mb-2 font-medium">
-                Gaps
+                {t('coach.launch.gaps')}
               </p>
               <ul className="space-y-1.5">
                 {review.gaps.map((g, i) => (
@@ -174,7 +176,7 @@ export function LaunchReviewForm() {
           {review.recommendations.length > 0 && (
             <div>
               <p className="text-[10px] text-[#666] uppercase tracking-wide mb-2 font-medium">
-                Recommendations
+                {t('coach.launch.recommendations')}
               </p>
               <ol className="space-y-2">
                 {review.recommendations.map((rec, i) => (

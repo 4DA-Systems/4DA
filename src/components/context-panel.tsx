@@ -1,3 +1,5 @@
+import { useTranslation } from 'react-i18next';
+
 interface ContextFile {
   path: string;
   lines: number;
@@ -31,6 +33,7 @@ export function ContextPanel({
   onIndex,
   onClear,
 }: ContextPanelProps) {
+  const { t } = useTranslation();
   return (
     <section className="bg-bg-secondary rounded-lg border border-border overflow-hidden">
       <div className="px-5 py-4 border-b border-border flex items-center justify-between">
@@ -39,8 +42,8 @@ export function ContextPanel({
             <span className="text-gray-500">F</span>
           </div>
           <div>
-            <h2 className="font-medium text-white">Context</h2>
-            <p className="text-xs text-gray-500">{contextFiles.length} files indexed</p>
+            <h2 className="font-medium text-white">{t('context.title')}</h2>
+            <p className="text-xs text-gray-500">{t('context.filesIndexed', { count: contextFiles.length })}</p>
           </div>
         </div>
         <div className="flex gap-2">
@@ -48,7 +51,7 @@ export function ContextPanel({
             onClick={onReload}
             aria-label="Reload context files"
             className="w-8 h-8 flex items-center justify-center text-sm bg-bg-tertiary text-gray-400 rounded-lg hover:bg-border hover:text-white transition-all"
-            title="Reload files"
+            title={t('context.reloadFiles')}
           >
             R
           </button>
@@ -58,16 +61,16 @@ export function ContextPanel({
                 onClick={onIndex}
                 disabled={loading}
                 className="px-3 py-1.5 text-xs bg-green-500/10 text-green-400 border border-green-500/30 rounded-lg hover:bg-green-500/20 transition-all disabled:opacity-50"
-                title="Index files"
+                title={t('context.indexFiles')}
               >
-                Index
+                {t('context.index')}
               </button>
               <button
                 onClick={onClear}
                 className="px-3 py-1.5 text-xs bg-red-500/10 text-red-400 border border-red-500/30 rounded-lg hover:bg-red-500/20 transition-all"
-                title="Clear"
+                title={t('context.clear')}
               >
-                Clear
+                {t('context.clear')}
               </button>
             </>
           )}
@@ -81,8 +84,8 @@ export function ContextPanel({
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
               </svg>
             </div>
-            <p className="text-gray-400 text-sm mb-1">Context auto-discovered</p>
-            <p className="text-xs text-gray-600">4DA scans your projects automatically. Customize scan paths in Settings.</p>
+            <p className="text-gray-400 text-sm mb-1">{t('context.autoDiscovered')}</p>
+            <p className="text-xs text-gray-600">{t('context.autoDiscoveredHint')}</p>
           </div>
         ) : (
           <ul className="space-y-2">
@@ -104,7 +107,7 @@ export function ContextPanel({
         {(discoveredContext.tech.length > 0 || discoveredContext.topics.length > 0) && (
           <div className="mt-4 pt-4 border-t border-border">
             <div className="text-xs text-gray-500 mb-3 flex items-center gap-2">
-              <span>Auto-Discovered</span>
+              <span>{t('context.autoDiscoveredLabel')}</span>
               <span className="px-1.5 py-0.5 text-[10px] bg-orange-500/20 text-orange-400 rounded" title="Auto Context Engine - score boost from your local project context">ACE</span>
             </div>
             {discoveredContext.tech.length > 0 && (

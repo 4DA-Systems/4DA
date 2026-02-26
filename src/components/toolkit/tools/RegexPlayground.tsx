@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 
 interface MatchResult {
   text: string;
@@ -52,6 +53,7 @@ function buildHighlightedSegments(
 }
 
 export default function RegexPlayground() {
+  const { t } = useTranslation();
   const [pattern, setPattern] = useState('');
   const [flags, setFlags] = useState<Set<Flag>>(new Set(['g']));
   const [testString, setTestString] = useState('');
@@ -165,7 +167,7 @@ export default function RegexPlayground() {
             type="text"
             value={pattern}
             onChange={e => setPattern(e.target.value)}
-            placeholder="Enter regex pattern..."
+            placeholder={t('toolkit.regex.patternPlaceholder')}
             spellCheck={false}
             className={`w-full font-mono text-sm bg-bg-tertiary text-text-primary border rounded px-7 py-2 outline-none transition-colors ${
               isInvalid
@@ -219,10 +221,10 @@ export default function RegexPlayground() {
               : 'bg-bg-tertiary text-text-muted border-border hover:text-text-secondary'
           }`}
         >
-          Replace Mode
+          {t('toolkit.regex.replaceMode')}
         </button>
         <span className="text-text-muted text-xs">
-          {matches.length} match{matches.length !== 1 ? 'es' : ''}
+          {t('toolkit.regex.matchCount', { count: matches.length })}
         </span>
       </div>
 
@@ -232,7 +234,7 @@ export default function RegexPlayground() {
           type="text"
           value={replacePattern}
           onChange={e => setReplacePattern(e.target.value)}
-          placeholder="Replacement pattern (e.g. $1, $&)"
+          placeholder={t('toolkit.regex.replacePlaceholder')}
           spellCheck={false}
           className="font-mono text-sm bg-bg-tertiary text-text-primary border border-border rounded px-3 py-2 outline-none focus:border-text-muted"
         />
@@ -242,12 +244,12 @@ export default function RegexPlayground() {
       <div className="flex gap-4 min-h-0 flex-1">
         <div className="flex flex-col gap-2 flex-1 min-h-0">
           <label className="text-text-secondary text-xs uppercase tracking-wide font-medium">
-            Test String
+            {t('toolkit.regex.testString')}
           </label>
           <textarea
             value={testString}
             onChange={e => setTestString(e.target.value)}
-            placeholder="Enter test text..."
+            placeholder={t('toolkit.regex.testPlaceholder')}
             spellCheck={false}
             className="flex-1 font-mono text-sm bg-bg-tertiary text-text-primary border border-border rounded p-3 outline-none resize-none focus:border-text-muted min-h-[120px]"
           />
@@ -255,7 +257,7 @@ export default function RegexPlayground() {
 
         <div className="flex flex-col gap-2 flex-1 min-h-0">
           <label className="text-text-secondary text-xs uppercase tracking-wide font-medium">
-            {replaceMode ? 'Replace Preview' : 'Match Preview'}
+            {replaceMode ? t('toolkit.regex.replacePreview') : t('toolkit.regex.matchPreview')}
           </label>
           <div className="flex-1 font-mono text-sm bg-bg-tertiary border border-border rounded p-3 overflow-auto whitespace-pre-wrap break-words min-h-[120px]">
             {replaceMode && replacedText ? (
@@ -285,7 +287,7 @@ export default function RegexPlayground() {
       {matches.length > 0 && (
         <div className="flex flex-col gap-2 max-h-[200px] overflow-auto">
           <label className="text-text-secondary text-xs uppercase tracking-wide font-medium">
-            Matches
+            {t('toolkit.regex.matches')}
           </label>
           <table className="w-full text-xs font-mono border-collapse">
             <thead>
@@ -333,7 +335,7 @@ export default function RegexPlayground() {
       {hasNamedGroups && (
         <div className="flex flex-col gap-2 max-h-[160px] overflow-auto">
           <label className="text-text-secondary text-xs uppercase tracking-wide font-medium">
-            Named Capture Groups
+            {t('toolkit.regex.namedCaptureGroups')}
           </label>
           <table className="w-full text-xs font-mono border-collapse">
             <thead>

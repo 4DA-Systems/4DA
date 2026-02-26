@@ -1,4 +1,5 @@
 import { memo } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../store';
 
 /**
@@ -8,6 +9,7 @@ import { useAppStore } from '../store';
  * Reads from Zustand store (loaded once on mount via loadProValueReport).
  */
 export const ProValueBadge = memo(function ProValueBadge() {
+  const { t } = useTranslation();
   const report = useAppStore((s) => s.proValueReport);
 
   if (!report) return null;
@@ -20,16 +22,16 @@ export const ProValueBadge = memo(function ProValueBadge() {
   }
 
   const parts: string[] = [];
-  if (signals_detected > 0) parts.push(`${signals_detected} signal${signals_detected !== 1 ? 's' : ''}`);
-  if (knowledge_gaps_caught > 0) parts.push(`${knowledge_gaps_caught} gap${knowledge_gaps_caught !== 1 ? 's' : ''}`);
-  if (estimated_hours_saved > 0) parts.push(`~${estimated_hours_saved.toFixed(1)}h saved`);
+  if (signals_detected > 0) parts.push(t('pro.signals', { count: signals_detected }));
+  if (knowledge_gaps_caught > 0) parts.push(t('pro.gaps', { count: knowledge_gaps_caught }));
+  if (estimated_hours_saved > 0) parts.push(t('pro.hoursSaved', { hours: estimated_hours_saved.toFixed(1) }));
 
   if (parts.length === 0) return null;
 
   return (
     <div
       className="hidden md:flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-bg-tertiary/50 border border-border/50"
-      title={`Pro Intelligence: ${parts.join(', ')} (last ${report.period_days} days)`}
+      title={t('pro.intelligenceSummary', { summary: parts.join(', '), days: report.period_days })}
     >
       <svg width="12" height="12" viewBox="0 0 16 16" fill="none" className="text-gray-500 flex-shrink-0">
         <rect x="1" y="8" width="3" height="6" rx="0.5" fill="currentColor" opacity="0.4" />

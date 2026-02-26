@@ -1,4 +1,5 @@
 import { useState, useCallback, useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
 import type { ParsedCommand, CommandExecutionResult, OsTarget, RiskLevel } from '../../types/streets';
 
@@ -32,6 +33,7 @@ const OS_LABELS: Record<OsTarget, string> = {
 };
 
 export function StreetsCodeBlock({ code, language, moduleId, lessonIdx, blockIndex }: StreetsCodeBlockProps) {
+  const { t } = useTranslation();
   const [commands, setCommands] = useState<ParsedCommand[]>([]);
   const [parsed, setParsed] = useState(false);
   const [results, setResults] = useState<Map<string, CommandExecutionResult>>(new Map());
@@ -194,14 +196,14 @@ export function StreetsCodeBlock({ code, language, moduleId, lessonIdx, blockInd
               className="flex items-center gap-1 px-2 py-1 text-[10px] font-medium text-[#22C55E] bg-[#22C55E]/10 border border-[#22C55E]/20 rounded hover:bg-[#22C55E]/20 transition-colors disabled:opacity-50"
             >
               {runningAny && <span className="w-3 h-3 border border-[#22C55E] border-t-transparent rounded-full animate-spin" />}
-              Run All Safe ({safeCount})
+              {t('playbook.code.runAllSafe', { count: safeCount })}
             </button>
           )}
           <button
             onClick={copyBlock}
             className="px-2 py-1 text-[10px] text-[#666] hover:text-[#A0A0A0] border border-[#2A2A2A] rounded transition-colors"
           >
-            {copied ? 'Copied' : 'Copy'}
+            {copied ? t('action.copied') : t('action.copy')}
           </button>
         </div>
       </div>
@@ -256,7 +258,7 @@ export function StreetsCodeBlock({ code, language, moduleId, lessonIdx, blockInd
                           onClick={() => handleRunClick(matchedCmd)}
                           disabled={isRunning}
                           className="flex items-center justify-center w-5 h-5 text-[#22C55E] hover:bg-[#22C55E]/10 rounded transition-colors disabled:opacity-50"
-                          title="Run command"
+                          title={t('playbook.code.runCommand')}
                         >
                           {isRunning ? (
                             <span className="w-3 h-3 border border-[#22C55E] border-t-transparent rounded-full animate-spin" />
@@ -272,7 +274,7 @@ export function StreetsCodeBlock({ code, language, moduleId, lessonIdx, blockInd
                       <button
                         onClick={ensureParsed}
                         className="flex items-center justify-center w-5 h-5 text-[#666] hover:text-[#A0A0A0] hover:bg-[#1F1F1F] rounded transition-colors"
-                        title="Parse commands"
+                        title={t('playbook.code.parseCommands')}
                       >
                         <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor">
                           <polygon points="5,3 19,12 5,21" />
@@ -293,7 +295,7 @@ export function StreetsCodeBlock({ code, language, moduleId, lessonIdx, blockInd
                 >
                   <div className="flex items-center justify-between mb-1.5">
                     <span className={`text-[10px] font-medium ${result.success ? 'text-[#22C55E]' : 'text-[#EF4444]'}`}>
-                      {result.success ? 'Success' : `Failed (exit ${result.exit_code})`}
+                      {result.success ? t('playbook.code.success') : t('playbook.code.failed', { code: result.exit_code })}
                     </span>
                     <span className="text-[10px] text-[#666]">{result.duration_ms}ms</span>
                   </div>
@@ -320,7 +322,7 @@ export function StreetsCodeBlock({ code, language, moduleId, lessonIdx, blockInd
                       : 'text-[#EF4444] bg-[#EF4444]/5 hover:bg-[#EF4444]/10'
                   } transition-colors`}
                 >
-                  {result.success ? 'Show output' : 'Show error'} ({result.duration_ms}ms)
+                  {result.success ? t('playbook.code.showOutput') : t('playbook.code.showError')} ({result.duration_ms}ms)
                 </button>
               )}
             </div>

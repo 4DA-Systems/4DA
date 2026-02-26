@@ -1,6 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
+
 import type { OllamaStatus, PullProgress } from './types';
 import { SetupAIProvider } from './setup-ai-provider';
 import { SetupProjects } from './setup-projects';
@@ -30,6 +32,8 @@ const fallbackSuggestions = [
 ];
 
 export function QuickSetupStep({ isAnimating, onComplete, onBack }: QuickSetupStepProps) {
+  const { t } = useTranslation();
+
   // Section collapse state
   const [aiOpen, setAiOpen] = useState(true);
   const [projectsOpen, setProjectsOpen] = useState(false);
@@ -341,9 +345,9 @@ export function QuickSetupStep({ isAnimating, onComplete, onBack }: QuickSetupSt
 
   return (
     <div className={`transition-all duration-300 ${isAnimating ? 'opacity-0 translate-y-4' : 'opacity-100 translate-y-0'}`}>
-      <h2 className="text-3xl font-semibold text-white mb-2 text-center">Quick Setup</h2>
+      <h2 className="text-3xl font-semibold text-white mb-2 text-center">{t('onboarding.setup.title')}</h2>
       <p className="text-gray-400 mb-6 text-center">
-        Configure your AI and interests. Everything stays local and private.
+        {t('onboarding.setup.subtitle')}
       </p>
 
       {error && (
@@ -358,10 +362,10 @@ export function QuickSetupStep({ isAnimating, onComplete, onBack }: QuickSetupSt
         {/* Section 1: AI Provider */}
         <div>
           <SectionHeader
-            title="AI Provider"
+            title={t('onboarding.setup.aiProvider')}
             subtitle={aiConfigured
-              ? (provider === 'ollama' ? 'Local AI Ready' : `${provider === 'anthropic' ? 'Anthropic' : 'OpenAI'} configured`)
-              : 'Auto-detecting...'}
+              ? (provider === 'ollama' ? t('onboarding.setup.localAiReady') : `${provider === 'anthropic' ? 'Anthropic' : 'OpenAI'} ${t('onboarding.setup.configured')}`)
+              : t('onboarding.setup.autoDetecting')}
             isOpen={aiOpen}
             onToggle={() => setAiOpen(!aiOpen)}
             done={aiConfigured}
@@ -382,10 +386,10 @@ export function QuickSetupStep({ isAnimating, onComplete, onBack }: QuickSetupSt
         {/* Section 2: Your Projects */}
         <div>
           <SectionHeader
-            title="Your Projects"
+            title={t('onboarding.setup.yourProjects')}
             subtitle={discoveryDone
-              ? (detectedTech.length > 0 ? `${detectedTech.length} technologies detected` : 'Discovery complete')
-              : 'Scanning...'}
+              ? (detectedTech.length > 0 ? t('onboarding.setup.techDetected', { count: detectedTech.length }) : t('onboarding.setup.discoveryComplete'))
+              : t('onboarding.setup.scanning')}
             isOpen={projectsOpen}
             onToggle={() => setProjectsOpen(!projectsOpen)}
             done={discoveryDone}
@@ -402,8 +406,8 @@ export function QuickSetupStep({ isAnimating, onComplete, onBack }: QuickSetupSt
         {/* Section 3: Your Stack */}
         <div>
           <SectionHeader
-            title="Your Stack"
-            subtitle={selectedStacks.length > 0 ? `${selectedStacks.length} profile${selectedStacks.length > 1 ? 's' : ''} selected` : 'Auto-detecting...'}
+            title={t('onboarding.setup.yourStack')}
+            subtitle={selectedStacks.length > 0 ? t('onboarding.setup.profilesSelected', { count: selectedStacks.length }) : t('onboarding.setup.autoDetecting')}
             isOpen={stacksOpen}
             onToggle={() => setStacksOpen(!stacksOpen)}
             done={selectedStacks.length > 0}
@@ -419,8 +423,8 @@ export function QuickSetupStep({ isAnimating, onComplete, onBack }: QuickSetupSt
         {/* Section: Your Region */}
         <div>
           <SectionHeader
-            title="Your Region"
-            subtitle={localeConfigured ? 'Configured' : 'Auto-detected'}
+            title={t('onboarding.setup.yourRegion')}
+            subtitle={localeConfigured ? t('onboarding.setup.configured') : t('onboarding.setup.autoDetected')}
             isOpen={localeOpen}
             onToggle={() => setLocaleOpen(!localeOpen)}
             done={localeConfigured}
@@ -433,8 +437,8 @@ export function QuickSetupStep({ isAnimating, onComplete, onBack }: QuickSetupSt
         {/* Section 4: Your Interests */}
         <div>
           <SectionHeader
-            title="Your Interests"
-            subtitle={interests.length > 0 ? `${interests.length} topics selected` : 'Suggested for you'}
+            title={t('onboarding.setup.yourInterests')}
+            subtitle={interests.length > 0 ? t('onboarding.setup.topicsSelected', { count: interests.length }) : t('onboarding.setup.suggestedForYou')}
             isOpen={interestsOpen}
             onToggle={() => setInterestsOpen(!interestsOpen)}
             done={interests.length > 0}
@@ -461,26 +465,26 @@ export function QuickSetupStep({ isAnimating, onComplete, onBack }: QuickSetupSt
           onClick={onBack}
           className="px-6 py-2 text-gray-400 hover:text-white transition-colors"
         >
-          &larr; Back
+          &larr; {t('onboarding.nav.back')}
         </button>
         <div className="flex flex-col items-end gap-1.5">
           <button
             onClick={handleContinue}
             className="px-8 py-3 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-colors font-medium"
           >
-            Enter 4DA
+            {t('onboarding.setup.enter4DA')}
           </button>
           {pullingModels && (
             <button
               onClick={handleContinue}
               className="text-xs text-gray-500 hover:text-gray-300 transition-colors"
             >
-              Skip download &mdash; use keyword matching for now
+              {t('onboarding.setup.skipDownload')}
             </button>
           )}
           {!pullingModels && (
             <p className="text-[11px] text-gray-600">
-              All sections optional &mdash; configure anytime in Settings
+              {t('onboarding.setup.allSectionsOptional')}
             </p>
           )}
         </div>

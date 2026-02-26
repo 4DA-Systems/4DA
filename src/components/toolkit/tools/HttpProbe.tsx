@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
 
 // --- Types ---
@@ -69,6 +70,7 @@ function methodColor(method: string): string {
 // --- Component ---
 
 export default function HttpProbe() {
+  const { t } = useTranslation();
   const [method, setMethod] = useState<string>('GET');
   const [url, setUrl] = useState('');
   const [headers, setHeaders] = useState<[string, string][]>([['', '']]);
@@ -199,10 +201,10 @@ export default function HttpProbe() {
             {loading ? (
               <>
                 <span className="w-3 h-3 border-2 border-black/30 border-t-black rounded-full animate-spin" />
-                Sending...
+                {t('toolkit.httpProbe.sending')}
               </>
             ) : (
-              'Send'
+              t('toolkit.httpProbe.send')
             )}
           </button>
         </div>
@@ -211,13 +213,13 @@ export default function HttpProbe() {
         <div className="flex flex-col gap-1.5">
           <div className="flex items-center justify-between">
             <label className="text-[#A0A0A0] text-xs uppercase tracking-wide font-medium">
-              Headers
+              {t('toolkit.httpProbe.headers')}
             </label>
             <button
               onClick={addHeader}
               className="text-xs text-[#A0A0A0] hover:text-white transition-colors"
             >
-              + Add Header
+              {t('toolkit.httpProbe.addHeader')}
             </button>
           </div>
           {headers.map(([key, val], i) => (
@@ -226,7 +228,7 @@ export default function HttpProbe() {
                 type="text"
                 value={key}
                 onChange={(e) => updateHeader(i, 0, e.target.value)}
-                placeholder="Header name"
+                placeholder={t('toolkit.httpProbe.headerName')}
                 spellCheck={false}
                 className="flex-1 bg-[#1F1F1F] border border-[#2A2A2A] text-white text-xs font-mono rounded px-2 py-1.5 outline-none focus:border-white/30 placeholder:text-[#666]"
               />
@@ -234,14 +236,14 @@ export default function HttpProbe() {
                 type="text"
                 value={val}
                 onChange={(e) => updateHeader(i, 1, e.target.value)}
-                placeholder="Value"
+                placeholder={t('toolkit.httpProbe.value')}
                 spellCheck={false}
                 className="flex-1 bg-[#1F1F1F] border border-[#2A2A2A] text-white text-xs font-mono rounded px-2 py-1.5 outline-none focus:border-white/30 placeholder:text-[#666]"
               />
               <button
                 onClick={() => removeHeader(i)}
                 className="text-[#666] hover:text-[#EF4444] transition-colors text-xs px-1.5 py-1"
-                title="Remove header"
+                title={t('toolkit.httpProbe.removeHeader')}
               >
                 x
               </button>
@@ -253,7 +255,7 @@ export default function HttpProbe() {
         {BODY_METHODS.has(method) && (
           <div className="flex flex-col gap-1.5">
             <label className="text-[#A0A0A0] text-xs uppercase tracking-wide font-medium">
-              Body
+              {t('toolkit.httpProbe.body')}
             </label>
             <textarea
               value={body}
@@ -309,7 +311,7 @@ export default function HttpProbe() {
                 >
                   <path d="M9 18l6-6-6-6" />
                 </svg>
-                Response Headers ({response.headers.length})
+                {t('toolkit.httpProbe.responseHeaders', { count: response.headers.length })}
               </button>
               {showResponseHeaders && (
                 <div className="mt-1.5 bg-[#141414] border border-[#2A2A2A] rounded p-2 max-h-40 overflow-auto">
@@ -327,7 +329,7 @@ export default function HttpProbe() {
             {/* Response body */}
             <div className="flex flex-col gap-1.5 min-h-0 flex-1">
               <label className="text-[#A0A0A0] text-xs uppercase tracking-wide font-medium">
-                Response Body
+                {t('toolkit.httpProbe.responseBody')}
               </label>
               <pre className="bg-[#141414] border border-[#2A2A2A] rounded p-3 text-xs font-mono text-white overflow-auto max-h-72 whitespace-pre-wrap break-words">
                 {response.body}
@@ -344,7 +346,7 @@ export default function HttpProbe() {
           className="flex items-center justify-between w-full mb-2"
         >
           <span className="text-[#A0A0A0] text-xs uppercase tracking-wide font-medium">
-            History
+            {t('toolkit.httpProbe.history')}
           </span>
           <svg
             width="10"
@@ -365,7 +367,7 @@ export default function HttpProbe() {
           <div className="flex-1 overflow-auto space-y-1">
             {history.length === 0 && (
               <p className="text-xs text-[#666] py-4 text-center">
-                No requests yet
+                {t('toolkit.httpProbe.noRequests')}
               </p>
             )}
             {history.map((entry) => (

@@ -1,8 +1,10 @@
 import { useRef, useState, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../../store';
 import { useShallow } from 'zustand/react/shallow';
 
 export function CommandRunnerTab() {
+  const { t } = useTranslation();
   const {
     commandInput,
     setCommandInput,
@@ -67,7 +69,7 @@ export function CommandRunnerTab() {
     <div className="flex flex-col gap-3 h-full">
       {/* Working directory */}
       <div className="text-[10px] text-gray-600 font-mono truncate">
-        {selectedRepoPath || 'No directory selected'}
+        {selectedRepoPath || t('commandRunner.noDir')}
       </div>
 
       {/* Command input */}
@@ -79,7 +81,7 @@ export function CommandRunnerTab() {
           value={commandInput}
           onChange={(e) => setCommandInput(e.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder="Enter command..."
+          placeholder={t('commandRunner.placeholder')}
           disabled={commandRunning}
           className="flex-1 bg-bg-tertiary border border-border rounded px-3 py-2 text-sm text-white placeholder-gray-600 font-mono focus:outline-none focus:border-gray-500 disabled:opacity-50"
           autoFocus
@@ -108,7 +110,7 @@ export function CommandRunnerTab() {
                 commandOutput.exit_code === 0 ? 'text-green-500' : 'text-red-400'
               }`}
             >
-              exit {commandOutput.exit_code}
+              {t('commandRunner.exit', { code: commandOutput.exit_code })}
             </span>
             <span className="text-[10px] text-gray-600">{commandOutput.duration_ms}ms</span>
           </div>
@@ -117,7 +119,7 @@ export function CommandRunnerTab() {
 
       {!commandOutput && !commandRunning && (
         <div className="flex-1 flex items-center justify-center text-gray-600 text-xs">
-          Type a command and press Enter
+          {t('commandRunner.hint')}
         </div>
       )}
     </div>

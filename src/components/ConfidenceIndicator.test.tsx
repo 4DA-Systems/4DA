@@ -22,7 +22,7 @@ describe('ConfidenceIndicator', () => {
 
   it('displays low confidence (<0.5) with warning', () => {
     render(<ConfidenceIndicator confidence={0.3} />);
-    expect(screen.getByText('⚠️ Low confidence')).toHaveClass('confidence-low');
+    expect(screen.getByText('results.lowConfidence')).toHaveClass('confidence-low');
   });
 
   it('calculates margin of error correctly', () => {

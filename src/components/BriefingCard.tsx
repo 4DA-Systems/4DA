@@ -1,4 +1,5 @@
 import { memo } from 'react';
+import { useTranslation } from 'react-i18next';
 import type { SourceRelevance, FeedbackAction } from '../types';
 import { formatScore, getScoreColor } from '../utils/score';
 import { getSourceLabel, getSourceColorClass } from '../config/sources';
@@ -21,6 +22,7 @@ export const BriefingCard = memo(function BriefingCard({
   onDismiss,
   onRecordInteraction,
 }: BriefingCardProps) {
+  const { t } = useTranslation();
   const source = item.source_type || 'hackernews';
   const colorClass = getSourceColorClass(source);
   const label = getSourceLabel(source);
@@ -75,7 +77,7 @@ export const BriefingCard = memo(function BriefingCard({
             <span className={`text-xs px-2 py-1 rounded ${
               feedbackGiven === 'save' ? 'bg-green-500/20 text-green-400' : 'bg-gray-500/20 text-gray-500'
             }`}>
-              {feedbackGiven === 'save' ? 'Saved' : 'Dismissed'}
+              {feedbackGiven === 'save' ? t('feedback.saved') : t('feedback.dismissed')}
             </span>
           ) : (
             <>
@@ -84,7 +86,7 @@ export const BriefingCard = memo(function BriefingCard({
                   onClick={() => onSave(item)}
                   className="px-2.5 py-1.5 text-xs bg-green-500/10 text-green-400 border border-green-500/20 rounded-lg hover:bg-green-500/20 transition-all font-medium"
                 >
-                  Save
+                  {t('action.save')}
                 </button>
               )}
               {onDismiss && (
@@ -92,7 +94,7 @@ export const BriefingCard = memo(function BriefingCard({
                   onClick={() => onDismiss(item)}
                   className="px-2.5 py-1.5 text-xs bg-border text-gray-500 border border-[#333] rounded-lg hover:bg-red-500/10 hover:text-red-400 hover:border-red-500/20 transition-all font-medium"
                 >
-                  Dismiss
+                  {t('action.dismiss')}
                 </button>
               )}
             </>

@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
 
 interface ScoreAutopsyProps {
@@ -53,6 +54,7 @@ export const ScoreAutopsy: React.FC<ScoreAutopsyProps> = ({
   itemId,
   sourceType,
 }) => {
+  const { t } = useTranslation();
   const [autopsy, setAutopsy] = useState<AutopsyResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -70,7 +72,7 @@ export const ScoreAutopsy: React.FC<ScoreAutopsyProps> = ({
       setAutopsy(result);
     } catch (err) {
       console.error('Autopsy failed:', err);
-      setError(err instanceof Error ? err.message : 'Failed to run autopsy');
+      setError(err instanceof Error ? err.message : t('autopsy.failed'));
     } finally {
       setLoading(false);
     }
@@ -87,9 +89,9 @@ export const ScoreAutopsy: React.FC<ScoreAutopsyProps> = ({
           {loading ? (
             <span className="flex items-center gap-1.5">
               <span className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-              Analyzing...
+              {t('action.analyzing')}
             </span>
-          ) : '🔬 Score Autopsy'}
+          ) : t('autopsy.title')}
         </button>
         {error && (
           <div className="error-message mt-2 text-error text-xs">{error}</div>
@@ -115,7 +117,7 @@ export const ScoreAutopsy: React.FC<ScoreAutopsyProps> = ({
         >
           <div className="verdict-header flex items-center gap-2 mb-2">
             <span className="verdict-icon">🤖</span>
-            <strong className="text-text-primary text-sm">AI Assessment:</strong>
+            <strong className="text-text-primary text-sm">{t('autopsy.aiAssessment')}</strong>
           </div>
           <p className="verdict-text text-xs text-text-primary mb-2">
             {autopsy.ai_analysis.verdict}
@@ -134,7 +136,7 @@ export const ScoreAutopsy: React.FC<ScoreAutopsyProps> = ({
       {/* Component Breakdown */}
       <div className="components-section mb-4">
         <h4 className="text-sm font-medium text-text-primary mb-3">
-          Score Components
+          {t('autopsy.components')}
         </h4>
         {autopsy.components.map((comp, idx) => (
           <div key={idx} className="component-item mb-3">
@@ -166,11 +168,11 @@ export const ScoreAutopsy: React.FC<ScoreAutopsyProps> = ({
       {/* Matching Context */}
       <div className="matching-context-section mb-4">
         <h4 className="text-sm font-medium text-text-primary mb-3">
-          What Matched
+          {t('autopsy.whatMatched')}
         </h4>
         {autopsy.matching_context.interests.length > 0 && (
           <div className="context-group mb-2 text-xs">
-            <strong className="text-text-primary">Interests:</strong>{' '}
+            <strong className="text-text-primary">{t('autopsy.interests')}:</strong>{' '}
             <span className="text-text-secondary">
               {autopsy.matching_context.interests.join(', ')}
             </span>
@@ -178,7 +180,7 @@ export const ScoreAutopsy: React.FC<ScoreAutopsyProps> = ({
         )}
         {autopsy.matching_context.tech_stack.length > 0 && (
           <div className="context-group mb-2 text-xs">
-            <strong className="text-text-primary">Tech Stack:</strong>{' '}
+            <strong className="text-text-primary">{t('autopsy.techStack')}:</strong>{' '}
             <span className="text-text-secondary">
               {autopsy.matching_context.tech_stack.join(', ')}
             </span>
@@ -186,7 +188,7 @@ export const ScoreAutopsy: React.FC<ScoreAutopsyProps> = ({
         )}
         {autopsy.matching_context.active_topics.length > 0 && (
           <div className="context-group mb-2 text-xs">
-            <strong className="text-text-primary">Recent Work:</strong>{' '}
+            <strong className="text-text-primary">{t('autopsy.recentWork')}:</strong>{' '}
             <span className="text-text-secondary">
               {autopsy.matching_context.active_topics.join(', ')}
             </span>
@@ -194,7 +196,7 @@ export const ScoreAutopsy: React.FC<ScoreAutopsyProps> = ({
         )}
         {autopsy.matching_context.learned_affinities.length > 0 && (
           <div className="context-group mb-2 text-xs">
-            <strong className="text-text-primary">Learned Preferences:</strong>{' '}
+            <strong className="text-text-primary">{t('autopsy.learnedPreferences')}:</strong>{' '}
             <span className="text-text-secondary">
               {autopsy.matching_context.learned_affinities.join(', ')}
             </span>
@@ -206,7 +208,7 @@ export const ScoreAutopsy: React.FC<ScoreAutopsyProps> = ({
       {autopsy.recommendations.length > 0 && (
         <div className="recommendations-section mb-4">
           <h4 className="text-sm font-medium text-text-primary mb-3">
-            How to Improve Relevance
+            {t('autopsy.howToImprove')}
           </h4>
           <ul className="list-none p-0">
             {autopsy.recommendations.map((rec, idx) => (
@@ -225,7 +227,7 @@ export const ScoreAutopsy: React.FC<ScoreAutopsyProps> = ({
       {autopsy.similar_items.length > 0 && (
         <div className="similar-items-section mb-4">
           <h4 className="text-sm font-medium text-text-primary mb-3">
-            Compared to Similar Items
+            {t('autopsy.comparedToSimilar')}
           </h4>
           {autopsy.similar_items.map((similar, idx) => (
             <div
@@ -260,7 +262,7 @@ export const ScoreAutopsy: React.FC<ScoreAutopsyProps> = ({
         onClick={() => setAutopsy(null)}
         className="close-autopsy-button mt-4 bg-bg-tertiary text-text-secondary border-none px-4 py-2 rounded cursor-pointer text-xs hover:bg-bg-primary transition-colors"
       >
-        Close Autopsy
+        {t('autopsy.close')}
       </button>
     </div>
   );

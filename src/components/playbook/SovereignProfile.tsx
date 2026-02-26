@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../../store';
 import { useShallow } from 'zustand/react/shallow';
 
@@ -45,6 +46,7 @@ function CompletenessRing({ percentage }: { percentage: number }) {
 }
 
 export function SovereignProfile({ onGenerateDocument }: SovereignProfileProps) {
+  const { t } = useTranslation();
   const {
     sovereignProfile,
     profileCompleteness,
@@ -117,7 +119,7 @@ export function SovereignProfile({ onGenerateDocument }: SovereignProfileProps) 
       <div className="bg-[#141414] border border-[#2A2A2A] rounded-xl p-6 mt-4">
         <div className="flex items-center gap-3">
           <div className="w-5 h-5 border-2 border-[#D4AF37] border-t-transparent rounded-full animate-spin" />
-          <span className="text-sm text-[#A0A0A0]">Loading sovereign profile...</span>
+          <span className="text-sm text-[#A0A0A0]">{t('playbook.sovereign.loading')}</span>
         </div>
       </div>
     );
@@ -128,9 +130,9 @@ export function SovereignProfile({ onGenerateDocument }: SovereignProfileProps) 
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h3 className="text-sm font-semibold text-white">Sovereign Profile</h3>
+          <h3 className="text-sm font-semibold text-white">{t('playbook.sovereign.title')}</h3>
           <p className="text-xs text-[#666] mt-0.5">
-            Hardware and system facts accumulated from STREETS commands
+            {t('playbook.sovereign.subtitle')}
           </p>
         </div>
         {profileCompleteness && (
@@ -165,7 +167,7 @@ export function SovereignProfile({ onGenerateDocument }: SovereignProfileProps) 
                   {meta.label}
                 </span>
                 {hasFacts && (
-                  <span className="text-[10px] text-[#A0A0A0]">{facts.length} fact{facts.length !== 1 ? 's' : ''}</span>
+                  <span className="text-[10px] text-[#A0A0A0]">{t('playbook.sovereign.factCount', { count: facts.length })}</span>
                 )}
                 <svg
                   width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#666" strokeWidth="2"
@@ -212,7 +214,7 @@ export function SovereignProfile({ onGenerateDocument }: SovereignProfileProps) 
 
       {/* Manual Entry Form */}
       <div className="border-t border-[#2A2A2A] pt-4">
-        <p className="text-[10px] text-[#666] mb-2 uppercase tracking-wide font-medium">Manual Entry</p>
+        <p className="text-[10px] text-[#666] mb-2 uppercase tracking-wide font-medium">{t('playbook.sovereign.manualEntry')}</p>
         <div className="flex items-end gap-2">
           <div className="flex-shrink-0">
             <select
@@ -229,14 +231,14 @@ export function SovereignProfile({ onGenerateDocument }: SovereignProfileProps) 
             type="text"
             value={manualKey}
             onChange={(e) => setManualKey(e.target.value)}
-            placeholder="Key"
+            placeholder={t('playbook.sovereign.keyPlaceholder')}
             className="bg-[#0A0A0A] border border-[#2A2A2A] rounded px-2 py-1.5 text-xs text-[#A0A0A0] w-28 focus:border-[#D4AF37] focus:outline-none font-mono"
           />
           <input
             type="text"
             value={manualValue}
             onChange={(e) => setManualValue(e.target.value)}
-            placeholder="Value"
+            placeholder={t('playbook.sovereign.valuePlaceholder')}
             className="bg-[#0A0A0A] border border-[#2A2A2A] rounded px-2 py-1.5 text-xs text-[#A0A0A0] flex-1 focus:border-[#D4AF37] focus:outline-none font-mono"
             onKeyDown={(e) => e.key === 'Enter' && handleSaveFact()}
           />
@@ -245,7 +247,7 @@ export function SovereignProfile({ onGenerateDocument }: SovereignProfileProps) 
             disabled={!manualKey.trim() || !manualValue.trim()}
             className="px-3 py-1.5 text-xs font-medium bg-[#1F1F1F] text-[#A0A0A0] border border-[#2A2A2A] rounded hover:bg-[#2A2A2A] hover:text-white transition-colors disabled:opacity-40"
           >
-            Save
+            {t('action.save')}
           </button>
         </div>
       </div>
@@ -256,11 +258,11 @@ export function SovereignProfile({ onGenerateDocument }: SovereignProfileProps) 
           onClick={handleGenerate}
           className="px-4 py-2 text-xs font-medium bg-[#D4AF37]/15 text-[#D4AF37] border border-[#D4AF37]/30 rounded-lg hover:bg-[#D4AF37]/25 transition-colors"
         >
-          Generate Stack Document
+          {t('playbook.sovereign.generateStackDoc')}
         </button>
         {profileCompleteness && profileCompleteness.missing.length > 0 && (
           <span className="text-[10px] text-[#666]">
-            Missing: {profileCompleteness.missing.join(', ')}
+            {t('playbook.sovereign.missing', { fields: profileCompleteness.missing.join(', ') })}
           </span>
         )}
       </div>
@@ -269,19 +271,19 @@ export function SovereignProfile({ onGenerateDocument }: SovereignProfileProps) 
       {showDocument && generatedDocument && (
         <div className="border border-[#2A2A2A] rounded-lg bg-[#0A0A0A] p-4 mt-2">
           <div className="flex items-center justify-between mb-3">
-            <span className="text-xs font-medium text-white">Sovereign Stack Document</span>
+            <span className="text-xs font-medium text-white">{t('playbook.sovereign.stackDocument')}</span>
             <div className="flex items-center gap-2">
               <button
                 onClick={() => navigator.clipboard.writeText(generatedDocument)}
                 className="text-[10px] text-[#666] hover:text-[#A0A0A0] transition-colors"
               >
-                Copy
+                {t('action.copy')}
               </button>
               <button
                 onClick={() => setShowDocument(false)}
                 className="text-[10px] text-[#666] hover:text-[#A0A0A0] transition-colors"
               >
-                Close
+                {t('action.close')}
               </button>
             </div>
           </div>

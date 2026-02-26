@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
 
 // --- Types ---
@@ -35,6 +36,7 @@ const CATEGORY_ICONS: Record<string, string> = {
 // --- Component ---
 
 export default function SovereignProfileView() {
+  const { t } = useTranslation();
   const [profile, setProfile] = useState<SovereignProfile | null>(null);
   const [completeness, setCompleteness] = useState<ProfileCompleteness | null>(null);
   const [loading, setLoading] = useState(false);
@@ -104,7 +106,7 @@ export default function SovereignProfileView() {
           </svg>
           <span className="text-sm text-[#EF4444] flex-1">{error}</span>
           <button onClick={() => setError(null)} className="text-[#EF4444]/60 hover:text-[#EF4444] text-xs">
-            Dismiss
+            {t('action.dismiss')}
           </button>
         </div>
       )}
@@ -113,7 +115,7 @@ export default function SovereignProfileView() {
       {loading && (
         <div className="flex flex-col items-center justify-center py-16 text-[#666]">
           <div className="w-8 h-8 border-2 border-[#2A2A2A] border-t-white rounded-full animate-spin mb-4" />
-          <p className="text-sm">Loading sovereign profile...</p>
+          <p className="text-sm">{t('toolkit.sovereignProfile.loading')}</p>
         </div>
       )}
 
@@ -142,7 +144,7 @@ export default function SovereignProfileView() {
             </div>
 
             <div className="flex-1 min-w-0">
-              <h3 className="text-sm font-medium text-white mb-1">Profile Completeness</h3>
+              <h3 className="text-sm font-medium text-white mb-1">{t('toolkit.sovereignProfile.completeness')}</h3>
               <div className="flex items-center gap-4 text-xs text-[#A0A0A0]">
                 <span>{completeness.total_facts} fact{completeness.total_facts !== 1 ? 's' : ''} collected</span>
                 <span>{completeness.categories_filled}/{completeness.total_categories} categories filled</span>
@@ -158,7 +160,7 @@ export default function SovereignProfileView() {
               {docLoading ? (
                 <>
                   <div className="w-3 h-3 border-2 border-[#0A0A0A]/30 border-t-[#0A0A0A] rounded-full animate-spin" />
-                  Generating...
+                  {t('toolkit.sovereignProfile.generating')}
                 </>
               ) : (
                 <>
@@ -168,7 +170,7 @@ export default function SovereignProfileView() {
                     <line x1="16" y1="13" x2="8" y2="13" />
                     <line x1="16" y1="17" x2="8" y2="17" />
                   </svg>
-                  Generate Document
+                  {t('toolkit.sovereignProfile.generateDocument')}
                 </>
               )}
             </button>
@@ -211,7 +213,7 @@ export default function SovereignProfileView() {
                     </div>
                   ) : (
                     <p className="text-[10px] text-[#666] italic">
-                      Run STREETS commands to populate
+                      {t('toolkit.sovereignProfile.runStreets')}
                     </p>
                   )}
                 </div>
@@ -224,7 +226,7 @@ export default function SovereignProfileView() {
             <div className="bg-[#141414] border border-[#2A2A2A] rounded-xl p-4">
               <div className="flex items-center justify-between mb-3">
                 <h3 className="text-xs font-medium text-[#A0A0A0] uppercase tracking-wider">
-                  Stack Document
+                  {t('toolkit.sovereignProfile.stackDocument')}
                 </h3>
                 <button
                   onClick={copyDocument}
@@ -235,7 +237,7 @@ export default function SovereignProfileView() {
                       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#22C55E" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                         <polyline points="20 6 9 17 4 12" />
                       </svg>
-                      <span className="text-[#22C55E]">Copied</span>
+                      <span className="text-[#22C55E]">{t('action.copied')}</span>
                     </>
                   ) : (
                     <>
@@ -243,7 +245,7 @@ export default function SovereignProfileView() {
                         <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
                         <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" />
                       </svg>
-                      Copy
+                      {t('action.copy')}
                     </>
                   )}
                 </button>

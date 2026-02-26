@@ -1,4 +1,5 @@
 import { useState, useEffect, memo } from 'react';
+import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
 import { ProGate } from './ProGate';
 import type { PredictedContext } from '../types';
@@ -10,6 +11,7 @@ function confidenceColor(score: number): string {
 }
 
 export const PredictiveIndicator = memo(function PredictiveIndicator() {
+  const { t } = useTranslation();
   const [prediction, setPrediction] = useState<PredictedContext | null>(null);
   const [expanded, setExpanded] = useState(false);
 
@@ -33,7 +35,7 @@ export const PredictiveIndicator = memo(function PredictiveIndicator() {
   const predTime = new Date(prediction.predicted_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
   return (
-    <ProGate feature="Predictive Context">
+    <ProGate feature={t('results.predictiveFeature')}>
     <div className="mb-6 bg-bg-secondary rounded-lg border border-border overflow-hidden">
       <button
         onClick={() => setExpanded(!expanded)}
@@ -48,7 +50,7 @@ export const PredictiveIndicator = memo(function PredictiveIndicator() {
             </svg>
           </div>
           <div className="text-left">
-            <h2 className="font-medium text-white text-sm">Predicted Context</h2>
+            <h2 className="font-medium text-white text-sm">{t('results.predictedContext')}</h2>
             <p className="text-xs text-gray-500">
               {topTopics.map(([t]) => t).join(', ')}
               <span className="ml-1.5 text-teal-400/70">{Math.round(prediction.confidence * 100)}%</span>
@@ -88,13 +90,13 @@ export const PredictiveIndicator = memo(function PredictiveIndicator() {
 
           {/* Footer: prediction time + refresh cycle */}
           <div className="flex items-center justify-between pt-1">
-            <span className="text-[10px] text-gray-600">Predicted at {predTime}</span>
+            <span className="text-[10px] text-gray-600">{t('results.predictedAt', { time: predTime })}</span>
             <span className="text-[10px] text-gray-600 flex items-center gap-1">
               <svg width="10" height="10" viewBox="0 0 10 10" fill="none" className="text-gray-600">
                 <path d="M5 1v4l2.5 1.5" stroke="currentColor" strokeWidth="1" strokeLinecap="round" />
                 <circle cx="5" cy="5" r="4" stroke="currentColor" strokeWidth="1" fill="none" />
               </svg>
-              Refreshes every 5m
+              {t('results.refreshInterval')}
             </span>
           </div>
         </div>

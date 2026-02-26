@@ -1,10 +1,12 @@
 import { useState, useEffect, memo } from 'react';
+import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
 import type { DeveloperDna } from '../types';
 import { getSourceFullName } from '../config/sources';
 import { ProGate } from './ProGate';
 
 export const DeveloperDnaPanel = memo(function DeveloperDnaPanel() {
+  const { t } = useTranslation();
   const [dna, setDna] = useState<DeveloperDna | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -78,9 +80,9 @@ export const DeveloperDnaPanel = memo(function DeveloperDnaPanel() {
             <span className="text-sm">&#x1F9EC;</span>
           </div>
           <div className="text-left">
-            <h2 className="font-medium text-white text-sm">Developer DNA</h2>
+            <h2 className="font-medium text-white text-sm">{t('dna.title')}</h2>
             <p className="text-xs text-gray-500">
-              {dna ? dna.identity_summary : 'Your technology identity profile'}
+              {dna ? dna.identity_summary : t('dna.defaultSubtitle')}
             </p>
           </div>
         </div>
@@ -92,7 +94,7 @@ export const DeveloperDnaPanel = memo(function DeveloperDnaPanel() {
           {loading && (
             <div className="flex items-center gap-2 py-8 justify-center">
               <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-              <span className="text-xs text-gray-500">Building your DNA profile...</span>
+              <span className="text-xs text-gray-500">{t('dna.building')}</span>
             </div>
           )}
 
@@ -117,26 +119,26 @@ export const DeveloperDnaPanel = memo(function DeveloperDnaPanel() {
                     onClick={copyBadge}
                     className="px-3 py-1.5 text-xs bg-orange-500/10 hover:bg-orange-500/20 border border-orange-500/30 rounded-lg text-orange-400 transition-colors"
                   >
-                    {badgeCopied ? 'Copied!' : 'Copy SVG Badge'}
+                    {badgeCopied ? t('action.copied') : t('dna.copySvgBadge')}
                   </button>
                   <button
                     onClick={downloadBadge}
                     className="px-3 py-1.5 text-xs bg-bg-tertiary hover:bg-border border border-border rounded-lg text-gray-300 transition-colors"
                   >
-                    Download Badge
+                    {t('dna.downloadBadge')}
                   </button>
                   <button
                     onClick={copyAsMarkdown}
                     className="px-3 py-1.5 text-xs bg-bg-tertiary hover:bg-border border border-border rounded-lg text-gray-300 transition-colors"
                   >
-                    {copied ? 'Copied!' : 'Markdown'}
+                    {copied ? t('action.copied') : t('dna.markdown')}
                   </button>
                 </div>
               </div>
 
               {/* Primary Stack */}
               {dna.primary_stack.length > 0 && (
-                <Section title="Primary Stack">
+                <Section title={t('dna.primaryStack')}>
                   <div className="flex flex-wrap gap-2">
                     {dna.primary_stack.map((tech) => (
                       <Tag key={tech} label={tech} variant="primary" />
@@ -147,7 +149,7 @@ export const DeveloperDnaPanel = memo(function DeveloperDnaPanel() {
 
               {/* Adjacent Tech */}
               {dna.adjacent_tech.length > 0 && (
-                <Section title="Ecosystem">
+                <Section title={t('dna.ecosystem')}>
                   <div className="flex flex-wrap gap-2">
                     {dna.adjacent_tech.map((tech) => (
                       <Tag key={tech} label={tech} variant="secondary" />

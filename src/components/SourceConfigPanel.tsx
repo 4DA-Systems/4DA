@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
 
 interface SourceConfigPanelProps {
@@ -6,6 +7,7 @@ interface SourceConfigPanelProps {
 }
 
 export function SourceConfigPanel({ onStatusChange }: SourceConfigPanelProps) {
+  const { t } = useTranslation();
   const [rssFeeds, setRssFeeds] = useState<string[]>([]);
   const [youtubeChannels, setYoutubeChannels] = useState<string[]>([]);
   const [twitterHandles, setTwitterHandles] = useState<string[]>([]);
@@ -50,7 +52,7 @@ export function SourceConfigPanel({ onStatusChange }: SourceConfigPanelProps) {
       await invoke('set_rss_feeds', { feeds: [...rssFeeds, url] });
       setRssFeeds((f) => [...f, url]);
       setNewRssFeed('');
-      onStatusChange('RSS feed added');
+      onStatusChange(t('sources.rss.added'));
       setTimeout(() => onStatusChange(''), 2000);
     } catch (error) {
       onStatusChange(`Error: ${error}`);
@@ -62,7 +64,7 @@ export function SourceConfigPanel({ onStatusChange }: SourceConfigPanelProps) {
     try {
       await invoke('set_rss_feeds', { feeds: updated });
       setRssFeeds(updated);
-      onStatusChange('RSS feed removed');
+      onStatusChange(t('sources.rss.removed'));
       setTimeout(() => onStatusChange(''), 2000);
     } catch (error) {
       onStatusChange(`Error: ${error}`);
@@ -76,7 +78,7 @@ export function SourceConfigPanel({ onStatusChange }: SourceConfigPanelProps) {
       await invoke('set_youtube_channels', { channels: [...youtubeChannels, id] });
       setYoutubeChannels((c) => [...c, id]);
       setNewYoutubeChannel('');
-      onStatusChange('YouTube channel added');
+      onStatusChange(t('sources.youtube.added'));
       setTimeout(() => onStatusChange(''), 2000);
     } catch (error) {
       onStatusChange(`Error: ${error}`);
@@ -88,7 +90,7 @@ export function SourceConfigPanel({ onStatusChange }: SourceConfigPanelProps) {
     try {
       await invoke('set_youtube_channels', { channels: updated });
       setYoutubeChannels(updated);
-      onStatusChange('YouTube channel removed');
+      onStatusChange(t('sources.youtube.removed'));
       setTimeout(() => onStatusChange(''), 2000);
     } catch (error) {
       onStatusChange(`Error: ${error}`);
@@ -102,7 +104,7 @@ export function SourceConfigPanel({ onStatusChange }: SourceConfigPanelProps) {
       await invoke('set_twitter_handles', { handles: [...twitterHandles, handle] });
       setTwitterHandles((h) => [...h, handle]);
       setNewTwitterHandle('');
-      onStatusChange('Twitter handle added');
+      onStatusChange(t('sources.twitter.added'));
       setTimeout(() => onStatusChange(''), 2000);
     } catch (error) {
       onStatusChange(`Error: ${error}`);
@@ -114,7 +116,7 @@ export function SourceConfigPanel({ onStatusChange }: SourceConfigPanelProps) {
     try {
       await invoke('set_twitter_handles', { handles: updated });
       setTwitterHandles(updated);
-      onStatusChange('Twitter handle removed');
+      onStatusChange(t('sources.twitter.removed'));
       setTimeout(() => onStatusChange(''), 2000);
     } catch (error) {
       onStatusChange(`Error: ${error}`);
@@ -127,7 +129,7 @@ export function SourceConfigPanel({ onStatusChange }: SourceConfigPanelProps) {
       await invoke('set_x_api_key', { key });
       setHasXApiKey(key.length > 0);
       setXApiKey('');
-      onStatusChange(key ? 'X API key saved' : 'X API key cleared');
+      onStatusChange(key ? t('sources.twitter.keySaved') : t('sources.twitter.keyCleared'));
       setTimeout(() => onStatusChange(''), 2000);
     } catch (error) {
       onStatusChange(`Error: ${error}`);
@@ -142,7 +144,7 @@ export function SourceConfigPanel({ onStatusChange }: SourceConfigPanelProps) {
       await invoke('set_github_languages', { languages: updated });
       setGithubLanguages(updated);
       setNewGithubLanguage('');
-      onStatusChange('GitHub language added');
+      onStatusChange(t('sources.github.added'));
       setTimeout(() => onStatusChange(''), 2000);
     } catch (error) {
       onStatusChange(`Error: ${error}`);
@@ -154,7 +156,7 @@ export function SourceConfigPanel({ onStatusChange }: SourceConfigPanelProps) {
     try {
       await invoke('set_github_languages', { languages: updated });
       setGithubLanguages(updated);
-      onStatusChange('GitHub language removed');
+      onStatusChange(t('sources.github.removed'));
       setTimeout(() => onStatusChange(''), 2000);
     } catch (error) {
       onStatusChange(`Error: ${error}`);
@@ -174,13 +176,13 @@ export function SourceConfigPanel({ onStatusChange }: SourceConfigPanelProps) {
         </div>
         <div className="flex-1 text-left">
           <div className="flex items-center gap-2">
-            <h3 className="text-white font-medium">Source Configuration</h3>
+            <h3 className="text-white font-medium">{t('sources.title')}</h3>
             <span className="px-1.5 py-0.5 text-[10px] bg-cyan-500/20 text-cyan-400 rounded">
-              {totalSources} custom
+              {t('sources.customCount', { count: totalSources })}
             </span>
           </div>
           <p className="text-gray-500 text-sm mt-0.5">
-            RSS feeds, YouTube, GitHub languages, Twitter/X
+            {t('sources.subtitle')}
           </p>
         </div>
         <span className="text-gray-500 text-xs">{expanded ? '−' : '+'}</span>
@@ -190,7 +192,7 @@ export function SourceConfigPanel({ onStatusChange }: SourceConfigPanelProps) {
         <div className="mt-4 space-y-5">
           {/* RSS Feeds */}
           <div>
-            <label className="text-xs text-gray-400 block mb-2">RSS Feeds</label>
+            <label className="text-xs text-gray-400 block mb-2">{t('sources.rss.label')}</label>
             <div className="flex gap-2 mb-2">
               <input
                 type="text"
@@ -204,7 +206,7 @@ export function SourceConfigPanel({ onStatusChange }: SourceConfigPanelProps) {
                 onClick={addRssFeed}
                 className="px-3 py-2 text-sm bg-bg-secondary border border-border rounded-lg text-gray-400 hover:text-white hover:border-cyan-500/30 transition-all"
               >
-                Add
+                {t('action.add')}
               </button>
             </div>
             {rssFeeds.length > 0 ? (
@@ -227,15 +229,15 @@ export function SourceConfigPanel({ onStatusChange }: SourceConfigPanelProps) {
                 ))}
               </div>
             ) : (
-              <p className="text-xs text-gray-600">No custom RSS feeds</p>
+              <p className="text-xs text-gray-600">{t('sources.rss.empty')}</p>
             )}
           </div>
 
           {/* YouTube Channels */}
           <div>
             <label className="text-xs text-gray-400 block mb-2">
-              YouTube Channels
-              <span className="text-gray-600 ml-1">(no API key needed)</span>
+              {t('sources.youtube.label')}
+              <span className="text-gray-600 ml-1">{t('sources.youtube.noKeyNeeded')}</span>
             </label>
             <div className="flex gap-2 mb-2">
               <input
@@ -250,7 +252,7 @@ export function SourceConfigPanel({ onStatusChange }: SourceConfigPanelProps) {
                 onClick={addYoutubeChannel}
                 className="px-3 py-2 text-sm bg-bg-secondary border border-border rounded-lg text-gray-400 hover:text-white hover:border-cyan-500/30 transition-all"
               >
-                Add
+                {t('action.add')}
               </button>
             </div>
             {youtubeChannels.length > 0 ? (
@@ -272,7 +274,7 @@ export function SourceConfigPanel({ onStatusChange }: SourceConfigPanelProps) {
               </div>
             ) : (
               <p className="text-xs text-gray-600">
-                Using default tech channels (Fireship, ThePrimeagen, etc.)
+                {t('sources.youtube.defaultChannels')}
               </p>
             )}
           </div>
@@ -280,8 +282,8 @@ export function SourceConfigPanel({ onStatusChange }: SourceConfigPanelProps) {
           {/* GitHub Languages */}
           <div>
             <label className="text-xs text-gray-400 block mb-2">
-              GitHub Languages
-              <span className="text-gray-600 ml-1">(trending repos filter)</span>
+              {t('sources.github.label')}
+              <span className="text-gray-600 ml-1">{t('sources.github.trendingFilter')}</span>
             </label>
             <div className="flex gap-2 mb-2">
               <input
@@ -296,7 +298,7 @@ export function SourceConfigPanel({ onStatusChange }: SourceConfigPanelProps) {
                 onClick={addGithubLanguage}
                 className="px-3 py-2 text-sm bg-bg-secondary border border-border rounded-lg text-gray-400 hover:text-white hover:border-cyan-500/30 transition-all"
               >
-                Add
+                {t('action.add')}
               </button>
             </div>
             <div className="flex flex-wrap gap-1.5">
@@ -320,11 +322,11 @@ export function SourceConfigPanel({ onStatusChange }: SourceConfigPanelProps) {
           {/* Twitter/X */}
           <div>
             <label className="text-xs text-gray-400 block mb-2">
-              Twitter/X Accounts
+              {t('sources.twitter.label')}
               {hasXApiKey ? (
-                <span className="text-green-400 ml-1">(API key set)</span>
+                <span className="text-green-400 ml-1">{t('sources.twitter.keySet')}</span>
               ) : (
-                <span className="text-yellow-400 ml-1">(needs API key)</span>
+                <span className="text-yellow-400 ml-1">{t('sources.twitter.needsKey')}</span>
               )}
             </label>
             <div className="flex gap-2 mb-2">
@@ -340,7 +342,7 @@ export function SourceConfigPanel({ onStatusChange }: SourceConfigPanelProps) {
                 onClick={addTwitterHandle}
                 className="px-3 py-2 text-sm bg-bg-secondary border border-border rounded-lg text-gray-400 hover:text-white hover:border-cyan-500/30 transition-all"
               >
-                Add
+                {t('action.add')}
               </button>
             </div>
             {twitterHandles.length > 0 ? (
@@ -362,7 +364,7 @@ export function SourceConfigPanel({ onStatusChange }: SourceConfigPanelProps) {
               </div>
             ) : (
               <p className="text-xs text-gray-600 mb-3">
-                Using default tech handles
+                {t('sources.twitter.defaultHandles')}
               </p>
             )}
 
@@ -379,7 +381,7 @@ export function SourceConfigPanel({ onStatusChange }: SourceConfigPanelProps) {
                 onClick={saveXApiKey}
                 className="px-3 py-2 text-sm bg-bg-secondary border border-border rounded-lg text-gray-400 hover:text-white hover:border-cyan-500/30 transition-all"
               >
-                {hasXApiKey ? 'Update' : 'Save'}
+                {hasXApiKey ? t('sources.twitter.update') : t('action.save')}
               </button>
             </div>
           </div>

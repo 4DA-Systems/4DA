@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 
 function computeDiff(a: string, b: string): Array<{ type: 'equal' | 'added' | 'removed'; line: string }> {
   const linesA = a.split('\n');
@@ -37,6 +38,7 @@ function computeDiff(a: string, b: string): Array<{ type: 'equal' | 'added' | 'r
 }
 
 export default function DiffViewer() {
+  const { t } = useTranslation();
   const [left, setLeft] = useState('');
   const [right, setRight] = useState('');
   const [mode, setMode] = useState<'unified' | 'side'>('unified');
@@ -57,20 +59,20 @@ export default function DiffViewer() {
       {/* Input panes */}
       <div className="grid grid-cols-2 gap-3">
         <div>
-          <label className="block text-xs text-gray-500 mb-1">Original</label>
+          <label className="block text-xs text-gray-500 mb-1">{t('toolkit.diffViewer.original')}</label>
           <textarea
             value={left}
             onChange={(e) => setLeft(e.target.value)}
-            placeholder="Paste original text..."
+            placeholder={t('toolkit.diffViewer.originalPlaceholder')}
             className="w-full h-48 px-3 py-2 text-sm font-mono bg-bg-secondary border border-border rounded-lg text-white placeholder:text-gray-600 focus:outline-none focus:border-white/30 resize-y"
           />
         </div>
         <div>
-          <label className="block text-xs text-gray-500 mb-1">Modified</label>
+          <label className="block text-xs text-gray-500 mb-1">{t('toolkit.diffViewer.modified')}</label>
           <textarea
             value={right}
             onChange={(e) => setRight(e.target.value)}
-            placeholder="Paste modified text..."
+            placeholder={t('toolkit.diffViewer.modifiedPlaceholder')}
             className="w-full h-48 px-3 py-2 text-sm font-mono bg-bg-secondary border border-border rounded-lg text-white placeholder:text-gray-600 focus:outline-none focus:border-white/30 resize-y"
           />
         </div>
@@ -83,13 +85,13 @@ export default function DiffViewer() {
             onClick={() => setMode('unified')}
             className={`px-3 py-1 text-xs rounded-md transition-all ${mode === 'unified' ? 'bg-bg-tertiary text-white' : 'text-gray-500'}`}
           >
-            Unified
+            {t('toolkit.diffViewer.unified')}
           </button>
           <button
             onClick={() => setMode('side')}
             className={`px-3 py-1 text-xs rounded-md transition-all ${mode === 'side' ? 'bg-bg-tertiary text-white' : 'text-gray-500'}`}
           >
-            Side by Side
+            {t('toolkit.diffViewer.sideBySide')}
           </button>
         </div>
         {(left || right) && (

@@ -15,14 +15,14 @@ describe('ArticleReader', () => {
 
   it('renders "Read Article" button initially', () => {
     render(<ArticleReader itemId={1} />);
-    expect(screen.getByText('Read Article')).toBeTruthy();
+    expect(screen.getByText('reader.readArticle')).toBeTruthy();
   });
 
   it('shows loading state when clicked', async () => {
     mockInvoke.mockReturnValue(new Promise(() => {})); // never resolves
     render(<ArticleReader itemId={1} />);
-    fireEvent.click(screen.getByText('Read Article'));
-    expect(screen.getByText('Loading...')).toBeTruthy();
+    fireEvent.click(screen.getByText('reader.readArticle'));
+    expect(screen.getByText('action.loading')).toBeTruthy();
   });
 
   it('displays content after successful fetch', async () => {
@@ -34,24 +34,24 @@ describe('ArticleReader', () => {
       summary: null,
     });
     render(<ArticleReader itemId={1} url="https://example.com" />);
-    fireEvent.click(screen.getByText('Read Article'));
+    fireEvent.click(screen.getByText('reader.readArticle'));
     await waitFor(() => {
       expect(screen.getByText('This is the article content.')).toBeTruthy();
     });
-    expect(screen.getByText('5 words')).toBeTruthy();
-    expect(screen.getByText('~1 min read')).toBeTruthy();
-    expect(screen.getByText('Copy URL')).toBeTruthy();
-    expect(screen.getByText('Close')).toBeTruthy();
+    expect(screen.getByText('reader.wordCount')).toBeTruthy();
+    expect(screen.getByText('reader.readTime')).toBeTruthy();
+    expect(screen.getByText('saved.copyUrl')).toBeTruthy();
+    expect(screen.getByText('action.close')).toBeTruthy();
   });
 
   it('shows error state on failure', async () => {
     mockInvoke.mockRejectedValue('Network error');
     render(<ArticleReader itemId={1} />);
-    fireEvent.click(screen.getByText('Read Article'));
+    fireEvent.click(screen.getByText('reader.readArticle'));
     await waitFor(() => {
       expect(screen.getByText('Network error')).toBeTruthy();
     });
-    expect(screen.getByText('Retry')).toBeTruthy();
+    expect(screen.getByText('action.retry')).toBeTruthy();
   });
 
   it('shows error when no content available', async () => {
@@ -63,9 +63,9 @@ describe('ArticleReader', () => {
       summary: null,
     });
     render(<ArticleReader itemId={1} />);
-    fireEvent.click(screen.getByText('Read Article'));
+    fireEvent.click(screen.getByText('reader.readArticle'));
     await waitFor(() => {
-      expect(screen.getByText('No content available for this item.')).toBeTruthy();
+      expect(screen.getByText('reader.noContent')).toBeTruthy();
     });
   });
 
@@ -78,10 +78,10 @@ describe('ArticleReader', () => {
       summary: null,
     });
     render(<ArticleReader itemId={1} />);
-    fireEvent.click(screen.getByText('Read Article'));
+    fireEvent.click(screen.getByText('reader.readArticle'));
     await waitFor(() => {
-      expect(screen.getByText('600 words')).toBeTruthy();
+      expect(screen.getByText('reader.wordCount')).toBeTruthy();
     });
-    expect(screen.getByText('~3 min read')).toBeTruthy();
+    expect(screen.getByText('reader.readTime')).toBeTruthy();
   });
 });

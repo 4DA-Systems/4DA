@@ -1,4 +1,5 @@
 import { useState, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import { SunSparkline } from './SunSparkline';
 import type { SunStatus } from '../../store/suns-slice';
 import type { ModuleHealth } from '../../store/suns-slice';
@@ -47,6 +48,7 @@ export function SunModuleGroup({
   onToggle,
   onTrigger,
 }: SunModuleGroupProps) {
+  const { t } = useTranslation();
   const color = MODULE_COLORS[moduleId] || '#A0A0A0';
   const healthPct = moduleHealth ? Math.round(moduleHealth.score * 100) : 0;
 
@@ -69,15 +71,14 @@ export function SunModuleGroup({
           </span>
           <span className="text-sm font-medium text-white">{moduleName}</span>
           <span className="text-xs" style={{ color: '#666666' }}>
-            {suns.length} sun{suns.length !== 1 ? 's' : ''}
+            {t('playbook.suns.sunCount', { count: suns.length })}
           </span>
         </div>
         {moduleHealth && (
           <div className="flex items-center gap-2">
             {moduleHealth.lessons_completed > 0 && (
               <span className="text-xs" style={{ color: '#666666' }}>
-                {moduleHealth.lessons_completed}/{moduleHealth.total_lessons}{' '}
-                lessons
+                {t('playbook.suns.lessonsProgress', { completed: moduleHealth.lessons_completed, total: moduleHealth.total_lessons })}
               </span>
             )}
             <span
@@ -127,6 +128,7 @@ function SunRowCompact({
   onToggle: (id: string, enabled: boolean) => void;
   onTrigger: (id: string) => void;
 }) {
+  const { t } = useTranslation();
   const [triggering, setTriggering] = useState(false);
 
   const handleTrigger = useCallback(() => {
@@ -158,7 +160,7 @@ function SunRowCompact({
           </span>
           {sun.run_count > 0 && (
             <span className="text-xs" style={{ color: '#666666' }}>
-              {sun.run_count} runs
+              {t('playbook.suns.runCount', { count: sun.run_count })}
             </span>
           )}
         </div>
@@ -176,7 +178,7 @@ function SunRowCompact({
           opacity: sun.enabled ? 1 : 0.5,
         }}
       >
-        {triggering ? '...' : 'Run'}
+        {triggering ? '...' : t('action.run')}
       </button>
 
       <button

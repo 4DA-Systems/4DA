@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import { useLicense } from '../hooks/use-license';
 
 interface ProHintProps {
@@ -13,6 +14,7 @@ interface ProHintProps {
  * clickable hint for free users and full content for Pro users.
  */
 export function ProHint({ children, feature }: ProHintProps) {
+  const { t } = useTranslation();
   const { isPro } = useLicense();
 
   if (isPro) {
@@ -29,7 +31,7 @@ export function ProHint({ children, feature }: ProHintProps) {
       <svg width="10" height="10" viewBox="0 0 16 16" fill="none" className="opacity-60 group-hover:opacity-100">
         <path d="M8 1L10 6H15L11 9.5L12.5 15L8 11.5L3.5 15L5 9.5L1 6H6L8 1Z" fill="currentColor"/>
       </svg>
-      <span>Pro: {feature}</span>
+      <span>{t('pro.hint', { feature })}</span>
     </a>
   );
 }

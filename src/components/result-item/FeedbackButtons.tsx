@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import type { SourceRelevance, FeedbackAction } from '../../types';
 
 interface FeedbackButtonsProps {
@@ -7,6 +8,7 @@ interface FeedbackButtonsProps {
 }
 
 export function FeedbackButtons({ item, feedback, onRecordInteraction }: FeedbackButtonsProps) {
+  const { t } = useTranslation();
   return (
     <div className="flex gap-2 mb-3">
       {item.url && (
@@ -20,7 +22,7 @@ export function FeedbackButtons({ item, feedback, onRecordInteraction }: Feedbac
           }}
           className="px-3 py-1.5 text-xs bg-accent-primary text-bg-primary rounded hover:bg-text-secondary transition-colors font-medium"
         >
-          Open Link
+          {t('feedback.openLink')}
         </a>
       )}
       <button
@@ -37,7 +39,7 @@ export function FeedbackButtons({ item, feedback, onRecordInteraction }: Feedbac
             : 'bg-success/20 text-success hover:bg-success/30'
         }`}
       >
-        {feedback === 'save' ? '\u2713 Saved' : 'Save'}
+        {feedback === 'save' ? `\u2713 ${t('feedback.saved')}` : t('action.save')}
       </button>
       <button
         onClick={(e) => {
@@ -53,7 +55,7 @@ export function FeedbackButtons({ item, feedback, onRecordInteraction }: Feedbac
             : 'bg-bg-tertiary text-text-secondary hover:bg-border'
         }`}
       >
-        {feedback === 'dismiss' ? '\u2717 Dismissed' : 'Dismiss'}
+        {feedback === 'dismiss' ? `\u2717 ${t('feedback.dismissed')}` : t('action.dismiss')}
       </button>
       <button
         onClick={(e) => {
@@ -69,7 +71,7 @@ export function FeedbackButtons({ item, feedback, onRecordInteraction }: Feedbac
             : 'bg-error/10 text-error/80 hover:bg-error/20 hover:text-error'
         }`}
       >
-        {feedback === 'mark_irrelevant' ? '\u2298 Marked' : 'Not Relevant'}
+        {feedback === 'mark_irrelevant' ? `\u2298 ${t('feedback.marked')}` : t('feedback.notRelevant')}
       </button>
     </div>
   );

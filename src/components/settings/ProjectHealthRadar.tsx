@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
 import { ProGate } from '../ProGate';
 import type { ProjectHealth } from '../../types';
@@ -19,6 +20,7 @@ function ScoreBar({ label, score, color }: { label: string; score: number; color
 }
 
 export function ProjectHealthRadar() {
+  const { t } = useTranslation();
   const [projects, setProjects] = useState<ProjectHealth[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -46,15 +48,15 @@ export function ProjectHealthRadar() {
           <span>📡</span>
         </div>
         <div>
-          <h3 className="text-sm font-medium text-white">Project Health Radar</h3>
-          <p className="text-xs text-gray-500">Dependency freshness, security, momentum, community</p>
+          <h3 className="text-sm font-medium text-white">{t('settings.health.title')}</h3>
+          <p className="text-xs text-gray-500">{t('settings.health.description')}</p>
         </div>
       </div>
 
       {loading && (
         <div className="flex items-center gap-2 py-4 justify-center">
           <div className="w-4 h-4 border-2 border-teal-500 border-t-transparent rounded-full animate-spin" />
-          <span className="text-xs text-gray-500">Scanning projects...</span>
+          <span className="text-xs text-gray-500">{t('settings.health.scanning')}</span>
         </div>
       )}
 
@@ -64,7 +66,7 @@ export function ProjectHealthRadar() {
 
       {!loading && projects.length === 0 && !error && (
         <p className="text-xs text-gray-500 text-center py-4">
-          No projects detected. Add context directories in settings to enable health tracking.
+          {t('settings.health.noProjects')}
         </p>
       )}
 
@@ -82,10 +84,10 @@ export function ProjectHealthRadar() {
           </div>
 
           <div className="space-y-2">
-            <ScoreBar label="Freshness" score={p.freshness.score} color="bg-green-500/70" />
-            <ScoreBar label="Security" score={p.security.score} color="bg-red-500/70" />
-            <ScoreBar label="Momentum" score={p.momentum.score} color="bg-blue-500/70" />
-            <ScoreBar label="Community" score={p.community.score} color="bg-purple-500/70" />
+            <ScoreBar label={t('settings.health.freshness')} score={p.freshness.score} color="bg-green-500/70" />
+            <ScoreBar label={t('settings.health.security')} score={p.security.score} color="bg-red-500/70" />
+            <ScoreBar label={t('settings.health.momentum')} score={p.momentum.score} color="bg-blue-500/70" />
+            <ScoreBar label={t('settings.health.community')} score={p.community.score} color="bg-purple-500/70" />
           </div>
 
           {/* Details on hover/click */}
@@ -112,7 +114,7 @@ export function ProjectHealthRadar() {
           )}
 
           <div className="mt-2 text-[10px] text-gray-600">
-            {p.dependency_count} dependencies · Last checked {p.last_checked ? new Date(p.last_checked).toLocaleDateString() : 'never'}
+            {t('settings.health.dependencies', { count: p.dependency_count })} · {t('settings.health.lastChecked', { date: p.last_checked ? new Date(p.last_checked).toLocaleDateString() : t('settings.health.never') })}
           </div>
         </div>
       ))}

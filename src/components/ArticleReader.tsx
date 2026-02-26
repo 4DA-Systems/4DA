@@ -1,4 +1,5 @@
 import { useState, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
 import type { ItemContent } from '../types';
 import { getContentTypeBadge } from '../config/content-types';
@@ -10,6 +11,7 @@ interface ArticleReaderProps {
 }
 
 export function ArticleReader({ itemId, url, contentType }: ArticleReaderProps) {
+  const { t } = useTranslation();
   const [content, setContent] = useState<ItemContent | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -21,7 +23,7 @@ export function ArticleReader({ itemId, url, contentType }: ArticleReaderProps) 
     try {
       const result = await invoke<ItemContent>('get_item_content', { itemId });
       if (!result.content || result.content.trim().length === 0) {
-        setError('No content available for this item.');
+        setError(t('reader.noContent'));
         setContent(null);
       } else {
         setContent(result);
@@ -32,7 +34,7 @@ export function ArticleReader({ itemId, url, contentType }: ArticleReaderProps) 
     } finally {
       setLoading(false);
     }
-  }, [itemId]);
+  }, [itemId, t]);
 
   const readTime = content ? Math.max(1, Math.ceil(content.word_count / 200)) : 0;
   const badge = getContentTypeBadge(contentType);
@@ -45,7 +47,7 @@ export function ArticleReader({ itemId, url, contentType }: ArticleReaderProps) 
           disabled={loading}
           className="text-[11px] px-2.5 py-1.5 rounded border border-border text-text-secondary hover:bg-bg-tertiary transition-colors disabled:opacity-50"
         >
-          {loading ? 'Loading...' : 'Read Article'}
+          {loading ? t('action.loading') : t('reader.readArticle')}
         </button>
         {error && (
           <div className="mt-1.5 p-2 rounded border border-red-500/30 bg-red-500/5">
@@ -54,7 +56,7 @@ export function ArticleReader({ itemId, url, contentType }: ArticleReaderProps) 
               onClick={loadContent}
               className="ml-2 text-[10px] text-red-300 underline hover:text-red-200"
             >
-              Retry
+              {t('action.retry')}
             </button>
           </div>
         )}
@@ -73,10 +75,10 @@ export function ArticleReader({ itemId, url, contentType }: ArticleReaderProps) 
             </span>
           )}
           <span className="text-[10px] text-text-muted">
-            {content?.word_count.toLocaleString()} words
+            {t('reader.wordCount', { count: content?.word_count ?? 0 })}
           </span>
           <span className="text-[10px] text-text-muted">
-            ~{readTime} min read
+            {t('reader.readTime', { minutes: readTime })}
           </span>
         </div>
         <div className="flex items-center gap-2">
@@ -85,14 +87,14 @@ export function ArticleReader({ itemId, url, contentType }: ArticleReaderProps) 
               onClick={() => window.navigator.clipboard.writeText(url)}
               className="text-[10px] text-text-muted hover:text-text-secondary transition-colors"
             >
-              Copy URL
+              {t('saved.copyUrl')}
             </button>
           )}
           <button
             onClick={() => setIsOpen(false)}
             className="text-[10px] text-text-muted hover:text-text-secondary transition-colors"
           >
-            Close
+            {t('action.close')}
           </button>
         </div>
       </div>

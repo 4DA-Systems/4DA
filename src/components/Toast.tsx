@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import type { Toast as ToastData, ToastType } from '../hooks/use-toasts';
 
 const typeStyles: Record<ToastType, { border: string; icon: string; text: string }> = {
@@ -13,6 +14,7 @@ interface ToastContainerProps {
 }
 
 export function ToastContainer({ toasts, onDismiss }: ToastContainerProps) {
+  const { t } = useTranslation();
   if (toasts.length === 0) return null;
 
   return (
@@ -39,7 +41,7 @@ export function ToastContainer({ toasts, onDismiss }: ToastContainerProps) {
             <button
               onClick={() => onDismiss(toast.id)}
               className="text-gray-600 hover:text-gray-300 transition-colors flex-shrink-0 ml-1"
-              aria-label="Dismiss notification"
+              aria-label={t('action.dismiss')}
             >
               x
             </button>

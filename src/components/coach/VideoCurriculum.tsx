@@ -1,4 +1,5 @@
 import { useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../../store';
 import { useShallow } from 'zustand/react/shallow';
 import type { VideoLesson } from '../../types/coach';
@@ -28,13 +29,14 @@ function StatsBar({
   watched: number;
   completionPct: number;
 }) {
+  const { t } = useTranslation();
   const pct = Math.min(Math.max(completionPct, 0), 100);
 
   return (
     <div className="bg-[#141414] border border-[#2A2A2A] rounded-xl p-5 mb-5">
       <div className="flex items-center justify-between mb-3">
         <p className="text-[10px] text-[#666] uppercase tracking-wide font-medium">
-          Curriculum Progress
+          {t('coach.video.curriculumProgress')}
         </p>
         <span className="text-xs text-[#A0A0A0] font-mono">{Math.round(pct)}%</span>
       </div>
@@ -47,15 +49,15 @@ function StatsBar({
       <div className="grid grid-cols-3 gap-4">
         <div className="text-center">
           <p className="text-lg font-semibold text-white">{total}</p>
-          <p className="text-[10px] text-[#666] uppercase tracking-wide">Total</p>
+          <p className="text-[10px] text-[#666] uppercase tracking-wide">{t('coach.video.total')}</p>
         </div>
         <div className="text-center">
           <p className="text-lg font-semibold text-[#D4AF37]">{unlocked}</p>
-          <p className="text-[10px] text-[#666] uppercase tracking-wide">Unlocked</p>
+          <p className="text-[10px] text-[#666] uppercase tracking-wide">{t('coach.video.unlocked')}</p>
         </div>
         <div className="text-center">
           <p className="text-lg font-semibold text-[#22C55E]">{watched}</p>
-          <p className="text-[10px] text-[#666] uppercase tracking-wide">Watched</p>
+          <p className="text-[10px] text-[#666] uppercase tracking-wide">{t('coach.video.watched')}</p>
         </div>
       </div>
     </div>
@@ -63,6 +65,7 @@ function StatsBar({
 }
 
 function LockOverlay({ dripDay }: { dripDay: number }) {
+  const { t } = useTranslation();
   return (
     <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-[#0A0A0A]/80 backdrop-blur-[2px] rounded-xl">
       <svg
@@ -78,7 +81,7 @@ function LockOverlay({ dripDay }: { dripDay: number }) {
         <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
         <path d="M7 11V7a5 5 0 0 1 10 0v4" />
       </svg>
-      <p className="text-xs text-[#666] mt-2 font-medium">Unlocks on Day {dripDay}</p>
+      <p className="text-xs text-[#666] mt-2 font-medium">{t('coach.video.unlocksOnDay', { day: dripDay })}</p>
     </div>
   );
 }
@@ -165,6 +168,7 @@ function VideoCard({ lesson }: { lesson: VideoLesson }) {
 // ---------------------------------------------------------------------------
 
 export function VideoCurriculum() {
+  const { t } = useTranslation();
   const { videoCurriculum, videoStatus } = useAppStore(
     useShallow(s => ({
       videoCurriculum: s.videoCurriculum,
@@ -187,9 +191,9 @@ export function VideoCurriculum() {
     <div className="space-y-5">
       {/* Header */}
       <div>
-        <h3 className="text-sm font-semibold text-white">Video Curriculum</h3>
+        <h3 className="text-sm font-semibold text-white">{t('coach.video.title')}</h3>
         <p className="text-xs text-[#666] mt-0.5">
-          STREETS Cohort video lessons -- drip-unlocked as you progress
+          {t('coach.video.subtitle')}
         </p>
       </div>
 
@@ -227,8 +231,7 @@ export function VideoCurriculum() {
             </svg>
           </div>
           <p className="text-sm text-[#A0A0A0] max-w-sm">
-            No video lessons available yet. Activate your Cohort tier to access
-            the full STREETS video curriculum.
+            {t('coach.video.emptyDescription')}
           </p>
         </div>
       )}

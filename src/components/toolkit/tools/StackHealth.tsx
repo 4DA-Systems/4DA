@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
 
 // --- Types ---
@@ -55,6 +56,7 @@ function formatScore(score: number): string {
 // --- Component ---
 
 export default function StackHealth() {
+  const { t } = useTranslation();
   const [data, setData] = useState<ProjectHealth | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -100,7 +102,7 @@ export default function StackHealth() {
           {loading ? (
             <>
               <div className="w-3.5 h-3.5 border-2 border-[#0A0A0A]/30 border-t-[#0A0A0A] rounded-full animate-spin" />
-              Scanning...
+              {t('toolkit.stackHealth.scanning')}
             </>
           ) : (
             <>
@@ -109,7 +111,7 @@ export default function StackHealth() {
                 <path d="M1 20v-6h6" />
                 <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15" />
               </svg>
-              Refresh
+              {t('action.refresh')}
             </>
           )}
         </button>
@@ -142,7 +144,7 @@ export default function StackHealth() {
             onClick={fetch}
             className="text-xs text-[#EF4444] hover:text-white transition-colors underline"
           >
-            Retry
+            {t('action.retry')}
           </button>
         </div>
       )}
@@ -151,7 +153,7 @@ export default function StackHealth() {
       {loading && !data && (
         <div className="flex flex-col items-center justify-center py-16 text-[#666]">
           <div className="w-8 h-8 border-2 border-[#2A2A2A] border-t-white rounded-full animate-spin mb-4" />
-          <p className="text-sm">Analyzing project health...</p>
+          <p className="text-sm">{t('toolkit.stackHealth.analyzing')}</p>
         </div>
       )}
 
@@ -161,15 +163,15 @@ export default function StackHealth() {
           <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="mb-3 opacity-50">
             <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
           </svg>
-          <p className="text-sm">No health data yet</p>
-          <p className="text-xs mt-1">Click Refresh to scan project dependencies</p>
+          <p className="text-sm">{t('toolkit.stackHealth.empty')}</p>
+          <p className="text-xs mt-1">{t('toolkit.stackHealth.emptyHint')}</p>
         </div>
       )}
 
       {/* Project cards */}
       {data && data.projects.length === 0 && (
         <div className="text-center py-10 text-[#666] text-sm">
-          No projects detected. ACE must discover projects first.
+          {t('toolkit.stackHealth.noProjects')}
         </div>
       )}
 

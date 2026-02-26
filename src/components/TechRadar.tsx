@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, memo } from 'react';
+import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
 
 import { RadarSVG } from './tech-radar/RadarSVG';
@@ -12,6 +13,7 @@ interface TechRadarData {
 }
 
 export const TechRadar = memo(function TechRadar() {
+  const { t } = useTranslation();
   const [data, setData] = useState<TechRadarData | null>(null);
   const [loading, setLoading] = useState(true);
   const [selectedEntry, setSelectedEntry] = useState<RadarEntry | null>(null);
@@ -59,7 +61,7 @@ export const TechRadar = memo(function TechRadar() {
     return (
       <div className="bg-bg-secondary rounded-lg border border-border p-8 flex flex-col items-center justify-center gap-2">
         <div className="w-5 h-5 border-2 border-gray-600 border-t-white rounded-full animate-spin" />
-        <div className="text-xs text-gray-500">Loading tech radar...</div>
+        <div className="text-xs text-gray-500">{t('techRadar.loading')}</div>
       </div>
     );
   }
@@ -67,9 +69,9 @@ export const TechRadar = memo(function TechRadar() {
   if (!data || data.entries.length === 0) {
     return (
       <div className="bg-bg-secondary rounded-lg border border-border p-8 text-center">
-        <div className="text-sm text-gray-500">No radar data available</div>
+        <div className="text-sm text-gray-500">{t('techRadar.empty')}</div>
         <div className="text-xs text-gray-600 mt-1">
-          Radar populates as decisions and signals accumulate
+          {t('techRadar.emptyHint')}
         </div>
       </div>
     );
@@ -83,9 +85,9 @@ export const TechRadar = memo(function TechRadar() {
           <span className="text-sm text-gray-400">R</span>
         </div>
         <div>
-          <h2 className="font-medium text-white text-sm">Tech Radar</h2>
+          <h2 className="font-medium text-white text-sm">{t('techRadar.title')}</h2>
           <p className="text-xs text-gray-500">
-            {data.entries.length} technolog{data.entries.length !== 1 ? 'ies' : 'y'} tracked
+            {t('techRadar.count', { count: data.entries.length })}
           </p>
         </div>
       </div>
@@ -108,36 +110,36 @@ export const TechRadar = memo(function TechRadar() {
           <svg width="10" height="10" viewBox="0 0 10 10">
             <polygon points="5,1 2,7 8,7" fill="#22C55E" />
           </svg>
-          <span>Moving in</span>
+          <span>{t('techRadar.movingIn')}</span>
         </div>
         <div className="flex items-center gap-1.5">
           <svg width="10" height="10" viewBox="0 0 10 10">
             <polygon points="5,9 2,3 8,3" fill="#EF4444" />
           </svg>
-          <span>Moving out</span>
+          <span>{t('techRadar.movingOut')}</span>
         </div>
         <div className="flex items-center gap-1.5">
           <svg width="10" height="10" viewBox="0 0 10 10">
             <polygon points="5,1 9,5 5,9 1,5" fill="#D4AF37" />
           </svg>
-          <span>New</span>
+          <span>{t('techRadar.new')}</span>
         </div>
         <div className="flex items-center gap-1.5">
           <svg width="8" height="8" viewBox="0 0 8 8">
             <circle cx="4" cy="4" r="3" fill="#FFFFFF" />
           </svg>
-          <span>Stable</span>
+          <span>{t('techRadar.stable')}</span>
         </div>
         <div className="flex items-center gap-1.5">
           <svg width="12" height="12" viewBox="0 0 12 12">
             <circle cx="6" cy="6" r="3" fill="#FFFFFF" />
             <circle cx="6" cy="6" r="5" fill="none" stroke="#D4AF37" strokeWidth="1.5" />
           </svg>
-          <span>Your stack</span>
+          <span>{t('techRadar.yourStack')}</span>
         </div>
         {data.generated_at && (
           <span className="ml-auto text-gray-600">
-            Generated {new Date(data.generated_at).toLocaleDateString()}
+            {t('techRadar.generated', { date: new Date(data.generated_at).toLocaleDateString() })}
           </span>
         )}
       </div>

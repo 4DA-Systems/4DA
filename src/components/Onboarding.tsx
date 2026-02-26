@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
 
 import type { Step } from './onboarding/types';
@@ -11,12 +12,13 @@ interface OnboardingProps {
 
 const steps: Step[] = ['welcome', 'setup'];
 
-const stepLabels: Record<Step, string> = {
-  welcome: 'Welcome',
-  setup: 'Setup',
-};
-
 export function Onboarding({ onComplete }: OnboardingProps) {
+  const { t } = useTranslation();
+
+  const stepLabels: Record<Step, string> = {
+    welcome: t('onboarding.stepLabel.welcome'),
+    setup: t('onboarding.stepLabel.setup'),
+  };
   const [step, setStep] = useState<Step>('welcome');
   const [isAnimating, setIsAnimating] = useState(true);
 
@@ -97,7 +99,7 @@ export function Onboarding({ onComplete }: OnboardingProps) {
       </div>
 
       {/* Version */}
-      <p className="absolute bottom-6 text-xs text-gray-600">Version 1.0.0</p>
+      <p className="absolute bottom-6 text-xs text-gray-600">{t('onboarding.version', { version: '1.0.0' })}</p>
     </div>
   );
 }

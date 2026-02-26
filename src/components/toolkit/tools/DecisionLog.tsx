@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
 
 interface DeveloperDecision {
@@ -43,6 +44,7 @@ const confColor = (c: number) => c >= 80 ? '#22C55E' : c >= 50 ? '#D4AF37' : '#E
 const fmtDate = (iso: string) => { try { return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }); } catch { return iso; } };
 
 export default function DecisionLog() {
+  const { t } = useTranslation();
   const [decisions, setDecisions] = useState<DeveloperDecision[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -113,7 +115,7 @@ export default function DecisionLog() {
       {/* Filters */}
       <div className="space-y-2">
         <div className="flex items-center gap-1.5 flex-wrap">
-          <span className="text-xs text-[#666] mr-1">Type:</span>
+          <span className="text-xs text-[#666] mr-1">{t('toolkit.decisionLog.type')}:</span>
           {TYPES.map((t) => (
             <Pill
               key={t}
@@ -124,7 +126,7 @@ export default function DecisionLog() {
           ))}
         </div>
         <div className="flex items-center gap-1.5 flex-wrap">
-          <span className="text-xs text-[#666] mr-1">Status:</span>
+          <span className="text-xs text-[#666] mr-1">{t('toolkit.decisionLog.status')}:</span>
           {STATUSES.map((s) => (
             <Pill
               key={s}
@@ -145,12 +147,12 @@ export default function DecisionLog() {
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             {showForm ? <path d="M5 12h14" /> : <><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></>}
           </svg>
-          {showForm ? 'Cancel' : 'Add Decision'}
+          {showForm ? t('action.cancel') : t('toolkit.decisionLog.addDecision')}
         </button>
         {loading && (
           <div className="flex items-center gap-2 text-xs text-[#A0A0A0]">
             <div className="w-3 h-3 border-2 border-[#666] border-t-white rounded-full animate-spin" />
-            Loading...
+            {t('action.loading')}
           </div>
         )}
       </div>
@@ -159,38 +161,38 @@ export default function DecisionLog() {
       {showForm && (
         <div className="bg-[#141414] border border-[#2A2A2A] rounded-xl p-4 space-y-3">
           <div>
-            <label className="block text-xs text-[#A0A0A0] mb-1.5">Subject *</label>
+            <label className="block text-xs text-[#A0A0A0] mb-1.5">{t('toolkit.decisionLog.subject')} *</label>
             <input
               type="text"
               value={subject}
               onChange={(e) => setSubject(e.target.value)}
-              placeholder="e.g. State management library"
+              placeholder={t('toolkit.decisionLog.subjectPlaceholder')}
               className="w-full px-3 py-2 text-sm bg-[#0A0A0A] border border-[#2A2A2A] rounded-lg text-white placeholder-[#666] focus:outline-none focus:border-white/30 transition-colors"
             />
           </div>
           <div>
-            <label className="block text-xs text-[#A0A0A0] mb-1.5">Decision *</label>
+            <label className="block text-xs text-[#A0A0A0] mb-1.5">{t('toolkit.decisionLog.decision')} *</label>
             <textarea
               value={decision}
               onChange={(e) => setDecision(e.target.value)}
-              placeholder="What was decided?"
+              placeholder={t('toolkit.decisionLog.decisionPlaceholder')}
               rows={2}
               className="w-full px-3 py-2 text-sm bg-[#0A0A0A] border border-[#2A2A2A] rounded-lg text-white placeholder-[#666] focus:outline-none focus:border-white/30 transition-colors resize-y"
             />
           </div>
           <div>
-            <label className="block text-xs text-[#A0A0A0] mb-1.5">Rationale (optional)</label>
+            <label className="block text-xs text-[#A0A0A0] mb-1.5">{t('toolkit.decisionLog.rationale')}</label>
             <textarea
               value={rationale}
               onChange={(e) => setRationale(e.target.value)}
-              placeholder="Why this choice?"
+              placeholder={t('toolkit.decisionLog.rationalePlaceholder')}
               rows={2}
               className="w-full px-3 py-2 text-sm bg-[#0A0A0A] border border-[#2A2A2A] rounded-lg text-white placeholder-[#666] focus:outline-none focus:border-white/30 transition-colors resize-y"
             />
           </div>
           <div className="flex items-end gap-4">
             <div className="flex-1 max-w-[180px]">
-              <label className="block text-xs text-[#A0A0A0] mb-1.5">Type</label>
+              <label className="block text-xs text-[#A0A0A0] mb-1.5">{t('toolkit.decisionLog.type')}</label>
               <select
                 value={decType}
                 onChange={(e) => setDecType(e.target.value)}
@@ -203,7 +205,7 @@ export default function DecisionLog() {
             </div>
             <div className="flex-1 max-w-[220px]">
               <label className="block text-xs text-[#A0A0A0] mb-1.5">
-                Confidence: <span className="font-mono" style={{ color: confColor(confidence) }}>{confidence}%</span>
+                {t('toolkit.decisionLog.confidence')}: <span className="font-mono" style={{ color: confColor(confidence) }}>{confidence}%</span>
               </label>
               <input
                 type="range"
@@ -219,7 +221,7 @@ export default function DecisionLog() {
               disabled={submitting || !subject.trim() || !decision.trim()}
               className="px-4 py-2 text-sm font-medium bg-white text-[#0A0A0A] rounded-lg hover:bg-white/90 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {submitting ? 'Adding...' : 'Add Decision'}
+              {submitting ? t('toolkit.decisionLog.adding') : t('toolkit.decisionLog.addDecision')}
             </button>
           </div>
         </div>
@@ -230,7 +232,7 @@ export default function DecisionLog() {
         <div className="flex items-center gap-3 px-4 py-3 bg-[#EF4444]/10 border border-[#EF4444]/30 rounded-lg">
           <span className="text-sm text-[#EF4444] flex-1">{error}</span>
           <button onClick={() => setError(null)} className="text-[#EF4444]/60 hover:text-[#EF4444] text-xs">
-            Dismiss
+            {t('action.dismiss')}
           </button>
         </div>
       )}
@@ -295,13 +297,13 @@ export default function DecisionLog() {
                   <div className="mt-3 pt-3 border-t border-[#2A2A2A] space-y-2">
                     {d.rationale && (
                       <div>
-                        <span className="text-[10px] text-[#666] uppercase tracking-wider">Rationale</span>
+                        <span className="text-[10px] text-[#666] uppercase tracking-wider">{t('toolkit.decisionLog.rationale')}</span>
                         <p className="text-xs text-[#A0A0A0] mt-0.5 leading-relaxed">{d.rationale}</p>
                       </div>
                     )}
                     {d.alternatives_rejected.length > 0 && (
                       <div>
-                        <span className="text-[10px] text-[#666] uppercase tracking-wider">Alternatives Rejected</span>
+                        <span className="text-[10px] text-[#666] uppercase tracking-wider">{t('toolkit.decisionLog.alternativesRejected')}</span>
                         <div className="flex flex-wrap gap-1 mt-1">
                           {d.alternatives_rejected.map((alt, i) => (
                             <span key={i} className="px-2 py-0.5 text-xs text-[#A0A0A0] bg-[#1F1F1F] border border-[#2A2A2A] rounded-full">
@@ -313,7 +315,7 @@ export default function DecisionLog() {
                     )}
                     {d.context_tags.length > 0 && (
                       <div>
-                        <span className="text-[10px] text-[#666] uppercase tracking-wider">Tags</span>
+                        <span className="text-[10px] text-[#666] uppercase tracking-wider">{t('toolkit.decisionLog.tags')}</span>
                         <div className="flex flex-wrap gap-1 mt-1">
                           {d.context_tags.map((tag) => (
                             <span key={tag} className="px-2 py-0.5 text-xs text-[#D4AF37] bg-[#D4AF37]/10 border border-[#D4AF37]/20 rounded-full">
@@ -334,9 +336,9 @@ export default function DecisionLog() {
           <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#666" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="mb-3">
             <path d="M12 3v18" /><path d="M5 6l7-3 7 3" /><path d="M5 6v12l7 3 7-3V6" />
           </svg>
-          <p className="text-sm text-[#A0A0A0] mb-1">No decisions recorded yet</p>
+          <p className="text-sm text-[#A0A0A0] mb-1">{t('toolkit.decisionLog.empty')}</p>
           <p className="text-xs text-[#666]">
-            Click "Add Decision" to start tracking your technical choices
+            {t('toolkit.decisionLog.emptyHint')}
           </p>
         </div>
       ) : null}

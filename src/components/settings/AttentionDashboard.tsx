@@ -1,8 +1,10 @@
 import { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
 import type { AttentionReport } from '../../types';
 
 export function AttentionDashboard() {
+  const { t } = useTranslation();
   const [report, setReport] = useState<AttentionReport | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -33,8 +35,8 @@ export function AttentionDashboard() {
             <span>👁</span>
           </div>
           <div>
-            <h3 className="text-sm font-medium text-white">Attention Dashboard</h3>
-            <p className="text-xs text-gray-500">Where your focus goes vs. where your code needs it</p>
+            <h3 className="text-sm font-medium text-white">{t('settings.attention.title')}</h3>
+            <p className="text-xs text-gray-500">{t('settings.attention.description')}</p>
           </div>
         </div>
         <select
@@ -42,16 +44,16 @@ export function AttentionDashboard() {
           onChange={(e) => setPeriod(Number(e.target.value))}
           className="bg-bg-tertiary border border-border rounded px-2 py-1 text-xs text-gray-300"
         >
-          <option value={7}>7 days</option>
-          <option value={14}>14 days</option>
-          <option value={30}>30 days</option>
+          <option value={7}>{t('settings.attention.days', { count: 7 })}</option>
+          <option value={14}>{t('settings.attention.days', { count: 14 })}</option>
+          <option value={30}>{t('settings.attention.days', { count: 30 })}</option>
         </select>
       </div>
 
       {loading && (
         <div className="flex items-center gap-2 py-4 justify-center">
           <div className="w-4 h-4 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
-          <span className="text-xs text-gray-500">Loading attention data...</span>
+          <span className="text-xs text-gray-500">{t('settings.attention.loading')}</span>
         </div>
       )}
 
@@ -64,7 +66,7 @@ export function AttentionDashboard() {
           {/* Topic Engagement */}
           {report.topic_engagement.length > 0 && (
             <div>
-              <h4 className="text-xs font-medium text-gray-400 mb-2">Your Engagement</h4>
+              <h4 className="text-xs font-medium text-gray-400 mb-2">{t('settings.attention.engagement')}</h4>
               <div className="space-y-1.5">
                 {report.topic_engagement.slice(0, 8).map((te) => (
                   <div key={te.topic} className="flex items-center gap-2">
@@ -86,7 +88,7 @@ export function AttentionDashboard() {
           {/* Codebase Topics */}
           {report.codebase_topics.length > 0 && (
             <div>
-              <h4 className="text-xs font-medium text-gray-400 mb-2">Codebase Topics</h4>
+              <h4 className="text-xs font-medium text-gray-400 mb-2">{t('settings.attention.codebaseTopics')}</h4>
               <div className="flex flex-wrap gap-1.5">
                 {report.codebase_topics.slice(0, 12).map((ct) => (
                   <span key={ct.topic} className="px-2 py-1 text-[10px] bg-emerald-500/10 text-emerald-400 rounded border border-emerald-500/20">
@@ -100,7 +102,7 @@ export function AttentionDashboard() {
           {/* Blind Spots */}
           {report.blind_spots.length > 0 && (
             <div>
-              <h4 className="text-xs font-medium text-gray-400 mb-2">Blind Spots</h4>
+              <h4 className="text-xs font-medium text-gray-400 mb-2">{t('settings.attention.blindSpots')}</h4>
               <div className="space-y-2">
                 {report.blind_spots.map((bs) => (
                   <div key={bs.topic} className="px-3 py-2 bg-amber-500/5 border border-amber-500/20 rounded">
@@ -110,7 +112,7 @@ export function AttentionDashboard() {
                         bs.risk_level === 'medium' ? 'bg-amber-400' : 'bg-gray-400'
                       }`} />
                       <span className="text-xs text-amber-300 font-medium">{bs.topic}</span>
-                      <span className="text-[10px] text-gray-500 ml-auto">{bs.risk_level} risk</span>
+                      <span className="text-[10px] text-gray-500 ml-auto">{t('settings.attention.risk', { level: bs.risk_level })}</span>
                     </div>
                     <p className="text-[11px] text-gray-400 mt-1">{bs.gap_description}</p>
                   </div>
@@ -121,7 +123,7 @@ export function AttentionDashboard() {
 
           {report.topic_engagement.length === 0 && report.blind_spots.length === 0 && (
             <p className="text-xs text-gray-500 text-center py-4">
-              Not enough interaction data yet. Use 4DA for a few days to build attention patterns.
+              {t('settings.attention.noData')}
             </p>
           )}
         </>

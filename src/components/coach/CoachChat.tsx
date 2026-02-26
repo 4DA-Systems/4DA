@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../../store';
 import { useShallow } from 'zustand/react/shallow';
 import type { CoachMessage } from '../../types/coach';
@@ -126,11 +127,11 @@ function renderInline(text: string): React.ReactNode {
 // Suggested prompts for empty state
 // ---------------------------------------------------------------------------
 
-const SUGGESTED_PROMPTS = [
-  'What revenue engine fits my profile best?',
-  'Help me create a 30-day launch plan',
-  'Review my project idea for market fit',
-];
+const SUGGESTED_PROMPT_KEYS = [
+  'coach.chat.suggestEngine',
+  'coach.chat.suggest30DayPlan',
+  'coach.chat.suggestMarketFit',
+] as const;
 
 // ---------------------------------------------------------------------------
 // Loading dots animation
@@ -193,6 +194,7 @@ function MessageBubble({ message }: { message: CoachMessage }) {
 // ===========================================================================
 
 export function CoachChat() {
+  const { t } = useTranslation();
   const {
     messages,
     loading,
@@ -274,19 +276,18 @@ export function CoachChat() {
                 <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
               </svg>
             </div>
-            <h3 className="text-base font-semibold text-white mb-1">STREETS Coach</h3>
+            <h3 className="text-base font-semibold text-white mb-1">{t('coach.chat.title')}</h3>
             <p className="text-sm text-[#A0A0A0] max-w-sm mb-5">
-              Ask anything about building independent developer income.
-              Your sovereign profile and playbook progress inform every answer.
+              {t('coach.chat.emptyDescription')}
             </p>
             <div className="flex flex-col gap-2 w-full max-w-sm">
-              {SUGGESTED_PROMPTS.map(prompt => (
+              {SUGGESTED_PROMPT_KEYS.map(key => (
                 <button
-                  key={prompt}
-                  onClick={() => handleSuggestedPrompt(prompt)}
+                  key={key}
+                  onClick={() => handleSuggestedPrompt(t(key))}
                   className="text-left px-4 py-2.5 bg-[#0A0A0A] border border-[#2A2A2A] rounded-lg text-sm text-[#A0A0A0] hover:border-[#D4AF37]/40 hover:text-white transition-colors"
                 >
-                  {prompt}
+                  {t(key)}
                 </button>
               ))}
             </div>
@@ -317,7 +318,7 @@ export function CoachChat() {
             value={input}
             onChange={e => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="Ask your coach..."
+            placeholder={t('coach.chat.placeholder')}
             rows={1}
             className="flex-1 resize-none bg-[#0A0A0A] border border-[#2A2A2A] rounded-lg px-3 py-2 text-sm text-white placeholder-[#666] focus:outline-none focus:border-[#D4AF37]/50 leading-5"
           />
@@ -326,11 +327,11 @@ export function CoachChat() {
             disabled={!input.trim() || loading}
             className="flex-shrink-0 px-4 py-2 bg-[#D4AF37] text-black text-sm font-medium rounded-lg hover:bg-[#C4A030] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
           >
-            Send
+            {t('coach.chat.send')}
           </button>
         </div>
         <p className="text-[10px] text-[#666] mt-1.5 pl-1">
-          Shift+Enter for newline. Responses use your configured AI provider.
+          {t('coach.chat.inputHint')}
         </p>
       </div>
     </div>

@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import type { Settings } from '../../types';
 import type { OllamaStatus } from '../../hooks/use-settings';
 
@@ -37,6 +38,7 @@ export function AIProviderSection({
   ollamaModels,
   checkOllamaStatus,
 }: AIProviderSectionProps) {
+  const { t } = useTranslation();
   return (
     <>
       {/* LLM Provider Section */}
@@ -46,14 +48,14 @@ export function AIProviderSection({
             <span>&#x1f916;</span>
           </div>
           <div>
-            <h3 className="text-sm font-medium text-white">AI Provider</h3>
-            <p className="text-xs text-gray-500">Choose your LLM provider</p>
+            <h3 className="text-sm font-medium text-white">{t('settings.ai.title')}</h3>
+            <p className="text-xs text-gray-500">{t('settings.ai.description')}</p>
           </div>
         </div>
 
         <div className="space-y-4">
           <div>
-            <label className="text-xs text-gray-500 block mb-2">Provider</label>
+            <label className="text-xs text-gray-500 block mb-2">{t('settings.ai.provider')}</label>
             <select
               value={settingsForm.provider}
               onChange={(e) => {
@@ -70,27 +72,27 @@ export function AIProviderSection({
               }}
               className="w-full px-4 py-3 bg-bg-secondary border border-border rounded-lg text-sm text-white focus:border-orange-500 focus:outline-none"
             >
-              <option value="anthropic">Anthropic Claude</option>
-              <option value="openai">OpenAI</option>
-              <option value="ollama">Ollama (Local)</option>
+              <option value="anthropic">{t('settings.ai.providerAnthropic')}</option>
+              <option value="openai">{t('settings.ai.providerOpenAI')}</option>
+              <option value="ollama">{t('settings.ai.providerOllama')}</option>
             </select>
           </div>
 
           {settingsForm.provider !== 'ollama' && (
             <div>
-              <label className="text-xs text-gray-500 block mb-2">API Key</label>
+              <label className="text-xs text-gray-500 block mb-2">{t('settings.ai.apiKey')}</label>
               <input
                 type="password"
                 value={settingsForm.apiKey}
                 onChange={(e) => setSettingsForm((f) => ({ ...f, apiKey: e.target.value }))}
-                placeholder={settings?.llm.has_api_key ? '(key saved)' : 'Enter your API key'}
+                placeholder={settings?.llm.has_api_key ? t('settings.ai.keySaved') : t('settings.ai.enterKey')}
                 className="w-full px-4 py-3 bg-bg-secondary border border-border rounded-lg text-sm text-white placeholder:text-gray-600 focus:border-orange-500 focus:outline-none font-mono"
               />
             </div>
           )}
 
           <div>
-            <label className="text-xs text-gray-500 block mb-2">Model</label>
+            <label className="text-xs text-gray-500 block mb-2">{t('settings.ai.model')}</label>
             <select
               value={settingsForm.model}
               onChange={(e) => setSettingsForm((f) => ({ ...f, model: e.target.value }))}
@@ -107,14 +109,14 @@ export function AIProviderSection({
               <div className="flex items-center gap-2 mt-2">
                 <p className="text-xs text-gray-500">
                   {ollamaStatus?.running
-                    ? <span className="text-green-400">&#x2713; Ollama v{ollamaStatus.version} - {ollamaModels.length} models</span>
-                    : <span className="text-yellow-400">&#x25cb; Ollama not detected</span>}
+                    ? <span className="text-green-400">&#x2713; {t('settings.ai.ollamaRunning', { version: ollamaStatus.version, count: ollamaModels.length })}</span>
+                    : <span className="text-yellow-400">&#x25cb; {t('settings.ai.ollamaNotDetected')}</span>}
                 </p>
                 <button
                   onClick={() => checkOllamaStatus(settingsForm.baseUrl || undefined)}
                   className="text-[10px] px-2 py-0.5 text-gray-500 hover:text-orange-400 bg-bg-tertiary rounded transition-colors"
                 >
-                  Re-check
+                  {t('settings.ai.recheck')}
                 </button>
               </div>
             )}
@@ -122,7 +124,7 @@ export function AIProviderSection({
 
           {settingsForm.provider === 'ollama' && (
             <div>
-              <label className="text-xs text-gray-500 block mb-2">Base URL</label>
+              <label className="text-xs text-gray-500 block mb-2">{t('settings.ai.baseUrl')}</label>
               <input
                 type="text"
                 value={settingsForm.baseUrl}
@@ -142,8 +144,8 @@ export function AIProviderSection({
             <span>&#x26a1;</span>
           </div>
           <div>
-            <h3 className="text-sm font-medium text-white">LLM Re-ranking</h3>
-            <p className="text-xs text-gray-500">Deeper analysis of top candidates</p>
+            <h3 className="text-sm font-medium text-white">{t('settings.ai.rerankTitle')}</h3>
+            <p className="text-xs text-gray-500">{t('settings.ai.rerankDescription')}</p>
           </div>
         </div>
 
@@ -156,14 +158,14 @@ export function AIProviderSection({
               className="w-5 h-5 accent-orange-500 rounded"
             />
             <div>
-              <span className="text-sm text-white">Enable LLM re-ranking</span>
-              <p className="text-xs text-gray-500 mt-0.5">Improves precision but uses API tokens</p>
+              <span className="text-sm text-white">{t('settings.ai.enableRerank')}</span>
+              <p className="text-xs text-gray-500 mt-0.5">{t('settings.ai.rerankNote')}</p>
             </div>
           </label>
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="text-xs text-gray-500 block mb-2">Max items/batch</label>
+              <label className="text-xs text-gray-500 block mb-2">{t('settings.ai.maxItemsBatch')}</label>
               <input
                 type="number"
                 value={settingsForm.maxItems}
@@ -172,7 +174,7 @@ export function AIProviderSection({
               />
             </div>
             <div>
-              <label className="text-xs text-gray-500 block mb-2">Min score</label>
+              <label className="text-xs text-gray-500 block mb-2">{t('settings.ai.minScore')}</label>
               <input
                 type="number"
                 step="0.05"
@@ -185,7 +187,7 @@ export function AIProviderSection({
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="text-xs text-gray-500 block mb-2">Daily token limit</label>
+              <label className="text-xs text-gray-500 block mb-2">{t('settings.ai.dailyTokenLimit')}</label>
               <input
                 type="number"
                 value={settingsForm.dailyTokenLimit}
@@ -194,7 +196,7 @@ export function AIProviderSection({
               />
             </div>
             <div>
-              <label className="text-xs text-gray-500 block mb-2">Cost limit (&cent;/day)</label>
+              <label className="text-xs text-gray-500 block mb-2">{t('settings.ai.costLimit')}</label>
               <input
                 type="number"
                 value={settingsForm.dailyCostLimit}
@@ -214,22 +216,22 @@ export function AIProviderSection({
               <span>&#x1f4c8;</span>
             </div>
             <div>
-              <h3 className="text-sm font-medium text-white">Usage Today</h3>
-              <p className="text-xs text-gray-500">Token consumption</p>
+              <h3 className="text-sm font-medium text-white">{t('settings.ai.usageTitle')}</h3>
+              <p className="text-xs text-gray-500">{t('settings.ai.usageDescription')}</p>
             </div>
           </div>
           <div className="grid grid-cols-3 gap-4">
             <div className="bg-bg-secondary rounded-lg p-3 text-center">
               <p className="text-xl font-semibold text-white">{settings.usage.tokens_today.toLocaleString()}</p>
-              <p className="text-xs text-gray-500">Tokens</p>
+              <p className="text-xs text-gray-500">{t('settings.ai.tokens')}</p>
             </div>
             <div className="bg-bg-secondary rounded-lg p-3 text-center">
               <p className="text-xl font-semibold text-green-400">${(settings.usage.cost_today_cents / 100).toFixed(2)}</p>
-              <p className="text-xs text-gray-500">Cost</p>
+              <p className="text-xs text-gray-500">{t('settings.ai.cost')}</p>
             </div>
             <div className="bg-bg-secondary rounded-lg p-3 text-center">
               <p className="text-xl font-semibold text-orange-400">{settings.usage.items_reranked}</p>
-              <p className="text-xs text-gray-500">Re-ranked</p>
+              <p className="text-xs text-gray-500">{t('settings.ai.reranked')}</p>
             </div>
           </div>
         </div>

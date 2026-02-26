@@ -1,4 +1,5 @@
 import { useState, useEffect, memo } from 'react';
+import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
 import { ProGate } from './ProGate';
 import type { SignalChain } from '../types';
@@ -18,6 +19,7 @@ const PRIORITY_TEXT: Record<string, string> = {
 };
 
 export const SignalChainsPanel = memo(function SignalChainsPanel() {
+  const { t } = useTranslation();
   const [chains, setChains] = useState<SignalChain[]>([]);
   const [expandedChain, setExpandedChain] = useState<string | null>(null);
 
@@ -45,15 +47,15 @@ export const SignalChainsPanel = memo(function SignalChainsPanel() {
   if (chains.length === 0) return null;
 
   return (
-    <ProGate feature="Signal Chains">
+    <ProGate feature={t('signals.feature')}>
     <div className="mb-6 bg-bg-secondary rounded-lg border border-border overflow-hidden">
       <div className="px-5 py-4 border-b border-border flex items-center gap-3">
         <div className="w-8 h-8 bg-bg-tertiary rounded-lg flex items-center justify-center">
           <span className="text-gray-400">🔗</span>
         </div>
         <div>
-          <h2 className="font-medium text-white text-sm">Signal Chains</h2>
-          <p className="text-xs text-gray-500">{chains.length} active chain{chains.length !== 1 ? 's' : ''}</p>
+          <h2 className="font-medium text-white text-sm">{t('signals.title')}</h2>
+          <p className="text-xs text-gray-500">{t('signals.activeChains', { count: chains.length })}</p>
         </div>
       </div>
 
@@ -85,7 +87,7 @@ export const SignalChainsPanel = memo(function SignalChainsPanel() {
                   <p className={`text-sm font-medium ${textColor}`}>{chain.chain_name}</p>
                   <p className="text-xs text-gray-400 mt-0.5">{chain.suggested_action}</p>
                   <div className="flex items-center gap-2 mt-1.5">
-                    <span className="text-[10px] text-gray-500">{chain.links.length} signals</span>
+                    <span className="text-[10px] text-gray-500">{t('signals.signalCount', { count: chain.links.length })}</span>
                     <span className="text-[10px] text-gray-600">
                       {new Date(chain.created_at).toLocaleDateString()}
                     </span>
@@ -121,7 +123,7 @@ export const SignalChainsPanel = memo(function SignalChainsPanel() {
                       onClick={(e) => { e.stopPropagation(); resolveChain(chain.id); }}
                       className="px-3 py-1.5 text-xs bg-green-500/10 text-green-400 border border-green-500/20 rounded hover:bg-green-500/20 transition-colors"
                     >
-                      Resolve
+                      {t('signals.resolve')}
                     </button>
                   </div>
                 </div>

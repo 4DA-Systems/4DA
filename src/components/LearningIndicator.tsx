@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 
 interface TopicAffinity {
   topic: string;
@@ -25,6 +26,7 @@ export function LearningIndicator({
   antiTopics,
   lastLearnedTopic,
 }: LearningIndicatorProps) {
+  const { t } = useTranslation();
   const [expanded, setExpanded] = useState(false);
   const [glowingTopic, setGlowingTopic] = useState<string | null>(null);
   const prevLearnedRef = useRef<typeof lastLearnedTopic>(null);
@@ -101,7 +103,7 @@ export function LearningIndicator({
         </div>
 
         <span className="text-xs text-gray-400 flex-1 text-left">
-          Learning: {totalPreferences} preference{totalPreferences !== 1 ? 's' : ''}
+          {t('learnedBehavior.learningCount', { count: totalPreferences })}
         </span>
 
         {/* Expand/Collapse chevron */}

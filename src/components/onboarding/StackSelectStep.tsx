@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
 import type { StackProfileSummary, StackDetection } from '../../types/stacks';
 
@@ -21,6 +22,7 @@ interface StackSelectStepProps {
 }
 
 export function StackSelectStep({ selected, onSelectionChange, compact }: StackSelectStepProps) {
+  const { t } = useTranslation();
   const [profiles, setProfiles] = useState<StackProfileSummary[]>([]);
   const [detections, setDetections] = useState<StackDetection[]>([]);
   const [loading, setLoading] = useState(true);
@@ -70,7 +72,7 @@ export function StackSelectStep({ selected, onSelectionChange, compact }: StackS
     return (
       <div className="flex items-center gap-2 text-sm text-gray-400 py-4">
         <div className="w-4 h-4 border-2 border-orange-500 border-t-transparent rounded-full animate-spin" />
-        Loading stack profiles...
+        {t('onboarding.stack.loading')}
       </div>
     );
   }
@@ -79,7 +81,7 @@ export function StackSelectStep({ selected, onSelectionChange, compact }: StackS
     <div>
       {!compact && (
         <p className="text-xs text-gray-500 mb-3">
-          Select your tech stack for smarter content scoring. Auto-detected stacks are pre-selected.
+          {t('onboarding.stack.description')}
         </p>
       )}
 
@@ -137,7 +139,7 @@ export function StackSelectStep({ selected, onSelectionChange, compact }: StackS
               {/* Pain points / shifts count */}
               {!compact && (
                 <div className="mt-2 text-[10px] text-gray-600">
-                  {profile.pain_point_count} pain points &middot; {profile.ecosystem_shift_count} shifts
+                  {t('onboarding.stack.painPoints', { count: profile.pain_point_count })} &middot; {t('onboarding.stack.shifts', { count: profile.ecosystem_shift_count })}
                 </div>
               )}
             </button>
@@ -148,14 +150,14 @@ export function StackSelectStep({ selected, onSelectionChange, compact }: StackS
       {/* Detection summary */}
       {detections.length > 0 && !compact && (
         <p className="text-xs text-gray-500 mt-3">
-          Auto-detected {detections.length} stack{detections.length > 1 ? 's' : ''} from your projects.
-          {' '}Click to toggle.
+          {t('onboarding.stack.autoDetected', { count: detections.length })}
+          {' '}{t('onboarding.stack.clickToToggle')}
         </p>
       )}
 
       {selected.length === 0 && !compact && (
         <p className="text-xs text-gray-600 mt-2">
-          No stacks selected — scoring will use default behavior.
+          {t('onboarding.stack.noSelection')}
         </p>
       )}
     </div>

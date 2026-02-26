@@ -1,3 +1,5 @@
+import { useTranslation } from 'react-i18next';
+
 const suggestedInterests = [
   'Machine Learning', 'Rust', 'TypeScript', 'Web Development',
   'DevOps', 'Security', 'Startups', 'Open Source', 'AI/LLM',
@@ -27,6 +29,8 @@ export function InterestsStep({
   onSave,
   onBack,
 }: InterestsStepProps) {
+  const { t } = useTranslation();
+
   const addInterest = () => {
     if (newInterest.trim() && !interests.includes(newInterest.trim())) {
       setInterests([...interests, newInterest.trim()]);
@@ -40,22 +44,22 @@ export function InterestsStep({
 
   return (
     <div className={`transition-all duration-300 ${isAnimating ? 'opacity-0 translate-y-4' : 'opacity-100 translate-y-0'}`}>
-      <h2 className="text-3xl font-semibold text-white mb-2 text-center">Your Interests</h2>
+      <h2 className="text-3xl font-semibold text-white mb-2 text-center">{t('onboarding.interests.title')}</h2>
       <p className="text-gray-400 mb-6 text-center">
-        Help 4DA understand what to surface. This improves over time as you use the app.
+        {t('onboarding.interests.subtitle')}
       </p>
 
       <div className="space-y-5 bg-bg-secondary p-6 rounded-lg mb-6">
         {/* Role - simplified */}
         <div>
           <label className="block text-sm text-gray-400 mb-2">
-            What do you do? <span className="text-gray-600">(optional)</span>
+            {t('onboarding.interests.roleLabel')} <span className="text-gray-600">({t('onboarding.interests.optional')})</span>
           </label>
           <input
             type="text"
             value={role}
             onChange={(e) => setRole(e.target.value)}
-            placeholder="e.g., Software Engineer, Product Manager, Researcher"
+            placeholder={t('onboarding.interests.rolePlaceholder')}
             className="w-full px-4 py-3 bg-bg-tertiary border border-border rounded-lg text-white placeholder-gray-600 focus:border-orange-500 focus:outline-none"
           />
         </div>
@@ -63,7 +67,7 @@ export function InterestsStep({
         {/* Interests - improved */}
         <div>
           <label className="block text-sm text-gray-400 mb-2">
-            Topics you want to follow
+            {t('onboarding.interests.topicsLabel')}
           </label>
 
           {/* Selected interests first */}
@@ -94,7 +98,7 @@ export function InterestsStep({
               value={newInterest}
               onChange={(e) => setNewInterest(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && addInterest()}
-              placeholder="Type a topic and press Enter..."
+              placeholder={t('onboarding.interests.placeholder')}
               className="flex-1 px-4 py-2 bg-bg-tertiary border border-border rounded-lg text-white placeholder-gray-600 focus:border-orange-500 focus:outline-none"
             />
             <button
@@ -102,13 +106,13 @@ export function InterestsStep({
               disabled={!newInterest.trim()}
               className="px-4 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              Add
+              {t('onboarding.interests.add')}
             </button>
           </div>
 
           {/* Suggestions - categorized */}
           <div className="space-y-3">
-            <p className="text-xs text-gray-500">Or quick-add popular topics:</p>
+            <p className="text-xs text-gray-500">{t('onboarding.interests.quickAdd')}:</p>
             <div className="flex flex-wrap gap-2">
               {suggestedInterests
                 .filter((s) => !interests.includes(s))
@@ -128,7 +132,7 @@ export function InterestsStep({
 
         {/* Hint */}
         <p className="text-xs text-gray-500 text-center">
-          Don&apos;t worry about being complete - 4DA learns from your feedback and activity.
+          {t('onboarding.interests.hint')}
         </p>
       </div>
 
@@ -137,7 +141,7 @@ export function InterestsStep({
           onClick={onBack}
           className="px-6 py-2 text-gray-400 hover:text-white transition-colors"
         >
-          &larr; Back
+          &larr; {t('onboarding.nav.back')}
         </button>
         <div className="flex items-center gap-3">
           <button
@@ -148,13 +152,13 @@ export function InterestsStep({
             }}
             className="px-4 py-2 text-gray-500 hover:text-gray-300 text-sm transition-colors"
           >
-            Skip for now
+            {t('onboarding.nav.skipForNow')}
           </button>
           <button
             onClick={onSave}
             className="px-8 py-3 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-colors font-medium"
           >
-            {interests.length > 0 || role ? 'Save & Finish' : 'Finish Setup'}
+            {interests.length > 0 || role ? t('onboarding.interests.saveAndFinish') : t('onboarding.interests.finishSetup')}
           </button>
         </div>
       </div>

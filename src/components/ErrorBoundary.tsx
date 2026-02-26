@@ -1,4 +1,5 @@
 import { Component, ErrorInfo, ReactNode } from 'react';
+import i18n from '../i18n';
 
 interface ErrorBoundaryState {
   hasError: boolean;
@@ -29,7 +30,7 @@ export class ErrorBoundary extends Component<{ children: ReactNode }, ErrorBound
           padding: '2rem',
           fontFamily: 'Inter, sans-serif',
         }}>
-          <h1 style={{ color: 'var(--color-error)' }}>Something went wrong</h1>
+          <h1 style={{ color: 'var(--color-error)' }}>{i18n.t('error.somethingWrong')}</h1>
           <pre style={{
             backgroundColor: 'var(--color-bg-secondary)',
             padding: '1rem',
@@ -53,7 +54,7 @@ export class ErrorBoundary extends Component<{ children: ReactNode }, ErrorBound
               cursor: 'pointer',
             }}
           >
-            Reload App
+            {i18n.t('error.reload')}
           </button>
         </div>
       );

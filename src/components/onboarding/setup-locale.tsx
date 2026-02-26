@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
 
 interface SetupLocaleProps {
@@ -59,6 +60,7 @@ function getLanguageName(code: string): string {
 }
 
 export function SetupLocale({ onLocaleChange }: SetupLocaleProps) {
+  const { t } = useTranslation();
   const [country, setCountry] = useState('US');
   const [language, setLanguage] = useState('en');
   const [currency, setCurrency] = useState('USD');
@@ -116,7 +118,7 @@ export function SetupLocale({ onLocaleChange }: SetupLocaleProps) {
   if (!loaded) {
     return (
       <div className="mt-2 p-4 bg-[#141414] rounded-lg border border-[#2A2A2A]">
-        <p className="text-sm text-[#666666]">Detecting region...</p>
+        <p className="text-sm text-[#666666]">{t('onboarding.locale.detecting')}</p>
       </div>
     );
   }
@@ -126,7 +128,7 @@ export function SetupLocale({ onLocaleChange }: SetupLocaleProps) {
       {/* Country */}
       <div>
         <label className="block text-xs text-[#A0A0A0] uppercase tracking-wider mb-1.5">
-          Country
+          {t('onboarding.locale.country')}
         </label>
         <select
           value={country}
@@ -144,7 +146,7 @@ export function SetupLocale({ onLocaleChange }: SetupLocaleProps) {
       <div className="grid grid-cols-2 gap-3">
         <div>
           <label className="block text-xs text-[#A0A0A0] uppercase tracking-wider mb-1.5">
-            Language
+            {t('onboarding.locale.language')}
           </label>
           <select
             value={language}
@@ -159,7 +161,7 @@ export function SetupLocale({ onLocaleChange }: SetupLocaleProps) {
         </div>
         <div>
           <label className="block text-xs text-[#A0A0A0] uppercase tracking-wider mb-1.5">
-            Currency
+            {t('onboarding.locale.currency')}
           </label>
           <select
             value={currency}
@@ -176,7 +178,7 @@ export function SetupLocale({ onLocaleChange }: SetupLocaleProps) {
 
       {/* Preview */}
       <p className="text-xs text-[#666666]">
-        Prices will show in {currency}, content prioritized in {getLanguageName(language)}
+        {t('onboarding.locale.priceInfo', { currency, language: getLanguageName(language) })}
       </p>
     </div>
   );

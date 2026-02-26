@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import type { SourceRelevance, FeedbackAction } from '../../types';
 import { formatScore, getScoreColor } from '../../utils/score';
 import { ArticleReader } from '../ArticleReader';
@@ -31,13 +32,14 @@ export function ResultItemExpanded({
   summaryError,
   onGenerateSummary,
 }: ResultItemExpandedProps) {
+  const { t } = useTranslation();
   return (
     <div id={`result-detail-${item.id}`} className="px-4 pb-3 border-t border-border/50 mt-2 pt-3">
       {/* Why This Matters - Full Display */}
       {item.explanation && (
         <div className="mb-3 p-2 bg-bg-primary/50 rounded border border-accent-gold/30">
           <div className="text-xs text-accent-gold font-medium mb-1">
-            Why this matters:
+            {t('results.whyThisMatters')}
           </div>
           <div className="text-xs text-text-secondary leading-relaxed">
             {item.explanation}
@@ -49,7 +51,7 @@ export function ResultItemExpanded({
       <div className="mb-3">
         {summary ? (
           <div className="p-2 bg-bg-primary/50 rounded border border-cyan-500/20">
-            <div className="text-[10px] text-cyan-400 font-medium mb-1">AI Summary</div>
+            <div className="text-[10px] text-cyan-400 font-medium mb-1">{t('results.aiSummary')}</div>
             <div className="text-xs text-text-secondary leading-relaxed">{summary}</div>
           </div>
         ) : (
@@ -58,7 +60,7 @@ export function ResultItemExpanded({
             disabled={summaryLoading}
             className="text-[11px] px-2.5 py-1.5 rounded border border-cyan-500/20 text-cyan-400 hover:bg-cyan-500/10 transition-colors disabled:opacity-50"
           >
-            {summaryLoading ? 'Generating...' : 'Generate AI Summary'}
+            {summaryLoading ? t('briefing.generating') : t('results.generateAiSummary')}
           </button>
         )}
         {summaryError && (
@@ -92,7 +94,7 @@ export function ResultItemExpanded({
       />
 
       <div className="text-xs text-text-muted mb-2 font-medium">
-        Top Matches:
+        {t('results.topMatches')}
       </div>
       <ul className="space-y-2">
         {item.matches.map((match, i) => (

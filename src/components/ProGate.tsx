@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useLicense } from '../hooks/use-license';
 import { useAppStore } from '../store';
 
@@ -8,6 +9,7 @@ interface ProGateProps {
 }
 
 export function ProGate({ children, feature }: ProGateProps) {
+  const { t } = useTranslation();
   const { isPro, trialStatus, expired, daysRemaining } = useLicense();
   const startTrial = useAppStore((s) => s.startTrial);
   const activateLicense = useAppStore((s) => s.activateLicense);
@@ -23,8 +25,8 @@ export function ProGate({ children, feature }: ProGateProps) {
       <div>
         <div className="mb-2 px-3 py-1.5 rounded-lg bg-[#D4AF37]/10 border border-[#D4AF37]/20 text-center">
           <p className="text-[10px] text-[#D4AF37]">
-            License expires in {daysRemaining} day{daysRemaining !== 1 ? 's' : ''}.{' '}
-            <a href="https://4da.ai/streets" target="_blank" rel="noopener noreferrer" className="underline font-medium">Renew</a>
+            {t('pro.licenseExpiresSoon', { count: daysRemaining })}{' '}
+            <a href="https://4da.ai/streets" target="_blank" rel="noopener noreferrer" className="underline font-medium">{t('pro.renew')}</a>
           </p>
         </div>
         {children}
@@ -53,7 +55,7 @@ export function ProGate({ children, feature }: ProGateProps) {
     const success = await activateLicense(licenseKey.trim());
     setActivating(false);
     if (!success) {
-      setError('Invalid license key');
+      setError(t('pro.invalidLicenseKey'));
     }
   };
 
@@ -68,17 +70,17 @@ export function ProGate({ children, feature }: ProGateProps) {
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none" className="text-[#D4AF37]">
               <path d="M8 1L10 6H15L11 9.5L12.5 15L8 11.5L3.5 15L5 9.5L1 6H6L8 1Z" fill="currentColor"/>
             </svg>
-            <span className="text-sm font-semibold text-[#D4AF37] tracking-wide uppercase">Pro</span>
+            <span className="text-sm font-semibold text-[#D4AF37] tracking-wide uppercase">{t('tier.pro')}</span>
           </div>
           <p className="text-sm text-gray-300 mb-1">
-            {feature ? `${feature} is a Pro feature` : 'This is a Pro feature'}
+            {feature ? t('pro.featureGated', { feature }) : t('pro.genericGated')}
           </p>
           <p className="text-xs text-gray-500 mb-4">
             {licenseExpired
-              ? 'Your license has expired. Renew to restore access.'
+              ? t('pro.licenseExpired')
               : trialExpired
-              ? 'Your free trial has ended. Upgrade to continue.'
-              : 'Upgrade to unlock AI briefings, intelligence panels, and more.'}
+              ? t('pro.trialEnded')
+              : t('pro.upgradeDescription')}
           </p>
           <div className="flex flex-col gap-2">
             <a
@@ -87,7 +89,7 @@ export function ProGate({ children, feature }: ProGateProps) {
               rel="noopener noreferrer"
               className="inline-block px-5 py-2 text-sm font-medium text-black bg-[#D4AF37] rounded-lg hover:bg-[#C4A030] transition-colors"
             >
-              Upgrade to Pro
+              {t('pro.upgrade')}
             </a>
             {canStartTrial && (
               <button
@@ -95,7 +97,7 @@ export function ProGate({ children, feature }: ProGateProps) {
                 disabled={starting}
                 className="px-5 py-2 text-sm font-medium text-gray-300 border border-gray-600 rounded-lg hover:border-gray-400 hover:text-white transition-colors disabled:opacity-50"
               >
-                {starting ? 'Starting...' : 'Start 30-Day Free Trial'}
+                {starting ? t('pro.startingTrial') : t('pro.startTrial')}
               </button>
             )}
 
@@ -105,7 +107,7 @@ export function ProGate({ children, feature }: ProGateProps) {
                 onClick={() => setShowKeyInput(true)}
                 className="text-xs text-gray-500 hover:text-[#D4AF37] transition-colors"
               >
-                Have a license key?
+                {t('pro.haveLicenseKey')}
               </button>
             ) : (
               <div className="mt-1 space-y-2">
@@ -123,7 +125,7 @@ export function ProGate({ children, feature }: ProGateProps) {
                     disabled={activating || !licenseKey.trim()}
                     className="px-3 py-1.5 text-xs font-medium bg-[#1F1F1F] text-[#A0A0A0] border border-[#2A2A2A] rounded-lg hover:bg-[#2A2A2A] hover:text-white transition-colors disabled:opacity-50"
                   >
-                    {activating ? '...' : 'Activate'}
+                    {activating ? '...' : t('action.activate')}
                   </button>
                 </div>
                 {error && <p className="text-[10px] text-[#EF4444]">{error}</p>}

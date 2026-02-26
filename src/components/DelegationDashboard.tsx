@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, memo } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useShallow } from 'zustand/react/shallow';
 import { useAppStore } from '../store';
 import type { DelegationScoreEntry } from '../store/agent-slice';
@@ -76,6 +77,7 @@ function FactorBar({ label, value }: { label: string; value: number }) {
 }
 
 function DelegationCard({ entry }: { entry: DelegationScoreEntry }) {
+  const { t } = useTranslation();
   const [expanded, setExpanded] = useState(false);
   const style = RECOMMENDATION_STYLES[entry.recommendation] || DEFAULT_RECOMMENDATION_STYLE;
   const pct = Math.round(entry.overall_score * 100);
@@ -109,7 +111,7 @@ function DelegationCard({ entry }: { entry: DelegationScoreEntry }) {
           {/* Factor breakdown */}
           <div className="mt-3">
             <div className="text-[10px] text-[#666666] uppercase tracking-wider mb-2">
-              Factor Breakdown
+              {t('delegation.factorBreakdown')}
             </div>
             <div className="space-y-2">
               {Object.entries(entry.factors).map(([key, val]) => (
@@ -126,7 +128,7 @@ function DelegationCard({ entry }: { entry: DelegationScoreEntry }) {
           {entry.caveats.length > 0 && (
             <div>
               <div className="text-[10px] text-[#666666] uppercase tracking-wider mb-1">
-                Caveats
+                {t('delegation.caveats')}
               </div>
               <ul className="space-y-1">
                 {entry.caveats.map((caveat, i) => (
@@ -145,6 +147,7 @@ function DelegationCard({ entry }: { entry: DelegationScoreEntry }) {
 }
 
 export const DelegationDashboard = memo(function DelegationDashboard() {
+  const { t } = useTranslation();
   const { delegationScores } = useAppStore(
     useShallow((s) => ({
       delegationScores: s.delegationScores,
@@ -173,12 +176,12 @@ export const DelegationDashboard = memo(function DelegationDashboard() {
           <div className="w-8 h-8 bg-[#1F1F1F] rounded-lg flex items-center justify-center">
             <span className="text-sm text-[#666666]">S</span>
           </div>
-          <h2 className="font-medium text-white text-sm">Delegation Scores</h2>
+          <h2 className="font-medium text-white text-sm">{t('delegation.title')}</h2>
         </div>
         <div className="p-8 text-center">
-          <div className="text-sm text-[#A0A0A0]">No delegation data available</div>
+          <div className="text-sm text-[#A0A0A0]">{t('delegation.empty')}</div>
           <div className="text-xs text-[#666666] mt-1">
-            Add your tech stack in settings to see delegation scores.
+            {t('delegation.emptyHint')}
           </div>
         </div>
       </div>
@@ -194,9 +197,9 @@ export const DelegationDashboard = memo(function DelegationDashboard() {
             <span className="text-sm text-[#666666]">S</span>
           </div>
           <div>
-            <h2 className="font-medium text-white text-sm">Delegation Scores</h2>
+            <h2 className="font-medium text-white text-sm">{t('delegation.title')}</h2>
             <p className="text-xs text-[#666666]">
-              {delegationScores.length} technolog{delegationScores.length !== 1 ? 'ies' : 'y'} scored
+              {t('delegation.count', { count: delegationScores.length })}
             </p>
           </div>
         </div>
@@ -207,8 +210,7 @@ export const DelegationDashboard = memo(function DelegationDashboard() {
         <div className="px-5 py-3 border-b border-[#2A2A2A] flex items-center gap-3">
           <div className="flex items-center gap-2">
             <span className="text-xs text-[#A0A0A0]">
-              <span className="text-white font-medium">{summaryStats.pct}%</span> of your stack can be
-              fully delegated to AI
+              <span className="text-white font-medium">{summaryStats.pct}%</span> {t('delegation.delegatable')}
             </span>
           </div>
           <div className="flex-1 h-1.5 bg-[#0A0A0A] rounded-full overflow-hidden ml-3">

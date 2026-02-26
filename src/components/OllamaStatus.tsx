@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { listen } from '@tauri-apps/api/event';
 import { invoke } from '@tauri-apps/api/core';
 
@@ -44,37 +45,37 @@ function mapPhaseToStatus(phase: string): OllamaConnectionStatus {
 const STATUS_CONFIG: Record<OllamaConnectionStatus, {
   dotClass: string;
   textClass: string;
-  label: string;
+  labelKey: string;
   animate: boolean;
 }> = {
   pulling: {
     dotClass: 'bg-blue-400',
     textClass: 'text-blue-400',
-    label: 'Pulling models...',
+    labelKey: 'ollama.pulling',
     animate: true,
   },
   warming: {
     dotClass: 'bg-orange-400',
     textClass: 'text-orange-400',
-    label: 'Loading model...',
+    labelKey: 'ollama.loading',
     animate: true,
   },
   ready: {
     dotClass: 'bg-green-400',
     textClass: 'text-green-400',
-    label: 'Ollama',
+    labelKey: 'ollama.ready',
     animate: false,
   },
   error: {
     dotClass: 'bg-red-400',
     textClass: 'text-red-400',
-    label: 'Error',
+    labelKey: 'ollama.error',
     animate: false,
   },
   offline: {
     dotClass: 'bg-gray-400',
     textClass: 'text-gray-400',
-    label: 'Offline',
+    labelKey: 'ollama.offline',
     animate: false,
   },
 };
@@ -84,6 +85,7 @@ const STATUS_CONFIG: Record<OllamaConnectionStatus, {
 // ============================================================================
 
 export function OllamaStatus({ provider }: OllamaStatusProps) {
+  const { t } = useTranslation();
   const [status, setStatus] = useState<OllamaConnectionStatus>('offline');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
@@ -104,6 +106,7 @@ export function OllamaStatus({ provider }: OllamaStatusProps) {
   if (provider !== 'ollama') return null;
 
   const config = STATUS_CONFIG[status];
+  const label = t(config.labelKey);
   const isClickable = status === 'error' || status === 'offline';
 
   const handleRetry = async () => {
@@ -123,14 +126,14 @@ export function OllamaStatus({ provider }: OllamaStatusProps) {
       type="button"
       onClick={isClickable ? handleRetry : undefined}
       disabled={!isClickable}
-      aria-label={`Ollama status: ${config.label}${isClickable ? '. Click to retry.' : ''}`}
+      aria-label={`${t('ollama.status')}: ${label}${isClickable ? `. ${t('ollama.clickRetry')}` : ''}`}
       className={`
         inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border
         bg-bg-secondary border-border
         text-xs select-none transition-colors
         ${isClickable ? 'cursor-pointer hover:border-[#3A3A3A]' : 'cursor-default'}
       `}
-      title={errorMsg ?? config.label}
+      title={errorMsg ?? label}
     >
       <span
         className={`
@@ -140,7 +143,7 @@ export function OllamaStatus({ provider }: OllamaStatusProps) {
         `}
       />
       <span className={config.textClass}>
-        {config.label}
+        {label}
       </span>
     </button>
   );

@@ -1,4 +1,5 @@
 import { useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../../store';
 import { useShallow } from 'zustand/react/shallow';
 import type { CommitSummary } from '../../types/command-deck';
@@ -6,6 +7,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { useState } from 'react';
 
 export function HistoryTab() {
+  const { t } = useTranslation();
   const { commandHistory, loadCommandHistory, setCommandInput, setCommandDeckTab, selectedRepoPath } =
     useAppStore(
       useShallow((s) => ({
@@ -35,10 +37,10 @@ export function HistoryTab() {
       {/* Command History */}
       <div>
         <h4 className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-2">
-          Commands
+          {t('commandDeck.commands')}
         </h4>
         {commandHistory.length === 0 ? (
-          <p className="text-xs text-gray-600">No command history</p>
+          <p className="text-xs text-gray-600">{t('commandDeck.history.noCommands')}</p>
         ) : (
           <div className="space-y-0.5">
             {commandHistory.slice(0, 20).map((entry) => (
@@ -74,7 +76,7 @@ export function HistoryTab() {
       {gitLog.length > 0 && (
         <div>
           <h4 className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-2">
-            Recent Commits
+            {t('commandDeck.history.recentCommits')}
           </h4>
           <div className="space-y-0.5">
             {gitLog.map((commit) => (

@@ -1,4 +1,6 @@
 import { useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
+
 import type { ApiKeyState, OllamaStatus, PullProgress } from './types';
 
 interface ApiKeysStepProps {
@@ -42,6 +44,8 @@ export function ApiKeysStep({
   pullingModels,
   pullProgress,
 }: ApiKeysStepProps) {
+  const { t } = useTranslation();
+
   // Auto-detect Ollama on mount
   useEffect(() => {
     checkOllamaStatus();
@@ -51,9 +55,9 @@ export function ApiKeysStep({
 
   return (
     <div className={`transition-all duration-300 ${isAnimating ? 'opacity-0 translate-y-4' : 'opacity-100 translate-y-0'}`}>
-      <h2 className="text-3xl font-semibold text-white mb-2 text-center">API Keys</h2>
+      <h2 className="text-3xl font-semibold text-white mb-2 text-center">{t('onboarding.apiKeys.title')}</h2>
       <p className="text-gray-400 mb-6 text-center">
-        Configure API keys for best results, or try keyword-only mode.
+        {t('onboarding.apiKeys.subtitle')}
       </p>
 
       <div className="space-y-4 mb-6">
@@ -64,14 +68,14 @@ export function ApiKeysStep({
               <div className="p-4 bg-bg-secondary border border-orange-500/30 rounded-lg space-y-3">
                 <div className="flex items-center gap-2 text-sm text-orange-300">
                   <div className="w-4 h-4 border-2 border-orange-500 border-t-transparent rounded-full animate-spin" />
-                  Installing models for local AI...
+                  {t('onboarding.apiKeys.installingModels')}
                 </div>
                 {Object.entries(pullProgress).map(([model, p]) => (
                   <div key={model} className="space-y-1">
                     <div className="flex items-center justify-between text-xs">
                       <span className="text-gray-300 font-mono">{model}</span>
                       <span className="text-gray-500">
-                        {p.done ? 'Complete' : p.status || `${p.percent}%`}
+                        {p.done ? t('onboarding.apiKeys.pullComplete') : p.status || `${p.percent}%`}
                       </span>
                     </div>
                     <div className="w-full h-1.5 bg-bg-tertiary rounded-full overflow-hidden">
@@ -85,23 +89,23 @@ export function ApiKeysStep({
                   </div>
                 ))}
                 <p className="text-xs text-gray-500">
-                  This may take a few minutes depending on your connection.
+                  {t('onboarding.apiKeys.pullWaitMessage')}
                 </p>
               </div>
             ) : ollamaStatus.has_embedding_model && ollamaStatus.has_llm_model ? (
               <div className="p-3 bg-green-900/20 border border-green-500/30 rounded-lg text-sm text-green-300 flex items-center gap-2">
                 <span className="text-green-500">&#x2713;</span>
-                Ollama ready — no API keys needed.
+                {t('onboarding.apiKeys.ollamaReady')}
               </div>
             ) : ollamaStatus.models.length === 0 && !pullingModels ? (
               <div className="p-3 bg-yellow-900/20 border border-yellow-500/30 rounded-lg text-sm text-yellow-300 flex items-center gap-2">
                 <span className="text-yellow-500">&#x26A0;</span>
-                Ollama detected but no models installed. Models will be downloaded automatically.
+                {t('onboarding.apiKeys.ollamaNoModels')}
               </div>
             ) : (
               <div className="p-3 bg-green-900/20 border border-green-500/30 rounded-lg text-sm text-green-300 flex items-center gap-2">
                 <span className="text-green-500">&#x2713;</span>
-                Ollama detected with {ollamaStatus.models.length} model{ollamaStatus.models.length !== 1 ? 's' : ''}.
+                {t('onboarding.apiKeys.ollamaDetected', { count: ollamaStatus.models.length })}
               </div>
             )}
           </>
@@ -111,24 +115,24 @@ export function ApiKeysStep({
         <div className="bg-bg-secondary p-5 rounded-lg">
           <div className="flex items-center gap-2 mb-3">
             {hasEmbeddingService ? (
-              <span className="px-2 py-0.5 bg-green-500/20 text-green-400 text-xs rounded font-medium">Recommended</span>
+              <span className="px-2 py-0.5 bg-green-500/20 text-green-400 text-xs rounded font-medium">{t('onboarding.apiKeys.recommended')}</span>
             ) : (
-              <span className="px-2 py-0.5 bg-yellow-500/20 text-yellow-400 text-xs rounded font-medium">Recommended</span>
+              <span className="px-2 py-0.5 bg-yellow-500/20 text-yellow-400 text-xs rounded font-medium">{t('onboarding.apiKeys.recommended')}</span>
             )}
-            <h3 className="text-white font-medium">OpenAI API Key</h3>
+            <h3 className="text-white font-medium">{t('onboarding.apiKeys.openaiLabel')}</h3>
           </div>
           <p className="text-sm text-gray-400 mb-3">
-            Used for semantic understanding (embeddings). Provides the best relevance scoring.
+            {t('onboarding.apiKeys.openaiDesc')}
           </p>
           <div className="flex items-center justify-between mb-2">
-            <label className="text-xs text-gray-500">API Key</label>
+            <label className="text-xs text-gray-500">{t('settings.llm.apiKey')}</label>
             <a
               href="https://platform.openai.com/api-keys"
               target="_blank"
               rel="noopener noreferrer"
               className="text-xs text-orange-500 hover:underline"
             >
-              Get your API key &rarr;
+              {t('onboarding.apiKeys.getApiKey')} &rarr;
             </a>
           </div>
           <input
@@ -142,18 +146,18 @@ export function ApiKeysStep({
             className="w-full px-4 py-3 bg-bg-tertiary border border-border rounded-lg text-white placeholder-gray-600 focus:border-orange-500 focus:outline-none font-mono text-sm"
           />
           <p className="text-xs text-gray-500 mt-2">
-            ~$0.02/1M tokens for embeddings. Typical usage costs pennies/month.
+            {t('onboarding.apiKeys.openaiCostHint')}
           </p>
         </div>
 
         {/* LLM Provider - for analysis/reasoning */}
         <div className="bg-bg-secondary p-5 rounded-lg">
           <div className="flex items-center gap-2 mb-3">
-            <span className="px-2 py-0.5 bg-blue-500/20 text-blue-400 text-xs rounded font-medium">Analysis</span>
-            <h3 className="text-white font-medium">LLM Provider</h3>
+            <span className="px-2 py-0.5 bg-blue-500/20 text-blue-400 text-xs rounded font-medium">{t('onboarding.apiKeys.analysisTag')}</span>
+            <h3 className="text-white font-medium">{t('onboarding.apiKeys.llmProviderLabel')}</h3>
           </div>
           <p className="text-sm text-gray-400 mb-3">
-            Choose which AI to use for analyzing and explaining relevance.
+            {t('onboarding.apiKeys.llmProviderDesc')}
           </p>
 
           {/* Provider selection */}
@@ -186,14 +190,14 @@ export function ApiKeysStep({
           {apiKeys.provider === 'anthropic' && (
             <div className="mt-3">
               <div className="flex items-center justify-between mb-2">
-                <label className="text-xs text-gray-500">Anthropic API Key</label>
+                <label className="text-xs text-gray-500">{t('onboarding.apiKeys.anthropicLabel')}</label>
                 <a
                   href="https://console.anthropic.com/settings/keys"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="text-xs text-orange-500 hover:underline"
                 >
-                  Get key &rarr;
+                  {t('onboarding.apiKeys.getKey')} &rarr;
                 </a>
               </div>
               <input
@@ -214,13 +218,13 @@ export function ApiKeysStep({
               {isCheckingOllama ? (
                 <div className="flex items-center gap-2">
                   <div className="w-4 h-4 border-2 border-orange-500 border-t-transparent rounded-full animate-spin" />
-                  <span className="text-gray-400 text-sm">Checking Ollama...</span>
+                  <span className="text-gray-400 text-sm">{t('onboarding.apiKeys.checkingOllama')}</span>
                 </div>
               ) : ollamaStatus?.running ? (
                 <div className="space-y-2">
                   <div className="flex items-center gap-2">
                     <span className="text-green-500">&#x2713;</span>
-                    <span className="text-green-300 text-sm">Ollama running (v{ollamaStatus.version})</span>
+                    <span className="text-green-300 text-sm">{t('onboarding.apiKeys.ollamaRunning', { version: ollamaStatus.version })}</span>
                   </div>
                   {ollamaStatus.models.length > 0 && (
                     <select
@@ -236,12 +240,12 @@ export function ApiKeysStep({
                 </div>
               ) : (
                 <div className="text-yellow-400 text-sm">
-                  Ollama not detected.{' '}
+                  {t('onboarding.apiKeys.ollamaNotDetected')}{' '}
                   <a href="https://ollama.ai" target="_blank" rel="noopener noreferrer" className="text-orange-500 hover:underline">
-                    Install Ollama
+                    {t('onboarding.apiKeys.installOllama')}
                   </a>
-                  {' '}or{' '}
-                  <button onClick={checkOllamaStatus} className="text-orange-500 hover:underline">retry</button>
+                  {' '}{t('onboarding.apiKeys.or')}{' '}
+                  <button onClick={checkOllamaStatus} className="text-orange-500 hover:underline">{t('action.retry').toLowerCase()}</button>
                 </div>
               )}
             </div>
@@ -249,7 +253,7 @@ export function ApiKeysStep({
 
           {apiKeys.provider === 'openai' && (
             <p className="text-xs text-gray-500 mt-2">
-              Using same OpenAI key for both embeddings and analysis.
+              {t('onboarding.apiKeys.openaiSharedKeyHint')}
             </p>
           )}
         </div>
@@ -257,21 +261,21 @@ export function ApiKeysStep({
         {/* X/Twitter API Key - Optional */}
         <div className="bg-bg-secondary p-5 rounded-lg">
           <div className="flex items-center gap-2 mb-3">
-            <span className="px-2 py-0.5 bg-gray-500/20 text-gray-400 text-xs rounded font-medium">Optional</span>
-            <h3 className="text-white font-medium">X / Twitter API Key</h3>
+            <span className="px-2 py-0.5 bg-gray-500/20 text-gray-400 text-xs rounded font-medium">{t('onboarding.apiKeys.optionalTag')}</span>
+            <h3 className="text-white font-medium">{t('onboarding.apiKeys.xApiLabel')}</h3>
           </div>
           <p className="text-sm text-gray-400 mb-3">
-            Enables monitoring tweets from tech influencers. Requires a free X Developer account.
+            {t('onboarding.apiKeys.xApiDesc')}
           </p>
           <div className="flex items-center justify-between mb-2">
-            <label className="text-xs text-gray-500">Bearer Token</label>
+            <label className="text-xs text-gray-500">{t('onboarding.apiKeys.bearerToken')}</label>
             <a
               href="https://developer.x.com/en/portal/dashboard"
               target="_blank"
               rel="noopener noreferrer"
               className="text-xs text-orange-500 hover:underline"
             >
-              Get X Developer access &rarr;
+              {t('onboarding.apiKeys.getXAccess')} &rarr;
             </a>
           </div>
           <input
@@ -282,7 +286,7 @@ export function ApiKeysStep({
             className="w-full px-4 py-3 bg-bg-tertiary border border-border rounded-lg text-white placeholder-gray-600 focus:border-orange-500 focus:outline-none font-mono text-sm"
           />
           <p className="text-xs text-gray-500 mt-2">
-            Skip this if you don't have an X developer account. You can add it later in Settings.
+            {t('onboarding.apiKeys.xApiSkipHint')}
           </p>
         </div>
 
@@ -295,12 +299,12 @@ export function ApiKeysStep({
           {isTesting ? (
             <>
               <div className="w-4 h-4 border-2 border-orange-500 border-t-transparent rounded-full animate-spin" />
-              Testing connection...
+              {t('onboarding.apiKeys.testingConnection')}
             </>
           ) : (
             <>
               <span>&#x1f50c;</span>
-              Test Connection
+              {t('settings.testConnection')}
             </>
           )}
         </button>
@@ -315,11 +319,11 @@ export function ApiKeysStep({
             {testResult.success ? (
               <div className="flex items-center gap-2">
                 <span className="text-green-500">&#x2713;</span>
-                Connection successful! Ready to use.
+                {t('onboarding.apiKeys.connectionSuccess')}
               </div>
             ) : (
               <div>
-                <div className="font-medium">Connection failed</div>
+                <div className="font-medium">{t('onboarding.apiKeys.connectionFailed')}</div>
                 <div className="text-xs mt-1 opacity-80">{testResult.message}</div>
               </div>
             )}
@@ -330,11 +334,9 @@ export function ApiKeysStep({
       {/* Keyword-only mode info */}
       {!hasEmbeddingService && (
         <div className="p-3 bg-bg-tertiary border border-border rounded-lg text-sm">
-          <div className="text-yellow-400 font-medium mb-1">Keyword-only mode available</div>
+          <div className="text-yellow-400 font-medium mb-1">{t('onboarding.apiKeys.keywordModeTitle')}</div>
           <p className="text-gray-400 text-xs">
-            Without an API key or Ollama, 4DA can still work using keyword matching.
-            Results will be less precise than semantic search, but still useful.
-            You can add API keys later in Settings.
+            {t('onboarding.apiKeys.keywordModeDesc')}
           </p>
         </div>
       )}
@@ -345,7 +347,7 @@ export function ApiKeysStep({
           onClick={onBack}
           className="px-6 py-2 text-gray-400 hover:text-white transition-colors"
         >
-          &larr; Back
+          &larr; {t('onboarding.nav.back')}
         </button>
         <div className="flex items-center gap-3">
           {!hasEmbeddingService && (
@@ -353,7 +355,7 @@ export function ApiKeysStep({
               onClick={onSkip}
               className="px-4 py-2 text-yellow-500 hover:text-yellow-300 text-sm transition-colors"
             >
-              Try keyword-only mode
+              {t('onboarding.apiKeys.tryKeywordMode')}
             </button>
           )}
           {hasEmbeddingService && !apiKeys.openai && apiKeys.provider !== 'ollama' && (
@@ -361,7 +363,7 @@ export function ApiKeysStep({
               onClick={onSkip}
               className="px-4 py-2 text-gray-500 hover:text-gray-300 text-sm transition-colors"
             >
-              Skip for now
+              {t('onboarding.nav.skipForNow')}
             </button>
           )}
           <button
@@ -369,7 +371,7 @@ export function ApiKeysStep({
             disabled={pullingModels || (!apiKeys.openai && apiKeys.provider !== 'ollama')}
             className="px-8 py-3 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {pullingModels ? 'Installing models...' : 'Continue'}
+            {pullingModels ? t('onboarding.apiKeys.installingModelsBtn') : t('onboarding.nav.continue')}
           </button>
         </div>
       </div>

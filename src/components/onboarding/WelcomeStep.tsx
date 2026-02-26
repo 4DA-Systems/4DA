@@ -1,3 +1,5 @@
+import { useTranslation } from 'react-i18next';
+
 import sunLogo from '../../assets/sun-logo.jpg';
 
 interface WelcomeStepProps {
@@ -6,15 +8,17 @@ interface WelcomeStepProps {
 }
 
 export function WelcomeStep({ isAnimating, onNext }: WelcomeStepProps) {
+  const { t } = useTranslation();
+
   return (
     <div className={`text-center transition-all duration-500 ${isAnimating ? 'opacity-0 scale-95' : 'opacity-100 scale-100'}`}>
       <div className="w-32 h-32 mx-auto mb-6 rounded-full overflow-hidden shadow-2xl ring-4 ring-orange-500/20">
         <img src={sunLogo} alt="4DA" className="w-full h-full object-cover" />
       </div>
-      <h1 className="text-4xl font-semibold text-white mb-3">Welcome to 4DA</h1>
-      <p className="text-xl text-orange-400 mb-2 font-medium">All signal. No feed.</p>
+      <h1 className="text-4xl font-semibold text-white mb-3">{t('onboarding.welcome.title')}</h1>
+      <p className="text-xl text-orange-400 mb-2 font-medium">{t('onboarding.welcome.tagline')}</p>
       <p className="text-gray-500 mb-8 max-w-md mx-auto">
-        4DA learns what you care about and surfaces relevant content from across the internet - before you know you need it.
+        {t('onboarding.welcome.description')}
       </p>
       <div className="space-y-3 text-left bg-bg-secondary p-5 rounded-lg mb-8 max-w-md mx-auto">
         <ul className="text-gray-400 space-y-3">
@@ -23,8 +27,8 @@ export function WelcomeStep({ isAnimating, onNext }: WelcomeStepProps) {
               <span className="text-green-400">&#x1f512;</span>
             </span>
             <div>
-              <strong className="text-white block">100% Private</strong>
-              <span className="text-sm">All processing happens locally</span>
+              <strong className="text-white block">{t('onboarding.welcome.privateTitle')}</strong>
+              <span className="text-sm">{t('onboarding.welcome.privateDesc')}</span>
             </div>
           </li>
           <li className="flex items-start gap-3">
@@ -32,8 +36,8 @@ export function WelcomeStep({ isAnimating, onNext }: WelcomeStepProps) {
               <span className="text-orange-400">&#x26a1;</span>
             </span>
             <div>
-              <strong className="text-white block">Autonomous</strong>
-              <span className="text-sm">Self-discovering, learns from you</span>
+              <strong className="text-white block">{t('onboarding.welcome.autonomousTitle')}</strong>
+              <span className="text-sm">{t('onboarding.welcome.autonomousDesc')}</span>
             </div>
           </li>
           <li className="flex items-start gap-3">
@@ -41,8 +45,8 @@ export function WelcomeStep({ isAnimating, onNext }: WelcomeStepProps) {
               <span className="text-blue-400">&#x1f511;</span>
             </span>
             <div>
-              <strong className="text-white block">BYOK</strong>
-              <span className="text-sm">Your API keys, you control costs</span>
+              <strong className="text-white block">{t('onboarding.welcome.byokTitle')}</strong>
+              <span className="text-sm">{t('onboarding.welcome.byokDesc')}</span>
             </div>
           </li>
         </ul>
@@ -51,9 +55,9 @@ export function WelcomeStep({ isAnimating, onNext }: WelcomeStepProps) {
         onClick={onNext}
         className="px-10 py-3 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-all font-medium hover:scale-105 active:scale-95"
       >
-        Get Started &rarr;
+        {t('onboarding.welcome.getStarted')} &rarr;
       </button>
-      <p className="text-xs text-gray-600 mt-4">Quick setup — most steps are automatic</p>
+      <p className="text-xs text-gray-600 mt-4">{t('onboarding.welcome.quickSetupHint')}</p>
     </div>
   );
 }

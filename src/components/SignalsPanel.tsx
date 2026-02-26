@@ -1,4 +1,5 @@
 import { useState, useMemo, memo } from 'react';
+import { useTranslation } from 'react-i18next';
 import type { SourceRelevance } from '../types';
 
 // ============================================================================
@@ -57,6 +58,7 @@ const SIGNAL_LABELS: Record<string, string> = {
 // ============================================================================
 
 export const SignalsPanel = memo(function SignalsPanel({ results }: SignalsPanelProps) {
+  const { t } = useTranslation();
   const [expanded, setExpanded] = useState(true);
   const [typeFilter, setTypeFilter] = useState<string | null>(null);
   const [priorityFilter, setPriorityFilter] = useState<string | null>(null);
@@ -101,7 +103,7 @@ export const SignalsPanel = memo(function SignalsPanel({ results }: SignalsPanel
 
   if (signals.length === 0) return (
     <div className="mb-6 bg-bg-secondary rounded-lg border border-border px-5 py-4">
-      <p className="text-text-muted text-sm text-center">No actionable signals in this batch</p>
+      <p className="text-text-muted text-sm text-center">{t('signals.noSignals')}</p>
     </div>
   );
 
@@ -121,14 +123,14 @@ export const SignalsPanel = memo(function SignalsPanel({ results }: SignalsPanel
             <span className="text-gray-400">⚡</span>
           </div>
           <div className="text-left">
-            <h2 className="font-medium text-white">Signals</h2>
+            <h2 className="font-medium text-white">{t('signals.title')}</h2>
             <p className="text-xs text-gray-500">
-              {signals.length} actionable
+              {t('signals.actionable', { count: signals.length })}
               {criticalCount > 0 && (
-                <span className="ml-2 text-red-400">{criticalCount} critical</span>
+                <span className="ml-2 text-red-400">{t('signals.critical', { count: criticalCount })}</span>
               )}
               {highCount > 0 && (
-                <span className="ml-2 text-orange-400">{highCount} high</span>
+                <span className="ml-2 text-orange-400">{t('signals.high', { count: highCount })}</span>
               )}
             </p>
           </div>
@@ -203,7 +205,7 @@ export const SignalsPanel = memo(function SignalsPanel({ results }: SignalsPanel
                 onClick={() => { setTypeFilter(null); setPriorityFilter(null); }}
                 className="px-2 py-1 text-[10px] text-gray-500 hover:text-white transition-colors"
               >
-                Clear
+                {t('signals.clear')}
               </button>
             )}
           </div>
@@ -211,7 +213,7 @@ export const SignalsPanel = memo(function SignalsPanel({ results }: SignalsPanel
           {/* Signal Items */}
           <div className="space-y-2 max-h-[400px] overflow-y-auto">
             {filtered.length === 0 ? (
-              <p className="text-center text-sm text-gray-500 py-4">No signals match filters</p>
+              <p className="text-center text-sm text-gray-500 py-4">{t('signals.noMatch')}</p>
             ) : (
               filtered.map((signal) => (
                 <SignalRow key={signal.id} signal={signal} />
@@ -229,6 +231,7 @@ export const SignalsPanel = memo(function SignalsPanel({ results }: SignalsPanel
 // ============================================================================
 
 const SignalRow = ({ signal }: { signal: SignalItem }) => {
+  const { t } = useTranslation();
   const [showTriggers, setShowTriggers] = useState(false);
   const config = SIGNAL_CONFIG[signal.signal_type] || SIGNAL_CONFIG['tech_trend'];
   const priority = PRIORITY_CONFIG[signal.signal_priority] || PRIORITY_CONFIG['low'];
@@ -277,7 +280,7 @@ const SignalRow = ({ signal }: { signal: SignalItem }) => {
               {priority.label}
             </span>
             <span className="text-[10px] text-gray-500">
-              {Math.round(signal.top_score * 100)}% match
+              {t('signals.match', { score: Math.round(signal.top_score * 100) })}
             </span>
             <span className="text-[10px] text-gray-600">{signal.source_type}</span>
             {signal.signal_triggers.length > 0 && (
@@ -285,7 +288,7 @@ const SignalRow = ({ signal }: { signal: SignalItem }) => {
                 onClick={() => setShowTriggers(!showTriggers)}
                 className="text-[10px] text-gray-500 hover:text-gray-300 transition-colors ml-auto"
               >
-                {showTriggers ? 'hide triggers' : `${signal.signal_triggers.length} triggers`}
+                {showTriggers ? t('signals.hideTriggers') : t('signals.triggers', { count: signal.signal_triggers.length })}
               </button>
             )}
           </div>
@@ -293,7 +296,7 @@ const SignalRow = ({ signal }: { signal: SignalItem }) => {
           {/* Similar items grouped */}
           {signal.similar_count > 0 && (
             <div className="mt-1.5 text-[10px] text-gray-500">
-              +{signal.similar_count} similar{signal.similar_titles.length > 0 && (
+              +{t('signals.similar', { count: signal.similar_count })}{signal.similar_titles.length > 0 && (
                 <span className="text-gray-600"> ({signal.similar_titles.slice(0, 2).join(', ')}{signal.similar_titles.length > 2 ? '...' : ''})</span>
               )}
             </div>

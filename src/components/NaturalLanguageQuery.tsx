@@ -1,4 +1,5 @@
 import { useState, useCallback, memo } from 'react';
+import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
 import { ProGate } from './ProGate';
 
@@ -40,6 +41,7 @@ const SOURCE_COLORS: Record<string, string> = {
 
 const DEFAULT_SOURCE = 'bg-gray-500/15 text-gray-400 border-gray-500/20';
 export const NaturalLanguageQueryPanel = memo(function NaturalLanguageQueryPanel() {
+  const { t } = useTranslation();
   const [query, setQuery] = useState('');
   const [result, setResult] = useState<NLQResult | null>(null);
   const [loading, setLoading] = useState(false);
@@ -55,18 +57,18 @@ export const NaturalLanguageQueryPanel = memo(function NaturalLanguageQueryPanel
       setResult(r);
     } catch (err) {
       const msg = String(err);
-      setError(msg.includes('No context') ? 'Index your files first (Settings > Context)' : msg);
+      setError(msg.includes('No context') ? t('search.indexFirst') : msg);
     } finally {
       setLoading(false);
     }
-  }, [query, loading]);
+  }, [query, loading, t]);
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
     if (e.key === 'Enter') handleSubmit();
   }, [handleSubmit]);
 
   return (
-    <ProGate feature="Natural Language Query">
+    <ProGate feature={t('search.nlqFeature')}>
       <div className="mb-6 bg-bg-secondary rounded-lg border border-border overflow-hidden">
         {/* Header */}
         <div className="px-5 py-4 border-b border-border flex items-center gap-3">
@@ -77,8 +79,8 @@ export const NaturalLanguageQueryPanel = memo(function NaturalLanguageQueryPanel
             </svg>
           </div>
           <div>
-            <h2 className="font-medium text-white text-sm">Natural Language Query</h2>
-            <p className="text-xs text-gray-500">Ask about your feed in plain language</p>
+            <h2 className="font-medium text-white text-sm">{t('search.nlqTitle')}</h2>
+            <p className="text-xs text-gray-500">{t('search.nlqSubtitle')}</p>
           </div>
         </div>
 
@@ -90,7 +92,7 @@ export const NaturalLanguageQueryPanel = memo(function NaturalLanguageQueryPanel
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder="Ask about your feed..."
+              placeholder={t('search.nlqPlaceholder')}
               className="flex-1 px-3 py-2 text-sm bg-bg-primary border border-border rounded-lg text-white placeholder:text-gray-600 focus:outline-none focus:border-gray-500 transition-colors"
             />
             <button
@@ -101,7 +103,7 @@ export const NaturalLanguageQueryPanel = memo(function NaturalLanguageQueryPanel
               {loading ? (
                 <span className="w-4 h-4 border-2 border-gray-600 border-t-gray-300 rounded-full animate-spin inline-block" />
               ) : (
-                'Query'
+                t('search.query')
               )}
             </button>
           </div>
@@ -118,7 +120,7 @@ export const NaturalLanguageQueryPanel = memo(function NaturalLanguageQueryPanel
         {!result && !error && !loading && (
           <div className="px-4 pb-4">
             <p className="text-xs text-gray-600 text-center py-3">
-              Ask a question about your feed in natural language
+              {t('search.nlqHint')}
             </p>
           </div>
         )}
@@ -162,7 +164,7 @@ export const NaturalLanguageQueryPanel = memo(function NaturalLanguageQueryPanel
                           {item.file_name ? (
                             <span className="text-xs text-white font-medium truncate">{item.file_name}</span>
                           ) : (
-                            <span className="text-xs text-gray-400 truncate">Untitled</span>
+                            <span className="text-xs text-gray-400 truncate">{t('search.untitled')}</span>
                           )}
                           <span className={`text-[10px] px-1.5 py-0.5 rounded border ${SOURCE_COLORS[item.source_type] || DEFAULT_SOURCE}`}>
                             {item.source_type}
@@ -181,15 +183,15 @@ export const NaturalLanguageQueryPanel = memo(function NaturalLanguageQueryPanel
               </div>
             ) : (
               <div className="text-center py-4">
-                <p className="text-xs text-gray-500">No results found</p>
-                <p className="text-[10px] text-gray-600 mt-0.5">Try different keywords or a broader query</p>
+                <p className="text-xs text-gray-500">{t('search.noResults')}</p>
+                <p className="text-[10px] text-gray-600 mt-0.5">{t('search.tryDifferent')}</p>
               </div>
             )}
 
             {/* Stats bar */}
             <div className="pt-2 border-t border-border">
               <p className="text-[10px] text-gray-600 text-center font-mono">
-                {result.total_count} result{result.total_count !== 1 ? 's' : ''} in {result.execution_ms}ms
+                {t('search.resultStats', { count: result.total_count, ms: result.execution_ms })}
               </p>
             </div>
           </div>

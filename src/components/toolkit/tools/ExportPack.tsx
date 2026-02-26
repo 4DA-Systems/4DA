@@ -1,4 +1,5 @@
 import { useState, useCallback, useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
 
 interface ExportPackResult {
@@ -48,6 +49,7 @@ function formatDate(): string {
 }
 
 export default function ExportPack() {
+  const { t } = useTranslation();
   const [result, setResult] = useState<ExportPackResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -131,21 +133,21 @@ export default function ExportPack() {
           {loading ? (
             <>
               <div className="w-3.5 h-3.5 border-2 border-[#0A0A0A]/30 border-t-[#0A0A0A] rounded-full animate-spin" />
-              Generating...
+              {t('toolkit.exportPack.generating')}
             </>
           ) : (
             <>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M21 8v13H3V8" /><path d="M1 3h22v5H1z" /><path d="M10 12h4" />
               </svg>
-              Generate Export
+              {t('toolkit.exportPack.generateExport')}
             </>
           )}
         </button>
 
         {/* Section toggles */}
         <div className="flex items-center gap-2 ml-auto">
-          <span className="text-xs text-[#666]">Sections:</span>
+          <span className="text-xs text-[#666]">{t('toolkit.exportPack.sections')}:</span>
           <SectionToggle
             label="DNA"
             checked={showDna}
@@ -177,7 +179,7 @@ export default function ExportPack() {
           </svg>
           <span className="text-sm text-[#EF4444] flex-1">{error}</span>
           <button onClick={() => setError(null)} className="text-[#EF4444]/60 hover:text-[#EF4444] text-xs">
-            Dismiss
+            {t('action.dismiss')}
           </button>
         </div>
       )}
@@ -202,7 +204,7 @@ export default function ExportPack() {
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#22C55E" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <polyline points="20 6 9 17 4 12" />
                   </svg>
-                  <span className="text-[#22C55E]">Copied!</span>
+                  <span className="text-[#22C55E]">{t('action.copied')}</span>
                 </>
               ) : (
                 <>
@@ -210,7 +212,7 @@ export default function ExportPack() {
                     <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
                     <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" />
                   </svg>
-                  <span className="text-[#A0A0A0]">Copy Markdown</span>
+                  <span className="text-[#A0A0A0]">{t('toolkit.exportPack.copyMarkdown')}</span>
                 </>
               )}
             </button>
@@ -224,7 +226,7 @@ export default function ExportPack() {
                 <polyline points="7 10 12 15 17 10" />
                 <line x1="12" y1="15" x2="12" y2="3" />
               </svg>
-              Download .md
+              {t('toolkit.exportPack.downloadMd')}
             </button>
 
             <span className="text-[10px] text-[#666] ml-auto font-mono">
@@ -239,9 +241,9 @@ export default function ExportPack() {
             <path d="M1 3h22v5H1z" />
             <path d="M10 12h4" />
           </svg>
-          <p className="text-sm text-[#A0A0A0] mb-1">Generate your developer profile to see a preview</p>
+          <p className="text-sm text-[#A0A0A0] mb-1">{t('toolkit.exportPack.empty')}</p>
           <p className="text-xs text-[#666]">
-            Combines your DNA, tech radar, and decisions into a shareable markdown document
+            {t('toolkit.exportPack.emptyHint')}
           </p>
         </div>
       ) : null}

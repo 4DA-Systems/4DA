@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useCallback, memo } from 'react';
+import { useTranslation } from 'react-i18next';
 
 export interface RadarEntry {
   name: string;
@@ -106,6 +107,7 @@ const RadarTooltip = memo(function RadarTooltip({ tooltip }: { tooltip: TooltipS
 });
 
 export const RadarSVG = memo(function RadarSVG({ entries, userStack, onEntryClick }: RadarSVGProps) {
+  const { t } = useTranslation();
   const [zoomedQuadrant, setZoomedQuadrant] = useState<QuadrantKey | null>(null);
   const [tooltip, setTooltip] = useState<TooltipState | null>(null);
   const [mounted, setMounted] = useState(false);
@@ -216,7 +218,7 @@ export const RadarSVG = memo(function RadarSVG({ entries, userStack, onEntryClic
       {isZoomed && (
         <button onClick={handleBackClick}
           className="absolute top-2 left-2 px-2 py-1 text-[10px] rounded bg-[#1F1F1F] text-[#A0A0A0] border border-[#2A2A2A] hover:text-white hover:border-[#666666] transition-colors">
-          Back to full view
+          {t('techRadar.backToFull')}
         </button>
       )}
     </div>

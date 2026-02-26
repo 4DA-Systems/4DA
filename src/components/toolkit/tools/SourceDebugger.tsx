@@ -1,4 +1,5 @@
 import { useState, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
 
 // --- Types ---
@@ -40,6 +41,7 @@ function truncate(str: string, max: number): string {
 // --- Component ---
 
 export default function SourceDebugger() {
+  const { t } = useTranslation();
   const [url, setUrl] = useState('');
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<FeedTestResult | null>(null);
@@ -112,7 +114,7 @@ export default function SourceDebugger() {
           {loading ? (
             <>
               <div className="w-3.5 h-3.5 border-2 border-[#0A0A0A]/30 border-t-[#0A0A0A] rounded-full animate-spin" />
-              Testing...
+              {t('toolkit.sourceDebugger.testing')}
             </>
           ) : (
             <>
@@ -121,7 +123,7 @@ export default function SourceDebugger() {
                 <path d="M4 4a16 16 0 0116 16" />
                 <circle cx="5" cy="19" r="1" />
               </svg>
-              Test Feed
+              {t('toolkit.sourceDebugger.testFeed')}
             </>
           )}
         </button>
@@ -130,7 +132,7 @@ export default function SourceDebugger() {
             onClick={clear}
             className="px-3 py-2 text-xs text-[#A0A0A0] bg-[#141414] border border-[#2A2A2A] rounded-lg hover:text-white hover:border-white/20 transition-all shrink-0"
           >
-            Clear
+            {t('toolkit.sourceDebugger.clear')}
           </button>
         )}
       </div>
@@ -160,8 +162,8 @@ export default function SourceDebugger() {
             <path d="M4 4a16 16 0 0116 16" />
             <circle cx="5" cy="19" r="1" />
           </svg>
-          <p className="text-sm">Test any RSS or Atom feed</p>
-          <p className="text-xs mt-1">Enter a URL and click Test Feed to validate</p>
+          <p className="text-sm">{t('toolkit.sourceDebugger.empty')}</p>
+          <p className="text-xs mt-1">{t('toolkit.sourceDebugger.emptyHint')}</p>
         </div>
       )}
 
@@ -251,7 +253,7 @@ export default function SourceDebugger() {
 
           {result.items.length === 0 && result.errors.length === 0 && (
             <div className="text-center py-8 text-[#666] text-sm">
-              Feed parsed successfully but contains no items.
+              {t('toolkit.sourceDebugger.noItems')}
             </div>
           )}
         </div>

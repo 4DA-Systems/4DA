@@ -1,4 +1,5 @@
 import { useState, useEffect, memo } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useShallow } from 'zustand/react/shallow';
 import { useAppStore } from '../store';
 import type { DeveloperDecision } from '../store/decisions-slice';
@@ -54,6 +55,7 @@ const EMPTY_FORM: NewDecisionForm = {
 };
 
 export const DecisionMemory = memo(function DecisionMemory() {
+  const { t } = useTranslation();
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState<NewDecisionForm>({ ...EMPTY_FORM });
@@ -114,9 +116,9 @@ export const DecisionMemory = memo(function DecisionMemory() {
             <span className="text-sm text-gray-400">D</span>
           </div>
           <div>
-            <h2 className="font-medium text-white text-sm">Decision Memory</h2>
+            <h2 className="font-medium text-white text-sm">{t('decisions.title')}</h2>
             <p className="text-xs text-gray-500">
-              {decisions.length} decision{decisions.length !== 1 ? 's' : ''} recorded
+              {t('decisions.recorded', { count: decisions.length })}
             </p>
           </div>
         </div>
@@ -124,7 +126,7 @@ export const DecisionMemory = memo(function DecisionMemory() {
           onClick={() => setShowForm(!showForm)}
           className="px-3 py-1.5 text-xs bg-bg-tertiary text-gray-300 border border-border rounded hover:border-white/20 transition-colors"
         >
-          {showForm ? 'Cancel' : '+ Record'}
+          {showForm ? t('action.cancel') : t('decisions.record')}
         </button>
       </div>
 
@@ -145,21 +147,21 @@ export const DecisionMemory = memo(function DecisionMemory() {
             </select>
             <input
               type="text"
-              placeholder="Subject"
+              placeholder={t('decisions.subject')}
               value={form.subject}
               onChange={(e) => setForm({ ...form, subject: e.target.value })}
               className="flex-1 px-3 py-2 text-xs bg-bg-tertiary text-white border border-border rounded-lg placeholder-gray-600 focus:outline-none focus:border-white/30"
             />
           </div>
           <textarea
-            placeholder="What was decided?"
+            placeholder={t('decisions.whatDecided')}
             value={form.decision}
             onChange={(e) => setForm({ ...form, decision: e.target.value })}
             rows={2}
             className="w-full px-3 py-2 text-xs bg-bg-tertiary text-white border border-border rounded-lg placeholder-gray-600 focus:outline-none focus:border-white/30 resize-none"
           />
           <textarea
-            placeholder="Rationale (optional)"
+            placeholder={t('decisions.rationaleOptional')}
             value={form.rationale}
             onChange={(e) => setForm({ ...form, rationale: e.target.value })}
             rows={2}
@@ -167,7 +169,7 @@ export const DecisionMemory = memo(function DecisionMemory() {
           />
           <div className="flex items-center gap-3">
             <label className="text-xs text-gray-500">
-              Confidence: {Math.round(form.confidence * 100)}%
+              {t('decisions.confidence', { value: Math.round(form.confidence * 100) })}
             </label>
             <input
               type="range"
@@ -184,7 +186,7 @@ export const DecisionMemory = memo(function DecisionMemory() {
               disabled={!form.subject.trim() || !form.decision.trim()}
               className="px-4 py-2 text-xs bg-white text-black rounded-lg font-medium hover:bg-gray-200 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
             >
-              Save
+              {t('action.save')}
             </button>
           </div>
         </div>
@@ -192,15 +194,15 @@ export const DecisionMemory = memo(function DecisionMemory() {
 
       {/* Loading */}
       {decisionsLoading && (
-        <div className="p-4 text-xs text-gray-500 text-center">Loading decisions...</div>
+        <div className="p-4 text-xs text-gray-500 text-center">{t('decisions.loading')}</div>
       )}
 
       {/* Empty State */}
       {!decisionsLoading && decisions.length === 0 && (
         <div className="p-8 text-center">
-          <div className="text-sm text-gray-500">No decisions recorded yet</div>
+          <div className="text-sm text-gray-500">{t('decisions.noDecisions')}</div>
           <div className="text-xs text-gray-600 mt-1">
-            Record architectural and technical decisions to build institutional memory
+            {t('decisions.noDecisionsHint')}
           </div>
         </div>
       )}
@@ -256,7 +258,7 @@ export const DecisionMemory = memo(function DecisionMemory() {
                       {/* Decision text */}
                       <div className="mt-3">
                         <div className="text-[10px] text-gray-500 uppercase tracking-wider mb-1">
-                          Decision
+                          {t('decisions.decision')}
                         </div>
                         <p className="text-xs text-gray-300">{d.decision}</p>
                       </div>
@@ -265,7 +267,7 @@ export const DecisionMemory = memo(function DecisionMemory() {
                       {d.rationale && (
                         <div>
                           <div className="text-[10px] text-gray-500 uppercase tracking-wider mb-1">
-                            Rationale
+                            {t('decisions.rationale')}
                           </div>
                           <p className="text-xs text-gray-400">{d.rationale}</p>
                         </div>
@@ -275,7 +277,7 @@ export const DecisionMemory = memo(function DecisionMemory() {
                       {d.alternatives_rejected.length > 0 && (
                         <div>
                           <div className="text-[10px] text-gray-500 uppercase tracking-wider mb-1">
-                            Alternatives Rejected
+                            {t('decisions.alternativesRejected')}
                           </div>
                           <div className="flex flex-wrap gap-1.5">
                             {d.alternatives_rejected.map((alt, i) => (
@@ -294,7 +296,7 @@ export const DecisionMemory = memo(function DecisionMemory() {
                       {d.context_tags.length > 0 && (
                         <div>
                           <div className="text-[10px] text-gray-500 uppercase tracking-wider mb-1">
-                            Tags
+                            {t('decisions.tags')}
                           </div>
                           <div className="flex flex-wrap gap-1.5">
                             {d.context_tags.map((tag, i) => (
@@ -329,13 +331,13 @@ export const DecisionMemory = memo(function DecisionMemory() {
                             onClick={() => handleReconsider(d.id)}
                             className="px-3 py-1.5 text-xs bg-amber-500/10 text-amber-400 border border-amber-500/20 rounded hover:bg-amber-500/20 transition-colors"
                           >
-                            Reconsider
+                            {t('decisions.reconsider')}
                           </button>
                           <button
                             onClick={() => handleSupersede(d.id)}
                             className="px-3 py-1.5 text-xs bg-gray-500/10 text-gray-400 border border-gray-500/20 rounded hover:bg-gray-500/20 transition-colors"
                           >
-                            Supersede
+                            {t('decisions.supersede')}
                           </button>
                         </div>
                       )}
@@ -345,13 +347,13 @@ export const DecisionMemory = memo(function DecisionMemory() {
                             onClick={() => updateDecision(d.id, { status: 'active' })}
                             className="px-3 py-1.5 text-xs bg-green-500/10 text-green-400 border border-green-500/20 rounded hover:bg-green-500/20 transition-colors"
                           >
-                            Reaffirm
+                            {t('decisions.reaffirm')}
                           </button>
                           <button
                             onClick={() => handleSupersede(d.id)}
                             className="px-3 py-1.5 text-xs bg-gray-500/10 text-gray-400 border border-gray-500/20 rounded hover:bg-gray-500/20 transition-colors"
                           >
-                            Supersede
+                            {t('decisions.supersede')}
                           </button>
                         </div>
                       )}

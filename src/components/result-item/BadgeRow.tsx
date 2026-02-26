@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import type { SourceRelevance } from '../../types';
 import { getContentTypeBadge } from '../../config/content-types';
 
@@ -6,11 +7,12 @@ interface BadgeRowProps {
 }
 
 export function BadgeRow({ item }: BadgeRowProps) {
+  const { t } = useTranslation();
   return (
     <>
       {item.serendipity && (
         <span className="flex-shrink-0 text-[10px] px-1.5 py-0.5 rounded font-medium bg-fuchsia-500/20 text-fuchsia-400">
-          Serendipity
+          {t('results.serendipity')}
         </span>
       )}
       {item.signal_type && (
@@ -29,17 +31,17 @@ export function BadgeRow({ item }: BadgeRowProps) {
           className="flex-shrink-0 text-[10px] px-1.5 py-0.5 rounded font-medium bg-emerald-500/20 text-emerald-400"
           title={`Affects: ${item.score_breakdown.matched_deps.join(', ')}`}
         >
-          Stack
+          {t('results.stackBadge')}
         </span>
       )}
       {item.score_breakdown?.novelty_mult != null && item.score_breakdown.novelty_mult > 1.05 && (
         <span className="flex-shrink-0 text-[10px] px-1.5 py-0.5 rounded font-medium bg-blue-500/20 text-blue-400">
-          New
+          {t('results.newBadge')}
         </span>
       )}
       {item.score_breakdown?.intent_boost != null && item.score_breakdown.intent_boost > 0 && (
         <span className="flex-shrink-0 text-[10px] px-1.5 py-0.5 rounded font-medium bg-violet-500/20 text-violet-400">
-          Working on
+          {t('results.workingOnBadge')}
         </span>
       )}
       {item.streets_engine && (

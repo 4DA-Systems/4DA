@@ -1,4 +1,5 @@
 import { useState, useEffect, memo, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
 
 // ============================================================================
@@ -19,6 +20,7 @@ export interface TemporalSliderProps {
 // ============================================================================
 
 export const TemporalSlider = memo(function TemporalSlider({ onSnapshotChange }: TemporalSliderProps) {
+  const { t } = useTranslation();
   const [snapshots, setSnapshots] = useState<Snapshot[]>([]);
   const [selectedIndex, setSelectedIndex] = useState<number>(-1);
   const [loading, setLoading] = useState(true);
@@ -57,14 +59,14 @@ export const TemporalSlider = memo(function TemporalSlider({ onSnapshotChange }:
   const max = snapshots.length; // index = snapshots.length means "Current"
   const displayLabel =
     selectedIndex >= snapshots.length || selectedIndex < 0
-      ? 'Current'
+      ? t('techRadar.current')
       : snapshots[selectedIndex].label;
 
   if (loading) return null;
 
   return (
     <div className="px-5 py-2 border-t border-[#2A2A2A] flex items-center gap-3">
-      <span className="text-[10px] text-[#666666] whitespace-nowrap">Timeline</span>
+      <span className="text-[10px] text-[#666666] whitespace-nowrap">{t('techRadar.timeline')}</span>
       <input
         type="range"
         min={0}

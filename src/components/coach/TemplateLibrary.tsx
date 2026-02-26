@@ -1,4 +1,5 @@
 import { useEffect, useState, useMemo, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../../store';
 import { useShallow } from 'zustand/react/shallow';
 import type { CoachTemplate } from '../../types/coach';
@@ -16,6 +17,7 @@ function CategoryFilter({
   active: string;
   onSelect: (cat: string) => void;
 }) {
+  const { t } = useTranslation();
   return (
     <div className="flex flex-wrap gap-2">
       <button
@@ -26,7 +28,7 @@ function CategoryFilter({
             : 'bg-[#1F1F1F] text-[#A0A0A0] border-[#2A2A2A] hover:text-white hover:border-[#D4AF37]/20'
         }`}
       >
-        All
+        {t('coach.template.all')}
       </button>
       {categories.map(cat => (
         <button
@@ -85,6 +87,7 @@ function TemplateViewer({
   template: CoachTemplate;
   onClose: () => void;
 }) {
+  const { t } = useTranslation();
   const [copied, setCopied] = useState(false);
 
   const handleCopy = useCallback(async () => {
@@ -117,12 +120,12 @@ function TemplateViewer({
                   : 'bg-[#1F1F1F] text-[#A0A0A0] border-[#2A2A2A] hover:text-white hover:border-[#D4AF37]/30'
               }`}
             >
-              {copied ? 'Copied' : 'Copy'}
+              {copied ? t('action.copied') : t('action.copy')}
             </button>
             <button
               onClick={onClose}
               className="w-7 h-7 flex items-center justify-center rounded-lg text-[#666] hover:text-white hover:bg-[#1F1F1F] transition-colors"
-              aria-label="Close viewer"
+              aria-label={t('action.close')}
             >
               <svg
                 width="14"
@@ -157,6 +160,7 @@ function TemplateViewer({
 // ---------------------------------------------------------------------------
 
 export function TemplateLibrary() {
+  const { t } = useTranslation();
   const { templates } = useAppStore(
     useShallow(s => ({
       templates: s.templates,
@@ -186,9 +190,9 @@ export function TemplateLibrary() {
     <div className="space-y-5">
       {/* Header */}
       <div>
-        <h3 className="text-sm font-semibold text-white">Template Library</h3>
+        <h3 className="text-sm font-semibold text-white">{t('coach.template.title')}</h3>
         <p className="text-xs text-[#666] mt-0.5">
-          Ready-to-use markdown templates for your STREETS journey
+          {t('coach.template.subtitle')}
         </p>
       </div>
 
@@ -234,8 +238,8 @@ export function TemplateLibrary() {
           </div>
           <p className="text-sm text-[#A0A0A0] max-w-sm">
             {templates.length === 0
-              ? 'No templates available yet. Activate your Community tier to access the template library.'
-              : 'No templates match the selected category.'}
+              ? t('coach.template.emptyNoTemplates')
+              : t('coach.template.emptyNoMatch')}
           </p>
         </div>
       )}

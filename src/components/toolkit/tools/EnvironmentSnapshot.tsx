@@ -1,4 +1,5 @@
 import { useState, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
 
 type EnvSnapshot = {
@@ -77,6 +78,7 @@ function InfoRow({ label, value, mono = false }: { label: string; value: string;
 }
 
 export default function EnvironmentSnapshot() {
+  const { t } = useTranslation();
   const [snapshot, setSnapshot] = useState<EnvSnapshot | null>(null);
   const [timestamp, setTimestamp] = useState<string>('');
   const [loading, setLoading] = useState(false);
@@ -133,7 +135,7 @@ export default function EnvironmentSnapshot() {
           {loading ? (
             <>
               <div className="w-3.5 h-3.5 border-2 border-[#0A0A0A]/30 border-t-[#0A0A0A] rounded-full animate-spin" />
-              Capturing...
+              {t('toolkit.envSnapshot.capturing')}
             </>
           ) : (
             <>
@@ -141,7 +143,7 @@ export default function EnvironmentSnapshot() {
                 <circle cx="12" cy="12" r="10" />
                 <polyline points="12 6 12 12 16 14" />
               </svg>
-              Capture Snapshot
+              {t('toolkit.envSnapshot.captureSnapshot')}
             </>
           )}
         </button>
@@ -156,7 +158,7 @@ export default function EnvironmentSnapshot() {
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#22C55E" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <polyline points="20 6 9 17 4 12" />
                 </svg>
-                <span className="text-[#22C55E]">Copied</span>
+                <span className="text-[#22C55E]">{t('action.copied')}</span>
               </>
             ) : (
               <>
@@ -164,7 +166,7 @@ export default function EnvironmentSnapshot() {
                   <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
                   <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" />
                 </svg>
-                Copy as Markdown
+                {t('toolkit.envSnapshot.copyAsMarkdown')}
               </>
             )}
           </button>
@@ -192,9 +194,9 @@ export default function EnvironmentSnapshot() {
             <line x1="8" y1="21" x2="16" y2="21" />
             <line x1="12" y1="17" x2="12" y2="21" />
           </svg>
-          <p className="text-sm text-[#A0A0A0] mb-1">No snapshot captured yet</p>
+          <p className="text-sm text-[#A0A0A0] mb-1">{t('toolkit.envSnapshot.empty')}</p>
           <p className="text-xs text-[#666]">
-            Click "Capture Snapshot" to inspect your environment
+            {t('toolkit.envSnapshot.emptyHint')}
           </p>
         </div>
       )}
@@ -204,7 +206,7 @@ export default function EnvironmentSnapshot() {
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
           {/* System section */}
           <div className="bg-[#141414] border border-[#2A2A2A] rounded-lg p-4">
-            <SectionHeader>System</SectionHeader>
+            <SectionHeader>{t('toolkit.envSnapshot.system')}</SectionHeader>
             <InfoRow label="OS" value={snapshot.os} />
             <InfoRow label="Version" value={snapshot.os_version} mono />
             <InfoRow label="Hostname" value={snapshot.hostname} mono />
@@ -213,7 +215,7 @@ export default function EnvironmentSnapshot() {
           {/* Runtimes section */}
           {availableRuntimes.length > 0 && (
             <div className="bg-[#141414] border border-[#2A2A2A] rounded-lg p-4">
-              <SectionHeader>Runtime Versions</SectionHeader>
+              <SectionHeader>{t('toolkit.envSnapshot.runtimeVersions')}</SectionHeader>
               {availableRuntimes.map(([name, version]) => (
                 <InfoRow key={name} label={name} value={version} mono />
               ))}
@@ -223,7 +225,7 @@ export default function EnvironmentSnapshot() {
           {/* Git section — full width */}
           {(snapshot.git_branch || snapshot.git_status) && (
             <div className="bg-[#141414] border border-[#2A2A2A] rounded-lg p-4 lg:col-span-2">
-              <SectionHeader>Git</SectionHeader>
+              <SectionHeader>{t('toolkit.envSnapshot.git')}</SectionHeader>
 
               {snapshot.git_branch && (
                 <div className="flex items-center gap-2 mb-3">
@@ -245,7 +247,7 @@ export default function EnvironmentSnapshot() {
 
               {snapshot.git_recent_commits.length > 0 && (
                 <div>
-                  <p className="text-xs text-[#A0A0A0] mb-1.5">Recent Commits:</p>
+                  <p className="text-xs text-[#A0A0A0] mb-1.5">{t('toolkit.envSnapshot.recentCommits')}:</p>
                   <div className="space-y-1">
                     {snapshot.git_recent_commits.map((commit, i) => (
                       <div

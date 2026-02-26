@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
 import { ProGate } from './ProGate';
 
@@ -56,6 +57,7 @@ interface NaturalLanguageSearchProps {
 }
 
 export function NaturalLanguageSearch({ onStatusChange, defaultExpanded = true }: NaturalLanguageSearchProps) {
+  const { t } = useTranslation();
   const [query, setQuery] = useState('');
   const [result, setResult] = useState<QueryResult | null>(null);
   const [loading, setLoading] = useState(false);
@@ -76,7 +78,7 @@ export function NaturalLanguageSearch({ onStatusChange, defaultExpanded = true }
     } catch (err) {
       const msg = String(err);
       console.error('Search failed:', err);
-      setError(msg.includes('No context') ? 'Index your files first (Settings → Context)' : msg);
+      setError(msg.includes('No context') ? t('search.indexFirst') : msg);
       onStatusChange?.(`Search error: ${err}`);
     } finally {
       setLoading(false);
@@ -107,8 +109,8 @@ export function NaturalLanguageSearch({ onStatusChange, defaultExpanded = true }
             <span className="text-cyan-400">💬</span>
           </div>
           <div>
-            <h3 className="text-white font-medium">Natural Language Search</h3>
-            <p className="text-gray-500 text-sm">Ask questions about your indexed files</p>
+            <h3 className="text-white font-medium">{t('search.title')}</h3>
+            <p className="text-gray-500 text-sm">{t('search.subtitle')}</p>
           </div>
         </div>
         <span className="text-gray-500 text-sm" aria-hidden="true">{expanded ? '▼' : '▶'}</span>
@@ -121,7 +123,7 @@ export function NaturalLanguageSearch({ onStatusChange, defaultExpanded = true }
             <input
               type="text"
               aria-label="Natural language search query"
-              placeholder="Ask anything... e.g., 'files about rust from last week'"
+              placeholder={t('search.placeholder')}
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               onKeyDown={handleKeyDown}
@@ -135,9 +137,9 @@ export function NaturalLanguageSearch({ onStatusChange, defaultExpanded = true }
               {loading ? (
                 <span className="flex items-center gap-1.5">
                   <span className="w-3 h-3 border-2 border-cyan-400/30 border-t-cyan-400 rounded-full animate-spin" />
-                  Searching
+                  {t('search.searching')}
                 </span>
-              ) : 'Search'}
+              ) : t('action.search')}
             </button>
           </div>
 
@@ -153,7 +155,7 @@ export function NaturalLanguageSearch({ onStatusChange, defaultExpanded = true }
           {/* Example queries */}
           {!result && !error && (
             <div className="space-y-2">
-              <span className="text-xs text-gray-400 font-medium">Try these:</span>
+              <span className="text-xs text-gray-400 font-medium">{t('search.tryThese')}</span>
               <div className="flex flex-wrap gap-2">
                 {[
                   'show me files about authentication',
@@ -180,7 +182,7 @@ export function NaturalLanguageSearch({ onStatusChange, defaultExpanded = true }
               <div className="flex items-center gap-2 p-3 bg-bg-secondary rounded-lg border border-border">
                 <span className="text-lg">{intentIcons[result.intent] || '🔍'}</span>
                 <span className="text-sm text-gray-400">
-                  {result.intent} query
+                  {t('search.queryType', { intent: result.intent })}
                 </span>
                 <span className="text-sm text-white">•</span>
                 <span className="text-sm text-cyan-400">
@@ -188,7 +190,7 @@ export function NaturalLanguageSearch({ onStatusChange, defaultExpanded = true }
                 </span>
                 {result.parsed.time_range && (
                   <span className="px-2 py-1 text-xs bg-bg-tertiary rounded-md text-gray-300 border border-border">
-                    {result.parsed.time_range.relative || 'custom range'}
+                    {result.parsed.time_range.relative || t('search.customRange')}
                   </span>
                 )}
                 {result.parsed.file_types.length > 0 && (
@@ -226,7 +228,7 @@ export function NaturalLanguageSearch({ onStatusChange, defaultExpanded = true }
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2">
                           <span className="text-sm text-white font-medium truncate">
-                            {item.file_name || 'Unknown file'}
+                            {item.file_name || t('search.unknownFile')}
                           </span>
                           <span className={`text-xs px-2 py-0.5 rounded-md ${
                             item.relevance > 0.7
@@ -258,15 +260,15 @@ export function NaturalLanguageSearch({ onStatusChange, defaultExpanded = true }
                 {result.items.length === 0 && (
                   <div className="text-center py-6 bg-bg-secondary rounded-lg border border-border">
                     <div className="text-2xl mb-2">🔍</div>
-                    <div className="text-sm text-gray-400">No results found</div>
-                    <div className="text-xs text-gray-500 mt-1">Try different keywords or a broader query</div>
+                    <div className="text-sm text-gray-400">{t('search.noResults')}</div>
+                    <div className="text-xs text-gray-500 mt-1">{t('search.tryDifferent')}</div>
                   </div>
                 )}
               </div>
 
               {/* Stats footer */}
               <div className="text-xs text-gray-500 text-center pt-2 border-t border-border">
-                {result.total_count} results • {result.execution_ms}ms • confidence: {(result.parsed.confidence * 100).toFixed(0)}%
+                {t('search.stats', { count: result.total_count, ms: result.execution_ms, confidence: (result.parsed.confidence * 100).toFixed(0) })}
               </div>
             </div>
           )}

@@ -1,4 +1,5 @@
 import { useEffect, useCallback, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../../store';
 import { useShallow } from 'zustand/react/shallow';
 import { RepoSelector } from './RepoSelector';
@@ -7,15 +8,16 @@ import { CommandRunnerTab } from './CommandRunnerTab';
 import { HistoryTab } from './HistoryTab';
 import type { CommandDeckTab } from '../../types/command-deck';
 
-const TABS: { id: CommandDeckTab; label: string; key: string }[] = [
-  { id: 'git', label: 'Git', key: '1' },
-  { id: 'commands', label: 'Commands', key: '2' },
-  { id: 'history', label: 'History', key: '3' },
+const TAB_KEYS: { id: CommandDeckTab; labelKey: string; key: string }[] = [
+  { id: 'git', labelKey: 'commandDeck.git', key: '1' },
+  { id: 'commands', labelKey: 'commandDeck.commands', key: '2' },
+  { id: 'history', labelKey: 'commandDeck.history', key: '3' },
 ];
 
 const GIT_REFRESH_INTERVAL = 5000; // Auto-refresh git status every 5s
 
 export function CommandDeck() {
+  const { t } = useTranslation();
   const {
     commandDeckOpen,
     commandDeckTab,
@@ -61,7 +63,7 @@ export function CommandDeck() {
       // Tab switching: 1/2/3 only when not in an input
       const tag = (e.target as HTMLElement).tagName;
       if (tag !== 'INPUT' && tag !== 'TEXTAREA' && tag !== 'SELECT') {
-        const tab = TABS.find((t) => t.key === e.key);
+        const tab = TAB_KEYS.find((t) => t.key === e.key);
         if (tab) {
           e.preventDefault();
           setCommandDeckTab(tab.id);
@@ -86,7 +88,7 @@ export function CommandDeck() {
     <div
       className="fixed bottom-0 left-0 right-0 z-40 bg-bg-secondary border-t border-border shadow-2xl transition-transform duration-200"
       role="region"
-      aria-label="Command Deck"
+      aria-label={t('commandDeck.title')}
       style={{ height: '50vh' }}
     >
       {/* Header */}
@@ -118,8 +120,8 @@ export function CommandDeck() {
         <div className="flex-1" />
 
         {/* Tab Bar */}
-        <div className="flex items-center gap-0.5 bg-bg-tertiary rounded p-0.5" role="tablist" aria-label="Command Deck tabs">
-          {TABS.map((tab) => (
+        <div className="flex items-center gap-0.5 bg-bg-tertiary rounded p-0.5" role="tablist" aria-label={t('commandDeck.title')}>
+          {TAB_KEYS.map((tab) => (
             <button
               key={tab.id}
               role="tab"
@@ -131,7 +133,7 @@ export function CommandDeck() {
                   : 'text-gray-500 hover:text-gray-300'
               }`}
             >
-              {tab.label}
+              {t(tab.labelKey)}
               {tab.id === 'git' && totalChanges > 0 && (
                 <span className="ml-1 px-1.5 py-0.5 bg-orange-500/20 text-orange-400 text-[10px] rounded-full">
                   {totalChanges}
@@ -145,7 +147,7 @@ export function CommandDeck() {
         {/* Close */}
         <button
           onClick={toggleCommandDeck}
-          aria-label="Close Command Deck"
+          aria-label={t('action.close')}
           className="w-7 h-7 rounded bg-bg-tertiary text-gray-500 hover:text-white hover:bg-border flex items-center justify-center transition-all text-sm"
         >
           &times;
@@ -162,15 +164,15 @@ export function CommandDeck() {
       {/* Footer */}
       <div className="absolute bottom-0 left-0 right-0 px-4 py-1.5 bg-bg-primary/80 border-t border-border flex items-center gap-4 text-[10px] text-gray-600">
         <span>
-          <kbd className="px-1 py-0.5 bg-bg-tertiary rounded">Ctrl+`</kbd> Toggle
+          <kbd className="px-1 py-0.5 bg-bg-tertiary rounded">Ctrl+`</kbd> {t('commandDeck.toggle')}
         </span>
         <span>
-          <kbd className="px-1 py-0.5 bg-bg-tertiary rounded">Esc</kbd> Close
+          <kbd className="px-1 py-0.5 bg-bg-tertiary rounded">Esc</kbd> {t('action.close')}
         </span>
         <span>
           <kbd className="px-1 py-0.5 bg-bg-tertiary rounded">1</kbd>
           <kbd className="px-1 py-0.5 bg-bg-tertiary rounded ml-0.5">2</kbd>
-          <kbd className="px-1 py-0.5 bg-bg-tertiary rounded ml-0.5">3</kbd> Tabs
+          <kbd className="px-1 py-0.5 bg-bg-tertiary rounded ml-0.5">3</kbd> {t('commandDeck.tabs')}
         </span>
       </div>
     </div>

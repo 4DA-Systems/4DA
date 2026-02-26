@@ -1,4 +1,5 @@
 import { useEffect, memo } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../store';
 
 function TrendArrow({ trend }: { trend: number }) {
@@ -34,6 +35,7 @@ function MiniSparkline({ data }: { data: number[] }) {
 }
 
 export const CompoundAdvantageScore = memo(function CompoundAdvantageScore() {
+  const { t } = useTranslation();
   const advantage = useAppStore(s => s.compoundAdvantage);
   const loadAdvantage = useAppStore(s => s.loadCompoundAdvantage);
 
@@ -55,14 +57,14 @@ export const CompoundAdvantageScore = memo(function CompoundAdvantageScore() {
         <TrendArrow trend={advantage.trend} />
       </div>
       <div className="flex-1 min-w-0">
-        <div className="text-[10px] text-gray-500 uppercase tracking-wider">Advantage Score</div>
+        <div className="text-[10px] text-gray-500 uppercase tracking-wider">{t('advantage.score')}</div>
         <div className="flex items-center gap-3 mt-0.5">
           <span className="text-[10px] text-gray-400">
-            {advantage.windows_acted}/{advantage.windows_opened} acted
+            {t('advantage.acted', { acted: advantage.windows_acted, opened: advantage.windows_opened })}
           </span>
           {advantage.avg_lead_time_hours > 0 && (
             <span className="text-[10px] text-gray-400">
-              {Math.round(advantage.avg_lead_time_hours)}h avg lead
+              {t('advantage.avgLead', { hours: Math.round(advantage.avg_lead_time_hours) })}
             </span>
           )}
         </div>

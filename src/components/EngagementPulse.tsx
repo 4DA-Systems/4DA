@@ -1,4 +1,5 @@
 import { useEffect, useState, memo } from 'react';
+import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
 
 interface EngagementData {
@@ -10,6 +11,7 @@ interface EngagementData {
 }
 
 export const EngagementPulse = memo(function EngagementPulse() {
+  const { t } = useTranslation();
   const [data, setData] = useState<EngagementData | null>(null);
 
   useEffect(() => {
@@ -39,7 +41,7 @@ export const EngagementPulse = memo(function EngagementPulse() {
   return (
     <div className="flex items-center gap-4 px-4 py-2.5 bg-bg-secondary rounded-lg border border-border">
       {/* 7-day heatmap */}
-      <div className="flex items-end gap-1" title="7-day activity">
+      <div className="flex items-end gap-1" title={t('engagement.activity')}>
         {data.heatmap.map((day) => {
           const intensity = day.count === 0 ? 0 : Math.max(0.2, day.count / maxCount);
           return (
@@ -63,7 +65,7 @@ export const EngagementPulse = memo(function EngagementPulse() {
         <span className="text-xs font-mono font-medium text-orange-400">
           {data.streak_days}d
         </span>
-        <span className="text-[10px] text-gray-500">streak</span>
+        <span className="text-[10px] text-gray-500">{t('engagement.streak')}</span>
       </div>
 
       {/* Trend */}

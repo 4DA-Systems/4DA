@@ -1,4 +1,5 @@
 import { useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../../store';
 import type { EngineChoice } from '../../types/coach';
 
@@ -34,6 +35,7 @@ function EngineCard({
   engine: EngineChoice;
   isPrimary: boolean;
 }) {
+  const { t } = useTranslation();
   return (
     <div
       className={`flex-1 min-w-[260px] bg-[#141414] rounded-xl p-5 space-y-4 border ${
@@ -56,7 +58,7 @@ function EngineCard({
             {engine.engine_name}
           </h4>
           <span className="text-[10px] uppercase tracking-wider text-[#666] font-medium">
-            {isPrimary ? 'Primary Engine' : 'Secondary Engine'}
+            {isPrimary ? t('coach.engine.primaryEngine') : t('coach.engine.secondaryEngine')}
           </span>
         </div>
       </div>
@@ -64,7 +66,7 @@ function EngineCard({
       {/* Fit Score */}
       <div>
         <p className="text-[10px] text-[#666] uppercase tracking-wide mb-1">
-          Fit Score
+          {t('coach.engine.fitScore')}
         </p>
         <FitBar score={engine.fit_score} />
       </div>
@@ -73,7 +75,7 @@ function EngineCard({
       <div className="grid grid-cols-2 gap-3">
         <div>
           <p className="text-[10px] text-[#666] uppercase tracking-wide mb-0.5">
-            Time to First Dollar
+            {t('coach.engine.timeToFirstDollar')}
           </p>
           <p className="text-xs text-white font-medium">
             {engine.time_to_first_dollar}
@@ -81,7 +83,7 @@ function EngineCard({
         </div>
         <div>
           <p className="text-[10px] text-[#666] uppercase tracking-wide mb-0.5">
-            Revenue Range
+            {t('coach.engine.revenueRange')}
           </p>
           <p className="text-xs text-white font-medium">
             {engine.revenue_range}
@@ -92,7 +94,7 @@ function EngineCard({
       {/* Reasoning */}
       <div>
         <p className="text-[10px] text-[#666] uppercase tracking-wide mb-1">
-          Reasoning
+          {t('coach.engine.reasoning')}
         </p>
         <p className="text-xs text-[#A0A0A0] leading-relaxed">
           {engine.reasoning}
@@ -103,7 +105,7 @@ function EngineCard({
       {engine.prerequisites.length > 0 && (
         <div>
           <p className="text-[10px] text-[#666] uppercase tracking-wide mb-1">
-            Prerequisites
+            {t('coach.engine.prerequisites')}
           </p>
           <ul className="space-y-1">
             {engine.prerequisites.map((prereq, i) => (
@@ -124,6 +126,7 @@ function EngineCard({
 // ---------------------------------------------------------------------------
 
 export function EngineRecommender() {
+  const { t } = useTranslation();
   const recommendation = useAppStore((s) => s.engineRecommendation);
   const loading = useAppStore((s) => s.coachLoading);
   const recommendEngines = useAppStore((s) => s.recommendEngines);
@@ -137,9 +140,9 @@ export function EngineRecommender() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h3 className="text-sm font-semibold text-white">Engine Recommender</h3>
+          <h3 className="text-sm font-semibold text-white">{t('coach.engine.title')}</h3>
           <p className="text-xs text-[#666] mt-0.5">
-            AI-powered analysis of your profile
+            {t('coach.engine.subtitle')}
           </p>
         </div>
         <button
@@ -147,7 +150,7 @@ export function EngineRecommender() {
           disabled={loading}
           className="px-4 py-2 text-sm font-medium bg-[#D4AF37] text-black rounded-lg hover:bg-[#C4A030] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          {loading ? 'Analyzing...' : 'Analyze My Profile'}
+          {loading ? t('coach.engine.analyzing') : t('coach.engine.analyzeProfile')}
         </button>
       </div>
 
@@ -157,7 +160,7 @@ export function EngineRecommender() {
           <div className="flex flex-col items-center gap-3">
             <Spinner />
             <p className="text-xs text-[#A0A0A0]">
-              Analyzing your sovereign profile and matching engines...
+              {t('coach.engine.analyzingProfile')}
             </p>
           </div>
         </div>
@@ -176,7 +179,7 @@ export function EngineRecommender() {
           <div className="bg-[#141414] border border-[#2A2A2A] rounded-xl p-5 space-y-3">
             <div>
               <p className="text-[10px] text-[#666] uppercase tracking-wide mb-1">
-                Overall Analysis
+                {t('coach.engine.overallAnalysis')}
               </p>
               <p className="text-xs text-[#A0A0A0] leading-relaxed">
                 {recommendation.reasoning}
@@ -187,7 +190,7 @@ export function EngineRecommender() {
             {recommendation.profile_gaps.length > 0 && (
               <div>
                 <p className="text-[10px] text-[#666] uppercase tracking-wide mb-1">
-                  Profile Gaps
+                  {t('coach.engine.profileGaps')}
                 </p>
                 <ul className="space-y-1">
                   {recommendation.profile_gaps.map((gap, i) => (
@@ -225,8 +228,7 @@ export function EngineRecommender() {
             </svg>
           </div>
           <p className="text-sm text-[#A0A0A0] max-w-sm">
-            Click "Analyze My Profile" to get AI-powered engine recommendations
-            based on your sovereign profile, skills, and goals.
+            {t('coach.engine.emptyDescription')}
           </p>
         </div>
       )}

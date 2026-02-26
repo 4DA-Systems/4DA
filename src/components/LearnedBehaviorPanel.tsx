@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 
 interface TopicAffinity {
   topic: string;
@@ -24,6 +25,7 @@ export function LearnedBehaviorPanel({
   antiTopics,
   onRefresh,
 }: LearnedBehaviorPanelProps) {
+  const { t } = useTranslation();
   return (
     <div className="bg-bg-tertiary rounded-lg p-5 border border-border">
       <div className="flex items-start gap-3 mb-4">
@@ -31,9 +33,9 @@ export function LearnedBehaviorPanel({
           <span className="text-indigo-400">🧠</span>
         </div>
         <div>
-          <h3 className="text-white font-medium">Learned Behavior</h3>
+          <h3 className="text-white font-medium">{t('learnedBehavior.title')}</h3>
           <p className="text-gray-500 text-sm mt-1">
-            Topics the system has learned from your feedback
+            {t('learnedBehavior.subtitle')}
           </p>
         </div>
       </div>
@@ -42,7 +44,7 @@ export function LearnedBehaviorPanel({
       {affinities.length > 0 ? (
         <div className="space-y-3">
           <div className="text-xs text-gray-400 font-medium">
-            Topic Affinities
+            {t('learnedBehavior.topicAffinities')}
           </div>
           <div className="space-y-1.5 max-h-40 overflow-y-auto">
             {affinities.slice(0, 10).map((affinity, i) => (
@@ -75,16 +77,16 @@ export function LearnedBehaviorPanel({
           </div>
           {affinities.length > 10 && (
             <div className="text-xs text-gray-500 text-center">
-              +{affinities.length - 10} more topics
+              {t('learnedBehavior.moreTopics', { count: affinities.length - 10 })}
             </div>
           )}
         </div>
       ) : (
         <div className="text-sm text-gray-500 bg-bg-secondary rounded-lg p-4 text-center border border-border">
           <div className="text-2xl mb-2">📊</div>
-          <div>No learned affinities yet</div>
+          <div>{t('learnedBehavior.noAffinities')}</div>
           <div className="text-xs text-gray-600 mt-1">
-            Interact with results to train the system
+            {t('learnedBehavior.noAffinitiesHint')}
           </div>
         </div>
       )}
@@ -93,7 +95,7 @@ export function LearnedBehaviorPanel({
       {antiTopics.length > 0 && (
         <div className="mt-4 space-y-3">
           <div className="text-xs text-gray-400 font-medium">
-            Auto-Detected Anti-Topics
+            {t('learnedBehavior.antiTopics')}
           </div>
           <div className="flex flex-wrap gap-1.5">
             {antiTopics.map((anti, i) => (
@@ -109,7 +111,7 @@ export function LearnedBehaviorPanel({
             ))}
           </div>
           <div className="text-xs text-gray-500">
-            Items with these topics will be penalized in relevance scoring
+            {t('learnedBehavior.antiTopicsHint')}
           </div>
         </div>
       )}
@@ -119,7 +121,7 @@ export function LearnedBehaviorPanel({
         onClick={onRefresh}
         className="mt-4 w-full px-4 py-2.5 text-sm bg-bg-secondary border border-border rounded-lg text-gray-400 hover:text-white hover:border-indigo-500/30 transition-all"
       >
-        Refresh Learned Behavior
+        {t('learnedBehavior.refresh')}
       </button>
     </div>
   );

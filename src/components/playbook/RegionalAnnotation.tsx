@@ -10,6 +10,7 @@
  */
 
 import { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
 
 interface RegionalAnnotationProps {
@@ -26,6 +27,7 @@ interface LocaleData {
 }
 
 export function RegionalAnnotation({ usdAmount, unit = '' }: RegionalAnnotationProps) {
+  const { t } = useTranslation();
   const [formatted, setFormatted] = useState<string | null>(null);
   const [currency, setCurrency] = useState<string>('USD');
 
@@ -58,9 +60,9 @@ export function RegionalAnnotation({ usdAmount, unit = '' }: RegionalAnnotationP
     <span
       className="ml-1 text-[10px] opacity-70"
       style={{ color: '#D4AF37' }}
-      title={`Approximate equivalent in ${currency}`}
+      title={t('playbook.regional.approximateEquivalent', { currency })}
     >
-      (~{formatted}{unit} in your region)
+      {t('playbook.regional.inYourRegion', { amount: formatted, unit })}
     </span>
   );
 }

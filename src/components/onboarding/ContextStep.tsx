@@ -1,3 +1,5 @@
+import { useTranslation } from 'react-i18next';
+
 interface ContextStepProps {
   isAnimating: boolean;
   isDiscovering: boolean;
@@ -15,11 +17,13 @@ export function ContextStep({
   onNext,
   onBack,
 }: ContextStepProps) {
+  const { t } = useTranslation();
+
   return (
     <div className={`transition-all duration-300 ${isAnimating ? 'opacity-0 translate-y-4' : 'opacity-100 translate-y-0'}`}>
-      <h2 className="text-3xl font-semibold text-white mb-2 text-center">Discover Your Context</h2>
+      <h2 className="text-3xl font-semibold text-white mb-2 text-center">{t('onboarding.context.title')}</h2>
       <p className="text-gray-400 mb-6 text-center">
-        4DA learns what matters to you by scanning your projects. 100% local, 100% private.
+        {t('onboarding.context.subtitle')}
       </p>
 
       <div className="bg-bg-secondary p-6 rounded-lg mb-4">
@@ -38,12 +42,12 @@ export function ContextStep({
           </div>
           <div className="flex-1">
             <h3 className="text-white font-medium">
-              {discoveryResult ? 'Discovery Complete!' : isDiscovering ? 'Scanning your projects...' : 'Auto-Discovery'}
+              {discoveryResult ? t('onboarding.context.discoveryComplete') : isDiscovering ? t('onboarding.context.scanning') : t('onboarding.context.autoDiscovery')}
             </h3>
             <p className="text-sm text-gray-400 mt-1">
               {discoveryResult || (isDiscovering
-                ? 'Looking for code, notes, documents...'
-                : 'Scans ~/Projects, ~/Code, ~/Documents and similar locations'
+                ? t('onboarding.context.lookingFor')
+                : t('onboarding.context.scansLocations')
               )}
             </p>
           </div>
@@ -55,7 +59,7 @@ export function ContextStep({
             onClick={onDiscovery}
             className="w-full py-4 bg-orange-500/20 border-2 border-dashed border-orange-500/50 text-orange-300 rounded-lg hover:bg-orange-500/30 hover:border-orange-500 transition-all font-medium"
           >
-            <span className="text-lg">&#x1f50d;</span> Scan My Computer
+            <span className="text-lg">&#x1f50d;</span> {t('onboarding.context.scanMyComputer')}
           </button>
         )}
 
@@ -72,15 +76,15 @@ export function ContextStep({
               {discoveryResult}
             </div>
             <p className="text-xs text-green-400/70 mt-2">
-              4DA will continuously learn from your activity in these directories.
+              {t('onboarding.context.continuousLearning')}
             </p>
           </div>
         )}
 
         <p className="text-xs text-gray-500 mt-4 text-center">
           {discoveryResult
-            ? 'You can manage directories anytime in Settings'
-            : 'Or skip this and add directories manually later'
+            ? t('onboarding.context.manageInSettings')
+            : t('onboarding.context.skipHint')
           }
         </p>
       </div>
@@ -91,46 +95,39 @@ export function ContextStep({
           <summary className="flex items-center justify-between cursor-pointer text-sm text-gray-400 hover:text-gray-300 transition-colors">
             <span className="flex items-center gap-2">
               <span className="text-orange-400">?</span>
-              Common questions about context scanning
+              {t('onboarding.context.faqTitle')}
             </span>
             <span className="text-xs group-open:rotate-180 transition-transform">&#x25bc;</span>
           </summary>
           <div className="mt-4 space-y-4 text-sm">
             <div className="bg-bg-tertiary rounded-lg p-3">
-              <h4 className="text-white font-medium mb-1">What files are being scanned?</h4>
+              <h4 className="text-white font-medium mb-1">{t('onboarding.context.faqFilesTitle')}</h4>
               <p className="text-gray-400 text-xs">
-                4DA looks for project markers (package.json, Cargo.toml, README files, etc.),
-                code files, and documents. It reads file names and contents to understand your work context.
+                {t('onboarding.context.faqFilesDesc')}
               </p>
             </div>
             <div className="bg-bg-tertiary rounded-lg p-3">
-              <h4 className="text-white font-medium mb-1">Is my data sent anywhere?</h4>
+              <h4 className="text-white font-medium mb-1">{t('onboarding.context.faqDataTitle')}</h4>
               <p className="text-gray-400 text-xs">
-                <span className="text-green-400 font-medium">No.</span> All scanning happens 100% locally on your machine.
-                Your file contents never leave your computer. Only when you use the AI features,
-                small text snippets are sent to your chosen AI provider (and you control that).
+                <span className="text-green-400 font-medium">{t('onboarding.context.faqDataNo')}</span> {t('onboarding.context.faqDataDesc')}
               </p>
             </div>
             <div className="bg-bg-tertiary rounded-lg p-3">
-              <h4 className="text-white font-medium mb-1">What does 4DA do with this information?</h4>
+              <h4 className="text-white font-medium mb-1">{t('onboarding.context.faqUsageTitle')}</h4>
               <p className="text-gray-400 text-xs">
-                It builds a local understanding of your interests (e.g., &quot;you work with Rust and React&quot;)
-                to filter internet content and show you only what&apos;s relevant. This context stays in a
-                local database on your machine.
+                {t('onboarding.context.faqUsageDesc')}
               </p>
             </div>
             <div className="bg-bg-tertiary rounded-lg p-3">
-              <h4 className="text-white font-medium mb-1">Can I control what gets scanned?</h4>
+              <h4 className="text-white font-medium mb-1">{t('onboarding.context.faqControlTitle')}</h4>
               <p className="text-gray-400 text-xs">
-                Yes! You can add or remove directories anytime in Settings. 4DA automatically
-                ignores sensitive locations like node_modules, .git folders, and hidden system files.
+                {t('onboarding.context.faqControlDesc')}
               </p>
             </div>
             <div className="bg-bg-tertiary rounded-lg p-3">
-              <h4 className="text-white font-medium mb-1">How long does scanning take?</h4>
+              <h4 className="text-white font-medium mb-1">{t('onboarding.context.faqTimeTitle')}</h4>
               <p className="text-gray-400 text-xs">
-                Usually a few seconds to a minute depending on how many projects you have.
-                The initial scan is the longest - after that, 4DA only checks for changes.
+                {t('onboarding.context.faqTimeDesc')}
               </p>
             </div>
           </div>
@@ -142,7 +139,7 @@ export function ContextStep({
           onClick={onBack}
           className="px-6 py-2 text-gray-400 hover:text-white transition-colors"
         >
-          &larr; Back
+          &larr; {t('onboarding.nav.back')}
         </button>
         <div className="flex items-center gap-3">
           {!discoveryResult && (
@@ -150,14 +147,14 @@ export function ContextStep({
               onClick={onNext}
               className="px-4 py-2 text-gray-500 hover:text-gray-300 text-sm transition-colors"
             >
-              Skip for now
+              {t('onboarding.nav.skipForNow')}
             </button>
           )}
           <button
             onClick={onNext}
             className="px-8 py-3 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-colors font-medium"
           >
-            Continue
+            {t('onboarding.nav.continue')}
           </button>
         </div>
       </div>

@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 
 type Mode = 'editor' | 'tree' | 'diff';
 type JsonValue = string | number | boolean | null | JsonValue[] | { [key: string]: JsonValue };
@@ -179,6 +180,7 @@ function ToolbarButton({
 }
 
 export default function JsonYamlViewer() {
+  const { t } = useTranslation();
   const [mode, setMode] = useState<Mode>('editor');
   const [input, setInput] = useState('');
   const [parsed, setParsed] = useState<ParseResult>({ data: undefined, error: null });
@@ -244,7 +246,7 @@ export default function JsonYamlViewer() {
               onClick={() => setMode(m)}
               active={mode === m}
             >
-              {m === 'editor' ? 'Editor' : m === 'tree' ? 'Tree' : 'Diff'}
+              {m === 'editor' ? t('toolkit.jsonViewer.editor') : m === 'tree' ? t('toolkit.jsonViewer.tree') : t('toolkit.jsonViewer.diff')}
             </ToolbarButton>
           ))}
         </div>
@@ -253,21 +255,21 @@ export default function JsonYamlViewer() {
 
         {mode === 'editor' && (
           <div className="flex gap-1">
-            <ToolbarButton onClick={handleFormat}>Format</ToolbarButton>
-            <ToolbarButton onClick={handleMinify}>Minify</ToolbarButton>
+            <ToolbarButton onClick={handleFormat}>{t('toolkit.jsonViewer.format')}</ToolbarButton>
+            <ToolbarButton onClick={handleMinify}>{t('toolkit.jsonViewer.minify')}</ToolbarButton>
             <ToolbarButton onClick={handleCopyOutput}>
-              {copyFeedback ? 'Copied' : 'Copy'}
+              {copyFeedback ? t('action.copied') : t('action.copy')}
             </ToolbarButton>
           </div>
         )}
         {mode === 'tree' && parsed.data !== undefined && (
           <ToolbarButton onClick={handleCopyOutput}>
-            {copyFeedback ? 'Copied' : 'Copy source'}
+            {copyFeedback ? t('action.copied') : t('toolkit.jsonViewer.copySource')}
           </ToolbarButton>
         )}
         {mode === 'diff' && (
           <ToolbarButton onClick={handleDiff} variant="accent">
-            Compare
+            {t('toolkit.jsonViewer.compare')}
           </ToolbarButton>
         )}
       </div>
@@ -286,7 +288,7 @@ export default function JsonYamlViewer() {
             className="w-full h-full bg-transparent text-text-primary font-mono text-sm p-4 resize-none outline-none placeholder:text-text-muted"
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            placeholder='Paste JSON here...'
+            placeholder={t('toolkit.jsonViewer.placeholder')}
             spellCheck={false}
           />
         )}
@@ -296,8 +298,8 @@ export default function JsonYamlViewer() {
             {parsed.data === undefined ? (
               <p className="text-text-muted">
                 {parsed.error
-                  ? 'Fix the JSON errors above to view the tree.'
-                  : 'Enter JSON in the Editor tab to view the tree.'}
+                  ? t('toolkit.jsonViewer.fixErrors')
+                  : t('toolkit.jsonViewer.enterJson')}
               </p>
             ) : (
               <TreeNode
@@ -315,25 +317,25 @@ export default function JsonYamlViewer() {
             <div className="grid grid-cols-2 gap-0 flex-1 min-h-0">
               <div className="flex flex-col border-r border-border">
                 <div className="px-3 py-1.5 text-xs text-text-muted bg-bg-secondary border-b border-border">
-                  Left
+                  {t('toolkit.jsonViewer.left')}
                 </div>
                 <textarea
                   className="flex-1 w-full bg-transparent text-text-primary font-mono text-sm p-3 resize-none outline-none placeholder:text-text-muted"
                   value={diffLeft}
                   onChange={(e) => setDiffLeft(e.target.value)}
-                  placeholder="Paste first JSON..."
+                  placeholder={t('toolkit.jsonViewer.leftPlaceholder')}
                   spellCheck={false}
                 />
               </div>
               <div className="flex flex-col">
                 <div className="px-3 py-1.5 text-xs text-text-muted bg-bg-secondary border-b border-border">
-                  Right
+                  {t('toolkit.jsonViewer.right')}
                 </div>
                 <textarea
                   className="flex-1 w-full bg-transparent text-text-primary font-mono text-sm p-3 resize-none outline-none placeholder:text-text-muted"
                   value={diffRight}
                   onChange={(e) => setDiffRight(e.target.value)}
-                  placeholder="Paste second JSON..."
+                  placeholder={t('toolkit.jsonViewer.rightPlaceholder')}
                   spellCheck={false}
                 />
               </div>
@@ -342,7 +344,7 @@ export default function JsonYamlViewer() {
             {diffResult.length > 0 && (
               <div className="border-t border-border bg-bg-secondary overflow-auto max-h-64">
                 <div className="px-3 py-1.5 text-xs text-text-muted border-b border-border">
-                  Diff result
+                  {t('toolkit.jsonViewer.diffResult')}
                 </div>
                 <div className="font-mono text-sm">
                   {diffResult.map((line, i) => (

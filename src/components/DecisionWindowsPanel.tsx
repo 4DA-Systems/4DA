@@ -1,4 +1,5 @@
 import { useEffect, useMemo, memo } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../store';
 import type { DecisionWindow } from '../types/autophagy';
 
@@ -44,6 +45,7 @@ const WindowCard = memo(function WindowCard({
   onAct: (id: number) => void;
   onDismiss: (id: number) => void;
 }) {
+  const { t } = useTranslation();
   const config = WINDOW_TYPE_CONFIG[window.window_type] ?? WINDOW_TYPE_CONFIG.knowledge;
   const timeLeft = getTimeRemaining(window.expires_at);
 
@@ -70,7 +72,7 @@ const WindowCard = memo(function WindowCard({
       )}
       {window.dependency && (
         <div className="text-[10px] text-gray-500 mb-2">
-          Affects: <span className="text-gray-300 font-mono">{window.dependency}</span>
+          {t('decisions.affects')}: <span className="text-gray-300 font-mono">{window.dependency}</span>
         </div>
       )}
       <UrgencyBar urgency={window.urgency} />
@@ -79,13 +81,13 @@ const WindowCard = memo(function WindowCard({
           onClick={() => onAct(window.id)}
           className={`flex-1 px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${config.color} ${config.bg} hover:opacity-80`}
         >
-          Act
+          {t('decisions.act')}
         </button>
         <button
           onClick={() => onDismiss(window.id)}
           className="px-3 py-1.5 text-xs text-gray-500 bg-[#1F1F1F] rounded-lg hover:text-gray-300 hover:bg-[#2A2A2A] transition-colors"
         >
-          Dismiss
+          {t('action.dismiss')}
         </button>
       </div>
     </div>
@@ -93,6 +95,7 @@ const WindowCard = memo(function WindowCard({
 });
 
 export const DecisionWindowsPanel = memo(function DecisionWindowsPanel() {
+  const { t } = useTranslation();
   const windows = useAppStore(s => s.decisionWindows);
   const loading = useAppStore(s => s.decisionWindowsLoading);
   const loadWindows = useAppStore(s => s.loadDecisionWindows);
@@ -115,12 +118,12 @@ export const DecisionWindowsPanel = memo(function DecisionWindowsPanel() {
     <div>
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
-          <h3 className="text-sm font-medium text-white">Decision Windows</h3>
+          <h3 className="text-sm font-medium text-white">{t('decisions.title')}</h3>
           <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-[#1F1F1F] text-gray-400">
             {openWindows.length}
           </span>
         </div>
-        <span className="text-[10px] text-gray-500">Time-bounded opportunities</span>
+        <span className="text-[10px] text-gray-500">{t('decisions.subtitle')}</span>
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
         {openWindows.map(w => (

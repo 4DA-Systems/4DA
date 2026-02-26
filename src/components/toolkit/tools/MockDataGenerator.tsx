@@ -1,4 +1,5 @@
 import { useState, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 
 type DataType = 'uuid' | 'name' | 'email' | 'timestamp' | 'ip' | 'hex-color' | 'json';
 
@@ -53,6 +54,7 @@ function generateOne(type: DataType): string {
 }
 
 export default function MockDataGenerator() {
+  const { t } = useTranslation();
   const [dataType, setDataType] = useState<DataType>('uuid');
   const [count, setCount] = useState(5);
   const [output, setOutput] = useState('');
@@ -74,7 +76,7 @@ export default function MockDataGenerator() {
       {/* Controls */}
       <div className="flex items-end gap-3">
         <div>
-          <label className="block text-xs text-gray-500 mb-1">Type</label>
+          <label className="block text-xs text-gray-500 mb-1">{t('toolkit.mockData.type')}</label>
           <select
             value={dataType}
             onChange={(e) => setDataType(e.target.value as DataType)}
@@ -84,7 +86,7 @@ export default function MockDataGenerator() {
           </select>
         </div>
         <div>
-          <label className="block text-xs text-gray-500 mb-1">Count</label>
+          <label className="block text-xs text-gray-500 mb-1">{t('toolkit.mockData.count')}</label>
           <input
             type="number"
             min={1}
@@ -98,7 +100,7 @@ export default function MockDataGenerator() {
           onClick={generate}
           className="px-4 py-2 text-sm font-medium bg-white text-black rounded-lg hover:bg-gray-200 transition-colors"
         >
-          Generate
+          {t('action.generate')}
         </button>
       </div>
 
@@ -109,7 +111,7 @@ export default function MockDataGenerator() {
             onClick={copy}
             className="absolute top-2 right-2 px-2 py-1 text-xs bg-bg-tertiary border border-border rounded text-gray-400 hover:text-white hover:border-white/20 transition-all"
           >
-            {copied ? 'Copied' : 'Copy'}
+            {copied ? t('action.copied') : t('action.copy')}
           </button>
           <pre className="p-4 text-sm font-mono bg-bg-secondary border border-border rounded-xl text-gray-300 overflow-auto max-h-96 whitespace-pre-wrap">
             {output}

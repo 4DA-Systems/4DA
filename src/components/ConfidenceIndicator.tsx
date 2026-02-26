@@ -1,8 +1,11 @@
+import { useTranslation } from 'react-i18next';
+
 interface ConfidenceIndicatorProps {
   confidence?: number;
 }
 
 export const ConfidenceIndicator = ({ confidence }: ConfidenceIndicatorProps) => {
+  const { t } = useTranslation();
   if (!confidence) return null;
 
   const formatConfidence = (conf: number) => {
@@ -14,7 +17,7 @@ export const ConfidenceIndicator = ({ confidence }: ConfidenceIndicatorProps) =>
       const margin = ((1 - conf) * 100).toFixed(0);
       return { text: `±${margin}%`, className: 'confidence-medium' };
     }
-    return { text: '⚠️ Low confidence', className: 'confidence-low' };
+    return { text: t('results.lowConfidence'), className: 'confidence-low' };
   };
 
   const { text, className } = formatConfidence(confidence);

@@ -1,4 +1,5 @@
 import { useState, useEffect, memo } from 'react';
+import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
 import { ProGate } from './ProGate';
 import type { KnowledgeGap } from '../types';
@@ -11,6 +12,7 @@ const SEVERITY_CONFIG: Record<string, { color: string; bg: string; border: strin
 };
 
 export const KnowledgeGapsPanel = memo(function KnowledgeGapsPanel() {
+  const { t } = useTranslation();
   const [gaps, setGaps] = useState<KnowledgeGap[]>([]);
   const [expanded, setExpanded] = useState(false);
 
@@ -31,7 +33,7 @@ export const KnowledgeGapsPanel = memo(function KnowledgeGapsPanel() {
   const criticalCount = gaps.filter(g => g.gap_severity === 'critical' || g.gap_severity === 'high').length;
 
   return (
-    <ProGate feature="Knowledge Gaps">
+    <ProGate feature={t('knowledgeGaps.feature')}>
     <div className="mb-6 bg-bg-secondary rounded-lg border border-border overflow-hidden">
       <button
         onClick={() => setExpanded(!expanded)}
@@ -42,10 +44,10 @@ export const KnowledgeGapsPanel = memo(function KnowledgeGapsPanel() {
             <span className="text-gray-400">📖</span>
           </div>
           <div className="text-left">
-            <h2 className="font-medium text-white text-sm">Knowledge Gaps</h2>
+            <h2 className="font-medium text-white text-sm">{t('knowledgeGaps.title')}</h2>
             <p className="text-xs text-gray-500">
-              {gaps.length} gap{gaps.length !== 1 ? 's' : ''}
-              {criticalCount > 0 && <span className="text-amber-400 ml-1">{criticalCount} need attention</span>}
+              {t('knowledgeGaps.count', { count: gaps.length })}
+              {criticalCount > 0 && <span className="text-amber-400 ml-1">{t('knowledgeGaps.needAttention', { count: criticalCount })}</span>}
             </p>
           </div>
         </div>
@@ -66,7 +68,7 @@ export const KnowledgeGapsPanel = memo(function KnowledgeGapsPanel() {
                   </span>
                 </div>
                 <p className="text-xs text-gray-400 mt-1">
-                  {gap.missed_items.length} relevant article{gap.missed_items.length !== 1 ? 's' : ''} you haven't engaged with
+                  {t('knowledgeGaps.missedArticles', { count: gap.missed_items.length })}
                 </p>
                 {gap.missed_items.length > 0 && (
                   <div className="mt-2 space-y-1">
@@ -88,8 +90,8 @@ export const KnowledgeGapsPanel = memo(function KnowledgeGapsPanel() {
                 )}
                 <div className="text-[10px] text-gray-600 mt-1">
                   {gap.days_since_last_engagement >= 999
-                    ? 'No engagement recorded'
-                    : `${gap.days_since_last_engagement}d since last engagement`} · {gap.project_path}
+                    ? t('knowledgeGaps.noEngagement')
+                    : t('knowledgeGaps.daysSinceEngagement', { days: gap.days_since_last_engagement })} · {gap.project_path}
                 </div>
               </div>
             );

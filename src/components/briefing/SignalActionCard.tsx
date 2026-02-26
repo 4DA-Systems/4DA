@@ -1,4 +1,5 @@
 import { memo } from 'react';
+import { useTranslation } from 'react-i18next';
 import type { SourceRelevance, FeedbackAction } from '../../types';
 import { getSourceLabel, getSourceColorClass } from '../../config/sources';
 
@@ -39,6 +40,7 @@ export const SignalActionCard = memo(function SignalActionCard({
   onSave,
   onDismiss,
 }: SignalActionCardProps) {
+  const { t } = useTranslation();
   const priority = item.signal_priority || 'high';
   const style = priorityStyles[priority] || priorityStyles.high;
   const signalLabel = signalTypeLabels[item.signal_type || ''] || item.signal_type?.toUpperCase() || 'SIGNAL';
@@ -75,7 +77,7 @@ export const SignalActionCard = memo(function SignalActionCard({
             <span className={`text-xs px-2 py-1 rounded ${
               feedbackGiven === 'save' ? 'bg-green-500/20 text-green-400' : 'bg-gray-500/20 text-gray-500'
             }`}>
-              {feedbackGiven === 'save' ? 'Saved' : 'Dismissed'}
+              {feedbackGiven === 'save' ? t('feedback.saved') : t('feedback.dismissed')}
             </span>
           ) : (
             <>
@@ -84,20 +86,20 @@ export const SignalActionCard = memo(function SignalActionCard({
                   onClick={() => window.open(item.url!, '_blank', 'noopener,noreferrer')}
                   className="px-2.5 py-1.5 text-xs bg-bg-tertiary text-gray-300 border border-border rounded-lg hover:bg-border transition-all font-medium"
                 >
-                  Read
+                  {t('briefing.read')}
                 </button>
               )}
               <button
                 onClick={() => onSave(item)}
                 className="px-2.5 py-1.5 text-xs bg-green-500/10 text-green-400 border border-green-500/20 rounded-lg hover:bg-green-500/20 transition-all font-medium"
               >
-                Save
+                {t('action.save')}
               </button>
               <button
                 onClick={() => onDismiss(item)}
                 className="px-2.5 py-1.5 text-xs bg-border text-gray-500 border border-[#333] rounded-lg hover:bg-red-500/10 hover:text-red-400 hover:border-red-500/20 transition-all font-medium"
               >
-                Dismiss
+                {t('action.dismiss')}
               </button>
             </>
           )}

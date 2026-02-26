@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 
 type SubTab = 'base64' | 'url' | 'jwt' | 'hash';
 type Direction = 'encode' | 'decode';
@@ -71,6 +72,7 @@ async function computeHash(input: string, algo: HashAlgo): Promise<string> {
 }
 
 function CopyButton({ text }: { text: string }) {
+  const { t } = useTranslation();
   const [copied, setCopied] = useState(false);
 
   const handleCopy = useCallback(() => {
@@ -89,7 +91,7 @@ function CopyButton({ text }: { text: string }) {
         bg-bg-tertiary text-text-secondary hover:text-white hover:border-white/20
         transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
     >
-      {copied ? 'Copied' : 'Copy'}
+      {copied ? t('action.copied') : t('action.copy')}
     </button>
   );
 }
@@ -121,6 +123,7 @@ function DirectionToggle({
 }
 
 function Base64Tab() {
+  const { t } = useTranslation();
   const [input, setInput] = useState('');
   const [direction, setDirection] = useState<Direction>('encode');
   const [output, setOutput] = useState('');
@@ -143,19 +146,19 @@ function Base64Tab() {
       <div className="flex items-center justify-between">
         <DirectionToggle direction={direction} onChange={setDirection} />
         {autoDetected && (
-          <span className="text-xs text-text-muted">Base64 detected</span>
+          <span className="text-xs text-text-muted">{t('toolkit.encoder.base64Detected')}</span>
         )}
       </div>
       <textarea
         value={input}
         onChange={(e) => setInput(e.target.value)}
-        placeholder="Enter text to encode or Base64 to decode..."
+        placeholder={t('toolkit.encoder.base64Placeholder')}
         className="w-full h-32 bg-bg-primary border border-border rounded-lg p-3 text-sm
           font-mono text-text-primary placeholder:text-text-muted resize-none
           focus:outline-none focus:border-white/20"
       />
       <div className="flex items-center justify-between">
-        <span className="text-xs text-text-muted">Output</span>
+        <span className="text-xs text-text-muted">{t('toolkit.encoder.output')}</span>
         <CopyButton text={output} />
       </div>
       <textarea
@@ -169,6 +172,7 @@ function Base64Tab() {
 }
 
 function UrlTab() {
+  const { t } = useTranslation();
   const [input, setInput] = useState('');
   const [direction, setDirection] = useState<Direction>('encode');
   const [output, setOutput] = useState('');
@@ -192,13 +196,13 @@ function UrlTab() {
       <textarea
         value={input}
         onChange={(e) => setInput(e.target.value)}
-        placeholder="Enter text to URL encode or encoded string to decode..."
+        placeholder={t('toolkit.encoder.urlPlaceholder')}
         className="w-full h-32 bg-bg-primary border border-border rounded-lg p-3 text-sm
           font-mono text-text-primary placeholder:text-text-muted resize-none
           focus:outline-none focus:border-white/20"
       />
       <div className="flex items-center justify-between">
-        <span className="text-xs text-text-muted">Output</span>
+        <span className="text-xs text-text-muted">{t('toolkit.encoder.output')}</span>
         <CopyButton text={output} />
       </div>
       <textarea
@@ -212,6 +216,7 @@ function UrlTab() {
 }
 
 function JwtTab() {
+  const { t } = useTranslation();
   const [input, setInput] = useState('');
   const [header, setHeader] = useState('');
   const [payload, setPayload] = useState('');
@@ -254,7 +259,7 @@ function JwtTab() {
       <textarea
         value={input}
         onChange={(e) => setInput(e.target.value)}
-        placeholder="Paste a JWT token..."
+        placeholder={t('toolkit.encoder.jwtPlaceholder')}
         className="w-full h-20 bg-bg-primary border border-border rounded-lg p-3 text-sm
           font-mono text-text-primary placeholder:text-text-muted resize-none
           focus:outline-none focus:border-white/20"
@@ -268,7 +273,7 @@ function JwtTab() {
       {header && (
         <div className="space-y-1">
           <div className="flex items-center justify-between">
-            <span className="text-xs text-text-muted">Header</span>
+            <span className="text-xs text-text-muted">{t('toolkit.encoder.header')}</span>
             <CopyButton text={header} />
           </div>
           <pre className="bg-bg-primary border border-border rounded-lg p-3 text-xs
@@ -280,7 +285,7 @@ function JwtTab() {
       {payload && (
         <div className="space-y-1">
           <div className="flex items-center justify-between">
-            <span className="text-xs text-text-muted">Payload</span>
+            <span className="text-xs text-text-muted">{t('toolkit.encoder.payload')}</span>
             <CopyButton text={payload} />
           </div>
           <pre className="bg-bg-primary border border-border rounded-lg p-3 text-xs
@@ -294,6 +299,7 @@ function JwtTab() {
 }
 
 function HashTab() {
+  const { t } = useTranslation();
   const [input, setInput] = useState('');
   const [algo, setAlgo] = useState<HashAlgo>('SHA-256');
   const [output, setOutput] = useState('');
@@ -313,7 +319,7 @@ function HashTab() {
   return (
     <div className="space-y-3">
       <div className="flex items-center gap-2">
-        <span className="text-xs text-text-muted">Algorithm</span>
+        <span className="text-xs text-text-muted">{t('toolkit.encoder.algorithm')}</span>
         <div className="flex items-center gap-1 bg-bg-primary rounded-md p-0.5 border border-border">
           {(['SHA-256', 'SHA-512'] as const).map((a) => (
             <button
@@ -333,7 +339,7 @@ function HashTab() {
       <textarea
         value={input}
         onChange={(e) => setInput(e.target.value)}
-        placeholder="Enter text to hash..."
+        placeholder={t('toolkit.encoder.hashPlaceholder')}
         className="w-full h-32 bg-bg-primary border border-border rounded-lg p-3 text-sm
           font-mono text-text-primary placeholder:text-text-muted resize-none
           focus:outline-none focus:border-white/20"
@@ -346,7 +352,7 @@ function HashTab() {
       </div>
       <div className="bg-bg-primary border border-border rounded-lg p-3 min-h-[3rem]
         break-all text-sm font-mono text-text-secondary">
-        {output || <span className="text-text-muted">Hash output will appear here</span>}
+        {output || <span className="text-text-muted">{t('toolkit.encoder.hashOutputHint')}</span>}
       </div>
     </div>
   );

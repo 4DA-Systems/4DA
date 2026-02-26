@@ -33,8 +33,8 @@ describe('SunsDashboard', () => {
   it('renders the header', () => {
     setMockState({});
     render(<SunsDashboard />);
-    expect(screen.getByText('Suns')).toBeInTheDocument();
-    expect(screen.getByText(/0\/0 active/)).toBeInTheDocument();
+    expect(screen.getByText('suns.title')).toBeInTheDocument();
+    expect(screen.getByText('suns.active')).toBeInTheDocument();
   });
 
   it('renders sun names when statuses exist', () => {
@@ -57,7 +57,7 @@ describe('SunsDashboard', () => {
       ],
     });
     render(<SunsDashboard />);
-    expect(screen.getByText(/1\/2 active/)).toBeInTheDocument();
+    expect(screen.getByText('suns.active')).toBeInTheDocument();
   });
 
   it('groups suns by module', () => {
@@ -83,7 +83,7 @@ describe('SunsDashboard', () => {
     });
     render(<SunsDashboard />);
     expect(screen.getByText(/Connection failed/)).toBeInTheDocument();
-    expect(screen.getByText('Dismiss')).toBeInTheDocument();
+    expect(screen.getByText('action.dismiss')).toBeInTheDocument();
   });
 
   it('calls load functions on mount', () => {

@@ -108,25 +108,25 @@ export function SystemHealthPanel({
                 <div className="text-lg font-semibold text-white">
                   {(health.accuracyMetrics.precision * 100).toFixed(0)}%
                 </div>
-                <div className="text-xs text-gray-500">Precision</div>
+                <div className="text-xs text-gray-500">{t('systemHealth.precision')}</div>
               </div>
               <div className="text-center">
                 <div className="text-lg font-semibold text-white">
                   {(health.accuracyMetrics.engagement_rate * 100).toFixed(0)}%
                 </div>
-                <div className="text-xs text-gray-500">Engagement</div>
+                <div className="text-xs text-gray-500">{t('systemHealth.engagement')}</div>
               </div>
               <div className="text-center">
                 <div className="text-lg font-semibold text-white">
                   {(health.accuracyMetrics.calibration_error * 100).toFixed(1)}%
                 </div>
-                <div className="text-xs text-gray-500">Calibration</div>
+                <div className="text-xs text-gray-500">{t('systemHealth.calibration')}</div>
               </div>
             </div>
             {health.accuracyMetrics.precision === 0 &&
               health.accuracyMetrics.engagement_rate === 0 && (
                 <div className="text-xs text-gray-500 mt-3 text-center">
-                  Metrics update as you interact with results
+                  {t('systemHealth.metricsUpdate')}
                 </div>
               )}
           </div>
@@ -136,7 +136,7 @@ export function SystemHealthPanel({
         <div>
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2">
-              <span className="text-xs text-gray-400 font-medium">Anomalies</span>
+              <span className="text-xs text-gray-400 font-medium">{t('systemHealth.anomalies')}</span>
               <span className={`px-2 py-0.5 text-xs rounded-md ${
                 health.anomalyCount > 0
                   ? 'bg-red-500/20 text-red-400'
@@ -149,7 +149,7 @@ export function SystemHealthPanel({
               onClick={onRunAnomalyDetection}
               className="px-3 py-1.5 text-xs bg-bg-secondary border border-border rounded-lg text-gray-400 hover:text-white hover:border-rose-500/30 transition-all"
             >
-              Scan Now
+              {t('systemHealth.scanNow')}
             </button>
           </div>
           {health.anomalies.length > 0 ? (
@@ -164,7 +164,7 @@ export function SystemHealthPanel({
             </div>
           ) : (
             <div className="text-sm text-green-400 bg-green-500/10 rounded-lg p-3 border border-green-500/20 text-center">
-              No anomalies detected
+              {t('systemHealth.noAnomalies')}
             </div>
           )}
         </div>
@@ -172,7 +172,7 @@ export function SystemHealthPanel({
         {/* Topic Similarity Search */}
         <div>
           <label className="text-xs text-gray-400 font-medium block mb-2">
-            Find Similar Topics
+            {t('systemHealth.findSimilarTopics')}
           </label>
           <div className="flex gap-2 mb-3">
             <input
@@ -180,14 +180,14 @@ export function SystemHealthPanel({
               value={similarTopicQuery}
               onChange={(e) => onSimilarTopicQueryChange(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && onFindSimilarTopics()}
-              placeholder="e.g. machine learning"
+              placeholder={t('systemHealth.topicPlaceholder')}
               className="flex-1 px-3 py-2.5 bg-bg-secondary border border-border rounded-lg text-sm text-white placeholder:text-gray-500 focus:border-rose-500/50 focus:outline-none transition-colors"
             />
             <button
               onClick={onFindSimilarTopics}
               className="px-4 py-2.5 text-sm bg-rose-500/20 border border-rose-500/30 text-rose-400 rounded-lg hover:bg-rose-500/30 transition-all"
             >
-              Search
+              {t('action.search')}
             </button>
           </div>
           {similarTopicResults.length > 0 && (
@@ -213,13 +213,13 @@ export function SystemHealthPanel({
             onClick={onSaveWatcherState}
             className="flex-1 px-4 py-2.5 text-sm bg-bg-secondary border border-border rounded-lg text-gray-400 hover:text-white hover:border-rose-500/30 transition-all"
           >
-            Save Watcher State
+            {t('systemHealth.saveWatcherState')}
           </button>
           <button
             onClick={onRefresh}
             className="px-4 py-2.5 text-sm bg-bg-secondary border border-border rounded-lg text-gray-400 hover:text-white hover:border-rose-500/30 transition-all"
           >
-            Refresh
+            {t('action.refresh')}
           </button>
         </div>
       </div>
@@ -233,6 +233,7 @@ interface AnomalyItemProps {
 }
 
 function AnomalyItem({ anomaly, onResolve }: AnomalyItemProps) {
+  const { t } = useTranslation();
   const isHighSeverity = anomaly.severity === 'high' || anomaly.severity === 'critical';
   const isMediumSeverity = anomaly.severity === 'medium';
 
@@ -264,7 +265,7 @@ function AnomalyItem({ anomaly, onResolve }: AnomalyItemProps) {
             onClick={() => onResolve(anomaly.id!)}
             className="text-xs text-green-400 hover:text-green-300 transition-colors"
           >
-            Resolve
+            {t('systemHealth.resolve')}
           </button>
         )}
       </div>

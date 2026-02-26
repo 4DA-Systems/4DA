@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import type { SourceRelevance } from '../../types';
 import { useAppStore } from '../../store';
 
@@ -69,6 +70,7 @@ function extractTopic(title: string): string | null {
  * maps to a monetization engine. Links to the STREETS playbook view.
  */
 export function StreetsEngineLink({ item }: StreetsEngineLinkProps) {
+  const { t } = useTranslation();
   const setActiveView = useAppStore((s) => s.setActiveView);
 
   if (!item.streets_engine) return null;
@@ -78,7 +80,7 @@ export function StreetsEngineLink({ item }: StreetsEngineLinkProps) {
 
   const description = template
     ? (topic ? template.contextual.replace('{topic}', topic) : template.fallback)
-    : 'This content maps to a STREETS revenue engine.';
+    : t('results.streetsDefault');
 
   const engineShort = item.streets_engine.replace(/^Engine \d+: /, '');
 
@@ -99,7 +101,7 @@ export function StreetsEngineLink({ item }: StreetsEngineLinkProps) {
         onClick={() => setActiveView('playbook')}
         className="mt-1.5 text-[10px] text-yellow-400/60 hover:text-yellow-400 transition-colors"
       >
-        Explore {engineShort} in STREETS Playbook &rarr;
+        {t('results.exploreInPlaybook', { engine: engineShort })}
       </button>
     </div>
   );

@@ -88,7 +88,7 @@ describe('ResultItem', () => {
     );
 
     // Expanded view shows "Top Matches:" label and match details
-    expect(screen.getByText('Top Matches:')).toBeInTheDocument();
+    expect(screen.getByText('results.topMatches')).toBeInTheDocument();
     expect(screen.getByText('src/main.rs')).toBeInTheDocument();
     expect(screen.getByText(/Relevant code snippet/)).toBeInTheDocument();
   });
@@ -105,7 +105,7 @@ describe('ResultItem', () => {
       />,
     );
 
-    expect(screen.queryByText('Top Matches:')).not.toBeInTheDocument();
+    expect(screen.queryByText('results.topMatches')).not.toBeInTheDocument();
   });
 
   it('shows expand indicator "+" when collapsed and "-" when expanded', () => {
@@ -148,7 +148,7 @@ describe('ResultItem', () => {
       />,
     );
 
-    fireEvent.click(screen.getByLabelText('Expand details'));
+    fireEvent.click(screen.getByLabelText('results.expandDetails'));
     expect(onToggle).toHaveBeenCalledTimes(1);
   });
 
@@ -165,7 +165,7 @@ describe('ResultItem', () => {
       />,
     );
 
-    fireEvent.click(screen.getByText('Save'));
+    fireEvent.click(screen.getByText('action.save'));
     expect(onRecord).toHaveBeenCalledWith(item.id, 'save', item);
   });
 
@@ -182,7 +182,7 @@ describe('ResultItem', () => {
       />,
     );
 
-    fireEvent.click(screen.getByText('Dismiss'));
+    fireEvent.click(screen.getByText('action.dismiss'));
     expect(onRecord).toHaveBeenCalledWith(item.id, 'dismiss', item);
   });
 
@@ -199,7 +199,7 @@ describe('ResultItem', () => {
       />,
     );
 
-    fireEvent.click(screen.getByText('Not Relevant'));
+    fireEvent.click(screen.getByText('feedback.notRelevant'));
     expect(onRecord).toHaveBeenCalledWith(item.id, 'mark_irrelevant', item);
   });
 
@@ -217,7 +217,7 @@ describe('ResultItem', () => {
     );
 
     // Both the feedback indicator and the save button show "Saved" state
-    const savedElements = screen.getAllByText(/Saved/);
+    const savedElements = screen.getAllByText(/feedback\.saved/);
     expect(savedElements.length).toBeGreaterThanOrEqual(1);
   });
 
@@ -308,7 +308,7 @@ describe('ResultItem', () => {
       />,
     );
 
-    expect(screen.getByText('Unknown')).toBeInTheDocument();
+    expect(screen.getByText('results.unknownSource')).toBeInTheDocument();
   });
 
   it('renders signal badge when signal_type is present', () => {
@@ -338,7 +338,7 @@ describe('ResultItem', () => {
       />,
     );
 
-    const button = screen.getByLabelText('Collapse details');
+    const button = screen.getByLabelText('results.collapseDetails');
     expect(button).toHaveAttribute('aria-expanded', 'true');
     expect(button).toHaveAttribute('aria-controls', 'result-detail-42');
   });

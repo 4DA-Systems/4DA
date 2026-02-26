@@ -1,3 +1,5 @@
+import { useTranslation } from 'react-i18next';
+
 import type { ToolDescriptor } from '../../types/toolkit';
 
 interface ToolkitCardProps {
@@ -28,6 +30,7 @@ const ICON_PATHS: Record<string, string> = {
 };
 
 export function ToolkitCard({ tool, pinned, onOpen, onTogglePin }: ToolkitCardProps) {
+  const { t } = useTranslation();
   const iconPath = ICON_PATHS[tool.icon];
 
   return (
@@ -41,7 +44,7 @@ export function ToolkitCard({ tool, pinned, onOpen, onTogglePin }: ToolkitCardPr
         className={`absolute top-2 right-2 p-1 rounded transition-opacity ${
           pinned ? 'opacity-100 text-[#D4AF37]' : 'opacity-0 group-hover:opacity-60 text-gray-500 hover:text-white'
         }`}
-        title={pinned ? 'Unpin' : 'Pin to top'}
+        title={pinned ? t('toolkit.unpin') : t('toolkit.pinToTop')}
       >
         <svg width="14" height="14" viewBox="0 0 24 24" fill={pinned ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2">
           <path d="M12 2l2.4 7.4H22l-6.2 4.5 2.4 7.4L12 16.8l-6.2 4.5 2.4-7.4L2 9.4h7.6z"/>
@@ -51,7 +54,7 @@ export function ToolkitCard({ tool, pinned, onOpen, onTogglePin }: ToolkitCardPr
       {/* Pro badge */}
       {tool.pro && (
         <span className="absolute top-2 left-2 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider bg-[#D4AF37]/20 text-[#D4AF37] border border-[#D4AF37]/30 rounded">
-          Pro
+          {t('tier.pro')}
         </span>
       )}
 

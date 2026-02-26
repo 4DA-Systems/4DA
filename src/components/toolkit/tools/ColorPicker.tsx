@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 
 type RGB = { r: number; g: number; b: number };
 type HSL = { h: number; s: number; l: number };
@@ -102,18 +103,20 @@ async function copyText(text: string) {
 }
 
 function Badge({ pass, label }: { pass: boolean; label: string }) {
+  const { t } = useTranslation();
   return (
     <span
       className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold ${
         pass ? 'bg-[#22C55E]/20 text-[#22C55E]' : 'bg-[#EF4444]/20 text-[#EF4444]'
       }`}
     >
-      {label} {pass ? 'Pass' : 'Fail'}
+      {label} {pass ? t('toolkit.colorPicker.pass') : t('toolkit.colorPicker.fail')}
     </span>
   );
 }
 
 function CopyBtn({ value, label }: { value: string; label: string }) {
+  const { t } = useTranslation();
   const [copied, setCopied] = useState(false);
   const handleCopy = async () => {
     await copyText(value);
@@ -124,9 +127,9 @@ function CopyBtn({ value, label }: { value: string; label: string }) {
     <button
       onClick={handleCopy}
       className="px-2 py-1 text-xs rounded bg-[#1F1F1F] border border-[#2A2A2A] text-[#A0A0A0] hover:text-white hover:border-[#444] transition-colors"
-      title={`Copy ${label}`}
+      title={t('toolkit.colorPicker.copyLabel', { label })}
     >
-      {copied ? 'Copied' : label}
+      {copied ? t('action.copied') : label}
     </button>
   );
 }
@@ -136,6 +139,7 @@ function contrastColor(rgb: RGB): string {
 }
 
 export default function ColorPicker() {
+  const { t } = useTranslation();
   const [rgb, setRgb] = useState<RGB>({ r: 74, g: 144, b: 226 });
   const [hexInput, setHexInput] = useState('#4A90E2');
   const [history, setHistory] = useState<string[]>(loadHistory);
@@ -225,7 +229,7 @@ export default function ColorPicker() {
 
       {/* Hue slider */}
       <div className="flex flex-col gap-1">
-        <label className="text-xs text-[#666] font-medium">Hue</label>
+        <label className="text-xs text-[#666] font-medium">{t('toolkit.colorPicker.hue')}</label>
         <input
           type="range"
           min={0}
@@ -311,13 +315,13 @@ export default function ColorPicker() {
           onClick={handleEyeDropper}
           className="w-full py-2 text-sm rounded bg-[#1F1F1F] border border-[#2A2A2A] text-[#A0A0A0] hover:text-white hover:border-[#444] transition-colors"
         >
-          Pick from Screen
+          {t('toolkit.colorPicker.pickFromScreen')}
         </button>
       )}
 
       {/* WCAG Contrast */}
       <div className="flex flex-col gap-2 p-3 rounded-lg bg-[#141414] border border-[#2A2A2A]">
-        <span className="text-xs text-[#666] font-medium">WCAG Contrast</span>
+        <span className="text-xs text-[#666] font-medium">{t('toolkit.colorPicker.wcagContrast')}</span>
         <div className="flex flex-col gap-2">
           <div className="flex items-center gap-2 flex-wrap">
             <div className="w-5 h-5 rounded border border-[#2A2A2A] bg-white" />
@@ -345,7 +349,7 @@ export default function ColorPicker() {
       {/* Color history */}
       {history.length > 0 && (
         <div className="flex flex-col gap-1.5">
-          <span className="text-xs text-[#666] font-medium">History</span>
+          <span className="text-xs text-[#666] font-medium">{t('toolkit.colorPicker.history')}</span>
           <div className="flex gap-1.5 flex-wrap">
             {history.map((h) => (
               <button

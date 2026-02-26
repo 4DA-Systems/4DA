@@ -1,6 +1,8 @@
+import { useTranslation } from 'react-i18next';
 import sunLogo from '../assets/sun-logo.jpg';
 
 export function AboutPanel() {
+  const { t } = useTranslation();
   return (
     <div className="space-y-8">
       {/* Logo + Identity */}
@@ -10,15 +12,15 @@ export function AboutPanel() {
           alt="4DA Sun Logo"
           className="w-28 h-28 rounded-2xl object-cover shadow-lg shadow-orange-500/20 mb-4"
         />
-        <h3 className="text-xl font-semibold text-white">4DA</h3>
-        <p className="text-sm text-gray-400 mt-1">4 Dimensional Autonomy</p>
-        <p className="text-xs text-gray-500 mt-0.5">All signal. No feed.</p>
+        <h3 className="text-xl font-semibold text-white">{t('app.title')}</h3>
+        <p className="text-sm text-gray-400 mt-1">{t('about.fullName')}</p>
+        <p className="text-xs text-gray-500 mt-0.5">{t('app.tagline')}</p>
       </div>
 
       {/* Built With Section */}
       <div className="bg-bg-tertiary/50 border border-border rounded-xl p-5 space-y-4">
         <h4 className="text-sm font-medium text-white tracking-wide uppercase">
-          Development Attribution
+          {t('about.attribution')}
         </h4>
 
         <div className="space-y-3 text-sm text-gray-300 leading-relaxed">
@@ -53,7 +55,7 @@ export function AboutPanel() {
                 <circle cx="12" cy="7" r="4" />
               </svg>
             </div>
-            <span className="text-[10px] text-gray-500 font-medium uppercase tracking-wider">Vision</span>
+            <span className="text-[10px] text-gray-500 font-medium uppercase tracking-wider">{t('about.vision')}</span>
           </div>
 
           {/* Connection */}
@@ -63,7 +65,7 @@ export function AboutPanel() {
               <div className="w-2 h-2 rounded-full bg-orange-500/60" />
               <div className="w-6 h-px bg-gray-600" />
             </div>
-            <span className="text-[9px] text-gray-600">collaborative</span>
+            <span className="text-[9px] text-gray-600">{t('about.collaborative')}</span>
           </div>
 
           {/* Claude */}
@@ -78,7 +80,7 @@ export function AboutPanel() {
                 <path d="M10 16h4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
               </svg>
             </div>
-            <span className="text-[10px] text-gray-500 font-medium uppercase tracking-wider">Engine</span>
+            <span className="text-[10px] text-gray-500 font-medium uppercase tracking-wider">{t('about.engine')}</span>
           </div>
         </div>
       </div>
@@ -91,10 +93,9 @@ export function AboutPanel() {
             <polyline points="22 4 12 14.01 9 11.01" />
           </svg>
           <div>
-            <p className="text-xs font-medium text-green-400">Externally Verifiable</p>
+            <p className="text-xs font-medium text-green-400">{t('about.verifiable')}</p>
             <p className="text-xs text-gray-500 mt-1">
-              Development process is auditable via the public git history. Every commit,
-              co-authorship tag, and architectural decision is preserved in the repository.
+              {t('about.verifiableDescription')}
             </p>
           </div>
         </div>
@@ -103,39 +104,39 @@ export function AboutPanel() {
       {/* Technical Details */}
       <div className="grid grid-cols-2 gap-3 text-xs">
         <div className="bg-bg-tertiary/30 rounded-lg p-3 border border-border/50">
-          <p className="text-gray-500 mb-1">Stack</p>
-          <p className="text-gray-300">Rust + React + SQLite</p>
+          <p className="text-gray-500 mb-1">{t('about.stack')}</p>
+          <p className="text-gray-300">{t('about.stackValue')}</p>
         </div>
         <div className="bg-bg-tertiary/30 rounded-lg p-3 border border-border/50">
-          <p className="text-gray-500 mb-1">Framework</p>
-          <p className="text-gray-300">Tauri 2.0</p>
+          <p className="text-gray-500 mb-1">{t('about.framework')}</p>
+          <p className="text-gray-300">{t('about.frameworkValue')}</p>
         </div>
         <div className="bg-bg-tertiary/30 rounded-lg p-3 border border-border/50">
-          <p className="text-gray-500 mb-1">License</p>
-          <p className="text-gray-300">FSL-1.1-Apache-2.0</p>
+          <p className="text-gray-500 mb-1">{t('about.license')}</p>
+          <p className="text-gray-300">{t('about.licenseValue')}</p>
         </div>
         <div className="bg-bg-tertiary/30 rounded-lg p-3 border border-border/50">
-          <p className="text-gray-500 mb-1">Privacy Model</p>
-          <p className="text-gray-300">100% Local / BYOK</p>
+          <p className="text-gray-500 mb-1">{t('about.privacyModel')}</p>
+          <p className="text-gray-300">{t('about.privacyValue')}</p>
         </div>
       </div>
 
       {/* Keyboard Shortcuts */}
       <div className="bg-bg-tertiary/30 border border-border/50 rounded-xl p-5 space-y-3">
         <h4 className="text-sm font-medium text-white tracking-wide uppercase">
-          Keyboard Shortcuts
+          {t('shortcuts.title')}
         </h4>
         <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-xs">
           {[
-            ['R', 'Run analysis'],
-            ['F', 'Toggle filter panel'],
-            ['B', 'Open briefing'],
-            [',', 'Open settings'],
-            ['?', 'Show help'],
-            ['Esc', 'Close panel / modal'],
-            ['Ctrl+`', 'Toggle Command Deck'],
-            ['S', 'Save current item'],
-            ['J / K', 'Navigate items'],
+            ['R', t('shortcuts.runAnalysis')],
+            ['F', t('shortcuts.toggleFilter')],
+            ['B', t('shortcuts.openBriefing')],
+            [',', t('shortcuts.openSettings')],
+            ['?', t('shortcuts.showHelp')],
+            ['Esc', t('shortcuts.closePanel')],
+            ['Ctrl+`', t('shortcuts.toggleCommandDeck')],
+            ['S', t('shortcuts.saveItem')],
+            ['J / K', t('shortcuts.navigateItems')],
           ].map(([key, desc]) => (
             <div key={key} className="flex items-center gap-2">
               <kbd className="px-1.5 py-0.5 bg-bg-secondary rounded border border-border text-gray-400 font-mono text-[11px] min-w-[28px] text-center">

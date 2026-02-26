@@ -1,3 +1,5 @@
+import { useTranslation } from 'react-i18next';
+
 interface ContextDiscoverySectionProps {
   scanDirectories: string[];
   newScanDir: string;
@@ -25,6 +27,7 @@ export function ContextDiscoverySection({
   addScanDirectory,
   removeScanDirectory,
 }: ContextDiscoverySectionProps) {
+  const { t } = useTranslation();
   return (
     <div className="bg-bg-tertiary rounded-lg p-5 border border-border">
       <div className="flex items-start gap-3 mb-4">
@@ -33,11 +36,11 @@ export function ContextDiscoverySection({
         </div>
         <div className="flex-1">
           <div className="flex items-center gap-2">
-            <h3 className="text-white font-medium">Automatic Context Discovery</h3>
+            <h3 className="text-white font-medium">{t('settings.context.title')}</h3>
             <span className="px-2 py-0.5 text-[10px] bg-orange-500/20 text-orange-400 rounded-full font-medium">ACE</span>
           </div>
           <p className="text-gray-500 text-sm mt-1">
-            Scan directories that define who you are - projects, notes, documents
+            {t('settings.context.description')}
           </p>
         </div>
       </div>
@@ -48,40 +51,40 @@ export function ContextDiscoverySection({
           disabled={isScanning}
           className="w-full px-4 py-3 text-sm bg-gradient-to-r from-orange-500/20 to-orange-600/10 text-orange-400 border border-orange-500/30 rounded-lg hover:from-orange-500/30 hover:to-orange-600/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed font-medium"
         >
-          {isScanning ? 'Discovering...' : '\u2728 Auto-Discover My Context'}
+          {isScanning ? t('settings.context.discovering') : t('settings.context.autoDiscover')}
         </button>
 
         <div className="flex gap-2">
           <input
             type="text"
-            aria-label="Directory path to scan"
+            aria-label={t('settings.context.dirPathLabel')}
             value={newScanDir}
             onChange={(e) => setNewScanDir(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && addScanDirectory()}
-            placeholder="Or add specific directory: ~/notes, D:\research"
+            placeholder={t('settings.context.addDirPlaceholder')}
             className="flex-1 px-3 py-2.5 bg-bg-secondary border border-border rounded-lg text-sm text-white placeholder:text-gray-500 focus:border-orange-500/50 focus:outline-none transition-colors"
           />
           <button
             onClick={addScanDirectory}
             className="px-4 py-2.5 text-sm bg-bg-secondary border border-border rounded-lg text-gray-400 hover:text-white hover:border-orange-500/30 transition-all"
           >
-            Add
+            {t('action.add')}
           </button>
         </div>
 
         <div className="space-y-2">
           {scanDirectories.length === 0 ? (
-            <p className="text-sm text-gray-500 text-center py-3">No directories configured yet</p>
+            <p className="text-sm text-gray-500 text-center py-3">{t('settings.context.noDirs')}</p>
           ) : (
             <>
-              <div className="text-xs text-gray-500 mb-2">Configured Directories ({scanDirectories.length})</div>
+              <div className="text-xs text-gray-500 mb-2">{t('settings.context.configuredDirs', { count: scanDirectories.length })}</div>
               <div className="space-y-1.5 max-h-32 overflow-y-auto">
                 {scanDirectories.map((dir) => (
                   <div key={dir} className="flex items-center justify-between px-3 py-2 bg-bg-secondary rounded-lg border border-border group">
                     <span className="font-mono text-sm text-white truncate">{dir}</span>
                     <button
                       onClick={() => removeScanDirectory(dir)}
-                      aria-label={`Remove directory ${dir}`}
+                      aria-label={t('settings.context.removeDir', { dir })}
                       className="text-gray-500 hover:text-red-400 ml-2 opacity-0 group-hover:opacity-100 transition-opacity"
                     >
                       &times;
@@ -99,7 +102,7 @@ export function ContextDiscoverySection({
             disabled={isScanning}
             className="w-full px-4 py-2.5 text-sm bg-bg-secondary border border-border rounded-lg text-gray-400 hover:text-white hover:border-orange-500/30 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {isScanning ? 'Scanning...' : 'Re-scan Configured Directories'}
+            {isScanning ? t('settings.context.scanning') : t('settings.context.rescan')}
           </button>
         )}
 
@@ -107,11 +110,11 @@ export function ContextDiscoverySection({
           <div className="bg-bg-secondary rounded-lg p-4 border border-border space-y-3">
             <div className="text-xs text-gray-500 flex items-center gap-2">
               <span className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse" />
-              Discovered Context {discoveredContext.lastScan && `(${new Date(discoveredContext.lastScan).toLocaleDateString()})`}
+              {t('settings.context.discoveredContext')} {discoveredContext.lastScan && `(${new Date(discoveredContext.lastScan).toLocaleDateString()})`}
             </div>
             {discoveredContext.tech.length > 0 && (
               <div>
-                <div className="text-xs text-gray-400 mb-2">Tech Stack</div>
+                <div className="text-xs text-gray-400 mb-2">{t('settings.context.techStack')}</div>
                 <div className="flex flex-wrap gap-1.5">
                   {discoveredContext.tech.slice(0, 10).map((tech) => (
                     <span
@@ -123,14 +126,14 @@ export function ContextDiscoverySection({
                     </span>
                   ))}
                   {discoveredContext.tech.length > 10 && (
-                    <span className="text-xs text-gray-500 self-center">+{discoveredContext.tech.length - 10} more</span>
+                    <span className="text-xs text-gray-500 self-center">{t('settings.context.more', { count: discoveredContext.tech.length - 10 })}</span>
                   )}
                 </div>
               </div>
             )}
             {discoveredContext.topics.length > 0 && (
               <div>
-                <div className="text-xs text-gray-400 mb-2">Topics</div>
+                <div className="text-xs text-gray-400 mb-2">{t('settings.context.topics')}</div>
                 <div className="flex flex-wrap gap-1.5">
                   {discoveredContext.topics.slice(0, 8).map((topic) => (
                     <span
@@ -141,7 +144,7 @@ export function ContextDiscoverySection({
                     </span>
                   ))}
                   {discoveredContext.topics.length > 8 && (
-                    <span className="text-xs text-gray-500 self-center">+{discoveredContext.topics.length - 8} more</span>
+                    <span className="text-xs text-gray-500 self-center">{t('settings.context.more', { count: discoveredContext.topics.length - 8 })}</span>
                   )}
                 </div>
               </div>
