@@ -414,6 +414,7 @@ pub fn run() {
             suns_commands::get_sun_alerts,
             suns_commands::acknowledge_sun_alert,
             suns_commands::trigger_sun_manually,
+            suns_commands::get_street_health,
             // Coach Nudges
             coach_nudges::get_coach_nudges,
             coach_nudges::dismiss_coach_nudge,

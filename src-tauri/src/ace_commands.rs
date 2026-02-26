@@ -13,8 +13,7 @@ use crate::context_engine::InterestSource;
 use crate::error::Result;
 use crate::scoring::get_ace_context;
 use crate::{
-    embed_texts, get_ace_engine, get_ace_engine_mut, get_context_engine, get_database,
-    get_settings_manager,
+    embed_texts, get_ace_engine, get_ace_engine_mut, get_context_engine, get_settings_manager,
 };
 
 // Re-export README indexing for callers that use ace_commands::index_discovered_readmes

@@ -8,8 +8,8 @@ use tracing::{debug, info};
 
 pub use crate::coach_context::{
     assemble_coach_context, ensure_coach_tables, extract_json_from_response, format_system_prompt,
-    generate_session_id, get_llm_client, record_llm_usage, require_streets_feature, CoachContext,
-    CoachMessage, CoachSession, EngineChoice, EngineRecommendation, LaunchReviewResult,
+    generate_session_id, get_llm_client, record_llm_usage, require_streets_feature, CoachMessage,
+    CoachSession, EngineRecommendation, LaunchReviewResult,
 };
 
 // ============================================================================
