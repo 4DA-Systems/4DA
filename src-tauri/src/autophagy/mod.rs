@@ -27,10 +27,6 @@ pub(crate) use calibration::load_calibration_deltas;
 pub(crate) use topic_decay::load_topic_decay_profiles;
 
 // Individual analyzers (for granular invocation)
-pub(crate) use anti_patterns::detect_anti_patterns;
-pub(crate) use calibration::analyze_calibration;
-pub(crate) use source_autopsy::analyze_sources;
-pub(crate) use topic_decay::analyze_topic_decay;
 
 // ============================================================================
 // Types

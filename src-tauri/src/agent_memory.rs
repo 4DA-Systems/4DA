@@ -141,6 +141,7 @@ pub fn recall_memories(
 }
 
 /// Recall memories by context tags.
+#[allow(dead_code)]
 pub fn recall_by_tags(
     conn: &Connection,
     tags: &[String],

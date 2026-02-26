@@ -14,9 +14,8 @@ use std::sync::atomic::Ordering;
 use crate::scoring;
 use crate::{
     analysis_rerank, emit_progress, get_analysis_abort, get_analysis_state, get_database,
-    get_settings_manager, monitoring, signals, source_fetching, truncate_utf8,
-    void_signal_analysis_complete, void_signal_error, AnalysisState, SourceRelevance,
-    ANALYSIS_TIMEOUT_SECS,
+    monitoring, signals, source_fetching, truncate_utf8, void_signal_analysis_complete,
+    void_signal_error, AnalysisState, SourceRelevance, ANALYSIS_TIMEOUT_SECS,
 };
 
 // Singleton SignalClassifier - created once and reused across all analyses

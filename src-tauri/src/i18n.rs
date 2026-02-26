@@ -39,6 +39,7 @@ pub(crate) fn translations_dir() -> PathBuf {
 }
 
 /// Load translations for a language (if not already cached).
+#[allow(dead_code)]
 fn ensure_loaded(lang: &str) {
     {
         let cache = TRANSLATIONS.read();
@@ -90,6 +91,7 @@ fn ensure_loaded(lang: &str) {
 /// ## Variables
 /// Pass a slice of `(name, value)` pairs for interpolation.
 /// Uses `{{name}}` placeholder syntax matching i18next frontend.
+#[allow(dead_code)]
 pub fn t(key: &str, lang: &str, vars: &[(&str, &str)]) -> String {
     // Parse namespace from key
     let (namespace, lookup_key) = if let Some(colon_pos) = key.find(':') {
@@ -122,6 +124,7 @@ pub fn t(key: &str, lang: &str, vars: &[(&str, &str)]) -> String {
 }
 
 /// Look up a dotted key path in a JSON value.
+#[allow(dead_code)]
 fn lookup_nested<'a>(value: &'a Value, key: &str) -> Option<&'a Value> {
     let parts: Vec<&str> = key.split('.').collect();
     let mut current = value;

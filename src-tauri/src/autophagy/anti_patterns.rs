@@ -8,7 +8,6 @@
 //! The system may be filtering out valuable content.
 
 use rusqlite::{params, Connection};
-use std::collections::HashMap;
 use tracing::{debug, info, warn};
 
 /// Minimum items required to declare an anti-pattern. Prevents false positives

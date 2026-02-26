@@ -5,7 +5,7 @@
 //! decision window records in the database.
 
 use rusqlite::{params, Connection};
-use tracing::{debug, info, warn};
+use tracing::{info, warn};
 
 use super::DecisionWindow;
 

@@ -8,7 +8,7 @@
 //! - Items surfaced:           0.10  (log-scaled, ln(items) / ln(1000))
 
 use rusqlite::{params, Connection};
-use tracing::{debug, info, warn};
+use tracing::{debug, warn};
 
 use super::CompoundAdvantageScore;
 
