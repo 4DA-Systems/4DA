@@ -4,6 +4,7 @@ import { useAppStore } from '../store';
 import { useShallow } from 'zustand/react/shallow';
 import { renderMarkdown } from '../utils/playbook-markdown';
 import { SovereignProfile } from './playbook/SovereignProfile';
+import { StreetHealthBadge } from './playbook/StreetHealthBadge';
 import { SunsDashboard } from './playbook/SunsDashboard';
 
 // Module IDs (static, mirrors backend MODULE_DEFS)
@@ -177,6 +178,8 @@ export function PlaybookView() {
 
       {/* Content Area */}
       <main className="flex-1 min-w-0">
+        <StreetHealthBadge />
+
         {playbookError && (
           <div className="mb-4 px-4 py-3 bg-[#EF4444]/10 border border-[#EF4444]/30 rounded-lg text-sm text-[#EF4444]">
             {playbookError}
