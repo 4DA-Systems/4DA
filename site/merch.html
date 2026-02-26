@@ -211,6 +211,29 @@
       font-size: 14px;
       font-weight: 500;
     }
+    .product-buy {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      font-weight: 500;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      padding: 6px 16px;
+      border-radius: 6px;
+      border: none;
+      background: var(--accent);
+      color: var(--bg);
+      cursor: pointer;
+      transition: opacity 0.2s, transform 0.15s;
+      text-decoration: none;
+      display: inline-block;
+    }
+    .product-buy:hover { opacity: 0.85; transform: translateY(-1px); }
+    .product-coming {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px;
+      color: var(--text-muted);
+      letter-spacing: 0.04em;
+    }
     .product-colors {
       display: flex;
       gap: 6px;
@@ -374,7 +397,7 @@
         <a href="#apparel">Apparel</a>
         <a href="#accessories">Accessories</a>
         <a href="streets.html">STREETS</a>
-        <a href="https://4da.ai" class="nav-cta">Download 4DA</a>
+        <a href="https://shop.4da.ai" class="nav-cta">Shop Now</a>
       </div>
     </div>
   </nav>
@@ -385,6 +408,7 @@
       <div class="hero-label">4DA Merch</div>
       <h1>Gear for builders<br>who ship.</h1>
       <p>Premium developer merch from 4DA and STREETS. Minimal when it needs to be. Bold when it doesn't. Every piece designed for the culture.</p>
+      <p style="font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--text-muted);margin-top:16px;">All prices in AUD</p>
     </div>
   </header>
 
@@ -415,7 +439,8 @@
           <span class="tag">DTG Print</span>
           <span class="tag">Black</span>
         </div>
-        <p style="font-family: 'JetBrains Mono', monospace; font-size: 14px;">$38 <span style="color: var(--text-muted); font-size: 12px;">// assert!(data.stays_local())</span></p>
+        <p style="font-family: 'JetBrains Mono', monospace; font-size: 14px;">$59 <span style="color: var(--text-muted); font-size: 12px;">// assert!(data.stays_local())</span></p>
+        <a href="https://shop.4da.ai/products/code-fragment-tee" class="product-buy" style="margin-top:12px;">Shop Now</a>
       </div>
     </div>
   </div>
@@ -438,12 +463,8 @@
             <h3>4DA Logo Tee</h3>
             <p class="product-desc">Clean text mark. Small chest print. The daily driver for builders who don't need to explain what they do.</p>
             <div class="product-meta">
-              <span class="product-price">$34</span>
-              <div class="product-colors">
-                <div class="color-dot" style="background:#0A0A0A;"></div>
-                <div class="color-dot" style="background:#1A1A2E;"></div>
-                <div class="color-dot" style="background:#FFFFFF; border-color:#CCC;"></div>
-              </div>
+              <span class="product-price">$59</span>
+              <a href="https://shop.4da.ai/products/4da-logo-tee" class="product-buy">Shop</a>
             </div>
           </div>
         </div>
@@ -459,11 +480,25 @@
             <h3>Solar Crown Tee</h3>
             <p class="product-desc">The 4DA sun — blazing corona with the "4" at center. Full chest print. The icon piece.</p>
             <div class="product-meta">
-              <span class="product-price">$38</span>
-              <div class="product-colors">
-                <div class="color-dot" style="background:#0A0A0A;"></div>
-                <div class="color-dot" style="background:#1F1F1F;"></div>
-              </div>
+              <span class="product-price">$59</span>
+              <a href="https://shop.4da.ai/products/4da-sun-tee" class="product-buy">Shop</a>
+            </div>
+          </div>
+        </div>
+
+        <!-- Product: 4DA Inferno Tee (NEW) -->
+        <div class="product-card" data-collection="4da">
+          <div class="product-preview">
+            <span class="product-type-badge">Tee</span>
+            <img src="merch-designs/4da-sun-badge.svg" alt="4DA Inferno" style="width:75%;">
+          </div>
+          <div class="product-info">
+            <div class="product-line line-4da">4DA Collection</div>
+            <h3>4DA Inferno Tee</h3>
+            <p class="product-desc">No words. No tagline. Just the mark. A full-scale solar orb with the "4" forged into its core. 4DA reduced to its purest form.</p>
+            <div class="product-meta">
+              <span class="product-price">$59</span>
+              <a href="https://shop.4da.ai/products/4da-inferno-tee" class="product-buy">Shop</a>
             </div>
           </div>
         </div>
@@ -479,10 +514,8 @@
             <h3>Void Pulse Tee</h3>
             <p class="product-desc">The Void Engine heartbeat — concentric rings radiating from an amber core with a signal pulse. Ambient intelligence, visualized.</p>
             <div class="product-meta">
-              <span class="product-price">$38</span>
-              <div class="product-colors">
-                <div class="color-dot" style="background:#0A0A0A;"></div>
-              </div>
+              <span class="product-price">$59</span>
+              <a href="https://shop.4da.ai/products/void-pulse-tee" class="product-buy">Shop</a>
             </div>
           </div>
         </div>
@@ -498,11 +531,8 @@
             <h3>4 Dimensions Tee</h3>
             <p class="product-desc">Intelligence. Privacy. Autonomy. Revenue. The four dimensions mapped as a geometric schematic. Clean, architectural.</p>
             <div class="product-meta">
-              <span class="product-price">$38</span>
-              <div class="product-colors">
-                <div class="color-dot" style="background:#0A0A0A;"></div>
-                <div class="color-dot" style="background:#1A1A2E;"></div>
-              </div>
+              <span class="product-price">$59</span>
+              <span class="product-coming">Coming Soon</span>
             </div>
           </div>
         </div>
@@ -518,10 +548,8 @@
             <h3>PASIFA Schematic Tee</h3>
             <p class="product-desc">The scoring algorithm as a blueprint. Stack detect, signal extract, local embed, confidence gate. Systems thinking as wearable art.</p>
             <div class="product-meta">
-              <span class="product-price">$38</span>
-              <div class="product-colors">
-                <div class="color-dot" style="background:#0A0A0A;"></div>
-              </div>
+              <span class="product-price">$59</span>
+              <span class="product-coming">Coming Soon</span>
             </div>
           </div>
         </div>
@@ -537,10 +565,8 @@
             <h3>Code Fragment Tee</h3>
             <p class="product-desc">Actual PASIFA scoring code in a terminal window. Rust syntax highlighting. "Privacy first. Always." For devs who read shirts.</p>
             <div class="product-meta">
-              <span class="product-price">$38</span>
-              <div class="product-colors">
-                <div class="color-dot" style="background:#0A0A0A;"></div>
-              </div>
+              <span class="product-price">$59</span>
+              <a href="https://shop.4da.ai/products/code-fragment-tee" class="product-buy">Shop</a>
             </div>
           </div>
         </div>
@@ -556,11 +582,8 @@
             <h3>STREETS Wordmark Tee</h3>
             <p class="product-desc">Bold STREETS logo with "The Developer Income Playbook" tagline. Statement front print. On Comfort Colors vintage wash.</p>
             <div class="product-meta">
-              <span class="product-price">$42</span>
-              <div class="product-colors">
-                <div class="color-dot" style="background:#0A0A0A;"></div>
-                <div class="color-dot" style="background:#2C2C2C;"></div>
-              </div>
+              <span class="product-price">$59</span>
+              <a href="https://shop.4da.ai/products/streets-tee" class="product-buy">Shop</a>
             </div>
           </div>
         </div>
@@ -576,10 +599,8 @@
             <h3>"For the Streets" Back Print Tee</h3>
             <p class="product-desc">The statement piece. "Your Rig. Your Rules. Your Revenue." on front. Full "FOR THE STREETS" graphic on back. The drop.</p>
             <div class="product-meta">
-              <span class="product-price">$45</span>
-              <div class="product-colors">
-                <div class="color-dot" style="background:#0A0A0A;"></div>
-              </div>
+              <span class="product-price">$59</span>
+              <span class="product-coming">Coming Soon</span>
             </div>
           </div>
         </div>
@@ -595,11 +616,8 @@
             <h3>4DA Essential Hoodie</h3>
             <p class="product-desc">Premium heavyweight hoodie. Small 4DA text mark on chest. Clean, warm, built for late-night coding sessions.</p>
             <div class="product-meta">
-              <span class="product-price">$62</span>
-              <div class="product-colors">
-                <div class="color-dot" style="background:#0A0A0A;"></div>
-                <div class="color-dot" style="background:#1A1A2E;"></div>
-              </div>
+              <span class="product-price">$79</span>
+              <span class="product-coming">Coming Soon</span>
             </div>
           </div>
         </div>
@@ -615,10 +633,8 @@
             <h3>STREETS Heavyweight Hoodie</h3>
             <p class="product-desc">Oversized STREETS wordmark on chest. "8 Engines" on back. Comfort Colors heavyweight. The cold-weather statement.</p>
             <div class="product-meta">
-              <span class="product-price">$68</span>
-              <div class="product-colors">
-                <div class="color-dot" style="background:#0A0A0A;"></div>
-              </div>
+              <span class="product-price">$89</span>
+              <span class="product-coming">Coming Soon</span>
             </div>
           </div>
         </div>
@@ -634,11 +650,8 @@
             <h3>4DA Dad Cap</h3>
             <p class="product-desc">Unstructured dad cap with embroidered 4DA mark. Low-profile, adjustable strap. Understated daily wear.</p>
             <div class="product-meta">
-              <span class="product-price">$28</span>
-              <div class="product-colors">
-                <div class="color-dot" style="background:#0A0A0A;"></div>
-                <div class="color-dot" style="background:#2C2C2C;"></div>
-              </div>
+              <span class="product-price">$39</span>
+              <span class="product-coming">Coming Soon</span>
             </div>
           </div>
         </div>
@@ -667,8 +680,8 @@
             <h3>Sticker Pack (5 pcs)</h3>
             <p class="product-desc">Die-cut vinyl. Waterproof. Laptop-ready. 4DA badge, Void Pulse, "Privacy First", STREETS pill, and the code assertion.</p>
             <div class="product-meta">
-              <span class="product-price">$8</span>
-              <span style="font-size:12px;color:var(--text-muted);font-family:'JetBrains Mono',monospace;">5 stickers</span>
+              <span class="product-price">$12</span>
+              <span class="product-coming">Coming Soon</span>
             </div>
           </div>
         </div>
@@ -684,8 +697,8 @@
             <h3>PASIFA Schematic Desk Mat</h3>
             <p class="product-desc">900x400mm extended desk mat. The PASIFA scoring schematic as your workspace surface. Stitched edges, non-slip rubber base.</p>
             <div class="product-meta">
-              <span class="product-price">$35</span>
-              <span style="font-size:12px;color:var(--text-muted);font-family:'JetBrains Mono',monospace;">900x400mm</span>
+              <span class="product-price">$49</span>
+              <span class="product-coming">Coming Soon</span>
             </div>
           </div>
         </div>
@@ -701,8 +714,8 @@
             <h3>Void Pulse Mug</h3>
             <p class="product-desc">11oz ceramic mug. Matte black with the Void Engine pulse wrapping the full surface. Fuel for the build.</p>
             <div class="product-meta">
-              <span class="product-price">$18</span>
-              <span style="font-size:12px;color:var(--text-muted);font-family:'JetBrains Mono',monospace;">11oz ceramic</span>
+              <span class="product-price">$24</span>
+              <span class="product-coming">Coming Soon</span>
             </div>
           </div>
         </div>
@@ -718,11 +731,8 @@
             <h3>4DA Embroidered Beanie</h3>
             <p class="product-desc">Ribbed knit beanie with embroidered 4DA mark. One size. The winter essential for builders.</p>
             <div class="product-meta">
-              <span class="product-price">$24</span>
-              <div class="product-colors">
-                <div class="color-dot" style="background:#0A0A0A;"></div>
-                <div class="color-dot" style="background:#1A1A2E;"></div>
-              </div>
+              <span class="product-price">$34</span>
+              <span class="product-coming">Coming Soon</span>
             </div>
           </div>
         </div>
@@ -738,8 +748,8 @@
             <h3>Solar Crown Enamel Pin</h3>
             <p class="product-desc">Hard enamel pin. Gold plating with orange-to-gold gradient fill. 30mm. Butterfly clutch back. Conference-ready.</p>
             <div class="product-meta">
-              <span class="product-price">$12</span>
-              <span style="font-size:12px;color:var(--text-muted);font-family:'JetBrains Mono',monospace;">30mm enamel</span>
+              <span class="product-price">$16</span>
+              <span class="product-coming">Coming Soon</span>
             </div>
           </div>
         </div>
@@ -755,8 +765,8 @@
             <h3>STREETS Canvas Tote</h3>
             <p class="product-desc">Heavy-duty canvas tote with "For the Streets" typography. Carry your laptop, carry the message. Conference essential.</p>
             <div class="product-meta">
-              <span class="product-price">$22</span>
-              <span style="font-size:12px;color:var(--text-muted);font-family:'JetBrains Mono',monospace;">canvas</span>
+              <span class="product-price">$29</span>
+              <span class="product-coming">Coming Soon</span>
             </div>
           </div>
         </div>
@@ -767,16 +777,13 @@
 
   <hr class="divider">
 
-  <!-- Notify Section -->
+  <!-- Store CTA Section -->
   <section class="notify-section">
     <div class="container">
-      <h2>Drop notification</h2>
-      <p>First drop coming soon. Get notified when the store goes live.</p>
-      <div class="notify-form">
-        <input type="email" placeholder="your@email.dev" aria-label="Email address">
-        <button type="button">Notify Me</button>
-      </div>
-      <p style="margin-top:16px;font-size:12px;color:var(--text-muted);">No spam. One email when the store opens. That's it.</p>
+      <h2>Shop the collection</h2>
+      <p>Tees are live. Hoodies, accessories, and more dropping soon.</p>
+      <a href="https://shop.4da.ai" class="product-buy" style="font-size:14px;padding:12px 32px;">Visit the Store</a>
+      <p style="margin-top:16px;font-size:12px;color:var(--text-muted);">All prices in AUD. Free shipping on orders over $120.</p>
     </div>
   </section>
 
