@@ -147,10 +147,8 @@ pub fn extract_facts_from_output(command: &str, stdout: &str) -> Vec<(String, St
     }
 
     // AMD GPU (rocm-smi)
-    if cl.contains("rocm-smi") {
-        if stdout.contains("GFX Version") {
-            fact!("gpu", "type", "AMD ROCm");
-        }
+    if cl.contains("rocm-smi") && stdout.contains("GFX Version") {
+        fact!("gpu", "type", "AMD ROCm");
     }
 
     // Storage (df -h)
@@ -303,6 +301,7 @@ pub fn store_facts_from_execution(command: &str, stdout: &str, source_lesson: &s
 }
 
 /// Log a command execution to the execution log table.
+#[allow(clippy::too_many_arguments)]
 pub fn log_command_execution(
     module_id: &str,
     lesson_idx: usize,

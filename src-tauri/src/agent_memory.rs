@@ -66,6 +66,7 @@ pub struct AgentMemoryEntry {
 // ============================================================================
 
 /// Store a new agent memory entry.
+#[allow(clippy::too_many_arguments)]
 pub fn store_memory(
     conn: &Connection,
     session_id: &str,

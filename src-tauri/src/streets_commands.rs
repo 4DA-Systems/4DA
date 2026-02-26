@@ -397,7 +397,7 @@ pub async fn parse_lesson_commands(
         )));
     }
 
-    let raw = std::fs::read_to_string(&path).map_err(|e| FourDaError::Io(e))?;
+    let raw = std::fs::read_to_string(&path).map_err(FourDaError::Io)?;
     let lessons = playbook_commands::parse_lessons(&raw);
 
     if lesson_idx >= lessons.len() {

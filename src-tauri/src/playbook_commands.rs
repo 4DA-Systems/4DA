@@ -169,7 +169,7 @@ pub(crate) fn parse_lessons(content: &str) -> Vec<PlaybookLesson> {
 
 #[tauri::command]
 pub fn get_playbook_modules(lang: Option<String>) -> Result<Vec<PlaybookModule>, String> {
-    let language = lang.unwrap_or_else(|| crate::i18n::get_user_language());
+    let language = lang.unwrap_or_else(crate::i18n::get_user_language);
     let content_dir = get_content_dir_for_lang(&language);
     let mut modules = Vec::new();
 
@@ -204,7 +204,7 @@ pub fn get_playbook_content(
     module_id: String,
     lang: Option<String>,
 ) -> Result<PlaybookContent, String> {
-    let language = lang.unwrap_or_else(|| crate::i18n::get_user_language());
+    let language = lang.unwrap_or_else(crate::i18n::get_user_language);
     let content_dir = get_content_dir_for_lang(&language);
     let filename = module_id_to_filename(&module_id)
         .ok_or_else(|| format!("Unknown module: {}", module_id))?;

@@ -255,11 +255,11 @@ pub fn assemble_coach_context() -> CoachContext {
     // 5. Playbook progress
     let playbook_progress = conn
         .as_ref()
-        .and_then(|c| {
+        .map(|c| {
             let n: i64 = c
                 .query_row("SELECT COUNT(*) FROM playbook_progress", [], |r| r.get(0))
                 .unwrap_or(0);
-            Some(format!("{} lessons completed", n))
+            format!("{} lessons completed", n)
         })
         .unwrap_or_else(|| "0 lessons completed".to_string());
     // 6. Profile completeness

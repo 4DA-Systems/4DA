@@ -12,7 +12,7 @@
 /// 6. Consulting — expertise, advisory
 /// 7. Open Source+ — OSS with premium tiers
 /// 8. Data Products — datasets, analytics, ML models
-
+///
 /// Map a scored item to a STREETS revenue engine based on its properties.
 /// Returns None if no clear engine match is detected.
 pub(crate) fn map_to_streets_engine(

@@ -58,7 +58,7 @@ fn get_system_uptime() -> u64 {
                 }
             }
         }
-        return 0;
+        0
     }
 
     #[cfg(target_os = "linux")]

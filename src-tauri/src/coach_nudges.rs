@@ -295,7 +295,7 @@ fn format_template_review(lessons: i64, profile_updates: i64) -> String {
 #[tauri::command]
 pub async fn get_coach_nudges() -> Result<Vec<CoachNudge>> {
     let conn = crate::open_db_connection().map_err(FourDaError::Internal)?;
-    ensure_tables(&conn).map_err(|e| FourDaError::Db(e))?;
+    ensure_tables(&conn).map_err(FourDaError::Db)?;
 
     let mut stmt = conn
         .prepare(
@@ -327,7 +327,7 @@ pub async fn get_coach_nudges() -> Result<Vec<CoachNudge>> {
 #[tauri::command]
 pub async fn dismiss_coach_nudge(nudge_id: i64) -> Result<()> {
     let conn = crate::open_db_connection().map_err(FourDaError::Internal)?;
-    ensure_tables(&conn).map_err(|e| FourDaError::Db(e))?;
+    ensure_tables(&conn).map_err(FourDaError::Db)?;
 
     conn.execute(
         "UPDATE coach_nudges SET dismissed = 1 WHERE id = ?1",

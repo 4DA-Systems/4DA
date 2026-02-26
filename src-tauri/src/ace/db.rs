@@ -328,12 +328,12 @@ pub fn migrate(conn: &Arc<Mutex<Connection>>) -> Result<(), String> {
     {
         let has_old_schema: bool = conn
             .prepare("PRAGMA table_info(activity_patterns)")
-            .and_then(|mut stmt| {
+            .map(|mut stmt| {
                 let cols: Vec<String> = stmt
                     .query_map([], |row| row.get::<_, String>(1))
                     .map(|rows| rows.filter_map(|r| r.ok()).collect())
                     .unwrap_or_default();
-                Ok(cols.iter().any(|c| c == "hourly_engagement"))
+                cols.iter().any(|c| c == "hourly_engagement")
             })
             .unwrap_or(false);
         if has_old_schema {

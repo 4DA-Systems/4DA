@@ -116,6 +116,7 @@ pub struct AlignmentConflict {
 // ============================================================================
 
 /// Record a new developer decision.
+#[allow(clippy::too_many_arguments)]
 pub fn record_decision(
     conn: &Connection,
     decision_type: &DecisionType,

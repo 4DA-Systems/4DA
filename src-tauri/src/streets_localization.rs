@@ -99,37 +99,35 @@ fn load_regional_file(country_code: &str) -> Option<RegionalData> {
         ),
     ];
 
-    for path_opt in paths_to_try {
-        if let Some(path) = path_opt {
-            if path.exists() {
-                match std::fs::read_to_string(&path) {
-                    Ok(content) => match serde_json::from_str::<RegionalData>(&content) {
-                        Ok(data) => {
-                            debug!(
-                                target: "4da::locale",
-                                country = country_code,
-                                path = %path.display(),
-                                "Loaded regional data"
-                            );
-                            return Some(data);
-                        }
-                        Err(e) => {
-                            warn!(
-                                target: "4da::locale",
-                                country = country_code,
-                                error = %e,
-                                "Failed to parse regional data file"
-                            );
-                        }
-                    },
+    for path in paths_to_try.into_iter().flatten() {
+        if path.exists() {
+            match std::fs::read_to_string(&path) {
+                Ok(content) => match serde_json::from_str::<RegionalData>(&content) {
+                    Ok(data) => {
+                        debug!(
+                            target: "4da::locale",
+                            country = country_code,
+                            path = %path.display(),
+                            "Loaded regional data"
+                        );
+                        return Some(data);
+                    }
                     Err(e) => {
                         warn!(
                             target: "4da::locale",
                             country = country_code,
                             error = %e,
-                            "Failed to read regional data file"
+                            "Failed to parse regional data file"
                         );
                     }
+                },
+                Err(e) => {
+                    warn!(
+                        target: "4da::locale",
+                        country = country_code,
+                        error = %e,
+                        "Failed to read regional data file"
+                    );
                 }
             }
         }

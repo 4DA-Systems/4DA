@@ -99,9 +99,9 @@ pub async fn toolkit_test_feed(url: String) -> Result<FeedTestResult, String> {
     let fetch_duration_ms = start.elapsed().as_millis() as u64;
 
     // Detect format
-    let format = if xml.contains("<feed") && xml.contains("xmlns=\"http://www.w3.org/2005/Atom\"") {
-        "Atom".to_string()
-    } else if xml.contains("<entry>") && !xml.contains("<item>") {
+    let format = if (xml.contains("<feed") && xml.contains("xmlns=\"http://www.w3.org/2005/Atom\""))
+        || (xml.contains("<entry>") && !xml.contains("<item>"))
+    {
         "Atom".to_string()
     } else if xml.contains("<rss") || xml.contains("<item>") {
         "RSS 2.0".to_string()
@@ -270,7 +270,7 @@ pub async fn toolkit_generate_export_pack() -> Result<ExportPackResult, String> 
 
             // Stats
             s.push_str("### Stats\n\n");
-            s.push_str(&format!("| Metric | Value |\n|--------|-------|\n"));
+            s.push_str("| Metric | Value |\n|--------|-------|\n");
             s.push_str(&format!(
                 "| Items Processed | {} |\n",
                 dna.stats.total_items_processed

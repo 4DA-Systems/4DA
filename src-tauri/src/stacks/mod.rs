@@ -48,6 +48,7 @@ pub struct StackProfile {
 
 /// Merged result of composing multiple stack profiles.
 /// When `active` is false (no stacks selected), all scoring values are neutral.
+#[derive(Default)]
 pub struct ComposedStack {
     pub pain_points: Vec<&'static PainPoint>,
     pub ecosystem_shifts: Vec<&'static EcosystemShift>,
@@ -56,20 +57,6 @@ pub struct ComposedStack {
     pub all_tech: HashSet<&'static str>,
     pub competing: HashSet<&'static str>,
     pub active: bool,
-}
-
-impl Default for ComposedStack {
-    fn default() -> Self {
-        Self {
-            pain_points: Vec::new(),
-            ecosystem_shifts: Vec::new(),
-            keyword_boosts: HashMap::new(),
-            source_preferences: HashMap::new(),
-            all_tech: HashSet::new(),
-            competing: HashSet::new(),
-            active: false,
-        }
-    }
 }
 
 // ============================================================================
