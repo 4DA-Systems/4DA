@@ -2,6 +2,8 @@
 # CADE Pre-commit Hook
 # Runs validation before allowing commit
 
+export NODE_OPTIONS="--max-old-space-size=4096"
+
 echo "Running CADE pre-commit validation..."
 
 # File size guardian (fast check)
