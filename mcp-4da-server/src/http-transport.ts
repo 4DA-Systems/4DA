@@ -16,7 +16,7 @@ import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/
 
 const DEFAULT_PORT = 4840;
 const DEFAULT_HOST = "127.0.0.1";
-const SERVER_VERSION = "3.3.0";
+const SERVER_VERSION = "1.0.0";
 
 export interface HttpServerOptions {
   port: number;

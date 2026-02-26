@@ -168,7 +168,7 @@ import type { CompoundAdvantageParams } from "./tools/compound-advantage.js";
 const server = new Server(
   {
     name: "4da-server",
-    version: "3.3.0", // MCP Protocol Readiness Edition
+    version: "1.0.0",
   },
   {
     capabilities: {

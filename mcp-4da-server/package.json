@@ -1,6 +1,6 @@
 {
   "name": "@4da/mcp-server",
-  "version": "3.3.0",
+  "version": "1.0.0",
   "description": "27 MCP tools that connect your AI coding assistant to your actual codebase. Scores content from HN, arXiv, Reddit, GitHub against your tech stack. Privacy-first — everything stays local.",
   "type": "module",
   "main": "dist/index.js",

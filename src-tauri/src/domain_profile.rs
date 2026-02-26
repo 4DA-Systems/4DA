@@ -8,7 +8,11 @@
 //!
 //! Used by scoring to compute graduated domain relevance (not just binary on/off domain).
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
+
+use crate::domain_profile_data::{
+    adjacency_map, archetype_map, AMBIGUOUS_DEPS, CROSS_CUTTING_TOPICS, UTILITY_DEPS,
+};
 
 /// User's technology identity — what they work with and care about
 #[derive(Debug, Clone, Default)]
@@ -37,39 +41,6 @@ impl DomainProfile {
             && self.interest_topics.is_empty()
     }
 }
-
-/// Cross-cutting topics that are universally relevant to all developers.
-/// These get 0.60 domain relevance instead of 0.15 (off-domain) for any populated profile.
-const CROSS_CUTTING_TOPICS: &[&str] = &[
-    "architecture",
-    "testing",
-    "deployment",
-    "monitoring",
-    "security",
-    "performance",
-    "accessibility",
-    "debugging",
-    "refactoring",
-    "caching",
-    "authentication",
-    "authorization",
-    "observability",
-    "logging",
-    "documentation",
-    "concurrency",
-    "profiling",
-    "benchmarking",
-    "linting",
-    "packaging",
-    "migration",
-    "open source",
-    "design patterns",
-    "best practices",
-    "code review",
-    "unit testing",
-    "integration testing",
-    "continuous integration",
-];
 
 /// Build a DomainProfile from the database
 pub fn build_domain_profile(conn: &rusqlite::Connection) -> DomainProfile {
@@ -142,66 +113,6 @@ pub fn build_domain_profile(conn: &rusqlite::Connection) -> DomainProfile {
         domain_concerns,
     }
 }
-
-/// Dependency names that exist across multiple ecosystems (Rust `futures` vs C++ futures).
-/// When one of these matches, we require corroboration: at least one OTHER topic must also
-/// match the user's primary_stack or all_tech. Without corroboration, downgrade to interest-level.
-const AMBIGUOUS_DEPS: &[&str] = &[
-    "futures",
-    "async",
-    "sync",
-    "core",
-    "base",
-    "web",
-    "app",
-    "http",
-    "log",
-    "url",
-    "net",
-    "cli",
-    "api",
-    "io",
-    "env",
-    "cfg",
-    "lib",
-    "util",
-    "config",
-    "crypto",
-    "rand",
-    "num",
-    "regex",
-    "time",
-    "chrono",
-    "uuid",
-    "json",
-    "xml",
-    "csv",
-    "toml",
-    "yaml",
-    "sql",
-    "proc",
-    "proc-macro",
-    "derive",
-    "macro",
-    "test",
-    "bench",
-    "build",
-    "bytes",
-    "string",
-    "either",
-    "lazy",
-    "once",
-    "pin",
-    "mutex",
-    "lock",
-    "parallel",
-    "runtime",
-    "scheduler",
-    "executor",
-    "channel",
-    "stream",
-    "buffer",
-];
 
 /// Check if a dependency name is ambiguous (exists across multiple ecosystems).
 fn is_ambiguous_dep(name: &str) -> bool {
@@ -378,34 +289,6 @@ fn is_notable_dependency(name: &str) -> bool {
     if name.len() < 4 {
         return false;
     }
-
-    const UTILITY_DEPS: &[&str] = &[
-        "proc-macro2",
-        "quote",
-        "unicode-ident",
-        "cfg-if",
-        "memchr",
-        "libc",
-        "autocfg",
-        "version_check",
-        "pkg-config",
-        "itoa",
-        "ryu",
-        "bitflags",
-        "bytes",
-        "pin-project-lite",
-        "fnv",
-        "percent-encoding",
-        "tinyvec",
-        "smallvec",
-        "indexmap",
-        "hashbrown",
-        "equivalent",
-        "either",
-        "anyhow",
-        "thiserror",
-    ];
-
     !UTILITY_DEPS.contains(&name)
 }
 
@@ -416,202 +299,13 @@ fn is_notable_dependency(name: &str) -> bool {
 fn infer_domain_concerns(primary: &HashSet<String>, all_tech: &HashSet<String>) -> HashSet<String> {
     let mut concerns = HashSet::new();
 
-    // Maps: if ANY of these tech signals are present → add these domain concerns.
-    // Each entry: (tech_signals, concerns)
-    let archetype_map: &[(&[&str], &[&str])] = &[
-        // Desktop app developers
-        (
-            &[
-                "tauri",
-                "electron",
-                "wails",
-                "neutralino",
-                "nwjs",
-                "gtk",
-                "qt",
-            ],
-            &[
-                "cross-platform",
-                "packaging",
-                "auto-update",
-                "installer",
-                "notarization",
-                "tray",
-                "native",
-                "window management",
-                "system tray",
-                "file dialog",
-                "drag and drop",
-            ],
-        ),
-        // Frontend web developers
-        (
-            &[
-                "react", "vue", "angular", "svelte", "nextjs", "next.js", "nuxt", "remix", "astro",
-            ],
-            &[
-                "responsive",
-                "ssr",
-                "seo",
-                "bundle size",
-                "lighthouse",
-                "web vitals",
-                "hydration",
-                "lazy loading",
-                "code splitting",
-                "progressive web app",
-                "pwa",
-                "browser compatibility",
-            ],
-        ),
-        // Backend / API developers
-        (
-            &[
-                "express", "fastify", "django", "flask", "fastapi", "rails", "actix", "axum",
-                "gin", "spring",
-            ],
-            &[
-                "api design",
-                "rate limiting",
-                "middleware",
-                "orm",
-                "migrations",
-                "connection pooling",
-                "microservices",
-                "message queue",
-                "event driven",
-            ],
-        ),
-        // DevOps / Infrastructure
-        (
-            &[
-                "docker",
-                "kubernetes",
-                "k8s",
-                "terraform",
-                "ansible",
-                "pulumi",
-            ],
-            &[
-                "infrastructure",
-                "ci/cd",
-                "scaling",
-                "load balancing",
-                "service mesh",
-                "container orchestration",
-                "gitops",
-                "blue-green deployment",
-                "canary",
-                "rollback",
-            ],
-        ),
-        // ML / AI Engineers
-        (
-            &[
-                "pytorch",
-                "tensorflow",
-                "llm",
-                "transformers",
-                "langchain",
-                "openai",
-            ],
-            &[
-                "training",
-                "inference",
-                "fine-tuning",
-                "embeddings",
-                "rag",
-                "vector",
-                "prompt engineering",
-                "model serving",
-                "quantization",
-                "distillation",
-            ],
-        ),
-        // Mobile developers
-        (
-            &[
-                "ios",
-                "android",
-                "flutter",
-                "react native",
-                "swiftui",
-                "kotlin",
-            ],
-            &[
-                "app store",
-                "push notifications",
-                "deep linking",
-                "offline first",
-                "gestures",
-                "navigation",
-                "app size",
-                "launch time",
-                "background tasks",
-            ],
-        ),
-        // Database / Data engineers
-        (
-            &[
-                "postgresql",
-                "postgres",
-                "mongodb",
-                "redis",
-                "elasticsearch",
-                "clickhouse",
-                "cassandra",
-            ],
-            &[
-                "indexing",
-                "replication",
-                "sharding",
-                "backup",
-                "query optimization",
-                "data modeling",
-                "schema design",
-                "data pipeline",
-                "etl",
-                "warehousing",
-            ],
-        ),
-        // Game developers
-        (
-            &["unity", "unreal", "godot", "bevy", "gamedev"],
-            &[
-                "rendering",
-                "physics",
-                "shaders",
-                "ecs",
-                "pathfinding",
-                "procedural generation",
-                "networking",
-                "frame rate",
-                "asset pipeline",
-            ],
-        ),
-        // Systems / Embedded
-        (
-            &["rust", "cpp", "c++"],
-            &[
-                "memory safety",
-                "lifetimes",
-                "ownership",
-                "zero-cost abstractions",
-                "unsafe",
-                "ffi",
-                "linking",
-                "compile time",
-            ],
-        ),
-    ];
-
     let combined: HashSet<&str> = primary
         .iter()
         .chain(all_tech.iter())
         .map(|s| s.as_str())
         .collect();
 
-    for (signals, domain_concerns) in archetype_map {
+    for (signals, domain_concerns) in archetype_map() {
         if signals.iter().any(|s| combined.contains(s)) {
             for concern in *domain_concerns {
                 concerns.insert(concern.to_string());
@@ -625,35 +319,7 @@ fn infer_domain_concerns(primary: &HashSet<String>, all_tech: &HashSet<String>) 
 /// Infer adjacent technologies from the primary tech stack.
 fn infer_adjacent_tech(primary: &HashSet<String>) -> HashSet<String> {
     let mut adjacent = HashSet::new();
-
-    let adjacency: HashMap<&str, &[&str]> = HashMap::from([
-        (
-            "rust",
-            &["cargo", "wasm", "webassembly", "tokio", "serde", "async"][..],
-        ),
-        ("tauri", &["webview", "desktop", "ipc", "wry", "tao"]),
-        (
-            "react",
-            &["jsx", "hooks", "vite", "webpack", "nextjs", "next.js"],
-        ),
-        ("typescript", &["javascript", "nodejs", "deno", "bun"]),
-        ("javascript", &["typescript", "nodejs", "npm"]),
-        (
-            "python",
-            &["pip", "pytorch", "tensorflow", "django", "flask", "fastapi"],
-        ),
-        ("go", &["golang", "goroutine"]),
-        ("sqlite", &["sql", "database", "rusqlite"]),
-        ("next.js", &["react", "vercel", "nextjs"]),
-        ("vue", &["vuejs", "nuxt", "vite"]),
-        ("svelte", &["sveltekit", "vite"]),
-        ("docker", &["container", "kubernetes", "k8s"]),
-        ("kubernetes", &["k8s", "docker", "helm", "container"]),
-        ("aws", &["lambda", "s3", "dynamodb", "cloudformation"]),
-        ("postgresql", &["postgres", "sql", "database"]),
-        ("mongodb", &["nosql", "database", "mongoose"]),
-        ("graphql", &["apollo", "relay"]),
-    ]);
+    let adjacency = adjacency_map();
 
     for tech in primary {
         if let Some(neighbors) = adjacency.get(tech.as_str()) {
