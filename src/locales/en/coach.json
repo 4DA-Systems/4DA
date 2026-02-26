@@ -19,6 +19,8 @@
   "coach.tab.strategy": "Strategy",
   "coach.tab.launchReview": "Launch Review",
   "coach.tab.progress": "Progress",
+  "coach.tab.templates": "Templates",
+  "coach.tab.curriculum": "Curriculum",
   "coach.gate.title": "STREETS Coach",
   "coach.gate.requiresLicense": "Coach requires a Community or Cohort tier license.",
   "coach.gate.freeModules": "The free Playbook tier includes all 7 STREETS modules. Upgrade to unlock AI coaching, engine recommendations, and strategy generation.",

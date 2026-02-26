@@ -81,6 +81,6 @@ export interface VideoCurriculumStatus {
   days_since_activation: number;
 }
 
-export type CoachSessionType = 'chat' | 'engine_recommender' | 'strategy' | 'launch_review' | 'progress';
+export type CoachSessionType = 'chat' | 'engine_recommender' | 'strategy' | 'launch_review' | 'progress' | 'templates' | 'curriculum';
 
 export type StreetsTier = 'playbook' | 'community' | 'cohort';
