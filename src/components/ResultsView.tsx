@@ -1,6 +1,7 @@
 import { useRef } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
+import { useTranslation } from 'react-i18next';
 import { useShallow } from 'zustand/react/shallow';
 import { ResultItem } from './ResultItem';
 import { ContextPanel } from './context-panel';
@@ -22,6 +23,7 @@ export function ResultsView({
   renderLimit: _renderLimit,
   setRenderLimit: _setRenderLimit,
 }: ResultsViewProps) {
+  const { t } = useTranslation();
   // Data selectors (may change, use useShallow)
   const { state, feedbackGiven, discoveredContext, expandedItem } = useAppStore(
     useShallow((s) => ({
@@ -88,17 +90,17 @@ export function ResultsView({
               </div>
               <div>
                 <div className="flex items-center gap-2">
-                  <h2 className="font-medium text-white">Results</h2>
+                  <h2 className="font-medium text-white">{t('results.title')}</h2>
                   {newItemIds.size > 0 && (
                     <span className="px-2 py-0.5 text-[10px] bg-blue-500/20 text-blue-400 rounded-full font-medium animate-pulse">
-                      {newItemIds.size} new
+                      {t('results.new', { count: newItemIds.size })}
                     </span>
                   )}
                 </div>
                 <p className="text-xs text-gray-500">
                   {state.analysisComplete
-                    ? `${filteredResults.length} items - ${filteredResults.filter((r) => r.relevant).length} relevant`
-                    : 'Click Analyze to find relevant content'}
+                    ? t('results.itemsRelevant', { items: filteredResults.length, relevant: filteredResults.filter((r) => r.relevant).length })
+                    : t('results.clickAnalyze')}
                 </p>
                 {state.analysisComplete && filteredResults.length > 0 && (
                   <span className="text-xs text-text-muted">
@@ -111,11 +113,11 @@ export function ResultsView({
               <div className="flex items-center gap-2">
                 {filteredResults.filter((r) => r.top_score >= 0.72).length > 0 && (
                   <span className="text-xs px-2 py-1 bg-orange-500/10 text-orange-400 rounded-lg">
-                    {filteredResults.filter((r) => r.top_score >= 0.72).length} top picks
+                    {t('results.topPicks', { count: filteredResults.filter((r) => r.top_score >= 0.72).length })}
                   </span>
                 )}
                 <span className="text-xs px-2 py-1 bg-green-500/10 text-green-400 rounded-lg">
-                  {filteredResults.filter((r) => r.relevant).length} relevant
+                  {t('results.relevant', { count: filteredResults.filter((r) => r.relevant).length })}
                 </span>
               </div>
             )}
@@ -130,7 +132,7 @@ export function ResultsView({
                   type="text"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Search results..."
+                  placeholder={t('results.searchPlaceholder')}
                   aria-label="Search results by keyword"
                   className="bg-bg-tertiary text-sm text-white placeholder-gray-500 rounded-lg pl-8 pr-3 py-1.5 w-48 border border-transparent focus:border-border focus:outline-none transition-all"
                 />
@@ -152,7 +154,7 @@ export function ResultsView({
 
               {/* Source Filters */}
               <div className="flex items-center gap-2 bg-bg-tertiary px-3 py-1.5 rounded-lg flex-wrap" role="group" aria-label="Source filters">
-                <span className="text-xs text-gray-500">Sources:</span>
+                <span className="text-xs text-gray-500">{t('results.sources')}</span>
                 {[...new Set(state.relevanceResults.map(r => r.source_type || 'hackernews'))]
                   .sort((a, b) => getSourceLabel(a).localeCompare(getSourceLabel(b)))
                   .map(id => (
@@ -174,7 +176,7 @@ export function ResultsView({
 
               {/* Sort */}
               <div className="flex items-center gap-2 bg-bg-tertiary px-3 py-1.5 rounded-lg" role="group" aria-label="Sort order">
-                <span className="text-xs text-gray-500">Sort:</span>
+                <span className="text-xs text-gray-500">{t('results.sort')}</span>
                 <button
                   onClick={() => setSortBy('score')}
                   aria-pressed={sortBy === 'score'}
@@ -184,7 +186,7 @@ export function ResultsView({
                       : 'text-gray-500 hover:text-gray-300'
                   }`}
                 >
-                  Score
+                  {t('results.score')}
                 </button>
                 <button
                   onClick={() => setSortBy('date')}
@@ -195,7 +197,7 @@ export function ResultsView({
                       : 'text-gray-500 hover:text-gray-300'
                   }`}
                 >
-                  Recent
+                  {t('results.recent')}
                 </button>
               </div>
 
@@ -210,7 +212,7 @@ export function ResultsView({
                     : 'bg-bg-tertiary text-gray-500 hover:text-gray-300'
                 }`}
               >
-                {showOnlyRelevant ? 'Relevant only' : 'Show all'}
+                {showOnlyRelevant ? t('results.relevantOnly') : t('results.showAllItems')}
               </button>
 
               {/* Saved Items Toggle */}
@@ -224,7 +226,7 @@ export function ResultsView({
                     : 'bg-bg-tertiary text-gray-500 hover:text-gray-300'
                 }`}
               >
-                {showSavedOnly ? 'Saved' : 'Saved'}
+                {t('results.saved')}
               </button>
 
               {/* Spacer */}
@@ -260,7 +262,7 @@ export function ResultsView({
                   <div className="w-16 h-16 mx-auto mb-4 bg-orange-500/20 rounded-full flex items-center justify-center">
                     <div className="w-8 h-8 border-3 border-orange-500 border-t-transparent rounded-full animate-spin" />
                   </div>
-                  <p className="text-lg text-white mb-2">Analyzing...</p>
+                  <p className="text-lg text-white mb-2">{t('action.analyzing')}</p>
                   <p className="text-sm text-gray-500">{state.progressMessage}</p>
                   {state.progress > 0 && (
                     <div className="mt-4 max-w-xs mx-auto">
@@ -284,15 +286,15 @@ export function ResultsView({
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                     </svg>
                   </div>
-                  <p className="text-lg text-white mb-2">No results yet</p>
+                  <p className="text-lg text-white mb-2">{t('results.noResults')}</p>
                   <p className="text-sm text-gray-500 mb-5">
-                    Run an analysis to discover relevant content from 7+ sources
+                    {t('results.startAnalysis')}
                   </p>
                   <button
                     onClick={startAnalysis}
                     className="px-6 py-2.5 bg-orange-500 text-white text-sm font-medium rounded-lg hover:bg-orange-600 transition-colors"
                   >
-                    Analyze Now
+                    {t('results.analyzeNow')}
                   </button>
                   <p className="text-xs text-gray-600 mt-3">
                     or press <kbd className="px-1.5 py-0.5 bg-bg-tertiary rounded text-gray-500">R</kbd>
@@ -307,9 +309,9 @@ export function ResultsView({
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
                 </svg>
               </div>
-              <p className="text-lg text-white mb-2">No results match your filters</p>
+              <p className="text-lg text-white mb-2">{t('results.noMatch')}</p>
               <p className="text-sm text-gray-500 mb-5">
-                {state.relevanceResults.length} items analyzed, but none match current filters
+                {t('results.analyzedNoMatch', { count: state.relevanceResults.length })}
               </p>
               <div className="flex items-center justify-center gap-3">
                 {showOnlyRelevant && (
@@ -317,7 +319,7 @@ export function ResultsView({
                     onClick={() => setShowOnlyRelevant(false)}
                     className="px-4 py-2 text-sm bg-bg-tertiary text-gray-300 rounded-lg border border-border hover:border-orange-500/30 transition-all"
                   >
-                    Show all items
+                    {t('results.showAll')}
                   </button>
                 )}
                 {sourceFilters.size > 0 && (
@@ -325,7 +327,7 @@ export function ResultsView({
                     onClick={() => sourceFilters.forEach(s => toggleSourceFilter(s))}
                     className="px-4 py-2 text-sm bg-bg-tertiary text-gray-300 rounded-lg border border-border hover:border-orange-500/30 transition-all"
                   >
-                    Clear source filters
+                    {t('results.clearSourceFilters')}
                   </button>
                 )}
                 {!showOnlyRelevant && sourceFilters.size === 0 && <p className="text-xs text-gray-600">Try a broader search query or add more interests in Settings</p>}
@@ -341,14 +343,14 @@ export function ResultsView({
                 if (sortBy === 'score' && idx > 0) {
                   const prev = filteredResults[idx - 1];
                   if (prev.top_score >= 0.72 && item.top_score < 0.72) {
-                    groupHeader = 'Relevant';
+                    groupHeader = t('results.relevantGroup');
                   } else if (prev.top_score >= 0.50 && item.top_score < 0.50) {
-                    groupHeader = 'Below Threshold';
+                    groupHeader = t('results.belowThreshold');
                   }
                 } else if (sortBy === 'score' && idx === 0 && item.top_score >= 0.72) {
-                  groupHeader = 'Top Picks';
+                  groupHeader = t('results.topPicksGroup');
                 } else if (sortBy === 'score' && idx === 0 && item.top_score >= 0.50) {
-                  groupHeader = 'Relevant';
+                  groupHeader = t('results.relevantGroup');
                 }
                 return (
                   <div
@@ -366,8 +368,8 @@ export function ResultsView({
                     {groupHeader && (
                       <div className="flex items-center gap-3 mb-3 mt-2 first:mt-0">
                         <span className={`text-xs font-medium px-2 py-1 rounded-lg ${
-                          groupHeader === 'Top Picks' ? 'bg-orange-500/10 text-orange-400' :
-                          groupHeader === 'Relevant' ? 'bg-green-500/10 text-green-400' :
+                          groupHeader === t('results.topPicksGroup') ? 'bg-orange-500/10 text-orange-400' :
+                          groupHeader === t('results.relevantGroup') ? 'bg-green-500/10 text-green-400' :
                           'bg-gray-500/10 text-gray-500'
                         }`}>
                           {groupHeader}

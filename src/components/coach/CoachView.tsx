@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../../store';
 import { useShallow } from 'zustand/react/shallow';
 import { getRelativeTime } from '../../utils/briefing-parser';
@@ -10,39 +11,45 @@ import { ProgressDashboard } from './ProgressDashboard';
 import type { CoachSessionType, StreetsTier } from '../../types/coach';
 
 // Placeholder for sub-components not yet implemented
-const Placeholder = ({ name }: { name: string }) => (
-  <div className="flex items-center justify-center h-64 text-[#666]">
-    <p>{name} -- coming soon</p>
-  </div>
-);
+const Placeholder = ({ name }: { name: string }) => {
+  const { t } = useTranslation();
+  return (
+    <div className="flex items-center justify-center h-64 text-[#666]">
+      <p>{t('coach:coach.comingSoon', { name })}</p>
+    </div>
+  );
+};
 
 // ---------------------------------------------------------------------------
 // Sub-tab definitions
 // ---------------------------------------------------------------------------
 
-const SUB_TABS: Array<{ id: CoachSessionType; label: string }> = [
-  { id: 'chat', label: 'Chat' },
-  { id: 'engine_recommender', label: 'Engines' },
-  { id: 'strategy', label: 'Strategy' },
-  { id: 'launch_review', label: 'Launch Review' },
-  { id: 'progress', label: 'Progress' },
-];
+const SUB_TAB_IDS: CoachSessionType[] = ['chat', 'engine_recommender', 'strategy', 'launch_review', 'progress'];
+
+const SUB_TAB_KEYS: Record<CoachSessionType, string> = {
+  chat: 'coach:coach.tab.chat',
+  engine_recommender: 'coach:coach.tab.engines',
+  strategy: 'coach:coach.tab.strategy',
+  launch_review: 'coach:coach.tab.launchReview',
+  progress: 'coach:coach.tab.progress',
+};
 
 // ---------------------------------------------------------------------------
 // Tier badge
 // ---------------------------------------------------------------------------
 
 function TierBadge({ tier }: { tier: StreetsTier }) {
-  const config: Record<StreetsTier, { label: string; color: string }> = {
-    playbook: { label: 'Playbook', color: 'bg-[#1F1F1F] text-[#A0A0A0] border-[#2A2A2A]' },
-    community: { label: 'Community', color: 'bg-[#D4AF37]/15 text-[#D4AF37] border-[#D4AF37]/30' },
-    cohort: { label: 'Cohort', color: 'bg-[#22C55E]/15 text-[#22C55E] border-[#22C55E]/30' },
+  const { t } = useTranslation();
+  const config: Record<StreetsTier, { labelKey: string; color: string }> = {
+    playbook: { labelKey: 'coach:coach.tier.playbook', color: 'bg-[#1F1F1F] text-[#A0A0A0] border-[#2A2A2A]' },
+    community: { labelKey: 'coach:coach.tier.community', color: 'bg-[#D4AF37]/15 text-[#D4AF37] border-[#D4AF37]/30' },
+    cohort: { labelKey: 'coach:coach.tier.cohort', color: 'bg-[#22C55E]/15 text-[#22C55E] border-[#22C55E]/30' },
   };
-  const { label, color } = config[tier];
+  const { labelKey, color } = config[tier];
 
   return (
     <span className={`px-2.5 py-1 text-xs font-medium rounded-md border ${color}`}>
-      {label}
+      {t(labelKey)}
     </span>
   );
 }
@@ -52,17 +59,18 @@ function TierBadge({ tier }: { tier: StreetsTier }) {
 // ---------------------------------------------------------------------------
 
 function SessionTypeBadge({ type }: { type: string }) {
-  const shortLabels: Record<string, string> = {
-    chat: 'Chat',
-    engine_recommender: 'Engine',
-    strategy: 'Strategy',
-    launch_review: 'Launch',
-    progress: 'Progress',
+  const { t } = useTranslation();
+  const shortLabelKeys: Record<string, string> = {
+    chat: 'coach:coach.sessionType.chat',
+    engine_recommender: 'coach:coach.sessionType.engine',
+    strategy: 'coach:coach.sessionType.strategy',
+    launch_review: 'coach:coach.sessionType.launch',
+    progress: 'coach:coach.sessionType.progress',
   };
 
   return (
     <span className="px-1.5 py-0.5 text-[10px] font-medium rounded bg-[#1F1F1F] text-[#666] border border-[#2A2A2A]">
-      {shortLabels[type] ?? type}
+      {shortLabelKeys[type] ? t(shortLabelKeys[type]) : type}
     </span>
   );
 }
@@ -72,6 +80,7 @@ function SessionTypeBadge({ type }: { type: string }) {
 // ---------------------------------------------------------------------------
 
 function StreetsGate() {
+  const { t } = useTranslation();
   const activateStreetsLicense = useAppStore(s => s.activateStreetsLicense);
   const [key, setKey] = useState('');
   const [activating, setActivating] = useState(false);
@@ -83,7 +92,7 @@ function StreetsGate() {
     setError(null);
     const ok = await activateStreetsLicense(key.trim());
     setActivating(false);
-    if (!ok) setError('Invalid license key. Please try again.');
+    if (!ok) setError(t('coach:coach.gate.invalidKey'));
   };
 
   return (
@@ -94,15 +103,14 @@ function StreetsGate() {
             <path d="M8 1L10 6H15L11 9.5L12.5 15L8 11.5L3.5 15L5 9.5L1 6H6L8 1Z" fill="currentColor" />
           </svg>
           <span className="text-sm font-semibold text-[#D4AF37] tracking-wide uppercase">
-            STREETS Coach
+            {t('coach:coach.gate.title')}
           </span>
         </div>
         <p className="text-sm text-[#A0A0A0] mb-1">
-          Coach requires a Community or Cohort tier license.
+          {t('coach:coach.gate.requiresLicense')}
         </p>
         <p className="text-xs text-[#666] mb-4">
-          The free Playbook tier includes all 7 STREETS modules.
-          Upgrade to unlock AI coaching, engine recommendations, and strategy generation.
+          {t('coach:coach.gate.freeModules')}
         </p>
         <div className="flex flex-col gap-2">
           <a
@@ -111,14 +119,14 @@ function StreetsGate() {
             rel="noopener noreferrer"
             className="inline-block px-5 py-2.5 text-sm font-medium text-black bg-[#D4AF37] rounded-lg hover:bg-[#C4A030] transition-colors"
           >
-            Get Community — $29/mo
+            {t('coach:coach.gate.getCommunity')}
           </a>
           <div className="flex gap-2">
             <input
               type="text"
               value={key}
               onChange={e => setKey(e.target.value)}
-              placeholder="Enter license key"
+              placeholder={t('coach:coach.gate.enterKey')}
               onKeyDown={e => e.key === 'Enter' && handleActivate()}
               className="flex-1 px-3 py-2 bg-[#0A0A0A] border border-[#2A2A2A] rounded-lg text-sm text-white placeholder-[#666] focus:outline-none focus:border-[#D4AF37]/50"
             />
@@ -127,7 +135,7 @@ function StreetsGate() {
               disabled={activating || !key.trim()}
               className="px-3 py-2 text-sm font-medium bg-[#1F1F1F] text-[#A0A0A0] border border-[#2A2A2A] rounded-lg hover:bg-[#2A2A2A] hover:text-white transition-colors disabled:opacity-50"
             >
-              {activating ? '...' : 'Activate'}
+              {activating ? '...' : t('action.activate')}
             </button>
           </div>
           {error && <p className="text-xs text-[#EF4444]">{error}</p>}
@@ -146,6 +154,7 @@ function NewSessionDropdown({
 }: {
   onSelect: (type: CoachSessionType) => void;
 }) {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
 
   return (
@@ -158,7 +167,7 @@ function NewSessionDropdown({
           <line x1="12" y1="5" x2="12" y2="19" />
           <line x1="5" y1="12" x2="19" y2="12" />
         </svg>
-        New Session
+        {t('coach:coach.newSession')}
       </button>
 
       {open && (
@@ -166,16 +175,16 @@ function NewSessionDropdown({
           {/* Backdrop to close dropdown */}
           <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
           <div className="absolute left-0 right-0 mt-1 z-20 bg-[#141414] border border-[#2A2A2A] rounded-lg shadow-lg overflow-hidden">
-            {SUB_TABS.map(tab => (
+            {SUB_TAB_IDS.map(tabId => (
               <button
-                key={tab.id}
+                key={tabId}
                 onClick={() => {
-                  onSelect(tab.id);
+                  onSelect(tabId);
                   setOpen(false);
                 }}
                 className="w-full text-left px-3 py-2 text-sm text-[#A0A0A0] hover:bg-[#1F1F1F] hover:text-white transition-colors"
               >
-                {tab.label}
+                {t(SUB_TAB_KEYS[tabId])}
               </button>
             ))}
           </div>
@@ -190,6 +199,7 @@ function NewSessionDropdown({
 // ===========================================================================
 
 export function CoachView() {
+  const { t } = useTranslation();
   const {
     streetsTier,
     coachSessions,
@@ -260,7 +270,7 @@ export function CoachView() {
     <div className="relative flex flex-col h-full min-h-[600px]">
       {/* Header */}
       <div className="flex items-center justify-between mb-4">
-        <h1 className="text-lg font-semibold text-white tracking-wide">STREETS Coach</h1>
+        <h1 className="text-lg font-semibold text-white tracking-wide">{t('coach:coach.title')}</h1>
         <TierBadge tier={streetsTier} />
       </div>
 
@@ -277,7 +287,7 @@ export function CoachView() {
           <div className="flex-1 overflow-y-auto space-y-1 min-h-0">
             {coachSessions.length === 0 && (
               <p className="text-xs text-[#666] text-center py-4">
-                No sessions yet
+                {t('coach:coach.noSessions')}
               </p>
             )}
             {coachSessions.map(session => {
@@ -311,7 +321,7 @@ export function CoachView() {
                     <button
                       onClick={(e) => handleDeleteSession(e, session.id)}
                       className="absolute top-2 right-2 w-5 h-5 flex items-center justify-center rounded text-[#666] hover:text-[#EF4444] hover:bg-[#EF4444]/10 transition-colors"
-                      title="Delete session"
+                      title={t('coach:coach.deleteSession')}
                     >
                       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                         <line x1="18" y1="6" x2="6" y2="18" />
@@ -326,17 +336,17 @@ export function CoachView() {
 
           {/* Sub-tab navigation */}
           <div className="mt-3 pt-3 border-t border-[#2A2A2A] space-y-0.5">
-            {SUB_TABS.map(tab => (
+            {SUB_TAB_IDS.map(tabId => (
               <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
+                key={tabId}
+                onClick={() => setActiveTab(tabId)}
                 className={`w-full text-left px-3 py-1.5 text-sm rounded-md transition-colors ${
-                  activeTab === tab.id
+                  activeTab === tabId
                     ? 'text-[#D4AF37] bg-[#D4AF37]/10 font-medium'
                     : 'text-[#A0A0A0] hover:text-white hover:bg-[#1F1F1F]'
                 }`}
               >
-                {tab.label}
+                {t(SUB_TAB_KEYS[tabId])}
               </button>
             ))}
           </div>

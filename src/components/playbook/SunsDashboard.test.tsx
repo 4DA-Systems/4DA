@@ -28,15 +28,11 @@ vi.mock('../../store', () => ({
 }));
 
 describe('SunsDashboard', () => {
-  // Note: t() mock from setup.ts returns the i18n key string as-is
-
   it('renders the header', () => {
     setMockState({});
     render(<SunsDashboard />);
-    // t('suns.title') renders as 'suns.title' in test mock
-    expect(screen.getByText('suns.title')).toBeInTheDocument();
-    // t('suns.active', {...}) renders as 'suns.active'
-    expect(screen.getByText('suns.active')).toBeInTheDocument();
+    expect(screen.getByText('Suns')).toBeInTheDocument();
+    expect(screen.getByText(/0\/0 active/)).toBeInTheDocument();
   });
 
   it('renders sun rows when statuses exist', () => {
@@ -59,8 +55,7 @@ describe('SunsDashboard', () => {
       ],
     });
     render(<SunsDashboard />);
-    // Active badge should show count info
-    expect(screen.getByText('suns.active')).toBeInTheDocument();
+    expect(screen.getByText(/1\/2 active/)).toBeInTheDocument();
   });
 
   it('renders alert rows when alerts exist', () => {
@@ -71,8 +66,7 @@ describe('SunsDashboard', () => {
     });
     render(<SunsDashboard />);
     expect(screen.getByText(/Connection failed/)).toBeInTheDocument();
-    // Dismiss button uses t('action.dismiss')
-    expect(screen.getByText('action.dismiss')).toBeInTheDocument();
+    expect(screen.getByText('Dismiss')).toBeInTheDocument();
   });
 
   it('calls loadStatuses and loadAlerts on mount', () => {

@@ -6,6 +6,7 @@ import './i18n';
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
+import { useTranslation } from 'react-i18next';
 import './App.css';
 import sunLogo from './assets/sun-logo.jpg';
 import { SplashScreen } from './components/SplashScreen';
@@ -59,6 +60,7 @@ import { useDirection } from './i18n/rtl';
 import type { SourceRelevance } from './types';
 
 function App() {
+  const { t } = useTranslation();
   // Local UI state
   const [showSplash, setShowSplash] = useState(true);
   const [showSettings, setShowSettings] = useState(false);
@@ -323,7 +325,7 @@ function App() {
           href="#main-content"
           className="sr-only focus:not-sr-only focus:absolute focus:z-50 focus:top-2 focus:left-2 focus:px-4 focus:py-2 focus:bg-orange-500 focus:text-white focus:rounded-lg focus:text-sm focus:font-medium"
         >
-          Skip to main content
+          {t('app.skipToContent')}
         </a>
         {/* Header - Polished */}
         <header className="mb-8 flex items-center justify-between">
@@ -337,15 +339,15 @@ function App() {
               <VoidEngine size={48} />
             </div>
             <div>
-              <h1 className="text-2xl font-semibold tracking-tight text-white">4DA</h1>
-              <p className="text-gray-500 text-sm">All signal. No feed.</p>
+              <h1 className="text-2xl font-semibold tracking-tight text-white">{t('app.title')}</h1>
+              <p className="text-gray-500 text-sm">{t('app.tagline')}</p>
             </div>
           </div>
           <div className="flex items-center gap-3">
             {monitoring?.enabled && (
               <div className="flex items-center gap-2 px-3 py-2 bg-green-500/10 border border-green-500/30 rounded-lg">
                 <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
-                <span className="text-xs text-green-400 font-medium">Live</span>
+                <span className="text-xs text-green-400 font-medium">{t('header.live')}</span>
               </div>
             )}
             <OllamaStatus provider={settingsForm.provider} />
@@ -361,7 +363,7 @@ function App() {
               onClick={() => setShowSettings(true)}
               className="px-4 py-2 text-sm bg-bg-secondary text-gray-300 border border-border rounded-lg hover:bg-bg-tertiary hover:border-orange-500/30 transition-all"
             >
-              ⚙️ Settings
+              {t('header.settings')}
             </button>
           </div>
         </header>
@@ -369,14 +371,11 @@ function App() {
         {/* Browser Mode Notice */}
         {isBrowserMode && (
           <div className="mb-6 px-4 py-4 bg-bg-secondary border border-border rounded-lg">
-            <p className="text-sm font-medium text-white mb-2">Desktop App Required</p>
+            <p className="text-sm font-medium text-white mb-2">{t('browser.title')}</p>
             <p className="text-xs text-gray-400">
-              4DA runs as a desktop app to access your local files, monitor sources,
-              and keep everything private on your machine.
+              {t('browser.description')}
             </p>
-            <p className="text-xs text-gray-500 mt-2">
-              Run <code className="text-orange-400">npm run tauri dev</code> or launch the installed app.
-            </p>
+            <p className="text-xs text-gray-500 mt-2" dangerouslySetInnerHTML={{ __html: t('browser.hint') }} />
           </div>
         )}
 
@@ -457,7 +456,7 @@ function App() {
         <footer className="mt-8 text-center">
           <div className="flex items-center justify-center gap-2">
             <img src={sunLogo} alt="" className="w-4 h-4 rounded-sm object-cover opacity-40" />
-            <p className="text-xs text-gray-600">All signal. No feed.</p>
+            <p className="text-xs text-gray-600">{t('app.tagline')}</p>
           </div>
         </footer>
 
@@ -466,9 +465,9 @@ function App() {
           <div className="fixed bottom-4 right-4 z-50 bg-bg-secondary border border-[#D4AF37]/40 rounded-xl px-5 py-4 shadow-lg max-w-sm">
             <div className="flex items-start gap-3">
               <div className="flex-1">
-                <p className="text-sm font-medium text-white">Update available: v{update.version}</p>
+                <p className="text-sm font-medium text-white">{t('update.available', { version: update.version })}</p>
                 <p className="text-xs text-gray-400 mt-1">
-                  {update.body ? update.body.slice(0, 100) : 'A new version is ready to install.'}
+                  {update.body ? update.body.slice(0, 100) : t('update.defaultBody')}
                 </p>
               </div>
               <button onClick={dismissUpdate} aria-label="Dismiss update notification" className="text-gray-500 hover:text-white text-lg leading-none">&times;</button>
@@ -479,13 +478,13 @@ function App() {
                 disabled={installing}
                 className="px-4 py-1.5 text-xs font-medium text-black bg-[#D4AF37] rounded-lg hover:bg-[#C4A030] transition-colors disabled:opacity-50"
               >
-                {installing ? 'Installing...' : 'Install & Restart'}
+                {installing ? t('update.installing') : t('update.install')}
               </button>
               <button
                 onClick={dismissUpdate}
                 className="px-4 py-1.5 text-xs text-gray-400 hover:text-white transition-colors"
               >
-                Later
+                {t('update.later')}
               </button>
             </div>
           </div>

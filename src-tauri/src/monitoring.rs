@@ -303,6 +303,38 @@ pub fn start_scheduler<R: Runtime>(app: AppHandle<R>, state: Arc<MonitoringState
                     crate::coach_nudges::run_daily_nudge_check().await;
                 }
 
+                // Translation sync check - daily
+                // Flags untranslated strings for the user's language as a sun alert.
+                // Does NOT auto-translate -- just informs the user.
+                {
+                    let user_lang = crate::i18n::get_user_language();
+                    if user_lang != "en" {
+                        match crate::translation_pipeline::get_untranslated_keys(&user_lang) {
+                            Ok(untranslated) if !untranslated.is_empty() => {
+                                let msg = format!(
+                                    "{} UI strings are not yet translated to {}. \
+                                     Use Settings > Language to trigger translation.",
+                                    untranslated.len(),
+                                    user_lang
+                                );
+                                crate::suns::store_sun_alert("i18n_sync", "translation_gap", &msg);
+                                info!(
+                                    target: "4da::monitor",
+                                    lang = %user_lang,
+                                    missing = untranslated.len(),
+                                    "Translation gap detected"
+                                );
+                            }
+                            Ok(_) => {
+                                info!(target: "4da::monitor", lang = %user_lang, "All strings translated");
+                            }
+                            Err(e) => {
+                                warn!(target: "4da::monitor", error = %e, "Translation sync check failed");
+                            }
+                        }
+                    }
+                }
+
                 // Quarterly review generation - every ~90 days
                 let last_quarterly = state.last_quarterly_review.load(Ordering::Relaxed);
                 if now - last_quarterly >= QUARTERLY_REVIEW_INTERVAL {

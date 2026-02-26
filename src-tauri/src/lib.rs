@@ -121,6 +121,7 @@ mod command_runner;
 mod decision_advantage;
 mod decision_advantage_commands;
 mod git_deck;
+pub(crate) mod i18n;
 mod playbook_commands;
 mod sovereign_profile;
 mod streets_coach;
@@ -131,6 +132,8 @@ mod suns;
 mod suns_commands;
 mod toolkit;
 mod toolkit_intelligence;
+mod translation_commands;
+mod translation_pipeline;
 mod video_curriculum;
 
 use source_fetching::fill_cache_background;
@@ -445,7 +448,14 @@ pub fn run() {
             commands::get_diagnostics,
             // Autophagy (intelligent content metabolism)
             autophagy_commands::get_autophagy_status,
-            autophagy_commands::get_autophagy_history
+            autophagy_commands::get_autophagy_history,
+            // Translation Pipeline
+            translation_commands::get_translation_status,
+            translation_commands::trigger_translation,
+            translation_commands::get_all_translations,
+            translation_commands::save_translation_override,
+            translation_commands::get_translation_overrides,
+            translation_commands::delete_translation_override
         ])
         .setup(|app| {
             // Record app start time for diagnostics uptime tracking

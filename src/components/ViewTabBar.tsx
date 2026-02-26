@@ -1,18 +1,20 @@
+import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../store';
 
 type ViewId = 'briefing' | 'results' | 'insights' | 'saved' | 'toolkit' | 'playbook' | 'coach';
 
-const TABS: Array<{ id: ViewId; label: string; subtitle: string; activeColor: string }> = [
-  { id: 'briefing', label: 'Intelligence', subtitle: 'AI briefing & signals', activeColor: 'bg-orange-500/20 text-orange-400' },
-  { id: 'results', label: 'All Results', subtitle: 'Scored content feed', activeColor: 'bg-orange-500/20 text-orange-400' },
-  { id: 'insights', label: 'Insights', subtitle: 'Trends & knowledge gaps', activeColor: 'bg-amber-500/20 text-amber-400' },
-  { id: 'saved', label: 'Saved', subtitle: 'Bookmarked items', activeColor: 'bg-green-500/20 text-green-400' },
-  { id: 'toolkit', label: 'Toolkit', subtitle: 'Dev tools & health', activeColor: 'bg-purple-500/20 text-purple-400' },
-  { id: 'playbook', label: 'Playbook', subtitle: 'STREETS modules', activeColor: 'bg-yellow-500/20 text-yellow-400' },
-  { id: 'coach', label: 'Coach', subtitle: 'AI strategy coaching', activeColor: 'bg-emerald-500/20 text-emerald-400' },
+const TABS: Array<{ id: ViewId; labelKey: string; subtitleKey: string; activeColor: string }> = [
+  { id: 'briefing', labelKey: 'nav.briefing.label', subtitleKey: 'nav.briefing.subtitle', activeColor: 'bg-orange-500/20 text-orange-400' },
+  { id: 'results', labelKey: 'nav.results', subtitleKey: 'nav.results.subtitle', activeColor: 'bg-orange-500/20 text-orange-400' },
+  { id: 'insights', labelKey: 'nav.insights', subtitleKey: 'nav.insights.subtitle', activeColor: 'bg-amber-500/20 text-amber-400' },
+  { id: 'saved', labelKey: 'nav.saved', subtitleKey: 'nav.saved.subtitle', activeColor: 'bg-green-500/20 text-green-400' },
+  { id: 'toolkit', labelKey: 'nav.toolkit', subtitleKey: 'nav.toolkit.subtitle', activeColor: 'bg-purple-500/20 text-purple-400' },
+  { id: 'playbook', labelKey: 'nav.playbook', subtitleKey: 'nav.playbook.subtitle', activeColor: 'bg-yellow-500/20 text-yellow-400' },
+  { id: 'coach', labelKey: 'nav.coach', subtitleKey: 'nav.coach.subtitle', activeColor: 'bg-emerald-500/20 text-emerald-400' },
 ];
 
 export function ViewTabBar() {
+  const { t } = useTranslation();
   const activeView = useAppStore(s => s.activeView);
   const setActiveView = useAppStore(s => s.setActiveView);
 
@@ -31,12 +33,12 @@ export function ViewTabBar() {
               ? `${tab.activeColor} font-medium`
               : 'text-gray-500 hover:text-gray-300'
           }`}
-          title={tab.subtitle}
+          title={t(tab.subtitleKey)}
         >
-          <span>{tab.label}</span>
+          <span>{t(tab.labelKey)}</span>
           <span className={`block text-[10px] leading-tight ${
             activeView === tab.id ? 'opacity-70' : 'opacity-40'
-          }`}>{tab.subtitle}</span>
+          }`}>{t(tab.subtitleKey)}</span>
         </button>
       ))}
     </div>

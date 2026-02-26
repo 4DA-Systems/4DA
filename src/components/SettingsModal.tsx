@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import { LearnedBehaviorPanel } from './LearnedBehaviorPanel';
 import { SystemHealthPanel } from './SystemHealthPanel';
 import { IndexedDocumentsPanel } from './IndexedDocumentsPanel';
@@ -91,14 +92,7 @@ function StreetsMembershipSection({ onStatus }: { onStatus: (s: string) => void 
 
 type SettingsTab = 'general' | 'sources' | 'profile' | 'discovery' | 'health' | 'about';
 
-const TABS: { id: SettingsTab; label: string }[] = [
-  { id: 'general', label: 'General' },
-  { id: 'sources', label: 'Sources' },
-  { id: 'profile', label: 'Profile' },
-  { id: 'discovery', label: 'Discovery' },
-  { id: 'health', label: 'Health' },
-  { id: 'about', label: 'About' },
-];
+const TAB_IDS: SettingsTab[] = ['general', 'sources', 'profile', 'discovery', 'health', 'about'];
 
 // ============================================================================
 // Props
@@ -113,6 +107,7 @@ interface SettingsModalProps {
 // ============================================================================
 
 export function SettingsModal({ onClose }: SettingsModalProps) {
+  const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState<SettingsTab>('general');
   const [initialized, setInitialized] = useState<Set<SettingsTab>>(new Set(['general']));
 
@@ -281,7 +276,7 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
               <div className="w-8 h-8 bg-orange-500/20 rounded-lg flex items-center justify-center">
                 <span>&#x2699;&#xfe0f;</span>
               </div>
-              <h2 id="settings-modal-title" className="text-lg font-medium text-white">Settings</h2>
+              <h2 id="settings-modal-title" className="text-lg font-medium text-white">{t('settings.title')}</h2>
             </div>
             <button
               onClick={onClose}
@@ -294,21 +289,21 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
 
           {/* Tab Bar */}
           <div className="px-6 flex gap-1 border-b border-border" role="tablist">
-            {TABS.map(tab => (
+            {TAB_IDS.map(tabId => (
               <button
-                key={tab.id}
+                key={tabId}
                 role="tab"
-                aria-selected={activeTab === tab.id}
-                aria-controls={`tabpanel-${tab.id}`}
-                onClick={() => handleTabChange(tab.id)}
+                aria-selected={activeTab === tabId}
+                aria-controls={`tabpanel-${tabId}`}
+                onClick={() => handleTabChange(tabId)}
                 className={`px-4 py-3 text-sm transition-all relative ${
-                  activeTab === tab.id
+                  activeTab === tabId
                     ? 'text-orange-400 font-medium'
                     : 'text-gray-500 hover:text-gray-300'
                 }`}
               >
-                {tab.label}
-                {activeTab === tab.id && (
+                {t(`settings.tabs.${tabId}`)}
+                {activeTab === tabId && (
                   <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-orange-500" />
                 )}
               </button>
@@ -363,13 +358,13 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
                     onClick={saveSettings}
                     className="flex-1 px-4 py-3 text-sm bg-gradient-to-r from-orange-500 to-orange-600 text-white font-medium rounded-lg hover:from-orange-600 hover:to-orange-700 transition-all shadow-lg shadow-orange-500/20"
                   >
-                    Save Settings
+                    {t('settings.saveSettings')}
                   </button>
                   <button
                     onClick={testConnection}
                     className="px-6 py-3 text-sm bg-bg-tertiary text-gray-300 border border-border rounded-lg hover:text-white hover:border-orange-500/30 transition-all"
                   >
-                    Test Connection
+                    {t('settings.testConnection')}
                   </button>
                 </div>
               </div>

@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
+import { useTranslation } from 'react-i18next';
 import { AudioBriefing } from './AudioBriefing';
 import { ContextHandoff } from './ContextHandoff';
 import { getStageLabel } from '../utils/score';
@@ -26,14 +27,13 @@ interface ActionBarProps {
   onToast: (type: 'success' | 'error', message: string) => void;
 }
 
-function getRefreshLabel(state: ActionBarProps['state'], briefingLoading: boolean): string {
-  if (state.loading) return 'Analyzing...';
-  if (briefingLoading) return 'Briefing...';
-  // Briefly show "Up to date" if analyzed within 10 minutes
+function getRefreshLabel(state: ActionBarProps['state'], briefingLoading: boolean, t: (key: string) => string): string {
+  if (state.loading) return t('action.analyzing');
+  if (briefingLoading) return t('action.briefing');
   if (state.lastAnalyzedAt && Date.now() - state.lastAnalyzedAt.getTime() < 600_000) {
-    return 'Up to date';
+    return t('action.upToDate');
   }
-  return 'Refresh';
+  return t('action.refresh');
 }
 
 export function ActionBar({
@@ -47,6 +47,7 @@ export function ActionBar({
   onToggleAutoBriefing,
   onToast,
 }: ActionBarProps) {
+  const { t } = useTranslation();
   const [overflowOpen, setOverflowOpen] = useState(false);
   const overflowRef = useRef<HTMLDivElement>(null);
 
@@ -64,8 +65,8 @@ export function ActionBar({
 
   const embeddingMode = useAppStore(s => s.embeddingMode);
   const isRefreshing = state.loading || aiBriefing.loading;
-  const refreshLabel = getRefreshLabel(state, aiBriefing.loading);
-  const isUpToDate = refreshLabel === 'Up to date';
+  const refreshLabel = getRefreshLabel(state, aiBriefing.loading, t);
+  const isUpToDate = !state.loading && !aiBriefing.loading && state.lastAnalyzedAt != null && Date.now() - state.lastAnalyzedAt.getTime() < 600_000;
 
   return (
     <div className="mb-6 bg-bg-secondary rounded-lg border border-border overflow-hidden" role="region" aria-label="Analysis controls">
@@ -84,7 +85,7 @@ export function ActionBar({
           )}
           <div className="min-w-0">
             <p className="text-sm text-white font-medium truncate">
-              {state.loading ? 'Analyzing...' : state.analysisComplete ? 'Analysis Complete' : 'Ready'}
+              {state.loading ? t('action.analyzing') : state.analysisComplete ? t('action.analysisComplete') : t('action.ready')}
             </p>
             <p className="text-xs text-gray-500 truncate">
               {state.status}
@@ -111,7 +112,7 @@ export function ActionBar({
             title="No embedding model available. Click to configure AI provider for semantic matching."
             onClick={() => useAppStore.getState().setShowSettings(true)}
           >
-            Keyword only
+            {t('action.keywordOnly')}
           </button>
         )}
 
@@ -157,7 +158,7 @@ export function ActionBar({
               onClick={() => invoke('cancel_analysis')}
               className="px-3 py-2.5 text-sm bg-bg-tertiary text-red-400 border border-red-500/30 font-medium rounded-lg hover:bg-red-500/10 transition-all"
             >
-              Cancel
+              {t('action.cancel')}
             </button>
           )}
 
@@ -185,14 +186,14 @@ export function ActionBar({
                   disabled={aiBriefing.loading || state.relevanceResults.length === 0}
                   className="w-full px-4 py-2.5 text-sm text-left text-gray-300 hover:bg-border disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
                 >
-                  Regenerate Briefing
+                  {t('action.regenerateBriefing')}
                 </button>
                 <button
                   role="menuitem"
                   onClick={() => { onToggleAutoBriefing(); setOverflowOpen(false); }}
                   className="w-full px-4 py-2.5 text-sm text-left text-gray-300 hover:bg-border transition-colors flex items-center justify-between"
                 >
-                  Auto-briefing
+                  {t('action.autoBriefing')}
                   <span className={`text-xs px-2 py-0.5 rounded ${autoBriefingEnabled ? 'bg-orange-500/20 text-orange-400' : 'bg-border text-gray-500'}`}>
                     {autoBriefingEnabled ? 'ON' : 'OFF'}
                   </span>
@@ -219,7 +220,7 @@ export function ActionBar({
                       }}
                       className="w-full px-4 py-2.5 text-sm text-left text-gray-300 hover:bg-border transition-colors"
                     >
-                      Export Markdown
+                      {t('action.exportMarkdown')}
                     </button>
                     <button
                       role="menuitem"
@@ -235,7 +236,7 @@ export function ActionBar({
                       }}
                       className="w-full px-4 py-2.5 text-sm text-left text-gray-300 hover:bg-border transition-colors"
                     >
-                      Export Digest
+                      {t('action.exportDigest')}
                     </button>
                   </>
                 )}

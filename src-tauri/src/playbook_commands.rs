@@ -118,6 +118,22 @@ pub(crate) fn get_content_dir() -> PathBuf {
     PathBuf::from("docs/streets")
 }
 
+/// Returns the content directory for a specific language.
+///
+/// English content lives directly in `docs/streets/`.
+/// Localized content lives in `docs/streets/{lang}/` (e.g. `docs/streets/es/`).
+/// Falls back to the base directory (English) if no localized directory exists.
+fn get_content_dir_for_lang(lang: &str) -> PathBuf {
+    let base = get_content_dir();
+    if lang != "en" {
+        let localized = base.join(lang);
+        if localized.exists() {
+            return localized;
+        }
+    }
+    base
+}
+
 pub(crate) fn parse_lessons(content: &str) -> Vec<PlaybookLesson> {
     let mut lessons = Vec::new();
     let mut current_title = String::new();
@@ -152,8 +168,9 @@ pub(crate) fn parse_lessons(content: &str) -> Vec<PlaybookLesson> {
 }
 
 #[tauri::command]
-pub fn get_playbook_modules() -> Result<Vec<PlaybookModule>, String> {
-    let content_dir = get_content_dir();
+pub fn get_playbook_modules(lang: Option<String>) -> Result<Vec<PlaybookModule>, String> {
+    let language = lang.unwrap_or_else(|| crate::i18n::get_user_language());
+    let content_dir = get_content_dir_for_lang(&language);
     let mut modules = Vec::new();
 
     for (id, title, desc, is_free) in MODULE_DEFS {
@@ -183,8 +200,12 @@ pub fn get_playbook_modules() -> Result<Vec<PlaybookModule>, String> {
 }
 
 #[tauri::command]
-pub fn get_playbook_content(module_id: String) -> Result<PlaybookContent, String> {
-    let content_dir = get_content_dir();
+pub fn get_playbook_content(
+    module_id: String,
+    lang: Option<String>,
+) -> Result<PlaybookContent, String> {
+    let language = lang.unwrap_or_else(|| crate::i18n::get_user_language());
+    let content_dir = get_content_dir_for_lang(&language);
     let filename = module_id_to_filename(&module_id)
         .ok_or_else(|| format!("Unknown module: {}", module_id))?;
     let path = content_dir.join(filename);

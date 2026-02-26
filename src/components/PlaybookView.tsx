@@ -1,20 +1,13 @@
 import { useEffect, useCallback, useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../store';
 import { useShallow } from 'zustand/react/shallow';
 import { renderMarkdown } from '../utils/playbook-markdown';
 import { SovereignProfile } from './playbook/SovereignProfile';
 import { SunsDashboard } from './playbook/SunsDashboard';
 
-// Module metadata (static, mirrors backend MODULE_DEFS)
-const MODULES = [
-  { id: 'S', label: 'S', title: 'Sovereign Setup' },
-  { id: 'T', label: 'T', title: 'Technical Moats' },
-  { id: 'R', label: 'R', title: 'Revenue Engines' },
-  { id: 'E1', label: 'E1', title: 'Execution Playbook' },
-  { id: 'E2', label: 'E2', title: 'Evolving Edge' },
-  { id: 'T2', label: 'T2', title: 'Tactical Automation' },
-  { id: 'S2', label: 'S2', title: 'Stacking Streams' },
-];
+// Module IDs (static, mirrors backend MODULE_DEFS)
+const MODULE_IDS = ['S', 'T', 'R', 'E1', 'E2', 'T2', 'S2'] as const;
 
 function CheckIcon() {
   return (
@@ -49,6 +42,7 @@ function ProgressRing({ percentage }: { percentage: number }) {
 }
 
 export function PlaybookView() {
+  const { t } = useTranslation();
   const {
     playbookModules,
     playbookContent,
@@ -109,21 +103,21 @@ export function PlaybookView() {
       {/* Sidebar - Module Navigation */}
       <aside className="w-64 flex-shrink-0 bg-[#141414] border border-[#2A2A2A] rounded-xl p-4 space-y-2 self-start sticky top-6">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-sm font-semibold text-white tracking-wide uppercase">STREETS</h2>
+          <h2 className="text-sm font-semibold text-white tracking-wide uppercase">{t('streets:streets.title')}</h2>
           <ProgressRing percentage={overallPct} />
         </div>
 
-        {MODULES.map((mod) => {
-          const progress = playbookProgress?.modules.find((m) => m.module_id === mod.id);
+        {MODULE_IDS.map((modId) => {
+          const progress = playbookProgress?.modules.find((m) => m.module_id === modId);
           const pct = progress?.percentage ?? 0;
-          const isActive = activeModuleId === mod.id;
-          const moduleData = playbookModules.find((m) => m.id === mod.id);
+          const isActive = activeModuleId === modId;
+          const moduleData = playbookModules.find((m) => m.id === modId);
           const lessonCount = moduleData?.lesson_count ?? 0;
 
           return (
             <button
-              key={mod.id}
-              onClick={() => handleModuleClick(mod.id)}
+              key={modId}
+              onClick={() => handleModuleClick(modId)}
               className={`w-full text-left px-3 py-2.5 rounded-lg transition-all flex items-center gap-3 group ${
                 isActive
                   ? 'bg-[#D4AF37]/15 border border-[#D4AF37]/30'
@@ -139,14 +133,14 @@ export function PlaybookView() {
                       : 'bg-[#1F1F1F] text-[#A0A0A0]'
                 }`}
               >
-                {mod.label}
+                {modId}
               </span>
               <div className="flex-1 min-w-0">
                 <p className={`text-sm truncate ${isActive ? 'text-white font-medium' : 'text-[#A0A0A0]'}`}>
-                  {mod.title}
+                  {t(`streets:streets.module.${modId}`)}
                 </p>
                 <p className="text-[10px] text-[#666]">
-                  {lessonCount} lesson{lessonCount !== 1 ? 's' : ''}
+                  {lessonCount} {lessonCount !== 1 ? t('streets:streets.lessons').toLowerCase() : t('streets:streets.lesson').toLowerCase()}
                   {pct > 0 && pct < 100 && ` - ${Math.round(pct)}%`}
                 </p>
               </div>
@@ -158,15 +152,15 @@ export function PlaybookView() {
         {/* Coach upgrade nudge */}
         <div className="mt-4 pt-4 border-t border-[#2A2A2A] space-y-3">
           <p className="text-[10px] text-[#666] text-center">
-            All 7 modules. Free forever.
+            {t('streets:streets.freeForever')}
           </p>
           {streetsTier === 'playbook' && (
             <div className="bg-[#D4AF37]/5 border border-[#D4AF37]/20 rounded-lg p-3">
               <p className="text-[10px] font-medium text-[#D4AF37] mb-1.5">
-                Want AI coaching?
+                {t('streets:streets.wantCoaching')}
               </p>
               <p className="text-[10px] text-[#666] mb-2 leading-relaxed">
-                Get personalized engine analysis, strategy generation, and launch reviews.
+                {t('streets:streets.coachingDescription')}
               </p>
               <a
                 href="https://4da.ai/streets"
@@ -174,7 +168,7 @@ export function PlaybookView() {
                 rel="noopener noreferrer"
                 className="block text-center px-3 py-1.5 text-[10px] font-medium text-black bg-[#D4AF37] rounded hover:bg-[#C4A030] transition-colors"
               >
-                Upgrade — $29/mo
+                {t('streets:streets.upgrade')}
               </a>
             </div>
           )}
@@ -194,16 +188,16 @@ export function PlaybookView() {
             <div className="w-16 h-16 bg-[#D4AF37]/10 rounded-2xl flex items-center justify-center mb-4">
               <span className="text-2xl text-[#D4AF37] font-bold">S</span>
             </div>
-            <h3 className="text-lg font-semibold text-white mb-2">STREETS Playbook</h3>
+            <h3 className="text-lg font-semibold text-white mb-2">{t('streets:streets.title')}</h3>
             <p className="text-sm text-[#A0A0A0] max-w-md mb-4">
-              Seven modules to build independent developer income.
-              Select a module from the sidebar to begin.
+              {t('streets:streets.selectModuleDescription')}{' '}
+              {t('streets:streets.selectModule')}
             </p>
             <button
               onClick={() => handleModuleClick('S')}
               className="px-4 py-2 bg-[#D4AF37] text-black text-sm font-medium rounded-lg hover:bg-[#C4A030] transition-colors"
             >
-              Start with Sovereign Setup
+              {t('streets:streets.startWith')}
             </button>
           </div>
         )}
