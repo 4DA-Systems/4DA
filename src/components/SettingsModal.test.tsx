@@ -126,6 +126,14 @@ vi.mock('./settings/PersonalizationSection', () => ({
   PersonalizationSection: () => <div data-testid="personalization-section" />,
 }));
 
+vi.mock('./settings/LocaleSection', () => ({
+  LocaleSection: () => <div data-testid="locale-section" />,
+}));
+
+vi.mock('./ProValuePanel', () => ({
+  ProValuePanel: () => <div data-testid="pro-value-panel" />,
+}));
+
 vi.mock('./DeveloperDna', () => ({
   DeveloperDnaPanel: () => <div data-testid="developer-dna-panel" />,
 }));
