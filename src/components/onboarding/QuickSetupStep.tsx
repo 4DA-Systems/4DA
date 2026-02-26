@@ -64,6 +64,9 @@ export function QuickSetupStep({ isAnimating, onComplete, onBack }: QuickSetupSt
   const [role, setRole] = useState('Developer');
 
   const [error, setError] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
+  const [apiKeyHint, setApiKeyHint] = useState<string | null>(null);
+  const [skippedDownload, setSkippedDownload] = useState(false);
 
   // --- AI Provider auto-detect ---
   const pullMissingModels = useCallback(async (status: OllamaStatus) => {
@@ -206,7 +209,12 @@ export function QuickSetupStep({ isAnimating, onComplete, onBack }: QuickSetupSt
     return () => { cancelled = true; };
   }, [discoveryDone]);
 
-  // --- Handlers ---
+  // Auto-expand next section on completion
+  useEffect(() => { if (aiConfigured) setProjectsOpen(true); }, [aiConfigured]);
+  useEffect(() => { if (discoveryDone) setStacksOpen(true); }, [discoveryDone]);
+  useEffect(() => { if (selectedStacks.length > 0) setLocaleOpen(true); }, [selectedStacks.length]);
+  useEffect(() => { if (localeConfigured) setInterestsOpen(true); }, [localeConfigured]);
+
   const removeTag = (tag: string) => {
     setDetectedTech(prev => prev.filter(t => t !== tag));
   };
@@ -234,11 +242,26 @@ export function QuickSetupStep({ isAnimating, onComplete, onBack }: QuickSetupSt
 
   const handleApiKeyChange = (key: string) => {
     setApiKey(key);
-    setAiConfigured(key.trim().length > 0);
+    if (key.trim().length === 0) {
+      setAiConfigured(false);
+      setApiKeyHint(null);
+      return;
+    }
+    let valid = false;
+    if (provider === 'anthropic') {
+      valid = key.startsWith('sk-ant-') && key.length > 20;
+    } else if (provider === 'openai') {
+      valid = key.startsWith('sk-') && key.length > 20;
+    } else {
+      valid = key.trim().length > 10;
+    }
+    setAiConfigured(valid);
+    setApiKeyHint(valid ? null : t('onboarding.setup.keyFormatHint'));
   };
 
   const handleContinue = async () => {
     setError(null);
+    setIsSaving(true);
     try {
       // Save provider config — guard against saving 'ollama' when it's not running
       if (provider === 'ollama') {
@@ -300,7 +323,16 @@ export function QuickSetupStep({ isAnimating, onComplete, onBack }: QuickSetupSt
       onComplete();
     } catch (e) {
       setError(`Failed to save settings: ${e}`);
+    } finally {
+      setIsSaving(false);
     }
+  };
+
+  const handleSkipDownload = () => {
+    setPullingModels(false);
+    setSkippedDownload(true);
+    setTimeout(() => setSkippedDownload(false), 3000);
+    handleContinue();
   };
 
   // --- Section header component ---
@@ -310,12 +342,14 @@ export function QuickSetupStep({ isAnimating, onComplete, onBack }: QuickSetupSt
     isOpen,
     onToggle,
     done,
+    warning,
   }: {
     title: string;
     subtitle: string;
     isOpen: boolean;
     onToggle: () => void;
     done: boolean;
+    warning?: boolean;
   }) => (
     <button
       onClick={onToggle}
@@ -326,6 +360,10 @@ export function QuickSetupStep({ isAnimating, onComplete, onBack }: QuickSetupSt
         {done ? (
           <span className="w-6 h-6 bg-green-500/20 rounded-full flex items-center justify-center text-green-400 text-xs">
             &#x2713;
+          </span>
+        ) : warning ? (
+          <span className="w-6 h-6 bg-amber-500/20 rounded-full flex items-center justify-center text-amber-400 text-xs">
+            &#x25CB;
           </span>
         ) : (
           <span className="w-6 h-6 bg-bg-tertiary rounded-full flex items-center justify-center text-gray-500 text-xs">
@@ -371,15 +409,20 @@ export function QuickSetupStep({ isAnimating, onComplete, onBack }: QuickSetupSt
             done={aiConfigured}
           />
           {aiOpen && (
-            <SetupAIProvider
-              ollamaStatus={ollamaStatus}
-              provider={provider}
-              apiKey={apiKey}
-              pullingModels={pullingModels}
-              pullProgress={pullProgress}
-              onProviderChange={handleProviderChange}
-              onApiKeyChange={handleApiKeyChange}
-            />
+            <>
+              <SetupAIProvider
+                ollamaStatus={ollamaStatus}
+                provider={provider}
+                apiKey={apiKey}
+                pullingModels={pullingModels}
+                pullProgress={pullProgress}
+                onProviderChange={handleProviderChange}
+                onApiKeyChange={handleApiKeyChange}
+              />
+              {apiKeyHint && (
+                <p className="mt-1 px-4 text-xs text-amber-400">{apiKeyHint}</p>
+              )}
+            </>
           )}
         </div>
 
@@ -430,7 +473,7 @@ export function QuickSetupStep({ isAnimating, onComplete, onBack }: QuickSetupSt
             done={localeConfigured}
           />
           <div style={{ display: localeOpen ? undefined : 'none' }}>
-            <SetupLocale onLocaleChange={() => setLocaleConfigured(true)} />
+            <SetupLocale onLocaleChange={(_c, _l, _cur) => setLocaleConfigured(true)} />
           </div>
         </div>
 
@@ -438,10 +481,15 @@ export function QuickSetupStep({ isAnimating, onComplete, onBack }: QuickSetupSt
         <div>
           <SectionHeader
             title={t('onboarding.setup.yourInterests')}
-            subtitle={interests.length > 0 ? t('onboarding.setup.topicsSelected', { count: interests.length }) : t('onboarding.setup.suggestedForYou')}
+            subtitle={interests.length > 0
+              ? t('onboarding.setup.topicsSelected', { count: interests.length })
+              : detectedTech.length > 0
+                ? t('onboarding.setup.usingTechStack')
+                : t('onboarding.setup.suggestedForYou')}
             isOpen={interestsOpen}
             onToggle={() => setInterestsOpen(!interestsOpen)}
             done={interests.length > 0}
+            warning={interests.length === 0 && detectedTech.length > 0}
           />
           <div style={{ display: interestsOpen ? undefined : 'none' }}>
             <SetupInterests
@@ -463,6 +511,7 @@ export function QuickSetupStep({ isAnimating, onComplete, onBack }: QuickSetupSt
       <div className="flex justify-between items-center">
         <button
           onClick={onBack}
+          aria-label={t('onboarding.setup.goBack')}
           className="px-6 py-2 text-gray-400 hover:text-white transition-colors"
         >
           &larr; {t('onboarding.nav.back')}
@@ -470,21 +519,29 @@ export function QuickSetupStep({ isAnimating, onComplete, onBack }: QuickSetupSt
         <div className="flex flex-col items-end gap-1.5">
           <button
             onClick={handleContinue}
-            className="px-8 py-3 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-colors font-medium"
+            disabled={isSaving}
+            aria-label={t('onboarding.setup.completeSetup')}
+            className="px-8 py-3 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {t('onboarding.setup.enter4DA')}
+            {isSaving ? t('onboarding.setup.savingSettings') : t('onboarding.setup.enter4DA')}
           </button>
           {pullingModels && (
             <button
-              onClick={handleContinue}
+              onClick={handleSkipDownload}
+              aria-label={t('onboarding.setup.skipModelDownload')}
               className="text-xs text-gray-500 hover:text-gray-300 transition-colors"
             >
-              {t('onboarding.setup.skipDownload')}
+              {t('onboarding.setup.skipModelDownloadLabel')}
             </button>
           )}
-          {!pullingModels && (
+          {!pullingModels && !skippedDownload && (
             <p className="text-[11px] text-gray-600">
               {t('onboarding.setup.allSectionsOptional')}
+            </p>
+          )}
+          {skippedDownload && (
+            <p className="text-[11px] text-amber-400">
+              {t('action.keywordOnly')}
             </p>
           )}
         </div>

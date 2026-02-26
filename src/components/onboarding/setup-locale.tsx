@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
 
@@ -65,6 +65,9 @@ export function SetupLocale({ onLocaleChange }: SetupLocaleProps) {
   const [language, setLanguage] = useState('en');
   const [currency, setCurrency] = useState('USD');
   const [loaded, setLoaded] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const userInteracted = useRef(false);
 
   // Load current locale from backend on mount
   useEffect(() => {
@@ -72,7 +75,7 @@ export function SetupLocale({ onLocaleChange }: SetupLocaleProps) {
     (async () => {
       try {
         const locale = await invoke<{ country: string; language: string; currency: string }>('get_locale');
-        if (cancelled) return;
+        if (cancelled || userInteracted.current) return;
         setCountry(locale.country);
         setLanguage(locale.language);
         setCurrency(locale.currency);
@@ -85,15 +88,19 @@ export function SetupLocale({ onLocaleChange }: SetupLocaleProps) {
   }, []);
 
   const saveLocale = useCallback(async (c: string, l: string, cur: string) => {
+    setSaveError(null);
     try {
       await invoke('set_locale', { country: c, language: l, currency: cur });
       onLocaleChange(c, l, cur);
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
     } catch {
-      // Silent failure - locale is not critical
+      setSaveError(t('onboarding.locale.saveFailed'));
     }
-  }, [onLocaleChange]);
+  }, [onLocaleChange, t]);
 
   const handleCountryChange = useCallback((code: string) => {
+    userInteracted.current = true;
     setCountry(code);
     const match = COUNTRIES.find(c => c.code === code);
     if (match) {
@@ -106,11 +113,13 @@ export function SetupLocale({ onLocaleChange }: SetupLocaleProps) {
   }, [language, currency, saveLocale]);
 
   const handleLanguageChange = useCallback((code: string) => {
+    userInteracted.current = true;
     setLanguage(code);
     saveLocale(country, code, currency);
   }, [country, currency, saveLocale]);
 
   const handleCurrencyChange = useCallback((cur: string) => {
+    userInteracted.current = true;
     setCurrency(cur);
     saveLocale(country, language, cur);
   }, [country, language, saveLocale]);
@@ -177,9 +186,13 @@ export function SetupLocale({ onLocaleChange }: SetupLocaleProps) {
       </div>
 
       {/* Preview */}
-      <p className="text-xs text-[#666666]">
-        {t('onboarding.locale.priceInfo', { currency, language: getLanguageName(language) })}
-      </p>
+      <div className="flex items-center gap-2">
+        <p className="text-xs text-[#666666]">
+          {t('onboarding.locale.priceInfo', { currency, language: getLanguageName(language) })}
+        </p>
+        {saved && <span className="text-xs text-green-400">{t('onboarding.locale.saved')}</span>}
+      </div>
+      {saveError && <p className="text-xs text-red-400">{saveError}</p>}
     </div>
   );
 }

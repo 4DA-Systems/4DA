@@ -42,20 +42,34 @@ export class ErrorBoundary extends Component<{ children: ReactNode }, ErrorBound
             {'\n\n'}
             {this.state.error?.stack}
           </pre>
-          <button
-            onClick={() => window.location.reload()}
-            style={{
-              marginTop: '1rem',
-              padding: '0.5rem 1rem',
-              backgroundColor: 'var(--color-border)',
-              color: '#fff',
-              border: 'none',
-              borderRadius: '4px',
-              cursor: 'pointer',
-            }}
-          >
-            {i18n.t('error.reload')}
-          </button>
+          <div style={{ display: 'flex', gap: '0.5rem', marginTop: '1rem' }}>
+            <button
+              onClick={() => this.setState({ hasError: false, error: null })}
+              style={{
+                padding: '0.5rem 1rem',
+                backgroundColor: 'var(--color-border)',
+                color: '#fff',
+                border: 'none',
+                borderRadius: '4px',
+                cursor: 'pointer',
+              }}
+            >
+              {i18n.t('error.tryRecover')}
+            </button>
+            <button
+              onClick={() => window.location.reload()}
+              style={{
+                padding: '0.5rem 1rem',
+                backgroundColor: 'transparent',
+                color: 'var(--color-text-secondary)',
+                border: '1px solid var(--color-border)',
+                borderRadius: '4px',
+                cursor: 'pointer',
+              }}
+            >
+              {i18n.t('error.reload')}
+            </button>
+          </div>
         </div>
       );
     }

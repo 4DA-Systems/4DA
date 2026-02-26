@@ -54,6 +54,7 @@ export default [
         TextDecoder: 'readonly',
         Uint8Array: 'readonly',
         ArrayBuffer: 'readonly',
+        __APP_VERSION__: 'readonly',
       },
     },
     plugins: {

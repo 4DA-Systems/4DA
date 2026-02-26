@@ -99,7 +99,7 @@ export function Onboarding({ onComplete }: OnboardingProps) {
       </div>
 
       {/* Version */}
-      <p className="absolute bottom-6 text-xs text-gray-600">{t('onboarding.version', { version: '1.0.0' })}</p>
+      <p className="absolute bottom-6 text-xs text-gray-600">{t('onboarding.version', { version: __APP_VERSION__ })}</p>
     </div>
   );
 }

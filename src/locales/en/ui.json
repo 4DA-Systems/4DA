@@ -486,6 +486,13 @@
   "onboarding.setup.enter4DA": "Enter 4DA",
   "onboarding.setup.skipDownload": "Skip download — use keyword matching for now",
   "onboarding.setup.allSectionsOptional": "All sections optional — configure anytime in Settings",
+  "onboarding.setup.skipModelDownloadLabel": "Continue without AI models (keyword search only)",
+  "onboarding.setup.savingSettings": "Saving...",
+  "onboarding.setup.completeSetup": "Complete setup and enter 4DA",
+  "onboarding.setup.skipModelDownload": "Skip model download and continue",
+  "onboarding.setup.goBack": "Go back to previous step",
+  "onboarding.setup.keyFormatHint": "Key format doesn't look right",
+  "onboarding.setup.usingTechStack": "Using tech stack for content scoring",
 
   "onboarding.setupAi.localAiReady": "Local AI Ready - no API keys needed",
   "onboarding.setupAi.local": "Local",
@@ -516,6 +523,7 @@
   "error.dbUnavailable": "Database unavailable",
   "error.somethingWrong": "Something went wrong",
   "error.reload": "Reload App",
+  "error.tryRecover": "Try to Recover",
 
   "commandDeck.title": "Command Deck",
   "commandDeck.git": "Git",
@@ -595,6 +603,10 @@
   "firstRun.analyzing": "Matching against your interests...",
   "firstRun.itemsFound": "{{count}} items found",
   "firstRun.keywordMatching": "Matching by keywords and dependencies",
+  "firstRun.errorEmbedding": "Embedding service unavailable. Try switching to keyword-only mode in settings.",
+  "firstRun.errorFetch": "Could not reach content sources. Check your internet connection.",
+  "firstRun.errorGeneric": "Something went wrong during analysis.",
+  "firstRun.skipToResults": "Skip to Results",
 
   "shortcuts.title": "Keyboard Shortcuts",
   "shortcuts.close": "Close keyboard shortcuts",
@@ -1152,6 +1164,8 @@
   "onboarding.locale.language": "Language",
   "onboarding.locale.currency": "Currency",
   "onboarding.locale.priceInfo": "Prices will show in {{currency}}, content prioritized in {{language}}",
+  "onboarding.locale.saved": "Saved",
+  "onboarding.locale.saveFailed": "Could not save locale settings",
 
   "onboarding.stack.loading": "Loading stack profiles...",
   "onboarding.stack.description": "Select your tech stack for smarter content scoring. Auto-detected stacks are pre-selected.",

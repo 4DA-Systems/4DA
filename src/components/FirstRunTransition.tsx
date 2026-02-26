@@ -137,14 +137,28 @@ export function FirstRunTransition({ onComplete }: FirstRunTransitionProps) {
             </svg>
           </div>
           <h2 className="text-xl font-medium text-white mb-2">{t('firstRun.errorTitle')}</h2>
-          <p className="text-sm text-gray-400 mb-6">{appState.status}</p>
-          <button
-            onClick={handleRetry}
-            aria-label="Retry analysis"
-            className="px-6 py-3 bg-orange-500 text-white font-medium rounded-lg hover:bg-orange-600 transition-colors"
-          >
-            {t('firstRun.tryAgain')}
-          </button>
+          <p className="text-sm text-gray-400 mb-6">
+            {appState.status?.includes('Embedding')
+              ? t('firstRun.errorEmbedding')
+              : appState.status?.includes('fetch')
+              ? t('firstRun.errorFetch')
+              : t('firstRun.errorGeneric')}
+          </p>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={handleRetry}
+              aria-label="Retry analysis"
+              className="px-6 py-3 bg-orange-500 text-white font-medium rounded-lg hover:bg-orange-600 transition-colors"
+            >
+              {t('firstRun.tryAgain')}
+            </button>
+            <button
+              onClick={() => handleDismiss('results')}
+              className="px-6 py-3 text-gray-400 hover:text-white transition-colors text-sm"
+            >
+              {t('firstRun.skipToResults')}
+            </button>
+          </div>
         </div>
       ) : phase === 'celebrating' ? (
         /* Celebration phase */
