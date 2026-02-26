@@ -8,23 +8,15 @@ import { EngineRecommender } from './EngineRecommender';
 import { StrategyViewer } from './StrategyViewer';
 import { LaunchReviewForm } from './LaunchReviewForm';
 import { ProgressDashboard } from './ProgressDashboard';
+import { TemplateLibrary } from './TemplateLibrary';
+import { VideoCurriculum } from './VideoCurriculum';
 import type { CoachSessionType, StreetsTier } from '../../types/coach';
-
-// Placeholder for sub-components not yet implemented
-const Placeholder = ({ name }: { name: string }) => {
-  const { t } = useTranslation();
-  return (
-    <div className="flex items-center justify-center h-64 text-[#666]">
-      <p>{t('coach:coach.comingSoon', { name })}</p>
-    </div>
-  );
-};
 
 // ---------------------------------------------------------------------------
 // Sub-tab definitions
 // ---------------------------------------------------------------------------
 
-const SUB_TAB_IDS: CoachSessionType[] = ['chat', 'engine_recommender', 'strategy', 'launch_review', 'progress'];
+const SUB_TAB_IDS: CoachSessionType[] = ['chat', 'engine_recommender', 'strategy', 'launch_review', 'progress', 'templates', 'curriculum'];
 
 const SUB_TAB_KEYS: Record<CoachSessionType, string> = {
   chat: 'coach:coach.tab.chat',
@@ -32,6 +24,8 @@ const SUB_TAB_KEYS: Record<CoachSessionType, string> = {
   strategy: 'coach:coach.tab.strategy',
   launch_review: 'coach:coach.tab.launchReview',
   progress: 'coach:coach.tab.progress',
+  templates: 'coach:coach.tab.templates',
+  curriculum: 'coach:coach.tab.curriculum',
 };
 
 // ---------------------------------------------------------------------------
@@ -261,8 +255,12 @@ export function CoachView() {
         return <LaunchReviewForm />;
       case 'progress':
         return <ProgressDashboard />;
+      case 'templates':
+        return <TemplateLibrary />;
+      case 'curriculum':
+        return <VideoCurriculum />;
       default:
-        return <Placeholder name="Unknown view" />;
+        return null;
     }
   }
 
