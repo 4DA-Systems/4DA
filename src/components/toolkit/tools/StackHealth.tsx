@@ -2,25 +2,25 @@ import { useState, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
 
-// --- Types ---
+// --- Types (match Rust ProjectHealth / HealthDimension / HealthAlert) ---
 
-interface ProjectHealthEntry {
-  name: string;
-  path: string;
-  scores: {
-    freshness: number;
-    security: number;
-    momentum: number;
-    community: number;
-  };
-  alerts: Array<{ severity: string; message: string }>;
-  dependency_count: number;
-  overall: number;
+interface HealthDimension {
+  score: number;
+  label: string;
+  details: string;
 }
 
-interface ProjectHealth {
-  projects: ProjectHealthEntry[];
-  generated_at: string;
+interface ProjectHealthEntry {
+  project_name: string;
+  project_path: string;
+  overall_score: number;
+  freshness: HealthDimension;
+  security: HealthDimension;
+  momentum: HealthDimension;
+  community: HealthDimension;
+  alerts: Array<{ severity: string; message: string; dependency?: string }>;
+  last_checked: string;
+  dependency_count: number;
 }
 
 // --- Helpers ---
@@ -57,7 +57,7 @@ function formatScore(score: number): string {
 
 export default function StackHealth() {
   const { t } = useTranslation();
-  const [data, setData] = useState<ProjectHealth | null>(null);
+  const [projects, setProjects] = useState<ProjectHealthEntry[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
@@ -66,8 +66,8 @@ export default function StackHealth() {
     setLoading(true);
     setError(null);
     try {
-      const result = await invoke<ProjectHealth>('get_project_health');
-      setData(result);
+      const result = await invoke<ProjectHealthEntry[]>('get_project_health');
+      setProjects(result);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -88,7 +88,7 @@ export default function StackHealth() {
     });
   };
 
-  const totalAlerts = data?.projects.reduce((sum, p) => sum + p.alerts.length, 0) ?? 0;
+  const totalAlerts = projects.reduce((sum, p) => sum + p.alerts.length, 0);
 
   return (
     <div className="space-y-4">
@@ -116,17 +116,16 @@ export default function StackHealth() {
           )}
         </button>
 
-        {data && (
+        {projects.length > 0 && (
           <div className="flex items-center gap-4 text-xs text-[#A0A0A0]">
             <span>
-              {data.projects.length} project{data.projects.length !== 1 ? 's' : ''}
+              {projects.length} project{projects.length !== 1 ? 's' : ''}
             </span>
             {totalAlerts > 0 && (
               <span className="text-[#EF4444]">
                 {totalAlerts} alert{totalAlerts !== 1 ? 's' : ''}
               </span>
             )}
-            <span className="text-[#666] font-mono">{data.generated_at}</span>
           </div>
         )}
       </div>
@@ -150,7 +149,7 @@ export default function StackHealth() {
       )}
 
       {/* Loading state */}
-      {loading && !data && (
+      {loading && projects.length === 0 && (
         <div className="flex flex-col items-center justify-center py-16 text-[#666]">
           <div className="w-8 h-8 border-2 border-[#2A2A2A] border-t-white rounded-full animate-spin mb-4" />
           <p className="text-sm">{t('toolkit.stackHealth.analyzing')}</p>
@@ -158,7 +157,7 @@ export default function StackHealth() {
       )}
 
       {/* Empty state */}
-      {!loading && !data && !error && (
+      {!loading && projects.length === 0 && !error && (
         <div className="flex flex-col items-center justify-center py-16 text-[#666]">
           <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="mb-3 opacity-50">
             <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
@@ -168,25 +167,18 @@ export default function StackHealth() {
         </div>
       )}
 
-      {/* Project cards */}
-      {data && data.projects.length === 0 && (
-        <div className="text-center py-10 text-[#666] text-sm">
-          {t('toolkit.stackHealth.noProjects')}
-        </div>
-      )}
-
-      {data?.projects.map((project) => {
-        const isOpen = expanded.has(project.name);
+      {projects.map((project) => {
+        const isOpen = expanded.has(project.project_name);
         const criticalCount = project.alerts.filter((a) => a.severity.toLowerCase() === 'critical').length;
 
         return (
           <div
-            key={project.name}
+            key={project.project_name}
             className="bg-[#141414] border border-[#2A2A2A] rounded-xl overflow-hidden"
           >
             {/* Card header */}
             <button
-              onClick={() => toggleExpand(project.name)}
+              onClick={() => toggleExpand(project.project_name)}
               className="w-full flex items-center gap-3 px-4 py-3 hover:bg-[#1F1F1F] transition-colors text-left"
             >
               <svg
@@ -196,7 +188,7 @@ export default function StackHealth() {
               >
                 <path d="M9 18l6-6-6-6" />
               </svg>
-              <span className="text-sm text-white font-medium truncate flex-1">{project.name}</span>
+              <span className="text-sm text-white font-medium truncate flex-1">{project.project_name}</span>
 
               {criticalCount > 0 && (
                 <span className="px-1.5 py-0.5 text-[10px] font-medium bg-[#EF4444]/15 text-[#EF4444] rounded">
@@ -212,11 +204,11 @@ export default function StackHealth() {
               <span
                 className="px-2 py-0.5 text-xs font-mono font-semibold rounded shrink-0"
                 style={{
-                  color: scoreColor(project.overall),
-                  backgroundColor: `${scoreColor(project.overall)}15`,
+                  color: scoreColor(project.overall_score),
+                  backgroundColor: `${scoreColor(project.overall_score)}15`,
                 }}
               >
-                {formatScore(project.overall)}
+                {formatScore(project.overall_score)}
               </span>
             </button>
 
@@ -226,7 +218,8 @@ export default function StackHealth() {
                 {/* Score bars */}
                 <div className="grid grid-cols-2 gap-3 mt-3">
                   {DIMENSIONS.map((dim) => {
-                    const score = project.scores[dim];
+                    const dimension = project[dim];
+                    const score = dimension.score;
                     const color = scoreColor(score);
                     return (
                       <div key={dim} className="flex items-center gap-2">
@@ -249,8 +242,8 @@ export default function StackHealth() {
                 </div>
 
                 {/* Path */}
-                <div className="mt-3 text-[10px] font-mono text-[#666] truncate" title={project.path}>
-                  {project.path}
+                <div className="mt-3 text-[10px] font-mono text-[#666] truncate" title={project.project_path}>
+                  {project.project_path}
                 </div>
 
                 {/* Alerts */}
