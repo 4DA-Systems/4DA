@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { useTranslation } from 'react-i18next';
+import { TranslationEditor } from './TranslationEditor';
 
 const COUNTRIES = [
   { code: 'US', name: 'United States', lang: 'en', currency: 'USD' },
@@ -111,6 +112,8 @@ export function LocaleSection() {
     saveLocale(country, language, cur);
   }, [country, language, saveLocale]);
 
+  const [showEditor, setShowEditor] = useState(false);
+
   return (
     <div className="bg-bg-tertiary rounded-lg p-5 border border-border">
       <div className="flex items-start gap-3 mb-4">
@@ -176,6 +179,24 @@ export function LocaleSection() {
           <p className="text-xs text-gray-500 pt-1">
             {t('settings.locale.priceInfo', { currency, language: getLanguageName(language) })}
           </p>
+
+          {/* Translation Editor toggle (only for non-English) */}
+          {language !== 'en' && (
+            <div className="pt-2">
+              <button
+                onClick={() => setShowEditor(!showEditor)}
+                className="text-xs text-[#D4AF37] hover:text-[#C4A030] transition-colors"
+              >
+                {showEditor ? '- ' : '+ '}
+                {t('settings.translations.editorToggle')}
+              </button>
+              {showEditor && (
+                <div className="mt-3">
+                  <TranslationEditor language={language} />
+                </div>
+              )}
+            </div>
+          )}
         </div>
       ) : (
         <div className="text-sm text-gray-500">Detecting region...</div>
