@@ -194,6 +194,8 @@ function App() {
     loadTrialStatus();
     loadProValueReport();
     loadGameState();
+    // Prune stale personalization cache (non-blocking)
+    invoke('prune_personalization_cache').catch(() => {});
   }, [loadPersistedBriefing, loadSourceHealth, loadLicense, loadTrialStatus, loadProValueReport, loadGameState]);
 
   // GAME achievement listeners

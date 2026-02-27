@@ -79,6 +79,13 @@ export const createPlaybookSlice: StateCreator<AppStore, [], [], PlaybookSlice> 
       const current = new Map(get().personalizedLessons);
       current.set(key, lesson);
       set({ personalizedLessons: current });
+
+      // If LLM is available, trigger async hydration in the background
+      if (lesson.depth.llm_pending) {
+        invoke('hydrate_lesson_with_llm', { moduleId, lessonIdx }).catch((e) => {
+          console.warn('LLM hydration failed (non-fatal):', e);
+        });
+      }
     } catch (e) {
       // Non-fatal: fallback to static content
       console.warn('Personalization failed, using static content:', e);

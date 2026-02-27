@@ -1,14 +1,15 @@
 //! Tauri commands for the Sovereign Content Engine.
 
 use crate::error::{FourDaError, Result};
-use tracing::info;
+use tracing::{info, warn};
 
 use super::cache;
 use super::context::{assemble_personalization_context, context_hash};
+use super::llm_engine;
 use super::nollm_engine;
 use super::template_processor;
 use super::temporal;
-use super::{PersonalizationDepth, PersonalizedLesson};
+use super::{InsightContent, PersonalizationDepth, PersonalizedLesson};
 
 /// Get a personalized lesson with all 5 levels of personalization applied.
 ///
@@ -129,5 +130,104 @@ pub async fn prune_personalization_cache() -> Result<serde_json::Value> {
         "remaining": stats.cache_entries,
         "read_states": stats.read_state_entries,
         "cache_size_bytes": stats.cache_size_bytes,
+    }))
+}
+
+/// Asynchronously upgrade insight blocks with LLM prose.
+///
+/// Called by the frontend AFTER the no-LLM response renders. Iterates over the
+/// lesson's insight blocks, generates LLM prose for each, and emits a Tauri event
+/// (`personalization-llm-upgrade`) for each upgrade so the frontend can hydrate.
+#[tauri::command]
+pub async fn hydrate_lesson_with_llm(
+    app: tauri::AppHandle,
+    module_id: String,
+    lesson_idx: u32,
+) -> Result<serde_json::Value> {
+    use tauri::Emitter;
+
+    let conn = crate::open_db_connection().map_err(FourDaError::Internal)?;
+    let ctx = assemble_personalization_context(&conn);
+
+    if !ctx.settings.has_llm {
+        return Ok(serde_json::json!({ "upgraded": 0, "reason": "no_llm" }));
+    }
+
+    // Re-compute the no-LLM insight blocks so we know what to upgrade
+    let content = crate::playbook_commands::get_playbook_content(module_id.clone(), None)
+        .map_err(FourDaError::Internal)?;
+
+    let lesson = content.lessons.get(lesson_idx as usize).ok_or_else(|| {
+        FourDaError::Internal(format!(
+            "Lesson {} not found in module {}",
+            lesson_idx, module_id
+        ))
+    })?;
+
+    let processed = template_processor::process_template(&lesson.content, &ctx);
+    let insight_blocks = nollm_engine::compute_insight_blocks(
+        &processed.injection_markers,
+        &ctx,
+        &module_id,
+        lesson_idx,
+    );
+
+    let mut upgraded = 0u32;
+
+    for block in &insight_blocks {
+        // Extract the card from the block content
+        let card = match &block.content {
+            InsightContent::Card(c) => c,
+            InsightContent::Prose { .. } => continue, // Already prose
+        };
+
+        // Determine session type from card type
+        let session_type = match block.source_labels.first().map(|s| s.as_str()) {
+            Some("mirror") => "mirror",
+            Some("recommendation") => "recommendation",
+            _ => "insight",
+        };
+
+        match llm_engine::generate_insight_prose(card, &ctx, session_type).await {
+            Some(prose) => {
+                // Emit event for frontend hydration
+                let payload = serde_json::json!({
+                    "module_id": module_id,
+                    "lesson_idx": lesson_idx,
+                    "block_id": block.block_id,
+                    "content": prose,
+                });
+                if let Err(e) = app.emit("personalization-llm-upgrade", &payload) {
+                    warn!(
+                        target: "4da::personalize",
+                        error = %e,
+                        block_id = %block.block_id,
+                        "Failed to emit LLM upgrade event"
+                    );
+                }
+                upgraded += 1;
+            }
+            None => {
+                warn!(
+                    target: "4da::personalize",
+                    block_id = %block.block_id,
+                    "LLM prose generation returned None"
+                );
+            }
+        }
+    }
+
+    info!(
+        target: "4da::personalize",
+        module = %module_id,
+        lesson = lesson_idx,
+        upgraded,
+        total = insight_blocks.len(),
+        "LLM hydration complete"
+    );
+
+    Ok(serde_json::json!({
+        "upgraded": upgraded,
+        "total_blocks": insight_blocks.len(),
     }))
 }

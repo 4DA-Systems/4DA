@@ -1,8 +1,10 @@
 import { useEffect, useCallback, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
+import { listen } from '@tauri-apps/api/event';
 import { useAppStore } from '../store';
 import { useShallow } from 'zustand/react/shallow';
 import { renderMarkdown } from '../utils/playbook-markdown';
+import type { InsightContent } from '../types/personalization';
 import { SovereignProfile } from './playbook/SovereignProfile';
 import { StreetHealthBadge } from './playbook/StreetHealthBadge';
 import { SunsDashboard } from './playbook/SunsDashboard';
@@ -109,6 +111,32 @@ export function PlaybookView() {
       }
     });
   }, [playbookContent, personalizedLessons, loadPersonalized]);
+
+  // Listen for LLM hydration events and upgrade insight blocks in-place
+  useEffect(() => {
+    const unlisten = listen<{
+      module_id: string;
+      lesson_idx: number;
+      block_id: string;
+      content: InsightContent;
+    }>('personalization-llm-upgrade', (event) => {
+      const { module_id, lesson_idx, block_id, content } = event.payload;
+      const key = `${module_id}:${lesson_idx}`;
+      const current = new Map(useAppStore.getState().personalizedLessons);
+      const lesson = current.get(key);
+      if (!lesson) return;
+
+      const updatedBlocks = lesson.insight_blocks.map((block) =>
+        block.block_id === block_id ? { ...block, content } : block,
+      );
+      current.set(key, { ...lesson, insight_blocks: updatedBlocks });
+      useAppStore.setState({ personalizedLessons: current });
+    });
+
+    return () => {
+      unlisten.then((fn) => fn());
+    };
+  }, []);
 
   // Build a set of completed lesson indices for the active module
   const completedSet = useMemo(() => {

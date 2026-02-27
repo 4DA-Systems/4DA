@@ -406,6 +406,7 @@ pub fn run() {
             content_personalization::commands::get_personalized_lesson,
             content_personalization::commands::get_personalization_context_summary,
             content_personalization::commands::prune_personalization_cache,
+            content_personalization::commands::hydrate_lesson_with_llm,
             // STREETS Command Execution
             streets_commands::parse_lesson_commands,
             streets_commands::execute_streets_command,
