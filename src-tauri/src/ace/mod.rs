@@ -366,6 +366,24 @@ impl ACE {
 
         store_detected_context(&self.conn, &merged_tech, &active_topics)?;
 
+        // Auto-enrich: run stack profile detection after context update
+        {
+            let ace_ctx = crate::scoring::get_ace_context();
+            let detections = crate::stacks::detection::detect_matching_profiles(&ace_ctx);
+            if !detections.is_empty() {
+                let conn = self.conn.lock();
+                if let Err(e) = crate::stacks::save_detected_stacks(&conn, &detections) {
+                    warn!(target: "ace::detect", error = %e, "Failed to save auto-detected stacks");
+                } else {
+                    info!(target: "ace::detect",
+                        profiles = detections.len(),
+                        top = %detections.first().map(|d| d.profile_name.as_str()).unwrap_or("none"),
+                        "Auto-detected stack profiles after context scan"
+                    );
+                }
+            }
+        }
+
         Ok(AutonomousContext {
             detected_tech: merged_tech,
             active_topics,

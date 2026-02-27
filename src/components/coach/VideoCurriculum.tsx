@@ -33,14 +33,14 @@ function StatsBar({
   const pct = Math.min(Math.max(completionPct, 0), 100);
 
   return (
-    <div className="bg-[#141414] border border-[#2A2A2A] rounded-xl p-5 mb-5">
+    <div className="bg-bg-secondary border border-border rounded-xl p-5 mb-5">
       <div className="flex items-center justify-between mb-3">
         <p className="text-[10px] text-[#666] uppercase tracking-wide font-medium">
           {t('coach.video.curriculumProgress')}
         </p>
-        <span className="text-xs text-[#A0A0A0] font-mono">{Math.round(pct)}%</span>
+        <span className="text-xs text-text-secondary font-mono">{Math.round(pct)}%</span>
       </div>
-      <div className="h-1.5 bg-[#1F1F1F] rounded-full overflow-hidden mb-4">
+      <div className="h-1.5 bg-bg-tertiary rounded-full overflow-hidden mb-4">
         <div
           className="h-full bg-[#D4AF37] rounded-full transition-all duration-500"
           style={{ width: `${pct}%` }}
@@ -67,7 +67,7 @@ function StatsBar({
 function LockOverlay({ dripDay }: { dripDay: number }) {
   const { t } = useTranslation();
   return (
-    <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-[#0A0A0A]/80 backdrop-blur-[2px] rounded-xl">
+    <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-bg-primary/80 backdrop-blur-[2px] rounded-xl">
       <svg
         width="24"
         height="24"
@@ -112,7 +112,7 @@ function VideoCard({ lesson }: { lesson: VideoLesson }) {
       : 0;
 
   return (
-    <div className="relative bg-[#141414] border border-[#2A2A2A] rounded-xl p-4 transition-colors hover:border-[#D4AF37]/30">
+    <div className="relative bg-bg-secondary border border-border rounded-xl p-4 transition-colors hover:border-[#D4AF37]/30">
       {!lesson.unlocked && <LockOverlay dripDay={lesson.drip_day} />}
       {lesson.watched && <WatchedBadge />}
 
@@ -121,7 +121,7 @@ function VideoCard({ lesson }: { lesson: VideoLesson }) {
         {lesson.title}
       </h4>
       <div className="flex items-center gap-3 mb-3">
-        <span className="flex items-center gap-1 text-xs text-[#A0A0A0]">
+        <span className="flex items-center gap-1 text-xs text-text-secondary">
           <svg
             width="12"
             height="12"
@@ -137,13 +137,13 @@ function VideoCard({ lesson }: { lesson: VideoLesson }) {
           </svg>
           {formatDuration(lesson.duration_seconds)}
         </span>
-        <span className="px-1.5 py-0.5 text-[10px] font-medium rounded bg-[#1F1F1F] text-[#666] border border-[#2A2A2A]">
+        <span className="px-1.5 py-0.5 text-[10px] font-medium rounded bg-bg-tertiary text-[#666] border border-border">
           Day {lesson.drip_day}
         </span>
       </div>
 
       {/* Progress bar */}
-      <div className="h-1 bg-[#1F1F1F] rounded-full overflow-hidden">
+      <div className="h-1 bg-bg-tertiary rounded-full overflow-hidden">
         <div
           className={`h-full rounded-full transition-all duration-300 ${
             lesson.watched ? 'bg-[#22C55E]' : 'bg-[#D4AF37]'
@@ -230,7 +230,7 @@ export function VideoCurriculum() {
               <polygon points="5 3 19 12 5 21 5 3" />
             </svg>
           </div>
-          <p className="text-sm text-[#A0A0A0] max-w-sm">
+          <p className="text-sm text-text-secondary max-w-sm">
             {t('coach.video.emptyDescription')}
           </p>
         </div>

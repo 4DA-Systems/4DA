@@ -219,7 +219,7 @@ impl Database {
             .query_row("SELECT version FROM schema_version", [], |row| row.get(0))
             .unwrap_or(1);
 
-        const TARGET_VERSION: i64 = 20;
+        const TARGET_VERSION: i64 = 22;
         if current_version < TARGET_VERSION {
             // Drop the conn lock briefly to allow backup (needs filesystem access)
             drop(conn);
@@ -761,6 +761,111 @@ impl Database {
                 )?;
             }
 
+            // Phase 22 migration: Information Channels
+            if current_version < 22 {
+                Self::run_versioned_migration(
+                    &conn,
+                    21,
+                    22,
+                    "Phase 22: information channels",
+                    |c| {
+                        c.execute_batch(
+                            "CREATE TABLE IF NOT EXISTS channels (
+                                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                                slug TEXT NOT NULL UNIQUE,
+                                title TEXT NOT NULL,
+                                description TEXT NOT NULL DEFAULT '',
+                                topic_query TEXT NOT NULL DEFAULT '[]',
+                                status TEXT NOT NULL DEFAULT 'active',
+                                source_count INTEGER NOT NULL DEFAULT 0,
+                                render_count INTEGER NOT NULL DEFAULT 0,
+                                last_rendered_at TEXT,
+                                created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                                updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+                            );
+                            CREATE INDEX IF NOT EXISTS idx_channels_slug ON channels(slug);
+                            CREATE INDEX IF NOT EXISTS idx_channels_status ON channels(status);
+
+                            CREATE TABLE IF NOT EXISTS channel_renders (
+                                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                                channel_id INTEGER NOT NULL,
+                                version INTEGER NOT NULL,
+                                content_markdown TEXT NOT NULL,
+                                content_hash TEXT NOT NULL,
+                                source_item_ids TEXT NOT NULL DEFAULT '[]',
+                                model TEXT,
+                                tokens_used INTEGER,
+                                latency_ms INTEGER,
+                                rendered_at TEXT NOT NULL DEFAULT (datetime('now')),
+                                FOREIGN KEY (channel_id) REFERENCES channels(id),
+                                UNIQUE(channel_id, version)
+                            );
+                            CREATE INDEX IF NOT EXISTS idx_channel_renders_channel
+                                ON channel_renders(channel_id);
+
+                            CREATE TABLE IF NOT EXISTS channel_provenance (
+                                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                                render_id INTEGER NOT NULL,
+                                claim_index INTEGER NOT NULL,
+                                claim_text TEXT NOT NULL,
+                                source_item_ids TEXT NOT NULL DEFAULT '[]',
+                                source_titles TEXT NOT NULL DEFAULT '[]',
+                                source_urls TEXT NOT NULL DEFAULT '[]',
+                                FOREIGN KEY (render_id) REFERENCES channel_renders(id)
+                            );
+                            CREATE INDEX IF NOT EXISTS idx_channel_provenance_render
+                                ON channel_provenance(render_id);
+
+                            CREATE TABLE IF NOT EXISTS channel_source_matches (
+                                channel_id INTEGER NOT NULL,
+                                source_item_id INTEGER NOT NULL,
+                                match_score REAL NOT NULL DEFAULT 0.0,
+                                matched_at TEXT NOT NULL DEFAULT (datetime('now')),
+                                PRIMARY KEY (channel_id, source_item_id),
+                                FOREIGN KEY (channel_id) REFERENCES channels(id),
+                                FOREIGN KEY (source_item_id) REFERENCES source_items(id)
+                            );
+                            CREATE INDEX IF NOT EXISTS idx_channel_source_matches_channel
+                                ON channel_source_matches(channel_id);",
+                        )?;
+
+                        // Seed default channels
+                        let seeds: &[(&str, &str, &str, &str)] = &[
+                            (
+                                "local-ai-hardware",
+                                "Hardware for Local AI",
+                                "GPU availability, VRAM benchmarks, quantization advances, and hardware acceleration for local inference.",
+                                r#"["gpu","nvidia","amd","apple silicon","vram","quantization","gguf","local inference","hardware acceleration","npu","cuda","rocm","metal"]"#,
+                            ),
+                            (
+                                "local-llm-landscape",
+                                "Local LLM Landscape",
+                                "Open-weight models, inference engines, fine-tuning techniques, and the local AI ecosystem.",
+                                r#"["ollama","llama","llm","gguf","mistral","llama.cpp","vllm","mlx","fine-tuning","lora","open source model","embedding model","whisper","inference engine"]"#,
+                            ),
+                            (
+                                "developer-tools-shifting",
+                                "Developer Tools Shifting",
+                                "IDE evolution, AI coding assistants, build systems, and the changing developer toolchain.",
+                                r#"["developer tools","cli","ide","vscode","neovim","build system","ai coding","copilot","cursor","toolchain","dx","bun","deno","turbopack"]"#,
+                            ),
+                        ];
+                        for (slug, title, desc, topics) in seeds {
+                            c.execute(
+                                "INSERT OR IGNORE INTO channels
+                                    (slug, title, description, topic_query, status,
+                                     source_count, render_count, created_at, updated_at)
+                                 VALUES (?1, ?2, ?3, ?4, 'active', 0, 0, datetime('now'), datetime('now'))",
+                                rusqlite::params![slug, title, desc, topics],
+                            )?;
+                        }
+
+                        info!(target: "4da::db", "Created channels tables and seeded 3 default channels");
+                        Ok(())
+                    },
+                )?;
+            }
+
             info!(target: "4da::db", "Database schema initialized with sqlite-vec");
             return Ok(());
         }
@@ -1055,6 +1160,10 @@ mod tests {
             .collect();
 
         let expected = [
+            "channels",
+            "channel_renders",
+            "channel_provenance",
+            "channel_source_matches",
             "context_chunks",
             "source_items",
             "temporal_events",

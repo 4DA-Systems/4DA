@@ -214,6 +214,11 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
     first?.focus();
 
     const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.stopPropagation();
+        onClose();
+        return;
+      }
       if (e.key !== 'Tab') return;
       if (e.shiftKey) {
         if (document.activeElement === first) {
@@ -233,7 +238,7 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
       modal.removeEventListener('keydown', handleKeyDown);
       previouslyFocused?.focus();
     };
-  }, [activeTab]);
+  }, [activeTab, onClose]);
 
   // Monitoring action wrappers (add status messages)
   const handleToggleMonitoring = async () => {

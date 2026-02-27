@@ -107,13 +107,13 @@ export interface ToastSlice {
 export interface UiSlice {
   showSettings: boolean;
   showSplash: boolean;
-  activeView: 'briefing' | 'results' | 'saved' | 'insights' | 'toolkit' | 'playbook' | 'coach';
+  activeView: 'briefing' | 'results' | 'saved' | 'insights' | 'toolkit' | 'playbook' | 'coach' | 'channels';
   isFirstRun: boolean;
   firstRunDismissed: boolean;
   embeddingMode: 'semantic' | 'keyword-only' | null;
   setShowSettings: (show: boolean) => void;
   setShowSplash: (show: boolean) => void;
-  setActiveView: (view: 'briefing' | 'results' | 'saved' | 'insights' | 'toolkit' | 'playbook' | 'coach') => void;
+  setActiveView: (view: 'briefing' | 'results' | 'saved' | 'insights' | 'toolkit' | 'playbook' | 'coach' | 'channels') => void;
   setIsFirstRun: (v: boolean) => void;
   setFirstRunDismissed: (v: boolean) => void;
   setEmbeddingMode: (mode: 'semantic' | 'keyword-only' | null) => void;
@@ -351,4 +351,6 @@ export type AppStore =
   & import('./coach-slice').CoachSlice
   & import('./autophagy-slice').AutophagySlice
   & import('./decision-advantage-slice').DecisionAdvantageSlice
-  & import('./game-slice').GameSlice;
+  & import('./game-slice').GameSlice
+  & import('./channels-slice').ChannelsSlice
+  & import('./unified-profile-slice').UnifiedProfileSlice;

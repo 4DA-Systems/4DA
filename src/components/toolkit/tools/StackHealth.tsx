@@ -117,7 +117,7 @@ export default function StackHealth() {
         </button>
 
         {projects.length > 0 && (
-          <div className="flex items-center gap-4 text-xs text-[#A0A0A0]">
+          <div className="flex items-center gap-4 text-xs text-text-secondary">
             <span>
               {projects.length} project{projects.length !== 1 ? 's' : ''}
             </span>
@@ -151,7 +151,7 @@ export default function StackHealth() {
       {/* Loading state */}
       {loading && projects.length === 0 && (
         <div className="flex flex-col items-center justify-center py-16 text-[#666]">
-          <div className="w-8 h-8 border-2 border-[#2A2A2A] border-t-white rounded-full animate-spin mb-4" />
+          <div className="w-8 h-8 border-2 border-border border-t-white rounded-full animate-spin mb-4" />
           <p className="text-sm">{t('toolkit.stackHealth.analyzing')}</p>
         </div>
       )}
@@ -174,12 +174,12 @@ export default function StackHealth() {
         return (
           <div
             key={project.project_name}
-            className="bg-[#141414] border border-[#2A2A2A] rounded-xl overflow-hidden"
+            className="bg-bg-secondary border border-border rounded-xl overflow-hidden"
           >
             {/* Card header */}
             <button
               onClick={() => toggleExpand(project.project_name)}
-              className="w-full flex items-center gap-3 px-4 py-3 hover:bg-[#1F1F1F] transition-colors text-left"
+              className="w-full flex items-center gap-3 px-4 py-3 hover:bg-bg-tertiary transition-colors text-left"
             >
               <svg
                 width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor"
@@ -214,7 +214,7 @@ export default function StackHealth() {
 
             {/* Expanded content */}
             {isOpen && (
-              <div className="px-4 pb-4 border-t border-[#2A2A2A]">
+              <div className="px-4 pb-4 border-t border-border">
                 {/* Score bars */}
                 <div className="grid grid-cols-2 gap-3 mt-3">
                   {DIMENSIONS.map((dim) => {
@@ -226,8 +226,8 @@ export default function StackHealth() {
                         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
                           <path d={DIMENSION_ICONS[dim]} />
                         </svg>
-                        <span className="text-xs text-[#A0A0A0] capitalize w-20 shrink-0">{dim}</span>
-                        <div className="flex-1 h-1.5 bg-[#1F1F1F] rounded-full overflow-hidden">
+                        <span className="text-xs text-text-secondary capitalize w-20 shrink-0">{dim}</span>
+                        <div className="flex-1 h-1.5 bg-bg-tertiary rounded-full overflow-hidden">
                           <div
                             className="h-full rounded-full transition-all duration-500"
                             style={{ width: `${score * 100}%`, backgroundColor: color }}
@@ -264,7 +264,7 @@ export default function StackHealth() {
                         >
                           {alert.severity}
                         </span>
-                        <span className="text-[#A0A0A0]">{alert.message}</span>
+                        <span className="text-text-secondary">{alert.message}</span>
                       </div>
                     ))}
                   </div>

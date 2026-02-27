@@ -126,24 +126,24 @@ export function SetupLocale({ onLocaleChange }: SetupLocaleProps) {
 
   if (!loaded) {
     return (
-      <div className="mt-2 p-4 bg-[#141414] rounded-lg border border-[#2A2A2A]">
-        <p className="text-sm text-[#666666]">{t('onboarding.locale.detecting')}</p>
+      <div className="mt-2 p-4 bg-bg-secondary rounded-lg border border-border">
+        <p className="text-sm text-text-muted">{t('onboarding.locale.detecting')}</p>
       </div>
     );
   }
 
   return (
-    <div className="mt-2 p-4 bg-[#141414] rounded-lg border border-[#2A2A2A] space-y-3">
+    <div className="mt-2 p-4 bg-bg-secondary rounded-lg border border-border space-y-3">
       {/* Country */}
       <div>
-        <label className="block text-xs text-[#A0A0A0] uppercase tracking-wider mb-1.5">
+        <label className="block text-xs text-text-secondary uppercase tracking-wider mb-1.5">
           {t('onboarding.locale.country')}
         </label>
         <select
           value={country}
           onChange={(e) => handleCountryChange(e.target.value)}
           aria-label="Select country"
-          className="w-full bg-[#0A0A0A] border border-[#2A2A2A] rounded-lg px-3 py-2 text-white text-sm focus:border-orange-500 focus:outline-none"
+          className="w-full bg-bg-primary border border-border rounded-lg px-3 py-2 text-white text-sm focus:border-orange-500 focus:outline-none"
         >
           {COUNTRIES.map((c) => (
             <option key={c.code} value={c.code}>{c.name}</option>
@@ -154,14 +154,14 @@ export function SetupLocale({ onLocaleChange }: SetupLocaleProps) {
       {/* Language & Currency side by side */}
       <div className="grid grid-cols-2 gap-3">
         <div>
-          <label className="block text-xs text-[#A0A0A0] uppercase tracking-wider mb-1.5">
+          <label className="block text-xs text-text-secondary uppercase tracking-wider mb-1.5">
             {t('onboarding.locale.language')}
           </label>
           <select
             value={language}
             onChange={(e) => handleLanguageChange(e.target.value)}
             aria-label="Select language"
-            className="w-full bg-[#0A0A0A] border border-[#2A2A2A] rounded-lg px-3 py-2 text-white text-sm focus:border-orange-500 focus:outline-none"
+            className="w-full bg-bg-primary border border-border rounded-lg px-3 py-2 text-white text-sm focus:border-orange-500 focus:outline-none"
           >
             {LANGUAGES.map((l) => (
               <option key={l.code} value={l.code}>{l.name}</option>
@@ -169,14 +169,14 @@ export function SetupLocale({ onLocaleChange }: SetupLocaleProps) {
           </select>
         </div>
         <div>
-          <label className="block text-xs text-[#A0A0A0] uppercase tracking-wider mb-1.5">
+          <label className="block text-xs text-text-secondary uppercase tracking-wider mb-1.5">
             {t('onboarding.locale.currency')}
           </label>
           <select
             value={currency}
             onChange={(e) => handleCurrencyChange(e.target.value)}
             aria-label="Select currency"
-            className="w-full bg-[#0A0A0A] border border-[#2A2A2A] rounded-lg px-3 py-2 text-white text-sm focus:border-orange-500 focus:outline-none"
+            className="w-full bg-bg-primary border border-border rounded-lg px-3 py-2 text-white text-sm focus:border-orange-500 focus:outline-none"
           >
             {CURRENCIES.map((c) => (
               <option key={c} value={c}>{c}</option>
@@ -187,7 +187,7 @@ export function SetupLocale({ onLocaleChange }: SetupLocaleProps) {
 
       {/* Preview */}
       <div className="flex items-center gap-2">
-        <p className="text-xs text-[#666666]">
+        <p className="text-xs text-text-muted">
           {t('onboarding.locale.priceInfo', { currency, language: getLanguageName(language) })}
         </p>
         {saved && <span className="text-xs text-green-400">{t('onboarding.locale.saved')}</span>}

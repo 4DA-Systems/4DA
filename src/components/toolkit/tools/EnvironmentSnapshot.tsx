@@ -62,7 +62,7 @@ function buildMarkdown(snapshot: EnvSnapshot, timestamp: string): string {
 
 function SectionHeader({ children }: { children: React.ReactNode }) {
   return (
-    <h3 className="text-xs font-medium text-[#A0A0A0] uppercase tracking-wider mb-2">
+    <h3 className="text-xs font-medium text-text-secondary uppercase tracking-wider mb-2">
       {children}
     </h3>
   );
@@ -70,8 +70,8 @@ function SectionHeader({ children }: { children: React.ReactNode }) {
 
 function InfoRow({ label, value, mono = false }: { label: string; value: string; mono?: boolean }) {
   return (
-    <div className="flex items-center justify-between py-1.5 border-b border-[#2A2A2A] last:border-0">
-      <span className="text-xs text-[#A0A0A0]">{label}</span>
+    <div className="flex items-center justify-between py-1.5 border-b border-border last:border-0">
+      <span className="text-xs text-text-secondary">{label}</span>
       <span className={`text-xs text-white ${mono ? 'font-mono' : ''}`}>{value}</span>
     </div>
   );
@@ -151,7 +151,7 @@ export default function EnvironmentSnapshot() {
         {snapshot && (
           <button
             onClick={copyMarkdown}
-            className="flex items-center gap-2 px-3 py-2 text-xs text-[#A0A0A0] bg-[#141414] border border-[#2A2A2A] rounded-lg hover:text-white hover:border-white/20 transition-all"
+            className="flex items-center gap-2 px-3 py-2 text-xs text-text-secondary bg-bg-secondary border border-border rounded-lg hover:text-white hover:border-white/20 transition-all"
           >
             {copied ? (
               <>
@@ -194,7 +194,7 @@ export default function EnvironmentSnapshot() {
             <line x1="8" y1="21" x2="16" y2="21" />
             <line x1="12" y1="17" x2="12" y2="21" />
           </svg>
-          <p className="text-sm text-[#A0A0A0] mb-1">{t('toolkit.envSnapshot.empty')}</p>
+          <p className="text-sm text-text-secondary mb-1">{t('toolkit.envSnapshot.empty')}</p>
           <p className="text-xs text-[#666]">
             {t('toolkit.envSnapshot.emptyHint')}
           </p>
@@ -205,7 +205,7 @@ export default function EnvironmentSnapshot() {
       {snapshot && (
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
           {/* System section */}
-          <div className="bg-[#141414] border border-[#2A2A2A] rounded-lg p-4">
+          <div className="bg-bg-secondary border border-border rounded-lg p-4">
             <SectionHeader>{t('toolkit.envSnapshot.system')}</SectionHeader>
             <InfoRow label="OS" value={snapshot.os} />
             <InfoRow label="Version" value={snapshot.os_version} mono />
@@ -214,7 +214,7 @@ export default function EnvironmentSnapshot() {
 
           {/* Runtimes section */}
           {availableRuntimes.length > 0 && (
-            <div className="bg-[#141414] border border-[#2A2A2A] rounded-lg p-4">
+            <div className="bg-bg-secondary border border-border rounded-lg p-4">
               <SectionHeader>{t('toolkit.envSnapshot.runtimeVersions')}</SectionHeader>
               {availableRuntimes.map(([name, version]) => (
                 <InfoRow key={name} label={name} value={version} mono />
@@ -224,13 +224,13 @@ export default function EnvironmentSnapshot() {
 
           {/* Git section — full width */}
           {(snapshot.git_branch || snapshot.git_status) && (
-            <div className="bg-[#141414] border border-[#2A2A2A] rounded-lg p-4 lg:col-span-2">
+            <div className="bg-bg-secondary border border-border rounded-lg p-4 lg:col-span-2">
               <SectionHeader>{t('toolkit.envSnapshot.git')}</SectionHeader>
 
               {snapshot.git_branch && (
                 <div className="flex items-center gap-2 mb-3">
-                  <span className="text-xs text-[#A0A0A0]">Branch:</span>
-                  <span className="inline-flex items-center px-2 py-0.5 text-xs font-mono text-white bg-[#1F1F1F] border border-[#2A2A2A] rounded">
+                  <span className="text-xs text-text-secondary">Branch:</span>
+                  <span className="inline-flex items-center px-2 py-0.5 text-xs font-mono text-white bg-bg-tertiary border border-border rounded">
                     {snapshot.git_branch}
                   </span>
                 </div>
@@ -238,8 +238,8 @@ export default function EnvironmentSnapshot() {
 
               {snapshot.git_status && (
                 <div className="mb-3">
-                  <p className="text-xs text-[#A0A0A0] mb-1.5">Status:</p>
-                  <pre className="text-xs font-mono text-[#A0A0A0] bg-[#0A0A0A] border border-[#2A2A2A] rounded-lg p-3 overflow-auto max-h-48 whitespace-pre-wrap">
+                  <p className="text-xs text-text-secondary mb-1.5">Status:</p>
+                  <pre className="text-xs font-mono text-text-secondary bg-bg-primary border border-border rounded-lg p-3 overflow-auto max-h-48 whitespace-pre-wrap">
                     {snapshot.git_status}
                   </pre>
                 </div>
@@ -247,12 +247,12 @@ export default function EnvironmentSnapshot() {
 
               {snapshot.git_recent_commits.length > 0 && (
                 <div>
-                  <p className="text-xs text-[#A0A0A0] mb-1.5">{t('toolkit.envSnapshot.recentCommits')}:</p>
+                  <p className="text-xs text-text-secondary mb-1.5">{t('toolkit.envSnapshot.recentCommits')}:</p>
                   <div className="space-y-1">
                     {snapshot.git_recent_commits.map((commit, i) => (
                       <div
                         key={i}
-                        className="text-xs font-mono text-[#A0A0A0] bg-[#0A0A0A] border border-[#2A2A2A] rounded px-3 py-1.5 truncate"
+                        className="text-xs font-mono text-text-secondary bg-bg-primary border border-border rounded px-3 py-1.5 truncate"
                         title={commit}
                       >
                         {commit}

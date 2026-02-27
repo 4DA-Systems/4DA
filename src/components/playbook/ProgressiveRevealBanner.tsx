@@ -21,12 +21,12 @@ export function ProgressiveRevealBanner({ block }: Props) {
           New Data Unlocked
         </h4>
       </div>
-      <p className="text-xs text-[#A0A0A0] mb-2">
+      <p className="text-xs text-text-secondary mb-2">
         Completed modules: {newly_completed.join(', ')}
       </p>
       <ul className="space-y-1">
         {unlocked_content.map((item, i) => (
-          <li key={i} className="flex items-center gap-2 text-xs text-[#A0A0A0]">
+          <li key={i} className="flex items-center gap-2 text-xs text-text-secondary">
             <span className="text-[#22C55E]">+</span>
             {item}
           </li>

@@ -84,6 +84,7 @@ export const ScoreAutopsy: React.FC<ScoreAutopsyProps> = ({
         <button
           onClick={runAutopsy}
           disabled={loading}
+          aria-label={t('autopsy.title')}
           className="autopsy-button px-3 py-1.5 text-xs bg-bg-secondary text-text-primary border border-border rounded hover:bg-bg-tertiary transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {loading ? (
@@ -260,6 +261,7 @@ export const ScoreAutopsy: React.FC<ScoreAutopsyProps> = ({
 
       <button
         onClick={() => setAutopsy(null)}
+        aria-label={t('autopsy.close')}
         className="close-autopsy-button mt-4 bg-bg-tertiary text-text-secondary border-none px-4 py-2 rounded cursor-pointer text-xs hover:bg-bg-primary transition-colors"
       >
         {t('autopsy.close')}

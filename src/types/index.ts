@@ -8,3 +8,5 @@ export * from './stacks';
 export * from './playbook';
 export * from './streets';
 export * from './coach';
+export * from './channels';
+export * from './profile';

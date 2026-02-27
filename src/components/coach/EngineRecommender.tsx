@@ -17,13 +17,13 @@ function FitBar({ score }: { score: number }) {
   const pct = Math.min(Math.max(score, 0), 100);
   return (
     <div className="flex items-center gap-2">
-      <div className="flex-1 h-1.5 bg-[#1F1F1F] rounded-full overflow-hidden">
+      <div className="flex-1 h-1.5 bg-bg-tertiary rounded-full overflow-hidden">
         <div
           className="h-full bg-[#D4AF37] rounded-full transition-all duration-500"
           style={{ width: `${pct}%` }}
         />
       </div>
-      <span className="text-xs text-[#A0A0A0] font-mono w-10 text-right">{pct}%</span>
+      <span className="text-xs text-text-secondary font-mono w-10 text-right">{pct}%</span>
     </div>
   );
 }
@@ -38,8 +38,8 @@ function EngineCard({
   const { t } = useTranslation();
   return (
     <div
-      className={`flex-1 min-w-[260px] bg-[#141414] rounded-xl p-5 space-y-4 border ${
-        isPrimary ? 'border-[#D4AF37]/40' : 'border-[#2A2A2A]'
+      className={`flex-1 min-w-[260px] bg-bg-secondary rounded-xl p-5 space-y-4 border ${
+        isPrimary ? 'border-[#D4AF37]/40' : 'border-border'
       }`}
     >
       {/* Header */}
@@ -48,7 +48,7 @@ function EngineCard({
           className={`w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold ${
             isPrimary
               ? 'bg-[#D4AF37]/20 text-[#D4AF37]'
-              : 'bg-[#1F1F1F] text-[#A0A0A0]'
+              : 'bg-bg-tertiary text-text-secondary'
           }`}
         >
           {engine.engine_number}
@@ -96,7 +96,7 @@ function EngineCard({
         <p className="text-[10px] text-[#666] uppercase tracking-wide mb-1">
           {t('coach.engine.reasoning')}
         </p>
-        <p className="text-xs text-[#A0A0A0] leading-relaxed">
+        <p className="text-xs text-text-secondary leading-relaxed">
           {engine.reasoning}
         </p>
       </div>
@@ -109,7 +109,7 @@ function EngineCard({
           </p>
           <ul className="space-y-1">
             {engine.prerequisites.map((prereq, i) => (
-              <li key={i} className="flex items-start gap-2 text-xs text-[#A0A0A0]">
+              <li key={i} className="flex items-start gap-2 text-xs text-text-secondary">
                 <span className="text-[#D4AF37] mt-0.5 flex-shrink-0">-</span>
                 <span>{prereq}</span>
               </li>
@@ -159,7 +159,7 @@ export function EngineRecommender() {
         <div className="flex items-center justify-center py-16">
           <div className="flex flex-col items-center gap-3">
             <Spinner />
-            <p className="text-xs text-[#A0A0A0]">
+            <p className="text-xs text-text-secondary">
               {t('coach.engine.analyzingProfile')}
             </p>
           </div>
@@ -176,12 +176,12 @@ export function EngineRecommender() {
           </div>
 
           {/* Overall Reasoning */}
-          <div className="bg-[#141414] border border-[#2A2A2A] rounded-xl p-5 space-y-3">
+          <div className="bg-bg-secondary border border-border rounded-xl p-5 space-y-3">
             <div>
               <p className="text-[10px] text-[#666] uppercase tracking-wide mb-1">
                 {t('coach.engine.overallAnalysis')}
               </p>
-              <p className="text-xs text-[#A0A0A0] leading-relaxed">
+              <p className="text-xs text-text-secondary leading-relaxed">
                 {recommendation.reasoning}
               </p>
             </div>
@@ -196,7 +196,7 @@ export function EngineRecommender() {
                   {recommendation.profile_gaps.map((gap, i) => (
                     <li
                       key={i}
-                      className="flex items-start gap-2 text-xs text-[#A0A0A0]"
+                      className="flex items-start gap-2 text-xs text-text-secondary"
                     >
                       <span className="text-[#F97316] mt-0.5 flex-shrink-0">*</span>
                       <span>{gap}</span>
@@ -227,7 +227,7 @@ export function EngineRecommender() {
               <path d="M12 16v-4M12 8h.01" />
             </svg>
           </div>
-          <p className="text-sm text-[#A0A0A0] max-w-sm">
+          <p className="text-sm text-text-secondary max-w-sm">
             {t('coach.engine.emptyDescription')}
           </p>
         </div>

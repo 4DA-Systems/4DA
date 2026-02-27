@@ -60,6 +60,9 @@ mod anomaly;
 mod attention;
 mod autophagy;
 mod autophagy_commands;
+mod channel_commands;
+mod channel_render;
+pub mod channels;
 mod competing_tech;
 mod content_commands;
 mod content_dna;
@@ -126,6 +129,7 @@ mod decision_advantage_commands;
 mod git_deck;
 pub(crate) mod i18n;
 mod playbook_commands;
+mod sovereign_developer_profile;
 mod sovereign_profile;
 mod streets_coach;
 mod streets_commands;
@@ -411,6 +415,10 @@ pub fn run() {
             streets_commands::parse_lesson_commands,
             streets_commands::execute_streets_command,
             streets_commands::execute_lesson_commands,
+            // Sovereign Developer Profile (unified view)
+            sovereign_developer_profile::get_sovereign_developer_profile,
+            sovereign_developer_profile::export_sovereign_profile_markdown,
+            sovereign_developer_profile::export_sovereign_profile_json,
             // Sovereign Profile
             sovereign_profile::get_sovereign_profile,
             sovereign_profile::get_sovereign_profile_completeness,
@@ -471,7 +479,16 @@ pub fn run() {
             translation_commands::get_translation_overrides,
             translation_commands::delete_translation_override,
             // GAME Engine
-            game_commands::get_game_state
+            game_commands::get_game_state,
+            // Information Channels
+            channel_commands::list_channels,
+            channel_commands::get_channel,
+            channel_commands::get_channel_content,
+            channel_commands::render_channel_now,
+            channel_commands::get_channel_provenance,
+            channel_commands::get_channel_changelog,
+            channel_commands::get_channel_sources,
+            channel_commands::refresh_channel_sources
         ])
         .setup(|app| {
             // Record app start time for diagnostics uptime tracking

@@ -36,14 +36,14 @@ function BreakdownBar({ label, value }: { label: string; value: number }) {
   const pct = Math.min(Math.max(value * 100, 0), 100);
   return (
     <div className="flex items-center gap-3 py-1">
-      <span className="text-xs text-[#A0A0A0] w-36 shrink-0">{label}</span>
+      <span className="text-xs text-text-secondary w-36 shrink-0">{label}</span>
       <div className="flex-1 h-1.5 bg-white/10 rounded-full overflow-hidden">
         <div
           className="h-full bg-white rounded-full transition-all duration-500"
           style={{ width: `${pct}%` }}
         />
       </div>
-      <span className="text-xs font-mono text-[#A0A0A0] w-12 text-right">
+      <span className="text-xs font-mono text-text-secondary w-12 text-right">
         {value.toFixed(2)}
       </span>
     </div>
@@ -101,38 +101,38 @@ export default function ScoringSandbox() {
   return (
     <div className="space-y-4">
       {/* Input form */}
-      <div className="bg-[#141414] border border-[#2A2A2A] rounded-xl p-4 space-y-3">
+      <div className="bg-bg-secondary border border-border rounded-xl p-4 space-y-3">
         <div>
-          <label className="block text-xs text-[#A0A0A0] mb-1.5">{t('toolkit.scoringSandbox.title')} *</label>
+          <label className="block text-xs text-text-secondary mb-1.5">{t('toolkit.scoringSandbox.title')} *</label>
           <input
             type="text"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder={t('toolkit.scoringSandbox.titlePlaceholder')}
-            className="w-full px-3 py-2 text-sm bg-[#0A0A0A] border border-[#2A2A2A] rounded-lg text-white placeholder-[#666] focus:outline-none focus:border-white/30 transition-colors"
+            className="w-full px-3 py-2 text-sm bg-bg-primary border border-border rounded-lg text-white placeholder-[#666] focus:outline-none focus:border-white/30 transition-colors"
           />
         </div>
 
         <div>
-          <label className="block text-xs text-[#A0A0A0] mb-1.5">{t('toolkit.scoringSandbox.content')}</label>
+          <label className="block text-xs text-text-secondary mb-1.5">{t('toolkit.scoringSandbox.content')}</label>
           <textarea
             value={content}
             onChange={(e) => setContent(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder={t('toolkit.scoringSandbox.contentPlaceholder')}
             rows={3}
-            className="w-full px-3 py-2 text-sm bg-[#0A0A0A] border border-[#2A2A2A] rounded-lg text-white placeholder-[#666] focus:outline-none focus:border-white/30 transition-colors resize-y min-h-[60px]"
+            className="w-full px-3 py-2 text-sm bg-bg-primary border border-border rounded-lg text-white placeholder-[#666] focus:outline-none focus:border-white/30 transition-colors resize-y min-h-[60px]"
           />
         </div>
 
         <div className="flex items-end gap-3">
           <div className="flex-1 max-w-[200px]">
-            <label className="block text-xs text-[#A0A0A0] mb-1.5">{t('toolkit.scoringSandbox.sourceType')}</label>
+            <label className="block text-xs text-text-secondary mb-1.5">{t('toolkit.scoringSandbox.sourceType')}</label>
             <select
               value={sourceType}
               onChange={(e) => setSourceType(e.target.value)}
-              className="w-full px-3 py-2 text-sm bg-[#0A0A0A] border border-[#2A2A2A] rounded-lg text-white focus:outline-none focus:border-white/30 transition-colors"
+              className="w-full px-3 py-2 text-sm bg-bg-primary border border-border rounded-lg text-white focus:outline-none focus:border-white/30 transition-colors"
             >
               {SOURCE_TYPES.map((st) => (
                 <option key={st.value} value={st.value}>
@@ -167,7 +167,7 @@ export default function ScoringSandbox() {
           {(result || title || content) && (
             <button
               onClick={reset}
-              className="px-3 py-2 text-xs text-[#A0A0A0] bg-[#1F1F1F] border border-[#2A2A2A] rounded-lg hover:text-white hover:border-white/20 transition-all"
+              className="px-3 py-2 text-xs text-text-secondary bg-bg-tertiary border border-border rounded-lg hover:text-white hover:border-white/20 transition-all"
             >
               {t('toolkit.scoringSandbox.clear')}
             </button>
@@ -192,7 +192,7 @@ export default function ScoringSandbox() {
 
       {/* Results */}
       {result && (
-        <div className="bg-[#141414] border border-[#2A2A2A] rounded-xl p-5 space-y-5">
+        <div className="bg-bg-secondary border border-border rounded-xl p-5 space-y-5">
           {/* Score hero */}
           <div className="flex items-center gap-5">
             <div className="text-center">
@@ -217,7 +217,7 @@ export default function ScoringSandbox() {
 
           {/* Breakdown bars */}
           <div>
-            <h4 className="text-xs font-medium text-[#A0A0A0] uppercase tracking-wider mb-2">
+            <h4 className="text-xs font-medium text-text-secondary uppercase tracking-wider mb-2">
               {t('toolkit.scoringSandbox.scoreBreakdown')}
             </h4>
             <div className="space-y-0.5">
@@ -233,14 +233,14 @@ export default function ScoringSandbox() {
           {/* Matched interests */}
           {result.matched_interests.length > 0 && (
             <div>
-              <h4 className="text-xs font-medium text-[#A0A0A0] uppercase tracking-wider mb-2">
+              <h4 className="text-xs font-medium text-text-secondary uppercase tracking-wider mb-2">
                 {t('toolkit.scoringSandbox.matchedInterests')}
               </h4>
               <div className="flex flex-wrap gap-1.5">
                 {result.matched_interests.map((interest) => (
                   <span
                     key={interest}
-                    className="px-2 py-0.5 text-xs text-[#A0A0A0] bg-[#1F1F1F] border border-[#2A2A2A] rounded-full"
+                    className="px-2 py-0.5 text-xs text-text-secondary bg-bg-tertiary border border-border rounded-full"
                   >
                     {interest}
                   </span>
@@ -266,7 +266,7 @@ export default function ScoringSandbox() {
             <path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20" />
             <path d="M2 12h20" />
           </svg>
-          <p className="text-sm text-[#A0A0A0] mb-1">{t('toolkit.scoringSandbox.empty')}</p>
+          <p className="text-sm text-text-secondary mb-1">{t('toolkit.scoringSandbox.empty')}</p>
           <p className="text-xs text-[#666]">
             {t('toolkit.scoringSandbox.emptyHint')}
           </p>

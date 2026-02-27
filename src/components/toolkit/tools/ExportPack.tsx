@@ -24,10 +24,10 @@ function SectionToggle({
     <label
       className={`flex items-center gap-2 px-3 py-2 text-sm rounded-lg border transition-all cursor-pointer select-none ${
         disabled
-          ? 'bg-[#1F1F1F] border-[#2A2A2A] text-[#666] cursor-not-allowed'
+          ? 'bg-bg-tertiary border-border text-[#666] cursor-not-allowed'
           : checked
-            ? 'bg-[#141414] border-white/20 text-white'
-            : 'bg-[#141414] border-[#2A2A2A] text-[#A0A0A0] hover:border-white/10'
+            ? 'bg-bg-secondary border-white/20 text-white'
+            : 'bg-bg-secondary border-border text-text-secondary hover:border-white/10'
       }`}
     >
       <input
@@ -187,8 +187,8 @@ export default function ExportPack() {
       {/* Preview */}
       {result && filteredMarkdown ? (
         <div className="space-y-3">
-          <div className="bg-[#1F1F1F] border border-[#2A2A2A] rounded-lg p-4 max-h-[500px] overflow-auto">
-            <pre className="text-sm font-mono text-[#A0A0A0] whitespace-pre-wrap leading-relaxed">
+          <div className="bg-bg-tertiary border border-border rounded-lg p-4 max-h-[500px] overflow-auto">
+            <pre className="text-sm font-mono text-text-secondary whitespace-pre-wrap leading-relaxed">
               {filteredMarkdown}
             </pre>
           </div>
@@ -197,7 +197,7 @@ export default function ExportPack() {
           <div className="flex items-center gap-3">
             <button
               onClick={copyMarkdown}
-              className="flex items-center gap-2 px-3 py-2 text-xs bg-[#141414] border border-[#2A2A2A] rounded-lg hover:text-white hover:border-white/20 transition-all"
+              className="flex items-center gap-2 px-3 py-2 text-xs bg-bg-secondary border border-border rounded-lg hover:text-white hover:border-white/20 transition-all"
             >
               {copied ? (
                 <>
@@ -212,14 +212,14 @@ export default function ExportPack() {
                     <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
                     <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" />
                   </svg>
-                  <span className="text-[#A0A0A0]">{t('toolkit.exportPack.copyMarkdown')}</span>
+                  <span className="text-text-secondary">{t('toolkit.exportPack.copyMarkdown')}</span>
                 </>
               )}
             </button>
 
             <button
               onClick={downloadMarkdown}
-              className="flex items-center gap-2 px-3 py-2 text-xs text-[#A0A0A0] bg-[#141414] border border-[#2A2A2A] rounded-lg hover:text-white hover:border-white/20 transition-all"
+              className="flex items-center gap-2 px-3 py-2 text-xs text-text-secondary bg-bg-secondary border border-border rounded-lg hover:text-white hover:border-white/20 transition-all"
             >
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" />
@@ -241,7 +241,7 @@ export default function ExportPack() {
             <path d="M1 3h22v5H1z" />
             <path d="M10 12h4" />
           </svg>
-          <p className="text-sm text-[#A0A0A0] mb-1">{t('toolkit.exportPack.empty')}</p>
+          <p className="text-sm text-text-secondary mb-1">{t('toolkit.exportPack.empty')}</p>
           <p className="text-xs text-[#666]">
             {t('toolkit.exportPack.emptyHint')}
           </p>

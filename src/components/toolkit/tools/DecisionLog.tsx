@@ -37,7 +37,7 @@ const TYPE_COLORS: Record<string, string> = {
 };
 
 const Pill = ({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) => (
-  <button onClick={onClick} className={`px-2.5 py-1 text-xs rounded-full transition-all ${active ? 'bg-white text-[#0A0A0A] font-medium' : 'bg-[#1F1F1F] text-[#A0A0A0] border border-[#2A2A2A] hover:border-white/20'}`}>{label}</button>
+  <button onClick={onClick} className={`px-2.5 py-1 text-xs rounded-full transition-all ${active ? 'bg-white text-[#0A0A0A] font-medium' : 'bg-bg-tertiary text-text-secondary border border-border hover:border-white/20'}`}>{label}</button>
 );
 
 const confColor = (c: number) => c >= 80 ? '#22C55E' : c >= 50 ? '#D4AF37' : '#EF4444';
@@ -150,7 +150,7 @@ export default function DecisionLog() {
           {showForm ? t('action.cancel') : t('toolkit.decisionLog.addDecision')}
         </button>
         {loading && (
-          <div className="flex items-center gap-2 text-xs text-[#A0A0A0]">
+          <div className="flex items-center gap-2 text-xs text-text-secondary">
             <div className="w-3 h-3 border-2 border-[#666] border-t-white rounded-full animate-spin" />
             {t('action.loading')}
           </div>
@@ -159,44 +159,44 @@ export default function DecisionLog() {
 
       {/* Add form */}
       {showForm && (
-        <div className="bg-[#141414] border border-[#2A2A2A] rounded-xl p-4 space-y-3">
+        <div className="bg-bg-secondary border border-border rounded-xl p-4 space-y-3">
           <div>
-            <label className="block text-xs text-[#A0A0A0] mb-1.5">{t('toolkit.decisionLog.subject')} *</label>
+            <label className="block text-xs text-text-secondary mb-1.5">{t('toolkit.decisionLog.subject')} *</label>
             <input
               type="text"
               value={subject}
               onChange={(e) => setSubject(e.target.value)}
               placeholder={t('toolkit.decisionLog.subjectPlaceholder')}
-              className="w-full px-3 py-2 text-sm bg-[#0A0A0A] border border-[#2A2A2A] rounded-lg text-white placeholder-[#666] focus:outline-none focus:border-white/30 transition-colors"
+              className="w-full px-3 py-2 text-sm bg-bg-primary border border-border rounded-lg text-white placeholder-[#666] focus:outline-none focus:border-white/30 transition-colors"
             />
           </div>
           <div>
-            <label className="block text-xs text-[#A0A0A0] mb-1.5">{t('toolkit.decisionLog.decision')} *</label>
+            <label className="block text-xs text-text-secondary mb-1.5">{t('toolkit.decisionLog.decision')} *</label>
             <textarea
               value={decision}
               onChange={(e) => setDecision(e.target.value)}
               placeholder={t('toolkit.decisionLog.decisionPlaceholder')}
               rows={2}
-              className="w-full px-3 py-2 text-sm bg-[#0A0A0A] border border-[#2A2A2A] rounded-lg text-white placeholder-[#666] focus:outline-none focus:border-white/30 transition-colors resize-y"
+              className="w-full px-3 py-2 text-sm bg-bg-primary border border-border rounded-lg text-white placeholder-[#666] focus:outline-none focus:border-white/30 transition-colors resize-y"
             />
           </div>
           <div>
-            <label className="block text-xs text-[#A0A0A0] mb-1.5">{t('toolkit.decisionLog.rationale')}</label>
+            <label className="block text-xs text-text-secondary mb-1.5">{t('toolkit.decisionLog.rationale')}</label>
             <textarea
               value={rationale}
               onChange={(e) => setRationale(e.target.value)}
               placeholder={t('toolkit.decisionLog.rationalePlaceholder')}
               rows={2}
-              className="w-full px-3 py-2 text-sm bg-[#0A0A0A] border border-[#2A2A2A] rounded-lg text-white placeholder-[#666] focus:outline-none focus:border-white/30 transition-colors resize-y"
+              className="w-full px-3 py-2 text-sm bg-bg-primary border border-border rounded-lg text-white placeholder-[#666] focus:outline-none focus:border-white/30 transition-colors resize-y"
             />
           </div>
           <div className="flex items-end gap-4">
             <div className="flex-1 max-w-[180px]">
-              <label className="block text-xs text-[#A0A0A0] mb-1.5">{t('toolkit.decisionLog.type')}</label>
+              <label className="block text-xs text-text-secondary mb-1.5">{t('toolkit.decisionLog.type')}</label>
               <select
                 value={decType}
                 onChange={(e) => setDecType(e.target.value)}
-                className="w-full px-3 py-2 text-sm bg-[#0A0A0A] border border-[#2A2A2A] rounded-lg text-white focus:outline-none focus:border-white/30 transition-colors"
+                className="w-full px-3 py-2 text-sm bg-bg-primary border border-border rounded-lg text-white focus:outline-none focus:border-white/30 transition-colors"
               >
                 {TYPES.filter((t) => t !== 'All').map((t) => (
                   <option key={t} value={t}>{TYPE_LABELS[t]}</option>
@@ -204,7 +204,7 @@ export default function DecisionLog() {
               </select>
             </div>
             <div className="flex-1 max-w-[220px]">
-              <label className="block text-xs text-[#A0A0A0] mb-1.5">
+              <label className="block text-xs text-text-secondary mb-1.5">
                 {t('toolkit.decisionLog.confidence')}: <span className="font-mono" style={{ color: confColor(confidence) }}>{confidence}%</span>
               </label>
               <input
@@ -247,7 +247,7 @@ export default function DecisionLog() {
               <div
                 key={d.id}
                 onClick={() => setExpanded(isExpanded ? null : d.id)}
-                className="bg-[#141414] border border-[#2A2A2A] rounded-lg p-4 cursor-pointer hover:border-white/20 transition-all"
+                className="bg-bg-secondary border border-border rounded-lg p-4 cursor-pointer hover:border-white/20 transition-all"
               >
                 {/* Header row */}
                 <div className="flex items-start gap-3 mb-1.5">
@@ -274,7 +274,7 @@ export default function DecisionLog() {
                 </div>
 
                 {/* Decision text (clamped) */}
-                <p className={`text-xs text-[#A0A0A0] leading-relaxed ${isExpanded ? '' : 'line-clamp-2'}`}>
+                <p className={`text-xs text-text-secondary leading-relaxed ${isExpanded ? '' : 'line-clamp-2'}`}>
                   {d.decision}
                 </p>
 
@@ -294,11 +294,11 @@ export default function DecisionLog() {
 
                 {/* Expanded details */}
                 {isExpanded && (
-                  <div className="mt-3 pt-3 border-t border-[#2A2A2A] space-y-2">
+                  <div className="mt-3 pt-3 border-t border-border space-y-2">
                     {d.rationale && (
                       <div>
                         <span className="text-[10px] text-[#666] uppercase tracking-wider">{t('toolkit.decisionLog.rationale')}</span>
-                        <p className="text-xs text-[#A0A0A0] mt-0.5 leading-relaxed">{d.rationale}</p>
+                        <p className="text-xs text-text-secondary mt-0.5 leading-relaxed">{d.rationale}</p>
                       </div>
                     )}
                     {d.alternatives_rejected.length > 0 && (
@@ -306,7 +306,7 @@ export default function DecisionLog() {
                         <span className="text-[10px] text-[#666] uppercase tracking-wider">{t('toolkit.decisionLog.alternativesRejected')}</span>
                         <div className="flex flex-wrap gap-1 mt-1">
                           {d.alternatives_rejected.map((alt, i) => (
-                            <span key={i} className="px-2 py-0.5 text-xs text-[#A0A0A0] bg-[#1F1F1F] border border-[#2A2A2A] rounded-full">
+                            <span key={i} className="px-2 py-0.5 text-xs text-text-secondary bg-bg-tertiary border border-border rounded-full">
                               {alt}
                             </span>
                           ))}
@@ -336,7 +336,7 @@ export default function DecisionLog() {
           <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#666" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="mb-3">
             <path d="M12 3v18" /><path d="M5 6l7-3 7 3" /><path d="M5 6v12l7 3 7-3V6" />
           </svg>
-          <p className="text-sm text-[#A0A0A0] mb-1">{t('toolkit.decisionLog.empty')}</p>
+          <p className="text-sm text-text-secondary mb-1">{t('toolkit.decisionLog.empty')}</p>
           <p className="text-xs text-[#666]">
             {t('toolkit.decisionLog.emptyHint')}
           </p>

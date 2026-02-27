@@ -70,4 +70,6 @@ pub(crate) struct ScoringContext {
     pub calibration_deltas: HashMap<String, f32>,
     /// Topic-aware decay half-lives: topic -> half_life_hours
     pub topic_half_lives: HashMap<String, f32>,
+    /// Unified sovereign developer profile (assembled once per run)
+    pub sovereign_profile: Option<crate::sovereign_developer_profile::SovereignDeveloperProfile>,
 }

@@ -31,17 +31,17 @@ export function AchievementsPanel() {
   return (
     <div className="space-y-4">
       {/* Summary bar */}
-      <div className="flex items-center gap-6 px-4 py-3 bg-[#141414] border border-[#2A2A2A] rounded-lg">
+      <div className="flex items-center gap-6 px-4 py-3 bg-bg-secondary border border-border rounded-lg">
         <div>
           <div className="text-2xl font-bold text-white">
             {total_unlocked}<span className="text-sm font-normal text-[#666]">/{total_achievements}</span>
           </div>
-          <div className="text-xs text-[#A0A0A0]">Unlocked</div>
+          <div className="text-xs text-text-secondary">Unlocked</div>
         </div>
         <div className="w-px h-8 bg-[#2A2A2A]" />
         <div>
           <div className="text-2xl font-bold text-white">{current_streak}</div>
-          <div className="text-xs text-[#A0A0A0]">Day Streak</div>
+          <div className="text-xs text-text-secondary">Day Streak</div>
         </div>
         <div className="flex-1" />
         {gpuProgress ? (
@@ -55,7 +55,7 @@ export function AchievementsPanel() {
             style={{ width: '32px', height: '32px' }}
           />
         ) : (
-          <div className="w-32 h-2 bg-[#1F1F1F] rounded-full overflow-hidden">
+          <div className="w-32 h-2 bg-bg-tertiary rounded-full overflow-hidden">
             <div
               className="h-full bg-[#D4AF37] rounded-full transition-all duration-500"
               style={{ width: `${total_achievements > 0 ? (total_unlocked / total_achievements) * 100 : 0}%` }}
@@ -75,8 +75,8 @@ export function AchievementsPanel() {
               key={a.id}
               className={`relative p-4 rounded-lg border transition-all ${
                 a.unlocked
-                  ? 'bg-[#141414] border-[#D4AF37]/30'
-                  : 'bg-[#0F0F0F] border-[#2A2A2A] opacity-60'
+                  ? 'bg-bg-secondary border-[#D4AF37]/30'
+                  : 'bg-[#0F0F0F] border-border opacity-60'
               }`}
             >
               <div className="flex items-start gap-3">
@@ -92,14 +92,14 @@ export function AchievementsPanel() {
                       <span className="text-xs text-[#D4AF37]">&#x2713;</span>
                     )}
                   </div>
-                  <div className="text-xs text-[#A0A0A0] mt-0.5">{a.description}</div>
+                  <div className="text-xs text-text-secondary mt-0.5">{a.description}</div>
                   {!a.unlocked && (
                     <div className="mt-2">
                       <div className="flex items-center justify-between text-[10px] text-[#666] mb-1">
                         <span>{a.progress}/{a.threshold}</span>
                         <span>{Math.round(pct)}%</span>
                       </div>
-                      <div className="w-full h-1 bg-[#1F1F1F] rounded-full overflow-hidden">
+                      <div className="w-full h-1 bg-bg-tertiary rounded-full overflow-hidden">
                         <div
                           className="h-full bg-[#D4AF37]/50 rounded-full transition-all duration-300"
                           style={{ width: `${pct}%` }}

@@ -28,7 +28,7 @@ function UrgencyBar({ urgency }: { urgency: number }) {
   const color = urgency >= 0.8 ? 'bg-red-400' : urgency >= 0.5 ? 'bg-amber-400' : 'bg-blue-400';
   return (
     <div className="flex items-center gap-2">
-      <div className="flex-1 h-1 bg-[#1F1F1F] rounded-full overflow-hidden">
+      <div className="flex-1 h-1 bg-bg-tertiary rounded-full overflow-hidden">
         <div className={`h-full rounded-full transition-all ${color}`} style={{ width: `${pct}%` }} />
       </div>
       <span className="text-[10px] text-gray-500 tabular-nums">{pct}%</span>
@@ -85,7 +85,7 @@ const WindowCard = memo(function WindowCard({
         </button>
         <button
           onClick={() => onDismiss(window.id)}
-          className="px-3 py-1.5 text-xs text-gray-500 bg-[#1F1F1F] rounded-lg hover:text-gray-300 hover:bg-[#2A2A2A] transition-colors"
+          className="px-3 py-1.5 text-xs text-gray-500 bg-bg-tertiary rounded-lg hover:text-gray-300 hover:bg-[#2A2A2A] transition-colors"
         >
           {t('action.dismiss')}
         </button>
@@ -119,7 +119,7 @@ export const DecisionWindowsPanel = memo(function DecisionWindowsPanel() {
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
           <h3 className="text-sm font-medium text-white">{t('decisions.title')}</h3>
-          <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-[#1F1F1F] text-gray-400">
+          <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-bg-tertiary text-gray-400">
             {openWindows.length}
           </span>
         </div>

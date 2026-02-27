@@ -175,39 +175,6 @@ pub fn context_hash(ctx: &PersonalizationContext) -> String {
     format!("{:x}", hasher.finalize())
 }
 
-/// Estimate how much the context changed vs a previous hash.
-/// Returns 0.0 (identical) to 1.0 (completely different).
-/// Used to decide whether cache regeneration is worthwhile.
-pub fn change_significance(
-    old_ctx: &PersonalizationContext,
-    new_ctx: &PersonalizationContext,
-) -> f64 {
-    let mut score: f64 = 0.0;
-
-    // Stack change (high impact)
-    if old_ctx.stack.primary != new_ctx.stack.primary {
-        score += 0.5;
-    }
-    // GPU change
-    if old_ctx.computed.gpu_tier != new_ctx.computed.gpu_tier {
-        score += 0.3;
-    }
-    // Regional change
-    if old_ctx.regional.country != new_ctx.regional.country {
-        score += 0.4;
-    }
-    // Progress change
-    if old_ctx.progress.completed_lesson_count != new_ctx.progress.completed_lesson_count {
-        score += 0.2;
-    }
-    // Radar change
-    if old_ctx.radar.adopt != new_ctx.radar.adopt {
-        score += 0.3;
-    }
-
-    score.min(1.0)
-}
-
 // ============================================================================
 // Individual Source Assemblers
 // ============================================================================
@@ -594,31 +561,5 @@ mod tests {
         profile.gpu.insert("memory_total".into(), "4 GB".into());
         let derived = compute_derived(&profile, &SettingsData::default());
         assert_eq!(derived.gpu_tier, "discrete");
-    }
-
-    #[test]
-    fn test_change_significance() {
-        let ctx1 = PersonalizationContext {
-            profile: ProfileData::default(),
-            stack: StackData {
-                primary: vec!["rust".into()],
-                ..Default::default()
-            },
-            radar: RadarData::default(),
-            regional: RegionalData::default(),
-            decisions: Vec::new(),
-            progress: ProgressData::default(),
-            settings: SettingsData::default(),
-            dna: DnaData::default(),
-            computed: ComputedFields::default(),
-        };
-
-        // Identical
-        assert_eq!(change_significance(&ctx1, &ctx1), 0.0);
-
-        // Stack change
-        let mut ctx2 = ctx1.clone();
-        ctx2.stack.primary = vec!["python".into()];
-        assert!(change_significance(&ctx1, &ctx2) >= 0.5);
     }
 }

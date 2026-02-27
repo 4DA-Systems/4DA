@@ -29,7 +29,7 @@ function BarChart({ bars, maxValue, unit }: { bars: { label: string; value: numb
         return (
           <div key={bar.label} className="flex items-center gap-3">
             <span className="text-[10px] text-[#666] w-12 text-right flex-shrink-0">{bar.label}</span>
-            <div className="flex-1 h-4 bg-[#1F1F1F] rounded-full overflow-hidden relative">
+            <div className="flex-1 h-4 bg-bg-tertiary rounded-full overflow-hidden relative">
               <div
                 className="h-full rounded-full transition-all duration-500"
                 style={{
@@ -38,7 +38,7 @@ function BarChart({ bars, maxValue, unit }: { bars: { label: string; value: numb
                 }}
               />
             </div>
-            <span className={`text-xs flex-shrink-0 w-16 text-right ${bar.highlight ? 'text-[#D4AF37] font-medium' : 'text-[#A0A0A0]'}`}>
+            <span className={`text-xs flex-shrink-0 w-16 text-right ${bar.highlight ? 'text-[#D4AF37] font-medium' : 'text-text-secondary'}`}>
               {bar.value.toFixed(0)} {unit}
             </span>
           </div>
@@ -58,7 +58,7 @@ function RankList({ items }: { items: { rank: number; name: string; score: numbe
       {items.map((item) => (
         <div key={item.rank} className="flex items-center gap-2">
           <span className="text-[10px] text-[#666] w-5 text-center flex-shrink-0">#{item.rank}</span>
-          <span className={`text-xs flex-1 ${item.matches_stack ? 'text-white' : 'text-[#A0A0A0]'}`}>
+          <span className={`text-xs flex-1 ${item.matches_stack ? 'text-white' : 'text-text-secondary'}`}>
             {item.name}
           </span>
           <span className="flex-shrink-0">
@@ -85,7 +85,7 @@ function TShapeDiagram({ primary, depthLabel, adjacent, breadthLabel }: {
       {/* Breadth bar */}
       <div className="flex items-center gap-1 flex-wrap justify-center">
         {adjacent.map((tech) => (
-          <span key={tech} className="px-2 py-0.5 bg-[#1F1F1F] border border-[#2A2A2A] text-[10px] text-[#A0A0A0] rounded">
+          <span key={tech} className="px-2 py-0.5 bg-bg-tertiary border border-border text-[10px] text-text-secondary rounded">
             {tech}
           </span>
         ))}
@@ -108,19 +108,19 @@ function TShapeDiagram({ primary, depthLabel, adjacent, breadthLabel }: {
 
 function RateTable({ headers, rows }: { headers: string[]; rows: { cells: string[]; highlight: boolean }[] }) {
   return (
-    <table className="w-full text-xs border border-[#2A2A2A] rounded">
+    <table className="w-full text-xs border border-border rounded">
       <thead>
-        <tr className="bg-[#1F1F1F]">
+        <tr className="bg-bg-tertiary">
           {headers.map((h, i) => (
-            <th key={i} className="px-3 py-1.5 text-left text-white font-medium border-b border-[#2A2A2A]">{h}</th>
+            <th key={i} className="px-3 py-1.5 text-left text-white font-medium border-b border-border">{h}</th>
           ))}
         </tr>
       </thead>
       <tbody>
         {rows.map((row, ri) => (
-          <tr key={ri} className={`border-b border-[#2A2A2A] last:border-0 ${row.highlight ? 'bg-[#D4AF37]/5' : ''}`}>
+          <tr key={ri} className={`border-b border-border last:border-0 ${row.highlight ? 'bg-[#D4AF37]/5' : ''}`}>
             {row.cells.map((cell, ci) => (
-              <td key={ci} className={`px-3 py-1.5 ${row.highlight ? 'text-[#D4AF37]' : 'text-[#A0A0A0]'}`}>{cell}</td>
+              <td key={ci} className={`px-3 py-1.5 ${row.highlight ? 'text-[#D4AF37]' : 'text-text-secondary'}`}>{cell}</td>
             ))}
           </tr>
         ))}
@@ -149,9 +149,9 @@ function DiffRibbonViz({ added, removed, changed }: {
       {changed.map((ch, i) => (
         <div key={`c-${i}`} className="flex items-center gap-2 text-xs">
           <span className="text-[#D4AF37] font-mono">~</span>
-          <span className="text-[#A0A0A0]">{ch.field}:</span>
+          <span className="text-text-secondary">{ch.field}:</span>
           <span className="text-[#EF4444] line-through">{ch.old_value}</span>
-          <span className="text-[#A0A0A0]">→</span>
+          <span className="text-text-secondary">→</span>
           <span className="text-[#22C55E]">{ch.new_value}</span>
         </div>
       ))}

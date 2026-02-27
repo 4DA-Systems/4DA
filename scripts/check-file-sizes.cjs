@@ -57,6 +57,7 @@ const EXCEPTIONS = {
   'src-tauri/src/stacks/profiles.rs':      'Stack Intelligence — 8 technology profile definitions',
   'src-tauri/src/scoring/benchmark.rs':    'Scoring benchmarks — comprehensive test assertions',
   'src-tauri/src/void_engine/universe.rs': 'Void Universe renderer — experimental, feature-gated',
+  'src-tauri/src/sovereign_developer_profile.rs': 'Unified profile aggregation — 10 data sources + markdown/JSON export',
 
   // TypeScript — type registries and complex UI
   'src/lib/commands.ts':                             'IPC command registry — all 107 typed Tauri commands',

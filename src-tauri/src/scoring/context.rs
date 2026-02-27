@@ -57,7 +57,14 @@ pub(crate) async fn build_scoring_context(db: &Database) -> Result<ScoringContex
     };
 
     // Build domain profile for graduated domain relevance scoring
-    let (domain_profile, composed_stack, open_windows, calibration_deltas, topic_half_lives) = {
+    let (
+        domain_profile,
+        composed_stack,
+        open_windows,
+        calibration_deltas,
+        topic_half_lives,
+        sovereign_profile,
+    ) = {
         let conn = crate::open_db_connection()?;
         let dp = crate::domain_profile::build_domain_profile(&conn);
         let cs = crate::stacks::load_composed_stack(&conn);
@@ -65,7 +72,9 @@ pub(crate) async fn build_scoring_context(db: &Database) -> Result<ScoringContex
         let ow = crate::decision_advantage::get_open_windows(&conn);
         let cd = crate::autophagy::load_calibration_deltas(&conn);
         let thl = crate::autophagy::load_topic_decay_profiles(&conn);
-        (dp, cs, ow, cd, thl)
+        // Unified profile (non-fatal if assembly fails)
+        let sp = Some(crate::sovereign_developer_profile::assemble_profile(&conn));
+        (dp, cs, ow, cd, thl, sp)
     };
 
     // Warm-start source preferences from stack profiles (only fills gaps)
@@ -110,5 +119,6 @@ pub(crate) async fn build_scoring_context(db: &Database) -> Result<ScoringContex
         open_windows,
         calibration_deltas,
         topic_half_lives,
+        sovereign_profile,
     })
 }

@@ -97,8 +97,8 @@ export function StackSelectStep({ selected, onSelectionChange, compact }: StackS
               onClick={() => toggleProfile(profile.id)}
               className={`relative p-3 rounded-lg text-left transition-all ${
                 isSelected
-                  ? 'bg-[#1F1F1F] border-2 border-white'
-                  : 'bg-[#141414] border-2 border-transparent hover:border-[#2A2A2A]'
+                  ? 'bg-bg-tertiary border-2 border-white'
+                  : 'bg-bg-secondary border-2 border-transparent hover:border-border'
               }`}
             >
               {/* Detection badge */}
@@ -129,7 +129,7 @@ export function StackSelectStep({ selected, onSelectionChange, compact }: StackS
                 {profile.core_tech.slice(0, 3).map((tech) => (
                   <span
                     key={tech}
-                    className="text-[10px] px-1.5 py-0.5 bg-[#0A0A0A] text-gray-500 rounded"
+                    className="text-[10px] px-1.5 py-0.5 bg-bg-primary text-gray-500 rounded"
                   >
                     {tech}
                   </span>

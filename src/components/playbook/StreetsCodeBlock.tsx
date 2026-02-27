@@ -167,7 +167,7 @@ export function StreetsCodeBlock({ code, language, moduleId, lessonIdx, blockInd
   const runningAny = running.size > 0;
 
   return (
-    <div className="bg-[#0A0A0A] border border-[#2A2A2A] rounded-lg p-4 my-3">
+    <div className="bg-bg-primary border border-border rounded-lg p-4 my-3">
       {/* Header row: OS tabs + actions */}
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-1.5">
@@ -181,7 +181,7 @@ export function StreetsCodeBlock({ code, language, moduleId, lessonIdx, blockInd
               className={`px-2 py-0.5 text-[10px] rounded font-medium transition-colors ${
                 activeOs === os
                   ? 'bg-[#D4AF37]/20 text-[#D4AF37] border border-[#D4AF37]/30'
-                  : 'text-[#666] hover:text-[#A0A0A0] border border-transparent'
+                  : 'text-[#666] hover:text-text-secondary border border-transparent'
               }`}
             >
               {OS_LABELS[os]}
@@ -201,7 +201,7 @@ export function StreetsCodeBlock({ code, language, moduleId, lessonIdx, blockInd
           )}
           <button
             onClick={copyBlock}
-            className="px-2 py-1 text-[10px] text-[#666] hover:text-[#A0A0A0] border border-[#2A2A2A] rounded transition-colors"
+            className="px-2 py-1 text-[10px] text-[#666] hover:text-text-secondary border border-border rounded transition-colors"
           >
             {copied ? t('action.copied') : t('action.copy')}
           </button>
@@ -239,7 +239,7 @@ export function StreetsCodeBlock({ code, language, moduleId, lessonIdx, blockInd
                       ? 'text-[#666] italic'
                       : isEmpty
                         ? ''
-                        : 'text-[#A0A0A0]'
+                        : 'text-text-secondary'
                   }`}
                 >
                   {line || '\u00A0'}
@@ -273,7 +273,7 @@ export function StreetsCodeBlock({ code, language, moduleId, lessonIdx, blockInd
                     {!matchedCmd && !parsed && (
                       <button
                         onClick={ensureParsed}
-                        className="flex items-center justify-center w-5 h-5 text-[#666] hover:text-[#A0A0A0] hover:bg-[#1F1F1F] rounded transition-colors"
+                        className="flex items-center justify-center w-5 h-5 text-[#666] hover:text-text-secondary hover:bg-bg-tertiary rounded transition-colors"
                         title={t('playbook.code.parseCommands')}
                       >
                         <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor">
@@ -288,7 +288,7 @@ export function StreetsCodeBlock({ code, language, moduleId, lessonIdx, blockInd
               {/* Execution result panel */}
               {result && isExpanded && (
                 <div
-                  className={`mt-1 mb-2 ml-1 p-3 rounded text-xs font-mono border-l-2 bg-[#0A0A0A] cursor-pointer ${
+                  className={`mt-1 mb-2 ml-1 p-3 rounded text-xs font-mono border-l-2 bg-bg-primary cursor-pointer ${
                     result.success ? 'border-[#22C55E]' : 'border-[#EF4444]'
                   }`}
                   onClick={() => matchedCmd && toggleResult(matchedCmd.id)}
@@ -300,7 +300,7 @@ export function StreetsCodeBlock({ code, language, moduleId, lessonIdx, blockInd
                     <span className="text-[10px] text-[#666]">{result.duration_ms}ms</span>
                   </div>
                   {result.stdout && (
-                    <pre className="text-[#A0A0A0] whitespace-pre-wrap break-all max-h-40 overflow-y-auto">
+                    <pre className="text-text-secondary whitespace-pre-wrap break-all max-h-40 overflow-y-auto">
                       {result.stdout}
                     </pre>
                   )}

@@ -117,7 +117,7 @@ export function ToolkitView() {
 
   // Render tool grid
   return (
-    <div>
+    <section aria-label={t('toolkit.title', { defaultValue: 'Developer Toolkit' })}>
       {/* Search */}
       <div className="mb-5">
         <div className="relative max-w-sm">
@@ -129,6 +129,7 @@ export function ToolkitView() {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder={t('toolkit.search')}
+            aria-label={t('toolkit.search')}
             className="w-full pl-9 pr-3 py-2 text-sm bg-bg-secondary border border-border rounded-lg text-white placeholder:text-gray-600 focus:outline-none focus:border-white/30 transition-colors"
           />
         </div>
@@ -177,6 +178,7 @@ export function ToolkitView() {
         <div className="mb-6">
           <button
             onClick={() => setUtilitiesExpanded(!utilitiesExpanded)}
+            aria-expanded={utilitiesExpanded}
             className="flex items-center gap-2 mb-3 group"
           >
             <svg
@@ -221,6 +223,6 @@ export function ToolkitView() {
           <p className="text-sm text-gray-500">{t('toolkit.noMatch', { query: search })}</p>
         </div>
       )}
-    </div>
+    </section>
   );
 }

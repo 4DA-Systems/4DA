@@ -116,6 +116,7 @@ export const SignalsPanel = memo(function SignalsPanel({ results }: SignalsPanel
       <button
         onClick={() => setExpanded(!expanded)}
         aria-expanded={expanded}
+        aria-label={t('signals.title')}
         className="w-full px-5 py-4 border-b border-border flex items-center justify-between hover:bg-[#1A1A1A] transition-colors"
       >
         <div className="flex items-center gap-3">

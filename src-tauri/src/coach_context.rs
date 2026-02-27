@@ -288,6 +288,81 @@ pub fn assemble_coach_context() -> CoachContext {
     }
 }
 
+/// Assemble coach context from the unified Sovereign Developer Profile.
+/// Falls back to the direct assembly if profile is unavailable.
+pub fn assemble_coach_context_from_profile(
+    profile: &crate::sovereign_developer_profile::SovereignDeveloperProfile,
+) -> CoachContext {
+    let sovereign_profile_summary = {
+        let infra = &profile.infrastructure;
+        let mut parts = Vec::new();
+        if !infra.cpu.is_empty() {
+            for (k, v) in &infra.cpu {
+                parts.push(format!("cpu/{}: {}", k, v));
+            }
+        }
+        if !infra.gpu.is_empty() {
+            for (k, v) in &infra.gpu {
+                parts.push(format!("gpu/{}: {}", k, v));
+            }
+        }
+        parts.push(format!("gpu_tier: {}", infra.gpu_tier));
+        parts.push(format!("llm_tier: {}", infra.llm_tier));
+        parts.join("; ")
+    };
+
+    let developer_dna_summary = format!(
+        "Identity: {}. Stack: {}. {} dependencies tracked.",
+        profile.identity_summary,
+        profile.stack.primary_stack.join(", "),
+        profile.stack.dependencies.len()
+    );
+
+    let tech_radar_summary = {
+        let r = &profile.preferences.tech_radar;
+        format!(
+            "Adopt: [{}]. Trial: [{}]. Assess: [{}]. Hold: [{}].",
+            r.adopt.join(", "),
+            r.trial.join(", "),
+            r.assess.join(", "),
+            r.hold.join(", ")
+        )
+    };
+
+    let active_decisions = profile
+        .preferences
+        .active_decisions
+        .iter()
+        .map(|d| format!("{}: {}", d.subject, d.decision))
+        .collect();
+
+    let pp = &profile.skills.playbook_progress;
+    let playbook_progress = format!(
+        "{}/{} lessons completed",
+        pp.completed_lessons, pp.total_lessons
+    );
+
+    let top_engaged_topics = profile
+        .skills
+        .top_affinities
+        .iter()
+        .take(5)
+        .map(|a| a.topic.clone())
+        .collect();
+
+    let profile_completeness = profile.completeness.overall_percentage as f32;
+
+    CoachContext {
+        sovereign_profile_summary,
+        developer_dna_summary,
+        tech_radar_summary,
+        active_decisions,
+        playbook_progress,
+        top_engaged_topics,
+        profile_completeness,
+    }
+}
+
 pub fn format_system_prompt(session_type: &str, ctx: &CoachContext) -> String {
     let or_default = |s: &str, d: &str| {
         if s.is_empty() {

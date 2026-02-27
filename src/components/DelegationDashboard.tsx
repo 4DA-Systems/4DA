@@ -49,7 +49,7 @@ const FACTOR_LABELS: Record<string, string> = {
 function ScoreBar({ value, color }: { value: number; color: string }) {
   const pct = Math.round(value * 100);
   return (
-    <div className="w-full h-2 bg-[#0A0A0A] rounded-full overflow-hidden">
+    <div className="w-full h-2 bg-bg-primary rounded-full overflow-hidden">
       <div
         className="h-full rounded-full transition-all duration-300"
         style={{ width: `${pct}%`, backgroundColor: color }}
@@ -63,10 +63,10 @@ function FactorBar({ label, value }: { label: string; value: number }) {
   return (
     <div className="space-y-1">
       <div className="flex items-center justify-between">
-        <span className="text-[10px] text-[#A0A0A0]">{label}</span>
-        <span className="text-[10px] font-mono text-[#666666]">{pct}%</span>
+        <span className="text-[10px] text-text-secondary">{label}</span>
+        <span className="text-[10px] font-mono text-text-muted">{pct}%</span>
       </div>
-      <div className="w-full h-1.5 bg-[#0A0A0A] rounded-full overflow-hidden">
+      <div className="w-full h-1.5 bg-bg-primary rounded-full overflow-hidden">
         <div
           className="h-full rounded-full bg-white/30 transition-all duration-300"
           style={{ width: `${pct}%` }}
@@ -83,7 +83,7 @@ function DelegationCard({ entry }: { entry: DelegationScoreEntry }) {
   const pct = Math.round(entry.overall_score * 100);
 
   return (
-    <div className="rounded-lg border border-[#2A2A2A] bg-[#1F1F1F]/50 transition-all hover:border-white/10">
+    <div className="rounded-lg border border-border bg-bg-tertiary/50 transition-all hover:border-white/10">
       <button
         onClick={() => setExpanded(!expanded)}
         className="w-full p-4 text-left"
@@ -102,15 +102,15 @@ function DelegationCard({ entry }: { entry: DelegationScoreEntry }) {
           >
             {style.label}
           </span>
-          <span className="text-[#666666] text-xs">{expanded ? '\u25BE' : '\u25B8'}</span>
+          <span className="text-text-muted text-xs">{expanded ? '\u25BE' : '\u25B8'}</span>
         </div>
       </button>
 
       {expanded && (
-        <div className="px-4 pb-4 border-t border-[#2A2A2A]/50 space-y-3">
+        <div className="px-4 pb-4 border-t border-border/50 space-y-3">
           {/* Factor breakdown */}
           <div className="mt-3">
-            <div className="text-[10px] text-[#666666] uppercase tracking-wider mb-2">
+            <div className="text-[10px] text-text-muted uppercase tracking-wider mb-2">
               {t('delegation.factorBreakdown')}
             </div>
             <div className="space-y-2">
@@ -127,13 +127,13 @@ function DelegationCard({ entry }: { entry: DelegationScoreEntry }) {
           {/* Caveats */}
           {entry.caveats.length > 0 && (
             <div>
-              <div className="text-[10px] text-[#666666] uppercase tracking-wider mb-1">
+              <div className="text-[10px] text-text-muted uppercase tracking-wider mb-1">
                 {t('delegation.caveats')}
               </div>
               <ul className="space-y-1">
                 {entry.caveats.map((caveat, i) => (
-                  <li key={i} className="text-xs text-[#A0A0A0] flex items-start gap-1.5">
-                    <span className="text-[#666666] mt-0.5">-</span>
+                  <li key={i} className="text-xs text-text-secondary flex items-start gap-1.5">
+                    <span className="text-text-muted mt-0.5">-</span>
                     <span>{caveat}</span>
                   </li>
                 ))}
@@ -171,16 +171,16 @@ export const DelegationDashboard = memo(function DelegationDashboard() {
 
   if (delegationScores.length === 0) {
     return (
-      <div className="bg-[#141414] rounded-lg border border-[#2A2A2A] overflow-hidden">
-        <div className="px-5 py-4 border-b border-[#2A2A2A] flex items-center gap-3">
-          <div className="w-8 h-8 bg-[#1F1F1F] rounded-lg flex items-center justify-center">
-            <span className="text-sm text-[#666666]">S</span>
+      <div className="bg-bg-secondary rounded-lg border border-border overflow-hidden">
+        <div className="px-5 py-4 border-b border-border flex items-center gap-3">
+          <div className="w-8 h-8 bg-bg-tertiary rounded-lg flex items-center justify-center">
+            <span className="text-sm text-text-muted">S</span>
           </div>
           <h2 className="font-medium text-white text-sm">{t('delegation.title')}</h2>
         </div>
         <div className="p-8 text-center">
-          <div className="text-sm text-[#A0A0A0]">{t('delegation.empty')}</div>
-          <div className="text-xs text-[#666666] mt-1">
+          <div className="text-sm text-text-secondary">{t('delegation.empty')}</div>
+          <div className="text-xs text-text-muted mt-1">
             {t('delegation.emptyHint')}
           </div>
         </div>
@@ -189,16 +189,16 @@ export const DelegationDashboard = memo(function DelegationDashboard() {
   }
 
   return (
-    <div className="bg-[#141414] rounded-lg border border-[#2A2A2A] overflow-hidden">
+    <div className="bg-bg-secondary rounded-lg border border-border overflow-hidden">
       {/* Header */}
-      <div className="px-5 py-4 border-b border-[#2A2A2A] flex items-center justify-between">
+      <div className="px-5 py-4 border-b border-border flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <div className="w-8 h-8 bg-[#1F1F1F] rounded-lg flex items-center justify-center">
-            <span className="text-sm text-[#666666]">S</span>
+          <div className="w-8 h-8 bg-bg-tertiary rounded-lg flex items-center justify-center">
+            <span className="text-sm text-text-muted">S</span>
           </div>
           <div>
             <h2 className="font-medium text-white text-sm">{t('delegation.title')}</h2>
-            <p className="text-xs text-[#666666]">
+            <p className="text-xs text-text-muted">
               {t('delegation.count', { count: delegationScores.length })}
             </p>
           </div>
@@ -207,13 +207,13 @@ export const DelegationDashboard = memo(function DelegationDashboard() {
 
       {/* Summary stats */}
       {summaryStats && (
-        <div className="px-5 py-3 border-b border-[#2A2A2A] flex items-center gap-3">
+        <div className="px-5 py-3 border-b border-border flex items-center gap-3">
           <div className="flex items-center gap-2">
-            <span className="text-xs text-[#A0A0A0]">
+            <span className="text-xs text-text-secondary">
               <span className="text-white font-medium">{summaryStats.pct}%</span> {t('delegation.delegatable')}
             </span>
           </div>
-          <div className="flex-1 h-1.5 bg-[#0A0A0A] rounded-full overflow-hidden ml-3">
+          <div className="flex-1 h-1.5 bg-bg-primary rounded-full overflow-hidden ml-3">
             <div
               className="h-full rounded-full transition-all duration-300"
               style={{
@@ -222,7 +222,7 @@ export const DelegationDashboard = memo(function DelegationDashboard() {
               }}
             />
           </div>
-          <span className="text-[10px] font-mono text-[#666666]">
+          <span className="text-[10px] font-mono text-text-muted">
             {summaryStats.fullyDelegatable}/{summaryStats.total}
           </span>
         </div>

@@ -233,6 +233,8 @@
   "nav.saved.subtitle": "Your bookmarked items",
   "nav.toolkit.subtitle": "Developer tools and utilities",
   "nav.playbook.subtitle": "STREETS independence modules",
+  "nav.channels": "Channels",
+  "nav.channels.subtitle": "Live intelligence on topics you track",
   "nav.coach.subtitle": "AI coaching for STREETS progress",
 
   "results.title": "Relevance Results",
@@ -1198,5 +1200,21 @@
   "onboarding.projects.manageHint": "Manage directories anytime in Settings.",
 
   "learnedBehavior.learningCount": "Learning: {{count}} preference",
-  "learnedBehavior.learningCount_other": "Learning: {{count}} preferences"
+  "learnedBehavior.learningCount_other": "Learning: {{count}} preferences",
+
+  "channels.renderNow": "Render Now",
+  "channels.rerender": "Re-render",
+  "channels.rendering": "Rendering...",
+  "channels.lastRendered": "Last rendered",
+  "channels.neverRendered": "Never rendered",
+  "channels.sources": "sources",
+  "channels.changelog": "Changelog",
+  "channels.provenance": "Source",
+  "channels.version": "v{{version}}",
+  "channels.noLlm": "Configure an LLM for prose synthesis",
+  "channels.freshness.fresh": "Fresh",
+  "channels.freshness.stale": "Stale",
+  "channels.freshness.never": "New",
+  "channels.noChannels": "No channels found",
+  "channels.selectChannel": "Select a channel to view"
 }

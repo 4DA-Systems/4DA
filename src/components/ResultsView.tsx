@@ -81,7 +81,7 @@ export function ResultsView({
       />
 
       {/* Relevance Results Panel */}
-      <section className="lg:col-span-2 bg-bg-secondary rounded-lg border border-border overflow-hidden">
+      <section aria-label={t('results.title')} className="lg:col-span-2 bg-bg-secondary rounded-lg border border-border overflow-hidden">
         <div className="px-5 py-4 border-b border-border">
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-3">

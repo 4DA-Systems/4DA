@@ -126,7 +126,7 @@ function CopyBtn({ value, label }: { value: string; label: string }) {
   return (
     <button
       onClick={handleCopy}
-      className="px-2 py-1 text-xs rounded bg-[#1F1F1F] border border-[#2A2A2A] text-[#A0A0A0] hover:text-white hover:border-[#444] transition-colors"
+      className="px-2 py-1 text-xs rounded bg-bg-tertiary border border-border text-text-secondary hover:text-white hover:border-[#444] transition-colors"
       title={t('toolkit.colorPicker.copyLabel', { label })}
     >
       {copied ? t('action.copied') : label}
@@ -216,7 +216,7 @@ export default function ColorPicker() {
     <div className="flex flex-col gap-5 p-4 max-w-md">
       {/* Preview swatch */}
       <div
-        className="relative w-[120px] h-[120px] rounded-lg border border-[#2A2A2A] flex items-end justify-center"
+        className="relative w-[120px] h-[120px] rounded-lg border border-border flex items-end justify-center"
         style={{ backgroundColor: hex }}
       >
         <span
@@ -255,7 +255,7 @@ export default function ColorPicker() {
           type="text"
           value={hexInput}
           onChange={(e) => handleHexChange(e.target.value)}
-          className="font-mono text-sm bg-[#1F1F1F] border border-[#2A2A2A] rounded px-3 py-1.5 text-white focus:outline-none focus:border-[#444] w-full"
+          className="font-mono text-sm bg-bg-tertiary border border-border rounded px-3 py-1.5 text-white focus:outline-none focus:border-[#444] w-full"
           spellCheck={false}
           maxLength={7}
         />
@@ -277,7 +277,7 @@ export default function ColorPicker() {
                 max={255}
                 value={rgb[ch]}
                 onChange={(e) => handleRgbChange(ch, e.target.value)}
-                className="font-mono text-sm bg-[#1F1F1F] border border-[#2A2A2A] rounded px-2 py-1.5 text-white focus:outline-none focus:border-[#444] w-full"
+                className="font-mono text-sm bg-bg-tertiary border border-border rounded px-2 py-1.5 text-white focus:outline-none focus:border-[#444] w-full"
               />
             </div>
           ))}
@@ -302,7 +302,7 @@ export default function ColorPicker() {
                 max={ch === 'h' ? 360 : 100}
                 value={hsl[ch]}
                 onChange={(e) => handleHslChange(ch, e.target.value)}
-                className="font-mono text-sm bg-[#1F1F1F] border border-[#2A2A2A] rounded px-2 py-1.5 text-white focus:outline-none focus:border-[#444] w-full"
+                className="font-mono text-sm bg-bg-tertiary border border-border rounded px-2 py-1.5 text-white focus:outline-none focus:border-[#444] w-full"
               />
             </div>
           ))}
@@ -313,19 +313,19 @@ export default function ColorPicker() {
       {hasEyeDropper && (
         <button
           onClick={handleEyeDropper}
-          className="w-full py-2 text-sm rounded bg-[#1F1F1F] border border-[#2A2A2A] text-[#A0A0A0] hover:text-white hover:border-[#444] transition-colors"
+          className="w-full py-2 text-sm rounded bg-bg-tertiary border border-border text-text-secondary hover:text-white hover:border-[#444] transition-colors"
         >
           {t('toolkit.colorPicker.pickFromScreen')}
         </button>
       )}
 
       {/* WCAG Contrast */}
-      <div className="flex flex-col gap-2 p-3 rounded-lg bg-[#141414] border border-[#2A2A2A]">
+      <div className="flex flex-col gap-2 p-3 rounded-lg bg-bg-secondary border border-border">
         <span className="text-xs text-[#666] font-medium">{t('toolkit.colorPicker.wcagContrast')}</span>
         <div className="flex flex-col gap-2">
           <div className="flex items-center gap-2 flex-wrap">
-            <div className="w-5 h-5 rounded border border-[#2A2A2A] bg-white" />
-            <span className="text-xs text-[#A0A0A0] font-mono w-12">
+            <div className="w-5 h-5 rounded border border-border bg-white" />
+            <span className="text-xs text-text-secondary font-mono w-12">
               {whiteContrast.toFixed(2)}
             </span>
             <Badge pass={whiteContrast >= 4.5} label="AA" />
@@ -334,8 +334,8 @@ export default function ColorPicker() {
             <Badge pass={whiteContrast >= 4.5} label="AAA lg" />
           </div>
           <div className="flex items-center gap-2 flex-wrap">
-            <div className="w-5 h-5 rounded border border-[#2A2A2A] bg-black" />
-            <span className="text-xs text-[#A0A0A0] font-mono w-12">
+            <div className="w-5 h-5 rounded border border-border bg-black" />
+            <span className="text-xs text-text-secondary font-mono w-12">
               {blackContrast.toFixed(2)}
             </span>
             <Badge pass={blackContrast >= 4.5} label="AA" />
@@ -356,7 +356,7 @@ export default function ColorPicker() {
                 key={h}
                 onClick={() => handleSwatchClick(h)}
                 title={h}
-                className="w-7 h-7 rounded border border-[#2A2A2A] hover:border-[#444] transition-colors cursor-pointer"
+                className="w-7 h-7 rounded border border-border hover:border-[#444] transition-colors cursor-pointer"
                 style={{ backgroundColor: h }}
               />
             ))}

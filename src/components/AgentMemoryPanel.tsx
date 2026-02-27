@@ -90,16 +90,16 @@ export const AgentMemoryPanel = memo(function AgentMemoryPanel() {
 
   if (!agentDataExists && !agentMemoryLoading) {
     return (
-      <div className="bg-[#141414] rounded-lg border border-[#2A2A2A] overflow-hidden">
-        <div className="px-5 py-4 border-b border-[#2A2A2A] flex items-center gap-3">
-          <div className="w-8 h-8 bg-[#1F1F1F] rounded-lg flex items-center justify-center">
-            <span className="text-sm text-[#666666]">A</span>
+      <div className="bg-bg-secondary rounded-lg border border-border overflow-hidden">
+        <div className="px-5 py-4 border-b border-border flex items-center gap-3">
+          <div className="w-8 h-8 bg-bg-tertiary rounded-lg flex items-center justify-center">
+            <span className="text-sm text-text-muted">A</span>
           </div>
           <h2 className="font-medium text-white text-sm">{t('agentMemory.title')}</h2>
         </div>
         <div className="p-8 text-center">
-          <div className="text-sm text-[#A0A0A0]">{t('agentMemory.empty')}</div>
-          <div className="text-xs text-[#666666] mt-1">
+          <div className="text-sm text-text-secondary">{t('agentMemory.empty')}</div>
+          <div className="text-xs text-text-muted mt-1">
             {t('agentMemory.emptyHint')}
           </div>
         </div>
@@ -108,16 +108,16 @@ export const AgentMemoryPanel = memo(function AgentMemoryPanel() {
   }
 
   return (
-    <div className="bg-[#141414] rounded-lg border border-[#2A2A2A] overflow-hidden">
+    <div className="bg-bg-secondary rounded-lg border border-border overflow-hidden">
       {/* Header */}
-      <div className="px-5 py-4 border-b border-[#2A2A2A] flex items-center justify-between">
+      <div className="px-5 py-4 border-b border-border flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <div className="w-8 h-8 bg-[#1F1F1F] rounded-lg flex items-center justify-center">
-            <span className="text-sm text-[#666666]">A</span>
+          <div className="w-8 h-8 bg-bg-tertiary rounded-lg flex items-center justify-center">
+            <span className="text-sm text-text-muted">A</span>
           </div>
           <div>
             <h2 className="font-medium text-white text-sm">{t('agentMemory.title')}</h2>
-            <p className="text-xs text-[#666666]">
+            <p className="text-xs text-text-muted">
               {t('agentMemory.count', { count: agentMemories.length })}
             </p>
           </div>
@@ -125,11 +125,11 @@ export const AgentMemoryPanel = memo(function AgentMemoryPanel() {
       </div>
 
       {/* Filter Bar */}
-      <div className="px-5 py-3 border-b border-[#2A2A2A] flex items-center gap-3">
+      <div className="px-5 py-3 border-b border-border flex items-center gap-3">
         <select
           value={agentFilter}
           onChange={(e) => setAgentFilter(e.target.value)}
-          className="px-3 py-1.5 text-xs bg-[#1F1F1F] text-white border border-[#2A2A2A] rounded-lg focus:outline-none focus:border-white/30"
+          className="px-3 py-1.5 text-xs bg-bg-tertiary text-white border border-border rounded-lg focus:outline-none focus:border-white/30"
         >
           {AGENT_TYPE_OPTIONS.map((opt) => (
             <option key={opt} value={opt}>
@@ -140,7 +140,7 @@ export const AgentMemoryPanel = memo(function AgentMemoryPanel() {
         <select
           value={memoryFilter}
           onChange={(e) => setMemoryFilter(e.target.value)}
-          className="px-3 py-1.5 text-xs bg-[#1F1F1F] text-white border border-[#2A2A2A] rounded-lg focus:outline-none focus:border-white/30"
+          className="px-3 py-1.5 text-xs bg-bg-tertiary text-white border border-border rounded-lg focus:outline-none focus:border-white/30"
         >
           {MEMORY_TYPE_OPTIONS.map((opt) => (
             <option key={opt} value={opt}>
@@ -148,21 +148,21 @@ export const AgentMemoryPanel = memo(function AgentMemoryPanel() {
             </option>
           ))}
         </select>
-        <span className="text-[10px] text-[#666666] ml-auto">
+        <span className="text-[10px] text-text-muted ml-auto">
           {t('agentMemory.results', { count: filtered.length })}
         </span>
       </div>
 
       {/* Loading */}
       {agentMemoryLoading && (
-        <div className="p-4 text-xs text-[#666666] text-center">{t('agentMemory.loading')}</div>
+        <div className="p-4 text-xs text-text-muted text-center">{t('agentMemory.loading')}</div>
       )}
 
       {/* Empty filtered state */}
       {!agentMemoryLoading && filtered.length === 0 && (
         <div className="p-8 text-center">
-          <div className="text-sm text-[#A0A0A0]">{t('agentMemory.noMatch')}</div>
-          <div className="text-xs text-[#666666] mt-1">{t('agentMemory.noMatchHint')}</div>
+          <div className="text-sm text-text-secondary">{t('agentMemory.noMatch')}</div>
+          <div className="text-xs text-text-muted mt-1">{t('agentMemory.noMatchHint')}</div>
         </div>
       )}
 
@@ -178,7 +178,7 @@ export const AgentMemoryPanel = memo(function AgentMemoryPanel() {
             return (
               <div
                 key={m.id}
-                className={`rounded-lg border border-[#2A2A2A] bg-[#1F1F1F]/50 transition-all ${
+                className={`rounded-lg border border-border bg-bg-tertiary/50 transition-all ${
                   expired ? 'opacity-50' : ''
                 }`}
               >
@@ -187,8 +187,8 @@ export const AgentMemoryPanel = memo(function AgentMemoryPanel() {
                   className="w-full px-4 py-3 flex items-center gap-3 text-left"
                 >
                   {/* Memory type icon */}
-                  <div className="w-6 h-6 bg-[#0A0A0A] rounded flex items-center justify-center flex-shrink-0">
-                    <span className="text-[10px] font-mono text-[#A0A0A0]">{memoryIcon}</span>
+                  <div className="w-6 h-6 bg-bg-primary rounded flex items-center justify-center flex-shrink-0">
+                    <span className="text-[10px] font-mono text-text-secondary">{memoryIcon}</span>
                   </div>
 
                   {/* Content */}
@@ -201,7 +201,7 @@ export const AgentMemoryPanel = memo(function AgentMemoryPanel() {
                         </span>
                       )}
                     </div>
-                    <p className="text-xs text-[#A0A0A0] mt-0.5 truncate">{m.content}</p>
+                    <p className="text-xs text-text-secondary mt-0.5 truncate">{m.content}</p>
                   </div>
 
                   {/* Agent badge + timestamp */}
@@ -211,34 +211,34 @@ export const AgentMemoryPanel = memo(function AgentMemoryPanel() {
                     >
                       {m.agent_type}
                     </span>
-                    <span className="text-[10px] text-[#666666] font-mono">
+                    <span className="text-[10px] text-text-muted font-mono">
                       {formatTimestamp(m.created_at)}
                     </span>
-                    <span className="text-[#666666] text-xs">{isExpanded ? '\u25BE' : '\u25B8'}</span>
+                    <span className="text-text-muted text-xs">{isExpanded ? '\u25BE' : '\u25B8'}</span>
                   </div>
                 </button>
 
                 {isExpanded && (
-                  <div className="px-4 pb-3 border-t border-[#2A2A2A]/50 space-y-3">
+                  <div className="px-4 pb-3 border-t border-border/50 space-y-3">
                     {/* Full content */}
                     <div className="mt-3">
-                      <div className="text-[10px] text-[#666666] uppercase tracking-wider mb-1">
+                      <div className="text-[10px] text-text-muted uppercase tracking-wider mb-1">
                         {t('agentMemory.content')}
                       </div>
-                      <p className="text-xs text-[#A0A0A0] whitespace-pre-wrap">{m.content}</p>
+                      <p className="text-xs text-text-secondary whitespace-pre-wrap">{m.content}</p>
                     </div>
 
                     {/* Context tags */}
                     {m.context_tags.length > 0 && (
                       <div>
-                        <div className="text-[10px] text-[#666666] uppercase tracking-wider mb-1">
+                        <div className="text-[10px] text-text-muted uppercase tracking-wider mb-1">
                           {t('agentMemory.tags')}
                         </div>
                         <div className="flex flex-wrap gap-1.5">
                           {m.context_tags.map((tag, i) => (
                             <span
                               key={i}
-                              className="text-[10px] px-2 py-0.5 bg-[#141414] text-[#A0A0A0] border border-[#2A2A2A] rounded"
+                              className="text-[10px] px-2 py-0.5 bg-bg-secondary text-text-secondary border border-border rounded"
                             >
                               {tag}
                             </span>
@@ -248,7 +248,7 @@ export const AgentMemoryPanel = memo(function AgentMemoryPanel() {
                     )}
 
                     {/* Metadata */}
-                    <div className="flex items-center gap-3 text-[10px] text-[#666666]">
+                    <div className="flex items-center gap-3 text-[10px] text-text-muted">
                       <span>{t('agentMemory.session')}: <span className="font-mono">{m.session_id.slice(0, 8)}</span></span>
                       <span>{t('agentMemory.type')}: {m.memory_type}</span>
                       <span>{t('agentMemory.created')} {new Date(m.created_at).toLocaleDateString()}</span>

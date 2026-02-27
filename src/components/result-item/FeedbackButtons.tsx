@@ -10,7 +10,7 @@ interface FeedbackButtonsProps {
 export function FeedbackButtons({ item, feedback, onRecordInteraction }: FeedbackButtonsProps) {
   const { t } = useTranslation();
   return (
-    <div className="flex gap-2 mb-3">
+    <div className="flex gap-2 mb-3" role="group" aria-label={t('feedback.actions', { defaultValue: 'Feedback actions' })}>
       {item.url && (
         <a
           href={item.url}

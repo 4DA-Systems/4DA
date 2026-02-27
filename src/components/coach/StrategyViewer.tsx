@@ -17,7 +17,7 @@ function MarkdownProse({ content }: { content: string }) {
   const flushList = (key: string) => {
     if (listBuffer.length > 0) {
       elements.push(
-        <ul key={`ul-${key}`} className="list-disc list-inside space-y-1 text-xs text-[#A0A0A0] leading-relaxed pl-2">
+        <ul key={`ul-${key}`} className="list-disc list-inside space-y-1 text-xs text-text-secondary leading-relaxed pl-2">
           {listBuffer.map((item, j) => (
             <li key={j}>{item}</li>
           ))}
@@ -27,7 +27,7 @@ function MarkdownProse({ content }: { content: string }) {
     }
     if (olBuffer.length > 0) {
       elements.push(
-        <ol key={`ol-${key}`} className="list-decimal list-inside space-y-1 text-xs text-[#A0A0A0] leading-relaxed pl-2">
+        <ol key={`ol-${key}`} className="list-decimal list-inside space-y-1 text-xs text-text-secondary leading-relaxed pl-2">
           {olBuffer.map((item, j) => (
             <li key={j}>{item}</li>
           ))}
@@ -74,7 +74,7 @@ function MarkdownProse({ content }: { content: string }) {
     } else {
       flushList(String(i));
       elements.push(
-        <p key={i} className="text-xs text-[#A0A0A0] leading-relaxed">
+        <p key={i} className="text-xs text-text-secondary leading-relaxed">
           {trimmed}
         </p>,
       );
@@ -122,7 +122,7 @@ export function StrategyViewer() {
           {doc && (
             <button
               onClick={handleCopy}
-              className="px-3 py-2 text-xs font-medium text-[#A0A0A0] border border-[#2A2A2A] rounded-lg hover:bg-[#1F1F1F] hover:text-white transition-colors"
+              className="px-3 py-2 text-xs font-medium text-text-secondary border border-border rounded-lg hover:bg-bg-tertiary hover:text-white transition-colors"
             >
               {copied ? t('action.copied') : t('action.export')}
             </button>
@@ -142,7 +142,7 @@ export function StrategyViewer() {
         <div className="flex items-center justify-center py-16">
           <div className="flex flex-col items-center gap-3">
             <div className="w-5 h-5 border-2 border-[#D4AF37] border-t-transparent rounded-full animate-spin" />
-            <p className="text-xs text-[#A0A0A0]">
+            <p className="text-xs text-text-secondary">
               {t('coach.strategy.generatingDoc')}
             </p>
             <p className="text-[10px] text-[#666]">
@@ -154,8 +154,8 @@ export function StrategyViewer() {
 
       {/* Document Display */}
       {doc && (
-        <div className="bg-[#141414] border border-[#2A2A2A] rounded-xl overflow-hidden">
-          <div className="flex items-center justify-between px-5 py-3 border-b border-[#2A2A2A]">
+        <div className="bg-bg-secondary border border-border rounded-xl overflow-hidden">
+          <div className="flex items-center justify-between px-5 py-3 border-b border-border">
             <span className="text-[10px] text-[#666] uppercase tracking-wide font-medium">
               {t('coach.strategy.title')}
             </span>
@@ -190,7 +190,7 @@ export function StrategyViewer() {
               <polyline points="10 9 9 9 8 9" />
             </svg>
           </div>
-          <p className="text-sm text-[#A0A0A0] max-w-sm">
+          <p className="text-sm text-text-secondary max-w-sm">
             {t('coach.strategy.emptyDescription')}
           </p>
         </div>
