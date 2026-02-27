@@ -4,11 +4,15 @@ import { StreetsCodeBlock } from '../components/playbook/StreetsCodeBlock';
 /**
  * Lightweight inline markdown renderer for Playbook content.
  * No external dependencies. Handles: headings, bold, code, code blocks,
- * lists, blockquotes, tables, links, and paragraph breaks.
+ * lists, blockquotes, tables, links, paragraph breaks, and L3-L5 injection
+ * markers ({@ type block_id ... @}) from the Sovereign Content Engine.
  *
  * When config.moduleId and config.lessonIdx are provided, bash/shell/powershell
  * code blocks render as interactive StreetsCodeBlock components with run buttons.
  */
+
+/** Regex for injection markers: {@ type block_id [params] @} */
+const INJECTION_MARKER_RE = /^\{@\s+(\w+)\s+([\w.-]+)(?:\s+(.*?))?\s*@\}$/;
 
 function processInline(text: string): ReactNode[] {
   const parts: ReactNode[] = [];
@@ -243,6 +247,23 @@ export function renderMarkdown(content: string, config?: { moduleId?: string; le
           ))}
         </ol>,
       );
+      continue;
+    }
+
+    // Injection marker: {@ type block_id [params] @}
+    const injectionMatch = line.trim().match(INJECTION_MARKER_RE);
+    if (injectionMatch) {
+      const blockType = injectionMatch[1];
+      const blockId = injectionMatch[2];
+      elements.push(
+        <div
+          key={`inject-${key++}`}
+          data-block-type={blockType}
+          data-block-id={blockId}
+          className="personalization-injection-point"
+        />,
+      );
+      i++;
       continue;
     }
 

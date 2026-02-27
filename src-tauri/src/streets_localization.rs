@@ -152,6 +152,16 @@ fn default_regional_data() -> RegionalData {
 }
 
 // ============================================================================
+// Public Sync Accessors (for internal use by content_personalization)
+// ============================================================================
+
+/// Load regional data by country code — sync, no Tauri command overhead.
+/// Falls back to default.json, then hardcoded US defaults.
+pub(crate) fn load_regional_data_for_context(country_code: &str) -> Option<RegionalData> {
+    load_regional_file(&country_code.to_lowercase()).or_else(|| load_regional_file("default"))
+}
+
+// ============================================================================
 // Tauri Commands
 // ============================================================================
 
