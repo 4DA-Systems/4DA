@@ -350,4 +350,5 @@ export type AppStore =
   & import('./suns-slice').SunsSlice
   & import('./coach-slice').CoachSlice
   & import('./autophagy-slice').AutophagySlice
-  & import('./decision-advantage-slice').DecisionAdvantageSlice;
+  & import('./decision-advantage-slice').DecisionAdvantageSlice
+  & import('./game-slice').GameSlice;

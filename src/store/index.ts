@@ -22,6 +22,7 @@ import { createSunsSlice } from './suns-slice';
 import { createCoachSlice } from './coach-slice';
 import { createAutophagySlice } from './autophagy-slice';
 import { createDecisionAdvantageSlice } from './decision-advantage-slice';
+import { createGameSlice } from './game-slice';
 
 // Re-export all types
 export type {
@@ -64,4 +65,5 @@ export const useAppStore = create<AppStore>()((...a) => ({
   ...createCoachSlice(...a),
   ...createAutophagySlice(...a),
   ...createDecisionAdvantageSlice(...a),
+  ...createGameSlice(...a),
 }));
