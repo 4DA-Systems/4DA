@@ -116,6 +116,24 @@ const editors: EditorConfig[] = [
       console.log(`  Written: ${configPath}`);
     },
   },
+  {
+    name: "Windsurf",
+    detect: () => {
+      const windsurfDir = join(homedir(), ".windsurf");
+      if (existsSync(windsurfDir)) {
+        return join(windsurfDir, "mcp.json");
+      }
+      return null;
+    },
+    write: (configPath: string) => {
+      const config = readJsonSafe(configPath);
+      const mcpServers = (config.mcpServers || {}) as Record<string, unknown>;
+      mcpServers["4da"] = MCP_CONFIG["4da"];
+      config.mcpServers = mcpServers;
+      writeJsonFile(configPath, config);
+      console.log(`  Written: ${configPath}`);
+    },
+  },
 ];
 
 /**
@@ -143,7 +161,13 @@ export function runSetup(): void {
     console.log(`  ${JSON.stringify(MCP_CONFIG, null, 2)}\n`);
   }
 
-  console.log("  Done. Restart your editor to activate 4DA.\n");
+  console.log("  Done. Restart your editor to activate 4DA.");
+  console.log("");
+  console.log("  Note: This server reads data from the 4DA desktop app.");
+  console.log("  If you haven't installed it yet:");
+  console.log("    https://github.com/runyourempire/4DA/releases/latest");
+  console.log("");
+  console.log("  Run: npx @4da/mcp-server --doctor  to verify everything works.\n");
 }
 
 // Run directly if invoked as a script (bin entry or pnpm run setup)
