@@ -2,6 +2,7 @@ import type { StateCreator } from 'zustand';
 import { invoke } from '@tauri-apps/api/core';
 import type { ContextFile } from '../types';
 import type { AppStore, AnalysisSlice, AppState } from './types';
+import { translateError } from '../utils/error-messages';
 
 const initialAppState: AppState = {
   contextFiles: [],
@@ -73,9 +74,9 @@ export const createAnalysisSlice: StateCreator<AppStore, [], [], AnalysisSlice> 
         addToast('info', 'Analysis already in progress');
       } else {
         set(state => ({
-          appState: { ...state.appState, status: `Error: ${error}`, loading: false },
+          appState: { ...state.appState, status: `Error: ${translateError(error)}`, loading: false },
         }));
-        addToast('error', `Analysis failed: ${errorMsg}`);
+        addToast('error', `Analysis failed: ${translateError(error)}`);
       }
     }
   },
@@ -108,7 +109,7 @@ export const createAnalysisSlice: StateCreator<AppStore, [], [], AnalysisSlice> 
         }));
       } else {
         set(state => ({
-          appState: { ...state.appState, status: `Error: ${error}`, loading: false },
+          appState: { ...state.appState, status: `Error: ${translateError(error)}`, loading: false },
         }));
       }
     }
@@ -129,7 +130,7 @@ export const createAnalysisSlice: StateCreator<AppStore, [], [], AnalysisSlice> 
     } catch (error) {
       console.error('Failed to clear context:', error);
       set(state => ({
-        appState: { ...state.appState, status: `Error: ${error}` },
+        appState: { ...state.appState, status: `Error: ${translateError(error)}` },
       }));
     }
   },
@@ -155,10 +156,11 @@ export const createAnalysisSlice: StateCreator<AppStore, [], [], AnalysisSlice> 
         },
       }));
     } catch (error) {
+      console.error('Failed to index context:', error);
       set(state => ({
         appState: {
           ...state.appState,
-          status: `Index failed: ${error}`,
+          status: `Index failed: ${translateError(error)}`,
           loading: false,
         },
       }));

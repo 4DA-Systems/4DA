@@ -4,6 +4,7 @@ import { invoke } from '@tauri-apps/api/core';
 import type { SavedItem } from '../types';
 import { getSourceLabel, getSourceColorClass } from '../config/sources';
 import { useAppStore } from '../store';
+import { translateError } from '../utils/error-messages';
 
 export function SavedItemsView() {
   const { t } = useTranslation();
@@ -20,7 +21,7 @@ export function SavedItemsView() {
       const result = await invoke<SavedItem[]>('get_saved_items');
       setItems(result);
     } catch (e) {
-      setError(String(e));
+      setError(translateError(e));
     } finally {
       setLoading(false);
     }
@@ -44,7 +45,7 @@ export function SavedItemsView() {
     } catch (e) {
       // Revert on failure
       loadItems();
-      addToast('error', `Failed to remove: ${e}`);
+      addToast('error', `Failed to remove: ${translateError(e)}`);
     }
   }, [addToast, setFeedbackGivenFull, loadItems, t]);
 

@@ -19,6 +19,7 @@ import { NaturalLanguageQueryPanel } from './NaturalLanguageQuery';
 import { ProValuePanel } from './ProValuePanel';
 import { AboutPanel } from './AboutPanel';
 import { useAppStore } from '../store';
+import { translateError } from '../utils/error-messages';
 import type { StreetsTier } from '../types/coach';
 
 // ============================================================================
@@ -241,7 +242,7 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
       setSettingsStatus(msg);
       setTimeout(() => setSettingsStatus(''), 2000);
     } catch (error) {
-      setSettingsStatus(`Error: ${error}`);
+      setSettingsStatus(`Error: ${translateError(error)}`);
     }
   };
 
@@ -251,7 +252,7 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
       setSettingsStatus(msg);
       setTimeout(() => setSettingsStatus(''), 2000);
     } catch (error) {
-      setSettingsStatus(`Error: ${error}`);
+      setSettingsStatus(`Error: ${translateError(error)}`);
     }
   };
 
@@ -261,7 +262,7 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
       setSettingsStatus(msg);
       setTimeout(() => setSettingsStatus(''), 2000);
     } catch (error) {
-      setSettingsStatus(`Notification error: ${error}`);
+      setSettingsStatus(`Notification error: ${translateError(error)}`);
     }
   };
 

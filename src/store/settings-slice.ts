@@ -2,6 +2,7 @@ import type { StateCreator } from 'zustand';
 import { invoke } from '@tauri-apps/api/core';
 import type { Settings } from '../types';
 import type { AppStore, SettingsSlice, SettingsForm, OllamaStatus } from './types';
+import { translateError } from '../utils/error-messages';
 
 const defaultSettingsForm: SettingsForm = {
   provider: 'anthropic',
@@ -95,7 +96,7 @@ export const createSettingsSlice: StateCreator<AppStore, [], [], SettingsSlice> 
       await loadSettings();
       setTimeout(() => set({ settingsStatus: '' }), 2000);
     } catch (error) {
-      set({ settingsStatus: `Error: ${error}` });
+      set({ settingsStatus: `Error: ${translateError(error)}` });
     }
   },
 
@@ -119,7 +120,7 @@ export const createSettingsSlice: StateCreator<AppStore, [], [], SettingsSlice> 
       const result = await Promise.race([testPromise, timeoutPromise]);
       set({ settingsStatus: result.message });
     } catch (error) {
-      set({ settingsStatus: `Connection failed: ${error}` });
+      set({ settingsStatus: `Connection failed: ${translateError(error)}` });
     }
   },
 

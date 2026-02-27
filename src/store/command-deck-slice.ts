@@ -1,6 +1,7 @@
 import { invoke } from '@tauri-apps/api/core';
 import type { StateCreator } from 'zustand';
 import type { AppStore } from './types';
+import { translateError } from '../utils/error-messages';
 import type {
   CommandDeckTab,
   CommandHistoryEntry,
@@ -118,7 +119,7 @@ export const createCommandDeckSlice: StateCreator<AppStore, [], [], CommandDeckS
       await invoke('git_deck_stage', { repoPath, paths });
       get().loadGitStatus();
     } catch (e) {
-      get().addToast('error', `Stage failed: ${e}`);
+      get().addToast('error', `Stage failed: ${translateError(e)}`);
     }
   },
 
@@ -129,7 +130,7 @@ export const createCommandDeckSlice: StateCreator<AppStore, [], [], CommandDeckS
       await invoke('git_deck_unstage', { repoPath, paths });
       get().loadGitStatus();
     } catch (e) {
-      get().addToast('error', `Unstage failed: ${e}`);
+      get().addToast('error', `Unstage failed: ${translateError(e)}`);
     }
   },
 
@@ -146,7 +147,7 @@ export const createCommandDeckSlice: StateCreator<AppStore, [], [], CommandDeckS
       set({ commitMessage: '', suggestedCommitMessage: null });
       get().loadGitStatus();
     } catch (e) {
-      get().addToast('error', `Commit failed: ${e}`);
+      get().addToast('error', `Commit failed: ${translateError(e)}`);
     }
   },
 
@@ -159,7 +160,7 @@ export const createCommandDeckSlice: StateCreator<AppStore, [], [], CommandDeckS
       get().addToast('success', 'Pushed successfully');
       get().loadGitStatus();
     } catch (e) {
-      get().addToast('error', `Push failed: ${e}`);
+      get().addToast('error', `Push failed: ${translateError(e)}`);
     }
   },
 
@@ -176,7 +177,7 @@ export const createCommandDeckSlice: StateCreator<AppStore, [], [], CommandDeckS
       });
     } catch (e) {
       set({ suggestingCommit: false });
-      get().addToast('error', `Suggest failed: ${e}`);
+      get().addToast('error', `Suggest failed: ${translateError(e)}`);
     }
   },
 

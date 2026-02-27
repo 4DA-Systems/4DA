@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
+import { translateError } from '../utils/error-messages';
 
 interface SourceConfigPanelProps {
   onStatusChange: (status: string) => void;
@@ -55,7 +56,7 @@ export function SourceConfigPanel({ onStatusChange }: SourceConfigPanelProps) {
       onStatusChange(t('sources.rss.added'));
       setTimeout(() => onStatusChange(''), 2000);
     } catch (error) {
-      onStatusChange(`Error: ${error}`);
+      onStatusChange(`Error: ${translateError(error)}`);
     }
   };
 
@@ -67,7 +68,7 @@ export function SourceConfigPanel({ onStatusChange }: SourceConfigPanelProps) {
       onStatusChange(t('sources.rss.removed'));
       setTimeout(() => onStatusChange(''), 2000);
     } catch (error) {
-      onStatusChange(`Error: ${error}`);
+      onStatusChange(`Error: ${translateError(error)}`);
     }
   };
 
@@ -81,7 +82,7 @@ export function SourceConfigPanel({ onStatusChange }: SourceConfigPanelProps) {
       onStatusChange(t('sources.youtube.added'));
       setTimeout(() => onStatusChange(''), 2000);
     } catch (error) {
-      onStatusChange(`Error: ${error}`);
+      onStatusChange(`Error: ${translateError(error)}`);
     }
   };
 
@@ -93,7 +94,7 @@ export function SourceConfigPanel({ onStatusChange }: SourceConfigPanelProps) {
       onStatusChange(t('sources.youtube.removed'));
       setTimeout(() => onStatusChange(''), 2000);
     } catch (error) {
-      onStatusChange(`Error: ${error}`);
+      onStatusChange(`Error: ${translateError(error)}`);
     }
   };
 
@@ -107,7 +108,7 @@ export function SourceConfigPanel({ onStatusChange }: SourceConfigPanelProps) {
       onStatusChange(t('sources.twitter.added'));
       setTimeout(() => onStatusChange(''), 2000);
     } catch (error) {
-      onStatusChange(`Error: ${error}`);
+      onStatusChange(`Error: ${translateError(error)}`);
     }
   };
 
@@ -119,7 +120,7 @@ export function SourceConfigPanel({ onStatusChange }: SourceConfigPanelProps) {
       onStatusChange(t('sources.twitter.removed'));
       setTimeout(() => onStatusChange(''), 2000);
     } catch (error) {
-      onStatusChange(`Error: ${error}`);
+      onStatusChange(`Error: ${translateError(error)}`);
     }
   };
 
@@ -132,7 +133,7 @@ export function SourceConfigPanel({ onStatusChange }: SourceConfigPanelProps) {
       onStatusChange(key ? t('sources.twitter.keySaved') : t('sources.twitter.keyCleared'));
       setTimeout(() => onStatusChange(''), 2000);
     } catch (error) {
-      onStatusChange(`Error: ${error}`);
+      onStatusChange(`Error: ${translateError(error)}`);
     }
   };
 
@@ -147,7 +148,7 @@ export function SourceConfigPanel({ onStatusChange }: SourceConfigPanelProps) {
       onStatusChange(t('sources.github.added'));
       setTimeout(() => onStatusChange(''), 2000);
     } catch (error) {
-      onStatusChange(`Error: ${error}`);
+      onStatusChange(`Error: ${translateError(error)}`);
     }
   };
 
@@ -159,7 +160,7 @@ export function SourceConfigPanel({ onStatusChange }: SourceConfigPanelProps) {
       onStatusChange(t('sources.github.removed'));
       setTimeout(() => onStatusChange(''), 2000);
     } catch (error) {
-      onStatusChange(`Error: ${error}`);
+      onStatusChange(`Error: ${translateError(error)}`);
     }
   };
 

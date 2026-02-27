@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
 import sunLogo from '../assets/sun-logo.jpg';
+import { translateError } from '../utils/error-messages';
 
 interface SplashScreenProps {
   onComplete: () => void;
@@ -55,7 +56,7 @@ export function SplashScreen({ onComplete, minimumDisplayTime = 1500 }: SplashSc
         await invoke('get_settings');
         if (cancelled) return;
 
-        // Stage 2: Embeddings/AI
+        // Stage 2: Embeddings/AI — non-blocking, just a visual step
         setStage('embeddings');
 
         // Stage 3: Context engine
@@ -82,7 +83,7 @@ export function SplashScreen({ onComplete, minimumDisplayTime = 1500 }: SplashSc
 
       } catch (e) {
         console.error('[SplashScreen] Backend check failed:', e);
-        setError(String(e));
+        setError(translateError(e));
         // Still mark as ready after error so app can show error state
         setBackendReady(true);
       }
