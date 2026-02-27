@@ -102,6 +102,18 @@ export function runDoctor(): void {
   const warnings = checks.filter((c) => c.status === "warn");
 
   console.log("");
+
+  // If database is missing, show actionable next step
+  const dbCheck = checks.find((c) => c.name === "4DA database");
+  if (dbCheck && dbCheck.status !== "pass") {
+    console.log("  The MCP server reads data from the 4DA desktop app.");
+    console.log("  Install 4DA, open it, and let it scan your projects.");
+    console.log("");
+    console.log("  Download: https://github.com/runyourempire/4DA/releases/latest");
+    console.log("  Learn more: https://4da.ai");
+    console.log("");
+  }
+
   if (failures.length > 0) {
     console.log(`  ${failures.length} issue(s) need attention.\n`);
     process.exit(1);

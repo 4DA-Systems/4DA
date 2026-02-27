@@ -12,26 +12,20 @@
  * Do NOT expose this server over a network without adding proper auth.
  */
 /**
- * 4DA MCP Server v4.0.0 - Intelligence Platform
+ * 4DA MCP Server v4.0.0 — Intelligence Platform
  *
- * Exposes 4DA's personalized content filtering to AI agents via MCP.
- * Now with local LLM support via Ollama for fully offline AI synthesis.
+ * 30 tools across 8 categories. Exposes 4DA's codebase-aware content
+ * scoring engine to any AI tool that speaks MCP.
  *
- * Core Tools (4):
- * - get_relevant_content: Get filtered relevant content from 4DA
- * - get_context: Get the user's context (what 4DA knows about them)
- * - explain_relevance: Explain why an item was considered relevant
- * - record_feedback: Record user feedback for learning
- *
- * AI Superpower Tools (8):
- * - score_autopsy: Deep forensic analysis of relevance scores (AI-powered)
- * - trend_analysis: Statistical patterns and anomaly detection (AI-powered)
- * - daily_briefing: Executive summaries of discoveries (AI-powered)
- * - context_analysis: Optimize your context for better relevance (AI-powered)
- * - source_health: Diagnose source pipeline issues
- * - topic_connections: Build knowledge graphs from content (AI-powered)
- * - config_validator: Validate configuration and detect issues
- * - llm_status: Check LLM configuration and Ollama availability
+ * Categories:
+ *   Core (4)                  — content feed, context, relevance, feedback
+ *   Intelligence (9)          — briefings, signals, autopsy, trends, topics
+ *   Diagnostic (3)            — source health, config, LLM status
+ *   Knowledge & Health (4)    — gaps, project health, mentions, context export
+ *   Decision Intelligence (3) — decision memory, tech radar, alignment checks
+ *   Agent Autonomy (3)        — persistent memory, session briefs, delegation
+ *   Developer DNA (1)         — tech identity profile
+ *   Intelligence Metabolism (3)— autophagy, decision windows, compound advantage
  */
 
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
@@ -168,7 +162,7 @@ import type { CompoundAdvantageParams } from "./tools/compound-advantage.js";
 const server = new Server(
   {
     name: "4da-server",
-    version: "4.0.0",
+    version: "4.0.1",
   },
   {
     capabilities: {
@@ -651,6 +645,41 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 async function main() {
   const args = process.argv.slice(2);
 
+  // Version
+  if (args.includes("--version") || args.includes("-v")) {
+    console.log("@4da/mcp-server 4.0.1");
+    return;
+  }
+
+  // Help
+  if (args.includes("--help") || args.includes("-h")) {
+    console.log(`
+  @4da/mcp-server — 30 tools for codebase-aware developer intelligence
+
+  Usage:
+    npx @4da/mcp-server              Start MCP server (stdio transport)
+    npx @4da/mcp-server --http       Start Streamable HTTP transport
+    npx @4da/mcp-server --setup      Auto-configure your editor
+    npx @4da/mcp-server --doctor     Check installation health
+    npx @4da/mcp-server --version    Print version
+
+  Options:
+    --http              Use Streamable HTTP instead of stdio
+    --port <number>     HTTP port (default: 4840)
+    --host <address>    HTTP bind address (default: 127.0.0.1)
+    --setup             Detect editors and write MCP config
+    --doctor            Validate database, bindings, and LLM providers
+
+  Environment:
+    FOURDA_DB_PATH      Path to 4DA's SQLite database (auto-detected if omitted)
+
+  Requires the 4DA desktop app (scans your projects, scores content).
+  Download: https://github.com/runyourempire/4DA/releases/latest
+  Docs:     https://4da.ai
+`);
+    return;
+  }
+
   // Setup command: configure editors
   if (args.includes("--setup") || args.includes("setup")) {
     runSetup();
@@ -681,8 +710,14 @@ async function main() {
   if (validation.valid) {
     console.error(`[4DA] Database validated — ${validation.tables?.length ?? 0} tables found`);
   } else {
-    // Log warning but do not abort — tools will surface errors naturally
-    console.error(`[4DA] Database validation warning: ${validation.error}`);
+    // Log actionable warning — this IS the conversion funnel for MCP-first users
+    console.error(`[4DA] Database not found.`);
+    console.error(`  The MCP server needs the 4DA desktop app to work.`);
+    console.error(`  4DA scans your projects and scores content — this server reads that data.`);
+    console.error(``);
+    console.error(`  Get started: https://github.com/runyourempire/4DA/releases/latest`);
+    console.error(`  Or run: npx @4da/mcp-server --doctor  for diagnostics`);
+    console.error(``);
   }
 
   // Default: stdio transport (existing behavior)
@@ -703,7 +738,7 @@ async function main() {
   });
 
   const toolCount = getSlimToolList().length;
-  console.error(`4DA MCP Server v4.0.0 (Intelligence Platform) started — ${toolCount} tools, stdio transport`);
+  console.error(`4DA MCP Server v4.0.1 started — ${toolCount} tools, stdio transport`);
   console.error("  Use --http for Streamable HTTP, --setup to configure editors, --doctor to check health");
 }
 
