@@ -432,7 +432,11 @@ pub async fn generate_ai_briefing(app: tauri::AppHandle) -> Result<serde_json::V
 
     // GAME: track briefing generation on success
     if let Ok(ref val) = result {
-        if val.get("success").and_then(|v| v.as_bool()).unwrap_or(false) {
+        if val
+            .get("success")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false)
+        {
             if let Ok(db) = crate::get_database() {
                 for a in crate::game_engine::increment_counter(db, "briefings", 1) {
                     crate::events::emit_achievement_unlocked(&app, &a);

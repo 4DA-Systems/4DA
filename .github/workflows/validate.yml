@@ -40,8 +40,8 @@ jobs:
       - name: ESLint
         run: pnpm run lint
 
-      - name: Run tests
-        run: pnpm run test
+      - name: Run tests with coverage
+        run: pnpm run test -- --coverage
 
       - name: Build
         run: pnpm run build
@@ -134,6 +134,19 @@ jobs:
       - name: Run unit tests
         working-directory: src-tauri
         run: cargo test --all
+
+      # Verify test count floor (prevents accidental test deletion)
+      - name: Verify Rust test count floor
+        if: matrix.full
+        working-directory: src-tauri
+        run: |
+          OUTPUT=$(cargo test --all 2>&1)
+          COUNT=$(echo "$OUTPUT" | grep -oP '\d+ passed' | tail -1 | grep -oP '\d+')
+          echo "Rust tests: $COUNT"
+          if [ "$COUNT" -lt 650 ]; then
+            echo "::error::Test count dropped below 650 (got $COUNT)"
+            exit 1
+          fi
 
       # Integration tests on all platforms
       - name: Run migration tests

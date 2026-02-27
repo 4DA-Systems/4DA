@@ -154,7 +154,10 @@ pub(crate) fn void_signal_context_change(app: &AppHandle, intensity: f32) {
 }
 
 /// Emit an achievement unlocked event to the frontend
-pub fn emit_achievement_unlocked(app: &AppHandle, achievement: &crate::game_engine::AchievementUnlocked) {
+pub fn emit_achievement_unlocked(
+    app: &AppHandle,
+    achievement: &crate::game_engine::AchievementUnlocked,
+) {
     if let Err(e) = app.emit("achievement-unlocked", achievement) {
         tracing::debug!(target: "4da::events", error = %e, "Failed to emit achievement event");
     }
