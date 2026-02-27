@@ -25,7 +25,7 @@ function CategoryFilter({
         className={`px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors ${
           active === 'all'
             ? 'bg-[#D4AF37]/15 text-[#D4AF37] border-[#D4AF37]/30'
-            : 'bg-[#1F1F1F] text-[#A0A0A0] border-[#2A2A2A] hover:text-white hover:border-[#D4AF37]/20'
+            : 'bg-bg-tertiary text-text-secondary border-border hover:text-white hover:border-[#D4AF37]/20'
         }`}
       >
         {t('coach.template.all')}
@@ -37,7 +37,7 @@ function CategoryFilter({
           className={`px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors ${
             active === cat
               ? 'bg-[#D4AF37]/15 text-[#D4AF37] border-[#D4AF37]/30'
-              : 'bg-[#1F1F1F] text-[#A0A0A0] border-[#2A2A2A] hover:text-white hover:border-[#D4AF37]/20'
+              : 'bg-bg-tertiary text-text-secondary border-border hover:text-white hover:border-[#D4AF37]/20'
           }`}
         >
           {cat}
@@ -65,7 +65,7 @@ function TemplateCard({
   return (
     <button
       onClick={() => onOpen(template)}
-      className="w-full text-left bg-[#141414] border border-[#2A2A2A] rounded-xl p-4 transition-colors hover:border-[#D4AF37]/30 group"
+      className="w-full text-left bg-bg-secondary border border-border rounded-xl p-4 transition-colors hover:border-[#D4AF37]/30 group"
     >
       <div className="flex items-start justify-between gap-2 mb-2">
         <h4 className="text-sm font-semibold text-white group-hover:text-[#D4AF37] transition-colors leading-snug">
@@ -73,7 +73,7 @@ function TemplateCard({
         </h4>
         <CategoryBadge category={template.category} />
       </div>
-      <p className="text-xs text-[#A0A0A0] leading-relaxed line-clamp-2">
+      <p className="text-xs text-text-secondary leading-relaxed line-clamp-2">
         {template.description}
       </p>
     </button>
@@ -101,10 +101,10 @@ function TemplateViewer({
   }, [template.content]);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#0A0A0A]/80 backdrop-blur-sm">
-      <div className="bg-[#141414] border border-[#2A2A2A] rounded-xl shadow-2xl w-full max-w-2xl max-h-[80vh] flex flex-col mx-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-bg-primary/80 backdrop-blur-sm">
+      <div className="bg-bg-secondary border border-border rounded-xl shadow-2xl w-full max-w-2xl max-h-[80vh] flex flex-col mx-4">
         {/* Viewer header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-[#2A2A2A]">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-border">
           <div className="flex items-center gap-3 min-w-0">
             <h3 className="text-sm font-semibold text-white truncate">
               {template.title}
@@ -117,14 +117,14 @@ function TemplateViewer({
               className={`px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors ${
                 copied
                   ? 'bg-[#22C55E]/15 text-[#22C55E] border-[#22C55E]/30'
-                  : 'bg-[#1F1F1F] text-[#A0A0A0] border-[#2A2A2A] hover:text-white hover:border-[#D4AF37]/30'
+                  : 'bg-bg-tertiary text-text-secondary border-border hover:text-white hover:border-[#D4AF37]/30'
               }`}
             >
               {copied ? t('action.copied') : t('action.copy')}
             </button>
             <button
               onClick={onClose}
-              className="w-7 h-7 flex items-center justify-center rounded-lg text-[#666] hover:text-white hover:bg-[#1F1F1F] transition-colors"
+              className="w-7 h-7 flex items-center justify-center rounded-lg text-[#666] hover:text-white hover:bg-bg-tertiary transition-colors"
               aria-label={t('action.close')}
             >
               <svg
@@ -146,7 +146,7 @@ function TemplateViewer({
 
         {/* Content */}
         <div className="flex-1 overflow-y-auto px-5 py-4">
-          <pre className="text-xs text-[#A0A0A0] leading-relaxed whitespace-pre-wrap font-[JetBrains_Mono,monospace]">
+          <pre className="text-xs text-text-secondary leading-relaxed whitespace-pre-wrap font-[JetBrains_Mono,monospace]">
             {template.content}
           </pre>
         </div>
@@ -236,7 +236,7 @@ export function TemplateLibrary() {
               <polyline points="10 9 9 9 8 9" />
             </svg>
           </div>
-          <p className="text-sm text-[#A0A0A0] max-w-sm">
+          <p className="text-sm text-text-secondary max-w-sm">
             {templates.length === 0
               ? t('coach.template.emptyNoTemplates')
               : t('coach.template.emptyNoMatch')}

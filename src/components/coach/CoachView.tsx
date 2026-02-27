@@ -35,7 +35,7 @@ const SUB_TAB_KEYS: Record<CoachSessionType, string> = {
 function TierBadge({ tier }: { tier: StreetsTier }) {
   const { t } = useTranslation();
   const config: Record<StreetsTier, { labelKey: string; color: string }> = {
-    playbook: { labelKey: 'coach:coach.tier.playbook', color: 'bg-[#1F1F1F] text-[#A0A0A0] border-[#2A2A2A]' },
+    playbook: { labelKey: 'coach:coach.tier.playbook', color: 'bg-bg-tertiary text-text-secondary border-border' },
     community: { labelKey: 'coach:coach.tier.community', color: 'bg-[#D4AF37]/15 text-[#D4AF37] border-[#D4AF37]/30' },
     cohort: { labelKey: 'coach:coach.tier.cohort', color: 'bg-[#22C55E]/15 text-[#22C55E] border-[#22C55E]/30' },
   };
@@ -63,7 +63,7 @@ function SessionTypeBadge({ type }: { type: string }) {
   };
 
   return (
-    <span className="px-1.5 py-0.5 text-[10px] font-medium rounded bg-[#1F1F1F] text-[#666] border border-[#2A2A2A]">
+    <span className="px-1.5 py-0.5 text-[10px] font-medium rounded bg-bg-tertiary text-[#666] border border-border">
       {shortLabelKeys[type] ? t(shortLabelKeys[type]) : type}
     </span>
   );
@@ -90,8 +90,8 @@ function StreetsGate() {
   };
 
   return (
-    <div className="absolute inset-0 z-20 flex items-center justify-center bg-[#0A0A0A]/80 backdrop-blur-sm rounded-xl">
-      <div className="bg-[#141414] border border-[#D4AF37]/30 rounded-xl px-8 py-6 text-center max-w-sm shadow-lg">
+    <div className="absolute inset-0 z-20 flex items-center justify-center bg-bg-primary/80 backdrop-blur-sm rounded-xl">
+      <div className="bg-bg-secondary border border-[#D4AF37]/30 rounded-xl px-8 py-6 text-center max-w-sm shadow-lg">
         <div className="flex items-center justify-center gap-2 mb-3">
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none" className="text-[#D4AF37]">
             <path d="M8 1L10 6H15L11 9.5L12.5 15L8 11.5L3.5 15L5 9.5L1 6H6L8 1Z" fill="currentColor" />
@@ -100,7 +100,7 @@ function StreetsGate() {
             {t('coach:coach.gate.title')}
           </span>
         </div>
-        <p className="text-sm text-[#A0A0A0] mb-1">
+        <p className="text-sm text-text-secondary mb-1">
           {t('coach:coach.gate.requiresLicense')}
         </p>
         <p className="text-xs text-[#666] mb-4">
@@ -122,12 +122,12 @@ function StreetsGate() {
               onChange={e => setKey(e.target.value)}
               placeholder={t('coach:coach.gate.enterKey')}
               onKeyDown={e => e.key === 'Enter' && handleActivate()}
-              className="flex-1 px-3 py-2 bg-[#0A0A0A] border border-[#2A2A2A] rounded-lg text-sm text-white placeholder-[#666] focus:outline-none focus:border-[#D4AF37]/50"
+              className="flex-1 px-3 py-2 bg-bg-primary border border-border rounded-lg text-sm text-white placeholder-[#666] focus:outline-none focus:border-[#D4AF37]/50"
             />
             <button
               onClick={handleActivate}
               disabled={activating || !key.trim()}
-              className="px-3 py-2 text-sm font-medium bg-[#1F1F1F] text-[#A0A0A0] border border-[#2A2A2A] rounded-lg hover:bg-[#2A2A2A] hover:text-white transition-colors disabled:opacity-50"
+              className="px-3 py-2 text-sm font-medium bg-bg-tertiary text-text-secondary border border-border rounded-lg hover:bg-[#2A2A2A] hover:text-white transition-colors disabled:opacity-50"
             >
               {activating ? '...' : t('action.activate')}
             </button>
@@ -155,7 +155,7 @@ function NewSessionDropdown({
     <div className="relative">
       <button
         onClick={() => setOpen(prev => !prev)}
-        className="w-full flex items-center justify-center gap-1.5 px-3 py-2 text-sm font-medium text-white bg-[#1F1F1F] border border-[#2A2A2A] rounded-lg hover:border-[#D4AF37]/40 transition-colors"
+        className="w-full flex items-center justify-center gap-1.5 px-3 py-2 text-sm font-medium text-white bg-bg-tertiary border border-border rounded-lg hover:border-[#D4AF37]/40 transition-colors"
       >
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <line x1="12" y1="5" x2="12" y2="19" />
@@ -168,7 +168,7 @@ function NewSessionDropdown({
         <>
           {/* Backdrop to close dropdown */}
           <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
-          <div className="absolute left-0 right-0 mt-1 z-20 bg-[#141414] border border-[#2A2A2A] rounded-lg shadow-lg overflow-hidden">
+          <div className="absolute left-0 right-0 mt-1 z-20 bg-bg-secondary border border-border rounded-lg shadow-lg overflow-hidden">
             {SUB_TAB_IDS.map(tabId => (
               <button
                 key={tabId}
@@ -176,7 +176,7 @@ function NewSessionDropdown({
                   onSelect(tabId);
                   setOpen(false);
                 }}
-                className="w-full text-left px-3 py-2 text-sm text-[#A0A0A0] hover:bg-[#1F1F1F] hover:text-white transition-colors"
+                className="w-full text-left px-3 py-2 text-sm text-text-secondary hover:bg-bg-tertiary hover:text-white transition-colors"
               >
                 {t(SUB_TAB_KEYS[tabId])}
               </button>
@@ -275,7 +275,7 @@ export function CoachView() {
       {/* Two-panel layout */}
       <div className="flex gap-4 flex-1 min-h-0">
         {/* Left sidebar */}
-        <aside className="w-52 flex-shrink-0 bg-[#141414] border border-[#2A2A2A] rounded-xl p-3 flex flex-col">
+        <aside className="w-52 flex-shrink-0 bg-bg-secondary border border-border rounded-xl p-3 flex flex-col">
           {/* New Session button */}
           <div className="mb-3">
             <NewSessionDropdown onSelect={handleNewSession} />
@@ -301,10 +301,10 @@ export function CoachView() {
                   className={`w-full text-left px-3 py-2 rounded-lg transition-all group relative ${
                     isActive
                       ? 'bg-[#D4AF37]/10 border border-[#D4AF37]/30'
-                      : 'hover:bg-[#1F1F1F] border border-transparent'
+                      : 'hover:bg-bg-tertiary border border-transparent'
                   }`}
                 >
-                  <p className={`text-sm truncate ${isActive ? 'text-white font-medium' : 'text-[#A0A0A0]'}`}>
+                  <p className={`text-sm truncate ${isActive ? 'text-white font-medium' : 'text-text-secondary'}`}>
                     {session.title}
                   </p>
                   <div className="flex items-center gap-1.5 mt-0.5">
@@ -333,7 +333,7 @@ export function CoachView() {
           </div>
 
           {/* Sub-tab navigation */}
-          <div className="mt-3 pt-3 border-t border-[#2A2A2A] space-y-0.5">
+          <div className="mt-3 pt-3 border-t border-border space-y-0.5">
             {SUB_TAB_IDS.map(tabId => (
               <button
                 key={tabId}
@@ -341,7 +341,7 @@ export function CoachView() {
                 className={`w-full text-left px-3 py-1.5 text-sm rounded-md transition-colors ${
                   activeTab === tabId
                     ? 'text-[#D4AF37] bg-[#D4AF37]/10 font-medium'
-                    : 'text-[#A0A0A0] hover:text-white hover:bg-[#1F1F1F]'
+                    : 'text-text-secondary hover:text-white hover:bg-bg-tertiary'
                 }`}
               >
                 {t(SUB_TAB_KEYS[tabId])}
@@ -351,7 +351,7 @@ export function CoachView() {
         </aside>
 
         {/* Content area */}
-        <main className="flex-1 min-w-0 bg-[#141414] border border-[#2A2A2A] rounded-xl p-4 overflow-hidden flex flex-col">
+        <main className="flex-1 min-w-0 bg-bg-secondary border border-border rounded-xl p-4 overflow-hidden flex flex-col">
           {renderContent()}
         </main>
       </div>

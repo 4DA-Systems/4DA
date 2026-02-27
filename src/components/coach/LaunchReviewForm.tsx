@@ -92,7 +92,7 @@ export function LaunchReviewForm() {
           onChange={(e) => setDescription(e.target.value)}
           placeholder={t('coach.launch.placeholder')}
           rows={5}
-          className="w-full bg-[#0A0A0A] border border-[#2A2A2A] rounded-lg px-4 py-3 text-sm text-[#A0A0A0] placeholder-[#666] resize-none focus:border-[#D4AF37] focus:outline-none transition-colors leading-relaxed"
+          className="w-full bg-bg-primary border border-border rounded-lg px-4 py-3 text-sm text-text-secondary placeholder-[#666] resize-none focus:border-[#D4AF37] focus:outline-none transition-colors leading-relaxed"
         />
         <div className="flex items-center justify-between">
           <span className="text-[10px] text-[#666]">
@@ -113,7 +113,7 @@ export function LaunchReviewForm() {
         <div className="flex items-center justify-center py-12">
           <div className="flex flex-col items-center gap-3">
             <div className="w-5 h-5 border-2 border-[#D4AF37] border-t-transparent rounded-full animate-spin" />
-            <p className="text-xs text-[#A0A0A0]">
+            <p className="text-xs text-text-secondary">
               {t('coach.launch.analyzingReadiness')}
             </p>
           </div>
@@ -122,13 +122,13 @@ export function LaunchReviewForm() {
 
       {/* Review Results */}
       {review && (
-        <div className="bg-[#141414] border border-[#2A2A2A] rounded-xl p-5 space-y-5">
+        <div className="bg-bg-secondary border border-border rounded-xl p-5 space-y-5">
           {/* Score */}
           <div className="flex items-center gap-6">
             <ScoreRing score={review.overall_score} />
             <div className="flex-1">
               <p className="text-sm font-semibold text-white">{t('coach.launch.readiness')}</p>
-              <p className="text-xs text-[#A0A0A0] mt-1">
+              <p className="text-xs text-text-secondary mt-1">
                 {review.overall_score >= 80
                   ? t('coach.launch.readinessHigh')
                   : review.overall_score >= 50
@@ -148,7 +148,7 @@ export function LaunchReviewForm() {
                 {review.strengths.map((s, i) => (
                   <li key={i} className="flex items-start gap-2 text-xs">
                     <span className="text-[#22C55E] mt-0.5 flex-shrink-0">+</span>
-                    <span className="text-[#A0A0A0]">{s}</span>
+                    <span className="text-text-secondary">{s}</span>
                   </li>
                 ))}
               </ul>
@@ -165,7 +165,7 @@ export function LaunchReviewForm() {
                 {review.gaps.map((g, i) => (
                   <li key={i} className="flex items-start gap-2 text-xs">
                     <span className="text-[#F97316] mt-0.5 flex-shrink-0">!</span>
-                    <span className="text-[#A0A0A0]">{g}</span>
+                    <span className="text-text-secondary">{g}</span>
                   </li>
                 ))}
               </ul>
@@ -181,10 +181,10 @@ export function LaunchReviewForm() {
               <ol className="space-y-2">
                 {review.recommendations.map((rec, i) => (
                   <li key={i} className="flex items-start gap-3 text-xs">
-                    <span className="w-5 h-5 rounded-md bg-[#1F1F1F] text-[#D4AF37] flex items-center justify-center flex-shrink-0 text-[10px] font-bold">
+                    <span className="w-5 h-5 rounded-md bg-bg-tertiary text-[#D4AF37] flex items-center justify-center flex-shrink-0 text-[10px] font-bold">
                       {i + 1}
                     </span>
-                    <span className="text-[#A0A0A0] leading-relaxed">{rec}</span>
+                    <span className="text-text-secondary leading-relaxed">{rec}</span>
                   </li>
                 ))}
               </ol>

@@ -132,14 +132,14 @@ export default function PortScanner() {
           value={filter}
           onChange={(e) => setFilter(e.target.value)}
           placeholder={t('toolkit.portScanner.filterPlaceholder')}
-          className="flex-1 min-w-[200px] px-3 py-2 text-sm bg-[#141414] border border-[#2A2A2A] rounded-lg text-white placeholder-[#666] focus:outline-none focus:border-white/30 font-mono"
+          className="flex-1 min-w-[200px] px-3 py-2 text-sm bg-bg-secondary border border-border rounded-lg text-white placeholder-[#666] focus:outline-none focus:border-white/30 font-mono"
         />
 
-        <label className="flex items-center gap-2 text-xs text-[#A0A0A0] cursor-pointer select-none">
+        <label className="flex items-center gap-2 text-xs text-text-secondary cursor-pointer select-none">
           <button
             onClick={() => setAutoRefresh((v) => !v)}
             className={`w-8 h-[18px] rounded-full relative transition-colors ${
-              autoRefresh ? 'bg-[#22C55E]' : 'bg-[#1F1F1F] border border-[#2A2A2A]'
+              autoRefresh ? 'bg-[#22C55E]' : 'bg-bg-tertiary border border-border'
             }`}
           >
             <span
@@ -179,7 +179,7 @@ export default function PortScanner() {
 
       {/* Stats bar */}
       {ports.length > 0 && (
-        <div className="flex items-center gap-4 text-xs text-[#A0A0A0]">
+        <div className="flex items-center gap-4 text-xs text-text-secondary">
           <span>{t('toolkit.portScanner.portsListening', { count: filtered.length })}</span>
           {devCount > 0 && (
             <span className="text-[#D4AF37]">
@@ -196,10 +196,10 @@ export default function PortScanner() {
 
       {/* Table */}
       {filtered.length > 0 ? (
-        <div className="border border-[#2A2A2A] rounded-xl overflow-hidden">
+        <div className="border border-border rounded-xl overflow-hidden">
           <table className="w-full text-sm">
             <thead>
-              <tr className="bg-[#141414] text-[#A0A0A0] text-xs uppercase tracking-wider">
+              <tr className="bg-bg-secondary text-text-secondary text-xs uppercase tracking-wider">
                 <th className="text-left px-4 py-2.5 font-medium">Port</th>
                 <th className="text-left px-4 py-2.5 font-medium">Protocol</th>
                 <th className="text-left px-4 py-2.5 font-medium">Process</th>
@@ -215,8 +215,8 @@ export default function PortScanner() {
                 return (
                   <tr
                     key={`${p.port}-${p.pid}-${p.protocol}`}
-                    className={`border-t border-[#2A2A2A] transition-colors ${
-                      isDev ? 'bg-[#D4AF37]/5 hover:bg-[#D4AF37]/10' : 'hover:bg-[#1F1F1F]'
+                    className={`border-t border-border transition-colors ${
+                      isDev ? 'bg-[#D4AF37]/5 hover:bg-[#D4AF37]/10' : 'hover:bg-bg-tertiary'
                     }`}
                   >
                     <td className="px-4 py-2.5 font-mono text-white">
@@ -229,13 +229,13 @@ export default function PortScanner() {
                         )}
                       </span>
                     </td>
-                    <td className="px-4 py-2.5 font-mono text-[#A0A0A0] uppercase text-xs">
+                    <td className="px-4 py-2.5 font-mono text-text-secondary uppercase text-xs">
                       {p.protocol}
                     </td>
                     <td className="px-4 py-2.5 text-white truncate max-w-[200px]" title={p.process_name}>
                       {p.process_name}
                     </td>
-                    <td className="px-4 py-2.5 font-mono text-[#A0A0A0]">
+                    <td className="px-4 py-2.5 font-mono text-text-secondary">
                       {p.pid}
                     </td>
                     <td className="px-4 py-2.5 font-mono text-[#666] text-xs">
@@ -252,7 +252,7 @@ export default function PortScanner() {
                       ) : (
                         <button
                           onClick={() => setKillConfirm(p.pid)}
-                          className="px-2.5 py-1 text-xs text-[#666] border border-[#2A2A2A] rounded-md hover:text-[#EF4444] hover:border-[#EF4444]/30 transition-colors"
+                          className="px-2.5 py-1 text-xs text-[#666] border border-border rounded-md hover:text-[#EF4444] hover:border-[#EF4444]/30 transition-colors"
                         >
                           {t('toolkit.portScanner.kill')}
                         </button>

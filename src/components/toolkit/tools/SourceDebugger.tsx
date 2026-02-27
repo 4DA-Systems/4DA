@@ -30,7 +30,7 @@ function formatBadgeColor(format: string): string {
   const f = format.toLowerCase();
   if (f.includes('rss')) return 'bg-orange-400/15 text-orange-400';
   if (f.includes('atom')) return 'bg-blue-400/15 text-blue-400';
-  return 'bg-[#1F1F1F] text-[#A0A0A0]';
+  return 'bg-bg-tertiary text-text-secondary';
 }
 
 function truncate(str: string, max: number): string {
@@ -104,7 +104,7 @@ export default function SourceDebugger() {
           onKeyDown={handleKeyDown}
           placeholder="https://example.com/feed.xml"
           spellCheck={false}
-          className="flex-1 bg-[#1F1F1F] border border-[#2A2A2A] text-white text-sm font-mono rounded-lg px-3 py-2 outline-none focus:border-white/30 placeholder:text-[#666] transition-colors"
+          className="flex-1 bg-bg-tertiary border border-border text-white text-sm font-mono rounded-lg px-3 py-2 outline-none focus:border-white/30 placeholder:text-[#666] transition-colors"
         />
         <button
           onClick={testFeed}
@@ -130,7 +130,7 @@ export default function SourceDebugger() {
         {(result || error) && (
           <button
             onClick={clear}
-            className="px-3 py-2 text-xs text-[#A0A0A0] bg-[#141414] border border-[#2A2A2A] rounded-lg hover:text-white hover:border-white/20 transition-all shrink-0"
+            className="px-3 py-2 text-xs text-text-secondary bg-bg-secondary border border-border rounded-lg hover:text-white hover:border-white/20 transition-all shrink-0"
           >
             {t('toolkit.sourceDebugger.clear')}
           </button>
@@ -182,7 +182,7 @@ export default function SourceDebugger() {
           )}
 
           {/* Summary bar */}
-          <div className="flex items-center gap-3 flex-wrap bg-[#141414] border border-[#2A2A2A] rounded-xl px-4 py-3">
+          <div className="flex items-center gap-3 flex-wrap bg-bg-secondary border border-border rounded-xl px-4 py-3">
             {/* Format badge */}
             <span className={`px-2 py-0.5 text-xs font-mono font-semibold rounded ${formatBadgeColor(result.format)}`}>
               {result.format}
@@ -195,7 +195,7 @@ export default function SourceDebugger() {
               </span>
             )}
 
-            <div className="flex items-center gap-4 ml-auto text-xs text-[#A0A0A0] font-mono shrink-0">
+            <div className="flex items-center gap-4 ml-auto text-xs text-text-secondary font-mono shrink-0">
               <span>{result.item_count} item{result.item_count !== 1 ? 's' : ''}</span>
               <span>{result.fetch_duration_ms}ms</span>
             </div>
@@ -203,12 +203,12 @@ export default function SourceDebugger() {
 
           {/* Item list */}
           {result.items.length > 0 && (
-            <div className="border border-[#2A2A2A] rounded-xl overflow-hidden max-h-[400px] overflow-y-auto">
+            <div className="border border-border rounded-xl overflow-hidden max-h-[400px] overflow-y-auto">
               {result.items.map((item, i) => (
                 <div
                   key={i}
-                  className={`px-4 py-3 hover:bg-[#1F1F1F] transition-colors ${
-                    i > 0 ? 'border-t border-[#2A2A2A]' : ''
+                  className={`px-4 py-3 hover:bg-bg-tertiary transition-colors ${
+                    i > 0 ? 'border-t border-border' : ''
                   }`}
                 >
                   {/* Title as link */}
@@ -242,7 +242,7 @@ export default function SourceDebugger() {
 
                   {/* Content preview */}
                   {item.content_preview && (
-                    <p className="text-xs text-[#A0A0A0] ml-5 line-clamp-2">
+                    <p className="text-xs text-text-secondary ml-5 line-clamp-2">
                       {truncate(item.content_preview, 200)}
                     </p>
                   )}

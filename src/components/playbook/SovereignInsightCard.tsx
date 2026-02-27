@@ -11,8 +11,8 @@ export function SovereignInsightCard({ block }: Props) {
 
   if (block.content.type === 'prose') {
     return (
-      <div className="border border-[#D4AF37]/20 rounded-xl bg-[#141414] p-5 my-4">
-        <p className="text-sm text-[#A0A0A0] leading-relaxed whitespace-pre-wrap">
+      <div className="border border-[#D4AF37]/20 rounded-xl bg-bg-secondary p-5 my-4">
+        <p className="text-sm text-text-secondary leading-relaxed whitespace-pre-wrap">
           {block.content.text}
         </p>
         <SourceLabels labels={block.source_labels} show={showSources} onToggle={() => setShowSources(!showSources)} />
@@ -23,9 +23,9 @@ export function SovereignInsightCard({ block }: Props) {
   // Card content (no-LLM path)
   const card = block.content;
   return (
-    <div className="border border-[#D4AF37]/20 rounded-xl bg-[#141414] overflow-hidden my-4">
+    <div className="border border-[#D4AF37]/20 rounded-xl bg-bg-secondary overflow-hidden my-4">
       {/* Header */}
-      <div className="px-5 py-3 border-b border-[#2A2A2A] flex items-center justify-between">
+      <div className="px-5 py-3 border-b border-border flex items-center justify-between">
         <h4 className="text-sm font-semibold text-white">{card.title}</h4>
         <ConfidenceBar confidence={block.confidence} />
       </div>
@@ -52,7 +52,7 @@ export function SovereignInsightCard({ block }: Props) {
 
 function DataPointRow({ point }: { point: DataPoint }) {
   return (
-    <div className={`flex items-start justify-between gap-4 ${point.highlight ? 'text-white' : 'text-[#A0A0A0]'}`}>
+    <div className={`flex items-start justify-between gap-4 ${point.highlight ? 'text-white' : 'text-text-secondary'}`}>
       <span className="text-xs text-[#666] flex-shrink-0 w-32">{point.label}</span>
       <div className="flex-1 text-right">
         <span className={`text-sm ${point.highlight ? 'text-[#D4AF37] font-medium' : ''}`}>
@@ -82,14 +82,14 @@ function ConfidenceBar({ confidence }: { confidence: number }) {
 function SourceLabels({ labels, show, onToggle }: { labels: string[]; show: boolean; onToggle: () => void }) {
   if (labels.length === 0) return null;
   return (
-    <div className="px-5 py-2 border-t border-[#2A2A2A]">
-      <button onClick={onToggle} className="text-[10px] text-[#666] hover:text-[#A0A0A0] transition-colors">
+    <div className="px-5 py-2 border-t border-border">
+      <button onClick={onToggle} className="text-[10px] text-[#666] hover:text-text-secondary transition-colors">
         {show ? '▾' : '▸'} Data Sources ({labels.length})
       </button>
       {show && (
         <div className="flex gap-1.5 mt-1.5 flex-wrap">
           {labels.map((label) => (
-            <span key={label} className="px-2 py-0.5 bg-[#1F1F1F] text-[10px] text-[#A0A0A0] rounded">
+            <span key={label} className="px-2 py-0.5 bg-bg-tertiary text-[10px] text-text-secondary rounded">
               {label}
             </span>
           ))}

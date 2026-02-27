@@ -45,7 +45,7 @@ function statusColor(status: number): string {
   if (status >= 300 && status < 400) return 'text-blue-400';
   if (status >= 400 && status < 500) return 'text-orange-400';
   if (status >= 500) return 'text-[#EF4444]';
-  return 'text-[#A0A0A0]';
+  return 'text-text-secondary';
 }
 
 function statusBgColor(status: number): string {
@@ -53,7 +53,7 @@ function statusBgColor(status: number): string {
   if (status >= 300 && status < 400) return 'bg-blue-400/10';
   if (status >= 400 && status < 500) return 'bg-orange-400/10';
   if (status >= 500) return 'bg-[#EF4444]/10';
-  return 'bg-[#1F1F1F]';
+  return 'bg-bg-tertiary';
 }
 
 function methodColor(method: string): string {
@@ -63,7 +63,7 @@ function methodColor(method: string): string {
     case 'PUT': return 'bg-orange-400/15 text-orange-400';
     case 'PATCH': return 'bg-orange-400/15 text-orange-400';
     case 'DELETE': return 'bg-[#EF4444]/15 text-[#EF4444]';
-    default: return 'bg-[#1F1F1F] text-[#A0A0A0]';
+    default: return 'bg-bg-tertiary text-text-secondary';
   }
 }
 
@@ -175,7 +175,7 @@ export default function HttpProbe() {
           <select
             value={method}
             onChange={(e) => setMethod(e.target.value)}
-            className="bg-[#1F1F1F] border border-[#2A2A2A] text-white text-sm font-mono rounded px-2 py-2 outline-none focus:border-white/30 appearance-none cursor-pointer"
+            className="bg-bg-tertiary border border-border text-white text-sm font-mono rounded px-2 py-2 outline-none focus:border-white/30 appearance-none cursor-pointer"
           >
             {METHODS.map((m) => (
               <option key={m} value={m}>
@@ -190,7 +190,7 @@ export default function HttpProbe() {
             onChange={(e) => setUrl(e.target.value)}
             placeholder="https://api.example.com/endpoint"
             spellCheck={false}
-            className="flex-1 bg-[#1F1F1F] border border-[#2A2A2A] text-white text-sm font-mono rounded px-3 py-2 outline-none focus:border-white/30 placeholder:text-[#666]"
+            className="flex-1 bg-bg-tertiary border border-border text-white text-sm font-mono rounded px-3 py-2 outline-none focus:border-white/30 placeholder:text-[#666]"
           />
 
           <button
@@ -212,12 +212,12 @@ export default function HttpProbe() {
         {/* Headers editor */}
         <div className="flex flex-col gap-1.5">
           <div className="flex items-center justify-between">
-            <label className="text-[#A0A0A0] text-xs uppercase tracking-wide font-medium">
+            <label className="text-text-secondary text-xs uppercase tracking-wide font-medium">
               {t('toolkit.httpProbe.headers')}
             </label>
             <button
               onClick={addHeader}
-              className="text-xs text-[#A0A0A0] hover:text-white transition-colors"
+              className="text-xs text-text-secondary hover:text-white transition-colors"
             >
               {t('toolkit.httpProbe.addHeader')}
             </button>
@@ -230,7 +230,7 @@ export default function HttpProbe() {
                 onChange={(e) => updateHeader(i, 0, e.target.value)}
                 placeholder={t('toolkit.httpProbe.headerName')}
                 spellCheck={false}
-                className="flex-1 bg-[#1F1F1F] border border-[#2A2A2A] text-white text-xs font-mono rounded px-2 py-1.5 outline-none focus:border-white/30 placeholder:text-[#666]"
+                className="flex-1 bg-bg-tertiary border border-border text-white text-xs font-mono rounded px-2 py-1.5 outline-none focus:border-white/30 placeholder:text-[#666]"
               />
               <input
                 type="text"
@@ -238,7 +238,7 @@ export default function HttpProbe() {
                 onChange={(e) => updateHeader(i, 1, e.target.value)}
                 placeholder={t('toolkit.httpProbe.value')}
                 spellCheck={false}
-                className="flex-1 bg-[#1F1F1F] border border-[#2A2A2A] text-white text-xs font-mono rounded px-2 py-1.5 outline-none focus:border-white/30 placeholder:text-[#666]"
+                className="flex-1 bg-bg-tertiary border border-border text-white text-xs font-mono rounded px-2 py-1.5 outline-none focus:border-white/30 placeholder:text-[#666]"
               />
               <button
                 onClick={() => removeHeader(i)}
@@ -254,7 +254,7 @@ export default function HttpProbe() {
         {/* Body editor (only for methods that support a body) */}
         {BODY_METHODS.has(method) && (
           <div className="flex flex-col gap-1.5">
-            <label className="text-[#A0A0A0] text-xs uppercase tracking-wide font-medium">
+            <label className="text-text-secondary text-xs uppercase tracking-wide font-medium">
               {t('toolkit.httpProbe.body')}
             </label>
             <textarea
@@ -262,7 +262,7 @@ export default function HttpProbe() {
               onChange={(e) => setBody(e.target.value)}
               placeholder='{"key": "value"}'
               spellCheck={false}
-              className="w-full h-32 bg-[#1F1F1F] border border-[#2A2A2A] text-white text-xs font-mono rounded px-3 py-2 outline-none focus:border-white/30 placeholder:text-[#666] resize-y"
+              className="w-full h-32 bg-bg-tertiary border border-border text-white text-xs font-mono rounded px-3 py-2 outline-none focus:border-white/30 placeholder:text-[#666] resize-y"
             />
           </div>
         )}
@@ -284,10 +284,10 @@ export default function HttpProbe() {
               >
                 {response.status} {response.status_text}
               </span>
-              <span className="text-xs text-[#A0A0A0] font-mono">
+              <span className="text-xs text-text-secondary font-mono">
                 {response.duration_ms} ms
               </span>
-              <span className="text-xs text-[#A0A0A0] font-mono">
+              <span className="text-xs text-text-secondary font-mono">
                 {formatBytes(response.size_bytes)}
               </span>
             </div>
@@ -296,7 +296,7 @@ export default function HttpProbe() {
             <div>
               <button
                 onClick={() => setShowResponseHeaders((p) => !p)}
-                className="text-xs text-[#A0A0A0] hover:text-white transition-colors flex items-center gap-1"
+                className="text-xs text-text-secondary hover:text-white transition-colors flex items-center gap-1"
               >
                 <svg
                   width="10"
@@ -314,12 +314,12 @@ export default function HttpProbe() {
                 {t('toolkit.httpProbe.responseHeaders', { count: response.headers.length })}
               </button>
               {showResponseHeaders && (
-                <div className="mt-1.5 bg-[#141414] border border-[#2A2A2A] rounded p-2 max-h-40 overflow-auto">
+                <div className="mt-1.5 bg-bg-secondary border border-border rounded p-2 max-h-40 overflow-auto">
                   {response.headers.map(([k, v], i) => (
                     <div key={i} className="text-xs font-mono py-0.5">
                       <span className="text-[#D4AF37]">{k}</span>
                       <span className="text-[#666]">: </span>
-                      <span className="text-[#A0A0A0]">{v}</span>
+                      <span className="text-text-secondary">{v}</span>
                     </div>
                   ))}
                 </div>
@@ -328,10 +328,10 @@ export default function HttpProbe() {
 
             {/* Response body */}
             <div className="flex flex-col gap-1.5 min-h-0 flex-1">
-              <label className="text-[#A0A0A0] text-xs uppercase tracking-wide font-medium">
+              <label className="text-text-secondary text-xs uppercase tracking-wide font-medium">
                 {t('toolkit.httpProbe.responseBody')}
               </label>
-              <pre className="bg-[#141414] border border-[#2A2A2A] rounded p-3 text-xs font-mono text-white overflow-auto max-h-72 whitespace-pre-wrap break-words">
+              <pre className="bg-bg-secondary border border-border rounded p-3 text-xs font-mono text-white overflow-auto max-h-72 whitespace-pre-wrap break-words">
                 {response.body}
               </pre>
             </div>
@@ -340,12 +340,12 @@ export default function HttpProbe() {
       </div>
 
       {/* History sidebar */}
-      <div className="w-64 shrink-0 flex flex-col min-h-0 border-l border-[#2A2A2A] pl-4">
+      <div className="w-64 shrink-0 flex flex-col min-h-0 border-l border-border pl-4">
         <button
           onClick={() => setShowHistory((p) => !p)}
           className="flex items-center justify-between w-full mb-2"
         >
-          <span className="text-[#A0A0A0] text-xs uppercase tracking-wide font-medium">
+          <span className="text-text-secondary text-xs uppercase tracking-wide font-medium">
             {t('toolkit.httpProbe.history')}
           </span>
           <svg
@@ -374,7 +374,7 @@ export default function HttpProbe() {
               <button
                 key={entry.id}
                 onClick={() => replayEntry(entry)}
-                className="w-full text-left bg-[#141414] hover:bg-[#1F1F1F] border border-[#2A2A2A] rounded px-2 py-1.5 transition-colors group"
+                className="w-full text-left bg-bg-secondary hover:bg-bg-tertiary border border-border rounded px-2 py-1.5 transition-colors group"
               >
                 <div className="flex items-center gap-1.5 mb-0.5">
                   <span
@@ -391,7 +391,7 @@ export default function HttpProbe() {
                     {entry.duration_ms}ms
                   </span>
                 </div>
-                <div className="text-[11px] text-[#A0A0A0] font-mono truncate group-hover:text-white transition-colors">
+                <div className="text-[11px] text-text-secondary font-mono truncate group-hover:text-white transition-colors">
                   {entry.url}
                 </div>
               </button>

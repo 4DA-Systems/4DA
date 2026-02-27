@@ -13,20 +13,9 @@ env:
 jobs:
   frontend:
     name: Frontend
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, windows, 4da]
     steps:
       - uses: actions/checkout@v4
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 9
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: 'pnpm'
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -48,21 +37,9 @@ jobs:
 
   mcp-server:
     name: MCP Server
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, windows, 4da]
     steps:
       - uses: actions/checkout@v4
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 9
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: 'pnpm'
-          cache-dependency-path: mcp-4da-server/pnpm-lock.yaml
 
       - name: Install dependencies
         working-directory: mcp-4da-server
@@ -77,68 +54,30 @@ jobs:
         run: pnpm run test
 
   rust:
-    name: Rust (${{ matrix.os }})
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: ubuntu-latest
-            full: true
-          - os: windows-latest
-            full: false
-          - os: macos-latest
-            full: false
-    runs-on: ${{ matrix.os }}
+    name: Rust
+    runs-on: [self-hosted, windows, 4da]
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          components: ${{ matrix.full && 'rustfmt, clippy' || '' }}
-
-      - name: Rust cache
-        uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: src-tauri
-
-      # Linux-only: install system dependencies for Tauri
-      - name: Install system dependencies (Linux)
-        if: matrix.os == 'ubuntu-latest'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            libwebkit2gtk-4.1-dev \
-            libappindicator3-dev \
-            librsvg2-dev \
-            patchelf \
-            libssl-dev
-
-      # Formatting and lints only on Linux (platform-independent checks)
       - name: Check formatting
-        if: matrix.full
         working-directory: src-tauri
         run: cargo fmt --check
 
       - name: Clippy lints
-        if: matrix.full
         working-directory: src-tauri
         run: cargo clippy -- -D warnings
 
-      # Check compilation on all platforms
       - name: Cargo check
         working-directory: src-tauri
         run: cargo check
 
-      # Unit tests on all platforms
       - name: Run unit tests
         working-directory: src-tauri
         run: cargo test --all
 
-      # Verify test count floor (prevents accidental test deletion)
       - name: Verify Rust test count floor
-        if: matrix.full
         working-directory: src-tauri
+        shell: bash
         run: |
           OUTPUT=$(cargo test --all 2>&1)
           COUNT=$(echo "$OUTPUT" | grep -oP '\d+ passed' | tail -1 | grep -oP '\d+')
@@ -148,7 +87,6 @@ jobs:
             exit 1
           fi
 
-      # Integration tests on all platforms
       - name: Run migration tests
         working-directory: src-tauri
         run: cargo test --test migration_tests
@@ -161,8 +99,6 @@ jobs:
         working-directory: src-tauri
         run: cargo test --test source_resilience
 
-      # Full build only on Linux (saves CI minutes; cross-platform build tested in release)
       - name: Build
-        if: matrix.full
         working-directory: src-tauri
         run: cargo build

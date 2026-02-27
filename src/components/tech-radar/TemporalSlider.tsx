@@ -65,8 +65,8 @@ export const TemporalSlider = memo(function TemporalSlider({ onSnapshotChange }:
   if (loading) return null;
 
   return (
-    <div className="px-5 py-2 border-t border-[#2A2A2A] flex items-center gap-3">
-      <span className="text-[10px] text-[#666666] whitespace-nowrap">{t('techRadar.timeline')}</span>
+    <div className="px-5 py-2 border-t border-border flex items-center gap-3">
+      <span className="text-[10px] text-text-muted whitespace-nowrap">{t('techRadar.timeline')}</span>
       <input
         type="range"
         min={0}
@@ -77,7 +77,7 @@ export const TemporalSlider = memo(function TemporalSlider({ onSnapshotChange }:
         className="flex-1 h-1 appearance-none bg-[#2A2A2A] rounded-full cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed accent-[#D4AF37]"
         style={{ colorScheme: 'dark' }}
       />
-      <span className="text-[10px] text-[#A0A0A0] font-mono w-16 text-right whitespace-nowrap">
+      <span className="text-[10px] text-text-secondary font-mono w-16 text-right whitespace-nowrap">
         {displayLabel}
       </span>
     </div>

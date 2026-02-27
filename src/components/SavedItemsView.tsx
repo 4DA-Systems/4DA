@@ -83,7 +83,7 @@ export function SavedItemsView() {
   }
 
   return (
-    <div>
+    <section aria-label={t('saved.title', { defaultValue: 'Saved items' })}>
       <div className="flex items-center justify-between mb-4">
         <span className="text-xs text-gray-500">{t('saved.count', { count: items.length })}</span>
         <button
@@ -134,6 +134,7 @@ export function SavedItemsView() {
                   {item.url && (
                     <button
                       onClick={() => window.navigator.clipboard.writeText(item.url!)}
+                      aria-label={`${t('saved.copyUrl')} for ${item.title}`}
                       className="text-[10px] text-gray-600 hover:text-gray-400 transition-colors"
                     >
                       {t('saved.copyUrl')}
@@ -145,6 +146,7 @@ export function SavedItemsView() {
               {/* Remove button */}
               <button
                 onClick={() => handleRemove(item.item_id)}
+                aria-label={`${t('saved.remove')} ${item.title}`}
                 className="flex-shrink-0 text-[10px] px-2 py-1 rounded text-gray-600 hover:text-red-400 hover:bg-red-500/10 transition-colors"
               >
                 {t('saved.remove')}
@@ -153,6 +155,6 @@ export function SavedItemsView() {
           </div>
         ))}
       </div>
-    </div>
+    </section>
   );
 }

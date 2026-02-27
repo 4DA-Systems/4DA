@@ -44,7 +44,7 @@ function renderSimpleMarkdown(text: string): React.ReactNode[] {
     // Bullet lists
     if (line.startsWith('- ') || line.startsWith('* ')) {
       elements.push(
-        <li key={i} className="ml-4 list-disc text-[#A0A0A0]">
+        <li key={i} className="ml-4 list-disc text-text-secondary">
           {renderInline(line.slice(2))}
         </li>,
       );
@@ -55,7 +55,7 @@ function renderSimpleMarkdown(text: string): React.ReactNode[] {
     const numberedMatch = line.match(/^(\d+)\.\s/);
     if (numberedMatch) {
       elements.push(
-        <li key={i} className="ml-4 list-decimal text-[#A0A0A0]">
+        <li key={i} className="ml-4 list-decimal text-text-secondary">
           {renderInline(line.slice(numberedMatch[0].length))}
         </li>,
       );
@@ -70,7 +70,7 @@ function renderSimpleMarkdown(text: string): React.ReactNode[] {
 
     // Regular paragraph
     elements.push(
-      <p key={i} className="text-[#A0A0A0]">
+      <p key={i} className="text-text-secondary">
         {renderInline(line)}
       </p>,
     );
@@ -105,7 +105,7 @@ function renderInline(text: string): React.ReactNode {
       parts.push(
         <code
           key={match.index}
-          className="px-1 py-0.5 bg-[#1F1F1F] rounded text-[#D4AF37] text-xs font-mono"
+          className="px-1 py-0.5 bg-bg-tertiary rounded text-[#D4AF37] text-xs font-mono"
         >
           {match[3]}
         </code>,
@@ -159,8 +159,8 @@ function MessageBubble({ message }: { message: CoachMessage }) {
       <div
         className={`max-w-[80%] rounded-xl px-4 py-3 text-sm leading-relaxed ${
           isUser
-            ? 'bg-[#1F1F1F] text-white rounded-br-sm'
-            : 'bg-[#141414] border border-[#2A2A2A] text-[#A0A0A0] rounded-bl-sm'
+            ? 'bg-bg-tertiary text-white rounded-br-sm'
+            : 'bg-bg-secondary border border-border text-text-secondary rounded-bl-sm'
         }`}
       >
         {isUser ? (
@@ -171,7 +171,7 @@ function MessageBubble({ message }: { message: CoachMessage }) {
 
         {/* Token cost metadata for assistant messages */}
         {!isUser && (message.token_count > 0 || message.cost_cents > 0) && (
-          <div className="flex items-center gap-2 mt-2 pt-2 border-t border-[#2A2A2A]">
+          <div className="flex items-center gap-2 mt-2 pt-2 border-t border-border">
             {message.cost_cents > 0 && (
               <span className="text-[10px] text-[#666] font-mono">
                 cost: {message.cost_cents.toFixed(2)}c
@@ -277,7 +277,7 @@ export function CoachChat() {
               </svg>
             </div>
             <h3 className="text-base font-semibold text-white mb-1">{t('coach.chat.title')}</h3>
-            <p className="text-sm text-[#A0A0A0] max-w-sm mb-5">
+            <p className="text-sm text-text-secondary max-w-sm mb-5">
               {t('coach.chat.emptyDescription')}
             </p>
             <div className="flex flex-col gap-2 w-full max-w-sm">
@@ -285,7 +285,7 @@ export function CoachChat() {
                 <button
                   key={key}
                   onClick={() => handleSuggestedPrompt(t(key))}
-                  className="text-left px-4 py-2.5 bg-[#0A0A0A] border border-[#2A2A2A] rounded-lg text-sm text-[#A0A0A0] hover:border-[#D4AF37]/40 hover:text-white transition-colors"
+                  className="text-left px-4 py-2.5 bg-bg-primary border border-border rounded-lg text-sm text-text-secondary hover:border-[#D4AF37]/40 hover:text-white transition-colors"
                 >
                   {t(key)}
                 </button>
@@ -300,7 +300,7 @@ export function CoachChat() {
             ))}
             {loading && (
               <div className="flex justify-start mb-3">
-                <div className="bg-[#141414] border border-[#2A2A2A] rounded-xl rounded-bl-sm">
+                <div className="bg-bg-secondary border border-border rounded-xl rounded-bl-sm">
                   <LoadingDots />
                 </div>
               </div>
@@ -311,7 +311,7 @@ export function CoachChat() {
       </div>
 
       {/* Input area */}
-      <div className="flex-shrink-0 border-t border-[#2A2A2A] pt-3 px-1">
+      <div className="flex-shrink-0 border-t border-border pt-3 px-1">
         <div className="flex items-end gap-2">
           <textarea
             ref={textareaRef}
@@ -320,7 +320,7 @@ export function CoachChat() {
             onKeyDown={handleKeyDown}
             placeholder={t('coach.chat.placeholder')}
             rows={1}
-            className="flex-1 resize-none bg-[#0A0A0A] border border-[#2A2A2A] rounded-lg px-3 py-2 text-sm text-white placeholder-[#666] focus:outline-none focus:border-[#D4AF37]/50 leading-5"
+            className="flex-1 resize-none bg-bg-primary border border-border rounded-lg px-3 py-2 text-sm text-white placeholder-[#666] focus:outline-none focus:border-[#D4AF37]/50 leading-5"
           />
           <button
             onClick={handleSend}

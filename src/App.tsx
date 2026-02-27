@@ -35,12 +35,14 @@ import { AutophagyInsights } from './components/AutophagyInsights';
 import { ToolkitView } from './components/toolkit/ToolkitView';
 import { PlaybookView } from './components/PlaybookView';
 import { CoachView } from './components/coach/CoachView';
+import { ChannelsView } from './components/channels/ChannelsView';
 import { CommandDeck } from './components/command-deck/CommandDeck';
 import { FirstRunTransition } from './components/FirstRunTransition';
 import { ViewTabBar } from './components/ViewTabBar';
 import { ProValueBadge } from './components/ProValueBadge';
 import { GameCelebration } from './components/GameCelebration';
 import { AchievementsPanel } from './components/AchievementsPanel';
+import { SovereignDeveloperProfile } from './components/SovereignDeveloperProfile';
 import {
   useSettings,
   useMonitoring,
@@ -437,8 +439,11 @@ function App() {
         {/* Conditional View Rendering */}
         {activeView === 'briefing' ? (
           <BriefingView />
+        ) : activeView === 'channels' ? (
+          <ChannelsView />
         ) : activeView === 'insights' ? (
-          <div className="space-y-6">
+          <section aria-label={t('nav.insights', { defaultValue: 'Insights' })} className="space-y-6">
+            <SovereignDeveloperProfile />
             <AchievementsPanel />
             <TechRadar />
             <DecisionMemory />
@@ -447,7 +452,7 @@ function App() {
               <DelegationDashboard />
               <AgentMemoryPanel />
             </div>
-          </div>
+          </section>
         ) : activeView === 'saved' ? (
           <SavedItemsView />
         ) : activeView === 'toolkit' ? (

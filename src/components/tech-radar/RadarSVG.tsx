@@ -217,7 +217,7 @@ export const RadarSVG = memo(function RadarSVG({ entries, userStack, onEntryClic
 
       {isZoomed && (
         <button onClick={handleBackClick}
-          className="absolute top-2 left-2 px-2 py-1 text-[10px] rounded bg-[#1F1F1F] text-[#A0A0A0] border border-[#2A2A2A] hover:text-white hover:border-[#666666] transition-colors">
+          className="absolute top-2 left-2 px-2 py-1 text-[10px] rounded bg-bg-tertiary text-text-secondary border border-border hover:text-white hover:border-[#666666] transition-colors">
           {t('techRadar.backToFull')}
         </button>
       )}

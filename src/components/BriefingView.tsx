@@ -166,7 +166,7 @@ export function BriefingView() {
     // Free briefing for non-Pro users
     if (!isPro && freeBriefing && !freeBriefing.empty) {
       return (
-        <div className="bg-bg-primary rounded-lg space-y-4">
+        <section aria-label={t('briefing.dailyOverview')} className="bg-bg-primary rounded-lg space-y-4">
           <div className="bg-bg-secondary rounded-lg border border-border p-5">
             <h2 className="font-medium text-white mb-3">{t('briefing.dailyOverview')}</h2>
             <div className="space-y-3">
@@ -210,7 +210,7 @@ export function BriefingView() {
             </div>
           </div>
           <EngagementPulse />
-        </div>
+        </section>
       );
     }
 
@@ -220,7 +220,7 @@ export function BriefingView() {
 
   // Briefing content view
   return (
-    <div className="bg-bg-primary rounded-lg space-y-6">
+    <section aria-label={t('briefing.intelligenceBriefing')} className="bg-bg-primary rounded-lg space-y-6">
       {/* Signal Action Cards — critical/high priority items */}
       {signalItems.length > 0 && (
         <div className="space-y-3">
@@ -425,6 +425,6 @@ export function BriefingView() {
           {briefing.error}
         </div>
       )}
-    </div>
+    </section>
   );
 }

@@ -114,7 +114,7 @@ export default function SovereignProfileView() {
       {/* Loading */}
       {loading && (
         <div className="flex flex-col items-center justify-center py-16 text-[#666]">
-          <div className="w-8 h-8 border-2 border-[#2A2A2A] border-t-white rounded-full animate-spin mb-4" />
+          <div className="w-8 h-8 border-2 border-border border-t-white rounded-full animate-spin mb-4" />
           <p className="text-sm">{t('toolkit.sovereignProfile.loading')}</p>
         </div>
       )}
@@ -123,7 +123,7 @@ export default function SovereignProfileView() {
       {!loading && profile && completeness && (
         <>
           {/* Completeness header */}
-          <div className="flex items-center gap-6 bg-[#141414] border border-[#2A2A2A] rounded-xl p-4">
+          <div className="flex items-center gap-6 bg-bg-secondary border border-border rounded-xl p-4">
             {/* SVG Ring */}
             <div className="relative shrink-0" style={{ width: 80, height: 80 }}>
               <svg width="80" height="80" viewBox="0 0 80 80">
@@ -145,7 +145,7 @@ export default function SovereignProfileView() {
 
             <div className="flex-1 min-w-0">
               <h3 className="text-sm font-medium text-white mb-1">{t('toolkit.sovereignProfile.completeness')}</h3>
-              <div className="flex items-center gap-4 text-xs text-[#A0A0A0]">
+              <div className="flex items-center gap-4 text-xs text-text-secondary">
                 <span>{completeness.total_facts} fact{completeness.total_facts !== 1 ? 's' : ''} collected</span>
                 <span>{completeness.categories_filled}/{completeness.total_categories} categories filled</span>
               </div>
@@ -186,8 +186,8 @@ export default function SovereignProfileView() {
               return (
                 <div
                   key={cat}
-                  className={`bg-[#141414] border rounded-lg p-3 transition-colors ${
-                    isFilled ? 'border-[#2A2A2A]' : 'border-[#2A2A2A]/50 opacity-50'
+                  className={`bg-bg-secondary border rounded-lg p-3 transition-colors ${
+                    isFilled ? 'border-border' : 'border-border/50 opacity-50'
                   }`}
                 >
                   <div className="flex items-center gap-2 mb-2">
@@ -206,7 +206,7 @@ export default function SovereignProfileView() {
                     <div className="space-y-1 max-h-28 overflow-y-auto">
                       {facts.map((fact, i) => (
                         <div key={i} className="flex items-baseline gap-1.5 text-xs">
-                          <span className="text-[#A0A0A0] shrink-0">{fact.key}:</span>
+                          <span className="text-text-secondary shrink-0">{fact.key}:</span>
                           <span className="text-white font-mono truncate" title={fact.value}>{fact.value}</span>
                         </div>
                       ))}
@@ -223,14 +223,14 @@ export default function SovereignProfileView() {
 
           {/* Generated document */}
           {document && (
-            <div className="bg-[#141414] border border-[#2A2A2A] rounded-xl p-4">
+            <div className="bg-bg-secondary border border-border rounded-xl p-4">
               <div className="flex items-center justify-between mb-3">
-                <h3 className="text-xs font-medium text-[#A0A0A0] uppercase tracking-wider">
+                <h3 className="text-xs font-medium text-text-secondary uppercase tracking-wider">
                   {t('toolkit.sovereignProfile.stackDocument')}
                 </h3>
                 <button
                   onClick={copyDocument}
-                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-[#A0A0A0] bg-[#1F1F1F] border border-[#2A2A2A] rounded-lg hover:text-white hover:border-white/20 transition-all"
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-text-secondary bg-bg-tertiary border border-border rounded-lg hover:text-white hover:border-white/20 transition-all"
                 >
                   {copied ? (
                     <>
@@ -250,7 +250,7 @@ export default function SovereignProfileView() {
                   )}
                 </button>
               </div>
-              <pre className="text-xs font-mono text-[#A0A0A0] bg-[#0A0A0A] border border-[#2A2A2A] rounded-lg p-3 overflow-auto max-h-64 whitespace-pre-wrap break-words">
+              <pre className="text-xs font-mono text-text-secondary bg-bg-primary border border-border rounded-lg p-3 overflow-auto max-h-64 whitespace-pre-wrap break-words">
                 {document}
               </pre>
             </div>

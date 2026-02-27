@@ -10,10 +10,10 @@ export function FeedEchoBlock({ block }: Props) {
   if (items.length === 0) return null;
 
   return (
-    <div className="border border-[#2A2A2A] rounded-xl bg-[#141414] p-4 my-4">
+    <div className="border border-border rounded-xl bg-bg-secondary p-4 my-4">
       <div className="flex items-center gap-2 mb-3">
         <div className="w-1.5 h-1.5 rounded-full bg-[#D4AF37] animate-pulse" />
-        <h4 className="text-xs font-semibold text-[#A0A0A0] uppercase tracking-wider">
+        <h4 className="text-xs font-semibold text-text-secondary uppercase tracking-wider">
           Feed Signals Since Last Read
         </h4>
       </div>
@@ -36,12 +36,12 @@ function FeedEchoRow({ item }: { item: FeedEchoItem }) {
             href={item.url}
             target="_blank"
             rel="noopener noreferrer"
-            className="text-xs text-[#A0A0A0] hover:text-[#D4AF37] transition-colors line-clamp-1"
+            className="text-xs text-text-secondary hover:text-[#D4AF37] transition-colors line-clamp-1"
           >
             {item.title}
           </a>
         ) : (
-          <span className="text-xs text-[#A0A0A0] line-clamp-1">{item.title}</span>
+          <span className="text-xs text-text-secondary line-clamp-1">{item.title}</span>
         )}
         <div className="flex items-center gap-2 mt-0.5">
           <span className="text-[10px] text-[#666]">{item.source}</span>

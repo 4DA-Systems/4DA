@@ -41,6 +41,7 @@ export function ToolkitCard({ tool, pinned, onOpen, onTogglePin }: ToolkitCardPr
       {/* Pin button */}
       <button
         onClick={(e) => { e.stopPropagation(); onTogglePin(); }}
+        aria-label={pinned ? `${t('toolkit.unpin')} ${tool.name}` : `${t('toolkit.pinToTop')} ${tool.name}`}
         className={`absolute top-2 right-2 p-1 rounded transition-opacity ${
           pinned ? 'opacity-100 text-[#D4AF37]' : 'opacity-0 group-hover:opacity-60 text-gray-500 hover:text-white'
         }`}

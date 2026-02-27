@@ -4,6 +4,7 @@
 //! Designed to handle hundreds of thousands of sources.
 
 mod cache;
+mod channels;
 mod history;
 mod migrations;
 mod sources;

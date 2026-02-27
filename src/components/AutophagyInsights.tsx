@@ -17,7 +17,7 @@ function CalibrationHeatmap({ status, t }: { status: AutophagyStatus; t: (key: s
         <span className="text-xs text-gray-400">{t('autophagy.calibrationAccuracy')}</span>
         <span className="text-xs text-gray-300 tabular-nums">{pct}%</span>
       </div>
-      <div className="h-1.5 bg-[#1F1F1F] rounded-full overflow-hidden">
+      <div className="h-1.5 bg-bg-tertiary rounded-full overflow-hidden">
         <div className={`h-full rounded-full transition-all ${color}`} style={{ width: `${pct}%` }} />
       </div>
     </div>
@@ -85,8 +85,8 @@ const InsightsContent = memo(function InsightsContent() {
   if (loading && !status) {
     return (
       <div className="space-y-3 animate-pulse">
-        <div className="h-4 bg-[#1F1F1F] rounded w-1/3" />
-        <div className="h-20 bg-[#1F1F1F] rounded" />
+        <div className="h-4 bg-bg-tertiary rounded w-1/3" />
+        <div className="h-20 bg-bg-tertiary rounded" />
       </div>
     );
   }

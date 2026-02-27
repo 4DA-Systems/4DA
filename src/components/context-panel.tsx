@@ -35,7 +35,7 @@ export function ContextPanel({
 }: ContextPanelProps) {
   const { t } = useTranslation();
   return (
-    <section className="bg-bg-secondary rounded-lg border border-border overflow-hidden">
+    <section aria-label={t('context.title')} className="bg-bg-secondary rounded-lg border border-border overflow-hidden">
       <div className="px-5 py-4 border-b border-border flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className="w-8 h-8 bg-bg-tertiary rounded-lg flex items-center justify-center">

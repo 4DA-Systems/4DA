@@ -296,7 +296,13 @@ pub fn get_playbook_progress() -> Result<PlaybookProgress, String> {
 }
 
 #[tauri::command]
-pub fn mark_lesson_complete(module_id: String, lesson_idx: u32) -> Result<(), String> {
+pub fn mark_lesson_complete(
+    app: tauri::AppHandle,
+    module_id: String,
+    lesson_idx: u32,
+) -> Result<(), String> {
+    use tauri::Emitter;
+
     let conn = crate::open_db_connection()?;
 
     conn.execute(
@@ -304,6 +310,9 @@ pub fn mark_lesson_complete(module_id: String, lesson_idx: u32) -> Result<(), St
         rusqlite::params![module_id, lesson_idx],
     )
     .map_err(|e| e.to_string())?;
+
+    // Notify frontend that profile data has changed
+    let _ = app.emit("profile-updated", "lesson-complete");
 
     Ok(())
 }
