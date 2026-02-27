@@ -202,14 +202,15 @@ cd mcp-4da-server
 pnpm install && pnpm build
 ```
 
-**27 tools across 7 categories:**
+**30 tools across 8 categories:**
 - **Core** — `get_relevant_content`, `get_context`, `explain_relevance`, `record_feedback`
 - **Intelligence** — `daily_briefing`, `get_actionable_signals`, `score_autopsy`, `trend_analysis`, `context_analysis`, `topic_connections`, `signal_chains`, `semantic_shifts`, `attention_report`
 - **Diagnostic** — `source_health`, `config_validator`, `llm_status`
 - **Innovation** — `knowledge_gaps`, `project_health`, `reverse_mentions`, `export_context_packet`
-- **Decision Intelligence** — `decision_memory`, `tech_radar`, `decision_enforcement`
+- **Decision Intelligence** — `decision_memory`, `tech_radar`, `check_decision_alignment`
 - **Agent Autonomy** — `agent_memory`, `agent_session_brief`, `delegation_score`
 - **Developer DNA** — `developer_dna`
+- **Intelligence Metabolism** — `autophagy_status`, `decision_windows`, `compound_advantage`
 
 Add to your Claude Code config:
 ```json
@@ -284,7 +285,7 @@ pnpm validate:all           # Full validation (lint + types + tests + build)
 ## Pricing
 
 **Free** — $0 forever. No credit card. No account. No expiration.
-- All 11 sources, full 5-axis scoring engine, confirmation gate, behavior learning, STREETS Playbook (all 7 modules), MCP server (27 tools), CLI
+- All 11 sources, full 5-axis scoring engine, confirmation gate, behavior learning, STREETS Playbook (all 7 modules), MCP server (30 tools), CLI
 
 **Pro** — $12/month or $99/year. BYOK — you bring your own API key.
 - Everything in Free, plus: AI daily briefings, Developer DNA profiling, Score Autopsy, intelligence panels, signal chain analysis, knowledge gap detection

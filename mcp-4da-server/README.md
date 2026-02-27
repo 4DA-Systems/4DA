@@ -2,7 +2,7 @@
 
 Your AI coding assistant doesn't know what you're working on. It doesn't know your tech stack, your dependencies, or that the library you're debating has a critical CVE from yesterday. It writes code in a vacuum.
 
-This MCP server fixes that. It connects your AI tools to a local intelligence engine that scans your actual codebase — your `Cargo.toml`, `package.json`, `go.mod` — and continuously scores content from 11 sources (Hacker News, arXiv, Reddit, GitHub, and more) against what you actually build with. 27 tools. Everything stays on your machine.
+This MCP server fixes that. It connects your AI tools to a local intelligence engine that scans your actual codebase — your `Cargo.toml`, `package.json`, `go.mod` — and continuously scores content from 11 sources (Hacker News, arXiv, Reddit, GitHub, and more) against what you actually build with. 30 tools. Everything stays on your machine.
 
 ```
 You:     "Are there any security issues in my dependencies?"
@@ -13,7 +13,7 @@ Claude:  [calls knowledge_gaps, project_health, get_actionable_signals]
 
 ## How It Works
 
-[4DA](https://github.com/runyourempire/4DA) is a desktop app that runs quietly in the background. It scans your projects, watches your Git activity, and scores every piece of incoming content across 5 independent axes:
+[4DA](https://4da.ai) is a desktop app that runs quietly in the background. It scans your projects, watches your Git activity, and scores every piece of incoming content across 5 independent axes:
 
 | Axis | Signal |
 |------|--------|
@@ -31,7 +31,7 @@ This MCP server exposes that intelligence to any AI tool that speaks MCP.
 
 ### 1. Install the intelligence engine
 
-Download [4DA](https://github.com/runyourempire/4DA/releases) for your platform (Windows, macOS, Linux). Open it, point it at your project directories, and let it run its first scan. Takes about 3 minutes.
+Download [4DA](https://4da.ai) for your platform (Windows, macOS, Linux). Open it, point it at your project directories, and let it run its first scan. Takes about 3 minutes.
 
 ### 2. Add the MCP server to your editor
 
@@ -112,7 +112,7 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS)
 
 Your AI calls the right tools automatically. No configuration needed — 4DA already knows your stack.
 
-## Tools (27)
+## Tools (30)
 
 ### Core
 
@@ -137,6 +137,14 @@ Your AI calls the right tools automatically. No configuration needed — 4DA alr
 | `semantic_shifts` | Detects when topics you follow are changing in meaning or sentiment |
 | `attention_report` | Where you spend attention vs. where your codebase needs it |
 
+### Diagnostic
+
+| Tool | What it does |
+|------|-------------|
+| `source_health` | Diagnose source fetching and data quality issues |
+| `config_validator` | Validate configuration and detect issues |
+| `llm_status` | Check LLM/Ollama configuration and availability |
+
 ### Knowledge & Health
 
 | Tool | What it does |
@@ -152,7 +160,7 @@ Your AI calls the right tools automatically. No configuration needed — 4DA alr
 |------|-------------|
 | `decision_memory` | Record, query, and enforce architectural decisions across sessions |
 | `tech_radar` | Technology adoption signals derived from your decisions + content trends |
-| `decision_enforcement` | Check if a proposed change aligns with your recorded decisions |
+| `check_decision_alignment` | Check if a proposed change aligns with your recorded decisions |
 
 ### Agent Autonomy
 
@@ -167,6 +175,14 @@ Your AI calls the right tools automatically. No configuration needed — 4DA alr
 | Tool | What it does |
 |------|-------------|
 | `developer_dna` | Your tech identity — primary stack, dependencies, engagement patterns, blind spots |
+
+### Intelligence Metabolism
+
+| Tool | What it does |
+|------|-------------|
+| `autophagy_status` | Intelligence metabolism status — autophagy cycles, calibration accuracy, anti-patterns |
+| `decision_windows` | Time-bounded decision opportunities requiring your attention |
+| `compound_advantage` | Compound advantage score — measures intelligence leverage for decisions |
 
 ## Transports
 
@@ -190,7 +206,7 @@ npx @4da/mcp-server --http --port 4840
 
 Most MCP servers connect your AI to a cloud API. This one connects it to **you** — your local codebase, your dependencies, your Git history, your architectural decisions. Nothing leaves your machine. The AI gets smarter about your work without any data going anywhere.
 
-27 tools is not typical. Most MCP servers expose 1-5 endpoints. This is a full intelligence layer — from raw content scoring to decision enforcement to knowledge gap detection. It's not a wrapper around someone else's API. It's a read layer on top of a scoring engine that rejects 99% of everything it sees, so what your AI gets is what actually matters to you.
+30 tools is not typical. Most MCP servers expose 1-5 endpoints. This is a full intelligence layer — from raw content scoring to decision enforcement to knowledge gap detection. It's not a wrapper around someone else's API. It's a read layer on top of a scoring engine that rejects 99% of everything it sees, so what your AI gets is what actually matters to you.
 
 ## Build from Source
 
@@ -203,7 +219,7 @@ pnpm build
 ## Test
 
 ```bash
-pnpm test                # Contract tests (38 tests)
+pnpm test                # Contract tests (71 tests)
 pnpm run inspect         # MCP Inspector (interactive browser UI)
 ```
 
@@ -213,4 +229,4 @@ MIT — use it anywhere, integrate it with anything.
 
 ---
 
-Built by [4DA](https://github.com/runyourempire/4DA) — privacy-first developer intelligence. All signal. No feed.
+Built by [4DA](https://4da.ai) — privacy-first developer intelligence. All signal. No feed.

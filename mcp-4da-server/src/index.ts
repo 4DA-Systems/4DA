@@ -12,7 +12,7 @@
  * Do NOT expose this server over a network without adding proper auth.
  */
 /**
- * 4DA MCP Server v3.0 - AI Superpower Edition
+ * 4DA MCP Server v4.0.0 - Intelligence Platform
  *
  * Exposes 4DA's personalized content filtering to AI agents via MCP.
  * Now with local LLM support via Ollama for fully offline AI synthesis.
@@ -168,7 +168,7 @@ import type { CompoundAdvantageParams } from "./tools/compound-advantage.js";
 const server = new Server(
   {
     name: "4da-server",
-    version: "1.0.0",
+    version: "4.0.0",
   },
   {
     capabilities: {
@@ -703,7 +703,7 @@ async function main() {
   });
 
   const toolCount = getSlimToolList().length;
-  console.error(`4DA MCP Server v3.3 (Intelligence Platform) started — ${toolCount} tools, stdio transport`);
+  console.error(`4DA MCP Server v4.0.0 (Intelligence Platform) started — ${toolCount} tools, stdio transport`);
   console.error("  Use --http for Streamable HTTP, --setup to configure editors, --doctor to check health");
 }
 
