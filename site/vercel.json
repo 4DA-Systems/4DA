@@ -1,4 +1,6 @@
 {
+  "buildCommand": "npm install && npx @11ty/eleventy",
+  "outputDirectory": "_site",
   "rewrites": [
     { "source": "/streets", "destination": "/streets.html" },
     { "source": "/streets/activate", "destination": "/streets/activate.html" },

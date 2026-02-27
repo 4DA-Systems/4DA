@@ -1,0 +1,695 @@
+---
+title: "4DA Merch -- Developer Gear for the Streets"
+description: "Premium developer merch from 4DA and STREETS. Tees, hoodies, crewnecks, and more. Designed for builders who ship."
+permalink: "/merch.html"
+---
+{% extends "base.njk" %}
+
+{% block head %}
+  <meta property="og:title" content="4DA Merch -- Developer Gear for the Streets">
+  <meta property="og:description" content="Premium developer merch from 4DA and STREETS. Designed for builders who ship.">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://4da.ai/merch">
+
+  <style>
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+    :root {
+      --bg: #0A0A0A;
+      --bg-card: #141414;
+      --bg-hover: #1A1A1A;
+      --text: #FFFFFF;
+      --text-secondary: #A0A0A0;
+      --text-muted: #666666;
+      --accent: #D4AF37;
+      --orange: #F97316;
+      --border: #2A2A2A;
+      --radius: 12px;
+    }
+
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+    }
+    code, .mono { font-family: 'JetBrains Mono', monospace; }
+    a { color: var(--accent); text-decoration: none; transition: opacity 0.2s; }
+    a:hover { opacity: 0.8; }
+    .container { max-width: 1100px; margin: 0 auto; padding: 0 24px; }
+
+    /* Nav */
+    .nav { height: 56px; border-bottom: 1px solid var(--border); background: rgba(10,10,10,0.95); backdrop-filter: blur(12px); position: sticky; top: 0; z-index: 100; }
+    .nav-inner { max-width: 1100px; margin: 0 auto; padding: 0 24px; height: 100%; display: flex; align-items: center; justify-content: space-between; }
+    .nav-brand { font-weight: 600; font-size: 15px; color: var(--text); display: flex; align-items: center; gap: 8px; }
+    .nav-brand img { width: 24px; height: 24px; border-radius: 50%; opacity: 0.8; }
+    .nav-brand span { color: var(--text-muted); font-weight: 400; font-size: 13px; }
+    .nav-links { display: flex; gap: 24px; align-items: center; }
+    .nav-links a { color: var(--text-muted); font-size: 14px; }
+    .nav-links a:hover { color: var(--text); opacity: 1; }
+
+    /* Hero */
+    .hero { padding: 100px 0 60px; text-align: center; }
+    .hero-label { font-family: 'JetBrains Mono', monospace; font-size: 12px; letter-spacing: 0.1em; color: var(--accent); margin-bottom: 24px; text-transform: uppercase; }
+    .hero h1 { font-size: clamp(36px, 6vw, 56px); font-weight: 600; line-height: 1.1; letter-spacing: -0.03em; margin-bottom: 16px; }
+    .hero p { font-size: 17px; color: var(--text-secondary); max-width: 520px; margin: 0 auto; line-height: 1.7; }
+    .hero-note { font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--text-muted); margin-top: 16px; }
+
+    .divider { border: none; border-top: 1px solid var(--border); margin: 0; }
+
+    /* Tabs */
+    .collection-tabs { display: flex; gap: 8px; justify-content: center; margin: 48px 0 16px; flex-wrap: wrap; }
+    .tab { padding: 8px 20px; border-radius: 20px; border: 1px solid var(--border); background: transparent; color: var(--text-muted); font-family: 'JetBrains Mono', monospace; font-size: 12px; letter-spacing: 0.04em; cursor: pointer; transition: all 0.2s; }
+    .tab:hover { border-color: var(--text-muted); color: var(--text); }
+    .tab.active { border-color: var(--accent); color: var(--accent); background: rgba(212,175,55,0.08); }
+    .product-count { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--text-muted); text-align: center; margin-bottom: 40px; }
+
+    /* Section */
+    .section-label { font-family: 'JetBrains Mono', monospace; font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--accent); margin-bottom: 16px; }
+    .section-title { font-size: 28px; font-weight: 600; letter-spacing: -0.02em; margin-bottom: 32px; }
+
+    /* Featured */
+    .featured { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); padding: 48px; display: grid; grid-template-columns: 1fr 1fr; gap: 48px; align-items: center; margin-bottom: 80px; }
+    .featured-visual { background: #0A0A0A; border-radius: 8px; aspect-ratio: 1; display: flex; align-items: center; justify-content: center; padding: 20px; border: 1px solid var(--border); overflow: hidden; }
+    .featured-visual img { max-width: 100%; max-height: 100%; object-fit: contain; transition: transform 0.4s; }
+    .featured:hover .featured-visual img { transform: scale(1.02); }
+    .featured h2 { font-size: 28px; font-weight: 600; margin-bottom: 12px; }
+    .featured p { font-size: 15px; color: var(--text-secondary); line-height: 1.7; margin-bottom: 16px; }
+    .tag-list { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 20px; }
+    .tag { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--text-muted); background: var(--bg); border: 1px solid var(--border); padding: 4px 10px; border-radius: 4px; }
+
+    /* Product Grid */
+    .product-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 20px; margin-bottom: 80px; }
+    .product-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; transition: border-color 0.2s, transform 0.2s; }
+    .product-card:hover { border-color: #3A3A3A; transform: translateY(-2px); }
+
+    /* Product Image */
+    .product-preview { aspect-ratio: 1; background: #0A0A0A; display: flex; align-items: center; justify-content: center; padding: 12px; position: relative; overflow: hidden; }
+    .product-preview img { max-width: 100%; max-height: 100%; object-fit: contain; transition: transform 0.3s, opacity 0.3s; }
+    .product-card:hover .product-preview img { transform: scale(1.03); }
+    .product-preview img.fade-out { opacity: 0; transform: scale(0.97); }
+    .product-type-badge { position: absolute; top: 12px; right: 12px; font-family: 'JetBrains Mono', monospace; font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase; padding: 3px 10px; border-radius: 4px; background: rgba(212,175,55,0.15); color: var(--accent); }
+    .product-type-badge.streets-badge { background: rgba(249,115,22,0.15); color: var(--orange); }
+
+    /* Image Gallery Dots */
+    .gallery-nav { position: absolute; bottom: 12px; left: 50%; transform: translateX(-50%); display: flex; gap: 6px; }
+    .gallery-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--text-muted); opacity: 0.3; cursor: pointer; transition: opacity 0.2s; border: none; padding: 0; }
+    .gallery-dot.active { opacity: 1; background: var(--accent); }
+
+    /* Product Info */
+    .product-info { padding: 20px; }
+    .product-info h3 { font-size: 16px; font-weight: 600; margin-bottom: 4px; }
+    .product-line { font-family: 'JetBrains Mono', monospace; font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase; margin-bottom: 8px; }
+    .line-4da { color: var(--accent); }
+    .line-streets { color: var(--orange); }
+    .product-desc { font-size: 13px; color: var(--text-muted); line-height: 1.6; margin-bottom: 12px; }
+
+    /* Color Selector */
+    .color-selector { display: flex; gap: 8px; align-items: center; margin-bottom: 12px; }
+    .color-dot { width: 20px; height: 20px; border-radius: 50%; cursor: pointer; transition: all 0.15s; border: 2px solid transparent; }
+    .color-dot:hover { transform: scale(1.15); }
+    .color-dot.selected { border-color: var(--accent); box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--accent); }
+    .color-dot.black { background: #1a1a1a; border-color: #333; }
+    .color-dot.black.selected { border-color: #1a1a1a; box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--accent); }
+    .color-dot.white { background: #E8E8E8; }
+    .color-label { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--text-muted); letter-spacing: 0.04em; }
+
+    /* Size Selector */
+    .size-selector { display: flex; gap: 4px; flex-wrap: wrap; margin-bottom: 12px; }
+    .size-btn { font-family: 'JetBrains Mono', monospace; font-size: 10px; padding: 4px 8px; border-radius: 4px; border: 1px solid var(--border); background: transparent; color: var(--text-muted); cursor: pointer; transition: all 0.15s; }
+    .size-btn:hover { border-color: var(--text-muted); color: var(--text); }
+    .size-btn.selected { border-color: var(--accent); color: var(--accent); background: rgba(212,175,55,0.08); }
+    .size-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+
+    /* Meta / Buy */
+    .product-meta { display: flex; justify-content: space-between; align-items: center; padding-top: 12px; border-top: 1px solid var(--border); }
+    .product-price { font-family: 'JetBrains Mono', monospace; font-size: 14px; font-weight: 500; }
+    .product-buy { font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 500; letter-spacing: 0.04em; text-transform: uppercase; padding: 6px 16px; border-radius: 6px; border: none; background: var(--accent); color: var(--bg); cursor: pointer; transition: opacity 0.2s, transform 0.15s; text-decoration: none; display: inline-block; }
+    .product-buy:hover { opacity: 0.85; transform: translateY(-1px); }
+    .product-buy.loading { pointer-events: none; opacity: 0.6; }
+
+    /* Skeleton Loading */
+    .skeleton-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 20px; margin-bottom: 80px; }
+    .skeleton-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+    .skeleton-img { aspect-ratio: 1; background: linear-gradient(110deg, #141414 30%, #1a1a1a 50%, #141414 70%); background-size: 200% 100%; animation: shimmer 1.5s ease-in-out infinite; }
+    .skeleton-text { height: 14px; background: linear-gradient(110deg, #1a1a1a 30%, #222 50%, #1a1a1a 70%); background-size: 200% 100%; animation: shimmer 1.5s ease-in-out infinite; border-radius: 4px; margin: 8px 20px; }
+    .skeleton-text:first-of-type { width: 40%; margin-top: 20px; }
+    .skeleton-text:nth-of-type(2) { width: 70%; }
+    .skeleton-text:last-of-type { width: 55%; margin-bottom: 20px; }
+    @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+
+    /* CTA */
+    .cta-section { text-align: center; padding: 80px 0; }
+    .cta-section h2 { font-size: 24px; font-weight: 600; margin-bottom: 12px; }
+    .cta-section p { font-size: 15px; color: var(--text-secondary); margin-bottom: 16px; }
+
+    /* Footer */
+    footer { padding: 48px 0; border-top: 1px solid var(--border); }
+    .footer-inner { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px; }
+    .footer-brand { font-weight: 600; font-size: 15px; display: flex; align-items: center; gap: 8px; }
+    .footer-brand img { width: 20px; height: 20px; border-radius: 50%; opacity: 0.6; }
+    .footer-brand span { color: var(--text-muted); font-weight: 400; font-size: 13px; }
+    .footer-links { display: flex; gap: 24px; font-size: 14px; align-items: center; }
+    .footer-links a { color: var(--text-muted); }
+    .footer-links a:hover { color: var(--text); }
+
+    /* Hamburger */
+    .nav-hamburger { display: none; background: none; border: none; cursor: pointer; padding: 4px; z-index: 101; }
+    .nav-hamburger span { display: block; width: 20px; height: 2px; background: var(--text); margin: 4px 0; transition: transform 0.3s, opacity 0.3s; }
+    .nav-hamburger.open span:nth-child(1) { transform: translateY(6px) rotate(45deg); }
+    .nav-hamburger.open span:nth-child(2) { opacity: 0; }
+    .nav-hamburger.open span:nth-child(3) { transform: translateY(-6px) rotate(-45deg); }
+
+    @media (max-width: 768px) {
+      .featured { grid-template-columns: 1fr; padding: 24px; gap: 24px; }
+      .product-grid, .skeleton-grid { grid-template-columns: 1fr; }
+      .footer-inner { flex-direction: column; text-align: center; }
+      .nav-hamburger { display: block; }
+      .nav-links { display: none; position: absolute; top: 56px; left: 0; right: 0; flex-direction: column; background: rgba(10,10,10,0.98); backdrop-filter: blur(12px); border-bottom: 1px solid var(--border); padding: 16px 24px; gap: 12px; }
+      .nav-links.nav-open { display: flex; }
+      .nav-links a { font-size: 15px; padding: 4px 0; }
+    }
+  </style>
+{% endblock %}
+
+{% block body %}
+
+  <nav class="nav">
+    <div class="nav-inner">
+      <a href="/" class="nav-brand"><img src="hero-sun.jpg" alt="4DA">4DA <span>Merch</span></a>
+      <div class="nav-links" id="nav-links">
+        <a href="#tees">Tees</a>
+        <a href="#layers">Hoodies & Crews</a>
+        <a href="streets.html">STREETS</a>
+      </div>
+      <button class="nav-hamburger" id="nav-hamburger" aria-label="Toggle menu">
+        <span></span><span></span><span></span>
+      </button>
+    </div>
+  </nav>
+
+  <header class="hero">
+    <div class="container">
+      <div class="hero-label">4DA Merch</div>
+      <h1>Gear for builders<br>who ship.</h1>
+      <p>Premium developer merch from 4DA and STREETS. Minimal when it needs to be. Bold when it doesn't. Every piece designed for the culture.</p>
+      <p class="hero-note">All prices in AUD</p>
+    </div>
+  </header>
+
+  <hr class="divider">
+
+  <div class="container">
+    <div class="collection-tabs">
+      <button class="tab active" data-filter="all">All</button>
+      <button class="tab" data-filter="4da">4DA Collection</button>
+      <button class="tab" data-filter="streets">STREETS Collection</button>
+      <button class="tab" data-filter="tees">Tees</button>
+      <button class="tab" data-filter="layers">Hoodies & Crews</button>
+    </div>
+    <div class="product-count" id="product-count"></div>
+  </div>
+
+  <div class="container" id="featured-container"></div>
+
+  <section id="tees">
+    <div class="container">
+      <div class="section-label">Apparel</div>
+      <div class="section-title">Tees</div>
+      <div id="tees-grid" class="product-grid"></div>
+      <div id="tees-skeleton" class="skeleton-grid">
+        <div class="skeleton-card"><div class="skeleton-img"></div><div class="skeleton-text"></div><div class="skeleton-text"></div><div class="skeleton-text"></div></div>
+        <div class="skeleton-card"><div class="skeleton-img"></div><div class="skeleton-text"></div><div class="skeleton-text"></div><div class="skeleton-text"></div></div>
+        <div class="skeleton-card"><div class="skeleton-img"></div><div class="skeleton-text"></div><div class="skeleton-text"></div><div class="skeleton-text"></div></div>
+      </div>
+    </div>
+  </section>
+
+  <hr class="divider" id="layers-divider">
+
+  <section id="layers">
+    <div class="container">
+      <div class="section-label">Layers</div>
+      <div class="section-title">Hoodies & Crewnecks</div>
+      <div id="layers-grid" class="product-grid"></div>
+      <div id="layers-skeleton" class="skeleton-grid">
+        <div class="skeleton-card"><div class="skeleton-img"></div><div class="skeleton-text"></div><div class="skeleton-text"></div><div class="skeleton-text"></div></div>
+        <div class="skeleton-card"><div class="skeleton-img"></div><div class="skeleton-text"></div><div class="skeleton-text"></div><div class="skeleton-text"></div></div>
+      </div>
+    </div>
+  </section>
+
+  <hr class="divider">
+
+  <section class="cta-section">
+    <div class="container">
+      <h2>More dropping soon</h2>
+      <p>Stickers, desk mats, pins, caps, and more. The collection is growing.</p>
+      <p style="font-size:12px;color:var(--text-muted);">All prices in AUD. Printed on demand. Ships worldwide.</p>
+    </div>
+  </section>
+
+  <footer>
+    <div class="container">
+      <div class="footer-inner">
+        <a href="/" class="footer-brand"><img src="hero-sun.jpg" alt="4DA">4DA <span>Merch</span></a>
+        <div class="footer-links">
+          <a href="/">Home</a>
+          <a href="streets.html">STREETS</a>
+          <a href="https://github.com/runyourempire/4DA">GitHub</a>
+          <a href="https://github.com/runyourempire/4DA#privacy">Privacy</a>
+          <a href="https://x.com/4aborhood" aria-label="Twitter/X" title="X / Twitter">X</a>
+          <a href="https://discord.gg/4da" aria-label="Discord" title="Discord">Discord</a>
+        </div>
+      </div>
+    </div>
+  </footer>
+
+  <script>
+    /* ═══════════════════════════════════════════════
+       Shopify Storefront API — Headless Integration
+       ═══════════════════════════════════════════════ */
+    var STORE = '4da-2.myshopify.com';
+    var TOKEN = '4a2d2f8581b0855706a978a384ae65f8';
+    var API_VER = '2024-01';
+
+    // ── Hamburger ──
+    (function() {
+      var btn = document.getElementById('nav-hamburger');
+      var links = document.getElementById('nav-links');
+      if (!btn || !links) return;
+      btn.addEventListener('click', function() { btn.classList.toggle('open'); links.classList.toggle('nav-open'); });
+      links.querySelectorAll('a').forEach(function(a) { a.addEventListener('click', function() { btn.classList.remove('open'); links.classList.remove('nav-open'); }); });
+    })();
+
+    // ── Storefront API ──
+    function gql(query) {
+      return fetch('https://' + STORE + '/api/' + API_VER + '/graphql.json', {
+        method: 'POST',
+        headers: { 'X-Shopify-Storefront-Access-Token': TOKEN, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query: query })
+      }).then(function(r) { return r.json(); });
+    }
+
+    function fetchProducts() {
+      return gql(
+        '{ products(first: 50, sortKey: CREATED_AT) { edges { node { id title handle description productType tags availableForSale' +
+        ' priceRange { minVariantPrice { amount currencyCode } }' +
+        ' images(first: 5) { edges { node { url altText } } }' +
+        ' variants(first: 20) { edges { node { id title availableForSale priceV2 { amount currencyCode } } } }' +
+        ' } } } }'
+      ).then(function(d) { return d.data.products.edges.map(function(e) { return e.node; }); });
+    }
+
+    function createCart(variantId) {
+      return gql(
+        'mutation { cartCreate(input: { lines: [{ merchandiseId: "' + variantId + '", quantity: 1 }] }) { cart { checkoutUrl } userErrors { message } } }'
+      ).then(function(d) { return d.data.cartCreate.cart.checkoutUrl; });
+    }
+
+    // ── Description Cleanup ──
+    // Strip size charts, bullet specs, and formatting artifacts
+    function cleanDesc(text) {
+      if (!text) return '';
+      // Cut at size guide / bullet specs
+      var cuts = ['Size guide', 'LENGTH (inches)', 'LENGTH (cm)', '- Gildan', '- Bella'];
+      var clean = text;
+      for (var i = 0; i < cuts.length; i++) {
+        var idx = clean.indexOf(cuts[i]);
+        if (idx > 0) clean = clean.substring(0, idx);
+      }
+      // Take first 2 sentences max
+      var sentences = clean.split(/(?<=[.!])\s+/);
+      var result = sentences.slice(0, 2).join(' ').trim();
+      if (result.length > 160) result = result.substring(0, 157) + '...';
+      return result;
+    }
+
+    // ── Color Detection ──
+    function detectColor(title) {
+      var t = title.toLowerCase();
+      if (t.indexOf('- black') !== -1 || t.endsWith('black')) return 'black';
+      if (t.indexOf('- white') !== -1 || t.endsWith('white')) return 'white';
+      if (t.indexOf('black/white') !== -1 || t.indexOf('black & white') !== -1) return 'black';
+      return 'black'; // default
+    }
+
+    function baseName(title) {
+      return title.replace(/\s*-\s*(Black|White|Black\/White)\s*$/i, '').trim();
+    }
+
+    // ── Product Classification ──
+    function isStreets(p) { return p.tags.indexOf('streets') !== -1; }
+    function isTee(p) { return (p.productType || '').toUpperCase() === 'T-SHIRT'; }
+    function isLayer(p) { var pt = (p.productType || '').toUpperCase(); return pt === 'HOODIE' || pt === 'SWEATSHIRT'; }
+    function typeBadge(p) {
+      var pt = (p.productType || '').toUpperCase();
+      if (pt === 'T-SHIRT') return 'Tee';
+      if (pt === 'HOODIE') return 'Hoodie';
+      if (pt === 'SWEATSHIRT') return 'Crewneck';
+      return 'Item';
+    }
+
+    // ── Group Products by Color ──
+    function groupByDesign(products) {
+      var groups = {};
+      var order = [];
+      products.forEach(function(p) {
+        var base = baseName(p.title);
+        if (!groups[base]) {
+          groups[base] = { name: base, colors: [], streets: isStreets(p), productType: p.productType };
+          order.push(base);
+        }
+        var color = detectColor(p.title);
+        groups[base].colors.push({
+          color: color,
+          product: p,
+          images: p.images.edges.map(function(e) { return e.node; }),
+          variants: p.variants.edges.map(function(e) { return e.node; })
+        });
+      });
+      // Sort colors within each group: black first
+      order.forEach(function(key) {
+        groups[key].colors.sort(function(a, b) {
+          if (a.color === 'black') return -1;
+          if (b.color === 'black') return 1;
+          return 0;
+        });
+      });
+      return order.map(function(key) { return groups[key]; });
+    }
+
+    // ── Render Grouped Product Card ──
+    function renderGroupCard(group) {
+      var active = group.colors[0];
+      var streets = group.streets;
+      var type = typeBadge(active.product);
+      var price = parseFloat(active.product.priceRange.minVariantPrice.amount);
+      var desc = cleanDesc(active.product.description);
+
+      var card = document.createElement('div');
+      card.className = 'product-card';
+      card.dataset.collection = streets ? 'streets' : '4da';
+
+      // Badge
+      var badgeCls = streets ? 'product-type-badge streets-badge' : 'product-type-badge';
+      var lineCls = streets ? 'product-line line-streets' : 'product-line line-4da';
+      var lineLabel = streets ? 'STREETS Collection' : '4DA Collection';
+
+      // Image HTML
+      var imgSrc = active.images[0] ? active.images[0].url + '&width=800' : '';
+      var imgAlt = active.images[0] ? (active.images[0].altText || group.name) : group.name;
+
+      // Gallery dots
+      var dotsHtml = '';
+      if (active.images.length > 1) {
+        dotsHtml = '<div class="gallery-nav">';
+        for (var i = 0; i < active.images.length; i++) {
+          dotsHtml += '<button class="gallery-dot' + (i === 0 ? ' active' : '') + '" data-idx="' + i + '" aria-label="Image ' + (i+1) + '"></button>';
+        }
+        dotsHtml += '</div>';
+      }
+
+      // Color dots
+      var colorHtml = '';
+      if (group.colors.length > 1) {
+        colorHtml = '<div class="color-selector">';
+        group.colors.forEach(function(c, idx) {
+          colorHtml += '<button class="color-dot ' + c.color + (idx === 0 ? ' selected' : '') + '" data-color-idx="' + idx + '" aria-label="' + c.color + '" title="' + c.color.charAt(0).toUpperCase() + c.color.slice(1) + '"></button>';
+        });
+        colorHtml += '<span class="color-label">' + active.color.charAt(0).toUpperCase() + active.color.slice(1) + '</span>';
+        colorHtml += '</div>';
+      }
+
+      // Size buttons for active color
+      var sizesHtml = buildSizesHtml(active.variants);
+
+      card.innerHTML =
+        '<div class="product-preview">' +
+          '<span class="' + badgeCls + '">' + type + '</span>' +
+          (imgSrc ? '<img src="' + imgSrc + '" alt="' + imgAlt + '" loading="lazy">' : '') +
+          dotsHtml +
+        '</div>' +
+        '<div class="product-info">' +
+          '<div class="' + lineCls + '">' + lineLabel + '</div>' +
+          '<h3>' + group.name + '</h3>' +
+          '<p class="product-desc">' + desc + '</p>' +
+          colorHtml +
+          sizesHtml +
+          '<div class="product-meta">' +
+            '<span class="product-price">$' + price.toFixed(0) + '</span>' +
+            '<button class="product-buy">Buy Now</button>' +
+          '</div>' +
+        '</div>';
+
+      // ── State ──
+      var state = { colorIdx: 0, imgIdx: 0 };
+
+      // ── Gallery dots ──
+      setupGalleryDots(card, group, state);
+
+      // ── Color switching ──
+      if (group.colors.length > 1) {
+        card.querySelectorAll('.color-dot').forEach(function(dot) {
+          dot.addEventListener('click', function() {
+            var idx = parseInt(dot.dataset.colorIdx);
+            if (idx === state.colorIdx) return;
+            state.colorIdx = idx;
+            state.imgIdx = 0;
+            var c = group.colors[idx];
+
+            // Update color dots
+            card.querySelectorAll('.color-dot').forEach(function(d) { d.classList.remove('selected'); });
+            dot.classList.add('selected');
+            card.querySelector('.color-label').textContent = c.color.charAt(0).toUpperCase() + c.color.slice(1);
+
+            // Fade image, swap, fade in
+            var img = card.querySelector('.product-preview img');
+            img.classList.add('fade-out');
+            setTimeout(function() {
+              if (c.images[0]) { img.src = c.images[0].url + '&width=800'; img.alt = c.images[0].altText || group.name; }
+              img.classList.remove('fade-out');
+            }, 150);
+
+            // Rebuild gallery dots
+            var navEl = card.querySelector('.gallery-nav');
+            if (navEl) navEl.remove();
+            if (c.images.length > 1) {
+              var newNav = document.createElement('div');
+              newNav.className = 'gallery-nav';
+              for (var j = 0; j < c.images.length; j++) {
+                var btn = document.createElement('button');
+                btn.className = 'gallery-dot' + (j === 0 ? ' active' : '');
+                btn.dataset.idx = j;
+                btn.setAttribute('aria-label', 'Image ' + (j+1));
+                newNav.appendChild(btn);
+              }
+              card.querySelector('.product-preview').appendChild(newNav);
+              setupGalleryDots(card, group, state);
+            }
+
+            // Rebuild sizes
+            var sizeContainer = card.querySelector('.size-selector');
+            sizeContainer.outerHTML = buildSizesHtml(c.variants);
+            setupSizeButtons(card);
+
+            // Update price
+            var newPrice = parseFloat(c.product.priceRange.minVariantPrice.amount);
+            card.querySelector('.product-price').textContent = '$' + newPrice.toFixed(0);
+          });
+        });
+      }
+
+      // ── Size buttons ──
+      setupSizeButtons(card);
+
+      // ── Buy button ──
+      card.querySelector('.product-buy').addEventListener('click', function() {
+        var btn = card.querySelector('.product-buy');
+        var sel = card.querySelector('.size-btn.selected');
+        if (!sel) return;
+        btn.textContent = '...';
+        btn.classList.add('loading');
+        createCart(sel.dataset.variantId).then(function(url) {
+          window.location.href = url;
+        }).catch(function() {
+          btn.textContent = 'Buy Now';
+          btn.classList.remove('loading');
+        });
+      });
+
+      return card;
+    }
+
+    function buildSizesHtml(variants) {
+      var html = '<div class="size-selector">';
+      variants.forEach(function(v, j) {
+        var label = v.title.split(' / ').pop();
+        html += '<button class="size-btn' + (j === 0 ? ' selected' : '') + '" data-variant-id="' + v.id + '"' + (v.availableForSale ? '' : ' disabled') + '>' + label + '</button>';
+      });
+      return html + '</div>';
+    }
+
+    function setupSizeButtons(card) {
+      card.querySelectorAll('.size-btn').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+          card.querySelectorAll('.size-btn').forEach(function(b) { b.classList.remove('selected'); });
+          btn.classList.add('selected');
+        });
+      });
+    }
+
+    function setupGalleryDots(card, group, state) {
+      card.querySelectorAll('.gallery-dot').forEach(function(dot) {
+        dot.addEventListener('click', function(e) {
+          e.stopPropagation();
+          var idx = parseInt(dot.dataset.idx);
+          state.imgIdx = idx;
+          var images = group.colors[state.colorIdx].images;
+          var img = card.querySelector('.product-preview img');
+          if (images[idx]) {
+            img.classList.add('fade-out');
+            setTimeout(function() {
+              img.src = images[idx].url + '&width=800';
+              img.alt = images[idx].altText || group.name;
+              img.classList.remove('fade-out');
+            }, 150);
+          }
+          card.querySelectorAll('.gallery-dot').forEach(function(d) { d.classList.remove('active'); });
+          dot.classList.add('active');
+        });
+      });
+    }
+
+    // ── Render Featured ──
+    function renderFeatured(group) {
+      var el = document.getElementById('featured-container');
+      if (!group || !el) return;
+      var active = group.colors[0];
+      var price = parseFloat(active.product.priceRange.minVariantPrice.amount);
+      var desc = cleanDesc(active.product.description);
+      var imgSrc = active.images[0] ? active.images[0].url + '&width=800' : '';
+
+      var colorsHtml = '';
+      if (group.colors.length > 1) {
+        colorsHtml = '<div class="color-selector" style="margin-bottom:16px">';
+        group.colors.forEach(function(c, idx) {
+          colorsHtml += '<button class="color-dot ' + c.color + (idx === 0 ? ' selected' : '') + '" data-fidx="' + idx + '" title="' + c.color.charAt(0).toUpperCase() + c.color.slice(1) + '"></button>';
+        });
+        colorsHtml += '</div>';
+      }
+
+      el.innerHTML =
+        '<div class="featured" id="featured">' +
+          '<div class="featured-visual">' + (imgSrc ? '<img src="' + imgSrc + '" alt="' + group.name + '">' : '') + '</div>' +
+          '<div>' +
+            '<div class="section-label">Featured</div>' +
+            '<h2>' + group.name + '</h2>' +
+            '<p>' + desc + '</p>' +
+            '<div class="tag-list"><span class="tag">DTFlex Print</span><span class="tag">S - 5XL</span><span class="tag">Unisex Fit</span></div>' +
+            colorsHtml +
+            '<p style="font-family:JetBrains Mono,monospace;font-size:16px;margin-bottom:16px;">$' + price.toFixed(0) + ' <span style="color:var(--text-muted);font-size:12px;margin-left:4px">AUD</span></p>' +
+            '<button class="product-buy" id="featured-buy" style="padding:10px 28px;font-size:12px;">Buy Now</button>' +
+          '</div>' +
+        '</div>';
+
+      var fState = { colorIdx: 0 };
+
+      // Color switching on featured
+      if (group.colors.length > 1) {
+        el.querySelectorAll('.color-dot').forEach(function(dot) {
+          dot.addEventListener('click', function() {
+            var idx = parseInt(dot.dataset.fidx);
+            fState.colorIdx = idx;
+            var c = group.colors[idx];
+            el.querySelectorAll('.color-dot').forEach(function(d) { d.classList.remove('selected'); });
+            dot.classList.add('selected');
+            var img = el.querySelector('.featured-visual img');
+            if (img && c.images[0]) {
+              img.style.opacity = '0';
+              setTimeout(function() { img.src = c.images[0].url + '&width=800'; img.style.opacity = '1'; }, 200);
+            }
+            var newPrice = parseFloat(c.product.priceRange.minVariantPrice.amount);
+            el.querySelector('p[style*="font-size:16px"]').innerHTML = '$' + newPrice.toFixed(0) + ' <span style="color:var(--text-muted);font-size:12px;margin-left:4px">AUD</span>';
+          });
+        });
+      }
+
+      // Buy featured — defaults to M size
+      document.getElementById('featured-buy').addEventListener('click', function() {
+        var btn = document.getElementById('featured-buy');
+        var c = group.colors[fState.colorIdx];
+        // Pick M if available, else first
+        var variant = c.variants.find(function(v) { return v.title.indexOf('M') !== -1 && v.title.indexOf('XL') === -1 && v.availableForSale; }) || c.variants[0];
+        btn.textContent = '...';
+        btn.classList.add('loading');
+        createCart(variant.id).then(function(url) {
+          window.location.href = url;
+        }).catch(function() { btn.textContent = 'Buy Now'; btn.classList.remove('loading'); });
+      });
+    }
+
+    // ── Filter + Render ──
+    var allGroups = [];
+
+    function applyFilter(filter) {
+      var tees = [], layers = [];
+      allGroups.forEach(function(g) {
+        var p = g.colors[0].product;
+        var show = filter === 'all' ||
+          (filter === '4da' && !g.streets) ||
+          (filter === 'streets' && g.streets) ||
+          (filter === 'tees' && isTee(p)) ||
+          (filter === 'layers' && isLayer(p));
+        if (!show) return;
+        if (isTee(p)) tees.push(g);
+        else if (isLayer(p)) layers.push(g);
+      });
+
+      var tg = document.getElementById('tees-grid');
+      var lg = document.getElementById('layers-grid');
+      tg.innerHTML = '';
+      lg.innerHTML = '';
+      tees.forEach(function(g) { tg.appendChild(renderGroupCard(g)); });
+      layers.forEach(function(g) { lg.appendChild(renderGroupCard(g)); });
+
+      document.getElementById('tees').style.display = tees.length ? '' : 'none';
+      document.getElementById('layers').style.display = layers.length ? '' : 'none';
+      document.getElementById('layers-divider').style.display = (tees.length && layers.length) ? '' : 'none';
+
+      var total = tees.length + layers.length;
+      document.getElementById('product-count').textContent = total + ' design' + (total !== 1 ? 's' : '') + (filter !== 'all' ? ' in ' + document.querySelector('.tab.active').textContent : '');
+    }
+
+    // ── Tab clicks ──
+    document.querySelectorAll('.tab').forEach(function(tab) {
+      tab.addEventListener('click', function() {
+        document.querySelectorAll('.tab').forEach(function(t) { t.classList.remove('active'); });
+        tab.classList.add('active');
+        applyFilter(tab.dataset.filter);
+      });
+    });
+
+    // ── Init ──
+    fetchProducts().then(function(products) {
+      document.getElementById('tees-skeleton').style.display = 'none';
+      document.getElementById('layers-skeleton').style.display = 'none';
+
+      allGroups = groupByDesign(products);
+
+      // Featured: Code Fragment Tee
+      var featured = allGroups.find(function(g) { return g.name.toLowerCase().indexOf('code fragment') !== -1; });
+      if (!featured) featured = allGroups[0];
+      renderFeatured(featured);
+
+      applyFilter('all');
+    }).catch(function(err) {
+      console.error('Shopify load error:', err);
+      document.getElementById('tees-skeleton').innerHTML = '<div style="text-align:center;padding:60px 20px;color:var(--text-muted);"><p>Failed to load products. Please refresh.</p></div>';
+      document.getElementById('layers-skeleton').innerHTML = '';
+    });
+  </script>
+
+{% endblock %}
