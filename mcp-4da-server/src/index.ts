@@ -45,115 +45,16 @@ import { startHttpServer } from "./http-transport.js";
 import { runSetup } from "./setup.js";
 import { runDoctor } from "./doctor.js";
 
-// Schema registry for slim tool listing
-import { getSlimToolList, getSchemaResources, hasToolSchema, getSchemaFilename } from "./schema-registry.js";
+// Schema registry for slim tool listing + category metadata
+import { getSlimToolList, getSchemaResources, hasToolSchema, getSchemaFilename, getCategoryManifest } from "./schema-registry.js";
+
+// Map-based tool dispatch (replaces per-tool imports + switch statement)
+import { dispatchTool } from "./tool-dispatch.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 import { createDatabase, FourDADatabase, type DatabaseValidationResult } from "./db.js";
-
-// Core Tools
-import {
-  getRelevantContentTool,
-  executeGetRelevantContent,
-  getContextTool,
-  executeGetContext,
-  explainRelevanceTool,
-  executeExplainRelevance,
-  recordFeedbackTool,
-  executeRecordFeedback,
-} from "./tools/index.js";
-
-// Superpower Tools
-import {
-  scoreAutopsyTool,
-  executeScoreAutopsy,
-  trendAnalysisTool,
-  executeTrendAnalysis,
-  dailyBriefingTool,
-  executeDailyBriefing,
-  contextAnalysisTool,
-  executeContextAnalysis,
-  sourceHealthTool,
-  executeSourceHealth,
-  topicConnectionsTool,
-  executeTopicConnections,
-  configValidatorTool,
-  executeConfigValidator,
-  llmStatusTool,
-  executeLLMStatus,
-  getActionableSignalsTool,
-  executeGetActionableSignals,
-  exportContextPacketTool,
-  executeExportContextPacket,
-  knowledgeGapsTool,
-  executeKnowledgeGaps,
-  signalChainsTool,
-  executeSignalChains,
-  semanticShiftsTool,
-  executeSemanticShifts,
-  reverseMentionsTool,
-  executeReverseMentions,
-  attentionReportTool,
-  executeAttentionReport,
-  projectHealthTool,
-  executeProjectHealth,
-  decisionMemoryTool,
-  executeDecisionMemory,
-  techRadarTool,
-  executeTechRadar,
-  checkDecisionAlignmentTool,
-  executeCheckDecisionAlignment,
-  agentMemoryTool,
-  executeAgentMemory,
-  agentSessionBriefTool,
-  executeAgentSessionBrief,
-  delegationScoreTool,
-  executeDelegationScore,
-  developerDnaTool,
-  executeDeveloperDna,
-  autophagyStatusTool,
-  executeAutophagyStatus,
-  decisionWindowsTool,
-  executeDecisionWindows,
-  compoundAdvantageTool,
-  executeCompoundAdvantage,
-} from "./tools/index.js";
-
-import type {
-  GetRelevantContentParams,
-  GetContextParams,
-  ExplainRelevanceParams,
-  RecordFeedbackParams,
-} from "./types.js";
-
-import type { ScoreAutopsyParams } from "./tools/score-autopsy.js";
-import type { TrendAnalysisParams } from "./tools/trend-analysis.js";
-import type { DailyBriefingParams } from "./tools/daily-briefing.js";
-import type { ContextAnalysisParams } from "./tools/context-analysis.js";
-import type { SourceHealthParams } from "./tools/source-health.js";
-import type { TopicConnectionsParams } from "./tools/topic-connections.js";
-import type { ConfigValidatorParams } from "./tools/config-validator.js";
-import type { LLMStatusParams } from "./tools/llm-status.js";
-import type { GetActionableSignalsParams } from "./tools/get-actionable-signals.js";
-import type { ExportContextParams } from "./tools/export-context.js";
-import type { KnowledgeGapsParams } from "./tools/knowledge-gaps.js";
-import type { SignalChainsParams } from "./tools/signal-chains.js";
-import type { SemanticShiftsParams } from "./tools/semantic-shifts.js";
-import type { ReverseMentionsParams } from "./tools/reverse-mentions.js";
-import type { AttentionReportParams } from "./tools/attention-report.js";
-import type { ProjectHealthParams } from "./tools/project-health.js";
-import type { DecisionMemoryParams } from "./tools/decision-memory.js";
-import type { TechRadarParams } from "./tools/tech-radar.js";
-import type { CheckDecisionAlignmentParams } from "./tools/decision-enforcement.js";
-import type { AgentMemoryParams } from "./tools/agent-memory.js";
-import type { AgentSessionBriefParams } from "./tools/agent-session-brief.js";
-import type { DelegationScoreParams } from "./tools/delegation-score.js";
-import type { DeveloperDnaParams } from "./tools/developer-dna.js";
-import type { AutophagyStatusParams } from "./tools/autophagy-status.js";
-import type { DecisionWindowsParams } from "./tools/decision-windows.js";
-import type { CompoundAdvantageParams } from "./tools/compound-advantage.js";
 
 // =============================================================================
 // Server Setup
@@ -166,8 +67,8 @@ const server = new Server(
   },
   {
     capabilities: {
-      tools: {},
-      resources: {}, // Enable MCP Resources for lazy schema loading
+      tools: { listChanged: true },
+      resources: {},
     },
   }
 );
@@ -218,6 +119,13 @@ server.setRequestHandler(ListResourcesRequestSchema, async () => {
       description: "Registry of 4DA skills for Claude Code agent dispatch",
       mimeType: "application/json",
     },
+    // Category manifest for tool discovery
+    {
+      uri: "4da://categories",
+      name: "Tool categories",
+      description: "Tool groupings by category with tag metadata",
+      mimeType: "application/json",
+    },
   ];
 
   return { resources };
@@ -228,6 +136,19 @@ server.setRequestHandler(ListResourcesRequestSchema, async () => {
  */
 server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
   const uri = request.params.uri;
+
+  // Handle category manifest
+  if (uri === "4da://categories") {
+    return {
+      contents: [
+        {
+          uri,
+          mimeType: "application/json",
+          text: JSON.stringify(getCategoryManifest(), null, 2),
+        },
+      ],
+    };
+  }
 
   // Handle skill manifest
   if (uri === "4da://skills") {
@@ -286,336 +207,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
   try {
     const database = getDatabase();
-
-    switch (name) {
-      case "get_relevant_content": {
-        const params = (args || {}) as GetRelevantContentParams;
-        const result = executeGetRelevantContent(database, params);
-        return {
-          content: [
-            {
-              type: "text",
-              text: JSON.stringify(result, null, 2),
-            },
-          ],
-        };
-      }
-
-      case "get_context": {
-        const params = (args || {}) as GetContextParams;
-        const result = executeGetContext(database, params);
-        return {
-          content: [
-            {
-              type: "text",
-              text: JSON.stringify(result, null, 2),
-            },
-          ],
-        };
-      }
-
-      case "explain_relevance": {
-        const params = (args || {}) as unknown as ExplainRelevanceParams;
-        const result = executeExplainRelevance(database, params);
-        return {
-          content: [
-            {
-              type: "text",
-              text: JSON.stringify(result, null, 2),
-            },
-          ],
-        };
-      }
-
-      case "record_feedback": {
-        const params = (args || {}) as unknown as RecordFeedbackParams;
-        const result = executeRecordFeedback(database, params);
-        return {
-          content: [
-            {
-              type: "text",
-              text: JSON.stringify(result, null, 2),
-            },
-          ],
-        };
-      }
-
-      // =========================================================================
-      // Superpower Tools (async with LLM synthesis)
-      // =========================================================================
-
-      case "score_autopsy": {
-        const params = (args || {}) as unknown as ScoreAutopsyParams;
-        const result = await executeScoreAutopsy(database, params);
-        return {
-          content: [
-            {
-              type: "text",
-              text: JSON.stringify(result, null, 2),
-            },
-          ],
-        };
-      }
-
-      case "trend_analysis": {
-        const params = (args || {}) as unknown as TrendAnalysisParams;
-        const result = await executeTrendAnalysis(database, params);
-        return {
-          content: [
-            {
-              type: "text",
-              text: JSON.stringify(result, null, 2),
-            },
-          ],
-        };
-      }
-
-      case "daily_briefing": {
-        const params = (args || {}) as unknown as DailyBriefingParams;
-        const result = await executeDailyBriefing(database, params);
-        return {
-          content: [
-            {
-              type: "text",
-              text: JSON.stringify(result, null, 2),
-            },
-          ],
-        };
-      }
-
-      case "context_analysis": {
-        const params = (args || {}) as unknown as ContextAnalysisParams;
-        const result = await executeContextAnalysis(database, params);
-        return {
-          content: [
-            {
-              type: "text",
-              text: JSON.stringify(result, null, 2),
-            },
-          ],
-        };
-      }
-
-      case "source_health": {
-        const params = (args || {}) as unknown as SourceHealthParams;
-        const result = executeSourceHealth(database, params);
-        return {
-          content: [
-            {
-              type: "text",
-              text: JSON.stringify(result, null, 2),
-            },
-          ],
-        };
-      }
-
-      case "topic_connections": {
-        const params = (args || {}) as unknown as TopicConnectionsParams;
-        const result = await executeTopicConnections(database, params);
-        return {
-          content: [
-            {
-              type: "text",
-              text: JSON.stringify(result, null, 2),
-            },
-          ],
-        };
-      }
-
-      case "config_validator": {
-        const params = (args || {}) as unknown as ConfigValidatorParams;
-        const result = executeConfigValidator(database, params);
-        return {
-          content: [
-            {
-              type: "text",
-              text: JSON.stringify(result, null, 2),
-            },
-          ],
-        };
-      }
-
-      case "llm_status": {
-        const params = (args || {}) as unknown as LLMStatusParams;
-        const result = await executeLLMStatus(database, params);
-        return {
-          content: [
-            {
-              type: "text",
-              text: JSON.stringify(result, null, 2),
-            },
-          ],
-        };
-      }
-
-      case "get_actionable_signals": {
-        const params = (args || {}) as unknown as GetActionableSignalsParams;
-        const result = executeGetActionableSignals(database, params);
-        return {
-          content: [
-            {
-              type: "text",
-              text: JSON.stringify(result, null, 2),
-            },
-          ],
-        };
-      }
-
-      // =========================================================================
-      // Innovation Feature Tools
-      // =========================================================================
-
-      case "export_context_packet": {
-        const params = (args || {}) as unknown as ExportContextParams;
-        const result = executeExportContextPacket(database, params);
-        return {
-          content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
-        };
-      }
-
-      case "knowledge_gaps": {
-        const params = (args || {}) as unknown as KnowledgeGapsParams;
-        const result = executeKnowledgeGaps(database, params);
-        return {
-          content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
-        };
-      }
-
-      case "signal_chains": {
-        const params = (args || {}) as unknown as SignalChainsParams;
-        const result = executeSignalChains(database, params);
-        return {
-          content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
-        };
-      }
-
-      case "semantic_shifts": {
-        const params = (args || {}) as unknown as SemanticShiftsParams;
-        const result = executeSemanticShifts(database, params);
-        return {
-          content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
-        };
-      }
-
-      case "reverse_mentions": {
-        const params = (args || {}) as unknown as ReverseMentionsParams;
-        const result = executeReverseMentions(database, params);
-        return {
-          content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
-        };
-      }
-
-      case "attention_report": {
-        const params = (args || {}) as unknown as AttentionReportParams;
-        const result = executeAttentionReport(database, params);
-        return {
-          content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
-        };
-      }
-
-      case "project_health": {
-        const params = (args || {}) as unknown as ProjectHealthParams;
-        const result = executeProjectHealth(database, params);
-        return {
-          content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
-        };
-      }
-
-      // =========================================================================
-      // Decision Intelligence Tools
-      // =========================================================================
-
-      case "decision_memory": {
-        const params = (args || {}) as unknown as DecisionMemoryParams;
-        const result = executeDecisionMemory(database, params);
-        return {
-          content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
-        };
-      }
-
-      case "tech_radar": {
-        const params = (args || {}) as unknown as TechRadarParams;
-        const result = executeTechRadar(database, params);
-        return {
-          content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
-        };
-      }
-
-      case "check_decision_alignment": {
-        const params = (args || {}) as unknown as CheckDecisionAlignmentParams;
-        const result = executeCheckDecisionAlignment(database, params);
-        return {
-          content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
-        };
-      }
-
-      // =========================================================================
-      // Agent Autonomy Tools
-      // =========================================================================
-
-      case "agent_memory": {
-        const params = (args || {}) as unknown as AgentMemoryParams;
-        const result = executeAgentMemory(database, params);
-        return {
-          content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
-        };
-      }
-
-      case "agent_session_brief": {
-        const params = (args || {}) as unknown as AgentSessionBriefParams;
-        const result = executeAgentSessionBrief(database, params);
-        return {
-          content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
-        };
-      }
-
-      case "delegation_score": {
-        const params = (args || {}) as unknown as DelegationScoreParams;
-        const result = executeDelegationScore(database, params);
-        return {
-          content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
-        };
-      }
-
-      case "developer_dna": {
-        const params = (args || {}) as unknown as DeveloperDnaParams;
-        const result = executeDeveloperDna(database, params);
-        return {
-          content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
-        };
-      }
-
-      // =========================================================================
-      // Intelligence Metabolism Tools
-      // =========================================================================
-
-      case "autophagy_status": {
-        const params = (args || {}) as unknown as AutophagyStatusParams;
-        const result = executeAutophagyStatus(database, params);
-        return {
-          content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
-        };
-      }
-
-      case "decision_windows": {
-        const params = (args || {}) as unknown as DecisionWindowsParams;
-        const result = executeDecisionWindows(database, params);
-        return {
-          content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
-        };
-      }
-
-      case "compound_advantage": {
-        const params = (args || {}) as unknown as CompoundAdvantageParams;
-        const result = executeCompoundAdvantage(database, params);
-        return {
-          content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
-        };
-      }
-
-      default:
-        throw new Error(`Unknown tool: ${name}`);
-    }
+    return await dispatchTool(name, database, args as Record<string, unknown> | undefined);
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
     return {
