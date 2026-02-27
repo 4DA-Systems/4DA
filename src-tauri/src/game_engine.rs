@@ -462,3 +462,111 @@ pub fn get_achievements(db: &Database) -> Vec<AchievementUnlocked> {
 
     result
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_all_achievements_count() {
+        let achievements = all_achievements();
+        assert_eq!(achievements.len(), 13, "Should have exactly 13 achievements");
+    }
+
+    #[test]
+    fn test_all_achievements_unique_ids() {
+        let achievements = all_achievements();
+        let mut ids: Vec<&str> = achievements.iter().map(|a| a.id.as_str()).collect();
+        ids.sort();
+        ids.dedup();
+        assert_eq!(ids.len(), 13, "All achievement IDs should be unique");
+    }
+
+    #[test]
+    fn test_all_achievements_have_required_fields() {
+        for a in all_achievements() {
+            assert!(!a.id.is_empty(), "Achievement ID should not be empty");
+            assert!(!a.name.is_empty(), "Achievement name should not be empty");
+            assert!(!a.description.is_empty(), "Achievement description should not be empty");
+            assert!(!a.icon.is_empty(), "Achievement icon should not be empty");
+            assert!(!a.counter_type.is_empty(), "Achievement counter_type should not be empty");
+            assert!(a.threshold > 0, "Achievement threshold should be positive");
+        }
+    }
+
+    #[test]
+    fn test_all_achievements_counter_types() {
+        let achievements = all_achievements();
+        let valid_types = ["scans", "discoveries", "saves", "briefings", "sources", "context", "streak"];
+        for a in &achievements {
+            assert!(
+                valid_types.contains(&a.counter_type.as_str()),
+                "Unknown counter type '{}' in achievement '{}'",
+                a.counter_type,
+                a.id
+            );
+        }
+    }
+
+    #[test]
+    fn test_scan_achievements_ordered_thresholds() {
+        let achievements = all_achievements();
+        let scan_thresholds: Vec<u64> = achievements
+            .iter()
+            .filter(|a| a.counter_type == "scans")
+            .map(|a| a.threshold)
+            .collect();
+        // Scan achievements: 1, 10, 50
+        assert_eq!(scan_thresholds, vec![1, 10, 50]);
+    }
+
+    #[test]
+    fn test_discovery_achievements_ordered_thresholds() {
+        let achievements = all_achievements();
+        let thresholds: Vec<u64> = achievements
+            .iter()
+            .filter(|a| a.counter_type == "discoveries")
+            .map(|a| a.threshold)
+            .collect();
+        assert_eq!(thresholds, vec![1, 10, 100]);
+    }
+
+    #[test]
+    fn test_streak_achievements_ordered_thresholds() {
+        let achievements = all_achievements();
+        let thresholds: Vec<u64> = achievements
+            .iter()
+            .filter(|a| a.counter_type == "streak")
+            .map(|a| a.threshold)
+            .collect();
+        assert_eq!(thresholds, vec![3, 7]);
+    }
+
+    #[test]
+    fn test_source_achievements_ordered_thresholds() {
+        let achievements = all_achievements();
+        let thresholds: Vec<u64> = achievements
+            .iter()
+            .filter(|a| a.counter_type == "sources")
+            .map(|a| a.threshold)
+            .collect();
+        assert_eq!(thresholds, vec![3, 5]);
+    }
+
+    #[test]
+    fn test_first_scan_achievement() {
+        let achievements = all_achievements();
+        let first = achievements.iter().find(|a| a.id == "first_scan").unwrap();
+        assert_eq!(first.threshold, 1);
+        assert_eq!(first.counter_type, "scans");
+        assert_eq!(first.name, "First Light");
+    }
+
+    #[test]
+    fn test_context_builder_achievement() {
+        let achievements = all_achievements();
+        let ctx = achievements.iter().find(|a| a.id == "context_builder").unwrap();
+        assert_eq!(ctx.threshold, 3);
+        assert_eq!(ctx.counter_type, "context");
+    }
+}

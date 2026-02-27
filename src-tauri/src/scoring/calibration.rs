@@ -110,4 +110,102 @@ mod tests {
         assert_eq!(embedding_specificity_weight("rust"), 1.0);
         assert_eq!(embedding_specificity_weight("sqlite-vss"), 1.0);
     }
+
+    // ====================================================================
+    // calibrate_score tests
+    // ====================================================================
+
+    #[test]
+    fn test_calibrate_score_zero() {
+        assert_eq!(calibrate_score(0.0), 0.0);
+    }
+
+    #[test]
+    fn test_calibrate_score_one() {
+        assert_eq!(calibrate_score(1.0), 1.0);
+    }
+
+    #[test]
+    fn test_calibrate_score_negative() {
+        assert_eq!(calibrate_score(-0.5), 0.0);
+    }
+
+    #[test]
+    fn test_calibrate_score_above_one() {
+        assert_eq!(calibrate_score(1.5), 1.0);
+    }
+
+    #[test]
+    fn test_calibrate_score_midpoint() {
+        // At the sigmoid center (0.48), output should be close to 0.5
+        let cal = calibrate_score(0.48);
+        assert!((cal - 0.5).abs() < 0.05, "At sigmoid center, calibrated should be ~0.5, got {}", cal);
+    }
+
+    #[test]
+    fn test_calibrate_score_monotonic() {
+        // Calibration should be monotonically increasing
+        let values: Vec<f32> = (0..=10).map(|i| i as f32 / 10.0).collect();
+        let calibrated: Vec<f32> = values.iter().map(|&v| calibrate_score(v)).collect();
+        for i in 0..calibrated.len() - 1 {
+            assert!(
+                calibrated[i] <= calibrated[i + 1],
+                "calibrate_score should be monotonic: {} > {} at inputs ({}, {})",
+                calibrated[i], calibrated[i + 1], values[i], values[i + 1]
+            );
+        }
+    }
+
+    #[test]
+    fn test_calibrate_score_spreads_midrange() {
+        // The typical [0.40-0.56] band should spread to a wider range
+        let low_mid = calibrate_score(0.40);
+        let high_mid = calibrate_score(0.56);
+        let spread = high_mid - low_mid;
+        assert!(
+            spread > 0.3,
+            "Midrange [0.40-0.56] should spread to >0.3 range, got {}",
+            spread
+        );
+    }
+
+    // ====================================================================
+    // embedding_specificity_weight edge cases
+    // ====================================================================
+
+    #[test]
+    fn test_embedding_specificity_case_insensitive() {
+        assert_eq!(embedding_specificity_weight("OPEN SOURCE"), 0.40);
+        assert_eq!(embedding_specificity_weight("Machine Learning"), 0.40);
+    }
+
+    #[test]
+    fn test_embedding_specificity_contains_broad() {
+        // "artificial intelligence" contains "ai"
+        assert_eq!(embedding_specificity_weight("artificial intelligence"), 0.40);
+    }
+
+    #[test]
+    fn test_embedding_specificity_empty_string() {
+        // Empty string doesn't match any broad term
+        assert_eq!(embedding_specificity_weight(""), 1.0);
+    }
+
+    // ====================================================================
+    // BROAD_INTEREST_TERMS coverage
+    // ====================================================================
+
+    #[test]
+    fn test_broad_interest_terms_complete() {
+        // Verify key terms are in the list
+        let key_terms = ["open source", "ai", "ml", "cloud", "web", "programming",
+                         "software", "technology", "development", "security"];
+        for term in &key_terms {
+            assert!(
+                BROAD_INTEREST_TERMS.contains(term),
+                "'{}' should be in BROAD_INTEREST_TERMS",
+                term
+            );
+        }
+    }
 }

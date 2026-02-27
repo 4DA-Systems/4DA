@@ -727,4 +727,164 @@ mod tests {
         assert_eq!(SignalPriority::from_score(4), SignalPriority::Critical);
         assert_eq!(SignalPriority::from_score(5), SignalPriority::Critical);
     }
+
+    // ====================================================================
+    // SignalType slug/label tests
+    // ====================================================================
+
+    #[test]
+    fn test_signal_type_slugs() {
+        assert_eq!(SignalType::SecurityAlert.slug(), "security_alert");
+        assert_eq!(SignalType::BreakingChange.slug(), "breaking_change");
+        assert_eq!(SignalType::ToolDiscovery.slug(), "tool_discovery");
+        assert_eq!(SignalType::TechTrend.slug(), "tech_trend");
+        assert_eq!(SignalType::Learning.slug(), "learning");
+        assert_eq!(SignalType::CompetitiveIntel.slug(), "competitive_intel");
+    }
+
+    #[test]
+    fn test_signal_type_labels() {
+        assert_eq!(SignalType::SecurityAlert.label(), "Security Alert");
+        assert_eq!(SignalType::BreakingChange.label(), "Breaking Change");
+        assert_eq!(SignalType::ToolDiscovery.label(), "Tool Discovery");
+        assert_eq!(SignalType::TechTrend.label(), "Tech Trend");
+        assert_eq!(SignalType::Learning.label(), "Learning");
+        assert_eq!(SignalType::CompetitiveIntel.label(), "Competitive Intel");
+    }
+
+    #[test]
+    fn test_signal_type_base_weights() {
+        // Security and breaking changes have weight 2
+        assert_eq!(SignalType::SecurityAlert.base_weight(), 2);
+        assert_eq!(SignalType::BreakingChange.base_weight(), 2);
+        assert_eq!(SignalType::ToolDiscovery.base_weight(), 2);
+        // Trends, learning, intel have weight 1
+        assert_eq!(SignalType::TechTrend.base_weight(), 1);
+        assert_eq!(SignalType::Learning.base_weight(), 1);
+        assert_eq!(SignalType::CompetitiveIntel.base_weight(), 1);
+    }
+
+    // ====================================================================
+    // SignalPriority label tests
+    // ====================================================================
+
+    #[test]
+    fn test_priority_labels() {
+        assert_eq!(SignalPriority::Low.label(), "low");
+        assert_eq!(SignalPriority::Medium.label(), "medium");
+        assert_eq!(SignalPriority::High.label(), "high");
+        assert_eq!(SignalPriority::Critical.label(), "critical");
+    }
+
+    #[test]
+    fn test_priority_ordering() {
+        assert!(SignalPriority::Low < SignalPriority::Medium);
+        assert!(SignalPriority::Medium < SignalPriority::High);
+        assert!(SignalPriority::High < SignalPriority::Critical);
+    }
+
+    #[test]
+    fn test_priority_from_score_zero() {
+        assert_eq!(SignalPriority::from_score(0), SignalPriority::Low);
+    }
+
+    // ====================================================================
+    // SignalHorizon tests
+    // ====================================================================
+
+    #[test]
+    fn test_signal_horizon_labels() {
+        assert_eq!(SignalHorizon::Tactical.label(), "tactical");
+        assert_eq!(SignalHorizon::Strategic.label(), "strategic");
+    }
+
+    // ====================================================================
+    // has_word_boundary additional tests
+    // ====================================================================
+
+    #[test]
+    fn test_word_boundary_at_start() {
+        assert!(has_word_boundary("rust is great", "rust"));
+    }
+
+    #[test]
+    fn test_word_boundary_at_end() {
+        assert!(has_word_boundary("I love rust", "rust"));
+    }
+
+    #[test]
+    fn test_word_boundary_with_punctuation() {
+        assert!(has_word_boundary("rust, a systems language", "rust"));
+        assert!(has_word_boundary("try rust.", "rust"));
+    }
+
+    #[test]
+    fn test_word_boundary_false_positive_prevention() {
+        assert!(!has_word_boundary("frustrating", "rust"));
+        assert!(!has_word_boundary("entrust", "rust"));
+        assert!(!has_word_boundary("crusty", "rust"));
+    }
+
+    #[test]
+    fn test_word_boundary_not_found() {
+        assert!(!has_word_boundary("python is great", "rust"));
+    }
+
+    #[test]
+    fn test_word_boundary_empty_text() {
+        assert!(!has_word_boundary("", "rust"));
+    }
+
+    // ====================================================================
+    // Classifier: single keyword should not classify
+    // ====================================================================
+
+    #[test]
+    fn test_single_keyword_does_not_classify() {
+        let classifier = SignalClassifier::new();
+        // Only one keyword "tutorial" — should not be enough
+        let result = classifier.classify(
+            "A tutorial on cooking",
+            "Learn to cook",
+            0.3,
+            &[],
+            &[],
+        );
+        assert!(result.is_none(), "Single keyword should not classify");
+    }
+
+    // ====================================================================
+    // Horizon classification
+    // ====================================================================
+
+    #[test]
+    fn test_security_alert_is_tactical() {
+        let classifier = SignalClassifier::new();
+        let declared = vec!["node".to_string()];
+        let result = classifier.classify(
+            "Critical CVE in Node.js: RCE vulnerability",
+            "A severe security flaw was discovered. Patch immediately.",
+            0.8,
+            &declared,
+            &declared,
+        );
+        if let Some(c) = result {
+            assert_eq!(c.horizon, SignalHorizon::Tactical);
+        }
+    }
+
+    #[test]
+    fn test_tech_trend_is_strategic() {
+        let classifier = SignalClassifier::new();
+        let result = classifier.classify(
+            "State of JavaScript 2026 Survey Results: Growing Adoption of New Frameworks",
+            "The ecosystem report shows accelerating changes",
+            0.5,
+            &[],
+            &[],
+        );
+        if let Some(c) = result {
+            assert_eq!(c.horizon, SignalHorizon::Strategic);
+        }
+    }
 }

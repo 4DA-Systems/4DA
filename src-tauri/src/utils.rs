@@ -730,4 +730,237 @@ mod tests {
         let sim = cosine_similarity(&a, &b);
         assert!((sim - (-1.0)).abs() < 0.001);
     }
+
+    // ====================================================================
+    // Additional Utils Tests
+    // ====================================================================
+
+    #[test]
+    fn test_vector_norm_unit_vector() {
+        let v = vec![1.0, 0.0, 0.0];
+        assert!((vector_norm(&v) - 1.0).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_vector_norm_zero_vector() {
+        let v = vec![0.0, 0.0, 0.0];
+        assert!((vector_norm(&v) - 0.0).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_vector_norm_3_4_5() {
+        let v = vec![3.0, 4.0];
+        assert!((vector_norm(&v) - 5.0).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_cosine_similarity_with_norm_identical() {
+        let a = vec![1.0, 2.0, 3.0];
+        let a_norm = vector_norm(&a);
+        let sim = cosine_similarity_with_norm(&a, a_norm, &a);
+        assert!((sim - 1.0).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_cosine_similarity_with_norm_zero_a() {
+        let a = vec![0.0, 0.0, 0.0];
+        let b = vec![1.0, 2.0, 3.0];
+        let sim = cosine_similarity_with_norm(&a, 0.0, &b);
+        assert_eq!(sim, 0.0);
+    }
+
+    #[test]
+    fn test_cosine_similarity_with_norm_zero_b() {
+        let a = vec![1.0, 2.0, 3.0];
+        let a_norm = vector_norm(&a);
+        let b = vec![0.0, 0.0, 0.0];
+        let sim = cosine_similarity_with_norm(&a, a_norm, &b);
+        assert_eq!(sim, 0.0);
+    }
+
+    #[test]
+    fn test_cosine_similarity_with_norm_mismatched_length() {
+        let a = vec![1.0, 2.0];
+        let b = vec![1.0, 2.0, 3.0];
+        let sim = cosine_similarity_with_norm(&a, vector_norm(&a), &b);
+        assert_eq!(sim, 0.0);
+    }
+
+    #[test]
+    fn test_cosine_similarity_with_norm_empty() {
+        let a: Vec<f32> = vec![];
+        let b: Vec<f32> = vec![];
+        let sim = cosine_similarity_with_norm(&a, 0.0, &b);
+        assert_eq!(sim, 0.0);
+    }
+
+    #[test]
+    fn test_cosine_similarity_empty_vectors() {
+        let a: Vec<f32> = vec![];
+        let b: Vec<f32> = vec![];
+        let sim = cosine_similarity(&a, &b);
+        assert_eq!(sim, 0.0);
+    }
+
+    #[test]
+    fn test_cosine_similarity_mismatched_length() {
+        let a = vec![1.0, 2.0];
+        let b = vec![1.0, 2.0, 3.0];
+        let sim = cosine_similarity(&a, &b);
+        assert_eq!(sim, 0.0);
+    }
+
+    #[test]
+    fn test_decode_html_entities_all() {
+        assert_eq!(decode_html_entities("&amp;"), "&");
+        assert_eq!(decode_html_entities("&lt;"), "<");
+        assert_eq!(decode_html_entities("&gt;"), ">");
+        assert_eq!(decode_html_entities("&quot;"), "\"");
+        assert_eq!(decode_html_entities("&apos;"), "'");
+        assert_eq!(decode_html_entities("&#39;"), "'");
+        assert_eq!(decode_html_entities("&#x27;"), "'");
+        assert_eq!(decode_html_entities("&nbsp;"), " ");
+    }
+
+    #[test]
+    fn test_decode_html_entities_multiple() {
+        assert_eq!(decode_html_entities("A &amp; B &lt; C"), "A & B < C");
+    }
+
+    #[test]
+    fn test_decode_html_entities_no_entities() {
+        assert_eq!(decode_html_entities("plain text"), "plain text");
+    }
+
+    #[test]
+    fn test_build_embedding_text_with_content() {
+        let result = build_embedding_text("Title", "Content");
+        assert_eq!(result, "Title\n\nContent");
+    }
+
+    #[test]
+    fn test_build_embedding_text_empty_content() {
+        let result = build_embedding_text("Title Only", "");
+        assert_eq!(result, "Title Only");
+    }
+
+    #[test]
+    fn test_build_embedding_text_html_entities() {
+        let result = build_embedding_text("Rust &amp; Go", "Compare &lt;languages&gt;");
+        assert_eq!(result, "Rust & Go\n\nCompare <languages>");
+    }
+
+    #[test]
+    fn test_truncate_utf8_zero() {
+        assert_eq!(truncate_utf8("hello", 0), "");
+    }
+
+    #[test]
+    fn test_truncate_utf8_exact_length() {
+        assert_eq!(truncate_utf8("hello", 5), "hello");
+    }
+
+    #[test]
+    fn test_extract_topics_multiword_phrases() {
+        let topics = extract_topics("Machine Learning with Open Source tools", "");
+        assert!(topics.contains(&"machine learning".to_string()));
+        assert!(topics.contains(&"open source".to_string()));
+    }
+
+    #[test]
+    fn test_extract_topics_no_stopwords() {
+        let topics = extract_topics("The Best New Way For Your Project", "");
+        // None of these stopwords should appear in topics (they're in the exclusion list)
+        assert!(!topics.contains(&"the".to_string()));
+        assert!(!topics.contains(&"best".to_string()));
+        assert!(!topics.contains(&"new".to_string()));
+        assert!(!topics.contains(&"way".to_string()));
+        assert!(!topics.contains(&"for".to_string()));
+        assert!(!topics.contains(&"your".to_string()));
+        assert!(!topics.contains(&"project".to_string()));
+    }
+
+    #[test]
+    fn test_extract_topics_known_single_keywords() {
+        let topics = extract_topics("docker kubernetes aws", "");
+        assert!(topics.contains(&"docker".to_string()));
+        assert!(topics.contains(&"kubernetes".to_string()));
+        assert!(topics.contains(&"aws".to_string()));
+    }
+
+    #[test]
+    fn test_extract_topics_capitalized_words_from_title() {
+        let topics = extract_topics("Building Tauri Desktop Apps", "");
+        assert!(topics.contains(&"tauri".to_string()));
+    }
+
+    #[test]
+    fn test_extract_topics_content_truncation() {
+        // Content is truncated to first 500 chars
+        let long_content = "x ".repeat(300); // 600 chars
+        let topics = extract_topics("Rust", &long_content);
+        assert!(topics.contains(&"rust".to_string()));
+    }
+
+    #[test]
+    fn test_check_exclusions_case_insensitive() {
+        let topics = vec!["Crypto".to_string()];
+        let exclusions = vec!["crypto".to_string()];
+        assert!(check_exclusions(&topics, &exclusions).is_some());
+    }
+
+    #[test]
+    fn test_check_exclusions_partial_match() {
+        let topics = vec!["cryptocurrency".to_string()];
+        let exclusions = vec!["crypto".to_string()];
+        assert!(check_exclusions(&topics, &exclusions).is_some());
+    }
+
+    #[test]
+    fn test_check_exclusions_empty_topics() {
+        let topics: Vec<String> = vec![];
+        let exclusions = vec!["crypto".to_string()];
+        assert!(check_exclusions(&topics, &exclusions).is_none());
+    }
+
+    #[test]
+    fn test_check_exclusions_empty_exclusions() {
+        let topics = vec!["rust".to_string()];
+        let exclusions: Vec<String> = vec![];
+        assert!(check_exclusions(&topics, &exclusions).is_none());
+    }
+
+    #[test]
+    fn test_chunk_text_empty() {
+        let chunks = chunk_text("", "test.txt");
+        assert!(chunks.is_empty());
+    }
+
+    #[test]
+    fn test_chunk_text_whitespace_only() {
+        let chunks = chunk_text("   \n\n   ", "test.txt");
+        assert!(chunks.is_empty());
+    }
+
+    #[test]
+    fn test_chunk_text_single_paragraph() {
+        let text = "A single paragraph of moderate length.";
+        let chunks = chunk_text(text, "src.rs");
+        assert_eq!(chunks.len(), 1);
+        assert_eq!(chunks[0].0, "src.rs");
+        assert_eq!(chunks[0].1, text);
+    }
+
+    #[test]
+    fn test_chunk_text_respects_paragraph_breaks() {
+        let p1 = "A".repeat(400);
+        let p2 = "B".repeat(400);
+        let text = format!("{}\n\n{}", p1, p2);
+        let chunks = chunk_text(&text, "test.txt");
+        // Each paragraph is >400 chars, max chunk = 500, so they should split
+        assert!(
+            chunks.len() >= 2,
+            "Long paragraphs should split into multiple chunks"
+        );
+    }
 }

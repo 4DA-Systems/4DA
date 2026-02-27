@@ -609,4 +609,183 @@ mod tests {
         assert!(is_notable_dependency("@prisma/client"));
         assert!(!is_notable_dependency("my-random-lib"));
     }
+
+    // ====================================================================
+    // is_notable_dependency comprehensive tests
+    // ====================================================================
+
+    #[test]
+    fn test_notable_dependency_rust_ecosystem() {
+        assert!(is_notable_dependency("tokio"));
+        assert!(is_notable_dependency("serde"));
+        assert!(is_notable_dependency("reqwest"));
+        assert!(is_notable_dependency("axum"));
+        assert!(is_notable_dependency("tauri"));
+        assert!(is_notable_dependency("hyper"));
+    }
+
+    #[test]
+    fn test_notable_dependency_js_ecosystem() {
+        assert!(is_notable_dependency("react"));
+        assert!(is_notable_dependency("vue"));
+        assert!(is_notable_dependency("angular"));
+        assert!(is_notable_dependency("next"));
+        assert!(is_notable_dependency("express"));
+        assert!(is_notable_dependency("vite"));
+        assert!(is_notable_dependency("prisma"));
+    }
+
+    #[test]
+    fn test_notable_dependency_python_ecosystem() {
+        assert!(is_notable_dependency("django"));
+        assert!(is_notable_dependency("flask"));
+        assert!(is_notable_dependency("fastapi"));
+        assert!(is_notable_dependency("numpy"));
+        assert!(is_notable_dependency("pandas"));
+        assert!(is_notable_dependency("tensorflow"));
+    }
+
+    #[test]
+    fn test_notable_dependency_databases() {
+        assert!(is_notable_dependency("postgresql"));
+        assert!(is_notable_dependency("mysql"));
+        assert!(is_notable_dependency("sqlite"));
+        assert!(is_notable_dependency("mongodb"));
+        assert!(is_notable_dependency("redis"));
+    }
+
+    #[test]
+    fn test_notable_dependency_case_insensitive() {
+        assert!(is_notable_dependency("React"));
+        assert!(is_notable_dependency("TOKIO"));
+        assert!(is_notable_dependency("Django"));
+    }
+
+    #[test]
+    fn test_not_notable_dependency() {
+        assert!(!is_notable_dependency("my-lib"));
+        assert!(!is_notable_dependency("custom-tool"));
+        assert!(!is_notable_dependency("utils"));
+        assert!(!is_notable_dependency("helpers"));
+    }
+
+    // ====================================================================
+    // parse_hours_ago tests
+    // ====================================================================
+
+    #[test]
+    fn test_parse_hours_ago_valid_timestamp() {
+        let now = chrono::Utc::now().naive_utc();
+        let two_hours_ago = now - chrono::Duration::hours(2);
+        let ts_str = two_hours_ago.format("%Y-%m-%d %H:%M:%S").to_string();
+        let hours = parse_hours_ago(&ts_str);
+        assert!((hours - 2.0).abs() < 0.1, "Should be ~2 hours ago, got {}", hours);
+    }
+
+    #[test]
+    fn test_parse_hours_ago_invalid_timestamp() {
+        let hours = parse_hours_ago("not-a-timestamp");
+        assert_eq!(hours, 24.0, "Invalid timestamps should return 24.0");
+    }
+
+    #[test]
+    fn test_parse_hours_ago_empty_string() {
+        let hours = parse_hours_ago("");
+        assert_eq!(hours, 24.0, "Empty string should return 24.0");
+    }
+
+    #[test]
+    fn test_parse_hours_ago_recent() {
+        let now = chrono::Utc::now().naive_utc();
+        let ts_str = now.format("%Y-%m-%d %H:%M:%S").to_string();
+        let hours = parse_hours_ago(&ts_str);
+        assert!(hours < 0.1, "Current time should be ~0 hours ago, got {}", hours);
+    }
+
+    // ====================================================================
+    // merge_detected_tech tests
+    // ====================================================================
+
+    #[test]
+    fn test_merge_detected_tech_empty() {
+        let result = merge_detected_tech(vec![]);
+        assert!(result.is_empty());
+    }
+
+    #[test]
+    fn test_merge_detected_tech_no_duplicates() {
+        let tech = vec![
+            DetectedTech {
+                name: "Rust".to_string(),
+                category: TechCategory::Language,
+                confidence: 0.9,
+                source: DetectionSource::Manifest,
+                evidence: vec!["Cargo.toml".to_string()],
+            },
+            DetectedTech {
+                name: "TypeScript".to_string(),
+                category: TechCategory::Language,
+                confidence: 0.8,
+                source: DetectionSource::FileExtension,
+                evidence: vec![".ts files".to_string()],
+            },
+        ];
+        let result = merge_detected_tech(tech);
+        assert_eq!(result.len(), 2);
+    }
+
+    #[test]
+    fn test_merge_detected_tech_deduplicates() {
+        let tech = vec![
+            DetectedTech {
+                name: "Rust".to_string(),
+                category: TechCategory::Language,
+                confidence: 0.7,
+                source: DetectionSource::FileExtension,
+                evidence: vec![".rs files".to_string()],
+            },
+            DetectedTech {
+                name: "rust".to_string(),
+                category: TechCategory::Language,
+                confidence: 0.9,
+                source: DetectionSource::Manifest,
+                evidence: vec!["Cargo.toml".to_string()],
+            },
+        ];
+        let result = merge_detected_tech(tech);
+        assert_eq!(result.len(), 1, "Duplicate names should be merged");
+        assert_eq!(result[0].confidence, 0.9, "Should keep higher confidence");
+        assert_eq!(result[0].evidence.len(), 2, "Evidence should be merged");
+    }
+
+    #[test]
+    fn test_merge_detected_tech_sorted_by_confidence() {
+        let tech = vec![
+            DetectedTech {
+                name: "Python".to_string(),
+                category: TechCategory::Language,
+                confidence: 0.5,
+                source: DetectionSource::FileExtension,
+                evidence: vec![],
+            },
+            DetectedTech {
+                name: "Rust".to_string(),
+                category: TechCategory::Language,
+                confidence: 0.9,
+                source: DetectionSource::Manifest,
+                evidence: vec![],
+            },
+            DetectedTech {
+                name: "Go".to_string(),
+                category: TechCategory::Language,
+                confidence: 0.7,
+                source: DetectionSource::FileExtension,
+                evidence: vec![],
+            },
+        ];
+        let result = merge_detected_tech(tech);
+        assert_eq!(result.len(), 3);
+        assert!(result[0].confidence >= result[1].confidence);
+        assert!(result[1].confidence >= result[2].confidence);
+    }
 }

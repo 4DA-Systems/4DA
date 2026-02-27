@@ -307,6 +307,200 @@ mod tests {
         sort_results(&mut empty);
         assert!(empty.is_empty(), "Sort of empty vec should remain empty");
     }
+
+    // ====================================================================
+    // normalize_result_url tests
+    // ====================================================================
+
+    #[test]
+    fn test_normalize_url_strips_fragment() {
+        assert_eq!(
+            normalize_result_url("https://example.com/page#section"),
+            "https://example.com/page"
+        );
+    }
+
+    #[test]
+    fn test_normalize_url_strips_query() {
+        assert_eq!(
+            normalize_result_url("https://example.com/page?ref=hn"),
+            "https://example.com/page"
+        );
+    }
+
+    #[test]
+    fn test_normalize_url_http_to_https() {
+        assert_eq!(
+            normalize_result_url("http://example.com/page"),
+            "https://example.com/page"
+        );
+    }
+
+    #[test]
+    fn test_normalize_url_strips_www() {
+        assert_eq!(
+            normalize_result_url("https://www.example.com/page"),
+            "https://example.com/page"
+        );
+    }
+
+    #[test]
+    fn test_normalize_url_strips_trailing_slash() {
+        assert_eq!(
+            normalize_result_url("https://example.com/page/"),
+            "https://example.com/page"
+        );
+    }
+
+    #[test]
+    fn test_normalize_url_lowercases() {
+        assert_eq!(
+            normalize_result_url("https://Example.COM/Page"),
+            "https://example.com/page"
+        );
+    }
+
+    #[test]
+    fn test_normalize_url_combined() {
+        assert_eq!(
+            normalize_result_url("http://www.Example.COM/Page/?ref=hn#section"),
+            "https://example.com/page"
+        );
+    }
+
+    // ====================================================================
+    // normalize_result_title tests
+    // ====================================================================
+
+    #[test]
+    fn test_normalize_title_strips_show_hn() {
+        let a = normalize_result_title("Show HN: My Cool Project");
+        let b = normalize_result_title("My Cool Project");
+        assert_eq!(a, b);
+    }
+
+    #[test]
+    fn test_normalize_title_strips_ask_hn() {
+        let a = normalize_result_title("Ask HN: Best Rust Resources?");
+        let b = normalize_result_title("Best Rust Resources?");
+        assert_eq!(a, b);
+    }
+
+    #[test]
+    fn test_normalize_title_strips_punctuation() {
+        let normalized = normalize_result_title("Hello, World! (2025)");
+        // Should strip commas, exclamation, parens
+        assert!(!normalized.contains(','));
+        assert!(!normalized.contains('!'));
+        assert!(!normalized.contains('('));
+    }
+
+    #[test]
+    fn test_normalize_title_lowercases() {
+        let normalized = normalize_result_title("Rust Async Patterns");
+        assert_eq!(normalized, "rust async patterns");
+    }
+
+    #[test]
+    fn test_normalize_title_normalizes_whitespace() {
+        let normalized = normalize_result_title("  Too   Many    Spaces  ");
+        assert_eq!(normalized, "too many spaces");
+    }
+
+    // ====================================================================
+    // dedup additional edge cases
+    // ====================================================================
+
+    #[test]
+    fn test_dedup_no_url_no_dup() {
+        let mut items = vec![
+            make_item("Unique Title One", None, 0.8),
+            make_item("Unique Title Two", None, 0.6),
+        ];
+        dedup_results(&mut items);
+        assert_eq!(items.len(), 2, "Unique titles should not be deduped");
+    }
+
+    #[test]
+    fn test_dedup_url_normalization_catches_variants() {
+        let mut items = vec![
+            make_item("Article A", Some("http://www.example.com/page/"), 0.8),
+            make_item("Article B", Some("https://example.com/page"), 0.6),
+        ];
+        dedup_results(&mut items);
+        assert_eq!(items.len(), 1, "URL variants should be deduped after normalization");
+    }
+
+    #[test]
+    fn test_sort_all_excluded() {
+        let mut items = vec![
+            {
+                let mut item = make_item("A", None, 0.9);
+                item.excluded = true;
+                item
+            },
+            {
+                let mut item = make_item("B", None, 0.3);
+                item.excluded = true;
+                item
+            },
+        ];
+        sort_results(&mut items);
+        assert!(items[0].top_score >= items[1].top_score);
+    }
+
+    // ====================================================================
+    // compute_serendipity_candidates tests
+    // ====================================================================
+
+    #[test]
+    fn test_serendipity_empty_results() {
+        let results: Vec<SourceRelevance> = vec![];
+        let candidates = compute_serendipity_candidates(&results, 20);
+        assert!(candidates.is_empty());
+    }
+
+    #[test]
+    fn test_serendipity_all_relevant() {
+        // If all items are relevant, no serendipity candidates
+        let results = vec![make_item("Relevant", None, 0.8)];
+        let candidates = compute_serendipity_candidates(&results, 20);
+        assert!(candidates.is_empty(), "All-relevant results should yield no serendipity");
+    }
+
+    #[test]
+    fn test_serendipity_marks_items_correctly() {
+        let mut items = vec![
+            make_item("Relevant", None, 0.8),
+            {
+                let mut item = make_item("Near miss", None, 0.4);
+                item.relevant = false;
+                item.context_score = 0.3; // Above SERENDIPITY_MIN_AXIS_SCORE
+                item
+            },
+        ];
+        items[0].relevant = true;
+        let candidates = compute_serendipity_candidates(&items, 100);
+        for c in &candidates {
+            assert!(c.serendipity, "Serendipity candidates should be marked");
+            assert!(c.relevant, "Serendipity candidates should be made relevant");
+            assert!(c.explanation.is_some(), "Should have explanation");
+        }
+    }
+
+    #[test]
+    fn test_serendipity_budget_caps_at_five() {
+        let mut results = vec![make_item("Relevant", None, 0.8)];
+        // Add many non-relevant items with signal
+        for i in 0..20 {
+            let mut item = make_item(&format!("Miss {}", i), None, 0.3);
+            item.relevant = false;
+            item.context_score = 0.3;
+            results.push(item);
+        }
+        let candidates = compute_serendipity_candidates(&results, 100);
+        assert!(candidates.len() <= 5, "Budget should cap at 5, got {}", candidates.len());
+    }
 }
 
 /// Compute serendipity candidates from items that failed the confirmation gate

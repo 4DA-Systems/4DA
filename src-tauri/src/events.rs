@@ -171,3 +171,116 @@ pub(crate) fn void_signal_error(app: &AppHandle) {
         void_engine::emit_if_changed(app, signal);
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn make_result(
+        signal_type: Option<&str>,
+        signal_priority: Option<&str>,
+    ) -> SourceRelevance {
+        SourceRelevance {
+            id: 0,
+            title: "test".to_string(),
+            url: None,
+            top_score: 0.5,
+            matches: vec![],
+            relevant: true,
+            context_score: 0.0,
+            interest_score: 0.0,
+            excluded: false,
+            excluded_by: None,
+            source_type: "test".to_string(),
+            explanation: None,
+            confidence: None,
+            score_breakdown: None,
+            signal_type: signal_type.map(|s| s.to_string()),
+            signal_priority: signal_priority.map(|s| s.to_string()),
+            signal_action: None,
+            signal_triggers: None,
+            signal_horizon: None,
+            similar_count: 0,
+            similar_titles: vec![],
+            serendipity: false,
+            streets_engine: None,
+        }
+    }
+
+    #[test]
+    fn test_extract_signal_summary_empty() {
+        let results: Vec<SourceRelevance> = vec![];
+        let summary = extract_signal_summary(&results);
+        assert!(summary.is_none());
+    }
+
+    #[test]
+    fn test_extract_signal_summary_no_signals() {
+        let results = vec![make_result(None, None)];
+        let summary = extract_signal_summary(&results);
+        assert!(summary.is_none());
+    }
+
+    #[test]
+    fn test_extract_signal_summary_single_signal() {
+        let results = vec![make_result(Some("security_alert"), Some("critical"))];
+        let summary = extract_signal_summary(&results).unwrap();
+        assert_eq!(summary.max_priority, 4);
+        assert_eq!(summary.critical_count, 1);
+        assert_eq!(summary.dominant_type, Some("security_alert".to_string()));
+        assert!(summary.urgency_score > 0.0);
+        assert!(summary.urgency_score <= 1.0);
+    }
+
+    #[test]
+    fn test_extract_signal_summary_multiple_types() {
+        let results = vec![
+            make_result(Some("security_alert"), Some("critical")),
+            make_result(Some("security_alert"), Some("high")),
+            make_result(Some("tool_discovery"), Some("medium")),
+        ];
+        let summary = extract_signal_summary(&results).unwrap();
+        assert_eq!(summary.max_priority, 4);
+        assert_eq!(summary.critical_count, 1);
+        assert_eq!(summary.dominant_type, Some("security_alert".to_string()));
+        assert_eq!(*summary.signal_type_counts.get("security_alert").unwrap(), 2);
+        assert_eq!(*summary.signal_type_counts.get("tool_discovery").unwrap(), 1);
+    }
+
+    #[test]
+    fn test_extract_signal_summary_priority_mapping() {
+        // Test each priority level mapping
+        let tests = vec![
+            ("critical", 4u8),
+            ("high", 3),
+            ("medium", 2),
+            ("low", 1),
+        ];
+        for (label, expected) in tests {
+            let results = vec![make_result(Some("learning"), Some(label))];
+            let summary = extract_signal_summary(&results).unwrap();
+            assert_eq!(summary.max_priority, expected, "Priority '{}' should map to {}", label, expected);
+        }
+    }
+
+    #[test]
+    fn test_extract_signal_summary_urgency_capped() {
+        // Security alerts have weight 4.0, should never exceed 1.0
+        let results: Vec<SourceRelevance> = (0..10)
+            .map(|_| make_result(Some("security_alert"), Some("critical")))
+            .collect();
+        let summary = extract_signal_summary(&results).unwrap();
+        assert!(summary.urgency_score <= 1.0, "Urgency should be capped at 1.0");
+    }
+
+    #[test]
+    fn test_extract_signal_summary_mixed_with_none() {
+        let results = vec![
+            make_result(Some("tech_trend"), Some("low")),
+            make_result(None, None), // No signal
+            make_result(Some("learning"), Some("medium")),
+        ];
+        let summary = extract_signal_summary(&results).unwrap();
+        assert_eq!(summary.max_priority, 2); // medium = 2
+    }
+}

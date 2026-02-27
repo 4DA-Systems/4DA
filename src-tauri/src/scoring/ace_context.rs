@@ -152,4 +152,69 @@ mod tests {
         assert!(ctx.anti_topics.is_empty());
         assert!(ctx.topic_affinities.is_empty());
     }
+
+    #[test]
+    fn test_check_ace_exclusions_no_anti_topics() {
+        let ctx = ACEContext::default();
+        let topics = vec!["rust".to_string(), "tauri".to_string()];
+        assert!(check_ace_exclusions(&topics, &ctx).is_none());
+    }
+
+    #[test]
+    fn test_check_ace_exclusions_match() {
+        let mut ctx = ACEContext::default();
+        ctx.anti_topics.push("crypto".to_string());
+        let topics = vec!["cryptocurrency".to_string()];
+        let result = check_ace_exclusions(&topics, &ctx);
+        assert!(result.is_some());
+        assert!(result.unwrap().contains("crypto"));
+    }
+
+    #[test]
+    fn test_check_ace_exclusions_reverse_match() {
+        let mut ctx = ACEContext::default();
+        ctx.anti_topics.push("cryptocurrency".to_string());
+        let topics = vec!["crypto".to_string()];
+        let result = check_ace_exclusions(&topics, &ctx);
+        assert!(result.is_some());
+    }
+
+    #[test]
+    fn test_check_ace_exclusions_no_match() {
+        let mut ctx = ACEContext::default();
+        ctx.anti_topics.push("crypto".to_string());
+        let topics = vec!["rust".to_string(), "tauri".to_string()];
+        assert!(check_ace_exclusions(&topics, &ctx).is_none());
+    }
+
+    #[test]
+    fn test_check_ace_exclusions_empty_topics() {
+        let mut ctx = ACEContext::default();
+        ctx.anti_topics.push("crypto".to_string());
+        let topics: Vec<String> = vec![];
+        assert!(check_ace_exclusions(&topics, &ctx).is_none());
+    }
+
+    #[test]
+    fn test_check_ace_exclusions_multiple_anti_topics() {
+        let mut ctx = ACEContext::default();
+        ctx.anti_topics.push("crypto".to_string());
+        ctx.anti_topics.push("nft".to_string());
+        let topics = vec!["nft".to_string()];
+        let result = check_ace_exclusions(&topics, &ctx);
+        assert!(result.is_some());
+    }
+
+    #[test]
+    fn test_ace_context_dependency_names_default() {
+        let ctx = ACEContext::default();
+        assert!(ctx.dependency_names.is_empty());
+        assert!(ctx.dependency_info.is_empty());
+    }
+
+    #[test]
+    fn test_ace_context_anti_topic_confidence_default() {
+        let ctx = ACEContext::default();
+        assert!(ctx.anti_topic_confidence.is_empty());
+    }
 }
