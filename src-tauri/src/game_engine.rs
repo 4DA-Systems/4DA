@@ -1,378 +1,364 @@
-//! GAME Engine -- achievement tracking and visual feedback for 4DA.
-//! Tracks developer milestones and emits celebration events.
-
-use serde::{Deserialize, Serialize};
-use std::sync::Arc;
-use tracing::info;
+//! GAME Engine — Achievement tracking for 4DA
+//!
+//! Tracks user activity counters and unlocks achievements
+//! when thresholds are reached. Stores state in SQLite.
 
 use crate::db::Database;
+use serde::{Deserialize, Serialize};
+use tracing::{debug, info};
 
-/// An achievement definition with current progress
+/// Achievement definition
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Achievement {
     pub id: String,
-    pub title: String,
+    pub name: String,
     pub description: String,
     pub icon: String,
+    pub counter_type: String,
     pub threshold: u64,
-    pub unlocked: bool,
-    pub unlocked_at: Option<String>,
-    pub progress: u64,
 }
 
-/// Event payload when an achievement is unlocked
+/// Achievement unlock event
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AchievementUnlocked {
     pub id: String,
-    pub title: String,
+    pub name: String,
     pub description: String,
     pub icon: String,
+    pub unlocked_at: String,
 }
 
-/// Achievement definitions: (id, title, description, icon, counter_type, threshold)
-const ACHIEVEMENTS: &[(&str, &str, &str, &str, &str, u64)] = &[
-    (
-        "first_scan",
-        "First Light",
-        "Run your first analysis",
-        "sun",
-        "scans",
-        1,
-    ),
-    (
-        "ten_scans",
-        "Pattern Seeker",
-        "Run 10 analyses",
-        "eye",
-        "scans",
-        10,
-    ),
-    (
-        "fifty_scans",
-        "Signal Hunter",
-        "Run 50 analyses",
-        "radar",
-        "scans",
-        50,
-    ),
-    (
-        "first_discovery",
-        "Eureka",
-        "Find your first high-relevance item",
-        "sparkle",
-        "discoveries",
-        1,
-    ),
-    (
-        "ten_discoveries",
-        "Gold Miner",
-        "Find 10 high-relevance items",
-        "gem",
-        "discoveries",
-        10,
-    ),
-    (
-        "first_save",
-        "Collector",
-        "Save your first item",
-        "bookmark",
-        "saves",
-        1,
-    ),
-    (
-        "ten_saves",
-        "Curator",
-        "Save 10 items",
-        "archive",
-        "saves",
-        10,
-    ),
-    (
-        "first_briefing",
-        "Intelligence Brief",
-        "Generate your first briefing",
-        "scroll",
-        "briefings",
-        1,
-    ),
-    (
-        "streak_3",
-        "Momentum",
-        "Use 4DA 3 days in a row",
-        "fire",
-        "streak",
-        3,
-    ),
-    (
-        "streak_7",
-        "Discipline",
-        "Use 4DA 7 days in a row",
-        "flame",
-        "streak",
-        7,
-    ),
-    (
-        "streak_30",
-        "Relentless",
-        "Use 4DA 30 days in a row",
-        "crown",
-        "streak",
-        30,
-    ),
-    (
-        "sources_3",
-        "Network Builder",
-        "Configure 3+ source types",
-        "globe",
-        "sources",
-        3,
-    ),
-    (
-        "context_set",
-        "Self Aware",
-        "Set up your developer context",
-        "brain",
-        "context",
-        1,
-    ),
-];
+/// Game state returned to frontend
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GameState {
+    pub counters: Vec<CounterState>,
+    pub achievements: Vec<AchievementState>,
+    pub streak: u32,
+    pub last_active: Option<String>,
+}
 
-/// Initialize the GAME tables (called from migration)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CounterState {
+    pub counter_type: String,
+    pub value: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AchievementState {
+    pub id: String,
+    pub name: String,
+    pub description: String,
+    pub icon: String,
+    pub counter_type: String,
+    pub threshold: u64,
+    pub current: u64,
+    pub unlocked: bool,
+    pub unlocked_at: Option<String>,
+}
+
+/// All 13 achievements
+fn all_achievements() -> Vec<Achievement> {
+    vec![
+        Achievement { id: "first_scan".into(), name: "First Light".into(), description: "Run your first content scan".into(), icon: "telescope".into(), counter_type: "scans".into(), threshold: 1 },
+        Achievement { id: "ten_scans".into(), name: "Radar Operator".into(), description: "Run 10 content scans".into(), icon: "satellite".into(), counter_type: "scans".into(), threshold: 10 },
+        Achievement { id: "fifty_scans".into(), name: "Signal Hunter".into(), description: "Run 50 content scans".into(), icon: "radar".into(), counter_type: "scans".into(), threshold: 50 },
+        Achievement { id: "first_discovery".into(), name: "Eureka".into(), description: "Find your first relevant item".into(), icon: "lightbulb".into(), counter_type: "discoveries".into(), threshold: 1 },
+        Achievement { id: "ten_discoveries".into(), name: "Pattern Spotter".into(), description: "Find 10 relevant items".into(), icon: "eye".into(), counter_type: "discoveries".into(), threshold: 10 },
+        Achievement { id: "hundred_discoveries".into(), name: "Intelligence Analyst".into(), description: "Find 100 relevant items".into(), icon: "brain".into(), counter_type: "discoveries".into(), threshold: 100 },
+        Achievement { id: "first_save".into(), name: "Collector".into(), description: "Save your first item".into(), icon: "bookmark".into(), counter_type: "saves".into(), threshold: 1 },
+        Achievement { id: "first_briefing".into(), name: "Briefed".into(), description: "Generate your first briefing".into(), icon: "newspaper".into(), counter_type: "briefings".into(), threshold: 1 },
+        Achievement { id: "three_sources".into(), name: "Multi-Source".into(), description: "Discover items from 3+ sources".into(), icon: "antenna".into(), counter_type: "sources".into(), threshold: 3 },
+        Achievement { id: "five_sources".into(), name: "Intel Network".into(), description: "Discover items from 5+ sources".into(), icon: "globe".into(), counter_type: "sources".into(), threshold: 5 },
+        Achievement { id: "context_builder".into(), name: "Context Builder".into(), description: "Set up 3 context items (role, tech, interests)".into(), icon: "puzzle".into(), counter_type: "context".into(), threshold: 3 },
+        Achievement { id: "streak_three".into(), name: "Consistent".into(), description: "Use 4DA 3 days in a row".into(), icon: "flame".into(), counter_type: "streak".into(), threshold: 3 },
+        Achievement { id: "streak_seven".into(), name: "Dedicated".into(), description: "Use 4DA 7 days in a row".into(), icon: "fire".into(), counter_type: "streak".into(), threshold: 7 },
+    ]
+}
+
+/// Create game tables in the database
 pub fn create_tables(conn: &rusqlite::Connection) -> rusqlite::Result<()> {
     conn.execute_batch(
         "CREATE TABLE IF NOT EXISTS game_counters (
             counter_type TEXT PRIMARY KEY,
-            value INTEGER NOT NULL DEFAULT 0
+            value INTEGER NOT NULL DEFAULT 0,
+            updated_at TEXT NOT NULL DEFAULT (datetime('now'))
         );
-        CREATE TABLE IF NOT EXISTS game_unlocked (
-            achievement_id TEXT PRIMARY KEY,
-            unlocked_at DATETIME NOT NULL
+        CREATE TABLE IF NOT EXISTS game_achievements (
+            id TEXT PRIMARY KEY,
+            unlocked_at TEXT NOT NULL DEFAULT (datetime('now'))
         );
-        CREATE TABLE IF NOT EXISTS game_activity (
-            day TEXT PRIMARY KEY
-        );",
-    )
+        CREATE TABLE IF NOT EXISTS game_streak (
+            id INTEGER PRIMARY KEY CHECK (id = 1),
+            current_streak INTEGER NOT NULL DEFAULT 0,
+            last_active_date TEXT,
+            longest_streak INTEGER NOT NULL DEFAULT 0
+        );
+        INSERT OR IGNORE INTO game_streak (id, current_streak, last_active_date, longest_streak)
+            VALUES (1, 0, NULL, 0);",
+    )?;
+    Ok(())
 }
 
-/// Increment a counter and check if any achievements were newly unlocked.
-/// Returns a list of newly unlocked achievements.
-pub fn increment_counter(
-    db: &Arc<Database>,
-    counter_type: &str,
-    amount: u64,
-) -> Vec<AchievementUnlocked> {
+/// Increment a counter and return any newly unlocked achievements
+pub fn increment_counter(db: &Database, counter_type: &str, amount: u64) -> Vec<AchievementUnlocked> {
     let conn = db.conn.lock();
-    let mut newly_unlocked = Vec::new();
-
-    // Upsert the counter (keyed by counter_type)
-    if conn
-        .execute(
-            "INSERT INTO game_counters (counter_type, value) VALUES (?1, ?2)
-         ON CONFLICT(counter_type) DO UPDATE SET value = value + ?2",
-            rusqlite::params![counter_type, amount as i64],
-        )
-        .is_err()
-    {
-        return newly_unlocked;
-    }
-
-    // Read current counter value
-    let current: i64 = conn
-        .query_row(
-            "SELECT value FROM game_counters WHERE counter_type = ?1",
-            rusqlite::params![counter_type],
-            |row| row.get(0),
-        )
-        .unwrap_or(0);
-
-    // Check all achievements that use this counter_type
-    for &(id, title, description, icon, ct, threshold) in ACHIEVEMENTS {
-        if ct != counter_type {
-            continue;
-        }
-        if (current as u64) < threshold {
-            continue;
-        }
-
-        // Check if already unlocked
-        let already: bool = conn
-            .query_row(
-                "SELECT 1 FROM game_unlocked WHERE achievement_id = ?1",
-                rusqlite::params![id],
-                |_| Ok(true),
-            )
-            .unwrap_or(false);
-
-        if !already {
-            let _ = conn.execute(
-                "INSERT INTO game_unlocked (achievement_id, unlocked_at) VALUES (?1, datetime('now'))",
-                rusqlite::params![id],
-            );
-            info!(target: "4da::game", achievement = id, title, "Achievement unlocked!");
-            newly_unlocked.push(AchievementUnlocked {
-                id: id.to_string(),
-                title: title.to_string(),
-                description: description.to_string(),
-                icon: icon.to_string(),
-            });
-        }
-    }
-
-    newly_unlocked
-}
-
-/// Record today's activity for streak tracking, returns newly unlocked streak achievements
-pub fn record_daily_activity(db: &Arc<Database>) -> Vec<AchievementUnlocked> {
-    let conn = db.conn.lock();
-    let today = chrono::Local::now().format("%Y-%m-%d").to_string();
-
-    let _ = conn.execute(
-        "INSERT OR IGNORE INTO game_activity (day) VALUES (?1)",
-        rusqlite::params![today],
-    );
-
-    // Calculate current streak
-    let streak = calculate_streak(&conn);
-
-    // Set streak counter to current streak value (absolute, not incremental)
-    let _ = conn.execute(
-        "INSERT INTO game_counters (counter_type, value) VALUES ('streak', ?1)
-         ON CONFLICT(counter_type) DO UPDATE SET value = ?1",
-        rusqlite::params![streak as i64],
-    );
-
     let mut unlocked = Vec::new();
 
-    // Check streak achievements
-    for &(id, title, description, icon, ct, threshold) in ACHIEVEMENTS {
-        if ct != "streak" {
-            continue;
+    // Update counter
+    let new_value: u64 = match conn.query_row(
+        "INSERT INTO game_counters (counter_type, value, updated_at) VALUES (?1, ?2, datetime('now'))
+         ON CONFLICT(counter_type) DO UPDATE SET value = value + ?2, updated_at = datetime('now')
+         RETURNING value",
+        rusqlite::params![counter_type, amount],
+        |row| row.get(0),
+    ) {
+        Ok(v) => v,
+        Err(e) => {
+            debug!(target: "4da::game", error = %e, "Failed to update game counter");
+            return unlocked;
         }
-        if streak < threshold {
+    };
+
+    debug!(target: "4da::game", counter_type = %counter_type, new_value = new_value, "Counter incremented");
+
+    // Update streak if this is a scan (daily activity indicator)
+    if counter_type == "scans" {
+        update_streak(&conn);
+    }
+
+    // Check for newly unlocked achievements
+    for achievement in all_achievements() {
+        if achievement.counter_type != counter_type {
             continue;
         }
 
-        let already: bool = conn
-            .query_row(
-                "SELECT 1 FROM game_unlocked WHERE achievement_id = ?1",
-                rusqlite::params![id],
-                |_| Ok(true),
-            )
-            .unwrap_or(false);
+        // For streak achievements, use streak value not counter
+        let check_value = if counter_type == "streak" {
+            get_current_streak(&conn) as u64
+        } else {
+            new_value
+        };
 
-        if !already {
-            let _ = conn.execute(
-                "INSERT INTO game_unlocked (achievement_id, unlocked_at) VALUES (?1, datetime('now'))",
-                rusqlite::params![id],
-            );
-            info!(target: "4da::game", achievement = id, title, "Streak achievement unlocked!");
-            unlocked.push(AchievementUnlocked {
-                id: id.to_string(),
-                title: title.to_string(),
-                description: description.to_string(),
-                icon: icon.to_string(),
-            });
+        if check_value >= achievement.threshold {
+            // Check if already unlocked
+            let already: bool = conn
+                .query_row(
+                    "SELECT COUNT(*) > 0 FROM game_achievements WHERE id = ?1",
+                    rusqlite::params![achievement.id],
+                    |row| row.get(0),
+                )
+                .unwrap_or(true);
+
+            if !already {
+                let now = chrono::Utc::now().to_rfc3339();
+                if let Err(e) = conn.execute(
+                    "INSERT INTO game_achievements (id, unlocked_at) VALUES (?1, ?2)",
+                    rusqlite::params![achievement.id, now],
+                ) {
+                    debug!(target: "4da::game", error = %e, "Failed to record achievement");
+                    continue;
+                }
+                info!(target: "4da::game", id = %achievement.id, name = %achievement.name, "Achievement unlocked!");
+                unlocked.push(AchievementUnlocked {
+                    id: achievement.id.clone(),
+                    name: achievement.name.clone(),
+                    description: achievement.description.clone(),
+                    icon: achievement.icon.clone(),
+                    unlocked_at: now,
+                });
+            }
         }
     }
 
     unlocked
 }
 
-fn calculate_streak(conn: &rusqlite::Connection) -> u64 {
-    let mut stmt = match conn.prepare("SELECT day FROM game_activity ORDER BY day DESC") {
-        Ok(s) => s,
-        Err(_) => return 0,
-    };
+fn update_streak(conn: &rusqlite::Connection) {
+    let today = chrono::Utc::now().format("%Y-%m-%d").to_string();
 
-    let days: Vec<String> = stmt
-        .query_map([], |row| row.get(0))
+    let last_active: Option<String> = conn
+        .query_row(
+            "SELECT last_active_date FROM game_streak WHERE id = 1",
+            [],
+            |row| row.get(0),
+        )
         .ok()
-        .map(|rows| rows.filter_map(|r| r.ok()).collect())
-        .unwrap_or_default();
+        .flatten();
 
-    if days.is_empty() {
-        return 0;
+    match last_active {
+        Some(ref last) if last == &today => {
+            // Already active today, nothing to do
+        }
+        Some(ref last) => {
+            // Check if yesterday
+            if let Ok(last_date) = chrono::NaiveDate::parse_from_str(last, "%Y-%m-%d") {
+                if let Ok(today_date) = chrono::NaiveDate::parse_from_str(&today, "%Y-%m-%d") {
+                    let diff = (today_date - last_date).num_days();
+                    if diff == 1 {
+                        // Consecutive day — increment streak
+                        let _ = conn.execute(
+                            "UPDATE game_streak SET current_streak = current_streak + 1, last_active_date = ?1,
+                             longest_streak = MAX(longest_streak, current_streak + 1) WHERE id = 1",
+                            rusqlite::params![today],
+                        );
+                    } else {
+                        // Streak broken — reset to 1
+                        let _ = conn.execute(
+                            "UPDATE game_streak SET current_streak = 1, last_active_date = ?1 WHERE id = 1",
+                            rusqlite::params![today],
+                        );
+                    }
+                }
+            }
+        }
+        None => {
+            // First ever activity
+            let _ = conn.execute(
+                "UPDATE game_streak SET current_streak = 1, last_active_date = ?1, longest_streak = 1 WHERE id = 1",
+                rusqlite::params![today],
+            );
+        }
     }
 
-    let today = chrono::Local::now().format("%Y-%m-%d").to_string();
-    let mut streak = 0u64;
-    let mut expected = chrono::Local::now().date_naive();
-
-    // If today isn't in the list, start from yesterday
-    if days.first().map(|d| d.as_str()) != Some(today.as_str()) {
-        expected = expected.pred_opt().unwrap_or(expected);
+    // Check streak achievements
+    let streak = get_current_streak(conn);
+    for achievement in all_achievements() {
+        if achievement.counter_type != "streak" {
+            continue;
+        }
+        if streak >= achievement.threshold as u32 {
+            let already: bool = conn
+                .query_row(
+                    "SELECT COUNT(*) > 0 FROM game_achievements WHERE id = ?1",
+                    rusqlite::params![achievement.id],
+                    |row| row.get(0),
+                )
+                .unwrap_or(true);
+            if !already {
+                let now = chrono::Utc::now().to_rfc3339();
+                let _ = conn.execute(
+                    "INSERT INTO game_achievements (id, unlocked_at) VALUES (?1, ?2)",
+                    rusqlite::params![achievement.id, now],
+                );
+                info!(target: "4da::game", id = %achievement.id, "Streak achievement unlocked!");
+            }
+        }
     }
+}
 
-    for day_str in &days {
-        if let Ok(day) = chrono::NaiveDate::parse_from_str(day_str, "%Y-%m-%d") {
-            if day == expected {
-                streak += 1;
-                expected = expected.pred_opt().unwrap_or(expected);
-            } else if day < expected {
-                break;
+fn get_current_streak(conn: &rusqlite::Connection) -> u32 {
+    conn.query_row(
+        "SELECT current_streak FROM game_streak WHERE id = 1",
+        [],
+        |row| row.get(0),
+    )
+    .unwrap_or(0)
+}
+
+/// Get the full game state
+pub fn get_game_state(db: &Database) -> GameState {
+    let conn = db.conn.lock();
+    let achievements_def = all_achievements();
+
+    // Get all counters
+    let mut counters = Vec::new();
+    if let Ok(mut stmt) = conn.prepare("SELECT counter_type, value FROM game_counters") {
+        if let Ok(rows) = stmt.query_map([], |row| {
+            Ok(CounterState {
+                counter_type: row.get(0)?,
+                value: row.get(1)?,
+            })
+        }) {
+            for row in rows.flatten() {
+                counters.push(row);
             }
         }
     }
 
-    streak
-}
+    // Get unlocked achievement IDs
+    let mut unlocked_map: std::collections::HashMap<String, String> = std::collections::HashMap::new();
+    if let Ok(mut stmt) = conn.prepare("SELECT id, unlocked_at FROM game_achievements") {
+        if let Ok(rows) = stmt.query_map([], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+        }) {
+            for row in rows.flatten() {
+                unlocked_map.insert(row.0, row.1);
+            }
+        }
+    }
 
-/// Get all achievements with their current progress
-pub fn get_all_achievements(db: &Arc<Database>) -> Vec<Achievement> {
-    let conn = db.conn.lock();
-
-    ACHIEVEMENTS
+    // Build counter lookup
+    let counter_lookup: std::collections::HashMap<&str, u64> = counters
         .iter()
-        .map(|&(id, title, description, icon, counter_type, threshold)| {
-            let progress: i64 = conn
-                .query_row(
-                    "SELECT value FROM game_counters WHERE counter_type = ?1",
-                    rusqlite::params![counter_type],
-                    |row| row.get(0),
-                )
-                .unwrap_or(0);
+        .map(|c| (c.counter_type.as_str(), c.value))
+        .collect();
 
-            let (unlocked, unlocked_at) = conn
-                .query_row(
-                    "SELECT 1, unlocked_at FROM game_unlocked WHERE achievement_id = ?1",
-                    rusqlite::params![id],
-                    |row| Ok((true, row.get::<_, String>(1).ok())),
-                )
-                .unwrap_or((false, None));
+    let streak = get_current_streak(&conn);
 
-            Achievement {
-                id: id.to_string(),
-                title: title.to_string(),
-                description: description.to_string(),
-                icon: icon.to_string(),
-                threshold,
-                unlocked,
+    // Build achievement states
+    let achievements: Vec<AchievementState> = achievements_def
+        .iter()
+        .map(|a| {
+            let current = if a.counter_type == "streak" {
+                streak as u64
+            } else {
+                counter_lookup.get(a.counter_type.as_str()).copied().unwrap_or(0)
+            };
+            let unlocked_at = unlocked_map.get(&a.id).cloned();
+            AchievementState {
+                id: a.id.clone(),
+                name: a.name.clone(),
+                description: a.description.clone(),
+                icon: a.icon.clone(),
+                counter_type: a.counter_type.clone(),
+                threshold: a.threshold,
+                current,
+                unlocked: unlocked_at.is_some(),
                 unlocked_at,
-                progress: progress as u64,
             }
         })
-        .collect()
-}
+        .collect();
 
-/// Full game state summary for the frontend
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct GameState {
-    pub total_unlocked: usize,
-    pub total_achievements: usize,
-    pub current_streak: u64,
-    pub achievements: Vec<Achievement>,
-}
-
-pub fn get_game_state(db: &Arc<Database>) -> GameState {
-    let achievements = get_all_achievements(db);
-    let total_unlocked = achievements.iter().filter(|a| a.unlocked).count();
-    let conn = db.conn.lock();
-    let streak = calculate_streak(&conn);
+    let last_active: Option<String> = conn
+        .query_row(
+            "SELECT last_active_date FROM game_streak WHERE id = 1",
+            [],
+            |row| row.get(0),
+        )
+        .ok()
+        .flatten();
 
     GameState {
-        total_unlocked,
-        total_achievements: ACHIEVEMENTS.len(),
-        current_streak: streak,
+        counters,
         achievements,
+        streak,
+        last_active,
     }
+}
+
+/// Get just the list of unlocked achievements
+pub fn get_achievements(db: &Database) -> Vec<AchievementUnlocked> {
+    let conn = db.conn.lock();
+    let achievements_def = all_achievements();
+    let mut result = Vec::new();
+
+    if let Ok(mut stmt) = conn.prepare("SELECT id, unlocked_at FROM game_achievements") {
+        if let Ok(rows) = stmt.query_map([], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+        }) {
+            for row in rows.flatten() {
+                if let Some(a) = achievements_def.iter().find(|a| a.id == row.0) {
+                    result.push(AchievementUnlocked {
+                        id: a.id.clone(),
+                        name: a.name.clone(),
+                        description: a.description.clone(),
+                        icon: a.icon.clone(),
+                        unlocked_at: row.1,
+                    });
+                }
+            }
+        }
+    }
+
+    result
 }

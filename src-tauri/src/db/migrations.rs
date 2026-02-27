@@ -219,7 +219,7 @@ impl Database {
             .query_row("SELECT version FROM schema_version", [], |row| row.get(0))
             .unwrap_or(1);
 
-        const TARGET_VERSION: i64 = 19;
+        const TARGET_VERSION: i64 = 20;
         if current_version < TARGET_VERSION {
             // Drop the conn lock briefly to allow backup (needs filesystem access)
             drop(conn);
@@ -709,6 +709,13 @@ impl Database {
                                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP
                             );",
                     )
+                })?;
+            }
+
+            // Phase 20 migration: GAME Engine tables
+            if current_version < 20 {
+                Self::run_versioned_migration(&conn, 19, 20, "Phase 20: GAME engine", |c| {
+                    crate::game_engine::create_tables(c)
                 })?;
             }
 

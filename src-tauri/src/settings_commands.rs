@@ -692,7 +692,7 @@ pub async fn get_user_context() -> Result<serde_json::Value> {
 
 /// Set the user's role
 #[tauri::command]
-pub async fn set_user_role(role: Option<String>) -> Result<serde_json::Value> {
+pub async fn set_user_role(app: AppHandle, role: Option<String>) -> Result<serde_json::Value> {
     if let Some(ref r) = role {
         validate_input_length(r, "Role", 100)?;
     }
@@ -703,6 +703,15 @@ pub async fn set_user_role(role: Option<String>) -> Result<serde_json::Value> {
 
     info!(target: "4da::context", role = ?role, "Role updated");
 
+    // GAME: track context setup
+    if role.is_some() {
+        if let Ok(db) = crate::get_database() {
+            for a in crate::game_engine::increment_counter(db, "context", 1) {
+                crate::events::emit_achievement_unlocked(&app, &a);
+            }
+        }
+    }
+
     Ok(serde_json::json!({
         "success": true,
         "role": role
@@ -711,7 +720,7 @@ pub async fn set_user_role(role: Option<String>) -> Result<serde_json::Value> {
 
 /// Add a technology to the user's tech stack
 #[tauri::command]
-pub async fn add_tech_stack(technology: String) -> Result<serde_json::Value> {
+pub async fn add_tech_stack(app: AppHandle, technology: String) -> Result<serde_json::Value> {
     validate_input_length(&technology, "Technology", 100)?;
     let engine = get_context_engine()?;
     engine
@@ -719,6 +728,13 @@ pub async fn add_tech_stack(technology: String) -> Result<serde_json::Value> {
         .map_err(|e| format!("Failed to add technology: {}", e))?;
 
     debug!(target: "4da::context", technology = %technology, "Added technology");
+
+    // GAME: track context setup
+    if let Ok(db) = crate::get_database() {
+        for a in crate::game_engine::increment_counter(db, "context", 1) {
+            crate::events::emit_achievement_unlocked(&app, &a);
+        }
+    }
 
     Ok(serde_json::json!({
         "success": true,
@@ -742,7 +758,7 @@ pub async fn remove_tech_stack(technology: String) -> Result<serde_json::Value> 
 }
 /// Add an explicit interest (with embedding generation)
 #[tauri::command]
-pub async fn add_interest(topic: String, weight: Option<f32>) -> Result<serde_json::Value> {
+pub async fn add_interest(app: AppHandle, topic: String, weight: Option<f32>) -> Result<serde_json::Value> {
     validate_input_length(&topic, "Interest topic", 200)?;
     let engine = get_context_engine()?;
     let weight = weight.unwrap_or(1.0);
@@ -757,6 +773,13 @@ pub async fn add_interest(topic: String, weight: Option<f32>) -> Result<serde_js
 
     info!(target: "4da::context", topic = %topic, weight = weight, has_embedding = emb.is_some(), "Added interest");
     invalidate_context_engine();
+
+    // GAME: track context setup
+    if let Ok(db) = crate::get_database() {
+        for a in crate::game_engine::increment_counter(db, "context", 1) {
+            crate::events::emit_achievement_unlocked(&app, &a);
+        }
+    }
 
     Ok(serde_json::json!({
         "success": true,
@@ -819,7 +842,7 @@ pub async fn remove_exclusion(topic: String) -> Result<serde_json::Value> {
 
 /// Record a user interaction (click, save, dismiss)
 #[tauri::command]
-pub async fn record_interaction(source_item_id: i64, action: String) -> Result<serde_json::Value> {
+pub async fn record_interaction(app: AppHandle, source_item_id: i64, action: String) -> Result<serde_json::Value> {
     let engine = get_context_engine()?;
 
     let action_type = match action.to_lowercase().as_str() {
@@ -835,6 +858,15 @@ pub async fn record_interaction(source_item_id: i64, action: String) -> Result<s
         .map_err(|e| format!("Failed to record interaction: {}", e))?;
 
     debug!(target: "4da::context", action = %action, item_id = source_item_id, "Recorded interaction");
+
+    // GAME: track saves
+    if action.to_lowercase() == "save" {
+        if let Ok(db) = crate::get_database() {
+            for a in crate::game_engine::increment_counter(db, "saves", 1) {
+                crate::events::emit_achievement_unlocked(&app, &a);
+            }
+        }
+    }
 
     Ok(serde_json::json!({
         "success": true

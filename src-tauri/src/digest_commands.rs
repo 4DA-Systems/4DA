@@ -413,7 +413,7 @@ Rules:
 /// Generate an AI-powered briefing from recent relevant items
 /// Uses the configured LLM (Ollama by default) to synthesize insights
 #[tauri::command]
-pub async fn generate_ai_briefing() -> Result<serde_json::Value> {
+pub async fn generate_ai_briefing(app: tauri::AppHandle) -> Result<serde_json::Value> {
     crate::settings::require_pro_feature("generate_ai_briefing")?;
     // Improvement C: Gather unresolved anomalies for context injection
     let anomalies = {
@@ -428,7 +428,20 @@ pub async fn generate_ai_briefing() -> Result<serde_json::Value> {
             None
         }
     };
-    generate_briefing_internal(false, anomalies).await
+    let result = generate_briefing_internal(false, anomalies).await;
+
+    // GAME: track briefing generation on success
+    if let Ok(ref val) = result {
+        if val.get("success").and_then(|v| v.as_bool()).unwrap_or(false) {
+            if let Ok(db) = crate::get_database() {
+                for a in crate::game_engine::increment_counter(db, "briefings", 1) {
+                    crate::events::emit_achievement_unlocked(&app, &a);
+                }
+            }
+        }
+    }
+
+    result
 }
 
 // ============================================================================
