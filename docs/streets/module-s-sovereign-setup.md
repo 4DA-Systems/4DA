@@ -22,6 +22,8 @@ By the end of these two weeks, you will have:
 
 No hand-waving. No "just believe in yourself." Real numbers, real commands, real decisions.
 
+{@ mirror sovereign_readiness @}
+
 Let's get started.
 
 ---
@@ -33,6 +35,10 @@ Let's get started.
 ### Your Machine Is a Business Asset
 
 When a company evaluates its infrastructure, it doesn't just list specs — it maps capabilities to revenue opportunities. That's what you're going to do right now.
+
+{? if computed.profile_completeness != "0" ?}
+> **Your Current Rig:** {= profile.cpu.model | fallback("Unknown CPU") =} ({= profile.cpu.cores | fallback("?") =} cores / {= profile.cpu.threads | fallback("?") =} threads), {= profile.ram.total | fallback("?") =} {= profile.ram.type | fallback("") =} RAM, {= profile.gpu.model | fallback("No dedicated GPU") =} {? if profile.gpu.exists ?}({= profile.gpu.vram | fallback("?") =} VRAM){? endif ?}, {= profile.storage.free | fallback("?") =} free / {= profile.storage.total | fallback("?") =} total ({= profile.storage.type | fallback("unknown") =}), running {= profile.os.name | fallback("unknown OS") =} {= profile.os.version | fallback("") =}.
+{? endif ?}
 
 Open a terminal and run through the following. Write down every number. You'll need them for your Sovereign Stack Document in Lesson 6.
 
@@ -57,6 +63,9 @@ sysctl -n hw.ncpu
 
 **What matters for income:**
 - Core count determines how many concurrent tasks your rig can handle. Running a local LLM while simultaneously processing a batch job requires real parallelism.
+{? if profile.cpu.cores ?}
+- *Your {= profile.cpu.model | fallback("CPU") =} has {= profile.cpu.cores | fallback("?") =} cores — check the requirements table below to see which revenue engines your CPU supports.*
+{? endif ?}
 - For most revenue engines in this course, any modern 8+ core CPU from the last 5 years is sufficient.
 - If you're running local LLMs on CPU only (no GPU), you want 16+ cores. A Ryzen 7 5800X or Intel i7-12700 is the practical floor.
 
@@ -77,6 +86,9 @@ sysctl -n hw.memsize | awk '{print $0/1073741824 " GB"}'
 - 16 GB: Bare minimum. You can run 7B models and do basic automation work.
 - 32 GB: Comfortable. Run 13B models locally, handle multiple projects, keep your dev environment running alongside income workloads.
 - 64 GB+: You can run 30B+ models on CPU, or keep multiple models loaded. This is where things get interesting for selling inference services.
+{? if profile.ram.total ?}
+*Your system has {= profile.ram.total | fallback("?") =} RAM. Check the table above to see which capability tier you're in — this directly affects which local models are practical for your income workloads.*
+{? endif ?}
 
 #### GPU
 
@@ -107,6 +119,14 @@ This is the one spec people obsess over, and here's the honest truth: **your GPU
 | 48 GB+ (dual GPU, A6000) | 70B+ at speed | Enterprise-grade local inference. Serious competitive advantage. |
 | Apple Silicon 32GB+ (M2/M3 Pro/Max) | 30B+ using unified memory | Excellent efficiency. Lower power cost than NVIDIA equivalent. |
 
+{@ insight hardware_benchmark @}
+
+{? if profile.gpu.exists ?}
+> **Your GPU:** {= profile.gpu.model | fallback("Unknown") =} with {= profile.gpu.vram | fallback("?") =} VRAM — {? if computed.gpu_tier == "premium" ?}you're in the premium tier. 30B-70B models are within reach locally. This is a serious competitive advantage.{? elif computed.gpu_tier == "sweet_spot" ?}you're in the sweet spot. 13B at full speed, 30B quantized. Most revenue engines run well here.{? elif computed.gpu_tier == "capable" ?}you can run 7B models at good speed and 13B quantized. Good enough for most automation income streams.{? else ?}you have GPU acceleration available. Check the table above to see where you land.{? endif ?}
+{? else ?}
+> **No dedicated GPU detected.** You'll run inference on CPU, which means ~5-12 tokens/sec on 7B models. That's fine for batch processing and async work. Use API calls to fill the speed gap for customer-facing output.
+{? endif ?}
+
 > **Real Talk:** If you have an RTX 3060 12GB, you are in a better position than 95% of developers trying to monetize AI. Stop waiting for a 4090. The 3060 12GB is the Honda Civic of local AI — reliable, efficient, gets the job done. The money you'd spend on a GPU upgrade is better spent on API credits for customer-facing quality while your local models handle the grunt work.
 
 #### Storage
@@ -125,6 +145,9 @@ Get-PSDrive -PSProvider FileSystem | Select-Object Name, @{N='Used(GB)';E={[math
 - SSD is non-negotiable for anything customer-facing. Model loading from HDD adds 30-60 seconds of startup time.
 - Minimum practical: 500 GB SSD with at least 100 GB free.
 - Comfortable: 1 TB SSD. Keep models on the SSD, archive to HDD.
+{? if profile.storage.free ?}
+*You have {= profile.storage.free | fallback("?") =} free on {= profile.storage.type | fallback("your drive") =}. {? if profile.storage.type == "SSD" ?}Good — SSD means fast model loading.{? elif profile.storage.type == "NVMe" ?}Excellent — NVMe is the fastest option for model loading.{? else ?}Consider an SSD if you're not already on one — it makes a real difference for model load times.{? endif ?}*
+{? endif ?}
 
 #### Network
 
@@ -138,6 +161,9 @@ speedtest-cli --simple
 ```
 
 **What matters for income:**
+{? if profile.network.download ?}
+*Your connection: {= profile.network.download | fallback("?") =} down / {= profile.network.upload | fallback("?") =} up.*
+{? endif ?}
 - Download speed: 50+ Mbps. Needed for pulling models, packages, and data.
 - Upload speed: This is the bottleneck most people ignore. If you're serving anything (APIs, processed results, deliverables), upload matters.
   - 10 Mbps: Adequate for async delivery (processed files, batch results).
@@ -156,6 +182,10 @@ Ask yourself:
 - Can you SSH into your machine remotely if something breaks?
 
 If you can't run 24/7, that's fine — many income streams in this course are async batch jobs you trigger manually. But the ones that generate truly passive income require uptime.
+
+{? if computed.os_family == "windows" ?}
+**Quick uptime setup (Windows):** Use Task Scheduler for auto-restart, enable Remote Desktop or install Tailscale for remote access, and configure your BIOS for "restore on AC power loss" to recover from outages.
+{? endif ?}
 
 **Quick uptime setup (if you want it):**
 
@@ -217,9 +247,13 @@ Example: Mac Mini M2, 24/7
 - (12W / 1000) x 24h x 30 days x $0.12/kWh = $1.04/month
 ```
 
+{? if regional.country ?}
+Your electricity rate: approximately {= regional.currency_symbol | fallback("$") =}{= regional.electricity_kwh | fallback("0.12") =}/kWh (based on {= regional.country | fallback("your region") =} averages). Check your actual utility bill — rates vary by provider and time of day.
+{? else ?}
 US average electricity is about $0.12/kWh. Check your actual rate — it varies wildly. California might be $0.25/kWh. Some European countries hit $0.35/kWh. Parts of the US Midwest are $0.08/kWh.
+{? endif ?}
 
-**The point:** Running your rig 24/7 for income costs somewhere between $1-$30/month in electricity. If your income streams can't cover that, the problem isn't electricity — it's the income stream.
+**The point:** Running your rig 24/7 for income costs somewhere between {= regional.currency_symbol | fallback("$") =}1-{= regional.currency_symbol | fallback("$") =}30/month in electricity. If your income streams can't cover that, the problem isn't electricity — it's the income stream.
 
 ### Minimum Specs by Revenue Engine Type
 
@@ -236,6 +270,8 @@ Here's a preview of where we're headed in the full STREETS course. For now, just
 
 > **Common Mistake:** "I need to upgrade my hardware before I can start." No. Start with what you have. Use API calls to fill gaps your hardware can't cover. Upgrade when revenue justifies it — not before.
 
+{@ insight engine_ranking @}
+
 ### Lesson 1 Checkpoint
 
 You should now have written down:
@@ -248,6 +284,10 @@ You should now have written down:
 - [ ] Which revenue engine categories your rig qualifies for
 
 Keep these numbers. You'll plug them into your Sovereign Stack Document in Lesson 6.
+
+{? if computed.profile_completeness != "0" ?}
+> **4DA has already collected most of these numbers for you.** Check the personalized summaries above — your hardware inventory is partially pre-filled from system detection.
+{? endif ?}
 
 *In the full STREETS course, Module R (Revenue Engines) gives you specific, step-by-step playbooks for each engine type listed above — including the exact code to build and deploy them.*
 
@@ -271,6 +311,10 @@ But here's the nuance most people miss: **local and API models serve different r
 
 ### Installing Ollama
 
+{? if settings.has_llm ?}
+> **You already have an LLM configured:** {= settings.llm_provider | fallback("Local") =} / {= settings.llm_model | fallback("unknown model") =}. If Ollama is already running, skip to "Model Selection Guide" below.
+{? endif ?}
+
 Ollama is the foundation. It turns your machine into a local inference server with a clean API.
 
 ```bash
@@ -286,6 +330,14 @@ brew install ollama
 # Or use winget:
 winget install Ollama.Ollama
 ```
+
+{? if computed.os_family == "windows" ?}
+> **Windows:** Use the installer from ollama.ai or `winget install Ollama.Ollama`. Ollama runs as a background service automatically after installation.
+{? elif computed.os_family == "macos" ?}
+> **macOS:** `brew install ollama` is the quickest path. Ollama leverages Apple Silicon's unified memory — your {= profile.ram.total | fallback("system") =} RAM is shared between CPU and GPU workloads.
+{? elif computed.os_family == "linux" ?}
+> **Linux:** The install script handles everything. If you're running {= profile.os.name | fallback("Linux") =}, Ollama installs as a systemd service.
+{? endif ?}
 
 Verify the installation:
 
@@ -303,6 +355,10 @@ ollama run llama3.1:8b "Say hello in exactly 5 words"
 ### Model Selection Guide
 
 Don't download every model you see. Be strategic. Here's what to pull and when to use each.
+
+{? if computed.llm_tier ?}
+> **Your LLM tier (based on hardware):** {= computed.llm_tier | fallback("unknown") =}. The recommendations below are tagged so you can focus on the tier that matches your rig.
+{? endif ?}
 
 #### Tier 1: The Workhorse (7B-8B models)
 
@@ -355,6 +411,10 @@ ollama pull deepseek-coder-v2:16b
 - CPU only: ~3-6 tokens/second (not practical for real-time)
 
 **When to use over 7B:** When the output quality of 7B isn't good enough but you don't need to pay for API calls. Test both on your actual use case — sometimes 7B is fine and you're just wasting compute.
+
+{? if computed.gpu_tier == "capable" ?}
+> **Tier 3 stretch territory** — Your {= profile.gpu.model | fallback("GPU") =} can handle 30B quantized with some effort, but 70B is out of reach locally. Consider API calls for tasks that need 70B-level quality.
+{? endif ?}
 
 #### Tier 3: The Quality Tier (30B-70B models)
 
@@ -410,6 +470,10 @@ This hybrid approach is how you build services with healthy margins. More on thi
 ### Production Configuration
 
 Running Ollama for income work is different from running it for personal chat. Here's how to configure it properly.
+
+{? if computed.has_nvidia ?}
+> **NVIDIA GPU detected ({= profile.gpu.model | fallback("unknown") =}).** Ollama will automatically use CUDA acceleration. Make sure your NVIDIA drivers are up to date — run `nvidia-smi` to check. For best performance with {= profile.gpu.vram | fallback("your") =} VRAM, the `OLLAMA_MAX_LOADED_MODELS` setting below should match how many models fit in your VRAM simultaneously.
+{? endif ?}
 
 #### Set Environment Variables
 
@@ -602,6 +666,8 @@ chmod +x benchmark.sh
 
 Write down your tokens/second for each model. This number determines which income workflows are practical for your rig.
 
+{@ insight stack_fit @}
+
 **Speed requirements by use case:**
 - Batch processing (async): 5+ tokens/sec is fine (you don't care about latency)
 - Interactive tools (user waits): 20+ tokens/sec minimum
@@ -609,6 +675,12 @@ Write down your tokens/second for each model. This number determines which incom
 - Streaming chat: 15+ tokens/sec feels responsive
 
 ### Securing Your Local Inference Server
+
+{? if computed.os_family == "windows" ?}
+> **Windows note:** Ollama on Windows binds to localhost by default. Verify with `netstat -an | findstr 11434` in PowerShell. Use Windows Firewall to block external access to port 11434.
+{? elif computed.os_family == "macos" ?}
+> **macOS note:** Ollama on macOS binds to localhost by default. Verify with `lsof -i :11434`. The macOS firewall should block external connections automatically.
+{? endif ?}
 
 Your Ollama instance should never be accessible from the internet unless you explicitly intend it.
 
@@ -656,6 +728,16 @@ You, running models locally on your machine, don't have that problem.
 ### The Regulatory Tailwind
 
 The regulatory environment is moving in your direction. Fast.
+
+{? if regional.country == "US" ?}
+> **US-based:** The regulations below that matter most to you are HIPAA, SOC 2, ITAR, and state-level privacy laws (California CCPA, etc.). EU regulations still matter — they affect your ability to serve European clients, which is a lucrative market.
+{? elif regional.country == "GB" ?}
+> **UK-based:** Post-Brexit, the UK has its own data protection framework (UK GDPR + Data Protection Act 2018). Your local processing advantage is especially strong for serving UK financial services and NHS-adjacent work.
+{? elif regional.country == "DE" ?}
+> **Germany-based:** You're in one of the strictest data protection environments in the world. This is an *advantage* — German clients already understand why local processing matters, and they'll pay for it.
+{? elif regional.country == "AU" ?}
+> **Australia-based:** The Privacy Act 1988 and Australian Privacy Principles (APPs) govern your obligations. Local processing is a strong selling point for government and healthcare clients under the My Health Records Act.
+{? endif ?}
 
 **EU AI Act (enforced from 2024-2026):**
 - High-risk AI systems need documented data processing pipelines
@@ -712,9 +794,15 @@ Here's the business case in hard numbers:
 
 The privacy premium is real: **5x to 10x** over commodity cloud-based services for the same underlying task. And the clients who pay it are more loyal, less price-sensitive, and have larger budgets.
 
+{@ insight competitive_position @}
+
 ### Setting Up Isolated Workspaces
 
 If you have a day job (most of you do), you need clean separation between employer work and income work. This isn't just legal protection — it's operational hygiene.
+
+{? if computed.os_family == "windows" ?}
+> **Windows tip:** Create a separate Windows user account for income work (Settings > Accounts > Family & other users > Add someone else). This gives you a completely isolated environment — separate browser profiles, separate file paths, separate environment variables. Switch between accounts with Win+L.
+{? endif ?}
 
 **Option 1: Separate user accounts (recommended)**
 
@@ -818,7 +906,15 @@ If all three answers are clean, you're almost certainly fine. If any answer is m
 
 You need a legal entity to separate your personal assets from your business activities, and to open the door for business banking, payment processing, and tax benefits.
 
+{? if regional.country ?}
+> **Your location: {= regional.country | fallback("Unknown") =}.** The recommended entity type for your region is a **{= regional.business_entity_type | fallback("LLC or equivalent") =}**, with typical registration costs of {= regional.currency_symbol | fallback("$") =}{= regional.business_registration_cost | fallback("50-500") =}. Scroll to your country's section below, or read all sections to understand how clients in other regions operate.
+{? endif ?}
+
+{? if regional.country == "US" ?}
+#### United States (Your Region)
+{? else ?}
 #### United States
+{? endif ?}
 
 | Structure | Cost | Protection | Best For |
 |-----------|------|------------|----------|
@@ -836,7 +932,11 @@ You need a legal entity to separate your personal assets from your business acti
 3. File Articles of Organization (10-minute form)
 4. Get an EIN from the IRS (free, takes 5 minutes at irs.gov)
 
+{? if regional.country == "GB" ?}
+#### United Kingdom (Your Region)
+{? else ?}
 #### United Kingdom
+{? endif ?}
 
 | Structure | Cost | Protection | Best For |
 |-----------|------|------------|----------|
@@ -854,7 +954,11 @@ Varies significantly by country, but the general pattern:
 - **France:** Micro-entrepreneur (simplified, recommended for starting)
 - **Estonia:** e-Residency + OUE (popular for non-residents, fully online)
 
+{? if regional.country == "AU" ?}
+#### Australia (Your Region)
+{? else ?}
 #### Australia
+{? endif ?}
 
 | Structure | Cost | Protection | Best For |
 |-----------|------|------------|----------|
@@ -866,6 +970,10 @@ Varies significantly by country, but the general pattern:
 ### Step 3: Payment Processing (15-minute setup)
 
 You need a way to get paid. Set this up now, not when your first client is waiting.
+
+{? if regional.payment_processors ?}
+> **Recommended for {= regional.country | fallback("your region") =}:** {= regional.payment_processors | fallback("Stripe, Lemon Squeezy") =}
+{? endif ?}
 
 **Stripe (recommended for most developers):**
 
@@ -931,15 +1039,27 @@ Do not run business income through your personal checking account. The reasons:
 3. **Professionalism:** Invoices from "John's Consulting LLC" hitting a dedicated business account looks legitimate. Payments to your personal Venmo do not.
 
 **Free or low-cost business banking:**
+{? if regional.country == "US" ?}
+- **Mercury** (recommended for you) — Free, designed for startups. Excellent API if you want to automate bookkeeping later.
+- **Relay** — Free, good for separating income streams into sub-accounts.
+{? elif regional.country == "GB" ?}
+- **Starling Bank** (recommended for you) — Free business account, instant setup.
+- **Wise Business** — Low-cost multi-currency. Great if you serve international clients.
+{? else ?}
 - **Mercury** (US) — Free, designed for startups. Excellent API if you want to automate bookkeeping later.
 - **Relay** (US) — Free, good for separating income streams into sub-accounts.
-- **Wise Business** (International) — Low-cost multi-currency. Great for receiving payments in USD, EUR, GBP, etc.
 - **Starling Bank** (UK) — Free business account.
+{? endif ?}
+- **Wise Business** (International) — Low-cost multi-currency. Great for receiving payments in USD, EUR, GBP, etc.
 - **Qonto** (EU) — Clean business banking for European companies.
 
 Open the account now. It takes 10-15 minutes online and 1-3 days for verification.
 
 ### Step 6: Tax Basics for Developer Side Income
+
+{? if regional.tax_note ?}
+> **Tax note for {= regional.country | fallback("your region") =}:** {= regional.tax_note | fallback("Consult a local tax professional for specifics.") =}
+{? endif ?}
 
 > **Real Talk:** Taxes are the thing most developers ignore until April, and then panic about. Spending 30 minutes now saves you actual money and stress.
 
@@ -993,15 +1113,15 @@ You should now have (or have a plan for):
 
 ---
 
-## Lesson 5: The $200/month Budget
+## Lesson 5: The {= regional.currency_symbol | fallback("$") =}200/month Budget
 
 *"Your business has a burn rate. Know it. Control it. Make it earn."*
 
-### Why $200/month
+### Why {= regional.currency_symbol | fallback("$") =}200/month
 
-Two hundred dollars per month is the minimum viable budget for a developer income operation. It's enough to run real services, serve real customers, and generate real revenue. It's also small enough that if nothing works, you haven't bet the farm.
+Two hundred {= regional.currency | fallback("dollars") =} per month is the minimum viable budget for a developer income operation. It's enough to run real services, serve real customers, and generate real revenue. It's also small enough that if nothing works, you haven't bet the farm.
 
-The goal is simple: **turn $200/month into $600+/month within 90 days.** If you can do that, you have a business. If you can't, you change strategy — not increase budget.
+The goal is simple: **turn {= regional.currency_symbol | fallback("$") =}200/month into {= regional.currency_symbol | fallback("$") =}600+/month within 90 days.** If you can do that, you have a business. If you can't, you change strategy — not increase budget.
 
 ### The Budget Breakdown
 
@@ -1096,7 +1216,11 @@ def log_api_call(provider: str, tokens_in: int, tokens_out: int, model: str):
 - Use API calls for 20% of processing (final quality pass, complex reasoning, customer-facing output)
 - Your effective cost per task drops dramatically vs. pure API usage
 
-#### Tier 2: Infrastructure — $30-50/month
+{? if computed.monthly_electricity_estimate ?}
+> **Your estimated electricity cost:** {= regional.currency_symbol | fallback("$") =}{= computed.monthly_electricity_estimate | fallback("13") =}/month for 24/7 operation at {= regional.currency_symbol | fallback("$") =}{= regional.electricity_kwh | fallback("0.12") =}/kWh. This is already factored into your effective operating cost.
+{? endif ?}
+
+#### Tier 2: Infrastructure — {= regional.currency_symbol | fallback("$") =}30-50/month
 
 ```
 Domain name:            $12/year ($1/month)     — Namecheap, Cloudflare, Porkbun
@@ -1131,7 +1255,7 @@ Vercel/Netlify (free) — marketing site, landing pages, docs
 
 Total infrastructure cost: $5-20/month. The rest is free tiers.
 
-#### Tier 3: Tools — $20-30/month
+#### Tier 3: Tools — {= regional.currency_symbol | fallback("$") =}20-30/month
 
 ```
 Analytics:              $0/month    — Plausible Cloud ($9) or self-hosted,
@@ -1148,7 +1272,7 @@ Accounting:             $0/month    — Wave (free), or a spreadsheet
 
 > **Real Talk:** You can run your entire tool stack on free tiers when starting. The $20-30 allocated here is for when you outgrow free tiers or want a specific premium feature. Don't spend it just because it's in the budget. Unspent budget is profit.
 
-#### Tier 4: Reserve — $0-30/month
+#### Tier 4: Reserve — {= regional.currency_symbol | fallback("$") =}0-30/month
 
 This is your "things I didn't anticipate" fund:
 - An API cost spike from an unexpectedly large batch job
@@ -1175,6 +1299,8 @@ The minimum: 1x ROI ($200 revenue = break even)
 Below 1x: Change strategy or reduce costs
 ```
 
+{@ insight cost_projection @}
+
 **When to increase budget:**
 
 Increase your budget ONLY when:
@@ -1199,7 +1325,7 @@ $2000+/month → Full business operation (year 2+)
 Each step requires proving ROI at the current level first.
 ```
 
-> **Common Mistake:** Treating the $200 as an "investment" that doesn't need to return money immediately. No. This is an experiment with a 90-day deadline. If $200/month doesn't generate $200/month in revenue within 90 days, something about the strategy needs to change. The money, the market, the offer — something isn't working. Be honest with yourself.
+> **Common Mistake:** Treating the {= regional.currency_symbol | fallback("$") =}200 as an "investment" that doesn't need to return money immediately. No. This is an experiment with a 90-day deadline. If {= regional.currency_symbol | fallback("$") =}200/month doesn't generate {= regional.currency_symbol | fallback("$") =}200/month in revenue within 90 days, something about the strategy needs to change. The money, the market, the offer — something isn't working. Be honest with yourself.
 
 ### Lesson 5 Checkpoint
 
@@ -1226,6 +1352,10 @@ This is the most important thing you'll create in Module S. Your Sovereign Stack
 Create a new file. Markdown, Google Doc, Notion page, plain text — whatever you'll actually maintain. Use the template below, filling in every field with the numbers and decisions from Lessons 1-5.
 
 ### The Template
+
+{? if computed.profile_completeness != "0" ?}
+> **Head start:** 4DA has already detected some of your hardware specs and stack info. Look for the pre-filled hints below — they'll save you time filling in the template.
+{? endif ?}
 
 Copy this entire template and fill it in. Every field. No skipping.
 
@@ -1393,6 +1523,19 @@ What makes YOUR skill combination unusual? (This becomes your moat in Module T)
 *Next review date: [Date + 30 days]*
 ```
 
+{? if dna.primary_stack ?}
+> **Pre-fill from your Developer DNA:**
+> - **Primary stack:** {= dna.primary_stack | fallback("Not detected") =}
+> - **Interests:** {= dna.interests | fallback("Not detected") =}
+> - **Identity summary:** {= dna.identity_summary | fallback("Not yet profiled") =}
+{? if dna.blind_spots ?}> - **Blind spots to watch:** {= dna.blind_spots | fallback("None detected") =}
+{? endif ?}
+{? elif stack.primary ?}
+> **Pre-fill from detected stack:** Your primary technologies are {= stack.primary | fallback("not yet detected") =}. {? if stack.adjacent ?}Adjacent skills: {= stack.adjacent | fallback("none detected") =}.{? endif ?} Use these to fill in the Skills Inventory above.
+{? endif ?}
+
+{@ insight t_shape @}
+
 ### How to Use This Document
 
 1. **Before starting any new project:** Check your Sovereign Stack. Do you have the hardware, time, skills, and budget to execute?
@@ -1425,6 +1568,10 @@ You should now have:
 
 ## Module S: Complete
 
+{? if progress.completed("MODULE_S") ?}
+> **Module S completed.** You've finished {= progress.completed_count | fallback("1") =} of {= progress.total_count | fallback("7") =} STREETS modules. {? if progress.completed_modules ?}Completed: {= progress.completed_modules | fallback("S") =}.{? endif ?}
+{? endif ?}
+
 ### What You've Built in Two Weeks
 
 Look at what you now have that you didn't have when you started:
@@ -1439,6 +1586,8 @@ Look at what you now have that you didn't have when you started:
 This is more than most developers ever set up. Seriously. Most people who want to make side income skip straight to "build something cool" and then wonder why they can't get paid. You now have the infrastructure to get paid.
 
 But infrastructure without direction is just an expensive hobby. You need to know where to aim this stack.
+
+{@ temporal market_timing @}
 
 ### What Comes Next: Module T — Technical Moats
 

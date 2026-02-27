@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    width: 1200px;
+    height: 630px;
+    background: #0A0A0A;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    overflow: hidden;
+    position: relative;
+  }
+  /* Subtle grid pattern */
+  body::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(255,255,255,0.02) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,255,255,0.02) 1px, transparent 1px);
+    background-size: 60px 60px;
+  }
+  /* Gold accent line */
+  .accent-line {
+    width: 80px;
+    height: 2px;
+    background: #D4AF37;
+    margin-bottom: 40px;
+  }
+  .logo {
+    font-size: 160px;
+    font-weight: 600;
+    color: #FFFFFF;
+    letter-spacing: -4px;
+    line-height: 1;
+    margin-bottom: 20px;
+  }
+  .tagline {
+    font-size: 28px;
+    font-weight: 400;
+    color: #A0A0A0;
+    letter-spacing: 6px;
+    text-transform: uppercase;
+    margin-bottom: 48px;
+  }
+  .tools {
+    font-size: 16px;
+    color: #666666;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+  }
+  /* Corner accents */
+  .corner {
+    position: absolute;
+    width: 40px;
+    height: 40px;
+    border-color: #D4AF37;
+    border-style: solid;
+    border-width: 0;
+  }
+  .corner.tl { top: 40px; left: 40px; border-top-width: 1px; border-left-width: 1px; }
+  .corner.tr { top: 40px; right: 40px; border-top-width: 1px; border-right-width: 1px; }
+  .corner.bl { bottom: 40px; left: 40px; border-bottom-width: 1px; border-left-width: 1px; }
+  .corner.br { bottom: 40px; right: 40px; border-bottom-width: 1px; border-right-width: 1px; }
+</style>
+</head>
+<body>
+  <div class="corner tl"></div>
+  <div class="corner tr"></div>
+  <div class="corner bl"></div>
+  <div class="corner br"></div>
+  <div class="accent-line"></div>
+  <div class="logo">4DA</div>
+  <div class="tagline">Developer Intelligence</div>
+  <div class="tools">30 MCP Tools &middot; Privacy-First &middot; Local-Only</div>
+</body>
+</html>
