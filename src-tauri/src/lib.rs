@@ -120,6 +120,7 @@ mod coach_context;
 mod coach_nudges;
 mod coach_templates;
 mod command_runner;
+mod content_personalization;
 mod decision_advantage;
 mod decision_advantage_commands;
 mod git_deck;
@@ -401,6 +402,10 @@ pub fn run() {
             playbook_commands::get_playbook_content,
             playbook_commands::get_playbook_progress,
             playbook_commands::mark_lesson_complete,
+            // Content Personalization (Sovereign Content Engine)
+            content_personalization::commands::get_personalized_lesson,
+            content_personalization::commands::get_personalization_context_summary,
+            content_personalization::commands::prune_personalization_cache,
             // STREETS Command Execution
             streets_commands::parse_lesson_commands,
             streets_commands::execute_streets_command,

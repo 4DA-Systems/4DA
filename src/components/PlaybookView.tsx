@@ -6,6 +6,12 @@ import { renderMarkdown } from '../utils/playbook-markdown';
 import { SovereignProfile } from './playbook/SovereignProfile';
 import { StreetHealthBadge } from './playbook/StreetHealthBadge';
 import { SunsDashboard } from './playbook/SunsDashboard';
+import { SovereignInsightCard } from './playbook/SovereignInsightCard';
+import { SovereignConnectionBlock } from './playbook/SovereignConnectionBlock';
+import { DiffRibbon } from './playbook/DiffRibbon';
+import { FeedEchoBlock } from './playbook/FeedEchoBlock';
+import { ProgressiveRevealBanner } from './playbook/ProgressiveRevealBanner';
+import { PersonalizationDepthIndicator } from './playbook/PersonalizationDepthIndicator';
 
 // Module IDs (static, mirrors backend MODULE_DEFS)
 const MODULE_IDS = ['S', 'T', 'R', 'E1', 'E2', 'T2', 'S2'] as const;
@@ -52,6 +58,7 @@ export function PlaybookView() {
     playbookError,
     activeModuleId,
     streetsTier,
+    personalizedLessons,
   } = useAppStore(
     useShallow((s) => ({
       playbookModules: s.playbookModules,
@@ -61,6 +68,7 @@ export function PlaybookView() {
       playbookError: s.playbookError,
       activeModuleId: s.activeModuleId,
       streetsTier: s.streetsTier,
+      personalizedLessons: s.personalizedLessons,
     })),
   );
 
@@ -68,6 +76,7 @@ export function PlaybookView() {
   const loadContent = useAppStore((s) => s.loadPlaybookContent);
   const loadProgress = useAppStore((s) => s.loadPlaybookProgress);
   const markComplete = useAppStore((s) => s.markLessonComplete);
+  const loadPersonalized = useAppStore((s) => s.loadPersonalizedContent);
 
   // Load modules and progress on mount
   useEffect(() => {
@@ -88,6 +97,18 @@ export function PlaybookView() {
     },
     [markComplete],
   );
+
+  // Load personalized content for each lesson when module content is available
+  useEffect(() => {
+    if (!playbookContent) return;
+    const moduleId = playbookContent.module_id;
+    playbookContent.lessons.forEach((_, idx) => {
+      const key = `${moduleId}:${idx}`;
+      if (loadPersonalized && !personalizedLessons?.has(key)) {
+        loadPersonalized(moduleId, idx);
+      }
+    });
+  }, [playbookContent, personalizedLessons, loadPersonalized]);
 
   // Build a set of completed lesson indices for the active module
   const completedSet = useMemo(() => {
@@ -227,11 +248,36 @@ export function PlaybookView() {
             {/* Lessons */}
             {playbookContent.lessons.map((lesson, idx) => {
               const isCompleted = completedSet.has(idx);
+              const pKey = `${playbookContent.module_id}:${idx}`;
+              const personalized = personalizedLessons?.get(pKey);
+              const lessonContent = personalized?.content ?? lesson.content;
+
+              // Separate temporal blocks by type
+              const diffBlocks = personalized?.temporal_blocks.filter(
+                (b) => b.block_type.type === 'diff_ribbon',
+              ) ?? [];
+              const revealBlocks = personalized?.temporal_blocks.filter(
+                (b) => b.block_type.type === 'progressive_reveal',
+              ) ?? [];
+              const echoBlocks = personalized?.temporal_blocks.filter(
+                (b) => b.block_type.type === 'feed_echo',
+              ) ?? [];
+
               return (
                 <div
                   key={idx}
                   className="bg-[#141414] border border-[#2A2A2A] rounded-xl overflow-hidden"
                 >
+                  {/* Temporal: Diff Ribbon at top */}
+                  {diffBlocks.map((b) => (
+                    <DiffRibbon key={b.block_id} block={b} />
+                  ))}
+
+                  {/* Temporal: Progressive Reveal Banner */}
+                  {revealBlocks.map((b) => (
+                    <ProgressiveRevealBanner key={b.block_id} block={b} />
+                  ))}
+
                   {/* Lesson header */}
                   <div className="flex items-center gap-3 px-6 py-4 border-b border-[#2A2A2A]">
                     <button
@@ -248,14 +294,43 @@ export function PlaybookView() {
                         </svg>
                       )}
                     </button>
-                    <h3 className={`text-sm font-medium ${isCompleted ? 'text-[#A0A0A0]' : 'text-white'}`}>
+                    <h3 className={`text-sm font-medium flex-1 ${isCompleted ? 'text-[#A0A0A0]' : 'text-white'}`}>
                       {lesson.title}
                     </h3>
+                    {personalized && <PersonalizationDepthIndicator depth={personalized.depth} />}
                   </div>
-                  {/* Lesson content */}
+
+                  {/* Lesson content (L1/L2 personalized markdown) */}
                   <div className="px-6 py-5 prose-4da text-sm leading-relaxed text-[#A0A0A0]">
-                    {renderMarkdown(lesson.content, { moduleId: playbookContent.module_id, lessonIdx: idx })}
+                    {renderMarkdown(lessonContent, { moduleId: playbookContent.module_id, lessonIdx: idx })}
                   </div>
+
+                  {/* L3: Sovereign Insight Cards */}
+                  {personalized && personalized.insight_blocks.length > 0 && (
+                    <div className="px-6 pb-4">
+                      {personalized.insight_blocks.map((block) => (
+                        <SovereignInsightCard key={block.block_id} block={block} />
+                      ))}
+                    </div>
+                  )}
+
+                  {/* L4: Sovereign Connection (Mirror) Blocks */}
+                  {personalized && personalized.mirror_blocks.length > 0 && (
+                    <div className="px-6 pb-4">
+                      {personalized.mirror_blocks.map((block) => (
+                        <SovereignConnectionBlock key={block.block_id} block={block} />
+                      ))}
+                    </div>
+                  )}
+
+                  {/* L5: Feed Echo Blocks */}
+                  {echoBlocks.length > 0 && (
+                    <div className="px-6 pb-4">
+                      {echoBlocks.map((b) => (
+                        <FeedEchoBlock key={b.block_id} block={b} />
+                      ))}
+                    </div>
+                  )}
                 </div>
               );
             })}

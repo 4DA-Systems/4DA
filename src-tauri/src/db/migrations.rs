@@ -719,6 +719,48 @@ impl Database {
                 })?;
             }
 
+            // Phase 21 migration: Content Personalization cache + read state
+            if current_version < 21 {
+                Self::run_versioned_migration(
+                    &conn,
+                    20,
+                    21,
+                    "Phase 21: content personalization",
+                    |c| {
+                        c.execute_batch(
+                            "CREATE TABLE IF NOT EXISTS content_personalization_cache (
+                                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                                module_id TEXT NOT NULL,
+                                lesson_idx INTEGER NOT NULL,
+                                block_type TEXT NOT NULL,
+                                block_id TEXT NOT NULL,
+                                content_json TEXT NOT NULL,
+                                generation_path TEXT NOT NULL,
+                                context_hash TEXT NOT NULL,
+                                profile_hash TEXT NOT NULL,
+                                llm_tokens_used INTEGER DEFAULT 0,
+                                llm_cost_cents INTEGER DEFAULT 0,
+                                generated_at TEXT DEFAULT (datetime('now')),
+                                expires_at TEXT,
+                                UNIQUE(module_id, lesson_idx, block_type, block_id, context_hash)
+                            );
+                            CREATE INDEX IF NOT EXISTS idx_personalization_cache_lookup
+                                ON content_personalization_cache(module_id, lesson_idx, context_hash);
+
+                            CREATE TABLE IF NOT EXISTS content_read_state (
+                                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                                module_id TEXT NOT NULL,
+                                lesson_idx INTEGER NOT NULL,
+                                context_hash TEXT NOT NULL,
+                                profile_snapshot TEXT NOT NULL,
+                                read_at TEXT DEFAULT (datetime('now')),
+                                UNIQUE(module_id, lesson_idx)
+                            );",
+                        )
+                    },
+                )?;
+            }
+
             info!(target: "4da::db", "Database schema initialized with sqlite-vec");
             return Ok(());
         }

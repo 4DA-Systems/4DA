@@ -2,6 +2,7 @@ import type { StateCreator } from 'zustand';
 import { invoke } from '@tauri-apps/api/core';
 import type { AppStore } from './types';
 import type { PlaybookModule, PlaybookContent, PlaybookProgress } from '../types/playbook';
+import type { PersonalizedLesson } from '../types/personalization';
 
 export interface PlaybookSlice {
   playbookModules: PlaybookModule[];
@@ -10,11 +11,13 @@ export interface PlaybookSlice {
   playbookLoading: boolean;
   playbookError: string | null;
   activeModuleId: string | null;
+  personalizedLessons: Map<string, PersonalizedLesson>;
   loadPlaybookModules: () => Promise<void>;
   loadPlaybookContent: (moduleId: string) => Promise<void>;
   loadPlaybookProgress: () => Promise<void>;
   markLessonComplete: (moduleId: string, lessonIdx: number) => Promise<void>;
   setActiveModuleId: (id: string | null) => void;
+  loadPersonalizedContent: (moduleId: string, lessonIdx: number) => Promise<void>;
 }
 
 export const createPlaybookSlice: StateCreator<AppStore, [], [], PlaybookSlice> = (set, get) => ({
@@ -24,6 +27,7 @@ export const createPlaybookSlice: StateCreator<AppStore, [], [], PlaybookSlice> 
   playbookLoading: false,
   playbookError: null,
   activeModuleId: null,
+  personalizedLessons: new Map(),
 
   loadPlaybookModules: async () => {
     try {
@@ -64,4 +68,20 @@ export const createPlaybookSlice: StateCreator<AppStore, [], [], PlaybookSlice> 
   },
 
   setActiveModuleId: (id) => set({ activeModuleId: id }),
+
+  loadPersonalizedContent: async (moduleId: string, lessonIdx: number) => {
+    const key = `${moduleId}:${lessonIdx}`;
+    try {
+      const lesson = await invoke<PersonalizedLesson>('get_personalized_lesson', {
+        moduleId,
+        lessonIdx,
+      });
+      const current = new Map(get().personalizedLessons);
+      current.set(key, lesson);
+      set({ personalizedLessons: current });
+    } catch (e) {
+      // Non-fatal: fallback to static content
+      console.warn('Personalization failed, using static content:', e);
+    }
+  },
 });
