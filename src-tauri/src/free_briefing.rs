@@ -11,7 +11,7 @@ use tracing::info;
 
 /// Generate a free-tier briefing (no LLM, no Pro gate)
 #[tauri::command]
-pub async fn generate_free_briefing() -> Result<serde_json::Value> {
+pub async fn generate_free_briefing(app: tauri::AppHandle) -> Result<serde_json::Value> {
     info!(target: "4da::briefing", "Generating free-tier briefing");
 
     // Try in-memory results first, fall back to DB
@@ -144,6 +144,13 @@ pub async fn generate_free_briefing() -> Result<serde_json::Value> {
     let mut source_counts: HashMap<String, usize> = HashMap::new();
     for (_, _, source, _) in &items {
         *source_counts.entry(source.clone()).or_default() += 1;
+    }
+
+    // GAME: track briefing generation
+    if let Ok(db) = crate::get_database() {
+        for a in crate::game_engine::increment_counter(db, "briefings", 1) {
+            crate::events::emit_achievement_unlocked(&app, &a);
+        }
     }
 
     Ok(serde_json::json!({

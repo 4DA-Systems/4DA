@@ -78,6 +78,8 @@ mod domain_profile;
 pub(crate) mod domain_profile_data;
 pub mod extractors;
 mod free_briefing;
+mod game_commands;
+mod game_engine;
 mod handoff;
 mod health;
 mod health_commands;
@@ -457,7 +459,10 @@ pub fn run() {
             translation_commands::get_all_translations,
             translation_commands::save_translation_override,
             translation_commands::get_translation_overrides,
-            translation_commands::delete_translation_override
+            translation_commands::delete_translation_override,
+            // GAME Engine
+            game_commands::get_game_state,
+            game_commands::get_achievements
         ])
         .setup(|app| {
             // Record app start time for diagnostics uptime tracking

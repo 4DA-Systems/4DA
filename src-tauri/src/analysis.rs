@@ -13,9 +13,10 @@ use std::sync::atomic::Ordering;
 
 use crate::scoring;
 use crate::{
-    analysis_rerank, emit_progress, get_analysis_abort, get_analysis_state, get_database,
-    monitoring, signals, source_fetching, truncate_utf8, void_signal_analysis_complete,
-    void_signal_error, AnalysisState, SourceRelevance, ANALYSIS_TIMEOUT_SECS,
+    analysis_rerank, emit_progress, game_engine, get_analysis_abort, get_analysis_state,
+    get_database, monitoring, signals, source_fetching, truncate_utf8,
+    void_signal_analysis_complete, void_signal_error, AnalysisState, SourceRelevance,
+    ANALYSIS_TIMEOUT_SECS,
 };
 
 // Singleton SignalClassifier - created once and reused across all analyses
@@ -96,6 +97,27 @@ pub(crate) async fn run_deep_initial_scan(app: AppHandle) -> Result<(), String> 
 
                 // Run post-analysis innovation hooks (non-blocking)
                 scoring::run_post_analysis_hooks(&results);
+
+                // GAME: track scan, discoveries, and source diversity
+                if let Ok(db) = crate::get_database() {
+                    // Increment scan counter
+                    for a in game_engine::increment_counter(db, "scans", 1) {
+                        crate::events::emit_achievement_unlocked(&app, &a);
+                    }
+                    // Increment discoveries counter
+                    if relevant_count > 0 {
+                        for a in game_engine::increment_counter(db, "discoveries", relevant_count as u64) {
+                            crate::events::emit_achievement_unlocked(&app, &a);
+                        }
+                    }
+                    // Track source diversity
+                    let source_types: std::collections::HashSet<&str> = results.iter().map(|r| r.source_type.as_str()).collect();
+                    if source_types.len() >= 3 {
+                        for a in game_engine::increment_counter(db, "sources", source_types.len() as u64) {
+                            crate::events::emit_achievement_unlocked(&app, &a);
+                        }
+                    }
+                }
             }
             Ok(Err(e)) => {
                 error!(target: "4da::analysis", error = %e, "Deep initial scan failed");
@@ -474,6 +496,24 @@ pub(crate) async fn run_cached_analysis(app: AppHandle) -> Result<(), String> {
 
                 // Run post-analysis innovation hooks (non-blocking)
                 scoring::run_post_analysis_hooks(&results);
+
+                // GAME: track scan, discoveries, and source diversity
+                if let Ok(db) = crate::get_database() {
+                    for a in game_engine::increment_counter(db, "scans", 1) {
+                        crate::events::emit_achievement_unlocked(&app, &a);
+                    }
+                    if relevant_count > 0 {
+                        for a in game_engine::increment_counter(db, "discoveries", relevant_count as u64) {
+                            crate::events::emit_achievement_unlocked(&app, &a);
+                        }
+                    }
+                    let source_types: std::collections::HashSet<&str> = results.iter().map(|r| r.source_type.as_str()).collect();
+                    if source_types.len() >= 3 {
+                        for a in game_engine::increment_counter(db, "sources", source_types.len() as u64) {
+                            crate::events::emit_achievement_unlocked(&app, &a);
+                        }
+                    }
+                }
             }
             Ok(Err(e)) => {
                 guard.error = Some(e.clone());

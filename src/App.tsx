@@ -39,6 +39,8 @@ import { CommandDeck } from './components/command-deck/CommandDeck';
 import { FirstRunTransition } from './components/FirstRunTransition';
 import { ViewTabBar } from './components/ViewTabBar';
 import { ProValueBadge } from './components/ProValueBadge';
+import { GameCelebration } from './components/GameCelebration';
+import { AchievementsPanel } from './components/AchievementsPanel';
 import {
   useSettings,
   useMonitoring,
@@ -84,6 +86,8 @@ function App() {
   const loadLicense = useAppStore(s => s.loadLicense);
   const loadTrialStatus = useAppStore(s => s.loadTrialStatus);
   const loadProValueReport = useAppStore(s => s.loadProValueReport);
+  const loadGameState = useAppStore(s => s.loadGameState);
+  const initGameListeners = useAppStore(s => s.initGameListeners);
 
   // First-run state
   const isFirstRun = useAppStore(s => s.isFirstRun);
@@ -182,14 +186,22 @@ function App() {
   // Reset render limit when new results come in
   useEffect(() => { setRenderLimit(50); }, [state.relevanceResults]);
 
-  // Load persisted briefing + source health + license + pro value on mount (instant, from DB)
+  // Load persisted briefing + source health + license + pro value + game state on mount (instant, from DB)
   useEffect(() => {
     loadPersistedBriefing();
     loadSourceHealth();
     loadLicense();
     loadTrialStatus();
     loadProValueReport();
-  }, [loadPersistedBriefing, loadSourceHealth, loadLicense, loadTrialStatus, loadProValueReport]);
+    loadGameState();
+  }, [loadPersistedBriefing, loadSourceHealth, loadLicense, loadTrialStatus, loadProValueReport, loadGameState]);
+
+  // GAME achievement listeners
+  useEffect(() => {
+    let cleanup: (() => void) | undefined;
+    initGameListeners().then((fn) => { cleanup = fn; });
+    return () => { cleanup?.(); };
+  }, [initGameListeners]);
 
   // Deep-link handler: 4da://activate?key=...
   const activateLicense = useAppStore(s => s.activateLicense);
@@ -425,6 +437,7 @@ function App() {
           <BriefingView />
         ) : activeView === 'insights' ? (
           <div className="space-y-6">
+            <AchievementsPanel />
             <TechRadar />
             <DecisionMemory />
             <AutophagyInsights />
@@ -495,6 +508,9 @@ function App() {
 
         {/* Toast Notifications */}
         <ToastContainer toasts={toasts} onDismiss={removeToast} />
+
+        {/* GAME Achievement Celebration Overlay */}
+        <GameCelebration />
 
         {/* Keyboard Shortcuts Help Modal */}
         {showKeyboardHelp && (
