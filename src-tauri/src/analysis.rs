@@ -106,14 +106,19 @@ pub(crate) async fn run_deep_initial_scan(app: AppHandle) -> Result<(), String> 
                     }
                     // Increment discoveries counter
                     if relevant_count > 0 {
-                        for a in game_engine::increment_counter(db, "discoveries", relevant_count as u64) {
+                        for a in
+                            game_engine::increment_counter(db, "discoveries", relevant_count as u64)
+                        {
                             crate::events::emit_achievement_unlocked(&app, &a);
                         }
                     }
                     // Track source diversity
-                    let source_types: std::collections::HashSet<&str> = results.iter().map(|r| r.source_type.as_str()).collect();
+                    let source_types: std::collections::HashSet<&str> =
+                        results.iter().map(|r| r.source_type.as_str()).collect();
                     if source_types.len() >= 3 {
-                        for a in game_engine::increment_counter(db, "sources", source_types.len() as u64) {
+                        for a in
+                            game_engine::increment_counter(db, "sources", source_types.len() as u64)
+                        {
                             crate::events::emit_achievement_unlocked(&app, &a);
                         }
                     }
@@ -503,13 +508,18 @@ pub(crate) async fn run_cached_analysis(app: AppHandle) -> Result<(), String> {
                         crate::events::emit_achievement_unlocked(&app, &a);
                     }
                     if relevant_count > 0 {
-                        for a in game_engine::increment_counter(db, "discoveries", relevant_count as u64) {
+                        for a in
+                            game_engine::increment_counter(db, "discoveries", relevant_count as u64)
+                        {
                             crate::events::emit_achievement_unlocked(&app, &a);
                         }
                     }
-                    let source_types: std::collections::HashSet<&str> = results.iter().map(|r| r.source_type.as_str()).collect();
+                    let source_types: std::collections::HashSet<&str> =
+                        results.iter().map(|r| r.source_type.as_str()).collect();
                     if source_types.len() >= 3 {
-                        for a in game_engine::increment_counter(db, "sources", source_types.len() as u64) {
+                        for a in
+                            game_engine::increment_counter(db, "sources", source_types.len() as u64)
+                        {
                             crate::events::emit_achievement_unlocked(&app, &a);
                         }
                     }

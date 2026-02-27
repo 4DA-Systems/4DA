@@ -758,7 +758,11 @@ pub async fn remove_tech_stack(technology: String) -> Result<serde_json::Value> 
 }
 /// Add an explicit interest (with embedding generation)
 #[tauri::command]
-pub async fn add_interest(app: AppHandle, topic: String, weight: Option<f32>) -> Result<serde_json::Value> {
+pub async fn add_interest(
+    app: AppHandle,
+    topic: String,
+    weight: Option<f32>,
+) -> Result<serde_json::Value> {
     validate_input_length(&topic, "Interest topic", 200)?;
     let engine = get_context_engine()?;
     let weight = weight.unwrap_or(1.0);
@@ -842,7 +846,11 @@ pub async fn remove_exclusion(topic: String) -> Result<serde_json::Value> {
 
 /// Record a user interaction (click, save, dismiss)
 #[tauri::command]
-pub async fn record_interaction(app: AppHandle, source_item_id: i64, action: String) -> Result<serde_json::Value> {
+pub async fn record_interaction(
+    app: AppHandle,
+    source_item_id: i64,
+    action: String,
+) -> Result<serde_json::Value> {
     let engine = get_context_engine()?;
 
     let action_type = match action.to_lowercase().as_str() {
