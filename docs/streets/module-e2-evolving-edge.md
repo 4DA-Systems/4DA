@@ -26,6 +26,8 @@ Here's what you'll have by the end of this module:
 
 No predictions. No hype. Just signal.
 
+{@ insight engine_ranking @}
+
 Let's go.
 
 ---
@@ -62,13 +64,23 @@ This is the big one. In 2024, local LLMs were a novelty — fun to tinker with, 
 
 **Why this matters for income:**
 
-The cost equation flipped. In 2024, if you built an AI-powered service, your largest ongoing cost was API calls. At $5-15 per million tokens, your margins depended on how efficiently you could use the API. Now, for 80% of tasks, you can run inference locally at effectively zero marginal cost. Your only costs are electricity (~$0.003 per million tokens) and the hardware you already own.
+{? if profile.gpu.exists ?}
+Your {= profile.gpu.model | fallback("GPU") =} puts you in a strong position here. Local inference on your hardware means near-zero marginal cost for AI-powered services.
+{? else ?}
+Even without a dedicated GPU, CPU-based inference with smaller models (3B-8B) is viable for many revenue-generating tasks. A GPU upgrade would unlock the full range of opportunities below.
+{? endif ?}
+
+The cost equation flipped. In 2024, if you built an AI-powered service, your largest ongoing cost was API calls. At $5-15 per million tokens, your margins depended on how efficiently you could use the API. Now, for 80% of tasks, you can run inference locally at effectively zero marginal cost. Your only costs are electricity (~{= regional.currency_symbol | fallback("$") =}0.003 per million tokens) and the hardware you already own.
 
 This means:
 1. **Higher margins** on AI-powered services (processing costs dropped 99%)
 2. **More products are viable** (ideas that were unprofitable at API prices now work)
 3. **Privacy is free** (no trade-off between local processing and quality)
 4. **You can experiment freely** (no API bill anxiety while prototyping)
+
+{? if computed.has_nvidia ?}
+With your NVIDIA {= profile.gpu.model | fallback("GPU") =}, you have access to CUDA acceleration and the broadest model compatibility. Most local inference frameworks (llama.cpp, vLLM, Unsloth) are optimized for NVIDIA first. This is a direct competitive advantage for building AI-powered services.
+{? endif ?}
 
 ```bash
 # Verify this on your own hardware right now
@@ -213,6 +225,10 @@ But here's what most people miss: **the multiplier applies to your competitors t
 
 #### Shift 4: Privacy Regulations Created Real Demand
 
+{? if regional.country ?}
+This shift has specific implications in {= regional.country | fallback("your region") =}. Read the details below with your local regulatory environment in mind.
+{? endif ?}
+
 This stopped being theoretical in 2026.
 
 **EU AI Act enforcement timeline (where we are now):**
@@ -228,9 +244,9 @@ The February 2026 milestone matters because companies must now document their AI
 
 **Real-world impact on developer income:**
 
-- **Legal firms** can't send client documents to ChatGPT. They need local alternatives. Budget: $5,000-50,000 for setup.
-- **Healthcare companies** need AI for clinical notes but can't send patient data to external APIs. Budget: $10,000-100,000 for HIPAA-compliant local deployment.
-- **Financial institutions** want AI-assisted code review but their security teams vetoed all cloud AI providers. Budget: $5,000-25,000 for on-premise deployment.
+- **Legal firms** can't send client documents to ChatGPT. They need local alternatives. Budget: {= regional.currency_symbol | fallback("$") =}5,000-50,000 for setup.
+- **Healthcare companies** need AI for clinical notes but can't send patient data to external APIs. Budget: {= regional.currency_symbol | fallback("$") =}10,000-100,000 for HIPAA-compliant local deployment.
+- **Financial institutions** want AI-assisted code review but their security teams vetoed all cloud AI providers. Budget: {= regional.currency_symbol | fallback("$") =}5,000-25,000 for on-premise deployment.
 - **EU companies of all sizes** are realizing that "we use OpenAI" is now a compliance liability. They need alternatives. Budget: varies, but they're actively looking.
 
 "Local-first" went from a nerdy preference to a compliance requirement. If you know how to deploy models locally, you have a skill that enterprises will pay premium rates for.
@@ -297,6 +313,10 @@ Local LLMs are production-ready
 
 This window won't stay open forever. When major players build the MCP marketplace, when privacy consulting gets commoditized, when vibe coding tools mature enough to not need developer help — the early-mover advantage shrinks. The time to position is now.
 
+{? if dna.is_full ?}
+Based on your Developer DNA, your strongest alignment with these six shifts centers on {= dna.top_engaged_topics | fallback("your most-engaged topics") =}. The opportunities in Lesson 2 are ranked with this in mind — pay special attention to where your existing engagement overlaps with market timing.
+{? endif ?}
+
 ### Your Turn
 
 1. **Audit your 2025 assumptions.** What did you believe about AI, markets, or opportunities a year ago that's no longer true? Write down three things that changed.
@@ -310,6 +330,10 @@ This window won't stay open forever. When major players build the MCP marketplac
 *"Opportunity without specificity is just inspiration. Here are the specifics."*
 
 For each opportunity below, you get: what it is, the current market, competition level, entry difficulty, revenue potential, and a "Start This Week" action plan. These aren't abstract — they're executable.
+
+{? if stack.primary ?}
+As a {= stack.primary | fallback("developer") =} developer, some of these opportunities will feel more natural than others. That's fine. The best opportunity is the one you can actually execute on, not the one with the highest theoretical ceiling.
+{? endif ?}
 
 ### Opportunity 1: MCP Server Marketplace
 
@@ -366,7 +390,12 @@ The person who has published 10 useful MCP servers in February 2026 will have a 
 
 **Competition:** Low. Most AI consultants push cloud solutions (OpenAI/Azure/AWS) because that's what they know. The pool of consultants who can deploy Ollama, vLLM, or llama.cpp in a production environment with proper security, monitoring, and compliance documentation is tiny.
 
-**Entry difficulty:** Medium. You need genuine expertise in model deployment, Docker/Kubernetes, networking, and security. But if you've completed Module S of STREETS and you can deploy Ollama in production, you already have more practical expertise than 95% of the people calling themselves "AI consultants."
+{? if profile.gpu.exists ?}
+**Entry difficulty:** Medium — and your hardware is already capable. You need genuine expertise in model deployment, Docker/Kubernetes, networking, and security. With {= profile.gpu.model | fallback("your GPU") =}, you can demonstrate local deployment to clients on your own rig before touching their infrastructure.
+{? else ?}
+**Entry difficulty:** Medium. You need genuine expertise in model deployment, Docker/Kubernetes, networking, and security. Note: consulting clients will have their own hardware — you don't need a powerful GPU to advise on deployment, but having one to demo with helps close deals.
+{? endif ?}
+But if you've completed Module S of STREETS and you can deploy Ollama in production, you already have more practical expertise than 95% of the people calling themselves "AI consultants."
 
 **Revenue potential:**
 
@@ -543,6 +572,10 @@ The gap is for structured, practical content that treats AI as a genuine tool (n
 **Competition:** Low in specific niches, moderate in general. The big AI companies don't fine-tune for individual clients at this scale. The opportunity is in the long tail — specialized models for specific use cases that aren't worth OpenAI's attention.
 
 **Entry difficulty:** Medium-High. You need to understand fine-tuning workflows (LoRA, QLoRA), data preparation, evaluation metrics, and model deployment. But the tools have matured significantly — Unsloth, Axolotl, and Hugging Face TRL make fine-tuning accessible on consumer GPUs.
+
+{? if stack.contains("python") ?}
+Your Python experience is a direct advantage here — the entire fine-tuning ecosystem (Unsloth, Transformers, TRL) is Python-native. You can skip the language learning curve and go straight to model training.
+{? endif ?}
 
 **Revenue potential:**
 
@@ -729,7 +762,12 @@ if __name__ == "__main__":
 
 ### Your Turn
 
+{@ mirror radar_momentum @}
+
 1. **Rank the opportunities.** Order the seven opportunities above from most to least attractive for YOUR situation. Consider your skills, hardware, available time, and risk tolerance.
+{? if radar.adopt ?}
+Cross-reference with your current radar: you're already tracking {= radar.adopt | fallback("technologies in your adopt ring") =}. Which of these seven opportunities aligns with what you're already investing in?
+{? endif ?}
 2. **Pick one.** Not three, not "all of them eventually." One. The one you'll start this week.
 3. **Complete the "Start This Week" action plan.** Every opportunity above has a concrete first-week plan. Do it. Publish something by Sunday.
 4. **Set a 30-day checkpoint.** Write down what "success" looks like in 30 days for your chosen opportunity. Be specific: revenue target, user count, content published, clients contacted.
@@ -865,6 +903,8 @@ Watch for platform announcements. When the platform you build on announces they'
 | 2026 | MCP tools + local AI services | ? months | You are here. The window is open. How long it stays open depends on how quickly major players build marketplaces and commoditize distribution. |
 
 **The pattern:** Developer tool windows last 12-24 months on average. AI-adjacent windows are shorter (6-12 months) because the pace of change is faster. The MCP window is probably 12-18 months from today. After that, the marketplace infrastructure will exist, early winners will have distribution, and entering will require significantly more effort.
+
+{@ temporal market_timing @}
 
 ### The Decision Framework
 
@@ -1002,7 +1042,11 @@ sources:
 
 **Layer 1: Automated Collection (4DA)**
 
-If you're using 4DA, this is already handled. 4DA ingests from configurable sources, classifies by relevance to your Developer DNA, and surfaces the highest-signal items in your daily briefing.
+{? if settings.has_llm ?}
+If you're using 4DA with {= settings.llm_provider | fallback("your LLM provider") =}, this is already handled. 4DA ingests from configurable sources, classifies by relevance to your Developer DNA using {= settings.llm_model | fallback("your configured model") =}, and surfaces the highest-signal items in your daily briefing.
+{? else ?}
+If you're using 4DA, this is already handled. 4DA ingests from configurable sources, classifies by relevance to your Developer DNA, and surfaces the highest-signal items in your daily briefing. Configure an LLM provider in settings for AI-powered classification — Ollama with a local model works perfectly for this.
+{? endif ?}
 
 **Layer 2: RSS for Everything Else**
 
@@ -1344,6 +1388,10 @@ That's how you convert learning time into future income.
 
 ### The Deliverable
 
+{? if dna.is_full ?}
+Your Developer DNA profile ({= dna.identity_summary | fallback("your identity summary") =}) gives you a head start here. The opportunities you select should play to the strengths your DNA reveals — and compensate for the gaps. Your blind spots ({= dna.blind_spots | fallback("areas you engage with less") =}) are worth noting as you choose your three bets.
+{? endif ?}
+
 This is it — the output that makes this module worth your time. Your 2026 Opportunity Radar documents the three bets you're making this year, with enough specificity to actually execute on them.
 
 Not five bets. Not "a few ideas." Three. Humans are terrible at pursuing more than three things simultaneously. One is ideal. Three is the maximum.
@@ -1625,6 +1673,10 @@ Be honest in your review. The Opportunity Radar only works if you update it with
 ---
 
 ## Module E: Complete
+
+{? if progress.completed_count ?}
+You've now completed {= progress.completed_count | fallback("another") =} of {= progress.total_count | fallback("the") =} STREETS modules. Each module compounds on the last — the intelligence system from this module feeds directly into every opportunity you pursue.
+{? endif ?}
 
 ### What You've Built in Week 11
 

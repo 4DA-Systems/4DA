@@ -7,7 +7,11 @@
 
 ---
 
+{? if progress.completed("S") ?}
 Module S gave you the infrastructure. You have a rig, a local LLM stack, legal basics, a budget, and a Sovereign Stack Document. That's the foundation. But a foundation without walls is just a slab of concrete.
+{? else ?}
+Module S covers the infrastructure — your rig, a local LLM stack, legal basics, a budget, and a Sovereign Stack Document. That's the foundation. But a foundation without walls is just a slab of concrete. (Complete Module S first for maximum value from this module.)
+{? endif ?}
 
 This module is about walls. Specifically, the kind of walls that keep competitors out and let you charge premium prices without constantly looking over your shoulder.
 
@@ -15,7 +19,7 @@ In business, these walls are called "moats." Warren Buffett popularized the term
 
 They should.
 
-The difference between a developer earning $500/month from side projects and one earning $5,000/month is almost never raw technical skill. It's positioning. It's the moat. The $5,000/month developer has built something — a reputation, a dataset, a toolchain, a speed advantage, an integration nobody else has bothered to build — that makes their offering hard to replicate even if a competitor has the same hardware and the same models.
+The difference between a developer earning {= regional.currency_symbol | fallback("$") =}500/month from side projects and one earning {= regional.currency_symbol | fallback("$") =}5,000/month is almost never raw technical skill. It's positioning. It's the moat. The {= regional.currency_symbol | fallback("$") =}5,000/month developer has built something — a reputation, a dataset, a toolchain, a speed advantage, an integration nobody else has bothered to build — that makes their offering hard to replicate even if a competitor has the same hardware and the same models.
 
 By the end of these two weeks, you will have:
 
@@ -27,6 +31,12 @@ By the end of these two weeks, you will have:
 - A completed Moat Map — your personal positioning document
 
 No vague strategy talk. No "find your passion" platitudes. Concrete frameworks, real numbers, real examples.
+
+{? if dna.is_full ?}
+
+{@ mirror blind_spot_moat @}
+
+{? endif ?}
 
 Let's build your walls.
 
@@ -65,6 +75,8 @@ Ultra-specialists face three risks:
 
 ### The T-Shape: Where the Money Is
 
+{@ insight t_shape @}
+
 The T-shaped developer model isn't new. Tim Brown from IDEO popularized it in design. But developers almost never apply it to income strategy. They should.
 
 The horizontal bar of the T is your breadth — the adjacent skills where you're competent. You can do them. You understand the concepts. You can have an intelligent conversation about them.
@@ -85,7 +97,11 @@ Breadth (competent in many)
           |       |        |
 ```
 
+{? if stack.primary ?}
+**The magic happens at the intersection.** Your primary stack is {= stack.primary | fallback("your primary stack") =}. Combined with your adjacent skills in {= stack.adjacent | fallback("your adjacent areas") =}, this creates a positioning foundation. The question is: how rare is your specific combination? That scarcity creates pricing power.
+{? else ?}
 **The magic happens at the intersection.** "I build Rust-based desktop applications with local AI capabilities" is not a skill thousands of people have. It might be hundreds. Maybe dozens. That scarcity creates pricing power.
+{? endif ?}
 
 Real examples of T-shaped positioning that commands premium rates:
 
@@ -98,6 +114,16 @@ Real examples of T-shaped positioning that commands premium rates:
 | NLP + machine learning | Healthcare domain, HIPAA | "Healthcare AI implementation specialist" | $250-400/hr |
 
 Notice what's happening in that last column. These aren't "developer" rates. They're specialist rates. And the positioning isn't a lie or a stretch — it's a true description of a real, rare skill combination.
+
+{? if stack.contains("rust") ?}
+> **Your Stack Advantage:** Rust developers command some of the highest freelance rates in the industry. Rust's learning curve is your moat — fewer developers can compete with you on Rust-specific projects. Consider pairing Rust depth with a domain like local AI, embedded systems, or WebAssembly for maximum scarcity.
+{? endif ?}
+{? if stack.contains("python") ?}
+> **Your Stack Advantage:** Python is widely known, but Python expertise in specific domains (ML pipelines, data engineering, scientific computing) still commands premium rates. Your moat won't come from Python alone — it needs a domain pairing. Focus your T-shape on the vertical: what domain do you apply Python in that others don't?
+{? endif ?}
+{? if stack.contains("typescript") ?}
+> **Your Stack Advantage:** TypeScript skills are in high demand but also widely available. Your moat needs to come from what you build with TypeScript, not TypeScript itself. Consider specializing in a framework niche (Tauri frontends, custom design systems, developer tooling) where TypeScript is the vehicle, not the destination.
+{? endif ?}
 
 ### The Unique Combination Principle
 
@@ -118,6 +144,10 @@ And there are hospitals, clinics, health-tech companies, and insurance firms tha
 ### Exercise: Map Your Own T-Shape
 
 Get a piece of paper or open a text file. This takes 20 minutes. Don't overthink it.
+
+{? if dna.is_full ?}
+> **Head Start:** Based on your Developer DNA, your primary stack is {= dna.primary_stack | fallback("not yet identified") =} and your top engaged topics include {= dna.top_engaged_topics | fallback("various technologies") =}. Use these as starting points below — but don't limit yourself to what 4DA has detected. Your non-technical knowledge and past career experience are often the most valuable inputs.
+{? endif ?}
 
 **Step 1: List your deep skills (the vertical bar)**
 
@@ -173,7 +203,7 @@ For each intersection, ask: "If a company needed someone with exactly this combi
 
 If the answer is "thousands of people, at commodity rates," the combination isn't specific enough. Go deeper. Add another dimension.
 
-If the answer is "maybe 50-200 people, and they'd probably pay $150+/hr," you've found a potential moat.
+If the answer is "maybe 50-200 people, and they'd probably pay {= regional.currency_symbol | fallback("$") =}150+/hr," you've found a potential moat.
 
 ### Lesson 1 Checkpoint
 
@@ -193,6 +223,8 @@ Keep this T-shape map. You'll combine it with your moat category in Lesson 2 to 
 *"There are only five kinds of walls. Know which ones you can build."*
 
 Every developer moat falls into one of five categories. Some are quick to build but easy to erode. Others take months to construct but last for years. Understanding the categories helps you choose where to invest your limited time.
+
+{@ insight stack_fit @}
 
 ### Moat Category 1: Integration Moats
 
@@ -240,6 +272,10 @@ Consider this scenario: a developer builds a service that takes data from Shopif
 3. Build the bridge
 4. Price based on time saved, not hours worked
 
+{? if settings.has_llm ?}
+> **Your LLM Advantage:** You already have a local LLM configured. Integration moats become even more powerful when you add AI-powered data transformation between systems. Instead of just piping data from A to B, your bridge can intelligently map, categorize, and enrich data in transit — all locally, all privately.
+{? endif ?}
+
 > **Common Mistake:** Building integrations between two massive platforms (like Salesforce and HubSpot) where enterprise vendors already have solutions. Go niche. Clio + Notion. Pipedrive + Linear. Xero + Airtable. The niches are where the money is because the big players don't bother.
 
 ---
@@ -253,6 +289,10 @@ Consider this scenario: a developer builds a service that takes data from Shopif
 **The 2026 speed advantage:**
 
 You're reading this course in 2026. You have access to Claude Code, Cursor, local LLMs, and a Sovereign Stack that you configured in Module S. Combined with your deep expertise, you can ship work at a pace that would have been impossible 18 months ago.
+
+{? if profile.gpu.exists ?}
+Your {= profile.gpu.model | fallback("GPU") =} with {= profile.gpu.vram | fallback("dedicated") =} VRAM gives you a hardware speed advantage — local inference means you're not waiting on API rate limits or paying per-token costs during rapid iteration cycles.
+{? endif ?}
 
 Here's the real math:
 
@@ -330,6 +370,10 @@ echo "Deploy with: vercel --prod"
 
 > **Real Talk:** Speed moats erode as AI tools improve and more developers adopt them. The pure speed advantage of "I use Claude Code and you don't" will shrink over the next 12-18 months as adoption spreads. Your speed moat needs to be built on top of speed — your domain knowledge, your component library, your workflow automation. The AI tools are the engine. Your accumulated systems are the transmission.
 
+{? if stack.primary ?}
+> **Your Speed Baseline:** With {= stack.primary | fallback("your primary stack") =} as your primary stack, your speed moat investments should focus on building reusable assets in that ecosystem — component libraries, project scaffolding, testing templates, and deployment pipelines specific to {= stack.primary | fallback("your stack") =}.
+{? endif ?}
+
 ---
 
 ### Moat Category 3: Trust Moats
@@ -365,6 +409,10 @@ Projected results after 6 months:
 The total time investment in writing: about 80 hours over 6 months. The ROI on those 80 hours is absurd.
 
 > **NOTE:** Rust developer consulting rates averaging $78/hr (up to $143/hr on the high end per ZipRecruiter data) are the baseline. Trust moat positioning pushes rates to $200-400/hr. AI/ML specialists with trust moats command $120-250/hr (Source: index.dev). The "3 blog posts" strategy works because in most micro-niches, fewer than 3 deep technical articles exist.
+
+{? if regional.country ?}
+> **Regional Note:** Consulting rate ranges vary by market. In {= regional.country | fallback("your country") =}, adjust these benchmarks to local purchasing power — but remember that trust moats enable you to sell globally. A blog post that ranks on Google attracts clients from everywhere, not just {= regional.country | fallback("your local market") =}.
+{? endif ?}
 
 **Building in public as a trust accelerator:**
 
@@ -450,7 +498,11 @@ for repo in ["tauri-apps/tauri", "anthropics/anthropic-sdk-python"]:
 conn.commit()
 ```
 
+{? if settings.has_llm ?}
+2. **Create derived datasets.** Take raw data and add intelligence — classifications, scores, trends, correlations — that make the data more valuable than the sum of its parts. With your local LLM ({= settings.llm_model | fallback("your configured model") =}), you can enrich raw data with AI-powered classification without sending anything to external APIs.
+{? else ?}
 2. **Create derived datasets.** Take raw data and add intelligence — classifications, scores, trends, correlations — that make the data more valuable than the sum of its parts.
+{? endif ?}
 
 3. **Build domain-specific corpora.** A well-curated dataset of 10,000 legal contract clauses categorized by type, risk level, and jurisdiction is worth real money to legal tech companies. No clean dataset exists for most domains.
 
@@ -527,6 +579,10 @@ Example: a `client-weekly-report.sh` script that pulls analytics data, pipes it 
 
 The strongest positions combine multiple moat types. Here are proven combinations:
 
+{? if radar.has("tauri", "adopt") ?}
+> **Your Radar Signal:** You have Tauri in your "Adopt" ring. This positions you well for Integration + Trust moats — building Tauri-based local-first tools and writing about the process creates a compound moat that few developers can replicate.
+{? endif ?}
+
 | Moat Combination | Example | Strength |
 |---|---|---|
 | Integration + Trust | "The person who connects Clio to everything" (writes about it too) | Very strong |
@@ -554,9 +610,9 @@ You should now understand:
 
 Before you invest 40+ hours into building anything, run it through these four questions. If any answer is "no," the niche probably isn't worth pursuing. If all four are "yes," you've got a candidate.
 
-**Question 1: "Would someone pay $50 to solve this problem?"**
+**Question 1: "Would someone pay {= regional.currency_symbol | fallback("$") =}50 to solve this problem?"**
 
-This is the minimum viable price test. Not $5. Not $10. $50. If someone wouldn't pay $50 to make this problem go away, the problem isn't painful enough to build a business around.
+This is the minimum viable price test. Not {= regional.currency_symbol | fallback("$") =}5. Not {= regional.currency_symbol | fallback("$") =}10. {= regional.currency_symbol | fallback("$") =}50. If someone wouldn't pay {= regional.currency_symbol | fallback("$") =}50 to make this problem go away, the problem isn't painful enough to build a business around.
 
 How to validate: Search for the problem on Google. Look at existing solutions. Are they charging at least $50? If there are no existing solutions, that's either a massive opportunity or a sign that nobody cares enough to pay. Go to forums (Reddit, HN, StackOverflow) and look for people complaining about this problem. Count the complaints. Measure the frustration.
 
@@ -688,6 +744,10 @@ Let's walk through four real niche evaluations.
 
 Take the T-shape intersections you identified in Lesson 1. Pick three possible niches that emerge from those intersections. Score each one using the matrix above. Keep the highest-scoring niche as your primary candidate. You'll validate it in Lesson 6.
 
+{? if stack.primary ?}
+> **Starting Point:** Your primary stack ({= stack.primary | fallback("your primary stack") =}) combined with your adjacent skills ({= stack.adjacent | fallback("your adjacent skills") =}) suggests niche opportunities at the intersection. Score at least one niche that leverages this specific combination — your existing expertise lowers the "Buildability" barrier and raises the "Personal Fit" score.
+{? endif ?}
+
 ### Lesson 3 Checkpoint
 
 You should now have:
@@ -776,6 +836,13 @@ npm install @modelcontextprotocol/sdk
 4. Respond to threads on r/LocalLLaMA and r/selfhosted where people ask about enterprise deployment.
 5. Offer a free 30-minute "AI infrastructure audit" to 3 businesses in your network.
 
+{? if computed.os_family == "windows" ?}
+> **Windows Advantage:** Most local AI deployment guides target Linux. If you run {= profile.os | fallback("Windows") =}, you have a content gap to exploit — write the definitive Windows-native deployment guide. Many enterprise environments run Windows, and they need consultants who speak their OS.
+{? endif ?}
+{? if computed.os_family == "linux" ?}
+> **Linux Advantage:** You're already on the dominant platform for local AI deployment. Your familiarity with Linux makes Docker, GPU passthrough, and production Ollama setups second nature — that's a speed moat on top of the consulting moat.
+{? endif ?}
+
 ---
 
 ### 3. Privacy-First SaaS
@@ -829,7 +896,11 @@ npm install @modelcontextprotocol/sdk
 
 **What:** Taking a base model and fine-tuning it on domain-specific data so it performs dramatically better than the base model for specific tasks.
 
-**Why NOW:** LoRA and QLoRA made fine-tuning accessible on consumer GPUs (12GB+ VRAM). A developer with an RTX 3060 can fine-tune a 7B model on 10,000 examples in a few hours. Most businesses don't know how to do this. You do.
+{? if profile.gpu.exists ?}
+**Why NOW:** LoRA and QLoRA made fine-tuning accessible on consumer GPUs (12GB+ VRAM). Your {= profile.gpu.model | fallback("GPU") =} with {= profile.gpu.vram | fallback("dedicated") =} VRAM puts you in a position to fine-tune models locally. Most businesses don't know how to do this. You do.
+{? else ?}
+**Why NOW:** LoRA and QLoRA made fine-tuning accessible on consumer GPUs (12GB+ VRAM). A developer with an RTX 3060 can fine-tune a 7B model on 10,000 examples in a few hours. Most businesses don't know how to do this. You do. (Note: without a dedicated GPU, you can still offer this service using cloud GPU rentals from providers like RunPod or Vast.ai — the consulting expertise is the moat, not the hardware.)
+{? endif ?}
 
 | Dimension | Assessment |
 |---|---|
@@ -883,6 +954,10 @@ ollama pull llama3.1:8b
 4. Share in the Tauri Discord and on Reddit
 5. You are now one of the relatively few developers with a public Tauri portfolio
 
+{? if stack.contains("rust") ?}
+> **Your Advantage:** With Rust in your stack, Tauri development is a natural extension. You already speak the backend language. Most web developers attempting Tauri hit the Rust learning curve as a wall. You walk right through it.
+{? endif ?}
+
 ---
 
 ### 7. Developer Tooling (CLI Tools, Extensions, Plugins)
@@ -904,7 +979,11 @@ ollama pull llama3.1:8b
 1. What repetitive task do YOU do that annoys you?
 2. Build a CLI tool or extension that solves it
 3. If it solves it for you, it probably solves it for others
-4. Ship to npm/crates.io/PyPI with a free tier and a $9/month Pro tier
+4. Ship to npm/crates.io/PyPI with a free tier and a {= regional.currency_symbol | fallback("$") =}9/month Pro tier
+
+{? if radar.adopt ?}
+> **Your Radar:** Technologies in your Adopt ring ({= radar.adopt | fallback("your adopted technologies") =}) are where you have the deepest conviction. Developer tooling in these ecosystems is your fastest path to a credible, useful tool — you know the pain points firsthand.
+{? endif ?}
 
 ```rust
 // Pattern: Free CLI tool with Pro license gating
@@ -933,6 +1012,13 @@ fn main() {
 ```
 
 > **Real Talk:** Not all seven of these moats are for you. Pick one. Maybe two. The worst thing you can do is try to build all seven simultaneously. Read through them, identify which one aligns with your T-shape from Lesson 1, and focus there. You can always pivot later.
+
+{? if dna.is_full ?}
+> **DNA Insight:** Your Developer DNA shows engagement with {= dna.top_engaged_topics | fallback("various topics") =}. Cross-reference those interests with the seven moats above — the moat that overlaps with what you're already paying attention to is the one you'll sustain long enough to build real depth.
+{? if dna.blind_spots ?}
+> **Blind Spot Alert:** Your DNA also reveals blind spots in {= dna.blind_spots | fallback("certain areas") =}. Consider whether any of these blind spots represent moat opportunities hiding in your peripheral vision — sometimes the gap in your attention is where the gap in the market is.
+{? endif ?}
+{? endif ?}
 
 ### Lesson 4 Checkpoint
 
@@ -1129,6 +1215,8 @@ better, cheaper, faster, more private, more specific to a niche]
 3. [What's the smallest thing you can build to prove the concept?]
 ```
 
+{@ insight competitive_position @}
+
 ### How 4DA Helps with Competitive Intelligence
 
 If you're running 4DA, you already have a competitive intelligence engine.
@@ -1177,7 +1265,11 @@ It's not a business plan. It's not a pitch deck. It's a working document that te
 
 ### The Moat Map Template
 
-Copy this template. Fill in every section. This is your second key deliverable after the Sovereign Stack Document from Module S.
+{? if progress.completed("S") ?}
+Copy this template. Fill in every section. This is your second key deliverable after the Sovereign Stack Document from Module S. Pull data directly from your completed Sovereign Stack Document to fill in the T-Shape and infrastructure sections.
+{? else ?}
+Copy this template. Fill in every section. This is your second key deliverable. (Your Sovereign Stack Document from Module S will complement this — complete both for a full positioning foundation.)
+{? endif ?}
 
 ```markdown
 # MOAT MAP
@@ -1375,6 +1467,10 @@ to consider pivoting.*
 
 Here's how your Moat Map might look when filled in. This is a template example — use it as a reference for the level of specificity expected.
 
+{? if dna.is_full ?}
+> **Personalized Hint:** Your Developer DNA identifies your primary stack as {= dna.primary_stack | fallback("not yet determined") =} with interests in {= dna.interests | fallback("various areas") =}. Use this as a reality check against what you write in your Moat Map — your actual behavior (what you code, what you read, what you engage with) is often a more honest signal than your aspirations.
+{? endif ?}
+
 **[Your Name] — [Your Business Name]**
 
 - **T-Shape:** Deep in Rust + local AI deployment. Adjacent: TypeScript, Docker, tech writing. Non-tech: 2 years working IT at a law firm.
@@ -1450,6 +1546,10 @@ You should now have:
 
 ### What You've Built in Two Weeks
 
+{? if progress.completed_modules ?}
+> **Progress:** You've completed {= progress.completed_count | fallback("0") =} of {= progress.total_count | fallback("7") =} STREETS modules ({= progress.completed_modules | fallback("none yet") =}). Module T joins your completed set.
+{? endif ?}
+
 Look at what you now have:
 
 1. **A T-shaped skill profile** that identifies your unique value in the market — not just "what you know" but "what combination of knowledge makes you rare."
@@ -1507,6 +1607,10 @@ Your Moat Map is a snapshot. 4DA makes it a living radar.
 **Use `semantic_shifts`** to detect when technologies move from experimental to production adoption. This is the timing signal for your 2026-specific moats — knowing when a technology crosses the threshold from "interesting" to "companies are hiring for this" tells you when to build.
 
 Your Sovereign Stack Document (Module S) + your Moat Map (Module T) + 4DA's continuous intelligence = a positioning system that's always on.
+
+{? if dna.is_full ?}
+> **Your DNA Summary:** {= dna.identity_summary | fallback("Complete your Developer DNA profile to see a personalized summary of your technical identity here.") =}
+{? endif ?}
 
 ---
 

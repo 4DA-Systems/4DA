@@ -9,7 +9,9 @@
 
 You have revenue engines running. You have customers. You have processes that work. And you're spending 60-70% of your time doing the same things over and over: processing inputs, formatting outputs, checking monitors, sending updates, reviewing queues.
 
-That time is your most expensive resource, and you're burning it on tasks a $5/month VPS could handle.
+That time is your most expensive resource, and you're burning it on tasks a {= regional.currency_symbol | fallback("$") =}5/month VPS could handle.
+
+{@ insight hardware_benchmark @}
 
 This module is about systematically removing yourself from the loop — not completely (that's a trap we'll cover in Lesson 5), but from the 80% of work that doesn't require your judgment. The result: your income streams produce revenue while you sleep, while you're at your day job, while you're building the next thing.
 
@@ -21,6 +23,10 @@ By the end of these two weeks, you will have:
 - An understanding of agent-based systems and when they make economic sense
 - A human-in-the-loop framework so automation doesn't destroy your reputation
 - One complete, deployed pipeline that generates value without your active involvement
+
+{? if stack.primary ?}
+Your primary stack is {= stack.primary | fallback("your primary stack") =}, so the automation examples ahead will be most directly applicable when adapted to that ecosystem. Most examples use Python for portability, but the patterns translate to any language.
+{? endif ?}
 
 This is the most code-heavy module in the course. At least half of what follows is runnable code. Copy it, adapt it, deploy it.
 
@@ -134,7 +140,7 @@ The column that matters most is "Hours/Week Spent." The stream with the highest 
 
 ### The Economics of Each Level
 
-Let's say you have an income stream that takes 10 hours/week of your time and generates $2,000/month:
+Let's say you have an income stream that takes 10 hours/week of your time and generates {= regional.currency_symbol | fallback("$") =}2,000/month:
 
 | Level | Your Time | Your Effective Rate | Automation Cost |
 |-------|----------|-------------------|----------------|
@@ -160,6 +166,10 @@ Moving from Level 1 to Level 3 doesn't change your revenue. It changes your effe
 *"Cron is from 1975. It still works. Use it."*
 
 ### Cron Job Fundamentals
+
+{? if computed.os_family == "windows" ?}
+You're on Windows, so cron isn't native to your system. You have two options: use WSL (Windows Subsystem for Linux) to get real cron, or use Windows Task Scheduler (covered below). WSL is recommended if you're comfortable with it — all the cron examples in this lesson work directly in WSL. If you prefer native Windows, skip to the Task Scheduler section after this.
+{? endif ?}
 
 Yes, even in 2026, cron is king for scheduled tasks. It's reliable, it's everywhere, and it doesn't require a cloud account, a SaaS subscription, or a YAML schema you have to Google every time.
 
@@ -871,6 +881,12 @@ systemctl list-timers --all | grep income
 journalctl -u income-publisher.service --since today
 ```
 
+{? if computed.os_family == "windows" ?}
+### Windows Task Scheduler Alternative
+
+If you're not using WSL, Windows Task Scheduler handles the same job. Use `schtasks` from the command line or the Task Scheduler GUI (`taskschd.msc`). The key difference: cron uses a single expression, Task Scheduler uses separate fields for triggers, actions, and conditions. Every cron example in this lesson translates directly — schedule your Python scripts the same way, just through a different interface.
+{? endif ?}
+
 ### Your Turn
 
 1. Pick the simplest automation from this lesson that applies to your income stream.
@@ -898,6 +914,12 @@ The magic is in the "LLM Process" step. Instead of writing deterministic rules f
 
 ### When to Use Local vs API
 
+{? if settings.has_llm ?}
+You have {= settings.llm_provider | fallback("an LLM provider") =} configured with {= settings.llm_model | fallback("your LLM model") =}. That means you can start building intelligent pipelines immediately. The decision below helps you choose when to use your local setup versus an API for each pipeline.
+{? else ?}
+You don't have an LLM configured yet. The pipelines in this lesson work with both local models (Ollama) and cloud APIs. Set up at least one before building your first pipeline — Ollama is free and takes 10 minutes to install.
+{? endif ?}
+
 This decision has a direct impact on your margins:
 
 | Factor | Local (Ollama) | API (Claude, GPT) |
@@ -908,6 +930,15 @@ This decision has a direct impact on your margins:
 | **Privacy** | Data never leaves your machine | Data goes to provider |
 | **Uptime** | Depends on your machine | 99.9%+ |
 | **Batch capacity** | Limited by GPU memory | Limited by rate limits and budget |
+
+{? if profile.gpu.exists ?}
+With {= profile.gpu.model | fallback("your GPU") =} on your machine, local inference is a strong option. The speed and model size you can run depends on your VRAM — check what fits before committing to a local-only pipeline.
+{? if computed.has_nvidia ?}
+NVIDIA GPUs get the best Ollama performance thanks to CUDA acceleration. You should be able to run 7-8B parameter models comfortably, and possibly larger depending on your {= profile.gpu.vram | fallback("available VRAM") =}.
+{? endif ?}
+{? else ?}
+Without a dedicated GPU, local inference will be slower (CPU-only). It still works for small batch jobs and classification tasks, but for anything time-sensitive or high-volume, an API model will be more practical.
+{? endif ?}
 
 **Rules of thumb:**
 - **High volume, lower quality bar** (classification, extraction, tagging) → Local
@@ -938,6 +969,8 @@ API (Claude 3.5 Sonnet):
 ```
 
 For classification and extraction pipelines, the quality difference between a well-prompted 8B local model and a frontier API model is often negligible. Test both. Use the cheaper one that meets your quality bar.
+
+{@ insight cost_projection @}
 
 ### Pipeline 1: Newsletter Content Generator
 
@@ -1527,6 +1560,12 @@ if __name__ == "__main__":
 
 ### Your Turn
 
+{? if stack.contains("python") ?}
+Good news: the pipeline examples above are already in your primary language. You can copy them directly and start adapting. Focus on getting the niche definition and prompts right — that's where 90% of the output quality comes from.
+{? else ?}
+The examples above use Python for portability, but the patterns work in any language. If you prefer to build in {= stack.primary | fallback("your primary stack") =}, the key pieces to replicate are: HTTP client for RSS/API fetching, JSON parsing for LLM responses, and file I/O for state management. The LLM interaction is just an HTTP POST to Ollama or a cloud API.
+{? endif ?}
+
 1. Choose one of the three pipelines above (newsletter, research, or signal monitor).
 2. Adapt it to your niche. Change the feeds, the audience description, the classification criteria.
 3. Run it manually 3 times to test the output quality.
@@ -1557,6 +1596,10 @@ A pipeline processes items one at a time through a fixed sequence. An agent navi
 ### MCP Servers That Serve Customers
 
 An MCP server is one of the most practical agent-adjacent systems you can build. It exposes tools that an AI agent (Claude Code, Cursor, etc.) can call on behalf of your customers.
+
+{? if stack.contains("typescript") ?}
+The MCP server example below uses TypeScript — right in your wheelhouse. You can extend it with your existing TypeScript tooling and deploy it alongside your other Node.js services.
+{? endif ?}
 
 Here's a real example: an MCP server that answers customer questions from your product's documentation.
 
@@ -1960,6 +2003,8 @@ Some things should always have a human in the loop, regardless of how good the A
 
 ### Automation Debt
 
+{@ mirror automation_risk_profile @}
+
 Automation debt is worse than technical debt because it's invisible until it explodes.
 
 **What automation debt looks like:**
@@ -2197,9 +2242,13 @@ if __name__ == "__main__":
 
 Every LLM call has a cost. Even local models cost electricity and GPU wear. The question is whether the output of that call generates more value than the call costs.
 
-**The $200/month API budget rule:**
+{? if profile.gpu.exists ?}
+Running local models on {= profile.gpu.model | fallback("your GPU") =} costs roughly {= regional.currency_symbol | fallback("$") =}{= computed.monthly_electricity_estimate | fallback("a few dollars") =} in electricity per month for typical pipeline workloads. That's the baseline to beat with API alternatives.
+{? endif ?}
 
-If you're spending $200/month on API calls for your automations, those automations should be generating at least $200/month in value — either direct revenue or time saved that you convert to revenue elsewhere.
+**The {= regional.currency_symbol | fallback("$") =}200/month API budget rule:**
+
+If you're spending {= regional.currency_symbol | fallback("$") =}200/month on API calls for your automations, those automations should be generating at least {= regional.currency_symbol | fallback("$") =}200/month in value — either direct revenue or time saved that you convert to revenue elsewhere.
 
 If they're not: the problem isn't the API budget. It's the pipeline design or the product it supports.
 
@@ -2658,6 +2707,8 @@ If you've done all ten items on this checklist, you have a Level 3 automation ru
 
 ## Module T: Complete
 
+{@ temporal automation_progress @}
+
 ### What You've Built in Two Weeks
 
 1. **An understanding of the automation pyramid** — you know where you are and where each of your income streams should be heading.
@@ -2690,6 +2741,10 @@ This is how one developer operates like a team of five. Not by working harder. B
 ---
 
 ### 4DA Integration
+
+{? if dna.identity_summary ?}
+Based on your developer profile — {= dna.identity_summary | fallback("your development focus") =} — the 4DA tools below map directly to the automation patterns you just learned. The signal classification tools are particularly relevant for developers in your space.
+{? endif ?}
 
 4DA is itself a Level 3 automation. It ingests content from dozens of sources, scores each item with the PASIFA algorithm, and surfaces only what's relevant to your work — all without you lifting a finger. You don't manually check Hacker News, Reddit, and 50 RSS feeds. 4DA does it and shows you what matters.
 

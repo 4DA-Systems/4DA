@@ -11,6 +11,8 @@ You've got the infrastructure (Module S). You've got something competitors can't
 
 This is the longest module in the course because it's the one that matters most. Eight revenue engines. Eight different ways to turn your skills, hardware, and time into income. Each one is a complete playbook with real code, real pricing, real platforms, and real math.
 
+{@ insight engine_ranking @}
+
 You are not going to build all eight. You're going to pick two.
 
 **The 1+1 Strategy:**
@@ -26,6 +28,10 @@ By the end of this module, you will have:
 - A clear understanding of which engines match your skills, time, and risk tolerance
 - Real, deployed code — not just plans
 
+{? if progress.completed("T") ?}
+You built your moats in Module T. Now those moats become the foundation your revenue engines sit on — the harder your moats are to copy, the more durable your revenue.
+{? endif ?}
+
 No theory. No "someday." Let's build.
 
 ---
@@ -40,20 +46,26 @@ No theory. No "someday." Let's build.
 
 ### Why Digital Products First
 
+{@ insight stack_fit @}
+
 Digital products are the highest-margin, lowest-risk revenue engine for developers. You build something once, sell it forever. No clients to manage. No hourly billing. No scope creep. No meetings.
 
 The math is simple:
 - You spend 20-40 hours building a template or starter kit
-- You price it at $49
-- You sell 10 copies in the first month: $490
-- You sell 5 copies every month after that: $245/month passive
-- Total cost after creation: $0
+- You price it at {= regional.currency_symbol | fallback("$") =}49
+- You sell 10 copies in the first month: {= regional.currency_symbol | fallback("$") =}490
+- You sell 5 copies every month after that: {= regional.currency_symbol | fallback("$") =}245/month passive
+- Total cost after creation: {= regional.currency_symbol | fallback("$") =}0
 
-That $245/month might not sound exciting, but it requires zero ongoing time. Stack three products and you're at $735/month while you sleep. Stack ten and you've replaced a junior developer salary.
+That {= regional.currency_symbol | fallback("$") =}245/month might not sound exciting, but it requires zero ongoing time. Stack three products and you're at {= regional.currency_symbol | fallback("$") =}735/month while you sleep. Stack ten and you've replaced a junior developer salary.
 
 ### What Sells
 
+{? if stack.primary ?}
+Not everything you could build will sell. As a {= stack.primary | fallback("developer") =} developer, you have an advantage: you know what problems your stack has. Here's what developers actually pay for, with real price points from products that exist today:
+{? else ?}
 Not everything you could build will sell. Here's what developers actually pay for, with real price points from products that exist today:
+{? endif ?}
 
 **Starter Kits and Boilerplates**
 
@@ -93,11 +105,17 @@ Not everything you could build will sell. Here's what developers actually pay fo
 - Best for: International sales. Products over $50. Subscription products.
 - Upside: You don't need to register for VAT. They handle everything.
 - Downside: Slightly more setup than Gumroad.
+{? if regional.country ?}
+- *In {= regional.country | fallback("your country") =}, a Merchant of Record like Lemon Squeezy handles cross-border tax compliance, which is especially valuable for international sales.*
+{? endif ?}
 
 **Your Own Site** — Maximum control and margin. Use Stripe Checkout for payments, host on Vercel/Netlify for free.
 - Best for: When you have traffic. Products over $100. Building a brand.
 - Upside: 0% platform fee (only Stripe's 2.9% + $0.30).
 - Downside: You handle tax compliance (or use Stripe Tax).
+{? if regional.payment_processors ?}
+- *Available payment processors in {= regional.country | fallback("your region") =}: {= regional.payment_processors | fallback("Stripe, PayPal") =}. Verify which supports your {= regional.currency | fallback("local currency") =}.*
+{? endif ?}
 
 > **Common Mistake:** Spending two weeks building a custom storefront before you have a single product to sell. Use Gumroad or Lemon Squeezy for your first product. Move to your own site after you've validated demand and have revenue to justify the effort.
 
@@ -126,7 +144,11 @@ my-product/
   .env.example        # If applicable
 ```
 
-**Documentation is half the product.** A well-documented template outsells a better template with no docs, every single time. Use your local LLM to help draft documentation:
+{? if settings.has_llm ?}
+**Documentation is half the product.** A well-documented template outsells a better template with no docs, every single time. Use your local LLM ({= settings.llm_model | fallback("your configured model") =}) to help draft documentation:
+{? else ?}
+**Documentation is half the product.** A well-documented template outsells a better template with no docs, every single time. Use a local LLM to help draft documentation (set up Ollama from Module S if you haven't yet):
+{? endif ?}
 
 ```bash
 # Generate initial docs from your codebase
@@ -205,7 +227,9 @@ For team or extended licenses, visit [your-url].
 
 ### Revenue Math
 
-Let's do the real math on a $49 product:
+{@ insight cost_projection @}
+
+Let's do the real math on a {= regional.currency_symbol | fallback("$") =}49 product:
 
 ```
 Platform fee (Lemon Squeezy, 5% + $0.50):  -$2.95
@@ -227,7 +251,11 @@ You don't need those numbers. You need 11 sales.
 
 ### Your Turn
 
+{? if stack.primary ?}
+1. **Identify your product** (30 min): Look at your Sovereign Stack Document. As a {= stack.primary | fallback("your primary stack") =} developer, what have you built for yourself that took 20+ hours? That's your first product. Write down: the product name, the problem it solves, the target buyer, and the price.
+{? else ?}
 1. **Identify your product** (30 min): Look at your Sovereign Stack Document. What have you built for yourself that took 20+ hours? That's your first product. Write down: the product name, the problem it solves, the target buyer, and the price.
+{? endif ?}
 
 2. **Create the minimum viable product** (8-16 hours): Package your existing work. Write the README. Add examples. Make it clean.
 
@@ -248,6 +276,8 @@ You don't need those numbers. You need 11 sales.
 **Margin:** 70-95% (depends on platform)
 
 ### The Content Economics
+
+{@ insight stack_fit @}
 
 Content monetization works differently from every other engine. It's slow to start and then it compounds. Your first month might generate $0. Your sixth month might generate $500. Your twelfth month might generate $3,000. And it keeps growing — because content has a half-life measured in years, not days.
 
@@ -447,7 +477,11 @@ Comfortable (upgrade when revenue justifies):
 
 1. **Choose your content channel** (15 min): Blog, newsletter, or YouTube. Pick ONE. Don't try to do all three at once. The skills are different and the time commitment compounds fast.
 
+{? if stack.primary ?}
+2. **Define your niche** (30 min): Not "programming." Not "web development." Something specific that leverages your {= stack.primary | fallback("primary stack") =} expertise. "Rust for backend developers." "Building local-first desktop apps." "AI automation for small businesses." The more specific, the faster you'll grow.
+{? else ?}
 2. **Define your niche** (30 min): Not "programming." Not "web development." Something specific. "Rust for backend developers." "Building local-first desktop apps." "AI automation for small businesses." The more specific, the faster you'll grow.
+{? endif ?}
 
 3. **Create your first piece of content** (4-8 hours): One blog post, one newsletter issue, or one YouTube video. Ship it. Don't wait for perfection.
 
@@ -467,6 +501,8 @@ Comfortable (upgrade when revenue justifies):
 
 ### What Makes a Micro-SaaS Different
 
+{@ insight stack_fit @}
+
 A micro-SaaS is not a startup. It's not looking for venture capital. It's not trying to become the next Slack. A micro-SaaS is a small, focused tool that:
 
 - Solves exactly one problem
@@ -484,7 +520,11 @@ The beauty is in the constraints. One problem. One person. One price point.
 
 ### Finding Your Micro-SaaS Idea
 
+{? if dna.top_engaged_topics ?}
+Look at what you spend the most time engaging with: {= dna.top_engaged_topics | fallback("your most-engaged topics") =}. The best micro-SaaS ideas come from problems you've personally experienced in those areas. But if you need a framework for finding them, here's one:
+{? else ?}
 The best micro-SaaS ideas come from problems you've personally experienced. But if you need a framework for finding them, here's one:
+{? endif ?}
 
 **The "Spreadsheet Replacement" Method:**
 
@@ -722,7 +762,13 @@ Monthly Burn:
 
 3. **Build the MVP** (2-4 weeks): Core functionality only. Auth, the one thing your tool does, and Stripe billing. Nothing else. No admin dashboard. No team features. No API. One user, one function, one price.
 
+{? if computed.os_family == "windows" ?}
+4. **Deploy and launch** (1 day): Deploy to Vercel or Railway. On Windows, use WSL for Docker-based deployments if needed. Buy the domain. Set up a landing page. Post in 3-5 relevant communities.
+{? elif computed.os_family == "macos" ?}
+4. **Deploy and launch** (1 day): Deploy to Vercel or Railway. macOS makes Docker deployment straightforward via Docker Desktop. Buy the domain. Set up a landing page. Post in 3-5 relevant communities.
+{? else ?}
 4. **Deploy and launch** (1 day): Deploy to Vercel or Railway. Buy the domain. Set up a landing page. Post in 3-5 relevant communities.
+{? endif ?}
 
 5. **Track your unit economics** (ongoing): From day one, track CAC, churn, and MRR. If the numbers don't work at 10 customers, they won't work at 100.
 
@@ -738,6 +784,8 @@ Monthly Burn:
 
 ### Why Automation Pays So Well
 
+{@ insight stack_fit @}
+
 Most businesses have manual workflows that cost them 10-40 hours per week of employee time. A receptionist manually entering form submissions into a CRM. A bookkeeper copy-pasting invoice data from emails into QuickBooks. A marketing manager manually cross-posting content to five platforms.
 
 These businesses know automation exists. They've heard of Zapier. But they can't set it up themselves — and Zapier's pre-built integrations rarely handle their specific workflow perfectly.
@@ -748,11 +796,19 @@ This is one of the easiest sells in the entire course.
 
 ### The Privacy Selling Point
 
-Here's where your local LLM stack from Module S becomes a weapon.
+{? if settings.has_llm ?}
+Here's where your local LLM stack from Module S becomes a weapon. You've already got {= settings.llm_model | fallback("a model") =} running locally — that's the infrastructure most automation agencies don't have.
+{? else ?}
+Here's where your local LLM stack from Module S becomes a weapon. (If you haven't set up a local LLM yet, go back to Module S, Lesson 3. This is the foundation for premium-priced automation work.)
+{? endif ?}
 
 Most automation agencies use cloud-based AI. The client's data goes through Zapier, then to OpenAI, then back. For a lot of businesses — especially law firms, healthcare practices, financial advisors, and any EU-based company — this is a non-starter.
 
-Your pitch: **"I build automations that process your data privately. Your customer records, invoices, and communications never leave your infrastructure. No third-party AI processors. Full compliance with [GDPR/HIPAA/whatever they care about]."**
+{? if regional.country == "US" ?}
+Your pitch: **"I build automations that process your data privately. Your customer records, invoices, and communications never leave your infrastructure. No third-party AI processors. Full HIPAA/SOC 2 compliance."**
+{? else ?}
+Your pitch: **"I build automations that process your data privately. Your customer records, invoices, and communications never leave your infrastructure. No third-party AI processors. Full compliance with GDPR and local data protection regulations."**
+{? endif ?}
 
 That pitch closes deals that the cloud-automation agencies can't touch. And you can charge a premium for it.
 
@@ -830,7 +886,11 @@ Their savings: ~4 hours per article x 4 articles/week = 16 hours/week
 
 n8n is an open-source workflow automation tool you can self-host (`docker run -d --name n8n -p 5678:5678 n8nio/n8n`). It's the professional choice because client data stays on your/their infrastructure.
 
-For simpler deployments, here's the same invoice processing as a pure Python script:
+{? if stack.contains("python") ?}
+For simpler deployments, here's the same invoice processing as a pure Python script — right in your wheelhouse:
+{? else ?}
+For simpler deployments, here's the same invoice processing as a pure Python script (Python is the standard for automation work, even if it's not your primary stack):
+{? endif ?}
 
 ```python
 #!/usr/bin/env python3
@@ -950,7 +1010,11 @@ Always use a contract. Your contract needs these 7 sections minimum:
 6. **Maintenance** — Optional retainer for bug fixes and monitoring
 7. **IP** — Client owns the automation. Developer retains right to reuse general patterns.
 
+{? if regional.business_entity_type ?}
+Use a free template from Avodocs.com or Bonsai as your starting point, then add the data handling clause (section 4) — that's the one most templates miss and it's your competitive advantage. In {= regional.country | fallback("your country") =}, use your {= regional.business_entity_type | fallback("business entity") =} for the contract header.
+{? else ?}
 Use a free template from Avodocs.com or Bonsai as your starting point, then add the data handling clause (section 4) — that's the one most templates miss and it's your competitive advantage.
+{? endif ?}
 
 > **Real Talk:** The 50% upfront deposit is non-negotiable. It protects you from scope creep and clients who ghost after delivery. If a client won't pay 50% upfront, they're a client who won't pay 100% later.
 
@@ -978,9 +1042,15 @@ Use a free template from Avodocs.com or Bonsai as your starting point, then add 
 
 ### The API Product Model
 
+{@ insight stack_fit @}
+
 An API product wraps some capability — usually your local LLM with custom processing — behind a clean HTTP endpoint that other developers pay to use. You handle the infrastructure, the model, and the domain expertise. They get a simple API call.
 
 This is the most scalable engine in this course for developers who are comfortable with backend work. Once it's built, every new customer adds revenue with minimal additional cost.
+
+{? if profile.gpu.exists ?}
+With your {= profile.gpu.model | fallback("GPU") =}, you can run the inference layer locally during development and for your first customers, keeping costs at zero until you need to scale.
+{? endif ?}
 
 ### What Makes a Good API Product
 
@@ -1146,7 +1216,11 @@ async function reportUsageToStripe(userId: string) {
 
 ### Scaling When You Get Traction
 
-When your API starts getting real usage, here's the scaling path:
+{? if profile.gpu.exists ?}
+When your API starts getting real usage, your {= profile.gpu.model | fallback("GPU") =} gives you a head start — you can serve initial customers from your own hardware before paying for cloud inference. Here's the scaling path:
+{? else ?}
+When your API starts getting real usage, here's the scaling path. Without a dedicated GPU, you'll want to move to cloud inference (Replicate, Together.ai) earlier in the scaling curve:
+{? endif ?}
 
 ```
 Stage 1: 0-100 customers
@@ -1155,7 +1229,7 @@ Stage 1: 0-100 customers
   - Revenue: $0-5,000/month
 
 Stage 2: 100-500 customers
-  - Move LLM inference to a dedicated VPS (Hetzner GPU, $50-150/month)
+  - Move LLM inference to a dedicated VPS (Hetzner GPU, {= regional.currency_symbol | fallback("$") =}50-150/month)
   - Add Redis caching for repeat queries
   - Total cost: $50-200/month
   - Revenue: $5,000-25,000/month
@@ -1193,6 +1267,8 @@ Stage 3: 500+ customers
 
 ### Why Consulting Is Engine #1 for Most Developers
 
+{@ insight stack_fit @}
+
 If you need income this month, not this quarter, consulting is the answer. No product to build. No audience to grow. No marketing funnel to set up. Just you, your expertise, and someone who needs it.
 
 The math:
@@ -1209,7 +1285,11 @@ That's alongside your full-time job.
 
 ### What You're Actually Selling
 
+{? if stack.primary ?}
+You're not selling "{= stack.primary | fallback("programming") =}." You're selling one of these:
+{? else ?}
 You're not selling "programming." You're selling one of these:
+{? endif ?}
 
 1. **Expertise that saves time.** "I'll set up your Kubernetes cluster correctly in 10 hours instead of your team spending 80 hours figuring it out."
 2. **Knowledge that reduces risk.** "I'll audit your architecture before you launch, so you don't discover scaling issues with 10,000 users on day one."
@@ -1223,6 +1303,10 @@ The framing matters. "I write Python" is worth $50/hour. "I'll reduce your data 
 - **AI/ML consulting:** $120-250/hr for implementation work. Strategic AI consulting (architecture, deployment planning) commands $250-500/hr at enterprise scale. (source: debutinfotech.com)
 
 ### Hot Consulting Niches in 2026
+
+{? if stack.contains("rust") ?}
+Your Rust expertise puts you in one of the highest-demand, highest-rate consulting niches available. Rust migration consulting commands premium rates because supply is severely constrained.
+{? endif ?}
 
 | Niche | Rate Range | Demand | Why It's Hot |
 |-------|-----------|--------|-------------|
@@ -1288,6 +1372,8 @@ The trap of consulting is trading time for money. Break out of it:
 
 ### Using 4DA as Your Secret Weapon
 
+{@ mirror feed_predicts_engine @}
+
 Here's a competitive advantage most consultants don't have: **you know what's happening in your niche before your clients do.**
 
 4DA surfaces signals — new vulnerabilities, trending technologies, breaking changes, regulatory updates. When you mention to a client, "By the way, there's a new vulnerability in [library they use] that was disclosed yesterday, and here's my recommendation for addressing it," you look like you have supernatural awareness.
@@ -1320,6 +1406,8 @@ That awareness justifies premium rates. Clients pay more for consultants who are
 
 ### The Open Source Business Model
 
+{@ insight stack_fit @}
+
 Open source is not a charity. It's a distribution strategy.
 
 Here's the logic:
@@ -1344,7 +1432,11 @@ Your license determines your moat. Choose carefully.
 
 **Recommended for solo developers:** FSL or AGPL.
 
+{? if regional.country == "US" ?}
+- If you're building something companies will self-host: **AGPL** (they'll buy a commercial license to avoid AGPL obligations). US companies are especially averse to AGPL in commercial products.
+{? else ?}
 - If you're building something companies will self-host: **AGPL** (they'll buy a commercial license to avoid AGPL obligations)
+{? endif ?}
 - If you're building something you want to control completely for 2 years: **FSL** (prevents forks from competing with you while you establish market position)
 
 > **Common Mistake:** Choosing MIT because "open source should be free." MIT is generous, and that's admirable. But if a VC-funded company forks your MIT project, adds a payment layer, and out-markets you, you've just donated your work to their investors. Protect your work for long enough to build a business, then open it up.
@@ -1495,6 +1587,8 @@ class LicenseManager {
 
 ### What Data Products Are
 
+{@ insight stack_fit @}
+
 A data product takes raw information — public data, research papers, market trends, ecosystem changes — and transforms it into something actionable for a specific audience. Your local LLM handles the processing. Your expertise handles the curation. The combination is worth paying for.
 
 This is different from content monetization (Lesson 2). Content is "here's a blog post about React trends." A data product is "here's a structured weekly report with scored signals, trend analysis, and specific actionable recommendations for React ecosystem decision-makers."
@@ -1529,7 +1623,11 @@ This is different from content monetization (Lesson 2). Content is "here's a blo
 
 ### Building the Data Pipeline
 
-Here's a complete pipeline for producing a weekly intelligence report. This is real, runnable code.
+{? if settings.has_llm ?}
+Here's a complete pipeline for producing a weekly intelligence report. This is real, runnable code — and since you have {= settings.llm_model | fallback("a local model") =} set up, you can run this pipeline at zero marginal cost.
+{? else ?}
+Here's a complete pipeline for producing a weekly intelligence report. This is real, runnable code. You'll need Ollama running locally (see Module S) to process items at zero cost.
+{? endif ?}
 
 ```python
 #!/usr/bin/env python3
@@ -1664,6 +1762,8 @@ Cost to run:  ~$10/mo (email sending + domain)
 Your time:    5-8 hours/week (most automated, you add expertise)
 ```
 
+{@ temporal revenue_benchmarks @}
+
 **Real-world content creator benchmarks for context:**
 - **Fireship** (Jeff Delaney): 4M YouTube subscribers, ~$550K+/year from ads alone. Developer-focused, short-format content. (source: networthspot.com)
 - **Wes Bos:** $10M+ in total course sales, 55K paid students. Proves technical education can scale far beyond newsletter income. (source: foundershut.com)
@@ -1671,7 +1771,11 @@ Your time:    5-8 hours/week (most automated, you add expertise)
 
 These are elite outcomes, but the pipeline approach above is how many of them started: consistent, niche-focused content with clear value.
 
-The key: the pipeline does the heavy lifting. Your expertise is the moat. No one else has your specific combination of domain knowledge + curation judgment + processing infrastructure.
+{? if profile.gpu.exists ?}
+The key: the pipeline does the heavy lifting. Your {= profile.gpu.model | fallback("GPU") =} handles inference locally, keeping your per-report cost near zero. Your expertise is the moat. No one else has your specific combination of domain knowledge + curation judgment + processing infrastructure.
+{? else ?}
+The key: the pipeline does the heavy lifting. Even on CPU-only inference, processing 30-50 articles per week is practical for batch pipelines. Your expertise is the moat. No one else has your specific combination of domain knowledge + curation judgment + processing infrastructure.
+{? endif ?}
 
 ### Your Turn
 
@@ -1692,6 +1796,8 @@ The key: the pipeline does the heavy lifting. Your expertise is the moat. No one
 *"You now know eight engines. You need two. Here's how to choose."*
 
 ### The Decision Matrix
+
+{@ insight engine_ranking @}
 
 Score each engine 1-5 on these four dimensions, based on YOUR specific situation:
 
@@ -1719,6 +1825,10 @@ Engine                    Skill  Time  Speed  Scale  TOTAL
 
 ### The 1+1 Strategy
 
+{? if dna.identity_summary ?}
+Based on your developer profile — {= dna.identity_summary | fallback("your unique combination of skills and interests") =} — consider which engines align most naturally with what you already do.
+{? endif ?}
+
 **Engine 1: Your FAST engine** — Pick the engine with the highest Speed score (tiebreaker: highest Total). This is what you build in Weeks 5-6. The goal is revenue within 14 days.
 
 **Engine 2: Your SCALE engine** — Pick the engine with the highest Scale score (tiebreaker: highest Total). This is what you plan in Weeks 7-8 and build through Module E. The goal is compounding growth over 6-12 months.
@@ -1734,6 +1844,12 @@ Engine                    Skill  Time  Speed  Scale  TOTAL
 | Digital Products | Data Products | Templates establish your niche expertise. Intelligence reports deepen it. |
 
 ### Revenue Projection Worksheet
+
+{@ insight cost_projection @}
+
+{? if regional.electricity_kwh ?}
+Remember to factor in your local electricity cost ({= regional.currency_symbol | fallback("$") =}{= regional.electricity_kwh | fallback("0.12") =}/kWh) when calculating monthly costs for engines that rely on local inference.
+{? endif ?}
 
 Fill this in for your two chosen engines:
 
@@ -1777,6 +1893,10 @@ COMBINED PROJECTION:
 
 ### The Anti-Patterns
 
+{? if dna.blind_spots ?}
+Your identified blind spots — {= dna.blind_spots | fallback("areas you haven't explored") =} — might tempt you toward engines that feel "innovative." Resist that. Pick what works for your current strengths.
+{? endif ?}
+
 Don't do these:
 
 1. **Don't pick 3+ engines.** Two is the maximum. Three splits your attention too thin and nothing gets done well.
@@ -1792,6 +1912,8 @@ Don't do these:
 ---
 
 ## 4DA Integration
+
+{@ mirror feed_predicts_engine @}
 
 > **How 4DA connects to Module R:**
 >
@@ -1839,6 +1961,12 @@ Before moving to Module E (Execution Playbook), verify:
 - [ ] Your revenue projection worksheet is complete. You know your targets for months 1, 3, 6, and 12.
 
 If any of these are incomplete, spend the time. Module E builds on all of this. Going forward without a working Engine 1 is like trying to optimize a product that doesn't exist.
+
+{? if progress.completed_modules ?}
+### Your STREETS Progress
+
+You've completed {= progress.completed_count | fallback("0") =} of {= progress.total_count | fallback("7") =} modules so far ({= progress.completed_modules | fallback("none yet") =}). Module R is the turning point — everything before this was preparation. Everything after this is execution.
+{? endif ?}
 
 ### What Comes Next: Module E — Execution Playbook
 

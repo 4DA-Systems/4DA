@@ -7,9 +7,13 @@
 
 ---
 
+{? if progress.completed("T") ?}
 You have spent thirteen weeks building something most developers never build: a sovereign income operation. You have infrastructure. You have moats. You have revenue engines running. You have execution discipline. You have intelligence. You have automation.
+{? else ?}
+You have spent thirteen weeks building something most developers never build: a sovereign income operation. You have infrastructure. You have revenue engines running. You have execution discipline. You have intelligence. You have automation. (Complete Module T — Technical Moats — to fully activate the moat-based strategies in this module.)
+{? endif ?}
 
-Now comes the part that separates the developer who makes an extra $2K/month from the one who replaces their salary entirely: **stacking**.
+Now comes the part that separates the developer who makes an extra {= regional.currency_symbol | fallback("$") =}2K/month from the one who replaces their salary entirely: **stacking**.
 
 A single income stream — no matter how good — is fragile. Your biggest client leaves. The platform changes its API pricing. An algorithm shift tanks your traffic. A competitor launches a free version of your product. Any of these can crater a single-stream income overnight. You've seen it happen. Maybe it's happened to you.
 
@@ -26,6 +30,10 @@ By the end of these three weeks, you will have:
 - A completed Stream Stack document — your personal 12-month income plan with monthly milestones
 
 This is the final module. Everything you've built in STREETS converges here.
+
+{? if progress.completed_modules ?}
+> **Your STREETS progress:** {= progress.completed_count | fallback("0") =} of {= progress.total_count | fallback("7") =} modules completed ({= progress.completed_modules | fallback("none yet") =}). This module pulls together everything from prior modules — the more you've completed, the more concrete your Stream Stack will be.
+{? endif ?}
 
 Let's stack.
 
@@ -44,6 +52,8 @@ Investment professionals figured this out decades ago. You don't put all your mo
 Your income works the same way. Or at least it should.
 
 ### The 5 Stream Categories
+
+{@ insight engine_ranking @}
 
 Every developer income stream falls into one of five categories. Each has a different risk profile, time horizon, and growth curve.
 
@@ -88,8 +98,12 @@ Content is the slowest stream to start and the most powerful stream to sustain. 
 
 This is the stream uniquely available to developers. You build automated systems that generate value without your direct involvement. Data processing pipelines, API services, monitoring bots, automated reports. The revenue comes from the system running, not from you working.
 
+{? if profile.gpu.exists ?}
+> **Hardware advantage:** Your {= profile.gpu.model | fallback("GPU") =} with {= profile.gpu.vram | fallback("dedicated") =} VRAM opens up LLM-powered automation streams — local inference APIs, AI-powered data processing, and intelligent monitoring services — all at near-zero marginal cost per request.
+{? endif ?}
+
 - Revenue timeline: 2-4 months to first revenue (if you know the domain)
-- Typical range: $300-3,000/month
+- Typical range: {= regional.currency_symbol | fallback("$") =}300-3,000/month
 - Ceiling: moderate (limited by niche size, but almost zero time investment once running)
 - Risk: technical failures, niche drying up
 
@@ -331,6 +345,10 @@ Those 4 weeks go into building the next stream.
 
 This is where the system becomes greater than the sum of its parts.
 
+{? if settings.has_llm ?}
+> **Your LLM ({= settings.llm_provider | fallback("Local") =} / {= settings.llm_model | fallback("your model") =}) powers this connection.** Signal detection, content summarization, lead qualification, and opportunity classification — your LLM turns raw information into actionable intelligence across every stream simultaneously.
+{? endif ?}
+
 A signal about a trending framework isn't just a news item. Traced through the flywheel, it becomes:
 
 - A **consulting opportunity** ("We need help adopting Framework X")
@@ -411,7 +429,13 @@ For each stream in your stack, answer:
 
 If a stream has zero connections to your other streams, it's not part of a flywheel. It's a disconnected side project. That doesn't mean kill it — it means either find the connection or acknowledge that it's standalone and manage it accordingly.
 
-> **Common Mistake:** Designing streams for maximum revenue instead of maximum interaction. A stream that generates $800/month AND feeds two other streams is more valuable than a stream that generates $2,000/month in isolation. The isolated stream adds $2,000. The connected stream adds $800 plus growth acceleration across the entire portfolio. Over 12 months, the connected stream wins every time.
+> **Common Mistake:** Designing streams for maximum revenue instead of maximum interaction. A stream that generates {= regional.currency_symbol | fallback("$") =}800/month AND feeds two other streams is more valuable than a stream that generates {= regional.currency_symbol | fallback("$") =}2,000/month in isolation. The isolated stream adds {= regional.currency_symbol | fallback("$") =}2,000. The connected stream adds {= regional.currency_symbol | fallback("$") =}800 plus growth acceleration across the entire portfolio. Over 12 months, the connected stream wins every time.
+
+{? if dna.is_full ?}
+
+{@ mirror blind_spot_moat @}
+
+{? endif ?}
 
 ### Your Turn
 
@@ -429,16 +453,16 @@ If a stream has zero connections to your other streams, it's not part of a flywh
 
 *"$10K/month is not a dream. It's a math problem. Here are four ways to solve it."*
 
-### Why $10K/Month
+### Why {= regional.currency_symbol | fallback("$") =}10K/Month
 
-Ten thousand dollars per month is the number where everything changes. It's not arbitrary.
+Ten thousand {= regional.currency | fallback("dollars") =} per month is the number where everything changes. It's not arbitrary.
 
-- **$10K/month = $120K/year.** That matches or exceeds the median US software developer salary.
-- **$10K/month after taxes (~$7K net) covers a middle-class life** in most US cities and a comfortable life nearly anywhere else in the world.
-- **$10K/month from multiple streams is more stable** than $15K/month from a single employer, because no single failure can take you from $10K to $0.
-- **$10K/month proves the model.** If you can make $10K/month independently, you can make $20K/month. The system works. Everything after this is optimization.
+- **{= regional.currency_symbol | fallback("$") =}10K/month = {= regional.currency_symbol | fallback("$") =}120K/year.** That matches or exceeds the median US software developer salary.
+- **{= regional.currency_symbol | fallback("$") =}10K/month after taxes (~{= regional.currency_symbol | fallback("$") =}7K net) covers a middle-class life** in most US cities and a comfortable life nearly anywhere else in the world.
+- **{= regional.currency_symbol | fallback("$") =}10K/month from multiple streams is more stable** than {= regional.currency_symbol | fallback("$") =}15K/month from a single employer, because no single failure can take you from {= regional.currency_symbol | fallback("$") =}10K to {= regional.currency_symbol | fallback("$") =}0.
+- **{= regional.currency_symbol | fallback("$") =}10K/month proves the model.** If you can make {= regional.currency_symbol | fallback("$") =}10K/month independently, you can make {= regional.currency_symbol | fallback("$") =}20K/month. The system works. Everything after this is optimization.
 
-Below $10K/month, you're supplementing. At $10K/month, you're independent. That's why it matters.
+Below {= regional.currency_symbol | fallback("$") =}10K/month, you're supplementing. At {= regional.currency_symbol | fallback("$") =}10K/month, you're independent. That's why it matters.
 
 Here are four concrete paths. Each one is realistic, specific, and achievable within 12-18 months of consistent execution.
 
@@ -584,6 +608,12 @@ You don't have to pick exactly one path. These are archetypes, not prescriptions
 | Need money quickly | Path 1 first, then transition |
 | Have 6+ months of savings | Path 2 or 3 (invest in compounding) |
 | Have 10 hours/week or less | Path 4 (highest leverage per hour) |
+
+{? if stack.primary ?}
+> **Based on your stack ({= stack.primary | fallback("your primary stack") =}):** Consider which path best leverages your existing skills. Developers with backend/systems experience tend to thrive on Path 4 (Automation-Heavy). Frontend and full-stack developers often find Path 2 (Product-Heavy) the fastest to traction. Strong communicators with deep domain knowledge do well on Path 3 (Content-Heavy).
+{? endif ?}
+
+{@ temporal market_timing @}
 
 ### Your Turn
 
@@ -799,12 +829,12 @@ Every dollar your streams generate has four possible destinations:
 
 Most developers spend everything they earn (minus taxes). The ones who build lasting income operations reinvest strategically. Not all of it. Not most of it. But a deliberate percentage, allocated to specific investments that accelerate growth.
 
-### Level 1: First $500/Month
+### Level 1: First {= regional.currency_symbol | fallback("$") =}500/Month
 
 You've crossed the threshold. You're making money. It's not much, but it's real. Here's where it goes:
 
-**Tax reserve: $150/month (30%)**
-This is non-negotiable. Transfer 30% of every dollar that hits your business account to a separate savings account. Label it "TAXES — DO NOT TOUCH." The IRS (or HMRC, or your local tax authority) will come for this money. Have it ready.
+**Tax reserve: {= regional.currency_symbol | fallback("$") =}150/month (30%)**
+This is non-negotiable. Transfer 30% of every {= regional.currency | fallback("dollar") =} that hits your business account to a separate savings account. Label it "TAXES — DO NOT TOUCH." The IRS (or HMRC, or your local tax authority) will come for this money. Have it ready.
 
 **Reinvestment: $100-150/month**
 - Better tooling: faster hosting, more API credits for customer-facing quality ($50/month)
@@ -854,13 +884,15 @@ $5,000/month is the "consider going independent" threshold. Not "do it now" — 
 
 **Your pocket: $2,000-2,500/month**
 
-### Level 4: First $10,000/Month
+### Level 4: First {= regional.currency_symbol | fallback("$") =}10,000/Month
 
 You have a real business. Treat it like one.
 
-**Tax reserve: $3,000/month (30%)**
+**Tax reserve: {= regional.currency_symbol | fallback("$") =}3,000/month (30%)**
 
-At this level, your reinvestment decisions should be driven by a specific question: **"What is the bottleneck to the next $10K?"**
+{@ insight cost_projection @}
+
+At this level, your reinvestment decisions should be driven by a specific question: **"What is the bottleneck to the next {= regional.currency_symbol | fallback("$") =}10K?"**
 
 - If the bottleneck is **development capacity:** bring on a contractor ($2,000-4,000/month for 20-40 hrs/month)
 - If the bottleneck is **sales/marketing:** hire a part-time growth person ($1,500-3,000/month)
@@ -868,7 +900,7 @@ At this level, your reinvestment decisions should be driven by a specific questi
 - If the bottleneck is **your own capacity:** consider a technical co-founder or partner (equity conversation, not expense)
 
 **Structural investments:**
-- **LLC/Corp formation** if not already done. At $120K/year, an LLC is not optional.
+- **{= regional.business_entity_type | fallback("LLC") =} formation** if not already done. At {= regional.currency_symbol | fallback("$") =}120K/year, a {= regional.business_entity_type | fallback("LLC") =} is not optional.
 - **S-Corp election** (US): When you're consistently earning $40K+/year from self-employment, an S-Corp election saves 15.3% self-employment tax on distributions above a "reasonable salary." On $80K in distributions, that's $12,240/year in tax savings. Your accountant should be advising you on this.
 - **Business bank account and proper bookkeeping.** Wave (free) or QuickBooks ($25/month) or a bookkeeper ($200-400/month).
 - **Liability insurance.** Professional liability / E&O insurance runs $500-1,500/year. If a client sues you, this is the difference between a bad day and a bankruptcy.
@@ -888,6 +920,14 @@ The game changes from "how do I make money" to "how do I scale what's already wo
 ### Tax Planning: The Section Nobody Reads Until April
 
 Read this section now. Not in April. Now.
+
+{? if regional.country == "US" ?}
+> **You're in the US.** The section below covers your tax obligations directly. Pay particular attention to quarterly estimated taxes and the S-Corp election threshold.
+{? elif regional.country == "GB" ?}
+> **You're in the UK.** Scroll down to the United Kingdom section for your specific obligations. Self Assessment deadlines and Class 4 NICs are your key items.
+{? elif regional.country ?}
+> **Your location: {= regional.country | fallback("your country") =}.** Review all sections below for general principles, then consult a local tax professional for specifics.
+{? endif ?}
 
 **United States:**
 
@@ -919,6 +959,10 @@ Read this section now. Not in April. Now.
 2. Track every business expense from day one. Use a spreadsheet, Wave, or Hledger. The developers who track expenses save $2,000-5,000/year in taxes they'd otherwise leave on the table.
 3. Get a professional accountant when you cross $5K/month. The ROI is immediate.
 4. Never commingle personal and business funds. Separate accounts. Always.
+
+{? if regional.tax_note ?}
+> **Tax note for {= regional.country | fallback("your region") =}:** {= regional.tax_note | fallback("Consult a local tax professional for specifics.") =}
+{? endif ?}
 
 ### Your Turn
 
@@ -1365,7 +1409,11 @@ Optimize pricing, reduce churn, improve conversion, automate more. Draft your Ye
 
 ### The Full Journey
 
+{? if progress.completed("R") ?}
+You started Module S (Sovereign Setup) with a hardware inventory and a dream. Your revenue engines from Module R are now components in a larger system. You end Module S (Stacking Streams) with a complete income operation.
+{? else ?}
 You started Module S (Sovereign Setup) with a hardware inventory and a dream. You end Module S (Stacking Streams) with a complete income operation.
+{? endif ?}
 
 Here's what the full STREETS journey built:
 
@@ -1400,6 +1448,10 @@ A developer who has completed this course and executed on it for 12 months has:
 **Tactical automation.** Machines handle the repetitive work across every stream. Invoice generation, content distribution, monitoring, onboarding, reporting — all automated. Human hours go to the work that only humans can do: strategy, creativity, relationships, judgment.
 
 **Stacked streams.** A diversified, resilient income portfolio where each stream feeds the others. The flywheel is spinning. Each push requires less effort and generates more momentum.
+
+{? if dna.is_full ?}
+> **Your Developer DNA summary:** {= dna.identity_summary | fallback("Profile available") =}. Your top engaged topics ({= dna.top_engaged_topics | fallback("see your 4DA dashboard") =}) are natural stream foundations. {? if dna.blind_spots ?}Watch your blind spots ({= dna.blind_spots | fallback("none detected") =}) — they may represent untapped stream categories.{? endif ?}
+{? endif ?}
 
 ### The Long Game
 

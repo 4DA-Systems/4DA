@@ -23,6 +23,14 @@ By the end of these two weeks, you will have:
 
 No hypotheticals. No "in theory." A real product, live on the internet, capable of generating revenue.
 
+{? if progress.completed("R") ?}
+You completed Module R — you already have revenue engine designs ready to execute. This module turns one of those designs into a live product.
+{? else ?}
+If you have not completed Module R yet, you can still use this module — but having a revenue engine design ready will make the 48-hour sprint significantly smoother.
+{? endif ?}
+
+{@ mirror execution_readiness @}
+
 Let's build it.
 
 ---
@@ -172,6 +180,10 @@ If you fail this test: pivot your angle, not your entire idea. The demand might 
 
 You have validated demand. You have competitor research. You know what people want and what existing solutions lack. Now build the minimum version that solves the core problem.
 
+{? if profile.gpu.exists ?}
+With a GPU in your rig ({= profile.gpu.model | fallback("your GPU") =}), consider product ideas that leverage local AI inference — image processing tools, code analysis utilities, content generation pipelines. GPU-powered features are a genuine differentiator that most indie developers cannot offer.
+{? endif ?}
+
 **The 3-Feature Rule**
 
 Your v0.1 has exactly 3 features. Not 4. Not 7. Three.
@@ -193,9 +205,19 @@ Real example — a PII log scrubber CLI tool:
 2. **Usable:** Works as a CLI pipe (`cat logs.txt | pii-scrub > clean.txt`)
 3. **Differentiator:** Configurable rules file, handles 15+ log formats automatically
 
+{@ insight stack_fit @}
+
 **Scaffold the Project**
 
 Use LLMs to accelerate, not replace, your work. Here is the practical workflow:
+
+{? if stack.contains("react") ?}
+Since your primary stack includes React, the web app scaffold below is your fastest path. You already know the tooling — focus your 48 hours on the product logic, not learning a new framework.
+{? elif stack.contains("rust") ?}
+Since your primary stack includes Rust, the CLI tool scaffold below is your fastest path. Rust CLI tools have excellent distribution (single binary, cross-platform) and developer audiences respect the performance story.
+{? elif stack.contains("python") ?}
+Since your primary stack includes Python, consider a CLI tool or API service. Python ships fast with FastAPI or Typer, and the PyPI ecosystem gives you instant distribution to millions of developers.
+{? endif ?}
 
 ```bash
 # Scaffold a web app (SaaS tool, component library with docs site, etc.)
@@ -235,6 +257,10 @@ mkdir src
 ```
 
 **The LLM Workflow for Building**
+
+{? if settings.has_llm ?}
+You have an LLM configured ({= settings.llm_provider | fallback("local") =} / {= settings.llm_model | fallback("your model") =}). Use it as your pair programmer during the sprint — it accelerates scaffolding and boilerplate generation significantly.
+{? endif ?}
 
 Do not ask the LLM to build your entire product. That produces generic, fragile code. Instead:
 
@@ -379,6 +405,9 @@ cat server.log | scrublog > clean.log
 
 For a 48-hour sprint, do not build a custom landing page from scratch. Use one of these:
 
+{? if stack.contains("react") ?}
+- **Your React app** — Since you work in React, make the landing page the logged-out homepage of your app or add a marketing route in Next.js. Zero context-switching cost.
+{? endif ?}
 - **Your product's own site** — If it is a web app, make the landing page the logged-out homepage
 - **Astro + Tailwind** — Static site, deploys to Vercel in 2 minutes, extremely fast
 - **Next.js** — If your product is already React, add a marketing page route
@@ -403,6 +432,14 @@ You should have a landing page with copy by the end of Saturday. It does not nee
 Your product needs to be live on the internet at a real URL. Not localhost. Not a Vercel preview URL with a random hash. A real domain, with HTTPS, that you can share and people can visit.
 
 **Step 1: Deploy the Application (60 minutes)**
+
+{? if computed.os_family == "windows" ?}
+Since you are on Windows, make sure WSL2 is available if your deployment tooling requires it. Most CLI deployment tools (Vercel, Fly.io) work natively on Windows, but some scripts assume Unix paths.
+{? elif computed.os_family == "macos" ?}
+On macOS, all deployment CLIs install cleanly via Homebrew or direct download. You are in the smoothest deployment path.
+{? elif computed.os_family == "linux" ?}
+On Linux, you have the most flexible deployment environment. All CLI tools work natively, and you can also self-host on your own machine if you have a static IP and want to save on hosting costs.
+{? endif ?}
 
 Choose your deployment platform based on what you built:
 
@@ -508,6 +545,10 @@ Do not use Google Analytics. Your developer audience blocks it, it is overkill f
 #### Afternoon Block (2 hours): Set Up Payments
 
 If your product cannot accept money, it is a hobby project. Setting up payments takes less time than most developers think — about 20-30 minutes for the basic flow.
+
+{? if regional.country ?}
+> **Payment processors recommended for {= regional.country | fallback("your country") =}:** {= regional.payment_processors | fallback("Stripe, Lemon Squeezy, PayPal") =}. The options below are globally available, but check that your preferred processor supports payouts in {= regional.currency | fallback("your local currency") =}.
+{? endif ?}
 
 **Option A: Lemon Squeezy (Recommended for Digital Products)**
 
@@ -728,7 +769,7 @@ Rules for Reddit posts:
 
 **Launch Platform 2: Hacker News (30 minutes)**
 
-If your product is technical and interesting, post a Show HN.
+If your product is technical and interesting, post a Show HN. In the "Technical details" section, mention your stack ({= stack.primary | fallback("your primary stack") =}) and explain why you chose it — HN readers love informed technical decisions.
 
 Show HN template:
 
@@ -848,6 +889,9 @@ Each of these has a different fix. That is why metrics matter.
 1. **Block the time.** Open your calendar right now and block out next Saturday 8 AM to 8 PM and Sunday 8 AM to 8 PM. Label it "48-Hour Sprint." Treat it like a flight you cannot reschedule.
 
 2. **Pick your idea.** Choose one revenue engine from Module R. Write down the 3-feature scope for your v0.1. If you cannot pick one, pick the one you could explain to a non-developer in one sentence.
+{? if dna.primary_stack ?}
+   Your strongest execution path is building something with {= dna.primary_stack | fallback("your primary stack") =} — ship fastest where you already have deep expertise.
+{? endif ?}
 
 3. **Pre-work.** Before Saturday, create accounts on:
    - Vercel, Railway, or Fly.io (deployment)
@@ -1039,9 +1083,11 @@ The only reason to offer a free tier is as a lead generation mechanism for the p
 
 > **Common Mistake:** "I'll make it free to get users first, then charge later." This almost never works. The users you attract at $0 expect $0 forever. When you add a price, they leave. The users who would have paid $29 from day one never found your product because you positioned it as a free tool. You attracted the wrong audience.
 
+{@ insight cost_projection @}
+
 ### The Developer Product Pricing Tiers
 
-After analyzing hundreds of successful developer products, these price points consistently work:
+After analyzing hundreds of successful developer products, these price points consistently work. All prices below are in USD — if you are pricing in {= regional.currency | fallback("your local currency") =}, adjust for local purchasing power and market norms.
 
 **Tier 1: $9-29 — Developer Tools and Utilities**
 
@@ -1215,7 +1261,7 @@ Raise your prices when any of these are true:
 - Grandfather existing customers at the old price
 - This is not shady — it is standard practice and also creates urgency for fence-sitters
 
-> **Real Talk:** Most developers underprice by 50-200%. Your $29 product is probably worth $49. Your $49 product is probably worth $79. I know this because developers anchor to their own willingness to pay (low — we are cheapskates about tooling) rather than the customer's willingness to pay (higher — they are buying a solution to a problem that costs them time). Raise your prices sooner than you think.
+> **Real Talk:** Most developers underprice by 50-200%. Your {= regional.currency_symbol | fallback("$") =}29 product is probably worth {= regional.currency_symbol | fallback("$") =}49. Your {= regional.currency_symbol | fallback("$") =}49 product is probably worth {= regional.currency_symbol | fallback("$") =}79. I know this because developers anchor to their own willingness to pay (low — we are cheapskates about tooling) rather than the customer's willingness to pay (higher — they are buying a solution to a problem that costs them time). Raise your prices sooner than you think.
 
 ### Your Turn
 
@@ -1224,8 +1270,8 @@ Raise your prices when any of these are true:
 2. **Design your pricing page.** Using the 3-tier template, design your pricing page copy. Identify which features go in each tier. Identify your "highlighted" tier (the one you want most people to buy).
 
 3. **Calculate your math.** Fill in:
-   - Price per sale: $___
-   - Target monthly revenue: $___
+   - Price per sale: {= regional.currency_symbol | fallback("$") =}___
+   - Target monthly revenue: {= regional.currency_symbol | fallback("$") =}___
    - Number of sales needed per month: ___
    - Estimated landing page visitors needed (at 2% conversion): ___
    - Is that visitor count achievable with your distribution plan? (Yes/No)
@@ -1363,6 +1409,10 @@ Put this at `yourdomain.com/terms`. Link to it from your checkout page footer.
 
 Operating as a sole proprietor (the default when you sell things without forming a business) works for your first sales. But as revenue grows, you want liability protection and tax advantages.
 
+{? if regional.country ?}
+> **For {= regional.country | fallback("your region") =}:** The recommended entity type is a **{= regional.business_entity_type | fallback("LLC or equivalent") =}**, with typical registration costs of {= regional.currency_symbol | fallback("$") =}{= regional.business_registration_cost | fallback("50-500") =}. Find your country's section below for specific guidance.
+{? endif ?}
+
 **United States — LLC:**
 
 An LLC (Limited Liability Company) is the standard choice for solo developer businesses.
@@ -1432,7 +1482,11 @@ If you are using Stripe directly, you are responsible for:
 - **UK VAT:** 20%. Required if your UK sales exceed GBP 85,000/year.
 - **Digital Services Taxes:** Various countries imposing these. Another reason to use Lemon Squeezy until your volume justifies managing this yourself.
 
-> **Real Talk:** The single biggest advantage of Lemon Squeezy over Stripe for a solo developer is not the checkout page or the features. It is that they handle tax compliance globally. International sales tax is a nightmare. Lemon Squeezy takes 5% + $0.50 per transaction and makes the nightmare go away. Until you are making $5,000+/month, the 5% is worth it. After that, evaluate whether managing taxes yourself with Stripe + TaxJar saves you money and sanity.
+{? if regional.country ?}
+> **Tax note for {= regional.country | fallback("your region") =}:** {= regional.tax_note | fallback("Consult a local tax professional for specifics on your obligations.") =}
+{? endif ?}
+
+> **Real Talk:** The single biggest advantage of Lemon Squeezy over Stripe for a solo developer is not the checkout page or the features. It is that they handle tax compliance globally. International sales tax is a nightmare. Lemon Squeezy takes 5% + $0.50 per transaction and makes the nightmare go away. Until you are making {= regional.currency_symbol | fallback("$") =}5,000+/month, the 5% is worth it. After that, evaluate whether managing taxes yourself with Stripe + TaxJar saves you money and sanity.
 
 **6. Intellectual Property Basics**
 
@@ -1469,7 +1523,7 @@ When you need it, professional liability insurance (errors and omissions / E&O) 
 
 2. **Generate your legal documents.** Go to Termly or Avodocs and generate a privacy policy and terms of service for your product. Save them as HTML or Markdown. Deploy them to `/privacy` and `/terms` on your product domain.
 
-3. **Make your entity decision.** Based on the guidance above and your country of residence, decide: launch as sole proprietor (fastest) or form an LLC/Ltd/equivalent first (more protection). Write down your decision and timeline.
+3. **Make your entity decision.** Based on the guidance above and your residence in {= regional.country | fallback("your country") =}, decide: launch as sole proprietor (fastest) or form a {= regional.business_entity_type | fallback("LLC/Ltd/equivalent") =} first (more protection). Write down your decision and timeline.
 
 4. **Check your dependencies.** Run the license checker on your project. Resolve any GPL/AGPL dependencies before selling a commercial product.
 
@@ -1794,6 +1848,8 @@ pnpm add @astrojs/sitemap
 - Month 3-6: Growing traffic (100-500/month)
 - Month 6-12: Significant traffic (500-5,000/month)
 - Month 12+: Compounding traffic that grows without effort
+
+{@ temporal market_timing @}
 
 ### Channel Selection Framework
 
@@ -2163,6 +2219,9 @@ This is your deliverable for Module E. Create this document and fill it in as yo
 3. **Set your launch date.** Open your calendar. Pick a specific Saturday within the next 2 weeks. Write it down. Tell someone — a friend, a partner, a Twitter follower. Accountability makes it real.
 
 4. **Set your kill criteria.** Before you launch, decide: "If I have fewer than [X] sales after 30 days despite [Y] distribution effort, I will [pivot/kill]." Write this in your Launch Document. Having pre-committed criteria prevents you from pouring months into a dead product because of sunk cost fallacy.
+{? if progress.completed("S") ?}
+   Refer back to your Sovereign Stack Document from Module S — your budget constraints and operating costs define what "profitable" means for your specific situation.
+{? endif ?}
 
 5. **Ship it.** You have the playbook. You have the tools. You have the knowledge. The only thing left is the act. The internet is waiting.
 
@@ -2171,6 +2230,10 @@ This is your deliverable for Module E. Create this document and fill it in as yo
 ## Module E: Complete
 
 ### What You Have Built in Two Weeks
+
+{? if dna.identity_summary ?}
+> **Your developer identity:** {= dna.identity_summary | fallback("Not yet profiled") =}. Everything you built in this module leverages this identity — your shipping speed is a function of your existing expertise.
+{? endif ?}
 
 Look at what you now have that you did not have when you started this module:
 
@@ -2211,6 +2274,8 @@ The developers who make consistent income are not the ones who launch once. They
 | **S** | Stacking Streams | Multiple income sources, portfolio strategy | Weeks 15-16 |
 
 You are past the halfway point. You have a live product. That puts you ahead of 95% of developers who want to build independent income but never get this far.
+
+> **STREETS Progress:** {= progress.completed_count | fallback("0") =} of {= progress.total_count | fallback("7") =} modules completed. {? if progress.completed_modules ?}Completed: {= progress.completed_modules | fallback("None yet") =}.{? endif ?}
 
 Now make it grow.
 
