@@ -176,10 +176,7 @@ pub(crate) fn void_signal_error(app: &AppHandle) {
 mod tests {
     use super::*;
 
-    fn make_result(
-        signal_type: Option<&str>,
-        signal_priority: Option<&str>,
-    ) -> SourceRelevance {
+    fn make_result(signal_type: Option<&str>, signal_priority: Option<&str>) -> SourceRelevance {
         SourceRelevance {
             id: 0,
             title: "test".to_string(),
@@ -243,23 +240,28 @@ mod tests {
         assert_eq!(summary.max_priority, 4);
         assert_eq!(summary.critical_count, 1);
         assert_eq!(summary.dominant_type, Some("security_alert".to_string()));
-        assert_eq!(*summary.signal_type_counts.get("security_alert").unwrap(), 2);
-        assert_eq!(*summary.signal_type_counts.get("tool_discovery").unwrap(), 1);
+        assert_eq!(
+            *summary.signal_type_counts.get("security_alert").unwrap(),
+            2
+        );
+        assert_eq!(
+            *summary.signal_type_counts.get("tool_discovery").unwrap(),
+            1
+        );
     }
 
     #[test]
     fn test_extract_signal_summary_priority_mapping() {
         // Test each priority level mapping
-        let tests = vec![
-            ("critical", 4u8),
-            ("high", 3),
-            ("medium", 2),
-            ("low", 1),
-        ];
+        let tests = vec![("critical", 4u8), ("high", 3), ("medium", 2), ("low", 1)];
         for (label, expected) in tests {
             let results = vec![make_result(Some("learning"), Some(label))];
             let summary = extract_signal_summary(&results).unwrap();
-            assert_eq!(summary.max_priority, expected, "Priority '{}' should map to {}", label, expected);
+            assert_eq!(
+                summary.max_priority, expected,
+                "Priority '{}' should map to {}",
+                label, expected
+            );
         }
     }
 
@@ -270,7 +272,10 @@ mod tests {
             .map(|_| make_result(Some("security_alert"), Some("critical")))
             .collect();
         let summary = extract_signal_summary(&results).unwrap();
-        assert!(summary.urgency_score <= 1.0, "Urgency should be capped at 1.0");
+        assert!(
+            summary.urgency_score <= 1.0,
+            "Urgency should be capped at 1.0"
+        );
     }
 
     #[test]

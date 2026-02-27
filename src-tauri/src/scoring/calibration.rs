@@ -139,7 +139,11 @@ mod tests {
     fn test_calibrate_score_midpoint() {
         // At the sigmoid center (0.48), output should be close to 0.5
         let cal = calibrate_score(0.48);
-        assert!((cal - 0.5).abs() < 0.05, "At sigmoid center, calibrated should be ~0.5, got {}", cal);
+        assert!(
+            (cal - 0.5).abs() < 0.05,
+            "At sigmoid center, calibrated should be ~0.5, got {}",
+            cal
+        );
     }
 
     #[test]
@@ -151,7 +155,10 @@ mod tests {
             assert!(
                 calibrated[i] <= calibrated[i + 1],
                 "calibrate_score should be monotonic: {} > {} at inputs ({}, {})",
-                calibrated[i], calibrated[i + 1], values[i], values[i + 1]
+                calibrated[i],
+                calibrated[i + 1],
+                values[i],
+                values[i + 1]
             );
         }
     }
@@ -182,7 +189,10 @@ mod tests {
     #[test]
     fn test_embedding_specificity_contains_broad() {
         // "artificial intelligence" contains "ai"
-        assert_eq!(embedding_specificity_weight("artificial intelligence"), 0.40);
+        assert_eq!(
+            embedding_specificity_weight("artificial intelligence"),
+            0.40
+        );
     }
 
     #[test]
@@ -198,8 +208,18 @@ mod tests {
     #[test]
     fn test_broad_interest_terms_complete() {
         // Verify key terms are in the list
-        let key_terms = ["open source", "ai", "ml", "cloud", "web", "programming",
-                         "software", "technology", "development", "security"];
+        let key_terms = [
+            "open source",
+            "ai",
+            "ml",
+            "cloud",
+            "web",
+            "programming",
+            "software",
+            "technology",
+            "development",
+            "security",
+        ];
         for term in &key_terms {
             assert!(
                 BROAD_INTEREST_TERMS.contains(term),

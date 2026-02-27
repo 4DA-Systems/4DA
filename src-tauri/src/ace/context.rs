@@ -679,7 +679,11 @@ mod tests {
         let two_hours_ago = now - chrono::Duration::hours(2);
         let ts_str = two_hours_ago.format("%Y-%m-%d %H:%M:%S").to_string();
         let hours = parse_hours_ago(&ts_str);
-        assert!((hours - 2.0).abs() < 0.1, "Should be ~2 hours ago, got {}", hours);
+        assert!(
+            (hours - 2.0).abs() < 0.1,
+            "Should be ~2 hours ago, got {}",
+            hours
+        );
     }
 
     #[test]
@@ -699,7 +703,11 @@ mod tests {
         let now = chrono::Utc::now().naive_utc();
         let ts_str = now.format("%Y-%m-%d %H:%M:%S").to_string();
         let hours = parse_hours_ago(&ts_str);
-        assert!(hours < 0.1, "Current time should be ~0 hours ago, got {}", hours);
+        assert!(
+            hours < 0.1,
+            "Current time should be ~0 hours ago, got {}",
+            hours
+        );
     }
 
     // ====================================================================

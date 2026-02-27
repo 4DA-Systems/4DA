@@ -470,7 +470,11 @@ mod tests {
     #[test]
     fn test_all_achievements_count() {
         let achievements = all_achievements();
-        assert_eq!(achievements.len(), 13, "Should have exactly 13 achievements");
+        assert_eq!(
+            achievements.len(),
+            13,
+            "Should have exactly 13 achievements"
+        );
     }
 
     #[test]
@@ -487,9 +491,15 @@ mod tests {
         for a in all_achievements() {
             assert!(!a.id.is_empty(), "Achievement ID should not be empty");
             assert!(!a.name.is_empty(), "Achievement name should not be empty");
-            assert!(!a.description.is_empty(), "Achievement description should not be empty");
+            assert!(
+                !a.description.is_empty(),
+                "Achievement description should not be empty"
+            );
             assert!(!a.icon.is_empty(), "Achievement icon should not be empty");
-            assert!(!a.counter_type.is_empty(), "Achievement counter_type should not be empty");
+            assert!(
+                !a.counter_type.is_empty(),
+                "Achievement counter_type should not be empty"
+            );
             assert!(a.threshold > 0, "Achievement threshold should be positive");
         }
     }
@@ -497,7 +507,15 @@ mod tests {
     #[test]
     fn test_all_achievements_counter_types() {
         let achievements = all_achievements();
-        let valid_types = ["scans", "discoveries", "saves", "briefings", "sources", "context", "streak"];
+        let valid_types = [
+            "scans",
+            "discoveries",
+            "saves",
+            "briefings",
+            "sources",
+            "context",
+            "streak",
+        ];
         for a in &achievements {
             assert!(
                 valid_types.contains(&a.counter_type.as_str()),
@@ -565,7 +583,10 @@ mod tests {
     #[test]
     fn test_context_builder_achievement() {
         let achievements = all_achievements();
-        let ctx = achievements.iter().find(|a| a.id == "context_builder").unwrap();
+        let ctx = achievements
+            .iter()
+            .find(|a| a.id == "context_builder")
+            .unwrap();
         assert_eq!(ctx.threshold, 3);
         assert_eq!(ctx.counter_type, "context");
     }

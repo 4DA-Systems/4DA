@@ -428,7 +428,11 @@ mod tests {
             make_item("Article B", Some("https://example.com/page"), 0.6),
         ];
         dedup_results(&mut items);
-        assert_eq!(items.len(), 1, "URL variants should be deduped after normalization");
+        assert_eq!(
+            items.len(),
+            1,
+            "URL variants should be deduped after normalization"
+        );
     }
 
     #[test]
@@ -465,20 +469,20 @@ mod tests {
         // If all items are relevant, no serendipity candidates
         let results = vec![make_item("Relevant", None, 0.8)];
         let candidates = compute_serendipity_candidates(&results, 20);
-        assert!(candidates.is_empty(), "All-relevant results should yield no serendipity");
+        assert!(
+            candidates.is_empty(),
+            "All-relevant results should yield no serendipity"
+        );
     }
 
     #[test]
     fn test_serendipity_marks_items_correctly() {
-        let mut items = vec![
-            make_item("Relevant", None, 0.8),
-            {
-                let mut item = make_item("Near miss", None, 0.4);
-                item.relevant = false;
-                item.context_score = 0.3; // Above SERENDIPITY_MIN_AXIS_SCORE
-                item
-            },
-        ];
+        let mut items = vec![make_item("Relevant", None, 0.8), {
+            let mut item = make_item("Near miss", None, 0.4);
+            item.relevant = false;
+            item.context_score = 0.3; // Above SERENDIPITY_MIN_AXIS_SCORE
+            item
+        }];
         items[0].relevant = true;
         let candidates = compute_serendipity_candidates(&items, 100);
         for c in &candidates {
@@ -499,7 +503,11 @@ mod tests {
             results.push(item);
         }
         let candidates = compute_serendipity_candidates(&results, 100);
-        assert!(candidates.len() <= 5, "Budget should cap at 5, got {}", candidates.len());
+        assert!(
+            candidates.len() <= 5,
+            "Budget should cap at 5, got {}",
+            candidates.len()
+        );
     }
 }
 
