@@ -79,7 +79,6 @@ impl TimeRange {
     }
 
     /// Create a custom time range
-    #[allow(dead_code)]
     pub fn custom(start: DateTime<Utc>, end: DateTime<Utc>) -> Self {
         Self {
             start,
@@ -89,13 +88,11 @@ impl TimeRange {
     }
 
     /// Check if a datetime falls within this range
-    #[allow(dead_code)]
     pub fn contains(&self, dt: &DateTime<Utc>) -> bool {
         dt >= &self.start && dt <= &self.end
     }
 
     /// Check if a naive datetime (assumed UTC) falls within this range
-    #[allow(dead_code)]
     pub fn contains_naive(&self, dt: &NaiveDateTime) -> bool {
         let utc_dt = dt.and_utc();
         self.contains(&utc_dt)
@@ -115,7 +112,7 @@ impl TimeRange {
 
 /// Entity filter for queries (people, places, projects)
 /// Used when NER (Named Entity Recognition) is implemented
-#[allow(dead_code)]
+#[allow(dead_code)] // Reserved for future NER integration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EntityFilter {
     /// Entity name or pattern
@@ -127,7 +124,7 @@ pub struct EntityFilter {
 }
 
 /// Entity types for filtering (used with NER)
-#[allow(dead_code)]
+#[allow(dead_code)] // Reserved for future NER integration
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum EntityType {
     Person,
@@ -138,7 +135,7 @@ pub enum EntityType {
     Unknown,
 }
 
-#[allow(dead_code)]
+#[allow(dead_code)] // Reserved for future NER integration
 impl EntityFilter {
     pub fn person(name: &str) -> Self {
         Self {
@@ -187,7 +184,6 @@ pub enum SentimentFilter {
     Frustrated,
 }
 
-#[allow(dead_code)]
 impl SentimentFilter {
     #[allow(clippy::should_implement_trait)]
     pub fn from_str(s: &str) -> Self {
@@ -238,7 +234,7 @@ impl SentimentFilter {
 
 /// Combined filter set for a query (builder pattern)
 /// Designed for future advanced query building
-#[allow(dead_code)]
+#[allow(dead_code)] // Reserved for future advanced query system
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct QueryFilters {
     pub time_range: Option<TimeRange>,
@@ -248,7 +244,7 @@ pub struct QueryFilters {
     pub min_confidence: Option<f32>,
 }
 
-#[allow(dead_code)]
+#[allow(dead_code)] // Reserved for future advanced query system
 impl QueryFilters {
     pub fn new() -> Self {
         Self::default()

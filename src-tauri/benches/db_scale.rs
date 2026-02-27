@@ -4,34 +4,11 @@
 //! Run with: `cargo bench --bench db_scale`
 
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
-use std::path::Path;
-
-fn register_vec() {
-    fourda_lib::state::register_sqlite_vec_extension();
-}
-
-/// Generate a deterministic embedding from a seed
-fn seed_embedding(seed: &str) -> Vec<f32> {
-    let mut embedding = vec![0.0f32; 384];
-    let bytes = seed.as_bytes();
-    for (i, slot) in embedding.iter_mut().enumerate() {
-        let b1 = bytes[i % bytes.len()] as f32;
-        let b2 = bytes[(i + 7) % bytes.len()] as f32;
-        *slot = ((b1 * 0.00391 + b2 * 0.00197 + (i as f32) * 0.001).sin()) * 0.5;
-    }
-    let norm: f32 = embedding.iter().map(|v| v * v).sum::<f32>().sqrt();
-    if norm > 0.0 {
-        for v in &mut embedding {
-            *v /= norm;
-        }
-    }
-    embedding
-}
+use fourda_lib::test_utils::{seed_embedding, test_db};
 
 /// Pre-populate a database with N items and return it
 fn populated_db(n: usize) -> fourda_lib::db::Database {
-    register_vec();
-    let db = fourda_lib::db::Database::new(Path::new(":memory:")).expect("in-memory DB");
+    let db = test_db();
     for i in 0..n {
         let emb = seed_embedding(&format!("bench-{}", i));
         db.upsert_source_item(

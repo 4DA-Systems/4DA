@@ -618,3 +618,73 @@ impl ACE {
         Ok(updated)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_click_base_strength() {
+        let action = BehaviorAction::Click {
+            dwell_time_seconds: 0,
+        };
+        assert!((action.compute_strength() - 0.5).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn test_click_max_dwell_bonus() {
+        let action = BehaviorAction::Click {
+            dwell_time_seconds: 120,
+        };
+        // base 0.5 + min(120/60, 0.5) = 0.5 + 0.5 = 1.0
+        assert!((action.compute_strength() - 1.0).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn test_save_strength() {
+        let action = BehaviorAction::Save;
+        assert!((action.compute_strength() - 1.0).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn test_share_strength() {
+        let action = BehaviorAction::Share;
+        assert!((action.compute_strength() - 1.0).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn test_dismiss_strength() {
+        let action = BehaviorAction::Dismiss;
+        assert!((action.compute_strength() - (-0.8)).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn test_mark_irrelevant_strength() {
+        let action = BehaviorAction::MarkIrrelevant;
+        assert!((action.compute_strength() - (-1.0)).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn test_scroll_strength() {
+        let action = BehaviorAction::Scroll {
+            visible_seconds: 3.0,
+        };
+        // 0.1 * min(3.0, 3.0) = 0.3
+        assert!((action.compute_strength() - 0.3).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn test_scroll_capped() {
+        let action = BehaviorAction::Scroll {
+            visible_seconds: 10.0,
+        };
+        // 0.1 * min(10.0, 3.0) = 0.3 (capped at 3.0)
+        assert!((action.compute_strength() - 0.3).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn test_ignore_strength() {
+        let action = BehaviorAction::Ignore;
+        assert!((action.compute_strength() - (-0.1)).abs() < f32::EPSILON);
+    }
+}

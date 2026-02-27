@@ -413,3 +413,73 @@ impl Database {
         .optional()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::test_utils::{insert_test_item, test_db};
+
+    #[test]
+    fn test_store_and_retrieve_briefing() {
+        let db = test_db();
+
+        // No briefing yet
+        let latest = db.get_latest_briefing().unwrap();
+        assert!(latest.is_none(), "Empty DB should have no briefings");
+
+        // Save a briefing
+        let id = db
+            .save_briefing(
+                "Today's briefing content",
+                Some("gpt-4"),
+                5,
+                Some(1200),
+                Some(350),
+            )
+            .unwrap();
+        assert!(id > 0);
+
+        // Retrieve it
+        let latest = db.get_latest_briefing().unwrap().unwrap();
+        assert_eq!(latest.0, "Today's briefing content");
+        assert_eq!(latest.1, Some("gpt-4".to_string()));
+        assert_eq!(latest.2, 5);
+    }
+
+    #[test]
+    fn test_get_item_content_snippet_truncation() {
+        let db = test_db();
+        let long_content = "A".repeat(500);
+        let id = insert_test_item(
+            &db,
+            "hackernews",
+            "trunc_1",
+            "Truncation Test",
+            &long_content,
+        );
+
+        // Request snippet shorter than content
+        let snippet = db.get_item_content_snippet(id, 100).unwrap();
+        assert_eq!(
+            snippet.len(),
+            100,
+            "Snippet should be truncated to max_chars"
+        );
+
+        // Request snippet longer than content
+        let snippet = db.get_item_content_snippet(id, 1000).unwrap();
+        assert_eq!(
+            snippet.len(),
+            500,
+            "Snippet should return full content when under max_chars"
+        );
+    }
+
+    #[test]
+    fn test_get_item_content_missing_item() {
+        let db = test_db();
+
+        // Query a non-existent item id
+        let result = db.get_item_content_snippet(99999, 100);
+        assert!(result.is_err(), "Missing item should return an error");
+    }
+}

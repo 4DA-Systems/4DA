@@ -994,3 +994,118 @@ impl Database {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::test_utils::test_db;
+
+    #[test]
+    fn test_fresh_db_has_all_expected_tables() {
+        let db = test_db();
+        let conn = db.conn.lock();
+        let mut stmt = conn
+            .prepare("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")
+            .unwrap();
+        let tables: Vec<String> = stmt
+            .query_map([], |row| row.get(0))
+            .unwrap()
+            .filter_map(|r| r.ok())
+            .collect();
+
+        let expected = [
+            "context_chunks",
+            "source_items",
+            "temporal_events",
+            "feedback",
+            "sources",
+            "schema_version",
+            "migration_history",
+            "source_health",
+            "briefings",
+            "void_positions",
+        ];
+        for table in &expected {
+            assert!(
+                tables.iter().any(|t| t == table),
+                "Expected table '{}' not found in {:?}",
+                table,
+                tables
+            );
+        }
+    }
+
+    #[test]
+    fn test_migrations_are_idempotent() {
+        let db = test_db();
+        // Running migrate() again should not error
+        let result = db.migrate();
+        assert!(
+            result.is_ok(),
+            "Second migrate() call failed: {:?}",
+            result.err()
+        );
+    }
+
+    #[test]
+    fn test_migration_version_tracked() {
+        let db = test_db();
+        let conn = db.conn.lock();
+        let version: i64 = conn
+            .query_row("SELECT version FROM schema_version", [], |row| row.get(0))
+            .unwrap();
+        assert!(version > 0, "Schema version should be > 0, got {}", version);
+    }
+
+    #[test]
+    fn test_vec0_virtual_table_exists() {
+        let db = test_db();
+        let conn = db.conn.lock();
+        let mut stmt = conn
+            .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name IN ('context_vec', 'source_vec') ORDER BY name")
+            .unwrap();
+        let tables: Vec<String> = stmt
+            .query_map([], |row| row.get(0))
+            .unwrap()
+            .filter_map(|r| r.ok())
+            .collect();
+        assert!(
+            tables.contains(&"context_vec".to_string()),
+            "context_vec virtual table not found"
+        );
+        assert!(
+            tables.contains(&"source_vec".to_string()),
+            "source_vec virtual table not found"
+        );
+    }
+
+    #[test]
+    fn test_all_expected_indexes_exist() {
+        let db = test_db();
+        let conn = db.conn.lock();
+        let mut stmt = conn
+            .prepare(
+                "SELECT name FROM sqlite_master WHERE type='index' AND tbl_name='source_items' ORDER BY name",
+            )
+            .unwrap();
+        let indexes: Vec<String> = stmt
+            .query_map([], |row| row.get(0))
+            .unwrap()
+            .filter_map(|r| r.ok())
+            .collect();
+
+        let expected_indexes = [
+            "idx_source_type",
+            "idx_source_hash",
+            "idx_source_seen",
+            "idx_source_type_created",
+        ];
+        for idx in &expected_indexes {
+            assert!(
+                indexes.iter().any(|i| i == idx),
+                "Expected index '{}' not found on source_items. Found: {:?}",
+                idx,
+                indexes
+            );
+        }
+    }
+}

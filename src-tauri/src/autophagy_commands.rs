@@ -1,4 +1,3 @@
-#![allow(dead_code)]
 //! Tauri commands for the Intelligent Autophagy system.
 //!
 //! Exposes autophagy status, history, and manual trigger to the frontend.

@@ -84,7 +84,6 @@ mod handoff;
 mod health;
 mod health_commands;
 mod job_queue;
-mod job_queue_commands;
 mod knowledge_decay;
 mod llm;
 mod monitoring;
@@ -140,6 +139,11 @@ mod translation_pipeline;
 mod video_curriculum;
 
 use source_fetching::fill_cache_background;
+
+/// Shared test utilities — compiled unconditionally so integration tests
+/// and benchmarks can access them via `fourda_lib::test_utils`.
+#[doc(hidden)]
+pub mod test_utils;
 
 // ============================================================================
 // App Entry
@@ -461,8 +465,7 @@ pub fn run() {
             translation_commands::get_translation_overrides,
             translation_commands::delete_translation_override,
             // GAME Engine
-            game_commands::get_game_state,
-            game_commands::get_achievements
+            game_commands::get_game_state
         ])
         .setup(|app| {
             // Record app start time for diagnostics uptime tracking

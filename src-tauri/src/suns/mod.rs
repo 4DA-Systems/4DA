@@ -405,3 +405,66 @@ pub(crate) fn store_sun_alert(sun_id: &str, alert_type: &str, message: &str) {
         );
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    macro_rules! sun_smoke_test {
+        ($name:ident, $module:ident) => {
+            #[test]
+            fn $name() {
+                let result = $module::execute();
+                assert!(
+                    !result.message.is_empty(),
+                    "Sun {} must produce a non-empty message",
+                    stringify!($module)
+                );
+            }
+        };
+    }
+
+    sun_smoke_test!(smoke_uptime, uptime_monitor);
+    sun_smoke_test!(smoke_hardware, hardware_monitor);
+    sun_smoke_test!(smoke_price_tracker, price_tracker);
+    sun_smoke_test!(smoke_market_tracker, market_tracker);
+    sun_smoke_test!(smoke_api_cost_monitor, api_cost_monitor);
+    sun_smoke_test!(smoke_tech_moat_scanner, tech_moat_scanner);
+    sun_smoke_test!(smoke_execution_tracker, execution_tracker);
+    sun_smoke_test!(smoke_edge_detector, edge_detector);
+    sun_smoke_test!(smoke_automation_auditor, automation_auditor);
+    sun_smoke_test!(smoke_stream_monitor, stream_monitor);
+
+    // Test registry construction and behavior
+    #[test]
+    fn test_registry_has_10_suns() {
+        let registry = SunRegistry::new();
+        let statuses = registry.get_statuses();
+        assert_eq!(statuses.len(), 10, "Expected 10 registered suns");
+    }
+
+    #[test]
+    fn test_registry_module_counts() {
+        let registry = SunRegistry::new();
+        let counts = registry.get_module_sun_counts();
+        // Should have entries for S, R, T, E1, E2, T2, S2
+        assert!(
+            counts.len() >= 7,
+            "Expected at least 7 module categories, got {}",
+            counts.len()
+        );
+    }
+
+    #[test]
+    fn test_set_enabled_disables_sun() {
+        let mut registry = SunRegistry::new();
+        registry.set_enabled("uptime_monitor", false);
+        let statuses = registry.get_statuses();
+        let uptime = statuses.iter().find(|s| s.id == "uptime_monitor").unwrap();
+        assert!(!uptime.enabled);
+        assert!(
+            uptime.next_run_in_secs.is_none(),
+            "Disabled sun should have no next_run"
+        );
+    }
+}

@@ -257,3 +257,52 @@ impl ACE {
             .unwrap_or(false)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_embedding_blob_roundtrip() {
+        let original = vec![1.0_f32, 2.5, -3.7, 0.0, 42.0];
+        let blob = embedding_to_blob(&original);
+        let recovered = blob_to_embedding(&blob);
+        assert_eq!(original, recovered);
+    }
+
+    #[test]
+    fn test_empty_embedding_roundtrip() {
+        let original: Vec<f32> = vec![];
+        let blob = embedding_to_blob(&original);
+        let recovered = blob_to_embedding(&blob);
+        assert_eq!(original, recovered);
+    }
+
+    #[test]
+    fn test_single_value_roundtrip() {
+        let original = vec![42.0_f32];
+        let blob = embedding_to_blob(&original);
+        assert_eq!(blob.len(), 4);
+        let recovered = blob_to_embedding(&blob);
+        assert_eq!(original, recovered);
+    }
+
+    #[test]
+    fn test_blob_preserves_precision() {
+        let original = vec![
+            std::f32::consts::PI,
+            std::f32::consts::E,
+            std::f32::consts::SQRT_2,
+            std::f32::consts::LN_2,
+            f32::MIN_POSITIVE,
+            f32::MAX,
+            f32::MIN,
+        ];
+        let blob = embedding_to_blob(&original);
+        let recovered = blob_to_embedding(&blob);
+        assert_eq!(original.len(), recovered.len());
+        for (a, b) in original.iter().zip(recovered.iter()) {
+            assert_eq!(a.to_bits(), b.to_bits(), "Precision lost for value {a}");
+        }
+    }
+}
