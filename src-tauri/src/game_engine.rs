@@ -59,19 +59,110 @@ pub struct AchievementState {
 /// All 13 achievements
 fn all_achievements() -> Vec<Achievement> {
     vec![
-        Achievement { id: "first_scan".into(), name: "First Light".into(), description: "Run your first content scan".into(), icon: "telescope".into(), counter_type: "scans".into(), threshold: 1 },
-        Achievement { id: "ten_scans".into(), name: "Radar Operator".into(), description: "Run 10 content scans".into(), icon: "satellite".into(), counter_type: "scans".into(), threshold: 10 },
-        Achievement { id: "fifty_scans".into(), name: "Signal Hunter".into(), description: "Run 50 content scans".into(), icon: "radar".into(), counter_type: "scans".into(), threshold: 50 },
-        Achievement { id: "first_discovery".into(), name: "Eureka".into(), description: "Find your first relevant item".into(), icon: "lightbulb".into(), counter_type: "discoveries".into(), threshold: 1 },
-        Achievement { id: "ten_discoveries".into(), name: "Pattern Spotter".into(), description: "Find 10 relevant items".into(), icon: "eye".into(), counter_type: "discoveries".into(), threshold: 10 },
-        Achievement { id: "hundred_discoveries".into(), name: "Intelligence Analyst".into(), description: "Find 100 relevant items".into(), icon: "brain".into(), counter_type: "discoveries".into(), threshold: 100 },
-        Achievement { id: "first_save".into(), name: "Collector".into(), description: "Save your first item".into(), icon: "bookmark".into(), counter_type: "saves".into(), threshold: 1 },
-        Achievement { id: "first_briefing".into(), name: "Briefed".into(), description: "Generate your first briefing".into(), icon: "newspaper".into(), counter_type: "briefings".into(), threshold: 1 },
-        Achievement { id: "three_sources".into(), name: "Multi-Source".into(), description: "Discover items from 3+ sources".into(), icon: "antenna".into(), counter_type: "sources".into(), threshold: 3 },
-        Achievement { id: "five_sources".into(), name: "Intel Network".into(), description: "Discover items from 5+ sources".into(), icon: "globe".into(), counter_type: "sources".into(), threshold: 5 },
-        Achievement { id: "context_builder".into(), name: "Context Builder".into(), description: "Set up 3 context items (role, tech, interests)".into(), icon: "puzzle".into(), counter_type: "context".into(), threshold: 3 },
-        Achievement { id: "streak_three".into(), name: "Consistent".into(), description: "Use 4DA 3 days in a row".into(), icon: "flame".into(), counter_type: "streak".into(), threshold: 3 },
-        Achievement { id: "streak_seven".into(), name: "Dedicated".into(), description: "Use 4DA 7 days in a row".into(), icon: "fire".into(), counter_type: "streak".into(), threshold: 7 },
+        Achievement {
+            id: "first_scan".into(),
+            name: "First Light".into(),
+            description: "Run your first content scan".into(),
+            icon: "telescope".into(),
+            counter_type: "scans".into(),
+            threshold: 1,
+        },
+        Achievement {
+            id: "ten_scans".into(),
+            name: "Radar Operator".into(),
+            description: "Run 10 content scans".into(),
+            icon: "satellite".into(),
+            counter_type: "scans".into(),
+            threshold: 10,
+        },
+        Achievement {
+            id: "fifty_scans".into(),
+            name: "Signal Hunter".into(),
+            description: "Run 50 content scans".into(),
+            icon: "radar".into(),
+            counter_type: "scans".into(),
+            threshold: 50,
+        },
+        Achievement {
+            id: "first_discovery".into(),
+            name: "Eureka".into(),
+            description: "Find your first relevant item".into(),
+            icon: "lightbulb".into(),
+            counter_type: "discoveries".into(),
+            threshold: 1,
+        },
+        Achievement {
+            id: "ten_discoveries".into(),
+            name: "Pattern Spotter".into(),
+            description: "Find 10 relevant items".into(),
+            icon: "eye".into(),
+            counter_type: "discoveries".into(),
+            threshold: 10,
+        },
+        Achievement {
+            id: "hundred_discoveries".into(),
+            name: "Intelligence Analyst".into(),
+            description: "Find 100 relevant items".into(),
+            icon: "brain".into(),
+            counter_type: "discoveries".into(),
+            threshold: 100,
+        },
+        Achievement {
+            id: "first_save".into(),
+            name: "Collector".into(),
+            description: "Save your first item".into(),
+            icon: "bookmark".into(),
+            counter_type: "saves".into(),
+            threshold: 1,
+        },
+        Achievement {
+            id: "first_briefing".into(),
+            name: "Briefed".into(),
+            description: "Generate your first briefing".into(),
+            icon: "newspaper".into(),
+            counter_type: "briefings".into(),
+            threshold: 1,
+        },
+        Achievement {
+            id: "three_sources".into(),
+            name: "Multi-Source".into(),
+            description: "Discover items from 3+ sources".into(),
+            icon: "antenna".into(),
+            counter_type: "sources".into(),
+            threshold: 3,
+        },
+        Achievement {
+            id: "five_sources".into(),
+            name: "Intel Network".into(),
+            description: "Discover items from 5+ sources".into(),
+            icon: "globe".into(),
+            counter_type: "sources".into(),
+            threshold: 5,
+        },
+        Achievement {
+            id: "context_builder".into(),
+            name: "Context Builder".into(),
+            description: "Set up 3 context items (role, tech, interests)".into(),
+            icon: "puzzle".into(),
+            counter_type: "context".into(),
+            threshold: 3,
+        },
+        Achievement {
+            id: "streak_three".into(),
+            name: "Consistent".into(),
+            description: "Use 4DA 3 days in a row".into(),
+            icon: "flame".into(),
+            counter_type: "streak".into(),
+            threshold: 3,
+        },
+        Achievement {
+            id: "streak_seven".into(),
+            name: "Dedicated".into(),
+            description: "Use 4DA 7 days in a row".into(),
+            icon: "fire".into(),
+            counter_type: "streak".into(),
+            threshold: 7,
+        },
     ]
 }
 
@@ -100,7 +191,11 @@ pub fn create_tables(conn: &rusqlite::Connection) -> rusqlite::Result<()> {
 }
 
 /// Increment a counter and return any newly unlocked achievements
-pub fn increment_counter(db: &Database, counter_type: &str, amount: u64) -> Vec<AchievementUnlocked> {
+pub fn increment_counter(
+    db: &Database,
+    counter_type: &str,
+    amount: u64,
+) -> Vec<AchievementUnlocked> {
     let conn = db.conn.lock();
     let mut unlocked = Vec::new();
 
@@ -276,7 +371,8 @@ pub fn get_game_state(db: &Database) -> GameState {
     }
 
     // Get unlocked achievement IDs
-    let mut unlocked_map: std::collections::HashMap<String, String> = std::collections::HashMap::new();
+    let mut unlocked_map: std::collections::HashMap<String, String> =
+        std::collections::HashMap::new();
     if let Ok(mut stmt) = conn.prepare("SELECT id, unlocked_at FROM game_achievements") {
         if let Ok(rows) = stmt.query_map([], |row| {
             Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
@@ -302,7 +398,10 @@ pub fn get_game_state(db: &Database) -> GameState {
             let current = if a.counter_type == "streak" {
                 streak as u64
             } else {
-                counter_lookup.get(a.counter_type.as_str()).copied().unwrap_or(0)
+                counter_lookup
+                    .get(a.counter_type.as_str())
+                    .copied()
+                    .unwrap_or(0)
             };
             let unlocked_at = unlocked_map.get(&a.id).cloned();
             AchievementState {
@@ -337,6 +436,7 @@ pub fn get_game_state(db: &Database) -> GameState {
 }
 
 /// Get just the list of unlocked achievements
+#[allow(dead_code)] // Called from game_commands::get_achievements (reserved for future frontend use)
 pub fn get_achievements(db: &Database) -> Vec<AchievementUnlocked> {
     let conn = db.conn.lock();
     let achievements_def = all_achievements();

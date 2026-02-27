@@ -1,4 +1,3 @@
-#![allow(dead_code)]
 //! Semantic Diff Engine for 4DA
 //!
 //! Tracks how the conversation around topics shifts over time.
@@ -11,6 +10,7 @@ use tracing::{debug, info};
 // Types
 // ============================================================================
 
+#[allow(dead_code)] // Used by detect_shifts (reserved for MCP integration)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SemanticShift {
     pub topic: String,
@@ -53,6 +53,7 @@ pub fn record_topic_centroid(
 }
 
 /// Detect semantic shifts by comparing current topic centroids with historical ones
+#[allow(dead_code)] // Reserved for MCP integration
 pub fn detect_shifts(
     conn: &rusqlite::Connection,
     lookback_days: u32,
@@ -197,6 +198,7 @@ pub fn detect_shifts(
     Ok(shifts)
 }
 
+#[allow(dead_code)] // Used by detect_shifts
 fn compute_title_overlap(recent: &[String], older: &[String]) -> f32 {
     if recent.is_empty() || older.is_empty() {
         return 0.0;
@@ -239,14 +241,14 @@ fn compute_title_overlap(recent: &[String], older: &[String]) -> f32 {
 // Tauri Commands
 // ============================================================================
 
-#[tauri::command]
+#[allow(dead_code)] // Reserved for MCP integration
 pub fn get_semantic_shifts(lookback_days: Option<u32>) -> Result<Vec<SemanticShift>, String> {
     crate::settings::require_pro_feature("get_semantic_shifts")?;
     let conn = crate::open_db_connection()?;
     detect_shifts(&conn, lookback_days.unwrap_or(7))
 }
 
-#[tauri::command]
+#[allow(dead_code)] // Reserved for MCP integration
 pub fn get_topic_centroids(
     topic: Option<String>,
 ) -> Result<Vec<crate::temporal::TemporalEvent>, String> {

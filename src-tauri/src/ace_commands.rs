@@ -353,7 +353,6 @@ pub async fn ace_get_rate_limit_status(source: String) -> Result<serde_json::Val
 // ACE Watcher Control Commands
 
 /// Start file watching on specified directories
-#[tauri::command]
 pub async fn ace_start_watcher(paths: Vec<String>) -> Result<serde_json::Value> {
     let mut ace = get_ace_engine_mut()?;
 

@@ -305,3 +305,98 @@ impl Database {
         &self.db_path
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::test_utils::{insert_test_item, test_db};
+
+    #[test]
+    fn test_record_and_get_analysis_history() {
+        let db = test_db();
+
+        // DB stats on empty DB
+        let stats = db.get_db_stats().unwrap();
+        assert_eq!(stats.source_items, 0);
+        assert_eq!(stats.context_chunks, 0);
+        assert_eq!(stats.feedback_count, 0);
+        assert_eq!(stats.sources_count, 0);
+
+        // Insert some items
+        insert_test_item(&db, "hackernews", "h1", "HN Item", "hn content");
+        insert_test_item(&db, "reddit", "r1", "Reddit Item", "reddit content");
+
+        let stats = db.get_db_stats().unwrap();
+        assert_eq!(stats.source_items, 2);
+
+        // Save command history
+        db.save_command_history(
+            "cargo test",
+            "/home/user",
+            0,
+            true,
+            Some("All tests passed"),
+        )
+        .unwrap();
+        db.save_command_history("cargo build", "/home/user", 1, false, Some("error[E0308]"))
+            .unwrap();
+
+        let history = db.get_command_history(10).unwrap();
+        assert_eq!(history.len(), 2);
+        // Most recent first
+        assert_eq!(history[0].command, "cargo build");
+        assert!(!history[0].success);
+        assert_eq!(history[1].command, "cargo test");
+        assert!(history[1].success);
+
+        // Save HTTP history
+        db.save_http_history("GET", "https://api.example.com/data", 200, 150)
+            .unwrap();
+
+        let http_history = db.get_http_history(10).unwrap();
+        assert_eq!(http_history.len(), 1);
+        assert_eq!(http_history[0].method, "GET");
+        assert_eq!(http_history[0].status, 200);
+    }
+
+    #[test]
+    fn test_prune_old_items_respects_threshold() {
+        let db = test_db();
+
+        // Insert items — they will have last_seen = now
+        insert_test_item(&db, "hackernews", "old_1", "Old Item 1", "old content 1");
+        insert_test_item(&db, "hackernews", "old_2", "Old Item 2", "old content 2");
+        insert_test_item(&db, "reddit", "new_1", "New Item", "new content");
+
+        assert_eq!(db.total_item_count().unwrap(), 3);
+
+        // Cleanup with 0 days should delete everything (all items have last_seen = now,
+        // but datetime('now', '-0 days') = now, so items with last_seen < now won't match
+        // unless they are strictly older). Items inserted just now should survive.
+        let deleted = db.cleanup_old_items(0).unwrap();
+        // Items were just created so last_seen = now; they should NOT be older than now
+        assert_eq!(
+            deleted, 0,
+            "Items created just now should not be deleted with 0 day threshold"
+        );
+        assert_eq!(db.total_item_count().unwrap(), 3);
+
+        // Manually age one item by setting last_seen in the past
+        {
+            let conn = db.conn.lock();
+            conn.execute(
+                "UPDATE source_items SET last_seen = datetime('now', '-10 days') WHERE source_id = 'old_1'",
+                [],
+            )
+            .unwrap();
+        }
+
+        // Now cleanup with 5 day retention should delete the aged item
+        let deleted = db.cleanup_old_items(5).unwrap();
+        assert_eq!(deleted, 1, "Should delete 1 item older than 5 days");
+        assert_eq!(db.total_item_count().unwrap(), 2);
+
+        // vacuum_if_needed should not error
+        db.vacuum_if_needed(deleted, 100).unwrap(); // threshold not met, no vacuum
+        db.vacuum_if_needed(deleted, 1).unwrap(); // threshold met, runs vacuum
+    }
+}

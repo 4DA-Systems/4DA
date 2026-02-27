@@ -9,33 +9,7 @@
 //! - Database handles concurrent operations
 //! - Scale: 1K+ items without degradation
 
-use std::path::Path;
-
-/// Helper: create an in-memory database for testing
-fn test_db() -> fourda_lib::db::Database {
-    fourda_lib::state::register_sqlite_vec_extension();
-    fourda_lib::db::Database::new(Path::new(":memory:")).expect("in-memory DB")
-}
-
-/// Generate a deterministic pseudo-random embedding from a seed string.
-/// Not cryptographically random, but deterministic for reproducible tests.
-fn seed_embedding(seed: &str) -> Vec<f32> {
-    let mut embedding = vec![0.0f32; 384];
-    let bytes = seed.as_bytes();
-    for (i, slot) in embedding.iter_mut().enumerate() {
-        let b1 = bytes[i % bytes.len()] as f32;
-        let b2 = bytes[(i + 7) % bytes.len()] as f32;
-        *slot = ((b1 * 0.00391 + b2 * 0.00197 + (i as f32) * 0.001).sin()) * 0.5;
-    }
-    // Normalize to unit vector
-    let norm: f32 = embedding.iter().map(|v| v * v).sum::<f32>().sqrt();
-    if norm > 0.0 {
-        for v in &mut embedding {
-            *v /= norm;
-        }
-    }
-    embedding
-}
+use fourda_lib::test_utils::{seed_embedding, test_db};
 
 // ============================================================================
 // Test 1: Fresh database insert and retrieve

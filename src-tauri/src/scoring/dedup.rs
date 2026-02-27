@@ -168,6 +168,147 @@ pub(crate) fn topic_dedup_results(results: &mut Vec<SourceRelevance>) {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::SourceRelevance;
+
+    /// Helper: create a minimal SourceRelevance for testing
+    fn make_item(title: &str, url: Option<&str>, score: f32) -> SourceRelevance {
+        SourceRelevance {
+            id: 0,
+            title: title.to_string(),
+            url: url.map(|u| u.to_string()),
+            top_score: score,
+            matches: vec![],
+            relevant: true,
+            context_score: 0.0,
+            interest_score: 0.0,
+            excluded: false,
+            excluded_by: None,
+            source_type: "test".to_string(),
+            explanation: None,
+            confidence: None,
+            score_breakdown: None,
+            signal_type: None,
+            signal_priority: None,
+            signal_action: None,
+            signal_triggers: None,
+            signal_horizon: None,
+            similar_count: 0,
+            similar_titles: vec![],
+            serendipity: false,
+            streets_engine: None,
+        }
+    }
+
+    #[test]
+    fn test_dedup_by_url_keeps_highest_score() {
+        let mut items = vec![
+            make_item(
+                "Low score article",
+                Some("https://example.com/article"),
+                0.3,
+            ),
+            make_item(
+                "High score article",
+                Some("https://example.com/article"),
+                0.9,
+            ),
+            make_item("Different article", Some("https://other.com/page"), 0.5),
+        ];
+
+        dedup_results(&mut items);
+
+        // Should keep 2 items (one per unique URL)
+        assert_eq!(items.len(), 2, "Should have 2 items after URL dedup");
+        // The first item should be the highest scoring one for the duplicate URL
+        assert_eq!(
+            items[0].top_score, 0.9,
+            "Highest scoring item should be kept"
+        );
+        assert_eq!(items[1].top_score, 0.5, "Non-duplicate item should remain");
+    }
+
+    #[test]
+    fn test_dedup_by_normalized_title() {
+        let mut items = vec![
+            make_item("Show HN: My Cool Project", None, 0.8),
+            make_item("My Cool Project", None, 0.6),
+            make_item("Something Completely Different", None, 0.5),
+        ];
+
+        dedup_results(&mut items);
+
+        // "Show HN: My Cool Project" and "My Cool Project" normalize to the same title
+        assert_eq!(items.len(), 2, "Should have 2 items after title dedup");
+        // Highest scoring duplicate kept first
+        assert_eq!(
+            items[0].top_score, 0.8,
+            "Highest scoring title duplicate should be kept"
+        );
+        assert_eq!(items[1].top_score, 0.5, "Unique title should remain");
+    }
+
+    #[test]
+    fn test_sort_excluded_items_last() {
+        let mut items = vec![
+            {
+                let mut item = make_item("Excluded high score", None, 0.9);
+                item.excluded = true;
+                item
+            },
+            make_item("Normal low score", None, 0.3),
+            make_item("Normal mid score", None, 0.6),
+        ];
+
+        sort_results(&mut items);
+
+        // Non-excluded items should come first, excluded last
+        assert!(!items[0].excluded, "First item should not be excluded");
+        assert!(!items[1].excluded, "Second item should not be excluded");
+        assert!(items[2].excluded, "Last item should be excluded");
+        // Non-excluded items should be sorted by score desc
+        assert!(
+            items[0].top_score >= items[1].top_score,
+            "Non-excluded items should be sorted by score descending"
+        );
+    }
+
+    #[test]
+    fn test_sort_by_score_descending() {
+        let mut items = vec![
+            make_item("Low", None, 0.2),
+            make_item("High", None, 0.9),
+            make_item("Mid", None, 0.5),
+            make_item("Very High", None, 0.95),
+        ];
+
+        sort_results(&mut items);
+
+        for i in 0..items.len() - 1 {
+            assert!(
+                items[i].top_score >= items[i + 1].top_score,
+                "Items should be sorted by score descending: {} >= {} failed at index {}",
+                items[i].top_score,
+                items[i + 1].top_score,
+                i
+            );
+        }
+    }
+
+    #[test]
+    fn test_empty_input_returns_empty() {
+        let mut empty: Vec<SourceRelevance> = vec![];
+
+        dedup_results(&mut empty);
+        assert!(empty.is_empty(), "Dedup of empty vec should remain empty");
+
+        sort_results(&mut empty);
+        assert!(empty.is_empty(), "Sort of empty vec should remain empty");
+    }
+}
+
 /// Compute serendipity candidates from items that failed the confirmation gate
 /// but scored well on exactly 1 axis (partial relevance, different perspective)
 pub(crate) fn compute_serendipity_candidates(

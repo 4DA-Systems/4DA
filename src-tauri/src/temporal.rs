@@ -1,4 +1,3 @@
-#![allow(dead_code)]
 //! Temporal Event Store for 4DA Innovation Features
 //!
 //! Provides recording and querying of temporal events, project dependencies,
@@ -93,6 +92,7 @@ pub fn query_events(
 }
 
 /// Query temporal events by subject
+#[allow(dead_code)] // Used by semantic_diff (reserved for MCP integration)
 pub fn query_events_by_subject(
     conn: &rusqlite::Connection,
     subject: &str,
@@ -117,6 +117,7 @@ pub fn query_events_by_subject(
 }
 
 /// Clean up expired temporal events
+#[allow(dead_code)] // Used by cleanup_temporal_events (reserved for scheduled maintenance)
 pub fn cleanup_expired(conn: &rusqlite::Connection) -> Result<usize, String> {
     let deleted = conn
         .execute(
@@ -320,7 +321,7 @@ pub fn upsert_relationship(
 // Tauri Commands
 // ============================================================================
 
-#[tauri::command]
+#[allow(dead_code)] // Reserved for MCP integration
 pub fn get_temporal_events(
     event_type: String,
     since: Option<String>,
@@ -330,7 +331,7 @@ pub fn get_temporal_events(
     query_events(&conn, &event_type, since.as_deref(), limit.unwrap_or(50))
 }
 
-#[tauri::command]
+#[allow(dead_code)] // Reserved for MCP integration
 pub fn get_temporal_event_count(event_type: String) -> Result<usize, String> {
     let conn = crate::open_db_connection()?;
     let count: i64 = conn
@@ -343,7 +344,7 @@ pub fn get_temporal_event_count(event_type: String) -> Result<usize, String> {
     Ok(count as usize)
 }
 
-#[tauri::command]
+#[allow(dead_code)] // Reserved for MCP integration
 pub fn get_dependencies(project_path: Option<String>) -> Result<Vec<ProjectDependency>, String> {
     let conn = crate::open_db_connection()?;
     if let Some(path) = project_path {
@@ -353,7 +354,7 @@ pub fn get_dependencies(project_path: Option<String>) -> Result<Vec<ProjectDepen
     }
 }
 
-#[tauri::command]
+#[allow(dead_code)] // Reserved for scheduled maintenance task
 pub fn cleanup_temporal_events() -> Result<usize, String> {
     let conn = crate::open_db_connection()?;
     cleanup_expired(&conn)

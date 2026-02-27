@@ -216,3 +216,110 @@ pub(crate) fn compute_keyword_ace_boost(topics: &[String], ace_ctx: &ACEContext)
     }
     boost.clamp(0.0, scoring_config::ACE_MAX_BOOST)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::test_utils::seed_embedding;
+    use std::collections::HashMap;
+
+    /// Helper: build a minimal ACEContext with active topics and confidence
+    fn ace_ctx_with_topics(topics: &[(&str, f32)]) -> ACEContext {
+        let mut ctx = ACEContext::default();
+        for &(topic, conf) in topics {
+            ctx.active_topics.push(topic.to_string());
+            ctx.topic_confidence.insert(topic.to_string(), conf);
+        }
+        ctx
+    }
+
+    #[test]
+    fn test_empty_topic_embeddings_returns_none() {
+        let item_emb = seed_embedding("rust programming");
+        let ace_ctx = ace_ctx_with_topics(&[("rust", 0.9)]);
+        let topic_embeddings: HashMap<String, Vec<f32>> = HashMap::new();
+
+        let result = compute_semantic_ace_boost(&item_emb, &ace_ctx, &topic_embeddings);
+        assert!(
+            result.is_none(),
+            "Empty topic embeddings should return None, got {:?}",
+            result
+        );
+    }
+
+    #[test]
+    fn test_identical_embedding_produces_max_boost() {
+        let emb = seed_embedding("rust");
+        let ace_ctx = ace_ctx_with_topics(&[("rust", 1.0)]);
+        let mut topic_embeddings = HashMap::new();
+        topic_embeddings.insert("rust".to_string(), emb.clone());
+
+        let result = compute_semantic_ace_boost(&emb, &ace_ctx, &topic_embeddings);
+        assert!(
+            result.is_some(),
+            "Identical embeddings should produce a result"
+        );
+        let boost = result.unwrap();
+        // Cosine similarity of identical unit vectors = 1.0
+        // base_boost = (1.0 - 0.5) * 1.0 = 0.5, clamped to 0.5
+        assert!(
+            boost > 0.4,
+            "Identical embedding should produce near-max boost, got {}",
+            boost
+        );
+        assert!(
+            boost <= 0.5,
+            "Boost should be clamped to 0.5, got {}",
+            boost
+        );
+    }
+
+    #[test]
+    fn test_orthogonal_embeddings_produce_zero_boost() {
+        // Construct two orthogonal 384-dim unit vectors manually
+        let mut emb_a = vec![0.0f32; 384];
+        emb_a[0] = 1.0; // unit vector along dimension 0
+
+        let mut emb_b = vec![0.0f32; 384];
+        emb_b[1] = 1.0; // unit vector along dimension 1
+
+        let ace_ctx = ace_ctx_with_topics(&[("topic_b", 1.0)]);
+        let mut topic_embeddings = HashMap::new();
+        topic_embeddings.insert("topic_b".to_string(), emb_b);
+
+        let result = compute_semantic_ace_boost(&emb_a, &ace_ctx, &topic_embeddings);
+        assert!(
+            result.is_some(),
+            "Should return Some for orthogonal vectors"
+        );
+        let boost = result.unwrap();
+        // Cosine similarity of orthogonal vectors = 0.0
+        // base_boost = (0.0 - 0.5) * 1.0 = -0.5, clamped to -0.3
+        assert!(
+            boost <= 0.0,
+            "Orthogonal embeddings should produce non-positive boost, got {}",
+            boost
+        );
+        assert!(
+            boost >= -0.3,
+            "Boost should be clamped to -0.3, got {}",
+            boost
+        );
+    }
+
+    #[test]
+    fn test_zero_norm_embedding_handled_gracefully() {
+        let zero_emb = vec![0.0f32; 384];
+        let ace_ctx = ace_ctx_with_topics(&[("rust", 1.0)]);
+        let mut topic_embeddings = HashMap::new();
+        topic_embeddings.insert("rust".to_string(), seed_embedding("rust"));
+
+        let result = compute_semantic_ace_boost(&zero_emb, &ace_ctx, &topic_embeddings);
+        // Zero-norm item embedding returns None (checked at line 23-25)
+        assert!(
+            result.is_none(),
+            "Zero-norm embedding should return None, got {:?}",
+            result
+        );
+    }
+}

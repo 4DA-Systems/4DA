@@ -446,21 +446,15 @@ pub(crate) fn process_source_items(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::test_utils::test_db;
     use std::collections::hash_map::DefaultHasher;
     use std::hash::{Hash, Hasher};
-    use std::path::Path;
 
     /// Helper: replicate the ID hashing logic used in fetch_all_sources and process_source_items
     fn hash_source_id(source_type: &str, source_id: &str) -> u64 {
         let mut hasher = DefaultHasher::new();
         format!("{}:{}", source_type, source_id).hash(&mut hasher);
         hasher.finish()
-    }
-
-    /// Helper: create an in-memory Database for testing
-    fn test_db() -> Database {
-        crate::register_sqlite_vec_extension();
-        Database::new(Path::new(":memory:")).expect("in-memory DB")
     }
 
     // ---------- Test 1: ID hashing is deterministic and collision-resistant ----------

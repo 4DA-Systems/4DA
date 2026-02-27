@@ -8,7 +8,7 @@ pub fn get_game_state() -> Result<serde_json::Value> {
     Ok(serde_json::to_value(state).unwrap_or_default())
 }
 
-#[tauri::command]
+#[allow(dead_code)] // Reserved for future frontend wiring
 pub fn get_achievements() -> Result<serde_json::Value> {
     let db = get_database()?;
     let achievements = crate::game_engine::get_achievements(db);

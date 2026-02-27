@@ -645,22 +645,7 @@ pub(crate) fn score_item(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::path::Path;
-
-    // ========================================================================
-    // score_item() integration tests
-    // ========================================================================
-
-    /// Helper: create an in-memory Database for testing
-    fn test_db() -> crate::db::Database {
-        crate::register_sqlite_vec_extension();
-        crate::db::Database::new(Path::new(":memory:")).expect("in-memory DB")
-    }
-
-    /// Helper: build a minimal ScoringContext from builder defaults
-    fn empty_scoring_context() -> ScoringContext {
-        ScoringContext::builder().build()
-    }
+    use crate::test_utils::{empty_scoring_context, test_db};
 
     /// Helper: build a ScoringInput with a dummy 384-dim embedding
     fn test_input<'a>(title: &'a str, content: &'a str, embedding: &'a [f32]) -> ScoringInput<'a> {

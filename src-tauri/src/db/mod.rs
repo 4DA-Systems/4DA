@@ -1,4 +1,3 @@
-#![allow(dead_code)]
 //! Database module for 4DA - Persistence layer for embeddings and sources
 //!
 //! Uses sqlite-vec for vector similarity search at scale.

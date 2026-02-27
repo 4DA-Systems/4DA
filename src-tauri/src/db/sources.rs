@@ -764,3 +764,112 @@ impl Database {
         })
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::test_utils::{insert_test_item, seed_embedding, test_db};
+
+    #[test]
+    fn test_upsert_source_item_insert_and_update() {
+        let db = test_db();
+        let emb = seed_embedding("hn:42");
+
+        // Insert
+        let id1 = db
+            .upsert_source_item("hackernews", "42", None, "Original Title", "content", &emb)
+            .unwrap();
+        assert!(id1 > 0);
+
+        // Verify original title
+        let item = db.get_source_item("hackernews", "42").unwrap().unwrap();
+        assert_eq!(item.title, "Original Title");
+
+        // Update with same source_type + source_id
+        let id2 = db
+            .upsert_source_item(
+                "hackernews",
+                "42",
+                None,
+                "Updated Title",
+                "new content",
+                &emb,
+            )
+            .unwrap();
+        assert_eq!(
+            id1, id2,
+            "Upsert should return same id for same source_type+source_id"
+        );
+
+        // Verify title changed
+        let item = db.get_source_item("hackernews", "42").unwrap().unwrap();
+        assert_eq!(item.title, "Updated Title");
+    }
+
+    #[test]
+    fn test_upsert_duplicate_source_id() {
+        let db = test_db();
+        let emb = seed_embedding("reddit:abc");
+
+        let id1 = db
+            .upsert_source_item("reddit", "abc", None, "Title A", "content a", &emb)
+            .unwrap();
+        let id2 = db
+            .upsert_source_item("reddit", "abc", None, "Title B", "content b", &emb)
+            .unwrap();
+
+        assert_eq!(
+            id1, id2,
+            "Same source_type+source_id should return same row id"
+        );
+        assert_eq!(db.total_item_count().unwrap(), 1);
+    }
+
+    #[test]
+    fn test_get_sources_info_empty_db() {
+        let db = test_db();
+        let sources = db.get_all_sources().unwrap();
+        assert!(
+            sources.is_empty(),
+            "Empty DB should have no registered sources"
+        );
+    }
+
+    #[test]
+    fn test_record_and_get_source_health() {
+        let db = test_db();
+
+        // Record a healthy fetch
+        db.record_source_health("hackernews", true, 25, 150, None)
+            .unwrap();
+
+        let health = db.get_source_health().unwrap();
+        assert_eq!(health.len(), 1);
+        assert_eq!(health[0].source_type, "hackernews");
+        assert_eq!(health[0].status, "healthy");
+        assert_eq!(health[0].items_fetched, 25);
+        assert_eq!(health[0].consecutive_failures, 0);
+
+        // Record an error
+        db.record_source_health("hackernews", false, 0, 0, Some("timeout"))
+            .unwrap();
+
+        let health = db.get_source_health().unwrap();
+        assert_eq!(health.len(), 1);
+        assert_eq!(health[0].status, "error");
+        assert_eq!(health[0].consecutive_failures, 1);
+    }
+
+    #[test]
+    fn test_record_feedback_positive_and_negative() {
+        let db = test_db();
+        let id = insert_test_item(&db, "hackernews", "fb_1", "Feedback Test", "Some content");
+
+        // Record positive feedback
+        db.record_feedback(id, true).unwrap();
+        assert_eq!(db.query_feedback_count().unwrap(), 1);
+
+        // Record negative feedback
+        db.record_feedback(id, false).unwrap();
+        assert_eq!(db.query_feedback_count().unwrap(), 2);
+    }
+}
