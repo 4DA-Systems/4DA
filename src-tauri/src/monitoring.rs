@@ -438,7 +438,7 @@ pub fn start_scheduler<R: Runtime>(app: AppHandle<R>, state: Arc<MonitoringState
             let bg_app = app.clone();
             let bg_state = state.clone();
             tauri::async_runtime::spawn(async move {
-                crate::analysis_rerank::run_background_analysis(&bg_app, &bg_state).await;
+                crate::scoring::run_background_analysis(&bg_app, &bg_state).await;
             });
         }
     });

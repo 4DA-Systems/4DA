@@ -95,7 +95,7 @@ pub(crate) async fn run_deep_initial_scan(app: AppHandle) -> Result<(), String> 
                 }
 
                 // Run post-analysis innovation hooks (non-blocking)
-                analysis_rerank::run_post_analysis_hooks(&results);
+                scoring::run_post_analysis_hooks(&results);
             }
             Ok(Err(e)) => {
                 error!(target: "4da::analysis", error = %e, "Deep initial scan failed");
@@ -473,7 +473,7 @@ pub(crate) async fn run_cached_analysis(app: AppHandle) -> Result<(), String> {
                 void_signal_analysis_complete(&app, &results);
 
                 // Run post-analysis innovation hooks (non-blocking)
-                analysis_rerank::run_post_analysis_hooks(&results);
+                scoring::run_post_analysis_hooks(&results);
             }
             Ok(Err(e)) => {
                 guard.error = Some(e.clone());
@@ -598,7 +598,7 @@ pub(crate) async fn analyze_cached_content_impl(
                 return run_multi_source_analysis_impl(app).await;
             }
 
-            return analysis_rerank::score_items_full(app, db, &all_items).await;
+            return scoring::score_items_full(app, db, &all_items).await;
         }
 
         info!(target: "4da::analysis", new_items = new_items.len(), "Found new items for differential scoring");
@@ -721,7 +721,7 @@ pub(crate) async fn analyze_cached_content_impl(
         return run_multi_source_analysis_impl(app).await;
     }
 
-    analysis_rerank::score_items_full(app, db, &cached_items).await
+    scoring::score_items_full(app, db, &cached_items).await
 }
 
 /// Cancel a running analysis
