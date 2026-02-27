@@ -302,7 +302,7 @@ mod tests {
     #[test]
     fn test_extract_short_phrase_with_period() {
         let phrase = extract_short_phrase(
-            "Vector search is powerful. It enables fast nearest neighbor lookups."
+            "Vector search is powerful. It enables fast nearest neighbor lookups.",
         );
         // Should stop at the first period
         assert!(phrase.contains("Vector search"));
@@ -312,7 +312,7 @@ mod tests {
     #[test]
     fn test_extract_short_phrase_with_newline() {
         let phrase = extract_short_phrase(
-            "Async runtime improvements\nThe new version includes better scheduling"
+            "Async runtime improvements\nThe new version includes better scheduling",
         );
         // Should stop at the newline
         assert!(phrase.contains("Async runtime"));
@@ -353,43 +353,34 @@ mod tests {
     #[test]
     fn test_calculate_confidence_no_signals() {
         let ctx = ACEContext::default();
-        let confidence = calculate_confidence(
-            0.0, 0.0, 0.0, &ctx, &[], 0, 0, 0,
-        );
+        let confidence = calculate_confidence(0.0, 0.0, 0.0, &ctx, &[], 0, 0, 0);
         assert_eq!(confidence, scoring_config::CONFIDENCE_FLOOR_NO_SIGNAL);
     }
 
     #[test]
     fn test_calculate_confidence_context_only() {
         let ctx = ACEContext::default();
-        let confidence = calculate_confidence(
-            0.8, 0.0, 0.0, &ctx, &[], 10, 0, 1,
-        );
+        let confidence = calculate_confidence(0.8, 0.0, 0.0, &ctx, &[], 10, 0, 1);
         assert!(confidence > scoring_config::CONFIDENCE_FLOOR_NO_SIGNAL);
     }
 
     #[test]
     fn test_calculate_confidence_higher_confirmation_boosts() {
         let ctx = ACEContext::default();
-        let conf_1 = calculate_confidence(
-            0.5, 0.5, 0.0, &ctx, &[], 10, 5, 1,
-        );
-        let conf_3 = calculate_confidence(
-            0.5, 0.5, 0.0, &ctx, &[], 10, 5, 3,
-        );
+        let conf_1 = calculate_confidence(0.5, 0.5, 0.0, &ctx, &[], 10, 5, 1);
+        let conf_3 = calculate_confidence(0.5, 0.5, 0.0, &ctx, &[], 10, 5, 3);
         assert!(
             conf_3 > conf_1,
             "More confirmed signals should increase confidence: {} > {}",
-            conf_3, conf_1
+            conf_3,
+            conf_1
         );
     }
 
     #[test]
     fn test_calculate_confidence_clamped() {
         let ctx = ACEContext::default();
-        let confidence = calculate_confidence(
-            1.0, 1.0, 1.0, &ctx, &[], 100, 100, 5,
-        );
+        let confidence = calculate_confidence(1.0, 1.0, 1.0, &ctx, &[], 100, 100, 5);
         assert!(confidence <= 1.0, "Confidence should not exceed 1.0");
         assert!(confidence >= 0.0, "Confidence should not be negative");
     }
@@ -399,13 +390,10 @@ mod tests {
         let mut ctx = ACEContext::default();
         ctx.topic_affinities.insert("rust".to_string(), (0.8, 0.9));
         let topics = vec!["rust".to_string()];
-        let confidence = calculate_confidence(
-            0.5, 0.0, 0.0, &ctx, &topics, 10, 0, 2,
-        );
+        let confidence = calculate_confidence(0.5, 0.0, 0.0, &ctx, &topics, 10, 0, 2);
         // Should be higher than without affinities since we have an additional signal
-        let conf_no_aff = calculate_confidence(
-            0.5, 0.0, 0.0, &ACEContext::default(), &topics, 10, 0, 2,
-        );
+        let conf_no_aff =
+            calculate_confidence(0.5, 0.0, 0.0, &ACEContext::default(), &topics, 10, 0, 2);
         assert!(
             confidence >= conf_no_aff,
             "Topic affinities should boost or maintain confidence"
@@ -430,7 +418,11 @@ mod tests {
             &[],
             &["Rust".to_string()],
         );
-        assert!(explanation.contains("your stack"), "Should mention 'your stack': {}", explanation);
+        assert!(
+            explanation.contains("your stack"),
+            "Should mention 'your stack': {}",
+            explanation
+        );
     }
 
     #[test]
@@ -447,6 +439,10 @@ mod tests {
             &[],
         );
         // With no tech, no interest, no affinity, no context, should be empty
-        assert!(explanation.is_empty(), "Should be empty with no signals: '{}'", explanation);
+        assert!(
+            explanation.is_empty(),
+            "Should be empty with no signals: '{}'",
+            explanation
+        );
     }
 }

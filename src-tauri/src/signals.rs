@@ -843,13 +843,7 @@ mod tests {
     fn test_single_keyword_does_not_classify() {
         let classifier = SignalClassifier::new();
         // Only one keyword "tutorial" — should not be enough
-        let result = classifier.classify(
-            "A tutorial on cooking",
-            "Learn to cook",
-            0.3,
-            &[],
-            &[],
-        );
+        let result = classifier.classify("A tutorial on cooking", "Learn to cook", 0.3, &[], &[]);
         assert!(result.is_none(), "Single keyword should not classify");
     }
 
