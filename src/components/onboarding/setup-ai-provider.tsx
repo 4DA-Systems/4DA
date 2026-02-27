@@ -120,12 +120,24 @@ export function SetupAIProvider({
 
           {/* Ollama not running hint */}
           {provider === 'ollama' && !ollamaStatus?.running && (
-            <div className="text-yellow-400 text-sm p-3 bg-bg-tertiary rounded-lg">
-              {t('onboarding.setupAi.ollamaNotDetected')}{' '}
-              <a href="https://ollama.ai" target="_blank" rel="noopener noreferrer" className="text-orange-500 hover:underline">
-                {t('onboarding.apiKeys.installOllama')}
-              </a>
-              {' '}{t('onboarding.setupAi.orChooseCloud')}
+            <div className="text-gray-400 text-sm p-3 bg-bg-tertiary rounded-lg border border-border">
+              <p className="mb-1.5">
+                {t('onboarding.setupAi.ollamaNotDetected')}{' '}
+                <a href="https://ollama.ai" target="_blank" rel="noopener noreferrer" className="text-orange-500 hover:underline">
+                  {t('onboarding.apiKeys.installOllama')}
+                </a>
+                {' '}{t('onboarding.setupAi.orChooseCloud')}
+              </p>
+              <p className="text-xs text-gray-500">
+                {t('onboarding.setupAi.basicModeHint')}
+              </p>
+            </div>
+          )}
+
+          {/* Cloud provider without key — basic mode hint */}
+          {(provider === 'anthropic' || provider === 'openai') && !apiKey.trim() && (
+            <div className="text-xs text-gray-500 p-3 bg-bg-tertiary rounded-lg border border-border">
+              {t('onboarding.setupAi.noKeyHint')}
             </div>
           )}
         </>

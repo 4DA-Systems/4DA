@@ -215,6 +215,16 @@ export function QuickSetupStep({ isAnimating, onComplete, onBack }: QuickSetupSt
   useEffect(() => { if (selectedStacks.length > 0) setLocaleOpen(true); }, [selectedStacks.length]);
   useEffect(() => { if (localeConfigured) setInterestsOpen(true); }, [localeConfigured]);
 
+  // Auto-expand remaining sections after a delay if AI not configured
+  // This prevents users from being stuck waiting for AI setup
+  useEffect(() => {
+    if (aiConfigured) return;
+    const timer = setTimeout(() => {
+      setProjectsOpen(true);
+    }, 3000);
+    return () => clearTimeout(timer);
+  }, [aiConfigured]);
+
   const removeTag = (tag: string) => {
     setDetectedTech(prev => prev.filter(t => t !== tag));
   };
@@ -238,6 +248,10 @@ export function QuickSetupStep({ isAnimating, onComplete, onBack }: QuickSetupSt
   const handleProviderChange = (p: 'anthropic' | 'openai' | 'ollama') => {
     setProvider(p);
     setAiConfigured(p === 'ollama' && !!ollamaStatus?.running && !!ollamaStatus.has_embedding_model && !!ollamaStatus.has_llm_model);
+    // When switching providers, auto-expand next section so user isn't stuck
+    if (p !== 'ollama') {
+      setProjectsOpen(true);
+    }
   };
 
   const handleApiKeyChange = (key: string) => {
@@ -245,6 +259,8 @@ export function QuickSetupStep({ isAnimating, onComplete, onBack }: QuickSetupSt
     if (key.trim().length === 0) {
       setAiConfigured(false);
       setApiKeyHint(null);
+      // Auto-expand next section even without a key
+      setProjectsOpen(true);
       return;
     }
     let valid = false;
@@ -256,7 +272,8 @@ export function QuickSetupStep({ isAnimating, onComplete, onBack }: QuickSetupSt
       valid = key.trim().length > 10;
     }
     setAiConfigured(valid);
-    setApiKeyHint(valid ? null : t('onboarding.setup.keyFormatHint'));
+    // Show hint only as guidance, not as a blocker
+    setApiKeyHint(valid ? null : t('onboarding.setup.keyFormatHintSoft'));
   };
 
   const handleContinue = async () => {
@@ -284,7 +301,8 @@ export function QuickSetupStep({ isAnimating, onComplete, onBack }: QuickSetupSt
             openaiApiKey: null,
           });
         }
-      } else {
+      } else if (apiKey.trim()) {
+        // Cloud provider with API key
         const model = provider === 'anthropic' ? 'claude-3-haiku-20240307' : 'gpt-4o-mini';
         await invoke('set_llm_provider', {
           provider,
@@ -292,6 +310,15 @@ export function QuickSetupStep({ isAnimating, onComplete, onBack }: QuickSetupSt
           model,
           baseUrl: null,
           openaiApiKey: provider === 'openai' ? apiKey : null,
+        });
+      } else {
+        // Cloud provider selected but no API key — save as 'none' (keyword-only mode)
+        await invoke('set_llm_provider', {
+          provider: 'none',
+          apiKey: '',
+          model: '',
+          baseUrl: null,
+          openaiApiKey: null,
         });
       }
 
@@ -403,10 +430,13 @@ export function QuickSetupStep({ isAnimating, onComplete, onBack }: QuickSetupSt
             title={t('onboarding.setup.aiProvider')}
             subtitle={aiConfigured
               ? (provider === 'ollama' ? t('onboarding.setup.localAiReady') : `${provider === 'anthropic' ? 'Anthropic' : 'OpenAI'} ${t('onboarding.setup.configured')}`)
-              : t('onboarding.setup.autoDetecting')}
+              : ollamaStatus !== null
+                ? t('onboarding.setup.basicModeAvailable')
+                : t('onboarding.setup.autoDetecting')}
             isOpen={aiOpen}
             onToggle={() => setAiOpen(!aiOpen)}
             done={aiConfigured}
+            warning={!aiConfigured && ollamaStatus !== null}
           />
           {aiOpen && (
             <>
