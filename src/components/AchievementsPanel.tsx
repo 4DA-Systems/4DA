@@ -1,29 +1,22 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useAppStore } from '../store';
-
-const ICON_MAP: Record<string, string> = {
-  sun: '\u2600',
-  eye: '\uD83D\uDC41',
-  radar: '\uD83D\uDCE1',
-  sparkle: '\u2728',
-  gem: '\uD83D\uDC8E',
-  bookmark: '\uD83D\uDD16',
-  archive: '\uD83D\uDCE6',
-  scroll: '\uD83D\uDCDC',
-  fire: '\uD83D\uDD25',
-  flame: '\uD83D\uDD25',
-  crown: '\uD83D\uDC51',
-  globe: '\uD83C\uDF10',
-  brain: '\uD83E\uDDE0',
-};
+import { getGameIcon } from '../lib/game-icons';
+import { registerGameComponent } from '../lib/game-components';
 
 export function AchievementsPanel() {
   const gameState = useAppStore(s => s.gameState);
   const loadGameState = useAppStore(s => s.loadGameState);
+  const [gpuProgress, setGpuProgress] = useState(false);
 
   useEffect(() => {
     loadGameState();
   }, [loadGameState]);
+
+  useEffect(() => {
+    registerGameComponent('game-achievement-progress').then(() => {
+      if (customElements.get('game-achievement-progress')) setGpuProgress(true);
+    });
+  }, []);
 
   if (!gameState) {
     return (
@@ -51,18 +44,30 @@ export function AchievementsPanel() {
           <div className="text-xs text-[#A0A0A0]">Day Streak</div>
         </div>
         <div className="flex-1" />
-        <div className="w-32 h-2 bg-[#1F1F1F] rounded-full overflow-hidden">
-          <div
-            className="h-full bg-[#D4AF37] rounded-full transition-all duration-500"
-            style={{ width: `${total_achievements > 0 ? (total_unlocked / total_achievements) * 100 : 0}%` }}
+        {gpuProgress ? (
+          <game-achievement-progress
+            ref={(el: HTMLElement | null) => {
+              if (el && 'progress' in el) {
+                (el as HTMLElement & { progress: number }).progress =
+                  total_achievements > 0 ? total_unlocked / total_achievements : 0;
+              }
+            }}
+            style={{ width: '32px', height: '32px' }}
           />
-        </div>
+        ) : (
+          <div className="w-32 h-2 bg-[#1F1F1F] rounded-full overflow-hidden">
+            <div
+              className="h-full bg-[#D4AF37] rounded-full transition-all duration-500"
+              style={{ width: `${total_achievements > 0 ? (total_unlocked / total_achievements) * 100 : 0}%` }}
+            />
+          </div>
+        )}
       </div>
 
       {/* Achievement grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
         {achievements.map((a) => {
-          const icon = ICON_MAP[a.icon] || '\u2B50';
+          const icon = getGameIcon(a.icon);
           const pct = a.threshold > 0 ? Math.min(100, (a.progress / a.threshold) * 100) : 0;
 
           return (

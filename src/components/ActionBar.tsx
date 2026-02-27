@@ -5,6 +5,7 @@ import { AudioBriefing } from './AudioBriefing';
 import { ContextHandoff } from './ContextHandoff';
 import { getStageLabel } from '../utils/score';
 import { useAppStore } from '../store';
+import { registerGameComponent } from '../lib/game-components';
 import type { Settings, SourceRelevance } from '../types';
 
 interface ActionBarProps {
@@ -51,6 +52,9 @@ export function ActionBar({
   const [overflowOpen, setOverflowOpen] = useState(false);
   const overflowRef = useRef<HTMLDivElement>(null);
 
+  // Register GPU scan-ring component
+  useEffect(() => { registerGameComponent('game-scan-ring'); }, []);
+
   // Close overflow on outside click
   useEffect(() => {
     if (!overflowOpen) return;
@@ -75,8 +79,8 @@ export function ActionBar({
         {/* Status */}
         <div className="flex items-center gap-3 flex-1 min-w-0" role="status" aria-live="polite">
           {state.loading ? (
-            <div className="w-8 h-8 bg-orange-500/20 rounded-lg flex items-center justify-center flex-shrink-0" aria-busy="true">
-              <div className="w-4 h-4 border-2 border-orange-500 border-t-transparent rounded-full animate-spin" aria-label="Analysis in progress" />
+            <div className="w-8 h-8 bg-orange-500/20 rounded-lg flex items-center justify-center flex-shrink-0 overflow-hidden" aria-busy="true">
+              <game-scan-ring style={{ width: '20px', height: '20px' }} aria-label="Analysis in progress" />
             </div>
           ) : (
             <div className="w-8 h-8 bg-bg-tertiary rounded-lg flex items-center justify-center flex-shrink-0">
