@@ -1,44 +1,47 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useAppStore } from '../store';
-
-const ICON_MAP: Record<string, string> = {
-  sun: '\u2600',
-  eye: '\uD83D\uDC41',
-  radar: '\uD83D\uDCE1',
-  sparkle: '\u2728',
-  gem: '\uD83D\uDC8E',
-  bookmark: '\uD83D\uDD16',
-  archive: '\uD83D\uDCE6',
-  scroll: '\uD83D\uDCDC',
-  fire: '\uD83D\uDD25',
-  flame: '\uD83D\uDD25',
-  crown: '\uD83D\uDC51',
-  globe: '\uD83C\uDF10',
-  brain: '\uD83E\uDDE0',
-};
+import { getGameIcon } from '../lib/game-icons';
+import { registerGameComponent } from '../lib/game-components';
 
 /**
  * Full-screen celebration overlay that appears when achievements unlock.
- * Renders a golden ring burst + toast notification, then auto-dismisses.
+ * GPU-powered ring burst via <game-celebration-burst> with CSS fallback.
  */
 export function GameCelebration() {
   const celebration = useAppStore(s => s.celebration);
   const clearCelebration = useAppStore(s => s.clearCelebration);
   const containerRef = useRef<HTMLDivElement>(null);
+  const burstRef = useRef<HTMLElement>(null);
+  const [gpuReady, setGpuReady] = useState(false);
 
+  // Lazy-register the GPU component once
   useEffect(() => {
-    if (!celebration) return;
+    registerGameComponent('game-celebration-burst').then(() => {
+      if (customElements.get('game-celebration-burst')) setGpuReady(true);
+    });
+  }, []);
 
-    // Force reflow to trigger animation
-    const el = containerRef.current;
-    if (el) {
-      void el.offsetHeight; // force reflow
+  // Drive the burst intensity: spike to 1.0 on celebration, decay to 0
+  useEffect(() => {
+    if (!celebration || !burstRef.current) return;
+    const el = burstRef.current as HTMLElement & { intensity?: number };
+    el.intensity = 1.0;
+
+    // Decay over 1.2s to match CSS ring-burst timing
+    const start = performance.now();
+    const duration = 1200;
+    function decay() {
+      const elapsed = performance.now() - start;
+      const t = Math.min(1, elapsed / duration);
+      el.intensity = 1.0 - t;
+      if (t < 1) requestAnimationFrame(decay);
     }
+    requestAnimationFrame(decay);
   }, [celebration]);
 
   if (!celebration) return null;
 
-  const icon = ICON_MAP[celebration.icon] || '\u2B50';
+  const icon = getGameIcon(celebration.icon);
 
   return (
     <div
@@ -47,9 +50,23 @@ export function GameCelebration() {
       aria-live="assertive"
       role="alert"
     >
-      {/* Ring burst effect */}
-      <div className="game-ring-burst" />
-      <div className="game-ring-burst game-ring-burst-delayed" />
+      {/* GPU ring burst — replaces CSS .game-ring-burst divs */}
+      {gpuReady ? (
+        <game-celebration-burst
+          ref={burstRef}
+          style={{
+            position: 'absolute',
+            width: '320px',
+            height: '320px',
+            pointerEvents: 'none',
+          }}
+        />
+      ) : (
+        <>
+          <div className="game-ring-burst" />
+          <div className="game-ring-burst game-ring-burst-delayed" />
+        </>
+      )}
 
       {/* Achievement card */}
       <div
@@ -66,3 +83,4 @@ export function GameCelebration() {
     </div>
   );
 }
+
