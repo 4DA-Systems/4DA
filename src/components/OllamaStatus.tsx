@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { listen } from '@tauri-apps/api/event';
 import { invoke } from '@tauri-apps/api/core';
+import { registerGameComponent } from '../lib/game-components';
 
 // ============================================================================
 // Types
@@ -89,6 +90,8 @@ export function OllamaStatus({ provider }: OllamaStatusProps) {
   const [status, setStatus] = useState<OllamaConnectionStatus>('offline');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
+  useEffect(() => { registerGameComponent('game-status-orb'); }, []);
+
   useEffect(() => {
     if (provider !== 'ollama') return;
 
@@ -135,13 +138,18 @@ export function OllamaStatus({ provider }: OllamaStatusProps) {
       `}
       title={errorMsg ?? label}
     >
-      <span
-        className={`
-          w-2 h-2 rounded-full flex-shrink-0
-          ${config.dotClass}
-          ${config.animate ? 'animate-pulse' : ''}
-        `}
-      />
+      {config.animate ? (
+        <game-status-orb
+          style={{ width: '10px', height: '10px', flexShrink: 0 }}
+          ref={(el: HTMLElement | null) => {
+            if (el && 'health' in el) (el as HTMLElement & { health: number }).health = 1.0;
+          }}
+        />
+      ) : (
+        <span
+          className={`w-2 h-2 rounded-full flex-shrink-0 ${config.dotClass}`}
+        />
+      )}
       <span className={config.textClass}>
         {label}
       </span>

@@ -55,6 +55,11 @@ export default [
         Uint8Array: 'readonly',
         ArrayBuffer: 'readonly',
         __APP_VERSION__: 'readonly',
+        customElements: 'readonly',
+        performance: 'readonly',
+        ResizeObserver: 'readonly',
+        GPUShaderStage: 'readonly',
+        GPUBufferUsage: 'readonly',
       },
     },
     plugins: {
@@ -121,6 +126,7 @@ export default [
       '*.config.js',
       '*.config.ts',
       'scripts/**',
+      'src/lib/game-components/**',
     ],
   },
 ];
