@@ -104,7 +104,7 @@ describe('SavedItemsView', () => {
     mockInvoke.mockRejectedValue('Database error');
     render(<SavedItemsView />);
     await waitFor(() => {
-      expect(screen.getByText('Database error')).toBeTruthy();
+      expect(screen.getByText(/Database error/)).toBeTruthy();
     });
     expect(screen.getByText('action.retry')).toBeTruthy();
   });

@@ -39,13 +39,14 @@ function getStripe() {
   return _stripe;
 }
 
-// CORS — scope to known origins
+// CORS — scope to known origins (localhost only in non-production)
 const ALLOWED_ORIGINS = [
   'https://4da.ai',
   'https://www.4da.ai',
   'https://streets.4da.ai',
-  'http://localhost:4444',
-  'http://localhost:1420',
+  ...(process.env.VERCEL_ENV !== 'production'
+    ? ['http://localhost:4444', 'http://localhost:1420']
+    : []),
 ];
 
 export default async function handler(req, res) {

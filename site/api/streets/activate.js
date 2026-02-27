@@ -64,13 +64,15 @@ function getStripe() {
 // CORS — scope to known origins
 // ---------------------------------------------------------------------------
 
+// localhost only in non-production; tauri:// always allowed (desktop app)
 const ALLOWED_ORIGINS = [
   'https://4da.ai',
   'https://www.4da.ai',
   'https://streets.4da.ai',
-  'http://localhost:4444',
-  'http://localhost:1420',
   'tauri://localhost',
+  ...(process.env.VERCEL_ENV !== 'production'
+    ? ['http://localhost:4444', 'http://localhost:1420']
+    : []),
 ];
 
 function setCors(req, res) {

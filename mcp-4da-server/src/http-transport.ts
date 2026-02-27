@@ -116,8 +116,16 @@ export async function startHttpServer(
       transport.close();
     });
 
-    await server.connect(transport);
-    await transport.handleRequest(req, res, body);
+    try {
+      await server.connect(transport);
+      await transport.handleRequest(req, res, body);
+    } catch (err) {
+      console.error("MCP transport error:", err);
+      if (!res.headersSent) {
+        res.writeHead(500, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ error: "Internal server error" }));
+      }
+    }
   });
 
   httpServer.listen(port, host, () => {
