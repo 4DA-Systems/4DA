@@ -1,5 +1,10 @@
 # @4da/mcp-server
 
+[![npm version](https://img.shields.io/npm/v/@4da/mcp-server?color=gold)](https://www.npmjs.com/package/@4da/mcp-server)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
+[![Node](https://img.shields.io/badge/Node-%3E%3D18-brightgreen)](https://nodejs.org/)
+[![Tools](https://img.shields.io/badge/MCP%20Tools-30-white)](https://4da.ai)
+
 Your AI coding assistant doesn't know what you're working on. It doesn't know your tech stack, your dependencies, or that the library you're debating has a critical CVE from yesterday. It writes code in a vacuum.
 
 This MCP server fixes that. It connects your AI tools to a local intelligence engine that scans your actual codebase — your `Cargo.toml`, `package.json`, `go.mod` — and continuously scores content from 11 sources (Hacker News, arXiv, Reddit, GitHub, and more) against what you actually build with. 30 tools. Everything stays on your machine.
@@ -222,6 +227,10 @@ pnpm build
 pnpm test                # Contract tests (71 tests)
 pnpm run inspect         # MCP Inspector (interactive browser UI)
 ```
+
+## Versioning
+
+v4.0.0 is the first real release. Earlier versions on npm were pre-release stubs. We couldn't reclaim v1.0.0 due to npm's immutability policy, so we jumped past them.
 
 ## License
 

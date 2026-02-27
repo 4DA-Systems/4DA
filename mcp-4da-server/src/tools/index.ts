@@ -1,21 +1,14 @@
 /**
- * Tool exports for 4DA MCP Server
+ * Tool exports for 4DA MCP Server — 30 tools across 8 categories
  *
- * Core Tools:
- * - get_relevant_content: Query filtered content by relevance
- * - get_context: Get user's interests, tech stack, learned affinities
- * - explain_relevance: Understand why an item scored the way it did
- * - record_feedback: Teach 4DA what you like/dislike
- *
- * Superpower Tools:
- * - score_autopsy: Deep forensic analysis of relevance scores
- * - trend_analysis: Statistical patterns and anomaly detection
- * - daily_briefing: Executive summaries of discoveries
- * - context_analysis: Optimize your context for better relevance
- * - source_health: Diagnose source pipeline issues
- * - topic_connections: Build knowledge graphs from content
- * - config_validator: Validate configuration and detect issues
- * - get_actionable_signals: Classify items into actionable signal types with priority
+ * Core (4)                  — content feed, context, relevance, feedback
+ * Intelligence (9)          — briefings, signals, autopsy, trends, topics, chains, shifts, attention
+ * Diagnostic (3)            — source health, config validation, LLM status
+ * Knowledge & Health (4)    — knowledge gaps, project health, reverse mentions, context export
+ * Decision Intelligence (3) — decision memory, tech radar, alignment checks
+ * Agent Autonomy (3)        — persistent memory, session briefs, delegation scoring
+ * Developer DNA (1)         — tech identity profile
+ * Intelligence Metabolism (3)— autophagy status, decision windows, compound advantage
  */
 
 // Core Tools
