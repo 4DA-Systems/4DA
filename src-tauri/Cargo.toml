@@ -109,6 +109,11 @@ harness = false
 [features]
 default = []
 void-universe = []
+sql-check = []
+
+[[test]]
+name = "sql_checker"
+required-features = ["sql-check"]
 
 [profile.release]
 strip = true

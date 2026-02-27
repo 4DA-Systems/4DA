@@ -1,0 +1,11 @@
+mod heartbeat;
+
+#[cfg(feature = "void-universe")]
+#[allow(dead_code)]
+mod universe;
+
+pub use heartbeat::*;
+
+#[cfg(feature = "void-universe")]
+#[allow(unused_imports)]
+pub use universe::*;

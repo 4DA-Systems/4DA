@@ -75,6 +75,7 @@ mod digest;
 mod digest_commands;
 mod document_index;
 mod domain_profile;
+pub(crate) mod domain_profile_data;
 pub mod extractors;
 mod free_briefing;
 mod handoff;
