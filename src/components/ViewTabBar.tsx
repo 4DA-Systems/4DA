@@ -1,12 +1,13 @@
 import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../store';
 
-type ViewId = 'briefing' | 'channels' | 'results' | 'insights' | 'saved' | 'toolkit' | 'playbook' | 'coach';
+type ViewId = 'briefing' | 'channels' | 'results' | 'profile' | 'insights' | 'saved' | 'toolkit' | 'playbook' | 'coach';
 
 const TABS: Array<{ id: ViewId; labelKey: string; subtitleKey: string; activeColor: string }> = [
   { id: 'briefing', labelKey: 'nav.briefing.label', subtitleKey: 'nav.briefing.subtitle', activeColor: 'bg-orange-500/20 text-orange-400' },
   { id: 'channels', labelKey: 'nav.channels', subtitleKey: 'nav.channels.subtitle', activeColor: 'bg-cyan-500/20 text-cyan-400' },
   { id: 'results', labelKey: 'nav.results', subtitleKey: 'nav.results.subtitle', activeColor: 'bg-orange-500/20 text-orange-400' },
+  { id: 'profile', labelKey: 'nav.profile', subtitleKey: 'nav.profile.subtitle', activeColor: 'bg-white/10 text-white' },
   { id: 'insights', labelKey: 'nav.insights', subtitleKey: 'nav.insights.subtitle', activeColor: 'bg-amber-500/20 text-amber-400' },
   { id: 'saved', labelKey: 'nav.saved', subtitleKey: 'nav.saved.subtitle', activeColor: 'bg-green-500/20 text-green-400' },
   { id: 'toolkit', labelKey: 'nav.toolkit', subtitleKey: 'nav.toolkit.subtitle', activeColor: 'bg-purple-500/20 text-purple-400' },

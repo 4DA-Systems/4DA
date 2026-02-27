@@ -226,6 +226,8 @@
   "nav.toolkit": "Toolkit",
   "nav.playbook": "Playbook",
   "nav.coach": "Coach",
+  "nav.profile": "Profile",
+  "nav.profile.subtitle": "Your sovereign developer identity",
   "nav.briefing.label": "Briefing",
   "nav.briefing.subtitle": "AI-generated intelligence summary",
   "nav.results.subtitle": "Scored content from all sources",

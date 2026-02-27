@@ -42,16 +42,16 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Install dependencies
-        working-directory: mcp-4da-server
-        run: pnpm install --frozen-lockfile
+        shell: bash
+        run: cd mcp-4da-server && pnpm install --frozen-lockfile
 
       - name: Build
-        working-directory: mcp-4da-server
-        run: pnpm run build
+        shell: bash
+        run: cd mcp-4da-server && pnpm run build
 
       - name: Run tests
-        working-directory: mcp-4da-server
-        run: pnpm run test
+        shell: bash
+        run: cd mcp-4da-server && pnpm run test
 
   rust:
     name: Rust
@@ -60,25 +60,25 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Check formatting
-        working-directory: src-tauri
-        run: cargo fmt --check
+        shell: bash
+        run: cd src-tauri && cargo fmt --check
 
       - name: Clippy lints
-        working-directory: src-tauri
-        run: cargo clippy -- -D warnings
+        shell: bash
+        run: cd src-tauri && cargo clippy -- -D warnings
 
       - name: Cargo check
-        working-directory: src-tauri
-        run: cargo check
+        shell: bash
+        run: cd src-tauri && cargo check
 
       - name: Run unit tests
-        working-directory: src-tauri
-        run: cargo test --all
+        shell: bash
+        run: cd src-tauri && cargo test --all
 
       - name: Verify Rust test count floor
-        working-directory: src-tauri
         shell: bash
         run: |
+          cd src-tauri
           OUTPUT=$(cargo test --all 2>&1)
           COUNT=$(echo "$OUTPUT" | grep -oP '\d+ passed' | tail -1 | grep -oP '\d+')
           echo "Rust tests: $COUNT"
@@ -88,17 +88,17 @@ jobs:
           fi
 
       - name: Run migration tests
-        working-directory: src-tauri
-        run: cargo test --test migration_tests
+        shell: bash
+        run: cd src-tauri && cargo test --test migration_tests
 
       - name: Run pipeline integration tests
-        working-directory: src-tauri
-        run: cargo test --test pipeline_integration
+        shell: bash
+        run: cd src-tauri && cargo test --test pipeline_integration
 
       - name: Run source resilience tests
-        working-directory: src-tauri
-        run: cargo test --test source_resilience
+        shell: bash
+        run: cd src-tauri && cargo test --test source_resilience
 
       - name: Build
-        working-directory: src-tauri
-        run: cargo build
+        shell: bash
+        run: cd src-tauri && cargo build

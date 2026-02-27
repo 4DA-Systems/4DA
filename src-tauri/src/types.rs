@@ -119,6 +119,9 @@ pub struct ScoreBreakdown {
     /// ID of matched decision window
     #[serde(default)]
     pub matched_window_id: Option<i64>,
+    /// Skill gap boost from sovereign profile intelligence (0.0-0.15)
+    #[serde(default)]
+    pub skill_gap_boost: f32,
 }
 
 pub(crate) fn default_freshness() -> f32 {

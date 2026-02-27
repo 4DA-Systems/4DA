@@ -345,6 +345,33 @@ pub(crate) fn score_item(
     };
     let base_score = (base_score + window_boost).clamp(0.0, 1.0);
 
+    // Skill-gap boost: amplify content about dependencies the user has but hasn't engaged with.
+    // Closes the intelligence loop: ACE discovers deps → profile detects gaps → scoring prioritizes.
+    let skill_gap_boost: f32 = if let Some(ref profile) = ctx.sovereign_profile {
+        if !profile.intelligence.skill_gaps.is_empty() {
+            let match_count = topics
+                .iter()
+                .filter(|t| {
+                    profile
+                        .intelligence
+                        .skill_gaps
+                        .iter()
+                        .any(|g| topic_overlaps(t, &g.dependency))
+                })
+                .count();
+            match match_count {
+                0 => 0.0,
+                1 => 0.08, // Single gap match
+                _ => 0.12, // Multi gap match
+            }
+        } else {
+            0.0
+        }
+    } else {
+        0.0
+    };
+    let base_score = (base_score + skill_gap_boost).clamp(0.0, 1.0);
+
     // Autophagy calibration correction: if autophagy detected systematic under/over-scoring
     // for topics in this item, apply a correction. Positive delta = under-scored = boost.
     let calibration_correction: f32 = if !ctx.calibration_deltas.is_empty() && !topics.is_empty() {
@@ -520,6 +547,7 @@ pub(crate) fn score_item(
         llm_reason: None,
         window_boost,
         matched_window_id,
+        skill_gap_boost,
     };
 
     // Optional signal classification — four gates (all general, tech-stack-agnostic):

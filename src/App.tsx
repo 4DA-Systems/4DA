@@ -3,7 +3,7 @@
 
 import './i18n';
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, lazy, Suspense } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { useTranslation } from 'react-i18next';
@@ -11,38 +11,40 @@ import './App.css';
 import sunLogo from './assets/sun-logo.jpg';
 import { SplashScreen } from './components/SplashScreen';
 import { Onboarding } from './components/Onboarding';
-import { SettingsModal } from './components/SettingsModal';
 import { VoidEngine } from './components/void-engine/VoidEngine';
 import { OllamaStatus } from './components/OllamaStatus';
 import { SignalsPanel } from './components/SignalsPanel';
 import { NaturalLanguageSearch } from './components/NaturalLanguageSearch';
 import { ToastContainer } from './components/Toast';
 import { LearningIndicator } from './components/LearningIndicator';
-import { BriefingView } from './components/BriefingView';
 import { ResultsView } from './components/ResultsView';
-import { SavedItemsView } from './components/SavedItemsView';
 import { ActionBar } from './components/ActionBar';
 import { PredictiveIndicator } from './components/PredictiveIndicator';
 import { SignalChainsPanel } from './components/SignalChains';
 import { KnowledgeGapsPanel } from './components/KnowledgeGapsPanel';
-import { KeyboardShortcutsModal } from './components/KeyboardShortcutsModal';
 import { ErrorBoundary } from './components/ErrorBoundary';
-import { TechRadar } from './components/TechRadar';
-import { DecisionMemory } from './components/DecisionMemory';
-import { DelegationDashboard } from './components/DelegationDashboard';
-import { AgentMemoryPanel } from './components/AgentMemoryPanel';
-import { AutophagyInsights } from './components/AutophagyInsights';
-import { ToolkitView } from './components/toolkit/ToolkitView';
-import { PlaybookView } from './components/PlaybookView';
-import { CoachView } from './components/coach/CoachView';
-import { ChannelsView } from './components/channels/ChannelsView';
 import { CommandDeck } from './components/command-deck/CommandDeck';
 import { FirstRunTransition } from './components/FirstRunTransition';
 import { ViewTabBar } from './components/ViewTabBar';
 import { ProValueBadge } from './components/ProValueBadge';
 import { GameCelebration } from './components/GameCelebration';
-import { AchievementsPanel } from './components/AchievementsPanel';
-import { SovereignDeveloperProfile } from './components/SovereignDeveloperProfile';
+
+// Lazy-loaded views — each only loads when navigated to
+const BriefingView = lazy(() => import('./components/BriefingView').then(m => ({ default: m.BriefingView })));
+const SavedItemsView = lazy(() => import('./components/SavedItemsView').then(m => ({ default: m.SavedItemsView })));
+const SettingsModal = lazy(() => import('./components/SettingsModal').then(m => ({ default: m.SettingsModal })));
+const KeyboardShortcutsModal = lazy(() => import('./components/KeyboardShortcutsModal').then(m => ({ default: m.KeyboardShortcutsModal })));
+const TechRadar = lazy(() => import('./components/TechRadar').then(m => ({ default: m.TechRadar })));
+const DecisionMemory = lazy(() => import('./components/DecisionMemory').then(m => ({ default: m.DecisionMemory })));
+const DelegationDashboard = lazy(() => import('./components/DelegationDashboard').then(m => ({ default: m.DelegationDashboard })));
+const AgentMemoryPanel = lazy(() => import('./components/AgentMemoryPanel').then(m => ({ default: m.AgentMemoryPanel })));
+const AutophagyInsights = lazy(() => import('./components/AutophagyInsights').then(m => ({ default: m.AutophagyInsights })));
+const AchievementsPanel = lazy(() => import('./components/AchievementsPanel').then(m => ({ default: m.AchievementsPanel })));
+const SovereignDeveloperProfile = lazy(() => import('./components/SovereignDeveloperProfile').then(m => ({ default: m.SovereignDeveloperProfile })));
+const ToolkitView = lazy(() => import('./components/toolkit/ToolkitView').then(m => ({ default: m.ToolkitView })));
+const PlaybookView = lazy(() => import('./components/PlaybookView').then(m => ({ default: m.PlaybookView })));
+const CoachView = lazy(() => import('./components/coach/CoachView').then(m => ({ default: m.CoachView })));
+const ChannelsView = lazy(() => import('./components/channels/ChannelsView').then(m => ({ default: m.ChannelsView })));
 import {
   useSettings,
   useMonitoring,
@@ -437,13 +439,15 @@ function App() {
         <ViewTabBar />
 
         {/* Conditional View Rendering */}
+        <Suspense fallback={<div className="flex items-center justify-center py-20 text-text-secondary text-sm">{t('action.loading')}</div>}>
         {activeView === 'briefing' ? (
           <BriefingView />
         ) : activeView === 'channels' ? (
           <ChannelsView />
+        ) : activeView === 'profile' ? (
+          <SovereignDeveloperProfile />
         ) : activeView === 'insights' ? (
           <section aria-label={t('nav.insights', { defaultValue: 'Insights' })} className="space-y-6">
-            <SovereignDeveloperProfile />
             <AchievementsPanel />
             <TechRadar />
             <DecisionMemory />
@@ -469,6 +473,7 @@ function App() {
             setRenderLimit={setRenderLimit}
           />
         )}
+        </Suspense>
 
         </main>
 
@@ -521,14 +526,18 @@ function App() {
 
         {/* Keyboard Shortcuts Help Modal */}
         {showKeyboardHelp && (
-          <KeyboardShortcutsModal onClose={() => setShowKeyboardHelp(false)} />
+          <Suspense fallback={null}>
+            <KeyboardShortcutsModal onClose={() => setShowKeyboardHelp(false)} />
+          </Suspense>
         )}
 
         {/* Settings Modal - now self-sufficient via Zustand store */}
         {showSettings && (
-          <SettingsModal
-            onClose={() => setShowSettings(false)}
-          />
+          <Suspense fallback={null}>
+            <SettingsModal
+              onClose={() => setShowSettings(false)}
+            />
+          </Suspense>
         )}
       </div>
     </>
