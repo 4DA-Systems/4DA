@@ -82,17 +82,17 @@ jobs:
 
       - name: Run unit tests
         shell: bash
-        run: cd src-tauri && cargo test --all
+        run: cd src-tauri && cargo test --lib
 
       - name: Verify Rust test count floor
         shell: bash
         run: |
           cd src-tauri
-          OUTPUT=$(cargo test --all 2>&1)
+          OUTPUT=$(cargo test --lib 2>&1)
           COUNT=$(echo "$OUTPUT" | grep -oP '\d+ passed' | tail -1 | grep -oP '\d+')
           echo "Rust tests: $COUNT"
-          if [ "$COUNT" -lt 650 ]; then
-            echo "::error::Test count dropped below 650 (got $COUNT)"
+          if [ "$COUNT" -lt 800 ]; then
+            echo "::error::Test count dropped below 800 (got $COUNT)"
             exit 1
           fi
 

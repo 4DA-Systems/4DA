@@ -19,7 +19,6 @@ use crate::{
 // Re-export README indexing for callers that use ace_commands::index_discovered_readmes
 pub(crate) use crate::ace::readme_indexing::index_discovered_readmes;
 
-// ACE (Autonomous Context Engine) Commands
 /// Get detected technologies from ACE
 #[tauri::command]
 pub async fn ace_get_detected_tech() -> Result<serde_json::Value> {
@@ -79,7 +78,6 @@ pub(crate) fn get_default_scan_paths() -> Vec<PathBuf> {
     paths
 }
 
-// ACE Phase B: Real-Time Context Commands
 /// Run full autonomous context detection (manifests + git)
 #[tauri::command]
 pub async fn ace_full_scan(paths: Vec<String>) -> Result<serde_json::Value> {
@@ -158,7 +156,6 @@ pub async fn ace_full_scan(paths: Vec<String>) -> Result<serde_json::Value> {
 }
 
 /// Trigger autonomous context discovery - finds dev directories and projects automatically
-/// This is the "just make it work" button - discovers context without user configuration
 #[tauri::command]
 pub async fn ace_auto_discover() -> Result<serde_json::Value> {
     info!(target: "4da::ace", "Starting autonomous context discovery");
@@ -214,7 +211,85 @@ pub async fn ace_auto_discover() -> Result<serde_json::Value> {
         "scan_result": scan_result
     }))
 }
-// ACE Phase C: Behavior Learning Commands
+
+/// Get a structured summary of what ACE knows -- powers the first-run interstitial.
+#[tauri::command]
+pub async fn ace_get_scan_summary() -> Result<serde_json::Value> {
+    let ace = get_ace_engine()?;
+    let tech = ace.get_detected_tech()?;
+    let (mut rust_deps, mut npm_deps, mut python_deps, mut other_deps) = (0u32, 0, 0, 0);
+    let mut languages: Vec<String> = Vec::new();
+    let mut frameworks: Vec<String> = Vec::new();
+    let mut key_packages: Vec<String> = Vec::new();
+    for t in &tech {
+        match t.category {
+            ace::TechCategory::Language => {
+                if !languages.contains(&t.name) {
+                    languages.push(t.name.clone());
+                }
+            }
+            ace::TechCategory::Framework => {
+                if !frameworks.contains(&t.name) {
+                    frameworks.push(t.name.clone());
+                }
+            }
+            ace::TechCategory::Library => {
+                let ev_str = t.evidence.join(" ").to_lowercase();
+                if ev_str.contains("cargo.toml") || ace::is_rust_package(&t.name) {
+                    rust_deps += 1;
+                } else if ev_str.contains("package.json") {
+                    npm_deps += 1;
+                } else if ev_str.contains("pyproject") || ev_str.contains("requirements") {
+                    python_deps += 1;
+                } else {
+                    other_deps += 1;
+                }
+                if t.confidence >= 0.5 {
+                    key_packages.push(t.name.clone());
+                }
+            }
+            _ => {}
+        }
+    }
+    let primary_stack = if !languages.is_empty() || !frameworks.is_empty() {
+        let mut parts: Vec<String> = Vec::new();
+        parts.extend(languages.iter().take(3).cloned());
+        parts.extend(frameworks.iter().take(3).cloned());
+        parts.join(" + ")
+    } else {
+        String::new()
+    };
+    let projects_scanned = {
+        let mut paths = std::collections::HashSet::new();
+        for t in &tech {
+            for ev in &t.evidence {
+                if let Some(p) = ev
+                    .strip_prefix("Found in ")
+                    .or_else(|| ev.strip_prefix("Dependency in "))
+                {
+                    if let Some(parent) = std::path::Path::new(p).parent() {
+                        paths.insert(parent.to_path_buf());
+                    }
+                }
+            }
+        }
+        paths.len() as u32
+    };
+    key_packages.truncate(10);
+    let total_deps = rust_deps + npm_deps + python_deps + other_deps;
+    Ok(serde_json::json!({
+        "projects_scanned": projects_scanned,
+        "total_dependencies": total_deps,
+        "dependencies_by_ecosystem": {
+            "rust": rust_deps, "npm": npm_deps, "python": python_deps, "other": other_deps
+        },
+        "languages": languages,
+        "frameworks": frameworks,
+        "primary_stack": primary_stack,
+        "key_packages": key_packages,
+        "has_data": total_deps > 0 || !languages.is_empty()
+    }))
+}
 
 /// Record a user interaction for behavior learning
 #[tauri::command]
@@ -294,7 +369,6 @@ pub async fn ace_get_anti_topics(min_rejections: Option<u32>) -> Result<serde_js
         "threshold": threshold
     }))
 }
-// ACE Phase E: Embedding Commands
 /// Find similar topics using embeddings
 #[tauri::command]
 pub async fn ace_find_similar_topics(
@@ -327,8 +401,6 @@ pub async fn ace_embedding_status() -> Result<serde_json::Value> {
     }))
 }
 
-// ACE Phase E: Watcher Persistence Commands
-
 /// Save watcher state for persistence
 #[tauri::command]
 pub async fn ace_save_watcher_state() -> Result<serde_json::Value> {
@@ -339,7 +411,6 @@ pub async fn ace_save_watcher_state() -> Result<serde_json::Value> {
         "saved": true
     }))
 }
-// ACE Phase E: Rate Limiting Commands
 
 /// Get rate limit status for a source
 #[tauri::command]
@@ -349,8 +420,6 @@ pub async fn ace_get_rate_limit_status(source: String) -> Result<serde_json::Val
 
     Ok(serde_json::json!(status))
 }
-
-// ACE Watcher Control Commands
 
 /// Start file watching on specified directories
 pub async fn ace_start_watcher(paths: Vec<String>) -> Result<serde_json::Value> {
@@ -388,13 +457,9 @@ pub async fn ace_start_watcher(paths: Vec<String>) -> Result<serde_json::Value> 
         "paths": watch_paths.iter().map(|p| p.display().to_string()).collect::<Vec<_>>()
     }))
 }
-// PASIFA: README indexing is in ace/readme_indexing.rs
 
-// Auto-Seed Interests from ACE Context
-
-/// Automatically seed user interests from ACE-detected technologies
-/// This runs once at startup when interests are empty, providing immediate value
-/// without requiring manual configuration.
+/// Automatically seed user interests from ACE-detected technologies.
+/// Runs once at startup when interests are empty, providing immediate value.
 pub(crate) async fn auto_seed_interests_from_ace() -> Result<()> {
     let context_engine = get_context_engine()?;
 
@@ -525,8 +590,6 @@ pub(crate) async fn auto_seed_interests_from_ace() -> Result<()> {
     Ok(())
 }
 
-// Auto-Interest Discovery: Suggested Interests from ACE Context
-
 /// Get suggested interests based on ACE-detected technologies and active topics.
 /// Cross-references with existing interests and exclusions to avoid duplicates.
 #[tauri::command]
@@ -626,8 +689,6 @@ pub async fn ace_get_suggested_interests() -> Result<Vec<serde_json::Value>> {
 
     Ok(suggestions)
 }
-
-// ACE Phase 1C: Anomaly Detection Commands
 
 /// Get all unresolved anomalies
 #[tauri::command]

@@ -23,84 +23,110 @@ vi.mock('@tauri-apps/api/event', () => ({
 // Store mock — provides default slice values for all components that use Zustand
 // ---------------------------------------------------------------------------
 vi.mock('../../store', () => ({
-  useAppStore: vi.fn((selector: (s: Record<string, unknown>) => unknown) => {
-    const mockState: Record<string, unknown> = {
-      // app state
-      activeView: 'briefing',
-      setActiveView: vi.fn(),
-      embeddingMode: null,
-      setShowSettings: vi.fn(),
-      appState: {
-        loading: false,
-        analysisComplete: false,
-        status: 'Ready',
-        relevanceResults: [],
-        progress: 0,
-        progressStage: '',
-      },
-      userContext: null,
-      startAnalysis: vi.fn(),
-      generateBriefing: vi.fn(),
+  useAppStore: Object.assign(
+    vi.fn((selector: (s: Record<string, unknown>) => unknown) => {
+      const mockState: Record<string, unknown> = {
+        // app state
+        activeView: 'briefing',
+        setActiveView: vi.fn(),
+        embeddingMode: null,
+        setShowSettings: vi.fn(),
+        appState: {
+          loading: false,
+          analysisComplete: false,
+          status: 'Ready',
+          relevanceResults: [],
+          progress: 0,
+          progressStage: '',
+        },
+        userContext: null,
+        startAnalysis: vi.fn(),
+        generateBriefing: vi.fn(),
 
-      // playbook slice
-      playbookModules: [],
-      playbookContent: null,
-      playbookProgress: null,
-      playbookLoading: false,
-      playbookError: null,
-      activeModuleId: null,
-      streetsTier: 'playbook',
-      loadPlaybookModules: vi.fn(),
-      loadPlaybookContent: vi.fn(),
-      loadPlaybookProgress: vi.fn(),
-      markLessonComplete: vi.fn(),
+        // playbook slice
+        playbookModules: [],
+        playbookContent: null,
+        playbookProgress: null,
+        playbookLoading: false,
+        playbookError: null,
+        activeModuleId: null,
+        streetsTier: 'playbook',
+        loadPlaybookModules: vi.fn(),
+        loadPlaybookContent: vi.fn(),
+        loadPlaybookProgress: vi.fn(),
+        markLessonComplete: vi.fn(),
 
-      // street health
-      streetHealth: null,
-      loadStreetHealth: vi.fn(),
+        // street health
+        streetHealth: null,
+        loadStreetHealth: vi.fn(),
 
-      // suns dashboard
-      sunsModules: [],
-      sunsAlerts: [],
-      sunsLoading: false,
-      loadSunsModules: vi.fn(),
-      ackSunAlert: vi.fn(),
-      executeSunRecommendation: vi.fn(),
+        // suns dashboard
+        sunsModules: [],
+        sunsAlerts: [],
+        sunsLoading: false,
+        loadSunsModules: vi.fn(),
+        ackSunAlert: vi.fn(),
+        executeSunRecommendation: vi.fn(),
 
-      // decisions
-      decisions: [],
-      decisionsLoading: false,
-      loadDecisions: vi.fn(),
-      recordDecision: vi.fn(),
-      updateDecision: vi.fn(),
+        // decisions
+        decisions: [],
+        decisionsLoading: false,
+        loadDecisions: vi.fn(),
+        recordDecision: vi.fn(),
+        updateDecision: vi.fn(),
 
-      // compound advantage
-      compoundAdvantage: null,
-      loadCompoundAdvantage: vi.fn(),
+        // compound advantage
+        compoundAdvantage: null,
+        loadCompoundAdvantage: vi.fn(),
 
-      // autophagy
-      autophagyStatus: null,
-      autophagyLoading: false,
-      loadAutophagyStatus: vi.fn(),
+        // autophagy
+        autophagyStatus: null,
+        autophagyHistory: [],
+        autophagyLoading: false,
+        loadAutophagyStatus: vi.fn(),
+        loadAutophagyHistory: vi.fn(),
 
-      // pro value
-      proValueReport: null,
+        // decision windows
+        decisionWindows: [],
+        decisionWindowsLoading: false,
+        loadDecisionWindows: vi.fn(),
+        actOnWindow: vi.fn(),
+        dismissWindow: vi.fn(),
 
-      // game
-      celebration: null,
-      clearCelebration: vi.fn(),
+        // pro value
+        proValueReport: null,
 
-      // license
-      tier: 'free',
-      trialStatus: null,
-      expired: false,
-      daysRemaining: 0,
-      expiresAt: null,
-      startTrial: vi.fn(),
-      activateLicense: vi.fn(),
-    };
-    return selector(mockState);
-  }),
+        // game
+        celebration: null,
+        clearCelebration: vi.fn(),
+        gameState: null,
+        loadGameState: vi.fn(),
+
+        // agent memory
+        agentMemories: [],
+        agentMemoryLoading: false,
+        loadAgentMemories: vi.fn(),
+        recordAgentMemory: vi.fn(),
+        deleteAgentMemory: vi.fn(),
+
+        // license
+        tier: 'free',
+        trialStatus: null,
+        expired: false,
+        daysRemaining: 0,
+        expiresAt: null,
+        startTrial: vi.fn(),
+        activateLicense: vi.fn(),
+      };
+      return selector(mockState);
+    }),
+    {
+      // Static getState method used by some components (e.g., ActionBar)
+      getState: () => ({
+        setShowSettings: vi.fn(),
+      }),
+    },
+  ),
 }));
 
 // Mock zustand/react/shallow
@@ -146,6 +172,7 @@ vi.mock('../../utils/first-run-messages', () => ({
 vi.mock('../../utils/score', () => ({
   formatScore: (s: number) => `${Math.round(s * 100)}%`,
   getScoreColor: () => 'text-white',
+  getStageLabel: (s: string) => s || 'Ready',
 }));
 
 // Mock source config
@@ -158,6 +185,15 @@ vi.mock('../../config/sources', () => ({
 // Mock content types config
 vi.mock('../../config/content-types', () => ({
   getContentTypeBadge: () => null,
+}));
+
+// Mock game-components and game-icons (used by AchievementsPanel, ActionBar, etc.)
+vi.mock('../../lib/game-components', () => ({
+  registerGameComponent: vi.fn(() => Promise.resolve()),
+}));
+
+vi.mock('../../lib/game-icons', () => ({
+  getGameIcon: () => null,
 }));
 
 // ---------------------------------------------------------------------------
@@ -178,11 +214,23 @@ import { GameCelebration } from '../GameCelebration';
 import { ViewTabBar } from '../ViewTabBar';
 import { PlaybookView } from '../PlaybookView';
 import { DecisionMemory } from '../DecisionMemory';
+import { FeedbackButtons } from '../result-item/FeedbackButtons';
+import { ProInsightRow } from '../result-item/ProInsightRow';
+import { StreetsEngineLink } from '../result-item/StreetsEngineLink';
+import { BriefingLoadingState, BriefingReadyState, BriefingNoDataState } from '../BriefingEmptyStates';
+import { SignalsPanel } from '../SignalsPanel';
+import { OllamaStatus } from '../OllamaStatus';
+import { CompoundAdvantageScore } from '../CompoundAdvantageScore';
+import { AutophagyInsights } from '../AutophagyInsights';
+import { LearnedBehaviorPanel } from '../LearnedBehaviorPanel';
+import { SplashScreen } from '../SplashScreen';
+import { VoidHeartbeat } from '../void-engine/VoidHeartbeat';
+import { ActionBar } from '../ActionBar';
 
 // ---------------------------------------------------------------------------
 // Shared test data
 // ---------------------------------------------------------------------------
-import { makeItem, makeBreakdown } from '../../test/factories';
+import { makeItem, makeBreakdown, makeSettings } from '../../test/factories';
 
 // ---------------------------------------------------------------------------
 // Smoke test suite
@@ -191,6 +239,7 @@ const SMOKE_COMPONENTS: Array<{
   name: string;
   render: () => React.JSX.Element;
 }> = [
+  // --- Original 18 components ---
   {
     name: 'ConfidenceIndicator (with confidence)',
     render: () => <ConfidenceIndicator confidence={0.85} />,
@@ -302,6 +351,189 @@ const SMOKE_COMPONENTS: Array<{
   {
     name: 'DecisionMemory (empty)',
     render: () => <DecisionMemory />,
+  },
+
+  // --- New components (19-38) ---
+  {
+    name: 'FeedbackButtons (no feedback)',
+    render: () => (
+      <FeedbackButtons
+        item={makeItem()}
+        feedback={undefined}
+        onRecordInteraction={vi.fn()}
+      />
+    ),
+  },
+  {
+    name: 'FeedbackButtons (saved)',
+    render: () => (
+      <FeedbackButtons
+        item={makeItem()}
+        feedback="save"
+        onRecordInteraction={vi.fn()}
+      />
+    ),
+  },
+  {
+    name: 'FeedbackButtons (dismissed)',
+    render: () => (
+      <FeedbackButtons
+        item={makeItem()}
+        feedback="dismiss"
+        onRecordInteraction={vi.fn()}
+      />
+    ),
+  },
+  {
+    name: 'ProInsightRow (no signal)',
+    render: () => <ProInsightRow item={makeItem({ top_score: 0.2 })} />,
+  },
+  {
+    name: 'ProInsightRow (with signal)',
+    render: () => (
+      <ProInsightRow
+        item={makeItem({
+          top_score: 0.7,
+          signal_type: 'security_alert',
+          score_breakdown: makeBreakdown({ context_score: 0.5 }),
+        })}
+      />
+    ),
+  },
+  {
+    name: 'StreetsEngineLink (no engine)',
+    render: () => <StreetsEngineLink item={makeItem()} />,
+  },
+  {
+    name: 'StreetsEngineLink (with engine)',
+    render: () => (
+      <StreetsEngineLink
+        item={makeItem({
+          streets_engine: 'Engine 1: Digital Products',
+          title: 'Show HN: Build AI agents with Rust',
+        })}
+      />
+    ),
+  },
+  {
+    name: 'BriefingLoadingState',
+    render: () => <BriefingLoadingState />,
+  },
+  {
+    name: 'BriefingReadyState',
+    render: () => <BriefingReadyState />,
+  },
+  {
+    name: 'BriefingNoDataState',
+    render: () => <BriefingNoDataState />,
+  },
+  {
+    name: 'SignalsPanel (empty results)',
+    render: () => <SignalsPanel results={[]} />,
+  },
+  {
+    name: 'SignalsPanel (with signals)',
+    render: () => (
+      <SignalsPanel
+        results={[
+          makeItem({
+            id: 1,
+            signal_type: 'security_alert',
+            signal_priority: 'critical',
+            signal_action: 'Update immediately',
+            signal_triggers: ['CVE-2025-1234'],
+          }),
+          makeItem({
+            id: 2,
+            signal_type: 'tech_trend',
+            signal_priority: 'medium',
+            signal_action: 'Monitor this trend',
+            signal_triggers: ['trending'],
+          }),
+        ]}
+      />
+    ),
+  },
+  {
+    name: 'OllamaStatus (non-ollama provider)',
+    render: () => <OllamaStatus provider="openai" />,
+  },
+  {
+    name: 'OllamaStatus (ollama provider)',
+    render: () => <OllamaStatus provider="ollama" />,
+  },
+  {
+    name: 'CompoundAdvantageScore (null advantage)',
+    render: () => <CompoundAdvantageScore />,
+  },
+  {
+    name: 'AutophagyInsights',
+    render: () => <AutophagyInsights />,
+  },
+  {
+    name: 'LearnedBehaviorPanel (empty)',
+    render: () => (
+      <LearnedBehaviorPanel
+        affinities={[]}
+        antiTopics={[]}
+        onRefresh={vi.fn()}
+      />
+    ),
+  },
+  {
+    name: 'LearnedBehaviorPanel (with data)',
+    render: () => (
+      <LearnedBehaviorPanel
+        affinities={[
+          { topic: 'tauri', positive_signals: 8, negative_signals: 0, affinity_score: 0.95 },
+        ]}
+        antiTopics={[
+          { topic: 'php', rejection_count: 3, confidence: 0.85, auto_detected: true },
+        ]}
+        onRefresh={vi.fn()}
+      />
+    ),
+  },
+  {
+    name: 'SplashScreen',
+    render: () => <SplashScreen onComplete={vi.fn()} minimumDisplayTime={0} />,
+  },
+  {
+    name: 'VoidHeartbeat (default signal)',
+    render: () => (
+      <VoidHeartbeat
+        signal={{
+          pulse: 0, heat: 0, burst: 0, morph: 0, error: 0,
+          staleness: 0, item_count: 0, signal_intensity: 0,
+          signal_urgency: 0, critical_count: 0, signal_color_shift: 0,
+          metabolism: 0, open_windows: 0, advantage_trend: 0,
+        }}
+      />
+    ),
+  },
+  {
+    name: 'ActionBar (idle state)',
+    render: () => (
+      <ActionBar
+        state={{
+          loading: false,
+          analysisComplete: false,
+          status: 'Ready',
+          lastAnalyzedAt: null,
+          progress: 0,
+          progressStage: '',
+          relevanceResults: [],
+        }}
+        settings={makeSettings()}
+        aiBriefing={{ loading: false, error: null }}
+        autoBriefingEnabled={false}
+        summaryBadges={null}
+        onAnalyze={vi.fn()}
+        onGenerateBriefing={vi.fn()}
+        onToggleAutoBriefing={vi.fn()}
+        onToast={vi.fn()}
+      />
+    ),
   },
 ];
 

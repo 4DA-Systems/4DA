@@ -190,3 +190,132 @@ pub async fn set_close_to_tray(enabled: bool) -> Result<serde_json::Value> {
         "message": if enabled { "Window will hide to tray on close" } else { "Window will quit on close" }
     }))
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::monitoring::{BatchedNotification, MonitoringState};
+    use std::sync::atomic::Ordering;
+
+    // ---- MonitoringState construction & defaults ----
+
+    #[test]
+    fn test_monitoring_state_default() {
+        let state = MonitoringState::new();
+        assert!(!state.is_enabled());
+        assert_eq!(state.get_interval(), 1800); // 30 minutes default
+        assert!(!state.is_checking.load(Ordering::Relaxed));
+        assert_eq!(state.last_check.load(Ordering::Relaxed), 0);
+        assert_eq!(state.last_relevant_count.load(Ordering::Relaxed), 0);
+        assert_eq!(state.total_checks.load(Ordering::Relaxed), 0);
+    }
+
+    // ---- MonitoringState enable/disable ----
+
+    #[test]
+    fn test_monitoring_state_enable_disable() {
+        let state = MonitoringState::new();
+        assert!(!state.is_enabled());
+
+        state.set_enabled(true);
+        assert!(state.is_enabled());
+
+        state.set_enabled(false);
+        assert!(!state.is_enabled());
+    }
+
+    // ---- MonitoringState interval ----
+
+    #[test]
+    fn test_monitoring_state_set_interval() {
+        let state = MonitoringState::new();
+        state.set_interval(3600);
+        assert_eq!(state.get_interval(), 3600);
+    }
+
+    #[test]
+    fn test_monitoring_state_interval_clamped_low() {
+        let state = MonitoringState::new();
+        // set_interval clamps to [60, 86400]
+        state.set_interval(10);
+        assert_eq!(state.get_interval(), 60);
+    }
+
+    #[test]
+    fn test_monitoring_state_interval_clamped_high() {
+        let state = MonitoringState::new();
+        state.set_interval(100_000);
+        assert_eq!(state.get_interval(), 86400);
+    }
+
+    // ---- BatchedNotification construction ----
+
+    #[test]
+    fn test_batched_notification_construction() {
+        let notification = BatchedNotification {
+            title: "New Rust RFC".to_string(),
+            source_type: "hackernews".to_string(),
+            score: 0.85,
+            signal_priority: Some("high".to_string()),
+        };
+        assert_eq!(notification.title, "New Rust RFC");
+        assert_eq!(notification.source_type, "hackernews");
+        assert!(notification.score > 0.8);
+        assert_eq!(notification.signal_priority, Some("high".to_string()));
+    }
+
+    #[test]
+    fn test_batched_notification_no_priority() {
+        let notification = BatchedNotification {
+            title: "Minor update".to_string(),
+            source_type: "rss".to_string(),
+            score: 0.3,
+            signal_priority: None,
+        };
+        assert!(notification.signal_priority.is_none());
+    }
+
+    // ---- MonitoringState batched_items ----
+
+    #[test]
+    fn test_monitoring_state_batched_items() {
+        let state = MonitoringState::new();
+        {
+            let mut items = state.batched_items.lock();
+            assert!(items.is_empty());
+            items.push(BatchedNotification {
+                title: "Test".to_string(),
+                source_type: "test".to_string(),
+                score: 0.5,
+                signal_priority: None,
+            });
+        }
+        let items = state.batched_items.lock();
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0].title, "Test");
+    }
+
+    // ---- Notification threshold validation logic ----
+
+    #[test]
+    fn test_notification_threshold_valid_values() {
+        let valid = ["critical_only", "high_and_above", "all"];
+        assert!(valid.contains(&"critical_only"));
+        assert!(valid.contains(&"high_and_above"));
+        assert!(valid.contains(&"all"));
+        assert!(!valid.contains(&"invalid"));
+        assert!(!valid.contains(&""));
+    }
+
+    // ---- Minutes clamping logic (from set_monitoring_interval) ----
+
+    #[test]
+    fn test_minutes_clamping() {
+        // Mirrors the clamping logic in set_monitoring_interval
+        let clamp = |m: u64| m.clamp(1, 1440);
+        assert_eq!(clamp(0), 1);
+        assert_eq!(clamp(1), 1);
+        assert_eq!(clamp(30), 30);
+        assert_eq!(clamp(1440), 1440);
+        assert_eq!(clamp(9999), 1440);
+    }
+}

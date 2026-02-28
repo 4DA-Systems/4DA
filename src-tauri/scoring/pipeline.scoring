@@ -103,8 +103,8 @@ dampening {
 }
 
 intent_boost {
-    single_match: 0.08   # [0.03, 0.20]
-    multi_match: 0.15    # [0.05, 0.30]
+    single_match: 0.12   # [0.03, 0.20]
+    multi_match: 0.25    # [0.05, 0.30]
 }
 
 domain_gate {

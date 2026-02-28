@@ -53,7 +53,7 @@ export interface ScoreBreakdown {
   content_quality_mult?: number;
   /** Novelty multiplier (0.6 introductory to 1.15 release) */
   novelty_mult?: number;
-  /** Intent boost from recent work topics (0.0 to 0.15) */
+  /** Intent boost from recent work topics (0.0 to 0.25) */
   intent_boost?: number;
   /** Content type classification (e.g. "security_advisory", "show_and_tell") */
   content_type?: string;
@@ -69,6 +69,8 @@ export interface ScoreBreakdown {
   window_boost?: number;
   /** ID of matched decision window */
   matched_window_id?: number;
+  /** Skill gap boost from sovereign profile intelligence (0.0-0.20) */
+  skill_gap_boost?: number;
 }
 
 export interface AnalysisProgress {

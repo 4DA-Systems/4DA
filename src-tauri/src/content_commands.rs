@@ -212,3 +212,116 @@ pub async fn remove_saved_item(item_id: i64) -> Result<()> {
     info!(target: "4da::content", item_id = item_id, "Removed saved item");
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ---- ItemContent construction & serialization ----
+
+    #[test]
+    fn test_item_content_serialization() {
+        let item = ItemContent {
+            content: "This is the full article content with several words.".to_string(),
+            source_type: "hackernews".to_string(),
+            word_count: 9,
+            has_summary: true,
+            summary: Some("A brief summary.".to_string()),
+        };
+        let json = serde_json::to_value(&item).expect("serialize");
+        assert_eq!(json["source_type"], "hackernews");
+        assert_eq!(json["word_count"], 9);
+        assert_eq!(json["has_summary"], true);
+        assert_eq!(json["summary"], "A brief summary.");
+    }
+
+    #[test]
+    fn test_item_content_without_summary() {
+        let item = ItemContent {
+            content: "Some content".to_string(),
+            source_type: "reddit".to_string(),
+            word_count: 2,
+            has_summary: false,
+            summary: None,
+        };
+        let json = serde_json::to_value(&item).expect("serialize");
+        assert_eq!(json["has_summary"], false);
+        assert!(json["summary"].is_null());
+    }
+
+    // ---- ItemSummary construction & serialization ----
+
+    #[test]
+    fn test_item_summary_cached() {
+        let summary = ItemSummary {
+            summary: "This article covers Rust async patterns.".to_string(),
+            cached: true,
+        };
+        let json = serde_json::to_value(&summary).expect("serialize");
+        assert_eq!(json["cached"], true);
+        assert!(json["summary"].as_str().expect("str").contains("Rust"));
+    }
+
+    #[test]
+    fn test_item_summary_fresh() {
+        let summary = ItemSummary {
+            summary: "Freshly generated summary.".to_string(),
+            cached: false,
+        };
+        let json = serde_json::to_value(&summary).expect("serialize");
+        assert_eq!(json["cached"], false);
+    }
+
+    // ---- SavedItem construction & serialization ----
+
+    #[test]
+    fn test_saved_item_full_serialization() {
+        let item = SavedItem {
+            item_id: 42,
+            title: "Understanding SQLite-vec".to_string(),
+            url: Some("https://example.com/sqlite-vec".to_string()),
+            source_type: "hackernews".to_string(),
+            saved_at: "2025-12-01 10:00:00".to_string(),
+            summary: Some("Guide to sqlite-vec KNN queries.".to_string()),
+            content_preview: Some("SQLite-vec enables vector...".to_string()),
+        };
+        let json = serde_json::to_value(&item).expect("serialize");
+        assert_eq!(json["item_id"], 42);
+        assert_eq!(json["title"], "Understanding SQLite-vec");
+        assert_eq!(json["url"], "https://example.com/sqlite-vec");
+        assert_eq!(json["source_type"], "hackernews");
+    }
+
+    #[test]
+    fn test_saved_item_with_none_fields() {
+        let item = SavedItem {
+            item_id: 1,
+            title: "Minimal Item".to_string(),
+            url: None,
+            source_type: "rss".to_string(),
+            saved_at: "2025-12-01".to_string(),
+            summary: None,
+            content_preview: None,
+        };
+        let json = serde_json::to_value(&item).expect("serialize");
+        assert!(json["url"].is_null());
+        assert!(json["summary"].is_null());
+        assert!(json["content_preview"].is_null());
+    }
+
+    // ---- word count logic ----
+
+    #[test]
+    fn test_word_count_matches_split_whitespace() {
+        let text = "  Rust   is a systems   programming language  ";
+        let word_count = text.split_whitespace().count();
+        assert_eq!(word_count, 6);
+    }
+
+    #[test]
+    fn test_word_count_empty_content() {
+        let text = "";
+        let word_count = text.split_whitespace().count();
+        assert_eq!(word_count, 0);
+    }
+}

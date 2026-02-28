@@ -1187,8 +1187,8 @@ fn skill_gap_boost_fires_for_gap_dependency() {
         bd.skill_gap_boost
     );
     assert_eq!(
-        bd.skill_gap_boost, 0.08,
-        "Single gap match should give 0.08 boost"
+        bd.skill_gap_boost, 0.15,
+        "Single gap match should give 0.15 boost"
     );
 }
 
@@ -1236,8 +1236,8 @@ fn skill_gap_boost_multi_match_higher_than_single() {
     let bd = result.score_breakdown.as_ref().unwrap();
 
     assert_eq!(
-        bd.skill_gap_boost, 0.12,
-        "Multi gap match should give 0.12 boost, got {:.3}",
+        bd.skill_gap_boost, 0.20,
+        "Multi gap match should give 0.20 boost, got {:.3}",
         bd.skill_gap_boost
     );
 }

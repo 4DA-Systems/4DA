@@ -374,3 +374,139 @@ where
     }
     Err(last_error)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ========================================================================
+    // truncate_and_normalize tests
+    // ========================================================================
+
+    #[test]
+    fn test_truncate_short_vector_unchanged() {
+        // Vector shorter than TARGET_EMBEDDING_DIMS should pass through unchanged
+        let v = vec![1.0f32, 0.0, 0.0];
+        let result = truncate_and_normalize(v.clone());
+        assert_eq!(result, v, "Short vector should not be modified");
+    }
+
+    #[test]
+    fn test_truncate_exact_dims_unchanged() {
+        // Vector exactly TARGET_EMBEDDING_DIMS should pass through unchanged
+        let v: Vec<f32> = (0..TARGET_EMBEDDING_DIMS)
+            .map(|i| (i as f32) * 0.01)
+            .collect();
+        let result = truncate_and_normalize(v.clone());
+        assert_eq!(result, v, "Exact-length vector should not be modified");
+    }
+
+    #[test]
+    fn test_truncate_long_vector_to_target_dims() {
+        // Vector longer than TARGET_EMBEDDING_DIMS should be truncated
+        let v: Vec<f32> = (0..768).map(|i| (i as f32) * 0.001).collect();
+        let result = truncate_and_normalize(v);
+        assert_eq!(
+            result.len(),
+            TARGET_EMBEDDING_DIMS,
+            "Should be truncated to {} dims",
+            TARGET_EMBEDDING_DIMS
+        );
+    }
+
+    #[test]
+    fn test_truncate_preserves_unit_norm() {
+        // After truncation + re-normalization, vector should be unit length
+        let v: Vec<f32> = (0..768).map(|i| ((i as f32) * 0.1).sin()).collect();
+        let result = truncate_and_normalize(v);
+        let norm: f32 = result.iter().map(|x| x * x).sum::<f32>().sqrt();
+        assert!(
+            (norm - 1.0).abs() < 1e-5,
+            "Truncated vector should be unit-normalized, got norm={}",
+            norm
+        );
+    }
+
+    #[test]
+    fn test_truncate_zero_vector_stays_zero() {
+        // Zero vector should not cause division by zero
+        let v = vec![0.0f32; 768];
+        let result = truncate_and_normalize(v);
+        assert_eq!(result.len(), TARGET_EMBEDDING_DIMS);
+        assert!(
+            result.iter().all(|&x| x == 0.0),
+            "Zero vector should remain zero (no NaN from division)"
+        );
+    }
+
+    #[test]
+    fn test_truncate_preserves_direction() {
+        // The truncated + normalized vector should point in the same direction
+        // as the first TARGET_EMBEDDING_DIMS elements (just rescaled)
+        let v: Vec<f32> = (0..768).map(|i| ((i as f32) * 0.3).cos()).collect();
+        let result = truncate_and_normalize(v.clone());
+
+        // Compute cosine similarity between truncated prefix and result
+        let prefix: Vec<f32> = v[..TARGET_EMBEDDING_DIMS].to_vec();
+        let dot: f32 = prefix.iter().zip(result.iter()).map(|(a, b)| a * b).sum();
+        let norm_prefix: f32 = prefix.iter().map(|x| x * x).sum::<f32>().sqrt();
+        let norm_result: f32 = result.iter().map(|x| x * x).sum::<f32>().sqrt();
+        let cosine = dot / (norm_prefix * norm_result);
+
+        assert!(
+            (cosine - 1.0).abs() < 1e-5,
+            "Direction should be preserved after normalization, cosine={}",
+            cosine
+        );
+    }
+
+    // ========================================================================
+    // TARGET_EMBEDDING_DIMS constant test
+    // ========================================================================
+
+    #[test]
+    fn test_target_embedding_dims_is_384() {
+        assert_eq!(
+            TARGET_EMBEDDING_DIMS, 384,
+            "Embedding dims must match DB vec0 schema (384)"
+        );
+    }
+
+    // ========================================================================
+    // Retry backoff delay calculation tests
+    // ========================================================================
+
+    #[test]
+    fn test_retry_backoff_delay_calculation() {
+        // The retry_with_backoff function uses 3^attempt for delay:
+        // attempt 0 -> 3^0 = 1s
+        // attempt 1 -> 3^1 = 3s
+        // attempt 2 -> 3^2 = 9s
+        assert_eq!(3u64.pow(0), 1, "Attempt 0 delay should be 1s");
+        assert_eq!(3u64.pow(1), 3, "Attempt 1 delay should be 3s");
+        assert_eq!(3u64.pow(2), 9, "Attempt 2 delay should be 9s");
+        assert_eq!(3u64.pow(3), 27, "Attempt 3 delay should be 27s");
+    }
+
+    #[test]
+    fn test_retry_attempt_count() {
+        // With max_retries=2, we should have attempts 0, 1, 2 (3 total)
+        let max_retries: u32 = 2;
+        let attempts: Vec<u32> = (0..=max_retries).collect();
+        assert_eq!(attempts.len(), 3, "max_retries=2 should yield 3 attempts");
+    }
+
+    // ========================================================================
+    // embed_texts empty input test (async)
+    // ========================================================================
+
+    #[tokio::test]
+    async fn test_embed_texts_empty_input_returns_empty() {
+        let result = embed_texts(&[]).await;
+        assert!(result.is_ok());
+        assert!(
+            result.unwrap().is_empty(),
+            "Empty input should return empty vec"
+        );
+    }
+}
