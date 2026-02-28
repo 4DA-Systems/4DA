@@ -313,3 +313,200 @@ pub async fn coach_progress_check_in() -> Result<String, String> {
     info!(target: "4da::coach", length = response.content.len(), "Progress check-in delivered");
     Ok(response.content)
 }
+
+// ============================================================================
+// Tests
+// ============================================================================
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::coach_context::EngineChoice;
+
+    /// Helper: resolve default session title the same way coach_create_session does.
+    fn resolve_default_title(session_type: &str) -> String {
+        match session_type {
+            "engine_recommender" => "Engine Recommendation",
+            "strategy" => "Strategy Session",
+            "launch_review" => "Launch Review",
+            "progress" => "Progress Check-in",
+            _ => "Coach Chat",
+        }
+        .to_string()
+    }
+
+    // -- Session title resolution --
+
+    #[test]
+    fn test_default_title_engine_recommender() {
+        assert_eq!(
+            resolve_default_title("engine_recommender"),
+            "Engine Recommendation"
+        );
+    }
+
+    #[test]
+    fn test_default_title_strategy() {
+        assert_eq!(resolve_default_title("strategy"), "Strategy Session");
+    }
+
+    #[test]
+    fn test_default_title_launch_review() {
+        assert_eq!(resolve_default_title("launch_review"), "Launch Review");
+    }
+
+    #[test]
+    fn test_default_title_progress() {
+        assert_eq!(resolve_default_title("progress"), "Progress Check-in");
+    }
+
+    #[test]
+    fn test_default_title_unknown_type_falls_back() {
+        assert_eq!(resolve_default_title("anything_else"), "Coach Chat");
+        assert_eq!(resolve_default_title(""), "Coach Chat");
+    }
+
+    // -- Struct serialization roundtrips --
+
+    #[test]
+    fn test_coach_session_serde_roundtrip() {
+        let session = CoachSession {
+            id: "coach-abc123".to_string(),
+            session_type: "strategy".to_string(),
+            title: "My Strategy".to_string(),
+            context_snapshot: Some("{\"key\":\"val\"}".to_string()),
+            created_at: "2025-01-01T00:00:00Z".to_string(),
+            updated_at: "2025-01-01T01:00:00Z".to_string(),
+        };
+        let json = serde_json::to_string(&session).unwrap();
+        let deserialized: CoachSession = serde_json::from_str(&json).unwrap();
+        assert_eq!(deserialized.id, "coach-abc123");
+        assert_eq!(deserialized.session_type, "strategy");
+        assert_eq!(deserialized.title, "My Strategy");
+        assert_eq!(
+            deserialized.context_snapshot,
+            Some("{\"key\":\"val\"}".to_string())
+        );
+    }
+
+    #[test]
+    fn test_coach_session_none_context_snapshot() {
+        let session = CoachSession {
+            id: "coach-xyz".to_string(),
+            session_type: "chat".to_string(),
+            title: "Chat".to_string(),
+            context_snapshot: None,
+            created_at: "2025-01-01T00:00:00Z".to_string(),
+            updated_at: "2025-01-01T00:00:00Z".to_string(),
+        };
+        let json = serde_json::to_string(&session).unwrap();
+        assert!(json.contains("\"context_snapshot\":null"));
+        let back: CoachSession = serde_json::from_str(&json).unwrap();
+        assert!(back.context_snapshot.is_none());
+    }
+
+    #[test]
+    fn test_coach_message_serde_roundtrip() {
+        let msg = CoachMessage {
+            id: 42,
+            session_id: "coach-sess1".to_string(),
+            role: "assistant".to_string(),
+            content: "Here is my advice.".to_string(),
+            token_count: 150,
+            cost_cents: 3,
+            created_at: "2025-06-15T10:30:00Z".to_string(),
+        };
+        let json = serde_json::to_string(&msg).unwrap();
+        let back: CoachMessage = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.id, 42);
+        assert_eq!(back.role, "assistant");
+        assert_eq!(back.token_count, 150);
+        assert_eq!(back.cost_cents, 3);
+    }
+
+    #[test]
+    fn test_engine_recommendation_serde_roundtrip() {
+        let rec = EngineRecommendation {
+            primary_engine: EngineChoice {
+                engine_number: 4,
+                engine_name: "SaaS/Micro-SaaS".to_string(),
+                fit_score: 0.85,
+                time_to_first_dollar: "3-6 months".to_string(),
+                revenue_range: "$500-$5000/mo".to_string(),
+                reasoning: "Strong technical skills".to_string(),
+                prerequisites: vec!["Landing page".to_string()],
+            },
+            secondary_engine: EngineChoice {
+                engine_number: 2,
+                engine_name: "Technical Writing".to_string(),
+                fit_score: 0.7,
+                time_to_first_dollar: "1-2 months".to_string(),
+                revenue_range: "$200-$2000/mo".to_string(),
+                reasoning: "Good communication".to_string(),
+                prerequisites: vec![],
+            },
+            reasoning: "Based on your Rust/TS stack".to_string(),
+            profile_gaps: vec!["No portfolio".to_string()],
+        };
+        let json = serde_json::to_string(&rec).unwrap();
+        let back: EngineRecommendation = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.primary_engine.engine_number, 4);
+        assert_eq!(back.secondary_engine.engine_name, "Technical Writing");
+        assert!((back.primary_engine.fit_score - 0.85).abs() < f32::EPSILON);
+        assert_eq!(back.profile_gaps.len(), 1);
+    }
+
+    #[test]
+    fn test_launch_review_result_serde_roundtrip() {
+        let result = LaunchReviewResult {
+            overall_score: 7.5,
+            strengths: vec!["Solid architecture".to_string()],
+            gaps: vec!["No pricing page".to_string()],
+            recommendations: vec![
+                "Add testimonials".to_string(),
+                "Set up analytics".to_string(),
+            ],
+        };
+        let json = serde_json::to_string(&result).unwrap();
+        let back: LaunchReviewResult = serde_json::from_str(&json).unwrap();
+        assert!((back.overall_score - 7.5).abs() < f32::EPSILON);
+        assert_eq!(back.strengths.len(), 1);
+        assert_eq!(back.gaps[0], "No pricing page");
+        assert_eq!(back.recommendations.len(), 2);
+    }
+
+    // -- generate_session_id --
+
+    #[test]
+    fn test_generate_session_id_uniqueness() {
+        let ids: Vec<String> = (0..10).map(|_| generate_session_id()).collect();
+        // All should have the correct prefix and length
+        for id in &ids {
+            assert!(
+                id.starts_with("coach-"),
+                "id should start with coach-: {}",
+                id
+            );
+            assert_eq!(id.len(), 22, "id should be 22 chars: {}", id);
+        }
+        // At least some should be distinct (hash includes thread id + nanos)
+        let mut deduped = ids.clone();
+        deduped.sort();
+        deduped.dedup();
+        // With nanos granularity on the same thread, there is a small chance of collision,
+        // but 10 calls should produce at least 2 distinct values.
+        assert!(
+            deduped.len() >= 2,
+            "Expected at least 2 unique IDs from 10 generations"
+        );
+    }
+
+    // -- extract_json_from_response edge cases --
+
+    #[test]
+    fn test_extract_json_from_response_plain_fenced_block() {
+        // Fenced code block without "json" language tag, containing JSON
+        let response = "Result:\n```\n{\"a\": 1}\n```\nEnd.";
+        assert_eq!(extract_json_from_response(response), "{\"a\": 1}");
+    }
+}

@@ -4,8 +4,6 @@ mod affinity;
 mod analyzer;
 #[cfg(test)]
 mod benchmark;
-#[cfg(test)]
-mod simulation;
 mod calibration;
 mod context;
 mod dedup;
@@ -15,6 +13,8 @@ mod gate;
 mod keywords;
 mod pipeline;
 mod semantic;
+#[cfg(test)]
+mod simulation;
 mod utils;
 
 // Public API — external callers use crate::scoring::function_name unchanged

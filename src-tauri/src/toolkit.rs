@@ -422,3 +422,263 @@ fn save_http_history(method: &str, url: &str, status: u16, duration_ms: u64) -> 
         .map_err(FourDaError::Db)?;
     Ok(())
 }
+
+// ============================================================================
+// Tests
+// ============================================================================
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // -- Struct construction & serde roundtrip ---------------------------------
+
+    #[test]
+    fn listening_port_serde_roundtrip() {
+        let port = ListeningPort {
+            port: 4444,
+            protocol: "TCP".into(),
+            pid: 1234,
+            process_name: "node".into(),
+            address: "127.0.0.1:4444".into(),
+        };
+        let json = serde_json::to_string(&port).unwrap();
+        let restored: ListeningPort = serde_json::from_str(&json).unwrap();
+        assert_eq!(restored.port, 4444);
+        assert_eq!(restored.protocol, "TCP");
+        assert_eq!(restored.pid, 1234);
+        assert_eq!(restored.process_name, "node");
+        assert_eq!(restored.address, "127.0.0.1:4444");
+    }
+
+    #[test]
+    fn http_probe_request_serde_roundtrip() {
+        let req = HttpProbeRequest {
+            method: "POST".into(),
+            url: "https://example.com/api".into(),
+            headers: vec![("Content-Type".into(), "application/json".into())],
+            body: Some("{\"key\":\"value\"}".into()),
+        };
+        let json = serde_json::to_string(&req).unwrap();
+        let restored: HttpProbeRequest = serde_json::from_str(&json).unwrap();
+        assert_eq!(restored.method, "POST");
+        assert_eq!(restored.url, "https://example.com/api");
+        assert_eq!(restored.headers.len(), 1);
+        assert_eq!(restored.body.as_deref(), Some("{\"key\":\"value\"}"));
+    }
+
+    #[test]
+    fn http_probe_response_serde_roundtrip() {
+        let resp = HttpProbeResponse {
+            status: 200,
+            status_text: "OK".into(),
+            headers: vec![("content-type".into(), "text/html".into())],
+            body: "<html></html>".into(),
+            duration_ms: 42,
+            size_bytes: 13,
+        };
+        let json = serde_json::to_string(&resp).unwrap();
+        let restored: HttpProbeResponse = serde_json::from_str(&json).unwrap();
+        assert_eq!(restored.status, 200);
+        assert_eq!(restored.status_text, "OK");
+        assert_eq!(restored.duration_ms, 42);
+        assert_eq!(restored.size_bytes, 13);
+    }
+
+    #[test]
+    fn http_history_entry_serde_roundtrip() {
+        let entry = HttpHistoryEntry {
+            id: 1,
+            method: "GET".into(),
+            url: "https://example.com".into(),
+            status: 404,
+            duration_ms: 150,
+            created_at: "2025-01-01T00:00:00Z".into(),
+        };
+        let json = serde_json::to_string(&entry).unwrap();
+        let restored: HttpHistoryEntry = serde_json::from_str(&json).unwrap();
+        assert_eq!(restored.id, 1);
+        assert_eq!(restored.status, 404);
+        assert_eq!(restored.created_at, "2025-01-01T00:00:00Z");
+    }
+
+    #[test]
+    fn env_snapshot_serde_with_optional_fields() {
+        let snap = EnvSnapshot {
+            os: "windows".into(),
+            os_version: "10.0.19045".into(),
+            hostname: "DEVBOX".into(),
+            git_branch: Some("main".into()),
+            git_status: None,
+            git_recent_commits: vec!["abc123 initial commit".into()],
+            node_version: Some("v20.10.0".into()),
+            pnpm_version: None,
+            npm_version: None,
+            rust_version: Some("rustc 1.77.0".into()),
+            python_version: None,
+            ports: vec![],
+        };
+        let json = serde_json::to_string(&snap).unwrap();
+        let restored: EnvSnapshot = serde_json::from_str(&json).unwrap();
+        assert_eq!(restored.os, "windows");
+        assert_eq!(restored.git_branch.as_deref(), Some("main"));
+        assert!(restored.git_status.is_none());
+        assert!(restored.pnpm_version.is_none());
+        assert_eq!(restored.git_recent_commits.len(), 1);
+    }
+
+    // -- URL validation logic (extracted from toolkit_http_request) ------------
+
+    #[test]
+    fn url_validation_rejects_invalid_schemes() {
+        let invalid_urls = ["ftp://example.com", "ws://localhost", "example.com", ""];
+        for url in &invalid_urls {
+            let valid = url.starts_with("http://") || url.starts_with("https://");
+            assert!(!valid, "URL '{}' should be rejected", url);
+        }
+    }
+
+    #[test]
+    fn url_validation_accepts_valid_schemes() {
+        let valid_urls = [
+            "http://localhost:3000",
+            "https://api.example.com/v1/data",
+            "http://127.0.0.1:8080/path?q=1",
+        ];
+        for url in &valid_urls {
+            let valid = url.starts_with("http://") || url.starts_with("https://");
+            assert!(valid, "URL '{}' should be accepted", url);
+        }
+    }
+
+    // -- Kill-process PID guard -----------------------------------------------
+
+    #[tokio::test]
+    async fn kill_process_rejects_system_pids() {
+        // PID 0 (system idle) should be rejected
+        let result = toolkit_kill_process(0).await;
+        assert!(result.is_err());
+        let err = result.unwrap_err().to_string();
+        assert!(
+            err.contains("Cannot kill system processes"),
+            "Expected system process guard, got: {}",
+            err
+        );
+
+        // PID 4 (system) should also be rejected
+        let result = toolkit_kill_process(4).await;
+        assert!(result.is_err());
+        let err = result.unwrap_err().to_string();
+        assert!(err.contains("Cannot kill system processes"));
+    }
+
+    // -- History limit clamping -----------------------------------------------
+
+    #[test]
+    fn history_limit_defaults_to_50() {
+        let limit: Option<u32> = None;
+        let clamped = limit.unwrap_or(50).min(200);
+        assert_eq!(clamped, 50);
+    }
+
+    #[test]
+    fn history_limit_clamps_to_200() {
+        let limit: Option<u32> = Some(999);
+        let clamped = limit.unwrap_or(50).min(200);
+        assert_eq!(clamped, 200);
+    }
+
+    #[test]
+    fn history_limit_passes_through_valid_value() {
+        let limit: Option<u32> = Some(100);
+        let clamped = limit.unwrap_or(50).min(200);
+        assert_eq!(clamped, 100);
+    }
+
+    // -- Body truncation logic ------------------------------------------------
+
+    #[test]
+    fn body_truncation_at_500kb() {
+        // Body under 500KB should not be truncated
+        let small_body = "x".repeat(1000);
+        let result = if small_body.len() > 500_000 {
+            format!("{}...\n\n(truncated at 500KB)", &small_body[..500_000])
+        } else {
+            small_body.clone()
+        };
+        assert_eq!(result.len(), 1000);
+
+        // Body over 500KB should be truncated
+        let big_body = "y".repeat(600_000);
+        let result = if big_body.len() > 500_000 {
+            format!("{}...\n\n(truncated at 500KB)", &big_body[..500_000])
+        } else {
+            big_body.clone()
+        };
+        assert!(result.len() < big_body.len());
+        assert!(result.contains("(truncated at 500KB)"));
+        // 500_000 bytes + "...\n\n(truncated at 500KB)" suffix
+        assert!(result.starts_with("yyyyy"));
+    }
+
+    // -- Port sort & dedup logic ----------------------------------------------
+
+    #[test]
+    fn port_sort_and_dedup() {
+        let mut ports = vec![
+            ListeningPort {
+                port: 8080,
+                protocol: "TCP".into(),
+                pid: 10,
+                process_name: "a".into(),
+                address: "0.0.0.0:8080".into(),
+            },
+            ListeningPort {
+                port: 3000,
+                protocol: "TCP".into(),
+                pid: 20,
+                process_name: "b".into(),
+                address: "0.0.0.0:3000".into(),
+            },
+            ListeningPort {
+                port: 8080,
+                protocol: "TCP".into(),
+                pid: 30,
+                process_name: "c".into(),
+                address: "127.0.0.1:8080".into(),
+            },
+            ListeningPort {
+                port: 443,
+                protocol: "TCP".into(),
+                pid: 40,
+                process_name: "d".into(),
+                address: "0.0.0.0:443".into(),
+            },
+        ];
+
+        // Same sort + dedup logic used in toolkit_list_ports
+        ports.sort_by_key(|p| p.port);
+        ports.dedup_by_key(|p| p.port);
+
+        assert_eq!(ports.len(), 3, "Duplicate port 8080 should be removed");
+        assert_eq!(ports[0].port, 443);
+        assert_eq!(ports[1].port, 3000);
+        assert_eq!(ports[2].port, 8080);
+    }
+
+    // -- HttpProbeRequest with no body / no headers ---------------------------
+
+    #[test]
+    fn http_probe_request_minimal() {
+        let req = HttpProbeRequest {
+            method: "GET".into(),
+            url: "http://localhost".into(),
+            headers: vec![],
+            body: None,
+        };
+        let json = serde_json::to_string(&req).unwrap();
+        let restored: HttpProbeRequest = serde_json::from_str(&json).unwrap();
+        assert!(restored.body.is_none());
+        assert!(restored.headers.is_empty());
+    }
+}
