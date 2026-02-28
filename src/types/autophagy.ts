@@ -1,4 +1,4 @@
-// Intelligence Metabolism types — Autophagy + Decision Advantage
+// Intelligence Metabolism types — Autophagy + Decision Advantage + Intelligence Pulse
 
 export interface AutophagyCycleResult {
   items_analyzed: number;
@@ -45,6 +45,34 @@ export interface DecisionWindow {
   expires_at: string | null;
   lead_time_hours: number | null;
   streets_engine: string | null;
+}
+
+// Intelligence Pulse types (shared between IntelligencePulse + BriefingView via store)
+
+export interface CalibrationInsight {
+  topic: string;
+  delta: number;
+  sample_size: number;
+  confidence: number;
+}
+
+export interface SourceQuality {
+  source_type: string;
+  items_surfaced: number;
+  items_engaged: number;
+  engagement_rate: number;
+}
+
+export interface IntelligencePulseData {
+  items_analyzed_7d: number;
+  items_surfaced_7d: number;
+  rejection_rate: number;
+  calibration_accuracy: number;
+  top_calibrations: CalibrationInsight[];
+  source_quality: SourceQuality[];
+  anti_patterns_detected: number;
+  total_cycles: number;
+  learning_narratives: string[];
 }
 
 export interface CompoundAdvantageScore {

@@ -393,6 +393,21 @@ pub async fn get_intelligence_pulse() -> Result<IntelligencePulse> {
         ));
     }
 
+    // ── 10. Cold-start fallback narratives ────────────────────────────────
+    if learning_narratives.is_empty() {
+        if total_cycles == 0 {
+            learning_narratives.push(
+                "Analyzing your first interactions \u{2014} patterns will emerge as you save and dismiss content"
+                    .to_string(),
+            );
+        } else if items_analyzed_7d > 0 {
+            learning_narratives.push(format!(
+                "Processed {} items this week \u{2014} interact with results to sharpen your profile",
+                items_analyzed_7d
+            ));
+        }
+    }
+
     Ok(IntelligencePulse {
         items_analyzed_7d,
         items_surfaced_7d,
@@ -520,6 +535,51 @@ mod tests {
         assert_eq!(parsed["total_cycles"], 3);
         assert!(parsed["top_calibrations"].is_array());
         assert!(parsed["source_quality"].is_array());
+    }
+
+    #[test]
+    fn test_cold_start_narrative_zero_cycles() {
+        // When total_cycles is 0 and no calibrations exist, the system should
+        // generate a cold-start narrative guiding the user toward first interactions.
+        let pulse = IntelligencePulse {
+            items_analyzed_7d: 0,
+            items_surfaced_7d: 0,
+            rejection_rate: 0.0,
+            calibration_accuracy: 0.0,
+            top_calibrations: vec![],
+            source_quality: vec![],
+            anti_patterns_detected: 0,
+            total_cycles: 0,
+            learning_narratives: vec![
+                "Analyzing your first interactions \u{2014} patterns will emerge as you save and dismiss content"
+                    .to_string(),
+            ],
+        };
+        assert_eq!(pulse.learning_narratives.len(), 1);
+        assert!(pulse.learning_narratives[0].contains("first interactions"));
+    }
+
+    #[test]
+    fn test_cold_start_narrative_items_but_no_calibrations() {
+        // When items have been analyzed but no calibrations exist yet,
+        // the system should acknowledge processing and prompt engagement.
+        let pulse = IntelligencePulse {
+            items_analyzed_7d: 250,
+            items_surfaced_7d: 0,
+            rejection_rate: 100.0,
+            calibration_accuracy: 0.0,
+            top_calibrations: vec![],
+            source_quality: vec![],
+            anti_patterns_detected: 0,
+            total_cycles: 1,
+            learning_narratives: vec![format!(
+                "Processed {} items this week \u{2014} interact with results to sharpen your profile",
+                250
+            )],
+        };
+        assert_eq!(pulse.learning_narratives.len(), 1);
+        assert!(pulse.learning_narratives[0].contains("250 items"));
+        assert!(pulse.learning_narratives[0].contains("sharpen your profile"));
     }
 
     #[test]

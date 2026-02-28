@@ -13,16 +13,22 @@ import { SplashScreen } from './components/SplashScreen';
 import { Onboarding } from './components/Onboarding';
 import { VoidEngine } from './components/void-engine/VoidEngine';
 import { OllamaStatus } from './components/OllamaStatus';
+import { SignalsPanel } from './components/SignalsPanel';
 import { NaturalLanguageSearch } from './components/NaturalLanguageSearch';
 import { ToastContainer } from './components/Toast';
 import { LearningIndicator } from './components/LearningIndicator';
 import { ResultsView } from './components/ResultsView';
 import { ActionBar } from './components/ActionBar';
 import { PredictiveIndicator } from './components/PredictiveIndicator';
+import { SignalChainsPanel } from './components/SignalChains';
+import { KnowledgeGapsPanel } from './components/KnowledgeGapsPanel';
 import { ErrorBoundary } from './components/ErrorBoundary';
+import { ViewErrorBoundary } from './components/ViewErrorBoundary';
+import { CommandDeck } from './components/command-deck/CommandDeck';
 import { FirstRunTransition } from './components/FirstRunTransition';
 import { ViewTabBar } from './components/ViewTabBar';
 import { ProValueBadge } from './components/ProValueBadge';
+import { GameCelebration } from './components/GameCelebration';
 
 // Lazy-loaded views — each only loads when navigated to
 const BriefingView = lazy(() => import('./components/BriefingView').then(m => ({ default: m.BriefingView })));
@@ -41,11 +47,6 @@ const ToolkitView = lazy(() => import('./components/toolkit/ToolkitView').then(m
 const PlaybookView = lazy(() => import('./components/PlaybookView').then(m => ({ default: m.PlaybookView })));
 const CoachView = lazy(() => import('./components/coach/CoachView').then(m => ({ default: m.CoachView })));
 const ChannelsView = lazy(() => import('./components/channels/ChannelsView').then(m => ({ default: m.ChannelsView })));
-const SignalsPanel = lazy(() => import('./components/SignalsPanel').then(m => ({ default: m.SignalsPanel })));
-const SignalChainsPanel = lazy(() => import('./components/SignalChains').then(m => ({ default: m.SignalChainsPanel })));
-const KnowledgeGapsPanel = lazy(() => import('./components/KnowledgeGapsPanel').then(m => ({ default: m.KnowledgeGapsPanel })));
-const CommandDeck = lazy(() => import('./components/command-deck/CommandDeck').then(m => ({ default: m.CommandDeck })));
-const GameCelebration = lazy(() => import('./components/GameCelebration').then(m => ({ default: m.GameCelebration })));
 import {
   useSettings,
   useMonitoring,
@@ -425,11 +426,11 @@ function App() {
 
         {/* Actionable Signals */}
         {state.analysisComplete && (
-          <Suspense fallback={null}>
+          <>
             <SignalsPanel results={state.relevanceResults} />
             <SignalChainsPanel />
             <KnowledgeGapsPanel />
-          </Suspense>
+          </>
         )}
 
         {/* Natural Language Search */}
@@ -443,38 +444,56 @@ function App() {
         {/* Conditional View Rendering */}
         <Suspense fallback={<div className="flex items-center justify-center py-20 text-text-secondary text-sm">{t('action.loading')}</div>}>
         {activeView === 'briefing' ? (
-          <BriefingView />
+          <ViewErrorBoundary viewName="Briefing">
+            <BriefingView />
+          </ViewErrorBoundary>
         ) : activeView === 'channels' ? (
-          <ChannelsView />
+          <ViewErrorBoundary viewName="Channels">
+            <ChannelsView />
+          </ViewErrorBoundary>
         ) : activeView === 'profile' ? (
-          <SovereignDeveloperProfile />
+          <ViewErrorBoundary viewName="Profile">
+            <SovereignDeveloperProfile />
+          </ViewErrorBoundary>
         ) : activeView === 'insights' ? (
-          <section aria-label={t('nav.insights', { defaultValue: 'Insights' })} className="space-y-6">
-            <AchievementsPanel />
-            <TechRadar />
-            <DecisionJournal />
-            <DecisionMemory />
-            <AutophagyInsights />
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <DelegationDashboard />
-              <AgentMemoryPanel />
-            </div>
-          </section>
+          <ViewErrorBoundary viewName="Insights">
+            <section aria-label={t('nav.insights', { defaultValue: 'Insights' })} className="space-y-6">
+              <AchievementsPanel />
+              <TechRadar />
+              <DecisionJournal />
+              <DecisionMemory />
+              <AutophagyInsights />
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <DelegationDashboard />
+                <AgentMemoryPanel />
+              </div>
+            </section>
+          </ViewErrorBoundary>
         ) : activeView === 'saved' ? (
-          <SavedItemsView />
+          <ViewErrorBoundary viewName="Saved">
+            <SavedItemsView />
+          </ViewErrorBoundary>
         ) : activeView === 'toolkit' ? (
-          <ToolkitView />
+          <ViewErrorBoundary viewName="Toolkit">
+            <ToolkitView />
+          </ViewErrorBoundary>
         ) : activeView === 'playbook' ? (
-          <PlaybookView />
+          <ViewErrorBoundary viewName="Playbook">
+            <PlaybookView />
+          </ViewErrorBoundary>
         ) : activeView === 'coach' ? (
-          <CoachView />
+          <ViewErrorBoundary viewName="Coach">
+            <CoachView />
+          </ViewErrorBoundary>
         ) : (
-          <ResultsView
-            newItemIds={newItemIds}
-            focusedIndex={focusedIndex}
-            renderLimit={renderLimit}
-            setRenderLimit={setRenderLimit}
-          />
+          <ViewErrorBoundary viewName="Results">
+            <ResultsView
+              newItemIds={newItemIds}
+              focusedIndex={focusedIndex}
+              renderLimit={renderLimit}
+              setRenderLimit={setRenderLimit}
+            />
+          </ViewErrorBoundary>
         )}
         </Suspense>
 
@@ -519,17 +538,13 @@ function App() {
         )}
 
         {/* Command Deck (slide-up panel) */}
-        <Suspense fallback={null}>
-          <CommandDeck />
-        </Suspense>
+        <CommandDeck />
 
         {/* Toast Notifications */}
         <ToastContainer toasts={toasts} onDismiss={removeToast} />
 
         {/* GAME Achievement Celebration Overlay */}
-        <Suspense fallback={null}>
-          <GameCelebration />
-        </Suspense>
+        <GameCelebration />
 
         {/* Keyboard Shortcuts Help Modal */}
         {showKeyboardHelp && (

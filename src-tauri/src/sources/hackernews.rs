@@ -78,15 +78,11 @@ impl HackerNewsSource {
             .map(|id| {
                 let client = self.client.clone();
                 async move {
-                    let url = format!(
-                        "https://hacker-news.firebaseio.com/v0/item/{}.json",
-                        id
-                    );
+                    let url = format!("https://hacker-news.firebaseio.com/v0/item/{}.json", id);
                     match client.get(&url).send().await {
                         Ok(response) => match response.json::<HNStory>().await {
                             Ok(story) => {
-                                let title =
-                                    story.title.unwrap_or_else(|| "[No title]".to_string());
+                                let title = story.title.unwrap_or_else(|| "[No title]".to_string());
                                 let content = story.text.unwrap_or_default();
 
                                 let mut item =
@@ -241,8 +237,7 @@ impl Source for HackerNewsSource {
             "Fetching unique stories from all categories"
         );
         let len = ordered_ids.len();
-        self.fetch_stories_by_ids(ordered_ids, len)
-            .await
+        self.fetch_stories_by_ids(ordered_ids, len).await
     }
 
     async fn scrape_content(&self, item: &SourceItem) -> SourceResult<String> {

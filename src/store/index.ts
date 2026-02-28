@@ -25,6 +25,7 @@ import { createDecisionAdvantageSlice } from './decision-advantage-slice';
 import { createGameSlice } from './game-slice';
 import { createChannelsSlice } from './channels-slice';
 import { createUnifiedProfileSlice } from './unified-profile-slice';
+import { createIntelligencePulseSlice } from './intelligence-pulse-slice';
 
 // Re-export all types
 export type {
@@ -70,4 +71,5 @@ export const useAppStore = create<AppStore>()((...a) => ({
   ...createGameSlice(...a),
   ...createChannelsSlice(...a),
   ...createUnifiedProfileSlice(...a),
+  ...createIntelligencePulseSlice(...a),
 }));

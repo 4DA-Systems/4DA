@@ -64,7 +64,6 @@ const EXCEPTIONS = {
 
   // TypeScript — type registries and complex UI
   'src/lib/commands.ts':                             'IPC command registry — all 107 typed Tauri commands',
-  'src/components/onboarding/QuickSetupStep.tsx':    'Onboarding wizard — multi-step form',
   'src/components/ResultsView.tsx':                  'Results list + filters — primary view',
   'src/components/void-engine/VoidHeartbeat.tsx':    'Void visualizer — canvas + animation',
   'src/App.tsx':                                     'App shell + routing — single entry point',
@@ -75,8 +74,8 @@ const EXCEPTIONS = {
   'src/components/TechRadar.tsx':                      'Tech radar — technology adoption visualization',
   'src/components/SettingsModal.tsx':                   'Settings — tabbed configuration panels',
   'src/components/__tests__/smoke.test.tsx':            'Smoke tests — all component render coverage',
-  'src/components/FirstRunTransition.tsx':              'First-run transition — multi-phase orchestrator with intelligence preview',
-  'src/components/FirstRunTransition.test.tsx':         'First-run transition tests — multi-phase state machine coverage',
+  'src/components/FirstRunTransition.test.tsx':          'First-run experience — 18 tests across 6 phases',
+  'src/components/result-item/ScoreBreakdownDrawer.tsx': 'Score drawer — factor extraction + comparison + feedback',
 };
 
 const SCAN_DIRS = ['src', 'src-tauri/src'];

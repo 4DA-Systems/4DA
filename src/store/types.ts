@@ -353,4 +353,5 @@ export type AppStore =
   & import('./decision-advantage-slice').DecisionAdvantageSlice
   & import('./game-slice').GameSlice
   & import('./channels-slice').ChannelsSlice
-  & import('./unified-profile-slice').UnifiedProfileSlice;
+  & import('./unified-profile-slice').UnifiedProfileSlice
+  & import('./intelligence-pulse-slice').IntelligencePulseSlice;

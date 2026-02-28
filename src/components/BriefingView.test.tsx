@@ -2,9 +2,9 @@ import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { BriefingView } from './BriefingView';
 
-// Mock Tauri API
+// Mock Tauri API (no longer needed for pulse — now via store)
 vi.mock('@tauri-apps/api/core', () => ({
-  invoke: vi.fn().mockResolvedValue({ learning_narratives: [], calibration_accuracy: 0 }),
+  invoke: vi.fn().mockResolvedValue({}),
 }));
 
 // Mock useLicense hook
@@ -33,6 +33,9 @@ function setMockState(overrides: Record<string, unknown>) {
     freeBriefing: null,
     freeBriefingLoading: false,
     generateFreeBriefing: vi.fn(),
+    intelligencePulse: null,
+    intelligencePulseLoading: false,
+    loadIntelligencePulse: vi.fn(),
     decisionWindows: [],
     decisionWindowsLoading: false,
     loadDecisionWindows: vi.fn(),

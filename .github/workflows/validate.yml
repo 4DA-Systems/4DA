@@ -92,6 +92,14 @@ jobs:
       - name: Clippy lints
         run: cd src-tauri && cargo clippy -- -D warnings
 
+      - name: Security audit
+        run: |
+          if command -v cargo-audit &> /dev/null; then
+            cd src-tauri && cargo audit
+          else
+            echo "::warning::cargo-audit not installed"
+          fi
+
       - name: Run unit tests and verify count floor
         run: |
           cd src-tauri
