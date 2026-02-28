@@ -14,6 +14,8 @@ import {
   renderLine,
 } from '../utils/briefing-parser';
 import { EngagementPulse } from './EngagementPulse';
+import { IntelligencePulse } from './IntelligencePulse';
+import { ScoringDelta } from './ScoringDelta';
 import { DecisionWindowsPanel } from './DecisionWindowsPanel';
 import { CompoundAdvantageScore } from './CompoundAdvantageScore';
 import { useLicense } from '../hooks/use-license';
@@ -364,6 +366,12 @@ export function BriefingView() {
 
       {/* Engagement Pulse */}
       <EngagementPulse />
+
+      {/* Intelligence Pulse — system learning summary */}
+      <IntelligencePulse />
+
+      {/* Scoring Delta — topic weight shifts from feedback */}
+      <ScoringDelta />
 
       {/* Top items as BriefingCards */}
       {topItems.length > 0 && (
