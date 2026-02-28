@@ -35,6 +35,17 @@ jobs:
       - name: Run tests
         run: pnpm run test -- --run
 
+      - name: Verify frontend test count floor
+        shell: bash
+        run: |
+          OUTPUT=$(pnpm run test -- --run 2>&1)
+          COUNT=$(echo "$OUTPUT" | grep -oP '\d+ passed' | tail -1 | grep -oP '\d+')
+          echo "Frontend tests: $COUNT"
+          if [ "$COUNT" -lt 700 ]; then
+            echo "::error::Frontend test count dropped below 700 (got $COUNT)"
+            exit 1
+          fi
+
   mcp-server:
     name: MCP Server
     needs: frontend
@@ -88,7 +99,27 @@ jobs:
           OUTPUT=$(cargo test --lib 2>&1)
           COUNT=$(echo "$OUTPUT" | grep -oP '\d+ passed' | tail -1 | grep -oP '\d+')
           echo "Rust tests: $COUNT"
-          if [ "$COUNT" -lt 650 ]; then
-            echo "::error::Test count dropped below 650 (got $COUNT)"
+          if [ "$COUNT" -lt 900 ]; then
+            echo "::error::Test count dropped below 900 (got $COUNT)"
             exit 1
           fi
+
+      - name: Run migration tests
+        shell: bash
+        run: cd src-tauri && cargo test --test migration_tests
+
+      - name: Run pipeline integration tests
+        shell: bash
+        run: cd src-tauri && cargo test --test pipeline_integration
+
+      - name: Run source resilience tests
+        shell: bash
+        run: cd src-tauri && cargo test --test source_resilience
+
+      - name: SQL schema validation
+        shell: bash
+        run: cd src-tauri && cargo test --test sql_checker --features sql-check
+
+      - name: Build
+        shell: bash
+        run: cd src-tauri && cargo build

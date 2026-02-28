@@ -386,6 +386,7 @@ export function ResultsView({
                         onToggleExpand={() => setExpandedItem(expandedItem === item.id ? null : item.id)}
                         feedbackGiven={feedbackGiven}
                         onRecordInteraction={recordInteraction}
+                        comparePool={filteredResults}
                       />
                     </div>
                   </div>

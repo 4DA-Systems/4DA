@@ -608,13 +608,12 @@ fn detect_infrastructure_mismatches(
     let mut mismatches = Vec::new();
 
     // GPU + LLM mismatch: discrete GPU but no local LLM configured
-    if infra.gpu_tier == "discrete" || infra.gpu_tier == "workstation" {
-        if infra.llm_tier == "none" {
-            mismatches.push(InfrastructureMismatch {
-                category: "GPU + LLM".to_string(),
-                issue: "You have a capable GPU but no LLM configured — consider running Ollama for free local AI".to_string(),
-            });
-        }
+    if (infra.gpu_tier == "discrete" || infra.gpu_tier == "workstation") && infra.llm_tier == "none"
+    {
+        mismatches.push(InfrastructureMismatch {
+            category: "GPU + LLM".to_string(),
+            issue: "You have a capable GPU but no LLM configured — consider running Ollama for free local AI".to_string(),
+        });
     }
 
     // No GPU but using local LLM

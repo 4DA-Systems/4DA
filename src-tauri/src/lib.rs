@@ -472,6 +472,7 @@ pub fn run() {
             // Autophagy (intelligent content metabolism)
             autophagy_commands::get_autophagy_status,
             autophagy_commands::get_autophagy_history,
+            autophagy_commands::get_intelligence_pulse,
             // Translation Pipeline
             translation_commands::get_translation_status,
             translation_commands::trigger_translation,

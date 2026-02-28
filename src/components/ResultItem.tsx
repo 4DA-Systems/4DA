@@ -45,6 +45,8 @@ interface ResultItemProps {
     actionType: FeedbackAction,
     item: SourceRelevance
   ) => void;
+  /** Other scored items available for comparison */
+  comparePool?: SourceRelevance[];
 }
 
 export const ResultItem = memo(function ResultItem({
@@ -55,6 +57,7 @@ export const ResultItem = memo(function ResultItem({
   onToggleExpand,
   feedbackGiven,
   onRecordInteraction,
+  comparePool,
 }: ResultItemProps) {
   const [showBreakdown, setShowBreakdown] = useState(false);
   const toggleBreakdown = useCallback(() => setShowBreakdown(prev => !prev), []);
@@ -101,6 +104,7 @@ export const ResultItem = memo(function ResultItem({
           finalScore={item.top_score}
           itemId={item.id}
           onClose={toggleBreakdown}
+          comparePool={comparePool}
         />
       )}
 
