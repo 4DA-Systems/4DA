@@ -4,6 +4,8 @@ mod affinity;
 mod analyzer;
 #[cfg(test)]
 mod benchmark;
+#[cfg(test)]
+mod simulation;
 mod calibration;
 mod context;
 mod dedup;

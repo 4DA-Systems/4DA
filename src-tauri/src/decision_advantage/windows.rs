@@ -79,6 +79,26 @@ pub(crate) fn get_open_windows(conn: &Connection) -> Vec<DecisionWindow> {
         .unwrap_or_default()
 }
 
+/// Get the decision journal: acted and closed windows, most recent first (up to 50).
+pub(crate) fn get_decision_journal(conn: &Connection) -> Vec<DecisionWindow> {
+    let mut stmt = match conn.prepare(
+        "SELECT id, window_type, title, description, urgency, relevance,
+                dependency, status, opened_at, expires_at, lead_time_hours, streets_engine
+         FROM decision_windows WHERE status IN ('acted', 'closed')
+         ORDER BY COALESCE(acted_at, closed_at) DESC
+         LIMIT 50",
+    ) {
+        Ok(s) => s,
+        Err(e) => {
+            warn!(target: "4da::decision_advantage", error = %e, "Query decision journal failed");
+            return Vec::new();
+        }
+    };
+    stmt.query_map([], row_to_window)
+        .ok()
+        .map(|rows| rows.filter_map(|r| r.ok()).collect())
+        .unwrap_or_default()
+}
 /// Transition a window to a new status (acted, expired, closed).
 /// Calculates lead_time_hours as elapsed time since opened_at.
 pub(crate) fn transition_window(

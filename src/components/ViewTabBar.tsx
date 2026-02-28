@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../store';
 
@@ -15,34 +16,60 @@ const TABS: Array<{ id: ViewId; labelKey: string; subtitleKey: string; activeCol
   { id: 'coach', labelKey: 'nav.coach', subtitleKey: 'nav.coach.subtitle', activeColor: 'bg-emerald-500/20 text-emerald-400' },
 ];
 
+const BADGE_COLORS: Partial<Record<ViewId, string>> = {
+  briefing: 'bg-orange-400',
+  results: 'bg-orange-400',
+  profile: 'bg-amber-400',
+};
+
 export function ViewTabBar() {
   const { t } = useTranslation();
   const activeView = useAppStore(s => s.activeView);
   const setActiveView = useAppStore(s => s.setActiveView);
+  const results = useAppStore(s => s.appState.relevanceResults);
+  const windows = useAppStore(s => s.decisionWindows);
+  const profile = useAppStore(s => s.unifiedProfile);
+
+  const badges = useMemo(() => {
+    const b: Partial<Record<ViewId, boolean>> = {};
+    if (results.length > 0) b.results = true;
+    if ((windows ?? []).some(w => w.status === 'open')) b.briefing = true;
+    if (profile && profile.completeness.overall_percentage < 50) b.profile = true;
+    return b;
+  }, [results, windows, profile]);
 
   return (
     <nav aria-label="Main views">
     <div className="mb-6 flex items-center gap-1 bg-bg-secondary rounded-lg p-1 border border-border w-fit" role="tablist" aria-label="Content views">
-      {TABS.map(tab => (
-        <button
-          key={tab.id}
-          role="tab"
-          aria-selected={activeView === tab.id}
-          aria-controls={`view-panel-${tab.id}`}
-          onClick={() => setActiveView(tab.id)}
-          className={`px-4 py-1.5 text-sm rounded-md transition-all ${
-            activeView === tab.id
-              ? `${tab.activeColor} font-medium`
-              : 'text-gray-500 hover:text-gray-300'
-          }`}
-          title={t(tab.subtitleKey)}
-        >
-          <span>{t(tab.labelKey)}</span>
-          <span className={`block text-[10px] leading-tight ${
-            activeView === tab.id ? 'opacity-70' : 'opacity-40'
-          }`}>{t(tab.subtitleKey)}</span>
-        </button>
-      ))}
+      {TABS.map(tab => {
+        const showBadge = badges[tab.id] && activeView !== tab.id;
+        return (
+          <button
+            key={tab.id}
+            role="tab"
+            aria-selected={activeView === tab.id}
+            aria-controls={`view-panel-${tab.id}`}
+            onClick={() => setActiveView(tab.id)}
+            className={`relative px-4 py-1.5 text-sm rounded-md transition-all ${
+              activeView === tab.id
+                ? `${tab.activeColor} font-medium`
+                : 'text-gray-500 hover:text-gray-300'
+            }`}
+            title={t(tab.subtitleKey)}
+          >
+            <span>{t(tab.labelKey)}</span>
+            <span className={`block text-[10px] leading-tight ${
+              activeView === tab.id ? 'opacity-70' : 'opacity-40'
+            }`}>{t(tab.subtitleKey)}</span>
+            {showBadge && (
+              <span
+                className={`absolute top-1 right-1 w-1.5 h-1.5 rounded-full ${BADGE_COLORS[tab.id] || 'bg-white/60'}`}
+                aria-label="New activity"
+              />
+            )}
+          </button>
+        );
+      })}
     </div>
     </nav>
   );

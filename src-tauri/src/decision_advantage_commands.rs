@@ -29,6 +29,12 @@ pub async fn close_decision_window(window_id: i64) -> Result<()> {
         .map_err(FourDaError::Internal)
 }
 
+/// Get the decision journal: acted and closed windows, ordered most recent first (up to 50).
+#[tauri::command]
+pub async fn get_decision_journal() -> Result<Vec<DecisionWindow>> {
+    let conn = open_db_connection().map_err(FourDaError::Internal)?;
+    Ok(crate::decision_advantage::get_decision_journal(&conn))
+}
 /// Get the compound advantage score for the weekly period.
 #[tauri::command]
 pub async fn get_compound_advantage() -> Result<CompoundAdvantageScore> {

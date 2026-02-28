@@ -467,6 +467,7 @@ pub fn run() {
             decision_advantage_commands::close_decision_window,
             decision_advantage_commands::get_compound_advantage,
             decision_advantage_commands::detect_windows,
+            decision_advantage_commands::get_decision_journal,
             // Diagnostics
             commands::get_diagnostics,
             // Autophagy (intelligent content metabolism)
