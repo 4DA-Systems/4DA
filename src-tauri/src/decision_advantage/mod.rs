@@ -18,7 +18,8 @@ pub(crate) mod windows;
 pub(crate) use compound_score::compute_compound_score;
 pub(crate) use scoring_boost::compute_decision_window_boost;
 pub(crate) use windows::{
-    detect_decision_windows, expire_stale_windows, get_open_windows, transition_window,
+    detect_decision_windows, expire_stale_windows, get_decision_journal, get_open_windows,
+    transition_window,
 };
 
 // ============================================================================
