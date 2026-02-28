@@ -679,7 +679,7 @@ mod tests {
         // Exactly at boundary
         let boundary_elapsed = 300i64;
         assert!(
-            !(boundary_elapsed < fetch_interval_secs),
+            boundary_elapsed >= fetch_interval_secs,
             "Exactly 300s should trigger fetch (not less than)"
         );
     }
@@ -721,7 +721,7 @@ mod tests {
 
             // Progress should be between 0.55 and 0.90
             assert!(
-                progress >= 0.55 && progress < 0.91,
+                (0.55..0.91).contains(&progress),
                 "Progress {} at batch {} should be in [0.55, 0.90)",
                 progress,
                 batch_idx

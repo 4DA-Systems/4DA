@@ -417,8 +417,10 @@ mod tests {
 
     #[test]
     fn test_generate_explanation_declared_tech() {
-        let mut ace_ctx = ACEContext::default();
-        ace_ctx.detected_tech = vec!["rust".to_string()];
+        let ace_ctx = ACEContext {
+            detected_tech: vec!["rust".to_string()],
+            ..Default::default()
+        };
         let explanation = generate_relevance_explanation(
             "Rust Performance Tips",
             0.2,
@@ -460,8 +462,10 @@ mod tests {
 
     #[test]
     fn test_generate_explanation_skill_gap_with_stack() {
-        let mut ace_ctx = ACEContext::default();
-        ace_ctx.detected_tech = vec!["rust".to_string()];
+        let ace_ctx = ACEContext {
+            detected_tech: vec!["rust".to_string()],
+            ..Default::default()
+        };
         let explanation = generate_relevance_explanation(
             "Tokio and Rust async patterns",
             0.2,

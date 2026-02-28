@@ -495,7 +495,7 @@ mod tests {
 
     #[test]
     fn test_signal_summary_counts_priorities() {
-        let mut results = vec![
+        let mut results = [
             make_result("Critical vuln", 0.9, true, 3),
             make_result("High alert", 0.8, true, 2),
             make_result("Normal item", 0.5, true, 2),
@@ -520,7 +520,7 @@ mod tests {
 
     #[test]
     fn test_signal_summary_top_signal_is_highest_score() {
-        let mut results = vec![
+        let mut results = [
             make_result("Low signal", 0.3, false, 1),
             make_result("High signal", 0.9, true, 3),
         ];
@@ -552,7 +552,7 @@ mod tests {
 
     #[test]
     fn test_signal_summary_no_signals() {
-        let results = vec![make_result("Normal", 0.5, true, 2)];
+        let results = [make_result("Normal", 0.5, true, 2)];
 
         let critical = results
             .iter()
@@ -583,7 +583,7 @@ mod tests {
 
     #[test]
     fn test_relevant_count_excludes_excluded() {
-        let mut results = vec![
+        let mut results = [
             make_result("Relevant", 0.8, true, 3),
             make_result("Excluded", 0.7, true, 2),
             make_result("Irrelevant", 0.2, false, 0),

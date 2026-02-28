@@ -172,8 +172,6 @@ pub async fn get_radar_at_snapshot(snapshot_date: String) -> Result<serde_json::
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
     #[test]
     fn test_snapshot_date_parsing() {
         // Verify the date string format we expect

@@ -947,8 +947,6 @@ pub async fn get_engagement_summary() -> Result<serde_json::Value> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
     /// Helper: build a suggestion entry matching the shape produced by ace_get_suggested_interests
     fn make_suggestion(topic: &str, confidence: f64, already_declared: bool) -> serde_json::Value {
         serde_json::json!({
