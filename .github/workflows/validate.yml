@@ -35,8 +35,15 @@ jobs:
       - name: Run tests and verify count floor
         shell: bash
         run: |
+          set +e
           OUTPUT=$(pnpm run test -- --run 2>&1)
-          echo "$OUTPUT" | tail -15
+          EXIT_CODE=$?
+          set -e
+          echo "$OUTPUT" | tail -20
+          if [ $EXIT_CODE -ne 0 ]; then
+            echo "::error::Tests exited with code $EXIT_CODE"
+            exit 1
+          fi
           COUNT=$(echo "$OUTPUT" | sed -n 's/.*[^0-9]\([0-9][0-9]*\) passed.*/\1/p' | tail -1)
           echo "Frontend tests passed: $COUNT"
           if [ -z "$COUNT" ] || [ "$COUNT" -lt 700 ]; then
@@ -86,8 +93,15 @@ jobs:
         shell: bash
         run: |
           cd src-tauri
+          set +e
           OUTPUT=$(cargo test --lib 2>&1)
-          echo "$OUTPUT" | tail -5
+          EXIT_CODE=$?
+          set -e
+          echo "$OUTPUT" | tail -10
+          if [ $EXIT_CODE -ne 0 ]; then
+            echo "::error::Tests exited with code $EXIT_CODE"
+            exit 1
+          fi
           COUNT=$(echo "$OUTPUT" | sed -n 's/.*ok\. \([0-9]*\) passed.*/\1/p' | tail -1)
           echo "Rust tests passed: $COUNT"
           if [ -z "$COUNT" ] || [ "$COUNT" -lt 650 ]; then
