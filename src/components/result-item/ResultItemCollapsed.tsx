@@ -9,6 +9,8 @@ interface ResultItemCollapsedProps {
   item: SourceRelevance;
   isExpanded: boolean;
   onToggleExpand: () => void;
+  onToggleBreakdown?: () => void;
+  showBreakdown?: boolean;
   feedback: FeedbackAction | undefined;
   fallbackReason: string;
 }
@@ -17,6 +19,8 @@ export function ResultItemCollapsed({
   item,
   isExpanded,
   onToggleExpand,
+  onToggleBreakdown,
+  showBreakdown,
   feedback,
   fallbackReason,
 }: ResultItemCollapsedProps) {
@@ -24,25 +28,29 @@ export function ResultItemCollapsed({
   return (
     <div className="w-full px-4 py-3">
       <div className="flex items-start gap-3">
-        {/* Score Badge + Source (click to expand) */}
-        <button
-          onClick={onToggleExpand}
-          aria-expanded={isExpanded}
-          aria-controls={`result-detail-${item.id}`}
-          className="flex-shrink-0 flex flex-col items-center gap-1 cursor-pointer"
-        >
-          <div
-            className={`w-14 text-center py-1 rounded font-mono text-sm font-medium ${getScoreColor(
+        {/* Score Badge + Source */}
+        <div className="flex-shrink-0 flex flex-col items-center gap-1">
+          {/* Score — click to toggle breakdown (if available) or expand */}
+          <button
+            onClick={onToggleBreakdown && item.score_breakdown ? onToggleBreakdown : onToggleExpand}
+            aria-expanded={showBreakdown}
+            aria-label={item.score_breakdown ? t('scoreDrawer.toggle', 'Toggle score breakdown') : undefined}
+            className={`w-14 text-center py-1 rounded font-mono text-sm font-medium cursor-pointer transition-all ${getScoreColor(
               item.top_score,
-            )}`}
+            )} ${showBreakdown ? 'ring-1 ring-white/30' : ''} ${item.score_breakdown ? 'hover:ring-1 hover:ring-white/20' : ''}`}
           >
             {formatScore(item.top_score)}
-          </div>
-          {/* Source Badge */}
-          <div className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${getSourceColorClass(item.source_type || '')}`}>
+          </button>
+          {/* Source Badge — click to expand */}
+          <button
+            onClick={onToggleExpand}
+            aria-expanded={isExpanded}
+            aria-controls={`result-detail-${item.id}`}
+            className={`text-[10px] px-1.5 py-0.5 rounded font-medium cursor-pointer ${getSourceColorClass(item.source_type || '')}`}
+          >
             {getSourceLabel(item.source_type || '') || item.source_type || t('results.unknownSource')}
-          </div>
-        </button>
+          </button>
+        </div>
 
         {/* Title and URL — click title to open link */}
         <div className="flex-1 min-w-0">

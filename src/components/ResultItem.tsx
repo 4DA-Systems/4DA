@@ -1,9 +1,10 @@
-import { memo } from 'react';
+import { memo, useCallback, useState } from 'react';
 import type { SourceRelevance, FeedbackAction, FeedbackGiven } from '../types';
 import { useItemSummary } from '../hooks/use-item-summary';
 import { useViewTracking } from '../hooks/use-view-tracking';
 import { ResultItemCollapsed } from './result-item/ResultItemCollapsed';
 import { ResultItemExpanded } from './result-item/ResultItemExpanded';
+import { ScoreBreakdownDrawer } from './result-item/ScoreBreakdownDrawer';
 
 function generateFallbackReason(item: SourceRelevance): string {
   const parts: string[] = [];
@@ -55,6 +56,9 @@ export const ResultItem = memo(function ResultItem({
   feedbackGiven,
   onRecordInteraction,
 }: ResultItemProps) {
+  const [showBreakdown, setShowBreakdown] = useState(false);
+  const toggleBreakdown = useCallback(() => setShowBreakdown(prev => !prev), []);
+
   const feedback = feedbackGiven[item.id];
   const isTopPick = item.top_score >= 0.72;
   const isHighConfidence = (item.confidence ?? 0) >= 0.7;
@@ -85,9 +89,20 @@ export const ResultItem = memo(function ResultItem({
         item={item}
         isExpanded={isExpanded}
         onToggleExpand={onToggleExpand}
+        onToggleBreakdown={toggleBreakdown}
+        showBreakdown={showBreakdown}
         feedback={feedback}
         fallbackReason={generateFallbackReason(item)}
       />
+
+      {showBreakdown && item.score_breakdown && (
+        <ScoreBreakdownDrawer
+          breakdown={item.score_breakdown}
+          finalScore={item.top_score}
+          itemId={item.id}
+          onClose={toggleBreakdown}
+        />
+      )}
 
       {isExpanded && (
         <ResultItemExpanded
