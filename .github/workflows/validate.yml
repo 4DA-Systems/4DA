@@ -15,6 +15,9 @@ jobs:
   frontend:
     name: Frontend
     runs-on: [self-hosted, windows, 4da]
+    defaults:
+      run:
+        shell: bash
     steps:
       - uses: actions/checkout@v4
         with:
@@ -32,13 +35,18 @@ jobs:
       - name: ESLint
         run: pnpm run lint
 
-      - name: Run tests
-        run: pnpm run test -- --run 2>&1 | tee test-output.txt
-
-      - name: Verify frontend test count floor
-        shell: bash
+      - name: Run tests and verify count floor
         run: |
-          COUNT=$(sed -n 's/.*[^0-9]\([0-9][0-9]*\) passed.*/\1/p' test-output.txt | tail -1)
+          set +e
+          OUTPUT=$(pnpm run test -- --run 2>&1)
+          EXIT_CODE=$?
+          set -e
+          echo "$OUTPUT" | tail -15
+          if [ $EXIT_CODE -ne 0 ]; then
+            echo "::error::Tests exited with code $EXIT_CODE"
+            exit 1
+          fi
+          COUNT=$(echo "$OUTPUT" | sed -n 's/.*[^0-9]\([0-9][0-9]*\) passed.*/\1/p' | tail -1)
           echo "Frontend tests passed: $COUNT"
           if [ -z "$COUNT" ] || [ "$COUNT" -lt 700 ]; then
             echo "::error::Frontend test count dropped below 700 (got ${COUNT:-0})"
@@ -49,42 +57,42 @@ jobs:
     name: MCP Server
     needs: frontend
     runs-on: [self-hosted, windows, 4da]
+    defaults:
+      run:
+        shell: bash
     steps:
       - uses: actions/checkout@v4
         with:
           clean: false
 
       - name: Install dependencies
-        shell: bash
         run: cd mcp-4da-server && pnpm install --frozen-lockfile
 
       - name: Build
-        shell: bash
         run: cd mcp-4da-server && pnpm run build
 
       - name: Run tests
-        shell: bash
         run: cd mcp-4da-server && pnpm run test
 
   rust:
     name: Rust
     needs: mcp-server
     runs-on: [self-hosted, windows, 4da]
+    defaults:
+      run:
+        shell: bash
     steps:
       - uses: actions/checkout@v4
         with:
           clean: false
 
       - name: Check formatting
-        shell: bash
         run: cd src-tauri && cargo fmt --check
 
       - name: Clippy lints
-        shell: bash
         run: cd src-tauri && cargo clippy -- -D warnings
 
       - name: Run unit tests and verify count floor
-        shell: bash
         run: |
           cd src-tauri
           set +e
