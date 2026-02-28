@@ -200,7 +200,7 @@ export function VoidHeartbeat({ signal, size = 200 }: VoidHeartbeatProps) {
       className="void-heartbeat-container"
       role="status"
       aria-live="polite"
-      title="System pulse - shows 4DA activity state"
+      title={`4DA: ${stateLabel}${signal.item_count > 0 ? ` · ${signal.item_count} items` : ''}${signal.open_windows > 0 ? ` · ${signal.open_windows} decision window${signal.open_windows > 1 ? 's' : ''}` : ''}`}
       aria-label={`4DA status: ${stateLabel}${signal.item_count > 0 ? `, ${signal.item_count} items found` : ''}`}
       style={{
         width: size,

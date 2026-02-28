@@ -44,11 +44,21 @@ export const SignalChainsPanel = memo(function SignalChainsPanel() {
     }
   };
 
-  if (chains.length === 0) return null;
-
   return (
     <ProGate feature={t('signals.feature')}>
     <div className="mb-6 bg-bg-secondary rounded-lg border border-border overflow-hidden">
+      {chains.length === 0 ? (
+        <div className="px-5 py-4 flex items-center gap-3">
+          <div className="w-8 h-8 bg-bg-tertiary rounded-lg flex items-center justify-center">
+            <span className="text-gray-400">🔗</span>
+          </div>
+          <div>
+            <h2 className="font-medium text-white text-sm">{t('signals.title')}</h2>
+            <p className="text-xs text-gray-500">{t('signals.noChains', 'No active chains — system is monitoring')}</p>
+          </div>
+        </div>
+      ) : (
+      <>
       <div className="px-5 py-4 border-b border-border flex items-center gap-3">
         <div className="w-8 h-8 bg-bg-tertiary rounded-lg flex items-center justify-center">
           <span className="text-gray-400">🔗</span>
@@ -132,6 +142,8 @@ export const SignalChainsPanel = memo(function SignalChainsPanel() {
           );
         })}
       </div>
+      </>
+      )}
     </div>
     </ProGate>
   );

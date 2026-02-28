@@ -71,6 +71,7 @@ const EXCEPTIONS = {
   'src/components/DecisionMemory.tsx':                 'Decision memory — CRUD interface for tech decisions',
   'src/components/TechRadar.tsx':                      'Tech radar — technology adoption visualization',
   'src/components/SettingsModal.tsx':                   'Settings — tabbed configuration panels',
+  'src/components/__tests__/smoke.test.tsx':            'Smoke tests — all component render coverage',
 };
 
 const SCAN_DIRS = ['src', 'src-tauri/src'];

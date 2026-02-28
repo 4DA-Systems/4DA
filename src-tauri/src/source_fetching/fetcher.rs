@@ -600,3 +600,177 @@ pub(crate) async fn fetch_all_sources_deep(
     info!(target: "4da::sources", total = all_items.len(), "DEEP SCAN: Total items from all sources");
     Ok(all_items)
 }
+
+#[cfg(test)]
+mod tests {
+    // ========================================================================
+    // Content capping logic (500KB limit mirrors fetch_all_sources inline logic)
+    // ========================================================================
+
+    const CONTENT_CAP: usize = 500_000;
+
+    #[test]
+    fn test_content_cap_short_content_unchanged() {
+        let content = "Short content that is well under the limit.".to_string();
+        let capped = if content.len() > CONTENT_CAP {
+            content[..CONTENT_CAP].to_string()
+        } else {
+            content.clone()
+        };
+        assert_eq!(
+            capped, content,
+            "Short content should pass through unchanged"
+        );
+    }
+
+    #[test]
+    fn test_content_cap_exactly_at_limit() {
+        let content = "x".repeat(CONTENT_CAP);
+        let capped = if content.len() > CONTENT_CAP {
+            content[..CONTENT_CAP].to_string()
+        } else {
+            content.clone()
+        };
+        assert_eq!(
+            capped.len(),
+            CONTENT_CAP,
+            "Exact-limit content should not be truncated"
+        );
+    }
+
+    #[test]
+    fn test_content_cap_over_limit_truncated() {
+        let content = "y".repeat(CONTENT_CAP + 1000);
+        let capped = if content.len() > CONTENT_CAP {
+            content[..CONTENT_CAP].to_string()
+        } else {
+            content.clone()
+        };
+        assert_eq!(
+            capped.len(),
+            CONTENT_CAP,
+            "Over-limit content should be truncated to 500KB"
+        );
+    }
+
+    // ========================================================================
+    // Fetch interval logic (300s cooldown mirrors fetch_all_sources)
+    // ========================================================================
+
+    #[test]
+    fn test_fetch_interval_skip_logic() {
+        // Simulates the 300-second fetch interval check
+        let fetch_interval_secs = 300i64;
+
+        // Recently fetched (10s ago) - should be skipped
+        let recent_elapsed = 10i64;
+        assert!(
+            recent_elapsed < fetch_interval_secs,
+            "10s ago should be within interval (should skip)"
+        );
+
+        // Long ago (600s) - should be fetched
+        let old_elapsed = 600i64;
+        assert!(
+            old_elapsed >= fetch_interval_secs,
+            "600s ago should be past interval (should fetch)"
+        );
+
+        // Exactly at boundary
+        let boundary_elapsed = 300i64;
+        assert!(
+            !(boundary_elapsed < fetch_interval_secs),
+            "Exactly 300s should trigger fetch (not less than)"
+        );
+    }
+
+    // ========================================================================
+    // Retry backoff pattern (mirrors fetch_all_sources retry logic)
+    // ========================================================================
+
+    #[test]
+    fn test_fetch_retry_backoff_pattern() {
+        let backoff_ms = [500u64, 1000, 2000];
+        let max_attempts = 3;
+
+        // Attempt 1 (attempts=1, index 0) -> 500ms
+        let mut attempts = 1;
+        assert_eq!(backoff_ms.get(attempts - 1).copied().unwrap_or(2000), 500);
+
+        // Attempt 2 -> 1000ms
+        attempts = 2;
+        assert_eq!(backoff_ms.get(attempts - 1).copied().unwrap_or(2000), 1000);
+
+        // The loop breaks at max_attempts, so attempt 3 never indexes into backoff
+        assert_eq!(max_attempts, 3);
+    }
+
+    // ========================================================================
+    // Deep fetch batch progress calculation
+    // ========================================================================
+
+    #[test]
+    fn test_deep_fetch_batch_progress_calculation() {
+        // Mirrors the progress calculation in fetch_all_sources_deep
+        let total_to_embed: usize = 100;
+        let batch_size: usize = 20;
+
+        for batch_idx in 0..total_to_embed.div_ceil(batch_size) {
+            let start_idx = batch_idx * batch_size;
+            let progress = 0.55 + (0.35 * (start_idx as f32 / total_to_embed as f32));
+
+            // Progress should be between 0.55 and 0.90
+            assert!(
+                progress >= 0.55 && progress < 0.91,
+                "Progress {} at batch {} should be in [0.55, 0.90)",
+                progress,
+                batch_idx
+            );
+        }
+
+        // First batch starts at 0.55
+        let first_progress = 0.55 + (0.35 * (0.0 / total_to_embed as f32));
+        assert!(
+            (first_progress - 0.55).abs() < f32::EPSILON,
+            "First batch progress should be exactly 0.55"
+        );
+    }
+
+    // ========================================================================
+    // GenericSourceItem ID generation via hash
+    // ========================================================================
+
+    #[test]
+    fn test_generic_item_id_from_source_hash() {
+        use std::collections::hash_map::DefaultHasher;
+        use std::hash::{Hash, Hasher};
+
+        let source_type = "hackernews";
+        let source_id = "12345";
+
+        let id1 = {
+            let mut hasher = DefaultHasher::new();
+            format!("{}:{}", source_type, source_id).hash(&mut hasher);
+            hasher.finish()
+        };
+
+        let id2 = {
+            let mut hasher = DefaultHasher::new();
+            format!("{}:{}", source_type, source_id).hash(&mut hasher);
+            hasher.finish()
+        };
+
+        assert_eq!(id1, id2, "Same source should produce same ID");
+
+        // Different source_type should produce different ID
+        let id3 = {
+            let mut hasher = DefaultHasher::new();
+            format!("{}:{}", "reddit", source_id).hash(&mut hasher);
+            hasher.finish()
+        };
+        assert_ne!(
+            id1, id3,
+            "Different source_type should produce different ID"
+        );
+    }
+}

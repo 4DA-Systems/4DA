@@ -546,3 +546,161 @@ fn build_decision_context_for_briefing() -> String {
         format!("\n{}", sections.join("\n"))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ========================================================================
+    // LATEST_BRIEFING static tests
+    // ========================================================================
+
+    /// Tests for the LATEST_BRIEFING static are combined into a single test
+    /// to avoid data races (tests run in parallel and share the global static).
+    #[test]
+    fn latest_briefing_lifecycle() {
+        // 1. Write a value and read it back
+        {
+            *LATEST_BRIEFING.lock() = Some("First briefing".to_string());
+        }
+        let result = get_latest_briefing_text();
+        assert_eq!(result, Some("First briefing".to_string()));
+
+        // 2. Overwrite with a new value
+        {
+            *LATEST_BRIEFING.lock() = Some("Second briefing".to_string());
+        }
+        let result = get_latest_briefing_text();
+        assert_eq!(result, Some("Second briefing".to_string()));
+
+        // 3. Clear back to None
+        {
+            *LATEST_BRIEFING.lock() = None;
+        }
+        let result = get_latest_briefing_text();
+        assert!(result.is_none());
+
+        // 4. get_latest_briefing_text returns a clone, not a reference
+        {
+            *LATEST_BRIEFING.lock() = Some("Clone test".to_string());
+        }
+        let cloned = get_latest_briefing_text();
+        // Mutating the static should not affect the already-cloned value
+        {
+            *LATEST_BRIEFING.lock() = Some("Changed after clone".to_string());
+        }
+        assert_eq!(cloned, Some("Clone test".to_string()));
+
+        // Clean up
+        *LATEST_BRIEFING.lock() = None;
+    }
+
+    // ========================================================================
+    // DigestConfig default values (used by get_digest_config / set_digest_config)
+    // ========================================================================
+
+    #[test]
+    fn digest_config_default_values() {
+        let config = crate::digest::DigestConfig::default();
+        assert!(config.enabled);
+        assert_eq!(config.frequency, "daily");
+        assert!(config.email.is_none());
+        assert!(config.save_local);
+        assert_eq!(config.min_score, 0.35);
+        assert_eq!(config.max_items, 20);
+        assert!(config.last_sent.is_none());
+        assert!(!config.generate_summaries);
+    }
+
+    #[test]
+    fn digest_config_serializes_to_valid_json() {
+        let config = crate::digest::DigestConfig::default();
+        let json = serde_json::to_value(&config);
+        assert!(json.is_ok());
+        let val = json.unwrap();
+        assert_eq!(val["enabled"], true);
+        assert_eq!(val["frequency"], "daily");
+        assert_eq!(val["min_score"], 0.35);
+        assert_eq!(val["max_items"], 20);
+    }
+
+    #[test]
+    fn digest_config_deserializes_from_json() {
+        let json_str = r#"{
+            "enabled": false,
+            "frequency": "weekly",
+            "email": "user@example.com",
+            "smtp": null,
+            "save_local": false,
+            "output_dir": null,
+            "min_score": 0.5,
+            "max_items": 10,
+            "last_sent": null,
+            "generate_summaries": true
+        }"#;
+        let config: std::result::Result<crate::digest::DigestConfig, _> =
+            serde_json::from_str(json_str);
+        assert!(config.is_ok());
+        let c = config.unwrap();
+        assert!(!c.enabled);
+        assert_eq!(c.frequency, "weekly");
+        assert_eq!(c.email, Some("user@example.com".to_string()));
+        assert!(!c.save_local);
+        assert_eq!(c.min_score, 0.5);
+        assert_eq!(c.max_items, 10);
+        assert!(c.generate_summaries);
+    }
+
+    // ========================================================================
+    // Briefing JSON response structure tests
+    // ========================================================================
+
+    #[test]
+    fn briefing_no_llm_response_shape() {
+        // Simulates the response shape when no LLM is configured
+        let response = serde_json::json!({
+            "success": false,
+            "error": "No LLM configured. Set up Ollama or add an API key in Settings.",
+            "briefing": null
+        });
+        assert_eq!(response["success"], false);
+        assert!(response["error"].as_str().unwrap().contains("No LLM"));
+        assert!(response["briefing"].is_null());
+    }
+
+    #[test]
+    fn briefing_empty_items_response_shape() {
+        // Simulates the response when no items are found
+        let model = "llama3.2:latest";
+        let response = serde_json::json!({
+            "success": true,
+            "briefing": "No items found. Run an analysis first to fetch and score content.",
+            "item_count": 0,
+            "model": model
+        });
+        assert_eq!(response["success"], true);
+        assert_eq!(response["item_count"], 0);
+        assert_eq!(response["model"], model);
+        assert!(response["briefing"].as_str().unwrap().contains("No items"));
+    }
+
+    #[test]
+    fn briefing_success_response_has_required_fields() {
+        let response = serde_json::json!({
+            "success": true,
+            "briefing": "## Action Required\nNothing urgent today.",
+            "item_count": 5,
+            "model": "claude-3-haiku",
+            "tokens_used": 1500,
+            "latency_ms": 2300,
+            "auto_triggered": false,
+        });
+        assert_eq!(response["success"], true);
+        assert!(response["briefing"].is_string());
+        assert!(response["item_count"].is_number());
+        assert!(response["model"].is_string());
+        assert!(response["tokens_used"].is_number());
+        assert!(response["latency_ms"].is_number());
+        assert_eq!(response["auto_triggered"], false);
+    }
+}

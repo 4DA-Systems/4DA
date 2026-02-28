@@ -115,3 +115,75 @@ pub async fn get_autophagy_history(limit: Option<i64>) -> Result<Vec<AutophagyCy
 
     Ok(results)
 }
+
+// ============================================================================
+// Tests
+// ============================================================================
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::autophagy::AutophagyCycleResult;
+
+    #[test]
+    fn test_autophagy_status_construction() {
+        let status = AutophagyStatus {
+            last_cycle: None,
+            total_cycles: 0,
+            total_calibrations: 0,
+            total_anti_patterns: 0,
+        };
+        assert_eq!(status.total_cycles, 0);
+        assert!(status.last_cycle.is_none());
+    }
+
+    #[test]
+    fn test_autophagy_status_with_cycle() {
+        let cycle = AutophagyCycleResult {
+            items_analyzed: 100,
+            items_pruned: 15,
+            calibrations_produced: 3,
+            topic_decay_rates_updated: 5,
+            source_autopsies_produced: 2,
+            anti_patterns_detected: 1,
+            duration_ms: 450,
+        };
+        let status = AutophagyStatus {
+            last_cycle: Some(cycle.clone()),
+            total_cycles: 7,
+            total_calibrations: 12,
+            total_anti_patterns: 3,
+        };
+        assert_eq!(status.total_cycles, 7);
+        assert_eq!(
+            status
+                .last_cycle
+                .as_ref()
+                .expect("has cycle")
+                .items_analyzed,
+            100
+        );
+    }
+
+    #[test]
+    fn test_autophagy_status_serialization() {
+        let status = AutophagyStatus {
+            last_cycle: Some(AutophagyCycleResult {
+                items_analyzed: 50,
+                items_pruned: 5,
+                calibrations_produced: 1,
+                topic_decay_rates_updated: 2,
+                source_autopsies_produced: 0,
+                anti_patterns_detected: 0,
+                duration_ms: 200,
+            }),
+            total_cycles: 3,
+            total_calibrations: 1,
+            total_anti_patterns: 0,
+        };
+        let json = serde_json::to_string(&status).expect("serialize");
+        let parsed: serde_json::Value = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(parsed["total_cycles"], 3);
+        assert_eq!(parsed["last_cycle"]["items_analyzed"], 50);
+    }
+}

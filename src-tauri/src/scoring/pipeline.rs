@@ -147,9 +147,15 @@ pub(crate) fn score_item(
     };
 
     // Dependency contribution: dep_match_score weighted into base score
-    // This gives a meaningful boost without dominating the other signals
-    let base_score =
-        (base_score + dep_match_score * scoring_config::DEPENDENCY_BOOST_WEIGHT).min(1.0);
+    // This gives a meaningful boost without dominating the other signals.
+    // In bootstrap mode (< 10 interactions), dependency matches get 2x weight
+    // so first results disproportionately feature the user's actual packages.
+    let dep_weight = if ctx.feedback_interaction_count < 10 {
+        scoring_config::DEPENDENCY_BOOST_WEIGHT * 2.0
+    } else {
+        scoring_config::DEPENDENCY_BOOST_WEIGHT
+    };
+    let base_score = (base_score + dep_match_score * dep_weight).min(1.0);
 
     // Stack intelligence: pain point and keyword boost from selected profiles
     let stack_boost = crate::stacks::scoring::compute_stack_boost(
@@ -364,8 +370,8 @@ pub(crate) fn score_item(
             }
             match matched_skill_gaps.len() {
                 0 => 0.0,
-                1 => 0.08, // Single gap match
-                _ => 0.12, // Multi gap match
+                1 => 0.15, // Single gap match (raised from 0.08)
+                _ => 0.20, // Multi gap match (raised from 0.12)
             }
         } else {
             0.0

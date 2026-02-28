@@ -86,7 +86,7 @@ pub struct ScoreBreakdown {
     /// Novelty multiplier (0.6 introductory to 1.15 release)
     #[serde(default = "default_quality_mult")]
     pub novelty_mult: f32,
-    /// Intent boost from recent work topics (0.0 to 0.15)
+    /// Intent boost from recent work topics (0.0 to 0.25)
     #[serde(default)]
     pub intent_boost: f32,
     /// Content type classification (e.g. "security_advisory", "show_and_tell")
@@ -119,7 +119,7 @@ pub struct ScoreBreakdown {
     /// ID of matched decision window
     #[serde(default)]
     pub matched_window_id: Option<i64>,
-    /// Skill gap boost from sovereign profile intelligence (0.0-0.15)
+    /// Skill gap boost from sovereign profile intelligence (0.0-0.20)
     #[serde(default)]
     pub skill_gap_boost: f32,
 }

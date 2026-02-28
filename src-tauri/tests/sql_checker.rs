@@ -26,12 +26,13 @@ fn validate_all_sql_queries() {
     // =========================================================================
 
     let schema_files = vec![
-        src_dir.join("db.rs"),
+        src_dir.join("db").join("mod.rs"),
         src_dir.join("db").join("migrations.rs"),
         src_dir.join("ace").join("db.rs"),
         src_dir.join("ace").join("embedding.rs"),
         src_dir.join("ace").join("watcher.rs"),
         src_dir.join("context_engine.rs"),
+        src_dir.join("game_engine.rs"),
     ];
 
     let mut schema = sql_check_standalone::schema_parser::SchemaInfo::default();
@@ -154,8 +155,9 @@ fn schema_parser_finds_key_tables() {
     let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
     let src_dir = manifest_dir.join("src");
 
-    // Test db.rs tables
-    let db_source = std::fs::read_to_string(src_dir.join("db.rs")).expect("read db.rs");
+    // Test db/migrations.rs tables (CREATE TABLEs moved from db.rs to migrations.rs)
+    let db_source = std::fs::read_to_string(src_dir.join("db").join("migrations.rs"))
+        .expect("read db/migrations.rs");
     let db_schema = sql_check_standalone::schema_parser::parse_schema_from_source(&db_source);
 
     let expected_main_tables = vec![
@@ -256,7 +258,8 @@ fn schema_parser_finds_key_columns() {
     let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
     let src_dir = manifest_dir.join("src");
 
-    let db_source = std::fs::read_to_string(src_dir.join("db.rs")).expect("read db.rs");
+    let db_source = std::fs::read_to_string(src_dir.join("db").join("migrations.rs"))
+        .expect("read db/migrations.rs");
     let schema = sql_check_standalone::schema_parser::parse_schema_from_source(&db_source);
 
     // source_items should have these columns

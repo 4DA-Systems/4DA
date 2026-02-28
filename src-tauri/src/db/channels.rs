@@ -452,7 +452,7 @@ impl Database {
 
 #[cfg(test)]
 mod tests {
-    use crate::test_utils::test_db;
+    use crate::test_utils::{seed_embedding, test_db};
 
     #[test]
     fn test_channel_crud() {
@@ -478,12 +478,14 @@ mod tests {
     #[test]
     fn test_channel_list() {
         let db = test_db();
+        // Migrations seed 3 default channels
+        let baseline = db.list_channels().unwrap().len();
         db.create_channel("ch-1", "Channel 1", "First", &["a".to_string()])
             .unwrap();
         db.create_channel("ch-2", "Channel 2", "Second", &["b".to_string()])
             .unwrap();
         let list = db.list_channels().unwrap();
-        assert_eq!(list.len(), 2);
+        assert_eq!(list.len(), baseline + 2);
     }
 
     #[test]
@@ -568,9 +570,13 @@ mod tests {
         let ch_id = db
             .create_channel("match-test", "Match Test", "test", &[])
             .unwrap();
-        // Note: source_item must exist for the JOIN to work in get_channel_source_items,
-        // but upsert_channel_source_match and refresh_channel_source_count work independently.
-        db.upsert_channel_source_match(ch_id, 999, 0.85).unwrap();
+        // Create a real source_item to satisfy FK constraint
+        let emb = seed_embedding("match-test");
+        let item_id = db
+            .upsert_source_item("test", "match-item-1", None, "Test Item", "content", &emb)
+            .unwrap();
+        db.upsert_channel_source_match(ch_id, item_id, 0.85)
+            .unwrap();
         let count = db.refresh_channel_source_count(ch_id).unwrap();
         assert_eq!(count, 1);
     }

@@ -617,6 +617,32 @@ impl ACE {
     }
 }
 
+/// Check if a package name looks like a Rust crate (heuristic for ecosystem classification).
+pub fn is_rust_package(name: &str) -> bool {
+    matches!(
+        name,
+        "tokio"
+            | "serde"
+            | "anyhow"
+            | "thiserror"
+            | "clap"
+            | "tracing"
+            | "hyper"
+            | "axum"
+            | "actix"
+            | "sqlx"
+            | "diesel"
+            | "tauri"
+            | "warp"
+            | "reqwest"
+            | "rusqlite"
+            | "parking_lot"
+            | "crossbeam"
+            | "rayon"
+            | "rand"
+    ) || name.contains('_') // Rust crates typically use underscores
+}
+
 // ============================================================================
 // Tests
 // ============================================================================

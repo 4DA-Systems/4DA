@@ -28,13 +28,23 @@ export const KnowledgeGapsPanel = memo(function KnowledgeGapsPanel() {
     load();
   }, []);
 
-  if (gaps.length === 0) return null;
-
   const criticalCount = gaps.filter(g => g.gap_severity === 'critical' || g.gap_severity === 'high').length;
 
   return (
     <ProGate feature={t('knowledgeGaps.feature')}>
     <div className="mb-6 bg-bg-secondary rounded-lg border border-border overflow-hidden">
+      {gaps.length === 0 ? (
+        <div className="px-5 py-4 flex items-center gap-3">
+          <div className="w-8 h-8 bg-bg-tertiary rounded-lg flex items-center justify-center">
+            <span className="text-gray-400">✓</span>
+          </div>
+          <div>
+            <h2 className="font-medium text-white text-sm">{t('knowledgeGaps.title')}</h2>
+            <p className="text-xs text-gray-500">{t('knowledgeGaps.noGaps', 'No gaps detected — your knowledge is current')}</p>
+          </div>
+        </div>
+      ) : (
+      <>
       <button
         onClick={() => setExpanded(!expanded)}
         className="w-full px-5 py-4 flex items-center justify-between hover:bg-[#1A1A1A] transition-colors"
@@ -97,6 +107,8 @@ export const KnowledgeGapsPanel = memo(function KnowledgeGapsPanel() {
             );
           })}
         </div>
+      )}
+      </>
       )}
     </div>
     </ProGate>

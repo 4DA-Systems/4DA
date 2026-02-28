@@ -119,3 +119,59 @@ pub fn get_composed_stack() -> Result<ComposedStackSummary, String> {
         competing: composed.competing.iter().map(|s| s.to_string()).collect(),
     })
 }
+
+// ============================================================================
+// Tests
+// ============================================================================
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_stack_profile_summary_construction() {
+        let summary = StackProfileSummary {
+            id: "nextjs".to_string(),
+            name: "Next.js Full-Stack".to_string(),
+            core_tech: vec!["next.js".to_string(), "react".to_string()],
+            companions: vec!["tailwind".to_string()],
+            competing: vec!["remix".to_string()],
+            pain_point_count: 3,
+            ecosystem_shift_count: 1,
+        };
+        assert_eq!(summary.id, "nextjs");
+        assert_eq!(summary.core_tech.len(), 2);
+        assert_eq!(summary.pain_point_count, 3);
+    }
+
+    #[test]
+    fn test_stack_detection_result_serialization() {
+        let result = StackDetectionResult {
+            profile_id: "rust-backend".to_string(),
+            profile_name: "Rust Backend".to_string(),
+            confidence: 0.87,
+            matched_tech: vec!["rust".to_string(), "tokio".to_string()],
+        };
+        let json = serde_json::to_string(&result).expect("serialize");
+        assert!(json.contains("\"confidence\":0.87"));
+        assert!(json.contains("rust-backend"));
+    }
+
+    #[test]
+    fn test_composed_stack_summary_serialization() {
+        let summary = ComposedStackSummary {
+            active: true,
+            pain_point_count: 5,
+            ecosystem_shift_count: 2,
+            keyword_boost_count: 10,
+            source_preferences: vec![("hackernews".to_string(), 1.2)],
+            all_tech: vec!["rust".to_string(), "typescript".to_string()],
+            competing: vec!["go".to_string()],
+        };
+        let json = serde_json::to_string(&summary).expect("serialize");
+        let parsed: serde_json::Value = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(parsed["active"], true);
+        assert_eq!(parsed["pain_point_count"], 5);
+        assert_eq!(parsed["all_tech"].as_array().expect("array").len(), 2);
+    }
+}
