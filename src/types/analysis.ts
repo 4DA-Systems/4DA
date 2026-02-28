@@ -65,6 +65,12 @@ export interface ScoreBreakdown {
   llm_score?: number;
   /** LLM's one-sentence explanation */
   llm_reason?: string;
+  /** Stack intelligence: pain point and keyword boost (0.0-0.20) */
+  stack_boost?: number;
+  /** Stack intelligence: ecosystem shift multiplier (0.95-1.25, default 1.0) */
+  ecosystem_shift_mult?: number;
+  /** Stack intelligence: competing tech suppression (0.95 or 1.0) */
+  stack_competing_mult?: number;
   /** Decision window boost applied (0.0-0.20) */
   window_boost?: number;
   /** ID of matched decision window */

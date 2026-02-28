@@ -547,10 +547,8 @@ fn compute_feed_predicts_engine(ctx: &PersonalizationContext) -> Option<MirrorBl
                     .any(|et| et.to_lowercase().contains(*t))
             })
             .count();
-        if matches > 0 {
-            if best_match.map(|(_, c)| matches > c).unwrap_or(true) {
-                best_match = Some((engine.name, matches));
-            }
+        if matches > 0 && best_match.map(|(_, c)| matches > c).unwrap_or(true) {
+            best_match = Some((engine.name, matches));
         }
     }
 

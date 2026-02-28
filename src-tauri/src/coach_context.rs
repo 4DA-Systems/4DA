@@ -290,6 +290,7 @@ pub fn assemble_coach_context() -> CoachContext {
 
 /// Assemble coach context from the unified Sovereign Developer Profile.
 /// Falls back to the direct assembly if profile is unavailable.
+#[allow(dead_code)]
 pub fn assemble_coach_context_from_profile(
     profile: &crate::sovereign_developer_profile::SovereignDeveloperProfile,
 ) -> CoachContext {

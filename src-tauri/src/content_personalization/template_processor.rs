@@ -262,37 +262,37 @@ fn resolve_profile_path(parts: &[&str], ctx: &PersonalizationContext) -> Option<
 }
 
 fn resolve_stack_path(parts: &[&str], ctx: &PersonalizationContext) -> Option<String> {
-    match parts.first()? {
-        &"primary" => non_empty_join(&ctx.stack.primary),
-        &"adjacent" => non_empty_join(&ctx.stack.adjacent),
-        &"interests" => non_empty_join(&ctx.stack.interests),
+    match *parts.first()? {
+        "primary" => non_empty_join(&ctx.stack.primary),
+        "adjacent" => non_empty_join(&ctx.stack.adjacent),
+        "interests" => non_empty_join(&ctx.stack.interests),
         _ => None,
     }
 }
 
 fn resolve_radar_path(parts: &[&str], ctx: &PersonalizationContext) -> Option<String> {
-    match parts.first()? {
-        &"adopt" => non_empty_join(&ctx.radar.adopt),
-        &"trial" => non_empty_join(&ctx.radar.trial),
-        &"assess" => non_empty_join(&ctx.radar.assess),
-        &"hold" => non_empty_join(&ctx.radar.hold),
+    match *parts.first()? {
+        "adopt" => non_empty_join(&ctx.radar.adopt),
+        "trial" => non_empty_join(&ctx.radar.trial),
+        "assess" => non_empty_join(&ctx.radar.assess),
+        "hold" => non_empty_join(&ctx.radar.hold),
         _ => None,
     }
 }
 
 fn resolve_regional_path(parts: &[&str], ctx: &PersonalizationContext) -> Option<String> {
-    let val = match parts.first()? {
-        &"country" => &ctx.regional.country,
-        &"currency" => &ctx.regional.currency,
-        &"currency_symbol" => &ctx.regional.currency_symbol,
-        &"electricity_kwh" => return Some(format!("{:.3}", ctx.regional.electricity_kwh)),
-        &"internet_monthly" => return Some(format!("{:.0}", ctx.regional.internet_monthly)),
-        &"business_registration_cost" => {
+    let val = match *parts.first()? {
+        "country" => &ctx.regional.country,
+        "currency" => &ctx.regional.currency,
+        "currency_symbol" => &ctx.regional.currency_symbol,
+        "electricity_kwh" => return Some(format!("{:.3}", ctx.regional.electricity_kwh)),
+        "internet_monthly" => return Some(format!("{:.0}", ctx.regional.internet_monthly)),
+        "business_registration_cost" => {
             return Some(format!("{:.0}", ctx.regional.business_registration_cost))
         }
-        &"business_entity_type" => &ctx.regional.business_entity_type,
-        &"tax_note" => &ctx.regional.tax_note,
-        &"payment_processors" => return non_empty_join(&ctx.regional.payment_processors),
+        "business_entity_type" => &ctx.regional.business_entity_type,
+        "tax_note" => &ctx.regional.tax_note,
+        "payment_processors" => return non_empty_join(&ctx.regional.payment_processors),
         _ => return None,
     };
     if val.is_empty() {
@@ -303,40 +303,40 @@ fn resolve_regional_path(parts: &[&str], ctx: &PersonalizationContext) -> Option
 }
 
 fn resolve_progress_path(parts: &[&str], ctx: &PersonalizationContext) -> Option<String> {
-    match parts.first()? {
-        &"completed_count" => Some(ctx.progress.completed_lesson_count.to_string()),
-        &"total_count" => Some(ctx.progress.total_lesson_count.to_string()),
-        &"completed_modules" => non_empty_join(&ctx.progress.completed_modules),
+    match *parts.first()? {
+        "completed_count" => Some(ctx.progress.completed_lesson_count.to_string()),
+        "total_count" => Some(ctx.progress.total_lesson_count.to_string()),
+        "completed_modules" => non_empty_join(&ctx.progress.completed_modules),
         _ => None,
     }
 }
 
 fn resolve_settings_path(parts: &[&str], ctx: &PersonalizationContext) -> Option<String> {
-    match parts.first()? {
-        &"llm_provider" => non_empty_str(&ctx.settings.llm_provider),
-        &"llm_model" => non_empty_str(&ctx.settings.llm_model),
+    match *parts.first()? {
+        "llm_provider" => non_empty_str(&ctx.settings.llm_provider),
+        "llm_model" => non_empty_str(&ctx.settings.llm_model),
         _ => None,
     }
 }
 
 fn resolve_dna_path(parts: &[&str], ctx: &PersonalizationContext) -> Option<String> {
-    match parts.first()? {
-        &"primary_stack" => non_empty_join(&ctx.dna.primary_stack),
-        &"interests" => non_empty_join(&ctx.dna.interests),
-        &"identity_summary" => non_empty_str(&ctx.dna.identity_summary),
-        &"blind_spots" => non_empty_join(&ctx.dna.blind_spots),
-        &"top_engaged_topics" => non_empty_join(&ctx.dna.top_engaged_topics),
+    match *parts.first()? {
+        "primary_stack" => non_empty_join(&ctx.dna.primary_stack),
+        "interests" => non_empty_join(&ctx.dna.interests),
+        "identity_summary" => non_empty_str(&ctx.dna.identity_summary),
+        "blind_spots" => non_empty_join(&ctx.dna.blind_spots),
+        "top_engaged_topics" => non_empty_join(&ctx.dna.top_engaged_topics),
         _ => None,
     }
 }
 
 fn resolve_computed_path(parts: &[&str], ctx: &PersonalizationContext) -> Option<String> {
-    match parts.first()? {
-        &"llm_tier" => Some(ctx.computed.llm_tier.clone()),
-        &"gpu_tier" => Some(ctx.computed.gpu_tier.clone()),
-        &"os_family" => Some(ctx.computed.os_family.clone()),
-        &"profile_completeness" => Some(format!("{:.0}", ctx.computed.profile_completeness)),
-        &"monthly_electricity_estimate" => {
+    match *parts.first()? {
+        "llm_tier" => Some(ctx.computed.llm_tier.clone()),
+        "gpu_tier" => Some(ctx.computed.gpu_tier.clone()),
+        "os_family" => Some(ctx.computed.os_family.clone()),
+        "profile_completeness" => Some(format!("{:.0}", ctx.computed.profile_completeness)),
+        "monthly_electricity_estimate" => {
             Some(format!("{:.1}", ctx.computed.monthly_electricity_estimate))
         }
         _ => None,
@@ -615,7 +615,7 @@ fn collect_injection_markers(input: &str, markers: &mut Vec<String>) {
             let body = remaining[start + 2..start + end].trim();
             // Extract block_id (first word after "insight")
             if let Some(rest) = body.strip_prefix("insight") {
-                let block_id = rest.trim().split_whitespace().next().unwrap_or("unknown");
+                let block_id = rest.split_whitespace().next().unwrap_or("unknown");
                 markers.push(block_id.to_string());
             }
             remaining = &remaining[start + end + 2..];
