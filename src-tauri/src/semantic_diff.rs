@@ -259,3 +259,154 @@ pub fn get_topic_centroids(
         crate::temporal::query_events(&conn, "topic_centroid", None, 50)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn semantic_shift_serde_roundtrip() {
+        let shift = SemanticShift {
+            topic: "react".to_string(),
+            drift_magnitude: 0.72,
+            direction: "Discussion about react is gaining relevance".to_string(),
+            representative_items: vec![1, 2, 3],
+            period: "last 7 days".to_string(),
+            detected_at: "2026-02-28T10:00:00+00:00".to_string(),
+        };
+        let json = serde_json::to_string(&shift).unwrap();
+        let deserialized: SemanticShift = serde_json::from_str(&json).unwrap();
+        assert_eq!(deserialized.topic, "react");
+        assert!((deserialized.drift_magnitude - 0.72).abs() < 0.001);
+        assert_eq!(deserialized.representative_items, vec![1, 2, 3]);
+        assert_eq!(deserialized.period, "last 7 days");
+    }
+
+    #[test]
+    fn compute_title_overlap_identical_sets() {
+        let titles = vec!["Rust async programming guide".to_string()];
+        let overlap = compute_title_overlap(&titles, &titles);
+        assert!((overlap - 1.0).abs() < 0.001);
+    }
+
+    #[test]
+    fn compute_title_overlap_empty_inputs() {
+        assert!((compute_title_overlap(&[], &[]) - 0.0).abs() < 0.001);
+        let titles = vec!["Something about testing".to_string()];
+        assert!((compute_title_overlap(&titles, &[]) - 0.0).abs() < 0.001);
+        assert!((compute_title_overlap(&[], &titles) - 0.0).abs() < 0.001);
+    }
+
+    #[test]
+    fn compute_title_overlap_disjoint_sets() {
+        let recent = vec!["Kubernetes deployment strategies".to_string()];
+        let older = vec!["React component lifecycle hooks".to_string()];
+        let overlap = compute_title_overlap(&recent, &older);
+        assert!(
+            overlap < 0.1,
+            "Disjoint topics should have near-zero overlap: {}",
+            overlap
+        );
+    }
+
+    #[test]
+    fn compute_title_overlap_partial_similarity() {
+        let recent = vec!["Rust async runtime performance benchmarks".to_string()];
+        let older = vec!["Rust memory safety performance guide".to_string()];
+        let overlap = compute_title_overlap(&recent, &older);
+        // "rust" and "performance" overlap (4+ chars), others differ
+        assert!(
+            overlap > 0.0 && overlap < 1.0,
+            "Partial overlap expected: {}",
+            overlap
+        );
+    }
+
+    #[test]
+    fn compute_title_overlap_filters_short_words() {
+        // Words with 3 or fewer chars are filtered out
+        let recent = vec!["is it a new way to do API".to_string()];
+        let older = vec!["is it a new way to do API".to_string()];
+        // "is", "it", "a", "new", "way", "to", "do", "API" — all <= 3 chars
+        // No words > 3 chars remain → empty sets → should return 0.0
+        let overlap = compute_title_overlap(&recent, &older);
+        assert!((overlap - 0.0).abs() < 0.001);
+    }
+
+    #[test]
+    fn compute_title_overlap_case_insensitive() {
+        let recent = vec!["TYPESCRIPT MIGRATION Guide".to_string()];
+        let older = vec!["typescript migration guide".to_string()];
+        let overlap = compute_title_overlap(&recent, &older);
+        // "typescript", "migration", "guide" all > 3 chars, identical after lowering
+        assert!((overlap - 1.0).abs() < 0.001);
+    }
+
+    #[test]
+    fn record_and_query_topic_centroid() {
+        let conn = rusqlite::Connection::open_in_memory().expect("in-memory db");
+        conn.execute_batch(
+            "CREATE TABLE IF NOT EXISTS temporal_events (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                event_type TEXT NOT NULL,
+                subject TEXT NOT NULL,
+                data JSON NOT NULL,
+                embedding BLOB,
+                source_item_id INTEGER,
+                created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                expires_at TEXT
+            );",
+        )
+        .expect("create table");
+
+        let titles = vec![
+            "Rust 2026 roadmap".to_string(),
+            "Async Rust patterns".to_string(),
+        ];
+        record_topic_centroid(&conn, "rust", 5, 0.72, &titles).unwrap();
+
+        let events = crate::temporal::query_events(&conn, "topic_centroid", None, 10).unwrap();
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].subject, "rust");
+        assert_eq!(events[0].data["item_count"], 5);
+        assert!((events[0].data["avg_score"].as_f64().unwrap() - 0.72).abs() < 0.01);
+        let stored_titles = events[0].data["top_titles"].as_array().unwrap();
+        assert_eq!(stored_titles.len(), 2);
+    }
+
+    #[test]
+    fn detect_shifts_empty_returns_empty() {
+        let conn = rusqlite::Connection::open_in_memory().expect("in-memory db");
+        conn.execute_batch(
+            "CREATE TABLE IF NOT EXISTS temporal_events (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                event_type TEXT NOT NULL,
+                subject TEXT NOT NULL,
+                data JSON NOT NULL,
+                embedding BLOB,
+                source_item_id INTEGER,
+                created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                expires_at TEXT
+            );",
+        )
+        .expect("create table");
+
+        let shifts = detect_shifts(&conn, 7).unwrap();
+        assert!(shifts.is_empty());
+    }
+
+    #[test]
+    fn semantic_shift_with_empty_representative_items() {
+        let shift = SemanticShift {
+            topic: "testing".to_string(),
+            drift_magnitude: 0.6,
+            direction: "Narrative changed".to_string(),
+            representative_items: vec![],
+            period: "last 7 days".to_string(),
+            detected_at: "2026-03-01T00:00:00Z".to_string(),
+        };
+        let json = serde_json::to_string(&shift).unwrap();
+        let deserialized: SemanticShift = serde_json::from_str(&json).unwrap();
+        assert!(deserialized.representative_items.is_empty());
+    }
+}
