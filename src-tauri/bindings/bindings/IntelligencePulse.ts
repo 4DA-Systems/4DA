@@ -37,4 +37,8 @@ anti_patterns_detected: bigint,
 /**
  * Total autophagy cycles ever run
  */
-total_cycles: bigint, };
+total_cycles: bigint, 
+/**
+ * Human-readable narrative insights generated from autophagy data
+ */
+learning_narratives: Array<string>, };

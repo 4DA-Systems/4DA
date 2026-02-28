@@ -348,3 +348,161 @@ pub(crate) fn adjacency_map() -> HashMap<&'static str, &'static [&'static str]> 
         ("graphql", &["apollo", "relay"]),
     ])
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::collections::HashSet;
+
+    #[test]
+    fn cross_cutting_topics_contains_expected_items() {
+        let topics: HashSet<&str> = CROSS_CUTTING_TOPICS.iter().copied().collect();
+        for expected in &["testing", "security", "performance", "debugging", "caching"] {
+            assert!(
+                topics.contains(expected),
+                "missing cross-cutting topic: {expected}"
+            );
+        }
+    }
+
+    #[test]
+    fn cross_cutting_topics_has_no_duplicates() {
+        let set: HashSet<&str> = CROSS_CUTTING_TOPICS.iter().copied().collect();
+        assert_eq!(
+            set.len(),
+            CROSS_CUTTING_TOPICS.len(),
+            "duplicate in CROSS_CUTTING_TOPICS"
+        );
+    }
+
+    #[test]
+    fn ambiguous_deps_contains_expected_items() {
+        let deps: HashSet<&str> = AMBIGUOUS_DEPS.iter().copied().collect();
+        for expected in &["futures", "async", "http", "json", "regex"] {
+            assert!(deps.contains(expected), "missing ambiguous dep: {expected}");
+        }
+    }
+
+    #[test]
+    fn ambiguous_deps_has_no_duplicates() {
+        let set: HashSet<&str> = AMBIGUOUS_DEPS.iter().copied().collect();
+        assert_eq!(
+            set.len(),
+            AMBIGUOUS_DEPS.len(),
+            "duplicate in AMBIGUOUS_DEPS"
+        );
+    }
+
+    #[test]
+    fn utility_deps_contains_expected_items() {
+        let deps: HashSet<&str> = UTILITY_DEPS.iter().copied().collect();
+        for expected in &["proc-macro2", "quote", "anyhow", "thiserror", "bitflags"] {
+            assert!(deps.contains(expected), "missing utility dep: {expected}");
+        }
+    }
+
+    #[test]
+    fn utility_deps_has_no_duplicates() {
+        let set: HashSet<&str> = UTILITY_DEPS.iter().copied().collect();
+        assert_eq!(set.len(), UTILITY_DEPS.len(), "duplicate in UTILITY_DEPS");
+    }
+
+    #[test]
+    fn archetype_map_has_entries() {
+        let map = archetype_map();
+        assert!(
+            map.len() >= 8,
+            "expected at least 8 archetypes, got {}",
+            map.len()
+        );
+    }
+
+    #[test]
+    fn archetype_map_no_empty_signals_or_concerns() {
+        for (signals, concerns) in archetype_map() {
+            assert!(!signals.is_empty(), "archetype has empty signals");
+            assert!(!concerns.is_empty(), "archetype has empty concerns");
+        }
+    }
+
+    #[test]
+    fn archetype_map_tauri_maps_to_desktop_concerns() {
+        let map = archetype_map();
+        let desktop = map.iter().find(|(signals, _)| signals.contains(&"tauri"));
+        assert!(desktop.is_some(), "no archetype contains tauri");
+        let (_, concerns) = desktop.unwrap();
+        assert!(
+            concerns.contains(&"cross-platform"),
+            "tauri archetype missing cross-platform concern"
+        );
+    }
+
+    #[test]
+    fn archetype_map_react_maps_to_frontend_concerns() {
+        let map = archetype_map();
+        let frontend = map.iter().find(|(signals, _)| signals.contains(&"react"));
+        assert!(frontend.is_some(), "no archetype contains react");
+        let (_, concerns) = frontend.unwrap();
+        assert!(
+            concerns.contains(&"ssr"),
+            "react archetype missing ssr concern"
+        );
+    }
+
+    #[test]
+    fn adjacency_map_has_entries() {
+        let map = adjacency_map();
+        assert!(
+            map.len() >= 10,
+            "expected at least 10 adjacency entries, got {}",
+            map.len()
+        );
+    }
+
+    #[test]
+    fn adjacency_map_rust_includes_expected_tech() {
+        let map = adjacency_map();
+        let rust_adj = map.get("rust").expect("rust missing from adjacency map");
+        assert!(rust_adj.contains(&"cargo"), "rust adjacency missing cargo");
+        assert!(rust_adj.contains(&"tokio"), "rust adjacency missing tokio");
+    }
+
+    #[test]
+    fn adjacency_map_no_empty_adjacencies() {
+        for (key, values) in adjacency_map() {
+            assert!(!values.is_empty(), "adjacency for '{key}' is empty");
+        }
+    }
+
+    #[test]
+    fn cross_cutting_and_ambiguous_are_disjoint() {
+        let cross: HashSet<&str> = CROSS_CUTTING_TOPICS.iter().copied().collect();
+        let ambig: HashSet<&str> = AMBIGUOUS_DEPS.iter().copied().collect();
+        let overlap: Vec<&&str> = cross.intersection(&ambig).collect();
+        assert!(
+            overlap.is_empty(),
+            "overlap between cross-cutting and ambiguous: {overlap:?}"
+        );
+    }
+
+    #[test]
+    fn all_constant_strings_are_lowercase() {
+        for topic in CROSS_CUTTING_TOPICS {
+            assert_eq!(
+                *topic,
+                topic.to_lowercase(),
+                "CROSS_CUTTING not lowercase: {topic}"
+            );
+        }
+        for dep in AMBIGUOUS_DEPS {
+            assert_eq!(
+                *dep,
+                dep.to_lowercase(),
+                "AMBIGUOUS_DEP not lowercase: {dep}"
+            );
+        }
+        for dep in UTILITY_DEPS {
+            assert_eq!(*dep, dep.to_lowercase(), "UTILITY_DEP not lowercase: {dep}");
+        }
+    }
+}
