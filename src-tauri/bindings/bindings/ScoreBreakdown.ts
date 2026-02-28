@@ -37,7 +37,7 @@ content_quality_mult: number,
  */
 novelty_mult: number, 
 /**
- * Intent boost from recent work topics (0.0 to 0.15)
+ * Intent boost from recent work topics (0.0 to 0.25)
  */
 intent_boost: number, 
 /**
@@ -81,6 +81,6 @@ window_boost: number,
  */
 matched_window_id: bigint | null, 
 /**
- * Skill gap boost from sovereign profile intelligence (0.0-0.15)
+ * Skill gap boost from sovereign profile intelligence (0.0-0.20)
  */
 skill_gap_boost: number, };
