@@ -148,3 +148,140 @@ pub async fn refresh_channel_sources(channel_id: i64) -> Result<i64> {
     );
     Ok(count)
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::channels::{ChannelFreshness, ChannelSummary, RenderProvenance};
+    use crate::test_utils::test_db;
+
+    #[test]
+    fn list_channels_returns_seeded_channels() {
+        let db = test_db();
+        let channels = db.list_channels().unwrap();
+        assert_eq!(channels.len(), 3);
+        for ch in &channels {
+            assert!(matches!(ch.freshness, ChannelFreshness::NeverRendered));
+        }
+    }
+
+    #[test]
+    fn get_channel_returns_correct_data() {
+        let db = test_db();
+        let id = db
+            .create_channel("cmd-test", "Command Test", "Test", &["rust".to_string()])
+            .unwrap();
+        let ch = db.get_channel(id).unwrap();
+        assert_eq!(ch.slug, "cmd-test");
+        assert_eq!(ch.source_count, 0);
+    }
+
+    #[test]
+    fn get_channel_fails_for_nonexistent_id() {
+        let db = test_db();
+        assert!(db.get_channel(999_999).is_err());
+    }
+
+    #[test]
+    fn get_latest_render_returns_none_when_never_rendered() {
+        let db = test_db();
+        let id = db
+            .create_channel("no-render", "No Render", "Test", &[])
+            .unwrap();
+        let result = db.get_latest_render(id).unwrap();
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn get_latest_render_returns_newest_version() {
+        let db = test_db();
+        let id = db
+            .create_channel("versioned", "Versioned", "Test", &[])
+            .unwrap();
+        db.save_channel_render(id, "# V1", &[], None, None, None)
+            .unwrap();
+        db.save_channel_render(id, "# V2", &[], None, None, None)
+            .unwrap();
+        let render = db.get_latest_render(id).unwrap().unwrap();
+        assert_eq!(render.version, 2);
+        assert_eq!(render.content_markdown, "# V2");
+    }
+
+    #[test]
+    fn get_render_provenance_returns_empty_for_no_provenance() {
+        let db = test_db();
+        let id = db
+            .create_channel("prov-test", "Prov Test", "Test", &[])
+            .unwrap();
+        let render = db
+            .save_channel_render(id, "# Content", &[], None, None, None)
+            .unwrap();
+        let provenance = db.get_render_provenance(render.id).unwrap();
+        assert!(provenance.is_empty());
+    }
+
+    #[test]
+    fn get_render_provenance_returns_saved_entries() {
+        let db = test_db();
+        let id = db
+            .create_channel("prov-pop", "Prov Pop", "Test", &[])
+            .unwrap();
+        let render = db
+            .save_channel_render(id, "# Content", &[], None, None, None)
+            .unwrap();
+        let entries = vec![RenderProvenance {
+            render_id: render.id,
+            claim_index: 0,
+            claim_text: "Test claim".to_string(),
+            source_item_ids: vec![1],
+            source_titles: vec!["Test Article".to_string()],
+            source_urls: vec!["https://example.com".to_string()],
+        }];
+        db.save_render_provenance(&entries).unwrap();
+        let result = db.get_render_provenance(render.id).unwrap();
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].claim_text, "Test claim");
+    }
+
+    #[test]
+    fn get_render_history_needs_minimum_two_for_changelog() {
+        let db = test_db();
+        let id = db
+            .create_channel("changelog", "Changelog", "Test", &[])
+            .unwrap();
+        db.save_channel_render(id, "# V1", &[], None, None, None)
+            .unwrap();
+        let history = db.get_render_history(id, 2).unwrap();
+        assert_eq!(history.len(), 1);
+    }
+
+    #[test]
+    fn channel_summary_serializes_to_json() {
+        let summary = ChannelSummary {
+            id: 1,
+            slug: "test".to_string(),
+            title: "Test Channel".to_string(),
+            description: "A test channel".to_string(),
+            source_count: 5,
+            render_count: 2,
+            freshness: ChannelFreshness::Fresh,
+            last_rendered_at: Some("2026-01-01".to_string()),
+        };
+        let json = serde_json::to_string(&summary).unwrap();
+        assert!(json.contains("\"slug\":\"test\""));
+        assert!(json.contains("\"source_count\":5"));
+    }
+
+    #[test]
+    fn channel_render_stores_source_item_ids() {
+        let db = test_db();
+        let id = db
+            .create_channel("ids-test", "IDs Test", "Test", &[])
+            .unwrap();
+        let ids = vec![10, 20, 30];
+        let render = db
+            .save_channel_render(id, "# With Sources", &ids, Some("test-model"), None, None)
+            .unwrap();
+        assert_eq!(render.source_item_ids, ids);
+        assert_eq!(render.model.as_deref(), Some("test-model"));
+    }
+}

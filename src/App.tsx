@@ -39,6 +39,7 @@ const DecisionMemory = lazy(() => import('./components/DecisionMemory').then(m =
 const DelegationDashboard = lazy(() => import('./components/DelegationDashboard').then(m => ({ default: m.DelegationDashboard })));
 const AgentMemoryPanel = lazy(() => import('./components/AgentMemoryPanel').then(m => ({ default: m.AgentMemoryPanel })));
 const AutophagyInsights = lazy(() => import('./components/AutophagyInsights').then(m => ({ default: m.AutophagyInsights })));
+const DecisionJournal = lazy(() => import('./components/DecisionJournal').then(m => ({ default: m.DecisionJournal })));
 const AchievementsPanel = lazy(() => import('./components/AchievementsPanel').then(m => ({ default: m.AchievementsPanel })));
 const SovereignDeveloperProfile = lazy(() => import('./components/SovereignDeveloperProfile').then(m => ({ default: m.SovereignDeveloperProfile })));
 const ToolkitView = lazy(() => import('./components/toolkit/ToolkitView').then(m => ({ default: m.ToolkitView })));
@@ -378,6 +379,7 @@ function App() {
               {tier}
             </span>
             <button
+              data-settings-trigger
               onClick={() => setShowSettings(true)}
               className="px-4 py-2 text-sm bg-bg-secondary text-gray-300 border border-border rounded-lg hover:bg-bg-tertiary hover:border-orange-500/30 transition-all"
             >
@@ -450,6 +452,7 @@ function App() {
           <section aria-label={t('nav.insights', { defaultValue: 'Insights' })} className="space-y-6">
             <AchievementsPanel />
             <TechRadar />
+            <DecisionJournal />
             <DecisionMemory />
             <AutophagyInsights />
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

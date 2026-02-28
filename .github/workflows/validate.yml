@@ -106,7 +106,7 @@ jobs:
           fi
           COUNT=$(echo "$OUTPUT" | sed -n 's/.*ok\. \([0-9]*\) passed.*/\1/p' | tail -1)
           echo "Rust tests passed: $COUNT"
-          if [ -z "$COUNT" ] || [ "$COUNT" -lt 650 ]; then
-            echo "::error::Rust test count dropped below 650 (got ${COUNT:-0})"
+          if [ -z "$COUNT" ] || [ "$COUNT" -lt 900 ]; then
+            echo "::error::Rust test count dropped below 900 (got ${COUNT:-0})"
             exit 1
           fi
