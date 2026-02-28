@@ -1,6 +1,5 @@
 import { useCallback, useMemo, useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
-import { invoke } from '@tauri-apps/api/core';
 import { BriefingCard } from './BriefingCard';
 import { SignalActionCard } from './briefing/SignalActionCard';
 import { BriefingLoadingState, BriefingReadyState, BriefingNoDataState } from './BriefingEmptyStates';
@@ -40,25 +39,16 @@ export function BriefingView() {
   const generateFreeBriefing = useAppStore(s => s.generateFreeBriefing);
   const { isPro } = useLicense();
 
-  const [gapExpanded, setGapExpanded] = useState(false);
-  const [learningNarrative, setLearningNarrative] = useState<string | null>(null);
-  const [pulseAccuracy, setPulseAccuracy] = useState<number | null>(null);
+  const pulse = useAppStore(s => s.intelligencePulse);
+  const loadPulse = useAppStore(s => s.loadIntelligencePulse);
 
-  // Fetch learning narrative from intelligence pulse
+  const [gapExpanded, setGapExpanded] = useState(false);
+  const [metricsExpanded, setMetricsExpanded] = useState(false);
+
+  // Load intelligence pulse from store
   useEffect(() => {
-    const load = async () => {
-      try {
-        const pulse = await invoke<{ learning_narratives: string[]; calibration_accuracy: number }>('get_intelligence_pulse');
-        if (pulse?.learning_narratives?.length > 0) {
-          setLearningNarrative(pulse.learning_narratives[0]);
-        }
-        if (pulse?.calibration_accuracy != null) {
-          setPulseAccuracy(pulse.calibration_accuracy);
-        }
-      } catch { /* supplementary */ }
-    };
-    load();
-  }, []);
+    loadPulse();
+  }, [loadPulse]);
 
   // Intelligence gaps — non-healthy sources
   const gaps = useMemo(
@@ -261,10 +251,10 @@ export function BriefingView() {
       )}
 
       {/* 3. Learning Narrative Banner — one sentence from autophagy */}
-      {learningNarrative && (
+      {pulse?.learning_narratives?.[0] && (
         <div className="bg-bg-secondary border border-border rounded-lg px-4 py-2.5 flex items-center gap-3">
           <span className="text-[10px] text-text-muted uppercase tracking-wider shrink-0">System learned</span>
-          <p className="text-xs text-white">{learningNarrative}</p>
+          <p className="text-xs text-white">{pulse.learning_narratives[0]}</p>
         </div>
       )}
 
@@ -431,22 +421,31 @@ export function BriefingView() {
         )}
       </div>
 
-      {/* 6. Intelligence Metrics — collapsed footer */}
-      <details className="group">
-        <summary className="flex items-center gap-2 text-xs text-text-muted cursor-pointer py-2 list-none [&::-webkit-details-marker]:hidden">
+      {/* 6. Intelligence Metrics — collapsed footer with smooth animation */}
+      <div>
+        <button
+          onClick={() => setMetricsExpanded(prev => !prev)}
+          className="flex items-center gap-2 text-xs text-text-muted cursor-pointer py-2 w-full text-left"
+        >
           <span>Intelligence Metrics</span>
           <span className="text-[10px] bg-white/5 px-1.5 py-0.5 rounded">
-            {pulseAccuracy != null ? `${(pulseAccuracy * 100).toFixed(0)}% accuracy` : '\u2014'}
+            {pulse?.calibration_accuracy != null ? `${(pulse.calibration_accuracy * 100).toFixed(0)}% accuracy` : '\u2014'}
           </span>
-          <span className="ml-auto text-[10px] group-open:rotate-90 transition-transform">{'\u25B8'}</span>
-        </summary>
-        <div className="space-y-3 pt-2">
-          <EngagementPulse />
-          <IntelligencePulse />
-          <ScoringDelta />
-          <CompoundAdvantageScore />
+          <span className={`ml-auto text-[10px] transition-transform duration-200 ${metricsExpanded ? 'rotate-90' : ''}`}>{'\u25B8'}</span>
+        </button>
+        <div className={`grid transition-all duration-200 ease-in-out ${
+          metricsExpanded ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'
+        }`}>
+          <div className="overflow-hidden">
+            <div className="space-y-3 pt-2">
+              <EngagementPulse />
+              <IntelligencePulse />
+              <ScoringDelta />
+              <CompoundAdvantageScore />
+            </div>
+          </div>
         </div>
-      </details>
+      </div>
 
       {/* View all results link */}
       <div className="flex justify-center pt-2 pb-4">

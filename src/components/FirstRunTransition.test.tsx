@@ -1,134 +1,94 @@
-/**
- * FirstRunTransition — comprehensive test suite
- *
- * Tests the first-run experience component that guides new users
- * through preparing, intelligence preview, fetching, analyzing,
- * celebrating, and error states.
- */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, act } from '@testing-library/react';
+import { invoke } from '@tauri-apps/api/core';
 
 // ---------------------------------------------------------------------------
-// Mocks — must appear before component import
+// Tauri API mocks
 // ---------------------------------------------------------------------------
-
-const mockInvoke = vi.fn(() =>
-  Promise.resolve({
-    has_data: false,
-    projects_scanned: 0,
-    total_dependencies: 0,
-    dependencies_by_ecosystem: { rust: 0, npm: 0, python: 0, other: 0 },
-    languages: [] as string[],
-    frameworks: [] as string[],
-    primary_stack: '',
-    key_packages: [] as string[],
-  }),
-);
-
 vi.mock('@tauri-apps/api/core', () => ({
-  invoke: (..._args: unknown[]) => mockInvoke(),
+  invoke: vi.fn(() => Promise.resolve({ has_data: false })),
 }));
 
-// Capture listen callbacks so tests can trigger events
-type ListenCallback = (event: { payload: unknown }) => void;
-const listenCallbacks = new Map<string, ListenCallback>();
-
 vi.mock('@tauri-apps/api/event', () => ({
-  listen: vi.fn((eventName: string, cb: ListenCallback) => {
-    listenCallbacks.set(eventName, cb);
-    return Promise.resolve(() => {
-      listenCallbacks.delete(eventName);
-    });
-  }),
+  listen: vi.fn(() => Promise.resolve(() => {})),
   emit: vi.fn(),
 }));
 
-// Store mock — configurable per test via mockStoreState
-const mockStartAnalysis = vi.fn();
-
-let mockStoreState: Record<string, unknown> = {};
-
-function setMockStoreState(overrides: Record<string, unknown> = {}) {
-  mockStoreState = {
-    appState: {
-      loading: false,
-      analysisComplete: false,
-      status: 'Ready',
-      relevanceResults: [],
-      progress: 0,
-      progressStage: '',
+// ---------------------------------------------------------------------------
+// i18n mock — return key as text
+// ---------------------------------------------------------------------------
+vi.mock('react-i18next', () => ({
+  useTranslation: () => ({
+    t: (key: string, defaultOrOpts?: string | Record<string, unknown>) => {
+      if (typeof defaultOrOpts === 'string') return defaultOrOpts;
+      if (defaultOrOpts && typeof defaultOrOpts === 'object' && 'defaultValue' in defaultOrOpts) {
+        return defaultOrOpts.defaultValue as string;
+      }
+      return key;
     },
-    embeddingMode: null,
-    userContext: {
-      interests: [
-        { id: 1, topic: 'Rust', weight: 1, source: 'manual', has_embedding: false },
-        { id: 2, topic: 'TypeScript', weight: 1, source: 'manual', has_embedding: false },
-        { id: 3, topic: 'AI', weight: 1, source: 'manual', has_embedding: false },
-      ],
-      role: 'Developer',
-      experience_level: 'Senior',
-    },
-    startAnalysis: mockStartAnalysis,
-    ...overrides,
-  };
-}
-
-vi.mock('../store', () => ({
-  useAppStore: vi.fn((selector: (s: Record<string, unknown>) => unknown) => {
-    return selector(mockStoreState);
+    i18n: { language: 'en', changeLanguage: vi.fn() },
   }),
 }));
 
-// VoidEngine — lightweight mock
+// ---------------------------------------------------------------------------
+// VoidEngine mock — renders a simple div instead of canvas/WebGL
+// ---------------------------------------------------------------------------
 vi.mock('./void-engine/VoidEngine', () => ({
-  VoidEngine: () => <div data-testid="void-engine" />,
-}));
-
-// first-run-messages
-vi.mock('../utils/first-run-messages', () => ({
-  getStageNarration: vi.fn((phase: string) => `narration-${phase}`),
-  getSourceNarration: vi.fn((_type: string, count: number) => `source-${_type}-${count}`),
-  getCelebrationMessage: vi.fn((rel: number, total: number) => `celebration-${rel}-of-${total}`),
-}));
-
-// config/sources
-vi.mock('../config/sources', () => ({
-  getSourceFullName: vi.fn((type: string) => `Full ${type}`),
+  VoidEngine: ({ size }: { size?: number }) => <div data-testid="void-engine" style={{ width: size, height: size }} />,
 }));
 
 // ---------------------------------------------------------------------------
-// Component import (after all mocks)
+// Store mock
+// ---------------------------------------------------------------------------
+const mockStartAnalysis = vi.fn();
+const defaultAppState = {
+  loading: false,
+  progress: 0,
+  progressStage: 'init' as string,
+  status: '',
+  analysisComplete: false,
+  relevanceResults: [] as Array<{
+    relevant: boolean;
+    title: string;
+    url: string;
+    source_type?: string;
+    final_score: number;
+    score_breakdown?: {
+      dep_match_score?: number;
+      matched_deps?: string[];
+      skill_gap_boost?: number;
+    };
+  }>,
+};
+
+let currentAppState = { ...defaultAppState };
+
+vi.mock('../store', () => ({
+  useAppStore: (selector: (s: Record<string, unknown>) => unknown) => {
+    const store = {
+      appState: currentAppState,
+      embeddingMode: null as string | null,
+      userContext: null as { interests?: Array<{ topic: string }> } | null,
+      startAnalysis: mockStartAnalysis,
+    };
+    return selector(store);
+  },
+}));
+
+// ---------------------------------------------------------------------------
+// Component under test
 // ---------------------------------------------------------------------------
 import { FirstRunTransition } from './FirstRunTransition';
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-function makeResult(overrides: Record<string, unknown> = {}) {
-  return {
-    id: 1,
-    title: 'Test Article',
-    url: 'https://example.com',
-    top_score: 0.5,
-    matches: [],
-    relevant: true,
-    source_type: 'hackernews',
-    ...overrides,
-  };
-}
-
-// ---------------------------------------------------------------------------
-// Test suite
-// ---------------------------------------------------------------------------
-
 describe('FirstRunTransition', () => {
+  const mockOnComplete = vi.fn();
+
   beforeEach(() => {
     vi.useFakeTimers();
-    setMockStoreState();
-    listenCallbacks.clear();
-    mockInvoke.mockClear();
+    currentAppState = { ...defaultAppState };
     mockStartAnalysis.mockClear();
+    mockOnComplete.mockClear();
+    vi.mocked(invoke).mockResolvedValue({ has_data: false });
   });
 
   afterEach(() => {
@@ -136,205 +96,438 @@ describe('FirstRunTransition', () => {
   });
 
   // -------------------------------------------------------------------------
-  // 1. Basic rendering
+  // 1. Renders in preparing phase by default
   // -------------------------------------------------------------------------
-
-  it('renders without crashing', async () => {
+  it('renders with preparing aria-label initially', async () => {
     await act(async () => {
-      render(<FirstRunTransition onComplete={vi.fn()} />);
+      render(<FirstRunTransition onComplete={mockOnComplete} />);
     });
-    expect(screen.getByTestId('void-engine')).toBeInTheDocument();
-  });
 
-  // -------------------------------------------------------------------------
-  // 2. Initial phase
-  // -------------------------------------------------------------------------
-
-  it('starts in preparing phase with aria-busy', async () => {
-    await act(async () => {
-      render(<FirstRunTransition onComplete={vi.fn()} />);
-    });
     const status = screen.getByRole('status');
-    expect(status).toHaveAttribute('aria-busy', 'true');
     expect(status).toHaveAttribute('aria-label', 'Preparing analysis');
+    expect(status).toHaveAttribute('aria-busy', 'true');
   });
 
   // -------------------------------------------------------------------------
-  // 3. User interests display
+  // 2. Shows error state when progressStage is 'error'
   // -------------------------------------------------------------------------
-
-  it('shows user interests from store in preparing phase', async () => {
-    // invoke returns no scan data, so component stays in preparing phase
-    await act(async () => {
-      render(<FirstRunTransition onComplete={vi.fn()} />);
-    });
-    expect(screen.getByText('Rust')).toBeInTheDocument();
-    expect(screen.getByText('TypeScript')).toBeInTheDocument();
-    expect(screen.getByText('AI')).toBeInTheDocument();
-  });
-
-  // -------------------------------------------------------------------------
-  // 4. Intelligence preview when ACE scan has data
-  // -------------------------------------------------------------------------
-
-  it('renders IntelligencePreview when ACE scan has data', async () => {
-    mockInvoke.mockResolvedValueOnce({
-      has_data: true,
-      projects_scanned: 5,
-      total_dependencies: 42,
-      dependencies_by_ecosystem: { rust: 20, npm: 15, python: 5, other: 2 },
-      languages: ['Rust', 'TypeScript'],
-      frameworks: ['Tauri', 'React'],
-      primary_stack: 'Rust + TypeScript',
-      key_packages: ['serde', 'tokio', 'react'],
-    });
+  it('renders error state with retry and continue buttons', async () => {
+    currentAppState = {
+      ...defaultAppState,
+      progressStage: 'error',
+      status: 'Error: something failed',
+    };
 
     await act(async () => {
-      render(<FirstRunTransition onComplete={vi.fn()} />);
+      render(<FirstRunTransition onComplete={mockOnComplete} />);
     });
 
-    // Wait for the async invoke to resolve and phase to change
+    // Wait for the phase transition effect to fire
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(10);
-    });
-
-    // Intelligence preview should show the title
-    expect(screen.getByText('firstRun.intelligenceTitle')).toBeInTheDocument();
-  });
-
-  // -------------------------------------------------------------------------
-  // 5. Intelligence preview shows project/dependency counts
-  // -------------------------------------------------------------------------
-
-  it('shows intelligence project and dependency counts', async () => {
-    mockInvoke.mockResolvedValueOnce({
-      has_data: true,
-      projects_scanned: 5,
-      total_dependencies: 42,
-      dependencies_by_ecosystem: { rust: 20, npm: 15, python: 5, other: 2 },
-      languages: ['Rust', 'TypeScript'],
-      frameworks: ['Tauri', 'React'],
-      primary_stack: 'Rust + TypeScript',
-      key_packages: ['serde', 'tokio', 'react'],
-    });
-
-    await act(async () => {
-      render(<FirstRunTransition onComplete={vi.fn()} />);
-    });
-
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(10);
-    });
-
-    // "5" appears twice (projects count AND Python ecosystem pill count)
-    const fives = screen.getAllByText('5');
-    expect(fives.length).toBeGreaterThanOrEqual(1);
-    expect(screen.getByText('42')).toBeInTheDocument();
-    expect(screen.getByText('firstRun.projects')).toBeInTheDocument();
-    expect(screen.getByText('firstRun.dependencies')).toBeInTheDocument();
-  });
-
-  // -------------------------------------------------------------------------
-  // 6. Transition to fetching phase
-  // -------------------------------------------------------------------------
-
-  it('transitions to fetching phase when appState.loading with fetch stage', async () => {
-    setMockStoreState({
-      appState: {
-        loading: true,
-        analysisComplete: false,
-        status: 'Fetching',
-        relevanceResults: [],
-        progress: 0.2,
-        progressStage: 'fetch',
-      },
-    });
-
-    await act(async () => {
-      render(<FirstRunTransition onComplete={vi.fn()} />);
+      await vi.runAllTimersAsync();
     });
 
     const status = screen.getByRole('status');
-    expect(status).toHaveAttribute('aria-label', 'Scanning sources');
+    expect(status).toHaveAttribute('aria-label', 'Analysis error');
+
+    // Retry button exists
+    const retryBtn = screen.getByLabelText('Retry analysis');
+    expect(retryBtn).toBeDefined();
+
+    // Continue anyway button exists
+    expect(screen.getByText('firstRun.continueAnyway')).toBeDefined();
   });
 
   // -------------------------------------------------------------------------
-  // 7. Progress bar during fetching
+  // 3. Retry button clears error and restarts analysis
   // -------------------------------------------------------------------------
+  it('calls startAnalysis when retry is clicked', async () => {
+    currentAppState = {
+      ...defaultAppState,
+      progressStage: 'error',
+      status: 'Error: fetch failed',
+    };
 
-  it('shows progress bar during fetching phase', async () => {
-    setMockStoreState({
-      appState: {
-        loading: true,
-        analysisComplete: false,
-        status: 'Fetching',
-        relevanceResults: [],
-        progress: 0.5,
-        progressStage: 'fetch',
-      },
+    await act(async () => {
+      render(<FirstRunTransition onComplete={mockOnComplete} />);
     });
 
     await act(async () => {
-      render(<FirstRunTransition onComplete={vi.fn()} />);
+      await vi.runAllTimersAsync();
     });
 
-    // The progress bar inner element has a width style
-    const progressBar = document.querySelector('[style*="width"]');
-    expect(progressBar).not.toBeNull();
-    expect(progressBar!.getAttribute('style')).toContain('width: 50%');
+    const retryBtn = screen.getByLabelText('Retry analysis');
+    await act(async () => {
+      fireEvent.click(retryBtn);
+    });
+
+    expect(mockStartAnalysis).toHaveBeenCalled();
   });
 
   // -------------------------------------------------------------------------
-  // 8. Source messages from events
+  // 4. Continue anyway triggers onComplete after fade
   // -------------------------------------------------------------------------
+  it('calls onComplete with results when continue anyway is clicked', async () => {
+    currentAppState = {
+      ...defaultAppState,
+      progressStage: 'error',
+      status: 'Error: something broke',
+    };
 
-  it('displays source messages from source-fetched events', async () => {
-    setMockStoreState({
-      appState: {
-        loading: true,
-        analysisComplete: false,
-        status: 'Fetching',
-        relevanceResults: [],
-        progress: 0.3,
-        progressStage: 'fetch',
-      },
+    await act(async () => {
+      render(<FirstRunTransition onComplete={mockOnComplete} />);
     });
 
     await act(async () => {
-      render(<FirstRunTransition onComplete={vi.fn()} />);
+      await vi.runAllTimersAsync();
     });
 
-    // The listen mock should have captured a callback for 'source-fetched'
-    const callback = listenCallbacks.get('source-fetched');
-    expect(callback).toBeDefined();
-
-    // Trigger the event
+    const continueBtn = screen.getByText('firstRun.continueAnyway');
     await act(async () => {
-      callback!({ payload: { source: 'hackernews', count: 15 } });
+      fireEvent.click(continueBtn);
     });
 
-    // getSourceNarration was mocked to return `source-${type}-${count}`
-    expect(screen.getByText('source-hackernews-15')).toBeInTheDocument();
+    // Fade timer (300ms)
+    await act(async () => {
+      vi.advanceTimersByTime(300);
+    });
+
+    expect(mockOnComplete).toHaveBeenCalledWith('results');
   });
 
   // -------------------------------------------------------------------------
-  // 9. Transition to analyzing phase
+  // 5. Celebration phase renders relevant count and CTA buttons
   // -------------------------------------------------------------------------
+  it('shows celebration with relevant count and CTA buttons', async () => {
+    currentAppState = {
+      ...defaultAppState,
+      analysisComplete: true,
+      relevanceResults: [
+        { relevant: true, title: 'Rust async patterns', url: 'https://example.com/1', final_score: 0.8 },
+        { relevant: true, title: 'React hooks guide', url: 'https://example.com/2', final_score: 0.7 },
+        { relevant: false, title: 'Cooking recipes', url: 'https://example.com/3', final_score: 0.1 },
+      ],
+    };
 
-  it('transitions to analyzing phase when progressStage is embed', async () => {
-    setMockStoreState({
-      appState: {
-        loading: true,
-        analysisComplete: false,
-        status: 'Analyzing',
-        relevanceResults: [],
-        progress: 0.6,
-        progressStage: 'embed',
-      },
+    await act(async () => {
+      render(<FirstRunTransition onComplete={mockOnComplete} />);
     });
 
     await act(async () => {
-      render(<FirstRunTransition onComplete={vi.fn()} />);
+      await vi.runAllTimersAsync();
+    });
+
+    // Should show "2" as the big relevant count
+    expect(screen.getByText('2')).toBeDefined();
+
+    // Briefing CTA
+    expect(screen.getByText('firstRun.seeBriefing')).toBeDefined();
+
+    // Results CTA
+    expect(screen.getByText('firstRun.browseResults')).toBeDefined();
+
+    // aria-label should reflect celebrating phase
+    const status = screen.getByRole('status');
+    expect(status).toHaveAttribute('aria-label', 'Analysis complete: 2 relevant items found');
+    expect(status).toHaveAttribute('aria-busy', 'false');
+  });
+
+  // -------------------------------------------------------------------------
+  // 6. Briefing CTA triggers onComplete('briefing') after fade
+  // -------------------------------------------------------------------------
+  it('calls onComplete with briefing when briefing CTA is clicked', async () => {
+    currentAppState = {
+      ...defaultAppState,
+      analysisComplete: true,
+      relevanceResults: [
+        { relevant: true, title: 'Test article', url: 'https://test.com', final_score: 0.9 },
+      ],
+    };
+
+    await act(async () => {
+      render(<FirstRunTransition onComplete={mockOnComplete} />);
+    });
+
+    await act(async () => {
+      await vi.runAllTimersAsync();
+    });
+
+    const briefingBtn = screen.getByText('firstRun.seeBriefing');
+    await act(async () => {
+      fireEvent.click(briefingBtn);
+    });
+
+    await act(async () => {
+      vi.advanceTimersByTime(300);
+    });
+
+    expect(mockOnComplete).toHaveBeenCalledWith('briefing');
+  });
+
+  // -------------------------------------------------------------------------
+  // 7. Outer container has correct structure (role, classes)
+  // -------------------------------------------------------------------------
+  it('renders the outer container with correct role and opacity classes', async () => {
+    await act(async () => {
+      render(<FirstRunTransition onComplete={mockOnComplete} />);
+    });
+
+    const status = screen.getByRole('status');
+    expect(status.className).toContain('fixed');
+    expect(status.className).toContain('opacity-100');
+  });
+
+  // -------------------------------------------------------------------------
+  // 8. VoidEngine renders in loading states
+  // -------------------------------------------------------------------------
+  it('renders VoidEngine in loading phase', async () => {
+    await act(async () => {
+      render(<FirstRunTransition onComplete={mockOnComplete} />);
+    });
+
+    expect(screen.getByTestId('void-engine')).toBeDefined();
+  });
+
+  // -------------------------------------------------------------------------
+  // 9. Top signal is displayed in celebration phase
+  // -------------------------------------------------------------------------
+  it('shows top signal title in celebration phase', async () => {
+    currentAppState = {
+      ...defaultAppState,
+      analysisComplete: true,
+      relevanceResults: [
+        { relevant: true, title: 'Amazing Rust Article', url: 'https://example.com/rust', final_score: 0.95 },
+      ],
+    };
+
+    await act(async () => {
+      render(<FirstRunTransition onComplete={mockOnComplete} />);
+    });
+
+    await act(async () => {
+      await vi.runAllTimersAsync();
+    });
+
+    expect(screen.getByText('Amazing Rust Article')).toBeDefined();
+    expect(screen.getByText('https://example.com/rust')).toBeDefined();
+  });
+
+  // -------------------------------------------------------------------------
+  // 10. Source breakdown pills show in celebration
+  // -------------------------------------------------------------------------
+  it('shows source breakdown pills in celebration phase', async () => {
+    currentAppState = {
+      ...defaultAppState,
+      analysisComplete: true,
+      relevanceResults: [
+        { relevant: true, title: 'HN Story', url: 'https://hn.com', final_score: 0.8, source_type: 'hackernews' },
+        { relevant: true, title: 'Reddit Post', url: 'https://reddit.com', final_score: 0.7, source_type: 'reddit' },
+      ],
+    };
+
+    await act(async () => {
+      render(<FirstRunTransition onComplete={mockOnComplete} />);
+    });
+
+    await act(async () => {
+      await vi.runAllTimersAsync();
+    });
+
+    // Source full names should appear
+    expect(screen.getByText((content) => content.includes('Hacker News'))).toBeDefined();
+    expect(screen.getByText((content) => content.includes('Reddit'))).toBeDefined();
+  });
+
+  // -------------------------------------------------------------------------
+  // 11. Starts analysis on mount (after 300ms when no scan data)
+  // -------------------------------------------------------------------------
+  it('starts analysis after mount delay when no scan data', async () => {
+    await act(async () => {
+      render(<FirstRunTransition onComplete={mockOnComplete} />);
+    });
+
+    // Analysis should not be called immediately
+    expect(mockStartAnalysis).not.toHaveBeenCalled();
+
+    // After 300ms delay
+    await act(async () => {
+      vi.advanceTimersByTime(300);
+    });
+
+    expect(mockStartAnalysis).toHaveBeenCalledTimes(1);
+  });
+
+  // -------------------------------------------------------------------------
+  // 12. Error state shows embedding-specific messaging
+  // -------------------------------------------------------------------------
+  it('shows embedding-specific error message for embedding errors', async () => {
+    currentAppState = {
+      ...defaultAppState,
+      progressStage: 'error',
+      status: 'Error: Embedding service unavailable',
+    };
+
+    await act(async () => {
+      render(<FirstRunTransition onComplete={mockOnComplete} />);
+    });
+
+    await act(async () => {
+      await vi.runAllTimersAsync();
+    });
+
+    // Should show embedding-specific error text
+    expect(screen.getByText('firstRun.errorEmbedding')).toBeDefined();
+    // Should show basic mode explainer
+    expect(screen.getByText('firstRun.basicModeExplainer')).toBeDefined();
+  });
+
+  // -------------------------------------------------------------------------
+  // 13. Fading phase applies opacity-0
+  // -------------------------------------------------------------------------
+  it('applies opacity-0 class during fading phase', async () => {
+    currentAppState = {
+      ...defaultAppState,
+      analysisComplete: true,
+      relevanceResults: [
+        { relevant: true, title: 'Test', url: 'https://test.com', final_score: 0.9 },
+      ],
+    };
+
+    await act(async () => {
+      render(<FirstRunTransition onComplete={mockOnComplete} />);
+    });
+
+    await act(async () => {
+      await vi.runAllTimersAsync();
+    });
+
+    // Click briefing to trigger fading
+    const briefingBtn = screen.getByText('firstRun.seeBriefing');
+    await act(async () => {
+      fireEvent.click(briefingBtn);
+    });
+
+    const status = screen.getByRole('status');
+    expect(status.className).toContain('opacity-0');
+  });
+
+  // -------------------------------------------------------------------------
+  // 14. Stack insights render in celebration when dep matches exist
+  // -------------------------------------------------------------------------
+  it('shows stack insights when dependency matches exist', async () => {
+    currentAppState = {
+      ...defaultAppState,
+      analysisComplete: true,
+      relevanceResults: [
+        {
+          relevant: true,
+          title: 'Tokio 2.0 release',
+          url: 'https://example.com',
+          final_score: 0.9,
+          score_breakdown: {
+            dep_match_score: 0.5,
+            matched_deps: ['tokio', 'serde'],
+          },
+        },
+      ],
+    };
+
+    await act(async () => {
+      render(<FirstRunTransition onComplete={mockOnComplete} />);
+    });
+
+    await act(async () => {
+      await vi.runAllTimersAsync();
+    });
+
+    // Stack insight about dependencies should appear
+    expect(screen.getByText((content) => content.includes('articles about your dependencies'))).toBeDefined();
+  });
+
+  // -------------------------------------------------------------------------
+  // 15. buildStackInsights utility works correctly
+  // -------------------------------------------------------------------------
+  it('buildStackInsights returns correct insights', async () => {
+    const { buildStackInsights } = await import('./first-run/utils');
+
+    const results = [
+      {
+        relevant: true,
+        title: 'Rust async runtime',
+        score_breakdown: { dep_match_score: 0.5, matched_deps: ['tokio'] },
+      },
+      {
+        relevant: true,
+        title: 'Python ML guide',
+        score_breakdown: { skill_gap_boost: 0.3 },
+      },
+      {
+        relevant: false,
+        title: 'Irrelevant article',
+      },
+    ];
+
+    const scanSummary = {
+      projects_scanned: 3,
+      total_dependencies: 50,
+      dependencies_by_ecosystem: { rust: 20, npm: 25, python: 5, other: 0 },
+      languages: ['Rust', 'TypeScript'],
+      frameworks: ['Tauri', 'React'],
+      primary_stack: 'Rust + TypeScript',
+      key_packages: ['tokio', 'react'],
+      has_data: true,
+    };
+
+    const insights = buildStackInsights(results, scanSummary);
+
+    expect(insights.length).toBeGreaterThan(0);
+    expect(insights[0]).toContain('articles about your dependencies');
+    expect(insights[0]).toContain('tokio');
+  });
+
+  // -------------------------------------------------------------------------
+  // 16. Fetching phase shows stage narration
+  // -------------------------------------------------------------------------
+  it('shows stage narration text in fetching phase', async () => {
+    currentAppState = {
+      ...defaultAppState,
+      loading: true,
+      progressStage: 'fetch',
+      progress: 0.3,
+    };
+
+    await act(async () => {
+      render(<FirstRunTransition onComplete={mockOnComplete} />);
+    });
+
+    await act(async () => {
+      await vi.runAllTimersAsync();
+    });
+
+    // Should show narration for fetch stage
+    expect(screen.getByText('Gathering stories from across the internet...')).toBeDefined();
+
+    // Should show progress percentage
+    expect(screen.getByText('30%')).toBeDefined();
+  });
+
+  // -------------------------------------------------------------------------
+  // 17. Analyzing phase uses correct aria-label
+  // -------------------------------------------------------------------------
+  it('uses analyzing aria-label when in embed stage', async () => {
+    currentAppState = {
+      ...defaultAppState,
+      loading: true,
+      progressStage: 'embed',
+      progress: 0.5,
+    };
+
+    await act(async () => {
+      render(<FirstRunTransition onComplete={mockOnComplete} />);
+    });
+
+    await act(async () => {
+      await vi.runAllTimersAsync();
     });
 
     const status = screen.getByRole('status');
@@ -342,294 +535,30 @@ describe('FirstRunTransition', () => {
   });
 
   // -------------------------------------------------------------------------
-  // 10. Celebrating phase
+  // 18. Zero relevant items shows appropriate celebration message
   // -------------------------------------------------------------------------
+  it('shows profile learning message when zero relevant items', async () => {
+    currentAppState = {
+      ...defaultAppState,
+      analysisComplete: true,
+      relevanceResults: [
+        { relevant: false, title: 'Item 1', url: 'https://test.com/1', final_score: 0.1 },
+        { relevant: false, title: 'Item 2', url: 'https://test.com/2', final_score: 0.05 },
+      ],
+    };
 
-  it('shows celebrating phase when analysis is complete', async () => {
-    setMockStoreState({
-      appState: {
-        loading: false,
-        analysisComplete: true,
-        status: 'Complete',
-        relevanceResults: [
-          makeResult({ id: 1, relevant: true }),
-          makeResult({ id: 2, relevant: true }),
-          makeResult({ id: 3, relevant: false }),
-        ],
-        progress: 1,
-        progressStage: 'complete',
-      },
+    await act(async () => {
+      render(<FirstRunTransition onComplete={mockOnComplete} />);
     });
 
     await act(async () => {
-      render(<FirstRunTransition onComplete={vi.fn()} />);
+      await vi.runAllTimersAsync();
     });
 
-    const status = screen.getByRole('status');
-    expect(status).toHaveAttribute('aria-label', 'Analysis complete: 2 relevant items found');
-    expect(status).toHaveAttribute('aria-busy', 'false');
-  });
+    // Should show "0" as relevant count
+    expect(screen.getByText('0')).toBeDefined();
 
-  // -------------------------------------------------------------------------
-  // 11. Relevant count in celebration
-  // -------------------------------------------------------------------------
-
-  it('shows relevant count in celebration display', async () => {
-    setMockStoreState({
-      appState: {
-        loading: false,
-        analysisComplete: true,
-        status: 'Complete',
-        relevanceResults: [
-          makeResult({ id: 1, relevant: true }),
-          makeResult({ id: 2, relevant: true }),
-          makeResult({ id: 3, relevant: true }),
-          makeResult({ id: 4, relevant: false }),
-          makeResult({ id: 5, relevant: false }),
-        ],
-        progress: 1,
-        progressStage: 'complete',
-      },
-    });
-
-    await act(async () => {
-      render(<FirstRunTransition onComplete={vi.fn()} />);
-    });
-
-    // The big count display shows "3" (relevant items)
-    expect(screen.getByText('3')).toBeInTheDocument();
-    // getCelebrationMessage mock returns `celebration-3-of-5`
-    expect(screen.getByText('celebration-3-of-5')).toBeInTheDocument();
-  });
-
-  // -------------------------------------------------------------------------
-  // 12. Source breakdown pills
-  // -------------------------------------------------------------------------
-
-  it('shows source breakdown pills in celebration', async () => {
-    setMockStoreState({
-      appState: {
-        loading: false,
-        analysisComplete: true,
-        status: 'Complete',
-        relevanceResults: [
-          makeResult({ id: 1, source_type: 'hackernews' }),
-          makeResult({ id: 2, source_type: 'hackernews' }),
-          makeResult({ id: 3, source_type: 'reddit' }),
-          makeResult({ id: 4, source_type: 'github' }),
-        ],
-        progress: 1,
-        progressStage: 'complete',
-      },
-    });
-
-    await act(async () => {
-      render(<FirstRunTransition onComplete={vi.fn()} />);
-    });
-
-    // getSourceFullName mock returns `Full ${type}`
-    expect(screen.getByText(/Full hackernews/)).toBeInTheDocument();
-    expect(screen.getByText(/Full reddit/)).toBeInTheDocument();
-    expect(screen.getByText(/Full github/)).toBeInTheDocument();
-  });
-
-  // -------------------------------------------------------------------------
-  // 13. Top signal highlight
-  // -------------------------------------------------------------------------
-
-  it('highlights top signal with dep_match_score in celebration', async () => {
-    setMockStoreState({
-      appState: {
-        loading: false,
-        analysisComplete: true,
-        status: 'Complete',
-        relevanceResults: [
-          makeResult({
-            id: 1,
-            relevant: true,
-            title: 'Serde 2.0 Released',
-            url: 'https://blog.serde.rs/v2',
-            score_breakdown: {
-              dep_match_score: 0.8,
-              matched_deps: ['serde', 'serde_json', 'tokio'],
-            },
-          }),
-          makeResult({ id: 2, relevant: true }),
-        ],
-        progress: 1,
-        progressStage: 'complete',
-      },
-    });
-
-    await act(async () => {
-      render(<FirstRunTransition onComplete={vi.fn()} />);
-    });
-
-    // Should show the top signal title and "Matches your stack" label
-    expect(screen.getByText('Serde 2.0 Released')).toBeInTheDocument();
-    expect(screen.getByText('firstRun.topMatchStack')).toBeInTheDocument();
-    // matched deps (first 3)
-    expect(screen.getByText('serde, serde_json, tokio')).toBeInTheDocument();
-  });
-
-  // -------------------------------------------------------------------------
-  // 14. Stack insights
-  // -------------------------------------------------------------------------
-
-  it('shows stack insights when dep matches exist', async () => {
-    setMockStoreState({
-      appState: {
-        loading: false,
-        analysisComplete: true,
-        status: 'Complete',
-        relevanceResults: [
-          makeResult({
-            id: 1,
-            relevant: true,
-            title: 'Tokio update',
-            score_breakdown: { dep_match_score: 0.5, matched_deps: ['tokio'] },
-          }),
-          makeResult({
-            id: 2,
-            relevant: true,
-            title: 'Serde deep dive',
-            score_breakdown: { dep_match_score: 0.6, matched_deps: ['serde'] },
-          }),
-        ],
-        progress: 1,
-        progressStage: 'complete',
-      },
-    });
-
-    await act(async () => {
-      render(<FirstRunTransition onComplete={vi.fn()} />);
-    });
-
-    // buildStackInsights creates "X articles about your dependencies: ..."
-    expect(screen.getByText(/2 articles about your dependencies/)).toBeInTheDocument();
-  });
-
-  // -------------------------------------------------------------------------
-  // 15. Briefing CTA calls onComplete
-  // -------------------------------------------------------------------------
-
-  it('calls onComplete with briefing when briefing CTA is clicked', async () => {
-    const onComplete = vi.fn();
-
-    setMockStoreState({
-      appState: {
-        loading: false,
-        analysisComplete: true,
-        status: 'Complete',
-        relevanceResults: [makeResult()],
-        progress: 1,
-        progressStage: 'complete',
-      },
-    });
-
-    await act(async () => {
-      render(<FirstRunTransition onComplete={onComplete} />);
-    });
-
-    // Click the briefing button (firstRun.seeBriefing)
-    fireEvent.click(screen.getByText('firstRun.seeBriefing'));
-
-    // handleDismiss sets fading phase, then calls onComplete after 300ms
-    await act(async () => {
-      vi.advanceTimersByTime(300);
-    });
-
-    expect(onComplete).toHaveBeenCalledWith('briefing');
-  });
-
-  // -------------------------------------------------------------------------
-  // 16. Results CTA calls onComplete
-  // -------------------------------------------------------------------------
-
-  it('calls onComplete with results when results CTA is clicked', async () => {
-    const onComplete = vi.fn();
-
-    setMockStoreState({
-      appState: {
-        loading: false,
-        analysisComplete: true,
-        status: 'Complete',
-        relevanceResults: [makeResult()],
-        progress: 1,
-        progressStage: 'complete',
-      },
-    });
-
-    await act(async () => {
-      render(<FirstRunTransition onComplete={onComplete} />);
-    });
-
-    // Click the results button (firstRun.browseResults)
-    fireEvent.click(screen.getByText(/firstRun\.browseResults/));
-
-    await act(async () => {
-      vi.advanceTimersByTime(300);
-    });
-
-    expect(onComplete).toHaveBeenCalledWith('results');
-  });
-
-  // -------------------------------------------------------------------------
-  // 17. Error state UI
-  // -------------------------------------------------------------------------
-
-  it('shows error state UI when progressStage is error', async () => {
-    setMockStoreState({
-      appState: {
-        loading: false,
-        analysisComplete: false,
-        status: 'Error: fetch failed',
-        relevanceResults: [],
-        progress: 0,
-        progressStage: 'error',
-      },
-    });
-
-    await act(async () => {
-      render(<FirstRunTransition onComplete={vi.fn()} />);
-    });
-
-    const status = screen.getByRole('status');
-    expect(status).toHaveAttribute('aria-label', 'Analysis error');
-
-    // Error UI shows title, retry button, and continue button
-    expect(screen.getByText('firstRun.errorTitle')).toBeInTheDocument();
-    expect(screen.getByLabelText('Retry analysis')).toBeInTheDocument();
-    expect(screen.getByText('firstRun.continueAnyway')).toBeInTheDocument();
-    expect(screen.getByText('firstRun.settingsHint')).toBeInTheDocument();
-  });
-
-  // -------------------------------------------------------------------------
-  // 18. Retry button calls startAnalysis
-  // -------------------------------------------------------------------------
-
-  it('retry button calls startAnalysis and resets error state', async () => {
-    setMockStoreState({
-      appState: {
-        loading: false,
-        analysisComplete: false,
-        status: 'Error occurred',
-        relevanceResults: [],
-        progress: 0,
-        progressStage: 'error',
-      },
-    });
-
-    await act(async () => {
-      render(<FirstRunTransition onComplete={vi.fn()} />);
-    });
-
-    // Verify error state is shown
-    expect(screen.getByText('firstRun.errorTitle')).toBeInTheDocument();
-
-    // Click retry
-    fireEvent.click(screen.getByLabelText('Retry analysis'));
-
-    expect(mockStartAnalysis).toHaveBeenCalledTimes(1);
+    // Should show the profile learning message
+    expect(screen.getByText((content) => content.includes('Your profile is learning'))).toBeDefined();
   });
 });

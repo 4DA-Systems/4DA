@@ -97,7 +97,7 @@ export function ResultsView({
                     </span>
                   )}
                 </div>
-                <p className="text-xs text-gray-500">
+                <p className="text-xs text-gray-500" aria-live="polite">
                   {state.analysisComplete
                     ? t('results.itemsRelevant', { items: filteredResults.length, relevant: filteredResults.filter((r) => r.relevant).length })
                     : t('results.clickAnalyze')}
