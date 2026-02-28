@@ -79,4 +79,8 @@ window_boost: number,
 /**
  * ID of matched decision window
  */
-matched_window_id: bigint | null, };
+matched_window_id: bigint | null, 
+/**
+ * Skill gap boost from sovereign profile intelligence (0.0-0.15)
+ */
+skill_gap_boost: number, };

@@ -9,6 +9,7 @@ on:
 env:
   CARGO_TERM_COLOR: always
   RUST_BACKTRACE: 1
+  NODE_OPTIONS: '--max-old-space-size=4096'
 
 jobs:
   frontend:
@@ -16,6 +17,8 @@ jobs:
     runs-on: [self-hosted, windows, 4da]
     steps:
       - uses: actions/checkout@v4
+        with:
+          clean: false
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -41,14 +44,12 @@ jobs:
     runs-on: [self-hosted, windows, 4da]
     steps:
       - uses: actions/checkout@v4
+        with:
+          clean: false
 
       - name: Install dependencies
         shell: bash
-        run: cd mcp-4da-server && pnpm install --frozen-lockfile --no-optional || cd mcp-4da-server && pnpm install --frozen-lockfile
-
-      - name: Rebuild native modules
-        shell: bash
-        run: cd mcp-4da-server && pnpm rebuild better-sqlite3 2>/dev/null || true
+        run: cd mcp-4da-server && pnpm install --frozen-lockfile
 
       - name: Build
         shell: bash
@@ -60,10 +61,12 @@ jobs:
 
   rust:
     name: Rust
-    needs: frontend
+    needs: mcp-server
     runs-on: [self-hosted, windows, 4da]
     steps:
       - uses: actions/checkout@v4
+        with:
+          clean: false
 
       - name: Check formatting
         shell: bash
