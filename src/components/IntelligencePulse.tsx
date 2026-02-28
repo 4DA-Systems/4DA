@@ -26,6 +26,7 @@ interface IntelligencePulseData {
   source_quality: SourceQuality[];
   anti_patterns_detected: number;
   total_cycles: number;
+  learning_narratives: string[];
 }
 
 function formatSourceLabel(source: string): string {

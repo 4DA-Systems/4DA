@@ -193,9 +193,9 @@ export const SovereignDeveloperProfile = memo(function SovereignDeveloperProfile
           {exportStatus && <span className="text-[10px] text-green-400">{exportStatus}</span>}
           <button
             onClick={() => handleExport('markdown')}
-            className="px-2 py-1 text-[10px] text-text-secondary hover:text-white border border-border rounded transition-colors"
+            className="px-2.5 py-1 text-[10px] text-white bg-white/10 hover:bg-white/15 border border-white/20 rounded font-medium transition-colors"
           >
-            Export MD
+            Copy Profile
           </button>
           <button
             onClick={() => handleExport('json')}

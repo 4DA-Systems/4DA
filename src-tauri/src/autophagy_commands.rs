@@ -157,6 +157,8 @@ pub struct IntelligencePulse {
     pub anti_patterns_detected: i64,
     /// Total autophagy cycles ever run
     pub total_cycles: i64,
+    /// Human-readable narrative insights generated from autophagy data
+    pub learning_narratives: Vec<String>,
 }
 
 /// Return a rich intelligence pulse for the frontend dashboard.
@@ -349,6 +351,48 @@ pub async fn get_intelligence_pulse() -> Result<IntelligencePulse> {
         .query_row("SELECT COUNT(*) FROM autophagy_cycles", [], |r| r.get(0))
         .unwrap_or(0);
 
+    // ── 9. Generate human-readable learning narratives ────────────────────
+    let mut learning_narratives = Vec::new();
+
+    for cal in &top_calibrations {
+        let direction = if cal.delta > 0.0 {
+            "increasing"
+        } else {
+            "decreasing"
+        };
+        let pct = (cal.delta.abs() * 100.0).round();
+        learning_narratives.push(format!(
+            "Your {} relevance is {} by {:.0}% \u{2014} based on {} interactions",
+            cal.topic, direction, pct, cal.sample_size
+        ));
+    }
+
+    if let (Some(best), Some(worst)) = (source_quality.first(), source_quality.last()) {
+        if source_quality.len() >= 2 && best.engagement_rate > worst.engagement_rate * 2.0 {
+            learning_narratives.push(format!(
+                "{} delivers {:.0}x more relevant content than {} for your stack",
+                best.source_type,
+                best.engagement_rate / worst.engagement_rate.max(0.01),
+                worst.source_type
+            ));
+        }
+    }
+
+    if rejection_rate > 95.0 {
+        learning_narratives.push(format!(
+            "Processed {} items, surfaced {} ({:.1}% rejection rate) \u{2014} your filter is sharp",
+            items_analyzed_7d, items_surfaced_7d, rejection_rate
+        ));
+    }
+
+    if anti_patterns_detected > 0 {
+        learning_narratives.push(format!(
+            "Detected {} scoring anti-pattern{} \u{2014} self-correcting",
+            anti_patterns_detected,
+            if anti_patterns_detected > 1 { "s" } else { "" }
+        ));
+    }
+
     Ok(IntelligencePulse {
         items_analyzed_7d,
         items_surfaced_7d,
@@ -358,6 +402,7 @@ pub async fn get_intelligence_pulse() -> Result<IntelligencePulse> {
         source_quality,
         anti_patterns_detected,
         total_cycles,
+        learning_narratives,
     })
 }
 
@@ -439,6 +484,7 @@ mod tests {
             }],
             anti_patterns_detected: 2,
             total_cycles: 7,
+            learning_narratives: vec!["Test narrative".to_string()],
         };
 
         assert_eq!(pulse.items_analyzed_7d, 1500);
@@ -465,6 +511,7 @@ mod tests {
             source_quality: vec![],
             anti_patterns_detected: 0,
             total_cycles: 3,
+            learning_narratives: vec![],
         };
         let json = serde_json::to_string(&pulse).expect("serialize");
         let parsed: serde_json::Value = serde_json::from_str(&json).expect("deserialize");

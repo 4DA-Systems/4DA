@@ -1,5 +1,6 @@
 import { useCallback, useMemo, useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
+import { invoke } from '@tauri-apps/api/core';
 import { BriefingCard } from './BriefingCard';
 import { SignalActionCard } from './briefing/SignalActionCard';
 import { BriefingLoadingState, BriefingReadyState, BriefingNoDataState } from './BriefingEmptyStates';
@@ -40,6 +41,24 @@ export function BriefingView() {
   const { isPro } = useLicense();
 
   const [gapExpanded, setGapExpanded] = useState(false);
+  const [learningNarrative, setLearningNarrative] = useState<string | null>(null);
+  const [pulseAccuracy, setPulseAccuracy] = useState<number | null>(null);
+
+  // Fetch learning narrative from intelligence pulse
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const pulse = await invoke<{ learning_narratives: string[]; calibration_accuracy: number }>('get_intelligence_pulse');
+        if (pulse?.learning_narratives?.length > 0) {
+          setLearningNarrative(pulse.learning_narratives[0]);
+        }
+        if (pulse?.calibration_accuracy != null) {
+          setPulseAccuracy(pulse.calibration_accuracy);
+        }
+      } catch { /* supplementary */ }
+    };
+    load();
+  }, []);
 
   // Intelligence gaps — non-healthy sources
   const gaps = useMemo(
@@ -223,7 +242,10 @@ export function BriefingView() {
   // Briefing content view
   return (
     <section aria-label={t('briefing.intelligenceBriefing')} className="bg-bg-primary rounded-lg space-y-6">
-      {/* Signal Action Cards — critical/high priority items */}
+      {/* 1. Decision Windows — urgency first */}
+      <DecisionWindowsPanel />
+
+      {/* 2. Signal Action Cards — critical/high priority items */}
       {signalItems.length > 0 && (
         <div className="space-y-3">
           {signalItems.map(item => (
@@ -238,13 +260,58 @@ export function BriefingView() {
         </div>
       )}
 
-      {/* Decision Windows — time-bounded opportunities */}
-      <DecisionWindowsPanel />
+      {/* 3. Learning Narrative Banner — one sentence from autophagy */}
+      {learningNarrative && (
+        <div className="bg-bg-secondary border border-border rounded-lg px-4 py-2.5 flex items-center gap-3">
+          <span className="text-[10px] text-text-muted uppercase tracking-wider shrink-0">System learned</span>
+          <p className="text-xs text-white">{learningNarrative}</p>
+        </div>
+      )}
 
-      {/* Compound Advantage Score */}
-      <CompoundAdvantageScore />
+      {/* 4. Top items as BriefingCards — immediate value */}
+      {topItems.length > 0 && (
+        <div>
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-sm font-medium text-white">{t('briefing.topPicks')}</h3>
+            <span className="text-xs text-gray-500">{t('briefing.itemCount', { count: topItems.length })}</span>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {topItems.map(item => {
+              const hasWorkMatch = item.score_breakdown?.intent_boost && item.score_breakdown.intent_boost > 0;
+              const hasDep = item.score_breakdown?.dep_match_score && item.score_breakdown.dep_match_score > 0;
+              const matchedDeps = item.score_breakdown?.matched_deps;
+              return (
+                <div key={item.id} className="relative">
+                  {(hasWorkMatch || hasDep) && (
+                    <div className="flex items-center gap-1.5 mb-1.5">
+                      {hasWorkMatch && (
+                        <span className="text-[10px] px-1.5 py-0.5 bg-purple-500/10 text-purple-400 border border-purple-500/20 rounded font-medium">
+                          {t('briefing.workingOn')}
+                        </span>
+                      )}
+                      {hasDep && (
+                        <span className="text-[10px] px-1.5 py-0.5 bg-blue-500/10 text-blue-400 border border-blue-500/20 rounded font-medium">
+                          {matchedDeps ? t('briefing.stackDeps', { deps: matchedDeps.slice(0, 3).join(', ') }) : t('briefing.stack')}
+                        </span>
+                      )}
+                    </div>
+                  )}
+                  <BriefingCard
+                    item={item}
+                    explanation={item.explanation}
+                    feedbackGiven={feedbackGiven[item.id]}
+                    onSave={(it) => recordInteraction(it.id, 'save', it)}
+                    onDismiss={(it) => recordInteraction(it.id, 'dismiss', it)}
+                    onRecordInteraction={(it) => recordInteraction(it.id, 'click', it)}
+                  />
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
-      {/* Briefing header */}
+      {/* 5. Briefing content */}
       <div className="bg-bg-secondary rounded-lg border border-orange-500/20 overflow-hidden">
         <div className="px-5 py-4 border-b border-orange-500/10 flex items-center justify-between bg-orange-500/5">
           <div className="flex items-center gap-3">
@@ -364,57 +431,22 @@ export function BriefingView() {
         )}
       </div>
 
-      {/* Engagement Pulse */}
-      <EngagementPulse />
-
-      {/* Intelligence Pulse — system learning summary */}
-      <IntelligencePulse />
-
-      {/* Scoring Delta — topic weight shifts from feedback */}
-      <ScoringDelta />
-
-      {/* Top items as BriefingCards */}
-      {topItems.length > 0 && (
-        <div>
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="text-sm font-medium text-white">{t('briefing.topPicks')}</h3>
-            <span className="text-xs text-gray-500">{t('briefing.itemCount', { count: topItems.length })}</span>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            {topItems.map(item => {
-              const hasWorkMatch = item.score_breakdown?.intent_boost && item.score_breakdown.intent_boost > 0;
-              const hasDep = item.score_breakdown?.dep_match_score && item.score_breakdown.dep_match_score > 0;
-              const matchedDeps = item.score_breakdown?.matched_deps;
-              return (
-                <div key={item.id} className="relative">
-                  {(hasWorkMatch || hasDep) && (
-                    <div className="flex items-center gap-1.5 mb-1.5">
-                      {hasWorkMatch && (
-                        <span className="text-[10px] px-1.5 py-0.5 bg-purple-500/10 text-purple-400 border border-purple-500/20 rounded font-medium">
-                          {t('briefing.workingOn')}
-                        </span>
-                      )}
-                      {hasDep && (
-                        <span className="text-[10px] px-1.5 py-0.5 bg-blue-500/10 text-blue-400 border border-blue-500/20 rounded font-medium">
-                          {matchedDeps ? t('briefing.stackDeps', { deps: matchedDeps.slice(0, 3).join(', ') }) : t('briefing.stack')}
-                        </span>
-                      )}
-                    </div>
-                  )}
-                  <BriefingCard
-                    item={item}
-                    explanation={item.explanation}
-                    feedbackGiven={feedbackGiven[item.id]}
-                    onSave={(it) => recordInteraction(it.id, 'save', it)}
-                    onDismiss={(it) => recordInteraction(it.id, 'dismiss', it)}
-                    onRecordInteraction={(it) => recordInteraction(it.id, 'click', it)}
-                  />
-                </div>
-              );
-            })}
-          </div>
+      {/* 6. Intelligence Metrics — collapsed footer */}
+      <details className="group">
+        <summary className="flex items-center gap-2 text-xs text-text-muted cursor-pointer py-2 list-none [&::-webkit-details-marker]:hidden">
+          <span>Intelligence Metrics</span>
+          <span className="text-[10px] bg-white/5 px-1.5 py-0.5 rounded">
+            {pulseAccuracy != null ? `${(pulseAccuracy * 100).toFixed(0)}% accuracy` : '\u2014'}
+          </span>
+          <span className="ml-auto text-[10px] group-open:rotate-90 transition-transform">{'\u25B8'}</span>
+        </summary>
+        <div className="space-y-3 pt-2">
+          <EngagementPulse />
+          <IntelligencePulse />
+          <ScoringDelta />
+          <CompoundAdvantageScore />
         </div>
-      )}
+      </details>
 
       {/* View all results link */}
       <div className="flex justify-center pt-2 pb-4">

@@ -54,7 +54,7 @@ export const SignalChainsPanel = memo(function SignalChainsPanel() {
           </div>
           <div>
             <h2 className="font-medium text-white text-sm">{t('signals.title')}</h2>
-            <p className="text-xs text-gray-500">{t('signals.noChains', 'No active chains — system is monitoring')}</p>
+            <p className="text-xs text-gray-500">{t('signals.noChains', 'No active chains — monitoring for emerging patterns')}</p>
           </div>
         </div>
       ) : (

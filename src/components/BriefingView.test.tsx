@@ -4,7 +4,7 @@ import { BriefingView } from './BriefingView';
 
 // Mock Tauri API
 vi.mock('@tauri-apps/api/core', () => ({
-  invoke: vi.fn(),
+  invoke: vi.fn().mockResolvedValue({ learning_narratives: [], calibration_accuracy: 0 }),
 }));
 
 // Mock useLicense hook

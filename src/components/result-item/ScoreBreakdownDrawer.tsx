@@ -1,6 +1,7 @@
 import { memo, useCallback, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
+import { useAppStore } from '../../store';
 import type { ScoreBreakdown, SourceRelevance } from '../../types';
 
 interface ScoreBreakdownDrawerProps {
@@ -166,6 +167,26 @@ const EFFECT_COLORS = {
   neutral: { bar: 'bg-gray-500/40', text: 'text-gray-400', label: 'text-gray-300' },
 };
 
+const FACTOR_DESCRIPTIONS: Record<string, string> = {
+  context: 'context matching',
+  interest: 'interest relevance',
+  dependency: 'dependency match',
+  ace: 'project context boost',
+  intent: 'work intent boost',
+  skill_gap: 'skill gap detection',
+  stack: 'stack relevance',
+  window: 'decision window boost',
+  feedback: 'learned preference',
+  freshness: 'freshness weighting',
+  quality: 'content quality',
+  novelty: 'novelty scoring',
+  domain: 'domain relevance',
+  affinity: 'topic affinity',
+  anti: 'anti-topic penalty',
+  competing: 'competing tech penalty',
+  confirmation: 'signal confirmation',
+};
+
 export const ScoreBreakdownDrawer = memo(function ScoreBreakdownDrawer({
   breakdown,
   finalScore,
@@ -177,7 +198,15 @@ export const ScoreBreakdownDrawer = memo(function ScoreBreakdownDrawer({
   comparePool,
 }: ScoreBreakdownDrawerProps) {
   const { t } = useTranslation();
+  const addToast = useAppStore(s => s.addToast);
   const [selectedCompareId, setSelectedCompareId] = useState<number | null>(null);
+  const [feedbackCount, setFeedbackCount] = useState(0);
+
+  const onFeedbackGiven = useCallback((factorKey: string, vote: 'up' | 'down') => {
+    setFeedbackCount(c => c + 1);
+    const desc = FACTOR_DESCRIPTIONS[factorKey] || factorKey;
+    addToast('info', `Noted: I'll ${vote === 'up' ? 'boost' : 'reduce'} ${desc} for similar content`);
+  }, [addToast]);
 
   // Resolve comparison: prop takes priority, then user selection from pool
   const selectedItem = selectedCompareId != null
@@ -210,6 +239,11 @@ export const ScoreBreakdownDrawer = memo(function ScoreBreakdownDrawer({
           <span className="text-[10px] text-gray-500 uppercase tracking-wider">
             {t('scoreDrawer.title', 'Score Breakdown')}
           </span>
+          {feedbackCount > 0 && (
+            <span className="text-[10px] text-green-400">
+              {feedbackCount} factor{feedbackCount !== 1 ? 's' : ''} rated this session
+            </span>
+          )}
         </div>
         <button
           onClick={onClose}
@@ -253,6 +287,7 @@ export const ScoreBreakdownDrawer = memo(function ScoreBreakdownDrawer({
             factors={boosts}
             comparisons={compareFactors}
             itemId={itemId}
+            onFeedbackGiven={onFeedbackGiven}
           />
         )}
 
@@ -263,6 +298,7 @@ export const ScoreBreakdownDrawer = memo(function ScoreBreakdownDrawer({
             factors={penalties}
             comparisons={compareFactors}
             itemId={itemId}
+            onFeedbackGiven={onFeedbackGiven}
           />
         )}
 
@@ -273,6 +309,7 @@ export const ScoreBreakdownDrawer = memo(function ScoreBreakdownDrawer({
             factors={neutrals}
             comparisons={compareFactors}
             itemId={itemId}
+            onFeedbackGiven={onFeedbackGiven}
           />
         )}
 
@@ -336,12 +373,13 @@ export const ScoreBreakdownDrawer = memo(function ScoreBreakdownDrawer({
 // ============================================================================
 
 function FactorGroup({
-  label, factors, comparisons, itemId,
+  label, factors, comparisons, itemId, onFeedbackGiven,
 }: {
   label: string;
   factors: Factor[];
   comparisons: Factor[] | null;
   itemId: number;
+  onFeedbackGiven: (factorKey: string, vote: 'up' | 'down') => void;
 }) {
   return (
     <div>
@@ -353,6 +391,7 @@ function FactorGroup({
             factor={f}
             compareValue={comparisons?.find(c => c.key === f.key)?.value}
             itemId={itemId}
+            onFeedbackGiven={onFeedbackGiven}
           />
         ))}
       </div>
@@ -364,10 +403,11 @@ function FactorGroup({
 // Factor Bar — single scoring factor with bar, value, and teach-me feedback
 // ============================================================================
 
-function FactorBar({ factor, compareValue, itemId }: {
+function FactorBar({ factor, compareValue, itemId, onFeedbackGiven }: {
   factor: Factor;
   compareValue?: number;
   itemId: number;
+  onFeedbackGiven: (factorKey: string, vote: 'up' | 'down') => void;
 }) {
   const [feedbackGiven, setFeedbackGiven] = useState<'up' | 'down' | null>(null);
   const colors = EFFECT_COLORS[factor.effect];
@@ -383,10 +423,11 @@ function FactorBar({ factor, compareValue, itemId }: {
         itemTopics: [factor.key],
         itemSource: 'score_feedback',
       });
+      onFeedbackGiven(factor.key, vote);
     } catch {
       // Feedback is best-effort
     }
-  }, [itemId, factor.key]);
+  }, [itemId, factor.key, onFeedbackGiven]);
 
   return (
     <div className="group flex items-center gap-2">
