@@ -369,3 +369,96 @@ pub(crate) fn set_relevance_threshold(value: f32) {
     let clamped = value.clamp(0.30, 0.70);
     RELEVANCE_THRESHOLD_BITS.store(clamped.to_bits(), Ordering::Relaxed);
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::atomic::Ordering;
+
+    #[test]
+    fn test_get_db_path_points_to_data_dir() {
+        let path = get_db_path();
+        let path_str = path.to_string_lossy();
+        assert!(path_str.contains("data") && path_str.ends_with("4da.db"));
+    }
+
+    #[test]
+    fn test_register_sqlite_vec_extension_is_idempotent() {
+        register_sqlite_vec_extension();
+        register_sqlite_vec_extension();
+        let conn = rusqlite::Connection::open_in_memory().unwrap();
+        let result: String = conn
+            .query_row("SELECT vec_version()", [], |row| row.get(0))
+            .unwrap();
+        assert!(!result.is_empty());
+    }
+
+    #[test]
+    fn test_normalize_context_path_wsl_to_windows() {
+        let result = normalize_context_path("/mnt/c/Users/foo");
+        if cfg!(windows) {
+            assert_eq!(result, PathBuf::from("C:\\Users\\foo"));
+        }
+    }
+
+    #[test]
+    fn test_normalize_context_path_preserves_native_paths() {
+        let native = if cfg!(windows) {
+            "D:\\Projects\\myapp"
+        } else {
+            "/home/user/projects"
+        };
+        assert_eq!(normalize_context_path(native), PathBuf::from(native));
+    }
+
+    #[test]
+    fn test_normalize_context_path_wsl_drive_letters() {
+        if cfg!(windows) {
+            assert_eq!(
+                normalize_context_path("/mnt/d/code"),
+                PathBuf::from("D:\\code")
+            );
+        }
+    }
+
+    #[test]
+    fn test_relevance_threshold_default() {
+        RELEVANCE_THRESHOLD_BITS.store(0, Ordering::Relaxed);
+        assert!((get_relevance_threshold() - 0.35).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn test_set_and_get_relevance_threshold() {
+        set_relevance_threshold(0.50);
+        assert!((get_relevance_threshold() - 0.50).abs() < f32::EPSILON);
+        RELEVANCE_THRESHOLD_BITS.store(0, Ordering::Relaxed);
+    }
+
+    #[test]
+    fn test_relevance_threshold_clamps_to_bounds() {
+        set_relevance_threshold(0.10);
+        assert!((get_relevance_threshold() - 0.30).abs() < f32::EPSILON);
+        set_relevance_threshold(0.95);
+        assert!((get_relevance_threshold() - 0.70).abs() < f32::EPSILON);
+        RELEVANCE_THRESHOLD_BITS.store(0, Ordering::Relaxed);
+    }
+
+    #[test]
+    fn test_analysis_abort_flag_toggle() {
+        let abort = get_analysis_abort();
+        abort.store(false, Ordering::Relaxed);
+        assert!(!abort.load(Ordering::Relaxed));
+        abort.store(true, Ordering::Relaxed);
+        assert!(abort.load(Ordering::Relaxed));
+        abort.store(false, Ordering::Relaxed);
+    }
+
+    #[test]
+    fn test_supported_extensions_contains_expected_types() {
+        assert!(SUPPORTED_EXTENSIONS.contains(&"rs"));
+        assert!(SUPPORTED_EXTENSIONS.contains(&"ts"));
+        assert!(SUPPORTED_EXTENSIONS.contains(&"py"));
+        assert!(SUPPORTED_EXTENSIONS.contains(&"md"));
+        assert_eq!(SUPPORTED_EXTENSIONS.len(), 6);
+    }
+}

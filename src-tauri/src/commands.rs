@@ -736,3 +736,138 @@ pub(crate) async fn get_diagnostics() -> Result<crate::diagnostics::DiagnosticsS
     let db_path = db.db_path().to_path_buf();
     Ok(crate::diagnostics::collect_diagnostics(db, &db_path))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::types::SourceRelevance;
+
+    fn make_item(score: f32, context: f32, interest: f32) -> SourceRelevance {
+        SourceRelevance {
+            id: 1,
+            title: "Test Item".to_string(),
+            url: Some("https://example.com".to_string()),
+            top_score: score,
+            matches: vec![],
+            relevant: score >= 0.35,
+            context_score: context,
+            interest_score: interest,
+            excluded: false,
+            excluded_by: None,
+            source_type: "hackernews".to_string(),
+            explanation: None,
+            confidence: None,
+            score_breakdown: None,
+            signal_type: None,
+            signal_priority: None,
+            signal_action: None,
+            signal_triggers: None,
+            signal_horizon: None,
+            similar_count: 0,
+            similar_titles: vec![],
+            serendipity: false,
+            streets_engine: None,
+        }
+    }
+
+    #[test]
+    fn escape_html_handles_ampersand() {
+        assert_eq!(escape_html("a & b"), "a &amp; b");
+    }
+
+    #[test]
+    fn escape_html_handles_angle_brackets() {
+        assert_eq!(escape_html("<script>"), "&lt;script&gt;");
+    }
+
+    #[test]
+    fn escape_html_handles_quotes() {
+        assert_eq!(escape_html(r#"say "hello""#), "say &quot;hello&quot;");
+    }
+
+    #[test]
+    fn escape_html_handles_single_quotes() {
+        assert_eq!(escape_html("it's"), "it&#x27;s");
+    }
+
+    #[test]
+    fn escape_html_preserves_safe_text() {
+        assert_eq!(escape_html("hello world"), "hello world");
+    }
+
+    #[test]
+    fn escape_html_handles_all_special_chars() {
+        assert_eq!(
+            escape_html("<div class=\"a\" data-x='b'>&</div>"),
+            "&lt;div class=&quot;a&quot; data-x=&#x27;b&#x27;&gt;&amp;&lt;/div&gt;"
+        );
+    }
+
+    #[test]
+    fn narrative_strong_match_above_60_percent() {
+        let item = make_item(0.75, 0.0, 0.0);
+        let result = build_autopsy_narrative(&item, &[], &[], 10.0);
+        assert!(result.contains("strong match"));
+        assert!(result.contains("75%"));
+    }
+
+    #[test]
+    fn narrative_above_threshold() {
+        let item = make_item(0.45, 0.0, 0.0);
+        let result = build_autopsy_narrative(&item, &[], &[], 10.0);
+        assert!(result.contains("above the relevance threshold"));
+    }
+
+    #[test]
+    fn narrative_below_threshold() {
+        let item = make_item(0.20, 0.0, 0.0);
+        let result = build_autopsy_narrative(&item, &[], &[], 10.0);
+        assert!(result.contains("below the relevance threshold"));
+    }
+
+    #[test]
+    fn narrative_includes_tech_stack() {
+        let item = make_item(0.50, 0.0, 0.0);
+        let tech = vec!["Rust".to_string(), "TypeScript".to_string()];
+        let result = build_autopsy_narrative(&item, &tech, &[], 10.0);
+        assert!(result.contains("Rust, TypeScript"));
+        assert!(result.contains("tech stack"));
+    }
+
+    #[test]
+    fn narrative_includes_active_topics() {
+        let item = make_item(0.50, 0.0, 0.0);
+        let active = vec!["WebAssembly".to_string()];
+        let result = build_autopsy_narrative(&item, &[], &active, 10.0);
+        assert!(result.contains("WebAssembly"));
+        assert!(result.contains("active in"));
+    }
+
+    #[test]
+    fn narrative_freshness_boost() {
+        let item = make_item(0.50, 0.0, 0.0);
+        let result = build_autopsy_narrative(&item, &[], &[], 1.0);
+        assert!(result.contains("freshness boost"));
+    }
+
+    #[test]
+    fn narrative_staleness_penalty() {
+        let item = make_item(0.50, 0.0, 0.0);
+        let result = build_autopsy_narrative(&item, &[], &[], 48.0);
+        assert!(result.contains("staleness"));
+    }
+
+    #[test]
+    fn narrative_context_match() {
+        let item = make_item(0.50, 0.5, 0.0);
+        let result = build_autopsy_narrative(&item, &[], &[], 10.0);
+        assert!(result.contains("actively working on"));
+    }
+
+    #[test]
+    fn narrative_interest_match() {
+        let item = make_item(0.50, 0.0, 0.5);
+        let result = build_autopsy_narrative(&item, &[], &[], 10.0);
+        assert!(result.contains("declared interests"));
+    }
+}
