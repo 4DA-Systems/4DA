@@ -1,7 +1,7 @@
 import { memo, useCallback, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
-import type { ScoreBreakdown } from '../../types';
+import type { ScoreBreakdown, SourceRelevance } from '../../types';
 
 interface ScoreBreakdownDrawerProps {
   breakdown: ScoreBreakdown;
@@ -12,6 +12,8 @@ interface ScoreBreakdownDrawerProps {
   compareBreakdown?: ScoreBreakdown;
   compareScore?: number;
   compareTitle?: string;
+  /** Pool of items available for comparison selection */
+  comparePool?: SourceRelevance[];
 }
 
 interface Factor {
@@ -68,9 +70,9 @@ function extractFactors(b: ScoreBreakdown): Factor[] {
       effect: 'boost', format: 'raw', max: 0.20,
     });
   }
-  if ((b.skill_gap_boost ?? 0) > 0) {
+  if ((b.stack_boost ?? 0) > 0) {
     factors.push({
-      key: 'stack', label: 'Stack pain point', value: b.skill_gap_boost ?? 0,
+      key: 'stack', label: 'Stack pain point', value: b.stack_boost ?? 0,
       effect: 'boost', format: 'raw', max: 0.20,
     });
   }
@@ -169,11 +171,22 @@ export const ScoreBreakdownDrawer = memo(function ScoreBreakdownDrawer({
   finalScore,
   itemId,
   onClose,
-  compareBreakdown,
-  compareScore,
-  compareTitle,
+  compareBreakdown: compareBreakdownProp,
+  compareScore: compareScoreProp,
+  compareTitle: compareTitleProp,
+  comparePool,
 }: ScoreBreakdownDrawerProps) {
   const { t } = useTranslation();
+  const [selectedCompareId, setSelectedCompareId] = useState<number | null>(null);
+
+  // Resolve comparison: prop takes priority, then user selection from pool
+  const selectedItem = selectedCompareId != null
+    ? comparePool?.find(i => i.id === selectedCompareId)
+    : null;
+  const compareBreakdown = compareBreakdownProp ?? selectedItem?.score_breakdown;
+  const compareScore = compareScoreProp ?? selectedItem?.top_score;
+  const compareTitle = compareTitleProp ?? selectedItem?.title;
+
   const factors = extractFactors(breakdown);
   const compareFactors = compareBreakdown ? extractFactors(compareBreakdown) : null;
 
@@ -263,18 +276,56 @@ export const ScoreBreakdownDrawer = memo(function ScoreBreakdownDrawer({
           />
         )}
 
-        {/* Comparison header */}
-        {compareBreakdown && compareScore != null && (
-          <div className="pt-2 border-t border-border/50">
-            <p className="text-[10px] text-gray-500 uppercase tracking-wider mb-1">
-              {t('scoreDrawer.comparing', 'Comparing with')}
-            </p>
-            <p className="text-xs text-gray-400 truncate">{compareTitle}</p>
-            <p className="text-sm font-mono text-white mt-1">
-              {Math.round(compareScore * 100)}% vs {Math.round(finalScore * 100)}%
-            </p>
-          </div>
-        )}
+        {/* Comparison section */}
+        <div className="pt-2 border-t border-border/50">
+          {compareBreakdown && compareScore != null ? (
+            <div className="flex items-center justify-between">
+              <div className="min-w-0">
+                <p className="text-[10px] text-gray-500 uppercase tracking-wider mb-1">
+                  {t('scoreDrawer.comparing', 'Comparing with')}
+                </p>
+                <p className="text-xs text-gray-400 truncate">{compareTitle}</p>
+                <p className="text-sm font-mono text-white mt-1">
+                  {Math.round(compareScore * 100)}% vs {Math.round(finalScore * 100)}%
+                  <span className={`ml-2 text-xs ${compareScore > finalScore ? 'text-green-400' : compareScore < finalScore ? 'text-amber-400' : 'text-gray-500'}`}>
+                    ({compareScore > finalScore ? '+' : ''}{Math.round((compareScore - finalScore) * 100)})
+                  </span>
+                </p>
+              </div>
+              {selectedCompareId != null && (
+                <button
+                  onClick={() => setSelectedCompareId(null)}
+                  className="text-[10px] text-gray-600 hover:text-white px-2 py-1"
+                  aria-label="Clear comparison"
+                >
+                  &times;
+                </button>
+              )}
+            </div>
+          ) : comparePool && comparePool.length > 1 ? (
+            <div>
+              <p className="text-[10px] text-gray-500 uppercase tracking-wider mb-1.5">
+                {t('scoreDrawer.compareWith', 'Compare with')}
+              </p>
+              <select
+                value=""
+                onChange={(e) => setSelectedCompareId(Number(e.target.value))}
+                className="w-full bg-bg-tertiary text-xs text-gray-300 rounded border border-border px-2 py-1.5 focus:border-white/30 focus:outline-none"
+              >
+                <option value="" disabled>{t('scoreDrawer.selectItem', 'Select an item...')}</option>
+                {comparePool
+                  .filter(i => i.id !== itemId && i.score_breakdown)
+                  .slice(0, 20)
+                  .map(i => (
+                    <option key={i.id} value={i.id}>
+                      {Math.round(i.top_score * 100)}% — {i.title.slice(0, 60)}
+                    </option>
+                  ))
+                }
+              </select>
+            </div>
+          ) : null}
+        </div>
       </div>
     </div>
   );
