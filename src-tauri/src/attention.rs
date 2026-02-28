@@ -267,3 +267,204 @@ pub fn get_attention_report(period_days: Option<u32>) -> Result<AttentionReport,
     info!(target: "4da::attention", period_days = days, "Generating attention report");
     generate_report(days)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn make_engagement(topic: &str, interactions: u32, percent: f32) -> TopicEngagement {
+        TopicEngagement {
+            topic: topic.to_string(),
+            interactions,
+            percent_of_total: percent,
+            sentiment: 0.5,
+        }
+    }
+
+    fn make_codebase_topic(topic: &str, source: &str) -> CodebaseTopic {
+        CodebaseTopic {
+            topic: topic.to_string(),
+            file_count: 1,
+            source: source.to_string(),
+        }
+    }
+
+    #[test]
+    fn attention_report_serde_roundtrip() {
+        let report = AttentionReport {
+            period_days: 30,
+            topic_engagement: vec![TopicEngagement {
+                topic: "rust".to_string(),
+                interactions: 15,
+                percent_of_total: 45.0,
+                sentiment: 0.8,
+            }],
+            codebase_topics: vec![CodebaseTopic {
+                topic: "rust".to_string(),
+                file_count: 50,
+                source: "detected_language".to_string(),
+            }],
+            blind_spots: vec![],
+            attention_trend: vec![TrendPoint {
+                date: "2026-02-28".to_string(),
+                topic: "rust".to_string(),
+                engagement_level: 0.65,
+            }],
+        };
+        let json = serde_json::to_string(&report).unwrap();
+        let deserialized: AttentionReport = serde_json::from_str(&json).unwrap();
+        assert_eq!(deserialized.period_days, 30);
+        assert_eq!(deserialized.topic_engagement.len(), 1);
+        assert_eq!(deserialized.topic_engagement[0].topic, "rust");
+        assert!((deserialized.topic_engagement[0].sentiment - 0.8).abs() < 0.001);
+    }
+
+    #[test]
+    fn blind_spot_serde_roundtrip() {
+        let bs = BlindSpot {
+            topic: "python".to_string(),
+            in_codebase: true,
+            engagement_level: 0.02,
+            gap_description: "Python is in your codebase but rarely engaged".to_string(),
+            risk_level: "high".to_string(),
+        };
+        let json = serde_json::to_string(&bs).unwrap();
+        let deserialized: BlindSpot = serde_json::from_str(&json).unwrap();
+        assert_eq!(deserialized.topic, "python");
+        assert!(deserialized.in_codebase);
+        assert_eq!(deserialized.risk_level, "high");
+    }
+
+    #[test]
+    fn identify_blind_spots_finds_low_engagement_codebase_topics() {
+        let engagement = vec![
+            make_engagement("rust", 20, 60.0),
+            make_engagement("react", 10, 30.0),
+        ];
+        let codebase = vec![
+            make_codebase_topic("rust", "detected_language"),
+            make_codebase_topic("python", "detected_language"),
+            make_codebase_topic("docker", "detected_tool"),
+        ];
+        let spots = identify_blind_spots(&engagement, &codebase);
+        // python and docker have 0 engagement → both should be blind spots
+        assert_eq!(spots.len(), 2);
+        let topics: Vec<&str> = spots.iter().map(|s| s.topic.as_str()).collect();
+        assert!(topics.contains(&"python"));
+        assert!(topics.contains(&"docker"));
+    }
+
+    #[test]
+    fn identify_blind_spots_skips_high_engagement_topics() {
+        let engagement = vec![make_engagement("rust", 20, 80.0)];
+        let codebase = vec![make_codebase_topic("rust", "detected_language")];
+        // rust has 80% engagement → should NOT be a blind spot
+        let spots = identify_blind_spots(&engagement, &codebase);
+        assert!(spots.is_empty());
+    }
+
+    #[test]
+    fn identify_blind_spots_assigns_high_risk_to_language_framework() {
+        let engagement = vec![];
+        let codebase = vec![
+            make_codebase_topic("python", "detected_language"),
+            make_codebase_topic("redis", "detected_tool"),
+        ];
+        let spots = identify_blind_spots(&engagement, &codebase);
+        let python_spot = spots.iter().find(|s| s.topic == "python").unwrap();
+        let redis_spot = spots.iter().find(|s| s.topic == "redis").unwrap();
+        assert_eq!(python_spot.risk_level, "high");
+        assert_eq!(redis_spot.risk_level, "medium");
+    }
+
+    #[test]
+    fn identify_blind_spots_threshold_at_5_percent() {
+        // 4.9% engagement → blind spot (below 5%)
+        let engagement = vec![make_engagement("go", 5, 4.9)];
+        let codebase = vec![make_codebase_topic("go", "detected_language")];
+        let spots = identify_blind_spots(&engagement, &codebase);
+        assert_eq!(spots.len(), 1);
+        assert_eq!(spots[0].topic, "go");
+
+        // 5.1% engagement → NOT a blind spot
+        let engagement = vec![make_engagement("go", 5, 5.1)];
+        let spots2 = identify_blind_spots(&engagement, &codebase);
+        assert!(spots2.is_empty());
+    }
+
+    #[test]
+    fn identify_blind_spots_truncates_to_10() {
+        let engagement = vec![];
+        let codebase: Vec<CodebaseTopic> = (0..15)
+            .map(|i| make_codebase_topic(&format!("topic_{}", i), "detected_tool"))
+            .collect();
+        let spots = identify_blind_spots(&engagement, &codebase);
+        assert_eq!(spots.len(), 10);
+    }
+
+    #[test]
+    fn identify_blind_spots_case_insensitive_matching() {
+        let engagement = vec![make_engagement("Rust", 20, 80.0)];
+        let codebase = vec![make_codebase_topic("rust", "detected_language")];
+        // "Rust" in engagement should match "rust" in codebase (case-insensitive)
+        let spots = identify_blind_spots(&engagement, &codebase);
+        assert!(spots.is_empty());
+    }
+
+    #[test]
+    fn identify_blind_spots_sets_in_codebase_true() {
+        let engagement = vec![];
+        let codebase = vec![make_codebase_topic("typescript", "detected_language")];
+        let spots = identify_blind_spots(&engagement, &codebase);
+        assert_eq!(spots.len(), 1);
+        assert!(spots[0].in_codebase);
+        assert_eq!(spots[0].engagement_level, 0.0);
+    }
+
+    #[test]
+    fn identify_blind_spots_gap_description_includes_topic_and_source() {
+        let engagement = vec![];
+        let codebase = vec![make_codebase_topic("tailwind", "detected_framework")];
+        let spots = identify_blind_spots(&engagement, &codebase);
+        assert_eq!(spots.len(), 1);
+        assert!(spots[0].gap_description.contains("tailwind"));
+        assert!(spots[0].gap_description.contains("detected_framework"));
+    }
+
+    #[test]
+    fn identify_blind_spots_framework_source_is_high_risk() {
+        let engagement = vec![];
+        let codebase = vec![make_codebase_topic("react", "detected_framework")];
+        let spots = identify_blind_spots(&engagement, &codebase);
+        assert_eq!(spots.len(), 1);
+        assert_eq!(spots[0].risk_level, "high");
+    }
+
+    #[test]
+    fn topic_engagement_serde_preserves_float_precision() {
+        let te = TopicEngagement {
+            topic: "testing".to_string(),
+            interactions: 7,
+            percent_of_total: 33.33,
+            sentiment: -0.5,
+        };
+        let json = serde_json::to_string(&te).unwrap();
+        let deserialized: TopicEngagement = serde_json::from_str(&json).unwrap();
+        assert!((deserialized.percent_of_total - 33.33).abs() < 0.01);
+        assert!((deserialized.sentiment - (-0.5)).abs() < 0.001);
+    }
+
+    #[test]
+    fn trend_point_serde_roundtrip() {
+        let tp = TrendPoint {
+            date: "2026-03-01".to_string(),
+            topic: "kubernetes".to_string(),
+            engagement_level: 0.42,
+        };
+        let json = serde_json::to_string(&tp).unwrap();
+        let deserialized: TrendPoint = serde_json::from_str(&json).unwrap();
+        assert_eq!(deserialized.date, "2026-03-01");
+        assert_eq!(deserialized.topic, "kubernetes");
+        assert!((deserialized.engagement_level - 0.42).abs() < 0.001);
+    }
+}

@@ -215,3 +215,149 @@ fn has_word_boundary_match(text: &str, identifier: &str) -> bool {
 // ============================================================================
 // Tauri Commands
 // ============================================================================
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn reverse_mention_serde_roundtrip() {
+        let mention = ReverseMention {
+            source_item_id: 42,
+            title: "4DA mentioned on HN".to_string(),
+            url: Some("https://news.ycombinator.com/item?id=123".to_string()),
+            mentioned_project: "4da".to_string(),
+            mention_context: "...discussing 4DA as a privacy-first...".to_string(),
+            source_type: "hackernews".to_string(),
+            discovered_at: "2026-03-01T10:00:00".to_string(),
+        };
+        let json = serde_json::to_string(&mention).unwrap();
+        let deserialized: ReverseMention = serde_json::from_str(&json).unwrap();
+        assert_eq!(deserialized.source_item_id, 42);
+        assert_eq!(deserialized.mentioned_project, "4da");
+        assert!(deserialized.url.is_some());
+    }
+
+    #[test]
+    fn reverse_mention_with_none_url() {
+        let mention = ReverseMention {
+            source_item_id: 1,
+            title: "Test".to_string(),
+            url: None,
+            mentioned_project: "test-proj".to_string(),
+            mention_context: "context".to_string(),
+            source_type: "reddit".to_string(),
+            discovered_at: "2026-03-01".to_string(),
+        };
+        let json = serde_json::to_string(&mention).unwrap();
+        assert!(json.contains("null"));
+        let deserialized: ReverseMention = serde_json::from_str(&json).unwrap();
+        assert_eq!(deserialized.url, None);
+    }
+
+    #[test]
+    fn extract_project_name_from_unix_path() {
+        assert_eq!(
+            extract_project_name("/home/user/projects/my-app"),
+            Some("my-app".to_string())
+        );
+    }
+
+    #[test]
+    fn extract_project_name_from_windows_path() {
+        assert_eq!(
+            extract_project_name("D:\\Projects\\4DA"),
+            Some("4da".to_string())
+        );
+    }
+
+    #[test]
+    fn extract_project_name_root_path() {
+        // Root paths might not have a file_name
+        let result = extract_project_name("/");
+        // Path::file_name for "/" returns None
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn is_too_generic_rejects_common_dirs() {
+        assert!(is_too_generic("src"));
+        assert!(is_too_generic("app"));
+        assert!(is_too_generic("lib"));
+        assert!(is_too_generic("test"));
+        assert!(is_too_generic("tests"));
+        assert!(is_too_generic("build"));
+        assert!(is_too_generic("dist"));
+        assert!(is_too_generic("node_modules"));
+        assert!(is_too_generic("target"));
+    }
+
+    #[test]
+    fn is_too_generic_accepts_real_project_names() {
+        assert!(!is_too_generic("4da"));
+        assert!(!is_too_generic("my-app"));
+        assert!(!is_too_generic("tauri"));
+        assert!(!is_too_generic("react"));
+    }
+
+    #[test]
+    fn has_word_boundary_match_exact_match() {
+        assert!(has_word_boundary_match("Using 4da for development", "4da"));
+    }
+
+    #[test]
+    fn has_word_boundary_match_at_start() {
+        assert!(has_word_boundary_match("4da is great", "4da"));
+    }
+
+    #[test]
+    fn has_word_boundary_match_at_end() {
+        assert!(has_word_boundary_match("I love 4da", "4da"));
+    }
+
+    #[test]
+    fn has_word_boundary_match_rejects_substring() {
+        // "react" inside "reactivity" should NOT match
+        assert!(!has_word_boundary_match(
+            "reactivity is the future",
+            "react"
+        ));
+    }
+
+    #[test]
+    fn has_word_boundary_match_case_insensitive() {
+        assert!(has_word_boundary_match("Using TAURI for desktop", "tauri"));
+        assert!(has_word_boundary_match("using tauri for desktop", "TAURI"));
+    }
+
+    #[test]
+    fn has_word_boundary_match_no_match() {
+        assert!(!has_word_boundary_match("nothing relevant here", "4da"));
+    }
+
+    #[test]
+    fn extract_mention_context_returns_surrounding_text() {
+        let text = "Some discussion about how 4da handles privacy and local processing effectively for developers.";
+        let ctx = extract_mention_context(text, "4da");
+        assert!(ctx.is_some());
+        let ctx = ctx.unwrap();
+        assert!(ctx.contains("4da"));
+        assert!(ctx.starts_with("..."));
+        assert!(ctx.ends_with("..."));
+    }
+
+    #[test]
+    fn extract_mention_context_not_found() {
+        let text = "Nothing about that project here";
+        let ctx = extract_mention_context(text, "4da");
+        assert!(ctx.is_none());
+    }
+
+    #[test]
+    fn extract_mention_context_at_start_of_text() {
+        let text = "4da is a privacy-first developer tool with great features";
+        let ctx = extract_mention_context(text, "4da");
+        assert!(ctx.is_some());
+        assert!(ctx.unwrap().contains("4da"));
+    }
+}
