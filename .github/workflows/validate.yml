@@ -37,13 +37,18 @@ jobs:
 
   mcp-server:
     name: MCP Server
+    needs: frontend
     runs-on: [self-hosted, windows, 4da]
     steps:
       - uses: actions/checkout@v4
 
       - name: Install dependencies
         shell: bash
-        run: cd mcp-4da-server && pnpm install --frozen-lockfile
+        run: cd mcp-4da-server && pnpm install --frozen-lockfile --no-optional || cd mcp-4da-server && pnpm install --frozen-lockfile
+
+      - name: Rebuild native modules
+        shell: bash
+        run: cd mcp-4da-server && pnpm rebuild better-sqlite3 2>/dev/null || true
 
       - name: Build
         shell: bash
@@ -55,6 +60,7 @@ jobs:
 
   rust:
     name: Rust
+    needs: frontend
     runs-on: [self-hosted, windows, 4da]
     steps:
       - uses: actions/checkout@v4
