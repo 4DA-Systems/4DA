@@ -1096,6 +1096,202 @@ fn scoring_deterministic() {
 }
 
 // ============================================================================
+// Skill-Gap Boost
+// ============================================================================
+
+/// Helper: build a SovereignDeveloperProfile with specified skill gaps
+fn profile_with_skill_gaps(
+    gaps: Vec<&str>,
+) -> crate::sovereign_developer_profile::SovereignDeveloperProfile {
+    use crate::sovereign_developer_profile::*;
+    SovereignDeveloperProfile {
+        generated_at: String::new(),
+        identity_summary: "Test developer".to_string(),
+        infrastructure: InfrastructureDimension::default(),
+        stack: StackDimension::default(),
+        skills: SkillsDimension::default(),
+        preferences: PreferencesDimension::default(),
+        context: ContextDimension::default(),
+        intelligence: IntelligenceReport {
+            skill_gaps: gaps
+                .into_iter()
+                .map(|dep| SkillGap {
+                    dependency: dep.to_string(),
+                    reason: "Dependency in project but no content engagement".to_string(),
+                })
+                .collect(),
+            ..Default::default()
+        },
+        completeness: CompletenessReport {
+            overall_percentage: 50.0,
+            dimensions: vec![],
+        },
+    }
+}
+
+/// Helper: build a context with a sovereign profile that has skill gaps
+fn ctx_with_skill_gaps(gaps: Vec<&str>) -> ScoringContext {
+    let emb = vec![0.5_f32; 384];
+    let interests = vec![
+        crate::context_engine::Interest {
+            id: Some(1),
+            topic: "Rust".to_string(),
+            weight: 1.0,
+            embedding: Some(emb.clone()),
+            source: crate::context_engine::InterestSource::Explicit,
+        },
+        crate::context_engine::Interest {
+            id: Some(2),
+            topic: "systems programming".to_string(),
+            weight: 1.0,
+            embedding: Some(emb),
+            source: crate::context_engine::InterestSource::Explicit,
+        },
+    ];
+
+    let mut ace = ace_context::ACEContext::default();
+    ace.active_topics.push("rust".to_string());
+    ace.detected_tech.push("rust".to_string());
+
+    ScoringContext::builder()
+        .interest_count(2)
+        .interests(interests)
+        .ace_ctx(ace)
+        .declared_tech(vec!["rust".to_string()])
+        .sovereign_profile(Some(profile_with_skill_gaps(gaps)))
+        .feedback_interaction_count(20)
+        .build()
+}
+
+#[test]
+fn skill_gap_boost_fires_for_gap_dependency() {
+    let db = bench_db();
+    let emb = vec![0.1_f32; 384];
+    let opts = no_freshness();
+
+    // Context with "tokio" as a skill gap
+    let ctx = ctx_with_skill_gaps(vec!["tokio"]);
+
+    let input = bench_input(
+        1,
+        "Tokio runtime internals and task scheduling",
+        "tokio async runtime task scheduling performance rust",
+        &emb,
+    );
+    let result = score_item(&input, &ctx, &db, &opts, None);
+    let bd = result.score_breakdown.as_ref().unwrap();
+
+    assert!(
+        bd.skill_gap_boost > 0.0,
+        "skill_gap_boost should fire for gap dep 'tokio', got {:.3}",
+        bd.skill_gap_boost
+    );
+    assert_eq!(
+        bd.skill_gap_boost, 0.08,
+        "Single gap match should give 0.08 boost"
+    );
+}
+
+#[test]
+fn skill_gap_boost_does_not_fire_for_engaged_topic() {
+    let db = bench_db();
+    let emb = vec![0.1_f32; 384];
+    let opts = no_freshness();
+
+    // "serde" is the skill gap, but content is about "rust" (which user engages with)
+    let ctx = ctx_with_skill_gaps(vec!["serde"]);
+
+    let input = bench_input(
+        1,
+        "Rust borrow checker explained",
+        "rust borrow checker ownership memory safety",
+        &emb,
+    );
+    let result = score_item(&input, &ctx, &db, &opts, None);
+    let bd = result.score_breakdown.as_ref().unwrap();
+
+    assert_eq!(
+        bd.skill_gap_boost, 0.0,
+        "skill_gap_boost should NOT fire for non-gap content, got {:.3}",
+        bd.skill_gap_boost
+    );
+}
+
+#[test]
+fn skill_gap_boost_multi_match_higher_than_single() {
+    let db = bench_db();
+    let emb = vec![0.1_f32; 384];
+    let opts = no_freshness();
+
+    // Two skill gaps that will both match
+    let ctx = ctx_with_skill_gaps(vec!["tokio", "serde"]);
+
+    let input = bench_input(
+        1,
+        "Building async APIs with Tokio and Serde",
+        "tokio serde async api serialization deserialization performance rust",
+        &emb,
+    );
+    let result = score_item(&input, &ctx, &db, &opts, None);
+    let bd = result.score_breakdown.as_ref().unwrap();
+
+    assert_eq!(
+        bd.skill_gap_boost, 0.12,
+        "Multi gap match should give 0.12 boost, got {:.3}",
+        bd.skill_gap_boost
+    );
+}
+
+#[test]
+fn skill_gap_boost_zero_without_profile() {
+    let db = bench_db();
+    let emb = vec![0.1_f32; 384];
+    let opts = no_freshness();
+
+    // No sovereign profile at all
+    let ctx = rust_dev_ctx();
+
+    let input = bench_input(
+        1,
+        "Introduction to Tokio async runtime",
+        "tokio async runtime rust performance scheduling",
+        &emb,
+    );
+    let result = score_item(&input, &ctx, &db, &opts, None);
+    let bd = result.score_breakdown.as_ref().unwrap();
+
+    assert_eq!(
+        bd.skill_gap_boost, 0.0,
+        "Without sovereign profile, skill_gap_boost must be 0"
+    );
+}
+
+#[test]
+fn skill_gap_boost_appears_in_explanation() {
+    let db = bench_db();
+    let emb = vec![0.1_f32; 384];
+    let opts = no_freshness();
+    let ctx = ctx_with_skill_gaps(vec!["tokio"]);
+
+    let input = bench_input(
+        1,
+        "Tokio task scheduling deep dive",
+        "tokio async runtime task scheduling performance systems programming rust",
+        &emb,
+    );
+    let result = score_item(&input, &ctx, &db, &opts, None);
+
+    if let Some(ref explanation) = result.explanation {
+        assert!(
+            explanation.contains("skill gap"),
+            "Explanation should mention skill gap: '{}'",
+            explanation
+        );
+    }
+    // If explanation is None (score too low to generate), that's also acceptable
+}
+
+// ============================================================================
 // Aggregate Summary
 // ============================================================================
 

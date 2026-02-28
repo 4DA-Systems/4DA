@@ -347,19 +347,22 @@ pub(crate) fn score_item(
 
     // Skill-gap boost: amplify content about dependencies the user has but hasn't engaged with.
     // Closes the intelligence loop: ACE discovers deps → profile detects gaps → scoring prioritizes.
+    let mut matched_skill_gaps: Vec<String> = Vec::new();
     let skill_gap_boost: f32 = if let Some(ref profile) = ctx.sovereign_profile {
         if !profile.intelligence.skill_gaps.is_empty() {
-            let match_count = topics
-                .iter()
-                .filter(|t| {
-                    profile
-                        .intelligence
-                        .skill_gaps
-                        .iter()
-                        .any(|g| topic_overlaps(t, &g.dependency))
-                })
-                .count();
-            match match_count {
+            for t in &topics {
+                if let Some(g) = profile
+                    .intelligence
+                    .skill_gaps
+                    .iter()
+                    .find(|g| topic_overlaps(t, &g.dependency))
+                {
+                    if !matched_skill_gaps.contains(&g.dependency) {
+                        matched_skill_gaps.push(g.dependency.clone());
+                    }
+                }
+            }
+            match matched_skill_gaps.len() {
                 0 => 0.0,
                 1 => 0.08, // Single gap match
                 _ => 0.12, // Multi gap match
@@ -481,6 +484,7 @@ pub(crate) fn score_item(
             &topics,
             &ctx.interests,
             &ctx.declared_tech,
+            &matched_skill_gaps,
         ))
     } else {
         None

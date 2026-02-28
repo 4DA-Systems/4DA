@@ -14,6 +14,7 @@ pub(crate) fn generate_relevance_explanation(
     item_topics: &[String],
     interests: &[context_engine::Interest],
     declared_tech: &[String],
+    matched_skill_gaps: &[String],
 ) -> String {
     let mut parts: Vec<String> = Vec::new();
     let mut used_topics: Vec<&str> = Vec::new();
@@ -135,6 +136,16 @@ pub(crate) fn generate_relevance_explanation(
                 parts.push(format!("Similar to your code: \"{}\"", phrase));
             }
         }
+    }
+
+    // 6. Skill gap annotation — surfaces the intelligence loop to the user
+    if !matched_skill_gaps.is_empty() {
+        let names: Vec<&str> = matched_skill_gaps
+            .iter()
+            .map(|s| s.as_str())
+            .take(3)
+            .collect();
+        parts.push(format!("Closes skill gap: {}", names.join(", ")));
     }
 
     // Return empty string instead of vague fallback — the frontend handles empty gracefully
@@ -417,10 +428,59 @@ mod tests {
             &["rust".to_string()],
             &[],
             &["Rust".to_string()],
+            &[],
         );
         assert!(
             explanation.contains("your stack"),
             "Should mention 'your stack': {}",
+            explanation
+        );
+    }
+
+    #[test]
+    fn test_generate_explanation_skill_gap_annotation() {
+        let ace_ctx = ACEContext::default();
+        let explanation = generate_relevance_explanation(
+            "Getting started with Tokio async runtime",
+            0.1,
+            0.1,
+            &[],
+            &ace_ctx,
+            &["tokio".to_string()],
+            &[],
+            &[],
+            &["tokio".to_string()],
+        );
+        assert!(
+            explanation.contains("Closes skill gap: tokio"),
+            "Should annotate skill gap: {}",
+            explanation
+        );
+    }
+
+    #[test]
+    fn test_generate_explanation_skill_gap_with_stack() {
+        let mut ace_ctx = ACEContext::default();
+        ace_ctx.detected_tech = vec!["rust".to_string()];
+        let explanation = generate_relevance_explanation(
+            "Tokio and Rust async patterns",
+            0.2,
+            0.2,
+            &[],
+            &ace_ctx,
+            &["rust".to_string(), "tokio".to_string()],
+            &[],
+            &["Rust".to_string()],
+            &["tokio".to_string()],
+        );
+        assert!(
+            explanation.contains("your stack"),
+            "Should still show stack match: {}",
+            explanation
+        );
+        assert!(
+            explanation.contains("Closes skill gap: tokio"),
+            "Should also show skill gap: {}",
             explanation
         );
     }
@@ -435,6 +495,7 @@ mod tests {
             &[],
             &ace_ctx,
             &["random".to_string()],
+            &[],
             &[],
             &[],
         );

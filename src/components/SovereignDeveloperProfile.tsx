@@ -61,7 +61,19 @@ function DepthBadge({ depth }: { depth: string }) {
 // Dimension Card
 // ============================================================================
 
+// Actionable suggestions per dimension when data is thin — turns display into growth engine
+const DIMENSION_ACTIONS: Record<string, string> = {
+  Infrastructure: 'Run a scan to detect your GPU, CPU, and LLM setup',
+  Stack: 'Scan a project folder to discover your tech stack',
+  Skills: 'Complete STREETS Module 1 to build skills data',
+  Preferences: 'Add interests in Settings to sharpen your feed',
+  Context: 'Point 4DA at a project folder to build context',
+};
+
 function DimensionCard({ dim, children }: { dim: DimensionCompleteness; children: React.ReactNode }) {
+  const needsAction = dim.depth === 'empty' || dim.depth === 'minimal';
+  const action = needsAction ? DIMENSION_ACTIONS[dim.name] : null;
+
   return (
     <div className="bg-bg-secondary border border-border rounded-lg p-4">
       <div className="flex items-center justify-between mb-3">
@@ -75,6 +87,9 @@ function DimensionCard({ dim, children }: { dim: DimensionCompleteness; children
         <DepthBadge depth={dim.depth} />
       </div>
       <div className="text-xs text-text-secondary space-y-1">{children}</div>
+      {action && (
+        <p className="mt-2 text-[10px] text-amber-400/80 italic">{action}</p>
+      )}
     </div>
   );
 }
