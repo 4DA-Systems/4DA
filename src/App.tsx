@@ -13,22 +13,17 @@ import { SplashScreen } from './components/SplashScreen';
 import { Onboarding } from './components/Onboarding';
 import { VoidEngine } from './components/void-engine/VoidEngine';
 import { OllamaStatus } from './components/OllamaStatus';
-import { SignalsPanel } from './components/SignalsPanel';
 import { NaturalLanguageSearch } from './components/NaturalLanguageSearch';
 import { ToastContainer } from './components/Toast';
 import { LearningIndicator } from './components/LearningIndicator';
 import { ResultsView } from './components/ResultsView';
 import { ActionBar } from './components/ActionBar';
 import { PredictiveIndicator } from './components/PredictiveIndicator';
-import { SignalChainsPanel } from './components/SignalChains';
-import { KnowledgeGapsPanel } from './components/KnowledgeGapsPanel';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { ViewErrorBoundary } from './components/ViewErrorBoundary';
-import { CommandDeck } from './components/command-deck/CommandDeck';
 import { FirstRunTransition } from './components/FirstRunTransition';
 import { ViewTabBar } from './components/ViewTabBar';
 import { ProValueBadge } from './components/ProValueBadge';
-import { GameCelebration } from './components/GameCelebration';
 
 // Lazy-loaded views — each only loads when navigated to
 const BriefingView = lazy(() => import('./components/BriefingView').then(m => ({ default: m.BriefingView })));
@@ -47,6 +42,11 @@ const ToolkitView = lazy(() => import('./components/toolkit/ToolkitView').then(m
 const PlaybookView = lazy(() => import('./components/PlaybookView').then(m => ({ default: m.PlaybookView })));
 const CoachView = lazy(() => import('./components/coach/CoachView').then(m => ({ default: m.CoachView })));
 const ChannelsView = lazy(() => import('./components/channels/ChannelsView').then(m => ({ default: m.ChannelsView })));
+const SignalsPanel = lazy(() => import('./components/SignalsPanel').then(m => ({ default: m.SignalsPanel })));
+const SignalChainsPanel = lazy(() => import('./components/SignalChains').then(m => ({ default: m.SignalChainsPanel })));
+const KnowledgeGapsPanel = lazy(() => import('./components/KnowledgeGapsPanel').then(m => ({ default: m.KnowledgeGapsPanel })));
+const CommandDeck = lazy(() => import('./components/command-deck/CommandDeck').then(m => ({ default: m.CommandDeck })));
+const GameCelebration = lazy(() => import('./components/GameCelebration').then(m => ({ default: m.GameCelebration })));
 import {
   useSettings,
   useMonitoring,
@@ -426,11 +426,11 @@ function App() {
 
         {/* Actionable Signals */}
         {state.analysisComplete && (
-          <>
+          <Suspense fallback={null}>
             <SignalsPanel results={state.relevanceResults} />
             <SignalChainsPanel />
             <KnowledgeGapsPanel />
-          </>
+          </Suspense>
         )}
 
         {/* Natural Language Search */}
@@ -538,13 +538,17 @@ function App() {
         )}
 
         {/* Command Deck (slide-up panel) */}
-        <CommandDeck />
+        <Suspense fallback={null}>
+          <CommandDeck />
+        </Suspense>
 
         {/* Toast Notifications */}
         <ToastContainer toasts={toasts} onDismiss={removeToast} />
 
         {/* GAME Achievement Celebration Overlay */}
-        <GameCelebration />
+        <Suspense fallback={null}>
+          <GameCelebration />
+        </Suspense>
 
         {/* Keyboard Shortcuts Help Modal */}
         {showKeyboardHelp && (

@@ -349,3 +349,293 @@ pub async fn run_daily_nudge_check() {
         warn!(target: "4da::coach", error = %e, "Daily nudge generation failed");
     }
 }
+
+// ============================================================================
+// Tests
+// ============================================================================
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use rusqlite::Connection;
+
+    /// Create an in-memory database with all tables that coach_nudges depends on.
+    fn setup_test_db() -> Connection {
+        let conn = Connection::open_in_memory().expect("in-memory db");
+        ensure_tables(&conn).expect("create coach tables");
+        conn.execute_batch(
+            "CREATE TABLE IF NOT EXISTS sovereign_profile (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                category TEXT NOT NULL,
+                key TEXT NOT NULL,
+                value TEXT NOT NULL,
+                raw_output TEXT,
+                source_command TEXT,
+                source_lesson TEXT,
+                confidence REAL DEFAULT 1.0,
+                created_at TEXT DEFAULT (datetime('now')),
+                updated_at TEXT DEFAULT (datetime('now')),
+                UNIQUE(category, key)
+            );
+            CREATE TABLE IF NOT EXISTS command_execution_log (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                module_id TEXT NOT NULL,
+                lesson_idx INTEGER NOT NULL,
+                command_id TEXT NOT NULL,
+                command_text TEXT NOT NULL,
+                success INTEGER NOT NULL,
+                exit_code INTEGER,
+                stdout TEXT,
+                stderr TEXT,
+                duration_ms INTEGER,
+                executed_at TEXT DEFAULT (datetime('now'))
+            );
+            CREATE TABLE IF NOT EXISTS coach_sessions (
+                id TEXT PRIMARY KEY,
+                session_type TEXT NOT NULL,
+                title TEXT NOT NULL DEFAULT 'New Session',
+                context_snapshot TEXT,
+                created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+            );",
+        )
+        .expect("create supporting tables");
+        conn
+    }
+
+    // ---- CoachNudge serialization ----
+
+    #[test]
+    fn coach_nudge_serializes_to_json() {
+        let nudge = CoachNudge {
+            id: 1,
+            nudge_type: "progress".to_string(),
+            content: "Keep going!".to_string(),
+            dismissed: false,
+            created_at: "2025-01-01 00:00:00".to_string(),
+        };
+        let json = serde_json::to_string(&nudge).expect("serialize");
+        assert!(json.contains("\"nudge_type\":\"progress\""));
+        assert!(json.contains("\"dismissed\":false"));
+    }
+
+    #[test]
+    fn coach_nudge_roundtrip_json() {
+        let nudge = CoachNudge {
+            id: 42,
+            nudge_type: "profile_gap".to_string(),
+            content: "Complete your profile.".to_string(),
+            dismissed: true,
+            created_at: "2025-06-15 12:30:00".to_string(),
+        };
+        let json = serde_json::to_string(&nudge).expect("serialize");
+        let deserialized: CoachNudge = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(deserialized.id, 42);
+        assert_eq!(deserialized.nudge_type, "profile_gap");
+        assert_eq!(deserialized.content, "Complete your profile.");
+        assert!(deserialized.dismissed);
+        assert_eq!(deserialized.created_at, "2025-06-15 12:30:00");
+    }
+
+    // ---- ensure_tables ----
+
+    #[test]
+    fn ensure_tables_creates_coach_nudges_table() {
+        let conn = Connection::open_in_memory().expect("in-memory db");
+        ensure_tables(&conn).expect("ensure_tables");
+        conn.execute(
+            "INSERT INTO coach_nudges (nudge_type, content) VALUES ('test', 'hello')",
+            [],
+        )
+        .expect("insert into coach_nudges");
+        let count: i64 = conn
+            .query_row("SELECT COUNT(*) FROM coach_nudges", [], |r| r.get(0))
+            .expect("count");
+        assert_eq!(count, 1);
+    }
+
+    #[test]
+    fn ensure_tables_creates_coach_documents_table() {
+        let conn = Connection::open_in_memory().expect("in-memory db");
+        ensure_tables(&conn).expect("ensure_tables");
+        conn.execute(
+            "INSERT INTO coach_documents (doc_type, content) VALUES ('review', 'test')",
+            [],
+        )
+        .expect("insert into coach_documents");
+        let count: i64 = conn
+            .query_row("SELECT COUNT(*) FROM coach_documents", [], |r| r.get(0))
+            .expect("count");
+        assert_eq!(count, 1);
+    }
+
+    #[test]
+    fn ensure_tables_is_idempotent() {
+        let conn = Connection::open_in_memory().expect("in-memory db");
+        ensure_tables(&conn).expect("first call");
+        ensure_tables(&conn).expect("second call should succeed");
+        conn.execute(
+            "INSERT INTO coach_nudges (nudge_type, content) VALUES ('test', 'idem')",
+            [],
+        )
+        .expect("insert after double ensure");
+    }
+
+    // ---- generate_template_nudge (pure function, all branches) ----
+
+    #[test]
+    fn template_nudge_profile_gap() {
+        let text = generate_template_nudge("profile_gap");
+        assert!(
+            text.contains("Sovereign Profile"),
+            "profile_gap nudge should mention Sovereign Profile"
+        );
+    }
+
+    #[test]
+    fn template_nudge_progress() {
+        let text = generate_template_nudge("progress");
+        assert!(
+            text.contains("consistency beats intensity"),
+            "progress nudge should mention consistency"
+        );
+    }
+
+    #[test]
+    fn template_nudge_engine_suggestion() {
+        let text = generate_template_nudge("engine_suggestion");
+        assert!(
+            text.contains("Engine Recommender"),
+            "engine_suggestion nudge should mention Engine Recommender"
+        );
+    }
+
+    #[test]
+    fn template_nudge_unknown_type_returns_default() {
+        let text = generate_template_nudge("nonexistent_type");
+        assert!(
+            text.contains("Keep building"),
+            "unknown type should return default nudge"
+        );
+    }
+
+    // ---- format_template_review (pure function) ----
+
+    #[test]
+    fn template_review_zero_lessons() {
+        let review = format_template_review(0, 5);
+        assert!(review.contains("0 lesson commands"));
+        assert!(review.contains("5 updates"));
+        assert!(
+            review.contains("picking up the STREETS playbook"),
+            "zero lessons should encourage restarting"
+        );
+    }
+
+    #[test]
+    fn template_review_nonzero_lessons() {
+        let review = format_template_review(10, 3);
+        assert!(review.contains("10 lesson commands"));
+        assert!(review.contains("3 updates"));
+        assert!(
+            review.contains("Keep the momentum"),
+            "nonzero lessons should encourage momentum"
+        );
+    }
+
+    // ---- determine_nudge_type (DB-driven logic) ----
+
+    #[test]
+    fn nudge_type_profile_gap_when_few_categories() {
+        let conn = setup_test_db();
+        conn.execute(
+            "INSERT INTO sovereign_profile (category, key, value) VALUES ('lang', 'rust', 'yes')",
+            [],
+        )
+        .expect("insert");
+        conn.execute(
+            "INSERT INTO sovereign_profile (category, key, value) VALUES ('tool', 'vim', 'yes')",
+            [],
+        )
+        .expect("insert");
+        assert_eq!(determine_nudge_type(&conn), Some("profile_gap".to_string()));
+    }
+
+    #[test]
+    fn nudge_type_progress_when_no_lessons() {
+        let conn = setup_test_db();
+        for cat in &["lang", "tool", "framework"] {
+            conn.execute(
+                "INSERT INTO sovereign_profile (category, key, value) VALUES (?1, 'k', 'v')",
+                rusqlite::params![cat],
+            )
+            .expect("insert");
+        }
+        assert_eq!(determine_nudge_type(&conn), Some("progress".to_string()));
+    }
+
+    #[test]
+    fn nudge_type_engine_suggestion_when_no_coach_sessions() {
+        let conn = setup_test_db();
+        for cat in &["lang", "tool", "framework"] {
+            conn.execute(
+                "INSERT INTO sovereign_profile (category, key, value) VALUES (?1, 'k', 'v')",
+                rusqlite::params![cat],
+            )
+            .expect("insert");
+        }
+        conn.execute(
+            "INSERT INTO command_execution_log (module_id, lesson_idx, command_id, command_text, success, executed_at)
+             VALUES ('S', 1, 'cmd1', 'echo hi', 1, datetime('now'))",
+            [],
+        )
+        .expect("insert lesson");
+        assert_eq!(
+            determine_nudge_type(&conn),
+            Some("engine_suggestion".to_string())
+        );
+    }
+
+    #[test]
+    fn nudge_type_none_when_all_conditions_met() {
+        let conn = setup_test_db();
+        for cat in &["lang", "tool", "framework"] {
+            conn.execute(
+                "INSERT INTO sovereign_profile (category, key, value) VALUES (?1, 'k', 'v')",
+                rusqlite::params![cat],
+            )
+            .expect("insert");
+        }
+        conn.execute(
+            "INSERT INTO command_execution_log (module_id, lesson_idx, command_id, command_text, success, executed_at)
+             VALUES ('S', 1, 'cmd1', 'echo hi', 1, datetime('now'))",
+            [],
+        )
+        .expect("insert lesson");
+        conn.execute(
+            "INSERT INTO coach_sessions (id, session_type, title) VALUES ('s1', 'general', 'Test')",
+            [],
+        )
+        .expect("insert session");
+        assert_eq!(determine_nudge_type(&conn), None);
+    }
+
+    #[test]
+    fn nudge_type_progress_when_lesson_is_stale() {
+        let conn = setup_test_db();
+        for cat in &["lang", "tool", "framework"] {
+            conn.execute(
+                "INSERT INTO sovereign_profile (category, key, value) VALUES (?1, 'k', 'v')",
+                rusqlite::params![cat],
+            )
+            .expect("insert");
+        }
+        conn.execute(
+            "INSERT INTO command_execution_log (module_id, lesson_idx, command_id, command_text, success, executed_at)
+             VALUES ('S', 1, 'cmd1', 'echo hi', 1, datetime('now', '-30 days'))",
+            [],
+        )
+        .expect("insert stale lesson");
+        assert_eq!(determine_nudge_type(&conn), Some("progress".to_string()));
+    }
+}
