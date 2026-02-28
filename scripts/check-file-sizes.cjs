@@ -56,7 +56,8 @@ const EXCEPTIONS = {
   'src-tauri/src/delegation.rs':           'Delegation scoring — multi-axis trust assessment',
   'src-tauri/src/stacks/profiles.rs':      'Stack Intelligence — 8 technology profile definitions',
   'src-tauri/src/scoring/benchmark.rs':    'Scoring benchmarks — comprehensive test assertions',
-  'src-tauri/src/scoring/simulation/corpus.rs': 'Scoring simulation corpus — test fixtures for pipeline validation',
+  'src-tauri/src/scoring/simulation/corpus.rs': 'Scoring simulation corpus — 215 labeled test fixtures for pipeline validation',
+  'src-tauri/src/scoring/simulation/differential.rs': 'Scoring simulation System 4 — parameter regression detection tests',
   'src-tauri/src/void_engine/universe.rs': 'Void Universe renderer — experimental, feature-gated',
   'src-tauri/src/sovereign_developer_profile.rs': 'Unified profile aggregation — 10 data sources + markdown/JSON export',
 
