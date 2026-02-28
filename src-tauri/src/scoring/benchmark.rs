@@ -13,19 +13,19 @@ use std::path::Path;
 // Infrastructure
 // ============================================================================
 
-fn bench_db() -> crate::db::Database {
+pub(super) fn bench_db() -> crate::db::Database {
     crate::register_sqlite_vec_extension();
     crate::db::Database::new(Path::new(":memory:")).expect("in-memory DB")
 }
 
-fn no_freshness() -> ScoringOptions {
+pub(super) fn no_freshness() -> ScoringOptions {
     ScoringOptions {
         apply_freshness: false,
         apply_signals: false,
     }
 }
 
-fn bench_input<'a>(
+pub(super) fn bench_input<'a>(
     id: u64,
     title: &'a str,
     content: &'a str,

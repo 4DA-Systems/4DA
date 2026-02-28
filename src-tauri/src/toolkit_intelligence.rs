@@ -66,9 +66,7 @@ pub async fn toolkit_test_feed(url: String) -> Result<FeedTestResult, String> {
     info!(target: "4da::toolkit", url = %url, "Testing feed URL");
 
     // Validate URL
-    if !url.starts_with("http://") && !url.starts_with("https://") {
-        return Err("URL must start with http:// or https://".to_string());
-    }
+    validate_feed_url(&url)?;
 
     let client = crate::sources::shared_client();
     let start = std::time::Instant::now();
@@ -99,15 +97,7 @@ pub async fn toolkit_test_feed(url: String) -> Result<FeedTestResult, String> {
     let fetch_duration_ms = start.elapsed().as_millis() as u64;
 
     // Detect format
-    let format = if (xml.contains("<feed") && xml.contains("xmlns=\"http://www.w3.org/2005/Atom\""))
-        || (xml.contains("<entry>") && !xml.contains("<item>"))
-    {
-        "Atom".to_string()
-    } else if xml.contains("<rss") || xml.contains("<item>") {
-        "RSS 2.0".to_string()
-    } else {
-        "Unknown".to_string()
-    };
+    let format = detect_feed_format(&xml).to_string();
 
     // Parse using RssSource's parse_feed
     let rss_source = crate::sources::rss::RssSource::new();
@@ -438,4 +428,297 @@ pub async fn toolkit_generate_export_pack() -> Result<ExportPackResult, String> 
         has_radar,
         has_decisions,
     })
+}
+
+// ============================================================================
+// Helper (extracted from toolkit_test_feed for testability)
+// ============================================================================
+
+/// Detect whether raw XML is Atom, RSS 2.0, or Unknown.
+pub(crate) fn detect_feed_format(xml: &str) -> &'static str {
+    if (xml.contains("<feed") && xml.contains("xmlns=\"http://www.w3.org/2005/Atom\""))
+        || (xml.contains("<entry>") && !xml.contains("<item>"))
+    {
+        "Atom"
+    } else if xml.contains("<rss") || xml.contains("<item>") {
+        "RSS 2.0"
+    } else {
+        "Unknown"
+    }
+}
+
+/// Validate a feed URL (must start with http:// or https://).
+pub(crate) fn validate_feed_url(url: &str) -> Result<(), String> {
+    if !url.starts_with("http://") && !url.starts_with("https://") {
+        return Err("URL must start with http:// or https://".to_string());
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ----------------------------------------------------------------
+    // 1. FeedTestResult construction & serde round-trip
+    // ----------------------------------------------------------------
+    #[test]
+    fn feed_test_result_serde_roundtrip() {
+        let result = FeedTestResult {
+            feed_title: Some("My Feed".into()),
+            format: "RSS 2.0".into(),
+            item_count: 3,
+            items: vec![FeedTestItem {
+                title: "Post 1".into(),
+                url: "https://example.com/1".into(),
+                published_at: Some("2025-01-01T00:00:00Z".into()),
+                content_preview: "Hello world".into(),
+            }],
+            fetch_duration_ms: 123,
+            errors: vec![],
+        };
+
+        let json = serde_json::to_string(&result).expect("serialize");
+        let decoded: FeedTestResult = serde_json::from_str(&json).expect("deserialize");
+
+        assert_eq!(decoded.feed_title, Some("My Feed".into()));
+        assert_eq!(decoded.format, "RSS 2.0");
+        assert_eq!(decoded.item_count, 3);
+        assert_eq!(decoded.items.len(), 1);
+        assert_eq!(decoded.items[0].title, "Post 1");
+        assert_eq!(decoded.fetch_duration_ms, 123);
+        assert!(decoded.errors.is_empty());
+    }
+
+    // ----------------------------------------------------------------
+    // 2. FeedTestResult with no title and errors
+    // ----------------------------------------------------------------
+    #[test]
+    fn feed_test_result_with_errors() {
+        let result = FeedTestResult {
+            feed_title: None,
+            format: "Unknown".into(),
+            item_count: 0,
+            items: vec![],
+            fetch_duration_ms: 50,
+            errors: vec!["Could not detect feed format.".into()],
+        };
+
+        assert!(result.feed_title.is_none());
+        assert_eq!(result.errors.len(), 1);
+        assert!(result.errors[0].contains("Could not detect"));
+    }
+
+    // ----------------------------------------------------------------
+    // 3. FeedTestItem clone and debug
+    // ----------------------------------------------------------------
+    #[test]
+    fn feed_test_item_clone_and_debug() {
+        let item = FeedTestItem {
+            title: "Rust 1.80 Released".into(),
+            url: "https://blog.rust-lang.org/1.80".into(),
+            published_at: None,
+            content_preview: "Major release with...".into(),
+        };
+
+        let cloned = item.clone();
+        assert_eq!(cloned.title, item.title);
+        assert_eq!(cloned.url, item.url);
+        assert_eq!(cloned.published_at, item.published_at);
+
+        // Debug trait should produce non-empty output
+        let debug_str = format!("{:?}", item);
+        assert!(debug_str.contains("Rust 1.80 Released"));
+    }
+
+    // ----------------------------------------------------------------
+    // 4. SandboxBreakdown construction & serde
+    // ----------------------------------------------------------------
+    #[test]
+    fn sandbox_breakdown_serde_roundtrip() {
+        let breakdown = SandboxBreakdown {
+            keyword_score: 0.75,
+            interest_score: 0.5,
+            ace_boost: 0.1,
+            affinity_mult: 1.2,
+            domain_relevance: 0.8,
+            content_quality: 0.3,
+        };
+
+        let json = serde_json::to_string(&breakdown).expect("serialize");
+        let decoded: SandboxBreakdown = serde_json::from_str(&json).expect("deserialize");
+
+        assert!((decoded.keyword_score - 0.75).abs() < f32::EPSILON);
+        assert!((decoded.interest_score - 0.5).abs() < f32::EPSILON);
+        assert!((decoded.ace_boost - 0.1).abs() < f32::EPSILON);
+        assert!((decoded.affinity_mult - 1.2).abs() < f32::EPSILON);
+        assert!((decoded.domain_relevance - 0.8).abs() < f32::EPSILON);
+        assert!((decoded.content_quality - 0.3).abs() < f32::EPSILON);
+    }
+
+    // ----------------------------------------------------------------
+    // 5. SandboxBreakdown default/fallback values
+    // ----------------------------------------------------------------
+    #[test]
+    fn sandbox_breakdown_fallback_defaults() {
+        // Mirrors the else-branch in toolkit_score_sandbox (lines 206-213)
+        let fallback = SandboxBreakdown {
+            keyword_score: 0.0,
+            interest_score: 0.0,
+            ace_boost: 0.0,
+            affinity_mult: 1.0,
+            domain_relevance: 0.0,
+            content_quality: 0.0,
+        };
+
+        assert!((fallback.affinity_mult - 1.0).abs() < f32::EPSILON);
+        assert!((fallback.keyword_score).abs() < f32::EPSILON);
+        assert!((fallback.ace_boost).abs() < f32::EPSILON);
+    }
+
+    // ----------------------------------------------------------------
+    // 6. SandboxScoreResult construction & serde
+    // ----------------------------------------------------------------
+    #[test]
+    fn sandbox_score_result_serde_roundtrip() {
+        let result = SandboxScoreResult {
+            score: 0.85,
+            relevant: true,
+            breakdown: SandboxBreakdown {
+                keyword_score: 0.6,
+                interest_score: 0.4,
+                ace_boost: 0.05,
+                affinity_mult: 1.1,
+                domain_relevance: 0.7,
+                content_quality: 0.2,
+            },
+            matched_interests: vec!["rust".into(), "tauri".into()],
+            explanation: Some("Strong keyword match".into()),
+        };
+
+        let json = serde_json::to_string(&result).expect("serialize");
+        let decoded: SandboxScoreResult = serde_json::from_str(&json).expect("deserialize");
+
+        assert!((decoded.score - 0.85).abs() < f32::EPSILON);
+        assert!(decoded.relevant);
+        assert_eq!(decoded.matched_interests, vec!["rust", "tauri"]);
+        assert_eq!(decoded.explanation, Some("Strong keyword match".into()));
+    }
+
+    // ----------------------------------------------------------------
+    // 7. SandboxScoreResult with no matches and no explanation
+    // ----------------------------------------------------------------
+    #[test]
+    fn sandbox_score_result_empty_matches() {
+        let result = SandboxScoreResult {
+            score: 0.1,
+            relevant: false,
+            breakdown: SandboxBreakdown {
+                keyword_score: 0.0,
+                interest_score: 0.0,
+                ace_boost: 0.0,
+                affinity_mult: 1.0,
+                domain_relevance: 0.0,
+                content_quality: 0.0,
+            },
+            matched_interests: vec![],
+            explanation: None,
+        };
+
+        assert!(!result.relevant);
+        assert!(result.matched_interests.is_empty());
+        assert!(result.explanation.is_none());
+    }
+
+    // ----------------------------------------------------------------
+    // 8. ExportPackResult serde round-trip
+    // ----------------------------------------------------------------
+    #[test]
+    fn export_pack_result_serde_roundtrip() {
+        let pack = ExportPackResult {
+            markdown: "# 4DA Developer Profile\n\nTest content\n".into(),
+            has_dna: true,
+            has_radar: false,
+            has_decisions: true,
+        };
+
+        let json = serde_json::to_string(&pack).expect("serialize");
+        let decoded: ExportPackResult = serde_json::from_str(&json).expect("deserialize");
+
+        assert!(decoded.markdown.starts_with("# 4DA Developer Profile"));
+        assert!(decoded.has_dna);
+        assert!(!decoded.has_radar);
+        assert!(decoded.has_decisions);
+    }
+
+    // ----------------------------------------------------------------
+    // 9. detect_feed_format — RSS detection
+    // ----------------------------------------------------------------
+    #[test]
+    fn detect_feed_format_rss() {
+        let xml = r#"<?xml version="1.0"?><rss version="2.0"><channel><item><title>Hello</title></item></channel></rss>"#;
+        assert_eq!(detect_feed_format(xml), "RSS 2.0");
+    }
+
+    // ----------------------------------------------------------------
+    // 10. detect_feed_format — Atom detection (xmlns)
+    // ----------------------------------------------------------------
+    #[test]
+    fn detect_feed_format_atom_xmlns() {
+        let xml = r#"<?xml version="1.0"?><feed xmlns="http://www.w3.org/2005/Atom"><entry><title>Hello</title></entry></feed>"#;
+        assert_eq!(detect_feed_format(xml), "Atom");
+    }
+
+    // ----------------------------------------------------------------
+    // 11. detect_feed_format — Atom detection (entry without item)
+    // ----------------------------------------------------------------
+    #[test]
+    fn detect_feed_format_atom_entry_only() {
+        // Has <entry> but no <item> → Atom even without xmlns
+        let xml = r#"<feed><entry><title>Test</title></entry></feed>"#;
+        assert_eq!(detect_feed_format(xml), "Atom");
+    }
+
+    // ----------------------------------------------------------------
+    // 12. detect_feed_format — Unknown format
+    // ----------------------------------------------------------------
+    #[test]
+    fn detect_feed_format_unknown() {
+        let xml = "<html><body>Not a feed</body></html>";
+        assert_eq!(detect_feed_format(xml), "Unknown");
+    }
+
+    // ----------------------------------------------------------------
+    // 13. detect_feed_format — item-only (RSS)
+    // ----------------------------------------------------------------
+    #[test]
+    fn detect_feed_format_item_only_rss() {
+        // Has <item> without <rss> tag — still detected as RSS 2.0
+        let xml = "<channel><item><title>Test</title></item></channel>";
+        assert_eq!(detect_feed_format(xml), "RSS 2.0");
+    }
+
+    // ----------------------------------------------------------------
+    // 14. validate_feed_url — valid URLs
+    // ----------------------------------------------------------------
+    #[test]
+    fn validate_feed_url_valid() {
+        assert!(validate_feed_url("https://example.com/feed.xml").is_ok());
+        assert!(validate_feed_url("http://example.com/rss").is_ok());
+        assert!(validate_feed_url("https://feeds.feedburner.com/example").is_ok());
+    }
+
+    // ----------------------------------------------------------------
+    // 15. validate_feed_url — invalid URLs
+    // ----------------------------------------------------------------
+    #[test]
+    fn validate_feed_url_invalid() {
+        assert!(validate_feed_url("ftp://example.com").is_err());
+        assert!(validate_feed_url("example.com/feed").is_err());
+        assert!(validate_feed_url("").is_err());
+        assert!(validate_feed_url("file:///etc/passwd").is_err());
+
+        let err = validate_feed_url("ftp://x").unwrap_err();
+        assert!(err.contains("http://"));
+    }
 }
