@@ -960,7 +960,7 @@ fn property_boost_bounded() {
             js thread ui thread frame drop";
         let boost = scoring::compute_stack_boost(mega_title, mega_title, &stack);
         assert!(
-            boost >= 0.0 && boost <= 0.20,
+            (0.0..=0.20).contains(&boost),
             "{}: boost {} out of [0.0, 0.20] for mega input",
             profile_id,
             boost
@@ -1017,7 +1017,7 @@ fn property_shift_bounded() {
         let mega_title = all_topics.join(" ");
         let mult = scoring::detect_ecosystem_shift(&all_topics, &mega_title, &stack);
         assert!(
-            mult >= 0.95 && mult <= 1.25,
+            (0.95..=1.25).contains(&mult),
             "{}: shift multiplier {} out of [0.95, 1.25]",
             profile_id,
             mult
@@ -1206,7 +1206,7 @@ fn integrity_keyword_boost_bounds() {
     for profile in stacks::list_profiles() {
         for &(kw, boost) in profile.keyword_boosts {
             assert!(
-                boost >= 0.04 && boost <= 0.15,
+                (0.04..=0.15).contains(&boost),
                 "{}: keyword boost {} out of [0.04, 0.15] for '{}'",
                 profile.id,
                 boost,
@@ -1718,7 +1718,7 @@ fn edge_unicode_inputs() {
             &stack,
         );
         assert!(!boost.is_nan(), "NaN from unicode input for {}", profile_id);
-        assert!(boost >= 0.0 && boost <= 0.20);
+        assert!((0.0..=0.20).contains(&boost));
 
         let shift = scoring::detect_ecosystem_shift(
             &["\u{00e9}moji".to_string(), "caf\u{00e9}".to_string()],
@@ -1737,7 +1737,7 @@ fn edge_very_long_inputs() {
     // ~13,000 characters — must not panic or timeout
     let long_content = "lorem ipsum dolor sit amet consectetur adipiscing elit ".repeat(250);
     let boost = scoring::compute_stack_boost("Long Article Title", &long_content, &rust_stack);
-    assert!(boost >= 0.0 && boost <= 0.20);
+    assert!((0.0..=0.20).contains(&boost));
     assert!(!boost.is_nan());
 }
 
@@ -1775,7 +1775,7 @@ fn edge_whitespace_variations() {
         "Understanding\t\tasync\n\nlifetime\n\tpin\nsend",
         &rust_stack,
     );
-    assert!(boost >= 0.0 && boost <= 0.20);
+    assert!((0.0..=0.20).contains(&boost));
     assert!(!boost.is_nan());
 }
 

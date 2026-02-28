@@ -513,7 +513,7 @@ mod tests {
 
         // check_all_components requires crate globals (settings manager) so we test
         // individual components + quality/fallback computations directly
-        let components = vec![
+        let components = [
             check_scanner(&conn, "now"),
             check_watcher(&conn, "now"),
             check_git(&conn, "now"),
@@ -530,7 +530,7 @@ mod tests {
     #[test]
     fn test_empty_db_degraded() {
         let conn = setup_test_db();
-        let components = vec![
+        let components = [
             check_scanner(&conn, "now"),
             check_watcher(&conn, "now"),
             check_git(&conn, "now"),

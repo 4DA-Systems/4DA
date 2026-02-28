@@ -222,9 +222,10 @@ fn test_settings_clamp_zero_batch_size() {
 /// Test: embedding_threshold out of range is clamped
 #[test]
 fn test_settings_clamp_embedding_threshold() {
-    let mut settings = fourda_lib::settings::Settings::default();
-
-    settings.embedding_threshold = 1.5;
+    let mut settings = fourda_lib::settings::Settings {
+        embedding_threshold: 1.5,
+        ..Default::default()
+    };
     settings.validate();
     assert_eq!(settings.embedding_threshold, 1.0);
 
@@ -259,13 +260,15 @@ fn test_settings_clamp_zero_interval() {
 /// Test: empty context_dirs entries are removed
 #[test]
 fn test_settings_remove_empty_context_dirs() {
-    let mut settings = fourda_lib::settings::Settings::default();
-    settings.context_dirs = vec![
-        "valid/path".to_string(),
-        "".to_string(),
-        "  ".to_string(),
-        "another/valid".to_string(),
-    ];
+    let mut settings = fourda_lib::settings::Settings {
+        context_dirs: vec![
+            "valid/path".to_string(),
+            "".to_string(),
+            "  ".to_string(),
+            "another/valid".to_string(),
+        ],
+        ..Default::default()
+    };
     settings.validate();
     assert_eq!(settings.context_dirs.len(), 2);
     assert_eq!(settings.context_dirs[0], "valid/path");
@@ -287,6 +290,6 @@ fn test_settings_missing_fields_defaults() {
 
     // Fields not in JSON should have defaults
     assert_eq!(settings.monitoring.interval_minutes, 10);
-    assert_eq!(settings.monitoring.enabled, true);
+    assert!(settings.monitoring.enabled);
     assert_eq!(settings.rss_feeds.len(), 0);
 }

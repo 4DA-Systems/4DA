@@ -299,8 +299,10 @@ mod tests {
 
     #[test]
     fn test_off_domain_penalty_with_overlap() {
-        let mut ace_ctx = ACEContext::default();
-        ace_ctx.detected_tech = vec!["rust".to_string()];
+        let ace_ctx = ACEContext {
+            detected_tech: vec!["rust".to_string()],
+            ..Default::default()
+        };
         let declared = vec!["rust".to_string()];
         let topics = vec!["rust".to_string(), "performance".to_string()];
         assert_eq!(
@@ -333,8 +335,10 @@ mod tests {
 
     #[test]
     fn test_off_domain_penalty_active_topic_overlap() {
-        let mut ace_ctx = ACEContext::default();
-        ace_ctx.active_topics = vec!["tauri".to_string()];
+        let ace_ctx = ACEContext {
+            active_topics: vec!["tauri".to_string()],
+            ..Default::default()
+        };
         let declared: Vec<String> = vec![];
         let topics = vec!["tauri".to_string(), "desktop".to_string()];
         assert_eq!(

@@ -34,9 +34,7 @@ fn bench_inserts(c: &mut Criterion) {
     for count in [100, 1000, 5000] {
         group.bench_with_input(BenchmarkId::new("items", count), &count, |b, &n| {
             b.iter(|| {
-                register_vec();
-                let db =
-                    fourda_lib::db::Database::new(Path::new(":memory:")).expect("in-memory DB");
+                let db = fourda_lib::test_utils::test_db();
                 for i in 0..n {
                     let emb = seed_embedding(&format!("ins-{}", i));
                     db.upsert_source_item(

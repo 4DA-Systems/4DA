@@ -168,6 +168,51 @@ pub(crate) fn topic_dedup_results(results: &mut Vec<SourceRelevance>) {
     }
 }
 
+/// Compute serendipity candidates from items that failed the confirmation gate
+/// but scored well on exactly 1 axis (partial relevance, different perspective)
+pub(crate) fn compute_serendipity_candidates(
+    results: &[SourceRelevance],
+    budget_percent: u8,
+) -> Vec<SourceRelevance> {
+    // Budget: how many serendipity items to include
+    let total_relevant = results.iter().filter(|r| r.relevant && !r.excluded).count();
+    let budget = ((total_relevant.max(5) * budget_percent as usize) / 100).clamp(1, 5);
+
+    // Find items that failed the gate but had some signal
+    let mut candidates: Vec<SourceRelevance> = results
+        .iter()
+        .filter(|r| {
+            !r.relevant
+            && !r.excluded
+            && r.top_score > scoring_config::SERENDIPITY_MIN_SCORE // Had some score
+            && (r.context_score > scoring_config::SERENDIPITY_MIN_AXIS_SCORE || r.interest_score > scoring_config::SERENDIPITY_MIN_AXIS_SCORE) // Had at least 1 axis
+        })
+        .cloned()
+        .collect();
+
+    // Sort by top_score (highest partial scores first)
+    candidates.sort_by(|a, b| {
+        b.top_score
+            .partial_cmp(&a.top_score)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+
+    // Mark as serendipity and make them "relevant" so they show up
+    candidates
+        .into_iter()
+        .take(budget)
+        .map(|mut item| {
+            item.serendipity = true;
+            item.relevant = true;
+            item.explanation = Some(
+                "Serendipity: outside your usual interests but may offer a fresh perspective"
+                    .to_string(),
+            );
+            item
+        })
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -509,49 +554,4 @@ mod tests {
             candidates.len()
         );
     }
-}
-
-/// Compute serendipity candidates from items that failed the confirmation gate
-/// but scored well on exactly 1 axis (partial relevance, different perspective)
-pub(crate) fn compute_serendipity_candidates(
-    results: &[SourceRelevance],
-    budget_percent: u8,
-) -> Vec<SourceRelevance> {
-    // Budget: how many serendipity items to include
-    let total_relevant = results.iter().filter(|r| r.relevant && !r.excluded).count();
-    let budget = ((total_relevant.max(5) * budget_percent as usize) / 100).clamp(1, 5);
-
-    // Find items that failed the gate but had some signal
-    let mut candidates: Vec<SourceRelevance> = results
-        .iter()
-        .filter(|r| {
-            !r.relevant
-            && !r.excluded
-            && r.top_score > scoring_config::SERENDIPITY_MIN_SCORE // Had some score
-            && (r.context_score > scoring_config::SERENDIPITY_MIN_AXIS_SCORE || r.interest_score > scoring_config::SERENDIPITY_MIN_AXIS_SCORE) // Had at least 1 axis
-        })
-        .cloned()
-        .collect();
-
-    // Sort by top_score (highest partial scores first)
-    candidates.sort_by(|a, b| {
-        b.top_score
-            .partial_cmp(&a.top_score)
-            .unwrap_or(std::cmp::Ordering::Equal)
-    });
-
-    // Mark as serendipity and make them "relevant" so they show up
-    candidates
-        .into_iter()
-        .take(budget)
-        .map(|mut item| {
-            item.serendipity = true;
-            item.relevant = true;
-            item.explanation = Some(
-                "Serendipity: outside your usual interests but may offer a fresh perspective"
-                    .to_string(),
-            );
-            item
-        })
-        .collect()
 }
