@@ -359,3 +359,364 @@ pub fn cleanup_temporal_events() -> Result<usize, String> {
     let conn = crate::open_db_connection()?;
     cleanup_expired(&conn)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use rusqlite::Connection;
+
+    fn setup_test_db() -> Connection {
+        let conn = Connection::open_in_memory().expect("in-memory db");
+        conn.execute_batch(
+            "CREATE TABLE IF NOT EXISTS temporal_events (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                event_type TEXT NOT NULL,
+                subject TEXT NOT NULL,
+                data JSON NOT NULL,
+                embedding BLOB,
+                source_item_id INTEGER,
+                created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                expires_at TEXT
+            );
+            CREATE TABLE IF NOT EXISTS project_dependencies (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                project_path TEXT NOT NULL,
+                manifest_type TEXT NOT NULL,
+                package_name TEXT NOT NULL,
+                version TEXT,
+                is_dev BOOLEAN DEFAULT 0,
+                language TEXT NOT NULL DEFAULT 'unknown',
+                last_scanned TEXT NOT NULL DEFAULT (datetime('now')),
+                UNIQUE(project_path, package_name)
+            );
+            CREATE TABLE IF NOT EXISTS item_relationships (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                source_item_id INTEGER NOT NULL,
+                related_item_id INTEGER NOT NULL,
+                relationship_type TEXT NOT NULL,
+                strength REAL DEFAULT 1.0,
+                metadata JSON,
+                created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                UNIQUE(source_item_id, related_item_id, relationship_type)
+            );
+            CREATE TABLE IF NOT EXISTS git_signals (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                repo_path TEXT NOT NULL,
+                commit_hash TEXT,
+                timestamp TEXT NOT NULL DEFAULT (datetime('now'))
+            );",
+        )
+        .expect("create tables");
+        conn
+    }
+
+    #[test]
+    fn record_and_query_event_roundtrip() {
+        let conn = setup_test_db();
+        let data = serde_json::json!({"key": "value", "count": 42});
+        let id = record_event(&conn, "test_type", "test_subject", &data, Some(100), None).unwrap();
+        assert!(id > 0);
+
+        let events = query_events(&conn, "test_type", None, 10).unwrap();
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].id, id);
+        assert_eq!(events[0].event_type, "test_type");
+        assert_eq!(events[0].subject, "test_subject");
+        assert_eq!(events[0].source_item_id, Some(100));
+        assert_eq!(events[0].data["key"], "value");
+        assert_eq!(events[0].data["count"], 42);
+    }
+
+    #[test]
+    fn query_events_respects_limit() {
+        let conn = setup_test_db();
+        let data = serde_json::json!({});
+        for i in 0..5 {
+            record_event(&conn, "bulk", &format!("subj_{}", i), &data, None, None).unwrap();
+        }
+        let events = query_events(&conn, "bulk", None, 3).unwrap();
+        assert_eq!(events.len(), 3);
+    }
+
+    #[test]
+    fn query_events_filters_by_type() {
+        let conn = setup_test_db();
+        let data = serde_json::json!({});
+        record_event(&conn, "type_a", "s1", &data, None, None).unwrap();
+        record_event(&conn, "type_b", "s2", &data, None, None).unwrap();
+        record_event(&conn, "type_a", "s3", &data, None, None).unwrap();
+
+        let a_events = query_events(&conn, "type_a", None, 10).unwrap();
+        assert_eq!(a_events.len(), 2);
+        let b_events = query_events(&conn, "type_b", None, 10).unwrap();
+        assert_eq!(b_events.len(), 1);
+    }
+
+    #[test]
+    fn query_events_by_subject_returns_matching() {
+        let conn = setup_test_db();
+        let data = serde_json::json!({"info": "test"});
+        record_event(&conn, "ev1", "rust", &data, None, None).unwrap();
+        record_event(&conn, "ev2", "rust", &data, None, None).unwrap();
+        record_event(&conn, "ev3", "python", &data, None, None).unwrap();
+
+        let rust_events = query_events_by_subject(&conn, "rust", 10).unwrap();
+        assert_eq!(rust_events.len(), 2);
+        for ev in &rust_events {
+            assert_eq!(ev.subject, "rust");
+        }
+
+        let python_events = query_events_by_subject(&conn, "python", 10).unwrap();
+        assert_eq!(python_events.len(), 1);
+    }
+
+    #[test]
+    fn cleanup_expired_removes_old_events() {
+        let conn = setup_test_db();
+        let data = serde_json::json!({});
+        // Insert an event that expired yesterday
+        conn.execute(
+            "INSERT INTO temporal_events (event_type, subject, data, expires_at)
+             VALUES ('exp', 'old', '{}', datetime('now', '-1 day'))",
+            [],
+        )
+        .unwrap();
+        // Insert an event that expires tomorrow
+        conn.execute(
+            "INSERT INTO temporal_events (event_type, subject, data, expires_at)
+             VALUES ('exp', 'future', '{}', datetime('now', '+1 day'))",
+            [],
+        )
+        .unwrap();
+        // Insert an event with no expiry
+        record_event(&conn, "exp", "permanent", &data, None, None).unwrap();
+
+        let deleted = cleanup_expired(&conn).unwrap();
+        assert_eq!(deleted, 1);
+
+        let remaining = query_events(&conn, "exp", None, 10).unwrap();
+        assert_eq!(remaining.len(), 2);
+    }
+
+    #[test]
+    fn upsert_and_get_project_dependencies() {
+        let conn = setup_test_db();
+        upsert_dependency(
+            &conn,
+            "/home/user/proj",
+            "cargo.toml",
+            "serde",
+            Some("1.0.193"),
+            false,
+            "rust",
+        )
+        .unwrap();
+        upsert_dependency(
+            &conn,
+            "/home/user/proj",
+            "cargo.toml",
+            "tokio",
+            Some("1.35.0"),
+            false,
+            "rust",
+        )
+        .unwrap();
+        upsert_dependency(
+            &conn,
+            "/home/user/proj",
+            "cargo.toml",
+            "tracing",
+            Some("0.1.40"),
+            true,
+            "rust",
+        )
+        .unwrap();
+
+        let deps = get_project_dependencies(&conn, "/home/user/proj").unwrap();
+        assert_eq!(deps.len(), 3);
+        // Ordered by package_name
+        assert_eq!(deps[0].package_name, "serde");
+        assert_eq!(deps[1].package_name, "tokio");
+        assert_eq!(deps[2].package_name, "tracing");
+        assert!(!deps[0].is_dev);
+        assert!(deps[2].is_dev);
+        assert_eq!(deps[0].version, Some("1.0.193".to_string()));
+    }
+
+    #[test]
+    fn upsert_dependency_updates_existing() {
+        let conn = setup_test_db();
+        upsert_dependency(
+            &conn,
+            "/proj",
+            "cargo.toml",
+            "serde",
+            Some("1.0.100"),
+            false,
+            "rust",
+        )
+        .unwrap();
+        upsert_dependency(
+            &conn,
+            "/proj",
+            "cargo.toml",
+            "serde",
+            Some("1.0.200"),
+            true,
+            "rust",
+        )
+        .unwrap();
+
+        let deps = get_project_dependencies(&conn, "/proj").unwrap();
+        assert_eq!(deps.len(), 1);
+        assert_eq!(deps[0].version, Some("1.0.200".to_string()));
+        assert!(deps[0].is_dev);
+    }
+
+    #[test]
+    fn get_all_dependencies_fallback_no_git_signals() {
+        let conn = setup_test_db();
+        upsert_dependency(
+            &conn,
+            "/proj_a",
+            "package.json",
+            "react",
+            Some("18.2.0"),
+            false,
+            "javascript",
+        )
+        .unwrap();
+        upsert_dependency(
+            &conn,
+            "/proj_b",
+            "cargo.toml",
+            "serde",
+            Some("1.0.0"),
+            false,
+            "rust",
+        )
+        .unwrap();
+
+        // No git signals → should return all deps
+        let all = get_all_dependencies(&conn).unwrap();
+        assert_eq!(all.len(), 2);
+    }
+
+    #[test]
+    fn get_project_dependencies_empty_for_unknown_path() {
+        let conn = setup_test_db();
+        upsert_dependency(
+            &conn,
+            "/real/path",
+            "cargo.toml",
+            "serde",
+            Some("1.0"),
+            false,
+            "rust",
+        )
+        .unwrap();
+
+        let deps = get_project_dependencies(&conn, "/other/path").unwrap();
+        assert!(deps.is_empty());
+    }
+
+    #[test]
+    fn upsert_relationship_creates_and_updates() {
+        let conn = setup_test_db();
+        let meta = serde_json::json!({"reason": "similar topic"});
+        upsert_relationship(&conn, 1, 2, "similar", 0.85, Some(&meta)).unwrap();
+
+        // Verify it was created
+        let count: i64 = conn
+            .query_row("SELECT COUNT(*) FROM item_relationships", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(count, 1);
+
+        let strength: f64 = conn
+            .query_row(
+                "SELECT strength FROM item_relationships WHERE source_item_id = 1 AND related_item_id = 2",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert!((strength - 0.85).abs() < 0.001);
+
+        // Update strength via upsert
+        upsert_relationship(&conn, 1, 2, "similar", 0.95, None).unwrap();
+        let updated: f64 = conn
+            .query_row(
+                "SELECT strength FROM item_relationships WHERE source_item_id = 1 AND related_item_id = 2",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert!((updated - 0.95).abs() < 0.001);
+
+        // Still only one row (upsert, not duplicate)
+        let count2: i64 = conn
+            .query_row("SELECT COUNT(*) FROM item_relationships", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(count2, 1);
+    }
+
+    #[test]
+    fn upsert_relationship_different_types_creates_separate_rows() {
+        let conn = setup_test_db();
+        upsert_relationship(&conn, 1, 2, "similar", 0.8, None).unwrap();
+        upsert_relationship(&conn, 1, 2, "references", 0.6, None).unwrap();
+
+        let count: i64 = conn
+            .query_row("SELECT COUNT(*) FROM item_relationships", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(count, 2);
+    }
+
+    #[test]
+    fn temporal_event_serde_roundtrip() {
+        let event = TemporalEvent {
+            id: 1,
+            event_type: "version_release".to_string(),
+            subject: "react".to_string(),
+            data: serde_json::json!({"version": "19.0.0", "breaking": true}),
+            source_item_id: Some(42),
+            created_at: "2026-02-28T10:00:00".to_string(),
+            expires_at: Some("2026-03-28T10:00:00".to_string()),
+        };
+        let json = serde_json::to_string(&event).unwrap();
+        let deserialized: TemporalEvent = serde_json::from_str(&json).unwrap();
+        assert_eq!(deserialized.event_type, "version_release");
+        assert_eq!(deserialized.data["version"], "19.0.0");
+        assert_eq!(deserialized.source_item_id, Some(42));
+        assert!(deserialized.expires_at.is_some());
+    }
+
+    #[test]
+    fn project_dependency_serde_roundtrip() {
+        let dep = ProjectDependency {
+            id: 1,
+            project_path: "/home/user/myapp".to_string(),
+            manifest_type: "cargo.toml".to_string(),
+            package_name: "tokio".to_string(),
+            version: Some("1.35.0".to_string()),
+            is_dev: false,
+            language: "rust".to_string(),
+            last_scanned: "2026-02-28T12:00:00".to_string(),
+        };
+        let json = serde_json::to_string(&dep).unwrap();
+        let deserialized: ProjectDependency = serde_json::from_str(&json).unwrap();
+        assert_eq!(deserialized.package_name, "tokio");
+        assert!(!deserialized.is_dev);
+        assert_eq!(deserialized.language, "rust");
+    }
+
+    #[test]
+    fn record_event_with_null_source_item_id() {
+        let conn = setup_test_db();
+        let data = serde_json::json!({"note": "no source"});
+        let id = record_event(&conn, "manual", "user_action", &data, None, None).unwrap();
+        let events = query_events(&conn, "manual", None, 10).unwrap();
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].id, id);
+        assert_eq!(events[0].source_item_id, None);
+    }
+}
