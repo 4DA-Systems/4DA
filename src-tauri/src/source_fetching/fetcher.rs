@@ -288,7 +288,21 @@ pub(crate) async fn fetch_all_sources(
         // Try to embed, with fallback to zero vectors (keyword-only scoring)
         let embeddings = match embed_texts(&texts).await {
             Ok(emb) => {
-                let _ = app.emit("embedding-mode", serde_json::json!({ "mode": "semantic" }));
+                let is_zero_fallback = emb
+                    .first()
+                    .map(|v| v.iter().all(|&x| x == 0.0))
+                    .unwrap_or(false);
+                if is_zero_fallback {
+                    let _ = app.emit(
+                        "embedding-mode",
+                        serde_json::json!({
+                            "mode": "keyword-only",
+                            "reason": "No embedding provider available"
+                        }),
+                    );
+                } else {
+                    let _ = app.emit("embedding-mode", serde_json::json!({ "mode": "semantic" }));
+                }
                 emb
             }
             Err(e) => {

@@ -1,33 +1,7 @@
 import { useState, useEffect, memo } from 'react';
 import { useTranslation } from 'react-i18next';
-import { invoke } from '@tauri-apps/api/core';
 import { ProGate } from './ProGate';
-
-interface CalibrationInsight {
-  topic: string;
-  delta: number;
-  sample_size: number;
-  confidence: number;
-}
-
-interface SourceQuality {
-  source_type: string;
-  items_surfaced: number;
-  items_engaged: number;
-  engagement_rate: number;
-}
-
-interface IntelligencePulseData {
-  items_analyzed_7d: number;
-  items_surfaced_7d: number;
-  rejection_rate: number;
-  calibration_accuracy: number;
-  top_calibrations: CalibrationInsight[];
-  source_quality: SourceQuality[];
-  anti_patterns_detected: number;
-  total_cycles: number;
-  learning_narratives: string[];
-}
+import { useAppStore } from '../store';
 
 function formatSourceLabel(source: string): string {
   const labels: Record<string, string> = {
@@ -43,20 +17,13 @@ function formatSourceLabel(source: string): string {
 
 export const IntelligencePulse = memo(function IntelligencePulse() {
   const { t } = useTranslation();
-  const [data, setData] = useState<IntelligencePulseData | null>(null);
+  const data = useAppStore(s => s.intelligencePulse);
+  const loadPulse = useAppStore(s => s.loadIntelligencePulse);
   const [expanded, setExpanded] = useState(false);
 
   useEffect(() => {
-    const load = async () => {
-      try {
-        const pulse = await invoke<IntelligencePulseData>('get_intelligence_pulse');
-        setData(pulse);
-      } catch {
-        // Intelligence pulse is supplementary, don't error
-      }
-    };
-    load();
-  }, []);
+    loadPulse();
+  }, [loadPulse]);
 
   if (!data || data.total_cycles === 0) return null;
 

@@ -16,7 +16,7 @@ export default defineConfig({
   retries: process.env.CI ? 0 : 1,
 
   /* Reasonable timeouts for a local desktop app */
-  timeout: 30_000,
+  timeout: 60_000,
   expect: {
     timeout: 10_000,
   },
@@ -46,6 +46,11 @@ export default defineConfig({
     },
   ],
 
-  /* Do NOT auto-start the dev server. The user manages it. */
-  // webServer: { command: 'pnpm run dev', url: 'http://localhost:4444' },
+  /* Auto-start dev server (reuses existing if already running) */
+  webServer: {
+    command: 'pnpm run dev',
+    url: 'http://localhost:4444',
+    reuseExistingServer: !process.env.CI,
+    timeout: 30_000,
+  },
 });

@@ -110,6 +110,8 @@ harness = false
 default = []
 void-universe = []
 sql-check = []
+calibrated-sim = []
+generate-sim-fixtures = []
 
 [[test]]
 name = "sql_checker"

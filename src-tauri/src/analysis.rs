@@ -227,6 +227,13 @@ pub(crate) async fn run_deep_initial_scan_impl(
                 idx,
                 total_items,
             );
+
+            // Emit partial results for progressive rendering
+            if !results.is_empty() {
+                let batch_end = results.len();
+                let batch_start = batch_end.saturating_sub(50);
+                let _ = app.emit("partial-results", &results[batch_start..batch_end]);
+            }
         }
 
         results.push(scoring::score_item(

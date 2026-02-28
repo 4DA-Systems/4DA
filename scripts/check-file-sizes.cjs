@@ -75,6 +75,8 @@ const EXCEPTIONS = {
   'src/components/TechRadar.tsx':                      'Tech radar — technology adoption visualization',
   'src/components/SettingsModal.tsx':                   'Settings — tabbed configuration panels',
   'src/components/__tests__/smoke.test.tsx':            'Smoke tests — all component render coverage',
+  'src/components/FirstRunTransition.tsx':              'First-run transition — multi-phase orchestrator with intelligence preview',
+  'src/components/FirstRunTransition.test.tsx':         'First-run transition tests — multi-phase state machine coverage',
 };
 
 const SCAN_DIRS = ['src', 'src-tauri/src'];

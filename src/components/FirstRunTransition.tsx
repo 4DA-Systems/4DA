@@ -364,6 +364,13 @@ export function FirstRunTransition({ onComplete }: FirstRunTransitionProps) {
               {t('firstRun.keywordMatching')}
             </p>
           )}
+
+          {/* Progressive preview count during analysis */}
+          {(phase === 'fetching' || phase === 'analyzing') && appState.relevanceResults.length > 0 && (
+            <p className="text-xs text-[var(--text-muted)] mt-3">
+              {appState.relevanceResults.filter(r => r.relevant).length} relevant items found so far...
+            </p>
+          )}
         </div>
       )}
     </div>

@@ -3,6 +3,7 @@
 //! Fetches top stories from Hacker News API and scrapes article content.
 
 use async_trait::async_trait;
+use futures::stream::{self, StreamExt};
 use scraper::{Html, Selector};
 use serde::Deserialize;
 use tracing::{info, warn};
@@ -66,44 +67,58 @@ impl Default for HackerNewsSource {
 
 impl HackerNewsSource {
     /// Fetch story details by IDs (helper method)
+    /// Uses buffer_unordered(20) for parallel fetching — reqwest::Client is Arc-backed.
     async fn fetch_stories_by_ids(
         &self,
-        ids: &[u64],
+        ids: Vec<u64>,
         max_items: usize,
     ) -> SourceResult<Vec<SourceItem>> {
-        let mut items = Vec::new();
+        let owned_ids: Vec<u64> = ids.into_iter().take(max_items).collect();
+        let items: Vec<SourceItem> = stream::iter(owned_ids)
+            .map(|id| {
+                let client = self.client.clone();
+                async move {
+                    let url = format!(
+                        "https://hacker-news.firebaseio.com/v0/item/{}.json",
+                        id
+                    );
+                    match client.get(&url).send().await {
+                        Ok(response) => match response.json::<HNStory>().await {
+                            Ok(story) => {
+                                let title =
+                                    story.title.unwrap_or_else(|| "[No title]".to_string());
+                                let content = story.text.unwrap_or_default();
 
-        for id in ids.iter().take(max_items) {
-            let url = format!("https://hacker-news.firebaseio.com/v0/item/{}.json", id);
+                                let mut item =
+                                    SourceItem::new("hackernews", &id.to_string(), &title)
+                                        .with_url(story.url.clone())
+                                        .with_content(content);
 
-            match self.client.get(&url).send().await {
-                Ok(response) => match response.json::<HNStory>().await {
-                    Ok(story) => {
-                        let title = story.title.unwrap_or_else(|| "[No title]".to_string());
-                        let content = story.text.unwrap_or_default();
+                                if let (Some(score), Some(by)) = (story.score, story.by) {
+                                    item = item.with_metadata(serde_json::json!({
+                                        "score": score,
+                                        "author": by,
+                                    }));
+                                }
 
-                        let mut item = SourceItem::new("hackernews", &id.to_string(), &title)
-                            .with_url(story.url.clone())
-                            .with_content(content);
-
-                        if let (Some(score), Some(by)) = (story.score, story.by) {
-                            item = item.with_metadata(serde_json::json!({
-                                "score": score,
-                                "author": by,
-                            }));
+                                Some(item)
+                            }
+                            Err(e) => {
+                                warn!(story_id = id, error = %e, "Failed to parse story");
+                                None
+                            }
+                        },
+                        Err(e) => {
+                            warn!(story_id = id, error = %e, "Failed to fetch story");
+                            None
                         }
-
-                        items.push(item);
                     }
-                    Err(e) => {
-                        warn!(story_id = id, error = %e, "Failed to parse story");
-                    }
-                },
-                Err(e) => {
-                    warn!(story_id = id, error = %e, "Failed to fetch story");
                 }
-            }
-        }
+            })
+            .buffer_unordered(20)
+            .filter_map(|opt| async { opt })
+            .collect()
+            .await;
 
         info!(count = items.len(), "Fetched stories");
         Ok(items)
@@ -151,7 +166,7 @@ impl Source for HackerNewsSource {
             "Got story IDs, fetching top items"
         );
 
-        self.fetch_stories_by_ids(&top_ids, self.config.max_items)
+        self.fetch_stories_by_ids(top_ids, self.config.max_items)
             .await
     }
 
@@ -225,7 +240,8 @@ impl Source for HackerNewsSource {
             unique_ids = all_ids.len(),
             "Fetching unique stories from all categories"
         );
-        self.fetch_stories_by_ids(&ordered_ids, ordered_ids.len())
+        let len = ordered_ids.len();
+        self.fetch_stories_by_ids(ordered_ids, len)
             .await
     }
 

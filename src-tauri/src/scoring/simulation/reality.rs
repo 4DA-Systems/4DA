@@ -19,7 +19,9 @@ fn run_persona_simulation(persona_idx: usize, ctx: &ScoringContext) -> SimMetric
     let items = corpus();
     let db = sim_db();
     let opts = sim_no_freshness();
-    let emb = vec![0.0_f32; 384];
+    #[cfg(feature = "calibrated-sim")]
+    let calibrated_embeddings = super::load_corpus_embeddings();
+    let zero_emb = vec![0.0_f32; 384];
     let mut metrics = SimMetrics::new();
 
     for item in &items {
@@ -28,7 +30,13 @@ fn run_persona_simulation(persona_idx: usize, ctx: &ScoringContext) -> SimMetric
         if matches!(expected, ExpectedOutcome::MildBorderline) {
             continue;
         }
-        let input = sim_input(item.id, item.title, item.content, &emb);
+        #[cfg(feature = "calibrated-sim")]
+        let emb = calibrated_embeddings
+            .get((item.id - 1) as usize)
+            .unwrap_or(&zero_emb);
+        #[cfg(not(feature = "calibrated-sim"))]
+        let emb = &zero_emb;
+        let input = sim_input(item.id, item.title, item.content, emb);
         let result = score_item(&input, ctx, &db, &opts, None);
         metrics.record(&result, expected);
     }

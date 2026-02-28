@@ -20,9 +20,10 @@ export default defineConfig(async () => ({
       output: {
         manualChunks: {
           'vendor-react': ['react', 'react-dom'],
-          'vendor-tauri': ['@tauri-apps/api'],
+          'vendor-tauri': ['@tauri-apps/api', '@tauri-apps/plugin-opener', '@tauri-apps/plugin-updater'],
           'vendor-i18n': ['i18next', 'react-i18next'],
           'vendor-store': ['zustand'],
+          'vendor-virtual': ['@tanstack/react-virtual'],
         },
       },
     },
