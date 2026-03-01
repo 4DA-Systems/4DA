@@ -423,10 +423,8 @@ pub(super) fn context_switcher() -> ScoringContext {
         &["tokio", "axum", "gin", "grpc"],
         &["rust", "go", "backend", "microservices"],
     );
-    let stack = crate::stacks::compose_profiles(&[
-        "rust_systems".to_string(),
-        "go_backend".to_string(),
-    ]);
+    let stack =
+        crate::stacks::compose_profiles(&["rust_systems".to_string(), "go_backend".to_string()]);
     ScoringContext::builder()
         .interest_count(4)
         .interests(interests)
