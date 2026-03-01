@@ -20,6 +20,7 @@ use serde::{Deserialize, Serialize};
 #[serde(rename_all = "camelCase")]
 pub struct TasteCard {
     pub id: u64,
+    pub slot: usize,
     pub title: String,
     pub snippet: String,
     pub source_hint: String,
@@ -119,6 +120,7 @@ mod tests {
         let step = TasteTestStep::NextCard {
             card: TasteCard {
                 id: 1,
+                slot: 0,
                 title: "Test".into(),
                 snippet: "Snippet".into(),
                 source_hint: "HN".into(),
@@ -132,6 +134,7 @@ mod tests {
         // Verify tag name
         assert_eq!(json["type"], "nextCard", "Tag should be camelCase");
         // Verify card fields are camelCase
+        assert_eq!(json["card"]["slot"], 0, "slot should be present");
         assert_eq!(json["card"]["sourceHint"], "HN");
         assert_eq!(json["card"]["categoryHint"], "Systems");
         // Verify progress/confidence are present
@@ -194,6 +197,7 @@ mod tests {
             json["card"]["categoryHint"].is_string(),
             "card.categoryHint should be camelCase"
         );
+        assert!(json["card"]["slot"].is_u64(), "card.slot should be u64");
         assert!(json["progress"].is_f64(), "progress should be f64");
         assert!(json["confidence"].is_f64(), "confidence should be f64");
 

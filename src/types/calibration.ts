@@ -59,6 +59,7 @@ export interface Recommendation {
 
 export interface TasteCard {
   id: number;
+  slot: number;
   title: string;
   snippet: string;
   sourceHint: string;

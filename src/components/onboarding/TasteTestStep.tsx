@@ -15,18 +15,12 @@ type Phase = 'intro' | 'cards' | 'finalizing' | 'complete';
 
 interface CardState {
   id: number;
+  slot: number;
   title: string;
   snippet: string;
   sourceHint: string;
   categoryHint: string;
-  slot: number;
 }
-
-// Map card IDs to slot indices (matches items.rs SLOT_TO_CORPUS_ID)
-const SLOT_MAP: Record<number, number> = {
-  1: 0, 11: 1, 16: 2, 28: 3, 19: 4, 21: 5, 4: 6,
-  24: 7, 6: 8, 96: 9, 8: 10, 17: 11, 45: 12, 91: 13, 142: 14,
-};
 
 export function TasteTestStep({ isAnimating, onComplete, onSkip }: TasteTestStepProps) {
   const [phase, setPhase] = useState<Phase>('intro');
@@ -41,8 +35,7 @@ export function TasteTestStep({ isAnimating, onComplete, onSkip }: TasteTestStep
     try {
       const result = await invoke<TasteTestStepResult>('taste_test_start');
       if (result.type === 'nextCard') {
-        const slot = SLOT_MAP[result.card.id] ?? 0;
-        setCurrentCard({ ...result.card, slot });
+        setCurrentCard(result.card);
         setProgress(result.progress);
         setConfidence(result.confidence);
         setPhase('cards');
@@ -65,8 +58,7 @@ export function TasteTestStep({ isAnimating, onComplete, onSkip }: TasteTestStep
       });
 
       if (result.type === 'nextCard') {
-        const slot = SLOT_MAP[result.card.id] ?? 0;
-        setCurrentCard({ ...result.card, slot });
+        setCurrentCard(result.card);
         setProgress(result.progress);
         setConfidence(result.confidence);
         setCardAnimating(false);

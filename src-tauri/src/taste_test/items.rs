@@ -14,35 +14,35 @@ use super::TasteCard;
 pub fn calibration_items() -> Vec<TasteCard> {
     vec![
         // Slot 0: Rust 2024 Edition — rust_systems discriminator
-        TasteCard { id: 1, title: "Rust 2024 Edition: What's New".into(), snippet: "New language features including improved async support, new syntax for lifetime annotations, and better error messages.".into(), source_hint: "Hacker News".into(), category_hint: "Systems".into() },
+        TasteCard { id: 1, slot: 0, title: "Rust 2024 Edition: What's New".into(), snippet: "New language features including improved async support, new syntax for lifetime annotations, and better error messages.".into(), source_hint: "Hacker News".into(), category_hint: "Systems".into() },
         // Slot 1: PyTorch 2.0 — python_ml discriminator
-        TasteCard { id: 11, title: "PyTorch 2.0 performance benchmarks".into(), snippet: "torch.compile() delivers 1.5-2x speedup on training workloads with minimal code changes.".into(), source_hint: "Hacker News".into(), category_hint: "ML/AI".into() },
+        TasteCard { id: 11, slot: 1, title: "PyTorch 2.0 performance benchmarks".into(), snippet: "torch.compile() delivers 1.5-2x speedup on training workloads with minimal code changes.".into(), source_hint: "Hacker News".into(), category_hint: "ML/AI".into() },
         // Slot 2: Kubernetes 1.30 — devops_sre discriminator
-        TasteCard { id: 16, title: "Kubernetes 1.30: What's new for operators".into(), snippet: "Better CRD validation, improved leader election, and new admission policies for the operator pattern.".into(), source_hint: "Hacker News".into(), category_hint: "DevOps".into() },
+        TasteCard { id: 16, slot: 2, title: "Kubernetes 1.30: What's new for operators".into(), snippet: "Better CRD validation, improved leader election, and new admission policies for the operator pattern.".into(), source_hint: "Hacker News".into(), category_hint: "DevOps".into() },
         // Slot 3: Next.js App Router — fullstack_ts discriminator
-        TasteCard { id: 28, title: "Next.js App Router: Server components deep dive".into(), snippet: "React Server Components in Next.js App Router: data fetching patterns, caching strategies, and streaming.".into(), source_hint: "Hacker News".into(), category_hint: "Web".into() },
+        TasteCard { id: 28, slot: 3, title: "Next.js App Router: Server components deep dive".into(), snippet: "React Server Components in Next.js App Router: data fetching patterns, caching strategies, and streaming.".into(), source_hint: "Hacker News".into(), category_hint: "Web".into() },
         // Slot 4: React Native — mobile_dev discriminator
-        TasteCard { id: 19, title: "React Native 0.74 new architecture".into(), snippet: "Fabric renderer and JSI bridge replacement. Performance improvements and better TypeScript integration.".into(), source_hint: "Hacker News".into(), category_hint: "Mobile".into() },
+        TasteCard { id: 19, slot: 4, title: "React Native 0.74 new architecture".into(), snippet: "Fabric renderer and JSI bridge replacement. Performance improvements and better TypeScript integration.".into(), source_hint: "Hacker News".into(), category_hint: "Mobile".into() },
         // Slot 5: GHC 9.8 — niche_specialist discriminator
-        TasteCard { id: 21, title: "Haskell GHC 9.8 improvements".into(), snippet: "Improved type-level programming, better error messages, and performance improvements for compiled code.".into(), source_hint: "Hacker News".into(), category_hint: "Languages".into() },
+        TasteCard { id: 21, slot: 5, title: "Haskell GHC 9.8 improvements".into(), snippet: "Improved type-level programming, better error messages, and performance improvements for compiled code.".into(), source_hint: "Hacker News".into(), category_hint: "Languages".into() },
         // Slot 6: tokio internals — rust+power_user separator
-        TasteCard { id: 4, title: "tokio async runtime internals explained".into(), snippet: "Deep dive into task scheduling, executor pools, IO drivers, and waker mechanics in tokio.".into(), source_hint: "Hacker News".into(), category_hint: "Systems".into() },
+        TasteCard { id: 4, slot: 6, title: "tokio async runtime internals explained".into(), snippet: "Deep dive into task scheduling, executor pools, IO drivers, and waker mechanics in tokio.".into(), source_hint: "Hacker News".into(), category_hint: "Systems".into() },
         // Slot 7: Go generics — context_switcher discriminator
-        TasteCard { id: 24, title: "Go generics: Practical patterns after 2 years".into(), snippet: "Type constraints, generic data structures, and where Go generics shine two years after introduction.".into(), source_hint: "Hacker News".into(), category_hint: "Languages".into() },
+        TasteCard { id: 24, slot: 7, title: "Go generics: Practical patterns after 2 years".into(), snippet: "Type constraints, generic data structures, and where Go generics shine two years after introduction.".into(), source_hint: "Hacker News".into(), category_hint: "Languages".into() },
         // Slot 8: WASM + Rust — rust+fullstack overlap test
-        TasteCard { id: 6, title: "WebAssembly + Rust: Production case study".into(), snippet: "Running Rust compiled to WASM in production: performance-critical browser code and the component model.".into(), source_hint: "Blog".into(), category_hint: "Systems/Web".into() },
+        TasteCard { id: 6, slot: 8, title: "WebAssembly + Rust: Production case study".into(), snippet: "Running Rust compiled to WASM in production: performance-critical browser code and the component model.".into(), source_hint: "Blog".into(), category_hint: "Systems/Web".into() },
         // Slot 9: Career noise — noise calibrator
-        TasteCard { id: 96, title: "Senior Rust Engineer at Cloudflare — remote".into(), snippet: "5+ years experience, distributed systems background required. $180-250k.".into(), source_hint: "Hacker News".into(), category_hint: "Jobs".into() },
+        TasteCard { id: 96, slot: 9, title: "Senior Rust Engineer at Cloudflare — remote".into(), snippet: "5+ years experience, distributed systems background required. $180-250k.".into(), source_hint: "Hacker News".into(), category_hint: "Jobs".into() },
         // Slot 10: sqlite-vec — power_user breadth test
-        TasteCard { id: 8, title: "sqlite-vec: Vector search for SQLite".into(), snippet: "Store and query embeddings directly in SQLite using cosine similarity without a separate vector database.".into(), source_hint: "Hacker News".into(), category_hint: "Databases".into() },
+        TasteCard { id: 8, slot: 10, title: "sqlite-vec: Vector search for SQLite".into(), snippet: "Store and query embeddings directly in SQLite using cosine similarity without a separate vector database.".into(), source_hint: "Hacker News".into(), category_hint: "Databases".into() },
         // Slot 11: eBPF — devops_sre depth test
-        TasteCard { id: 17, title: "eBPF for production observability".into(), snippet: "Zero-overhead observability: trace system calls, network packets, and application behavior without modifying code.".into(), source_hint: "Hacker News".into(), category_hint: "DevOps".into() },
+        TasteCard { id: 17, slot: 11, title: "eBPF for production observability".into(), snippet: "Zero-overhead observability: trace system calls, network packets, and application behavior without modifying code.".into(), source_hint: "Hacker News".into(), category_hint: "DevOps".into() },
         // Slot 12: gRPC vs REST — context_switcher breadth test
-        TasteCard { id: 45, title: "gRPC vs REST: When to choose each".into(), snippet: "Comparing gRPC and REST for service communication: performance, schema evolution, streaming support.".into(), source_hint: "Hacker News".into(), category_hint: "Architecture".into() },
+        TasteCard { id: 45, slot: 12, title: "gRPC vs REST: When to choose each".into(), snippet: "Comparing gRPC and REST for service communication: performance, schema evolution, streaming support.".into(), source_hint: "Hacker News".into(), category_hint: "Architecture".into() },
         // Slot 13: Vector databases — borderline test
-        TasteCard { id: 91, title: "Vector databases: The hype and the reality".into(), snippet: "Pinecone, Weaviate, and Chroma vs SQLite-vec or pgvector for semantic search workloads.".into(), source_hint: "Hacker News".into(), category_hint: "Databases".into() },
+        TasteCard { id: 91, slot: 13, title: "Vector databases: The hype and the reality".into(), snippet: "Pinecone, Weaviate, and Chroma vs SQLite-vec or pgvector for semantic search workloads.".into(), source_hint: "Hacker News".into(), category_hint: "Databases".into() },
         // Slot 14: Show HN side project — meta noise calibrator
-        TasteCard { id: 142, title: "Show HN: My side project — another note-taking app".into(), snippet: "Note-taking app built over 6 months. Like Notion but simpler. Built with React and Node.js.".into(), source_hint: "Hacker News".into(), category_hint: "Show HN".into() },
+        TasteCard { id: 142, slot: 14, title: "Show HN: My side project — another note-taking app".into(), snippet: "Note-taking app built over 6 months. Like Notion but simpler. Built with React and Node.js.".into(), source_hint: "Hacker News".into(), category_hint: "Show HN".into() },
     ]
 }
 
