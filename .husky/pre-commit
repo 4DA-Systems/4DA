@@ -1,36 +1,17 @@
 #!/bin/sh
-# CADE Pre-commit Hook
-# Runs validation before allowing commit
+# CADE Pre-commit Hook — fast gate (< 10s)
+# Heavy checks (tsc, full tests) moved to pre-push
 
 echo "Running CADE pre-commit validation..."
 
-# File size guardian (fast check)
+# File size guardian (fast check, ~1s)
 echo "Checking file sizes..."
 node scripts/check-file-sizes.cjs || {
     echo "File size check failed. Split large files or add justified exceptions."
     exit 1
 }
 
-# TypeScript type check (incremental to avoid V8 Zone OOM on Windows)
-echo "Checking TypeScript types..."
-node --max-old-space-size=8192 node_modules/typescript/bin/tsc --noEmit --incremental --tsBuildInfoFile .tsbuildinfo || {
-    echo "TypeScript check failed. Fix type errors before committing."
-    exit 1
-}
-
-echo "Running ESLint..."
-NODE_OPTIONS="--max-old-space-size=4096" pnpm run lint || {
-    echo "ESLint check failed. Fix lint errors before committing."
-    exit 1
-}
-
-echo "Running frontend tests..."
-NODE_OPTIONS="--max-old-space-size=4096" pnpm run test -- --run 2>/dev/null || {
-    echo "Frontend tests failed. Fix failing tests before committing."
-    exit 1
-}
-
-# Rust validation (format only - full tests in CI)
+# Rust formatting (fast check, ~2s)
 echo "Checking Rust formatting..."
 cd src-tauri && cargo fmt --check || {
     echo "Rust formatting check failed. Run 'cargo fmt' to fix."
@@ -38,4 +19,14 @@ cd src-tauri && cargo fmt --check || {
 }
 cd ..
 
-echo "Pre-commit validation passed!"
+# ESLint on staged files only (~3s vs full project ~8s)
+echo "Running ESLint (staged files)..."
+STAGED_TS=$(git diff --cached --name-only --diff-filter=ACM | grep -E '\.(ts|tsx)$' || true)
+if [ -n "$STAGED_TS" ]; then
+    echo "$STAGED_TS" | xargs node_modules/.bin/eslint --no-warn-ignored 2>/dev/null || {
+        echo "ESLint check failed. Fix lint errors before committing."
+        exit 1
+    }
+fi
+
+echo "Pre-commit validation passed! (full tests run on push)"

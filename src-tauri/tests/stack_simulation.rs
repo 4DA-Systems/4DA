@@ -1248,10 +1248,11 @@ fn integrity_no_boosted_competitor() {
 fn integrity_all_keywords_lowercase() {
     for profile in stacks::list_profiles() {
         for pp in profile.pain_points {
-            for &kw in pp.keywords {
+            for kw in pp.keywords.iter() {
+                let lower = kw.to_lowercase();
                 assert_eq!(
-                    kw,
-                    kw.to_lowercase().as_str(),
+                    *kw,
+                    lower.as_str(),
                     "{}: pain point keyword '{}' not lowercase",
                     profile.id,
                     kw
@@ -1259,20 +1260,22 @@ fn integrity_all_keywords_lowercase() {
             }
         }
         for es in profile.ecosystem_shifts {
-            for &kw in es.keywords {
+            for kw in es.keywords.iter() {
+                let lower = kw.to_lowercase();
                 assert_eq!(
-                    kw,
-                    kw.to_lowercase().as_str(),
+                    *kw,
+                    lower.as_str(),
                     "{}: shift keyword '{}' not lowercase",
                     profile.id,
                     kw
                 );
             }
         }
-        for &(kw, _) in profile.keyword_boosts {
+        for &(kw, _) in profile.keyword_boosts.iter() {
+            let lower = kw.to_lowercase();
             assert_eq!(
                 kw,
-                kw.to_lowercase().as_str(),
+                lower.as_str(),
                 "{}: keyword boost '{}' not lowercase",
                 profile.id,
                 kw
@@ -1861,12 +1864,18 @@ fn monotonicity_shift_keywords_additive() {
                 continue;
             }
             // 2 keywords (threshold)
-            let topics_2: Vec<String> = es.keywords[..2].iter().map(|s| s.to_string()).collect();
+            let topics_2: Vec<String> = es.keywords[..2]
+                .iter()
+                .map(|s: &&str| s.to_string())
+                .collect();
             let title_2 = topics_2.join(" ");
             let mult_2 = scoring::detect_ecosystem_shift(&topics_2, &title_2, &stack);
 
             // 3 keywords (above threshold)
-            let topics_3: Vec<String> = es.keywords[..3].iter().map(|s| s.to_string()).collect();
+            let topics_3: Vec<String> = es.keywords[..3]
+                .iter()
+                .map(|s: &&str| s.to_string())
+                .collect();
             let title_3 = topics_3.join(" ");
             let mult_3 = scoring::detect_ecosystem_shift(&topics_3, &title_3, &stack);
 
@@ -1961,7 +1970,7 @@ fn threshold_single_keyword_no_pain_point() {
         let profile = stacks::get_profile(profile_id).unwrap();
 
         for pp in profile.pain_points {
-            for &kw in pp.keywords {
+            for kw in pp.keywords.iter() {
                 // Construct content with EXACTLY this one keyword
                 let title = format!("Article discussing {} in depth", kw);
                 let content = "some unrelated content about web development practices";
@@ -1973,14 +1982,18 @@ fn threshold_single_keyword_no_pain_point() {
                     // from TypeScript pain point also matches "setup" in Composition
                     // API pain point, giving it 2 matches).
                     let combined = format!("{} {}", title.to_lowercase(), content.to_lowercase());
-                    let any_pp_justified = profile.pain_points.iter().any(|any_pp| {
-                        let mc = any_pp
-                            .keywords
+                    let any_pp_justified =
+                        profile
+                            .pain_points
                             .iter()
-                            .filter(|k| scoring::text_contains_term(&combined, k))
-                            .count();
-                        mc >= 2
-                    });
+                            .any(|any_pp: &stacks::PainPoint| {
+                                let mc = any_pp
+                                    .keywords
+                                    .iter()
+                                    .filter(|k: &&&str| scoring::text_contains_term(&combined, k))
+                                    .count();
+                                mc >= 2
+                            });
                     assert!(
                         any_pp_justified,
                         "{}: pain match triggered with keyword '{}' \
@@ -2000,7 +2013,7 @@ fn threshold_single_keyword_no_ecosystem_shift() {
         let profile = stacks::get_profile(profile_id).unwrap();
 
         for es in profile.ecosystem_shifts {
-            for &kw in es.keywords {
+            for kw in es.keywords.iter() {
                 let topics = vec![kw.to_string()];
                 let title = format!("Article discussing {} trends", kw);
                 let mult = scoring::detect_ecosystem_shift(&topics, &title, &stack);
@@ -2011,9 +2024,9 @@ fn threshold_single_keyword_no_ecosystem_shift() {
                     let match_count = es
                         .keywords
                         .iter()
-                        .filter(|k| {
+                        .filter(|k: &&&str| {
                             scoring::text_contains_term(&title_lower, k)
-                                || topics.iter().any(|t| {
+                                || topics.iter().any(|t: &String| {
                                     let t_lower = t.to_lowercase();
                                     scoring::text_contains_term(&t_lower, k)
                                         || scoring::text_contains_term(k, &t_lower)

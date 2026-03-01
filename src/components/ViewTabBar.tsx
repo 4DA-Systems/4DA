@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../store';
 
-type ViewId = 'briefing' | 'channels' | 'results' | 'profile' | 'insights' | 'saved' | 'toolkit' | 'playbook' | 'coach';
+type ViewId = 'briefing' | 'channels' | 'results' | 'profile' | 'insights' | 'saved' | 'toolkit' | 'playbook' | 'coach' | 'calibrate';
 
 const TABS: Array<{ id: ViewId; labelKey: string; subtitleKey: string; activeColor: string }> = [
   { id: 'briefing', labelKey: 'nav.briefing.label', subtitleKey: 'nav.briefing.subtitle', activeColor: 'bg-orange-500/20 text-orange-400' },
@@ -14,6 +14,7 @@ const TABS: Array<{ id: ViewId; labelKey: string; subtitleKey: string; activeCol
   { id: 'toolkit', labelKey: 'nav.toolkit', subtitleKey: 'nav.toolkit.subtitle', activeColor: 'bg-purple-500/20 text-purple-400' },
   { id: 'playbook', labelKey: 'nav.playbook', subtitleKey: 'nav.playbook.subtitle', activeColor: 'bg-yellow-500/20 text-yellow-400' },
   { id: 'coach', labelKey: 'nav.coach', subtitleKey: 'nav.coach.subtitle', activeColor: 'bg-emerald-500/20 text-emerald-400' },
+  { id: 'calibrate', labelKey: 'nav.calibrate', subtitleKey: 'nav.calibrate.subtitle', activeColor: 'bg-sky-500/20 text-sky-400' },
 ];
 
 const BADGE_COLORS: Partial<Record<ViewId, string>> = {

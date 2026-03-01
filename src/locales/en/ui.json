@@ -238,6 +238,8 @@
   "nav.channels": "Channels",
   "nav.channels.subtitle": "Live intelligence on topics you track",
   "nav.coach.subtitle": "AI coaching for STREETS progress",
+  "nav.calibrate": "Calibrate",
+  "nav.calibrate.subtitle": "Rig quality and scoring accuracy",
 
   "results.title": "Relevance Results",
   "results.new": "{{count}} new",

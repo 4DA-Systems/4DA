@@ -18,6 +18,7 @@ import type {
   SourceRelevance,
   ScoreBreakdown,
 } from '../types/analysis';
+import type { CalibrationResult } from '../types/calibration';
 import type {
   Settings,
   MonitoringStatus,
@@ -107,6 +108,7 @@ interface CommandMap {
   check_ollama_status: { params: { baseUrl: string | null }; result: { operational: boolean; models: string[]; error: string | null } };
   mark_onboarding_complete: { params: Record<string, never>; result: void };
   pull_ollama_model: { params: { model: string; baseUrl: string | null }; result: void };
+  run_calibration: { params: Record<string, never>; result: CalibrationResult };
   set_close_to_tray: { params: { enabled: boolean }; result: void };
 
   // -- User Context & Interests --
