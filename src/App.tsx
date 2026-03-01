@@ -13,16 +13,18 @@ import { SplashScreen } from './components/SplashScreen';
 import { Onboarding } from './components/Onboarding';
 import { VoidEngine } from './components/void-engine/VoidEngine';
 import { OllamaStatus } from './components/OllamaStatus';
-import { NaturalLanguageSearch } from './components/NaturalLanguageSearch';
 import { ToastContainer } from './components/Toast';
-import { LearningIndicator } from './components/LearningIndicator';
 import { ResultsView } from './components/ResultsView';
 import { ActionBar } from './components/ActionBar';
-import { PredictiveIndicator } from './components/PredictiveIndicator';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { ViewErrorBoundary } from './components/ViewErrorBoundary';
-import { FirstRunTransition } from './components/FirstRunTransition';
 import { ViewTabBar } from './components/ViewTabBar';
+
+// Lazy-loaded non-critical-path components
+const FirstRunTransition = lazy(() => import('./components/FirstRunTransition').then(m => ({ default: m.FirstRunTransition })));
+const NaturalLanguageSearch = lazy(() => import('./components/NaturalLanguageSearch').then(m => ({ default: m.NaturalLanguageSearch })));
+const LearningIndicator = lazy(() => import('./components/LearningIndicator').then(m => ({ default: m.LearningIndicator })));
+const PredictiveIndicator = lazy(() => import('./components/PredictiveIndicator').then(m => ({ default: m.PredictiveIndicator })));
 import { ProValueBadge } from './components/ProValueBadge';
 
 // Lazy-loaded views — each only loads when navigated to
@@ -334,10 +336,12 @@ function App() {
 
       {/* First-Run Transition (bridges onboarding to first analysis) */}
       {!showSplash && !showOnboarding && isFirstRun && !firstRunDismissed && (
-        <FirstRunTransition onComplete={(view) => {
-          setFirstRunDismissed(true);
-          setActiveView(view);
-        }} />
+        <Suspense fallback={null}>
+          <FirstRunTransition onComplete={(view) => {
+            setFirstRunDismissed(true);
+            setActiveView(view);
+          }} />
+        </Suspense>
       )}
 
       <div className={`min-h-screen bg-bg-primary text-white p-6 ${showSplash || showOnboarding ? 'hidden' : 'opacity-100 transition-opacity duration-300'}`}>
@@ -415,14 +419,18 @@ function App() {
         />
 
         {/* Learning Indicator - Visible Learning Loop */}
-        <LearningIndicator
-          learnedAffinities={learnedAffinities}
-          antiTopics={antiTopics}
-          lastLearnedTopic={lastLearnedTopic}
-        />
+        <Suspense fallback={null}>
+          <LearningIndicator
+            learnedAffinities={learnedAffinities}
+            antiTopics={antiTopics}
+            lastLearnedTopic={lastLearnedTopic}
+          />
+        </Suspense>
 
         {/* Predictive Context */}
-        <PredictiveIndicator />
+        <Suspense fallback={null}>
+          <PredictiveIndicator />
+        </Suspense>
 
         {/* Actionable Signals */}
         {state.analysisComplete && (
@@ -435,7 +443,9 @@ function App() {
 
         {/* Natural Language Search */}
         <div className="mb-6">
-          <NaturalLanguageSearch defaultExpanded={true} />
+          <Suspense fallback={null}>
+            <NaturalLanguageSearch defaultExpanded={true} />
+          </Suspense>
         </div>
 
         {/* View Tab Bar */}

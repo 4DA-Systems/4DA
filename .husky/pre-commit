@@ -2,8 +2,6 @@
 # CADE Pre-commit Hook
 # Runs validation before allowing commit
 
-export NODE_OPTIONS="--max-old-space-size=6144"
-
 echo "Running CADE pre-commit validation..."
 
 # File size guardian (fast check)
@@ -13,21 +11,21 @@ node scripts/check-file-sizes.cjs || {
     exit 1
 }
 
-# Frontend validation (fast checks only)
+# TypeScript type check (explicit memory to avoid V8 OOM crash on Windows)
 echo "Checking TypeScript types..."
-npm run typecheck || {
+node --max-old-space-size=8192 node_modules/typescript/bin/tsc --noEmit || {
     echo "TypeScript check failed. Fix type errors before committing."
     exit 1
 }
 
 echo "Running ESLint..."
-npm run lint || {
+NODE_OPTIONS="--max-old-space-size=4096" pnpm run lint || {
     echo "ESLint check failed. Fix lint errors before committing."
     exit 1
 }
 
 echo "Running frontend tests..."
-pnpm run test -- --run || {
+NODE_OPTIONS="--max-old-space-size=4096" pnpm run test -- --run || {
     echo "Frontend tests failed. Fix failing tests before committing."
     exit 1
 }
