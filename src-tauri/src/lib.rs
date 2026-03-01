@@ -509,6 +509,7 @@ pub fn run() {
             channel_commands::refresh_channel_sources,
             channel_commands::auto_render_all_channels,
             channel_commands::create_custom_channel,
+            channel_commands::preview_channel_sources,
             channel_commands::delete_channel
         ])
         .setup(|app| {

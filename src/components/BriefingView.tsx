@@ -18,6 +18,7 @@ import { IntelligencePulse } from './IntelligencePulse';
 import { ScoringDelta } from './ScoringDelta';
 import { DecisionWindowsPanel } from './DecisionWindowsPanel';
 import { CompoundAdvantageScore } from './CompoundAdvantageScore';
+import { IntelligenceProfileCard } from './IntelligenceProfileCard';
 import { useLicense } from '../hooks/use-license';
 
 export function BriefingView() {
@@ -421,7 +422,10 @@ export function BriefingView() {
         )}
       </div>
 
-      {/* 6. Intelligence Metrics — collapsed footer with smooth animation */}
+      {/* 6. Your Intelligence Profile — learning visibility */}
+      <IntelligenceProfileCard />
+
+      {/* 7. Intelligence Metrics — collapsed footer with smooth animation */}
       <div>
         <button
           onClick={() => setMetricsExpanded(prev => !prev)}

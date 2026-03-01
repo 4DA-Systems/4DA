@@ -79,4 +79,7 @@ pub(crate) struct ScoringContext {
     pub topic_half_lives: HashMap<String, f32>,
     /// Unified sovereign developer profile (assembled once per run)
     pub sovereign_profile: Option<crate::sovereign_developer_profile::SovereignDeveloperProfile>,
+    /// Dominant persona from continuous taste inference (persona_index, weight)
+    /// Present when dominant weight exceeds uniform threshold (> 0.2)
+    pub dominant_persona: Option<(usize, f32)>,
 }

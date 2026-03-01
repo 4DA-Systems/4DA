@@ -235,6 +235,34 @@ pub fn get_dominant_persona(conn: &Connection) -> Result<Option<(String, f64)>, 
 }
 
 // ============================================================================
+// Persona Topic Boosts
+// ============================================================================
+
+/// Derive topic boosts from a dominant persona for scoring context injection.
+/// Returns a map of topic -> small boost value based on persona interests and tech.
+/// The boost is intentionally small: `weight * 0.1` per characteristic topic.
+pub fn get_persona_topic_boosts(
+    persona_idx: usize,
+    weight: f32,
+) -> std::collections::HashMap<String, f32> {
+    let mut boosts = std::collections::HashMap::new();
+    if persona_idx >= NUM_PERSONAS {
+        return boosts;
+    }
+    let template = &TEMPLATES[persona_idx];
+    let boost_factor = weight * 0.1;
+    for &(interest, interest_weight) in template.interests {
+        boosts.insert(interest.to_lowercase(), boost_factor * interest_weight);
+    }
+    for &tech in template.tech {
+        boosts
+            .entry(tech.to_lowercase())
+            .or_insert(boost_factor * 0.5);
+    }
+    boosts
+}
+
+// ============================================================================
 // Drift Detection
 // ============================================================================
 

@@ -93,11 +93,30 @@ export function PlaybookView() {
     [loadContent],
   );
 
+  const addToast = useAppStore((s) => s.addToast);
+
   const handleLessonToggle = useCallback(
     (moduleId: string, lessonIdx: number) => {
+      // Determine if this is marking complete (not toggling off)
+      const progress = useAppStore.getState().playbookProgress;
+      const mod = progress?.modules.find((m) => m.module_id === moduleId);
+      const wasComplete = mod?.completed_lessons.includes(lessonIdx) ?? false;
+
       markComplete(moduleId, lessonIdx);
+
+      // Show learning narrative toast when completing a lesson
+      if (!wasComplete) {
+        const content = useAppStore.getState().playbookContent;
+        const lessonTitle = content?.lessons[lessonIdx]?.title;
+        if (lessonTitle) {
+          addToast(
+            'success',
+            `Your scoring engine just learned about ${lessonTitle}. Future results will reflect this.`,
+          );
+        }
+      }
     },
-    [markComplete],
+    [markComplete, addToast],
   );
 
   // Load personalized content for each lesson when module content is available

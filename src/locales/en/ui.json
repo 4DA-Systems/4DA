@@ -1234,5 +1234,9 @@
   "channels.topicsLabel": "Topics",
   "channels.topicsPlaceholder": "Type a topic and press Enter",
   "channels.create": "Create",
+  "channels.previewFound": "Found {{count}} matching sources",
+  "channels.previewEmpty": "No sources match these topics yet. Run an analysis to fetch content, or try different keywords.",
+  "channels.basicMode": "Basic Mode",
+  "channels.configureOllama": "Configure Ollama for AI synthesis",
   "coach.freeSession": "Free session {{current}}/{{max}}"
 }

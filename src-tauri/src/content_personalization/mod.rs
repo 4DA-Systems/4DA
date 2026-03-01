@@ -12,6 +12,7 @@
 pub mod cache;
 pub mod commands;
 pub mod context;
+pub(crate) mod engine_scoring;
 pub mod llm_engine;
 pub mod nollm_engine;
 pub mod template_processor;
