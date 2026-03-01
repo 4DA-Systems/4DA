@@ -101,6 +101,11 @@ pub static NEXTJS_FULLSTACK: StackProfile = StackProfile {
         ("app router", 0.08),
         ("turbopack", 0.08),
         ("server action", 0.08),
+        ("app router", 0.08),
+        ("server component", 0.08),
+        ("rsc", 0.06),
+        ("ssr", 0.06),
+        ("hydration", 0.06),
     ],
     source_preferences: &[("hackernews", 0.05), ("reddit", -0.05)],
     detection_markers: &[
@@ -199,6 +204,11 @@ pub static RUST_SYSTEMS: StackProfile = StackProfile {
         ("wasm", 0.06),
         ("tauri", 0.08),
         ("axum", 0.08),
+        ("unsafe", 0.06),
+        ("borrow checker", 0.08),
+        ("lifetime", 0.06),
+        ("async rust", 0.08),
+        ("wasm", 0.06),
     ],
     source_preferences: &[("lobsters", 0.15), ("hackernews", 0.05)],
     detection_markers: &[
@@ -324,6 +334,12 @@ pub static PYTHON_ML: StackProfile = StackProfile {
         ("fine-tuning", 0.08),
         ("rag", 0.08),
         ("diffusion", 0.06),
+        ("deep learning", 0.08),
+        ("neural network", 0.06),
+        ("gpu", 0.06),
+        ("fine-tuning", 0.08),
+        ("inference", 0.06),
+        ("rag", 0.08),
     ],
     source_preferences: &[("arxiv", 0.15), ("hackernews", 0.05)],
     detection_markers: &[
@@ -429,6 +445,11 @@ pub static GO_BACKEND: StackProfile = StackProfile {
         ("grpc", 0.08),
         ("goroutine", 0.08),
         ("k8s", 0.06),
+        ("goroutine", 0.08),
+        ("concurrency", 0.06),
+        ("api", 0.06),
+        ("microservice", 0.08),
+        ("grpc", 0.08),
     ],
     source_preferences: &[("lobsters", 0.10), ("hackernews", 0.05)],
     detection_markers: &[
@@ -1030,11 +1051,88 @@ pub static HASKELL_FP: StackProfile = StackProfile {
 };
 
 // ============================================================================
+// General Web Development (Bootstrap)
+// ============================================================================
+
+pub static BOOTSTRAP_WEBDEV: StackProfile = StackProfile {
+    id: "bootstrap_webdev",
+    name: "General Web Development",
+    core_tech: &["typescript", "javascript", "react", "nodejs"],
+    companions: &[
+        "css",
+        "html",
+        "vite",
+        "webpack",
+        "eslint",
+        "prettier",
+        "tailwindcss",
+        "nextjs",
+        "express",
+        "npm",
+    ],
+    competing: &[],
+    pain_points: &[
+        PainPoint {
+            keywords: &["dependency", "npm", "package", "breaking change", "upgrade"],
+            severity: 0.10,
+            description: "Package ecosystem churn",
+        },
+        PainPoint {
+            keywords: &["build", "bundle", "webpack", "vite", "config"],
+            severity: 0.08,
+            description: "Build tooling complexity",
+        },
+        PainPoint {
+            keywords: &["typescript", "type", "inference", "strict", "any"],
+            severity: 0.08,
+            description: "Type system adoption",
+        },
+    ],
+    ecosystem_shifts: &[
+        EcosystemShift {
+            from: "webpack",
+            to: "vite",
+            keywords: &["vite", "vite migration", "webpack to vite"],
+            boost: 1.10,
+        },
+        EcosystemShift {
+            from: "create-react-app",
+            to: "nextjs",
+            keywords: &["nextjs", "cra migration", "app router"],
+            boost: 1.08,
+        },
+    ],
+    keyword_boosts: &[
+        ("typescript", 0.10),
+        ("javascript", 0.08),
+        ("react", 0.10),
+        ("nodejs", 0.08),
+        ("css", 0.06),
+        ("html", 0.06),
+        ("vite", 0.06),
+        ("tailwind", 0.06),
+        ("nextjs", 0.08),
+        ("web", 0.06),
+    ],
+    source_preferences: &[("hackernews", 0.05)],
+    detection_markers: &[
+        "typescript",
+        "javascript",
+        "react",
+        "package.json",
+        "tsconfig",
+        "node_modules",
+        "npm",
+    ],
+    detection_threshold: 2,
+};
+
+// ============================================================================
 // Profile Registry
 // ============================================================================
 
 /// All available stack profiles, in display order.
-pub static ALL_PROFILES: [&StackProfile; 10] = [
+pub static ALL_PROFILES: [&StackProfile; 11] = [
     &NEXTJS_FULLSTACK,
     &RUST_SYSTEMS,
     &PYTHON_ML,
@@ -1045,6 +1143,7 @@ pub static ALL_PROFILES: [&StackProfile; 10] = [
     &VUE_FRONTEND,
     &DEVOPS_SRE,
     &HASKELL_FP,
+    &BOOTSTRAP_WEBDEV,
 ];
 
 #[cfg(test)]

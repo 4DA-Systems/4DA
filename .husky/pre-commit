@@ -11,9 +11,9 @@ node scripts/check-file-sizes.cjs || {
     exit 1
 }
 
-# TypeScript type check (explicit memory to avoid V8 OOM crash on Windows)
+# TypeScript type check (incremental to avoid V8 Zone OOM on Windows)
 echo "Checking TypeScript types..."
-node --max-old-space-size=8192 node_modules/typescript/bin/tsc --noEmit || {
+node --max-old-space-size=8192 node_modules/typescript/bin/tsc --noEmit --incremental --tsBuildInfoFile .tsbuildinfo || {
     echo "TypeScript check failed. Fix type errors before committing."
     exit 1
 }
@@ -25,7 +25,7 @@ NODE_OPTIONS="--max-old-space-size=4096" pnpm run lint || {
 }
 
 echo "Running frontend tests..."
-NODE_OPTIONS="--max-old-space-size=4096" pnpm run test -- --run || {
+NODE_OPTIONS="--max-old-space-size=4096" pnpm run test -- --run 2>/dev/null || {
     echo "Frontend tests failed. Fix failing tests before committing."
     exit 1
 }

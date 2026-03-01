@@ -120,6 +120,20 @@ fn ace_dependency_match_boosts_score() {
         result_with.top_score,
         result_without.top_score,
     );
+
+    // Verify the breakdown shows actual dependency contribution
+    if let Some(ref bd) = result_with.score_breakdown {
+        assert!(
+            bd.dep_match_score > 0.0,
+            "Breakdown should show positive dep_match_score, got {:.3}",
+            bd.dep_match_score
+        );
+        assert!(
+            bd.matched_deps.iter().any(|d| d.contains("tokio")),
+            "Breakdown should list tokio in matched_deps: {:?}",
+            bd.matched_deps
+        );
+    }
 }
 
 // ============================================================================
@@ -176,6 +190,15 @@ fn ace_detected_tech_influences_scoring() {
             result_with.top_score,
             result_no.top_score,
         );
+
+        // Verify detected tech produces confirmation signals
+        if let Some(ref bd) = result_with.score_breakdown {
+            assert!(
+                bd.signal_count >= 1,
+                "Detected tech should produce >= 1 confirmation signal, got {}",
+                bd.signal_count
+            );
+        }
     }
 }
 
@@ -221,13 +244,9 @@ fn ace_topic_affinities_amplify_scores() {
     let opts = sim_no_freshness();
 
     // Use domain embeddings for non-zero vectors to activate semantic path
-    #[cfg(feature = "calibrated-sim")]
     let embeddings = super::domain_embeddings::corpus_embeddings();
-    #[cfg(not(feature = "calibrated-sim"))]
-    let embeddings: Vec<Vec<f32>> = vec![];
 
-    // If we have calibrated embeddings, test the semantic path
-    if !embeddings.is_empty() {
+    {
         let fallback = vec![0.0_f32; 384];
         let items = corpus();
         let rust_item = items
@@ -235,9 +254,7 @@ fn ace_topic_affinities_amplify_scores() {
             .find(|i| i.title.to_lowercase().contains("rust"));
 
         if let Some(item) = rust_item {
-            let emb = embeddings
-                .get((item.id - 1) as usize)
-                .unwrap_or(&fallback);
+            let emb = embeddings.get((item.id - 1) as usize).unwrap_or(&fallback);
 
             let input = sim_input(item.id, item.title, item.content, emb);
             let result_pos = score_item(&input, &ctx_positive, &db, &opts, None);
@@ -249,6 +266,18 @@ fn ace_topic_affinities_amplify_scores() {
                 result_pos.top_score,
                 result_neg.top_score,
             );
+
+            // Verify breakdown affinity_mult reflects the polarity
+            if let Some(ref bd_pos) = result_pos.score_breakdown {
+                if let Some(ref bd_neg) = result_neg.score_breakdown {
+                    assert!(
+                        bd_pos.affinity_mult >= bd_neg.affinity_mult,
+                        "Positive affinity mult ({:.3}) should >= negative ({:.3})",
+                        bd_pos.affinity_mult,
+                        bd_neg.affinity_mult
+                    );
+                }
+            }
         }
     }
 
@@ -272,4 +301,142 @@ fn ace_topic_affinities_amplify_scores() {
             result_neg.top_score,
         );
     }
+}
+
+// ============================================================================
+// Test 5: ACE boost is non-zero with calibrated embeddings
+// ============================================================================
+
+#[test]
+fn ace_semantic_boost_nonzero_with_embeddings() {
+    let interests = make_interests(&[("Rust", 1.0), ("systems programming", 1.0), ("Tauri", 0.9)]);
+
+    let mut ace = ACEContext::default();
+    ace.active_topics.push("rust".to_string());
+    ace.detected_tech.push("rust".to_string());
+    ace.detected_tech.push("tauri".to_string());
+    ace.topic_affinities.insert("rust".to_string(), (0.8, 0.9));
+
+    let ctx = ScoringContext::builder()
+        .interest_count(3)
+        .interests(interests)
+        .ace_ctx(ace)
+        .feedback_interaction_count(50)
+        .build();
+
+    let db = sim_db();
+    let opts = sim_no_freshness();
+
+    {
+        let embeddings = super::domain_embeddings::corpus_embeddings();
+        let fallback = vec![0.0_f32; 384];
+        let items = corpus();
+        // Find a Rust corpus item (IDs 1-10 are Systems/Rust)
+        let rust_item = items.iter().find(|i| i.id >= 1 && i.id <= 10);
+        if let Some(item) = rust_item {
+            let emb = embeddings.get((item.id - 1) as usize).unwrap_or(&fallback);
+            let input = sim_input(item.id, item.title, item.content, emb);
+            let result = score_item(&input, &ctx, &db, &opts, None);
+            if let Some(ref bd) = result.score_breakdown {
+                assert!(
+                    bd.ace_boost > 0.0,
+                    "ACE boost should be > 0 with domain embeddings and active ACE context, got {:.4}",
+                    bd.ace_boost
+                );
+            }
+        }
+    }
+
+    // With zero embeddings, ACE boost may still activate via keyword path
+    let emb_zero = vec![0.0_f32; 384];
+    let items = corpus();
+    let rust_item = items.iter().find(|i| i.id >= 1 && i.id <= 10);
+    if let Some(item) = rust_item {
+        let input = sim_input(item.id, item.title, item.content, &emb_zero);
+        let result = score_item(&input, &ctx, &db, &opts, None);
+        // At minimum, the item should be scored (not zero)
+        assert!(
+            result.top_score > 0.0,
+            "Rust content with full ACE context should score > 0, got {:.4}",
+            result.top_score
+        );
+    }
+}
+
+// ============================================================================
+// Test 6: ACE context increases confirmation signal count
+// ============================================================================
+
+#[test]
+fn ace_context_increases_confirmation_signals() {
+    let interests = make_interests(&[("Rust", 1.0), ("systems programming", 1.0), ("Tauri", 0.9)]);
+
+    // Full ACE persona: topics + tech + deps
+    let mut ace_full = ACEContext::default();
+    ace_full.active_topics.push("rust".to_string());
+    ace_full.active_topics.push("tauri".to_string());
+    ace_full.detected_tech.push("rust".to_string());
+    ace_full.detected_tech.push("tauri".to_string());
+    ace_full.dependency_names.insert("tokio".to_string());
+    ace_full.dependency_info.insert(
+        "tokio".to_string(),
+        DepInfo {
+            package_name: "tokio".to_string(),
+            search_terms: vec!["tokio".to_string()],
+            is_dev: false,
+            version: Some("1.36".to_string()),
+        },
+    );
+    ace_full
+        .topic_affinities
+        .insert("rust".to_string(), (0.8, 0.9));
+
+    let ctx_full = ScoringContext::builder()
+        .interest_count(3)
+        .interests(interests.clone())
+        .ace_ctx(ace_full)
+        .feedback_interaction_count(50)
+        .build();
+
+    // Empty ACE persona: same interests but no ACE context
+    let ctx_empty = ScoringContext::builder()
+        .interest_count(3)
+        .interests(interests)
+        .ace_ctx(ACEContext::default())
+        .feedback_interaction_count(50)
+        .build();
+
+    let db = sim_db();
+    let opts = sim_no_freshness();
+    let emb = vec![0.0_f32; 384];
+
+    // Score content that mentions tokio + rust
+    let input = sim_input(
+        998,
+        "Tokio async runtime improvements for Rust systems",
+        "Major performance boost in tokio 1.36 for async task scheduling in Rust.",
+        &emb,
+    );
+
+    let result_full = score_item(&input, &ctx_full, &db, &opts, None);
+    let result_empty = score_item(&input, &ctx_empty, &db, &opts, None);
+
+    if let (Some(ref bd_full), Some(ref bd_empty)) =
+        (&result_full.score_breakdown, &result_empty.score_breakdown)
+    {
+        assert!(
+            bd_full.signal_count >= bd_empty.signal_count,
+            "Full ACE signal_count ({}) should >= empty ACE signal_count ({})",
+            bd_full.signal_count,
+            bd_empty.signal_count
+        );
+    }
+
+    // Score with full ACE should be >= empty ACE
+    assert!(
+        result_full.top_score >= result_empty.top_score,
+        "Full ACE score ({:.3}) should >= empty ACE score ({:.3})",
+        result_full.top_score,
+        result_empty.top_score
+    );
 }

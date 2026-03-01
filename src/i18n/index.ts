@@ -1,23 +1,16 @@
 import i18n from 'i18next';
 import { initReactI18next } from 'react-i18next';
-
-// Import locale files directly (bundled, no HTTP backend needed for desktop app)
-import enUi from '../locales/en/ui.json';
-import enCoach from '../locales/en/coach.json';
-import enStreets from '../locales/en/streets.json';
-import enErrors from '../locales/en/errors.json';
+import resourcesToBackend from 'i18next-resources-to-backend';
 
 i18n
+  .use(
+    resourcesToBackend(
+      (language: string, namespace: string) =>
+        import(`../locales/${language}/${namespace}.json`),
+    ),
+  )
   .use(initReactI18next)
   .init({
-    resources: {
-      en: {
-        ui: enUi,
-        coach: enCoach,
-        streets: enStreets,
-        errors: enErrors,
-      },
-    },
     lng: 'en',
     fallbackLng: 'en',
     defaultNS: 'ui',

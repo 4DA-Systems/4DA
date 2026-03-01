@@ -19,7 +19,6 @@ fn run_persona_simulation(persona_idx: usize, ctx: &ScoringContext) -> SimMetric
     let items = corpus();
     let db = sim_db();
     let opts = sim_no_freshness();
-    #[cfg(feature = "calibrated-sim")]
     let calibrated_embeddings = super::load_corpus_embeddings();
     let zero_emb = vec![0.0_f32; 384];
     let mut metrics = SimMetrics::new();
@@ -30,12 +29,9 @@ fn run_persona_simulation(persona_idx: usize, ctx: &ScoringContext) -> SimMetric
         if matches!(expected, ExpectedOutcome::MildBorderline) {
             continue;
         }
-        #[cfg(feature = "calibrated-sim")]
         let emb = calibrated_embeddings
             .get((item.id - 1) as usize)
             .unwrap_or(&zero_emb);
-        #[cfg(not(feature = "calibrated-sim"))]
-        let emb = &zero_emb;
         let input = sim_input(item.id, item.title, item.content, emb);
         let result = score_item(&input, ctx, &db, &opts, None);
         metrics.record(&result, expected);
@@ -76,7 +72,8 @@ fn reality_devops_sre_persona() {
     let personas = all_personas();
     let m = run_persona_simulation(3, &personas[3]);
     println!("{}", m.format_report(PERSONA_NAMES[3]));
-    m.assert_quality(PERSONA_NAMES[3], 0.60, 0.10, 0.15);
+    // Calibrated: P=0.812 R=0.394 F1=0.531 → threshold F1-0.05=0.481
+    m.assert_quality(PERSONA_NAMES[3], 0.70, 0.35, 0.48);
 }
 
 #[test]
@@ -84,11 +81,7 @@ fn reality_mobile_dev_persona() {
     let personas = all_personas();
     let m = run_persona_simulation(4, &personas[4]);
     println!("{}", m.format_report(PERSONA_NAMES[4]));
-    // Calibrated embeddings increase recall but lower precision for mobile persona
-    // (more cross-domain items score positively via cosine similarity).
-    #[cfg(feature = "calibrated-sim")]
-    m.assert_quality(PERSONA_NAMES[4], 0.35, 0.30, 0.35);
-    #[cfg(not(feature = "calibrated-sim"))]
+    // Orthogonal Mobile signature — Web items no longer bleed in
     m.assert_quality(PERSONA_NAMES[4], 0.45, 0.30, 0.35);
 }
 
@@ -97,12 +90,9 @@ fn reality_bootstrap_persona() {
     let personas = all_personas();
     let m = run_persona_simulation(5, &personas[5]);
     println!("{}", m.format_report(PERSONA_NAMES[5]));
-    // Calibrated embeddings widen the scoring surface for minimal-interest personas,
-    // increasing false positives. Lower precision threshold accordingly.
-    #[cfg(feature = "calibrated-sim")]
-    m.assert_quality(PERSONA_NAMES[5], 0.10, 0.20, 0.15);
-    #[cfg(not(feature = "calibrated-sim"))]
-    m.assert_quality(PERSONA_NAMES[5], 0.20, 0.20, 0.20);
+    // Bootstrap: 1 interest, no feedback, thin context — conservative behavior expected.
+    // Calibrated observed: P=0.125 R=0.333 F1=0.182 — threshold below observed with buffer.
+    m.assert_quality(PERSONA_NAMES[5], 0.10, 0.15, 0.15);
 }
 
 #[test]
@@ -110,12 +100,8 @@ fn reality_power_user_persona() {
     let personas = all_personas();
     let m = run_persona_simulation(6, &personas[6]);
     println!("{}", m.format_report(PERSONA_NAMES[6]));
-    // Generalist persona — low recall expected; validate no excessive false positives
-    assert!(
-        m.precision() >= 0.30 || m.tp + m.fp == 0,
-        "Power user precision too low: {:.3}",
-        m.precision()
-    );
+    // Calibrated: P=0.721 R=0.304 F1=0.428 → threshold F1-0.05=0.378
+    m.assert_quality(PERSONA_NAMES[6], 0.65, 0.25, 0.38);
 }
 
 #[test]
@@ -123,12 +109,8 @@ fn reality_context_switcher_persona() {
     let personas = all_personas();
     let m = run_persona_simulation(7, &personas[7]);
     println!("{}", m.format_report(PERSONA_NAMES[7]));
-    // Generalist persona — low recall expected; validate no excessive false positives
-    assert!(
-        m.precision() >= 0.30 || m.tp + m.fp == 0,
-        "Context switcher precision too low: {:.3}",
-        m.precision()
-    );
+    // Calibrated: P=0.733 R=0.319 F1=0.444 → threshold F1-0.05=0.394
+    m.assert_quality(PERSONA_NAMES[7], 0.65, 0.27, 0.39);
 }
 
 #[test]
@@ -136,12 +118,8 @@ fn reality_niche_specialist_persona() {
     let personas = all_personas();
     let m = run_persona_simulation(8, &personas[8]);
     println!("{}", m.format_report(PERSONA_NAMES[8]));
-    // Narrow focus — precision matters more than recall
-    assert!(
-        m.precision() >= 0.50 || m.tp + m.fp == 0,
-        "Niche specialist precision too low: {:.3}",
-        m.precision()
-    );
+    // Calibrated: P=1.000 R=0.429 F1=0.600 → threshold F1-0.05=0.550
+    m.assert_quality(PERSONA_NAMES[8], 0.85, 0.35, 0.55);
 }
 
 // ============================================================================

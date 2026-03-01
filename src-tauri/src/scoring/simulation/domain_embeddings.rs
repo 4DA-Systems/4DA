@@ -1,9 +1,9 @@
 //! Domain-Specific Embedding Generation for Simulation
 //!
-//! Generates deterministic, domain-aware pseudo-embeddings for the 215 corpus items.
+//! Generates deterministic, domain-aware pseudo-embeddings for the corpus items.
 //! Uses a taxonomy of 12 domain blocks, each with a characteristic signature vector.
-//! When the `calibrated-sim` feature is enabled, `reality.rs` uses these instead of
-//! zero vectors, enabling cosine-similarity-based scoring in simulation tests.
+//! All simulation tests use these embeddings, enabling cosine-similarity-based
+//! scoring that discriminates in-domain from off-domain content.
 
 const EMBEDDING_DIM: usize = 384;
 const SIGNATURE_LEN: usize = 32;
@@ -50,9 +50,11 @@ impl DomainBlock {
                 0.4, 0.2, -0.1, 0.6, 0.3, 0.8, 0.5, -0.2, 0.7, 0.4, 0.1, 0.8, -0.1, 0.5, 0.3, 0.6,
                 0.8, 0.2, -0.2, 0.7, 0.4, 0.1, 0.8, 0.3, -0.1, 0.5, 0.7, 0.6, 0.2, 0.8, 0.4, -0.2,
             ],
+            // Mobile — orthogonal to Web: emphasize platform/native slots, suppress web slots
             Self::Mobile => [
-                -0.2, 0.5, 0.7, 0.3, 0.8, 0.1, 0.4, 0.6, -0.1, 0.8, 0.3, 0.7, 0.5, -0.2, 0.6, 0.1,
-                0.4, 0.8, 0.3, -0.1, 0.7, 0.5, 0.2, 0.6, 0.8, -0.2, 0.4, 0.1, 0.7, 0.5, 0.3, 0.8,
+                0.05, -0.1, 0.05, 0.05, 0.95, 0.85, 0.05, -0.1, 0.10, -0.1, 0.80, 0.10, -0.1, 0.05,
+                0.90, 0.80, 0.05, 0.10, -0.1, 0.10, 0.05, -0.1, 0.05, 0.10, -0.1, -0.1, 0.10, 0.05,
+                0.85, 0.05, 0.10, -0.1,
             ],
             Self::Database => [
                 0.6, 0.4, 0.2, -0.1, 0.5, 0.3, 0.8, 0.1, 0.7, -0.2, 0.4, 0.6, 0.8, 0.3, -0.1, 0.5,
@@ -724,5 +726,54 @@ mod tests {
             "Expected 220 corpus embeddings, got {}",
             embeddings.len()
         );
+    }
+
+    #[test]
+    fn domain_signatures_are_orthogonal() {
+        use DomainBlock::*;
+        let blocks = [
+            Systems,
+            Web,
+            ML,
+            DevOps,
+            Mobile,
+            Database,
+            Security,
+            Distributed,
+            FP,
+            Career,
+            Business,
+            Meta,
+        ];
+        let names = [
+            "Systems",
+            "Web",
+            "ML",
+            "DevOps",
+            "Mobile",
+            "Database",
+            "Security",
+            "Distributed",
+            "FP",
+            "Career",
+            "Business",
+            "Meta",
+        ];
+        for i in 0..blocks.len() {
+            for j in (i + 1)..blocks.len() {
+                let sig_a = blocks[i].signature();
+                let sig_b = blocks[j].signature();
+                let cos = cosine_similarity(&sig_a, &sig_b);
+                // 0.70 threshold catches severe overlap (old Mobile↔Web was 0.7427)
+                // while allowing legitimate domain adjacency (Systems↔Database ≈ 0.62)
+                assert!(
+                    cos <= 0.70,
+                    "{} <-> {} cosine = {:.4} exceeds 0.70 threshold",
+                    names[i],
+                    names[j],
+                    cos
+                );
+            }
+        }
     }
 }

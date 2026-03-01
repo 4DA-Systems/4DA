@@ -136,9 +136,22 @@ pub(crate) fn score_item(
         (context_score * ctx_w + interest_score * int_w + keyword_score * kw_w + semantic_boost)
             .min(1.0)
     } else if ctx.interest_count > 0 {
+        // Dampen semantic influence for thin-interest personas (bootstrap mode)
+        // to prevent embedding-driven false positives before user has provided feedback.
+        // Only applies when content has real embeddings — keyword-based ACE boost
+        // (the fallback when embeddings are zero) is already well-calibrated.
+        let has_real_embedding = input.embedding.iter().any(|&v| v != 0.0);
+        let semantic_mult = if has_real_embedding
+            && ctx.interest_count < 3
+            && ctx.feedback_interaction_count < 10
+        {
+            scoring_config::INTEREST_ONLY_SEMANTIC_MULT * 0.4
+        } else {
+            scoring_config::INTEREST_ONLY_SEMANTIC_MULT
+        };
         (interest_score * scoring_config::INTEREST_ONLY_INTEREST_W
             + keyword_score * scoring_config::INTEREST_ONLY_KEYWORD_W
-            + semantic_boost * scoring_config::INTEREST_ONLY_SEMANTIC_MULT)
+            + semantic_boost * semantic_mult)
             .min(1.0)
     } else if ctx.cached_context_count > 0 {
         (context_score + semantic_boost).min(1.0)

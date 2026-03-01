@@ -46,9 +46,8 @@ pub(super) fn sim_no_freshness() -> ScoringOptions {
     }
 }
 
-/// Load pre-computed corpus embeddings for calibrated simulation.
+/// Load pre-computed corpus embeddings for simulation.
 /// Bridges reality.rs → mod.rs → domain_embeddings.rs.
-#[cfg(feature = "calibrated-sim")]
 pub(super) fn load_corpus_embeddings() -> Vec<Vec<f32>> {
     domain_embeddings::corpus_embeddings()
 }

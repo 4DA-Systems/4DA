@@ -1199,6 +1199,165 @@ pub(super) fn corpus() -> Vec<LabeledItem> {
             //        rust py   ts   devops mobile boot power switch niche
             expected: [N,  S,   N,   N,     N,     N,   B,    N,     N],
         },
+
+        // ====================================================================
+        // ReleaseNotes expansion (5 more) — id 221-225
+        // ====================================================================
+        LabeledItem { id: 221, category: RN, source_type: "blog",
+            title: "Deno 2.0: Node compatibility and npm support",
+            content: "Deno 2.0 ships with full Node.js compatibility, npm package support, stable KV database, and improved JSR publishing workflow.",
+            //        rust py   ts   devops mobile boot power switch niche
+            expected: [N,  N,   W,   N,     N,     N,   W,    N,     N],
+        },
+        LabeledItem { id: 222, category: RN, source_type: "blog",
+            title: "Rails 8.0: Solid Queue and Solid Cache",
+            content: "Rails 8.0 introduces Solid Queue for background jobs, Solid Cache for caching, and Kamal 2 for deployment without Docker.",
+            //        rust py   ts   devops mobile boot power switch niche
+            expected: [N,  N,   N,   N,     N,     N,   N,    N,     N],
+        },
+        LabeledItem { id: 223, category: RN, source_type: "blog",
+            title: "PostgreSQL 17: Incremental backup and JSON_TABLE",
+            content: "PostgreSQL 17 adds incremental backup, JSON_TABLE for SQL/JSON queries, improved COPY performance, and memory management.",
+            //        rust py   ts   devops mobile boot power switch niche
+            expected: [N,  N,   N,   W,     N,     N,   W,    N,     N],
+        },
+        LabeledItem { id: 224, category: RN, source_type: "blog",
+            title: "Expo SDK 51: New Architecture by default",
+            content: "Expo SDK 51 enables React Native New Architecture by default, adds Expo Router v3, and improves EAS Build performance.",
+            //        rust py   ts   devops mobile boot power switch niche
+            expected: [N,  N,   N,   N,     S,     N,   N,    N,     N],
+        },
+        LabeledItem { id: 225, category: RN, source_type: "blog",
+            title: "Svelte 5: Runes and fine-grained reactivity",
+            content: "Svelte 5 introduces runes for fine-grained reactivity, replaces stores with $state and $derived, improved TypeScript support.",
+            //        rust py   ts   devops mobile boot power switch niche
+            expected: [N,  N,   W,   N,     N,     N,   N,    N,     N],
+        },
+
+        // ====================================================================
+        // BusinessNoise expansion (5 more) — id 226-230
+        // ====================================================================
+        LabeledItem { id: 226, category: BC, source_type: "hackernews",
+            title: "Stripe raises Series I at $65B valuation",
+            content: "Stripe closes new funding round at $65 billion valuation, plans expansion into banking and treasury services.",
+            expected: [N, N, N, N, N, N, N, N, N],
+        },
+        LabeledItem { id: 227, category: BC, source_type: "hackernews",
+            title: "How we grew from 0 to $1M ARR in 6 months",
+            content: "Founder shares growth playbook: product-led growth, community-driven acquisition, and pricing experiments that worked.",
+            expected: [N, N, N, N, N, N, N, N, N],
+        },
+        LabeledItem { id: 228, category: BC, source_type: "hackernews",
+            title: "The SaaS metrics that actually matter",
+            content: "Beyond MRR and churn: net revenue retention, payback period, and burn multiple for evaluating SaaS health.",
+            expected: [N, N, N, N, N, N, N, N, N],
+        },
+        LabeledItem { id: 229, category: BC, source_type: "hackernews",
+            title: "Why enterprise sales cycles are getting longer",
+            content: "Enterprise sales cycles have increased by 40%. Budget scrutiny, procurement changes, and security review bottlenecks.",
+            expected: [N, N, N, N, N, N, N, N, N],
+        },
+        LabeledItem { id: 230, category: BC, source_type: "hackernews",
+            title: "Bootstrapped vs VC-funded: A 5-year retrospective",
+            content: "Founder compares bootstrapped and VC-funded paths after running both. Revenue, control, and lifestyle tradeoffs.",
+            expected: [N, N, N, N, N, N, N, N, N],
+        },
+
+        // ====================================================================
+        // HNDiscussion expansion (5 more) — id 231-235
+        // ====================================================================
+        LabeledItem { id: 231, category: HI, source_type: "hackernews",
+            title: "Ask HN: How do you handle imposter syndrome?",
+            content: "Community discussion on imposter syndrome in tech: coping strategies, prevalence among senior engineers, and normalization.",
+            expected: [N, N, N, N, N, N, N, N, N],
+        },
+        LabeledItem { id: 232, category: HI, source_type: "hackernews",
+            title: "Ask HN: Best resources for learning distributed systems?",
+            content: "HN recommends distributed systems resources: DDIA book, MIT 6.824, Jepsen blog, and hands-on projects with Raft consensus.",
+            //        rust py   ts   devops mobile boot power switch niche
+            expected: [N,  N,   N,   N,     N,     N,   B,    B,     N],
+        },
+        LabeledItem { id: 233, category: HI, source_type: "hackernews",
+            title: "Tell HN: I built a programming language in a weekend",
+            content: "Developer shares experience building a toy language: parser combinators, tree-walking interpreter, and surprising lessons learned.",
+            //        rust py   ts   devops mobile boot power switch niche
+            expected: [N,  N,   N,   N,     N,     N,   B,    N,     B],
+        },
+        LabeledItem { id: 234, category: HI, source_type: "hackernews",
+            title: "Ask HN: What's your unpopular tech opinion?",
+            content: "Controversial tech opinions: microservices are overused, TDD is cargo cult, Rust is overhyped, and Go is underrated.",
+            expected: [N, N, N, N, N, N, N, N, N],
+        },
+        LabeledItem { id: 235, category: HI, source_type: "hackernews",
+            title: "Tell HN: After 10 years of Go, switching to Rust",
+            content: "A Go developer's journey to Rust: ownership model challenges, performance gains, and ecosystem comparison after a decade of Go.",
+            //        rust py   ts   devops mobile boot power switch niche
+            expected: [B,  N,   N,   N,     N,     N,   B,    B,     N],
+        },
+
+        // ====================================================================
+        // DistantlyRelevant expansion (5 more) — id 236-240
+        // ====================================================================
+        LabeledItem { id: 236, category: DI, source_type: "hackernews",
+            title: "How DNS actually works: A visual guide",
+            content: "Visual explanation of DNS resolution: recursive resolvers, authoritative nameservers, caching layers, and common misconfigurations.",
+            //        rust py   ts   devops mobile boot power switch niche
+            expected: [N,  N,   N,   W,     N,     N,   W,    N,     N],
+        },
+        LabeledItem { id: 237, category: DI, source_type: "hackernews",
+            title: "Understanding CPU branch prediction",
+            content: "CPU branch prediction internals: branch target buffers, speculative execution, and why sorted arrays are faster to process.",
+            //        rust py   ts   devops mobile boot power switch niche
+            expected: [W,  N,   N,   N,     N,     N,   W,    N,     B],
+        },
+        LabeledItem { id: 238, category: DI, source_type: "hackernews",
+            title: "The history of version control: RCS to Git",
+            content: "Version control evolution: RCS, CVS, Subversion, Mercurial, and Git. How distributed VCS changed software development.",
+            expected: [N, N, N, N, N, N, N, N, N],
+        },
+        LabeledItem { id: 239, category: DI, source_type: "hackernews",
+            title: "How databases use B-trees for indexing",
+            content: "B-tree data structure in databases: insertion, splitting, rebalancing, and why B+ trees are preferred for disk-based storage.",
+            //        rust py   ts   devops mobile boot power switch niche
+            expected: [W,  N,   N,   N,     N,     N,   W,    N,     B],
+        },
+        LabeledItem { id: 240, category: DI, source_type: "hackernews",
+            title: "POSIX signals explained: from SIGTERM to SIGKILL",
+            content: "POSIX signal handling: signal types, default actions, graceful shutdown patterns, and signal safety in multithreaded programs.",
+            //        rust py   ts   devops mobile boot power switch niche
+            expected: [W,  N,   N,   W,     N,     N,   W,    N,     N],
+        },
+
+        // ====================================================================
+        // ReverseEngineering expansion (5 more) — id 241-245
+        // ====================================================================
+        LabeledItem { id: 241, category: RE, source_type: "hackernews",
+            title: "Reverse engineering a wireless protocol with SDR",
+            content: "Using software-defined radio to reverse engineer a proprietary wireless protocol: signal capture, demodulation, and packet parsing.",
+            //        rust py   ts   devops mobile boot power switch niche
+            expected: [N,  N,   N,   N,     N,     N,   B,    N,     N],
+        },
+        LabeledItem { id: 242, category: RE, source_type: "hackernews",
+            title: "Binary exploitation CTF walkthrough: stack pivoting",
+            content: "CTF writeup demonstrating stack pivoting technique: ROP chain construction, gadget finding, and defeating ASLR on modern Linux.",
+            expected: [N, N, N, N, N, N, N, N, N],
+        },
+        LabeledItem { id: 243, category: RE, source_type: "hackernews",
+            title: "Analyzing iOS app traffic with mitmproxy",
+            content: "Using mitmproxy to intercept and analyze iOS app network traffic: certificate pinning bypass, API discovery, and protocol analysis.",
+            //        rust py   ts   devops mobile boot power switch niche
+            expected: [N,  N,   N,   N,     B,     N,   N,    N,     N],
+        },
+        LabeledItem { id: 244, category: RE, source_type: "hackernews",
+            title: "Decompiling Java bytecode: tools and techniques",
+            content: "Java decompilation tools compared: CFR, Procyon, Fernflower. Handling obfuscation, lambda expressions, and modern Java features.",
+            expected: [N, N, N, N, N, N, N, N, N],
+        },
+        LabeledItem { id: 245, category: RE, source_type: "hackernews",
+            title: "Hardware hacking: extracting firmware from IoT devices",
+            content: "Extracting firmware from IoT devices using UART, SPI flash dumping, and JTAG. Analyzing embedded Linux filesystems for vulnerabilities.",
+            expected: [N, N, N, N, N, N, N, N, N],
+        },
     ]
 }
 
@@ -1210,8 +1369,8 @@ mod tests {
     fn corpus_minimum_size() {
         let c = corpus();
         assert!(
-            c.len() >= 220,
-            "Corpus must have 220+ items, got {}",
+            c.len() >= 245,
+            "Corpus must have 245+ items, got {}",
             c.len()
         );
     }
