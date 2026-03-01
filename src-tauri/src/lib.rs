@@ -60,6 +60,7 @@ mod anomaly;
 mod attention;
 mod autophagy;
 mod autophagy_commands;
+mod calibration_commands;
 mod channel_commands;
 mod channel_render;
 pub mod channels;
@@ -259,6 +260,7 @@ pub fn run() {
             settings_commands::test_llm_connection,
             settings_commands::check_ollama_status,
             settings_commands::pull_ollama_model,
+            calibration_commands::run_calibration,
             settings_commands::get_license_tier,
             settings_commands::activate_license,
             settings_commands::get_trial_status,

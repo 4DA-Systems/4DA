@@ -18,7 +18,7 @@ impl TimeRange {
         let start = now
             .date_naive()
             .and_hms_opt(0, 0, 0)
-            .expect("midnight is always valid");
+            .unwrap_or_else(|| now.naive_utc());
         Self {
             start: start.and_utc(),
             end: now,
@@ -33,11 +33,11 @@ impl TimeRange {
         let start = yesterday
             .date_naive()
             .and_hms_opt(0, 0, 0)
-            .expect("midnight is always valid");
+            .unwrap_or_else(|| yesterday.naive_utc());
         let end = yesterday
             .date_naive()
             .and_hms_opt(23, 59, 59)
-            .expect("23:59:59 is always valid");
+            .unwrap_or_else(|| yesterday.naive_utc());
         Self {
             start: start.and_utc(),
             end: end.and_utc(),

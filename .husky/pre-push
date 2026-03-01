@@ -1,0 +1,21 @@
+#!/bin/sh
+# CADE Pre-push Hook — thorough gate
+# Runs full validation before allowing push to remote
+
+echo "Running CADE pre-push validation..."
+
+# TypeScript type check (incremental to avoid V8 Zone OOM)
+echo "Checking TypeScript types..."
+node --max-old-space-size=8192 node_modules/typescript/bin/tsc --noEmit --incremental --tsBuildInfoFile .tsbuildinfo || {
+    echo "TypeScript check failed. Fix type errors before pushing."
+    exit 1
+}
+
+# Full frontend tests
+echo "Running frontend tests..."
+NODE_OPTIONS="--max-old-space-size=4096" pnpm run test -- --run 2>/dev/null || {
+    echo "Frontend tests failed. Fix failing tests before pushing."
+    exit 1
+}
+
+echo "Pre-push validation passed!"

@@ -92,7 +92,7 @@ mod tests {
                 item_id: 4,
                 title: "tokio async runtime",
                 persona_idx: 0,
-                expected_range: (0.0, 1.0),
+                expected_range: (0.15, 1.0),
                 expect_relevant: None, // keyword-only: "tokio" in deps but zero embedding
                 expect_excluded: false,
             },
@@ -100,7 +100,7 @@ mod tests {
                 item_id: 5,
                 title: "serde serialization",
                 persona_idx: 0,
-                expected_range: (0.0, 1.0),
+                expected_range: (0.15, 1.0),
                 expect_relevant: None, // keyword-only baseline
                 expect_excluded: false,
             },
@@ -108,7 +108,7 @@ mod tests {
                 item_id: 25,
                 title: "axum production patterns",
                 persona_idx: 0,
-                expected_range: (0.0, 1.0),
+                expected_range: (0.15, 1.0),
                 expect_relevant: None, // keyword-only baseline
                 expect_excluded: false,
             },
@@ -116,7 +116,7 @@ mod tests {
                 item_id: 47,
                 title: "Rust Embassy embedded",
                 persona_idx: 0,
-                expected_range: (0.0, 1.0),
+                expected_range: (0.15, 1.0),
                 expect_relevant: None,
                 expect_excluded: false,
             },
@@ -134,7 +134,7 @@ mod tests {
                 item_id: 11,
                 title: "PyTorch 2.0 benchmarks",
                 persona_idx: 1,
-                expected_range: (0.0, 1.0),
+                expected_range: (0.15, 1.0),
                 expect_relevant: None, // keyword-only: threshold not met with zero embedding
                 expect_excluded: false,
             },
@@ -142,7 +142,7 @@ mod tests {
                 item_id: 12,
                 title: "QLoRA fine-tuning",
                 persona_idx: 1,
-                expected_range: (0.0, 1.0),
+                expected_range: (0.15, 1.0),
                 expect_relevant: None, // keyword-only: "QLoRA" niche term, low score with zero embedding
                 expect_excluded: false,
             },
@@ -150,7 +150,7 @@ mod tests {
                 item_id: 13,
                 title: "Python type hints",
                 persona_idx: 1,
-                expected_range: (0.0, 1.0),
+                expected_range: (0.15, 1.0),
                 expect_relevant: None, // keyword-only baseline
                 expect_excluded: false,
             },
@@ -158,7 +158,7 @@ mod tests {
                 item_id: 27,
                 title: "Python asyncio production",
                 persona_idx: 1,
-                expected_range: (0.0, 1.0),
+                expected_range: (0.15, 1.0),
                 expect_relevant: None, // keyword-only baseline
                 expect_excluded: false,
             },
@@ -166,7 +166,7 @@ mod tests {
                 item_id: 123,
                 title: "PyTorch RCE via pickle",
                 persona_idx: 1,
-                expected_range: (0.1, 1.0),
+                expected_range: (0.15, 1.0),
                 expect_relevant: None,
                 expect_excluded: false,
             },
@@ -212,7 +212,7 @@ mod tests {
                 item_id: 16,
                 title: "Kubernetes 1.30",
                 persona_idx: 3,
-                expected_range: (0.2, 1.0),
+                expected_range: (0.20, 1.0),
                 expect_relevant: Some(true),
                 expect_excluded: false,
             },
@@ -349,28 +349,13 @@ mod tests {
 
     #[test]
     fn golden_power_user_canonical_items() {
+        // Items 1 and 11 moved to golden_power_user_broad_relevance (dedup)
         check_golden(&[
-            GoldenExpectation {
-                item_id: 1,
-                title: "Rust 2024 Edition",
-                persona_idx: 6,
-                expected_range: (0.0, 1.0),
-                expect_relevant: None, // keyword-only: needs embeddings to cross relevance threshold
-                expect_excluded: false,
-            },
-            GoldenExpectation {
-                item_id: 11,
-                title: "PyTorch 2.0 benchmarks",
-                persona_idx: 6,
-                expected_range: (0.0, 1.0),
-                expect_relevant: None,
-                expect_excluded: false,
-            },
             GoldenExpectation {
                 item_id: 16,
                 title: "Kubernetes 1.30",
                 persona_idx: 6,
-                expected_range: (0.0, 1.0),
+                expected_range: (0.0, 0.18),
                 expect_relevant: None,
                 expect_excluded: false,
             },
@@ -380,7 +365,7 @@ mod tests {
                 item_id: 96,
                 title: "career noise: Rust engineer hiring",
                 persona_idx: 6,
-                expected_range: (0.0, 1.0),
+                expected_range: (0.10, 1.0),
                 expect_relevant: None,
                 expect_excluded: false,
             },
@@ -393,32 +378,15 @@ mod tests {
 
     #[test]
     fn golden_context_switcher_canonical_items() {
-        check_golden(&[
-            GoldenExpectation {
-                item_id: 24,
-                title: "Go generics deep dive",
-                persona_idx: 7,
-                expected_range: (0.0, 1.0),
-                expect_relevant: None,
-                expect_excluded: false,
-            },
-            GoldenExpectation {
-                item_id: 1,
-                title: "Rust 2024 Edition",
-                persona_idx: 7,
-                expected_range: (0.0, 1.0),
-                expect_relevant: None, // keyword-only: needs embeddings to cross relevance threshold
-                expect_excluded: false,
-            },
-            GoldenExpectation {
-                item_id: 11,
-                title: "PyTorch 2.0 benchmarks",
-                persona_idx: 7,
-                expected_range: (0.0, 0.25),
-                expect_relevant: Some(false),
-                expect_excluded: false,
-            },
-        ]);
+        // Items 1 and 11 moved to golden_context_switcher_multi_stack (dedup)
+        check_golden(&[GoldenExpectation {
+            item_id: 24,
+            title: "Go generics deep dive",
+            persona_idx: 7,
+            expected_range: (0.10, 1.0),
+            expect_relevant: None,
+            expect_excluded: false,
+        }]);
     }
 
     // ========================================================================
@@ -432,7 +400,7 @@ mod tests {
                 item_id: 21,
                 title: "GHC 9.8 Haskell features",
                 persona_idx: 8,
-                expected_range: (0.0, 1.0),
+                expected_range: (0.15, 1.0),
                 expect_relevant: None, // keyword-only: needs embeddings to cross relevance threshold
                 expect_excluded: false,
             },
@@ -440,7 +408,7 @@ mod tests {
                 item_id: 22,
                 title: "Category theory applied",
                 persona_idx: 8,
-                expected_range: (0.0, 1.0),
+                expected_range: (0.0, 0.22),
                 expect_relevant: None,
                 expect_excluded: false,
             },
@@ -448,7 +416,7 @@ mod tests {
                 item_id: 23,
                 title: "NixOS 24.05",
                 persona_idx: 8,
-                expected_range: (0.0, 1.0),
+                expected_range: (0.15, 1.0),
                 expect_relevant: None,
                 expect_excluded: false,
             },
@@ -490,7 +458,7 @@ mod tests {
                 item_id: 28,
                 title: "Next.js 14 App Router",
                 persona_idx: 2,
-                expected_range: (0.0, 1.0),
+                expected_range: (0.15, 1.0),
                 expect_relevant: None,
                 expect_excluded: false,
             },
@@ -517,7 +485,7 @@ mod tests {
                 item_id: 19,
                 title: "React Native performance",
                 persona_idx: 4,
-                expected_range: (0.0, 1.0),
+                expected_range: (0.15, 1.0),
                 expect_relevant: None, // keyword-only baseline
                 expect_excluded: false,
             },
@@ -525,7 +493,7 @@ mod tests {
                 item_id: 20,
                 title: "Flutter vs React Native",
                 persona_idx: 4,
-                expected_range: (0.0, 1.0),
+                expected_range: (0.15, 1.0),
                 expect_relevant: None,
                 expect_excluded: false,
             },
@@ -552,7 +520,7 @@ mod tests {
                 item_id: 16,
                 title: "Kubernetes 1.30",
                 persona_idx: 3,
-                expected_range: (0.1, 1.0),
+                expected_range: (0.15, 1.0),
                 expect_relevant: None, // keyword-only baseline
                 expect_excluded: false,
             },
@@ -560,7 +528,7 @@ mod tests {
                 item_id: 184,
                 title: "Kubernetes 1.29 changelog",
                 persona_idx: 3,
-                expected_range: (0.1, 1.0),
+                expected_range: (0.15, 1.0),
                 expect_relevant: None,
                 expect_excluded: false,
             },
@@ -589,7 +557,7 @@ mod tests {
                 item_id: 1, // Rust 2024 Edition
                 title: "Rust 2024 Edition",
                 persona_idx: 6,
-                expected_range: (0.1, 1.0),
+                expected_range: (0.10, 1.0),
                 expect_relevant: None, // keyword-only baseline
                 expect_excluded: false,
             },
@@ -597,7 +565,7 @@ mod tests {
                 item_id: 11, // PyTorch 2.2
                 title: "PyTorch 2.2",
                 persona_idx: 6,
-                expected_range: (0.05, 1.0),
+                expected_range: (0.10, 1.0),
                 expect_relevant: None, // keyword-only baseline
                 expect_excluded: false,
             },
@@ -605,7 +573,7 @@ mod tests {
                 item_id: 14, // React 19
                 title: "React 19",
                 persona_idx: 6,
-                expected_range: (0.05, 1.0),
+                expected_range: (0.10, 1.0),
                 expect_relevant: None, // keyword-only baseline
                 expect_excluded: false,
             },
@@ -633,7 +601,7 @@ mod tests {
                 item_id: 1, // Rust 2024 Edition
                 title: "Rust 2024 Edition",
                 persona_idx: 7,
-                expected_range: (0.1, 1.0),
+                expected_range: (0.10, 1.0),
                 expect_relevant: None, // keyword-only baseline
                 expect_excluded: false,
             },
@@ -641,7 +609,7 @@ mod tests {
                 item_id: 24, // Go generics: Practical patterns after 2 years
                 title: "Go item",
                 persona_idx: 7,
-                expected_range: (0.05, 1.0),
+                expected_range: (0.10, 1.0),
                 expect_relevant: None, // keyword-only baseline
                 expect_excluded: false,
             },
@@ -687,7 +655,7 @@ mod tests {
                 item_id: 11,
                 title: "PyTorch 2.0 benchmarks",
                 persona_idx: 1,
-                expected_range: (0.1, 1.0),
+                expected_range: (0.15, 1.0),
                 expect_relevant: None,
                 expect_excluded: false,
             },
@@ -705,7 +673,7 @@ mod tests {
                 item_id: 21,
                 title: "GHC 9.8 Haskell features",
                 persona_idx: 8,
-                expected_range: (0.2, 1.0),
+                expected_range: (0.20, 1.0),
                 expect_relevant: None,
                 expect_excluded: false,
             },

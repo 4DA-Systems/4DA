@@ -366,7 +366,7 @@ fn bytes_to_f32_vec(bytes: &[u8]) -> Vec<f32> {
     bytes
         .chunks_exact(4)
         .map(|chunk| {
-            let arr: [u8; 4] = chunk.try_into().expect("chunks_exact guarantees 4 bytes");
+            let arr: [u8; 4] = chunk.try_into().unwrap_or([0u8; 4]);
             f32::from_le_bytes(arr)
         })
         .collect()

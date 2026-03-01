@@ -48,6 +48,7 @@ const SignalsPanel = lazy(() => import('./components/SignalsPanel').then(m => ({
 const SignalChainsPanel = lazy(() => import('./components/SignalChains').then(m => ({ default: m.SignalChainsPanel })));
 const KnowledgeGapsPanel = lazy(() => import('./components/KnowledgeGapsPanel').then(m => ({ default: m.KnowledgeGapsPanel })));
 const CommandDeck = lazy(() => import('./components/command-deck/CommandDeck').then(m => ({ default: m.CommandDeck })));
+const CalibrationView = lazy(() => import('./components/CalibrationView').then(m => ({ default: m.CalibrationView })));
 const GameCelebration = lazy(() => import('./components/GameCelebration').then(m => ({ default: m.GameCelebration })));
 import {
   useSettings,
@@ -494,6 +495,10 @@ function App() {
         ) : activeView === 'coach' ? (
           <ViewErrorBoundary viewName="Coach">
             <CoachView />
+          </ViewErrorBoundary>
+        ) : activeView === 'calibrate' ? (
+          <ViewErrorBoundary viewName="Calibrate">
+            <CalibrationView />
           </ViewErrorBoundary>
         ) : (
           <ViewErrorBoundary viewName="Results">
