@@ -79,6 +79,7 @@ mod diagnostics;
 mod digest;
 mod digest_commands;
 mod document_index;
+mod document_search;
 mod domain_profile;
 pub(crate) mod domain_profile_data;
 pub mod extractors;
@@ -342,9 +343,9 @@ pub fn run() {
             commands::export_results,
             document_index::get_indexed_documents,
             document_index::get_document_content,
-            document_index::search_documents,
-            document_index::get_indexed_stats,
-            document_index::natural_language_query,
+            document_search::search_documents,
+            document_search::get_indexed_stats,
+            document_search::natural_language_query,
             // Void Engine
             void_commands::get_void_signal,
             // Intelligence panels

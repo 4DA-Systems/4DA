@@ -34,7 +34,7 @@ export function CreateChannelModal({ open, onClose }: CreateChannelModalProps) {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [sourcePreview, setSourcePreview] = useState<SourcePreview | null>(null);
-  const previewTimer = useRef<ReturnType<typeof setTimeout>>();
+  const previewTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const slug = slugify(title);
   const canSubmit = title.trim().length > 0 && topics.length > 0 && !submitting;
@@ -45,13 +45,13 @@ export function CreateChannelModal({ open, onClose }: CreateChannelModalProps) {
       setSourcePreview(null);
       return;
     }
-    clearTimeout(previewTimer.current);
+    if (previewTimer.current) clearTimeout(previewTimer.current);
     previewTimer.current = setTimeout(() => {
       invoke<SourcePreview>('preview_channel_sources', { topics })
         .then(setSourcePreview)
         .catch(() => setSourcePreview(null));
     }, 400);
-    return () => clearTimeout(previewTimer.current);
+    return () => { if (previewTimer.current) clearTimeout(previewTimer.current); };
   }, [topics]);
 
   const addTopic = useCallback(() => {
