@@ -1,19 +1,29 @@
 //! Simulation Infrastructure — Controlled scoring validation
 //!
-//! 4 simulation systems:
-//!   System 1 (lifecycle)    — multi-session convergence
-//!   System 2 (reality)      — content reality testing per persona
-//!   System 3 (first_run)    — first-60-seconds / bootstrap validation
-//!   System 4 (differential) — parameter regression detection
+//! 5 simulation systems + 3 validation tiers:
+//!   System 1 (lifecycle)       — multi-session convergence
+//!   System 2 (reality)         — content reality testing per persona
+//!   System 3 (first_run)       — first-60-seconds / bootstrap validation
+//!   System 4 (differential)    — parameter regression detection
+//!   System 5 (golden_snapshot) — canonical item score baselines
+//!
+//!   Tier 2 (tier2_semantic)    — embedding/semantic scoring validation
+//!   Tier 3 (tier3_rerank)      — post-scoring reranking validation
+//!   Dashboard (quality)        — aggregate quality reporting
 
 pub(super) mod corpus;
 pub(super) mod differential;
+pub(super) mod domain_embeddings;
 pub(super) mod feedback_sim;
 pub(super) mod first_run;
+pub(super) mod golden_snapshot;
 pub(super) mod lifecycle;
 pub(super) mod metrics;
 pub(super) mod personas;
+pub(super) mod quality_dashboard;
 pub(super) mod reality;
+pub(super) mod tier2_semantic;
+pub(super) mod tier3_rerank;
 
 use super::{ScoringInput, ScoringOptions};
 use std::path::Path;

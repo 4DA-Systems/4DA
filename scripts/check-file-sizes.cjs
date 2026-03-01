@@ -59,6 +59,7 @@ const EXCEPTIONS = {
   'src-tauri/src/scoring/simulation/corpus.rs': 'Scoring simulation corpus — 215 labeled test fixtures for pipeline validation',
   'src-tauri/src/scoring/simulation/differential.rs': 'Scoring simulation System 4 — parameter regression detection tests',
   'src-tauri/src/scoring/simulation/domain_embeddings.rs': 'Scoring simulation — domain embedding fixtures for persona-based testing',
+  'src-tauri/src/scoring/simulation/tier2_semantic.rs': 'Scoring simulation — semantic/embedding scoring validation with 12 tests',
   'src-tauri/src/void_engine/universe.rs': 'Void Universe renderer — experimental, feature-gated',
   'src-tauri/src/sovereign_developer_profile.rs': 'Unified profile aggregation — 10 data sources + markdown/JSON export',
 
