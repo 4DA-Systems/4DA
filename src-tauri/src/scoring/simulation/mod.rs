@@ -11,6 +11,7 @@
 //!   Tier 3 (tier3_rerank)      — post-scoring reranking validation
 //!   Dashboard (quality)        — aggregate quality reporting
 
+pub(super) mod ace_validation;
 pub(super) mod corpus;
 pub(super) mod differential;
 pub(super) mod domain_embeddings;
@@ -43,6 +44,13 @@ pub(super) fn sim_no_freshness() -> ScoringOptions {
         apply_freshness: false,
         apply_signals: false,
     }
+}
+
+/// Load pre-computed corpus embeddings for calibrated simulation.
+/// Bridges reality.rs → mod.rs → domain_embeddings.rs.
+#[cfg(feature = "calibrated-sim")]
+pub(super) fn load_corpus_embeddings() -> Vec<Vec<f32>> {
+    domain_embeddings::corpus_embeddings()
 }
 
 pub(super) fn sim_input<'a>(

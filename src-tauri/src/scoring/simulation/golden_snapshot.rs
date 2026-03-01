@@ -336,4 +336,122 @@ mod tests {
             "Excluded item must not be marked relevant"
         );
     }
+
+    // ========================================================================
+    // Golden: Power User canonical items (persona 6)
+    // ========================================================================
+
+    #[test]
+    fn golden_power_user_canonical_items() {
+        check_golden(&[
+            GoldenExpectation {
+                item_id: 1,
+                title: "Rust 2024 Edition",
+                persona_idx: 6,
+                expected_range: (0.2, 1.0),
+                expect_relevant: Some(true),
+                expect_excluded: false,
+            },
+            GoldenExpectation {
+                item_id: 11,
+                title: "PyTorch 2.0 benchmarks",
+                persona_idx: 6,
+                expected_range: (0.0, 1.0),
+                expect_relevant: None,
+                expect_excluded: false,
+            },
+            GoldenExpectation {
+                item_id: 16,
+                title: "Kubernetes 1.30",
+                persona_idx: 6,
+                expected_range: (0.0, 1.0),
+                expect_relevant: None,
+                expect_excluded: false,
+            },
+            GoldenExpectation {
+                item_id: 96,
+                title: "career noise: Rust engineer hiring",
+                persona_idx: 6,
+                expected_range: (0.0, 0.4),
+                expect_relevant: Some(false),
+                expect_excluded: false,
+            },
+        ]);
+    }
+
+    // ========================================================================
+    // Golden: Context Switcher canonical items (persona 7)
+    // ========================================================================
+
+    #[test]
+    fn golden_context_switcher_canonical_items() {
+        check_golden(&[
+            GoldenExpectation {
+                item_id: 24,
+                title: "Go generics deep dive",
+                persona_idx: 7,
+                expected_range: (0.0, 1.0),
+                expect_relevant: None,
+                expect_excluded: false,
+            },
+            GoldenExpectation {
+                item_id: 1,
+                title: "Rust 2024 Edition",
+                persona_idx: 7,
+                expected_range: (0.2, 1.0),
+                expect_relevant: Some(true),
+                expect_excluded: false,
+            },
+            GoldenExpectation {
+                item_id: 11,
+                title: "PyTorch 2.0 benchmarks",
+                persona_idx: 7,
+                expected_range: (0.0, 0.5),
+                expect_relevant: Some(false),
+                expect_excluded: false,
+            },
+        ]);
+    }
+
+    // ========================================================================
+    // Golden: Niche Specialist canonical items (persona 8)
+    // ========================================================================
+
+    #[test]
+    fn golden_niche_specialist_canonical_items() {
+        check_golden(&[
+            GoldenExpectation {
+                item_id: 21,
+                title: "GHC 9.8 Haskell features",
+                persona_idx: 8,
+                expected_range: (0.2, 1.0),
+                expect_relevant: Some(true),
+                expect_excluded: false,
+            },
+            GoldenExpectation {
+                item_id: 22,
+                title: "Category theory applied",
+                persona_idx: 8,
+                expected_range: (0.0, 1.0),
+                expect_relevant: None,
+                expect_excluded: false,
+            },
+            GoldenExpectation {
+                item_id: 23,
+                title: "NixOS 24.05",
+                persona_idx: 8,
+                expected_range: (0.0, 1.0),
+                expect_relevant: None,
+                expect_excluded: false,
+            },
+            GoldenExpectation {
+                item_id: 16,
+                title: "Kubernetes 1.30",
+                persona_idx: 8,
+                expected_range: (0.0, 0.35),
+                expect_relevant: Some(false),
+                expect_excluded: false,
+            },
+        ]);
+    }
 }

@@ -26,6 +26,28 @@ pub(super) fn make_interests(topics: &[(&str, f32)]) -> Vec<crate::context_engin
         .collect()
 }
 
+/// Calibrated variant: uses per-persona domain embeddings instead of uniform vectors.
+/// Each interest gets an embedding aligned with the persona's domain block, enabling
+/// cosine-similarity-based interest scoring to discriminate in-domain vs off-domain.
+#[cfg(feature = "calibrated-sim")]
+pub(super) fn make_interests_calibrated(
+    topics: &[(&str, f32)],
+    persona_idx: usize,
+) -> Vec<crate::context_engine::Interest> {
+    let e = super::domain_embeddings::interest_embedding(persona_idx);
+    topics
+        .iter()
+        .enumerate()
+        .map(|(i, (t, w))| crate::context_engine::Interest {
+            id: Some((i + 1) as i64),
+            topic: t.to_string(),
+            weight: *w,
+            embedding: Some(e.clone()),
+            source: crate::context_engine::InterestSource::Explicit,
+        })
+        .collect()
+}
+
 pub(super) fn make_domain(
     primary: &[&str],
     adjacent: &[&str],
@@ -51,6 +73,12 @@ pub(super) fn make_domain(
 // ============================================================================
 
 pub(super) fn rust_systems_dev() -> ScoringContext {
+    #[cfg(feature = "calibrated-sim")]
+    let interests = make_interests_calibrated(
+        &[("Rust", 1.0), ("systems programming", 1.0), ("Tauri", 0.9), ("SQLite", 0.8), ("WebAssembly", 0.7)],
+        0,
+    );
+    #[cfg(not(feature = "calibrated-sim"))]
     let interests = make_interests(&[
         ("Rust", 1.0),
         ("systems programming", 1.0),
@@ -90,6 +118,12 @@ pub(super) fn rust_systems_dev() -> ScoringContext {
 // ============================================================================
 
 pub(super) fn python_ml_engineer() -> ScoringContext {
+    #[cfg(feature = "calibrated-sim")]
+    let interests = make_interests_calibrated(
+        &[("Machine Learning", 1.0), ("Python", 1.0), ("LLM", 0.9), ("PyTorch", 0.9), ("data science", 0.7)],
+        1,
+    );
+    #[cfg(not(feature = "calibrated-sim"))]
     let interests = make_interests(&[
         ("Machine Learning", 1.0),
         ("Python", 1.0),
@@ -131,6 +165,12 @@ pub(super) fn python_ml_engineer() -> ScoringContext {
 // ============================================================================
 
 pub(super) fn fullstack_typescript() -> ScoringContext {
+    #[cfg(feature = "calibrated-sim")]
+    let interests = make_interests_calibrated(
+        &[("TypeScript", 1.0), ("React", 1.0), ("Node.js", 0.9), ("Next.js", 0.8), ("GraphQL", 0.7)],
+        2,
+    );
+    #[cfg(not(feature = "calibrated-sim"))]
     let interests = make_interests(&[
         ("TypeScript", 1.0),
         ("React", 1.0),
@@ -172,33 +212,59 @@ pub(super) fn fullstack_typescript() -> ScoringContext {
 // ============================================================================
 
 pub(super) fn devops_sre() -> ScoringContext {
+    // Phase 2A: Replace broad "DevOps" with specific multi-word terms that bypass
+    // BROAD_INTEREST_TERMS specificity penalty (calibration.rs:88). Multi-word terms
+    // get 1.0x specificity instead of 0.40x.
+    #[cfg(feature = "calibrated-sim")]
+    let interests = make_interests_calibrated(
+        &[
+            ("Kubernetes", 1.0),
+            ("kubernetes operator", 0.9),
+            ("Docker", 0.9),
+            ("Terraform", 0.8),
+            ("observability stack", 0.8),
+            ("eBPF tracing", 0.7),
+            ("Prometheus metrics", 0.7),
+            ("SRE", 0.8),
+        ],
+        3,
+    );
+    #[cfg(not(feature = "calibrated-sim"))]
     let interests = make_interests(&[
         ("Kubernetes", 1.0),
-        ("DevOps", 1.0),
+        ("kubernetes operator", 0.9),
         ("Docker", 0.9),
         ("Terraform", 0.8),
-        ("observability", 0.8),
+        ("observability stack", 0.8),
+        ("eBPF tracing", 0.7),
+        ("Prometheus metrics", 0.7),
+        ("SRE", 0.8),
     ]);
     let mut ace = ACEContext::default();
-    for t in ["kubernetes", "docker", "terraform"] {
+    for t in ["kubernetes", "docker", "terraform", "prometheus", "ci/cd", "observability"] {
         ace.active_topics.push(t.to_string());
+    }
+    for t in ["kubernetes", "docker", "terraform", "prometheus", "ci/cd", "observability"] {
         ace.detected_tech.push(t.to_string());
     }
     let domain = make_domain(
         &["kubernetes", "docker", "terraform"],
-        &["helm", "prometheus", "grafana", "ansible"],
-        &["kubernetes", "terraform", "helm", "prometheus"],
+        &["helm", "prometheus", "grafana", "ansible", "ebpf"],
+        &["kubernetes", "terraform", "helm", "prometheus", "grafana"],
         &[
             "kubernetes",
-            "devops",
+            "kubernetes operator",
             "docker",
             "terraform",
-            "observability",
+            "observability stack",
+            "ebpf tracing",
+            "prometheus metrics",
+            "sre",
         ],
     );
     let stack = crate::stacks::compose_profiles(&["devops_sre".to_string()]);
     ScoringContext::builder()
-        .interest_count(5)
+        .interest_count(8)
         .interests(interests)
         .ace_ctx(ace)
         .domain_profile(domain)
@@ -206,6 +272,7 @@ pub(super) fn devops_sre() -> ScoringContext {
             "kubernetes".to_string(),
             "docker".to_string(),
             "terraform".to_string(),
+            "sre".to_string(),
         ])
         .composed_stack(stack)
         .feedback_interaction_count(30)
@@ -217,6 +284,12 @@ pub(super) fn devops_sre() -> ScoringContext {
 // ============================================================================
 
 pub(super) fn mobile_dev() -> ScoringContext {
+    #[cfg(feature = "calibrated-sim")]
+    let interests = make_interests_calibrated(
+        &[("React Native", 1.0), ("mobile development", 1.0), ("Expo", 0.9), ("iOS", 0.7), ("Android", 0.7)],
+        4,
+    );
+    #[cfg(not(feature = "calibrated-sim"))]
     let interests = make_interests(&[
         ("React Native", 1.0),
         ("mobile development", 1.0),
@@ -258,6 +331,9 @@ pub(super) fn mobile_dev() -> ScoringContext {
 // ============================================================================
 
 pub(super) fn bootstrap_user() -> ScoringContext {
+    #[cfg(feature = "calibrated-sim")]
+    let interests = make_interests_calibrated(&[("TypeScript", 1.0)], 5);
+    #[cfg(not(feature = "calibrated-sim"))]
     let interests = make_interests(&[("TypeScript", 1.0)]);
     let mut ace = ACEContext::default();
     ace.active_topics.push("typescript".to_string());
@@ -274,6 +350,15 @@ pub(super) fn bootstrap_user() -> ScoringContext {
 // ============================================================================
 
 pub(super) fn power_user() -> ScoringContext {
+    #[cfg(feature = "calibrated-sim")]
+    let interests = make_interests_calibrated(
+        &[
+            ("Rust", 0.9), ("Python", 0.8), ("TypeScript", 0.8), ("distributed systems", 0.9),
+            ("AI", 0.7), ("WebAssembly", 0.7), ("databases", 0.8),
+        ],
+        6,
+    );
+    #[cfg(not(feature = "calibrated-sim"))]
     let interests = make_interests(&[
         ("Rust", 0.9),
         ("Python", 0.8),
@@ -314,6 +399,12 @@ pub(super) fn power_user() -> ScoringContext {
 // ============================================================================
 
 pub(super) fn context_switcher() -> ScoringContext {
+    #[cfg(feature = "calibrated-sim")]
+    let interests = make_interests_calibrated(
+        &[("Rust", 0.9), ("Go", 0.9), ("backend", 0.8), ("microservices", 0.7)],
+        7,
+    );
+    #[cfg(not(feature = "calibrated-sim"))]
     let interests = make_interests(&[
         ("Rust", 0.9),
         ("Go", 0.9),
@@ -348,18 +439,26 @@ pub(super) fn context_switcher() -> ScoringContext {
 // ============================================================================
 
 pub(super) fn niche_specialist() -> ScoringContext {
+    #[cfg(feature = "calibrated-sim")]
+    let interests = make_interests_calibrated(
+        &[("Haskell", 1.0), ("functional programming", 1.0), ("type theory", 0.9), ("category theory", 0.7), ("Nix", 0.7), ("monad", 0.6), ("type system", 0.6)],
+        8,
+    );
+    #[cfg(not(feature = "calibrated-sim"))]
     let interests = make_interests(&[
         ("Haskell", 1.0),
         ("functional programming", 1.0),
         ("type theory", 0.9),
         ("category theory", 0.7),
         ("Nix", 0.7),
+        ("monad", 0.6),
+        ("type system", 0.6),
     ]);
     let mut ace = ACEContext::default();
-    for t in ["haskell", "functional programming", "nix"] {
+    for t in ["haskell", "functional programming", "nix", "type theory"] {
         ace.active_topics.push(t.to_string());
     }
-    for t in ["haskell", "nix"] {
+    for t in ["haskell", "nix", "ghc", "cabal"] {
         ace.detected_tech.push(t.to_string());
     }
     let domain = make_domain(
@@ -368,12 +467,14 @@ pub(super) fn niche_specialist() -> ScoringContext {
         &["ghc", "cabal", "nix"],
         &["haskell", "functional programming", "type theory", "nix"],
     );
+    let stack = crate::stacks::compose_profiles(&["haskell".to_string()]);
     ScoringContext::builder()
-        .interest_count(5)
+        .interest_count(7)
         .interests(interests)
         .ace_ctx(ace)
         .domain_profile(domain)
         .declared_tech(vec!["haskell".to_string(), "nix".to_string()])
+        .composed_stack(stack)
         .feedback_interaction_count(30)
         .build()
 }

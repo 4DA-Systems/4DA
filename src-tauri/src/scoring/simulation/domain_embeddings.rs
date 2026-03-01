@@ -339,6 +339,23 @@ static SPEC_REVERSE: EmbeddingSpec = EmbeddingSpec {
     blocks: &[(Systems, 0.5), (Security, 0.5)],
 };
 
+// -- ReleaseNotes expansion (IDs 216-220): domain-specific releases
+static SPEC_RELEASE_GO: EmbeddingSpec = EmbeddingSpec {
+    blocks: &[(Systems, 0.5), (Distributed, 0.5)],
+};
+static SPEC_RELEASE_HASKELL: EmbeddingSpec = EmbeddingSpec {
+    blocks: &[(FP, 1.0)],
+};
+static SPEC_RELEASE_GRAFANA: EmbeddingSpec = EmbeddingSpec {
+    blocks: &[(DevOps, 0.9), (Distributed, 0.2)],
+};
+static SPEC_RELEASE_DOCKER: EmbeddingSpec = EmbeddingSpec {
+    blocks: &[(DevOps, 1.0)],
+};
+static SPEC_RELEASE_HF: EmbeddingSpec = EmbeddingSpec {
+    blocks: &[(ML, 1.0)],
+};
+
 // ============================================================================
 // Corpus Item -> EmbeddingSpec Mapping
 // ============================================================================
@@ -406,6 +423,12 @@ fn corpus_item_spec(item_id: u64) -> &'static EmbeddingSpec {
         196..=205 => &SPEC_DISTANT,
         // ReverseEngineering (206-215)
         206..=215 => &SPEC_REVERSE,
+        // ReleaseNotes expansion (216-220)
+        216 => &SPEC_RELEASE_GO,
+        217 => &SPEC_RELEASE_HASKELL,
+        218 => &SPEC_RELEASE_GRAFANA,
+        219 => &SPEC_RELEASE_DOCKER,
+        220 => &SPEC_RELEASE_HF,
         // Fallback: weak noise
         _ => &SPEC_INTRO,
     }
@@ -520,7 +543,7 @@ fn persona_domain_spec(domain_idx: usize) -> &'static EmbeddingSpec {
 /// Each embedding is a 384-dim unit vector with domain-specific signal.
 #[allow(dead_code)]
 pub(super) fn corpus_embeddings() -> Vec<Vec<f32>> {
-    (1..=215)
+    (1..=220)
         .map(|id| {
             let spec = corpus_item_spec(id);
             generate_embedding(spec, id)
@@ -697,8 +720,8 @@ mod tests {
         let embeddings = corpus_embeddings();
         assert_eq!(
             embeddings.len(),
-            215,
-            "Expected 215 corpus embeddings, got {}",
+            220,
+            "Expected 220 corpus embeddings, got {}",
             embeddings.len()
         );
     }
