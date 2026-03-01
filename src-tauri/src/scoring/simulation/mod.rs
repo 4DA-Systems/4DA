@@ -18,6 +18,7 @@ pub(super) mod feedback_sim;
 pub(super) mod first_run;
 pub(super) mod golden_snapshot;
 pub(super) mod lifecycle;
+pub(super) mod live_reality_check;
 pub(super) mod metrics;
 pub(super) mod personas;
 pub(super) mod quality_dashboard;

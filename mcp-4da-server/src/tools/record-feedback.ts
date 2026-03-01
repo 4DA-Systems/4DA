@@ -51,18 +51,16 @@ const validActions: FeedbackAction[] = ["click", "save", "dismiss", "mark_irrele
 export function executeRecordFeedback(
   db: FourDADatabase,
   params: RecordFeedbackParams
-): FeedbackResult {
+): FeedbackResult | { error: string } {
   if (!params.item_id || !params.source_type || !params.action) {
     return {
-      success: false,
-      message: "item_id, source_type, and action are required",
+      error: "item_id, source_type, and action are required",
     };
   }
 
   if (!validActions.includes(params.action)) {
     return {
-      success: false,
-      message: `Invalid action: ${params.action}. Valid actions: ${validActions.join(", ")}`,
+      error: `Invalid action: ${params.action}. Valid actions: ${validActions.join(", ")}`,
     };
   }
 

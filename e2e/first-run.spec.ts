@@ -55,6 +55,16 @@ test.describe('First-Run Flow', () => {
     expect(content?.length).toBeGreaterThan(0);
   });
 
+  test('reaches interactive state within 60 seconds', async ({ page }) => {
+    const startTime = Date.now();
+    const state = await waitForApp(page);
+    const elapsed = Date.now() - startTime;
+
+    expect(['onboarding', 'first-run', 'main']).toContain(state);
+    expect(elapsed).toBeLessThan(60_000);
+    console.log(`Time to interactive: ${elapsed}ms (state: ${state})`);
+  });
+
   test('onboarding wizard has navigable sections', async ({ page }) => {
     const state = await waitForApp(page);
 

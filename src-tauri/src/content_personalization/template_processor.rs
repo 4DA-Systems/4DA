@@ -427,7 +427,7 @@ fn find_conditional_block(input: &str) -> Option<(ConditionalBlock<'_>, usize)> 
                 if tag_body.starts_with("if ") {
                     if depth == 0 && !found_if {
                         // Opening if
-                        let condition = tag_body.strip_prefix("if ").unwrap().trim();
+                        let condition = tag_body.strip_prefix("if ").unwrap_or(tag_body).trim();
                         current_condition = Some(condition);
                         current_start = abs_end;
                         found_if = true;
@@ -440,7 +440,7 @@ fn find_conditional_block(input: &str) -> Option<(ConditionalBlock<'_>, usize)> 
                         condition: current_condition,
                         content: &input[current_start..abs_start],
                     });
-                    let condition = tag_body.strip_prefix("elif ").unwrap().trim();
+                    let condition = tag_body.strip_prefix("elif ").unwrap_or(tag_body).trim();
                     current_condition = Some(condition);
                     current_start = abs_end;
                     pos = abs_end;
