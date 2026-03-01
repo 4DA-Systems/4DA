@@ -117,3 +117,8 @@ coverage/
 # Eleventy build output
 site/_site/
 target-test/
+
+# 4DA World (separate repo)
+4DA-WORLD-DOCUMENTS/
+4DA-WORLD-PLAN.md
+4da-world/
