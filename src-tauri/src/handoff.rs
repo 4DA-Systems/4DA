@@ -285,3 +285,143 @@ pub fn generate_context_packet() -> Result<ContextPacket, String> {
     info!(target: "4da::handoff", "Generating context packet");
     generate_packet()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn make_context(tech: &[&str], topics: &[&str]) -> ActiveContextSnapshot {
+        ActiveContextSnapshot {
+            detected_tech: tech.iter().map(|s| s.to_string()).collect(),
+            active_topics: topics.iter().map(|s| s.to_string()).collect(),
+            interests: vec![],
+            exclusions: vec![],
+            context_dirs: vec![],
+            recent_work_topics: vec![],
+        }
+    }
+
+    fn make_signal(title: &str) -> SignalSummary {
+        SignalSummary {
+            item_id: 1,
+            title: title.to_string(),
+            signal_type: "recent".to_string(),
+            priority: "medium".to_string(),
+            action: None,
+            source_type: "hackernews".to_string(),
+        }
+    }
+
+    // --- generate_suggestions tests ---
+
+    #[test]
+    fn suggestions_empty_when_no_signals_no_context() {
+        let suggestions = generate_suggestions(&[], &make_context(&[], &[]));
+        assert!(suggestions.is_empty());
+    }
+
+    #[test]
+    fn suggestions_includes_review_when_signals_present() {
+        let signals = vec![make_signal("Test")];
+        let suggestions = generate_suggestions(&signals, &make_context(&[], &[]));
+        assert!(suggestions
+            .iter()
+            .any(|s| s.contains("Review") && s.contains("1")));
+    }
+
+    #[test]
+    fn suggestions_includes_continue_when_topics_present() {
+        let context = make_context(&[], &["rust", "tauri"]);
+        let suggestions = generate_suggestions(&[], &context);
+        assert!(suggestions
+            .iter()
+            .any(|s| s.contains("Continue working on")));
+    }
+
+    #[test]
+    fn suggestions_continue_truncates_to_3_topics() {
+        let context = make_context(&[], &["rust", "tauri", "react", "python", "go"]);
+        let suggestions = generate_suggestions(&[], &context);
+        let continue_suggestion = suggestions.iter().find(|s| s.contains("Continue")).unwrap();
+        // Should only contain first 3 topics
+        assert!(continue_suggestion.contains("rust"));
+        assert!(continue_suggestion.contains("tauri"));
+        assert!(continue_suggestion.contains("react"));
+        assert!(!continue_suggestion.contains("python"));
+    }
+
+    #[test]
+    fn suggestions_includes_dep_health_when_many_tech() {
+        let context = make_context(&["a", "b", "c", "d", "e", "f"], &[]);
+        let suggestions = generate_suggestions(&[], &context);
+        assert!(suggestions.iter().any(|s| s.contains("dependency health")));
+    }
+
+    #[test]
+    fn suggestions_no_dep_health_when_few_tech() {
+        let context = make_context(&["a", "b", "c"], &[]);
+        let suggestions = generate_suggestions(&[], &context);
+        assert!(!suggestions.iter().any(|s| s.contains("dependency health")));
+    }
+
+    #[test]
+    fn suggestions_can_have_all_three() {
+        let signals = vec![make_signal("Test")];
+        let context = make_context(&["a", "b", "c", "d", "e", "f"], &["rust"]);
+        let suggestions = generate_suggestions(&signals, &context);
+        assert_eq!(suggestions.len(), 3);
+    }
+
+    // --- Serde roundtrip tests ---
+
+    #[test]
+    fn context_packet_serde_roundtrip() {
+        let packet = ContextPacket {
+            generated_at: "2026-01-01T00:00:00Z".to_string(),
+            version: "1.0.0".to_string(),
+            active_context: make_context(&["rust"], &["tauri"]),
+            open_signals: vec![make_signal("Test signal")],
+            saved_items: vec![],
+            recent_briefing: Some("Latest briefing".to_string()),
+            attention_state: AttentionSnapshot {
+                top_topics: vec![("rust".to_string(), 0.9)],
+                topic_count: 1,
+                total_interactions: 42,
+            },
+            suggested_actions: vec!["Do something".to_string()],
+        };
+        let json = serde_json::to_string(&packet).unwrap();
+        let back: ContextPacket = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.version, "1.0.0");
+        assert_eq!(back.open_signals.len(), 1);
+        assert_eq!(back.attention_state.total_interactions, 42);
+    }
+
+    #[test]
+    fn saved_item_summary_serde_roundtrip() {
+        let item = SavedItemSummary {
+            item_id: 42,
+            title: "Test".to_string(),
+            url: Some("https://example.com".to_string()),
+            source_type: "hackernews".to_string(),
+            saved_at: "2026-01-01T00:00:00Z".to_string(),
+        };
+        let json = serde_json::to_string(&item).unwrap();
+        let back: SavedItemSummary = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.item_id, 42);
+        assert_eq!(back.url, Some("https://example.com".to_string()));
+    }
+
+    #[test]
+    fn attention_snapshot_serde_roundtrip() {
+        let snap = AttentionSnapshot {
+            top_topics: vec![("rust".to_string(), 0.9), ("go".to_string(), 0.3)],
+            topic_count: 2,
+            total_interactions: 100,
+        };
+        let json = serde_json::to_string(&snap).unwrap();
+        let back: AttentionSnapshot = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.top_topics.len(), 2);
+        assert_eq!(back.topic_count, 2);
+    }
+}

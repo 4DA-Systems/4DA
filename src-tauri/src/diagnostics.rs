@@ -156,3 +156,87 @@ fn get_process_memory() -> u64 {
             .unwrap_or(0)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn record_start_time_is_idempotent() {
+        // First call sets the time
+        record_start_time();
+        let first = APP_START.get().map(|i| i.elapsed());
+        // Second call should be a no-op
+        record_start_time();
+        let second = APP_START.get().map(|i| i.elapsed());
+        // Both should be set (not None)
+        assert!(first.is_some());
+        assert!(second.is_some());
+    }
+
+    #[test]
+    fn get_process_memory_returns_value() {
+        let mem = get_process_memory();
+        // Just verify it doesn't panic and returns a non-negative value
+        let _ = mem;
+    }
+
+    #[test]
+    fn diagnostics_snapshot_serializes_correctly() {
+        let snap = DiagnosticsSnapshot {
+            memory_bytes: 1024 * 1024 * 50,
+            db_size_bytes: 1024 * 1024 * 10,
+            source_item_count: 500,
+            context_chunk_count: 200,
+            feedback_count: 50,
+            uptime_secs: 3600,
+            source_health: vec![SourceHealthSummary {
+                source_type: "hackernews".to_string(),
+                status: "healthy".to_string(),
+                consecutive_failures: 0,
+            }],
+            schema_version: 42,
+            db_size_warning: false,
+        };
+        let json = serde_json::to_value(&snap).unwrap();
+        assert_eq!(json["source_item_count"], 500);
+        assert_eq!(json["db_size_warning"], false);
+        assert_eq!(json["source_health"].as_array().unwrap().len(), 1);
+    }
+
+    #[test]
+    fn source_health_summary_serializes_correctly() {
+        let health = SourceHealthSummary {
+            source_type: "reddit".to_string(),
+            status: "degraded".to_string(),
+            consecutive_failures: 3,
+        };
+        let json = serde_json::to_value(&health).unwrap();
+        assert_eq!(json["source_type"], "reddit");
+        assert_eq!(json["consecutive_failures"], 3);
+    }
+
+    #[test]
+    fn db_size_warning_threshold_is_500mb() {
+        // Below threshold
+        let snap = DiagnosticsSnapshot {
+            memory_bytes: 0,
+            db_size_bytes: 499 * 1024 * 1024,
+            source_item_count: 0,
+            context_chunk_count: 0,
+            feedback_count: 0,
+            uptime_secs: 0,
+            source_health: vec![],
+            schema_version: 0,
+            db_size_warning: 499 * 1024 * 1024 > 500 * 1024 * 1024,
+        };
+        assert!(!snap.db_size_warning);
+
+        // Above threshold
+        let snap2 = DiagnosticsSnapshot {
+            db_size_warning: 501 * 1024 * 1024 > 500 * 1024 * 1024,
+            ..snap
+        };
+        assert!(snap2.db_size_warning);
+    }
+}

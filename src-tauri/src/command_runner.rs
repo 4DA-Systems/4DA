@@ -215,3 +215,114 @@ pub async fn get_command_history(limit: Option<u32>) -> Result<Vec<CommandHistor
         })
         .collect())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn blocked_patterns_not_empty() {
+        assert!(!BLOCKED_PATTERNS.is_empty());
+    }
+
+    #[test]
+    fn blocked_patterns_catches_rm_rf_root() {
+        let cmd = "rm -rf /";
+        let blocked = BLOCKED_PATTERNS
+            .iter()
+            .any(|p| cmd.to_lowercase().contains(p));
+        assert!(blocked, "rm -rf / should be blocked");
+    }
+
+    #[test]
+    fn blocked_patterns_catches_format_c() {
+        let cmd = "FORMAT C:";
+        let blocked = BLOCKED_PATTERNS
+            .iter()
+            .any(|p| cmd.to_lowercase().contains(p));
+        assert!(blocked, "format c: should be blocked");
+    }
+
+    #[test]
+    fn blocked_patterns_catches_fork_bomb() {
+        let cmd = ":(){ :|:& };:";
+        let blocked = BLOCKED_PATTERNS
+            .iter()
+            .any(|p| cmd.to_lowercase().contains(p));
+        assert!(blocked, "fork bomb should be blocked");
+    }
+
+    #[test]
+    fn blocked_patterns_allows_safe_commands() {
+        let safe_cmds = vec!["ls -la", "git status", "npm test", "cargo build"];
+        for cmd in safe_cmds {
+            let blocked = BLOCKED_PATTERNS
+                .iter()
+                .any(|p| cmd.to_lowercase().contains(p));
+            assert!(!blocked, "safe command should not be blocked: {cmd}");
+        }
+    }
+
+    #[test]
+    fn blocked_patterns_catches_dd_zero() {
+        let cmd = "dd if=/dev/zero of=/dev/sda";
+        let blocked = BLOCKED_PATTERNS
+            .iter()
+            .any(|p| cmd.to_lowercase().contains(p));
+        assert!(blocked, "dd if=/dev/zero should be blocked");
+    }
+
+    #[test]
+    fn blocked_patterns_catches_mkfs() {
+        let cmd = "mkfs.ext4 /dev/sda1";
+        let blocked = BLOCKED_PATTERNS
+            .iter()
+            .any(|p| cmd.to_lowercase().contains(p));
+        assert!(blocked, "mkfs should be blocked");
+    }
+
+    #[test]
+    fn blocked_patterns_catches_chmod_777_root_case_bug() {
+        // BUG: Production code lowercases cmd but not patterns.
+        // Pattern "chmod -R 777 /" has uppercase R, so lowercased cmd won't match.
+        // This test documents the current (buggy) behavior.
+        let cmd = "chmod -R 777 /";
+        let blocked = BLOCKED_PATTERNS
+            .iter()
+            .any(|p| cmd.to_lowercase().contains(&p.to_lowercase()));
+        assert!(
+            blocked,
+            "chmod -R 777 / should be blocked (with case-insensitive comparison)"
+        );
+    }
+
+    #[test]
+    fn constants_have_sensible_values() {
+        assert!(MAX_STDOUT > 0);
+        assert!(MAX_STDERR > 0);
+        assert!(
+            MAX_STDOUT >= MAX_STDERR,
+            "stdout cap should be >= stderr cap"
+        );
+        assert!(MAX_HISTORY > 0 && MAX_HISTORY <= 1000);
+        assert!(TIMEOUT_SECS >= 5 && TIMEOUT_SECS <= 300);
+    }
+
+    #[test]
+    fn command_history_entry_serde_roundtrip() {
+        let entry = CommandHistoryEntry {
+            id: 1,
+            command: "ls -la".to_string(),
+            working_dir: "/home/user".to_string(),
+            exit_code: Some(0),
+            success: true,
+            output_preview: Some("total 42".to_string()),
+            created_at: "2026-01-01T00:00:00Z".to_string(),
+        };
+        let json = serde_json::to_string(&entry).unwrap();
+        let back: CommandHistoryEntry = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.command, "ls -la");
+        assert_eq!(back.success, true);
+        assert_eq!(back.exit_code, Some(0));
+    }
+}

@@ -132,3 +132,184 @@ pub fn get_predicted_context() -> Result<PredictedContext, String> {
     let conn = crate::open_db_connection()?;
     predict_next_context(&conn)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn setup_test_db() -> rusqlite::Connection {
+        let conn = rusqlite::Connection::open_in_memory().expect("in-memory db");
+        conn.execute_batch(
+            "CREATE TABLE IF NOT EXISTS temporal_events (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                event_type TEXT NOT NULL,
+                subject TEXT NOT NULL,
+                data JSON NOT NULL,
+                embedding BLOB,
+                source_item_id INTEGER,
+                created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                expires_at TEXT
+            );",
+        )
+        .expect("create tables");
+        conn
+    }
+
+    fn insert_context_switch(conn: &rusqlite::Connection, hour: u32, dow: u32, to_topics: &[&str]) {
+        let event = ContextSwitchEvent {
+            from_topics: vec![],
+            to_topics: to_topics.iter().map(|s| s.to_string()).collect(),
+            hour_of_day: hour,
+            day_of_week: dow,
+            trigger: "test".to_string(),
+        };
+        let data = serde_json::to_value(&event).unwrap();
+        crate::temporal::record_event(conn, "context_switch", "user", &data, None, None).unwrap();
+    }
+
+    #[test]
+    fn predict_empty_history_returns_zero_confidence() {
+        let conn = setup_test_db();
+        let result = predict_next_context(&conn).unwrap();
+        assert_eq!(result.confidence, 0.0);
+        assert!(result.predicted_topics.is_empty());
+        assert!(result.reasoning.contains("Not enough"));
+    }
+
+    #[test]
+    fn predict_with_events_returns_topics() {
+        let conn = setup_test_db();
+        let now = chrono::Utc::now();
+        let hour: u32 = now.format("%H").to_string().parse().unwrap_or(12);
+        let dow: u32 = now.format("%u").to_string().parse().unwrap_or(1);
+
+        // Insert multiple events at current hour/dow so they match the ±2 hour window
+        for _ in 0..5 {
+            insert_context_switch(&conn, hour, dow, &["rust", "tauri"]);
+        }
+
+        let result = predict_next_context(&conn).unwrap();
+        assert!(!result.predicted_topics.is_empty());
+        let topic_names: Vec<&str> = result
+            .predicted_topics
+            .iter()
+            .map(|(t, _)| t.as_str())
+            .collect();
+        assert!(topic_names.contains(&"rust") || topic_names.contains(&"tauri"));
+    }
+
+    #[test]
+    fn predict_confidence_scales_with_event_count() {
+        let conn = setup_test_db();
+        let now = chrono::Utc::now();
+        let hour: u32 = now.format("%H").to_string().parse().unwrap_or(12);
+        let dow: u32 = now.format("%u").to_string().parse().unwrap_or(1);
+
+        // Insert exactly 5 events — should get 0.3 confidence (< 10)
+        for _ in 0..5 {
+            insert_context_switch(&conn, hour, dow, &["test"]);
+        }
+        let result = predict_next_context(&conn).unwrap();
+        assert_eq!(result.confidence, 0.3);
+
+        // Add more to reach 15 — should get 0.5
+        for _ in 0..10 {
+            insert_context_switch(&conn, hour, dow, &["test"]);
+        }
+        let result = predict_next_context(&conn).unwrap();
+        assert_eq!(result.confidence, 0.5);
+
+        // Add more to reach 25 — should get 0.7
+        for _ in 0..10 {
+            insert_context_switch(&conn, hour, dow, &["test"]);
+        }
+        let result = predict_next_context(&conn).unwrap();
+        assert_eq!(result.confidence, 0.7);
+    }
+
+    #[test]
+    fn predict_day_match_weights_higher() {
+        let conn = setup_test_db();
+        let now = chrono::Utc::now();
+        let hour: u32 = now.format("%H").to_string().parse().unwrap_or(12);
+        let dow: u32 = now.format("%u").to_string().parse().unwrap_or(1);
+        let other_dow = if dow == 7 { 1 } else { dow + 1 };
+
+        // Insert matching-day event with topic A
+        insert_context_switch(&conn, hour, dow, &["topic_a"]);
+        // Insert 3x non-matching-day events with topic B
+        for _ in 0..3 {
+            insert_context_switch(&conn, hour, other_dow, &["topic_b"]);
+        }
+
+        let result = predict_next_context(&conn).unwrap();
+        // topic_a has weight 3 (1 event * 3 for day match), topic_b has weight 3 (3 events * 1)
+        // Either could be first, but both should appear
+        assert!(result.predicted_topics.len() >= 2);
+    }
+
+    #[test]
+    fn predict_topics_truncated_to_5() {
+        let conn = setup_test_db();
+        let now = chrono::Utc::now();
+        let hour: u32 = now.format("%H").to_string().parse().unwrap_or(12);
+        let dow: u32 = now.format("%u").to_string().parse().unwrap_or(1);
+
+        for i in 0..10 {
+            let topic = format!("topic_{}", i);
+            insert_context_switch(&conn, hour, dow, &[&topic]);
+        }
+
+        let result = predict_next_context(&conn).unwrap();
+        assert!(result.predicted_topics.len() <= 5);
+    }
+
+    #[test]
+    fn predict_scores_are_normalized() {
+        let conn = setup_test_db();
+        let now = chrono::Utc::now();
+        let hour: u32 = now.format("%H").to_string().parse().unwrap_or(12);
+        let dow: u32 = now.format("%u").to_string().parse().unwrap_or(1);
+
+        for _ in 0..5 {
+            insert_context_switch(&conn, hour, dow, &["rust"]);
+        }
+
+        let result = predict_next_context(&conn).unwrap();
+        for (_, score) in &result.predicted_topics {
+            assert!(
+                *score >= 0.0 && *score <= 1.0,
+                "score out of range: {score}"
+            );
+        }
+    }
+
+    #[test]
+    fn context_switch_event_serde_roundtrip() {
+        let event = ContextSwitchEvent {
+            from_topics: vec!["python".to_string()],
+            to_topics: vec!["rust".to_string(), "tauri".to_string()],
+            hour_of_day: 14,
+            day_of_week: 3,
+            trigger: "git_activity".to_string(),
+        };
+        let json = serde_json::to_string(&event).unwrap();
+        let back: ContextSwitchEvent = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.to_topics.len(), 2);
+        assert_eq!(back.hour_of_day, 14);
+    }
+
+    #[test]
+    fn predicted_context_serde_roundtrip() {
+        let ctx = PredictedContext {
+            predicted_topics: vec![("rust".to_string(), 0.8)],
+            predicted_at: "2026-01-01T00:00:00Z".to_string(),
+            reasoning: "Test".to_string(),
+            confidence: 0.7,
+        };
+        let json = serde_json::to_string(&ctx).unwrap();
+        let back: PredictedContext = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.confidence, 0.7);
+        assert_eq!(back.predicted_topics.len(), 1);
+    }
+}
