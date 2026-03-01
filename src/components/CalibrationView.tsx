@@ -1,23 +1,151 @@
-import { useState } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { invoke } from '@tauri-apps/api/core';
+import { listen } from '@tauri-apps/api/event';
 import { cmd } from '../lib/commands';
-import type { CalibrationResult } from '../types/calibration';
+import { useAppStore } from '../store';
+import type { CalibrationResult, Recommendation } from '../types/calibration';
+
+interface PullProgress {
+  model: string;
+  status: string;
+  percent: number;
+  done: boolean;
+}
 
 export function CalibrationView() {
   const [result, setResult] = useState<CalibrationResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [prevGrade, setPrevGrade] = useState<string | null>(null);
+  const [pullProgress, setPullProgress] = useState<PullProgress | null>(null);
+  const [actionInProgress, setActionInProgress] = useState<string | null>(null);
+  const [, setDetectingStack] = useState(false);
+  const hasAutoRun = useRef(false);
+  const setShowSettings = useAppStore(s => s.setShowSettings);
+  const setActiveView = useAppStore(s => s.setActiveView);
 
-  const runCalibration = async () => {
+  const runCalibration = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
       const data = await cmd('run_calibration');
+      if (result) setPrevGrade(result.grade);
       setResult(data);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
       setLoading(false);
     }
+  }, [result]);
+
+  // Auto-run calibration on mount
+  useEffect(() => {
+    if (!hasAutoRun.current) {
+      hasAutoRun.current = true;
+      runCalibration();
+    }
+  }, [runCalibration]);
+
+  // Listen for Ollama pull progress
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    listen<PullProgress>('ollama-pull-progress', (event) => {
+      setPullProgress(event.payload);
+      if (event.payload.done) {
+        setActionInProgress(null);
+        setTimeout(() => setPullProgress(null), 1500);
+        // Auto re-calibrate after model pull completes
+        setTimeout(() => runCalibration(), 2000);
+      }
+    }).then(fn => { unlisten = fn; });
+    return () => { unlisten?.(); };
+  }, [runCalibration]);
+
+  const handleAction = async (rec: Recommendation) => {
+    if (!rec.action_type || actionInProgress) return;
+
+    switch (rec.action_type) {
+      case 'pull_embedding_model': {
+        setActionInProgress('pull_embedding_model');
+        try {
+          await invoke('pull_ollama_model', {
+            model: result?.rig_requirements.recommended_model || 'nomic-embed-text',
+            baseUrl: null,
+          });
+        } catch (e) {
+          setError(`Model pull failed: ${e instanceof Error ? e.message : String(e)}`);
+          setActionInProgress(null);
+          setPullProgress(null);
+        }
+        break;
+      }
+      case 'open_settings_interests':
+      case 'open_settings_stacks': {
+        setShowSettings(true);
+        break;
+      }
+      case 'auto_detect_stacks': {
+        setDetectingStack(true);
+        setActionInProgress('auto_detect_stacks');
+        try {
+          const detected = await invoke<Array<{ profile_id: string; confidence: number }>>('detect_stack_profiles');
+          if (detected.length > 0) {
+            const topIds = detected.slice(0, 3).map(d => d.profile_id);
+            await invoke('set_selected_stacks', { profileIds: topIds });
+            // Auto re-calibrate after stack detection
+            await runCalibration();
+          } else {
+            // No auto-detection — open settings as fallback
+            setShowSettings(true);
+          }
+        } catch (e) {
+          setError(`Stack detection failed: ${e instanceof Error ? e.message : String(e)}`);
+        } finally {
+          setDetectingStack(false);
+          setActionInProgress(null);
+        }
+        break;
+      }
+      case 'give_feedback': {
+        setActiveView('results');
+        break;
+      }
+    }
+  };
+
+  const actionButton = (rec: Recommendation) => {
+    if (!rec.action_type) return null;
+
+    const isActive = actionInProgress === rec.action_type;
+    const labels: Record<string, { idle: string; active: string }> = {
+      pull_embedding_model: { idle: 'Pull Model', active: 'Pulling...' },
+      open_settings_interests: { idle: 'Open Settings', active: 'Open Settings' },
+      open_settings_stacks: { idle: 'Open Settings', active: 'Open Settings' },
+      auto_detect_stacks: { idle: 'Auto-Detect', active: 'Detecting...' },
+      give_feedback: { idle: 'Go to Results', active: 'Go to Results' },
+    };
+    const label = labels[rec.action_type] || { idle: 'Fix', active: 'Fixing...' };
+
+    return (
+      <button
+        onClick={() => handleAction(rec)}
+        disabled={!!actionInProgress && !['open_settings_interests', 'open_settings_stacks', 'give_feedback'].includes(rec.action_type!)}
+        style={{
+          marginTop: 6,
+          padding: '4px 12px',
+          background: isActive ? '#2A2A2A' : '#D4AF37',
+          color: isActive ? '#666666' : '#0A0A0A',
+          border: 'none',
+          borderRadius: 4,
+          fontSize: 11,
+          fontWeight: 600,
+          cursor: isActive ? 'not-allowed' : 'pointer',
+          fontFamily: 'Inter, sans-serif',
+        }}
+      >
+        {isActive ? label.active : label.idle}
+      </button>
+    );
   };
 
   const gradeColor = (grade: string) => {
@@ -33,6 +161,8 @@ export function CalibrationView() {
     if (p === 'P1') return '#F59E0B';
     return '#666666';
   };
+
+  const gradeImproved = prevGrade && result && prevGrade !== result.grade;
 
   return (
     <div style={{ padding: '24px', maxWidth: 720 }}>
@@ -60,13 +190,58 @@ export function CalibrationView() {
             fontFamily: 'Inter, sans-serif',
           }}
         >
-          {loading ? 'Calibrating...' : result ? 'Re-calibrate' : 'Run Calibration'}
+          {loading ? 'Calibrating...' : 'Re-calibrate'}
         </button>
       </div>
 
       {error && (
         <div style={{ padding: 12, background: '#1a0000', border: '1px solid #EF4444', borderRadius: 6, color: '#EF4444', fontSize: 13, marginBottom: 16 }}>
           {error}
+        </div>
+      )}
+
+      {/* Grade improvement banner */}
+      {gradeImproved && (
+        <div style={{
+          padding: 12,
+          background: '#0a1a0a',
+          border: '1px solid #22C55E',
+          borderRadius: 6,
+          marginBottom: 16,
+          display: 'flex',
+          alignItems: 'center',
+          gap: 8,
+        }}>
+          <span style={{ fontSize: 18 }}>&#x2191;</span>
+          <span style={{ fontSize: 13, color: '#22C55E', fontWeight: 600 }}>
+            Grade improved: {prevGrade} &#x2192; {result.grade}
+          </span>
+        </div>
+      )}
+
+      {/* Pull progress bar */}
+      {pullProgress && (
+        <div style={{ marginBottom: 16 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+            <span style={{ fontSize: 11, color: '#A0A0A0' }}>
+              Pulling {pullProgress.model}...
+            </span>
+            <span style={{ fontSize: 11, color: '#D4AF37', fontFamily: 'JetBrains Mono, monospace' }}>
+              {pullProgress.done ? 'Done' : `${pullProgress.percent}%`}
+            </span>
+          </div>
+          <div style={{ height: 4, background: '#2A2A2A', borderRadius: 2, overflow: 'hidden' }}>
+            <div style={{
+              height: '100%',
+              width: `${pullProgress.done ? 100 : pullProgress.percent}%`,
+              background: pullProgress.done ? '#22C55E' : '#D4AF37',
+              borderRadius: 2,
+              transition: 'width 0.3s ease',
+            }} />
+          </div>
+          <div style={{ fontSize: 10, color: '#666666', marginTop: 2 }}>
+            {pullProgress.status}
+          </div>
         </div>
       )}
 
@@ -140,12 +315,17 @@ export function CalibrationView() {
             )}
           </div>
 
-          {/* Recommendations */}
+          {/* Recommendations with action buttons */}
           {result.recommendations.length > 0 && (
             <div style={{ background: '#141414', border: '1px solid #2A2A2A', borderRadius: 8, padding: 16 }}>
-              <h3 style={{ margin: '0 0 12px', fontSize: 14, fontWeight: 600, color: '#FFFFFF' }}>
-                Recommendations
+              <h3 style={{ margin: '0 0 4px', fontSize: 14, fontWeight: 600, color: '#FFFFFF' }}>
+                {result.grade.startsWith('A')
+                  ? 'Maintaining Grade A'
+                  : `Upgrade Path to Grade A`}
               </h3>
+              <p style={{ margin: '0 0 12px', fontSize: 11, color: '#666666' }}>
+                Fix these to improve your grade. Actions auto-recalibrate when complete.
+              </p>
               {result.recommendations.map((rec, i) => (
                 <div key={i} style={{ padding: '8px 0', borderTop: i > 0 ? '1px solid #1F1F1F' : 'none' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -164,37 +344,56 @@ export function CalibrationView() {
                   <p style={{ margin: '4px 0 0', fontSize: 12, color: '#A0A0A0', lineHeight: 1.4 }}>
                     {rec.description}
                   </p>
-                  {rec.action && (
-                    <code style={{
-                      display: 'inline-block',
-                      marginTop: 4,
-                      padding: '2px 6px',
-                      background: '#1F1F1F',
-                      borderRadius: 3,
-                      fontSize: 11,
-                      color: '#D4AF37',
-                      fontFamily: 'JetBrains Mono, monospace',
-                    }}>
-                      {rec.action}
-                    </code>
-                  )}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4 }}>
+                    {actionButton(rec)}
+                    {rec.action && !rec.action_type && (
+                      <code style={{
+                        display: 'inline-block',
+                        padding: '2px 6px',
+                        background: '#1F1F1F',
+                        borderRadius: 3,
+                        fontSize: 11,
+                        color: '#D4AF37',
+                        fontFamily: 'JetBrains Mono, monospace',
+                      }}>
+                        {rec.action}
+                      </code>
+                    )}
+                  </div>
                 </div>
               ))}
+            </div>
+          )}
+
+          {/* Grade A achieved */}
+          {result.recommendations.length === 0 && (
+            <div style={{
+              background: '#0a1a0a',
+              border: '1px solid #22C55E',
+              borderRadius: 8,
+              padding: 20,
+              textAlign: 'center',
+            }}>
+              <div style={{ fontSize: 24, marginBottom: 8 }}>&#x2713;</div>
+              <div style={{ fontSize: 14, fontWeight: 600, color: '#22C55E' }}>
+                Your rig is fully calibrated
+              </div>
+              <div style={{ fontSize: 12, color: '#A0A0A0', marginTop: 4 }}>
+                All scoring systems are operating at maximum accuracy for your setup.
+              </div>
             </div>
           )}
         </>
       )}
 
-      {!result && !loading && (
+      {!result && loading && (
         <div style={{
           textAlign: 'center',
           padding: '60px 20px',
-          color: '#666666',
+          color: '#A0A0A0',
           fontSize: 13,
         }}>
-          <div style={{ fontSize: 32, marginBottom: 12, opacity: 0.5 }}>&#x2699;</div>
-          Run calibration to see your scoring quality grade,
-          rig capabilities, and what you can do to improve accuracy.
+          Analyzing your rig and scoring accuracy...
         </div>
       )}
     </div>
