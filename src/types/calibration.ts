@@ -44,4 +44,35 @@ export interface Recommendation {
   title: string;
   description: string;
   action: string | null;
+  action_type: string | null;
 }
+
+// ============================================================================
+// Taste Test Calibration
+// ============================================================================
+
+export interface TasteCard {
+  id: number;
+  title: string;
+  snippet: string;
+  sourceHint: string;
+  categoryHint: string;
+}
+
+export interface PersonaWeight {
+  name: string;
+  weight: number;
+}
+
+export interface TasteProfileSummary {
+  dominantPersonaName: string;
+  dominantPersonaDescription: string;
+  confidence: number;
+  itemsShown: number;
+  personaWeights: PersonaWeight[];
+  topInterests: string[];
+}
+
+export type TasteTestStepResult =
+  | { type: 'nextCard'; card: TasteCard; progress: number; confidence: number }
+  | { type: 'complete'; summary: TasteProfileSummary };
