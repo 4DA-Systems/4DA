@@ -305,4 +305,66 @@ mod tests {
         let unix_path = "/mnt/d/already/unix";
         assert_eq!(convert_windows_to_wsl_path(unix_path), unix_path);
     }
+
+    // -- is_meta_doc --
+
+    #[test]
+    fn is_meta_doc_explicit_skip_list() {
+        assert!(is_meta_doc("COMPARISON.md"));
+        assert!(is_meta_doc("IMPLEMENTATION_PLAN.md"));
+        assert!(is_meta_doc("MISSION_ACCOMPLISHED.md"));
+        assert!(is_meta_doc("SHIP_READINESS_VERIFICATION.md"));
+        assert!(is_meta_doc("README-MARKETING.md"));
+        assert!(is_meta_doc("CHANGELOG.md"));
+        assert!(is_meta_doc("LICENSE"));
+        assert!(is_meta_doc("LICENSE.md"));
+    }
+
+    #[test]
+    fn is_meta_doc_case_insensitive_skip() {
+        assert!(is_meta_doc("changelog.md"));
+        assert!(is_meta_doc("Changelog.md"));
+        assert!(is_meta_doc("license"));
+    }
+
+    #[test]
+    fn is_meta_doc_screaming_case_with_underscores() {
+        assert!(is_meta_doc("AI_ENGINEERING_CONTRACT.md"));
+        assert!(is_meta_doc("VALIDATION_CHECKLIST.md"));
+        assert!(is_meta_doc("BUILD_CONFIG.md"));
+    }
+
+    #[test]
+    fn is_meta_doc_single_word_caps_no_underscore() {
+        // Single-word allcaps WITHOUT underscore — fails screaming case check
+        // Only matches if in explicit skip list
+        assert!(!is_meta_doc("SECURITY.md"));
+        assert!(!is_meta_doc("CONTRIBUTING.md"));
+    }
+
+    #[test]
+    fn is_meta_doc_regular_markdown_not_filtered() {
+        assert!(!is_meta_doc("api.md"));
+        assert!(!is_meta_doc("setup.md"));
+        assert!(!is_meta_doc("getting-started.md"));
+        assert!(!is_meta_doc("README.md"));
+    }
+
+    #[test]
+    fn is_meta_doc_non_md_not_filtered() {
+        assert!(!is_meta_doc("BUILD_CONFIG.toml"));
+        assert!(!is_meta_doc("Cargo.toml"));
+        assert!(!is_meta_doc("lib.rs"));
+    }
+
+    #[test]
+    fn is_meta_doc_empty_string() {
+        assert!(!is_meta_doc(""));
+    }
+
+    #[test]
+    fn is_meta_doc_mixed_case_with_underscore() {
+        // Has lowercase — not screaming case
+        assert!(!is_meta_doc("My_Custom_Doc.md"));
+    }
 }

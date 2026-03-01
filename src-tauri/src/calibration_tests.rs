@@ -1,6 +1,8 @@
-//! Tests for calibration_commands — extracted for file size limit compliance.
+//! Tests for calibration_commands — 4-dimension grading, Metrics utilities,
+//! and integration with calibration_probes.
 
 use super::*;
+use crate::calibration_probes;
 
 // ------------------------------------------------------------------
 // Metrics basics
@@ -168,71 +170,215 @@ fn merge_combines_counters() {
 }
 
 // ------------------------------------------------------------------
-// Grade computation
+// 4-Dimension Grade Computation
 // ------------------------------------------------------------------
 
 #[test]
-fn grade_a() {
-    let (grade, score) = compute_grade(1.0, 1.0, 1.0);
+fn grade_from_dimensions_perfect() {
+    let (grade, score) = calibration_probes::compute_grade_from_dimensions(25, 25, 25, 25);
     assert_eq!(grade, "A");
     assert_eq!(score, 100);
 }
 
 #[test]
-fn grade_a_boundary() {
-    let (grade, score) = compute_grade(1.0, 1.0, 0.5);
-    assert_eq!(grade, "A");
-    assert_eq!(score, 90);
-}
-
-#[test]
-fn grade_b_plus() {
-    let (grade, score) = compute_grade(0.8, 0.8, 0.8);
-    assert_eq!(grade, "B+");
-    assert_eq!(score, 80);
-}
-
-#[test]
-fn grade_b() {
-    let (grade, score) = compute_grade(0.8, 0.5, 0.75);
-    assert_eq!(grade, "B");
-    assert_eq!(score, 70);
-}
-
-#[test]
-fn grade_c() {
-    let (grade, score) = compute_grade(0.6, 0.5, 0.5);
-    assert_eq!(grade, "C");
-    assert_eq!(score, 55);
-}
-
-#[test]
-fn grade_d() {
-    let (grade, score) = compute_grade(0.4, 0.5, 0.5);
-    assert_eq!(grade, "D");
-    assert_eq!(score, 45);
-}
-
-#[test]
-fn grade_f() {
-    let (grade, score) = compute_grade(0.0, 0.0, 0.0);
+fn grade_from_dimensions_zero() {
+    let (grade, score) = calibration_probes::compute_grade_from_dimensions(0, 0, 0, 0);
     assert_eq!(grade, "F");
     assert_eq!(score, 0);
 }
 
 #[test]
-fn grade_separation_clamped() {
-    let (g1, s1) = compute_grade(1.0, 5.0, 1.0);
-    let (g2, s2) = compute_grade(1.0, 1.0, 1.0);
-    assert_eq!(g1, g2);
-    assert_eq!(s1, s2);
+fn grade_from_dimensions_zero_setup_with_keyword_disc() {
+    // No infra, no context, no signal, small discrimination from keywords
+    let (grade, score) = calibration_probes::compute_grade_from_dimensions(0, 0, 0, 5);
+    assert_eq!(grade, "F");
+    assert_eq!(score, 5);
 }
 
 #[test]
-fn grade_negative_separation_clamped() {
-    let (grade, score) = compute_grade(1.0, -0.5, 1.0);
-    assert_eq!(grade, "B");
-    assert_eq!(score, 70);
+fn grade_from_dimensions_moderate_setup() {
+    // Ollama+embed(20) + 3 interests(7) + 2 axes(10) + ok disc(12)
+    let (grade, score) = calibration_probes::compute_grade_from_dimensions(20, 7, 10, 12);
+    assert_eq!(score, 49);
+    assert_eq!(grade, "D");
+}
+
+#[test]
+fn grade_from_dimensions_good_setup() {
+    // Full infra(25) + rich context(20) + 4 axes(20) + good disc(18)
+    let (grade, score) = calibration_probes::compute_grade_from_dimensions(25, 20, 20, 18);
+    assert_eq!(score, 83);
+    assert_eq!(grade, "B+");
+}
+
+#[test]
+fn grade_from_dimensions_clamped_at_100() {
+    let (_, score) = calibration_probes::compute_grade_from_dimensions(25, 25, 25, 25);
+    assert!(score <= 100);
+}
+
+// ------------------------------------------------------------------
+// Infrastructure score
+// ------------------------------------------------------------------
+
+#[test]
+fn infra_score_nothing() {
+    let rig = RigRequirements {
+        ollama_running: false,
+        ollama_url: String::new(),
+        embedding_model: None,
+        embedding_available: false,
+        gpu_detected: false,
+        recommended_model: String::new(),
+        estimated_ram_gb: 0.0,
+        can_reach_grade_a: false,
+        grade_a_requirements: vec![],
+    };
+    assert_eq!(calibration_probes::compute_infrastructure_score(&rig), 0);
+}
+
+#[test]
+fn infra_score_ollama_only() {
+    let rig = RigRequirements {
+        ollama_running: true,
+        ollama_url: String::new(),
+        embedding_model: None,
+        embedding_available: false,
+        gpu_detected: false,
+        recommended_model: String::new(),
+        estimated_ram_gb: 0.0,
+        can_reach_grade_a: false,
+        grade_a_requirements: vec![],
+    };
+    assert_eq!(calibration_probes::compute_infrastructure_score(&rig), 8);
+}
+
+#[test]
+fn infra_score_full() {
+    let rig = RigRequirements {
+        ollama_running: true,
+        ollama_url: String::new(),
+        embedding_model: Some("nomic".into()),
+        embedding_available: true,
+        gpu_detected: true,
+        recommended_model: String::new(),
+        estimated_ram_gb: 0.0,
+        can_reach_grade_a: true,
+        grade_a_requirements: vec![],
+    };
+    assert_eq!(calibration_probes::compute_infrastructure_score(&rig), 25);
+}
+
+// ------------------------------------------------------------------
+// Context richness score
+// ------------------------------------------------------------------
+
+#[test]
+fn context_score_empty() {
+    let ctx = crate::scoring::ScoringContext::builder().build();
+    assert_eq!(calibration_probes::compute_context_score(&ctx), 0);
+}
+
+#[test]
+fn context_score_3_interests() {
+    let ctx = crate::scoring::ScoringContext::builder()
+        .interest_count(3)
+        .build();
+    // 3 * 2.5 = 7.5 → 7
+    assert_eq!(calibration_probes::compute_context_score(&ctx), 7);
+}
+
+#[test]
+fn context_score_5_interests_capped() {
+    let ctx = crate::scoring::ScoringContext::builder()
+        .interest_count(10) // capped at 5 → 12.5
+        .build();
+    // 5 * 2.5 = 12.5 → 12
+    assert_eq!(calibration_probes::compute_context_score(&ctx), 12);
+}
+
+// ------------------------------------------------------------------
+// Signal coverage score
+// ------------------------------------------------------------------
+
+#[test]
+fn signal_score_zero_axes() {
+    let audit = calibration_probes::SignalAudit {
+        axes: vec![],
+        context_fires: false,
+        interest_fires: false,
+        ace_fires: false,
+        learned_fires: false,
+        dependency_fires: false,
+    };
+    assert_eq!(calibration_probes::compute_signal_score(&audit), 0);
+}
+
+#[test]
+fn signal_score_all_axes() {
+    let audit = calibration_probes::SignalAudit {
+        axes: vec![
+            "context".into(),
+            "interest".into(),
+            "ace".into(),
+            "learned".into(),
+            "dependency".into(),
+        ],
+        context_fires: true,
+        interest_fires: true,
+        ace_fires: true,
+        learned_fires: true,
+        dependency_fires: true,
+    };
+    assert_eq!(calibration_probes::compute_signal_score(&audit), 25);
+}
+
+#[test]
+fn signal_score_two_axes() {
+    let audit = calibration_probes::SignalAudit {
+        axes: vec!["interest".into(), "ace".into()],
+        context_fires: false,
+        interest_fires: true,
+        ace_fires: true,
+        learned_fires: false,
+        dependency_fires: false,
+    };
+    assert_eq!(calibration_probes::compute_signal_score(&audit), 10);
+}
+
+// ------------------------------------------------------------------
+// Discrimination score
+// ------------------------------------------------------------------
+
+#[test]
+fn disc_score_perfect() {
+    let probes = calibration_probes::ProbeResults {
+        f1: 1.0,
+        precision: 1.0,
+        recall: 1.0,
+        separation_gap: 1.0,
+        passed: 12,
+        total: 12,
+        failures: vec![],
+    };
+    assert_eq!(
+        calibration_probes::compute_discrimination_score(&probes),
+        25
+    );
+}
+
+#[test]
+fn disc_score_zero() {
+    let probes = calibration_probes::ProbeResults {
+        f1: 0.0,
+        precision: 0.0,
+        recall: 0.0,
+        separation_gap: 0.0,
+        passed: 0,
+        total: 12,
+        failures: vec![],
+    };
+    assert_eq!(calibration_probes::compute_discrimination_score(&probes), 0);
 }
 
 // ------------------------------------------------------------------
@@ -253,25 +399,7 @@ fn persona_names() {
 }
 
 // ------------------------------------------------------------------
-// Universal probes
-// ------------------------------------------------------------------
-
-#[test]
-fn probes_has_6_items() {
-    assert_eq!(universal_probes().len(), 6);
-}
-
-#[test]
-fn probes_3_relevant_3_noise() {
-    let probes = universal_probes();
-    let relevant = probes.iter().filter(|p| p.expected_relevant).count();
-    let noise = probes.iter().filter(|p| !p.expected_relevant).count();
-    assert_eq!(relevant, 3);
-    assert_eq!(noise, 3);
-}
-
-// ------------------------------------------------------------------
-// Probe calibration — end-to-end
+// Probe calibration — end-to-end via calibration_probes
 // ------------------------------------------------------------------
 
 #[test]
@@ -306,19 +434,47 @@ fn probe_calibration_returns_sensible_counts() {
         .feedback_interaction_count(50)
         .build();
 
-    let (passed, total, _failures) = run_probe_calibration(&ctx, &db);
-    assert_eq!(total, 6);
-    assert!(passed >= 1);
-    assert!(passed <= total);
+    let results = calibration_probes::run_probe_calibration(&ctx, &db);
+    assert_eq!(results.total, 12); // 12 probes selected
+    assert!(results.passed >= 1);
+    assert!(results.passed <= results.total);
 }
 
 #[test]
 fn probe_calibration_empty_context() {
     let db = crate::test_utils::test_db();
     let ctx = crate::test_utils::empty_scoring_context();
-    let (passed, total, failures) = run_probe_calibration(&ctx, &db);
-    assert_eq!(total, 6);
-    assert!(passed + failures.len() as u32 == total);
+    let results = calibration_probes::run_probe_calibration(&ctx, &db);
+    assert_eq!(results.total, 12);
+    assert!(results.passed + results.failures.len() as u32 == results.total);
+}
+
+// ------------------------------------------------------------------
+// Action type on recommendations
+// ------------------------------------------------------------------
+
+#[test]
+fn recommendation_has_action_type_field() {
+    let rec = Recommendation {
+        priority: "P0".into(),
+        title: "test".into(),
+        description: "test".into(),
+        action: None,
+        action_type: Some("pull_embedding_model".into()),
+    };
+    assert_eq!(rec.action_type.as_deref(), Some("pull_embedding_model"));
+}
+
+#[test]
+fn recommendation_action_type_none() {
+    let rec = Recommendation {
+        priority: "P2".into(),
+        title: "test".into(),
+        description: "test".into(),
+        action: None,
+        action_type: None,
+    };
+    assert!(rec.action_type.is_none());
 }
 
 // ------------------------------------------------------------------

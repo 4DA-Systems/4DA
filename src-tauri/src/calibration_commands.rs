@@ -1,12 +1,12 @@
-//! Calibration Commands — User-facing rig calibration and scoring quality assessment
+//! Calibration Commands — 4-dimension rig calibration and scoring quality assessment.
 //!
-//! Exposes the scoring simulation as a Tauri command so users can see
-//! honest scoring quality metrics for their setup.
+//! Grade = Infrastructure (25) + Context Richness (25) + Signal Coverage (25) + Discrimination (25)
+//! Each recommendation carries an `action_type` for one-click frontend actions.
 
 use serde::Serialize;
 use ts_rs::TS;
 
-use crate::scoring::{score_item, ScoringContext, ScoringInput, ScoringOptions};
+use crate::calibration_probes;
 
 // ============================================================================
 // Public Types (exported to frontend via ts-rs)
@@ -28,6 +28,13 @@ pub struct CalibrationResult {
     pub best_persona: String,
     pub rig_requirements: RigRequirements,
     pub recommendations: Vec<Recommendation>,
+    // 4-dimension scores (new)
+    pub infrastructure_score: u32,
+    pub context_richness_score: u32,
+    pub signal_coverage_score: u32,
+    pub discrimination_score: u32,
+    pub active_signal_axes: Vec<String>,
+    pub nearest_persona: String,
 }
 
 #[derive(Debug, Serialize, TS)]
@@ -62,14 +69,15 @@ pub struct RigRequirements {
 #[derive(Debug, Serialize, TS)]
 #[ts(export)]
 pub struct Recommendation {
-    pub priority: String, // P0, P1, P2
+    pub priority: String,
     pub title: String,
     pub description: String,
     pub action: Option<String>,
+    pub action_type: Option<String>,
 }
 
 // ============================================================================
-// Inline Simulation (self-contained — does not depend on #[cfg(test)] modules)
+// Legacy Metrics (kept for simulation utilities and test coverage)
 // ============================================================================
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -120,7 +128,7 @@ impl Metrics {
                     self.tn += 1;
                 }
             }
-            Expected::Borderline => {} // excluded from metrics
+            Expected::Borderline => {}
         }
     }
     fn precision(&self) -> f64 {
@@ -172,120 +180,8 @@ impl Metrics {
 }
 
 // ============================================================================
-// Calibration Probes — lightweight scoring tests using user's ACTUAL context
+// Persona Display
 // ============================================================================
-
-/// Core probe items that any developer should correctly classify.
-/// These test the scoring engine with the user's real ScoringContext.
-struct ProbeItem {
-    title: &'static str,
-    content: &'static str,
-    /// Expected outcome per generic scenario:
-    /// true = should be relevant for a typical developer, false = noise
-    expected_relevant: bool,
-}
-
-fn universal_probes() -> Vec<ProbeItem> {
-    vec![
-        // Should ALWAYS be relevant to any developer
-        ProbeItem {
-            title: "Critical CVE in widely-used open source library",
-            content: "A critical remote code execution vulnerability has been discovered in a popular dependency. All developers should update immediately.",
-            expected_relevant: true,
-        },
-        ProbeItem {
-            title: "GitHub Copilot major update: multi-file editing",
-            content: "GitHub Copilot now supports multi-file editing, workspace-aware suggestions, and improved code review integration.",
-            expected_relevant: true,
-        },
-        ProbeItem {
-            title: "VS Code January 2026 Release",
-            content: "VS Code ships new debugging features, improved terminal performance, and AI-assisted refactoring tools.",
-            expected_relevant: true,
-        },
-        // Should NEVER be relevant to a developer
-        ProbeItem {
-            title: "Best restaurants in downtown Brisbane",
-            content: "Top 10 dining spots for lunch in Brisbane CBD. From Asian fusion to Italian classics.",
-            expected_relevant: false,
-        },
-        ProbeItem {
-            title: "Premier League transfer window recap",
-            content: "Manchester United, Chelsea, and Arsenal made significant signings during the January transfer window.",
-            expected_relevant: false,
-        },
-        ProbeItem {
-            title: "New season of The Bachelor announced",
-            content: "Reality TV dating show returns with a new cast of contestants and surprise twist format.",
-            expected_relevant: false,
-        },
-    ]
-}
-
-fn run_probe_calibration(
-    ctx: &ScoringContext,
-    db: &crate::db::Database,
-) -> (u32, u32, Vec<String>) {
-    let probes = universal_probes();
-    let opts = ScoringOptions {
-        apply_freshness: false,
-        apply_signals: false,
-    };
-    let zero_emb = vec![0.0_f32; 384];
-    let mut passed = 0u32;
-    let mut total = 0u32;
-    let mut failures = Vec::new();
-
-    for (i, probe) in probes.iter().enumerate() {
-        let input = ScoringInput {
-            id: 90000 + i as u64,
-            title: probe.title,
-            url: Some("https://probe.test"),
-            content: probe.content,
-            source_type: "hackernews",
-            embedding: &zero_emb,
-            created_at: None,
-        };
-        let result = score_item(&input, ctx, db, &opts, None);
-        total += 1;
-        if result.relevant == probe.expected_relevant {
-            passed += 1;
-        } else {
-            failures.push(format!(
-                "'{}' — expected {}, got {} (score={:.3})",
-                probe.title,
-                if probe.expected_relevant {
-                    "relevant"
-                } else {
-                    "noise"
-                },
-                if result.relevant { "relevant" } else { "noise" },
-                result.top_score,
-            ));
-        }
-    }
-    (passed, total, failures)
-}
-
-// ============================================================================
-// Grade Calculation
-// ============================================================================
-
-fn compute_grade(f1: f64, separation: f64, probe_pass_rate: f64) -> (String, u32) {
-    // Weighted score: F1 (50%), separation gap (30%), probe accuracy (20%)
-    let score = (f1 * 50.0 + separation.clamp(0.0, 1.0) * 30.0 + probe_pass_rate * 20.0) as u32;
-    let grade = match score {
-        90..=100 => "A",
-        80..=89 => "B+",
-        70..=79 => "B",
-        60..=69 => "C+",
-        50..=59 => "C",
-        40..=49 => "D",
-        _ => "F",
-    }
-    .to_string();
-    (grade, score)
-}
 
 #[allow(dead_code)]
 fn persona_display_name(name: &str) -> String {
@@ -317,122 +213,150 @@ pub async fn run_calibration() -> Result<CalibrationResult, String> {
         .await
         .map_err(|e| format!("Context build failed: {e}"))?;
 
-    // Run probe calibration with user's real context
-    let (probe_passed, probe_total, probe_failures) = run_probe_calibration(&ctx, &db);
-    let probe_pass_rate = if probe_total > 0 {
-        probe_passed as f64 / probe_total as f64
-    } else {
-        0.0
-    };
-
     // Check Ollama/embedding status
     let rig = check_rig_requirements().await;
 
-    // Compute grade from probe results + rig capabilities
-    let base_f1 = probe_pass_rate; // For user-context calibration, probe accuracy IS the F1 proxy
-    let separation = 0.5 * probe_pass_rate; // Estimated from probe spread
-    let (grade, grade_score) = compute_grade(base_f1, separation, probe_pass_rate);
+    // === 4-Dimension Scoring ===
 
-    // Build recommendations
+    // Dimension 1: Infrastructure
+    let infra_score = calibration_probes::compute_infrastructure_score(&rig);
+
+    // Dimension 2: Context Richness
+    let context_score = calibration_probes::compute_context_score(&ctx);
+
+    // Dimension 3: Signal Coverage (audit which axes fire)
+    let audit = calibration_probes::audit_signal_axes(&ctx, &db);
+    let signal_score = calibration_probes::compute_signal_score(&audit);
+
+    // Dimension 4: Discrimination (run domain-aware probes)
+    let probe_results = calibration_probes::run_probe_calibration(&ctx, &db);
+    let disc_score = calibration_probes::compute_discrimination_score(&probe_results);
+
+    // Compute grade from 4 dimensions
+    let (grade, grade_score) = calibration_probes::compute_grade_from_dimensions(
+        infra_score,
+        context_score,
+        signal_score,
+        disc_score,
+    );
+
+    // Detect nearest persona
+    let domain = calibration_probes::detect_user_domain(&ctx);
+    let nearest_persona = calibration_probes::domain_name(domain).to_string();
+
+    // === Build Recommendations (with action_type) ===
     let mut recommendations = Vec::new();
 
     if !rig.ollama_running {
         recommendations.push(Recommendation {
-            priority: "P0".to_string(),
-            title: "Install and run Ollama".to_string(),
-            description: "Ollama provides local embeddings that dramatically improve scoring accuracy. Without it, scoring relies on keyword matching only.".to_string(),
-            action: Some("Install from https://ollama.com and run: ollama pull nomic-embed-text".to_string()),
+            priority: "P0".into(),
+            title: "Install and run Ollama".into(),
+            description: "Ollama provides local embeddings that dramatically improve scoring accuracy. Without it, scoring relies on keyword matching only.".into(),
+            action: Some("Install from https://ollama.com and run: ollama pull nomic-embed-text".into()),
+            action_type: Some("install_ollama".into()),
         });
     } else if !rig.embedding_available {
         recommendations.push(Recommendation {
-            priority: "P0".to_string(),
-            title: "Pull an embedding model".to_string(),
-            description: "Ollama is running but no embedding model is available. Pull one to enable semantic scoring.".to_string(),
-            action: Some("ollama pull nomic-embed-text".to_string()),
+            priority: "P0".into(),
+            title: "Pull an embedding model".into(),
+            description: "Ollama is running but no embedding model is available. Pull one to enable semantic scoring.".into(),
+            action: Some("ollama pull nomic-embed-text".into()),
+            action_type: Some("pull_embedding_model".into()),
         });
     }
 
     if ctx.interest_count == 0 {
         recommendations.push(Recommendation {
-            priority: "P0".to_string(),
-            title: "Add your interests".to_string(),
-            description: "The scoring engine needs to know what you care about. Add at least 3 interests in Settings.".to_string(),
-            action: Some("Open Settings → Interests".to_string()),
+            priority: "P0".into(),
+            title: "Add your interests".into(),
+            description: "The scoring engine needs to know what you care about. Add at least 3 interests in Settings.".into(),
+            action: Some("Open Settings → Interests".into()),
+            action_type: Some("open_settings_interests".into()),
         });
     } else if ctx.interest_count < 3 {
         recommendations.push(Recommendation {
-            priority: "P1".to_string(),
-            title: "Add more interests".to_string(),
+            priority: "P1".into(),
+            title: "Add more interests".into(),
             description: format!(
                 "You have {} interest(s). Adding 3+ gives the engine enough signal to separate relevant content from noise.",
                 ctx.interest_count
             ),
-            action: Some("Open Settings → Interests".to_string()),
-        });
-    }
-
-    if ctx.feedback_interaction_count < 10 {
-        recommendations.push(Recommendation {
-            priority: "P1".to_string(),
-            title: "Use feedback buttons".to_string(),
-            description: format!(
-                "You've given {} feedback interactions. The engine learns from your thumbs up/down — 10+ interactions significantly improve accuracy.",
-                ctx.feedback_interaction_count
-            ),
-            action: None,
+            action: Some("Open Settings → Interests".into()),
+            action_type: Some("open_settings_interests".into()),
         });
     }
 
     if !ctx.composed_stack.active {
         recommendations.push(Recommendation {
-            priority: "P1".to_string(),
-            title: "Select your stack profile".to_string(),
-            description: "Stack profiles tell the engine your tech identity. Select 1-3 profiles in Settings for better domain filtering.".to_string(),
-            action: Some("Open Settings → Stack Profiles".to_string()),
+            priority: "P1".into(),
+            title: "Auto-detect your stack".into(),
+            description: "Stack profiles tell the engine your tech identity. Auto-detect from your projects or select manually.".into(),
+            action: Some("Open Settings → Stack Profiles".into()),
+            action_type: Some("auto_detect_stacks".into()),
         });
     }
 
-    for failure in &probe_failures {
+    if ctx.feedback_interaction_count < 10 {
         recommendations.push(Recommendation {
-            priority: "P2".to_string(),
-            title: "Probe classification miss".to_string(),
+            priority: "P1".into(),
+            title: "Use feedback buttons".into(),
+            description: format!(
+                "You've given {} feedback interactions. The engine learns from your thumbs up/down — 10+ interactions significantly improve accuracy.",
+                ctx.feedback_interaction_count
+            ),
+            action: None,
+            action_type: Some("give_feedback".into()),
+        });
+    }
+
+    for failure in &probe_results.failures {
+        recommendations.push(Recommendation {
+            priority: "P2".into(),
+            title: "Probe classification miss".into(),
             description: failure.clone(),
             action: None,
+            action_type: None,
         });
     }
 
-    // Build per-persona metrics (from probe data, simplified for user context)
+    // Build per-persona metrics from probe data
     let per_persona = vec![PersonaMetrics {
-        name: "your_profile".to_string(),
-        display_name: "Your Profile".to_string(),
-        f1: probe_pass_rate,
-        precision: probe_pass_rate,
-        recall: probe_pass_rate,
-        separation_gap: separation,
-        tp: probe_passed,
+        name: "your_profile".into(),
+        display_name: "Your Profile".into(),
+        f1: probe_results.f1,
+        precision: probe_results.precision,
+        recall: probe_results.recall,
+        separation_gap: probe_results.separation_gap,
+        tp: probe_results.passed,
         fp: 0,
-        tn: probe_total - probe_passed,
+        tn: probe_results.total.saturating_sub(probe_results.passed),
         r#fn: 0,
     }];
 
     Ok(CalibrationResult {
         grade,
         grade_score,
-        aggregate_f1: base_f1,
-        aggregate_precision: probe_pass_rate,
-        aggregate_recall: probe_pass_rate,
-        mean_separation_gap: separation,
-        corpus_items: probe_total,
+        aggregate_f1: probe_results.f1,
+        aggregate_precision: probe_results.precision,
+        aggregate_recall: probe_results.recall,
+        mean_separation_gap: probe_results.separation_gap,
+        corpus_items: probe_results.total,
         personas_tested: 1,
         per_persona,
-        worst_persona: "your_profile".to_string(),
-        best_persona: "your_profile".to_string(),
+        worst_persona: "your_profile".into(),
+        best_persona: "your_profile".into(),
         rig_requirements: rig,
         recommendations,
+        infrastructure_score: infra_score,
+        context_richness_score: context_score,
+        signal_coverage_score: signal_score,
+        discrimination_score: disc_score,
+        active_signal_axes: audit.axes,
+        nearest_persona,
     })
 }
 
-async fn check_rig_requirements() -> RigRequirements {
+pub(crate) async fn check_rig_requirements() -> RigRequirements {
     let ollama_url = "http://localhost:11434".to_string();
 
     let ollama_check = reqwest::Client::builder()
@@ -466,18 +390,18 @@ async fn check_rig_requirements() -> RigRequirements {
     };
 
     let embedding_available = embedding_model.is_some();
-    let gpu_detected = models_list.len() > 2; // heuristic: if many models, likely has GPU
+    let gpu_detected = models_list.len() > 2;
 
     let mut grade_a_requirements = Vec::new();
     if !ollama_running {
-        grade_a_requirements.push("Install and run Ollama (https://ollama.com)".to_string());
+        grade_a_requirements.push("Install and run Ollama (https://ollama.com)".into());
     }
     if !embedding_available {
-        grade_a_requirements.push("Pull embedding model: ollama pull nomic-embed-text".to_string());
+        grade_a_requirements.push("Pull embedding model: ollama pull nomic-embed-text".into());
     }
-    grade_a_requirements.push("Add 3+ interests in Settings".to_string());
-    grade_a_requirements.push("Give 10+ feedback interactions (thumbs up/down)".to_string());
-    grade_a_requirements.push("Select 1-3 stack profiles".to_string());
+    grade_a_requirements.push("Add 3+ interests in Settings".into());
+    grade_a_requirements.push("Give 10+ feedback interactions (thumbs up/down)".into());
+    grade_a_requirements.push("Select 1-3 stack profiles".into());
 
     RigRequirements {
         ollama_running,
@@ -485,9 +409,17 @@ async fn check_rig_requirements() -> RigRequirements {
         embedding_model,
         embedding_available,
         gpu_detected,
-        recommended_model: "nomic-embed-text".to_string(),
+        recommended_model: "nomic-embed-text".into(),
         estimated_ram_gb: if gpu_detected { 8.0 } else { 4.0 },
         can_reach_grade_a: ollama_running && embedding_available,
         grade_a_requirements,
     }
 }
+
+// ============================================================================
+// Tests
+// ============================================================================
+
+#[cfg(test)]
+#[path = "calibration_tests.rs"]
+mod tests;

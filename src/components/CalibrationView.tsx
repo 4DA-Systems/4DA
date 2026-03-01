@@ -265,11 +265,22 @@ export function CalibrationView() {
               </div>
             </div>
             <div style={{ flex: 1, background: '#141414', border: '1px solid #2A2A2A', borderRadius: 8, padding: 16 }}>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
-                <MetricBox label="Accuracy" value={`${(result.aggregate_f1 * 100).toFixed(0)}%`} />
-                <MetricBox label="Precision" value={`${(result.aggregate_precision * 100).toFixed(0)}%`} />
-                <MetricBox label="Separation" value={result.mean_separation_gap.toFixed(2)} />
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <DimensionBar label="Infrastructure" score={result.infrastructure_score} />
+                <DimensionBar label="Context" score={result.context_richness_score} />
+                <DimensionBar label="Signal Coverage" score={result.signal_coverage_score} />
+                <DimensionBar label="Discrimination" score={result.discrimination_score} />
               </div>
+              {result.active_signal_axes.length > 0 && (
+                <div style={{ display: 'flex', gap: 4, marginTop: 10, flexWrap: 'wrap' }}>
+                  {result.active_signal_axes.map(axis => (
+                    <span key={axis} style={{
+                      padding: '2px 8px', background: '#1F1F1F', borderRadius: 10,
+                      fontSize: 10, color: '#22C55E', fontFamily: 'JetBrains Mono, monospace',
+                    }}>{axis}</span>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
 
@@ -400,13 +411,18 @@ export function CalibrationView() {
   );
 }
 
-function MetricBox({ label, value }: { label: string; value: string }) {
+function DimensionBar({ label, score }: { label: string; score: number }) {
+  const pct = Math.round((score / 25) * 100);
+  const color = pct >= 80 ? '#22C55E' : pct >= 50 ? '#D4AF37' : pct >= 25 ? '#F59E0B' : '#EF4444';
   return (
-    <div style={{ textAlign: 'center' }}>
-      <div style={{ fontSize: 20, fontWeight: 600, color: '#FFFFFF', fontFamily: 'JetBrains Mono, monospace' }}>
-        {value}
+    <div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 2 }}>
+        <span style={{ fontSize: 11, color: '#A0A0A0' }}>{label}</span>
+        <span style={{ fontSize: 11, color, fontFamily: 'JetBrains Mono, monospace' }}>{score}/25</span>
       </div>
-      <div style={{ fontSize: 11, color: '#666666', marginTop: 2 }}>{label}</div>
+      <div style={{ height: 4, background: '#2A2A2A', borderRadius: 2, overflow: 'hidden' }}>
+        <div style={{ height: '100%', width: `${pct}%`, background: color, borderRadius: 2, transition: 'width 0.3s ease' }} />
+      </div>
     </div>
   );
 }

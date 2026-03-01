@@ -501,4 +501,129 @@ mod tests {
         assert_eq!(open.len(), 2);
         assert!(open[0].urgency >= open[1].urgency);
     }
+
+    // -- truncate --
+
+    #[test]
+    fn truncate_shorter_than_max() {
+        assert_eq!(truncate("hello", 10), "hello");
+    }
+
+    #[test]
+    fn truncate_exact_boundary() {
+        assert_eq!(truncate("hello", 5), "hello");
+    }
+
+    #[test]
+    fn truncate_longer_adds_ellipsis() {
+        assert_eq!(truncate("hello world", 5), "hello...");
+    }
+
+    #[test]
+    fn truncate_empty_string() {
+        assert_eq!(truncate("", 10), "");
+    }
+
+    #[test]
+    fn truncate_multibyte_utf8() {
+        // 4-byte emoji: should back up to char boundary
+        let s = "hey \u{1F600} there"; // "hey 😀 there"
+        let result = truncate(s, 5);
+        assert!(result.ends_with("..."));
+        assert!(result.len() <= 8); // 5 bytes + "..."
+    }
+
+    // -- find_matching_dep --
+
+    #[test]
+    fn find_dep_in_title() {
+        let deps = vec!["lodash".to_string()];
+        assert_eq!(
+            find_matching_dep("lodash vulnerability found", "details here", &deps),
+            Some("lodash".to_string())
+        );
+    }
+
+    #[test]
+    fn find_dep_in_content() {
+        let deps = vec!["express".to_string()];
+        assert_eq!(
+            find_matching_dep("Security alert", "express has a CVE", &deps),
+            Some("express".to_string())
+        );
+    }
+
+    #[test]
+    fn find_dep_no_match() {
+        let deps = vec!["lodash".to_string()];
+        assert_eq!(
+            find_matching_dep("unrelated title", "unrelated content", &deps),
+            None
+        );
+    }
+
+    #[test]
+    fn find_dep_empty_deps() {
+        assert_eq!(find_matching_dep("anything", "anything", &[]), None);
+    }
+
+    #[test]
+    fn find_dep_case_insensitive() {
+        // title is lowered, so "lodash" should match "LODASH" in title
+        let deps = vec!["lodash".to_string()];
+        assert_eq!(
+            find_matching_dep("LODASH update", "", &deps),
+            Some("lodash".to_string())
+        );
+    }
+
+    // -- streets_engine_for --
+
+    #[test]
+    fn streets_engine_all_known_types() {
+        assert_eq!(
+            streets_engine_for("security_patch"),
+            Some("Automation".into())
+        );
+        assert_eq!(streets_engine_for("migration"), Some("Consulting".into()));
+        assert_eq!(
+            streets_engine_for("adoption"),
+            Some("Digital Products".into())
+        );
+        assert_eq!(streets_engine_for("knowledge"), Some("Education".into()));
+    }
+
+    #[test]
+    fn streets_engine_unknown_returns_none() {
+        assert_eq!(streets_engine_for("unknown"), None);
+        assert_eq!(streets_engine_for(""), None);
+    }
+
+    // -- make_window --
+
+    #[test]
+    fn make_window_basic_fields() {
+        let w = make_window(
+            "adoption",
+            Some("bun".into()),
+            "Adoption: bun",
+            0.5,
+            0.7,
+            None,
+        );
+        assert_eq!(w.window_type, "adoption");
+        assert_eq!(w.title, "Adoption: bun");
+        assert_eq!(w.dependency.as_deref(), Some("bun"));
+        assert_eq!(w.status, "open");
+        assert_eq!(w.streets_engine.as_deref(), Some("Digital Products"));
+        assert!(w.expires_at.is_none());
+    }
+
+    #[test]
+    fn make_window_long_title_truncated_in_description() {
+        let long_title = "A".repeat(300);
+        let w = make_window("knowledge", None, &long_title, 0.5, 0.5, None);
+        assert!(w.description.len() < 210); // 200 + "..."
+        assert!(w.description.ends_with("..."));
+    }
 }

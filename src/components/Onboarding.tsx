@@ -6,25 +6,41 @@ import type { Step } from './onboarding/types';
 import { WelcomeStep } from './onboarding/WelcomeStep';
 import { TasteTestStep } from './onboarding/TasteTestStep';
 import { QuickSetupStep } from './onboarding/QuickSetupStep';
+import { CalibrationStep } from './onboarding/CalibrationStep';
 
 interface OnboardingProps {
   onComplete: () => void;
 }
 
-const steps: Step[] = ['welcome', 'taste', 'setup'];
+const steps: Step[] = ['welcome', 'taste', 'setup', 'calibrate'];
+const WIZARD_STEP_KEY = '4da-onboarding-wizard-step';
+
+function getPersistedStep(): Step {
+  try {
+    const stored = localStorage.getItem(WIZARD_STEP_KEY);
+    if (stored && steps.includes(stored as Step)) return stored as Step;
+  } catch { /* localStorage unavailable */ }
+  return 'welcome';
+}
 
 export function Onboarding({ onComplete }: OnboardingProps) {
   const { t } = useTranslation();
 
   const stepLabels: Record<Step, string> = {
     welcome: t('onboarding.stepLabel.welcome'),
-    taste: t('onboarding.stepLabel.taste', 'Calibrate'),
+    taste: t('onboarding.stepLabel.taste', 'Taste Test'),
     setup: t('onboarding.stepLabel.setup'),
+    calibrate: t('onboarding.stepLabel.calibrate', 'Calibrate'),
   };
-  const [step, setStep] = useState<Step>('welcome');
+  const [step, setStep] = useState<Step>(getPersistedStep);
   const [isAnimating, setIsAnimating] = useState(true);
 
   const currentIndex = steps.indexOf(step);
+
+  // Persist wizard step to localStorage
+  useEffect(() => {
+    try { localStorage.setItem(WIZARD_STEP_KEY, step); } catch { /* noop */ }
+  }, [step]);
 
   // Trigger entrance animation on step change
   useEffect(() => {
@@ -49,6 +65,7 @@ export function Onboarding({ onComplete }: OnboardingProps) {
     } catch {
       // Non-critical — continue anyway
     }
+    try { localStorage.removeItem(WIZARD_STEP_KEY); } catch { /* noop */ }
     onComplete();
   };
 
@@ -101,6 +118,14 @@ export function Onboarding({ onComplete }: OnboardingProps) {
 
         {step === 'setup' && (
           <QuickSetupStep
+            isAnimating={isAnimating}
+            onComplete={nextStep}
+            onBack={prevStep}
+          />
+        )}
+
+        {step === 'calibrate' && (
+          <CalibrationStep
             isAnimating={isAnimating}
             onComplete={handleSetupComplete}
             onBack={prevStep}

@@ -12,6 +12,12 @@ export interface CalibrationResult {
   best_persona: string;
   rig_requirements: RigRequirements;
   recommendations: Recommendation[];
+  infrastructure_score: number;
+  context_richness_score: number;
+  signal_coverage_score: number;
+  discrimination_score: number;
+  active_signal_axes: string[];
+  nearest_persona: string;
 }
 
 export interface PersonaMetrics {

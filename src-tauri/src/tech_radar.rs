@@ -544,6 +544,95 @@ mod tests {
         assert_eq!(mysql.ring, RadarRing::Hold);
     }
 
+    // -- classify_quadrant exhaustive --
+
+    #[test]
+    fn classify_quadrant_case_insensitive() {
+        assert_eq!(classify_quadrant("Rust"), RadarQuadrant::Languages);
+        assert_eq!(classify_quadrant("RUST"), RadarQuadrant::Languages);
+        assert_eq!(classify_quadrant("React"), RadarQuadrant::Frameworks);
+        assert_eq!(classify_quadrant("AWS"), RadarQuadrant::Platforms);
+    }
+
+    #[test]
+    fn classify_quadrant_contains_match() {
+        // Frameworks use .contains() so substrings match
+        assert_eq!(classify_quadrant("my-react-app"), RadarQuadrant::Frameworks);
+        assert_eq!(classify_quadrant("vue-router"), RadarQuadrant::Frameworks);
+        // Platforms too
+        assert_eq!(classify_quadrant("aws-lambda"), RadarQuadrant::Platforms);
+    }
+
+    #[test]
+    fn classify_quadrant_empty_and_unknown() {
+        assert_eq!(classify_quadrant(""), RadarQuadrant::Tools);
+        assert_eq!(classify_quadrant("obscure-lib"), RadarQuadrant::Tools);
+        assert_eq!(classify_quadrant("my-custom-tool"), RadarQuadrant::Tools);
+    }
+
+    // -- EntryBuilder::score --
+
+    #[test]
+    fn entry_builder_score_all_zeros() {
+        let eb = EntryBuilder::new(RadarRing::Assess, 0.0);
+        assert!((eb.score() - 0.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn entry_builder_score_all_ones() {
+        let mut eb = EntryBuilder::new(RadarRing::Adopt, 1.0);
+        eb.engagement = 1.0;
+        eb.trend = 1.0;
+        eb.decision_boost = 1.0;
+        assert!((eb.score() - 1.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn entry_builder_score_weights_sum_to_one() {
+        // 0.4 + 0.3 + 0.2 + 0.1 = 1.0
+        // If all inputs are 1.0, result should be exactly 1.0
+        let mut eb = EntryBuilder::new(RadarRing::Adopt, 1.0);
+        eb.engagement = 1.0;
+        eb.trend = 1.0;
+        eb.decision_boost = 1.0;
+        assert!((eb.score() - 1.0).abs() < 1e-10);
+    }
+
+    #[test]
+    fn entry_builder_score_stack_weight_only() {
+        let eb = EntryBuilder::new(RadarRing::Trial, 0.9);
+        // 0.9 * 0.4 = 0.36
+        assert!((eb.score() - 0.36).abs() < 1e-6);
+    }
+
+    #[test]
+    fn entry_builder_score_clamps_above_one() {
+        let mut eb = EntryBuilder::new(RadarRing::Adopt, 3.0);
+        eb.engagement = 3.0;
+        eb.trend = 3.0;
+        eb.decision_boost = 3.0;
+        assert!((eb.score() - 1.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn entry_builder_into_entry_carries_fields() {
+        let mut eb = EntryBuilder::new(RadarRing::Adopt, 0.9);
+        eb.quadrant = RadarQuadrant::Languages;
+        eb.movement = RadarMovement::Up;
+        eb.signals = vec!["trending".to_string()];
+        eb.decision_ref = Some(42);
+        eb.engagement = 0.5;
+
+        let entry = eb.into_entry("rust".to_string());
+        assert_eq!(entry.name, "rust");
+        assert_eq!(entry.ring, RadarRing::Adopt);
+        assert_eq!(entry.quadrant, RadarQuadrant::Languages);
+        assert_eq!(entry.movement, RadarMovement::Up);
+        assert_eq!(entry.signals, vec!["trending"]);
+        assert_eq!(entry.decision_ref, Some(42));
+        assert!(entry.score > 0.0);
+    }
+
     #[test]
     fn test_signal_trends() {
         let conn = setup_test_db();
