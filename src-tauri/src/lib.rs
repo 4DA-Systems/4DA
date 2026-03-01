@@ -61,6 +61,7 @@ mod attention;
 mod autophagy;
 mod autophagy_commands;
 mod calibration_commands;
+mod calibration_probes;
 mod channel_commands;
 mod channel_render;
 pub mod channels;
@@ -502,7 +503,10 @@ pub fn run() {
             channel_commands::get_channel_provenance,
             channel_commands::get_channel_changelog,
             channel_commands::get_channel_sources,
-            channel_commands::refresh_channel_sources
+            channel_commands::refresh_channel_sources,
+            channel_commands::auto_render_all_channels,
+            channel_commands::create_custom_channel,
+            channel_commands::delete_channel
         ])
         .setup(|app| {
             // Record app start time for diagnostics uptime tracking
@@ -657,6 +661,13 @@ pub fn run() {
                             // Emit results to frontend if window is visible
                             void_signal_analysis_complete(&handle, &results);
                             let _ = handle.emit("analysis-complete", results);
+
+                            // Auto-render stale channels after each monitoring cycle
+                            tauri::async_runtime::spawn(async move {
+                                if let Err(e) = channel_render::auto_render_stale_channels().await {
+                                    warn!(target: "4da::channels", error = %e, "Channel auto-render failed");
+                                }
+                            });
                         }
                         Err(e) => {
                             error!(target: "4da::monitor", error = %e, "Scheduled analysis failed");

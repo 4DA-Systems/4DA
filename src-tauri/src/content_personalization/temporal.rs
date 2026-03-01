@@ -368,7 +368,7 @@ fn compute_feed_echoes(
         }
     };
 
-    let items: Vec<FeedEchoItem> = raw_items
+    let mut items: Vec<FeedEchoItem> = raw_items
         .into_iter()
         .map(|mut item| {
             for topic in &topics {
@@ -380,6 +380,37 @@ fn compute_feed_echoes(
             item
         })
         .collect();
+
+    // Also include channel-sourced items matching lesson topics
+    let mut channel_items: Vec<FeedEchoItem> = Vec::new();
+    for topic in &topics {
+        let channel_query = format!(
+            "SELECT si.title, c.title, si.url, csm.matched_at
+             FROM channel_source_matches csm
+             JOIN source_items si ON si.id = csm.source_item_id
+             JOIN channels c ON c.id = csm.channel_id
+             WHERE (si.title LIKE '%{}%' OR si.content LIKE '%{}%')
+             ORDER BY csm.match_score DESC
+             LIMIT 3",
+            topic, topic
+        );
+        if let Ok(mut cstmt) = conn.prepare(&channel_query) {
+            if let Ok(rows) = cstmt.query_map([], |row| {
+                Ok(FeedEchoItem {
+                    title: row.get(0)?,
+                    source: format!("Channel: {}", row.get::<_, String>(1)?),
+                    url: row.get(2)?,
+                    matched_topic: topic.to_string(),
+                    fetched_at: row.get(3)?,
+                })
+            }) {
+                for row in rows.flatten() {
+                    channel_items.push(row);
+                }
+            }
+        }
+    }
+    items.extend(channel_items);
 
     if items.is_empty() {
         return None;

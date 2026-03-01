@@ -347,6 +347,7 @@
 
   "onboarding.stepLabel.welcome": "Welcome",
   "onboarding.stepLabel.setup": "Setup",
+  "onboarding.stepLabel.calibrate": "Calibrate",
   "onboarding.version": "Version {{version}}",
 
   "onboarding.apiKeys.title": "API Keys",
@@ -628,6 +629,10 @@
   "firstRun.skipToResults": "Skip to Results",
   "firstRun.continueAnyway": "Continue to 4DA",
   "firstRun.basicModeExplainer": "4DA works without AI using keyword matching. You can add Ollama or an API key in Settings anytime for enhanced scoring.",
+  "firstRun.basicMode": "Basic Mode — keyword-only scoring",
+  "firstRun.basicModeHint": "Configure Ollama or add an API key for semantic scoring",
+  "firstRun.streetsNudge": "Your free independence playbook is ready",
+  "firstRun.exploreStreets": "Explore STREETS",
   "firstRun.settingsHint": "You can configure AI providers anytime in Settings",
 
   "shortcuts.title": "Keyboard Shortcuts",
@@ -1197,6 +1202,7 @@
   "onboarding.stack.autoDetected_other": "Auto-detected {{count}} stacks from your projects.",
   "onboarding.stack.clickToToggle": "Click to toggle.",
   "onboarding.stack.noSelection": "No stacks selected — scoring will use default behavior.",
+  "onboarding.stack.autoSelectedBanner": "Auto-selected based on your projects",
 
   "onboarding.projects.scanning": "Scanning your projects...",
   "onboarding.projects.detected": "Detected from your local projects:",
@@ -1220,5 +1226,13 @@
   "channels.freshness.stale": "Stale",
   "channels.freshness.never": "New",
   "channels.noChannels": "No channels found",
-  "channels.selectChannel": "Select a channel to view"
+  "channels.selectChannel": "Select a channel to view",
+  "channels.createTitle": "Create Channel",
+  "channels.titleLabel": "Channel Title",
+  "channels.titlePlaceholder": "e.g. Kubernetes Security",
+  "channels.descriptionLabel": "Description",
+  "channels.topicsLabel": "Topics",
+  "channels.topicsPlaceholder": "Type a topic and press Enter",
+  "channels.create": "Create",
+  "coach.freeSession": "Free session {{current}}/{{max}}"
 }

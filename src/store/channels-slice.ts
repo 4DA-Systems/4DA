@@ -18,6 +18,8 @@ export interface ChannelsSlice {
   loadProvenance: (renderId: number) => Promise<void>;
   loadChangelog: (channelId: number) => Promise<void>;
   refreshChannelSources: (channelId: number) => Promise<void>;
+  createChannel: (slug: string, title: string, description: string, topicQuery: string[]) => Promise<void>;
+  deleteChannel: (channelId: number) => Promise<void>;
 }
 
 export const createChannelsSlice: StateCreator<AppStore, [], [], ChannelsSlice> = (set, get) => ({
@@ -101,5 +103,19 @@ export const createChannelsSlice: StateCreator<AppStore, [], [], ChannelsSlice> 
     } catch {
       // Silently ignore
     }
+  },
+
+  createChannel: async (slug, title, description, topicQuery) => {
+    await invoke<number>('create_custom_channel', { slug, title, description, topicQuery });
+    get().loadChannels();
+  },
+
+  deleteChannel: async (channelId) => {
+    await invoke<void>('delete_channel', { channelId });
+    const state = get();
+    if (state.activeChannelId === channelId) {
+      set({ activeChannelId: null, activeRender: null });
+    }
+    get().loadChannels();
   },
 });

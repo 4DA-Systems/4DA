@@ -11,7 +11,7 @@ import { buildStackInsights } from './first-run/utils';
 import type { Phase, ScanSummary } from './first-run/utils';
 
 interface FirstRunTransitionProps {
-  onComplete: (view: 'briefing' | 'results') => void;
+  onComplete: (view: 'briefing' | 'results' | 'playbook') => void;
 }
 
 export function FirstRunTransition({ onComplete }: FirstRunTransitionProps) {
@@ -105,6 +105,8 @@ export function FirstRunTransition({ onComplete }: FirstRunTransitionProps) {
 
     if (appState.analysisComplete) {
       setPhase('celebrating');
+      // Auto-render channels in background while user sees celebration
+      invoke('auto_render_all_channels').catch(() => {});
       return;
     }
 
@@ -119,7 +121,7 @@ export function FirstRunTransition({ onComplete }: FirstRunTransitionProps) {
   }, [appState.loading, appState.progressStage, appState.analysisComplete, phase]);
 
   // Dismiss handler — fade out then call onComplete
-  const handleDismiss = useCallback((view: 'briefing' | 'results') => {
+  const handleDismiss = useCallback((view: 'briefing' | 'results' | 'playbook') => {
     setPhase('fading');
     setTimeout(() => onComplete(view), 300);
   }, [onComplete]);

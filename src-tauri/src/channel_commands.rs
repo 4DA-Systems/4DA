@@ -104,6 +104,17 @@ pub async fn get_channel_changelog(channel_id: i64) -> Result<Option<ChannelChan
     Ok(Some(changelog))
 }
 
+/// Auto-render all stale or never-rendered channels.
+/// Called after onboarding and on each monitoring cycle.
+#[tauri::command]
+pub async fn auto_render_all_channels() -> Result<()> {
+    info!(target: "4da::channels", "Auto-rendering all stale channels");
+    crate::channel_render::auto_render_stale_channels()
+        .await
+        .map_err(|e| -> crate::error::FourDaError { e.into() })?;
+    Ok(())
+}
+
 // ============================================================================
 // Source Management
 // ============================================================================
@@ -147,6 +158,45 @@ pub async fn refresh_channel_sources(channel_id: i64) -> Result<i64> {
         "Channel sources refreshed"
     );
     Ok(count)
+}
+
+// ============================================================================
+// Channel Creation & Deletion
+// ============================================================================
+
+/// Create a custom channel.
+#[tauri::command]
+pub async fn create_custom_channel(
+    slug: String,
+    title: String,
+    description: String,
+    topic_query: Vec<String>,
+) -> Result<i64> {
+    let db = get_database()?;
+    let id = db
+        .create_channel(&slug, &title, &description, &topic_query)
+        .map_err(|e| format!("Failed to create channel: {}", e))?;
+    info!(target: "4da::channels", slug = %slug, id, "Created custom channel");
+
+    // Trigger async render for the new channel
+    let channel_id = id;
+    tauri::async_runtime::spawn(async move {
+        if let Err(e) = crate::channel_render::render_channel(channel_id).await {
+            tracing::warn!(target: "4da::channels", error = %e, "Initial render failed for new channel");
+        }
+    });
+
+    Ok(id)
+}
+
+/// Soft-delete a channel by archiving it.
+#[tauri::command]
+pub async fn delete_channel(channel_id: i64) -> Result<()> {
+    let db = get_database()?;
+    db.update_channel_status(channel_id, &crate::channels::ChannelStatus::Archived)
+        .map_err(|e| format!("Failed to archive channel: {}", e))?;
+    info!(target: "4da::channels", channel_id, "Channel archived");
+    Ok(())
 }
 
 #[cfg(test)]

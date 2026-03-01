@@ -269,7 +269,14 @@ export function CoachView() {
       {/* Header */}
       <div className="flex items-center justify-between mb-4">
         <h1 className="text-lg font-semibold text-white tracking-wide">{t('coach:coach.title')}</h1>
-        <TierBadge tier={streetsTier} />
+        <div className="flex items-center gap-2">
+          {streetsTier === 'playbook' && coachSessions.length < 2 && (
+            <span className="text-xs text-text-muted">
+              {t('coach.freeSession', { current: coachSessions.length, max: 2 })}
+            </span>
+          )}
+          <TierBadge tier={streetsTier} />
+        </div>
       </div>
 
       {/* Two-panel layout */}
@@ -356,8 +363,8 @@ export function CoachView() {
         </main>
       </div>
 
-      {/* StreetsGate overlay for playbook-only tier */}
-      {streetsTier === 'playbook' && <StreetsGate />}
+      {/* StreetsGate overlay for playbook-only tier (after 2 free sessions) */}
+      {streetsTier === 'playbook' && coachSessions.length >= 2 && <StreetsGate />}
     </div>
   );
 }

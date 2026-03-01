@@ -311,6 +311,38 @@ pub fn mark_lesson_complete(
     )
     .map_err(|e| e.to_string())?;
 
+    // Extract topics from lesson content for affinity learning.
+    // STREETS completions are strong positive signals — record them as
+    // topic affinities so the scoring pipeline learns what the user cares about.
+    if let Some(filename) = module_id_to_filename(&module_id) {
+        let content_dir = get_content_dir();
+        let path = content_dir.join(filename);
+        if let Ok(raw) = std::fs::read_to_string(&path) {
+            let lessons = parse_lessons(&raw);
+            if let Some(lesson) = lessons.get(lesson_idx as usize) {
+                let topics = crate::extract_topics(&lesson.title, &lesson.content);
+                if let Ok(ace) = crate::get_ace_engine() {
+                    for topic in topics.iter().take(5) {
+                        let topic_lower = topic.to_lowercase();
+                        let _ = ace.record_interaction(
+                            0,                                // No specific item_id for STREETS lessons
+                            crate::ace::BehaviorAction::Save, // Save = strongest positive signal (1.0)
+                            vec![topic_lower],
+                            "streets".to_string(),
+                        );
+                    }
+                    tracing::debug!(
+                        target: "4da::streets",
+                        module = %module_id,
+                        lesson = lesson_idx,
+                        topic_count = topics.len().min(5),
+                        "Recorded STREETS lesson topics as affinity signals"
+                    );
+                }
+            }
+        }
+    }
+
     // Notify frontend that profile data has changed
     let _ = app.emit("profile-updated", "lesson-complete");
 

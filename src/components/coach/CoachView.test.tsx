@@ -268,14 +268,27 @@ describe('CoachView', () => {
     expect(screen.getByTestId('coach-chat')).toBeInTheDocument();
   });
 
-  // ---- 13. StreetsGate overlay when tier is playbook ----
-  it('shows StreetsGate overlay when tier is playbook', () => {
-    mockStoreOverrides = { streetsTier: 'playbook' };
+  // ---- 13. StreetsGate overlay when tier is playbook with 2+ sessions ----
+  it('shows StreetsGate overlay when tier is playbook and 2+ sessions exist', () => {
+    mockStoreOverrides = {
+      streetsTier: 'playbook',
+      coachSessions: [
+        makeSession({ id: 's1', title: 'Session 1' }),
+        makeSession({ id: 's2', title: 'Session 2' }),
+      ],
+    };
     render(<CoachView />);
     // StreetsGate renders the gate title and license key input
     expect(screen.getByText('coach:coach.gate.title')).toBeInTheDocument();
     expect(screen.getByText('coach:coach.gate.requiresLicense')).toBeInTheDocument();
     expect(screen.getByPlaceholderText('coach:coach.gate.enterKey')).toBeInTheDocument();
+  });
+
+  // ---- 13b. Free sessions allowed when tier is playbook with <2 sessions ----
+  it('does not show StreetsGate when tier is playbook but fewer than 2 sessions', () => {
+    mockStoreOverrides = { streetsTier: 'playbook', coachSessions: [] };
+    render(<CoachView />);
+    expect(screen.queryByText('coach:coach.gate.title')).not.toBeInTheDocument();
   });
 
   // ---- 14. StreetsGate is hidden for non-playbook tiers ----

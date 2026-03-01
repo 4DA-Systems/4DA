@@ -26,6 +26,7 @@ export function StackSelectStep({ selected, onSelectionChange, compact }: StackS
   const [profiles, setProfiles] = useState<StackProfileSummary[]>([]);
   const [detections, setDetections] = useState<StackDetection[]>([]);
   const [loading, setLoading] = useState(true);
+  const [autoSelected, setAutoSelected] = useState(false);
 
   // Load profiles and auto-detect on mount
   useEffect(() => {
@@ -47,6 +48,7 @@ export function StackSelectStep({ selected, onSelectionChange, compact }: StackS
             .map(d => d.profile_id);
           if (autoIds.length > 0) {
             onSelectionChange(autoIds);
+            setAutoSelected(true);
           }
         }
       } catch {
@@ -146,6 +148,15 @@ export function StackSelectStep({ selected, onSelectionChange, compact }: StackS
           );
         })}
       </div>
+
+      {/* Auto-select banner */}
+      {autoSelected && !compact && (
+        <div className="mt-3 px-3 py-2 bg-green-500/10 border border-green-500/20 rounded-lg">
+          <p className="text-xs text-green-400">
+            {t('onboarding.stack.autoSelectedBanner')}
+          </p>
+        </div>
+      )}
 
       {/* Detection summary */}
       {detections.length > 0 && !compact && (

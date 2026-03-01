@@ -24,15 +24,34 @@ const fallbackSuggestions = [
   'Mobile Development', 'Cloud Infrastructure', 'Data Engineering',
 ];
 
+const SECTION_KEY = '4da-onboarding-step';
+
+interface SectionState {
+  aiOpen?: boolean;
+  projectsOpen?: boolean;
+  stacksOpen?: boolean;
+  interestsOpen?: boolean;
+  localeOpen?: boolean;
+}
+
+function getPersistedSections(): SectionState {
+  try {
+    const stored = localStorage.getItem(SECTION_KEY);
+    if (stored) return JSON.parse(stored) as SectionState;
+  } catch { /* localStorage unavailable or corrupted */ }
+  return {};
+}
+
 export function useQuickSetup({ onComplete }: UseQuickSetupProps) {
   const { t } = useTranslation();
 
-  // Section collapse state
-  const [aiOpen, setAiOpen] = useState(true);
-  const [projectsOpen, setProjectsOpen] = useState(false);
-  const [stacksOpen, setStacksOpen] = useState(false);
-  const [interestsOpen, setInterestsOpen] = useState(false);
-  const [localeOpen, setLocaleOpen] = useState(false);
+  // Section collapse state — restore from localStorage if available
+  const persisted = getPersistedSections();
+  const [aiOpen, setAiOpen] = useState(persisted.aiOpen ?? true);
+  const [projectsOpen, setProjectsOpen] = useState(persisted.projectsOpen ?? false);
+  const [stacksOpen, setStacksOpen] = useState(persisted.stacksOpen ?? false);
+  const [interestsOpen, setInterestsOpen] = useState(persisted.interestsOpen ?? false);
+  const [localeOpen, setLocaleOpen] = useState(persisted.localeOpen ?? false);
   const [localeConfigured, setLocaleConfigured] = useState(false);
   const [selectedStacks, setSelectedStacks] = useState<string[]>([]);
 
@@ -55,6 +74,14 @@ export function useQuickSetup({ onComplete }: UseQuickSetupProps) {
   const [isSaving, setIsSaving] = useState(false);
   const [apiKeyHint, setApiKeyHint] = useState<string | null>(null);
   const [skippedDownload, setSkippedDownload] = useState(false);
+
+  // Persist section state to localStorage
+  useEffect(() => {
+    try {
+      const state: SectionState = { aiOpen, projectsOpen, stacksOpen, interestsOpen, localeOpen };
+      localStorage.setItem(SECTION_KEY, JSON.stringify(state));
+    } catch { /* noop */ }
+  }, [aiOpen, projectsOpen, stacksOpen, interestsOpen, localeOpen]);
 
   // --- AI Provider auto-detect ---
   const pullMissingModels = useCallback(async (status: OllamaStatus) => {
@@ -310,6 +337,7 @@ export function useQuickSetup({ onComplete }: UseQuickSetupProps) {
       for (const tech of detectedTech) await invoke('add_tech_stack', { technology: tech });
       if (selectedStacks.length > 0) await invoke('set_selected_stacks', { profileIds: selectedStacks });
 
+      try { localStorage.removeItem(SECTION_KEY); } catch { /* noop */ }
       onComplete();
     } catch (e) {
       setError(`Failed to save settings: ${e}`);

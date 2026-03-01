@@ -338,6 +338,11 @@ interface CommandMap {
   toolkit_generate_export_pack: { params: Record<string, never>; result: ExportPackResult };
   toolkit_env_snapshot: { params: { workingDir: string | null }; result: EnvSnapshot };
 
+  // -- Channels --
+  auto_render_all_channels: { params: Record<string, never>; result: void };
+  create_custom_channel: { params: { slug: string; title: string; description: string; topicQuery: string[] }; result: number };
+  delete_channel: { params: { channelId: number }; result: void };
+
   // -- Splash Probes --
   get_context_stats: { params: Record<string, never>; result: unknown };
 }
