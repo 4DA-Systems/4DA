@@ -208,6 +208,27 @@ test.describe('4DA Critical Path', () => {
     await expect(dialog).not.toBeVisible();
   });
 
+  test('app recovers from rapid navigation', async ({ page }) => {
+    const appState = await getToMainView(page);
+    test.skip(appState === 'onboarding', 'Cannot test navigation during onboarding (no backend to skip it)');
+
+    const tablist = page.getByRole('tablist', { name: /content views/i });
+    const tabs = tablist.getByRole('tab');
+    const count = await tabs.count();
+
+    // Rapid-fire tab switching — stress test lazy loading
+    for (let round = 0; round < 2; round++) {
+      for (let i = 0; i < count; i++) {
+        await tabs.nth(i).click();
+        await page.waitForTimeout(100); // deliberately fast
+      }
+    }
+
+    // App should still be functional after rapid switching
+    await tabs.first().click();
+    await expect(tabs.first()).toHaveAttribute('aria-selected', 'true');
+  });
+
   test('keyboard shortcuts modal closes with Escape', async ({ page }) => {
     const appState = await getToMainView(page);
     test.skip(appState === 'onboarding', 'Cannot test keyboard shortcuts during onboarding');

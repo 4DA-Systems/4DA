@@ -153,6 +153,24 @@ test.describe('4DA Smoke Tests', () => {
     });
   });
 
+  test('all tabs render content without error boundary', async ({ page }) => {
+    const appState = await waitForAppReady(page);
+    if (appState !== 'main') { test.skip(true, `App in ${appState} state`); return; }
+
+    const tablist = page.getByRole('tablist', { name: /content views/i });
+    const tabs = tablist.getByRole('tab');
+    const count = await tabs.count();
+
+    for (let i = 0; i < count; i++) {
+      await tabs.nth(i).click();
+      await page.waitForTimeout(1000); // allow lazy load
+
+      // No error boundary should be visible
+      const hasError = await page.locator('text=Something went wrong').isVisible().catch(() => false);
+      expect(hasError).toBe(false);
+    }
+  });
+
   test('Test 5: General Health - console errors and navigation', async ({ page }) => {
     const appState = await waitForAppReady(page);
     await page.waitForTimeout(5000);
