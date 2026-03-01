@@ -18,7 +18,7 @@ import type {
   SourceRelevance,
   ScoreBreakdown,
 } from '../types/analysis';
-import type { CalibrationResult } from '../types/calibration';
+import type { CalibrationResult, TasteTestStepResult, TasteProfileSummary } from '../types/calibration';
 import type {
   Settings,
   MonitoringStatus,
@@ -110,6 +110,13 @@ interface CommandMap {
   pull_ollama_model: { params: { model: string; baseUrl: string | null }; result: void };
   run_calibration: { params: Record<string, never>; result: CalibrationResult };
   set_close_to_tray: { params: { enabled: boolean }; result: void };
+
+  // -- Taste Test Calibration --
+  taste_test_start: { params: Record<string, never>; result: TasteTestStepResult };
+  taste_test_respond: { params: { itemSlot: number; response: string }; result: TasteTestStepResult };
+  taste_test_finalize: { params: Record<string, never>; result: TasteProfileSummary };
+  taste_test_is_calibrated: { params: Record<string, never>; result: boolean };
+  taste_test_get_profile: { params: Record<string, never>; result: TasteProfileSummary | null };
 
   // -- User Context & Interests --
   get_user_context: { params: Record<string, never>; result: UserContext };

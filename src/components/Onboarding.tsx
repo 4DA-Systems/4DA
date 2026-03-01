@@ -4,19 +4,21 @@ import { invoke } from '@tauri-apps/api/core';
 
 import type { Step } from './onboarding/types';
 import { WelcomeStep } from './onboarding/WelcomeStep';
+import { TasteTestStep } from './onboarding/TasteTestStep';
 import { QuickSetupStep } from './onboarding/QuickSetupStep';
 
 interface OnboardingProps {
   onComplete: () => void;
 }
 
-const steps: Step[] = ['welcome', 'setup'];
+const steps: Step[] = ['welcome', 'taste', 'setup'];
 
 export function Onboarding({ onComplete }: OnboardingProps) {
   const { t } = useTranslation();
 
   const stepLabels: Record<Step, string> = {
     welcome: t('onboarding.stepLabel.welcome'),
+    taste: t('onboarding.stepLabel.taste', 'Calibrate'),
     setup: t('onboarding.stepLabel.setup'),
   };
   const [step, setStep] = useState<Step>('welcome');
@@ -87,6 +89,14 @@ export function Onboarding({ onComplete }: OnboardingProps) {
       <div className="max-w-2xl w-full">
         {step === 'welcome' && (
           <WelcomeStep isAnimating={isAnimating} onNext={nextStep} />
+        )}
+
+        {step === 'taste' && (
+          <TasteTestStep
+            isAnimating={isAnimating}
+            onComplete={nextStep}
+            onSkip={nextStep}
+          />
         )}
 
         {step === 'setup' && (

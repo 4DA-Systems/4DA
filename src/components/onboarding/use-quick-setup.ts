@@ -167,6 +167,26 @@ export function useQuickSetup({ onComplete }: UseQuickSetupProps) {
     return () => { cancelled = true; };
   }, []);
 
+  // --- Pre-populate from taste test if calibrated ---
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const calibrated = await invoke<boolean>('taste_test_is_calibrated');
+        if (cancelled || !calibrated) return;
+        const profile = await invoke<{ topInterests: string[]; dominantPersonaName: string } | null>('taste_test_get_profile');
+        if (cancelled || !profile) return;
+        if (profile.topInterests.length > 0) {
+          setInterests(prev => prev.length === 0 ? profile.topInterests : prev);
+          setSuggestions(prev => prev.length === 0 ? profile.topInterests : prev);
+        }
+      } catch {
+        // Non-critical — taste test may not have been taken
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
   // --- Load suggested interests after discovery ---
   useEffect(() => {
     if (!discoveryDone) return;

@@ -120,6 +120,9 @@ mod void_engine;
 mod stack_commands;
 pub mod stacks;
 
+pub mod taste_test;
+mod taste_test_commands;
+
 mod coach_context;
 mod coach_nudges;
 mod coach_templates;
@@ -261,6 +264,12 @@ pub fn run() {
             settings_commands::check_ollama_status,
             settings_commands::pull_ollama_model,
             calibration_commands::run_calibration,
+            // Taste Test Calibration
+            taste_test_commands::taste_test_start,
+            taste_test_commands::taste_test_respond,
+            taste_test_commands::taste_test_finalize,
+            taste_test_commands::taste_test_is_calibrated,
+            taste_test_commands::taste_test_get_profile,
             settings_commands::get_license_tier,
             settings_commands::activate_license,
             settings_commands::get_trial_status,
