@@ -5,27 +5,34 @@ import { listen } from '@tauri-apps/api/event';
 
 export interface Achievement {
   id: string;
-  title: string;
+  name: string;
   description: string;
   icon: string;
+  counter_type: string;
   threshold: number;
+  current: number;
   unlocked: boolean;
   unlocked_at: string | null;
-  progress: number;
 }
 
 export interface AchievementUnlocked {
   id: string;
-  title: string;
+  name: string;
   description: string;
   icon: string;
+  unlocked_at: string;
+}
+
+export interface CounterState {
+  counter_type: string;
+  value: number;
 }
 
 export interface GameState {
-  total_unlocked: number;
-  total_achievements: number;
-  current_streak: number;
+  counters: CounterState[];
   achievements: Achievement[];
+  streak: number;
+  last_active: string | null;
 }
 
 export interface GameSlice {
@@ -37,10 +44,10 @@ export interface GameSlice {
 }
 
 const EMPTY_GAME: GameState = {
-  total_unlocked: 0,
-  total_achievements: 0,
-  current_streak: 0,
+  counters: [],
   achievements: [],
+  streak: 0,
+  last_active: null,
 };
 
 export const createGameSlice: StateCreator<AppStore, [], [], GameSlice> = (set) => ({

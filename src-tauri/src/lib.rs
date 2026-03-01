@@ -495,6 +495,7 @@ pub fn run() {
             translation_commands::delete_translation_override,
             // GAME Engine
             game_commands::get_game_state,
+            game_commands::get_achievements,
             // Information Channels
             channel_commands::list_channels,
             channel_commands::get_channel,

@@ -80,6 +80,8 @@ const EXCEPTIONS = {
 };
 
 const SCAN_DIRS = ['src', 'src-tauri/src'];
+// Note: .js files are not in THRESHOLDS and thus not checked.
+// src/lib/game-components/*.js are GAME compiler output — exempt by design.
 const SKIP_DIRS = new Set(['node_modules', 'target', 'dist', '.git', '_future']);
 
 // ============================================================================

@@ -77,7 +77,7 @@ export function GameCelebration() {
         <div className="text-xs uppercase tracking-widest text-[#D4AF37] font-semibold mb-1">
           Achievement Unlocked
         </div>
-        <div className="text-lg font-bold text-white">{celebration.title}</div>
+        <div className="text-lg font-bold text-white">{celebration.name}</div>
         <div className="text-xs text-gray-400 mt-1">{celebration.description}</div>
       </div>
     </div>

@@ -26,7 +26,9 @@ export function AchievementsPanel() {
     );
   }
 
-  const { achievements, total_unlocked, total_achievements, current_streak } = gameState;
+  const { achievements, streak } = gameState;
+  const total_achievements = achievements.length;
+  const total_unlocked = achievements.filter(a => a.unlocked).length;
 
   return (
     <div className="space-y-4">
@@ -40,7 +42,7 @@ export function AchievementsPanel() {
         </div>
         <div className="w-px h-8 bg-[#2A2A2A]" />
         <div>
-          <div className="text-2xl font-bold text-white">{current_streak}</div>
+          <div className="text-2xl font-bold text-white">{streak}</div>
           <div className="text-xs text-text-secondary">Day Streak</div>
         </div>
         <div className="flex-1" />
@@ -68,7 +70,7 @@ export function AchievementsPanel() {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
         {achievements.map((a) => {
           const icon = getGameIcon(a.icon);
-          const pct = a.threshold > 0 ? Math.min(100, (a.progress / a.threshold) * 100) : 0;
+          const pct = a.threshold > 0 ? Math.min(100, (a.current / a.threshold) * 100) : 0;
 
           return (
             <div
@@ -86,7 +88,7 @@ export function AchievementsPanel() {
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
                     <span className={`text-sm font-semibold ${a.unlocked ? 'text-white' : 'text-[#666]'}`}>
-                      {a.title}
+                      {a.name}
                     </span>
                     {a.unlocked && (
                       <span className="text-xs text-[#D4AF37]">&#x2713;</span>
@@ -96,7 +98,7 @@ export function AchievementsPanel() {
                   {!a.unlocked && (
                     <div className="mt-2">
                       <div className="flex items-center justify-between text-[10px] text-[#666] mb-1">
-                        <span>{a.progress}/{a.threshold}</span>
+                        <span>{a.current}/{a.threshold}</span>
                         <span>{Math.round(pct)}%</span>
                       </div>
                       <div className="w-full h-1 bg-bg-tertiary rounded-full overflow-hidden">

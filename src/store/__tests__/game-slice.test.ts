@@ -37,21 +37,22 @@ describe('game-slice', () => {
   describe('loadGameState', () => {
     it('sets gameState from invoke result', async () => {
       const mockState = {
-        total_unlocked: 3,
-        total_achievements: 13,
-        current_streak: 5,
+        counters: [{ counter_type: 'scans', value: 5 }],
         achievements: [
           {
             id: 'first_scan',
-            title: 'First Scan',
-            description: 'Run your first analysis',
-            icon: '🔍',
+            name: 'First Light',
+            description: 'Run your first content scan',
+            icon: 'telescope',
+            counter_type: 'scans',
             threshold: 1,
+            current: 5,
             unlocked: true,
             unlocked_at: '2024-01-01T00:00:00Z',
-            progress: 1,
           },
         ],
+        streak: 5,
+        last_active: '2024-01-01',
       };
       vi.mocked(invoke).mockResolvedValueOnce(mockState);
 
@@ -68,10 +69,10 @@ describe('game-slice', () => {
 
       const gameState = useAppStore.getState().gameState;
       expect(gameState).not.toBeNull();
-      expect(gameState!.total_unlocked).toBe(0);
-      expect(gameState!.total_achievements).toBe(0);
-      expect(gameState!.current_streak).toBe(0);
+      expect(gameState!.streak).toBe(0);
+      expect(gameState!.counters).toEqual([]);
       expect(gameState!.achievements).toEqual([]);
+      expect(gameState!.last_active).toBeNull();
     });
   });
 
@@ -84,9 +85,10 @@ describe('game-slice', () => {
       useAppStore.setState({
         celebration: {
           id: 'test',
-          title: 'Test Achievement',
+          name: 'Test Achievement',
           description: 'You did it',
-          icon: '🏆',
+          icon: 'telescope',
+          unlocked_at: '2024-01-01T00:00:00Z',
         },
       });
 
