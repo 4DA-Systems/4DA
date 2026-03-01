@@ -91,7 +91,7 @@ function StreetsGate() {
 
   return (
     <div className="absolute inset-0 z-20 flex items-center justify-center bg-bg-primary/80 backdrop-blur-sm rounded-xl">
-      <div className="bg-bg-secondary border border-[#D4AF37]/30 rounded-xl px-8 py-6 text-center max-w-sm shadow-lg">
+      <div className="bg-bg-secondary border border-[#D4AF37]/30 rounded-xl px-8 py-6 text-center max-w-md shadow-lg">
         <div className="flex items-center justify-center gap-2 mb-3">
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none" className="text-[#D4AF37]">
             <path d="M8 1L10 6H15L11 9.5L12.5 15L8 11.5L3.5 15L5 9.5L1 6H6L8 1Z" fill="currentColor" />
@@ -100,12 +100,26 @@ function StreetsGate() {
             {t('coach:coach.gate.title')}
           </span>
         </div>
-        <p className="text-sm text-text-secondary mb-1">
+        <p className="text-sm text-white mb-1">
+          {t('coach:coach.gate.interstitial')}
+        </p>
+        <p className="text-xs text-text-secondary mb-3">
           {t('coach:coach.gate.requiresLicense')}
         </p>
-        <p className="text-xs text-[#666] mb-4">
-          {t('coach:coach.gate.freeModules')}
-        </p>
+        <ul className="text-xs text-text-secondary text-left space-y-1.5 mb-4 mx-auto max-w-xs">
+          <li className="flex items-start gap-2">
+            <span className="text-[#22C55E] mt-0.5">&#10003;</span>
+            {t('coach:coach.gate.benefit.unlimitedSessions')}
+          </li>
+          <li className="flex items-start gap-2">
+            <span className="text-[#22C55E] mt-0.5">&#10003;</span>
+            {t('coach:coach.gate.benefit.allTypes')}
+          </li>
+          <li className="flex items-start gap-2">
+            <span className="text-[#22C55E] mt-0.5">&#10003;</span>
+            {t('coach:coach.gate.benefit.priorityRendering')}
+          </li>
+        </ul>
         <div className="flex flex-col gap-2">
           <a
             href="https://4da.ai/streets"
@@ -270,8 +284,12 @@ export function CoachView() {
       <div className="flex items-center justify-between mb-4">
         <h1 className="text-lg font-semibold text-white tracking-wide">{t('coach:coach.title')}</h1>
         <div className="flex items-center gap-2">
-          {streetsTier === 'playbook' && coachSessions.length < 2 && (
-            <span className="text-xs text-text-muted">
+          {streetsTier === 'playbook' && (
+            <span className={`text-xs px-2 py-0.5 rounded ${
+              coachSessions.length >= 2
+                ? 'bg-amber-500/10 text-amber-400'
+                : 'text-text-muted'
+            }`}>
               {t('coach.freeSession', { current: coachSessions.length, max: 2 })}
             </span>
           )}

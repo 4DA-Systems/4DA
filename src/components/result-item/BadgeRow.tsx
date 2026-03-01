@@ -1,6 +1,8 @@
+import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { SourceRelevance } from '../../types';
 import { getContentTypeBadge } from '../../config/content-types';
+import { useAppStore } from '../../store';
 
 interface BadgeRowProps {
   item: SourceRelevance;
@@ -8,8 +10,29 @@ interface BadgeRowProps {
 
 export function BadgeRow({ item }: BadgeRowProps) {
   const { t } = useTranslation();
+  const learnedAffinities = useAppStore(s => s.learnedAffinities);
+
+  // Find which learned topic matches this item (for tooltip)
+  const matchedAffinityTopic = useMemo(() => {
+    if (!item.score_breakdown || item.score_breakdown.affinity_mult <= 1.0) return null;
+    const titleLower = item.title.toLowerCase();
+    const positiveAffinities = learnedAffinities.filter(a => a.affinity_score > 0);
+    for (const a of positiveAffinities) {
+      if (titleLower.includes(a.topic.toLowerCase())) return a.topic;
+    }
+    return positiveAffinities[0]?.topic || null;
+  }, [item.score_breakdown, item.title, learnedAffinities]);
+
   return (
     <>
+      {matchedAffinityTopic && (
+        <span
+          className="flex-shrink-0 text-[10px] px-1.5 py-0.5 rounded font-medium bg-[#D4AF37]/10 text-[#D4AF37]"
+          title={`Boosted because you've shown interest in ${matchedAffinityTopic}`}
+        >
+          Learned
+        </span>
+      )}
       {item.serendipity && (
         <span className="flex-shrink-0 text-[10px] px-1.5 py-0.5 rounded font-medium bg-fuchsia-500/20 text-fuchsia-400">
           {t('results.serendipity')}

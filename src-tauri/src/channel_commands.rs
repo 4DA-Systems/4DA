@@ -189,6 +189,18 @@ pub async fn create_custom_channel(
     Ok(id)
 }
 
+/// Preview how many sources match given topics (without creating a channel).
+#[tauri::command]
+pub async fn preview_channel_sources(topics: Vec<String>) -> Result<serde_json::Value> {
+    let db = get_database()?;
+    let (count, top_titles) = crate::channel_render::preview_channel_sources(db, &topics)
+        .map_err(|e| -> crate::error::FourDaError { e.into() })?;
+    Ok(serde_json::json!({
+        "count": count,
+        "topTitles": top_titles
+    }))
+}
+
 /// Soft-delete a channel by archiving it.
 #[tauri::command]
 pub async fn delete_channel(channel_id: i64) -> Result<()> {

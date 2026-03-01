@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use tracing::info;
 
 use crate::db::Database;
+use crate::taste_test::continuous;
 
 use super::{compute_taste_embedding, get_ace_context, get_topic_embeddings, ScoringContext};
 
@@ -39,7 +40,7 @@ pub(crate) async fn build_scoring_context(db: &Database) -> Result<ScoringContex
     let topic_embeddings = get_topic_embeddings(&ace_ctx).await;
 
     // Load feedback-derived topic boosts (Phase 9: feedback learning loop)
-    let feedback_boosts: HashMap<String, f64> = db
+    let mut feedback_boosts: HashMap<String, f64> = db
         .get_feedback_topic_summary()
         .unwrap_or_default()
         .into_iter()
@@ -92,12 +93,48 @@ pub(crate) async fn build_scoring_context(db: &Database) -> Result<ScoringContex
                 .get_topic_affinities()
                 .unwrap_or_default()
                 .into_iter()
-                .filter(|a| a.confidence > 0.3)
+                .filter(|a| a.confidence > 0.05)
                 .map(|a| (a.topic, a.affinity_score, a.confidence))
                 .collect(),
             Err(_) => vec![],
         };
         compute_taste_embedding(&affinities, &topic_embeddings)
+    };
+
+    // Load persona posterior and inject persona-derived topic boosts
+    let dominant_persona = {
+        let conn = crate::open_db_connection().ok();
+        match conn {
+            Some(c) => {
+                let (weights, update_count) = continuous::load_posterior(&c).unwrap_or_default();
+                if update_count > 0 {
+                    let (idx, &max_w) = weights
+                        .iter()
+                        .enumerate()
+                        .max_by(|(_, a), (_, b)| {
+                            a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal)
+                        })
+                        .unwrap_or((0, &0.0));
+                    // Above uniform threshold (1/9 ~ 0.11) with margin
+                    if max_w > 0.2 {
+                        let persona_boosts =
+                            continuous::get_persona_topic_boosts(idx, max_w as f32);
+                        for (topic, boost) in persona_boosts {
+                            feedback_boosts
+                                .entry(topic)
+                                .and_modify(|v| *v += boost as f64)
+                                .or_insert(boost as f64);
+                        }
+                        Some((idx, max_w as f32))
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                }
+            }
+            None => None,
+        }
     };
 
     info!(target: "4da::ace",
@@ -111,6 +148,7 @@ pub(crate) async fn build_scoring_context(db: &Database) -> Result<ScoringContex
         stack_active = composed_stack.active,
         has_active_work,
         has_taste_embedding = taste_embedding.is_some(),
+        has_dominant_persona = dominant_persona.is_some(),
         "ACE context loaded for scoring"
     );
 
@@ -137,5 +175,6 @@ pub(crate) async fn build_scoring_context(db: &Database) -> Result<ScoringContex
         taste_embedding,
         topic_half_lives,
         sovereign_profile,
+        dominant_persona,
     })
 }

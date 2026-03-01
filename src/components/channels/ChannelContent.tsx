@@ -84,6 +84,11 @@ export function ChannelContent() {
               {activeRender.model}
             </span>
           )}
+          {!activeRender.model && (
+            <span className="text-xs px-2 py-0.5 bg-amber-500/10 text-amber-400 rounded">
+              {t('channels.basicMode')} — {t('channels.configureOllama')}
+            </span>
+          )}
         </div>
         <button
           onClick={() => activeChannelId && renderChannel(activeChannelId)}

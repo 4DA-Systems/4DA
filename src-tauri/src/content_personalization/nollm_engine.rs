@@ -4,93 +4,16 @@
 //! computed entirely from local sovereign data. No LLM calls required.
 
 use super::context::PersonalizationContext;
+use super::engine_scoring::{
+    compute_confidence, engine_hardware_score, engine_stack_score, infer_sources, parse_gb,
+    ram_tier_context, ENGINES,
+};
 use super::{
     BarEntry, BlockPosition, CardType, ConnectionType, DataPoint, InsightBlock, InsightContent,
     MirrorBlock, RankItem, SovereignInsightCard, Visualization,
 };
 
 use tracing::debug;
-
-// ============================================================================
-// Static Data: Engine Requirements
-// ============================================================================
-
-/// Revenue engine definitions with hardware/stack requirements.
-struct EngineSpec {
-    id: u8,
-    name: &'static str,
-    min_ram_gb: f64,
-    needs_gpu: bool,
-    prereq_stacks: &'static [&'static str],
-    topics: &'static [&'static str],
-}
-
-const ENGINES: &[EngineSpec] = &[
-    EngineSpec {
-        id: 1,
-        name: "Open Source + Sponsorship",
-        min_ram_gb: 8.0,
-        needs_gpu: false,
-        prereq_stacks: &["git"],
-        topics: &["open-source", "github", "community"],
-    },
-    EngineSpec {
-        id: 2,
-        name: "Technical Writing",
-        min_ram_gb: 4.0,
-        needs_gpu: false,
-        prereq_stacks: &[],
-        topics: &["writing", "blog", "documentation", "tutorial"],
-    },
-    EngineSpec {
-        id: 3,
-        name: "Freelance / Consulting",
-        min_ram_gb: 8.0,
-        needs_gpu: false,
-        prereq_stacks: &[],
-        topics: &["freelance", "consulting", "client", "contract"],
-    },
-    EngineSpec {
-        id: 4,
-        name: "SaaS / Micro-SaaS",
-        min_ram_gb: 8.0,
-        needs_gpu: false,
-        prereq_stacks: &["react", "typescript", "javascript", "python", "node"],
-        topics: &["saas", "startup", "product", "subscription"],
-    },
-    EngineSpec {
-        id: 5,
-        name: "Developer Tools",
-        min_ram_gb: 16.0,
-        needs_gpu: false,
-        prereq_stacks: &["rust", "go", "typescript", "python"],
-        topics: &["devtools", "cli", "sdk", "api", "tooling"],
-    },
-    EngineSpec {
-        id: 6,
-        name: "Education / Courses",
-        min_ram_gb: 8.0,
-        needs_gpu: false,
-        prereq_stacks: &[],
-        topics: &["education", "course", "teaching", "workshop"],
-    },
-    EngineSpec {
-        id: 7,
-        name: "API / Infrastructure",
-        min_ram_gb: 16.0,
-        needs_gpu: true,
-        prereq_stacks: &["python", "rust", "go", "typescript"],
-        topics: &["api", "infrastructure", "cloud", "backend"],
-    },
-    EngineSpec {
-        id: 8,
-        name: "Productized Services",
-        min_ram_gb: 8.0,
-        needs_gpu: false,
-        prereq_stacks: &[],
-        topics: &["service", "automation", "productized"],
-    },
-];
 
 // ============================================================================
 // L3: Insight Block Computation
@@ -606,161 +529,6 @@ fn compute_radar_momentum(ctx: &PersonalizationContext) -> Option<MirrorBlock> {
 }
 
 // ============================================================================
-// Scoring Helpers
-// ============================================================================
-
-/// Score how well the user's stack matches an engine's prerequisites.
-fn engine_stack_score(engine: &EngineSpec, ctx: &PersonalizationContext) -> f64 {
-    if engine.prereq_stacks.is_empty() {
-        return 0.5; // No specific stack required
-    }
-
-    let all_tech: Vec<String> = ctx
-        .stack
-        .primary
-        .iter()
-        .chain(ctx.stack.adjacent.iter())
-        .map(|s| s.to_lowercase())
-        .collect();
-
-    let matched = engine
-        .prereq_stacks
-        .iter()
-        .filter(|req| all_tech.iter().any(|t| t.contains(*req)))
-        .count();
-
-    (matched as f64 / engine.prereq_stacks.len() as f64).min(1.0)
-}
-
-/// Score how well the user's hardware matches an engine's requirements.
-fn engine_hardware_score(engine: &EngineSpec, ctx: &PersonalizationContext) -> f64 {
-    let ram_str = ctx.profile.ram.get("total").cloned().unwrap_or_default();
-    let ram_gb = parse_gb(&ram_str);
-
-    let mut score = 1.0;
-
-    // RAM check
-    if ram_gb > 0.0 && ram_gb < engine.min_ram_gb {
-        score *= ram_gb / engine.min_ram_gb;
-    }
-
-    // GPU check
-    if engine.needs_gpu && ctx.computed.gpu_tier == "none" {
-        score *= 0.5;
-    }
-
-    score.min(1.0)
-}
-
-/// Parse a string like "32 GB" or "16384 MB" into GB as f64.
-fn parse_gb(s: &str) -> f64 {
-    let s = s.trim().to_lowercase();
-    if let Some(gb) = s.strip_suffix("gb") {
-        gb.trim().parse().unwrap_or(0.0)
-    } else if let Some(mb) = s.strip_suffix("mb") {
-        mb.trim().parse::<f64>().unwrap_or(0.0) / 1024.0
-    } else if let Some(tb) = s.strip_suffix("tb") {
-        tb.trim().parse::<f64>().unwrap_or(0.0) * 1024.0
-    } else {
-        // Try parsing as plain number (assume GB)
-        s.split_whitespace()
-            .next()
-            .and_then(|n| n.parse().ok())
-            .unwrap_or(0.0)
-    }
-}
-
-/// RAM tier description for context.
-fn ram_tier_context(gb: f64) -> String {
-    if gb >= 64.0 {
-        "Workstation-grade — can run multiple large models simultaneously".into()
-    } else if gb >= 32.0 {
-        "Strong — comfortable for most local AI workloads".into()
-    } else if gb >= 16.0 {
-        "Adequate — can run small-medium local models".into()
-    } else if gb >= 8.0 {
-        "Minimum for development — cloud LLM recommended".into()
-    } else {
-        "Limited — cloud LLM strongly recommended".into()
-    }
-}
-
-/// Infer which data sources contributed to a given insight card.
-fn infer_sources(marker_id: &str, ctx: &PersonalizationContext) -> Vec<String> {
-    match marker_id {
-        "hardware_benchmark" => {
-            let mut sources = vec!["Sovereign Profile".to_string()];
-            if ctx.settings.has_llm {
-                sources.push("LLM Config".into());
-            }
-            sources
-        }
-        "stack_fit" => vec!["Domain Profile".into(), "Tech Stack".into()],
-        "cost_projection" => vec!["Regional Data".into(), "Sovereign Profile".into()],
-        "t_shape" => vec!["Domain Profile".into(), "ACE Detection".into()],
-        "engine_ranking" => vec![
-            "Domain Profile".into(),
-            "Sovereign Profile".into(),
-            "Tech Radar".into(),
-        ],
-        "blind_spot_alert" => vec!["Developer DNA".into()],
-        _ => vec!["Unknown".into()],
-    }
-}
-
-/// Compute data coverage confidence for a given insight card.
-fn compute_confidence(marker_id: &str, ctx: &PersonalizationContext) -> f64 {
-    match marker_id {
-        "hardware_benchmark" => {
-            let mut score = 0.0;
-            if !ctx.profile.cpu.is_empty() {
-                score += 0.3;
-            }
-            if !ctx.profile.ram.is_empty() {
-                score += 0.3;
-            }
-            if !ctx.profile.gpu.is_empty() {
-                score += 0.4;
-            }
-            score
-        }
-        "stack_fit" | "engine_ranking" => {
-            if ctx.stack.primary.len() >= 2 {
-                0.9
-            } else if !ctx.stack.primary.is_empty() {
-                0.6
-            } else {
-                0.2
-            }
-        }
-        "cost_projection" => {
-            if ctx.regional.electricity_kwh > 0.0 {
-                0.7
-            } else {
-                0.3
-            }
-        }
-        "t_shape" => {
-            if !ctx.stack.primary.is_empty() && !ctx.stack.adjacent.is_empty() {
-                0.8
-            } else if !ctx.stack.primary.is_empty() {
-                0.5
-            } else {
-                0.1
-            }
-        }
-        "blind_spot_alert" => {
-            if ctx.dna.is_full {
-                0.8
-            } else {
-                0.3
-            }
-        }
-        _ => 0.5,
-    }
-}
-
-// ============================================================================
 // Tests
 // ============================================================================
 
@@ -871,14 +639,6 @@ mod tests {
     }
 
     #[test]
-    fn test_stack_fit_scoring() {
-        let ctx = test_ctx();
-        // Engine 5 (Dev Tools) requires rust/go/ts/python — user has rust+ts
-        let score = engine_stack_score(&ENGINES[4], &ctx);
-        assert!(score >= 0.5); // At least 2/4 match
-    }
-
-    #[test]
     fn test_cost_projection() {
         let ctx = test_ctx();
         let card = compute_cost_projection(&ctx).unwrap();
@@ -901,27 +661,11 @@ mod tests {
     }
 
     #[test]
-    fn test_parse_gb() {
-        assert_eq!(parse_gb("32 GB"), 32.0);
-        assert_eq!(parse_gb("16384 MB"), 16.0);
-        assert_eq!(parse_gb("1 TB"), 1024.0);
-        assert_eq!(parse_gb("32"), 32.0);
-        assert_eq!(parse_gb(""), 0.0);
-    }
-
-    #[test]
     fn test_mirror_blocks() {
         let ctx = test_ctx();
         let blocks = compute_mirror_blocks(&ctx, "S", 0);
         // Should have at least blind_spot_moat and radar_momentum
         assert!(!blocks.is_empty());
         assert!(blocks.iter().any(|b| b.block_id == "blind_spot_moat"));
-    }
-
-    #[test]
-    fn test_confidence_scoring() {
-        let ctx = test_ctx();
-        let conf = compute_confidence("hardware_benchmark", &ctx);
-        assert!(conf >= 0.9); // Has CPU + RAM + GPU
     }
 }

@@ -15,12 +15,6 @@ pub(crate) use crate::probes_engine::{
     audit_signal_axes, detect_user_domain, run_probe_calibration, ProbeResults, SignalAudit,
 };
 
-// Re-export items only used by calibration_tests.rs
-#[cfg(test)]
-pub(crate) use crate::probes_corpus::{CalibrProbe, Domain, ProbeExpected};
-#[cfg(test)]
-pub(crate) use crate::probes_engine::select_probes_for_user;
-
 // ============================================================================
 // 4-Dimension Score Computation
 // ============================================================================

@@ -684,8 +684,9 @@ mod tests {
         let action = BehaviorAction::Scroll {
             visible_seconds: 3.0,
         };
-        // 0.1 * min(3.0, 3.0) = 0.3
-        assert!((action.compute_strength() - 0.3).abs() < f32::EPSILON);
+        // Log scale: 0.15 * ln(1 + 3.0) ≈ 0.2079
+        let expected = 0.15 * (1.0 + 3.0_f32).ln();
+        assert!((action.compute_strength() - expected).abs() < 1e-6);
     }
 
     #[test]
@@ -693,8 +694,9 @@ mod tests {
         let action = BehaviorAction::Scroll {
             visible_seconds: 10.0,
         };
-        // 0.1 * min(10.0, 3.0) = 0.3 (capped at 3.0)
-        assert!((action.compute_strength() - 0.3).abs() < f32::EPSILON);
+        // Log scale: 0.15 * ln(1 + 10.0) ≈ 0.3598 (no hard cap, log naturally tapers)
+        let expected = 0.15 * (1.0 + 10.0_f32).ln();
+        assert!((action.compute_strength() - expected).abs() < 1e-6);
     }
 
     #[test]

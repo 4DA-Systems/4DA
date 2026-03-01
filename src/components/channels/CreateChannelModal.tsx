@@ -1,7 +1,12 @@
-import { useState, useCallback, type KeyboardEvent } from 'react';
+import { useState, useCallback, useEffect, useRef, type KeyboardEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
 import { useAppStore } from '../../store';
+
+interface SourcePreview {
+  count: number;
+  topTitles: string[];
+}
 
 interface CreateChannelModalProps {
   open: boolean;
@@ -28,9 +33,26 @@ export function CreateChannelModal({ open, onClose }: CreateChannelModalProps) {
   const [topicInput, setTopicInput] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [sourcePreview, setSourcePreview] = useState<SourcePreview | null>(null);
+  const previewTimer = useRef<ReturnType<typeof setTimeout>>();
 
   const slug = slugify(title);
   const canSubmit = title.trim().length > 0 && topics.length > 0 && !submitting;
+
+  // Debounced source preview when topics change
+  useEffect(() => {
+    if (topics.length === 0) {
+      setSourcePreview(null);
+      return;
+    }
+    clearTimeout(previewTimer.current);
+    previewTimer.current = setTimeout(() => {
+      invoke<SourcePreview>('preview_channel_sources', { topics })
+        .then(setSourcePreview)
+        .catch(() => setSourcePreview(null));
+    }, 400);
+    return () => clearTimeout(previewTimer.current);
+  }, [topics]);
 
   const addTopic = useCallback(() => {
     const trimmed = topicInput.trim();
@@ -169,6 +191,30 @@ export function CreateChannelModal({ open, onClose }: CreateChannelModalProps) {
               </div>
             )}
           </div>
+
+          {/* Source preview */}
+          {sourcePreview && (
+            <div className="text-xs text-text-secondary space-y-1">
+              {sourcePreview.count > 0 ? (
+                <>
+                  <p className="text-[#22C55E]">
+                    {t('channels.previewFound', { count: sourcePreview.count })}
+                  </p>
+                  {sourcePreview.topTitles.length > 0 && (
+                    <ul className="list-disc list-inside text-text-muted space-y-0.5">
+                      {sourcePreview.topTitles.map((title) => (
+                        <li key={title} className="truncate">{title}</li>
+                      ))}
+                    </ul>
+                  )}
+                </>
+              ) : (
+                <p className="text-amber-400">
+                  {t('channels.previewEmpty')}
+                </p>
+              )}
+            </div>
+          )}
 
           {error && <p className="text-xs text-[#EF4444]">{error}</p>}
         </div>

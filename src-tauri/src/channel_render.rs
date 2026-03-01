@@ -13,6 +13,7 @@ use tracing::{error, info, warn};
 use crate::channels::{Channel, ChannelChangelog, ChannelRender, RenderProvenance};
 use crate::db::{Database, StoredSourceItem};
 use crate::extract_topics;
+use crate::scoring::{compute_affinity_multiplier, get_ace_context};
 
 // ============================================================================
 // Source Gathering
@@ -40,6 +41,7 @@ pub(crate) fn gather_channel_sources(
         .map_err(|e| e.to_string())?;
 
     let mut scored: Vec<(StoredSourceItem, f64)> = Vec::new();
+    let ace_ctx = get_ace_context();
 
     for item in items {
         let item_topics = extract_topics(&item.title, &item.content);
@@ -55,7 +57,10 @@ pub(crate) fn gather_channel_sources(
             .count();
 
         if matched > 0 {
-            let score = matched as f64 / channel_topics.len() as f64;
+            let base_score = matched as f64 / channel_topics.len() as f64;
+            // Apply affinity boost from learned topic preferences
+            let affinity_mult = compute_affinity_multiplier(&item_topics_lower, &ace_ctx);
+            let score = (base_score * affinity_mult as f64).min(1.0);
             scored.push((item, score));
         }
     }
@@ -74,6 +79,48 @@ pub(crate) fn gather_channel_sources(
     Ok(scored)
 }
 
+/// Lightweight preview: count matching sources for given topics without persisting.
+/// Returns (count, top 3 titles).
+pub(crate) fn preview_channel_sources(
+    db: &Database,
+    topics: &[String],
+) -> Result<(usize, Vec<String>), String> {
+    let topics_lower: Vec<String> = topics.iter().map(|t| t.to_lowercase()).collect();
+    if topics_lower.is_empty() {
+        return Ok((0, vec![]));
+    }
+
+    let items = db
+        .get_items_since_hours(30 * 24, 500)
+        .map_err(|e| e.to_string())?;
+
+    let mut matched_titles: Vec<(String, f64)> = Vec::new();
+
+    for item in items {
+        let item_topics = extract_topics(&item.title, &item.content);
+        let item_topics_lower: Vec<String> = item_topics.iter().map(|t| t.to_lowercase()).collect();
+
+        let hit_count = topics_lower
+            .iter()
+            .filter(|ct| {
+                item_topics_lower.iter().any(|it| it.contains(ct.as_str()))
+                    || item.title.to_lowercase().contains(ct.as_str())
+            })
+            .count();
+
+        if hit_count > 0 {
+            let score = hit_count as f64 / topics_lower.len() as f64;
+            matched_titles.push((item.title.clone(), score));
+        }
+    }
+
+    matched_titles.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+    let count = matched_titles.len();
+    let top_titles: Vec<String> = matched_titles.into_iter().take(3).map(|(t, _)| t).collect();
+
+    Ok((count, top_titles))
+}
+
 // ============================================================================
 // LLM Prompt Building
 // ============================================================================
@@ -85,6 +132,7 @@ fn build_channel_prompt(
     tech_stack: &str,
     active_topics: &str,
     sovereign_profile: &str,
+    affinity_summary: &str,
     previous_render: Option<&ChannelRender>,
 ) -> (String, String) {
     let system_prompt = format!(
@@ -141,12 +189,14 @@ fn build_channel_prompt(
     let user_prompt = format!(
         "User's tech stack: {tech}\n\
          User's active topics: {topics}\n\
+         User's learned preferences: {affinities}\n\
          User's system profile: {sovereign}\n\n\
          {count} sources for channel \"{title}\":\n\n\
          {items}{previous}\n\n\
          Generate the intelligence document.",
         tech = tech_stack,
         topics = active_topics,
+        affinities = affinity_summary,
         sovereign = sovereign_profile,
         count = items.len().min(20),
         title = channel.title,
@@ -450,7 +500,7 @@ pub(crate) async fn render_channel(channel_id: i64) -> Result<ChannelRender, Str
     }
 
     // Build ACE context (sync, no lock issues)
-    let ace_ctx = crate::scoring::get_ace_context();
+    let ace_ctx = get_ace_context();
     let tech_summary = if ace_ctx.detected_tech.is_empty() {
         "Not detected".to_string()
     } else {
@@ -472,6 +522,31 @@ pub(crate) async fn render_channel(channel_id: i64) -> Result<ChannelRender, Str
             .cloned()
             .collect::<Vec<_>>()
             .join(", ")
+    };
+
+    // Build affinity summary from learned topic preferences (confidence > 0.15, top 5)
+    let affinity_summary = {
+        let mut affinities: Vec<(&String, &(f32, f32))> = ace_ctx
+            .topic_affinities
+            .iter()
+            .filter(|(_, (_, confidence))| *confidence > 0.15)
+            .collect();
+        affinities.sort_by(|a, b| {
+            b.1 .0
+                .abs()
+                .partial_cmp(&a.1 .0.abs())
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
+        let top: Vec<String> = affinities
+            .iter()
+            .take(5)
+            .map(|(topic, (score, _))| format!("{}: {:.0}%", topic, score * 100.0))
+            .collect();
+        if top.is_empty() {
+            "Not yet learned".to_string()
+        } else {
+            top.join(", ")
+        }
     };
 
     // Load sovereign profile for hardware/environment context
@@ -516,6 +591,7 @@ pub(crate) async fn render_channel(channel_id: i64) -> Result<ChannelRender, Str
         &tech_summary,
         &topics_summary,
         &sovereign_summary,
+        &affinity_summary,
         previous_render.as_ref(),
     );
 
