@@ -1165,6 +1165,40 @@ pub(super) fn corpus() -> Vec<LabeledItem> {
             content: "Symbolic execution for finding bugs: KLEE's approach to exploring program paths with SMT constraint solving.",
             expected: [N, N, N, N, N, N, N, N, B],
         },
+
+        // ====================================================================
+        // ReleaseNotes expansion (5) — id 216-220
+        // ====================================================================
+        LabeledItem { id: 216, category: RN, source_type: "hackernews",
+            title: "Go 1.23 Release Notes",
+            content: "Go 1.23 brings range-over-func iterators, unique package, and timer changes. Improved generics type inference and new standard library additions.",
+            //        rust py   ts   devops mobile boot power switch niche
+            expected: [N,  N,   N,   N,     N,     B,   B,    S,     N],
+        },
+        LabeledItem { id: 217, category: RN, source_type: "hackernews",
+            title: "GHC 9.10 Release Announcement",
+            content: "GHC 9.10 brings LinearTypes improvements, JavaScript backend enhancements, and new type-level features for Haskell developers.",
+            //        rust py   ts   devops mobile boot power switch niche
+            expected: [N,  N,   N,   N,     N,     N,   N,    N,     S],
+        },
+        LabeledItem { id: 218, category: RN, source_type: "hackernews",
+            title: "Grafana 11 Release: Unified Alerting and Explore Metrics",
+            content: "Grafana 11 introduces unified alerting GA, Explore Metrics for PromQL, dashboard improvements, and enhanced Kubernetes monitoring dashboards.",
+            //        rust py   ts   devops mobile boot power switch niche
+            expected: [N,  N,   N,   S,     N,     N,   N,    N,     N],
+        },
+        LabeledItem { id: 219, category: RN, source_type: "hackernews",
+            title: "Docker Compose v2.27: Build Improvements and GPU Support",
+            content: "Docker Compose v2.27 adds GPU device support, build provenance attestation, improved secrets handling, and faster container startup.",
+            //        rust py   ts   devops mobile boot power switch niche
+            expected: [N,  N,   N,   S,     N,     N,   N,    N,     N],
+        },
+        LabeledItem { id: 220, category: RN, source_type: "hackernews",
+            title: "Hugging Face Transformers 4.40: New Model Architectures",
+            content: "Transformers 4.40 adds Gemma, Mamba, Jamba model support, improved quantization with GGUF, and faster generation with speculative decoding.",
+            //        rust py   ts   devops mobile boot power switch niche
+            expected: [N,  S,   N,   N,     N,     N,   B,    N,     N],
+        },
     ]
 }
 
@@ -1176,8 +1210,8 @@ mod tests {
     fn corpus_minimum_size() {
         let c = corpus();
         assert!(
-            c.len() >= 215,
-            "Corpus must have 215+ items, got {}",
+            c.len() >= 220,
+            "Corpus must have 220+ items, got {}",
             c.len()
         );
     }

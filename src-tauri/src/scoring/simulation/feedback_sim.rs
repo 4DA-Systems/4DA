@@ -312,3 +312,102 @@ fn derive_topic(category: &ContentCategory) -> String {
         _ => "general".to_string(),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::collections::HashMap;
+
+    #[test]
+    fn test_apply_feedback_accumulates() {
+        let existing = HashMap::new();
+        let events = vec![
+            FeedbackEvent { item_id: 1, topic: "core_tech".to_string(), relevant: true, delta: 0.15 },
+            FeedbackEvent { item_id: 2, topic: "core_tech".to_string(), relevant: true, delta: 0.15 },
+        ];
+        let result = apply_feedback(&existing, &events);
+        let val = result.get("core_tech").copied().unwrap_or(0.0);
+        assert!((val - 0.30).abs() < 0.01, "Expected ~0.30, got {:.4}", val);
+    }
+
+    #[test]
+    fn test_apply_feedback_decay() {
+        let mut existing = HashMap::new();
+        existing.insert("core_tech".to_string(), 0.50);
+        let events: Vec<FeedbackEvent> = vec![];
+        let result = apply_feedback(&existing, &events);
+        let val = result.get("core_tech").copied().unwrap_or(0.0);
+        assert!((val - 0.475).abs() < 0.01, "Expected ~0.475 after decay, got {:.4}", val);
+    }
+
+    #[test]
+    fn test_apply_feedback_clamps() {
+        let existing = HashMap::new();
+        let events: Vec<FeedbackEvent> = (0..20)
+            .map(|i| FeedbackEvent {
+                item_id: i,
+                topic: "core_tech".to_string(),
+                relevant: true,
+                delta: 0.15,
+            })
+            .collect();
+        let result = apply_feedback(&existing, &events);
+        let val = result.get("core_tech").copied().unwrap_or(0.0);
+        assert!((val - 1.0).abs() < f64::EPSILON, "Expected clamped to 1.0, got {:.4}", val);
+    }
+
+    #[test]
+    fn test_apply_feedback_mixed() {
+        let existing = HashMap::new();
+        let events = vec![
+            FeedbackEvent { item_id: 1, topic: "core_tech".to_string(), relevant: true, delta: 0.15 },
+            FeedbackEvent { item_id: 2, topic: "core_tech".to_string(), relevant: true, delta: 0.15 },
+            FeedbackEvent { item_id: 3, topic: "core_tech".to_string(), relevant: false, delta: -0.10 },
+        ];
+        let result = apply_feedback(&existing, &events);
+        let val = result.get("core_tech").copied().unwrap_or(0.0);
+        // 0 + 0.15 + 0.15 - 0.10 = 0.20
+        assert!((val - 0.20).abs() < 0.01, "Expected ~0.20, got {:.4}", val);
+    }
+
+    #[test]
+    fn test_simulate_session_returns_events() {
+        let boosts = HashMap::new();
+        let ctx = rust_ctx_with_boosts(&boosts, 50);
+        let items = corpus();
+        let events = simulate_session(&ctx, &items, 0);
+        // With 215 corpus items, Rust persona should generate at least some feedback events
+        assert!(!events.is_empty(), "simulate_session should produce at least one feedback event");
+    }
+
+    #[test]
+    fn test_rust_ctx_factory() {
+        let boosts = HashMap::new();
+        let ctx = rust_ctx_with_boosts(&boosts, 50);
+        assert_eq!(ctx.interest_count, 5, "Rust ctx should have 5 interests");
+        assert_eq!(ctx.interests.len(), 5);
+        assert_eq!(ctx.feedback_interaction_count, 50);
+    }
+
+    #[test]
+    fn test_python_ctx_factory() {
+        let boosts = HashMap::new();
+        let ctx = python_ctx_with_boosts(&boosts, 40);
+        assert_eq!(ctx.interest_count, 5, "Python ctx should have 5 interests");
+        assert_eq!(ctx.interests.len(), 5);
+        assert_eq!(ctx.feedback_interaction_count, 40);
+    }
+
+    #[test]
+    fn test_lifecycle_corpus_smaller_than_full() {
+        let full = corpus();
+        let lifecycle = lifecycle_corpus();
+        assert!(
+            lifecycle.len() < full.len(),
+            "lifecycle_corpus ({}) should be smaller than full corpus ({})",
+            lifecycle.len(),
+            full.len()
+        );
+        assert!(!lifecycle.is_empty(), "lifecycle_corpus should not be empty");
+    }
+}

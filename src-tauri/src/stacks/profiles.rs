@@ -839,11 +839,202 @@ pub static VUE_FRONTEND: StackProfile = StackProfile {
 };
 
 // ============================================================================
+// DevOps & SRE
+// ============================================================================
+
+pub static DEVOPS_SRE: StackProfile = StackProfile {
+    id: "devops_sre",
+    name: "DevOps & SRE",
+    core_tech: &["kubernetes", "docker", "terraform", "ansible"],
+    companions: &[
+        "helm",
+        "prometheus",
+        "grafana",
+        "istio",
+        "argocd",
+        "vault",
+        "etcd",
+        "cilium",
+        "envoy",
+        "datadog",
+    ],
+    competing: &["heroku", "railway", "render"],
+    pain_points: &[
+        PainPoint {
+            keywords: &["cluster", "upgrade", "etcd", "control plane"],
+            severity: 0.15,
+            description: "Cluster lifecycle management",
+        },
+        PainPoint {
+            keywords: &[
+                "observability",
+                "metrics",
+                "tracing",
+                "logging",
+                "opentelemetry",
+            ],
+            severity: 0.12,
+            description: "Observability stack complexity",
+        },
+        PainPoint {
+            keywords: &["rbac", "network policy", "pod security", "admission"],
+            severity: 0.10,
+            description: "Security policy management",
+        },
+        PainPoint {
+            keywords: &["terraform", "state", "drift", "plan", "apply"],
+            severity: 0.12,
+            description: "IaC state management",
+        },
+        PainPoint {
+            keywords: &["ci", "cd", "pipeline", "deploy", "rollback", "canary"],
+            severity: 0.10,
+            description: "CI/CD pipeline reliability",
+        },
+    ],
+    ecosystem_shifts: &[
+        EcosystemShift {
+            from: "helm",
+            to: "kustomize",
+            keywords: &["kustomize", "helm to kustomize", "kustomization"],
+            boost: 1.12,
+        },
+        EcosystemShift {
+            from: "jenkins",
+            to: "github actions",
+            keywords: &["github actions", "actions workflow", "jenkins migration"],
+            boost: 1.10,
+        },
+        EcosystemShift {
+            from: "nagios",
+            to: "prometheus",
+            keywords: &["prometheus migration", "alertmanager", "prometheus stack"],
+            boost: 1.10,
+        },
+        EcosystemShift {
+            from: "terraform",
+            to: "pulumi",
+            keywords: &["pulumi", "terraform to pulumi", "infrastructure sdk"],
+            boost: 1.08,
+        },
+    ],
+    keyword_boosts: &[
+        ("kubernetes", 0.12),
+        ("k8s", 0.12),
+        ("docker", 0.10),
+        ("terraform", 0.10),
+        ("helm", 0.08),
+        ("prometheus", 0.08),
+        ("grafana", 0.06),
+        ("ansible", 0.06),
+        ("argocd", 0.08),
+        ("istio", 0.08),
+        ("observability", 0.08),
+        ("sre", 0.06),
+    ],
+    source_preferences: &[("hackernews", 0.05), ("reddit", 0.05)],
+    detection_markers: &[
+        "kubernetes",
+        "kubectl",
+        "docker",
+        "terraform",
+        "helm",
+        "prometheus",
+        "k8s",
+    ],
+    detection_threshold: 2,
+};
+
+// ============================================================================
+// Haskell & Functional Programming
+// ============================================================================
+
+pub static HASKELL_FP: StackProfile = StackProfile {
+    id: "haskell",
+    name: "Haskell & Functional Programming",
+    core_tech: &["haskell", "nix", "ghc", "cabal", "stack"],
+    companions: &[
+        "purescript",
+        "ocaml",
+        "elm",
+        "agda",
+        "idris",
+        "coq",
+        "lens",
+        "mtl",
+        "servant",
+        "yesod",
+        "pandoc",
+    ],
+    competing: &[],
+    pain_points: &[
+        PainPoint {
+            keywords: &["ghc", "upgrade", "breaking", "version", "migration"],
+            severity: 0.12,
+            description: "GHC version upgrades",
+        },
+        PainPoint {
+            keywords: &["cabal", "stack", "dependency", "resolver", "build"],
+            severity: 0.10,
+            description: "Build tool fragmentation",
+        },
+        PainPoint {
+            keywords: &["monad", "transformer", "effect", "mtl", "io"],
+            severity: 0.10,
+            description: "Effect system complexity",
+        },
+        PainPoint {
+            keywords: &["nix", "flake", "derivation", "nixpkgs", "nixos"],
+            severity: 0.10,
+            description: "Nix ecosystem complexity",
+        },
+    ],
+    ecosystem_shifts: &[
+        EcosystemShift {
+            from: "mtl",
+            to: "effectful",
+            keywords: &["effectful", "effect system", "mtl alternative"],
+            boost: 1.12,
+        },
+        EcosystemShift {
+            from: "cabal",
+            to: "cabal+nix",
+            keywords: &["nix flake", "haskell.nix", "cabal2nix"],
+            boost: 1.08,
+        },
+    ],
+    keyword_boosts: &[
+        ("haskell", 0.12),
+        ("ghc", 0.10),
+        ("cabal", 0.08),
+        ("nix", 0.08),
+        ("functional programming", 0.10),
+        ("type theory", 0.08),
+        ("category theory", 0.06),
+        ("monad", 0.08),
+        ("algebraic", 0.06),
+        ("purescript", 0.06),
+        ("ocaml", 0.06),
+    ],
+    source_preferences: &[("hackernews", 0.05), ("lobsters", 0.15)],
+    detection_markers: &[
+        "haskell",
+        "ghc",
+        "cabal",
+        "stack.yaml",
+        ".cabal",
+        "nix",
+        "flake.nix",
+    ],
+    detection_threshold: 2,
+};
+
+// ============================================================================
 // Profile Registry
 // ============================================================================
 
 /// All available stack profiles, in display order.
-pub static ALL_PROFILES: [&StackProfile; 8] = [
+pub static ALL_PROFILES: [&StackProfile; 10] = [
     &NEXTJS_FULLSTACK,
     &RUST_SYSTEMS,
     &PYTHON_ML,
@@ -852,6 +1043,8 @@ pub static ALL_PROFILES: [&StackProfile; 8] = [
     &LARAVEL,
     &DJANGO,
     &VUE_FRONTEND,
+    &DEVOPS_SRE,
+    &HASKELL_FP,
 ];
 
 #[cfg(test)]
