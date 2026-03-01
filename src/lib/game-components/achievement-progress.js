@@ -148,12 +148,12 @@ out vec4 fragColor;
 // ── Built-in functions ──────────────────────────────────
 
 
-float apply_glow(d: float, intensity: float){
+float apply_glow(float d, float intensity){
     return exp(-max(d, 0.0) * intensity * 8.0);
 }
 
-void fs_main(input: VertexOutput){
-    float uv = v_uv * 2.0 - 1.0;
+void main(){
+    vec2 uv = v_uv * 2.0 - 1.0;
     float aspect = u_resolution.x / u_resolution.y;
     float time = fract(u_time / 120.0) * 120.0;
 
@@ -198,7 +198,7 @@ void fs_main(input: VertexOutput){
         final_color = vec4(final_color.rgb + lc * 1.000, 1.0);
     }
 
-    return final_color;
+    fragColor = final_color;
 }
 `;
 

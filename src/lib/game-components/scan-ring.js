@@ -119,18 +119,18 @@ out vec4 fragColor;
 // ── Built-in functions ──────────────────────────────────
 
 
-float apply_glow(d: float, intensity: float){
+float apply_glow(float d, float intensity){
     return exp(-max(d, 0.0) * intensity * 8.0);
 }
 
-void fs_main(input: VertexOutput){
-    float uv = v_uv * 2.0 - 1.0;
+void main(){
+    vec2 uv = v_uv * 2.0 - 1.0;
     float aspect = u_resolution.x / u_resolution.y;
     float time = fract(u_time / 120.0) * 120.0;
 
     vec2 p = vec2(uv.x * aspect, uv.y);
     // stage 0: rotate(...)
-    { float rc = cos((time * 3.0)); let rs = sin((time * 3.0));
+    { float rc = cos((time * 3.0)); float rs = sin((time * 3.0));
     p = vec2(p.x * rc - p.y * rs, p.x * rs + p.y * rc); }
 
     // stage 1: ring(...)
