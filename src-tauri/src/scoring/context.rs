@@ -3,7 +3,7 @@ use tracing::info;
 
 use crate::db::Database;
 
-use super::{get_ace_context, get_topic_embeddings, ScoringContext};
+use super::{compute_taste_embedding, get_ace_context, get_topic_embeddings, ScoringContext};
 
 /// Build a ScoringContext by loading all needed state. Call once per analysis run.
 pub(crate) async fn build_scoring_context(db: &Database) -> Result<ScoringContext, String> {
@@ -85,6 +85,21 @@ pub(crate) async fn build_scoring_context(db: &Database) -> Result<ScoringContex
         }
     }
 
+    // Compute taste embedding from topic affinities + topic embeddings
+    let taste_embedding = {
+        let affinities: Vec<(String, f32, f32)> = match crate::get_ace_engine() {
+            Ok(ace) => ace
+                .get_topic_affinities()
+                .unwrap_or_default()
+                .into_iter()
+                .filter(|a| a.confidence > 0.3)
+                .map(|a| (a.topic, a.affinity_score, a.confidence))
+                .collect(),
+            Err(_) => vec![],
+        };
+        compute_taste_embedding(&affinities, &topic_embeddings)
+    };
+
     info!(target: "4da::ace",
         topics = ace_ctx.active_topics.len(),
         tech = ace_ctx.detected_tech.len(),
@@ -95,6 +110,7 @@ pub(crate) async fn build_scoring_context(db: &Database) -> Result<ScoringContex
         domain_all = domain_profile.all_tech.len(),
         stack_active = composed_stack.active,
         has_active_work,
+        has_taste_embedding = taste_embedding.is_some(),
         "ACE context loaded for scoring"
     );
 
@@ -118,6 +134,7 @@ pub(crate) async fn build_scoring_context(db: &Database) -> Result<ScoringContex
         composed_stack,
         open_windows,
         calibration_deltas,
+        taste_embedding,
         topic_half_lives,
         sovereign_profile,
     })

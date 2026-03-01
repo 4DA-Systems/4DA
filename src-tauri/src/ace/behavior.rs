@@ -35,7 +35,10 @@ impl BehaviorAction {
             BehaviorAction::Share => 1.0,
             BehaviorAction::Dismiss => -0.8,
             BehaviorAction::MarkIrrelevant => -1.0,
-            BehaviorAction::Scroll { visible_seconds } => 0.1 * visible_seconds.min(3.0),
+            BehaviorAction::Scroll { visible_seconds } => {
+                // Log scale: 30s read ≈ 0.52, 10s ≈ 0.36, 2s ≈ 0.16 (was capped at 0.30)
+                0.15 * (1.0 + *visible_seconds).ln()
+            }
             BehaviorAction::Ignore => -0.1,
         }
     }
@@ -158,6 +161,18 @@ impl ACE {
 
         self.update_source_preference(&item_source, signal.signal_strength)?;
         self.update_activity_patterns(&signal)?;
+
+        // Update continuous persona posterior from implicit signals
+        if !item_topics.is_empty() {
+            let conn = self.conn.lock();
+            if let Err(e) = crate::taste_test::continuous::update_posterior(
+                &conn,
+                &item_topics,
+                signal.signal_strength,
+            ) {
+                debug!(target: "ace::behavior", error = %e, "Failed to update continuous posterior");
+            }
+        }
 
         debug!(target: "ace::behavior",
             action = ?action,

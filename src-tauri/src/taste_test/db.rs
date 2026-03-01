@@ -47,6 +47,7 @@ pub fn save_taste_result(
     conn: &Connection,
     profile: &TasteProfile,
     responses: &[(usize, TasteResponse)],
+    latencies: &[Option<u64>],
 ) -> Result<i64, String> {
     ensure_taste_test_tables(conn)?;
 
@@ -66,16 +67,17 @@ pub fn save_taste_result(
 
     let test_id = conn.last_insert_rowid();
 
-    for (slot, response) in responses {
+    for (i, (slot, response)) in responses.iter().enumerate() {
         let response_str = match response {
             TasteResponse::Interested => "interested",
             TasteResponse::NotInterested => "not_interested",
             TasteResponse::StrongInterest => "strong_interest",
         };
+        let latency_ms = latencies.get(i).copied().flatten();
         conn.execute(
-            "INSERT INTO taste_test_responses (test_id, item_slot, response)
-             VALUES (?1, ?2, ?3)",
-            params![test_id, *slot as i64, response_str],
+            "INSERT INTO taste_test_responses (test_id, item_slot, response, response_time_ms)
+             VALUES (?1, ?2, ?3, ?4)",
+            params![test_id, *slot as i64, response_str, latency_ms],
         )
         .map_err(|e| format!("Failed to save taste test response: {e}"))?;
     }
@@ -273,7 +275,8 @@ mod tests {
             (1, TasteResponse::NotInterested),
         ];
 
-        let test_id = save_taste_result(&conn, &profile, &responses).unwrap();
+        let latencies = vec![Some(1200), Some(800)];
+        let test_id = save_taste_result(&conn, &profile, &responses, &latencies).unwrap();
         assert!(test_id > 0);
 
         let loaded = load_latest_taste_result(&conn);
@@ -293,7 +296,7 @@ mod tests {
     fn test_is_calibrated_true_after_save() {
         let conn = setup_test_db();
         let profile = make_test_profile();
-        save_taste_result(&conn, &profile, &[]).unwrap();
+        save_taste_result(&conn, &profile, &[], &[]).unwrap();
         assert!(is_calibrated(&conn));
     }
 

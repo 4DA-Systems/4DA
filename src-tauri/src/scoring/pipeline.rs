@@ -229,6 +229,15 @@ pub(crate) fn score_item(
         .unwrap_or(0.0);
     let base_score = (base_score + source_quality_boost).clamp(0.0, 1.0);
 
+    // Taste embedding boost: cosine similarity between item and user's holistic preference vector
+    let taste_boost = match ctx.taste_embedding {
+        Some(ref taste_emb) if !input.embedding.is_empty() => {
+            semantic::compute_taste_boost(input.embedding, taste_emb)
+        }
+        _ => 0.0,
+    };
+    let base_score = (base_score + taste_boost).clamp(0.0, 1.0);
+
     // Domain relevance: graduated penalty based on technology identity
     // Replaces binary off_domain_penalty with tiered relevance (1.0 primary → 0.15 off-domain)
     let domain_relevance =

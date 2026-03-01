@@ -9,15 +9,15 @@ use std::collections::HashMap;
 // Persona Templates
 // ============================================================================
 
-struct PersonaTemplate {
-    interests: &'static [(&'static str, f32)],
-    tech: &'static [&'static str],
-    exclusions: &'static [&'static str],
-    stack_ids: &'static [&'static str],
+pub(crate) struct PersonaTemplate {
+    pub interests: &'static [(&'static str, f32)],
+    pub tech: &'static [&'static str],
+    pub exclusions: &'static [&'static str],
+    pub stack_ids: &'static [&'static str],
 }
 
 /// Templates for each persona in canonical order.
-static TEMPLATES: [PersonaTemplate; 9] = [
+pub(crate) static TEMPLATES: [PersonaTemplate; 9] = [
     // 0: rust_systems
     PersonaTemplate {
         interests: &[

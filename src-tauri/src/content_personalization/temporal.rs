@@ -315,25 +315,35 @@ fn compute_feed_echoes(
         )
         .ok();
 
-    // Build LIKE conditions for topic matching
-    let topic_conditions: Vec<String> = topics
-        .iter()
-        .map(|t| format!("(si.title LIKE '%{}%' OR si.content LIKE '%{}%')", t, t))
-        .collect();
+    // Build parameterized LIKE conditions — each topic gets two params
+    // (one for title LIKE, one for content LIKE)
+    let like_patterns: Vec<String> = topics.iter().map(|t| format!("%{}%", t)).collect();
 
+    // Param numbering: ?1..?N for title/content LIKE pairs,
+    // then ?N+1 for the optional read_at timestamp
+    let topic_conditions: Vec<String> = (0..topics.len())
+        .map(|i| {
+            let title_idx = i * 2 + 1;
+            let content_idx = i * 2 + 2;
+            format!(
+                "(si.title LIKE ?{} OR si.content LIKE ?{})",
+                title_idx, content_idx
+            )
+        })
+        .collect();
     let topic_filter = topic_conditions.join(" OR ");
+    let time_param_idx = topics.len() * 2 + 1;
 
     let query = if last_read.is_some() {
         format!(
             "SELECT si.title, si.source, si.url, si.fetched_at
              FROM source_items si
-             WHERE ({}) AND si.fetched_at > ?1
+             WHERE ({}) AND si.fetched_at > ?{}
              ORDER BY si.fetched_at DESC
              LIMIT 5",
-            topic_filter
+            topic_filter, time_param_idx
         )
     } else {
-        // First read — show recent items only
         format!(
             "SELECT si.title, si.source, si.url, si.fetched_at
              FROM source_items si
@@ -356,16 +366,20 @@ fn compute_feed_echoes(
         })
     };
 
-    let raw_items: Vec<FeedEchoItem> = if let Some(ref read_at) = last_read {
-        match stmt.query_map(rusqlite::params![read_at], map_row) {
-            Ok(rows) => rows.filter_map(|r| r.ok()).collect(),
-            Err(_) => return None,
-        }
-    } else {
-        match stmt.query_map([], map_row) {
-            Ok(rows) => rows.filter_map(|r| r.ok()).collect(),
-            Err(_) => return None,
-        }
+    // Build parameter slice: [pattern1_title, pattern1_content, pattern2_title, ...]
+    let mut params: Vec<Box<dyn rusqlite::types::ToSql>> = Vec::new();
+    for pat in &like_patterns {
+        params.push(Box::new(pat.clone()));
+        params.push(Box::new(pat.clone()));
+    }
+    if let Some(ref read_at) = last_read {
+        params.push(Box::new(read_at.clone()));
+    }
+    let param_refs: Vec<&dyn rusqlite::types::ToSql> = params.iter().map(|p| p.as_ref()).collect();
+
+    let raw_items: Vec<FeedEchoItem> = match stmt.query_map(param_refs.as_slice(), map_row) {
+        Ok(rows) => rows.filter_map(|r| r.ok()).collect(),
+        Err(_) => return None,
     };
 
     let mut items: Vec<FeedEchoItem> = raw_items
@@ -382,20 +396,18 @@ fn compute_feed_echoes(
         .collect();
 
     // Also include channel-sourced items matching lesson topics
-    let mut channel_items: Vec<FeedEchoItem> = Vec::new();
+    let channel_query = "SELECT si.title, c.title, si.url, csm.matched_at
+         FROM channel_source_matches csm
+         JOIN source_items si ON si.id = csm.source_item_id
+         JOIN channels c ON c.id = csm.channel_id
+         WHERE (si.title LIKE ?1 OR si.content LIKE ?1)
+         ORDER BY csm.match_score DESC
+         LIMIT 3";
+
     for topic in &topics {
-        let channel_query = format!(
-            "SELECT si.title, c.title, si.url, csm.matched_at
-             FROM channel_source_matches csm
-             JOIN source_items si ON si.id = csm.source_item_id
-             JOIN channels c ON c.id = csm.channel_id
-             WHERE (si.title LIKE '%{}%' OR si.content LIKE '%{}%')
-             ORDER BY csm.match_score DESC
-             LIMIT 3",
-            topic, topic
-        );
-        if let Ok(mut cstmt) = conn.prepare(&channel_query) {
-            if let Ok(rows) = cstmt.query_map([], |row| {
+        let pattern = format!("%{}%", topic);
+        if let Ok(mut cstmt) = conn.prepare(channel_query) {
+            if let Ok(rows) = cstmt.query_map(rusqlite::params![pattern], |row| {
                 Ok(FeedEchoItem {
                     title: row.get(0)?,
                     source: format!("Channel: {}", row.get::<_, String>(1)?),
@@ -405,12 +417,11 @@ fn compute_feed_echoes(
                 })
             }) {
                 for row in rows.flatten() {
-                    channel_items.push(row);
+                    items.push(row);
                 }
             }
         }
     }
-    items.extend(channel_items);
 
     if items.is_empty() {
         return None;

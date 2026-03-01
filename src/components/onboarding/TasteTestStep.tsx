@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 
 import type { TasteTestStepResult, TasteProfileSummary } from '../../types/calibration';
@@ -30,6 +30,7 @@ export function TasteTestStep({ isAnimating, onComplete, onSkip }: TasteTestStep
   const [summary, setSummary] = useState<TasteProfileSummary | null>(null);
   const [cardAnimating, setCardAnimating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const cardShownAt = useRef<number>(0);
 
   const startTest = useCallback(async () => {
     try {
@@ -38,6 +39,7 @@ export function TasteTestStep({ isAnimating, onComplete, onSkip }: TasteTestStep
         setCurrentCard(result.card);
         setProgress(result.progress);
         setConfidence(result.confidence);
+        cardShownAt.current = Date.now();
         setPhase('cards');
       }
     } catch (e) {
@@ -48,6 +50,10 @@ export function TasteTestStep({ isAnimating, onComplete, onSkip }: TasteTestStep
   const respond = useCallback(async (response: string) => {
     if (!currentCard) return;
 
+    const responseTimeMs = cardShownAt.current > 0
+      ? Date.now() - cardShownAt.current
+      : undefined;
+
     setCardAnimating(true);
     await new Promise(r => setTimeout(r, 150));
 
@@ -55,12 +61,14 @@ export function TasteTestStep({ isAnimating, onComplete, onSkip }: TasteTestStep
       const result = await invoke<TasteTestStepResult>('taste_test_respond', {
         itemSlot: currentCard.slot,
         response,
+        responseTimeMs,
       });
 
       if (result.type === 'nextCard') {
         setCurrentCard(result.card);
         setProgress(result.progress);
         setConfidence(result.confidence);
+        cardShownAt.current = Date.now();
         setCardAnimating(false);
       } else if (result.type === 'complete') {
         setPhase('finalizing');

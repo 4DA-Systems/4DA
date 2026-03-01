@@ -30,7 +30,11 @@ pub async fn taste_test_start() -> Result<TasteTestStep> {
 
 /// Process a user response and return the next step.
 #[tauri::command]
-pub async fn taste_test_respond(item_slot: usize, response: String) -> Result<TasteTestStep> {
+pub async fn taste_test_respond(
+    item_slot: usize,
+    response: String,
+    response_time_ms: Option<u64>,
+) -> Result<TasteTestStep> {
     let taste_response = match response.as_str() {
         "interested" => TasteResponse::Interested,
         "not_interested" => TasteResponse::NotInterested,
@@ -42,7 +46,7 @@ pub async fn taste_test_respond(item_slot: usize, response: String) -> Result<Ta
     let mut guard = mutex.lock().map_err(|e| format!("Lock error: {e}"))?;
     let state = guard.as_mut().ok_or("No active taste test session")?;
 
-    state.update(item_slot, &taste_response);
+    state.update_with_latency(item_slot, &taste_response, response_time_ms);
     let step = state.next_step();
 
     Ok(step)
@@ -51,23 +55,34 @@ pub async fn taste_test_respond(item_slot: usize, response: String) -> Result<Ta
 /// Finalize the taste test: save to DB, apply to context, return summary.
 #[tauri::command]
 pub async fn taste_test_finalize() -> Result<TasteProfileSummary> {
-    let (profile, responses, summary) = {
+    let (profile, responses, latencies, summary) = {
         let mutex = get_state();
         let mut guard = mutex.lock().map_err(|e| format!("Lock error: {e}"))?;
         let state = guard.take().ok_or("No active taste test session")?;
 
         let profile = state.finalize();
         let responses: Vec<(usize, TasteResponse)> = state.responses().to_vec();
+        let latencies: Vec<Option<u64>> = state.response_latencies().to_vec();
         let summary = state.build_summary();
 
-        (profile, responses, summary)
+        (profile, responses, latencies, summary)
     };
 
     // Save to database
     let conn = open_db_connection()?;
 
-    crate::taste_test::db::save_taste_result(&conn, &profile, &responses)?;
+    crate::taste_test::db::save_taste_result(&conn, &profile, &responses, &latencies)?;
     crate::taste_test::db::apply_taste_to_context(&conn, &profile)?;
+
+    // Seed continuous posterior in ACE DB from taste test persona weights
+    if let Ok(ace) = crate::state::get_ace_engine() {
+        let ace_conn = ace.get_conn().lock();
+        if let Err(e) =
+            crate::taste_test::continuous::seed_from_taste_test(&ace_conn, &profile.persona_weights)
+        {
+            tracing::warn!(target: "taste_test", error = %e, "Failed to seed continuous posterior");
+        }
+    }
 
     // Invalidate context engine so scoring picks up new data
     crate::invalidate_context_engine();

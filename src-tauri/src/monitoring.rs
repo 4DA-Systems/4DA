@@ -370,6 +370,28 @@ pub fn start_scheduler<R: Runtime>(app: AppHandle<R>, state: Arc<MonitoringState
                                 warn!(target: "4da::monitor", error = %e, "Autophagy cycle failed");
                             }
                         }
+
+                        // Bridge accuracy feedback from ACE behavior data into calibration
+                        if let Ok(ace) = crate::state::get_ace_engine() {
+                            let ace_conn = ace.get_conn().lock();
+                            match crate::autophagy::bridge_accuracy_feedback(
+                                &ace_conn,
+                                &conn,
+                                max_age_days as i64,
+                            ) {
+                                Ok(count) if count > 0 => {
+                                    info!(
+                                        target: "4da::monitor",
+                                        count,
+                                        "Accuracy feedback bridged to calibration"
+                                    );
+                                }
+                                Err(e) => {
+                                    warn!(target: "4da::monitor", error = %e, "Accuracy feedback bridge failed");
+                                }
+                                _ => {}
+                            }
+                        }
                     }
                     // Still run the actual prune after autophagy extracted intelligence
                     if let Ok(db) = crate::get_database() {

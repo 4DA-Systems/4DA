@@ -56,17 +56,24 @@ pub(crate) fn run_autophagy_cycle(
         "Autophagy pre-analysis stats"
     );
 
-    // Run all 4 analyzers (each returns empty vec on failure, never panics)
+    // Run all 5 analyzers (each returns empty vec on failure, never panics)
     let calibrations = super::calibration::analyze_calibration(conn, max_age_days);
+    let topic_calibrations = super::calibration::analyze_topic_calibration(conn, max_age_days);
     let decay_profiles = super::topic_decay::analyze_topic_decay(conn);
     let source_autopsies = super::source_autopsy::analyze_sources(conn, max_age_days);
     let anti_patterns = super::anti_patterns::detect_anti_patterns(conn, 0.35);
 
-    // Store calibration results
-    let calibrations_produced = calibrations.len() as i64;
+    // Store source-level calibration results
+    let calibrations_produced = (calibrations.len() + topic_calibrations.len()) as i64;
     if !calibrations.is_empty() {
         if let Err(e) = super::calibration::store_calibrations(conn, &calibrations) {
             warn!(target: "4da::autophagy", error = %e, "Failed to store calibrations");
+        }
+    }
+    // Store topic-level calibration results
+    if !topic_calibrations.is_empty() {
+        if let Err(e) = super::calibration::store_calibrations(conn, &topic_calibrations) {
+            warn!(target: "4da::autophagy", error = %e, "Failed to store topic calibrations");
         }
     }
 

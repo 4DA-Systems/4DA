@@ -5,50 +5,79 @@ import { invoke } from '@tauri-apps/api/core';
 interface UseViewTrackingOptions {
   itemId: number;
   sourceType: string;
-  /** Minimum seconds visible before recording (default: 2) */
+  /** Minimum seconds visible before recording scroll (default: 2) */
   threshold?: number;
   /** Whether tracking is enabled (default: true) */
   enabled?: boolean;
+  /** Whether the user has given explicit feedback (save/dismiss/click) */
+  hasExplicitFeedback?: boolean;
+  /** Content topics for behavior learning */
+  itemTopics?: string[];
 }
+
+/** Minimum seconds visible to emit an 'ignore' signal for seen-but-skipped */
+const IGNORE_THRESHOLD_SECONDS = 5;
 
 /**
  * Track view-time for a content item using IntersectionObserver.
  * When the element is visible for `threshold` seconds, emits a passive
  * 'scroll' interaction to the backend for behavior learning.
+ *
+ * When visible for 5+ seconds with no explicit feedback, also emits an
+ * 'ignore' signal — the user saw it and chose not to interact.
  */
 export function useViewTracking({
   itemId,
   sourceType,
   threshold = 2,
   enabled = true,
+  hasExplicitFeedback = false,
+  itemTopics = [],
 }: UseViewTrackingOptions) {
   const containerRef = useRef<HTMLDivElement>(null);
   const visibleSince = useRef<number | null>(null);
-  const recorded = useRef(false);
+  const scrollRecorded = useRef(false);
+  const ignoreRecorded = useRef(false);
 
   const recordView = useCallback(
     (visibleSeconds: number) => {
-      if (recorded.current) return;
-      recorded.current = true;
+      if (scrollRecorded.current) return;
+      scrollRecorded.current = true;
 
       invoke('ace_record_interaction', {
         itemId,
         actionType: 'scroll',
         actionData: JSON.stringify({ visible_seconds: visibleSeconds }),
-        itemTopics: [],
+        itemTopics,
         itemSource: sourceType,
       }).catch(() => {
         // Silent — passive signal, not critical
       });
     },
-    [itemId, sourceType],
+    [itemId, sourceType, itemTopics],
   );
+
+  const recordIgnore = useCallback(() => {
+    if (ignoreRecorded.current || hasExplicitFeedback) return;
+    ignoreRecorded.current = true;
+
+    invoke('ace_record_interaction', {
+      itemId,
+      actionType: 'ignore',
+      actionData: null,
+      itemTopics,
+      itemSource: sourceType,
+    }).catch(() => {
+      // Silent — passive signal
+    });
+  }, [itemId, sourceType, hasExplicitFeedback, itemTopics]);
 
   useEffect(() => {
     if (!enabled || !containerRef.current || typeof IntersectionObserver === 'undefined') return;
 
     const el = containerRef.current;
-    recorded.current = false;
+    scrollRecorded.current = false;
+    ignoreRecorded.current = false;
     visibleSince.current = null;
 
     const observer = new IntersectionObserver(
@@ -61,6 +90,10 @@ export function useViewTracking({
           const elapsed = (Date.now() - visibleSince.current) / 1000;
           if (elapsed >= threshold) {
             recordView(elapsed);
+          }
+          // Emit ignore if visible 5+ seconds with no feedback
+          if (elapsed >= IGNORE_THRESHOLD_SECONDS) {
+            recordIgnore();
           }
           visibleSince.current = null;
         }
@@ -78,9 +111,12 @@ export function useViewTracking({
         if (elapsed >= threshold) {
           recordView(elapsed);
         }
+        if (elapsed >= IGNORE_THRESHOLD_SECONDS) {
+          recordIgnore();
+        }
       }
     };
-  }, [enabled, threshold, recordView]);
+  }, [enabled, threshold, recordView, recordIgnore]);
 
   return containerRef;
 }

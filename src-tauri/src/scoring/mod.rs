@@ -34,7 +34,9 @@ pub(crate) use explanation::{
 };
 pub(crate) use gate::apply_confirmation_gate;
 pub(crate) use pipeline::{score_item, ScoringInput, ScoringOptions};
-pub(crate) use semantic::{compute_semantic_ace_boost, get_topic_embeddings};
+pub(crate) use semantic::{
+    compute_semantic_ace_boost, compute_taste_boost, compute_taste_embedding, get_topic_embeddings,
+};
 pub(crate) use utils::{has_word_boundary_match, topic_overlaps};
 
 use std::collections::HashMap;
@@ -70,6 +72,9 @@ pub(crate) struct ScoringContext {
     pub open_windows: Vec<crate::decision_advantage::DecisionWindow>,
     /// Autophagy calibration deltas: topic -> delta (scoring correction)
     pub calibration_deltas: HashMap<String, f32>,
+    /// Taste embedding: user's holistic preference vector (384-dim, unit normalized)
+    /// Computed from weighted centroid of topic affinity embeddings
+    pub taste_embedding: Option<Vec<f32>>,
     /// Topic-aware decay half-lives: topic -> half_life_hours
     pub topic_half_lives: HashMap<String, f32>,
     /// Unified sovereign developer profile (assembled once per run)

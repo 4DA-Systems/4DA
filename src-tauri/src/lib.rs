@@ -98,6 +98,8 @@ mod novelty;
 mod ollama;
 mod predictive;
 mod pro_value;
+mod probes_corpus;
+mod probes_engine;
 mod project_health;
 pub mod query;
 mod reverse_relevance;

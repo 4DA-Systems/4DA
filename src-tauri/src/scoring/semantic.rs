@@ -194,6 +194,74 @@ pub(crate) async fn get_topic_embeddings(ace_ctx: &ACEContext) -> HashMap<String
     result
 }
 
+/// Compute taste embedding: weighted centroid of topic affinity embeddings.
+///
+/// The taste embedding captures the user's holistic preference profile as a single
+/// 384-dim unit vector. Items with high cosine similarity to this vector are more
+/// likely to match the user's tastes — even if they don't match any individual topic.
+///
+/// # Arguments
+/// * `affinities` - (topic, affinity_score, confidence) triples from ACE behavior learning
+/// * `topic_embeddings` - topic -> 384-dim embedding map (already loaded)
+pub(crate) fn compute_taste_embedding(
+    affinities: &[(String, f32, f32)],
+    topic_embeddings: &HashMap<String, Vec<f32>>,
+) -> Option<Vec<f32>> {
+    if affinities.is_empty() || topic_embeddings.is_empty() {
+        return None;
+    }
+
+    let dim = 384;
+    let mut centroid = vec![0.0f32; dim];
+    let mut total_weight = 0.0f32;
+
+    for (topic, affinity, confidence) in affinities {
+        if let Some(emb) = topic_embeddings.get(topic) {
+            if emb.len() != dim {
+                continue;
+            }
+            // Weight = affinity_score * confidence
+            // Positive affinities pull toward liked content
+            // Negative affinities push away from disliked content
+            let weight = affinity * confidence;
+            for (c, e) in centroid.iter_mut().zip(emb.iter()) {
+                *c += weight * e;
+            }
+            total_weight += weight.abs();
+        }
+    }
+
+    if total_weight < f32::EPSILON {
+        return None;
+    }
+
+    // Normalize to unit vector for cosine similarity
+    let norm = crate::vector_norm(&centroid);
+    if norm < f32::EPSILON {
+        return None;
+    }
+    for c in centroid.iter_mut() {
+        *c /= norm;
+    }
+
+    Some(centroid)
+}
+
+/// Compute taste similarity between an item embedding and the user's taste embedding.
+///
+/// Returns a small boost/penalty (clamped to +/-0.08) that personalizes scoring
+/// without dominating it. High similarity items get a positive nudge.
+pub(crate) fn compute_taste_boost(item_embedding: &[f32], taste_embedding: &[f32]) -> f32 {
+    let item_norm = crate::vector_norm(item_embedding);
+    if item_norm < f32::EPSILON {
+        return 0.0;
+    }
+    let sim = crate::cosine_similarity_with_norm(item_embedding, item_norm, taste_embedding);
+    // Center around 0.4 (typical background similarity) and scale
+    // sim=0.8 → +0.08, sim=0.4 → 0.0, sim=0.0 → -0.08
+    ((sim - 0.4) * 0.2).clamp(-0.08, 0.08)
+}
+
 /// Keyword-based ACE boost fallback when embeddings unavailable
 /// Both topics (from extract_topics) and ace_ctx fields are already lowercase
 #[score_component(output_range = "0.0..=0.3")]
@@ -222,6 +290,12 @@ mod tests {
     use super::*;
     use crate::test_utils::seed_embedding;
     use std::collections::HashMap;
+
+    /// Helper: cosine similarity via the crate's norm-based function
+    fn cosine_sim(a: &[f32], b: &[f32]) -> f32 {
+        let a_norm = crate::vector_norm(a);
+        crate::cosine_similarity_with_norm(a, a_norm, b)
+    }
 
     /// Helper: build a minimal ACEContext with active topics and confidence
     fn ace_ctx_with_topics(topics: &[(&str, f32)]) -> ACEContext {
@@ -304,6 +378,143 @@ mod tests {
             boost >= -0.3,
             "Boost should be clamped to -0.3, got {}",
             boost
+        );
+    }
+
+    // ====================================================================
+    // Taste Embedding Tests
+    // ====================================================================
+
+    #[test]
+    fn test_compute_taste_embedding_empty() {
+        let affinities: Vec<(String, f32, f32)> = vec![];
+        let topic_embs: HashMap<String, Vec<f32>> = HashMap::new();
+        assert!(compute_taste_embedding(&affinities, &topic_embs).is_none());
+    }
+
+    #[test]
+    fn test_compute_taste_embedding_single_topic() {
+        let emb = seed_embedding("rust");
+        let affinities = vec![("rust".to_string(), 0.8, 0.9)];
+        let mut topic_embs = HashMap::new();
+        topic_embs.insert("rust".to_string(), emb.clone());
+
+        let taste = compute_taste_embedding(&affinities, &topic_embs);
+        assert!(taste.is_some());
+        let taste = taste.unwrap();
+        assert_eq!(taste.len(), 384);
+
+        // Should be unit normalized
+        let norm = crate::vector_norm(&taste);
+        assert!(
+            (norm - 1.0).abs() < 0.01,
+            "Taste embedding should be unit normalized, got {}",
+            norm
+        );
+
+        // Should be highly similar to the input embedding
+        let sim = cosine_sim(&taste, &emb);
+        assert!(
+            sim > 0.99,
+            "Single-topic taste should be nearly identical, got {}",
+            sim
+        );
+    }
+
+    #[test]
+    fn test_compute_taste_embedding_blends_topics() {
+        let emb_a = seed_embedding("rust");
+        let emb_b = seed_embedding("python");
+        let affinities = vec![
+            ("rust".to_string(), 0.8, 1.0),
+            ("python".to_string(), 0.4, 1.0),
+        ];
+        let mut topic_embs = HashMap::new();
+        topic_embs.insert("rust".to_string(), emb_a.clone());
+        topic_embs.insert("python".to_string(), emb_b.clone());
+
+        let taste = compute_taste_embedding(&affinities, &topic_embs).unwrap();
+
+        // Should be more similar to rust (higher weight) than python
+        let sim_rust = cosine_sim(&taste, &emb_a);
+        let sim_python = cosine_sim(&taste, &emb_b);
+        assert!(
+            sim_rust > sim_python,
+            "Taste should be more similar to higher-weighted topic: rust={:.3} python={:.3}",
+            sim_rust,
+            sim_python
+        );
+    }
+
+    #[test]
+    fn test_compute_taste_embedding_negative_affinities() {
+        let emb_a = seed_embedding("rust");
+        let emb_b = seed_embedding("career advice");
+        let affinities = vec![
+            ("rust".to_string(), 0.9, 1.0),
+            ("career advice".to_string(), -0.8, 1.0),
+        ];
+        let mut topic_embs = HashMap::new();
+        topic_embs.insert("rust".to_string(), emb_a.clone());
+        topic_embs.insert("career advice".to_string(), emb_b.clone());
+
+        let taste = compute_taste_embedding(&affinities, &topic_embs).unwrap();
+
+        // Taste should be more similar to liked topic than disliked
+        let sim_rust = cosine_sim(&taste, &emb_a);
+        let sim_career = cosine_sim(&taste, &emb_b);
+        assert!(
+            sim_rust > sim_career,
+            "Taste should prefer liked over disliked: rust={:.3} career={:.3}",
+            sim_rust,
+            sim_career
+        );
+    }
+
+    #[test]
+    fn test_taste_boost_identical() {
+        let emb = seed_embedding("rust");
+        let boost = compute_taste_boost(&emb, &emb);
+        // Cosine similarity of identical = 1.0 → (1.0 - 0.4) * 0.2 = 0.12, clamped to 0.08
+        assert!(
+            boost > 0.0,
+            "Identical embeddings should produce positive boost"
+        );
+        assert!(
+            boost <= 0.08,
+            "Boost should be clamped to 0.08, got {}",
+            boost
+        );
+    }
+
+    #[test]
+    fn test_taste_boost_orthogonal() {
+        let mut emb_a = vec![0.0f32; 384];
+        emb_a[0] = 1.0;
+        let mut emb_b = vec![0.0f32; 384];
+        emb_b[1] = 1.0;
+
+        let boost = compute_taste_boost(&emb_a, &emb_b);
+        // Cosine sim = 0.0 → (0.0 - 0.4) * 0.2 = -0.08
+        assert!(
+            boost < 0.0,
+            "Orthogonal embeddings should produce negative boost"
+        );
+        assert!(
+            boost >= -0.08,
+            "Boost should be clamped to -0.08, got {}",
+            boost
+        );
+    }
+
+    #[test]
+    fn test_taste_boost_zero_embedding() {
+        let zero = vec![0.0f32; 384];
+        let taste = seed_embedding("rust");
+        let boost = compute_taste_boost(&zero, &taste);
+        assert!(
+            (boost - 0.0).abs() < f32::EPSILON,
+            "Zero embedding should produce 0 boost"
         );
     }
 

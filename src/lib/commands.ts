@@ -113,7 +113,7 @@ interface CommandMap {
 
   // -- Taste Test Calibration --
   taste_test_start: { params: Record<string, never>; result: TasteTestStepResult };
-  taste_test_respond: { params: { itemSlot: number; response: string }; result: TasteTestStepResult };
+  taste_test_respond: { params: { itemSlot: number; response: string; responseTimeMs?: number }; result: TasteTestStepResult };
   taste_test_finalize: { params: Record<string, never>; result: TasteProfileSummary };
   taste_test_is_calibrated: { params: Record<string, never>; result: boolean };
   taste_test_get_profile: { params: Record<string, never>; result: TasteProfileSummary | null };

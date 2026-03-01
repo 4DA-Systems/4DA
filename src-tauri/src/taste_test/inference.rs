@@ -22,6 +22,8 @@ pub struct InferenceState {
     posterior: [f64; NUM_PERSONAS],
     /// History of (item_slot, response) pairs.
     items_shown: Vec<(usize, TasteResponse)>,
+    /// Response latencies in milliseconds (parallel to items_shown).
+    response_latencies: Vec<Option<u64>>,
     /// Entropy after each update.
     entropy_history: Vec<f64>,
     /// Which slots have been shown.
@@ -34,29 +36,58 @@ impl InferenceState {
         Self {
             posterior: [1.0 / NUM_PERSONAS as f64; NUM_PERSONAS],
             items_shown: Vec::new(),
+            response_latencies: Vec::new(),
             entropy_history: Vec::new(),
             shown_slots: [false; NUM_ITEMS],
         }
     }
 
-    /// Update posterior with a new observation.
+    /// Update posterior with a new observation (no latency data).
     pub fn update(&mut self, item_slot: usize, response: &TasteResponse) {
+        self.update_with_latency(item_slot, response, None);
+    }
+
+    /// Update posterior with a new observation and optional response latency.
+    ///
+    /// Response latency modulates signal strength: quick decisions (<1s) are
+    /// weighted as stronger signal, deliberate pauses (>5s) as weaker signal.
+    /// `latency_weight = 1.0 / (1.0 + response_ms / 3000.0)` — ranges [0.25, 1.0].
+    pub fn update_with_latency(
+        &mut self,
+        item_slot: usize,
+        response: &TasteResponse,
+        response_time_ms: Option<u64>,
+    ) {
         assert!(item_slot < NUM_ITEMS, "item_slot out of range");
 
         let likelihoods = &LIKELIHOOD_MATRIX[item_slot];
 
+        // Latency-based signal strength: instant responses are more decisive
+        let latency_power = match response_time_ms {
+            Some(ms) => {
+                // Weight ranges from ~1.0 (instant) to ~0.25 (very deliberate)
+                // A quick "interested" is strong signal; a slow deliberation is weaker
+                let w = 1.0 / (1.0 + ms as f64 / 3000.0);
+                // Map to exponent: w=1.0 → power=1.0, w=0.25 → power=0.5
+                0.5 + 0.5 * w
+            }
+            None => 1.0, // No latency data: full weight
+        };
+
         for j in 0..NUM_PERSONAS {
             let p = likelihoods[j];
-            let likelihood = match response {
+            let base_likelihood = match response {
                 TasteResponse::Interested => p,
                 TasteResponse::NotInterested => 1.0 - p,
                 TasteResponse::StrongInterest => {
                     // Squaring function: amplifies differences
-                    // High p stays high, low p gets lower
                     let sq = p * p / (p * p + (1.0 - p) * (1.0 - p));
                     sq
                 }
             };
+            // Apply latency modulation: raise likelihood to latency_power
+            // This dampens the update for deliberate responses
+            let likelihood = base_likelihood.powf(latency_power);
             self.posterior[j] *= likelihood;
         }
 
@@ -70,6 +101,7 @@ impl InferenceState {
 
         self.shown_slots[item_slot] = true;
         self.items_shown.push((item_slot, response.clone()));
+        self.response_latencies.push(response_time_ms);
         self.entropy_history.push(self.entropy());
     }
 
@@ -280,6 +312,11 @@ impl InferenceState {
     /// Get the recorded responses.
     pub fn responses(&self) -> &[(usize, TasteResponse)] {
         &self.items_shown
+    }
+
+    /// Get the recorded response latencies (parallel to responses).
+    pub fn response_latencies(&self) -> &[Option<u64>] {
+        &self.response_latencies
     }
 }
 

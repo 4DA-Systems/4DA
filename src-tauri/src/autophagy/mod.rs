@@ -23,6 +23,7 @@ mod topic_decay;
 pub(crate) use digest::run_autophagy_cycle;
 
 // Scoring pipeline integrations
+pub(crate) use calibration::bridge_accuracy_feedback;
 pub(crate) use calibration::load_calibration_deltas;
 pub(crate) use calibration::store_calibrations;
 pub(crate) use topic_decay::load_topic_decay_profiles;

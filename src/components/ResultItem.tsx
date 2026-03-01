@@ -1,7 +1,8 @@
-import { memo, useCallback, useState } from 'react';
+import { memo, useCallback, useMemo, useState } from 'react';
 import type { SourceRelevance, FeedbackAction, FeedbackGiven } from '../types';
 import { useItemSummary } from '../hooks/use-item-summary';
 import { useViewTracking } from '../hooks/use-view-tracking';
+import { useExpandTracking } from '../hooks/use-expand-tracking';
 import { ResultItemCollapsed } from './result-item/ResultItemCollapsed';
 import { ResultItemExpanded } from './result-item/ResultItemExpanded';
 import { ScoreBreakdownDrawer } from './result-item/ScoreBreakdownDrawer';
@@ -66,11 +67,25 @@ export const ResultItem = memo(function ResultItem({
   const isTopPick = item.top_score >= 0.72;
   const isHighConfidence = (item.confidence ?? 0) >= 0.7;
   const { summary, summaryLoading, summaryError, generateSummary } = useItemSummary(item.id, isExpanded);
+
+  // Extract topics from title for behavior tracking
+  const itemTopics = useMemo(() =>
+    item.title.toLowerCase().split(/\s+/)
+      .filter(w => w.length > 3)
+      .slice(0, 5),
+    [item.title],
+  );
+
   const viewRef = useViewTracking({
     itemId: item.id,
     sourceType: item.source_type || 'unknown',
-    enabled: !isExpanded, // Only track passive scrolling, not expanded viewing
+    enabled: !isExpanded, // Passive scroll tracking when collapsed
+    hasExplicitFeedback: !!feedback,
+    itemTopics,
   });
+
+  // Track expand dwell time — emits click+dwell when collapsed/unmounted
+  useExpandTracking(item.id, item.source_type || 'unknown', isExpanded, itemTopics);
 
   return (
     <div
