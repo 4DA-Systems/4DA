@@ -1,8 +1,9 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../../store';
 import { ChannelCard } from './ChannelCard';
 import { ChannelContent } from './ChannelContent';
+import { CreateChannelModal } from './CreateChannelModal';
 
 export function ChannelsView() {
   const { t } = useTranslation();
@@ -11,6 +12,7 @@ export function ChannelsView() {
   const activeChannelId = useAppStore((s) => s.activeChannelId);
   const loadChannels = useAppStore((s) => s.loadChannels);
   const selectChannel = useAppStore((s) => s.selectChannel);
+  const [showCreate, setShowCreate] = useState(false);
 
   // Load channels on mount
   useEffect(() => {
@@ -57,6 +59,19 @@ export function ChannelsView() {
     >
       {/* Sidebar: Channel List */}
       <div className="lg:col-span-1 space-y-2">
+        <div className="flex items-center justify-between mb-2">
+          <h2 className="text-sm font-semibold text-white tracking-wide">{t('nav.channels')}</h2>
+          <button
+            onClick={() => setShowCreate(true)}
+            className="w-7 h-7 flex items-center justify-center rounded-lg bg-bg-tertiary border border-border text-text-secondary hover:text-white hover:border-white/30 transition-colors"
+            aria-label={t('channels.createTitle')}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="12" y1="5" x2="12" y2="19" />
+              <line x1="5" y1="12" x2="19" y2="12" />
+            </svg>
+          </button>
+        </div>
         {channels.map((channel) => (
           <ChannelCard
             key={channel.id}
@@ -71,6 +86,8 @@ export function ChannelsView() {
       <div className="lg:col-span-2 bg-bg-secondary border border-border rounded-lg p-6">
         <ChannelContent />
       </div>
+
+      <CreateChannelModal open={showCreate} onClose={() => setShowCreate(false)} />
     </div>
   );
 }

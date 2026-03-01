@@ -97,6 +97,7 @@ function App() {
   const loadProValueReport = useAppStore(s => s.loadProValueReport);
   const loadGameState = useAppStore(s => s.loadGameState);
   const initGameListeners = useAppStore(s => s.initGameListeners);
+  const loadChannels = useAppStore(s => s.loadChannels);
 
   // First-run state
   const isFirstRun = useAppStore(s => s.isFirstRun);
@@ -332,6 +333,7 @@ function App() {
           loadSettings();
           loadUserContext();
           loadDiscoveredContext();
+          loadChannels();
         }} />
       )}
 

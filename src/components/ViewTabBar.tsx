@@ -19,6 +19,7 @@ const TABS: Array<{ id: ViewId; labelKey: string; subtitleKey: string; activeCol
 
 const BADGE_COLORS: Partial<Record<ViewId, string>> = {
   briefing: 'bg-orange-400',
+  channels: 'bg-cyan-400',
   results: 'bg-orange-400',
   profile: 'bg-amber-400',
 };
@@ -30,14 +31,16 @@ export function ViewTabBar() {
   const results = useAppStore(s => s.appState.relevanceResults);
   const windows = useAppStore(s => s.decisionWindows);
   const profile = useAppStore(s => s.unifiedProfile);
+  const channels = useAppStore(s => s.channels) ?? [];
 
   const badges = useMemo(() => {
     const b: Partial<Record<ViewId, boolean>> = {};
     if (results.length > 0) b.results = true;
     if ((windows ?? []).some(w => w.status === 'open')) b.briefing = true;
     if (profile && profile.completeness.overall_percentage < 50) b.profile = true;
+    if (channels.some(ch => ch.freshness === 'fresh')) b.channels = true;
     return b;
-  }, [results, windows, profile]);
+  }, [results, windows, profile, channels]);
 
   return (
     <nav aria-label="Main views">

@@ -21,7 +21,7 @@ interface CelebrationStateProps {
   topSignal: TopSignal | null;
   stackInsights: string[];
   embeddingMode: string | null;
-  onDismiss: (view: 'briefing' | 'results') => void;
+  onDismiss: (view: 'briefing' | 'results' | 'playbook') => void;
 }
 
 export function CelebrationState({
@@ -89,10 +89,15 @@ export function CelebrationState({
         </div>
       )}
 
-      {/* Keyword-only note */}
+      {/* Basic Mode indicator */}
       {embeddingMode === 'keyword-only' && (
-        <div className="mb-6 px-4 py-2.5 bg-bg-secondary border border-border rounded-lg text-xs text-gray-400 max-w-sm mx-auto">
-          {t('firstRun.keywordHint')}
+        <div className="mb-6 px-4 py-3 bg-amber-500/10 border border-amber-500/30 rounded-lg max-w-sm mx-auto text-left">
+          <p className="text-xs font-medium text-amber-400">
+            {t('firstRun.basicMode')}
+          </p>
+          <p className="text-[11px] text-amber-400/70 mt-1">
+            {t('firstRun.basicModeHint')}
+          </p>
         </div>
       )}
 
@@ -109,6 +114,18 @@ export function CelebrationState({
           className="text-sm text-gray-500 hover:text-gray-300 transition-colors"
         >
           {t('firstRun.browseResults', { count: totalCount })}
+        </button>
+      </div>
+
+      {/* STREETS nudge */}
+      <div className="mt-8 pt-4 border-t border-border/50">
+        <p className="text-xs text-gray-500 mb-1">{t('firstRun.streetsNudge')}</p>
+        <button
+          onClick={() => onDismiss('playbook')}
+          className="text-xs font-medium hover:underline transition-colors"
+          style={{ color: '#D4AF37' }}
+        >
+          {t('firstRun.exploreStreets')}
         </button>
       </div>
     </div>

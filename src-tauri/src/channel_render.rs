@@ -84,6 +84,7 @@ fn build_channel_prompt(
     items: &[(StoredSourceItem, f64)],
     tech_stack: &str,
     active_topics: &str,
+    sovereign_profile: &str,
     previous_render: Option<&ChannelRender>,
 ) -> (String, String) {
     let system_prompt = format!(
@@ -139,12 +140,14 @@ fn build_channel_prompt(
 
     let user_prompt = format!(
         "User's tech stack: {tech}\n\
-         User's active topics: {topics}\n\n\
+         User's active topics: {topics}\n\
+         User's system profile: {sovereign}\n\n\
          {count} sources for channel \"{title}\":\n\n\
          {items}{previous}\n\n\
          Generate the intelligence document.",
         tech = tech_stack,
         topics = active_topics,
+        sovereign = sovereign_profile,
         count = items.len().min(20),
         title = channel.title,
         items = items_text,
@@ -471,6 +474,38 @@ pub(crate) async fn render_channel(channel_id: i64) -> Result<ChannelRender, Str
             .join(", ")
     };
 
+    // Load sovereign profile for hardware/environment context
+    let sovereign_summary = {
+        let conn = crate::open_db_connection().ok();
+        match conn {
+            Some(c) => {
+                let mut facts = Vec::new();
+                if let Ok(mut stmt) = c.prepare(
+                    "SELECT category, key, value FROM sovereign_profile ORDER BY category LIMIT 20",
+                ) {
+                    let _ = stmt
+                        .query_map([], |row| {
+                            let cat: String = row.get(0)?;
+                            let key: String = row.get(1)?;
+                            let val: String = row.get(2)?;
+                            Ok(format!("{}/{}: {}", cat, key, val))
+                        })
+                        .map(|rows| {
+                            for row in rows.flatten() {
+                                facts.push(row);
+                            }
+                        });
+                }
+                if facts.is_empty() {
+                    "Not available".to_string()
+                } else {
+                    facts.join(", ")
+                }
+            }
+            None => "Not available".to_string(),
+        }
+    };
+
     // Get previous render for diff context (sync)
     let previous_render = db.get_latest_render(channel_id).ok().flatten();
 
@@ -480,6 +515,7 @@ pub(crate) async fn render_channel(channel_id: i64) -> Result<ChannelRender, Str
         &items,
         &tech_summary,
         &topics_summary,
+        &sovereign_summary,
         previous_render.as_ref(),
     );
 
@@ -543,6 +579,59 @@ pub(crate) async fn render_channel(channel_id: i64) -> Result<ChannelRender, Str
             Ok(render)
         }
     }
+}
+
+// ============================================================================
+// Auto-Render Stale Channels
+// ============================================================================
+
+/// Render all channels that are stale or never rendered.
+/// Iterates through every active channel, checks freshness, and renders
+/// any that need updating. Logs each attempt and continues on failure.
+pub(crate) async fn auto_render_stale_channels() -> Result<(), String> {
+    let db = crate::get_database().map_err(|e| e.to_string())?;
+    let channels = db.list_channels().map_err(|e| e.to_string())?;
+
+    let stale: Vec<_> = channels
+        .iter()
+        .filter(|ch| {
+            matches!(
+                ch.freshness,
+                crate::channels::ChannelFreshness::NeverRendered
+                    | crate::channels::ChannelFreshness::Stale
+            )
+        })
+        .collect();
+
+    info!(
+        target: "4da::channels",
+        total = channels.len(),
+        stale = stale.len(),
+        "Auto-rendering stale channels"
+    );
+
+    for ch in &stale {
+        match render_channel(ch.id).await {
+            Ok(render) => {
+                info!(
+                    target: "4da::channels",
+                    channel = %ch.slug,
+                    version = render.version,
+                    "Auto-rendered channel"
+                );
+            }
+            Err(e) => {
+                warn!(
+                    target: "4da::channels",
+                    channel = %ch.slug,
+                    error = %e,
+                    "Auto-render failed for channel, continuing"
+                );
+            }
+        }
+    }
+
+    Ok(())
 }
 
 // ============================================================================
