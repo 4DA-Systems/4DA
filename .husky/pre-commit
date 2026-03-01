@@ -1,25 +1,58 @@
 #!/bin/sh
 # CADE Pre-commit Hook — fast gate (< 10s)
 # Heavy checks (tsc, full tests) moved to pre-push
+# Process-aware: skips heavy ops when dev server is running to prevent crashes
 
 echo "Running CADE pre-commit validation..."
 
-# File size guardian (fast check, ~1s)
+# Detect if Tauri dev server or heavy cargo processes are running
+# On Windows, tasklist is used; on Unix, ps aux
+DEV_SERVER_RUNNING=false
+CARGO_BUSY=false
+
+if command -v tasklist > /dev/null 2>&1; then
+    # Windows: check for cargo.exe processes (dev server runs cargo-tauri)
+    if tasklist //FI "IMAGENAME eq cargo.exe" 2>/dev/null | grep -q "cargo.exe"; then
+        CARGO_BUSY=true
+    fi
+    # Check for the vite/tauri dev server
+    if tasklist //FI "IMAGENAME eq cargo-tauri.exe" 2>/dev/null | grep -q "cargo-tauri"; then
+        DEV_SERVER_RUNNING=true
+    fi
+else
+    # Unix: check for cargo processes
+    if pgrep -f "cargo-tauri dev" > /dev/null 2>&1; then
+        DEV_SERVER_RUNNING=true
+    fi
+    if pgrep -f "cargo build\|cargo check\|cargo test" > /dev/null 2>&1; then
+        CARGO_BUSY=true
+    fi
+fi
+
+if [ "$DEV_SERVER_RUNNING" = true ] || [ "$CARGO_BUSY" = true ]; then
+    echo "[GUARD] Heavy processes detected — running lightweight pre-commit only"
+fi
+
+# File size guardian (fast check, ~1s) — always runs
 echo "Checking file sizes..."
 node scripts/check-file-sizes.cjs || {
     echo "File size check failed. Split large files or add justified exceptions."
     exit 1
 }
 
-# Rust formatting (fast check, ~2s)
-echo "Checking Rust formatting..."
-cd src-tauri && cargo fmt --check || {
-    echo "Rust formatting check failed. Run 'cargo fmt' to fix."
-    exit 1
-}
-cd ..
+# Rust formatting (fast check, ~2s) — skip if cargo is busy
+if [ "$CARGO_BUSY" = true ]; then
+    echo "Skipping cargo fmt check (cargo processes active — will check on push)"
+else
+    echo "Checking Rust formatting..."
+    cd src-tauri && cargo fmt --check || {
+        echo "Rust formatting check failed. Run 'cargo fmt' to fix."
+        exit 1
+    }
+    cd ..
+fi
 
-# ESLint on staged files only (~3s vs full project ~8s)
+# ESLint on staged files only (~3s vs full project ~8s) — always runs (lightweight)
 echo "Running ESLint (staged files)..."
 STAGED_TS=$(git diff --cached --name-only --diff-filter=ACM | grep -E '\.(ts|tsx)$' || true)
 if [ -n "$STAGED_TS" ]; then
