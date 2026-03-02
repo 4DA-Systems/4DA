@@ -100,7 +100,7 @@ pub async fn get_channel_changelog(channel_id: i64) -> Result<Option<ChannelChan
     let new_render = &renders[0];
     let old_render = &renders[1];
 
-    let changelog = crate::channel_render::compute_changelog(channel_id, old_render, new_render);
+    let changelog = crate::channel_changelog::compute_changelog(channel_id, old_render, new_render);
     Ok(Some(changelog))
 }
 
