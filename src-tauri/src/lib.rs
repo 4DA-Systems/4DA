@@ -98,6 +98,7 @@ mod llm;
 mod monitoring;
 mod monitoring_commands;
 mod monitoring_jobs;
+mod monitoring_notifications;
 mod novelty;
 mod ollama;
 mod predictive;
@@ -121,6 +122,7 @@ pub mod sources;
 mod tech_radar;
 mod tech_radar_commands;
 mod temporal;
+mod temporal_dependencies;
 mod tts;
 mod void_commands;
 mod void_engine;
@@ -150,6 +152,7 @@ mod streets_localization;
 mod suns;
 mod suns_commands;
 mod toolkit;
+mod toolkit_export;
 mod toolkit_intelligence;
 mod translation_commands;
 mod translation_pipeline;
@@ -462,7 +465,7 @@ pub fn run() {
             // Toolkit Intelligence
             toolkit_intelligence::toolkit_test_feed,
             toolkit_intelligence::toolkit_score_sandbox,
-            toolkit_intelligence::toolkit_generate_export_pack,
+            toolkit_export::toolkit_generate_export_pack,
             // Video Curriculum (STREETS Cohort)
             video_curriculum::get_video_curriculum,
             video_curriculum::mark_video_progress,

@@ -1,4 +1,3 @@
-#![allow(dead_code)]
 //! Settings module for 4DA
 //!
 //! Manages user configuration including API keys (BYOK), preferences,

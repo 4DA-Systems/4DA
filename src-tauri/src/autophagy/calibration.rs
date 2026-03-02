@@ -1,4 +1,3 @@
-#![allow(dead_code)]
 //! Calibration analysis — compares what the system scored vs what users engaged with.
 //!
 //! Items in the pruning window (approaching max_age_days) are cross-referenced with

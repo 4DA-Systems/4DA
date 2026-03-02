@@ -1,4 +1,3 @@
-#![allow(dead_code)]
 //! Database migrations — schema versioning, backup, and migration orchestration.
 
 use rusqlite::{params, Connection, Result as SqliteResult};

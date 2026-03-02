@@ -1,4 +1,3 @@
-#![allow(dead_code)]
 //! Anti-pattern detection — finds systematic over-scoring and under-scoring.
 //!
 //! **Over-scored**: source_types with many surfaced items but very low engagement.

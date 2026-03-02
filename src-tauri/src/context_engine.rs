@@ -1,4 +1,3 @@
-#![allow(dead_code)]
 //! Context Engine - Personalized Relevance System for 4DA
 //!
 //! The Context Engine implements a 3-layer "Context Membrane" that transforms

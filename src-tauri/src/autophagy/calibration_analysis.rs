@@ -1,4 +1,3 @@
-#![allow(dead_code)]
 //! Calibration analysis — topic-level and accuracy feedback analysis.
 //!
 //! Provides deeper calibration by analyzing at the content-topic level

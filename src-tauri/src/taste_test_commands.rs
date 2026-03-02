@@ -2,6 +2,8 @@
 
 use std::sync::{Mutex, OnceLock};
 
+use tauri::{AppHandle, Emitter};
+
 use crate::state::open_db_connection;
 use crate::taste_test::inference::InferenceState;
 use crate::taste_test::{TasteProfileSummary, TasteResponse, TasteTestStep};
@@ -54,7 +56,7 @@ pub async fn taste_test_respond(
 
 /// Finalize the taste test: save to DB, apply to context, return summary.
 #[tauri::command]
-pub async fn taste_test_finalize() -> Result<TasteProfileSummary> {
+pub async fn taste_test_finalize(app: AppHandle) -> Result<TasteProfileSummary> {
     let (profile, responses, latencies, summary) = {
         let mutex = get_state();
         let mut guard = mutex.lock().map_err(|e| format!("Lock error: {e}"))?;
@@ -86,6 +88,13 @@ pub async fn taste_test_finalize() -> Result<TasteProfileSummary> {
 
     // Invalidate context engine so scoring picks up new data
     crate::invalidate_context_engine();
+
+    // GAME: track taste test completion
+    if let Ok(db) = crate::get_database() {
+        for a in crate::game_engine::increment_counter(db, "taste_tests", 1) {
+            crate::events::emit_achievement_unlocked(&app, &a);
+        }
+    }
 
     Ok(summary)
 }

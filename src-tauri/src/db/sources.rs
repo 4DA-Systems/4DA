@@ -1,4 +1,3 @@
-#![allow(dead_code)]
 //! Source item CRUD, feedback, source registry, and health tracking.
 
 use rusqlite::{params, OptionalExtension, Result as SqliteResult};

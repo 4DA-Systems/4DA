@@ -703,10 +703,13 @@ pub async fn set_user_role(app: AppHandle, role: Option<String>) -> Result<serde
 
     info!(target: "4da::context", role = ?role, "Role updated");
 
-    // GAME: track context setup
+    // GAME: track context setup + profile updates
     if role.is_some() {
         if let Ok(db) = crate::get_database() {
             for a in crate::game_engine::increment_counter(db, "context", 1) {
+                crate::events::emit_achievement_unlocked(&app, &a);
+            }
+            for a in crate::game_engine::increment_counter(db, "profile_updates", 1) {
                 crate::events::emit_achievement_unlocked(&app, &a);
             }
         }
@@ -729,9 +732,12 @@ pub async fn add_tech_stack(app: AppHandle, technology: String) -> Result<serde_
 
     debug!(target: "4da::context", technology = %technology, "Added technology");
 
-    // GAME: track context setup
+    // GAME: track context setup + profile updates
     if let Ok(db) = crate::get_database() {
         for a in crate::game_engine::increment_counter(db, "context", 1) {
+            crate::events::emit_achievement_unlocked(&app, &a);
+        }
+        for a in crate::game_engine::increment_counter(db, "profile_updates", 1) {
             crate::events::emit_achievement_unlocked(&app, &a);
         }
     }
@@ -778,9 +784,12 @@ pub async fn add_interest(
     info!(target: "4da::context", topic = %topic, weight = weight, has_embedding = emb.is_some(), "Added interest");
     invalidate_context_engine();
 
-    // GAME: track context setup
+    // GAME: track context setup + profile updates
     if let Ok(db) = crate::get_database() {
         for a in crate::game_engine::increment_counter(db, "context", 1) {
+            crate::events::emit_achievement_unlocked(&app, &a);
+        }
+        for a in crate::game_engine::increment_counter(db, "profile_updates", 1) {
             crate::events::emit_achievement_unlocked(&app, &a);
         }
     }
