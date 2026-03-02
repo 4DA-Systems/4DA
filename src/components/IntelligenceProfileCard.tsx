@@ -1,7 +1,7 @@
 import { useAppStore } from '../store';
 
 export function IntelligenceProfileCard() {
-  const learnedAffinities = useAppStore(s => s.learnedAffinities);
+  const learnedAffinities = useAppStore(s => s.learnedAffinities) ?? [];
   const pulse = useAppStore(s => s.intelligencePulse);
 
   if (learnedAffinities.length === 0 && (!pulse || pulse.total_cycles === 0)) {

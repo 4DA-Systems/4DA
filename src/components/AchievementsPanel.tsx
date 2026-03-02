@@ -1,7 +1,14 @@
 import { useEffect, useState } from 'react';
 import { useAppStore } from '../store';
+import type { AchievementTier } from '../store/game-slice';
 import { getGameIcon } from '../lib/game-icons';
 import { registerGameComponent } from '../lib/game-components';
+
+const TIER_COLORS: Record<AchievementTier, string> = {
+  gold: '#D4AF37',
+  silver: '#C0C0C0',
+  bronze: '#CD7F32',
+};
 
 export function AchievementsPanel() {
   const gameState = useAppStore(s => s.gameState);
@@ -90,6 +97,18 @@ export function AchievementsPanel() {
                     <span className={`text-sm font-semibold ${a.unlocked ? 'text-white' : 'text-[#666]'}`}>
                       {a.name}
                     </span>
+                    {a.tier && (
+                      <span
+                        className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded"
+                        style={{
+                          color: TIER_COLORS[a.tier],
+                          border: `1px solid ${TIER_COLORS[a.tier]}40`,
+                          backgroundColor: `${TIER_COLORS[a.tier]}10`,
+                        }}
+                      >
+                        {a.tier}
+                      </span>
+                    )}
                     {a.unlocked && (
                       <span className="text-xs text-[#D4AF37]">&#x2713;</span>
                     )}

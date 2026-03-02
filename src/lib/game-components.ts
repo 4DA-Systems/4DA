@@ -16,6 +16,9 @@ const COMPONENTS = {
   'game-boot-ring': () => import('./game-components/boot-ring.js'),
   'game-engagement-bars': () => import('./game-components/engagement-bars.js'),
   'game-achievement-progress': () => import('./game-components/achievement-progress.js'),
+  'game-ambient-intelligence': () => import('./game-components/ambient-intelligence.js'),
+  'game-score-fingerprint': () => import('./game-components/score-fingerprint.js'),
+  'game-decision-countdown': () => import('./game-components/decision-countdown.js'),
 } as const;
 
 export type GameComponentTag = keyof typeof COMPONENTS;

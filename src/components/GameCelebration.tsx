@@ -1,7 +1,14 @@
 import { useEffect, useRef, useState } from 'react';
 import { useAppStore } from '../store';
+import type { AchievementTier } from '../store/game-slice';
 import { getGameIcon } from '../lib/game-icons';
 import { registerGameComponent } from '../lib/game-components';
+
+const TIER_COLORS: Record<AchievementTier, string> = {
+  gold: '#D4AF37',
+  silver: '#C0C0C0',
+  bronze: '#CD7F32',
+};
 
 /**
  * Full-screen celebration overlay that appears when achievements unlock.
@@ -21,11 +28,12 @@ export function GameCelebration() {
     });
   }, []);
 
-  // Drive the burst intensity: spike to 1.0 on celebration, decay to 0
+  // Drive the burst intensity: spike based on tier, decay to 0
   useEffect(() => {
     if (!celebration || !burstRef.current) return;
     const el = burstRef.current as HTMLElement & { intensity?: number };
-    el.intensity = 1.0;
+    const peakIntensity = celebration.celebration_intensity ?? 1.0;
+    el.intensity = peakIntensity;
 
     // Decay over 1.2s to match CSS ring-burst timing
     const start = performance.now();
@@ -33,7 +41,7 @@ export function GameCelebration() {
     function decay() {
       const elapsed = performance.now() - start;
       const t = Math.min(1, elapsed / duration);
-      el.intensity = 1.0 - t;
+      el.intensity = peakIntensity * (1.0 - t);
       if (t < 1) requestAnimationFrame(decay);
     }
     requestAnimationFrame(decay);
@@ -74,8 +82,11 @@ export function GameCelebration() {
         onClick={clearCelebration}
       >
         <div className="text-3xl mb-1">{icon}</div>
-        <div className="text-xs uppercase tracking-widest text-[#D4AF37] font-semibold mb-1">
-          Achievement Unlocked
+        <div
+          className="text-xs uppercase tracking-widest font-semibold mb-1"
+          style={{ color: celebration.tier ? TIER_COLORS[celebration.tier] : '#D4AF37' }}
+        >
+          {celebration.tier ? `${celebration.tier} ` : ''}Achievement Unlocked
         </div>
         <div className="text-lg font-bold text-white">{celebration.name}</div>
         <div className="text-xs text-gray-400 mt-1">{celebration.description}</div>

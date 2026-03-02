@@ -84,6 +84,7 @@ mod domain_profile;
 pub(crate) mod domain_profile_data;
 pub mod extractors;
 mod free_briefing;
+mod game_achievements;
 mod game_commands;
 mod game_engine;
 mod handoff;

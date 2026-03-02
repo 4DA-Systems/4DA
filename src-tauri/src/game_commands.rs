@@ -21,6 +21,7 @@ pub fn get_achievements() -> Result<serde_json::Value> {
 
 #[cfg(test)]
 mod tests {
+    use crate::game_achievements::AchievementTier;
     use crate::game_engine::{AchievementState, CounterState, GameState};
 
     #[test]
@@ -37,6 +38,7 @@ mod tests {
                 icon: "telescope".to_string(),
                 counter_type: "scans".to_string(),
                 threshold: 1,
+                tier: AchievementTier::Bronze,
                 current: 5,
                 unlocked: true,
                 unlocked_at: Some("2025-01-15 10:00:00".to_string()),

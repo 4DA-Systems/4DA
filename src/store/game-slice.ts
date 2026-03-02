@@ -3,6 +3,8 @@ import type { AppStore } from './types';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 
+export type AchievementTier = 'bronze' | 'silver' | 'gold';
+
 export interface Achievement {
   id: string;
   name: string;
@@ -10,6 +12,7 @@ export interface Achievement {
   icon: string;
   counter_type: string;
   threshold: number;
+  tier: AchievementTier;
   current: number;
   unlocked: boolean;
   unlocked_at: string | null;
@@ -20,6 +23,8 @@ export interface AchievementUnlocked {
   name: string;
   description: string;
   icon: string;
+  tier: AchievementTier;
+  celebration_intensity: number;
   unlocked_at: string;
 }
 

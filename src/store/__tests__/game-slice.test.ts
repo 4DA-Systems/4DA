@@ -46,6 +46,7 @@ describe('game-slice', () => {
             icon: 'telescope',
             counter_type: 'scans',
             threshold: 1,
+            tier: 'bronze',
             current: 5,
             unlocked: true,
             unlocked_at: '2024-01-01T00:00:00Z',
@@ -88,6 +89,8 @@ describe('game-slice', () => {
           name: 'Test Achievement',
           description: 'You did it',
           icon: 'telescope',
+          tier: 'bronze',
+          celebration_intensity: 0.5,
           unlocked_at: '2024-01-01T00:00:00Z',
         },
       });

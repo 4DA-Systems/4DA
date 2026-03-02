@@ -14,7 +14,8 @@ use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
 mod anti_patterns;
-mod calibration;
+pub(crate) mod calibration;
+mod calibration_analysis;
 mod digest;
 mod source_autopsy;
 mod topic_decay;
@@ -23,9 +24,9 @@ mod topic_decay;
 pub(crate) use digest::run_autophagy_cycle;
 
 // Scoring pipeline integrations
-pub(crate) use calibration::bridge_accuracy_feedback;
 pub(crate) use calibration::load_calibration_deltas;
 pub(crate) use calibration::store_calibrations;
+pub(crate) use calibration_analysis::bridge_accuracy_feedback;
 pub(crate) use topic_decay::load_topic_decay_profiles;
 
 // Individual analyzers (for granular invocation)
