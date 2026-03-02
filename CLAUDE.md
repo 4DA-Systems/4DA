@@ -1,7 +1,5 @@
 # 4DA — Claude Code Instructions
 
-
-
 ## What Is 4DA
 
 4DA (4 Dimensional Autonomy) is a Tauri 2.0 desktop app that surfaces developer-relevant content from the internet — privately, locally, with zero configuration.
@@ -112,6 +110,5 @@ Before modifying architecture or invariants, read the relevant `.ai/` file:
 
 - Agent definitions: `.claude/agents/` (4DA-specific agents for source debugging, trend analysis, etc.)
 - Slash commands: `.claude/commands/` (project-specific commands)
-- MCP servers: memory (persistent decisions/learnings) and 4da (21 intelligence tools)
-- Hooks: wisdom gates (PreToolUse), consequence processing (UserPromptSubmit), session capture (Stop), git hygiene, prompt analyzer
-- Subagent rules: spawn for 3+ file changes, searching, debugging, testing, reviewing
+- MCP servers: memory (persistent decisions/learnings) and 4da (30 intelligence tools)
+- Hooks: wisdom gates (PreToolUse), consequence processing (UserPromptSubmit), session capture (Stop), prompt analyzer
