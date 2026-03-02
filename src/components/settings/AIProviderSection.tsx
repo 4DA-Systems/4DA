@@ -60,9 +60,11 @@ export function AIProviderSection({
               value={settingsForm.provider}
               onChange={(e) => {
                 const newProvider = e.target.value;
-                const defaultModel = newProvider === 'ollama' && ollamaModels.length > 0
-                  ? ollamaModels[0]
-                  : providerModels[newProvider]?.[0] || '';
+                const defaultModel = newProvider === 'local'
+                  ? 'all-MiniLM-L6-v2'
+                  : newProvider === 'ollama' && ollamaModels.length > 0
+                    ? ollamaModels[0]
+                    : providerModels[newProvider]?.[0] || '';
                 setSettingsForm((f) => ({
                   ...f,
                   provider: newProvider,
@@ -72,13 +74,23 @@ export function AIProviderSection({
               }}
               className="w-full px-4 py-3 bg-bg-secondary border border-border rounded-lg text-sm text-white focus:border-orange-500 focus:outline-none"
             >
+              <option value="local">Built-in (Local)</option>
               <option value="anthropic">{t('settings.ai.providerAnthropic')}</option>
               <option value="openai">{t('settings.ai.providerOpenAI')}</option>
               <option value="ollama">{t('settings.ai.providerOllama')}</option>
             </select>
           </div>
 
-          {settingsForm.provider !== 'ollama' && (
+          {settingsForm.provider === 'local' && (
+            <div className="bg-bg-secondary rounded-lg p-3 border border-green-500/20">
+              <p className="text-xs text-green-400 font-medium mb-1">all-MiniLM-L6-v2 (384 dimensions)</p>
+              <p className="text-xs text-gray-500">
+                Zero-config local embeddings. No API key required. The model is downloaded automatically on first use (~90MB).
+              </p>
+            </div>
+          )}
+
+          {settingsForm.provider !== 'ollama' && settingsForm.provider !== 'local' && (
             <div>
               <label className="text-xs text-gray-500 block mb-2">{t('settings.ai.apiKey')}</label>
               <input
@@ -91,36 +103,38 @@ export function AIProviderSection({
             </div>
           )}
 
-          <div>
-            <label className="text-xs text-gray-500 block mb-2">{t('settings.ai.model')}</label>
-            <select
-              value={settingsForm.model}
-              onChange={(e) => setSettingsForm((f) => ({ ...f, model: e.target.value }))}
-              className="w-full px-4 py-3 bg-bg-secondary border border-border rounded-lg text-sm text-white focus:border-orange-500 focus:outline-none"
-            >
-              {(settingsForm.provider === 'ollama' && ollamaModels.length > 0
-                ? ollamaModels
-                : providerModels[settingsForm.provider] || []
-              ).map((m) => (
-                <option key={m} value={m}>{m}</option>
-              ))}
-            </select>
-            {settingsForm.provider === 'ollama' && (
-              <div className="flex items-center gap-2 mt-2">
-                <p className="text-xs text-gray-500">
-                  {ollamaStatus?.running
-                    ? <span className="text-green-400">&#x2713; {t('settings.ai.ollamaRunning', { version: ollamaStatus.version, count: ollamaModels.length })}</span>
-                    : <span className="text-yellow-400">&#x25cb; {t('settings.ai.ollamaNotDetected')}</span>}
-                </p>
-                <button
-                  onClick={() => checkOllamaStatus(settingsForm.baseUrl || undefined)}
-                  className="text-[10px] px-2 py-0.5 text-gray-500 hover:text-orange-400 bg-bg-tertiary rounded transition-colors"
-                >
-                  {t('settings.ai.recheck')}
-                </button>
-              </div>
-            )}
-          </div>
+          {settingsForm.provider !== 'local' && (
+            <div>
+              <label className="text-xs text-gray-500 block mb-2">{t('settings.ai.model')}</label>
+              <select
+                value={settingsForm.model}
+                onChange={(e) => setSettingsForm((f) => ({ ...f, model: e.target.value }))}
+                className="w-full px-4 py-3 bg-bg-secondary border border-border rounded-lg text-sm text-white focus:border-orange-500 focus:outline-none"
+              >
+                {(settingsForm.provider === 'ollama' && ollamaModels.length > 0
+                  ? ollamaModels
+                  : providerModels[settingsForm.provider] || []
+                ).map((m) => (
+                  <option key={m} value={m}>{m}</option>
+                ))}
+              </select>
+              {settingsForm.provider === 'ollama' && (
+                <div className="flex items-center gap-2 mt-2">
+                  <p className="text-xs text-gray-500">
+                    {ollamaStatus?.running
+                      ? <span className="text-green-400">&#x2713; {t('settings.ai.ollamaRunning', { version: ollamaStatus.version, count: ollamaModels.length })}</span>
+                      : <span className="text-yellow-400">&#x25cb; {t('settings.ai.ollamaNotDetected')}</span>}
+                  </p>
+                  <button
+                    onClick={() => checkOllamaStatus(settingsForm.baseUrl || undefined)}
+                    className="text-[10px] px-2 py-0.5 text-gray-500 hover:text-orange-400 bg-bg-tertiary rounded transition-colors"
+                  >
+                    {t('settings.ai.recheck')}
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
 
           {settingsForm.provider === 'ollama' && (
             <div>
