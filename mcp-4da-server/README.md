@@ -3,52 +3,64 @@
 [![npm version](https://img.shields.io/npm/v/@4da/mcp-server?color=gold)](https://www.npmjs.com/package/@4da/mcp-server)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 [![Node](https://img.shields.io/badge/Node-%3E%3D18-brightgreen)](https://nodejs.org/)
-[![Tools](https://img.shields.io/badge/MCP%20Tools-30-white)](https://4da.ai)
+[![MCP Tools](https://img.shields.io/badge/MCP%20Tools-30-white)](https://4da.ai)
+[![smithery badge](https://smithery.ai/badge/@4da/mcp-server)](https://smithery.ai/server/@4da/mcp-server)
 
-Your AI coding assistant doesn't know what you're working on. It doesn't know your tech stack, your dependencies, or that the library you're debating has a critical CVE from yesterday. It writes code in a vacuum.
+**30 MCP tools that give your AI coding assistant memory, context, and awareness of what you actually build.**
 
-This MCP server fixes that. It connects your AI tools to a local intelligence engine that scans your actual codebase — your `Cargo.toml`, `package.json`, `go.mod` — and continuously scores content from 11 sources (Hacker News, arXiv, Reddit, GitHub, and more) against what you actually build with. 30 tools. Everything stays on your machine.
+Your AI writes code without knowing your tech stack, your dependencies, or that the library it just recommended has a critical CVE from yesterday. This MCP server fixes that. It connects Claude Code, Cursor, Copilot, and Windsurf to a local intelligence engine that reads your `Cargo.toml`, `package.json`, `go.mod`, and `requirements.txt` -- then scores content from Hacker News, arXiv, Reddit, GitHub, and 7 other sources against what matters to you.
+
+Everything runs locally. Nothing leaves your machine.
 
 ```
 You:     "Are there any security issues in my dependencies?"
-Claude:  [calls knowledge_gaps, project_health, get_actionable_signals]
-         "Yes — the `serde` crate you use in 3 projects has a new advisory
+Claude:  [calls project_health, knowledge_gaps, get_actionable_signals]
+         "Yes — the serde crate you use in 3 projects has a new advisory
           (RUSTSEC-2026-0012). Here's the migration path..."
+
+You:     "Give me my morning briefing"
+Claude:  [calls daily_briefing]
+         "3 high-signal items today: Tokio released 1.42 with a breaking change
+          in your spawn pattern, a Hacker News post on sqlite-vec hit #1 (your
+          primary vector store), and the RFC you bookmarked got merged..."
+
+You:     "Should I switch from Axios to fetch for this project?"
+Claude:  [calls check_decision_alignment, tech_radar, trend_analysis]
+         "Your recorded decision AD-014 chose Axios for interceptor support.
+          The trend data shows native fetch adoption is accelerating, but your
+          codebase has 47 interceptor usages. Recommendation: keep Axios here,
+          consider fetch for new greenfield projects..."
 ```
 
-## How It Works
+## Why This Exists
 
-[4DA](https://4da.ai) is a desktop app that runs quietly in the background. It scans your projects, watches your Git activity, and scores every piece of incoming content across 5 independent axes:
+Most MCP servers expose 1-5 tools that wrap a cloud API. This is different:
 
-| Axis | Signal |
-|------|--------|
-| **Context** | Semantic similarity to your active codebase |
-| **Interest** | Alignment with your declared and learned topics |
-| **ACE** | Real-time signals from your Git commits and file edits |
-| **Dependency** | Direct matches against your installed packages |
-| **Learned** | Behavioral patterns from your save/dismiss feedback |
+- **30 tools** across 8 categories -- content scoring, decision memory, knowledge gaps, agent autonomy, and more
+- **Codebase-aware** -- reads your actual project files, not just what you tell it
+- **Privacy-first** -- reads from a local SQLite database, zero network calls, no telemetry
+- **Works offline** -- the intelligence engine runs entirely on your machine with optional Ollama for local LLM
+- **MIT licensed** -- use it anywhere, fork it, integrate it, build on it
 
-An item needs 2+ independent signals to pass the confirmation gate. Typical rejection rate: **99%+**. What survives is genuinely relevant to you.
+## Quick Start
 
-This MCP server exposes that intelligence to any AI tool that speaks MCP.
+### 1. Install the 4DA desktop app
 
-## Setup
+The MCP server reads from a local database that the [4DA desktop app](https://4da.ai) builds. Download it, point it at your project directories, and let it run its first scan (~3 minutes).
 
-### 1. Install the intelligence engine
+> **[Download 4DA](https://github.com/runyourempire/4DA/releases/latest)** -- Windows, macOS, Linux
 
-Download [4DA](https://4da.ai) for your platform (Windows, macOS, Linux). Open it, point it at your project directories, and let it run its first scan. Takes about 3 minutes.
+### 2. Add the MCP server
 
-### 2. Add the MCP server to your editor
-
-**One command** (auto-detects Claude Code, Cursor, VS Code):
+**Auto-setup** (detects your editors and writes config):
 ```bash
 npx @4da/mcp-server --setup
 ```
 
-Or manually:
+Or add it manually to your editor:
 
 <details>
-<summary>Claude Code</summary>
+<summary><b>Claude Code</b></summary>
 
 ```bash
 claude mcp add 4da -- npx @4da/mcp-server
@@ -56,9 +68,9 @@ claude mcp add 4da -- npx @4da/mcp-server
 </details>
 
 <details>
-<summary>Cursor / Windsurf</summary>
+<summary><b>Cursor / Windsurf</b></summary>
 
-Add to `~/.cursor/mcp.json`:
+Add to `~/.cursor/mcp.json` or `~/.windsurf/mcp.json`:
 ```json
 {
   "mcpServers": {
@@ -72,7 +84,7 @@ Add to `~/.cursor/mcp.json`:
 </details>
 
 <details>
-<summary>VS Code (Copilot)</summary>
+<summary><b>VS Code (Copilot)</b></summary>
 
 Add to `~/.vscode/mcp.json`:
 ```json
@@ -89,7 +101,7 @@ Add to `~/.vscode/mcp.json`:
 </details>
 
 <details>
-<summary>Claude Desktop</summary>
+<summary><b>Claude Desktop</b></summary>
 
 Add to `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS) or `%APPDATA%\Claude\claude_desktop_config.json` (Windows):
 ```json
@@ -104,101 +116,132 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS)
 ```
 </details>
 
-### 3. Ask your AI anything
+### 3. Start asking
+
+No configuration needed -- 4DA already knows your stack:
 
 ```
 "What's relevant to my current project?"
 "Any breaking changes in my dependencies?"
-"Give me today's briefing"
-"Why was this Rust async article scored so high for me?"
-"What knowledge gaps do I have?"
+"What are my knowledge gaps?"
+"Why was this article scored so high?"
+"Record a decision: we're using Postgres, not MySQL"
 "Export my Developer DNA"
 ```
 
-Your AI calls the right tools automatically. No configuration needed — 4DA already knows your stack.
+### 4. Verify installation
 
-## Tools (30)
+```bash
+npx @4da/mcp-server --doctor
+```
 
-### Core
+## How Scoring Works
 
-| Tool | What it does |
+[4DA](https://4da.ai) scores every piece of content across 5 independent axes. An item needs 2+ confirming signals to pass. Typical rejection rate: **99%+**.
+
+| Axis | Signal |
+|------|--------|
+| **Context** | Semantic similarity to your active codebase via local embeddings |
+| **Interest** | Alignment with your declared and inferred topics |
+| **ACE** | Real-time signals from your Git commits and file edits |
+| **Dependency** | Direct matches against packages in your lockfiles |
+| **Learned** | Behavioral patterns from your save/dismiss actions |
+
+What survives the gate is genuinely relevant to what you build. The MCP server exposes that intelligence to any AI tool that speaks MCP.
+
+## All 30 Tools
+
+### Core (4 tools)
+
+| Tool | Description |
 |------|-------------|
-| `get_relevant_content` | Your filtered feed — only items that passed the 5-axis scoring gate |
-| `get_context` | What 4DA knows about you: stack, interests, learned affinities, ACE-detected topics |
-| `explain_relevance` | Why a specific item scored the way it did — full axis breakdown |
-| `record_feedback` | Teach 4DA what matters — save, dismiss, or mark items irrelevant |
+| `get_relevant_content` | Filtered content feed -- only items that passed the 5-axis scoring gate |
+| `get_context` | Your profile: tech stack, interests, affinities, ACE-detected topics |
+| `explain_relevance` | Full axis breakdown of why a specific item scored the way it did |
+| `record_feedback` | Teach 4DA what matters -- save, dismiss, or mark items irrelevant |
 
-### Intelligence
+### Intelligence (9 tools)
 
-| Tool | What it does |
+| Tool | Description |
 |------|-------------|
-| `daily_briefing` | AI-generated executive summary of your discoveries |
-| `get_actionable_signals` | Classified alerts: security advisories, breaking changes, new tools, trending repos |
-| `score_autopsy` | Deep forensic analysis of how any item's score was computed |
+| `daily_briefing` | AI-generated executive summary of today's discoveries |
+| `get_actionable_signals` | Classified alerts: security advisories, breaking changes, trending repos |
+| `score_autopsy` | Forensic analysis of how any item's relevance score was computed |
 | `trend_analysis` | Statistical patterns, anomalies, and predictions across your feed |
-| `context_analysis` | Recommendations to sharpen your context for better scoring |
-| `topic_connections` | Knowledge graph showing how your content topics relate |
+| `context_analysis` | Recommendations to sharpen your scoring context |
+| `topic_connections` | Knowledge graph of how your content topics relate |
 | `signal_chains` | Causal chains connecting related events across sources over time |
-| `semantic_shifts` | Detects when topics you follow are changing in meaning or sentiment |
-| `attention_report` | Where you spend attention vs. where your codebase needs it |
+| `semantic_shifts` | Detects when topics you follow are shifting in meaning or sentiment |
+| `attention_report` | Where you spend attention vs. where your codebase actually needs it |
 
-### Diagnostic
+### Decision Intelligence (3 tools)
 
-| Tool | What it does |
-|------|-------------|
-| `source_health` | Diagnose source fetching and data quality issues |
-| `config_validator` | Validate configuration and detect issues |
-| `llm_status` | Check LLM/Ollama configuration and availability |
-
-### Knowledge & Health
-
-| Tool | What it does |
-|------|-------------|
-| `knowledge_gaps` | Blind spots — dependencies you use but never read about |
-| `project_health` | Dependency freshness, security advisories, update urgency |
-| `reverse_mentions` | Where your projects are being discussed across monitored sources |
-| `export_context_packet` | Portable snapshot of your context for session handoff |
-
-### Decision Intelligence
-
-| Tool | What it does |
+| Tool | Description |
 |------|-------------|
 | `decision_memory` | Record, query, and enforce architectural decisions across sessions |
-| `tech_radar` | Technology adoption signals derived from your decisions + content trends |
-| `check_decision_alignment` | Check if a proposed change aligns with your recorded decisions |
+| `tech_radar` | Technology adoption signals from your decisions + content trends |
+| `check_decision_alignment` | Verify if a proposed change aligns with your recorded decisions |
 
-### Agent Autonomy
+### Knowledge & Health (4 tools)
 
-| Tool | What it does |
+| Tool | Description |
 |------|-------------|
-| `agent_memory` | Persistent memory that survives across sessions and agents |
-| `agent_session_brief` | Tailored startup context so agents don't start cold |
-| `delegation_score` | Should the agent proceed autonomously or ask you? |
+| `knowledge_gaps` | Blind spots -- dependencies you use daily but never read about |
+| `project_health` | Dependency freshness, security advisories, update urgency |
+| `reverse_mentions` | Where your projects are being discussed across monitored sources |
+| `export_context_packet` | Portable context snapshot for session or agent handoff |
 
-### Developer DNA
+### Agent Autonomy (3 tools)
 
-| Tool | What it does |
+| Tool | Description |
 |------|-------------|
-| `developer_dna` | Your tech identity — primary stack, dependencies, engagement patterns, blind spots |
+| `agent_memory` | Persistent memory that survives across sessions, agents, and editors |
+| `agent_session_brief` | Tailored startup context so agents resume where you left off |
+| `delegation_score` | Autonomy assessment -- should the agent proceed or ask the human? |
 
-### Intelligence Metabolism
+### Developer Identity (1 tool)
 
-| Tool | What it does |
+| Tool | Description |
 |------|-------------|
-| `autophagy_status` | Intelligence metabolism status — autophagy cycles, calibration accuracy, anti-patterns |
-| `decision_windows` | Time-bounded decision opportunities requiring your attention |
-| `compound_advantage` | Compound advantage score — measures intelligence leverage for decisions |
+| `developer_dna` | Your tech identity -- primary stack, dependencies, engagement patterns, blind spots |
+
+### Intelligence Metabolism (3 tools)
+
+| Tool | Description |
+|------|-------------|
+| `autophagy_status` | Self-cleaning intelligence health -- calibration accuracy, anti-patterns |
+| `decision_windows` | Time-bounded opportunities that need your attention now |
+| `compound_advantage` | How much intelligence leverage your decisions are generating |
+
+### Diagnostic (3 tools)
+
+| Tool | Description |
+|------|-------------|
+| `source_health` | Source fetching status and data quality diagnostics |
+| `config_validator` | Configuration validation and issue detection |
+| `llm_status` | LLM and Ollama provider availability check |
 
 ## Transports
 
-**stdio** (default) — works with all MCP hosts:
+**stdio** (default) -- works with all MCP hosts:
 ```bash
 npx @4da/mcp-server
 ```
 
-**Streamable HTTP** — for remote or multi-client setups:
+**Streamable HTTP** -- for remote or multi-client setups:
 ```bash
 npx @4da/mcp-server --http --port 4840
+```
+
+## CLI Reference
+
+```
+npx @4da/mcp-server              # Start server (stdio)
+npx @4da/mcp-server --http       # Start server (Streamable HTTP)
+npx @4da/mcp-server --setup      # Auto-configure your editors
+npx @4da/mcp-server --doctor     # Verify installation health
+npx @4da/mcp-server --version    # Print version
+npx @4da/mcp-server --help       # Show all options
 ```
 
 ## Environment Variables
@@ -207,16 +250,28 @@ npx @4da/mcp-server --http --port 4840
 |----------|-------------|---------|
 | `FOURDA_DB_PATH` | Path to 4DA's SQLite database | Auto-detected from standard install locations |
 
-## What Makes This Different
+## FAQ
 
-Most MCP servers connect your AI to a cloud API. This one connects it to **you** — your local codebase, your dependencies, your Git history, your architectural decisions. Nothing leaves your machine. The AI gets smarter about your work without any data going anywhere.
+**Do I need the 4DA desktop app?**
+Yes. The MCP server is a read layer on top of the intelligence that 4DA builds. 4DA scans your projects, fetches content, computes scores, and writes everything to a local SQLite database. The MCP server queries that database. Without it, there's nothing to query.
 
-30 tools is not typical. Most MCP servers expose 1-5 endpoints. This is a full intelligence layer — from raw content scoring to decision enforcement to knowledge gap detection. It's not a wrapper around someone else's API. It's a read layer on top of a scoring engine that rejects 99% of everything it sees, so what your AI gets is what actually matters to you.
+**Does this send my code anywhere?**
+No. The MCP server reads from a local SQLite database on your filesystem. It makes zero network calls. Your codebase data, scoring profiles, and decisions never leave your machine.
+
+**Which AI tools does this work with?**
+Any tool that supports the [Model Context Protocol](https://modelcontextprotocol.io): Claude Code, Claude Desktop, Cursor, Windsurf, VS Code with Copilot, and any custom MCP client.
+
+**Why 30 tools instead of 3?**
+Because developer context is not one thing. Knowing your tech stack is different from tracking your dependencies, which is different from remembering your architectural decisions, which is different from detecting that a trending HN post is about the exact library version you pinned last week. Each tool serves a distinct intelligence function. They compose naturally -- your AI picks the right ones for each question.
+
+**What content sources does 4DA monitor?**
+Hacker News, arXiv, Reddit (customizable subreddits), GitHub Trending, GitHub Releases, RSS/Atom feeds, DevTo, Lobsters, Product Hunt, and more. All configurable.
 
 ## Build from Source
 
 ```bash
-cd mcp-4da-server
+git clone https://github.com/runyourempire/4DA.git
+cd 4DA/mcp-4da-server
 pnpm install
 pnpm build
 ```
@@ -228,14 +283,10 @@ pnpm test                # Contract tests (71 tests)
 pnpm run inspect         # MCP Inspector (interactive browser UI)
 ```
 
-## Versioning
-
-v4.0.0 is the first real release. Earlier versions on npm were pre-release stubs. We couldn't reclaim v1.0.0 due to npm's immutability policy, so we jumped past them.
-
 ## License
 
-MIT — use it anywhere, integrate it with anything.
+MIT -- use it anywhere, integrate it with anything, build on top of it.
 
 ---
 
-Built by [4DA](https://4da.ai) — privacy-first developer intelligence. All signal. No feed.
+Built by [4DA](https://4da.ai) -- privacy-first developer intelligence.

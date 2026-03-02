@@ -1373,11 +1373,11 @@ npx <span class="string">@4da/mcp-server</span>
       <p>Your codebase already knows what's relevant. Let it decide.</p>
       <a href="https://github.com/runyourempire/4DA/releases/latest" class="btn btn-primary" id="final-download">Download 4DA -- Free</a>
       <div class="trust-line">No account &middot; No credit card &middot; No telemetry &middot; ~15MB download</div>
-      <form class="email-capture" action="" onsubmit="return false;">
-        <input type="email" placeholder="you@example.com" aria-label="Email address">
+      <form class="email-capture" id="notify-form">
+        <input type="email" placeholder="you@example.com" aria-label="Email address" required>
         <button type="submit">Notify Me</button>
       </form>
-      <p style="font-size:12px; color:var(--text-muted); margin-top:8px;">Get notified about updates. No spam.</p>
+      <p id="notify-status" style="font-size:12px; color:var(--text-muted); margin-top:8px;">Get notified about updates. No spam.</p>
     </div>
   </section>
 
@@ -1501,6 +1501,46 @@ npx <span class="string">@4da/mcp-server</span>
         if (heroBtn) heroBtn.textContent = 'Download for ' + platform;
         if (finalBtn) finalBtn.textContent = 'Download for ' + platform + ' -- Free';
       }
+    })();
+
+    // Email notify form
+    (function() {
+      var form = document.getElementById('notify-form');
+      var status = document.getElementById('notify-status');
+      if (!form) return;
+      form.addEventListener('submit', function(e) {
+        e.preventDefault();
+        var input = form.querySelector('input[type="email"]');
+        var btn = form.querySelector('button');
+        var email = input.value.trim();
+        if (!email) return;
+        btn.disabled = true;
+        btn.textContent = '...';
+        fetch('/api/notify', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: email })
+        })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+          if (data.ok) {
+            status.textContent = "You're in. We'll keep you posted.";
+            status.style.color = '#22C55E';
+            input.value = '';
+          } else {
+            status.textContent = data.error || 'Something went wrong.';
+            status.style.color = '#EF4444';
+          }
+        })
+        .catch(function() {
+          status.textContent = 'Network error. Try again.';
+          status.style.color = '#EF4444';
+        })
+        .finally(function() {
+          btn.disabled = false;
+          btn.textContent = 'Notify Me';
+        });
+      });
     })();
   </script>
 {% endblock %}

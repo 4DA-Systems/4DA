@@ -138,9 +138,11 @@ const editors: EditorConfig[] = [
 
 /**
  * Run the setup wizard: detect editors and write MCP configurations.
+ * @param dryRun If true, only report what would be written without modifying files.
  */
-export function runSetup(): void {
+export function runSetup(dryRun = false): void {
   console.log("\n  4DA MCP Server — Setup\n");
+  if (dryRun) console.log("  [DRY RUN] No files will be modified.\n");
   console.log("  Detecting editors...\n");
 
   let configured = 0;
@@ -149,7 +151,11 @@ export function runSetup(): void {
     const configPath = editor.detect();
     if (configPath) {
       console.log(`  Found: ${editor.name}`);
-      editor.write(configPath);
+      if (dryRun) {
+        console.log(`  Would write: ${configPath}`);
+      } else {
+        editor.write(configPath);
+      }
       configured++;
       console.log("");
     }
@@ -174,5 +180,6 @@ export function runSetup(): void {
 const isDirectRun =
   process.argv[1]?.endsWith("setup.js") || process.argv[1]?.endsWith("setup.ts");
 if (isDirectRun) {
-  runSetup();
+  const dryRun = process.argv.includes("--dry-run");
+  runSetup(dryRun);
 }
