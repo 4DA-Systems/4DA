@@ -167,21 +167,20 @@ describe('VoidHeartbeat', () => {
     expect(status.getAttribute('aria-label')).toContain('42 items found');
   });
 
-  it('renders the CSS fallback element', () => {
+  it('renders the GAME component container div', () => {
     const { container } = render(
       <VoidHeartbeat signal={makeSignal()} />,
     );
-    // CSS fallback div should exist
-    const cssFallback = container.querySelector('.void-heartbeat-css');
-    expect(cssFallback).toBeInTheDocument();
+    // The container wraps the GAME custom element
+    const gameContainer = container.querySelector('.void-heartbeat-container > div');
+    expect(gameContainer).toBeInTheDocument();
   });
 
-  it('renders the canvas element', () => {
-    const { container } = render(
-      <VoidHeartbeat signal={makeSignal()} />,
+  it('includes decision window count in title', () => {
+    render(
+      <VoidHeartbeat signal={makeSignal({ item_count: 5, open_windows: 2 })} />,
     );
-    const canvas = container.querySelector('canvas');
-    expect(canvas).toBeInTheDocument();
-    expect(canvas).toHaveAttribute('aria-hidden', 'true');
+    const status = screen.getByRole('status');
+    expect(status.getAttribute('title')).toContain('2 decision windows');
   });
 });
