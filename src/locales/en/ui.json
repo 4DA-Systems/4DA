@@ -796,6 +796,7 @@
   "coach.video.unlocked": "Unlocked",
   "coach.video.watched": "Watched",
   "coach.video.unlocksOnDay": "Unlocks on Day {{day}}",
+  "coach.video.dripDay": "Day {{day}}",
   "coach.video.emptyDescription": "No video lessons available yet. Activate your Cohort tier to access the full STREETS video curriculum.",
 
   "playbook.regional.approximateEquivalent": "Approximate equivalent in {{currency}}",

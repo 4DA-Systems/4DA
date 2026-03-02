@@ -106,6 +106,7 @@ function WatchedBadge() {
 }
 
 function VideoCard({ lesson }: { lesson: VideoLesson }) {
+  const { t } = useTranslation();
   const progressPct =
     lesson.duration_seconds > 0
       ? Math.min((lesson.watch_progress_seconds / lesson.duration_seconds) * 100, 100)
@@ -138,7 +139,7 @@ function VideoCard({ lesson }: { lesson: VideoLesson }) {
           {formatDuration(lesson.duration_seconds)}
         </span>
         <span className="px-1.5 py-0.5 text-[10px] font-medium rounded bg-bg-tertiary text-[#666] border border-border">
-          Day {lesson.drip_day}
+          {t('coach.video.dripDay', { day: lesson.drip_day })}
         </span>
       </div>
 

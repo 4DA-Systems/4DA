@@ -55,7 +55,9 @@ describe('game-slice', () => {
         streak: 5,
         last_active: '2024-01-01',
       };
-      vi.mocked(invoke).mockResolvedValueOnce(mockState);
+      vi.mocked(invoke)
+        .mockResolvedValueOnce(mockState) // get_game_state
+        .mockResolvedValueOnce(undefined); // check_daily_streak
 
       await useAppStore.getState().loadGameState();
 

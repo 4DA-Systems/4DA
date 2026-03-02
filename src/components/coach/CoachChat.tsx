@@ -199,11 +199,13 @@ export function CoachChat() {
     messages,
     loading,
     activeSessionId,
+    coachError,
   } = useAppStore(
     useShallow(s => ({
       messages: s.coachMessages,
       loading: s.coachLoading,
       activeSessionId: s.activeSessionId,
+      coachError: s.coachError,
     })),
   );
 
@@ -211,8 +213,18 @@ export function CoachChat() {
   const createSession = useAppStore(s => s.createCoachSession);
 
   const [input, setInput] = useState('');
+  const [displayError, setDisplayError] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // Show error from store and auto-clear after 5 seconds
+  useEffect(() => {
+    if (coachError) {
+      setDisplayError(coachError);
+      const timer = setTimeout(() => setDisplayError(null), 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [coachError]);
 
   // Auto-scroll to bottom when messages change or loading state changes
   useEffect(() => {
@@ -231,6 +243,8 @@ export function CoachChat() {
   const handleSend = useCallback(async () => {
     const trimmed = input.trim();
     if (!trimmed || loading) return;
+
+    setDisplayError(null);
 
     // Auto-create a chat session if none is active
     let sessionId = activeSessionId;
@@ -333,6 +347,9 @@ export function CoachChat() {
         <p className="text-[10px] text-[#666] mt-1.5 pl-1">
           {t('coach.chat.inputHint')}
         </p>
+        {displayError && (
+          <p className="text-[11px] text-[#EF4444] mt-1 pl-1">{displayError}</p>
+        )}
       </div>
     </div>
   );

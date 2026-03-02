@@ -25,6 +25,7 @@ export interface CoachSlice {
   activeSessionId: string | null;
   coachMessages: CoachMessage[];
   coachLoading: boolean;
+  coachError: string | null;
   engineRecommendation: EngineRecommendation | null;
   strategyDocument: string | null;
   launchReview: LaunchReviewResult | null;
@@ -63,6 +64,7 @@ export const createCoachSlice: StateCreator<AppStore, [], [], CoachSlice> = (set
   activeSessionId: null,
   coachMessages: [],
   coachLoading: false,
+  coachError: null,
   engineRecommendation: null,
   strategyDocument: null,
   launchReview: null,
@@ -154,7 +156,7 @@ export const createCoachSlice: StateCreator<AppStore, [], [], CoachSlice> = (set
       cost_cents: 0,
       created_at: new Date().toISOString(),
     };
-    set(s => ({ coachMessages: [...s.coachMessages, tempMsg], coachLoading: true }));
+    set(s => ({ coachMessages: [...s.coachMessages, tempMsg], coachLoading: true, coachError: null }));
 
     try {
       const response = await invoke<CoachMessage>('coach_send_message', { sessionId, content });
@@ -162,8 +164,9 @@ export const createCoachSlice: StateCreator<AppStore, [], [], CoachSlice> = (set
         coachMessages: [...s.coachMessages, response],
         coachLoading: false,
       }));
-    } catch {
-      set({ coachLoading: false });
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : typeof e === 'string' ? e : 'Failed to send message';
+      set({ coachLoading: false, coachError: msg });
     }
   },
 

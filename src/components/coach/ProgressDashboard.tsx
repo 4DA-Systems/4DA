@@ -66,9 +66,16 @@ export function ProgressDashboard() {
   const dismissNudge = useAppStore((s) => s.dismissNudge);
   const progressCheckIn = useAppStore((s) => s.progressCheckIn);
   const loadNudges = useAppStore((s) => s.loadCoachNudges);
+  const loadPlaybookProgress = useAppStore((s) => s.loadPlaybookProgress);
+  const loadProfileCompleteness = useAppStore((s) => s.loadProfileCompleteness);
   const [checkInDone, setCheckInDone] = useState(false);
 
   useEffect(() => { loadNudges(); }, [loadNudges]);
+
+  useEffect(() => {
+    if (!playbookProgress) loadPlaybookProgress();
+    if (!profileCompleteness) loadProfileCompleteness();
+  }, [playbookProgress, profileCompleteness, loadPlaybookProgress, loadProfileCompleteness]);
 
   const handleCheckIn = useCallback(async () => {
     await progressCheckIn();
