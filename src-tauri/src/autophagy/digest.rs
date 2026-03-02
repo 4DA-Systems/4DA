@@ -107,11 +107,7 @@ pub(crate) fn run_autophagy_cycle(
     let mut ace_calibrations_bridged: i64 = 0;
     if let Ok(ace) = crate::get_ace_engine() {
         let ace_conn = ace.get_conn().lock();
-        match super::calibration_analysis::bridge_accuracy_feedback(
-            &ace_conn,
-            conn,
-            max_age_days,
-        ) {
+        match super::calibration_analysis::bridge_accuracy_feedback(&ace_conn, conn, max_age_days) {
             Ok(count) => {
                 ace_calibrations_bridged = count as i64;
                 info!(

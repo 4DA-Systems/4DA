@@ -60,8 +60,10 @@ const EXCEPTIONS = {
   'src-tauri/src/scoring/simulation/differential.rs': 'Scoring simulation System 4 — parameter regression detection tests',
   'src-tauri/src/scoring/simulation/domain_embeddings.rs': 'Scoring simulation — domain embedding fixtures for persona-based testing',
   'src-tauri/src/scoring/simulation/tier2_semantic.rs': 'Scoring simulation — semantic/embedding scoring validation with 12 tests',
+  'src-tauri/src/scoring/simulation/golden_snapshot.rs': 'Scoring simulation — golden snapshot test assertions for pipeline validation',
   'src-tauri/src/void_engine/universe.rs': 'Void Universe renderer — experimental, feature-gated',
   'src-tauri/src/sovereign_developer_profile.rs': 'Unified profile aggregation — 10 data sources + markdown/JSON export',
+  'src-tauri/src/game_engine.rs':               'GAME engine — 404 lines production + 730 lines integration tests',
 
   // TypeScript — type registries and complex UI
   'src/lib/commands.ts':                             'IPC command registry — all 107 typed Tauri commands',

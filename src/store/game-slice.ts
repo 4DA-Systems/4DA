@@ -63,6 +63,8 @@ export const createGameSlice: StateCreator<AppStore, [], [], GameSlice> = (set) 
     try {
       const state = await invoke<GameState>('get_game_state');
       set({ gameState: state });
+      // Check daily streak on load — fires streak achievements from normal usage
+      invoke('check_daily_streak').catch(() => {});
     } catch {
       set({ gameState: EMPTY_GAME });
     }
