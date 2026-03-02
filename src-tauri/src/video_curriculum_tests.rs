@@ -1,0 +1,298 @@
+// Copyright (c) 2025-2026 4DA Systems. All rights reserved.
+// Licensed under the Functional Source License 1.1 (FSL-1.1-Apache-2.0). See LICENSE file.
+
+//! Tests for the video curriculum module.
+
+use super::*;
+use rusqlite::Connection;
+
+/// Create an in-memory SQLite database with the video_curriculum table.
+fn setup_test_db() -> Connection {
+    let conn = Connection::open_in_memory().expect("in-memory db");
+    conn.execute_batch(
+        "CREATE TABLE IF NOT EXISTS video_curriculum (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            video_id TEXT NOT NULL UNIQUE,
+            title TEXT NOT NULL,
+            duration_seconds INTEGER NOT NULL DEFAULT 0,
+            drip_day INTEGER NOT NULL DEFAULT 0,
+            watched INTEGER NOT NULL DEFAULT 0,
+            watch_progress_seconds INTEGER NOT NULL DEFAULT 0,
+            unlocked_at TEXT,
+            watched_at TEXT
+        );
+        CREATE INDEX IF NOT EXISTS idx_video_curriculum_video
+            ON video_curriculum(video_id);",
+    )
+    .expect("create table");
+    conn
+}
+
+// -- VIDEO_MANIFEST tests ------------------------------------------------
+
+#[test]
+fn manifest_has_16_videos() {
+    assert_eq!(VIDEO_MANIFEST.len(), 16, "8-week curriculum = 16 videos");
+}
+
+#[test]
+fn manifest_video_ids_are_unique() {
+    let mut ids: Vec<&str> = VIDEO_MANIFEST.iter().map(|(id, _, _, _)| *id).collect();
+    let original_len = ids.len();
+    ids.sort();
+    ids.dedup();
+    assert_eq!(ids.len(), original_len, "All video IDs must be unique");
+}
+
+#[test]
+fn manifest_drip_days_are_non_decreasing() {
+    for window in VIDEO_MANIFEST.windows(2) {
+        assert!(
+            window[1].3 >= window[0].3,
+            "Drip days must be non-decreasing: {} (day {}) before {} (day {})",
+            window[0].0,
+            window[0].3,
+            window[1].0,
+            window[1].3,
+        );
+    }
+}
+
+#[test]
+fn manifest_first_video_unlocks_on_day_zero() {
+    let (_, _, _, drip_day) = VIDEO_MANIFEST[0];
+    assert_eq!(drip_day, 0, "First video must unlock immediately (day 0)");
+}
+
+#[test]
+fn manifest_durations_are_positive() {
+    for (id, _, duration, _) in VIDEO_MANIFEST {
+        assert!(
+            *duration > 0,
+            "Video '{}' must have a positive duration, got {}",
+            id,
+            duration
+        );
+    }
+}
+
+// -- seed_curriculum_if_needed tests -------------------------------------
+
+#[test]
+fn seed_populates_empty_table() {
+    let conn = setup_test_db();
+    seed_curriculum_if_needed(&conn).expect("seed should succeed");
+
+    let count: i64 = conn
+        .query_row("SELECT COUNT(*) FROM video_curriculum", [], |row| {
+            row.get(0)
+        })
+        .unwrap();
+    assert_eq!(
+        count,
+        VIDEO_MANIFEST.len() as i64,
+        "All manifest videos should be seeded"
+    );
+}
+
+#[test]
+fn seed_is_idempotent() {
+    let conn = setup_test_db();
+    seed_curriculum_if_needed(&conn).expect("first seed");
+    seed_curriculum_if_needed(&conn).expect("second seed should not fail");
+
+    let count: i64 = conn
+        .query_row("SELECT COUNT(*) FROM video_curriculum", [], |row| {
+            row.get(0)
+        })
+        .unwrap();
+    assert_eq!(
+        count,
+        VIDEO_MANIFEST.len() as i64,
+        "Idempotent: row count must not change after re-seeding"
+    );
+}
+
+#[test]
+fn seed_creates_table_if_missing() {
+    // Use a bare in-memory DB without the table pre-created
+    let conn = Connection::open_in_memory().expect("in-memory db");
+    seed_curriculum_if_needed(&conn).expect("should create table and seed");
+
+    let count: i64 = conn
+        .query_row("SELECT COUNT(*) FROM video_curriculum", [], |row| {
+            row.get(0)
+        })
+        .unwrap();
+    assert_eq!(count, VIDEO_MANIFEST.len() as i64);
+}
+
+#[test]
+fn seeded_data_matches_manifest() {
+    let conn = setup_test_db();
+    seed_curriculum_if_needed(&conn).expect("seed");
+
+    let mut stmt = conn
+        .prepare(
+            "SELECT video_id, title, duration_seconds, drip_day
+             FROM video_curriculum ORDER BY id ASC",
+        )
+        .unwrap();
+
+    let rows: Vec<(String, String, i64, i64)> = stmt
+        .query_map([], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, i64>(2)?,
+                row.get::<_, i64>(3)?,
+            ))
+        })
+        .unwrap()
+        .collect::<Result<Vec<_>, _>>()
+        .unwrap();
+
+    assert_eq!(rows.len(), VIDEO_MANIFEST.len());
+    for (i, (vid, title, dur, day)) in rows.iter().enumerate() {
+        let (m_vid, m_title, m_dur, m_day) = VIDEO_MANIFEST[i];
+        assert_eq!(vid, m_vid, "video_id mismatch at index {}", i);
+        assert_eq!(title, m_title, "title mismatch at index {}", i);
+        assert_eq!(*dur, m_dur, "duration mismatch at index {}", i);
+        assert_eq!(*day, m_day, "drip_day mismatch at index {}", i);
+    }
+}
+
+#[test]
+fn seeded_videos_default_to_unwatched() {
+    let conn = setup_test_db();
+    seed_curriculum_if_needed(&conn).expect("seed");
+
+    let watched_count: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM video_curriculum WHERE watched = 1",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert_eq!(watched_count, 0, "No videos should be watched initially");
+
+    let progress_sum: i64 = conn
+        .query_row(
+            "SELECT COALESCE(SUM(watch_progress_seconds), 0) FROM video_curriculum",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert_eq!(progress_sum, 0, "No progress should exist initially");
+}
+
+// -- Database operations (progress / complete) ---------------------------
+
+#[test]
+fn update_watch_progress() {
+    let conn = setup_test_db();
+    seed_curriculum_if_needed(&conn).expect("seed");
+
+    let video_id = "streets-w1-01";
+    conn.execute(
+        "UPDATE video_curriculum SET watch_progress_seconds = ?1 WHERE video_id = ?2",
+        rusqlite::params![120, video_id],
+    )
+    .unwrap();
+
+    let progress: i64 = conn
+        .query_row(
+            "SELECT watch_progress_seconds FROM video_curriculum WHERE video_id = ?1",
+            rusqlite::params![video_id],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert_eq!(progress, 120);
+}
+
+#[test]
+fn mark_complete_sets_watched_flag() {
+    let conn = setup_test_db();
+    seed_curriculum_if_needed(&conn).expect("seed");
+
+    let video_id = "streets-w2-01";
+    conn.execute(
+        "UPDATE video_curriculum SET watched = 1, watched_at = datetime('now') WHERE video_id = ?1",
+        rusqlite::params![video_id],
+    )
+    .unwrap();
+
+    let (watched, watched_at): (bool, Option<String>) = conn
+        .query_row(
+            "SELECT watched, watched_at FROM video_curriculum WHERE video_id = ?1",
+            rusqlite::params![video_id],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .unwrap();
+    assert!(watched, "Video should be marked as watched");
+    assert!(watched_at.is_some(), "watched_at should be set");
+}
+
+#[test]
+fn update_nonexistent_video_affects_zero_rows() {
+    let conn = setup_test_db();
+    seed_curriculum_if_needed(&conn).expect("seed");
+
+    let updated = conn
+        .execute(
+            "UPDATE video_curriculum SET watch_progress_seconds = ?1 WHERE video_id = ?2",
+            rusqlite::params![60, "nonexistent-video"],
+        )
+        .unwrap();
+    assert_eq!(updated, 0, "Updating a missing video should affect 0 rows");
+}
+
+// -- Struct serialization tests ------------------------------------------
+
+#[test]
+fn video_lesson_serializes_to_json() {
+    let lesson = VideoLesson {
+        id: 1,
+        video_id: "streets-w1-01".to_string(),
+        title: "Week 1: Sovereign Setup Deep Dive".to_string(),
+        duration_seconds: 2700,
+        drip_day: 0,
+        watched: false,
+        watch_progress_seconds: 0,
+        unlocked: true,
+        unlocked_at: None,
+        watched_at: None,
+    };
+
+    let json = serde_json::to_string(&lesson).expect("serialize");
+    let deserialized: VideoLesson = serde_json::from_str(&json).expect("deserialize");
+
+    assert_eq!(deserialized.video_id, lesson.video_id);
+    assert_eq!(deserialized.title, lesson.title);
+    assert_eq!(deserialized.duration_seconds, lesson.duration_seconds);
+    assert_eq!(deserialized.drip_day, lesson.drip_day);
+    assert_eq!(deserialized.watched, lesson.watched);
+    assert_eq!(deserialized.unlocked, lesson.unlocked);
+}
+
+#[test]
+fn curriculum_status_serializes_to_json() {
+    let status = VideoCurriculumStatus {
+        total_videos: 16,
+        unlocked_count: 4,
+        watched_count: 2,
+        total_duration_seconds: 36000,
+        watched_duration_seconds: 5400,
+        days_since_activation: 10,
+    };
+
+    let json = serde_json::to_string(&status).expect("serialize");
+    let deserialized: VideoCurriculumStatus = serde_json::from_str(&json).expect("deserialize");
+
+    assert_eq!(deserialized.total_videos, 16);
+    assert_eq!(deserialized.unlocked_count, 4);
+    assert_eq!(deserialized.watched_count, 2);
+    assert_eq!(deserialized.total_duration_seconds, 36000);
+    assert_eq!(deserialized.watched_duration_seconds, 5400);
+    assert_eq!(deserialized.days_since_activation, 10);
+}
