@@ -1,5 +1,6 @@
 use crate::error::Result;
 use crate::get_database;
+use tauri::AppHandle;
 
 #[tauri::command]
 pub fn get_game_state() -> Result<serde_json::Value> {
@@ -13,6 +14,17 @@ pub fn get_achievements() -> Result<serde_json::Value> {
     let db = get_database()?;
     let achievements = crate::game_engine::get_achievements(db);
     Ok(serde_json::to_value(achievements).unwrap_or_default())
+}
+
+/// Check daily streak on app startup. Returns any newly unlocked streak achievements.
+#[tauri::command]
+pub fn check_daily_streak(app: AppHandle) -> Result<serde_json::Value> {
+    let db = get_database()?;
+    let unlocked = crate::game_engine::check_daily_streak(db);
+    for a in &unlocked {
+        crate::events::emit_achievement_unlocked(&app, a);
+    }
+    Ok(serde_json::to_value(&unlocked).unwrap_or_default())
 }
 
 // ============================================================================

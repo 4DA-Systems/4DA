@@ -80,6 +80,7 @@ mod developer_dna;
 mod diagnostics;
 mod digest;
 mod digest_commands;
+mod digest_config;
 mod document_index;
 mod document_search;
 mod domain_profile;
@@ -339,8 +340,8 @@ pub fn run() {
             source_config::get_github_languages,
             source_config::set_github_languages,
             // Digest & Briefing
-            digest_commands::get_digest_config,
-            digest_commands::set_digest_config,
+            digest_config::get_digest_config,
+            digest_config::set_digest_config,
             digest_commands::generate_ai_briefing,
             digest_commands::get_latest_briefing,
             free_briefing::generate_free_briefing,
@@ -496,6 +497,7 @@ pub fn run() {
             autophagy_commands::get_autophagy_status,
             autophagy_commands::get_autophagy_history,
             autophagy_commands::get_intelligence_pulse,
+            autophagy_commands::trigger_autophagy_cycle,
             // Translation Pipeline
             translation_commands::get_translation_status,
             translation_commands::trigger_translation,
@@ -506,6 +508,7 @@ pub fn run() {
             // GAME Engine
             game_commands::get_game_state,
             game_commands::get_achievements,
+            game_commands::check_daily_streak,
             // Information Channels
             channel_commands::list_channels,
             channel_commands::get_channel,

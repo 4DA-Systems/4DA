@@ -459,7 +459,7 @@ mod tests {
     #[test]
     fn test_launch_review_result_serde_roundtrip() {
         let result = LaunchReviewResult {
-            overall_score: 7.5,
+            overall_score: 75.0,
             strengths: vec!["Solid architecture".to_string()],
             gaps: vec!["No pricing page".to_string()],
             recommendations: vec![
@@ -469,7 +469,7 @@ mod tests {
         };
         let json = serde_json::to_string(&result).unwrap();
         let back: LaunchReviewResult = serde_json::from_str(&json).unwrap();
-        assert!((back.overall_score - 7.5).abs() < f32::EPSILON);
+        assert!((back.overall_score - 75.0).abs() < f32::EPSILON);
         assert_eq!(back.strengths.len(), 1);
         assert_eq!(back.gaps[0], "No pricing page");
         assert_eq!(back.recommendations.len(), 2);
