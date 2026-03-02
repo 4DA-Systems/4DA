@@ -227,6 +227,8 @@ impl Digest {
     }
 
     /// Format digest as plain text
+    // Text rendering: used by email digest delivery
+    #[allow(dead_code)]
     pub fn to_text(&self) -> String {
         let mut output = String::new();
 

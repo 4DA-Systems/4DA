@@ -182,6 +182,8 @@ impl ACE {
     }
 
     /// Stop file watching
+    // Watcher API: used when filesystem monitoring is active
+    #[allow(dead_code)]
     pub fn stop_watching(&mut self) {
         if let Some(ref watcher) = self.watcher {
             watcher.lock().stop();
@@ -191,6 +193,8 @@ impl ACE {
     }
 
     /// Check if file watching is active
+    // Watcher API: used when filesystem monitoring is active
+    #[allow(dead_code)]
     pub fn is_watching(&self) -> bool {
         self.watcher
             .as_ref()
@@ -559,6 +563,8 @@ impl ACE {
     }
 
     /// Clear watcher state
+    // Watcher API: used when filesystem monitoring is active
+    #[allow(dead_code)]
     pub fn clear_watcher_state(&self) -> Result<(), String> {
         if let Some(persistence) = &self.watcher_persistence {
             persistence.clear()

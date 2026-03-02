@@ -274,6 +274,8 @@ impl ContextEngine {
     }
 
     /// Add domain
+    // Domain management: exposed via future settings UI
+    #[allow(dead_code)]
     pub fn add_domain(&self, domain: &str) -> SqliteResult<()> {
         let conn = self.conn.lock();
         conn.execute(
@@ -284,6 +286,8 @@ impl ContextEngine {
     }
 
     /// Remove domain
+    // Domain management: exposed via future settings UI
+    #[allow(dead_code)]
     pub fn remove_domain(&self, domain: &str) -> SqliteResult<()> {
         let conn = self.conn.lock();
         conn.execute("DELETE FROM domains WHERE domain = ?1", params![domain])?;

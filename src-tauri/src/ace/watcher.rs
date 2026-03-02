@@ -89,6 +89,8 @@ impl Default for WatcherConfig {
 pub struct FileChange {
     pub path: PathBuf,
     pub change_type: FileChangeType,
+    // Populated by watcher events
+    #[allow(dead_code)]
     pub timestamp: Instant,
 }
 
@@ -159,6 +161,8 @@ impl FileWatcher {
     }
 
     /// Stop watching a directory
+    // Watcher API: used when filesystem monitoring is active
+    #[allow(dead_code)]
     pub fn unwatch(&mut self, path: &Path) -> Result<(), String> {
         if let Some(ref mut watcher) = self.watcher {
             watcher
@@ -327,6 +331,8 @@ impl FileWatcher {
     }
 
     /// Check if currently watching any paths
+    // Watcher API: used when filesystem monitoring is active
+    #[allow(dead_code)]
     pub fn is_watching(&self) -> bool {
         !self.watched_paths.lock().is_empty()
     }
@@ -642,6 +648,8 @@ impl WatcherStatePersistence {
     }
 
     /// Load watcher state
+    // Watcher API: used when filesystem monitoring is active
+    #[allow(dead_code)]
     pub fn load(&self) -> Result<Option<WatcherState>, String> {
         let conn = self.conn.lock();
         let result: Result<String, _> = conn.query_row(
@@ -662,6 +670,8 @@ impl WatcherStatePersistence {
     }
 
     /// Restore watcher from saved state
+    // Watcher API: used when filesystem monitoring is active
+    #[allow(dead_code)]
     pub fn restore(&self, watcher: &mut FileWatcher) -> Result<usize, String> {
         let state = self.load()?;
 
@@ -684,6 +694,8 @@ impl WatcherStatePersistence {
     }
 
     /// Clear saved state
+    // Watcher API: used when filesystem monitoring is active
+    #[allow(dead_code)]
     pub fn clear(&self) -> Result<(), String> {
         let conn = self.conn.lock();
         conn.execute("DELETE FROM watcher_state WHERE id = 1", [])
@@ -734,6 +746,8 @@ impl RateLimiter {
     }
 
     /// Record a request without checking (for manual tracking)
+    // Watcher API: used when filesystem monitoring is active
+    #[allow(dead_code)]
     pub fn record(&self) {
         let mut requests = self.requests.lock();
         requests.push(Instant::now());
@@ -754,6 +768,8 @@ impl RateLimiter {
     }
 
     /// Get time until next request is allowed (0 if allowed now)
+    // Watcher API: used when filesystem monitoring is active
+    #[allow(dead_code)]
     pub fn time_until_available(&self) -> Duration {
         if self.check() {
             Duration::ZERO
@@ -774,6 +790,8 @@ impl RateLimiter {
     }
 
     /// Reset the rate limiter
+    // Watcher API: used when filesystem monitoring is active
+    #[allow(dead_code)]
     pub fn reset(&self) {
         self.requests.lock().clear();
     }

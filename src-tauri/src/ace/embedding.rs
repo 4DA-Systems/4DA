@@ -340,6 +340,8 @@ impl EmbeddingService {
     }
 
     /// Get embedding dimension
+    // Embedding API: used when Ollama embedding is active
+    #[allow(dead_code)]
     pub fn dimension(&self) -> usize {
         self.dimension
     }

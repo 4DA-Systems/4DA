@@ -77,19 +77,20 @@ pub struct Recommendation {
 }
 
 // ============================================================================
-// Legacy Metrics (kept for simulation utilities and test coverage)
+// Test-only scoring metrics (superseded by calibration_probes for production)
 // ============================================================================
 
+#[cfg(test)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum Expected {
+pub(crate) enum Expected {
     Strong,
     Weak,
     Borderline,
     Noise,
 }
 
-#[allow(dead_code)]
-struct Metrics {
+#[cfg(test)]
+pub(crate) struct Metrics {
     tp: u32,
     fp: u32,
     tn: u32,
@@ -98,8 +99,9 @@ struct Metrics {
     noise_scores: Vec<f64>,
 }
 
+#[cfg(test)]
 impl Metrics {
-    fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self {
             tp: 0,
             fp: 0,
@@ -109,7 +111,7 @@ impl Metrics {
             noise_scores: Vec::new(),
         }
     }
-    fn record(&mut self, score: f32, relevant: bool, expected: Expected) {
+    pub(crate) fn record(&mut self, score: f32, relevant: bool, expected: Expected) {
         let s = score as f64;
         match expected {
             Expected::Strong | Expected::Weak => {
@@ -131,7 +133,7 @@ impl Metrics {
             Expected::Borderline => {}
         }
     }
-    fn precision(&self) -> f64 {
+    pub(crate) fn precision(&self) -> f64 {
         let d = (self.tp + self.fp) as f64;
         if d == 0.0 {
             1.0
@@ -139,7 +141,7 @@ impl Metrics {
             self.tp as f64 / d
         }
     }
-    fn recall(&self) -> f64 {
+    pub(crate) fn recall(&self) -> f64 {
         let d = (self.tp + self.r#fn) as f64;
         if d == 0.0 {
             1.0
@@ -147,7 +149,7 @@ impl Metrics {
             self.tp as f64 / d
         }
     }
-    fn f1(&self) -> f64 {
+    pub(crate) fn f1(&self) -> f64 {
         let (p, r) = (self.precision(), self.recall());
         if p + r == 0.0 {
             0.0
@@ -155,7 +157,7 @@ impl Metrics {
             2.0 * p * r / (p + r)
         }
     }
-    fn separation_gap(&self) -> f64 {
+    pub(crate) fn separation_gap(&self) -> f64 {
         let mean_rel = if self.relevant_scores.is_empty() {
             0.0
         } else {
@@ -168,7 +170,7 @@ impl Metrics {
         };
         mean_rel - mean_noise
     }
-    fn merge(&mut self, other: &Metrics) {
+    pub(crate) fn merge(&mut self, other: &Metrics) {
         self.tp += other.tp;
         self.fp += other.fp;
         self.tn += other.tn;

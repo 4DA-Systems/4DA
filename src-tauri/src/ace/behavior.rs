@@ -107,6 +107,8 @@ pub struct ActivityPatterns {
 }
 
 /// Summary of learned behavior
+// Behavioral learning: consumed by future adaptive scoring
+#[allow(dead_code)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LearnedBehaviorSummary {
     pub total_interactions: u32,
@@ -118,6 +120,8 @@ pub struct LearnedBehaviorSummary {
 }
 
 /// Source preference summary
+// Behavioral learning: consumed by future adaptive scoring
+#[allow(dead_code)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SourcePreferenceSummary {
     pub source: String,
@@ -431,6 +435,8 @@ impl ACE {
     }
 
     /// Get behavior modifier for an item
+    // Behavioral learning: consumed by future adaptive scoring
+    #[allow(dead_code)]
     pub fn get_behavior_modifier(&self, topics: &[String], source: &str) -> Result<f32, String> {
         let conn = self.conn.lock();
         let mut modifier = 0.0;
@@ -466,6 +472,8 @@ impl ACE {
     }
 
     /// Get learned behavior summary
+    // Behavioral learning: consumed by future adaptive scoring
+    #[allow(dead_code)]
     pub fn get_learned_behavior(&self) -> Result<LearnedBehaviorSummary, String> {
         let affinities = self.get_topic_affinities()?;
         let anti_topics = self.get_anti_topics(5)?;
@@ -532,6 +540,8 @@ impl ACE {
     }
 
     /// Confirm an anti-topic
+    // Behavioral learning: consumed by future adaptive scoring
+    #[allow(dead_code)]
     pub fn confirm_anti_topic(&self, topic: &str) -> Result<(), String> {
         let conn = self.conn.lock();
         conn.execute(

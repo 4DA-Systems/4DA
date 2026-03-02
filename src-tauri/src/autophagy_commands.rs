@@ -3,6 +3,7 @@
 //! Exposes autophagy status, history, and manual trigger to the frontend.
 
 use serde::Serialize;
+use tracing::info;
 use ts_rs::TS;
 
 use crate::autophagy::AutophagyCycleResult;
@@ -114,6 +115,53 @@ pub async fn get_autophagy_history(limit: Option<i64>) -> Result<Vec<AutophagyCy
         .map_err(FourDaError::Db)?;
 
     Ok(results)
+}
+
+/// Manually trigger an autophagy cycle. Returns the cycle result.
+/// Mirrors the logic in monitoring.rs but exposed for on-demand use.
+#[tauri::command]
+pub async fn trigger_autophagy_cycle() -> Result<AutophagyCycleResult> {
+    let max_age_days = {
+        let sm = crate::get_settings_manager().lock();
+        sm.get().monitoring.cleanup_max_age_days.unwrap_or(30)
+    };
+
+    let conn = crate::open_db_connection().map_err(FourDaError::Internal)?;
+
+    let cycle = crate::autophagy::run_autophagy_cycle(&conn, max_age_days as i64)
+        .map_err(FourDaError::Internal)?;
+
+    info!(
+        target: "4da::autophagy",
+        items_analyzed = cycle.items_analyzed,
+        calibrations = cycle.calibrations_produced,
+        anti_patterns = cycle.anti_patterns_detected,
+        duration_ms = cycle.duration_ms,
+        "Manual autophagy cycle completed"
+    );
+
+    // GAME: track calibrations produced
+    if cycle.calibrations_produced > 0 {
+        if let Ok(db) = crate::get_database() {
+            let _unlocked = crate::game_engine::increment_counter(
+                db,
+                "calibrations",
+                cycle.calibrations_produced as u64,
+            );
+        }
+    }
+
+    // Bridge accuracy feedback from ACE
+    if let Ok(ace) = crate::state::get_ace_engine() {
+        let ace_conn = ace.get_conn().lock();
+        if let Err(e) =
+            crate::autophagy::bridge_accuracy_feedback(&ace_conn, &conn, max_age_days as i64)
+        {
+            tracing::warn!(target: "4da::autophagy", error = %e, "Accuracy feedback bridge failed");
+        }
+    }
+
+    Ok(cycle)
 }
 
 /// A single calibration insight: how far off the system was for a topic.
