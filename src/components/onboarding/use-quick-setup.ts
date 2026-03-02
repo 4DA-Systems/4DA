@@ -4,6 +4,8 @@ import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 
 import type { OllamaStatus, PullProgress } from './types';
+import { fallbackSuggestions, SECTION_KEY, getPersistedSections } from './onboarding-constants';
+import type { SectionState } from './onboarding-constants';
 
 interface UseQuickSetupProps {
   isAnimating: boolean;
@@ -16,30 +18,6 @@ interface SuggestedInterest {
   source: string;
   confidence: number;
   already_declared: boolean;
-}
-
-const fallbackSuggestions = [
-  'Machine Learning', 'Rust', 'TypeScript', 'Web Development',
-  'DevOps', 'Security', 'Startups', 'Open Source', 'AI/LLM',
-  'Mobile Development', 'Cloud Infrastructure', 'Data Engineering',
-];
-
-const SECTION_KEY = '4da-onboarding-step';
-
-interface SectionState {
-  aiOpen?: boolean;
-  projectsOpen?: boolean;
-  stacksOpen?: boolean;
-  interestsOpen?: boolean;
-  localeOpen?: boolean;
-}
-
-function getPersistedSections(): SectionState {
-  try {
-    const stored = localStorage.getItem(SECTION_KEY);
-    if (stored) return JSON.parse(stored) as SectionState;
-  } catch { /* localStorage unavailable or corrupted */ }
-  return {};
 }
 
 export function useQuickSetup({ onComplete }: UseQuickSetupProps) {

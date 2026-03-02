@@ -56,6 +56,7 @@ const EXCEPTIONS = {
   'src-tauri/src/delegation.rs':           'Delegation scoring — multi-axis trust assessment',
   'src-tauri/src/stacks/profiles.rs':      'Stack Intelligence — 8 technology profile definitions',
   'src-tauri/src/scoring/benchmark.rs':    'Scoring benchmarks — comprehensive test assertions',
+  'src-tauri/src/scoring/pipeline_v2.rs':  'V2 scoring pipeline — experimental alternate scorer',
   'src-tauri/src/scoring/simulation/corpus.rs': 'Scoring simulation corpus — 215 labeled test fixtures for pipeline validation',
   'src-tauri/src/scoring/simulation/differential.rs': 'Scoring simulation System 4 — parameter regression detection tests',
   'src-tauri/src/scoring/simulation/domain_embeddings.rs': 'Scoring simulation — domain embedding fixtures for persona-based testing',
@@ -79,6 +80,9 @@ const EXCEPTIONS = {
   'src/components/__tests__/smoke.test.tsx':            'Smoke tests — all component render coverage',
   'src/components/FirstRunTransition.test.tsx':          'First-run experience — 18 tests across 6 phases',
   'src/components/result-item/ScoreBreakdownDrawer.tsx': 'Score drawer — factor extraction + comparison + feedback',
+  'src/components/ResultsView.test.tsx':                  'ResultsView tests — 17 accessibility and state tests + required mocks',
+  'src/components/__tests__/ActionBar.test.tsx':           'ActionBar tests — 26 tests covering all UI states and interactions',
+  'src/store/types.ts':                                    'Store type registry — combined slice interfaces and AppStore union type',
 };
 
 const SCAN_DIRS = ['src', 'src-tauri/src'];
