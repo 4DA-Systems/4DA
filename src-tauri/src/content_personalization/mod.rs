@@ -16,6 +16,7 @@ pub(crate) mod engine_scoring;
 pub mod llm_engine;
 pub mod nollm_engine;
 pub mod template_processor;
+mod template_resolver;
 pub mod temporal;
 
 use serde::{Deserialize, Serialize};
