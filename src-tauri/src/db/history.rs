@@ -1,4 +1,3 @@
-#![allow(dead_code)]
 //! Command history, HTTP history, maintenance, and diagnostics.
 
 use rusqlite::{params, Result as SqliteResult};

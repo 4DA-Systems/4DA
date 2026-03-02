@@ -5,6 +5,7 @@
 use crate::decision_advantage::{CompoundAdvantageScore, DecisionWindow};
 use crate::error::{FourDaError, Result};
 use crate::open_db_connection;
+use tauri::{AppHandle, Emitter};
 
 /// Get all open decision windows, ordered by urgency.
 #[tauri::command]
@@ -15,18 +16,40 @@ pub async fn get_decision_windows() -> Result<Vec<DecisionWindow>> {
 
 /// Mark a decision window as acted upon with an optional outcome note.
 #[tauri::command]
-pub async fn act_on_decision_window(window_id: i64, outcome: Option<String>) -> Result<()> {
+pub async fn act_on_decision_window(
+    app: AppHandle,
+    window_id: i64,
+    outcome: Option<String>,
+) -> Result<()> {
     let conn = open_db_connection().map_err(FourDaError::Internal)?;
     crate::decision_advantage::transition_window(&conn, window_id, "acted", outcome.as_deref())
-        .map_err(FourDaError::Internal)
+        .map_err(FourDaError::Internal)?;
+
+    // GAME: track decisions
+    if let Ok(db) = crate::get_database() {
+        for a in crate::game_engine::increment_counter(db, "decisions", 1) {
+            crate::events::emit_achievement_unlocked(&app, &a);
+        }
+    }
+
+    Ok(())
 }
 
 /// Dismiss/close a decision window without acting on it.
 #[tauri::command]
-pub async fn close_decision_window(window_id: i64) -> Result<()> {
+pub async fn close_decision_window(app: AppHandle, window_id: i64) -> Result<()> {
     let conn = open_db_connection().map_err(FourDaError::Internal)?;
     crate::decision_advantage::transition_window(&conn, window_id, "closed", None)
-        .map_err(FourDaError::Internal)
+        .map_err(FourDaError::Internal)?;
+
+    // GAME: track decisions (closing is still a decision)
+    if let Ok(db) = crate::get_database() {
+        for a in crate::game_engine::increment_counter(db, "decisions", 1) {
+            crate::events::emit_achievement_unlocked(&app, &a);
+        }
+    }
+
+    Ok(())
 }
 
 /// Get the decision journal: acted and closed windows, ordered most recent first (up to 50).

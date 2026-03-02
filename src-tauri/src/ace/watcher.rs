@@ -4,8 +4,6 @@
 //! Uses debouncing to prevent excessive processing during rapid saves.
 //! Includes state persistence for restart recovery.
 
-#![allow(dead_code)]
-
 use notify::{Config, Event, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
 use parking_lot::Mutex;
 use rusqlite::Connection;

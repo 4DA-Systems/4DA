@@ -1,4 +1,3 @@
-#![allow(dead_code)]
 //! Topic decay analysis — computes per-topic engagement half-lives.
 //!
 //! By bucketing engagement by content age, we discover how quickly each

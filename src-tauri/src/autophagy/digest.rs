@@ -1,4 +1,3 @@
-#![allow(dead_code)]
 //! Autophagy cycle orchestrator — runs all four analyzers and records metrics.
 //!
 //! This is the main entry point for an autophagy cycle. It:
@@ -102,6 +101,32 @@ pub(crate) fn run_autophagy_cycle(
         }
     }
 
+    // Bridge ACE behavior data into calibration system (topic-level accuracy feedback).
+    // This analyzes implicit user signals (save, click, dismiss) from the ACE database
+    // and produces per-topic calibration deltas that the scoring pipeline uses.
+    let mut ace_calibrations_bridged: i64 = 0;
+    if let Ok(ace) = crate::get_ace_engine() {
+        let ace_conn = ace.get_conn().lock();
+        match super::calibration_analysis::bridge_accuracy_feedback(
+            &ace_conn,
+            conn,
+            max_age_days,
+        ) {
+            Ok(count) => {
+                ace_calibrations_bridged = count as i64;
+                info!(
+                    target: "4da::autophagy",
+                    count,
+                    "ACE accuracy feedback bridged to calibration"
+                );
+            }
+            Err(e) => {
+                warn!(target: "4da::autophagy", error = %e, "ACE feedback bridge failed");
+            }
+        }
+    }
+
+    let total_calibrations = calibrations_produced + ace_calibrations_bridged;
     let duration_ms = start.elapsed().as_millis() as i64;
 
     // Record the cycle in autophagy_cycles table
@@ -113,7 +138,7 @@ pub(crate) fn run_autophagy_cycle(
          VALUES (?1, 0, ?2, ?3, ?4, ?5, ?6, 0, ?7)",
         params![
             items_analyzed,
-            calibrations_produced,
+            total_calibrations,
             topic_decay_rates_updated,
             source_autopsies_produced,
             anti_patterns_detected,
@@ -127,7 +152,8 @@ pub(crate) fn run_autophagy_cycle(
     info!(
         target: "4da::autophagy",
         items_analyzed,
-        calibrations_produced,
+        calibrations_produced = total_calibrations,
+        ace_calibrations_bridged,
         topic_decay_rates_updated,
         source_autopsies_produced,
         anti_patterns_detected,
@@ -138,7 +164,7 @@ pub(crate) fn run_autophagy_cycle(
     Ok(super::AutophagyCycleResult {
         items_analyzed,
         items_pruned: 0, // Pruning happens separately via db.cleanup_old_items()
-        calibrations_produced,
+        calibrations_produced: total_calibrations,
         topic_decay_rates_updated,
         source_autopsies_produced,
         anti_patterns_detected,

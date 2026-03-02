@@ -1,4 +1,3 @@
-#![allow(dead_code)]
 //! Caching, projection data, LLM content retrieval, briefings, and digest operations.
 
 use rusqlite::{params, OptionalExtension, Result as SqliteResult};

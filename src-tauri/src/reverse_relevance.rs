@@ -44,7 +44,7 @@ pub fn get_my_identifiers() -> Result<Vec<String>, String> {
 
     // Get package names from project_dependencies table
     let conn = crate::open_db_connection()?;
-    let deps = crate::temporal::get_all_dependencies(&conn)?;
+    let deps = crate::temporal_dependencies::get_all_dependencies(&conn)?;
 
     // Collect unique project-level package names (not individual deps)
     // We want names like "4da", "my-app" not "serde", "react"
@@ -151,7 +151,7 @@ pub fn scan_for_mentions(
             "mentioned_project": mention.mentioned_project,
             "mention_context": mention.mention_context
         });
-        let _ = crate::temporal::upsert_relationship(
+        let _ = crate::temporal_dependencies::upsert_relationship(
             conn,
             mention.source_item_id,
             0, // self-reference for project mentions

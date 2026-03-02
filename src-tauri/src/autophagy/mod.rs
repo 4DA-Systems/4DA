@@ -1,4 +1,3 @@
-#![allow(dead_code)]
 //! Intelligent Autophagy — extracts meta-intelligence from old content before pruning.
 //!
 //! Analyzes items approaching their retention limit to produce:

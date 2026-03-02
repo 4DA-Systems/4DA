@@ -10,6 +10,7 @@ use crate::channels::{
 };
 use crate::error::Result;
 use crate::get_database;
+use tauri::{AppHandle, Emitter};
 
 // ============================================================================
 // Channel List & Detail
@@ -167,6 +168,7 @@ pub async fn refresh_channel_sources(channel_id: i64) -> Result<i64> {
 /// Create a custom channel.
 #[tauri::command]
 pub async fn create_custom_channel(
+    app: AppHandle,
     slug: String,
     title: String,
     description: String,
@@ -177,6 +179,11 @@ pub async fn create_custom_channel(
         .create_channel(&slug, &title, &description, &topic_query)
         .map_err(|e| format!("Failed to create channel: {}", e))?;
     info!(target: "4da::channels", slug = %slug, id, "Created custom channel");
+
+    // GAME: track channel creation
+    for a in crate::game_engine::increment_counter(db, "channels", 1) {
+        crate::events::emit_achievement_unlocked(&app, &a);
+    }
 
     // Trigger async render for the new channel
     let channel_id = id;
