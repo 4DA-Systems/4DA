@@ -43,13 +43,31 @@ function handleRememberDecision(
   };
 }
 
+/** Compact representation: key + truncated decision + date */
+function compactDecision(row: Record<string, unknown>): Record<string, unknown> {
+  const decision = String(row.decision || "");
+  return {
+    key: row.key,
+    decision: decision.length > 120 ? decision.slice(0, 117) + "..." : decision,
+    updated_at: row.updated_at,
+  };
+}
+
 function handleRecallDecisions(
   args: Record<string, unknown>,
   ctx: ToolContext
 ): ToolResponse {
-  const { key, search } = args as { key?: string; search?: string };
+  const { key, search, limit = 10, compact } = args as {
+    key?: string;
+    search?: string;
+    limit?: number;
+    compact?: boolean;
+  };
 
-  let results;
+  // Default compact to true when listing multiple (no key specified)
+  const useCompact = compact !== undefined ? compact : !key;
+
+  let results: unknown[];
   if (key) {
     const result = ctx.db
       .prepare(`SELECT * FROM decisions WHERE key = ?`)
@@ -61,22 +79,27 @@ function handleRecallDecisions(
       .prepare(
         `SELECT * FROM decisions
          WHERE decision LIKE ? OR rationale LIKE ? OR key LIKE ?
-         ORDER BY updated_at DESC`
+         ORDER BY updated_at DESC
+         LIMIT ?`
       )
-      .all(pattern, pattern, pattern);
+      .all(pattern, pattern, pattern, limit);
   } else {
     results = ctx.db
-      .prepare(`SELECT * FROM decisions ORDER BY updated_at DESC`)
-      .all();
+      .prepare(`SELECT * FROM decisions ORDER BY updated_at DESC LIMIT ?`)
+      .all(limit);
   }
+
+  const output = useCompact
+    ? (results as Record<string, unknown>[]).map(compactDecision)
+    : results;
 
   return {
     content: [
       {
         type: "text",
         text:
-          (results as unknown[]).length > 0
-            ? JSON.stringify(results, null, 2)
+          output.length > 0
+            ? JSON.stringify(output, null, 2)
             : "No decisions found.",
       },
     ],
@@ -131,6 +154,16 @@ export const decisionTools: ToolEntry[] = [
           search: {
             type: "string",
             description: "Search term to filter decisions (optional)",
+          },
+          limit: {
+            type: "number",
+            description:
+              "Maximum decisions to return (default: 10). Only applies when listing multiple.",
+          },
+          compact: {
+            type: "boolean",
+            description:
+              "Compact mode: returns key + truncated decision + date only. Default true when listing, false for single-key lookup.",
           },
         },
       },

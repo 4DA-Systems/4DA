@@ -37,16 +37,17 @@ function handleRecallCodeLocations(
   args: Record<string, unknown>,
   ctx: ToolContext
 ): ToolResponse {
-  const { search } = args as { search: string };
+  const { search, limit = 20 } = args as { search: string; limit?: number };
   const pattern = `%${search}%`;
 
   const results = ctx.db
     .prepare(
       `SELECT * FROM code_locations
        WHERE name LIKE ? OR purpose LIKE ? OR file_path LIKE ?
-       ORDER BY updated_at DESC`
+       ORDER BY updated_at DESC
+       LIMIT ?`
     )
-    .all(pattern, pattern, pattern);
+    .all(pattern, pattern, pattern, limit);
 
   return {
     content: [
@@ -102,6 +103,10 @@ export const codeLocationTools: ToolEntry[] = [
           search: {
             type: "string",
             description: "Search by name, path, or purpose",
+          },
+          limit: {
+            type: "number",
+            description: "Maximum results to return (default: 20)",
           },
         },
         required: ["search"],

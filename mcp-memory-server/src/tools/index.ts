@@ -12,6 +12,7 @@ import { codeLocationTools } from "./code-locations.js";
 import { searchTools } from "./search.js";
 import { sessionTools } from "./sessions.js";
 import { metricTools } from "./metrics.js";
+import { deleteTools } from "./delete-tools.js";
 
 /** All registered tools in order. */
 const allTools: ToolEntry[] = [
@@ -22,6 +23,7 @@ const allTools: ToolEntry[] = [
   ...searchTools,
   ...sessionTools,
   ...metricTools,
+  ...deleteTools,
 ];
 
 /** Handler lookup by tool name. */

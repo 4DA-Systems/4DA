@@ -25,6 +25,15 @@ function handleUpdateState(
   };
 }
 
+/** Truncate long values when returning bulk state */
+function truncateStateValue(row: Record<string, unknown>): Record<string, unknown> {
+  const value = String(row.value || "");
+  return {
+    ...row,
+    value: value.length > 200 ? value.slice(0, 197) + "... [truncated]" : value,
+  };
+}
+
 function handleGetState(
   args: Record<string, unknown>,
   ctx: ToolContext
@@ -38,7 +47,8 @@ function handleGetState(
       .get(key);
     results = result ? [result] : [];
   } else {
-    results = ctx.db.prepare(`SELECT * FROM state ORDER BY key`).all();
+    const rows = ctx.db.prepare(`SELECT * FROM state ORDER BY key`).all();
+    results = (rows as Record<string, unknown>[]).map(truncateStateValue);
   }
 
   return {
