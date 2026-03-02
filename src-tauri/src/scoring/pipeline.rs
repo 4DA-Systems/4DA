@@ -300,11 +300,12 @@ pub(crate) fn score_item(
     // Domain-aware content_dna dampening: "I built [YOUR TECH]" is valuable,
     // "I built [random thing]" is not. When domain_relevance == 1.0 (primary stack),
     // reduce content_dna penalty strength for primary stack items.
-    let content_dna_dampened = if content_dna_mult < 1.0 && domain_relevance >= 1.0 {
-        1.0 + (content_dna_mult - 1.0) * scoring_config::DAMPENING_DOMAIN_AWARE_STRENGTH
-    } else {
-        dampen(content_dna_mult)
-    };
+    let content_dna_dampened =
+        if content_dna_mult < 1.0 && domain_relevance >= 1.0 && !ctx.domain_profile.is_empty() {
+            1.0 + (content_dna_mult - 1.0) * scoring_config::DAMPENING_DOMAIN_AWARE_STRENGTH
+        } else {
+            dampen(content_dna_mult)
+        };
     let composite_mult = dampen(competing_mult)
         * dampen(content_quality.multiplier)
         * content_dna_dampened
@@ -457,7 +458,7 @@ pub(crate) fn score_item(
     //   0.70 adjacent   → 0.92x (mild discount)
     //   0.50 interest   → 0.82x (moderate discount)
     //   0.15 off-domain → 0.40x (crush)
-    let domain_gate_mult = if domain_relevance >= 1.0 {
+    let domain_gate_mult = if domain_relevance >= 1.0 && !ctx.domain_profile.is_empty() {
         scoring_config::DOMAIN_GATE_PRIMARY_BOOST
     } else if domain_relevance >= 0.85 {
         1.0 // Dependency match — neutral
