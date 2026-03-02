@@ -60,6 +60,7 @@ mod anomaly;
 mod attention;
 mod autophagy;
 mod autophagy_commands;
+mod autophagy_pulse;
 mod calibration_commands;
 mod calibration_probes;
 mod channel_changelog;
@@ -122,6 +123,7 @@ mod source_fetching;
 pub mod sources;
 mod tech_radar;
 mod tech_radar_commands;
+mod tech_radar_compute;
 mod temporal;
 mod temporal_dependencies;
 mod tts;
@@ -136,6 +138,8 @@ mod taste_test_commands;
 
 mod coach_context;
 mod coach_nudges;
+mod coach_quarterly;
+mod coach_template_data;
 mod coach_templates;
 mod command_runner;
 mod content_personalization;
@@ -145,6 +149,7 @@ mod git_deck;
 pub(crate) mod i18n;
 mod playbook_commands;
 mod sovereign_developer_profile;
+mod sovereign_facts;
 mod sovereign_profile;
 mod streets_coach;
 mod streets_commands;
@@ -154,6 +159,7 @@ mod suns;
 mod suns_commands;
 mod toolkit;
 mod toolkit_export;
+mod toolkit_http;
 mod toolkit_intelligence;
 mod translation_commands;
 mod translation_pipeline;
@@ -417,8 +423,8 @@ pub fn run() {
             toolkit::toolkit_list_ports,
             toolkit::toolkit_kill_process,
             toolkit::toolkit_env_snapshot,
-            toolkit::toolkit_http_request,
-            toolkit::toolkit_get_http_history,
+            toolkit_http::toolkit_http_request,
+            toolkit_http::toolkit_get_http_history,
             // Stack Intelligence
             stack_commands::get_stack_profiles,
             stack_commands::get_selected_stacks,
@@ -496,7 +502,7 @@ pub fn run() {
             // Autophagy (intelligent content metabolism)
             autophagy_commands::get_autophagy_status,
             autophagy_commands::get_autophagy_history,
-            autophagy_commands::get_intelligence_pulse,
+            autophagy_pulse::get_intelligence_pulse,
             autophagy_commands::trigger_autophagy_cycle,
             // Translation Pipeline
             translation_commands::get_translation_status,
