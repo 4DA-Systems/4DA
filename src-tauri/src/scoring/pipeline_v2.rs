@@ -1,0 +1,971 @@
+//! PASIFA V2 Scoring Pipeline — 8-phase structured architecture
+//!
+//! Restructures V1 into clean, testable phases while reusing all existing module functions.
+//!
+//! Key improvements over V1:
+//! - **Separate KNN calibration** (`calibrate_knn`) with center=0.49, scale=12 to suppress KNN noise
+//! - **Gate count on clean signals** (Phase 3): count signals before any combination
+//! - **Multiplicative semantic**: `base * (1.0 + semantic_boost)` not additive
+//! - **Single quality composite** (Phase 5): all multipliers dampened and multiplied in one pass,
+//!   with domain_quality_mult restored as a multiplicative factor (NOT dampened)
+//! - **Single boost cap** (Phase 6): all boosts summed, capped at \[-0.15, 0.35\], then dampened
+//! - **Gate table** matches V1 for 0-1 signals: \[(0.25,0.20), (0.45,0.32), ...\]
+//! - **Score ceiling applied LAST** in gate phase — after domain gate mult
+
+use std::collections::HashMap;
+
+use crate::db::Database;
+use crate::scoring_config;
+use crate::signals;
+use crate::{
+    check_exclusions, extract_topics, get_relevance_threshold, RelevanceMatch, ScoreBreakdown,
+    SourceRelevance,
+};
+
+use super::pipeline::{ScoringInput, ScoringOptions};
+use super::*;
+
+// ============================================================================
+// V2 Constants (self-contained)
+// ============================================================================
+
+const V2_GATE: [(f32, f32); 6] = [
+    (0.25, 0.20), // 0 signals — matches V1
+    (0.45, 0.32), // 1 signal — matches V1, ceiling < 0.35 threshold
+    (1.00, 0.80), // 2 signals
+    (1.08, 0.92), // 3 signals
+    (1.15, 1.00), // 4 signals
+    (1.20, 1.00), // 5 signals
+];
+
+const BOOST_CAP_MIN: f32 = -0.15;
+const BOOST_CAP_MAX: f32 = 0.35;
+const KNN_CENTER: f32 = 0.49;
+const KNN_SCALE: f32 = 12.0;
+
+// ============================================================================
+// KNN-specific calibration
+// ============================================================================
+
+/// Calibrate a raw KNN distance-derived score using a sigmoid stretch.
+/// Same shape as `calibrate_score` but with KNN-tuned parameters:
+/// center=0.49 (slightly higher than cosine's 0.48) and scale=12 (conservative).
+/// This suppresses KNN noise from high-distance matches that V1 over-counted.
+fn calibrate_knn(raw: f32) -> f32 {
+    if raw <= 0.0 {
+        return 0.0;
+    }
+    if raw >= 1.0 {
+        return 1.0;
+    }
+    1.0 / (1.0 + ((KNN_CENTER - raw) * KNN_SCALE).exp())
+}
+
+// ============================================================================
+// Signal data structures
+// ============================================================================
+
+/// All raw signal values extracted from the input, before calibration.
+struct RawSignals {
+    context: f32,
+    interest: f32,
+    keyword_score: f32,
+    semantic_boost: f32,
+    dep_match_score: f32,
+    matched_deps: Vec<dependencies::DepMatch>,
+    feedback_boost: f32,
+    affinity_mult: f32,
+    anti_penalty: f32,
+    domain_relevance: f32,
+    taste_boost: f32,
+    stack_boost: f32,
+    stack_pain_match: bool,
+    topics: Vec<String>,
+}
+
+/// Calibrated signal values ready for combination.
+struct CalibratedSignals {
+    context_score: f32,
+    interest_score: f32,
+    keyword_score: f32,
+    semantic_boost: f32,
+}
+
+// ============================================================================
+// Phase 1: Extract all raw signals independently
+// ============================================================================
+
+fn extract_signals(
+    input: &ScoringInput,
+    ctx: &ScoringContext,
+    matches: &[RelevanceMatch],
+) -> RawSignals {
+    let topics = extract_topics(input.title, input.content);
+
+    // Raw context: best KNN score from embedding similarity
+    let raw_context = matches.first().map(|m| m.similarity).unwrap_or(0.0);
+
+    // Raw interest: embedding similarity against declared interests
+    let raw_interest = compute_interest_score(input.embedding, &ctx.interests);
+
+    // Keyword interest matching: boosts items containing declared interest terms
+    let raw_keyword_score =
+        keywords::compute_keyword_interest_score(input.title, input.content, &ctx.interests);
+    let specificity_weight =
+        keywords::best_interest_specificity_weight(input.title, input.content, &ctx.interests);
+    let keyword_score = raw_keyword_score * specificity_weight;
+
+    // Semantic boost with keyword fallback
+    let semantic_boost =
+        compute_semantic_ace_boost(input.embedding, &ctx.ace_ctx, &ctx.topic_embeddings)
+            .unwrap_or_else(|| semantic::compute_keyword_ace_boost(&topics, &ctx.ace_ctx));
+
+    // Dependency intelligence
+    let (matched_deps, dep_match_score) =
+        match_dependencies(input.title, input.content, &topics, &ctx.ace_ctx);
+
+    // Feedback learning boost
+    let feedback_boost = if !ctx.feedback_boosts.is_empty() {
+        let mut boost_sum: f64 = 0.0;
+        let mut match_count = 0;
+        for topic in &topics {
+            if let Some(&net_score) = ctx.feedback_boosts.get(topic.as_str()) {
+                boost_sum += net_score;
+                match_count += 1;
+            }
+        }
+        if match_count > 0 {
+            ((boost_sum / match_count as f64) * scoring_config::FEEDBACK_SCALE as f64).clamp(
+                scoring_config::FEEDBACK_CAP_RANGE.0 as f64,
+                scoring_config::FEEDBACK_CAP_RANGE.1 as f64,
+            ) as f32
+        } else {
+            0.0
+        }
+    } else {
+        0.0
+    };
+
+    // Affinity and anti-penalty from learned topic preferences
+    let affinity_mult = compute_affinity_multiplier(&topics, &ctx.ace_ctx);
+    let anti_penalty = compute_anti_penalty(&topics, &ctx.ace_ctx);
+
+    // Domain relevance: graduated penalty based on technology identity
+    let domain_relevance =
+        crate::domain_profile::compute_domain_relevance(&topics, &ctx.domain_profile);
+
+    // Taste embedding boost
+    let taste_boost = match ctx.taste_embedding {
+        Some(ref taste_emb) if !input.embedding.is_empty() => {
+            semantic::compute_taste_boost(input.embedding, taste_emb)
+        }
+        _ => 0.0,
+    };
+
+    // Stack intelligence
+    let stack_boost = crate::stacks::scoring::compute_stack_boost(
+        input.title,
+        input.content,
+        &ctx.composed_stack,
+    );
+
+    let stack_pain_match = crate::stacks::scoring::has_pain_point_match(
+        input.title,
+        input.content,
+        &ctx.composed_stack,
+    );
+
+    RawSignals {
+        context: raw_context,
+        interest: raw_interest,
+        keyword_score,
+        semantic_boost,
+        dep_match_score,
+        matched_deps,
+        feedback_boost,
+        affinity_mult,
+        anti_penalty,
+        domain_relevance,
+        taste_boost,
+        stack_boost,
+        stack_pain_match,
+        topics,
+    }
+}
+
+// ============================================================================
+// Phase 2: Calibrate raw signals
+// ============================================================================
+
+fn calibrate_signals(raw: &RawSignals) -> CalibratedSignals {
+    CalibratedSignals {
+        context_score: calibrate_knn(raw.context),
+        interest_score: calibrate_score(raw.interest),
+        keyword_score: raw.keyword_score,   // passthrough
+        semantic_boost: raw.semantic_boost, // passthrough
+    }
+}
+
+// ============================================================================
+// Phase 4: Compute base relevance score — FOUR branches
+// ============================================================================
+
+fn compute_relevance(
+    cal: &CalibratedSignals,
+    ctx: &ScoringContext,
+    has_real_embedding: bool,
+) -> f32 {
+    if ctx.cached_context_count > 0 && ctx.interest_count > 0 {
+        // Both context and interest available
+        let ctx_w = (scoring_config::BASE_BOTH_CONTEXT_BASE
+            + cal.context_score * scoring_config::BASE_BOTH_CONTEXT_SCALE)
+            .clamp(
+                scoring_config::BASE_BOTH_CONTEXT_BASE,
+                scoring_config::BASE_BOTH_CONTEXT_MAX,
+            );
+        let remaining = 1.0 - ctx_w;
+        let int_w = remaining * scoring_config::BASE_BOTH_INTEREST_SHARE;
+        let kw_w = remaining * scoring_config::BASE_BOTH_KEYWORD_SHARE;
+        let base =
+            cal.context_score * ctx_w + cal.interest_score * int_w + cal.keyword_score * kw_w;
+        // MULTIPLICATIVE semantic
+        (base * (1.0 + cal.semantic_boost)).clamp(0.0, 1.0)
+    } else if ctx.interest_count > 0 {
+        // Interest only
+        let semantic_mult = if has_real_embedding
+            && ctx.interest_count < 3
+            && ctx.feedback_interaction_count < 10
+        {
+            scoring_config::INTEREST_ONLY_SEMANTIC_MULT * 0.4
+        } else {
+            scoring_config::INTEREST_ONLY_SEMANTIC_MULT
+        };
+        let base = cal.interest_score * scoring_config::INTEREST_ONLY_INTEREST_W
+            + cal.keyword_score * scoring_config::INTEREST_ONLY_KEYWORD_W;
+        // MULTIPLICATIVE semantic
+        (base * (1.0 + cal.semantic_boost * semantic_mult)).clamp(0.0, 1.0)
+    } else if ctx.cached_context_count > 0 {
+        // Context only
+        (cal.context_score * (1.0 + cal.semantic_boost)).clamp(0.0, 1.0)
+    } else {
+        // Neither
+        (cal.semantic_boost * 2.0).clamp(0.0, 1.0)
+    }
+}
+
+// ============================================================================
+// Phase 5: Compute quality composite — ALL multipliers in one pass
+// ============================================================================
+
+/// Returns (quality_score, freshness, source_quality_boost, competing_mult, content_quality_mult,
+///          content_dna_mult, content_type, novelty_mult, ecosystem_shift_mult, stack_competing_mult)
+#[allow(clippy::type_complexity)]
+fn compute_quality_composite(
+    relevance_score: f32,
+    input: &ScoringInput,
+    ctx: &ScoringContext,
+    raw: &RawSignals,
+    options: &ScoringOptions,
+) -> (
+    f32,
+    f32,
+    f32,
+    f32,
+    f32,
+    f32,
+    crate::content_dna::ContentType,
+    f32,
+    f32,
+    f32,
+) {
+    // Freshness: topic-aware when autophagy half-lives are available
+    let freshness = if options.apply_freshness {
+        if let Some(created_at) = input.created_at {
+            let base_freshness = compute_temporal_freshness(created_at);
+            if !ctx.topic_half_lives.is_empty() && !raw.topics.is_empty() {
+                let matching_half_lives: Vec<f32> = raw
+                    .topics
+                    .iter()
+                    .filter_map(|t| ctx.topic_half_lives.get(t.as_str()).copied())
+                    .collect();
+                if !matching_half_lives.is_empty() {
+                    let avg_half_life =
+                        matching_half_lives.iter().sum::<f32>() / matching_half_lives.len() as f32;
+                    let age_hours =
+                        ((chrono::Utc::now() - *created_at).num_minutes() as f32 / 60.0).max(0.0);
+                    let calibrated = (-0.693 * age_hours / avg_half_life.max(1.0)).exp();
+                    (base_freshness * 0.5 + calibrated * 0.5).clamp(0.3, 1.0)
+                } else {
+                    base_freshness
+                }
+            } else {
+                base_freshness
+            }
+        } else {
+            1.0
+        }
+    } else {
+        1.0
+    };
+
+    // Source quality boost from learned preferences
+    let source_quality_boost = ctx
+        .source_quality
+        .get(input.source_type)
+        .copied()
+        .map(|score| {
+            (score * scoring_config::SOURCE_QUALITY_MULT).clamp(
+                scoring_config::SOURCE_QUALITY_CAP_RANGE.0,
+                scoring_config::SOURCE_QUALITY_CAP_RANGE.1,
+            )
+        })
+        .unwrap_or(0.0);
+    let source_quality_mult = 1.0 + source_quality_boost;
+
+    // Anti-topic multiplier
+    let anti_mult = 1.0 - raw.anti_penalty;
+
+    // Domain quality penalty (NOT dampened — preserves full penalty strength)
+    let domain_quality_mult = if raw.domain_relevance >= 0.85 {
+        1.0
+    } else if raw.domain_relevance >= 0.50 {
+        1.0 - scoring_config::OFF_DOMAIN_PENALTY * (1.0 - raw.domain_relevance) * 0.5
+    } else {
+        1.0 - scoring_config::OFF_DOMAIN_PENALTY * (1.0 - raw.domain_relevance)
+    };
+
+    // Competing tech penalty
+    let competing_mult = crate::competing_tech::compute_competing_penalty(
+        &raw.topics,
+        input.title,
+        &ctx.domain_profile.primary_stack,
+    );
+
+    // Content quality
+    let content_quality =
+        crate::content_quality::compute_content_quality(input.title, input.content, input.url);
+
+    // Content DNA
+    let (content_type, content_dna_mult) =
+        crate::content_dna::classify_content(input.title, input.content);
+
+    // Novelty
+    let novelty = crate::novelty::compute_novelty(
+        input.title,
+        input.content,
+        &raw.topics,
+        &ctx.domain_profile.primary_stack,
+    );
+
+    // Ecosystem shift from stack profiles
+    let ecosystem_shift_mult = crate::stacks::scoring::detect_ecosystem_shift(
+        &raw.topics,
+        input.title,
+        &ctx.composed_stack,
+    );
+
+    // Stack-aware competing tech penalty
+    let stack_competing_mult = crate::stacks::scoring::compute_competing_penalty(
+        input.title,
+        input.content,
+        &ctx.composed_stack,
+    );
+
+    // Asymmetric dampening function
+    let dampen = |m: f32| {
+        if m < 1.0 {
+            1.0 + (m - 1.0) * scoring_config::DAMPENING_PENALTY_STRENGTH
+        } else {
+            1.0 + (m - 1.0) * scoring_config::DAMPENING_BOOST_STRENGTH
+        }
+    };
+
+    // Domain-aware content_dna dampening
+    let content_dna_dampened = if content_dna_mult < 1.0
+        && raw.domain_relevance >= 1.0
+        && !ctx.domain_profile.is_empty()
+    {
+        1.0 + (content_dna_mult - 1.0) * scoring_config::DAMPENING_DOMAIN_AWARE_STRENGTH
+    } else {
+        dampen(content_dna_mult)
+    };
+
+    // Single composite of ALL quality multipliers
+    let composite = dampen(competing_mult)
+        * dampen(content_quality.multiplier)
+        * content_dna_dampened
+        * dampen(novelty.multiplier)
+        * dampen(ecosystem_shift_mult)
+        * dampen(stack_competing_mult)
+        * dampen(freshness)
+        * dampen(source_quality_mult)
+        * dampen(raw.affinity_mult)
+        * anti_mult
+        * domain_quality_mult;
+
+    let quality_score = (relevance_score * composite).clamp(0.0, 1.0);
+
+    (
+        quality_score,
+        freshness,
+        source_quality_boost,
+        competing_mult,
+        content_quality.multiplier,
+        content_dna_mult,
+        content_type,
+        novelty.multiplier,
+        ecosystem_shift_mult,
+        stack_competing_mult,
+    )
+}
+
+// ============================================================================
+// Phase 6: Compute boosts — sum, cap, dampen, add
+// ============================================================================
+
+/// Returns (boosted_score, dep_boost, intent_boost, window_boost, skill_gap_boost,
+///          calibration_correction, matched_window_id, matched_skill_gaps)
+#[allow(clippy::type_complexity)]
+fn compute_boosts(
+    quality_score: f32,
+    input: &ScoringInput,
+    ctx: &ScoringContext,
+    raw: &RawSignals,
+) -> (f32, f32, f32, f32, f32, f32, Option<i64>, Vec<String>) {
+    // Dependency boost (in bootstrap mode, 2x weight)
+    let dep_weight = if ctx.feedback_interaction_count < 10 {
+        scoring_config::DEPENDENCY_BOOST_WEIGHT * 2.0
+    } else {
+        scoring_config::DEPENDENCY_BOOST_WEIGHT
+    };
+    let dep_boost = raw.dep_match_score * dep_weight;
+
+    // Intent boost: amplify items matching recent work topics
+    let intent_boost: f32 = if !ctx.work_topics.is_empty() {
+        let matching_work_topics = raw
+            .topics
+            .iter()
+            .filter(|t| ctx.work_topics.iter().any(|wt| topic_overlaps(t, wt)))
+            .count();
+        match matching_work_topics {
+            0 => 0.0,
+            1 => scoring_config::INTENT_BOOST_SINGLE_MATCH,
+            _ => scoring_config::INTENT_BOOST_MULTI_MATCH,
+        }
+    } else {
+        0.0
+    };
+
+    // Decision window boost
+    let (window_boost, matched_window_id) = if !ctx.open_windows.is_empty() {
+        crate::decision_advantage::compute_decision_window_boost(
+            &ctx.open_windows,
+            input.title,
+            input.content,
+            &raw.topics,
+            &raw.matched_deps
+                .iter()
+                .map(|d| d.package_name.clone())
+                .collect::<Vec<_>>(),
+        )
+    } else {
+        (0.0, None)
+    };
+
+    // Skill-gap boost
+    let mut matched_skill_gaps: Vec<String> = Vec::new();
+    let skill_gap_boost: f32 = if let Some(ref profile) = ctx.sovereign_profile {
+        if !profile.intelligence.skill_gaps.is_empty() {
+            for t in &raw.topics {
+                if let Some(g) = profile
+                    .intelligence
+                    .skill_gaps
+                    .iter()
+                    .find(|g| topic_overlaps(t, &g.dependency))
+                {
+                    if !matched_skill_gaps.contains(&g.dependency) {
+                        matched_skill_gaps.push(g.dependency.clone());
+                    }
+                }
+            }
+            match matched_skill_gaps.len() {
+                0 => 0.0,
+                1 => 0.15,
+                _ => 0.20,
+            }
+        } else {
+            0.0
+        }
+    } else {
+        0.0
+    };
+
+    // Autophagy calibration correction
+    let calibration_correction: f32 =
+        if !ctx.calibration_deltas.is_empty() && !raw.topics.is_empty() {
+            let matching: Vec<f32> = raw
+                .topics
+                .iter()
+                .filter_map(|t| ctx.calibration_deltas.get(t.as_str()).copied())
+                .collect();
+            if !matching.is_empty() {
+                let avg_delta = matching.iter().sum::<f32>() / matching.len() as f32;
+                avg_delta.clamp(-0.10, 0.10)
+            } else {
+                0.0
+            }
+        } else {
+            0.0
+        };
+
+    // Sum all boosts -> cap -> dampen -> add
+    let total_raw = dep_boost
+        + raw.stack_boost
+        + intent_boost
+        + raw.feedback_boost
+        + window_boost
+        + skill_gap_boost
+        + calibration_correction
+        + raw.taste_boost;
+
+    let total_capped = total_raw.clamp(BOOST_CAP_MIN, BOOST_CAP_MAX);
+
+    let total_dampened = if total_capped < 0.0 {
+        total_capped * scoring_config::DAMPENING_PENALTY_STRENGTH
+    } else {
+        total_capped * scoring_config::DAMPENING_BOOST_STRENGTH
+    };
+
+    let boosted = (quality_score + total_dampened).clamp(0.0, 1.0);
+
+    (
+        boosted,
+        dep_boost,
+        intent_boost,
+        window_boost,
+        skill_gap_boost,
+        calibration_correction,
+        matched_window_id,
+        matched_skill_gaps,
+    )
+}
+
+// ============================================================================
+// Phase 7: Apply gate effect — confidence multiplier + domain gate + ceiling LAST
+// ============================================================================
+
+fn apply_gate_effect(
+    score: f32,
+    signal_count: u8,
+    domain_relevance: f32,
+    ctx: &ScoringContext,
+) -> f32 {
+    let idx = (signal_count as usize).min(5);
+    let (conf_mult, score_ceiling) = V2_GATE[idx];
+
+    let gated = score * conf_mult;
+
+    // Domain gate: same ramp as V1
+    let domain_gate_mult = if domain_relevance >= 1.0 && !ctx.domain_profile.is_empty() {
+        scoring_config::DOMAIN_GATE_PRIMARY_BOOST
+    } else if domain_relevance >= 0.85 {
+        1.0
+    } else if domain_relevance >= 0.50 {
+        let gap = 1.0 - scoring_config::DOMAIN_GATE_RAMP_BASE;
+        scoring_config::DOMAIN_GATE_RAMP_BASE + (domain_relevance - 0.50) * (gap / 0.35)
+    } else {
+        scoring_config::DOMAIN_GATE_OFF_DOMAIN_MULT
+    };
+
+    // Score ceiling applied LAST — domain boost cannot push above gate ceiling
+    (gated * domain_gate_mult)
+        .min(score_ceiling)
+        .clamp(0.0, 1.0)
+}
+
+// ============================================================================
+// Phase 8: Apply final adjustments — short title cap only
+// ============================================================================
+
+fn apply_final_adjustments(score: f32, title: &str) -> f32 {
+    let meaningful_words = title.split_whitespace().filter(|w| w.len() >= 2).count();
+    if meaningful_words < 3 {
+        score.min(scoring_config::QUALITY_FLOOR_SHORT_TITLE_CAP)
+    } else {
+        score
+    }
+}
+
+// ============================================================================
+// Signal classification (mirrors V1 logic)
+// ============================================================================
+
+#[allow(clippy::too_many_arguments)]
+fn classify_signals(
+    relevant: bool,
+    combined_score: f32,
+    domain_relevance: f32,
+    content_type: &crate::content_dna::ContentType,
+    options: &ScoringOptions,
+    classifier: Option<&signals::SignalClassifier>,
+    input: &ScoringInput,
+    ctx: &ScoringContext,
+    matched_deps: &[dependencies::DepMatch],
+) -> (
+    Option<String>,
+    Option<String>,
+    Option<String>,
+    Option<Vec<String>>,
+    Option<String>,
+) {
+    let show_and_tell_blocked =
+        *content_type == crate::content_dna::ContentType::ShowAndTell && domain_relevance < 1.0;
+
+    if !(options.apply_signals
+        && relevant
+        && combined_score >= 0.30
+        && domain_relevance >= 0.70
+        && !show_and_tell_blocked)
+    {
+        return (None, None, None, None, None);
+    }
+
+    let Some(clf) = classifier else {
+        return (None, None, None, None, None);
+    };
+
+    match clf.classify(
+        input.title,
+        input.content,
+        combined_score,
+        &ctx.declared_tech,
+        &ctx.ace_ctx.detected_tech,
+    ) {
+        Some(mut c) => {
+            // Dependency-aware priority escalation
+            if !matched_deps.is_empty() {
+                let has_non_dev_dep = matched_deps.iter().any(|d| !d.is_dev);
+                if c.signal_type == signals::SignalType::SecurityAlert && has_non_dev_dep {
+                    c.priority = signals::SignalPriority::Critical;
+                    c.action = format!(
+                        "URGENT: Security issue affects your dependency {}",
+                        matched_deps[0].package_name
+                    );
+                } else if c.signal_type == signals::SignalType::BreakingChange
+                    && matched_deps
+                        .iter()
+                        .any(|d| d.version_delta == dependencies::VersionDelta::NewerMajor)
+                    && c.priority < signals::SignalPriority::High
+                {
+                    c.priority = signals::SignalPriority::High;
+                }
+                for dep in matched_deps.iter().take(2) {
+                    c.triggers.push(format!("dep:{}", dep.package_name));
+                }
+            }
+
+            // Score-aware priority cap
+            if combined_score < scoring_config::LOW_SCORE_CAP
+                && c.priority > signals::SignalPriority::Low
+            {
+                c.priority = signals::SignalPriority::Low;
+            } else if (combined_score < scoring_config::MEDIUM_SCORE_CAP
+                && c.priority > signals::SignalPriority::Medium)
+                || (combined_score > scoring_config::HIGH_SCORE_FLOOR
+                    && c.priority < signals::SignalPriority::Medium)
+            {
+                c.priority = signals::SignalPriority::Medium;
+            }
+
+            (
+                Some(c.signal_type.slug().to_string()),
+                Some(c.priority.label().to_string()),
+                Some(c.action),
+                Some(c.triggers),
+                Some(c.horizon.label().to_string()),
+            )
+        }
+        None => (None, None, None, None, None),
+    }
+}
+
+// ============================================================================
+// Main entry point — identical public signature to V1
+// ============================================================================
+
+/// Score a single item through the PASIFA V2 pipeline (8-phase architecture).
+/// Returns SourceRelevance with all fields populated — drop-in replacement for V1.
+pub(crate) fn score_item(
+    input: &ScoringInput,
+    ctx: &ScoringContext,
+    db: &Database,
+    options: &ScoringOptions,
+    classifier: Option<&signals::SignalClassifier>,
+) -> SourceRelevance {
+    let topics = extract_topics(input.title, input.content);
+
+    // ── Exclusion check (before any scoring work) ──────────────────────
+    let excluded_by = check_exclusions(&topics, &ctx.exclusions)
+        .or_else(|| check_ace_exclusions(&topics, &ctx.ace_ctx));
+
+    if let Some(exclusion) = excluded_by {
+        return SourceRelevance {
+            id: input.id,
+            title: input.title.to_string(),
+            url: input.url.map(|s| s.to_string()),
+            top_score: 0.0,
+            matches: vec![],
+            relevant: false,
+            context_score: 0.0,
+            interest_score: 0.0,
+            excluded: true,
+            excluded_by: Some(exclusion),
+            source_type: input.source_type.to_string(),
+            explanation: None,
+            confidence: Some(0.0),
+            score_breakdown: None,
+            signal_type: None,
+            signal_priority: None,
+            signal_action: None,
+            signal_triggers: None,
+            signal_horizon: None,
+            similar_count: 0,
+            similar_titles: vec![],
+            serendipity: false,
+            streets_engine: None,
+        };
+    }
+
+    // ── KNN context search (needed for Phase 1 and final output) ──────
+    let matches: Vec<RelevanceMatch> =
+        if ctx.cached_context_count > 0 && !input.embedding.is_empty() {
+            db.find_similar_contexts(input.embedding, 3)
+                .unwrap_or_default()
+                .into_iter()
+                .map(|result| {
+                    let similarity = 1.0 / (1.0 + result.distance);
+                    let matched_text = if result.text.len() > 100 {
+                        let truncated: String = result.text.chars().take(100).collect();
+                        format!("{}...", truncated)
+                    } else {
+                        result.text
+                    };
+                    RelevanceMatch {
+                        source_file: result.source_file,
+                        matched_text,
+                        similarity,
+                    }
+                })
+                .collect()
+        } else {
+            vec![]
+        };
+
+    // ── Phase 1: Extract all raw signals ──────────────────────────────
+    let raw = extract_signals(input, ctx, &matches);
+
+    // ── Phase 2: Calibrate ────────────────────────────────────────────
+    let cal = calibrate_signals(&raw);
+
+    // ── Phase 3: Gate count on clean signals ──────────────────────────
+    let confirmation = gate::count_confirmed_signals(
+        cal.context_score,
+        cal.interest_score,
+        cal.keyword_score,
+        cal.semantic_boost,
+        &ctx.ace_ctx,
+        &raw.topics,
+        raw.feedback_boost,
+        raw.affinity_mult,
+        raw.dep_match_score,
+        raw.stack_pain_match,
+    );
+    let signal_count = confirmation.count;
+    let confirmed_signals = confirmation.confirmed_names();
+
+    // ── Phase 4: Compute base relevance ───────────────────────────────
+    let has_real_embedding = input.embedding.iter().any(|&v| v != 0.0);
+    let relevance_score = compute_relevance(&cal, ctx, has_real_embedding);
+
+    // ── Phase 5: Quality composite ────────────────────────────────────
+    let (
+        quality_score,
+        freshness,
+        source_quality_boost,
+        competing_mult,
+        content_quality_mult,
+        content_dna_mult,
+        content_type,
+        novelty_mult,
+        ecosystem_shift_mult,
+        stack_competing_mult,
+    ) = compute_quality_composite(relevance_score, input, ctx, &raw, options);
+
+    // ── Phase 6: Boosts ───────────────────────────────────────────────
+    let (
+        boosted_score,
+        _dep_boost,
+        intent_boost,
+        window_boost,
+        skill_gap_boost,
+        _calibration_correction,
+        matched_window_id,
+        matched_skill_gaps,
+    ) = compute_boosts(quality_score, input, ctx, &raw);
+
+    // ── Phase 7: Gate effect ──────────────────────────────────────────
+    let conf_idx = (signal_count as usize).min(5);
+    let confirmation_mult = V2_GATE[conf_idx].0;
+    let gated_score = apply_gate_effect(boosted_score, signal_count, raw.domain_relevance, ctx);
+
+    // ── Phase 8: Final adjustments ────────────────────────────────────
+    let combined_score = apply_final_adjustments(gated_score, input.title);
+
+    // ── Relevance determination ───────────────────────────────────────
+    let bootstrap_mode = ctx.feedback_interaction_count < 10;
+    let min_signals = if bootstrap_mode {
+        1u8
+    } else {
+        scoring_config::QUALITY_FLOOR_MIN_SIGNALS as u8
+    };
+    let relevant = combined_score >= get_relevance_threshold()
+        && (signal_count >= min_signals
+            || combined_score >= scoring_config::QUALITY_FLOOR_MIN_SCORE);
+
+    // ── Explanation ───────────────────────────────────────────────────
+    let explanation = if relevant || combined_score >= 0.3 {
+        Some(generate_relevance_explanation(
+            input.title,
+            cal.context_score,
+            cal.interest_score,
+            &matches,
+            &ctx.ace_ctx,
+            &raw.topics,
+            &ctx.interests,
+            &ctx.declared_tech,
+            &matched_skill_gaps,
+        ))
+    } else {
+        None
+    };
+
+    // ── Confidence ────────────────────────────────────────────────────
+    let confidence = calculate_confidence(
+        cal.context_score,
+        cal.interest_score,
+        cal.semantic_boost,
+        &ctx.ace_ctx,
+        &raw.topics,
+        ctx.cached_context_count,
+        ctx.interest_count as i64,
+        signal_count,
+    );
+
+    // ── Confidence by signal map ──────────────────────────────────────
+    let mut confidence_by_signal = HashMap::new();
+    if ctx.cached_context_count > 0 {
+        confidence_by_signal.insert("context".to_string(), cal.context_score);
+    }
+    if ctx.interest_count > 0 {
+        confidence_by_signal.insert("interest".to_string(), cal.interest_score);
+    }
+    if cal.semantic_boost > 0.0 {
+        confidence_by_signal.insert("ace_boost".to_string(), cal.semantic_boost);
+    }
+    if raw.dep_match_score > 0.0 {
+        confidence_by_signal.insert("dependency".to_string(), raw.dep_match_score);
+    }
+
+    // ── Matched dependency names ──────────────────────────────────────
+    let matched_dep_names: Vec<String> = raw
+        .matched_deps
+        .iter()
+        .map(|d| d.package_name.clone())
+        .collect();
+
+    // ── Score breakdown ───────────────────────────────────────────────
+    let score_breakdown = ScoreBreakdown {
+        context_score: cal.context_score,
+        interest_score: cal.interest_score,
+        keyword_score: cal.keyword_score,
+        ace_boost: cal.semantic_boost,
+        affinity_mult: raw.affinity_mult,
+        anti_penalty: raw.anti_penalty,
+        freshness_mult: freshness,
+        feedback_boost: raw.feedback_boost,
+        source_quality_boost,
+        confidence_by_signal,
+        signal_count,
+        confirmed_signals: confirmed_signals.clone(),
+        confirmation_mult,
+        dep_match_score: raw.dep_match_score,
+        matched_deps: matched_dep_names,
+        domain_relevance: raw.domain_relevance,
+        content_quality_mult,
+        novelty_mult,
+        intent_boost,
+        content_type: Some(content_type.slug().to_string()),
+        content_dna_mult,
+        competing_mult,
+        stack_boost: raw.stack_boost,
+        ecosystem_shift_mult,
+        stack_competing_mult,
+        llm_score: None,
+        llm_reason: None,
+        window_boost,
+        matched_window_id,
+        skill_gap_boost,
+    };
+
+    // ── Signal classification ─────────────────────────────────────────
+    let (sig_type, sig_priority, sig_action, sig_triggers, sig_horizon) = classify_signals(
+        relevant,
+        combined_score,
+        raw.domain_relevance,
+        &content_type,
+        options,
+        classifier,
+        input,
+        ctx,
+        &raw.matched_deps,
+    );
+
+    // ── STREETS revenue engine mapping ────────────────────────────────
+    let streets_engine = if relevant {
+        crate::streets_engine::map_to_streets_engine(
+            input.title,
+            input.content,
+            Some(content_type.slug()),
+            sig_type.as_deref(),
+        )
+    } else {
+        None
+    };
+
+    // ── Build final result ────────────────────────────────────────────
+    SourceRelevance {
+        id: input.id,
+        title: crate::decode_html_entities(input.title),
+        url: input.url.map(|s| s.to_string()),
+        top_score: combined_score,
+        matches,
+        relevant,
+        context_score: cal.context_score,
+        interest_score: cal.interest_score,
+        excluded: false,
+        excluded_by: None,
+        source_type: input.source_type.to_string(),
+        explanation,
+        confidence: Some(confidence),
+        score_breakdown: Some(score_breakdown),
+        signal_type: sig_type,
+        signal_priority: sig_priority,
+        signal_action: sig_action,
+        signal_triggers: sig_triggers,
+        signal_horizon: sig_horizon,
+        similar_count: 0,
+        similar_titles: vec![],
+        serendipity: false,
+        streets_engine,
+    }
+}

@@ -12,6 +12,7 @@ mod explanation;
 mod gate;
 mod keywords;
 mod pipeline;
+mod pipeline_v2;
 mod semantic;
 #[cfg(test)]
 mod simulation;
@@ -33,7 +34,22 @@ pub(crate) use explanation::{
     calculate_confidence, compute_temporal_freshness, generate_relevance_explanation,
 };
 pub(crate) use gate::apply_confirmation_gate;
-pub(crate) use pipeline::{score_item, ScoringInput, ScoringOptions};
+pub(crate) use pipeline::{ScoringInput, ScoringOptions};
+// Runtime dispatch: V2 pipeline with 8-phase architecture, fallback to V1
+const USE_V2: bool = true;
+pub(crate) fn score_item(
+    input: &ScoringInput,
+    ctx: &ScoringContext,
+    db: &crate::db::Database,
+    options: &ScoringOptions,
+    classifier: Option<&crate::signals::SignalClassifier>,
+) -> crate::SourceRelevance {
+    if USE_V2 {
+        pipeline_v2::score_item(input, ctx, db, options, classifier)
+    } else {
+        pipeline::score_item(input, ctx, db, options, classifier)
+    }
+}
 pub(crate) use semantic::{
     compute_semantic_ace_boost, compute_taste_embedding, get_topic_embeddings,
 };
