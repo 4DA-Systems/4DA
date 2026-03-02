@@ -284,8 +284,12 @@ pub(crate) fn get_monitoring_state() -> &'static Arc<monitoring::MonitoringState
 // Global Job Queue (Background Extraction Processing)
 // ============================================================================
 
+// Planned: async job queue for background task management
+#[allow(dead_code)]
 static JOB_QUEUE: OnceCell<Arc<parking_lot::RwLock<job_queue::JobQueue>>> = OnceCell::new();
 
+// Planned: async job queue for background task management
+#[allow(dead_code)]
 fn init_job_queue() -> Result<Arc<parking_lot::RwLock<job_queue::JobQueue>>, String> {
     let conn = open_db_connection()?;
 
@@ -294,6 +298,8 @@ fn init_job_queue() -> Result<Arc<parking_lot::RwLock<job_queue::JobQueue>>, Str
     Ok(Arc::new(parking_lot::RwLock::new(queue)))
 }
 
+// Planned: async job queue for background task management
+#[allow(dead_code)]
 pub(crate) fn get_job_queue(
 ) -> Result<&'static Arc<parking_lot::RwLock<job_queue::JobQueue>>, String> {
     JOB_QUEUE.get_or_try_init(init_job_queue)

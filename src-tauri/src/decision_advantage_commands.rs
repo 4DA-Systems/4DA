@@ -5,7 +5,7 @@
 use crate::decision_advantage::{CompoundAdvantageScore, DecisionWindow};
 use crate::error::{FourDaError, Result};
 use crate::open_db_connection;
-use tauri::{AppHandle, Emitter};
+use tauri::AppHandle;
 
 /// Get all open decision windows, ordered by urgency.
 #[tauri::command]

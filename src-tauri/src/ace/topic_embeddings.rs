@@ -227,6 +227,8 @@ pub fn find_similar_topics_knn(
 
 impl ACE {
     /// Generate embedding for a topic
+    // Embedding API: used when Ollama embedding is active
+    #[allow(dead_code)]
     pub fn embed_topic(&self, topic: &str) -> Result<Vec<f32>, String> {
         match &self.embedding_service {
             Some(service) => service.lock().embed(topic),

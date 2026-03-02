@@ -27,6 +27,8 @@ pub struct AutonomousContext {
 }
 
 /// Real-time context data
+// Realtime context: consumed by future live scoring pipeline
+#[allow(dead_code)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RealtimeContext {
     pub active_topics: Vec<ActiveTopic>,
@@ -338,6 +340,8 @@ pub fn process_file_changes(
 // ============================================================================
 
 /// Apply freshness decay to active topics
+// Realtime context: consumed by future live scoring pipeline
+#[allow(dead_code)]
 pub fn apply_freshness_decay(conn: &Arc<Mutex<Connection>>) -> Result<usize, String> {
     let conn = conn.lock();
 
@@ -364,6 +368,8 @@ pub fn apply_freshness_decay(conn: &Arc<Mutex<Connection>>) -> Result<usize, Str
 }
 
 /// Get real-time context for relevance scoring
+// Realtime context: consumed by future live scoring pipeline
+#[allow(dead_code)]
 pub fn get_realtime_context(conn: &Arc<Mutex<Connection>>) -> Result<RealtimeContext, String> {
     let conn = conn.lock();
 

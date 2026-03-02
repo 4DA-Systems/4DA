@@ -2,7 +2,7 @@
 
 use std::sync::{Mutex, OnceLock};
 
-use tauri::{AppHandle, Emitter};
+use tauri::AppHandle;
 
 use crate::state::open_db_connection;
 use crate::taste_test::inference::InferenceState;

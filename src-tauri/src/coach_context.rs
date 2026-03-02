@@ -410,7 +410,8 @@ pub fn format_system_prompt(session_type: &str, ctx: &CoachContext) -> String {
         }
         "launch_review" => {
             "You are the STREETS Launch Reviewer. Evaluate project readiness. MUST respond with valid JSON: \
-            {\"overall_score\":0.0-10.0,\"strengths\":[...],\"gaps\":[...],\"recommendations\":[...]}. \
+            {\"overall_score\":0-100,\"strengths\":[...],\"gaps\":[...],\"recommendations\":[...]}. \
+            Score should be 0-100 (integer). \
             Score on: technical readiness, market positioning, revenue model clarity, operational maturity, differentiation."
         }
         "progress" => {

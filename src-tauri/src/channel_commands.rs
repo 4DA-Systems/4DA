@@ -10,7 +10,7 @@ use crate::channels::{
 };
 use crate::error::Result;
 use crate::get_database;
-use tauri::{AppHandle, Emitter};
+use tauri::AppHandle;
 
 // ============================================================================
 // Channel List & Detail

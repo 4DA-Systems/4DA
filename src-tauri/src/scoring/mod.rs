@@ -35,7 +35,7 @@ pub(crate) use explanation::{
 pub(crate) use gate::apply_confirmation_gate;
 pub(crate) use pipeline::{score_item, ScoringInput, ScoringOptions};
 pub(crate) use semantic::{
-    compute_semantic_ace_boost, compute_taste_boost, compute_taste_embedding, get_topic_embeddings,
+    compute_semantic_ace_boost, compute_taste_embedding, get_topic_embeddings,
 };
 pub(crate) use utils::{has_word_boundary_match, topic_overlaps};
 
@@ -81,5 +81,7 @@ pub(crate) struct ScoringContext {
     pub sovereign_profile: Option<crate::sovereign_developer_profile::SovereignDeveloperProfile>,
     /// Dominant persona from continuous taste inference (persona_index, weight)
     /// Present when dominant weight exceeds uniform threshold (> 0.2)
+    // Diagnostic: populated for scoring introspection
+    #[allow(dead_code)]
     pub dominant_persona: Option<(usize, f32)>,
 }
