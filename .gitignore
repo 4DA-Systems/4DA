@@ -35,6 +35,9 @@ dist-ssr
 # ONNX model cache (binary files)
 src-tauri/.fastembed_cache/
 
+# ONNX Runtime DLL (bundled separately)
+src-tauri/ort-runtime/
+
 # Tauri build artifacts
 src-tauri/target/
 src-tauri/fourda-macros/target/
