@@ -495,3 +495,17 @@ pub(super) fn all_personas() -> Vec<ScoringContext> {
         niche_specialist(),
     ]
 }
+
+/// All 9 personas with full-fidelity enrichment applied.
+/// Populates the 11 ScoringContext fields + 4 ACEContext fields that
+/// base personas leave at defaults.
+pub(super) fn all_personas_enriched() -> Vec<ScoringContext> {
+    let bases = all_personas();
+    let enrichments = super::persona_data::all_enrichments();
+    let config = super::enrichment::EnrichmentConfig::all();
+    bases
+        .into_iter()
+        .zip(enrichments.iter())
+        .map(|(base, data)| super::enrichment::enrich_persona(base, data, &config))
+        .collect()
+}
