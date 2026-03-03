@@ -77,8 +77,9 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
     // ── Layer 1: grid ──
     {
         var p = vec2<f32>(uv.x * aspect, uv.y);
-        let sdf_result = sdf_star(p, 0.300000, 6.000000, 0.150000);
-        let glow_result = apply_glow(sdf_result, 1.000000);
+        var sdf_result = sdf_star(p, 0.300000, 6.000000, 0.150000);
+        let glow_pulse = 1.000000 * (0.9 + 0.1 * sin(time * 2.0));
+        let glow_result = apply_glow(sdf_result, glow_pulse);
         var color_result = vec4<f32>(vec3<f32>(glow_result), 1.0);
         let grain_noise = fract(sin(dot(p, vec2<f32>(12.9898, 78.233)) + time) * 43758.5453);
         color_result = vec4<f32>(color_result.rgb + (grain_noise - 0.5) * 0.800000, color_result.a);
@@ -159,7 +160,8 @@ void main(){
     {
         vec2 p = vec2(uv.x * aspect, uv.y);
         float sdf_result = sdf_star(p, 0.300000, 6.000000, 0.150000);
-        float glow_result = apply_glow(sdf_result, 1.000000);
+        float glow_pulse = 1.000000 * (0.9 + 0.1 * sin(time * 2.0));
+        float glow_result = apply_glow(sdf_result, glow_pulse);
 
         vec4 color_result = vec4(vec3(glow_result), 1.0);
         float grain_noise = fract(sin(dot(p, vec2(12.9898, 78.233)) + time) * 43758.5453);

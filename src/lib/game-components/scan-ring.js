@@ -50,10 +50,11 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
     var p = vec2<f32>(uv.x * aspect, uv.y);
     { let ra = time * 3.000000; let rc = cos(ra); let rs = sin(ra);
     p = vec2<f32>(p.x * rc - p.y * rs, p.x * rs + p.y * rc); }
-    let sdf_result = abs(length(p) - 0.250000) - 0.030000;
+    var sdf_result = abs(length(p) - 0.250000) - 0.030000;
     let arc_theta = atan2(p.x, p.y) + 3.14159265359;
     sdf_result = select(999.0, sdf_result, arc_theta < 4.000000);
-    let glow_result = apply_glow(sdf_result, 2.500000);
+    let glow_pulse = 2.500000 * (0.9 + 0.1 * sin(time * 2.0));
+    let glow_result = apply_glow(sdf_result, glow_pulse);
     var color_result = vec4<f32>(vec3<f32>(glow_result), 1.0);
     color_result = vec4<f32>(color_result.rgb * vec3<f32>(0.830000, 0.690000, 0.220000), 1.0);
     return color_result;
@@ -103,7 +104,8 @@ void main(){
     float sdf_result = abs(length(p) - 0.250000) - 0.030000;
     float arc_theta = atan(p.x, p.y) + 3.14159265359;
     sdf_result = (arc_theta < 4.000000 ? sdf_result : 999.0);
-    float glow_result = apply_glow(sdf_result, 2.500000);
+    float glow_pulse = 2.500000 * (0.9 + 0.1 * sin(time * 2.0));
+    float glow_result = apply_glow(sdf_result, glow_pulse);
 
     vec4 color_result = vec4(vec3(glow_result), 1.0);
     color_result = vec4(color_result.rgb * vec3(0.830000, 0.690000, 0.220000), 1.0);

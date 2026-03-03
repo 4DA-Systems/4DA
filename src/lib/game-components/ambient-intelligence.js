@@ -112,8 +112,9 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
     // ── Layer 1: core ──
     {
         var p = vec2<f32>(uv.x * aspect, uv.y);
-        let sdf_result = sdf_circle(p, 0.350000);
-        let glow_result = apply_glow(sdf_result, 2.000000);
+        var sdf_result = sdf_circle(p, 0.350000);
+        let glow_pulse = 2.000000 * (0.9 + 0.1 * sin(time * 2.0));
+        let glow_result = apply_glow(sdf_result, glow_pulse);
         var color_result = vec4<f32>(vec3<f32>(glow_result), 1.0);
         color_result = vec4<f32>(color_result.rgb * vec3<f32>(0.550000, 0.280000, 0.060000), 1.0);
         let prev_color = textureSample(prev_frame, prev_sampler, input.uv);
@@ -125,8 +126,9 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
     // ── Layer 2: noise_field ──
     {
         var p = vec2<f32>(uv.x * aspect, uv.y);
-        let sdf_result = fbm2((p * 3.000000), i32(4.000000), 0.500000, 2.000000);
-        let glow_result = apply_glow(sdf_result, 1.500000);
+        var sdf_result = fbm2((p * 3.000000 + vec2<f32>(time * 0.1, time * 0.07)), i32(4.000000), 0.500000, 2.000000);
+        let glow_pulse = 1.500000 * (0.9 + 0.1 * sin(time * 2.0));
+        let glow_result = apply_glow(sdf_result, glow_pulse);
         var color_result = vec4<f32>(vec3<f32>(glow_result), 1.0);
         color_result = vec4<f32>(color_result.rgb * vec3<f32>(1.000000, 0.820000, 0.300000), 1.0);
         let lc = color_result.rgb;
@@ -136,8 +138,9 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
     // ── Layer 3: outer_ring ──
     {
         var p = vec2<f32>(uv.x * aspect, uv.y);
-        let sdf_result = abs(length(p) - 0.380000) - 0.020000;
-        let glow_result = apply_glow(sdf_result, 1.000000);
+        var sdf_result = abs(length(p) - 0.380000) - 0.020000;
+        let glow_pulse = 1.000000 * (0.9 + 0.1 * sin(time * 2.0));
+        let glow_result = apply_glow(sdf_result, glow_pulse);
         var color_result = vec4<f32>(vec3<f32>(glow_result), 1.0);
         color_result = vec4<f32>(color_result.rgb * vec3<f32>(0.830000, 0.690000, 0.220000), 1.0);
         let lc = color_result.rgb;
@@ -250,7 +253,8 @@ void main(){
     {
         vec2 p = vec2(uv.x * aspect, uv.y);
         float sdf_result = sdf_circle(p, 0.350000);
-        float glow_result = apply_glow(sdf_result, 2.000000);
+        float glow_pulse = 2.000000 * (0.9 + 0.1 * sin(time * 2.0));
+        float glow_result = apply_glow(sdf_result, glow_pulse);
 
         vec4 color_result = vec4(vec3(glow_result), 1.0);
         color_result = vec4(color_result.rgb * vec3(0.550000, 0.280000, 0.060000), 1.0);
@@ -263,8 +267,9 @@ void main(){
     // ── Layer 2: noise_field ──
     {
         vec2 p = vec2(uv.x * aspect, uv.y);
-        float sdf_result = fbm2((p * 3.000000), int(4.000000), 0.500000, 2.000000);
-        float glow_result = apply_glow(sdf_result, 1.500000);
+        float sdf_result = fbm2((p * 3.000000 + vec2(time * 0.1, time * 0.07)), int(4.000000), 0.500000, 2.000000);
+        float glow_pulse = 1.500000 * (0.9 + 0.1 * sin(time * 2.0));
+        float glow_result = apply_glow(sdf_result, glow_pulse);
 
         vec4 color_result = vec4(vec3(glow_result), 1.0);
         color_result = vec4(color_result.rgb * vec3(1.000000, 0.820000, 0.300000), 1.0);
@@ -276,7 +281,8 @@ void main(){
     {
         vec2 p = vec2(uv.x * aspect, uv.y);
         float sdf_result = abs(length(p) - 0.380000) - 0.020000;
-        float glow_result = apply_glow(sdf_result, 1.000000);
+        float glow_pulse = 1.000000 * (0.9 + 0.1 * sin(time * 2.0));
+        float glow_result = apply_glow(sdf_result, glow_pulse);
 
         vec4 color_result = vec4(vec3(glow_result), 1.0);
         color_result = vec4(color_result.rgb * vec3(0.830000, 0.690000, 0.220000), 1.0);

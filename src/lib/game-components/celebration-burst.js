@@ -70,8 +70,9 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
     // ── Layer 1: ring_outer ──
     {
         var p = vec2<f32>(uv.x * aspect, uv.y);
-        let sdf_result = abs(length(p) - ring_r) - 0.020000;
-        let glow_result = apply_glow(sdf_result, glow_str);
+        var sdf_result = abs(length(p) - ring_r) - 0.020000;
+        let glow_pulse = glow_str * (0.9 + 0.1 * sin(time * 2.0));
+        let glow_result = apply_glow(sdf_result, glow_pulse);
         var color_result = vec4<f32>(vec3<f32>(glow_result), 1.0);
         let pp_lum = dot(color_result.rgb, vec3<f32>(0.299, 0.587, 0.114));
         color_result = vec4<f32>(color_result.rgb + max(pp_lum - 0.300000, 0.0) * 2.000000, 1.0);
@@ -83,8 +84,9 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
     // ── Layer 2: ring_inner ──
     {
         var p = vec2<f32>(uv.x * aspect, uv.y);
-        let sdf_result = abs(length(p) - inner_r) - 0.015000;
-        let glow_result = apply_glow(sdf_result, inner_glow);
+        var sdf_result = abs(length(p) - inner_r) - 0.015000;
+        let glow_pulse = inner_glow * (0.9 + 0.1 * sin(time * 2.0));
+        let glow_result = apply_glow(sdf_result, glow_pulse);
         var color_result = vec4<f32>(vec3<f32>(glow_result), 1.0);
         let pp_lum = dot(color_result.rgb, vec3<f32>(0.299, 0.587, 0.114));
         color_result = vec4<f32>(color_result.rgb + max(pp_lum - 0.300000, 0.0) * 2.000000, 1.0);
@@ -96,8 +98,9 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
     // ── Layer 3: center_flash ──
     {
         var p = vec2<f32>(uv.x * aspect, uv.y);
-        let sdf_result = sdf_circle(p, 0.080000);
-        let glow_result = apply_glow(sdf_result, flash_str);
+        var sdf_result = sdf_circle(p, 0.080000);
+        let glow_pulse = flash_str * (0.9 + 0.1 * sin(time * 2.0));
+        let glow_result = apply_glow(sdf_result, glow_pulse);
         var color_result = vec4<f32>(vec3<f32>(glow_result), 1.0);
         let pp_lum = dot(color_result.rgb, vec3<f32>(0.299, 0.587, 0.114));
         color_result = vec4<f32>(color_result.rgb + max(pp_lum - 0.400000, 0.0) * 3.000000, 1.0);
@@ -171,7 +174,8 @@ void main(){
     {
         vec2 p = vec2(uv.x * aspect, uv.y);
         float sdf_result = abs(length(p) - ring_r) - 0.020000;
-        float glow_result = apply_glow(sdf_result, glow_str);
+        float glow_pulse = glow_str * (0.9 + 0.1 * sin(time * 2.0));
+        float glow_result = apply_glow(sdf_result, glow_pulse);
 
         vec4 color_result = vec4(vec3(glow_result), 1.0);
         float pp_lum = dot(color_result.rgb, vec3(0.299, 0.587, 0.114));
@@ -185,7 +189,8 @@ void main(){
     {
         vec2 p = vec2(uv.x * aspect, uv.y);
         float sdf_result = abs(length(p) - inner_r) - 0.015000;
-        float glow_result = apply_glow(sdf_result, inner_glow);
+        float glow_pulse = inner_glow * (0.9 + 0.1 * sin(time * 2.0));
+        float glow_result = apply_glow(sdf_result, glow_pulse);
 
         vec4 color_result = vec4(vec3(glow_result), 1.0);
         float pp_lum = dot(color_result.rgb, vec3(0.299, 0.587, 0.114));
@@ -199,7 +204,8 @@ void main(){
     {
         vec2 p = vec2(uv.x * aspect, uv.y);
         float sdf_result = sdf_circle(p, 0.080000);
-        float glow_result = apply_glow(sdf_result, flash_str);
+        float glow_pulse = flash_str * (0.9 + 0.1 * sin(time * 2.0));
+        float glow_result = apply_glow(sdf_result, glow_pulse);
 
         vec4 color_result = vec4(vec3(glow_result), 1.0);
         float pp_lum = dot(color_result.rgb, vec3(0.299, 0.587, 0.114));

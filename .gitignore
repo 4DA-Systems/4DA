@@ -122,6 +122,10 @@ coverage/
 site/_site/
 target-test/
 
+# GAME compiler shader artifacts (embedded in .js components)
+src/lib/game-components/*.wgsl
+src/lib/game-components/*.frag
+
 # 4DA World (separate repo)
 4DA-WORLD-DOCUMENTS/
 4DA-WORLD-PLAN.md

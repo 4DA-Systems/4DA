@@ -60,8 +60,9 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
     // ── Layer 1: orb ──
     {
         var p = vec2<f32>(uv.x * aspect, uv.y);
-        let sdf_result = sdf_circle(p, 0.200000);
-        let glow_result = apply_glow(sdf_result, intensity);
+        var sdf_result = sdf_circle(p, 0.200000);
+        let glow_pulse = intensity * (0.9 + 0.1 * sin(time * 2.0));
+        let glow_result = apply_glow(sdf_result, glow_pulse);
         var color_result = vec4<f32>(vec3<f32>(glow_result), 1.0);
         color_result = vec4<f32>(color_result.rgb * vec3<f32>(green, 1.000000, green), 1.0);
         let lc = color_result.rgb;
@@ -123,7 +124,8 @@ void main(){
     {
         vec2 p = vec2(uv.x * aspect, uv.y);
         float sdf_result = sdf_circle(p, 0.200000);
-        float glow_result = apply_glow(sdf_result, intensity);
+        float glow_pulse = intensity * (0.9 + 0.1 * sin(time * 2.0));
+        float glow_result = apply_glow(sdf_result, glow_pulse);
 
         vec4 color_result = vec4(vec3(glow_result), 1.0);
         color_result = vec4(color_result.rgb * vec3(green, 1.000000, green), 1.0);
