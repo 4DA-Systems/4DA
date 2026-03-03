@@ -693,10 +693,6 @@ class AmbientIntelligence extends HTMLElement {
   set critical_count(v) { this.setParam('critical_count', v); }
   get metabolism() { return this._renderer?.userParams['metabolism'] ?? 0; }
   set metabolism(v) { this.setParam('metabolism', v); }
-  get progress() { return this.fill_angle / (2 * Math.PI); }
-  set progress(v) { this.fill_angle = v * 2 * Math.PI; }
-  get health() { return this.intensity; }
-  set health(v) { this.intensity = v; }
 
   static get observedAttributes() { return UNIFORMS.map(u => u.name); }
   attributeChangedCallback(name, _, val) {

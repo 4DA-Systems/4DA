@@ -28,12 +28,15 @@ export function GameCelebration() {
     });
   }, []);
 
-  // Drive the burst intensity: spike based on tier, decay to 0
+  // Drive the burst: spike glow/flash based on tier, decay to 0
   useEffect(() => {
     if (!celebration || !burstRef.current) return;
-    const el = burstRef.current as HTMLElement & { intensity?: number };
-    const peakIntensity = celebration.celebration_intensity ?? 1.0;
-    el.intensity = peakIntensity;
+    const el = burstRef.current as HTMLElement & { setParam?: (n: string, v: number) => void };
+    const peak = celebration.celebration_intensity ?? 1.0;
+    // Drive actual shader uniforms: glow_str (outer ring glow), flash_str (center flash)
+    el.setParam?.('glow_str', peak * 8);
+    el.setParam?.('inner_glow', peak * 6);
+    el.setParam?.('flash_str', peak * 4);
 
     // Decay over 1.2s to match CSS ring-burst timing
     const start = performance.now();
@@ -41,7 +44,10 @@ export function GameCelebration() {
     function decay() {
       const elapsed = performance.now() - start;
       const t = Math.min(1, elapsed / duration);
-      el.intensity = peakIntensity * (1.0 - t);
+      const v = peak * (1.0 - t);
+      el.setParam?.('glow_str', v * 8);
+      el.setParam?.('inner_glow', v * 6);
+      el.setParam?.('flash_str', v * 4);
       if (t < 1) requestAnimationFrame(decay);
     }
     requestAnimationFrame(decay);
