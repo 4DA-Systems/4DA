@@ -48,7 +48,7 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
 
     // ── Layer 0: sweep ──
     var p = vec2<f32>(uv.x * aspect, uv.y);
-    { let rc = cos(3.000000); let rs = sin(3.000000);
+    { let ra = time * 3.000000; let rc = cos(ra); let rs = sin(ra);
     p = vec2<f32>(p.x * rc - p.y * rs, p.x * rs + p.y * rc); }
     let sdf_result = abs(length(p) - 0.250000) - 0.030000;
     let arc_theta = atan2(p.x, p.y) + 3.14159265359;
@@ -98,7 +98,7 @@ void main(){
 
     // ── Layer 0: sweep ──
     vec2 p = vec2(uv.x * aspect, uv.y);
-    { float rc = cos(3.000000); float rs = sin(3.000000);
+    { float ra = time * 3.000000; float rc = cos(ra); float rs = sin(ra);
     p = vec2(p.x * rc - p.y * rs, p.x * rs + p.y * rc); }
     float sdf_result = abs(length(p) - 0.250000) - 0.030000;
     float arc_theta = atan(p.x, p.y) + 3.14159265359;
