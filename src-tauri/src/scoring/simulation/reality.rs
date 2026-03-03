@@ -119,8 +119,8 @@ fn reality_niche_specialist_persona() {
     let personas = all_personas();
     let m = run_persona_simulation(8, &personas[8]);
     println!("{}", m.format_report(PERSONA_NAMES[8]));
-    // Calibrated: P=1.000 R=0.429 F1=0.600 → threshold F1-0.05=0.550
-    m.assert_quality(PERSONA_NAMES[8], 0.85, 0.35, 0.55);
+    // Calibrated: P=1.000 R=0.357 F1=0.526 — tighter gates reduce recall for narrow personas
+    m.assert_quality(PERSONA_NAMES[8], 0.85, 0.30, 0.45);
 }
 
 // ============================================================================
@@ -259,15 +259,15 @@ fn reality_aggregate_summary() {
     }
 
     println!("{}", aggregate.format_report("AGGREGATE"));
-    // Aggregate quality — calibrated to current pipeline
+    // Aggregate quality — calibrated to V2 with tightened gates
     assert!(
-        aggregate.f1() >= 0.15,
-        "Aggregate F1 {:.3} below minimum 0.15",
+        aggregate.f1() >= 0.40,
+        "Aggregate F1 {:.3} below minimum 0.40",
         aggregate.f1()
     );
     assert!(
-        aggregate.precision() >= 0.45,
-        "Aggregate precision {:.3} below minimum 0.45",
+        aggregate.precision() >= 0.70,
+        "Aggregate precision {:.3} below minimum 0.70",
         aggregate.precision()
     );
 }

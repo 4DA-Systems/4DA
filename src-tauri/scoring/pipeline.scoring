@@ -8,8 +8,8 @@ calibration sigmoid {
 confirmation_gate {
     0 => (0.25, 0.20)
     1 => (0.45, 0.32)
-    2 => (1.00, 0.80)
-    3 => (1.10, 0.92)
+    2 => (1.00, 0.65)
+    3 => (1.10, 0.85)
     4 => (1.20, 1.00)
     5 => (1.25, 1.00)
 }
@@ -17,8 +17,8 @@ confirmation_gate {
 signal_thresholds {
     context:  0.45   # [0.20, 0.80]
     interest: 0.50   # [0.20, 0.80]
-    keyword:  0.60   # [0.30, 0.90]
-    semantic: 0.12   # [0.05, 0.50]
+    keyword:  0.70   # [0.30, 0.90]
+    semantic: 0.18   # [0.05, 0.50]
     feedback: 0.05   # [0.01, 0.30]
     affinity: 1.15   # [1.01, 2.00]
     dependency: 0.20 # [0.10, 0.50]
@@ -54,7 +54,7 @@ bounds {
     affinity_effect: 0.7       # [0.3, 1.0]
     anti_penalty_max: 0.7      # [0.3, 1.0]
     feedback_cap: [-0.20, 0.20]
-    feedback_scale: 0.15       # [0.05, 0.50]
+    feedback_scale: 0.30       # [0.05, 0.50]
     source_quality_cap: [-0.10, 0.10]
     source_quality_mult: 0.10  # [0.01, 0.30]
     off_domain_penalty: 0.50   # [0.05, 0.70]
@@ -71,7 +71,7 @@ confidence_bonuses {
 }
 
 specificity_weights {
-    broad: 0.25              # [0.10, 0.50]
+    broad: 0.15              # [0.10, 0.50]
     single_word: 0.60        # [0.30, 0.80]
     multi_word: 1.00         # [0.80, 1.00]
     embedding_broad: 0.40    # [0.20, 0.60]
@@ -98,7 +98,7 @@ priority_caps {
 
 dampening {
     penalty_strength: 0.65       # [0.30, 0.90]
-    boost_strength: 0.40         # [0.20, 0.70]
+    boost_strength: 0.55         # [0.20, 0.70]
     domain_aware_strength: 0.20  # [0.10, 0.50]
 }
 

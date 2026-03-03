@@ -146,11 +146,11 @@ mod tests {
 
     #[test]
     fn test_interest_specificity_weight_broad() {
-        assert_eq!(interest_specificity_weight("Open Source"), 0.25);
-        assert_eq!(interest_specificity_weight("AI"), 0.25);
-        assert_eq!(interest_specificity_weight("machine learning"), 0.25);
-        assert_eq!(interest_specificity_weight("cloud"), 0.25);
-        assert_eq!(interest_specificity_weight("programming"), 0.25);
+        assert_eq!(interest_specificity_weight("Open Source"), 0.15);
+        assert_eq!(interest_specificity_weight("AI"), 0.15);
+        assert_eq!(interest_specificity_weight("machine learning"), 0.15);
+        assert_eq!(interest_specificity_weight("cloud"), 0.15);
+        assert_eq!(interest_specificity_weight("programming"), 0.15);
     }
 
     #[test]
@@ -185,8 +185,8 @@ mod tests {
             &interests,
         );
         assert_eq!(
-            specificity, 0.25,
-            "Broad interest should return 0.25 weight"
+            specificity, 0.15,
+            "Broad interest should return 0.15 weight"
         );
 
         // A specific interest should get full weight

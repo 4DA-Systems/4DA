@@ -30,12 +30,12 @@ use super::*;
 // ============================================================================
 
 const V2_GATE: [(f32, f32); 6] = [
-    (0.25, 0.20), // 0 signals — matches V1
-    (0.45, 0.32), // 1 signal — matches V1, ceiling < 0.35 threshold
-    (1.00, 0.80), // 2 signals
-    (1.08, 0.92), // 3 signals
-    (1.15, 1.00), // 4 signals
-    (1.20, 1.00), // 5 signals
+    (0.25, 0.20), // 0 signals — heavy penalty
+    (0.45, 0.32), // 1 signal — ceiling < 0.35 threshold
+    (1.00, 0.65), // 2 signals — tightened ceiling (was 0.80)
+    (1.10, 0.85), // 3 signals — tightened ceiling (was 0.92)
+    (1.20, 1.00), // 4 signals — strong confirmation
+    (1.25, 1.00), // 5 signals — full confidence
 ];
 
 const BOOST_CAP_MIN: f32 = -0.15;

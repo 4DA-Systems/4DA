@@ -8,7 +8,7 @@ use std::collections::HashMap;
 use super::super::score_item;
 use super::feedback_sim::{
     apply_feedback, lifecycle_corpus, python_ctx_with_boosts, rust_ctx_with_boosts,
-    simulate_session,
+    simulate_session_with_embeddings,
 };
 use super::metrics::SimMetrics;
 use super::{sim_db, sim_input, sim_no_freshness};
@@ -22,6 +22,8 @@ const N_SESSIONS: usize = 20;
 
 fn run_rust_lifecycle_sessions(n: usize) -> Vec<f64> {
     let items = lifecycle_corpus();
+    let calibrated_embeddings = super::load_corpus_embeddings();
+    let zero_emb = vec![0.0_f32; 384];
     let mut boosts: HashMap<String, f64> = HashMap::new();
     let mut f1_per_session = Vec::new();
 
@@ -32,7 +34,6 @@ fn run_rust_lifecycle_sessions(n: usize) -> Vec<f64> {
         // Measure quality this session
         let db = sim_db();
         let opts = sim_no_freshness();
-        let emb = vec![0.0_f32; 384];
         let mut metrics = SimMetrics::new();
 
         for item in &items {
@@ -40,14 +41,17 @@ fn run_rust_lifecycle_sessions(n: usize) -> Vec<f64> {
             if matches!(expected, ExpectedOutcome::MildBorderline) {
                 continue;
             }
-            let input = sim_input(item.id, item.title, item.content, &emb);
+            let emb = calibrated_embeddings
+                .get((item.id - 1) as usize)
+                .unwrap_or(&zero_emb);
+            let input = sim_input(item.id, item.title, item.content, emb);
             let result = score_item(&input, &ctx, &db, &opts, None);
             metrics.record(&result, expected);
         }
         f1_per_session.push(metrics.f1());
 
         // Generate feedback for next session
-        let events = simulate_session(&ctx, &items, 0);
+        let events = simulate_session_with_embeddings(&ctx, &items, 0, &calibrated_embeddings);
         boosts = apply_feedback(&boosts, &events);
     }
     f1_per_session
@@ -55,6 +59,8 @@ fn run_rust_lifecycle_sessions(n: usize) -> Vec<f64> {
 
 fn run_python_lifecycle_sessions(n: usize) -> Vec<f64> {
     let items = lifecycle_corpus();
+    let calibrated_embeddings = super::load_corpus_embeddings();
+    let zero_emb = vec![0.0_f32; 384];
     let mut boosts: HashMap<String, f64> = HashMap::new();
     let mut f1_per_session = Vec::new();
 
@@ -64,7 +70,6 @@ fn run_python_lifecycle_sessions(n: usize) -> Vec<f64> {
 
         let db = sim_db();
         let opts = sim_no_freshness();
-        let emb = vec![0.0_f32; 384];
         let mut metrics = SimMetrics::new();
 
         for item in &items {
@@ -72,13 +77,16 @@ fn run_python_lifecycle_sessions(n: usize) -> Vec<f64> {
             if matches!(expected, ExpectedOutcome::MildBorderline) {
                 continue;
             }
-            let input = sim_input(item.id, item.title, item.content, &emb);
+            let emb = calibrated_embeddings
+                .get((item.id - 1) as usize)
+                .unwrap_or(&zero_emb);
+            let input = sim_input(item.id, item.title, item.content, emb);
             let result = score_item(&input, &ctx, &db, &opts, None);
             metrics.record(&result, expected);
         }
         f1_per_session.push(metrics.f1());
 
-        let events = simulate_session(&ctx, &items, 1);
+        let events = simulate_session_with_embeddings(&ctx, &items, 1, &calibrated_embeddings);
         boosts = apply_feedback(&boosts, &events);
     }
     f1_per_session
@@ -144,13 +152,15 @@ fn lifecycle_python_persona_does_not_degrade() {
 fn lifecycle_cross_persona_isolation_holds() {
     // Run Rust lifecycle and then verify Python content stays irrelevant
     let items = lifecycle_corpus();
+    let calibrated_embeddings = super::load_corpus_embeddings();
+    let zero_emb = vec![0.0_f32; 384];
     let mut rust_boosts: HashMap<String, f64> = HashMap::new();
 
     // Run 10 sessions of Rust feedback
     for session_idx in 0..10 {
         let interaction_count = (session_idx as i64 + 1) * 10;
         let ctx = rust_ctx_with_boosts(&rust_boosts, interaction_count);
-        let events = simulate_session(&ctx, &items, 0);
+        let events = simulate_session_with_embeddings(&ctx, &items, 0, &calibrated_embeddings);
         rust_boosts = apply_feedback(&rust_boosts, &events);
     }
 
@@ -158,7 +168,6 @@ fn lifecycle_cross_persona_isolation_holds() {
     let final_rust_ctx = rust_ctx_with_boosts(&rust_boosts, 100);
     let db = sim_db();
     let opts = sim_no_freshness();
-    let emb = vec![0.0_f32; 384];
 
     let mut python_false_positives = 0u32;
     let mut python_total = 0u32;
@@ -170,7 +179,10 @@ fn lifecycle_cross_persona_isolation_holds() {
         if item.expected[1] != ExpectedOutcome::StrongRelevant {
             continue; // only look at items that are strong for Python
         }
-        let input = sim_input(item.id, item.title, item.content, &emb);
+        let emb = calibrated_embeddings
+            .get((item.id - 1) as usize)
+            .unwrap_or(&zero_emb);
+        let input = sim_input(item.id, item.title, item.content, emb);
         let result = score_item(&input, &final_rust_ctx, &db, &opts, None);
         python_total += 1;
         if result.relevant {
@@ -188,11 +200,12 @@ fn lifecycle_cross_persona_isolation_holds() {
 #[test]
 fn lifecycle_feedback_boosts_stay_bounded() {
     let items = lifecycle_corpus();
+    let calibrated_embeddings = super::load_corpus_embeddings();
     let mut boosts: HashMap<String, f64> = HashMap::new();
 
     for session_idx in 0..N_SESSIONS {
         let ctx = rust_ctx_with_boosts(&boosts, (session_idx as i64 + 1) * 10);
-        let events = simulate_session(&ctx, &items, 0);
+        let events = simulate_session_with_embeddings(&ctx, &items, 0, &calibrated_embeddings);
         boosts = apply_feedback(&boosts, &events);
     }
 
@@ -209,11 +222,12 @@ fn lifecycle_feedback_boosts_stay_bounded() {
 fn lifecycle_feedback_boosts_do_not_saturate() {
     // After 20 sessions, boosts should not all be at ±1.0 (clamped)
     let items = lifecycle_corpus();
+    let calibrated_embeddings = super::load_corpus_embeddings();
     let mut boosts: HashMap<String, f64> = HashMap::new();
 
     for session_idx in 0..N_SESSIONS {
         let ctx = rust_ctx_with_boosts(&boosts, (session_idx as i64 + 1) * 10);
-        let events = simulate_session(&ctx, &items, 0);
+        let events = simulate_session_with_embeddings(&ctx, &items, 0, &calibrated_embeddings);
         boosts = apply_feedback(&boosts, &events);
     }
 
@@ -249,6 +263,7 @@ fn lifecycle_same_item_stable_score_over_sessions() {
     );
 
     let items = lifecycle_corpus();
+    let calibrated_embeddings = super::load_corpus_embeddings();
     let mut boosts: HashMap<String, f64> = HashMap::new();
     let mut probe_scores = Vec::new();
 
@@ -257,7 +272,7 @@ fn lifecycle_same_item_stable_score_over_sessions() {
         let result = score_item(&probe_input, &ctx, &db, &opts, None);
         probe_scores.push(result.top_score);
 
-        let events = simulate_session(&ctx, &items, 0);
+        let events = simulate_session_with_embeddings(&ctx, &items, 0, &calibrated_embeddings);
         boosts = apply_feedback(&boosts, &events);
     }
 
@@ -277,15 +292,16 @@ fn lifecycle_same_item_stable_score_over_sessions() {
 #[test]
 fn lifecycle_noise_stays_rejected_across_sessions() {
     let items = lifecycle_corpus();
+    let calibrated_embeddings = super::load_corpus_embeddings();
+    let zero_emb = vec![0.0_f32; 384];
     let db = sim_db();
     let opts = sim_no_freshness();
-    let emb = vec![0.0_f32; 384];
     let mut boosts: HashMap<String, f64> = HashMap::new();
 
     // Run all sessions
     for session_idx in 0..N_SESSIONS {
         let ctx = rust_ctx_with_boosts(&boosts, (session_idx as i64 + 1) * 10);
-        let events = simulate_session(&ctx, &items, 0);
+        let events = simulate_session_with_embeddings(&ctx, &items, 0, &calibrated_embeddings);
         boosts = apply_feedback(&boosts, &events);
     }
 
@@ -298,7 +314,10 @@ fn lifecycle_noise_stays_rejected_across_sessions() {
         if item.expected[0] != ExpectedOutcome::NotRelevant {
             continue;
         }
-        let input = sim_input(item.id, item.title, item.content, &emb);
+        let emb = calibrated_embeddings
+            .get((item.id - 1) as usize)
+            .unwrap_or(&zero_emb);
+        let input = sim_input(item.id, item.title, item.content, emb);
         let result = score_item(&input, &final_ctx, &db, &opts, None);
         noise_total += 1;
         if result.relevant {

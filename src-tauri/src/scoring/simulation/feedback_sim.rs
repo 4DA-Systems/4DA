@@ -59,6 +59,16 @@ pub(super) fn rust_ctx_with_boosts(
     ace.detected_tech.push("tauri".to_string());
     ace.detected_tech.push("sqlite".to_string());
 
+    // Derive topic affinities from accumulated feedback boosts
+    for (topic, &boost) in boosts {
+        if boost.abs() > 0.05 {
+            let affinity = boost.clamp(-1.0, 1.0) as f32;
+            let confidence = (boost.abs() as f32).min(0.9);
+            ace.topic_affinities
+                .insert(topic.clone(), (affinity, confidence));
+        }
+    }
+
     let domain = crate::domain_profile::DomainProfile {
         primary_stack: ["rust", "tauri", "sqlite"]
             .iter()
@@ -138,6 +148,16 @@ pub(super) fn python_ctx_with_boosts(
     ace.detected_tech.push("python".to_string());
     ace.detected_tech.push("pytorch".to_string());
 
+    // Derive topic affinities from accumulated feedback boosts
+    for (topic, &boost) in boosts {
+        if boost.abs() > 0.05 {
+            let affinity = boost.clamp(-1.0, 1.0) as f32;
+            let confidence = (boost.abs() as f32).min(0.9);
+            ace.topic_affinities
+                .insert(topic.clone(), (affinity, confidence));
+        }
+    }
+
     let domain = crate::domain_profile::DomainProfile {
         primary_stack: ["python", "pytorch", "tensorflow"]
             .iter()
@@ -192,7 +212,61 @@ pub(super) fn python_ctx_with_boosts(
 // Session simulation
 // ============================================================================
 
-/// Simulate one feedback session: score items, generate feedback events
+/// Simulate one feedback session with calibrated embeddings: score items, generate feedback events
+pub(super) fn simulate_session_with_embeddings(
+    ctx: &ScoringContext,
+    items: &[LabeledItem],
+    persona_idx: usize,
+    calibrated_embeddings: &[Vec<f32>],
+) -> Vec<FeedbackEvent> {
+    let db = sim_db();
+    let opts = sim_no_freshness();
+    let zero_emb = vec![0.0_f32; 384];
+
+    let mut events = Vec::new();
+    for item in items {
+        let emb = calibrated_embeddings
+            .get((item.id - 1) as usize)
+            .unwrap_or(&zero_emb);
+        let input = sim_input(item.id, item.title, item.content, emb);
+        let result = score_item(&input, ctx, &db, &opts, None);
+        let expected = item.expected[persona_idx];
+
+        match expected {
+            ExpectedOutcome::StrongRelevant => {
+                if result.relevant {
+                    events.push(FeedbackEvent {
+                        item_id: item.id,
+                        topic: derive_topic(&item.category),
+                        relevant: true,
+                        delta: 0.15,
+                    });
+                } else {
+                    events.push(FeedbackEvent {
+                        item_id: item.id,
+                        topic: derive_topic(&item.category),
+                        relevant: true,
+                        delta: 0.10,
+                    });
+                }
+            }
+            ExpectedOutcome::NotRelevant => {
+                if result.relevant {
+                    events.push(FeedbackEvent {
+                        item_id: item.id,
+                        topic: derive_topic(&item.category),
+                        relevant: false,
+                        delta: -0.10,
+                    });
+                }
+            }
+            _ => {}
+        }
+    }
+    events
+}
+
+/// Simulate one feedback session with zero embeddings (legacy): score items, generate feedback events
 pub(super) fn simulate_session(
     ctx: &ScoringContext,
     items: &[LabeledItem],
@@ -210,13 +284,22 @@ pub(super) fn simulate_session(
 
         match expected {
             ExpectedOutcome::StrongRelevant => {
-                // User clicks on relevant items
                 if result.relevant {
+                    // Confirmation: user clicks on correctly surfaced item
                     events.push(FeedbackEvent {
                         item_id: item.id,
                         topic: derive_topic(&item.category),
                         relevant: true,
                         delta: 0.15,
+                    });
+                } else {
+                    // Corrective: user discovers missed relevant item
+                    // (via manual search, recommendations, or browsing)
+                    events.push(FeedbackEvent {
+                        item_id: item.id,
+                        topic: derive_topic(&item.category),
+                        relevant: true,
+                        delta: 0.10,
                     });
                 }
             }
