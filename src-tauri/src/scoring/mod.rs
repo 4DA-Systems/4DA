@@ -16,6 +16,7 @@ mod pipeline_v2;
 mod semantic;
 #[cfg(test)]
 mod simulation;
+mod temporal_cluster;
 mod utils;
 
 // Public API — external callers use crate::scoring::function_name unchanged
@@ -35,6 +36,7 @@ pub(crate) use explanation::{
 };
 pub(crate) use gate::apply_confirmation_gate;
 pub(crate) use pipeline::{ScoringInput, ScoringOptions};
+pub(crate) use temporal_cluster::temporal_cluster_results;
 // Runtime dispatch: V2 pipeline with 8-phase architecture, fallback to V1
 const USE_V2: bool = true;
 pub(crate) fn score_item(
