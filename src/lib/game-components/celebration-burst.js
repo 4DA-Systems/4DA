@@ -514,10 +514,6 @@ class CelebrationBurst extends HTMLElement {
   set flash_str(v) { this.setParam('flash_str', v); }
   get white() { return this._renderer?.userParams['white'] ?? 0; }
   set white(v) { this.setParam('white', v); }
-  get progress() { return this.fill_angle / (2 * Math.PI); }
-  set progress(v) { this.fill_angle = v * 2 * Math.PI; }
-  get health() { return this.intensity; }
-  set health(v) { this.intensity = v; }
 
   static get observedAttributes() { return UNIFORMS.map(u => u.name); }
   attributeChangedCallback(name, _, val) {

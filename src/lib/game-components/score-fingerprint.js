@@ -464,10 +464,6 @@ class ScoreFingerprint extends HTMLElement {
   set depth(v) { this.setParam('depth', v); }
   get confidence() { return this._renderer?.userParams['confidence'] ?? 0; }
   set confidence(v) { this.setParam('confidence', v); }
-  get progress() { return this.fill_angle / (2 * Math.PI); }
-  set progress(v) { this.fill_angle = v * 2 * Math.PI; }
-  get health() { return this.intensity; }
-  set health(v) { this.intensity = v; }
 
   static get observedAttributes() { return UNIFORMS.map(u => u.name); }
   attributeChangedCallback(name, _, val) {
