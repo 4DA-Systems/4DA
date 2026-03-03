@@ -455,6 +455,20 @@ class ScoreFingerprint extends HTMLElement {
   setAudioData(data) { this._renderer?.setAudioData(data); }
   setAudioSource(bridge) { bridge?.subscribe(d => this._renderer?.setAudioData(d)); }
 
+  // Property accessors for each uniform
+  get relevance() { return this._renderer?.userParams['relevance'] ?? 0; }
+  set relevance(v) { this.setParam('relevance', v); }
+  get freshness() { return this._renderer?.userParams['freshness'] ?? 0; }
+  set freshness(v) { this.setParam('freshness', v); }
+  get depth() { return this._renderer?.userParams['depth'] ?? 0; }
+  set depth(v) { this.setParam('depth', v); }
+  get confidence() { return this._renderer?.userParams['confidence'] ?? 0; }
+  set confidence(v) { this.setParam('confidence', v); }
+  get progress() { return this.fill_angle / (2 * Math.PI); }
+  set progress(v) { this.fill_angle = v * 2 * Math.PI; }
+  get health() { return this.intensity; }
+  set health(v) { this.intensity = v; }
+
   static get observedAttributes() { return UNIFORMS.map(u => u.name); }
   attributeChangedCallback(name, _, val) {
     if (val !== null) this.setParam(name, parseFloat(val));

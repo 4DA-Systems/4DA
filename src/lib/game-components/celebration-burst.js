@@ -499,6 +499,26 @@ class CelebrationBurst extends HTMLElement {
   setAudioData(data) { this._renderer?.setAudioData(data); }
   setAudioSource(bridge) { bridge?.subscribe(d => this._renderer?.setAudioData(d)); }
 
+  // Property accessors for each uniform
+  get ring_r() { return this._renderer?.userParams['ring_r'] ?? 0; }
+  set ring_r(v) { this.setParam('ring_r', v); }
+  get glow_str() { return this._renderer?.userParams['glow_str'] ?? 0; }
+  set glow_str(v) { this.setParam('glow_str', v); }
+  get gold() { return this._renderer?.userParams['gold'] ?? 0; }
+  set gold(v) { this.setParam('gold', v); }
+  get inner_r() { return this._renderer?.userParams['inner_r'] ?? 0; }
+  set inner_r(v) { this.setParam('inner_r', v); }
+  get inner_glow() { return this._renderer?.userParams['inner_glow'] ?? 0; }
+  set inner_glow(v) { this.setParam('inner_glow', v); }
+  get flash_str() { return this._renderer?.userParams['flash_str'] ?? 0; }
+  set flash_str(v) { this.setParam('flash_str', v); }
+  get white() { return this._renderer?.userParams['white'] ?? 0; }
+  set white(v) { this.setParam('white', v); }
+  get progress() { return this.fill_angle / (2 * Math.PI); }
+  set progress(v) { this.fill_angle = v * 2 * Math.PI; }
+  get health() { return this.intensity; }
+  set health(v) { this.intensity = v; }
+
   static get observedAttributes() { return UNIFORMS.map(u => u.name); }
   attributeChangedCallback(name, _, val) {
     if (val !== null) this.setParam(name, parseFloat(val));

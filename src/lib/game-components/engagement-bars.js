@@ -471,6 +471,16 @@ class EngagementBars extends HTMLElement {
   setAudioData(data) { this._renderer?.setAudioData(data); }
   setAudioSource(bridge) { bridge?.subscribe(d => this._renderer?.setAudioData(d)); }
 
+  // Property accessors for each uniform
+  get glow_val() { return this._renderer?.userParams['glow_val'] ?? 0; }
+  set glow_val(v) { this.setParam('glow_val', v); }
+  get green() { return this._renderer?.userParams['green'] ?? 0; }
+  set green(v) { this.setParam('green', v); }
+  get progress() { return this.fill_angle / (2 * Math.PI); }
+  set progress(v) { this.fill_angle = v * 2 * Math.PI; }
+  get health() { return this.intensity; }
+  set health(v) { this.intensity = v; }
+
   static get observedAttributes() { return UNIFORMS.map(u => u.name); }
   attributeChangedCallback(name, _, val) {
     if (val !== null) this.setParam(name, parseFloat(val));

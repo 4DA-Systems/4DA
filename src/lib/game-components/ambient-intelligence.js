@@ -670,6 +670,34 @@ class AmbientIntelligence extends HTMLElement {
   setAudioData(data) { this._renderer?.setAudioData(data); }
   setAudioSource(bridge) { bridge?.subscribe(d => this._renderer?.setAudioData(d)); }
 
+  // Property accessors for each uniform
+  get pulse() { return this._renderer?.userParams['pulse'] ?? 0; }
+  set pulse(v) { this.setParam('pulse', v); }
+  get heat() { return this._renderer?.userParams['heat'] ?? 0; }
+  set heat(v) { this.setParam('heat', v); }
+  get burst() { return this._renderer?.userParams['burst'] ?? 0; }
+  set burst(v) { this.setParam('burst', v); }
+  get morph() { return this._renderer?.userParams['morph'] ?? 0; }
+  set morph(v) { this.setParam('morph', v); }
+  get error_val() { return this._renderer?.userParams['error_val'] ?? 0; }
+  set error_val(v) { this.setParam('error_val', v); }
+  get staleness() { return this._renderer?.userParams['staleness'] ?? 0; }
+  set staleness(v) { this.setParam('staleness', v); }
+  get opacity_val() { return this._renderer?.userParams['opacity_val'] ?? 0; }
+  set opacity_val(v) { this.setParam('opacity_val', v); }
+  get signal_intensity() { return this._renderer?.userParams['signal_intensity'] ?? 0; }
+  set signal_intensity(v) { this.setParam('signal_intensity', v); }
+  get color_shift() { return this._renderer?.userParams['color_shift'] ?? 0; }
+  set color_shift(v) { this.setParam('color_shift', v); }
+  get critical_count() { return this._renderer?.userParams['critical_count'] ?? 0; }
+  set critical_count(v) { this.setParam('critical_count', v); }
+  get metabolism() { return this._renderer?.userParams['metabolism'] ?? 0; }
+  set metabolism(v) { this.setParam('metabolism', v); }
+  get progress() { return this.fill_angle / (2 * Math.PI); }
+  set progress(v) { this.fill_angle = v * 2 * Math.PI; }
+  get health() { return this.intensity; }
+  set health(v) { this.intensity = v; }
+
   static get observedAttributes() { return UNIFORMS.map(u => u.name); }
   attributeChangedCallback(name, _, val) {
     if (val !== null) this.setParam(name, parseFloat(val));

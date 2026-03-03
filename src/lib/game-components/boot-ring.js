@@ -446,6 +446,20 @@ class BootRing extends HTMLElement {
   setAudioData(data) { this._renderer?.setAudioData(data); }
   setAudioSource(bridge) { bridge?.subscribe(d => this._renderer?.setAudioData(d)); }
 
+  // Property accessors for each uniform
+  get charcoal() { return this._renderer?.userParams['charcoal'] ?? 0; }
+  set charcoal(v) { this.setParam('charcoal', v); }
+  get fill_angle() { return this._renderer?.userParams['fill_angle'] ?? 0; }
+  set fill_angle(v) { this.setParam('fill_angle', v); }
+  get glow_str() { return this._renderer?.userParams['glow_str'] ?? 0; }
+  set glow_str(v) { this.setParam('glow_str', v); }
+  get gold() { return this._renderer?.userParams['gold'] ?? 0; }
+  set gold(v) { this.setParam('gold', v); }
+  get progress() { return this.fill_angle / (2 * Math.PI); }
+  set progress(v) { this.fill_angle = v * 2 * Math.PI; }
+  get health() { return this.intensity; }
+  set health(v) { this.intensity = v; }
+
   static get observedAttributes() { return UNIFORMS.map(u => u.name); }
   attributeChangedCallback(name, _, val) {
     if (val !== null) this.setParam(name, parseFloat(val));
