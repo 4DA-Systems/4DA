@@ -40,6 +40,23 @@ struct VertexOutput {
     @location(0) uv: vec2<f32>,
 };
 
+fn sdf_star(p: vec2<f32>, n: f32, r: f32, ir: f32) -> f32 {
+    let an = 3.14159265 / n;
+    let a = atan2(p.y, p.x);
+    let period = 2.0 * an;
+    let sa = (a + an) - floor((a + an) / period) * period - an;
+    let q = length(p) * vec2<f32>(cos(sa), abs(sin(sa)));
+    let tip = vec2<f32>(r, 0.0);
+    let valley = vec2<f32>(ir * cos(an), ir * sin(an));
+    let e = tip - valley;
+    let d = q - valley;
+    let t = clamp(dot(d, e) / dot(e, e), 0.0, 1.0);
+    let closest = valley + e * t;
+    let dist = length(q - closest);
+    let cross_val = d.x * e.y - d.y * e.x;
+    return select(dist, -dist, cross_val > 0.0);
+}
+
 fn apply_glow(d: f32, intensity: f32) -> f32 {
     return exp(-max(d, 0.0) * intensity * 8.0);
 }
@@ -60,14 +77,14 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
     // ── Layer 1: grid ──
     {
         var p = vec2<f32>(uv.x * aspect, uv.y);
-        // Unknown stage: star
+        let sdf_result = sdf_star(p, 0.300000, 6.000000, 0.150000);
         let glow_result = apply_glow(sdf_result, 1.000000);
         var color_result = vec4<f32>(vec3<f32>(glow_result), 1.0);
         let grain_noise = fract(sin(dot(p, vec2<f32>(12.9898, 78.233)) + time) * 43758.5453);
         color_result = vec4<f32>(color_result.rgb + (grain_noise - 0.5) * 0.800000, color_result.a);
         color_result = vec4<f32>(color_result.rgb * vec3<f32>(0.830000, 0.690000, 0.220000), 1.0);
         let lc = color_result.rgb;
-        final_color = vec4<f32>(final_color.rgb + lc * 1.0, 1.0);
+        final_color = vec4<f32>(final_color.rgb + lc, 1.0);
     }
 
     return final_color;
@@ -105,6 +122,23 @@ uniform float u_p_confidence;
 in vec2 v_uv;
 out vec4 fragColor;
 
+float sdf_star(vec2 p, float n, float r, float ir){
+    float an = 3.14159265 / n;
+    float a = atan(p.y, p.x);
+    float period = 2.0 * an;
+    float sa = mod(a + an, period) - an;
+    vec2 q = length(p) * vec2(cos(sa), abs(sin(sa)));
+    vec2 tip = vec2(r, 0.0);
+    vec2 valley = vec2(ir * cos(an), ir * sin(an));
+    vec2 e = tip - valley;
+    vec2 d = q - valley;
+    float t = clamp(dot(d, e) / dot(e, e), 0.0, 1.0);
+    vec2 closest = valley + e * t;
+    float dist = length(q - closest);
+    float cross_val = d.x * e.y - d.y * e.x;
+    return cross_val > 0.0 ? -dist : dist;
+}
+
 float apply_glow(float d, float intensity){
     return exp(-max(d, 0.0) * intensity * 8.0);
 }
@@ -124,7 +158,7 @@ void main(){
     // ── Layer 1: grid ──
     {
         vec2 p = vec2(uv.x * aspect, uv.y);
-        // Unknown stage: star
+        float sdf_result = sdf_star(p, 0.300000, 6.000000, 0.150000);
         float glow_result = apply_glow(sdf_result, 1.000000);
 
         vec4 color_result = vec4(vec3(glow_result), 1.0);
@@ -132,7 +166,7 @@ void main(){
         color_result = vec4(color_result.rgb + (grain_noise - 0.5) * 0.800000, color_result.a);
         color_result = vec4(color_result.rgb * vec3(0.830000, 0.690000, 0.220000), 1.0);
         vec3 lc = color_result.rgb;
-        final_color = vec4(final_color.rgb + lc * 1.000, 1.0);
+        final_color = vec4(final_color.rgb + lc, 1.0);
     }
 
     fragColor = final_color;
@@ -154,8 +188,15 @@ class GameRenderer {
     this.running = false;
     this.startTime = performance.now() / 1000;
     this.audioData = { bass: 0, mid: 0, treble: 0, energy: 0, beat: 0 };
+    this.mouseX = 0; this.mouseY = 0;
     this.userParams = {};
     for (const u of uniformDefs) this.userParams[u.name] = u.default;
+    this._onMouseMove = (e) => {
+      const r = this.canvas.getBoundingClientRect();
+      this.mouseX = (e.clientX - r.left) / r.width;
+      this.mouseY = 1.0 - (e.clientY - r.top) / r.height;
+    };
+    this.canvas.addEventListener('mousemove', this._onMouseMove);
   }
 
   async init() {
@@ -223,7 +264,7 @@ class GameRenderer {
     data[4] = this.audioData.energy;
     data[5] = this.audioData.beat;
     data[6] = w; data[7] = h;
-    data[8] = 0; data[9] = 0; // mouse
+    data[8] = this.mouseX; data[9] = this.mouseY;
     let i = 10;
     for (const u of this.uniformDefs) data[i++] = this.userParams[u.name] ?? u.default;
     this.device.queue.writeBuffer(this.uniformBuffer, 0, data);
@@ -244,7 +285,7 @@ class GameRenderer {
 
   setParam(name, value) { this.userParams[name] = value; }
   setAudioData(d) { Object.assign(this.audioData, d); }
-  destroy() { this.stop(); this.device?.destroy(); }
+  destroy() { this.stop(); this.canvas.removeEventListener('mousemove', this._onMouseMove); this.device?.destroy(); }
 }
 
 class GameRendererGL {
@@ -258,8 +299,15 @@ class GameRendererGL {
     this.running = false;
     this.startTime = performance.now() / 1000;
     this.audioData = { bass: 0, mid: 0, treble: 0, energy: 0, beat: 0 };
+    this.mouseX = 0; this.mouseY = 0;
     this.userParams = {};
     for (const u of uniformDefs) this.userParams[u.name] = u.default;
+    this._onMouseMove = (e) => {
+      const r = this.canvas.getBoundingClientRect();
+      this.mouseX = (e.clientX - r.left) / r.width;
+      this.mouseY = 1.0 - (e.clientY - r.top) / r.height;
+    };
+    this.canvas.addEventListener('mousemove', this._onMouseMove);
   }
 
   init() {
@@ -339,7 +387,7 @@ class GameRendererGL {
     gl.uniform1f(this.locs.energy, this.audioData.energy);
     gl.uniform1f(this.locs.beat, this.audioData.beat);
     gl.uniform2f(this.locs.resolution, this.canvas.width, this.canvas.height);
-    gl.uniform2f(this.locs.mouse, 0, 0);
+    gl.uniform2f(this.locs.mouse, this.mouseX, this.mouseY);
     for (const u of this.uniformDefs) {
       gl.uniform1f(this.paramLocs[u.name], this.userParams[u.name] ?? u.default);
     }
@@ -348,7 +396,7 @@ class GameRendererGL {
 
   setParam(name, value) { this.userParams[name] = value; }
   setAudioData(d) { Object.assign(this.audioData, d); }
-  destroy() { this.stop(); }
+  destroy() { this.stop(); this.canvas.removeEventListener('mousemove', this._onMouseMove); }
 }
 
 class ScoreFingerprint extends HTMLElement {

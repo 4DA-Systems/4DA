@@ -119,7 +119,7 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
         let prev_color = textureSample(prev_frame, prev_sampler, input.uv);
         color_result = mix(color_result, prev_color, 0.950000);
         let lc = color_result.rgb;
-        final_color = vec4<f32>(final_color.rgb + lc * 1.0, 1.0);
+        final_color = vec4<f32>(final_color.rgb + lc, 1.0);
     }
 
     // ── Layer 2: noise_field ──
@@ -130,7 +130,7 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
         var color_result = vec4<f32>(vec3<f32>(glow_result), 1.0);
         color_result = vec4<f32>(color_result.rgb * vec3<f32>(1.000000, 0.820000, 0.300000), 1.0);
         let lc = color_result.rgb;
-        final_color = vec4<f32>(final_color.rgb + lc * 1.0, 1.0);
+        final_color = vec4<f32>(final_color.rgb + lc, 1.0);
     }
 
     // ── Layer 3: outer_ring ──
@@ -141,7 +141,7 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
         var color_result = vec4<f32>(vec3<f32>(glow_result), 1.0);
         color_result = vec4<f32>(color_result.rgb * vec3<f32>(0.830000, 0.690000, 0.220000), 1.0);
         let lc = color_result.rgb;
-        final_color = vec4<f32>(final_color.rgb + lc * 1.0, 1.0);
+        final_color = vec4<f32>(final_color.rgb + lc, 1.0);
     }
 
     return final_color;
@@ -257,7 +257,7 @@ void main(){
         vec4 prev_color = texture(u_prev_frame, v_uv);
         color_result = mix(color_result, prev_color, 0.950000);
         vec3 lc = color_result.rgb;
-        final_color = vec4(final_color.rgb + lc * 1.000, 1.0);
+        final_color = vec4(final_color.rgb + lc, 1.0);
     }
 
     // ── Layer 2: noise_field ──
@@ -269,7 +269,7 @@ void main(){
         vec4 color_result = vec4(vec3(glow_result), 1.0);
         color_result = vec4(color_result.rgb * vec3(1.000000, 0.820000, 0.300000), 1.0);
         vec3 lc = color_result.rgb;
-        final_color = vec4(final_color.rgb + lc * 1.000, 1.0);
+        final_color = vec4(final_color.rgb + lc, 1.0);
     }
 
     // ── Layer 3: outer_ring ──
@@ -281,7 +281,7 @@ void main(){
         vec4 color_result = vec4(vec3(glow_result), 1.0);
         color_result = vec4(color_result.rgb * vec3(0.830000, 0.690000, 0.220000), 1.0);
         vec3 lc = color_result.rgb;
-        final_color = vec4(final_color.rgb + lc * 1.000, 1.0);
+        final_color = vec4(final_color.rgb + lc, 1.0);
     }
 
     fragColor = final_color;
@@ -303,8 +303,15 @@ class GameRenderer {
     this.running = false;
     this.startTime = performance.now() / 1000;
     this.audioData = { bass: 0, mid: 0, treble: 0, energy: 0, beat: 0 };
+    this.mouseX = 0; this.mouseY = 0;
     this.userParams = {};
     for (const u of uniformDefs) this.userParams[u.name] = u.default;
+    this._onMouseMove = (e) => {
+      const r = this.canvas.getBoundingClientRect();
+      this.mouseX = (e.clientX - r.left) / r.width;
+      this.mouseY = 1.0 - (e.clientY - r.top) / r.height;
+    };
+    this.canvas.addEventListener('mousemove', this._onMouseMove);
   }
 
   async init() {
@@ -372,7 +379,7 @@ class GameRenderer {
     data[4] = this.audioData.energy;
     data[5] = this.audioData.beat;
     data[6] = w; data[7] = h;
-    data[8] = 0; data[9] = 0; // mouse
+    data[8] = this.mouseX; data[9] = this.mouseY;
     let i = 10;
     for (const u of this.uniformDefs) data[i++] = this.userParams[u.name] ?? u.default;
     this.device.queue.writeBuffer(this.uniformBuffer, 0, data);
@@ -393,7 +400,7 @@ class GameRenderer {
 
   setParam(name, value) { this.userParams[name] = value; }
   setAudioData(d) { Object.assign(this.audioData, d); }
-  destroy() { this.stop(); this.device?.destroy(); }
+  destroy() { this.stop(); this.canvas.removeEventListener('mousemove', this._onMouseMove); this.device?.destroy(); }
 }
 
   _initMemory() {
@@ -458,8 +465,15 @@ class GameRendererGL {
     this.running = false;
     this.startTime = performance.now() / 1000;
     this.audioData = { bass: 0, mid: 0, treble: 0, energy: 0, beat: 0 };
+    this.mouseX = 0; this.mouseY = 0;
     this.userParams = {};
     for (const u of uniformDefs) this.userParams[u.name] = u.default;
+    this._onMouseMove = (e) => {
+      const r = this.canvas.getBoundingClientRect();
+      this.mouseX = (e.clientX - r.left) / r.width;
+      this.mouseY = 1.0 - (e.clientY - r.top) / r.height;
+    };
+    this.canvas.addEventListener('mousemove', this._onMouseMove);
   }
 
   init() {
@@ -539,7 +553,7 @@ class GameRendererGL {
     gl.uniform1f(this.locs.energy, this.audioData.energy);
     gl.uniform1f(this.locs.beat, this.audioData.beat);
     gl.uniform2f(this.locs.resolution, this.canvas.width, this.canvas.height);
-    gl.uniform2f(this.locs.mouse, 0, 0);
+    gl.uniform2f(this.locs.mouse, this.mouseX, this.mouseY);
     for (const u of this.uniformDefs) {
       gl.uniform1f(this.paramLocs[u.name], this.userParams[u.name] ?? u.default);
     }
@@ -548,7 +562,7 @@ class GameRendererGL {
 
   setParam(name, value) { this.userParams[name] = value; }
   setAudioData(d) { Object.assign(this.audioData, d); }
-  destroy() { this.stop(); }
+  destroy() { this.stop(); this.canvas.removeEventListener('mousemove', this._onMouseMove); }
 }
 
   _initMemoryGL() {
