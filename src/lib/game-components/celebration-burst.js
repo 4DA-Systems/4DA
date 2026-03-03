@@ -1,4 +1,4 @@
-// GAME Component: celebration — auto-generated, do not edit.
+// GAME Component: celebration-burst — auto-generated, do not edit.
 (function(){
 const WGSL_V = `struct VertexOutput {
     @builtin(position) pos: vec4<f32>,
@@ -67,7 +67,7 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
 
     var final_color = vec4<f32>(0.0, 0.0, 0.0, 1.0);
 
-    // ── Layer 0: ring_outer ──
+    // ── Layer 1: ring_outer ──
     {
         var p = vec2<f32>(uv.x * aspect, uv.y);
         let sdf_result = abs(length(p) - ring_r) - 0.020000;
@@ -75,12 +75,12 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
         var color_result = vec4<f32>(vec3<f32>(glow_result), 1.0);
         let pp_lum = dot(color_result.rgb, vec3<f32>(0.299, 0.587, 0.114));
         color_result = vec4<f32>(color_result.rgb + max(pp_lum - 0.300000, 0.0) * 2.000000, 1.0);
-        color_result = vec4<f32>(color_result.rgb * vec3<f32>(gold, 1.000000, 1.000000), 1.0);
+        color_result = vec4<f32>(color_result.rgb * vec3<f32>(gold, 0.690000, 0.220000), 1.0);
         let lc = color_result.rgb;
-        final_color = vec4<f32>(final_color.rgb + lc * 1.0, 1.0);
+        final_color = vec4<f32>(final_color.rgb + lc, 1.0);
     }
 
-    // ── Layer 1: ring_inner ──
+    // ── Layer 2: ring_inner ──
     {
         var p = vec2<f32>(uv.x * aspect, uv.y);
         let sdf_result = abs(length(p) - inner_r) - 0.015000;
@@ -88,12 +88,12 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
         var color_result = vec4<f32>(vec3<f32>(glow_result), 1.0);
         let pp_lum = dot(color_result.rgb, vec3<f32>(0.299, 0.587, 0.114));
         color_result = vec4<f32>(color_result.rgb + max(pp_lum - 0.300000, 0.0) * 2.000000, 1.0);
-        color_result = vec4<f32>(color_result.rgb * vec3<f32>(gold, 1.000000, 1.000000), 1.0);
+        color_result = vec4<f32>(color_result.rgb * vec3<f32>(gold, 0.690000, 0.220000), 1.0);
         let lc = color_result.rgb;
-        final_color = vec4<f32>(final_color.rgb + lc * 1.0, 1.0);
+        final_color = vec4<f32>(final_color.rgb + lc, 1.0);
     }
 
-    // ── Layer 2: center_flash ──
+    // ── Layer 3: center_flash ──
     {
         var p = vec2<f32>(uv.x * aspect, uv.y);
         let sdf_result = sdf_circle(p, 0.080000);
@@ -101,9 +101,9 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
         var color_result = vec4<f32>(vec3<f32>(glow_result), 1.0);
         let pp_lum = dot(color_result.rgb, vec3<f32>(0.299, 0.587, 0.114));
         color_result = vec4<f32>(color_result.rgb + max(pp_lum - 0.400000, 0.0) * 3.000000, 1.0);
-        color_result = vec4<f32>(color_result.rgb * vec3<f32>(white, 1.000000, 1.000000), 1.0);
+        color_result = vec4<f32>(color_result.rgb * vec3<f32>(white, white, white), 1.0);
         let lc = color_result.rgb;
-        final_color = vec4<f32>(final_color.rgb + lc * 1.0, 1.0);
+        final_color = vec4<f32>(final_color.rgb + lc, 1.0);
     }
 
     return final_color;
@@ -167,7 +167,7 @@ void main(){
 
     vec4 final_color = vec4(0.0, 0.0, 0.0, 1.0);
 
-    // ── Layer 0: ring_outer ──
+    // ── Layer 1: ring_outer ──
     {
         vec2 p = vec2(uv.x * aspect, uv.y);
         float sdf_result = abs(length(p) - ring_r) - 0.020000;
@@ -176,12 +176,12 @@ void main(){
         vec4 color_result = vec4(vec3(glow_result), 1.0);
         float pp_lum = dot(color_result.rgb, vec3(0.299, 0.587, 0.114));
         color_result = vec4(color_result.rgb + max(pp_lum - 0.300000, 0.0) * 2.000000, 1.0);
-        color_result = vec4(color_result.rgb * vec3(gold, 1.000000, 1.000000), 1.0);
+        color_result = vec4(color_result.rgb * vec3(gold, 0.690000, 0.220000), 1.0);
         vec3 lc = color_result.rgb;
-        final_color = vec4(final_color.rgb + lc * 1.000, 1.0);
+        final_color = vec4(final_color.rgb + lc, 1.0);
     }
 
-    // ── Layer 1: ring_inner ──
+    // ── Layer 2: ring_inner ──
     {
         vec2 p = vec2(uv.x * aspect, uv.y);
         float sdf_result = abs(length(p) - inner_r) - 0.015000;
@@ -190,12 +190,12 @@ void main(){
         vec4 color_result = vec4(vec3(glow_result), 1.0);
         float pp_lum = dot(color_result.rgb, vec3(0.299, 0.587, 0.114));
         color_result = vec4(color_result.rgb + max(pp_lum - 0.300000, 0.0) * 2.000000, 1.0);
-        color_result = vec4(color_result.rgb * vec3(gold, 1.000000, 1.000000), 1.0);
+        color_result = vec4(color_result.rgb * vec3(gold, 0.690000, 0.220000), 1.0);
         vec3 lc = color_result.rgb;
-        final_color = vec4(final_color.rgb + lc * 1.000, 1.0);
+        final_color = vec4(final_color.rgb + lc, 1.0);
     }
 
-    // ── Layer 2: center_flash ──
+    // ── Layer 3: center_flash ──
     {
         vec2 p = vec2(uv.x * aspect, uv.y);
         float sdf_result = sdf_circle(p, 0.080000);
@@ -204,15 +204,15 @@ void main(){
         vec4 color_result = vec4(vec3(glow_result), 1.0);
         float pp_lum = dot(color_result.rgb, vec3(0.299, 0.587, 0.114));
         color_result = vec4(color_result.rgb + max(pp_lum - 0.400000, 0.0) * 3.000000, 1.0);
-        color_result = vec4(color_result.rgb * vec3(white, 1.000000, 1.000000), 1.0);
+        color_result = vec4(color_result.rgb * vec3(white, white, white), 1.0);
         vec3 lc = color_result.rgb;
-        final_color = vec4(final_color.rgb + lc * 1.000, 1.0);
+        final_color = vec4(final_color.rgb + lc, 1.0);
     }
 
     fragColor = final_color;
 }
 `;
-const UNIFORMS = [{name:'ring_r',default:0.1},{name:'glow_str',default:4},{name:'gold',default:0},{name:'inner_r',default:0.05},{name:'inner_glow',default:3},{name:'flash_str',default:2},{name:'white',default:0}];
+const UNIFORMS = [{name:'ring_r',default:0.1},{name:'glow_str',default:4},{name:'gold',default:0.83},{name:'inner_r',default:0.05},{name:'inner_glow',default:3},{name:'flash_str',default:2},{name:'white',default:1}];
 const USES_MEMORY = false;
 
 class GameRenderer {
@@ -228,8 +228,15 @@ class GameRenderer {
     this.running = false;
     this.startTime = performance.now() / 1000;
     this.audioData = { bass: 0, mid: 0, treble: 0, energy: 0, beat: 0 };
+    this.mouseX = 0; this.mouseY = 0;
     this.userParams = {};
     for (const u of uniformDefs) this.userParams[u.name] = u.default;
+    this._onMouseMove = (e) => {
+      const r = this.canvas.getBoundingClientRect();
+      this.mouseX = (e.clientX - r.left) / r.width;
+      this.mouseY = 1.0 - (e.clientY - r.top) / r.height;
+    };
+    this.canvas.addEventListener('mousemove', this._onMouseMove);
   }
 
   async init() {
@@ -297,7 +304,7 @@ class GameRenderer {
     data[4] = this.audioData.energy;
     data[5] = this.audioData.beat;
     data[6] = w; data[7] = h;
-    data[8] = 0; data[9] = 0; // mouse
+    data[8] = this.mouseX; data[9] = this.mouseY;
     let i = 10;
     for (const u of this.uniformDefs) data[i++] = this.userParams[u.name] ?? u.default;
     this.device.queue.writeBuffer(this.uniformBuffer, 0, data);
@@ -318,7 +325,7 @@ class GameRenderer {
 
   setParam(name, value) { this.userParams[name] = value; }
   setAudioData(d) { Object.assign(this.audioData, d); }
-  destroy() { this.stop(); this.device?.destroy(); }
+  destroy() { this.stop(); this.canvas.removeEventListener('mousemove', this._onMouseMove); this.device?.destroy(); }
 }
 
 class GameRendererGL {
@@ -332,8 +339,15 @@ class GameRendererGL {
     this.running = false;
     this.startTime = performance.now() / 1000;
     this.audioData = { bass: 0, mid: 0, treble: 0, energy: 0, beat: 0 };
+    this.mouseX = 0; this.mouseY = 0;
     this.userParams = {};
     for (const u of uniformDefs) this.userParams[u.name] = u.default;
+    this._onMouseMove = (e) => {
+      const r = this.canvas.getBoundingClientRect();
+      this.mouseX = (e.clientX - r.left) / r.width;
+      this.mouseY = 1.0 - (e.clientY - r.top) / r.height;
+    };
+    this.canvas.addEventListener('mousemove', this._onMouseMove);
   }
 
   init() {
@@ -413,7 +427,7 @@ class GameRendererGL {
     gl.uniform1f(this.locs.energy, this.audioData.energy);
     gl.uniform1f(this.locs.beat, this.audioData.beat);
     gl.uniform2f(this.locs.resolution, this.canvas.width, this.canvas.height);
-    gl.uniform2f(this.locs.mouse, 0, 0);
+    gl.uniform2f(this.locs.mouse, this.mouseX, this.mouseY);
     for (const u of this.uniformDefs) {
       gl.uniform1f(this.paramLocs[u.name], this.userParams[u.name] ?? u.default);
     }
@@ -422,10 +436,10 @@ class GameRendererGL {
 
   setParam(name, value) { this.userParams[name] = value; }
   setAudioData(d) { Object.assign(this.audioData, d); }
-  destroy() { this.stop(); }
+  destroy() { this.stop(); this.canvas.removeEventListener('mousemove', this._onMouseMove); }
 }
 
-class Celebration extends HTMLElement {
+class CelebrationBurst extends HTMLElement {
   constructor() {
     super();
     this.attachShadow({ mode: 'open' });
@@ -460,7 +474,7 @@ class Celebration extends HTMLElement {
       if (gl.init()) {
         this._renderer = gl;
       } else {
-        console.warn('game-celebration: no WebGPU or WebGL2 support');
+        console.warn('game-celebration-burst: no WebGPU or WebGL2 support');
         return;
       }
     }
@@ -485,5 +499,5 @@ class Celebration extends HTMLElement {
   }
 }
 
-customElements.define('game-celebration', Celebration);
+customElements.define('game-celebration-burst', CelebrationBurst);
 })();
