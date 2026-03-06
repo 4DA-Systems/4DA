@@ -19,11 +19,24 @@ use tracing::{info, warn};
 /// max_age_days old are analyzed for calibration. All recent items are analyzed for
 /// topic decay, source quality, and anti-patterns.
 ///
+/// `ace_conn` optionally provides an ACE database connection for bridging accuracy
+/// feedback. When `None`, the global ACE engine is used (production). Pass `Some`
+/// in tests for full isolation.
+///
 /// Returns the cycle result with counts of all intelligence produced.
 /// Pruning itself is NOT performed here; it happens via `db.cleanup_old_items()`.
 pub(crate) fn run_autophagy_cycle(
     conn: &Connection,
     max_age_days: i64,
+) -> Result<super::AutophagyCycleResult, String> {
+    run_autophagy_cycle_with_ace(conn, max_age_days, None)
+}
+
+/// Inner implementation that accepts an optional ACE connection for test isolation.
+pub(crate) fn run_autophagy_cycle_with_ace(
+    conn: &Connection,
+    max_age_days: i64,
+    ace_conn: Option<&Connection>,
 ) -> Result<super::AutophagyCycleResult, String> {
     let start = Instant::now();
     info!(target: "4da::autophagy", max_age_days, "Starting autophagy cycle");
@@ -105,16 +118,24 @@ pub(crate) fn run_autophagy_cycle(
     // This analyzes implicit user signals (save, click, dismiss) from the ACE database
     // and produces per-topic calibration deltas that the scoring pipeline uses.
     let mut ace_calibrations_bridged: i64 = 0;
-    if let Ok(ace) = crate::get_ace_engine() {
-        let ace_conn = ace.get_conn().lock();
-        match super::calibration_analysis::bridge_accuracy_feedback(&ace_conn, conn, max_age_days) {
+    if let Some(provided_ace) = ace_conn {
+        // Test path: use the provided ACE connection directly
+        match super::calibration_analysis::bridge_accuracy_feedback(provided_ace, conn, max_age_days) {
             Ok(count) => {
                 ace_calibrations_bridged = count as i64;
-                info!(
-                    target: "4da::autophagy",
-                    count,
-                    "ACE accuracy feedback bridged to calibration"
-                );
+                info!(target: "4da::autophagy", count, "ACE accuracy feedback bridged to calibration");
+            }
+            Err(e) => {
+                warn!(target: "4da::autophagy", error = %e, "ACE feedback bridge failed");
+            }
+        }
+    } else if let Ok(ace) = crate::get_ace_engine() {
+        // Production path: use the global ACE engine
+        let ace_guard = ace.get_conn().lock();
+        match super::calibration_analysis::bridge_accuracy_feedback(&ace_guard, conn, max_age_days) {
+            Ok(count) => {
+                ace_calibrations_bridged = count as i64;
+                info!(target: "4da::autophagy", count, "ACE accuracy feedback bridged to calibration");
             }
             Err(e) => {
                 warn!(target: "4da::autophagy", error = %e, "ACE feedback bridge failed");
@@ -230,18 +251,33 @@ mod tests {
         conn
     }
 
+    /// Create an isolated in-memory ACE database for test isolation.
+    /// This prevents tests from reaching through the global OnceCell
+    /// to the production ACE database.
+    fn setup_test_ace_db() -> Connection {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(
+            "CREATE TABLE interactions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                item_topics TEXT,
+                signal_strength REAL NOT NULL DEFAULT 0.0,
+                timestamp TEXT NOT NULL DEFAULT (datetime('now'))
+            );",
+        )
+        .expect("create ACE tables");
+        conn
+    }
+
     #[test]
     fn test_run_cycle_empty_db() {
         let conn = setup_test_db();
-        let result = run_autophagy_cycle(&conn, 30).expect("cycle should succeed");
+        let ace = setup_test_ace_db();
+        let result = run_autophagy_cycle_with_ace(&conn, 30, Some(&ace))
+            .expect("cycle should succeed");
 
         assert_eq!(result.items_analyzed, 0);
         assert_eq!(result.items_pruned, 0);
-        // calibrations_produced may be > 0 if the global ACE engine bridges
-        // accuracy feedback from the production DB. The test DB itself is empty,
-        // so source-level and topic-level calibrations are 0, but ACE bridging
-        // operates on its own connection and may contribute calibrations.
-        assert!(result.calibrations_produced >= 0);
+        assert_eq!(result.calibrations_produced, 0);
         assert_eq!(result.topic_decay_rates_updated, 0);
         assert_eq!(result.source_autopsies_produced, 0);
         assert_eq!(result.anti_patterns_detected, 0);
@@ -277,7 +313,9 @@ mod tests {
             .unwrap();
         }
 
-        let result = run_autophagy_cycle(&conn, 30).expect("cycle should succeed");
+        let ace = setup_test_ace_db();
+        let result = run_autophagy_cycle_with_ace(&conn, 30, Some(&ace))
+            .expect("cycle should succeed");
 
         // Items are only 2 days old, so nothing in the pruning window (23-30 days)
         assert_eq!(result.items_analyzed, 0);
@@ -297,10 +335,11 @@ mod tests {
     #[test]
     fn test_cycle_records_to_autophagy_cycles() {
         let conn = setup_test_db();
+        let ace = setup_test_ace_db();
 
         // Run two cycles
-        run_autophagy_cycle(&conn, 30).expect("cycle 1");
-        run_autophagy_cycle(&conn, 30).expect("cycle 2");
+        run_autophagy_cycle_with_ace(&conn, 30, Some(&ace)).expect("cycle 1");
+        run_autophagy_cycle_with_ace(&conn, 30, Some(&ace)).expect("cycle 2");
 
         let cycle_count: i64 = conn
             .query_row("SELECT COUNT(*) FROM autophagy_cycles", [], |r| r.get(0))

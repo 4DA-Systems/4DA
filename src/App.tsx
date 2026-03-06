@@ -320,32 +320,36 @@ function App() {
 
   return (
     <>
-      {/* Splash Screen */}
-      {showSplash && (
-        <SplashScreen onComplete={() => setShowSplash(false)} minimumDisplayTime={800} />
-      )}
+      {/* First-run flow — wrapped in error boundary to contain crashes
+           during the user's first impression */}
+      <ViewErrorBoundary viewName="First Run">
+        {/* Splash Screen */}
+        {showSplash && (
+          <SplashScreen onComplete={() => setShowSplash(false)} minimumDisplayTime={800} />
+        )}
 
-      {/* Onboarding Flow (first run) */}
-      {!showSplash && showOnboarding && (
-        <Onboarding onComplete={() => {
-          setShowOnboarding(false);
-          setIsFirstRun(true);
-          loadSettings();
-          loadUserContext();
-          loadDiscoveredContext();
-          loadChannels();
-        }} />
-      )}
-
-      {/* First-Run Transition (bridges onboarding to first analysis) */}
-      {!showSplash && !showOnboarding && isFirstRun && !firstRunDismissed && (
-        <Suspense fallback={null}>
-          <FirstRunTransition onComplete={(view) => {
-            setFirstRunDismissed(true);
-            setActiveView(view);
+        {/* Onboarding Flow (first run) */}
+        {!showSplash && showOnboarding && (
+          <Onboarding onComplete={() => {
+            setShowOnboarding(false);
+            setIsFirstRun(true);
+            loadSettings();
+            loadUserContext();
+            loadDiscoveredContext();
+            loadChannels();
           }} />
-        </Suspense>
-      )}
+        )}
+
+        {/* First-Run Transition (bridges onboarding to first analysis) */}
+        {!showSplash && !showOnboarding && isFirstRun && !firstRunDismissed && (
+          <Suspense fallback={null}>
+            <FirstRunTransition onComplete={(view) => {
+              setFirstRunDismissed(true);
+              setActiveView(view);
+            }} />
+          </Suspense>
+        )}
+      </ViewErrorBoundary>
 
       <div className={`min-h-screen bg-bg-primary text-white p-6 ${showSplash || showOnboarding ? 'hidden' : 'opacity-100 transition-opacity duration-300'}`}>
         <a

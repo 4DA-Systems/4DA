@@ -105,12 +105,14 @@ export function CelebrationState({
       <div className="flex flex-col items-center gap-3">
         <button
           onClick={() => onDismiss('briefing')}
+          aria-label="View your intelligence briefing"
           className="px-8 py-3 bg-orange-500 text-white font-medium rounded-lg hover:bg-orange-600 hover:scale-105 active:scale-95 transition-all"
         >
           {t('firstRun.seeBriefing')}
         </button>
         <button
           onClick={() => onDismiss('results')}
+          aria-label={`Browse ${totalCount} analyzed results`}
           className="text-sm text-gray-500 hover:text-gray-300 transition-colors"
         >
           {t('firstRun.browseResults', { count: totalCount })}
@@ -122,6 +124,7 @@ export function CelebrationState({
         <p className="text-xs text-gray-500 mb-1">{t('firstRun.streetsNudge')}</p>
         <button
           onClick={() => onDismiss('playbook')}
+          aria-label="Explore the STREETS developer playbook"
           className="text-xs font-medium hover:underline transition-colors"
           style={{ color: '#D4AF37' }}
         >

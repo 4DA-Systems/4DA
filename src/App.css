@@ -57,6 +57,12 @@ body {
   font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
 }
 
+/* Global spinner keyframe — used by inline-styled spinners in CalibrationStep, etc. */
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
 /* Splash Screen Animations */
 @keyframes pulse-slow {
   0%, 100% {

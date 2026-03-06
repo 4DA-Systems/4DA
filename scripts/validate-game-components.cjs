@@ -1,0 +1,91 @@
+#!/usr/bin/env node
+/**
+ * Validates GAME compiler output files for syntax correctness.
+ *
+ * The GAME compiler (Generative Animation Matrix Engine) generates Web Components
+ * with WebGPU + WebGL renderers. A known codegen bug can emit class methods
+ * AFTER the class closing brace, breaking the build.
+ *
+ * Run after every GAME compile: node scripts/validate-game-components.cjs
+ * Also run as part of: pnpm run validate:all
+ */
+
+const fs = require('fs');
+const path = require('path');
+const { execSync } = require('child_process');
+
+const GAME_DIR = path.join(__dirname, '..', 'src', 'lib', 'game-components');
+
+if (!fs.existsSync(GAME_DIR)) {
+  console.log('No game-components directory found, skipping.');
+  process.exit(0);
+}
+
+const files = fs.readdirSync(GAME_DIR).filter(f => f.endsWith('.js'));
+
+if (files.length === 0) {
+  console.log('No GAME component files found.');
+  process.exit(0);
+}
+
+let failed = 0;
+let passed = 0;
+
+for (const file of files) {
+  const filePath = path.join(GAME_DIR, file);
+  try {
+    // Syntax check via Node.js --check
+    execSync(`node -c "${filePath}"`, { stdio: 'pipe' });
+
+    // Structural check: verify no methods leak outside class bodies
+    const content = fs.readFileSync(filePath, 'utf-8');
+    const lines = content.split('\n');
+    let braceDepth = 0;
+    let inIIFE = false;
+    const orphanedMethods = [];
+
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      // Track IIFE wrapper
+      if (line.includes('(function(){') || line.includes('(function ()')) inIIFE = true;
+
+      // Count braces (rough — good enough for generated code with consistent formatting)
+      for (const ch of line) {
+        if (ch === '{') braceDepth++;
+        if (ch === '}') braceDepth--;
+      }
+
+      // If we're at IIFE level (depth 1) or below, and see an indented method pattern,
+      // it's likely an orphaned method
+      if (braceDepth <= 1 && inIIFE) {
+        const methodMatch = line.match(/^\s{2,}(_?\w+)\s*\([^)]*\)\s*\{/);
+        if (methodMatch && !line.includes('class ') && !line.includes('function ')) {
+          orphanedMethods.push({ line: i + 1, method: methodMatch[1] });
+        }
+      }
+    }
+
+    if (orphanedMethods.length > 0) {
+      console.error(`FAIL  ${file} — ${orphanedMethods.length} orphaned method(s) outside class body:`);
+      for (const m of orphanedMethods) {
+        console.error(`        line ${m.line}: ${m.method}()`);
+      }
+      failed++;
+    } else {
+      console.log(`PASS  ${file}`);
+      passed++;
+    }
+  } catch (err) {
+    const stderr = err.stderr ? err.stderr.toString().trim() : err.message;
+    console.error(`FAIL  ${file} — syntax error:`);
+    console.error(`        ${stderr.split('\n')[0]}`);
+    failed++;
+  }
+}
+
+console.log(`\n${passed + failed} file(s) checked: ${passed} passed, ${failed} failed.`);
+
+if (failed > 0) {
+  console.error('\nGAME component validation failed. Fix the compiler output before committing.');
+  process.exit(1);
+}
