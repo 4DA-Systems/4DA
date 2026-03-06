@@ -1,4 +1,4 @@
-import { useEffect, useCallback, useMemo } from 'react';
+import { useEffect, useCallback, useMemo, useRef, memo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { listen } from '@tauri-apps/api/event';
 import { useAppStore } from '../store';
@@ -15,6 +15,15 @@ import { FeedEchoBlock } from './playbook/FeedEchoBlock';
 import { ProgressiveRevealBanner } from './playbook/ProgressiveRevealBanner';
 import { PersonalizationDepthIndicator } from './playbook/PersonalizationDepthIndicator';
 import { MODULE_IDS, CheckIcon, ProgressRing } from './playbook/PlaybookIcons';
+
+// 3a. Memoized lesson content — avoids re-parsing markdown on every parent render
+const LessonContent = memo(function LessonContent({ content, moduleId, lessonIdx }: {
+  content: string;
+  moduleId: string;
+  lessonIdx: number;
+}) {
+  return <>{renderMarkdown(content, { moduleId, lessonIdx })}</>;
+});
 
 export function PlaybookView() {
   const { t } = useTranslation();
@@ -85,17 +94,26 @@ export function PlaybookView() {
     [markComplete, addToast],
   );
 
-  // Load personalized content for each lesson when module content is available
+  // 3c. Track already-requested personalization keys to avoid duplicate IPC calls
+  const requestedKeysRef = useRef(new Set<string>());
+
+  // Load personalized content for each lesson when module content changes
   useEffect(() => {
     if (!playbookContent) return;
     const moduleId = playbookContent.module_id;
+
+    // Reset tracked keys when switching modules
+    requestedKeysRef.current = new Set<string>();
+
     playbookContent.lessons.forEach((_, idx) => {
       const key = `${moduleId}:${idx}`;
-      if (loadPersonalized && !personalizedLessons?.has(key)) {
+      if (!personalizedLessons[key] && !requestedKeysRef.current.has(key)) {
+        requestedKeysRef.current.add(key);
         loadPersonalized(moduleId, idx);
       }
     });
-  }, [playbookContent, personalizedLessons, loadPersonalized]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- only fire on module content change, not on personalizedLessons updates
+  }, [playbookContent, loadPersonalized]);
 
   // Listen for LLM hydration events and upgrade insight blocks in-place
   useEffect(() => {
@@ -107,15 +125,16 @@ export function PlaybookView() {
     }>('personalization-llm-upgrade', (event) => {
       const { module_id, lesson_idx, block_id, content } = event.payload;
       const key = `${module_id}:${lesson_idx}`;
-      const current = new Map(useAppStore.getState().personalizedLessons);
-      const lesson = current.get(key);
+      const current = useAppStore.getState().personalizedLessons;
+      const lesson = current[key];
       if (!lesson) return;
 
       const updatedBlocks = lesson.insight_blocks.map((block) =>
         block.block_id === block_id ? { ...block, content } : block,
       );
-      current.set(key, { ...lesson, insight_blocks: updatedBlocks });
-      useAppStore.setState({ personalizedLessons: current });
+      useAppStore.setState({
+        personalizedLessons: { ...current, [key]: { ...lesson, insight_blocks: updatedBlocks } },
+      });
     });
 
     return () => {
@@ -262,7 +281,7 @@ export function PlaybookView() {
             {playbookContent.lessons.map((lesson, idx) => {
               const isCompleted = completedSet.has(idx);
               const pKey = `${playbookContent.module_id}:${idx}`;
-              const personalized = personalizedLessons?.get(pKey);
+              const personalized = personalizedLessons[pKey];
               const lessonContent = personalized?.content ?? lesson.content;
 
               // Separate temporal blocks by type
@@ -315,9 +334,13 @@ export function PlaybookView() {
                     {personalized && <PersonalizationDepthIndicator depth={personalized.depth} />}
                   </div>
 
-                  {/* Lesson content (L1/L2 personalized markdown) */}
+                  {/* 3a. Lesson content — memoized markdown rendering */}
                   <div className="px-6 py-5 prose-4da text-sm leading-relaxed text-text-secondary">
-                    {renderMarkdown(lessonContent, { moduleId: playbookContent.module_id, lessonIdx: idx })}
+                    <LessonContent
+                      content={lessonContent}
+                      moduleId={playbookContent.module_id}
+                      lessonIdx={idx}
+                    />
                   </div>
 
                   {/* L3: Sovereign Insight Cards */}
@@ -359,8 +382,8 @@ export function PlaybookView() {
               />
             )}
 
-            {/* Suns Dashboard — always visible in playbook */}
-            <SunsDashboard />
+            {/* 3b. Suns Dashboard — only mount when SUNS module is active */}
+            {activeModuleId === 'S' && <SunsDashboard />}
           </div>
         )}
       </main>

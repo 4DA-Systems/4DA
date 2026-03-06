@@ -1,8 +1,12 @@
 //! Probe Engine — domain detection, probe selection, calibration execution,
 //! and signal axis audit.
 
+use std::sync::LazyLock;
+
 use crate::probes_corpus::{all_calibration_probes, CalibrProbe, Domain, ProbeExpected};
 use crate::scoring::{score_item, ScoringContext, ScoringInput, ScoringOptions};
+
+static CALIBRATION_PROBES: LazyLock<Vec<CalibrProbe>> = LazyLock::new(all_calibration_probes);
 
 // ============================================================================
 // Domain Detection
@@ -169,9 +173,7 @@ fn adjacent_domain(primary: Domain) -> Domain {
 // ============================================================================
 
 pub(crate) fn select_probes_for_user(ctx: &ScoringContext) -> (Vec<&'static CalibrProbe>, Domain) {
-    // Leak the probes vec to get 'static references. This runs once per
-    // calibration and the vec lives for the process lifetime — acceptable.
-    let probes: &'static Vec<CalibrProbe> = Box::leak(Box::new(all_calibration_probes()));
+    let probes: &Vec<CalibrProbe> = &CALIBRATION_PROBES;
     let primary = detect_user_domain(ctx);
     let adj = adjacent_domain(primary);
 

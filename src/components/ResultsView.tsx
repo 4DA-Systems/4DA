@@ -1,5 +1,4 @@
-import { useRef } from 'react';
-import type { Dispatch, SetStateAction } from 'react';
+import { useRef, useMemo } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { useTranslation } from 'react-i18next';
 import { useShallow } from 'zustand/react/shallow';
@@ -13,15 +12,11 @@ import { useResultFilters } from '../hooks';
 interface ResultsViewProps {
   newItemIds: Set<number>;
   focusedIndex: number;
-  renderLimit: number;
-  setRenderLimit: Dispatch<SetStateAction<number>>;
 }
 
 export function ResultsView({
   newItemIds,
   focusedIndex,
-  renderLimit: _renderLimit,
-  setRenderLimit: _setRenderLimit,
 }: ResultsViewProps) {
   const { t } = useTranslation();
   // Data selectors (may change, use useShallow)
@@ -68,6 +63,15 @@ export function ResultsView({
     overscan: 5,
   });
 
+  // 5b. Memoize computed filter counts and unique sources
+  const relevantCount = useMemo(() => filteredResults.filter(r => r.relevant).length, [filteredResults]);
+  const topPicksCount = useMemo(() => filteredResults.filter(r => r.top_score >= 0.72).length, [filteredResults]);
+  const uniqueSources = useMemo(
+    () => [...new Set(state.relevanceResults.map(r => r.source_type || 'hackernews'))]
+      .sort((a, b) => getSourceLabel(a).localeCompare(getSourceLabel(b))),
+    [state.relevanceResults],
+  );
+
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
       {/* Context Files Panel */}
@@ -99,7 +103,7 @@ export function ResultsView({
                 </div>
                 <p className="text-xs text-gray-500" aria-live="polite">
                   {state.analysisComplete
-                    ? t('results.itemsRelevant', { items: filteredResults.length, relevant: filteredResults.filter((r) => r.relevant).length })
+                    ? t('results.itemsRelevant', { items: filteredResults.length, relevant: relevantCount })
                     : t('results.clickAnalyze')}
                 </p>
                 {state.analysisComplete && filteredResults.length > 0 && (
@@ -111,13 +115,13 @@ export function ResultsView({
             </div>
             {state.analysisComplete && (
               <div className="flex items-center gap-2">
-                {filteredResults.filter((r) => r.top_score >= 0.72).length > 0 && (
+                {topPicksCount > 0 && (
                   <span className="text-xs px-2 py-1 bg-orange-500/10 text-orange-400 rounded-lg">
-                    {t('results.topPicks', { count: filteredResults.filter((r) => r.top_score >= 0.72).length })}
+                    {t('results.topPicks', { count: topPicksCount })}
                   </span>
                 )}
                 <span className="text-xs px-2 py-1 bg-green-500/10 text-green-400 rounded-lg">
-                  {t('results.relevant', { count: filteredResults.filter((r) => r.relevant).length })}
+                  {t('results.relevant', { count: relevantCount })}
                 </span>
               </div>
             )}
@@ -155,9 +159,7 @@ export function ResultsView({
               {/* Source Filters */}
               <div className="flex items-center gap-2 bg-bg-tertiary px-3 py-1.5 rounded-lg flex-wrap" role="group" aria-label="Source filters">
                 <span className="text-xs text-gray-500">{t('results.sources')}</span>
-                {[...new Set(state.relevanceResults.map(r => r.source_type || 'hackernews'))]
-                  .sort((a, b) => getSourceLabel(a).localeCompare(getSourceLabel(b)))
-                  .map(id => (
+                {uniqueSources.map(id => (
                     <button
                       key={id}
                       onClick={() => toggleSourceFilter(id)}

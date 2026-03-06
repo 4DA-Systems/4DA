@@ -28,19 +28,19 @@ export function ViewTabBar() {
   const { t } = useTranslation();
   const activeView = useAppStore(s => s.activeView);
   const setActiveView = useAppStore(s => s.setActiveView);
-  const results = useAppStore(s => s.appState.relevanceResults);
+  const resultsCount = useAppStore(s => s.appState.relevanceResults.length);
   const windows = useAppStore(s => s.decisionWindows);
-  const profile = useAppStore(s => s.unifiedProfile);
+  const profilePct = useAppStore(s => s.unifiedProfile?.completeness.overall_percentage);
   const channels = useAppStore(s => s.channels) ?? [];
 
   const badges = useMemo(() => {
     const b: Partial<Record<ViewId, boolean>> = {};
-    if (results.length > 0) b.results = true;
+    if (resultsCount > 0) b.results = true;
     if ((windows ?? []).some(w => w.status === 'open')) b.briefing = true;
-    if (profile && profile.completeness.overall_percentage < 50) b.profile = true;
+    if (profilePct != null && profilePct < 50) b.profile = true;
     if (channels.some(ch => ch.freshness === 'fresh')) b.channels = true;
     return b;
-  }, [results, windows, profile, channels]);
+  }, [resultsCount, windows, profilePct, channels]);
 
   return (
     <nav aria-label="Main views">

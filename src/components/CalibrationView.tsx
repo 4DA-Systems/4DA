@@ -102,6 +102,10 @@ export function CalibrationView() {
         }
         break;
       }
+      case 'install_ollama': {
+        import('@tauri-apps/plugin-opener').then(({ openUrl }) => openUrl('https://ollama.com/download'));
+        break;
+      }
       case 'give_feedback': {
         setActiveView('results');
         break;

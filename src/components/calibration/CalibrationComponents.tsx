@@ -46,6 +46,7 @@ export function ActionButton({ rec, actionInProgress, onAction }: ActionButtonPr
     open_settings_interests: { idle: 'Open Settings', active: 'Open Settings' },
     open_settings_stacks: { idle: 'Open Settings', active: 'Open Settings' },
     auto_detect_stacks: { idle: 'Auto-Detect', active: 'Detecting...' },
+    install_ollama: { idle: 'Install Ollama', active: 'Installing...' },
     give_feedback: { idle: 'Go to Results', active: 'Go to Results' },
   };
   const label = labels[rec.action_type] || { idle: 'Fix', active: 'Fixing...' };
@@ -53,7 +54,7 @@ export function ActionButton({ rec, actionInProgress, onAction }: ActionButtonPr
   return (
     <button
       onClick={() => onAction(rec)}
-      disabled={!!actionInProgress && !['open_settings_interests', 'open_settings_stacks', 'give_feedback'].includes(rec.action_type!)}
+      disabled={!!actionInProgress && !['open_settings_interests', 'open_settings_stacks', 'give_feedback', 'install_ollama'].includes(rec.action_type!)}
       style={{
         marginTop: 6,
         padding: '4px 12px',
