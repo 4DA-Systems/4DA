@@ -120,7 +120,11 @@ pub(crate) fn run_autophagy_cycle_with_ace(
     let mut ace_calibrations_bridged: i64 = 0;
     if let Some(provided_ace) = ace_conn {
         // Test path: use the provided ACE connection directly
-        match super::calibration_analysis::bridge_accuracy_feedback(provided_ace, conn, max_age_days) {
+        match super::calibration_analysis::bridge_accuracy_feedback(
+            provided_ace,
+            conn,
+            max_age_days,
+        ) {
             Ok(count) => {
                 ace_calibrations_bridged = count as i64;
                 info!(target: "4da::autophagy", count, "ACE accuracy feedback bridged to calibration");
@@ -132,7 +136,8 @@ pub(crate) fn run_autophagy_cycle_with_ace(
     } else if let Ok(ace) = crate::get_ace_engine() {
         // Production path: use the global ACE engine
         let ace_guard = ace.get_conn().lock();
-        match super::calibration_analysis::bridge_accuracy_feedback(&ace_guard, conn, max_age_days) {
+        match super::calibration_analysis::bridge_accuracy_feedback(&ace_guard, conn, max_age_days)
+        {
             Ok(count) => {
                 ace_calibrations_bridged = count as i64;
                 info!(target: "4da::autophagy", count, "ACE accuracy feedback bridged to calibration");
@@ -272,8 +277,8 @@ mod tests {
     fn test_run_cycle_empty_db() {
         let conn = setup_test_db();
         let ace = setup_test_ace_db();
-        let result = run_autophagy_cycle_with_ace(&conn, 30, Some(&ace))
-            .expect("cycle should succeed");
+        let result =
+            run_autophagy_cycle_with_ace(&conn, 30, Some(&ace)).expect("cycle should succeed");
 
         assert_eq!(result.items_analyzed, 0);
         assert_eq!(result.items_pruned, 0);
@@ -314,8 +319,8 @@ mod tests {
         }
 
         let ace = setup_test_ace_db();
-        let result = run_autophagy_cycle_with_ace(&conn, 30, Some(&ace))
-            .expect("cycle should succeed");
+        let result =
+            run_autophagy_cycle_with_ace(&conn, 30, Some(&ace)).expect("cycle should succeed");
 
         // Items are only 2 days old, so nothing in the pruning window (23-30 days)
         assert_eq!(result.items_analyzed, 0);
