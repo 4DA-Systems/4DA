@@ -42,9 +42,6 @@ const WGSL_F = `struct Uniforms {
 
 @group(0) @binding(0) var<uniform> u: Uniforms;
 
-@group(1) @binding(0) var prev_frame: texture_2d<f32>;
-@group(1) @binding(1) var prev_sampler: sampler;
-
 struct VertexOutput {
     @builtin(position) pos: vec4<f32>,
     @location(0) uv: vec2<f32>,
@@ -52,6 +49,23 @@ struct VertexOutput {
 
 fn sdf_circle(p: vec2<f32>, radius: f32) -> f32 {
     return length(p) - radius;
+}
+
+fn sdf_star(p: vec2<f32>, n: f32, r: f32, ir: f32) -> f32 {
+    let an = 3.14159265 / n;
+    let a = atan2(p.y, p.x);
+    let period = 2.0 * an;
+    let sa = (a + an) - floor((a + an) / period) * period - an;
+    let q = length(p) * vec2<f32>(cos(sa), abs(sin(sa)));
+    let tip = vec2<f32>(r, 0.0);
+    let valley = vec2<f32>(ir * cos(an), ir * sin(an));
+    let e = tip - valley;
+    let d = q - valley;
+    let t = clamp(dot(d, e) / dot(e, e), 0.0, 1.0);
+    let closest = valley + e * t;
+    let dist = length(q - closest);
+    let cross_val = d.x * e.y - d.y * e.x;
+    return select(dist, -dist, cross_val > 0.0);
 }
 
 fn apply_glow(d: f32, intensity: f32) -> f32 {
@@ -109,25 +123,54 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
 
     var final_color = vec4<f32>(0.0, 0.0, 0.0, 1.0);
 
-    // ── Layer 1: core ──
+    // ── Layer 1: deep_field ──
     {
         var p = vec2<f32>(uv.x * aspect, uv.y);
-        var sdf_result = sdf_circle(p, 0.350000);
-        let glow_pulse = 2.000000 * (0.9 + 0.1 * sin(time * 2.0));
+        { let warp_x = fbm2(p * 2.000000 + vec2<f32>(0.0, 1.3), i32(3.000000), 0.500000, 2.000000);
+        let warp_y = fbm2(p * 2.000000 + vec2<f32>(1.7, 0.0), i32(3.000000), 0.500000, 2.000000);
+        p = p + vec2<f32>(warp_x, warp_y) * 0.200000; }
+        var sdf_result = fbm2((p * 2.000000 + vec2<f32>(time * 0.1, time * 0.07)), i32(3.000000), 0.500000, 2.000000);
+        let glow_pulse = 1.000000 * (0.9 + 0.1 * sin(time * 2.0));
         let glow_result = apply_glow(sdf_result, glow_pulse);
         var color_result = vec4<f32>(vec3<f32>(glow_result), 1.0);
-        color_result = vec4<f32>(color_result.rgb * vec3<f32>(0.550000, 0.280000, 0.060000), 1.0);
-        let prev_color = textureSample(prev_frame, prev_sampler, input.uv);
-        color_result = mix(color_result, prev_color, 0.950000);
+        color_result = vec4<f32>(color_result.rgb * vec3<f32>(0.150000, 0.080000, 0.020000), 1.0);
+        let lc = color_result.rgb;
+        final_color = vec4<f32>(1.0 - (1.0 - final_color.rgb) * (1.0 - lc), 1.0);
+    }
+
+    // ── Layer 2: core ──
+    {
+        var p = vec2<f32>(uv.x * aspect, uv.y);
+        var color_result: vec4<f32>;
+        {
+            var p_then = p;
+            var then_color: vec4<f32>;
+            var else_color: vec4<f32>;
+            { var p = p_then;
+            var sdf_result = sdf_star(p, 5.000000, 0.280000, 0.120000);
+            let glow_pulse = 3.000000 * (0.9 + 0.1 * sin(time * 2.0));
+            let glow_result = apply_glow(sdf_result, glow_pulse);
+            var color_result = vec4<f32>(vec3<f32>(glow_result), 1.0);
+            color_result = vec4<f32>(color_result.rgb * vec3<f32>(1.000000, 0.150000, 0.100000), 1.0);
+            then_color = color_result; }
+            { var p = p_then;
+            var sdf_result = sdf_circle(p, 0.250000);
+            let glow_pulse = 2.000000 * (0.9 + 0.1 * sin(time * 2.0));
+            let glow_result = apply_glow(sdf_result, glow_pulse);
+            var color_result = vec4<f32>(vec3<f32>(glow_result), 1.0);
+            color_result = vec4<f32>(color_result.rgb * vec3<f32>(0.550000, 0.280000, 0.060000), 1.0);
+            else_color = color_result; }
+            color_result = select(else_color, then_color, (critical_count > 0.000000));
+        }
         let lc = color_result.rgb;
         final_color = vec4<f32>(final_color.rgb + lc, 1.0);
     }
 
-    // ── Layer 2: noise_field ──
+    // ── Layer 3: noise_halo ──
     {
         var p = vec2<f32>(uv.x * aspect, uv.y);
         var sdf_result = fbm2((p * 3.000000 + vec2<f32>(time * 0.1, time * 0.07)), i32(4.000000), 0.500000, 2.000000);
-        let glow_pulse = 1.500000 * (0.9 + 0.1 * sin(time * 2.0));
+        let glow_pulse = 1.200000 * (0.9 + 0.1 * sin(time * 2.0));
         let glow_result = apply_glow(sdf_result, glow_pulse);
         var color_result = vec4<f32>(vec3<f32>(glow_result), 1.0);
         color_result = vec4<f32>(color_result.rgb * vec3<f32>(1.000000, 0.820000, 0.300000), 1.0);
@@ -135,14 +178,26 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
         final_color = vec4<f32>(final_color.rgb + lc, 1.0);
     }
 
-    // ── Layer 3: outer_ring ──
+    // ── Layer 4: sentinel_ring ──
     {
         var p = vec2<f32>(uv.x * aspect, uv.y);
-        var sdf_result = abs(length(p) - 0.380000) - 0.020000;
-        let glow_pulse = 1.000000 * (0.9 + 0.1 * sin(time * 2.0));
+        var sdf_result = abs(length(p) - 0.380000) - 0.015000;
+        let glow_pulse = 1.500000 * (0.9 + 0.1 * sin(time * 2.0));
         let glow_result = apply_glow(sdf_result, glow_pulse);
         var color_result = vec4<f32>(vec3<f32>(glow_result), 1.0);
         color_result = vec4<f32>(color_result.rgb * vec3<f32>(0.830000, 0.690000, 0.220000), 1.0);
+        let lc = color_result.rgb;
+        final_color = vec4<f32>(final_color.rgb + lc, 1.0);
+    }
+
+    // ── Layer 5: pulse_ring ──
+    {
+        var p = vec2<f32>(uv.x * aspect, uv.y);
+        var sdf_result = abs(length(p) - 0.320000) - 0.008000;
+        let glow_pulse = 2.000000 * (0.9 + 0.1 * sin(time * 2.0));
+        let glow_result = apply_glow(sdf_result, glow_pulse);
+        var color_result = vec4<f32>(vec3<f32>(glow_result), 1.0);
+        color_result = vec4<f32>(color_result.rgb * vec3<f32>(0.900000, 0.750000, 0.300000), 1.0);
         let lc = color_result.rgb;
         final_color = vec4<f32>(final_color.rgb + lc, 1.0);
     }
@@ -185,14 +240,29 @@ uniform float u_p_signal_intensity;
 uniform float u_p_color_shift;
 uniform float u_p_critical_count;
 uniform float u_p_metabolism;
-uniform sampler2D u_prev_frame;
-
 
 in vec2 v_uv;
 out vec4 fragColor;
 
 float sdf_circle(vec2 p, float radius){
     return length(p) - radius;
+}
+
+float sdf_star(vec2 p, float n, float r, float ir){
+    float an = 3.14159265 / n;
+    float a = atan(p.y, p.x);
+    float period = 2.0 * an;
+    float sa = mod(a + an, period) - an;
+    vec2 q = length(p) * vec2(cos(sa), abs(sin(sa)));
+    vec2 tip = vec2(r, 0.0);
+    vec2 valley = vec2(ir * cos(an), ir * sin(an));
+    vec2 e = tip - valley;
+    vec2 d = q - valley;
+    float t = clamp(dot(d, e) / dot(e, e), 0.0, 1.0);
+    vec2 closest = valley + e * t;
+    float dist = length(q - closest);
+    float cross_val = d.x * e.y - d.y * e.x;
+    return cross_val > 0.0 ? -dist : dist;
 }
 
 float apply_glow(float d, float intensity){
@@ -249,26 +319,57 @@ void main(){
 
     vec4 final_color = vec4(0.0, 0.0, 0.0, 1.0);
 
-    // ── Layer 1: core ──
+    // ── Layer 1: deep_field ──
     {
         vec2 p = vec2(uv.x * aspect, uv.y);
-        float sdf_result = sdf_circle(p, 0.350000);
-        float glow_pulse = 2.000000 * (0.9 + 0.1 * sin(time * 2.0));
+        { float warp_x = fbm2(p * 2.000000 + vec2(0.0, 1.3), int(3.000000), 0.500000, 2.000000);
+        float warp_y = fbm2(p * 2.000000 + vec2(1.7, 0.0), int(3.000000), 0.500000, 2.000000);
+        p = p + vec2(warp_x, warp_y) * 0.200000; }
+        float sdf_result = fbm2((p * 2.000000 + vec2(time * 0.1, time * 0.07)), int(3.000000), 0.500000, 2.000000);
+        float glow_pulse = 1.000000 * (0.9 + 0.1 * sin(time * 2.0));
         float glow_result = apply_glow(sdf_result, glow_pulse);
 
         vec4 color_result = vec4(vec3(glow_result), 1.0);
-        color_result = vec4(color_result.rgb * vec3(0.550000, 0.280000, 0.060000), 1.0);
-        vec4 prev_color = texture(u_prev_frame, v_uv);
-        color_result = mix(color_result, prev_color, 0.950000);
+        color_result = vec4(color_result.rgb * vec3(0.150000, 0.080000, 0.020000), 1.0);
+        vec3 lc = color_result.rgb;
+        final_color = vec4(vec3(1.0) - (vec3(1.0) - final_color.rgb) * (vec3(1.0) - lc), 1.0);
+    }
+
+    // ── Layer 2: core ──
+    {
+        vec2 p = vec2(uv.x * aspect, uv.y);
+        vec4 color_result;
+        {
+            vec2 p_then = p;
+            vec4 then_color;
+            vec4 else_color;
+            { vec2 p = p_then;
+            float sdf_result = sdf_star(p, 5.000000, 0.280000, 0.120000);
+            float glow_pulse = 3.000000 * (0.9 + 0.1 * sin(time * 2.0));
+            float glow_result = apply_glow(sdf_result, glow_pulse);
+
+            vec4 color_result = vec4(vec3(glow_result), 1.0);
+            color_result = vec4(color_result.rgb * vec3(1.000000, 0.150000, 0.100000), 1.0);
+            then_color = color_result; }
+            { vec2 p = p_then;
+            float sdf_result = sdf_circle(p, 0.250000);
+            float glow_pulse = 2.000000 * (0.9 + 0.1 * sin(time * 2.0));
+            float glow_result = apply_glow(sdf_result, glow_pulse);
+
+            vec4 color_result = vec4(vec3(glow_result), 1.0);
+            color_result = vec4(color_result.rgb * vec3(0.550000, 0.280000, 0.060000), 1.0);
+            else_color = color_result; }
+            color_result = (critical_count > 0.000000) ? then_color : else_color;
+        }
         vec3 lc = color_result.rgb;
         final_color = vec4(final_color.rgb + lc, 1.0);
     }
 
-    // ── Layer 2: noise_field ──
+    // ── Layer 3: noise_halo ──
     {
         vec2 p = vec2(uv.x * aspect, uv.y);
         float sdf_result = fbm2((p * 3.000000 + vec2(time * 0.1, time * 0.07)), int(4.000000), 0.500000, 2.000000);
-        float glow_pulse = 1.500000 * (0.9 + 0.1 * sin(time * 2.0));
+        float glow_pulse = 1.200000 * (0.9 + 0.1 * sin(time * 2.0));
         float glow_result = apply_glow(sdf_result, glow_pulse);
 
         vec4 color_result = vec4(vec3(glow_result), 1.0);
@@ -277,11 +378,11 @@ void main(){
         final_color = vec4(final_color.rgb + lc, 1.0);
     }
 
-    // ── Layer 3: outer_ring ──
+    // ── Layer 4: sentinel_ring ──
     {
         vec2 p = vec2(uv.x * aspect, uv.y);
-        float sdf_result = abs(length(p) - 0.380000) - 0.020000;
-        float glow_pulse = 1.000000 * (0.9 + 0.1 * sin(time * 2.0));
+        float sdf_result = abs(length(p) - 0.380000) - 0.015000;
+        float glow_pulse = 1.500000 * (0.9 + 0.1 * sin(time * 2.0));
         float glow_result = apply_glow(sdf_result, glow_pulse);
 
         vec4 color_result = vec4(vec3(glow_result), 1.0);
@@ -290,18 +391,76 @@ void main(){
         final_color = vec4(final_color.rgb + lc, 1.0);
     }
 
+    // ── Layer 5: pulse_ring ──
+    {
+        vec2 p = vec2(uv.x * aspect, uv.y);
+        float sdf_result = abs(length(p) - 0.320000) - 0.008000;
+        float glow_pulse = 2.000000 * (0.9 + 0.1 * sin(time * 2.0));
+        float glow_result = apply_glow(sdf_result, glow_pulse);
+
+        vec4 color_result = vec4(vec3(glow_result), 1.0);
+        color_result = vec4(color_result.rgb * vec3(0.900000, 0.750000, 0.300000), 1.0);
+        vec3 lc = color_result.rgb;
+        final_color = vec4(final_color.rgb + lc, 1.0);
+    }
+
     fragColor = final_color;
 }
 `;
 const UNIFORMS = [{name:'pulse',default:0},{name:'heat',default:0},{name:'burst',default:0},{name:'morph',default:0},{name:'error_val',default:0},{name:'staleness',default:0},{name:'opacity_val',default:0.9},{name:'signal_intensity',default:0},{name:'color_shift',default:0},{name:'critical_count',default:0},{name:'metabolism',default:0}];
-const USES_MEMORY = true;
+const PASS_WGSL_0 = `// Post-processing pass: bloom
+
+struct Uniforms {
+    time: f32,
+    audio_bass: f32,
+    audio_mid: f32,
+    audio_treble: f32,
+    audio_energy: f32,
+    audio_beat: f32,
+    resolution: vec2<f32>,
+    mouse: vec2<f32>,
+};
+
+struct VertexOutput {
+    @builtin(position) pos: vec4<f32>,
+    @location(0) uv: vec2<f32>,
+};
+
+@group(0) @binding(0) var<uniform> u: Uniforms;
+@group(0) @binding(3) var pass_tex: texture_2d<f32>;
+@group(0) @binding(4) var pass_sampler: sampler;
+
+@fragment
+fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
+    let uv = input.uv;
+    let pixel = textureSample(pass_tex, pass_sampler, uv);
+    var color_result = pixel;
+
+    // blur pass
+    var blurred = vec4<f32>(0.0);
+    let texel = 1.0 / u.resolution;
+    let r = i32(2.000000);
+    var count = 0.0;
+    for (var dy = -r; dy <= r; dy++) {
+        for (var dx = -r; dx <= r; dx++) {
+            let offset = vec2<f32>(f32(dx), f32(dy)) * texel;
+            blurred += textureSample(pass_tex, pass_sampler, uv + offset);
+            count += 1.0;
+        }
+    }
+    color_result = blurred / count;
+    return color_result;
+}
+`;
+const PASS_SHADERS = [PASS_WGSL_0];
 
 class GameRenderer {
-  constructor(canvas, wgslVertex, wgslFragment, uniformDefs) {
+  constructor(canvas, wgslVertex, wgslFragment, uniformDefs, passShaders) {
     this.canvas = canvas;
     this.wgslVertex = wgslVertex;
     this.wgslFragment = wgslFragment;
     this.uniformDefs = uniformDefs;
+    this.passShaders = passShaders;
     this.device = null;
     this.pipeline = null;
     this.uniformBuffer = null;
@@ -334,8 +493,7 @@ class GameRenderer {
     const vMod = this.device.createShaderModule({ code: this.wgslVertex });
     const fMod = this.device.createShaderModule({ code: this.wgslFragment });
 
-    // 8 base floats + user params, padded to 16-byte alignment
-    const floatCount = 8 + 2 + 2 + this.uniformDefs.length; // time,bass,mid,treble,energy,beat + res(2) + mouse(2) + user
+    const floatCount = 8 + 2 + 2 + this.uniformDefs.length;
     const bufSize = Math.ceil(floatCount * 4 / 16) * 16;
     this.uniformBuffer = this.device.createBuffer({
       size: bufSize, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
@@ -351,12 +509,36 @@ class GameRenderer {
     });
 
     const pipelineLayout = this.device.createPipelineLayout({ bindGroupLayouts: [bindGroupLayout] });
+
     this.pipeline = this.device.createRenderPipeline({
       layout: pipelineLayout,
       vertex: { module: vMod, entryPoint: 'vs_main' },
       fragment: { module: fMod, entryPoint: 'fs_main', targets: [{ format }] },
       primitive: { topology: 'triangle-list' }
     });
+
+    // Post-processing pass pipelines
+    this._passPipelines = [];
+    const passBGL = this.device.createBindGroupLayout({
+      entries: [
+        { binding: 0, visibility: GPUShaderStage.FRAGMENT, buffer: { type: 'uniform' } },
+        { binding: 3, visibility: GPUShaderStage.FRAGMENT, texture: { sampleType: 'float' } },
+        { binding: 4, visibility: GPUShaderStage.FRAGMENT, sampler: { type: 'filtering' } }
+      ]
+    });
+    this._passBGL = passBGL;
+    const passPL = this.device.createPipelineLayout({ bindGroupLayouts: [passBGL] });
+    for (const code of this.passShaders) {
+      const mod = this.device.createShaderModule({ code });
+      this._passPipelines.push(this.device.createRenderPipeline({
+        layout: passPL,
+        vertex: { module: vMod, entryPoint: 'vs_main' },
+        fragment: { module: mod, entryPoint: 'fs_main', targets: [{ format }] },
+        primitive: { topology: 'triangle-list' }
+      }));
+    }
+    this._passSampler = this.device.createSampler({ magFilter: 'linear', minFilter: 'linear' });
+    this._initPassFBOs();
     return true;
   }
 
@@ -374,6 +556,7 @@ class GameRenderer {
   stop() { this.running = false; }
 
   render() {
+    if (this._preRender) this._preRender();
     const t = performance.now() / 1000 - this.startTime;
     const w = this.canvas.width;
     const h = this.canvas.height;
@@ -391,74 +574,72 @@ class GameRenderer {
     this.device.queue.writeBuffer(this.uniformBuffer, 0, data);
 
     const encoder = this.device.createCommandEncoder();
-    const pass = encoder.beginRenderPass({
+
+    // Main pass renders to FBO (input for post-processing)
+    const mainPass = encoder.beginRenderPass({
       colorAttachments: [{
-        view: this.ctx.getCurrentTexture().createView(),
+        view: this._passFBOs[0].createView(),
         loadOp: 'clear', storeOp: 'store', clearValue: { r: 0, g: 0, b: 0, a: 1 }
       }]
     });
-    pass.setPipeline(this.pipeline);
-    pass.setBindGroup(0, this.bindGroup);
-    pass.draw(3);
-    pass.end();
+    mainPass.setPipeline(this.pipeline);
+    mainPass.setBindGroup(0, this.bindGroup);
+    mainPass.draw(3);
+    mainPass.end();
+
+    // Post-processing chain (1 pass)
+    for (let p = 0; p < 1; p++) {
+      const isLast = (p === 1 - 1);
+      const readIdx = p % 2;
+      const targetView = isLast
+        ? this.ctx.getCurrentTexture().createView()
+        : this._passFBOs[(p + 1) % 2].createView();
+      const passBindGroup = this.device.createBindGroup({
+        layout: this._passBGL,
+        entries: [
+          { binding: 0, resource: { buffer: this.uniformBuffer } },
+          { binding: 3, resource: this._passFBOs[readIdx].createView() },
+          { binding: 4, resource: this._passSampler }
+        ]
+      });
+      const pp = encoder.beginRenderPass({
+        colorAttachments: [{
+          view: targetView,
+          loadOp: 'clear', storeOp: 'store', clearValue: { r: 0, g: 0, b: 0, a: 1 }
+        }]
+      });
+      pp.setPipeline(this._passPipelines[p]);
+      pp.setBindGroup(0, passBindGroup);
+      pp.draw(3);
+      pp.end();
+    }
     this.device.queue.submit([encoder.finish()]);
+  }
+
+  _initPassFBOs() {
+    const w = this.canvas.width || 1;
+    const h = this.canvas.height || 1;
+    const desc = {
+      size: { width: w, height: h },
+      format: this.format,
+      usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.COPY_SRC
+    };
+    this._passFBOs = [this.device.createTexture(desc), this.device.createTexture(desc)];
+  }
+
+  _resizePassFBOs() {
+    if (this._passFBOs) {
+      this._passFBOs[0].destroy();
+      this._passFBOs[1].destroy();
+      this._initPassFBOs();
+    }
   }
 
   setParam(name, value) { this.userParams[name] = value; }
   setAudioData(d) { Object.assign(this.audioData, d); }
   destroy() { this.stop(); this.canvas.removeEventListener('mousemove', this._onMouseMove); this.device?.destroy(); }
-
-  _initMemory() {
-    const w = this.canvas.width || 1;
-    const h = this.canvas.height || 1;
-    const desc = {
-      size: { width: w, height: h },
-      format: 'rgba8unorm',
-      usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.COPY_SRC | GPUTextureUsage.COPY_DST
-    };
-    this._memTex = [this.device.createTexture(desc), this.device.createTexture(desc)];
-    this._memIdx = 0;
-    this._memSampler = this.device.createSampler({ magFilter: 'linear', minFilter: 'linear' });
-    this._memBindGroupLayout = this.device.createBindGroupLayout({
-      entries: [
-        { binding: 0, visibility: GPUShaderStage.FRAGMENT, texture: { sampleType: 'float' } },
-        { binding: 1, visibility: GPUShaderStage.FRAGMENT, sampler: { type: 'filtering' } }
-      ]
-    });
-    this._updateMemBindGroup();
-  }
-
-  _updateMemBindGroup() {
-    const readTex = this._memTex[this._memIdx];
-    this._memBindGroup = this.device.createBindGroup({
-      layout: this._memBindGroupLayout,
-      entries: [
-        { binding: 0, resource: readTex.createView() },
-        { binding: 1, resource: this._memSampler }
-      ]
-    });
-  }
-
-  _swapMemory(encoder) {
-    const writeTex = this._memTex[1 - this._memIdx];
-    // Copy current frame to write texture for next frame's read
-    encoder.copyTextureToTexture(
-      { texture: this.ctx.getCurrentTexture() },
-      { texture: writeTex },
-      { width: this.canvas.width, height: this.canvas.height }
-    );
-    this._memIdx = 1 - this._memIdx;
-    this._updateMemBindGroup();
-  }
-
-  _resizeMemory() {
-    if (this._memTex) {
-      this._memTex[0].destroy();
-      this._memTex[1].destroy();
-      this._initMemory();
-    }
-  }
 }
+
 
 class GameRendererGL {
   constructor(canvas, glslVertex, glslFragment, uniformDefs) {
@@ -501,7 +682,6 @@ class GameRendererGL {
     }
     gl.useProgram(this.program);
 
-    // Cache uniform locations
     this.locs = {
       time: gl.getUniformLocation(this.program, 'u_time'),
       bass: gl.getUniformLocation(this.program, 'u_audio_bass'),
@@ -569,52 +749,8 @@ class GameRendererGL {
   setParam(name, value) { this.userParams[name] = value; }
   setAudioData(d) { Object.assign(this.audioData, d); }
   destroy() { this.stop(); this.canvas.removeEventListener('mousemove', this._onMouseMove); }
-
-  _initMemoryGL() {
-    const gl = this.gl;
-    const w = this.canvas.width || 1;
-    const h = this.canvas.height || 1;
-    this._memFbo = [gl.createFramebuffer(), gl.createFramebuffer()];
-    this._memTex = [gl.createTexture(), gl.createTexture()];
-    for (let i = 0; i < 2; i++) {
-      gl.bindTexture(gl.TEXTURE_2D, this._memTex[i]);
-      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, w, h, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-      gl.bindFramebuffer(gl.FRAMEBUFFER, this._memFbo[i]);
-      gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this._memTex[i], 0);
-    }
-    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-    gl.bindTexture(gl.TEXTURE_2D, null);
-    this._memIdx = 0;
-    this._memLoc = gl.getUniformLocation(this.program, 'u_prev_frame');
-  }
-
-  _swapMemoryGL() {
-    const gl = this.gl;
-    // Bind read texture to unit 1 for next frame
-    gl.activeTexture(gl.TEXTURE1);
-    gl.bindTexture(gl.TEXTURE_2D, this._memTex[this._memIdx]);
-    gl.uniform1i(this._memLoc, 1);
-    // Render to write FBO, then copy to screen
-    this._memIdx = 1 - this._memIdx;
-  }
-
-  _resizeMemoryGL() {
-    if (this._memTex) {
-      const gl = this.gl;
-      const w = this.canvas.width || 1;
-      const h = this.canvas.height || 1;
-      for (let i = 0; i < 2; i++) {
-        gl.bindTexture(gl.TEXTURE_2D, this._memTex[i]);
-        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, w, h, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
-      }
-      gl.bindTexture(gl.TEXTURE_2D, null);
-    }
-  }
 }
+
 
 class AmbientIntelligence extends HTMLElement {
   constructor() {
@@ -643,7 +779,7 @@ class AmbientIntelligence extends HTMLElement {
   }
 
   async _initRenderer() {
-    const gpu = new GameRenderer(this._canvas, WGSL_V, WGSL_F, UNIFORMS);
+    const gpu = new GameRenderer(this._canvas, WGSL_V, WGSL_F, UNIFORMS, PASS_SHADERS);
     if (await gpu.init()) {
       this._renderer = gpu;
     } else {
@@ -664,6 +800,8 @@ class AmbientIntelligence extends HTMLElement {
     const dpr = window.devicePixelRatio || 1;
     this._canvas.width = Math.round(rect.width * dpr);
     this._canvas.height = Math.round(rect.height * dpr);
+    if (this._renderer?._resizeMemory) this._renderer._resizeMemory();
+    if (this._renderer?._resizePassFBOs) this._renderer._resizePassFBOs();
   }
 
   setParam(name, value) { this._renderer?.setParam(name, value); }
