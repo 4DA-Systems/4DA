@@ -11,7 +11,7 @@ export interface PlaybookSlice {
   playbookLoading: boolean;
   playbookError: string | null;
   activeModuleId: string | null;
-  personalizedLessons: Map<string, PersonalizedLesson>;
+  personalizedLessons: Record<string, PersonalizedLesson>;
   loadPlaybookModules: () => Promise<void>;
   loadPlaybookContent: (moduleId: string) => Promise<void>;
   loadPlaybookProgress: () => Promise<void>;
@@ -27,7 +27,7 @@ export const createPlaybookSlice: StateCreator<AppStore, [], [], PlaybookSlice> 
   playbookLoading: false,
   playbookError: null,
   activeModuleId: null,
-  personalizedLessons: new Map(),
+  personalizedLessons: {},
 
   loadPlaybookModules: async () => {
     try {
@@ -76,9 +76,7 @@ export const createPlaybookSlice: StateCreator<AppStore, [], [], PlaybookSlice> 
         moduleId,
         lessonIdx,
       });
-      const current = new Map(get().personalizedLessons);
-      current.set(key, lesson);
-      set({ personalizedLessons: current });
+      set({ personalizedLessons: { ...get().personalizedLessons, [key]: lesson } });
 
       // If LLM is available, trigger async hydration in the background
       if (lesson.depth.llm_pending) {

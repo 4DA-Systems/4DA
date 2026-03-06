@@ -40,6 +40,13 @@ const defaultStoreState: Record<string, unknown> = {
   streetHealth: null,
   loadStreetHealth: mockLoadStreetHealth,
 
+  // Personalization slice
+  personalizedLessons: {},
+  loadPersonalizedContent: vi.fn(),
+
+  // Toast
+  addToast: vi.fn(),
+
   // SunsDashboard slice
   sunsModules: [],
   sunsAlerts: [],

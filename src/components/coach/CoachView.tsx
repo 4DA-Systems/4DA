@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../../store';
 import { useShallow } from 'zustand/react/shallow';
@@ -39,7 +39,6 @@ export function CoachView() {
   const setActiveSession = useAppStore(s => s.setActiveSession);
 
   const [activeTab, setActiveTab] = useState<CoachSessionType>('chat');
-  const [hoveredSessionId, setHoveredSessionId] = useState<string | null>(null);
 
   // Load initial data
   useEffect(() => {
@@ -67,8 +66,8 @@ export function CoachView() {
     }
   }, [setActiveSession]);
 
-  // Render the active content view
-  function renderContent() {
+  // 4b. Stabilize renderContent with useMemo
+  const renderedContent = useMemo(() => {
     switch (activeTab) {
       case 'chat':
         return <CoachChat />;
@@ -87,7 +86,16 @@ export function CoachView() {
       default:
         return null;
     }
-  }
+  }, [activeTab]);
+
+  // 4c. Memoize relative times for all sessions
+  const sessionTimes = useMemo(() => {
+    const map: Record<string, string> = {};
+    for (const s of coachSessions) {
+      map[s.id] = getRelativeTime(new Date(s.updated_at));
+    }
+    return map;
+  }, [coachSessions]);
 
   return (
     <div className="relative flex flex-col h-full min-h-[600px]">
@@ -126,14 +134,11 @@ export function CoachView() {
             )}
             {coachSessions.map(session => {
               const isActive = session.id === activeSessionId;
-              const isHovered = session.id === hoveredSessionId;
 
               return (
                 <button
                   key={session.id}
                   onClick={() => handleSelectSession(session.id, session.session_type)}
-                  onMouseEnter={() => setHoveredSessionId(session.id)}
-                  onMouseLeave={() => setHoveredSessionId(null)}
                   className={`w-full text-left px-3 py-2 rounded-lg transition-all group relative ${
                     isActive
                       ? 'bg-[#D4AF37]/10 border border-[#D4AF37]/30'
@@ -146,23 +151,23 @@ export function CoachView() {
                   <div className="flex items-center gap-1.5 mt-0.5">
                     <SessionTypeBadge type={session.session_type} />
                     <span className="text-[10px] text-[#666]">
-                      {getRelativeTime(new Date(session.updated_at))}
+                      {sessionTimes[session.id]}
                     </span>
                   </div>
 
-                  {/* Delete button on hover */}
-                  {(isHovered || isActive) && (
-                    <button
-                      onClick={(e) => handleDeleteSession(e, session.id)}
-                      className="absolute top-2 right-2 w-5 h-5 flex items-center justify-center rounded text-[#666] hover:text-[#EF4444] hover:bg-[#EF4444]/10 transition-colors"
-                      title={t('coach:coach.deleteSession')}
-                    >
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <line x1="18" y1="6" x2="6" y2="18" />
-                        <line x1="6" y1="6" x2="18" y2="18" />
-                      </svg>
-                    </button>
-                  )}
+                  {/* 4a. Delete button — CSS :hover instead of state, always visible when active */}
+                  <button
+                    onClick={(e) => handleDeleteSession(e, session.id)}
+                    className={`absolute top-2 right-2 w-5 h-5 flex items-center justify-center rounded text-[#666] hover:text-[#EF4444] hover:bg-[#EF4444]/10 transition-colors ${
+                      isActive ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+                    }`}
+                    title={t('coach:coach.deleteSession')}
+                  >
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <line x1="18" y1="6" x2="6" y2="18" />
+                      <line x1="6" y1="6" x2="18" y2="18" />
+                    </svg>
+                  </button>
                 </button>
               );
             })}
@@ -188,7 +193,7 @@ export function CoachView() {
 
         {/* Content area */}
         <main className="flex-1 min-w-0 bg-bg-secondary border border-border rounded-xl p-4 overflow-hidden flex flex-col">
-          {renderContent()}
+          {renderedContent}
         </main>
       </div>
 

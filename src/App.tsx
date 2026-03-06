@@ -74,9 +74,9 @@ function App() {
   const { t } = useTranslation();
   // Local UI state
   const [showSplash, setShowSplash] = useState(true);
-  const [showSettings, setShowSettings] = useState(false);
+  const showSettings = useAppStore(s => s.showSettings);
+  const setShowSettings = useAppStore(s => s.setShowSettings);
   const [showKeyboardHelp, setShowKeyboardHelp] = useState(false);
-  const [renderLimit, setRenderLimit] = useState(50);
   const [newItemIds, setNewItemIds] = useState<Set<number>>(new Set());
   // Data selectors (may change, use useShallow)
   const { activeView, showOnlyRelevant, filteredResults } = useAppStore(
@@ -193,8 +193,11 @@ function App() {
     generateBriefing,
   } = useBriefing(state.relevanceResults, state.analysisComplete);
 
-  // Reset render limit when new results come in
-  useEffect(() => { setRenderLimit(50); }, [state.relevanceResults]);
+  // 5c. Stabilize onAnalyze callback
+  const handleAnalyze = useCallback(() => {
+    setNewItemIds(new Set());
+    startAnalysis();
+  }, [startAnalysis]);
 
   // Load persisted briefing + source health + license + pro value + game state on mount (instant, from DB)
   useEffect(() => {
@@ -288,7 +291,6 @@ function App() {
   }, []);
 
   // Global keyboard shortcuts (extracted hook)
-  const visibleResults = filteredResults.slice(0, renderLimit);
   const { focusedIndex } = useKeyboardShortcuts({
     onAnalyze: startAnalysis,
     onToggleFilters: () => setShowOnlyRelevant(!showOnlyRelevant),
@@ -303,17 +305,17 @@ function App() {
     analyzeDisabled: state.loading,
     briefingAvailable: true,
     filtersAvailable: state.analysisComplete,
-    resultCount: visibleResults.length,
+    resultCount: filteredResults.length,
     onFocusResult: (index: number) => {
-      const el = document.getElementById(`result-item-${visibleResults[index]?.id}`);
+      const el = document.getElementById(`result-item-${filteredResults[index]?.id}`);
       el?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
     },
     onToggleExpandResult: (index: number) => {
-      const item = visibleResults[index];
+      const item = filteredResults[index];
       if (item) setExpandedItem(expandedItem === item.id ? null : item.id);
     },
     onOpenResult: (index: number) => {
-      const item = visibleResults[index];
+      const item = filteredResults[index];
       if (item?.url) window.open(item.url, '_blank', 'noopener,noreferrer');
     },
   });
@@ -419,7 +421,7 @@ function App() {
           aiBriefing={aiBriefing}
           autoBriefingEnabled={autoBriefingEnabled}
           summaryBadges={summaryBadges}
-          onAnalyze={() => { setNewItemIds(new Set()); startAnalysis(); }}
+          onAnalyze={handleAnalyze}
           onGenerateBriefing={generateBriefing}
           onToggleAutoBriefing={() => setAutoBriefingEnabled(!autoBriefingEnabled)}
           onToast={addToast}
@@ -511,8 +513,6 @@ function App() {
             <ResultsView
               newItemIds={newItemIds}
               focusedIndex={focusedIndex}
-              renderLimit={renderLimit}
-              setRenderLimit={setRenderLimit}
             />
           </ViewErrorBoundary>
         )}
