@@ -8,6 +8,8 @@ export interface IntelligencePulseSlice {
   loadIntelligencePulse: () => Promise<void>;
 }
 
+let pulseInflight: Promise<void> | null = null;
+
 export const createIntelligencePulseSlice: StateCreator<
   IntelligencePulseSlice,
   [],
@@ -18,14 +20,20 @@ export const createIntelligencePulseSlice: StateCreator<
   intelligencePulseLoading: false,
 
   loadIntelligencePulse: async () => {
-    set({ intelligencePulseLoading: true });
-    try {
-      const pulse = await invoke<IntelligencePulseData>('get_intelligence_pulse');
-      set({ intelligencePulse: pulse });
-    } catch {
-      // Silent — intelligence pulse is supplementary
-    } finally {
-      set({ intelligencePulseLoading: false });
-    }
+    if (pulseInflight) return pulseInflight;
+    const doLoad = async () => {
+      set({ intelligencePulseLoading: true });
+      try {
+        const pulse = await invoke<IntelligencePulseData>('get_intelligence_pulse');
+        set({ intelligencePulse: pulse });
+      } catch {
+        // Silent — intelligence pulse is supplementary
+      } finally {
+        set({ intelligencePulseLoading: false });
+        pulseInflight = null;
+      }
+    };
+    pulseInflight = doLoad();
+    return pulseInflight;
   },
 });

@@ -4,11 +4,18 @@
 //! including calibration insights, source quality, and learning narratives.
 
 use std::collections::HashMap;
+use std::sync::{LazyLock, Mutex};
+use std::time::Instant;
 
 use serde::Serialize;
 use ts_rs::TS;
 
 use crate::error::{FourDaError, Result};
+
+// 60-second TTL cache for intelligence pulse (avoids 7 SQL queries on repeat views)
+static PULSE_CACHE: LazyLock<Mutex<Option<(IntelligencePulse, Instant)>>> =
+    LazyLock::new(|| Mutex::new(None));
+const PULSE_TTL_SECS: u64 = 60;
 
 /// A single calibration insight: how far off the system was for a topic.
 #[derive(Debug, Clone, Serialize, TS)]
@@ -61,6 +68,16 @@ pub struct IntelligencePulse {
 /// to give the frontend a single, pre-computed snapshot of system health.
 #[tauri::command]
 pub async fn get_intelligence_pulse() -> Result<IntelligencePulse> {
+    // Check cache before running 7 SQL queries
+    {
+        let cache = PULSE_CACHE.lock().unwrap_or_else(|e| e.into_inner());
+        if let Some((ref result, ref instant)) = *cache {
+            if instant.elapsed().as_secs() < PULSE_TTL_SECS {
+                return Ok(result.clone());
+            }
+        }
+    }
+
     let conn = crate::open_db_connection().map_err(FourDaError::Internal)?;
 
     // ── 1. Items analyzed in the last 7 days (rows seen / fetched) ──────────
@@ -301,7 +318,7 @@ pub async fn get_intelligence_pulse() -> Result<IntelligencePulse> {
         }
     }
 
-    Ok(IntelligencePulse {
+    let pulse = IntelligencePulse {
         items_analyzed_7d,
         items_surfaced_7d,
         rejection_rate,
@@ -311,7 +328,15 @@ pub async fn get_intelligence_pulse() -> Result<IntelligencePulse> {
         anti_patterns_detected,
         total_cycles,
         learning_narratives,
-    })
+    };
+
+    // Store in cache
+    {
+        let mut cache = PULSE_CACHE.lock().unwrap_or_else(|e| e.into_inner());
+        *cache = Some((pulse.clone(), Instant::now()));
+    }
+
+    Ok(pulse)
 }
 
 // ============================================================================

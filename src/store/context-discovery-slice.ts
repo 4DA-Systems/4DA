@@ -11,36 +11,33 @@ export const createContextDiscoverySlice: StateCreator<AppStore, [], [], Context
   setNewScanDir: (dir) => set({ newScanDir: dir }),
 
   loadDiscoveredContext: async () => {
-    try {
-      const dirs = await invoke<string[]>('get_context_dirs');
-      if (dirs && dirs.length > 0) {
-        set({ scanDirectories: dirs });
-      }
-
-      const techResult = await invoke<{
+    const [dirsResult, techResult, topicsResult] = await Promise.allSettled([
+      invoke<string[]>('get_context_dirs'),
+      invoke<{
         detected_tech: Array<{ name: string; category: string; confidence: number }>;
-      }>('ace_get_detected_tech');
-
-      if (techResult.detected_tech && techResult.detected_tech.length > 0) {
-        set(state => ({
-          discoveredContext: { ...state.discoveredContext, tech: techResult.detected_tech },
-        }));
-      }
-
-      const topicsResult = await invoke<{
+      }>('ace_get_detected_tech'),
+      invoke<{
         topics: Array<{ topic: string; weight: number }>;
-      }>('ace_get_active_topics');
+      }>('ace_get_active_topics'),
+    ]);
 
-      if (topicsResult.topics && topicsResult.topics.length > 0) {
-        set(state => ({
-          discoveredContext: {
-            ...state.discoveredContext,
-            topics: topicsResult.topics.map(t => t.topic),
-          },
-        }));
-      }
-    } catch (error) {
-      console.debug('No discovered context yet:', error);
+    if (dirsResult.status === 'fulfilled' && dirsResult.value && dirsResult.value.length > 0) {
+      set({ scanDirectories: dirsResult.value });
+    }
+
+    if (techResult.status === 'fulfilled' && techResult.value?.detected_tech?.length > 0) {
+      set(state => ({
+        discoveredContext: { ...state.discoveredContext, tech: techResult.value.detected_tech },
+      }));
+    }
+
+    if (topicsResult.status === 'fulfilled' && topicsResult.value?.topics?.length > 0) {
+      set(state => ({
+        discoveredContext: {
+          ...state.discoveredContext,
+          topics: topicsResult.value.topics.map(t => t.topic),
+        },
+      }));
     }
   },
 

@@ -74,6 +74,8 @@ export interface SunsSlice {
 // Slice Creator
 // ============================================================================
 
+let streetHealthInflight: Promise<void> | null = null;
+
 export const createSunsSlice: StateCreator<AppStore, [], [], SunsSlice> = (set, get) => ({
   sunStatuses: [],
   sunAlerts: [],
@@ -133,12 +135,19 @@ export const createSunsSlice: StateCreator<AppStore, [], [], SunsSlice> = (set, 
   },
 
   loadStreetHealth: async () => {
-    set({ streetHealthLoading: true });
-    try {
-      const health = await invoke<StreetHealthScore>('get_street_health');
-      set({ streetHealth: health, streetHealthLoading: false });
-    } catch (e) {
-      set({ sunsError: String(e), streetHealthLoading: false });
-    }
+    if (streetHealthInflight) return streetHealthInflight;
+    const doLoad = async () => {
+      set({ streetHealthLoading: true });
+      try {
+        const health = await invoke<StreetHealthScore>('get_street_health');
+        set({ streetHealth: health, streetHealthLoading: false });
+      } catch (e) {
+        set({ sunsError: String(e), streetHealthLoading: false });
+      } finally {
+        streetHealthInflight = null;
+      }
+    };
+    streetHealthInflight = doLoad();
+    return streetHealthInflight;
   },
 });

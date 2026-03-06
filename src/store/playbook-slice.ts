@@ -18,6 +18,7 @@ export interface PlaybookSlice {
   markLessonComplete: (moduleId: string, lessonIdx: number) => Promise<void>;
   setActiveModuleId: (id: string | null) => void;
   loadPersonalizedContent: (moduleId: string, lessonIdx: number) => Promise<void>;
+  loadPersonalizedContentBatch: (moduleId: string, lessonCount: number) => Promise<void>;
 }
 
 export const createPlaybookSlice: StateCreator<AppStore, [], [], PlaybookSlice> = (set, get) => ({
@@ -87,6 +88,30 @@ export const createPlaybookSlice: StateCreator<AppStore, [], [], PlaybookSlice> 
     } catch (e) {
       // Non-fatal: fallback to static content
       console.warn('Personalization failed, using static content:', e);
+    }
+  },
+
+  loadPersonalizedContentBatch: async (moduleId: string, lessonCount: number) => {
+    if (lessonCount <= 0) return;
+    try {
+      const requests: [string, number][] = Array.from({ length: lessonCount }, (_, i) => [moduleId, i]);
+      const lessons = await invoke<PersonalizedLesson[]>('get_personalized_lessons_batch', { requests });
+      const updated = { ...get().personalizedLessons };
+      lessons.forEach((lesson, i) => {
+        updated[`${moduleId}:${i}`] = lesson;
+      });
+      set({ personalizedLessons: updated });
+
+      // Trigger LLM hydration for any lessons that need it
+      for (let i = 0; i < lessons.length; i++) {
+        if (lessons[i].depth.llm_pending) {
+          invoke('hydrate_lesson_with_llm', { moduleId, lessonIdx: i }).catch((e) => {
+            console.warn('LLM hydration failed (non-fatal):', e);
+          });
+        }
+      }
+    } catch (e) {
+      console.warn('Batch personalization failed, falling back to static content:', e);
     }
   },
 });

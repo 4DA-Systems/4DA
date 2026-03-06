@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../../store';
+import { useShallow } from 'zustand/react/shallow';
 import { renderMarkdown } from '../../utils/playbook-markdown';
 import { ProvenanceTooltip } from './ProvenanceTooltip';
 import { ChannelChangelog } from './ChannelChangelog';
@@ -8,13 +9,25 @@ import type { RenderProvenance } from '../../types/channels';
 
 export function ChannelContent() {
   const { t } = useTranslation();
-  const activeRender = useAppStore((s) => s.activeRender);
-  const activeProvenance = useAppStore((s) => s.activeProvenance);
-  const activeChangelog = useAppStore((s) => s.activeChangelog);
-  const renderLoading = useAppStore((s) => s.renderLoading);
-  const renderError = useAppStore((s) => s.renderError);
-  const activeChannelId = useAppStore((s) => s.activeChannelId);
-  const channels = useAppStore((s) => s.channels);
+  const {
+    activeRender,
+    activeProvenance,
+    activeChangelog,
+    renderLoading,
+    renderError,
+    activeChannelId,
+    channels,
+  } = useAppStore(
+    useShallow((s) => ({
+      activeRender: s.activeRender,
+      activeProvenance: s.activeProvenance,
+      activeChangelog: s.activeChangelog,
+      renderLoading: s.renderLoading,
+      renderError: s.renderError,
+      activeChannelId: s.activeChannelId,
+      channels: s.channels,
+    })),
+  );
   const renderChannel = useAppStore((s) => s.renderChannel);
 
   const activeChannel = channels.find((c) => c.id === activeChannelId);

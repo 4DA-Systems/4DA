@@ -441,8 +441,8 @@ function App() {
           <PredictiveIndicator />
         </Suspense>
 
-        {/* Actionable Signals */}
-        {state.analysisComplete && (
+        {/* Actionable Signals — only mount when Results view is active */}
+        {state.analysisComplete && activeView === 'results' && (
           <Suspense fallback={null}>
             <SignalsPanel results={state.relevanceResults} />
             <SignalChainsPanel />

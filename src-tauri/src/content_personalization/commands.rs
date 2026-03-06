@@ -96,6 +96,84 @@ pub async fn get_personalized_lesson(
     })
 }
 
+/// Get multiple personalized lessons in a single IPC call.
+///
+/// Shares one DB connection and one PersonalizationContext assembly across all
+/// requested lessons, eliminating the N+1 overhead of calling
+/// `get_personalized_lesson` individually for each lesson in a module.
+#[tauri::command]
+pub async fn get_personalized_lessons_batch(
+    requests: Vec<(String, u32)>,
+) -> Result<Vec<PersonalizedLesson>> {
+    let start = std::time::Instant::now();
+
+    // Shared connection + context (assembled once)
+    let conn = crate::open_db_connection().map_err(FourDaError::Internal)?;
+    let ctx = assemble_personalization_context(&conn);
+    let hash = context_hash(&ctx);
+
+    let mut results = Vec::with_capacity(requests.len());
+
+    for (module_id, lesson_idx) in &requests {
+        let content = crate::playbook_commands::get_playbook_content(module_id.clone(), None)
+            .map_err(FourDaError::Internal)?;
+
+        let lesson = match content.lessons.get(*lesson_idx as usize) {
+            Some(l) => l,
+            None => {
+                warn!(
+                    target: "4da::personalize",
+                    module = %module_id,
+                    lesson = lesson_idx,
+                    "Lesson not found in batch, skipping"
+                );
+                continue;
+            }
+        };
+
+        let processed = template_processor::process_template(&lesson.content, &ctx);
+        let insight_blocks = nollm_engine::compute_insight_blocks(
+            &processed.injection_markers,
+            &ctx,
+            module_id,
+            *lesson_idx,
+        );
+        let mirror_blocks = nollm_engine::compute_mirror_blocks(&ctx, module_id, *lesson_idx);
+        let temporal_blocks =
+            temporal::compute_temporal_blocks(&conn, &ctx, module_id, *lesson_idx);
+        temporal::update_read_state(&conn, &ctx, module_id, *lesson_idx);
+
+        let depth = PersonalizationDepth {
+            l1_resolved: processed.l1_resolved,
+            l1_fallbacks: processed.l1_fallbacks,
+            l2_evaluated: processed.l2_evaluated,
+            l3_cards: insight_blocks.len() as u32,
+            l4_connections: mirror_blocks.len() as u32,
+            l5_temporal: temporal_blocks.len() as u32,
+            llm_pending: ctx.settings.has_llm,
+        };
+
+        results.push(PersonalizedLesson {
+            content: processed.content,
+            insight_blocks,
+            mirror_blocks,
+            temporal_blocks,
+            depth,
+            context_hash: hash.clone(),
+        });
+    }
+
+    let elapsed = start.elapsed();
+    info!(
+        target: "4da::personalize",
+        count = results.len(),
+        elapsed_ms = elapsed.as_millis() as u64,
+        "Batch personalization complete"
+    );
+
+    Ok(results)
+}
+
 /// Get a lightweight summary of the current personalization context.
 /// Used by the frontend to check data availability before rendering.
 #[tauri::command]

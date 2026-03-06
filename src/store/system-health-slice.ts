@@ -11,45 +11,24 @@ export const createSystemHealthSlice: StateCreator<AppStore, [], [], SystemHealt
   setSimilarTopicQuery: (q) => set({ similarTopicQuery: q }),
 
   loadSystemHealth: async () => {
-    let anomalies: Anomaly[] = [];
-    let anomalyCount = 0;
-    let embeddingOperational = false;
-    let rateLimitStatus = null;
-    let accuracyMetrics = null;
+    const [anomalyResult, embeddingResult, rateLimitResult, accuracyResult] =
+      await Promise.allSettled([
+        invoke<{ anomalies: Anomaly[]; count: number }>('ace_get_unresolved_anomalies'),
+        invoke<{ operational: boolean }>('ace_embedding_status'),
+        invoke<{ global_remaining: number; source_remaining: number; is_limited: boolean }>(
+          'ace_get_rate_limit_status',
+          { source: 'global' },
+        ),
+        invoke<{ precision: number; engagement_rate: number; calibration_error: number }>(
+          'ace_get_accuracy_metrics',
+        ),
+      ]);
 
-    try {
-      const result = await invoke<{ anomalies: Anomaly[]; count: number }>('ace_get_unresolved_anomalies');
-      anomalies = result.anomalies || [];
-      anomalyCount = result.count || 0;
-    } catch (error) {
-      console.debug('Anomalies not available:', error);
-    }
-
-    try {
-      const result = await invoke<{ operational: boolean }>('ace_embedding_status');
-      embeddingOperational = result.operational ?? false;
-    } catch (error) {
-      console.error('Embedding status error:', error);
-    }
-
-    try {
-      const result = await invoke<{ global_remaining: number; source_remaining: number; is_limited: boolean }>(
-        'ace_get_rate_limit_status',
-        { source: 'global' },
-      );
-      rateLimitStatus = result;
-    } catch (error) {
-      console.error('Rate limit status error:', error);
-    }
-
-    try {
-      const result = await invoke<{ precision: number; engagement_rate: number; calibration_error: number }>(
-        'ace_get_accuracy_metrics',
-      );
-      accuracyMetrics = result;
-    } catch (error) {
-      console.debug('Accuracy metrics not available:', error);
-    }
+    const anomalies = anomalyResult.status === 'fulfilled' ? (anomalyResult.value.anomalies || []) : [];
+    const anomalyCount = anomalyResult.status === 'fulfilled' ? (anomalyResult.value.count || 0) : 0;
+    const embeddingOperational = embeddingResult.status === 'fulfilled' ? (embeddingResult.value.operational ?? false) : false;
+    const rateLimitStatus = rateLimitResult.status === 'fulfilled' ? rateLimitResult.value : null;
+    const accuracyMetrics = accuracyResult.status === 'fulfilled' ? accuracyResult.value : null;
 
     set({
       systemHealth: {

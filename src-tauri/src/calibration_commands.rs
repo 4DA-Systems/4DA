@@ -3,16 +3,24 @@
 //! Grade = Infrastructure (25) + Context Richness (25) + Signal Coverage (25) + Discrimination (25)
 //! Each recommendation carries an `action_type` for one-click frontend actions.
 
+use std::sync::{LazyLock, Mutex};
+use std::time::Instant;
+
 use serde::Serialize;
 use ts_rs::TS;
 
 use crate::calibration_probes;
 
+// 5-minute TTL cache for calibration results (avoids re-running 12 probes + HTTP to Ollama)
+static CALIBRATION_CACHE: LazyLock<Mutex<Option<(CalibrationResult, Instant)>>> =
+    LazyLock::new(|| Mutex::new(None));
+const CALIBRATION_TTL_SECS: u64 = 300;
+
 // ============================================================================
 // Public Types (exported to frontend via ts-rs)
 // ============================================================================
 
-#[derive(Debug, Serialize, TS)]
+#[derive(Debug, Clone, Serialize, TS)]
 #[ts(export)]
 pub struct CalibrationResult {
     pub grade: String,
@@ -37,7 +45,7 @@ pub struct CalibrationResult {
     pub nearest_persona: String,
 }
 
-#[derive(Debug, Serialize, TS)]
+#[derive(Debug, Clone, Serialize, TS)]
 #[ts(export)]
 pub struct PersonaMetrics {
     pub name: String,
@@ -52,7 +60,7 @@ pub struct PersonaMetrics {
     pub r#fn: u32,
 }
 
-#[derive(Debug, Serialize, TS)]
+#[derive(Debug, Clone, Serialize, TS)]
 #[ts(export)]
 pub struct RigRequirements {
     pub ollama_running: bool,
@@ -66,7 +74,7 @@ pub struct RigRequirements {
     pub grade_a_requirements: Vec<String>,
 }
 
-#[derive(Debug, Serialize, TS)]
+#[derive(Debug, Clone, Serialize, TS)]
 #[ts(export)]
 pub struct Recommendation {
     pub priority: String,
@@ -208,6 +216,16 @@ fn persona_display_name(name: &str) -> String {
 
 #[tauri::command]
 pub async fn run_calibration() -> Result<CalibrationResult, String> {
+    // Check cache before expensive work
+    {
+        let cache = CALIBRATION_CACHE.lock().unwrap_or_else(|e| e.into_inner());
+        if let Some((ref result, ref instant)) = *cache {
+            if instant.elapsed().as_secs() < CALIBRATION_TTL_SECS {
+                return Ok(result.clone());
+            }
+        }
+    }
+
     let db = crate::get_database()?;
 
     // Build the user's actual scoring context
@@ -335,7 +353,7 @@ pub async fn run_calibration() -> Result<CalibrationResult, String> {
         r#fn: 0,
     }];
 
-    Ok(CalibrationResult {
+    let result = CalibrationResult {
         grade,
         grade_score,
         aggregate_f1: probe_results.f1,
@@ -355,7 +373,15 @@ pub async fn run_calibration() -> Result<CalibrationResult, String> {
         discrimination_score: disc_score,
         active_signal_axes: audit.axes,
         nearest_persona,
-    })
+    };
+
+    // Store in cache
+    {
+        let mut cache = CALIBRATION_CACHE.lock().unwrap_or_else(|e| e.into_inner());
+        *cache = Some((result.clone(), Instant::now()));
+    }
+
+    Ok(result)
 }
 
 pub(crate) async fn check_rig_requirements() -> RigRequirements {

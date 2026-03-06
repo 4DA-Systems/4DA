@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../../store';
 import { useShallow } from 'zustand/react/shallow';
 import { SunModuleGroup } from './SunModuleGroup';
+import { useVisibilityPolling } from '../../hooks/use-visibility-polling';
 import type { SunAlert } from '../../store/suns-slice';
 
 // ============================================================================
@@ -102,14 +103,15 @@ export function SunsDashboard() {
     loadStatuses();
     loadAlerts();
     loadStreetHealth();
-
-    const timer = setInterval(() => {
-      loadStatuses();
-      loadAlerts();
-    }, 30000);
-
-    return () => clearInterval(timer);
   }, [loadStatuses, loadAlerts, loadStreetHealth]);
+
+  // Visibility-aware polling: pauses when the app is backgrounded
+  const pollCallback = useCallback(() => {
+    loadStatuses();
+    loadAlerts();
+  }, [loadStatuses, loadAlerts]);
+
+  useVisibilityPolling(pollCallback, 30000);
 
   const handleTrigger = useCallback(async (sunId: string) => {
     await triggerSun(sunId);

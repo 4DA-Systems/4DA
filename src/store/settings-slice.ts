@@ -63,8 +63,7 @@ export const createSettingsSlice: StateCreator<AppStore, [], [], SettingsSlice> 
 
       if (!onboardingChecked) {
         onboardingChecked = true;
-        const rawSettings = await invoke<Record<string, unknown>>('get_settings');
-        if (!rawSettings.onboarding_complete) {
+        if (!(s as unknown as Record<string, unknown>).onboarding_complete) {
           set({ showOnboarding: true });
         }
       }

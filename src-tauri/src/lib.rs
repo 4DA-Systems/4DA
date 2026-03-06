@@ -438,6 +438,7 @@ pub fn run() {
             playbook_commands::mark_lesson_complete,
             // Content Personalization (Sovereign Content Engine)
             content_personalization::commands::get_personalized_lesson,
+            content_personalization::commands::get_personalized_lessons_batch,
             content_personalization::commands::get_personalization_context_summary,
             content_personalization::commands::prune_personalization_cache,
             content_personalization::commands::hydrate_lesson_with_llm,
