@@ -4,8 +4,6 @@
 //! (from `persona_data.rs`), returns a fully-populated `ScoringContext` with all
 //! 18 active fields set. Supports per-signal toggle for isolation testing.
 
-use std::collections::HashMap;
-
 use super::super::ace_context::ACEContext;
 use super::super::ScoringContext;
 use super::persona_data::PersonaEnrichment;

@@ -127,8 +127,10 @@ export function CalibrationStep({ isAnimating, onComplete, onBack }: Calibration
       )}
 
       {loading && !result && (
-        <div style={{ textAlign: 'center', padding: '40px 0', color: '#A0A0A0', fontSize: 13 }}>
-          Analyzing your rig...
+        <div style={{ textAlign: 'center', padding: '40px 0' }}>
+          <div style={{ width: 24, height: 24, border: '2px solid #2A2A2A', borderTopColor: '#D4AF37', borderRadius: '50%', animation: 'spin 0.8s linear infinite', margin: '0 auto 12px' }} />
+          <div style={{ color: '#A0A0A0', fontSize: 13 }}>Analyzing your rig...</div>
+          <div style={{ color: '#666666', fontSize: 11, marginTop: 4 }}>Checking infrastructure, context, and signal coverage</div>
         </div>
       )}
 
@@ -202,6 +204,14 @@ export function CalibrationStep({ isAnimating, onComplete, onBack }: Calibration
         </>
       )}
 
+      {/* No-result explanation */}
+      {!loading && !result && !error && (
+        <div style={{ textAlign: 'center', padding: '24px 0', color: '#A0A0A0', fontSize: 13 }}>
+          <p>Calibration requires content to analyze.</p>
+          <p style={{ fontSize: 11, color: '#666666', marginTop: 4 }}>Run an analysis first, then come back to calibrate.</p>
+        </div>
+      )}
+
       {/* Navigation */}
       <div className="flex justify-between mt-6">
         <button onClick={onBack} className="px-4 py-2 text-sm text-gray-400 hover:text-white transition-colors">
@@ -211,7 +221,7 @@ export function CalibrationStep({ isAnimating, onComplete, onBack }: Calibration
           onClick={onComplete}
           className="px-6 py-2 bg-orange-500 hover:bg-orange-600 text-white text-sm font-medium rounded-lg transition-colors"
         >
-          {result ? 'Finish Setup' : 'Skip'}
+          {result ? 'Finish Setup' : 'Skip for now'}
         </button>
       </div>
     </div>

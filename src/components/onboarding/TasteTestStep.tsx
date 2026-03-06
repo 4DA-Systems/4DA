@@ -30,9 +30,11 @@ export function TasteTestStep({ isAnimating, onComplete, onSkip }: TasteTestStep
   const [summary, setSummary] = useState<TasteProfileSummary | null>(null);
   const [cardAnimating, setCardAnimating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [starting, setStarting] = useState(false);
   const cardShownAt = useRef<number>(0);
 
   const startTest = useCallback(async () => {
+    setStarting(true);
     try {
       const result = await invoke<TasteTestStepResult>('taste_test_start');
       if (result.type === 'nextCard') {
@@ -44,6 +46,7 @@ export function TasteTestStep({ isAnimating, onComplete, onSkip }: TasteTestStep
       }
     } catch (e) {
       setError(`Failed to start taste test: ${e}`);
+      setStarting(false);
     }
   }, []);
 
@@ -103,9 +106,15 @@ export function TasteTestStep({ isAnimating, onComplete, onSkip }: TasteTestStep
         <div className="flex items-center justify-center gap-4 pt-2">
           <button
             onClick={startTest}
-            className="bg-white text-black font-medium text-sm py-2.5 px-6 rounded-md hover:bg-gray-100 transition-colors"
+            disabled={starting}
+            className="bg-white text-black font-medium text-sm py-2.5 px-6 rounded-md hover:bg-gray-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            Start calibration
+            {starting ? (
+              <span className="flex items-center gap-2">
+                <span className="w-3.5 h-3.5 border-2 border-black/30 border-t-black rounded-full animate-spin" />
+                Starting...
+              </span>
+            ) : 'Start calibration'}
           </button>
           <button
             onClick={onSkip}

@@ -42,6 +42,12 @@ vi.mock('../../store', () => ({
         userContext: null,
         startAnalysis: vi.fn(),
         generateBriefing: vi.fn(),
+        aiBriefing: {
+          content: null,
+          loading: false,
+          error: null,
+          model: null,
+        },
 
         // playbook slice
         playbookModules: [],

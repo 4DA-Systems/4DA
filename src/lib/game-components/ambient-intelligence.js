@@ -407,7 +407,6 @@ class GameRenderer {
   setParam(name, value) { this.userParams[name] = value; }
   setAudioData(d) { Object.assign(this.audioData, d); }
   destroy() { this.stop(); this.canvas.removeEventListener('mousemove', this._onMouseMove); this.device?.destroy(); }
-}
 
   _initMemory() {
     const w = this.canvas.width || 1;
@@ -459,6 +458,7 @@ class GameRenderer {
       this._initMemory();
     }
   }
+}
 
 class GameRendererGL {
   constructor(canvas, glslVertex, glslFragment, uniformDefs) {
@@ -569,7 +569,6 @@ class GameRendererGL {
   setParam(name, value) { this.userParams[name] = value; }
   setAudioData(d) { Object.assign(this.audioData, d); }
   destroy() { this.stop(); this.canvas.removeEventListener('mousemove', this._onMouseMove); }
-}
 
   _initMemoryGL() {
     const gl = this.gl;
@@ -615,6 +614,7 @@ class GameRendererGL {
       gl.bindTexture(gl.TEXTURE_2D, null);
     }
   }
+}
 
 class AmbientIntelligence extends HTMLElement {
   constructor() {

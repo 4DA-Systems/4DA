@@ -295,7 +295,7 @@ export function SplashScreen({ onComplete, minimumDisplayTime = 1500 }: SplashSc
         fontSize: '0.75rem',
         color: '#4B5563',
       }}>
-        {t('splash.version', { version: '1.0.0' })}
+        {t('splash.version', { version: __APP_VERSION__ })}
       </p>
 
       {/* Subtle refresh button - top right corner */}

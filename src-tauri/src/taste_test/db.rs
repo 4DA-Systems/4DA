@@ -217,7 +217,6 @@ pub fn apply_taste_to_context(conn: &Connection, profile: &TasteProfile) -> Resu
 mod tests {
     use super::*;
     use rusqlite::Connection;
-    use std::collections::HashMap;
 
     fn setup_test_db() -> Connection {
         let conn = Connection::open_in_memory().unwrap();

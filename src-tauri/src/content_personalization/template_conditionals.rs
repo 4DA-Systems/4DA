@@ -256,7 +256,6 @@ fn evaluate_condition(condition: &str, ctx: &PersonalizationContext) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use crate::content_personalization::context::*;
     use crate::content_personalization::template_processor::process_template;
 

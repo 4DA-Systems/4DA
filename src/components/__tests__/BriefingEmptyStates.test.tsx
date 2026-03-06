@@ -31,6 +31,12 @@ vi.mock('../../store', () => ({
         progress: 0,
         progressStage: '',
       },
+      aiBriefing: {
+        content: null,
+        loading: false,
+        error: null,
+        model: null,
+      },
       startAnalysis: mockStartAnalysis,
       generateBriefing: mockGenerateBriefing,
       setActiveView: mockSetActiveView,

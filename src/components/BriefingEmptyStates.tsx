@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../store';
 
@@ -32,6 +33,16 @@ export function BriefingReadyState() {
   const { t } = useTranslation();
   const results = useAppStore(s => s.appState.relevanceResults);
   const generateBriefing = useAppStore(s => s.generateBriefing);
+  const isLoading = useAppStore(s => s.aiBriefing.loading);
+  const [clicked, setClicked] = useState(false);
+
+  const handleGenerate = () => {
+    if (clicked || isLoading) return;
+    setClicked(true);
+    generateBriefing();
+  };
+
+  const busy = clicked || isLoading;
 
   return (
     <div className="bg-bg-primary rounded-lg">
@@ -45,8 +56,13 @@ export function BriefingReadyState() {
         <p className="text-sm text-gray-500 text-center max-w-md mb-6">
           {t('briefing.resultsAnalyzed', { count: results.length })}
         </p>
-        <button onClick={generateBriefing} className="px-6 py-2.5 bg-orange-500 text-white text-sm font-medium rounded-lg hover:bg-orange-600 transition-colors">
-          {t('briefing.generate')}
+        <button onClick={handleGenerate} disabled={busy} className="px-6 py-2.5 bg-orange-500 text-white text-sm font-medium rounded-lg hover:bg-orange-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+          {busy ? (
+            <span className="flex items-center gap-2">
+              <span className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+              {t('briefing.generate')}
+            </span>
+          ) : t('briefing.generate')}
         </button>
       </div>
     </div>

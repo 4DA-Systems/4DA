@@ -19,7 +19,7 @@ mod tests {
 
     #[derive(Debug)]
     struct DashboardReport {
-        total_tests_run: u32,
+        _total_tests_run: u32,
         personas_tested: u32,
         corpus_items_scored: u32,
         aggregate_f1: f64,
@@ -211,7 +211,7 @@ mod tests {
         }
 
         let report = DashboardReport {
-            total_tests_run: 6,
+            _total_tests_run: 6,
             personas_tested: PERSONA_NAMES.len() as u32,
             corpus_items_scored: total_scored,
             aggregate_f1: aggregate.f1(),
