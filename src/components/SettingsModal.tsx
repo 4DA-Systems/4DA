@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useShallow } from 'zustand/react/shallow';
 import { LearnedBehaviorPanel } from './LearnedBehaviorPanel';
 import { SystemHealthPanel } from './SystemHealthPanel';
 import { IndexedDocumentsPanel } from './IndexedDocumentsPanel';
@@ -112,54 +113,58 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
   const [activeTab, setActiveTab] = useState<SettingsTab>('general');
   const [initialized, setInitialized] = useState<Set<SettingsTab>>(new Set(['general']));
 
-  // Shared state
-  const settings = useAppStore(s => s.settings);
-  const settingsForm = useAppStore(s => s.settingsForm);
+  // Data selectors (may change — useShallow prevents unnecessary re-renders)
+  const {
+    settings, settingsForm, settingsStatus, ollamaStatus, ollamaModels,
+    monitoring, monitoringInterval, notificationThreshold,
+    scanDirectories, newScanDir, isScanning, discoveredContext,
+    learnedAffinities, antiTopics, systemHealth,
+    similarTopicQuery, similarTopicResults,
+  } = useAppStore(
+    useShallow((s) => ({
+      settings: s.settings,
+      settingsForm: s.settingsForm,
+      settingsStatus: s.settingsStatus,
+      ollamaStatus: s.ollamaStatus,
+      ollamaModels: s.ollamaModels,
+      monitoring: s.monitoring,
+      monitoringInterval: s.monitoringInterval,
+      notificationThreshold: s.notificationThreshold,
+      scanDirectories: s.scanDirectories,
+      newScanDir: s.newScanDir,
+      isScanning: s.isScanning,
+      discoveredContext: s.discoveredContext,
+      learnedAffinities: s.learnedAffinities,
+      antiTopics: s.antiTopics,
+      systemHealth: s.systemHealth,
+      similarTopicQuery: s.similarTopicQuery,
+      similarTopicResults: s.similarTopicResults,
+    })),
+  );
+
+  // Action selectors (stable references — no useShallow needed)
   const setSettingsFormFull = useAppStore(s => s.setSettingsFormFull);
-  const settingsStatus = useAppStore(s => s.settingsStatus);
   const setSettingsStatus = useAppStore(s => s.setSettingsStatus);
   const saveSettings = useAppStore(s => s.saveSettings);
   const testConnection = useAppStore(s => s.testConnection);
-  const ollamaStatus = useAppStore(s => s.ollamaStatus);
-  const ollamaModels = useAppStore(s => s.ollamaModels);
   const checkOllamaStatus = useAppStore(s => s.checkOllamaStatus);
-
-  // Monitoring
-  const monitoring = useAppStore(s => s.monitoring);
-  const monitoringInterval = useAppStore(s => s.monitoringInterval);
   const setMonitoringInterval = useAppStore(s => s.setMonitoringInterval);
-  const notificationThreshold = useAppStore(s => s.notificationThreshold);
   const setNotificationThreshold = useAppStore(s => s.setNotificationThreshold);
   const toggleMonitoring = useAppStore(s => s.toggleMonitoring);
   const updateMonitoringInterval = useAppStore(s => s.updateMonitoringInterval);
   const testNotification = useAppStore(s => s.testNotification);
-
-  // Discovery
-  const scanDirectories = useAppStore(s => s.scanDirectories);
-  const newScanDir = useAppStore(s => s.newScanDir);
   const setNewScanDir = useAppStore(s => s.setNewScanDir);
-  const isScanning = useAppStore(s => s.isScanning);
-  const discoveredContext = useAppStore(s => s.discoveredContext);
   const runAutoDiscovery = useAppStore(s => s.runAutoDiscovery);
   const runFullScan = useAppStore(s => s.runFullScan);
   const addScanDirectory = useAppStore(s => s.addScanDirectory);
   const removeScanDirectory = useAppStore(s => s.removeScanDirectory);
-
-  // Health
-  const learnedAffinities = useAppStore(s => s.learnedAffinities);
-  const antiTopics = useAppStore(s => s.antiTopics);
   const loadLearnedBehavior = useAppStore(s => s.loadLearnedBehavior);
-  const systemHealth = useAppStore(s => s.systemHealth);
-  const similarTopicQuery = useAppStore(s => s.similarTopicQuery);
   const setSimilarTopicQuery = useAppStore(s => s.setSimilarTopicQuery);
-  const similarTopicResults = useAppStore(s => s.similarTopicResults);
   const runAnomalyDetection = useAppStore(s => s.runAnomalyDetection);
   const resolveAnomaly = useAppStore(s => s.resolveAnomaly);
   const findSimilarTopics = useAppStore(s => s.findSimilarTopics);
   const saveWatcherState = useAppStore(s => s.saveWatcherState);
   const loadSystemHealth = useAppStore(s => s.loadSystemHealth);
-
-  // Loaders
   const loadSettings = useAppStore(s => s.loadSettings);
   const loadMonitoringStatus = useAppStore(s => s.loadMonitoringStatus);
   const loadDiscoveredContext = useAppStore(s => s.loadDiscoveredContext);

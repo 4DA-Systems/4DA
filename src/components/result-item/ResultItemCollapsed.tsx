@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { SourceRelevance, FeedbackAction } from '../../types';
 import { formatScore, getScoreColor } from '../../utils/score';
@@ -15,7 +16,7 @@ interface ResultItemCollapsedProps {
   fallbackReason: string;
 }
 
-export function ResultItemCollapsed({
+export const ResultItemCollapsed = memo(function ResultItemCollapsed({
   item,
   isExpanded,
   onToggleExpand,
@@ -147,4 +148,4 @@ export function ResultItemCollapsed({
       )}
     </div>
   );
-}
+});

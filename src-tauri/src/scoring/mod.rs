@@ -63,7 +63,7 @@ use crate::context_engine;
 use fourda_macros::ScoringBuilder;
 
 /// Pre-loaded context for scoring (computed once per analysis run)
-#[derive(ScoringBuilder)]
+#[derive(ScoringBuilder, Clone)]
 pub(crate) struct ScoringContext {
     pub cached_context_count: i64,
     pub interest_count: usize,

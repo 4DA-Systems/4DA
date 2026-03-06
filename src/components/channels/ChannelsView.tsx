@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useShallow } from 'zustand/react/shallow';
 import { useAppStore } from '../../store';
 import { ChannelCard } from './ChannelCard';
 import { ChannelContent } from './ChannelContent';
@@ -7,11 +8,15 @@ import { CreateChannelModal } from './CreateChannelModal';
 
 export function ChannelsView() {
   const { t } = useTranslation();
-  const channels = useAppStore((s) => s.channels);
-  const channelsLoading = useAppStore((s) => s.channelsLoading);
-  const activeChannelId = useAppStore((s) => s.activeChannelId);
-  const loadChannels = useAppStore((s) => s.loadChannels);
-  const selectChannel = useAppStore((s) => s.selectChannel);
+  const { channels, channelsLoading, activeChannelId } = useAppStore(
+    useShallow(s => ({
+      channels: s.channels,
+      channelsLoading: s.channelsLoading,
+      activeChannelId: s.activeChannelId,
+    }))
+  );
+  const loadChannels = useAppStore(s => s.loadChannels);
+  const selectChannel = useAppStore(s => s.selectChannel);
   const [showCreate, setShowCreate] = useState(false);
 
   // Load channels on mount

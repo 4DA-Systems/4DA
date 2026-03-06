@@ -353,29 +353,34 @@ impl Database {
     // ========================================================================
 
     /// Save provenance records linking render claims to source items.
+    /// Uses a transaction to batch all inserts for performance.
     pub fn save_render_provenance(&self, provenance: &[RenderProvenance]) -> SqliteResult<()> {
         let conn = self.conn.lock();
-        let mut stmt = conn.prepare(
-            "INSERT INTO channel_provenance
-                (render_id, claim_index, claim_text, source_item_ids, source_titles, source_urls)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
-        )?;
-        for p in provenance {
-            let ids_json =
-                serde_json::to_string(&p.source_item_ids).unwrap_or_else(|_| "[]".to_string());
-            let titles_json =
-                serde_json::to_string(&p.source_titles).unwrap_or_else(|_| "[]".to_string());
-            let urls_json =
-                serde_json::to_string(&p.source_urls).unwrap_or_else(|_| "[]".to_string());
-            stmt.execute(params![
-                p.render_id,
-                p.claim_index,
-                p.claim_text,
-                ids_json,
-                titles_json,
-                urls_json
-            ])?;
+        let tx = conn.unchecked_transaction()?;
+        {
+            let mut stmt = tx.prepare(
+                "INSERT INTO channel_provenance
+                    (render_id, claim_index, claim_text, source_item_ids, source_titles, source_urls)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+            )?;
+            for p in provenance {
+                let ids_json =
+                    serde_json::to_string(&p.source_item_ids).unwrap_or_else(|_| "[]".to_string());
+                let titles_json =
+                    serde_json::to_string(&p.source_titles).unwrap_or_else(|_| "[]".to_string());
+                let urls_json =
+                    serde_json::to_string(&p.source_urls).unwrap_or_else(|_| "[]".to_string());
+                stmt.execute(params![
+                    p.render_id,
+                    p.claim_index,
+                    p.claim_text,
+                    ids_json,
+                    titles_json,
+                    urls_json
+                ])?;
+            }
         }
+        tx.commit()?;
         Ok(())
     }
 

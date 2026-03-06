@@ -1,6 +1,6 @@
 import { useTranslation } from 'react-i18next';
 
-import sunLogo from '../../assets/sun-logo.jpg';
+import sunLogo from '../../assets/sun-logo.webp';
 
 interface WelcomeStepProps {
   isAnimating: boolean;

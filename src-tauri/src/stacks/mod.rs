@@ -48,7 +48,7 @@ pub struct StackProfile {
 
 /// Merged result of composing multiple stack profiles.
 /// When `active` is false (no stacks selected), all scoring values are neutral.
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct ComposedStack {
     pub pain_points: Vec<&'static PainPoint>,
     pub ecosystem_shifts: Vec<&'static EcosystemShift>,

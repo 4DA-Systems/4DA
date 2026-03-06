@@ -14,8 +14,8 @@ vi.mock('@tauri-apps/api/event', () => ({
 }));
 
 // Mock sun-logo image
-vi.mock('../../assets/sun-logo.jpg', () => ({
-  default: 'mock-sun-logo.jpg',
+vi.mock('../../assets/sun-logo.webp', () => ({
+  default: 'mock-sun-logo.webp',
 }));
 
 // Mock error messages
@@ -89,7 +89,7 @@ describe('SplashScreen', () => {
     const { unmount } = render(<SplashScreen onComplete={vi.fn()} minimumDisplayTime={0} />);
     const img = screen.getByAltText('4DA');
     expect(img).toBeInTheDocument();
-    expect(img).toHaveAttribute('src', 'mock-sun-logo.jpg');
+    expect(img).toHaveAttribute('src', 'mock-sun-logo.webp');
     unmount();
   });
 

@@ -295,6 +295,15 @@ pub(crate) fn hash_content(content: &str) -> String {
     hex::encode(hasher.finalize())
 }
 
+/// Hash multiple content parts for deduplication without intermediate allocation.
+pub(crate) fn hash_content_parts(parts: &[&str]) -> String {
+    let mut hasher = Sha256::new();
+    for part in parts {
+        hasher.update(part.as_bytes());
+    }
+    hex::encode(hasher.finalize())
+}
+
 /// Convert f32 embedding to blob for storage
 pub(crate) fn embedding_to_blob(embedding: &[f32]) -> Vec<u8> {
     embedding.iter().flat_map(|f| f.to_le_bytes()).collect()

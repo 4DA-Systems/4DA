@@ -246,13 +246,12 @@ pub fn run() {
 
     // Initialize source registry
     let registry = get_source_registry();
-    let source_count = registry.lock().count();
-    let source_names: Vec<String> = registry
-        .lock()
-        .sources()
-        .iter()
-        .map(|s| s.name().to_string())
-        .collect();
+    let (source_count, source_names) = {
+        let reg = registry.lock();
+        let count = reg.count();
+        let names: Vec<String> = reg.sources().iter().map(|s| s.name().to_string()).collect();
+        (count, names)
+    };
     info!(target: "4da::startup", count = source_count, sources = %source_names.join(", "), "Sources registered");
 
     tauri::Builder::default()

@@ -1,13 +1,27 @@
 //! Source item CRUD, feedback, source registry, and health tracking.
 
 use rusqlite::{params, OptionalExtension, Result as SqliteResult};
+use std::sync::{LazyLock, Mutex};
 use tracing::info;
 
 use super::StoredSourceItem;
 use super::{
-    blob_to_embedding, embedding_to_blob, hash_content, parse_datetime, Database,
+    blob_to_embedding, embedding_to_blob, hash_content_parts, parse_datetime, Database,
     ScoringStatsAggregate,
 };
+
+// Cache for feedback topic summary — invalidated on feedback writes.
+static FEEDBACK_TOPIC_CACHE: LazyLock<Mutex<Option<Vec<FeedbackTopicSummary>>>> =
+    LazyLock::new(|| Mutex::new(None));
+
+/// Invalidate the feedback topic summary cache.
+/// Must be called after any feedback write (record_feedback, etc.).
+pub fn invalidate_feedback_topic_cache() {
+    let mut cache = FEEDBACK_TOPIC_CACHE
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    *cache = None;
+}
 
 // ============================================================================
 // Types
@@ -53,7 +67,7 @@ impl Database {
         embedding: &[f32],
     ) -> SqliteResult<i64> {
         let conn = self.conn.lock();
-        let content_hash = hash_content(&format!("{}{}", title, content));
+        let content_hash = hash_content_parts(&[title, content]);
         let embedding_blob = embedding_to_blob(embedding);
 
         let existing_id: Option<i64> = conn
@@ -115,7 +129,7 @@ impl Database {
                 tx.prepare_cached("INSERT INTO source_vec (rowid, embedding) VALUES (?1, ?2)")?;
 
             for (source_type, source_id, url, title, content, embedding) in items {
-                let content_hash = hash_content(&format!("{}{}", title, content));
+                let content_hash = hash_content_parts(&[title, content]);
                 let embedding_blob = embedding_to_blob(embedding);
 
                 let existing_id: Option<i64> = check_stmt
@@ -174,7 +188,7 @@ impl Database {
             )?;
 
             for (source_type, source_id, url, title, content, embed_text) in items {
-                let content_hash = hash_content(&format!("{}{}", title, content));
+                let content_hash = hash_content_parts(&[title, content]);
 
                 let existing_id: Option<i64> = check_stmt
                     .query_row(params![source_type, source_id], |row| row.get(0))
@@ -440,6 +454,8 @@ impl Database {
             "INSERT INTO feedback (source_item_id, relevant) VALUES (?1, ?2)",
             params![source_item_id, relevant as i32],
         )?;
+        drop(conn);
+        invalidate_feedback_topic_cache();
         Ok(())
     }
 
@@ -620,8 +636,18 @@ impl Database {
         }
     }
 
-    /// Get feedback summary aggregated by topic for scoring boost
+    /// Get feedback summary aggregated by topic for scoring boost.
+    /// Results are cached until invalidated by a feedback write.
     pub fn get_feedback_topic_summary(&self) -> SqliteResult<Vec<FeedbackTopicSummary>> {
+        // Check cache first
+        {
+            let cache = FEEDBACK_TOPIC_CACHE
+                .lock()
+                .unwrap_or_else(|e| e.into_inner());
+            if let Some(ref cached) = *cache {
+                return Ok(cached.clone());
+            }
+        }
         let conn = self.conn.lock();
 
         let mut stmt = conn.prepare(
@@ -684,6 +710,14 @@ impl Database {
                 .partial_cmp(&a.net_score)
                 .unwrap_or(std::cmp::Ordering::Equal)
         });
+
+        // Store in cache
+        {
+            let mut cache = FEEDBACK_TOPIC_CACHE
+                .lock()
+                .unwrap_or_else(|e| e.into_inner());
+            *cache = Some(summaries.clone());
+        }
 
         Ok(summaries)
     }

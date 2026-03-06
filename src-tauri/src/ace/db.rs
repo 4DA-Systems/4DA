@@ -17,6 +17,9 @@ pub fn migrate(conn: &Arc<Mutex<Connection>>) -> Result<(), String> {
         PRAGMA journal_mode = WAL;
         PRAGMA busy_timeout = 5000;
         PRAGMA synchronous = NORMAL;
+        PRAGMA cache_size = -4000;
+        PRAGMA mmap_size = 268435456;
+        PRAGMA temp_store = MEMORY;
 
         -- ═══════════════════════════════════════════════════════════════
         -- SIGNAL ACQUISITION TABLES

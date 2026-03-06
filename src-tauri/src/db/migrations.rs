@@ -865,6 +865,25 @@ impl Database {
                 )?;
             }
 
+            // Phase 23 migration: Performance indexes
+            if current_version < 23 {
+                Self::run_versioned_migration(
+                    &conn,
+                    22,
+                    23,
+                    "Phase 23: performance indexes",
+                    |c| {
+                        c.execute_batch(
+                        "CREATE INDEX IF NOT EXISTS idx_feedback_created ON feedback(created_at);
+                         CREATE INDEX IF NOT EXISTS idx_feedback_item_relevant ON feedback(source_item_id, relevant);
+                         CREATE INDEX IF NOT EXISTS idx_source_items_created ON source_items(created_at);
+                         CREATE INDEX IF NOT EXISTS idx_digest_superseded ON digested_intelligence(superseded_by);
+                         CREATE INDEX IF NOT EXISTS idx_channel_renders_channel_version ON channel_renders(channel_id, version);",
+                    )
+                    },
+                )?;
+            }
+
             info!(target: "4da::db", "Database schema initialized with sqlite-vec");
             return Ok(());
         }

@@ -58,6 +58,12 @@ export const createAgentSlice: StateCreator<AppStore, [], [], AgentSlice> = (set
   },
 
   checkAgentDataExists: async () => {
+    // Derive from already-loaded memories if available, avoiding a redundant IPC call
+    const { agentMemories } = get();
+    if (agentMemories.length > 0) {
+      set({ agentDataExists: true });
+      return;
+    }
     try {
       const memories = await invoke<AgentMemoryEntry[]>('recall_agent_memories', {
         subject: '',

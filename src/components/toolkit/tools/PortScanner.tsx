@@ -1,6 +1,7 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
+import { useVisibilityPolling } from '../../../hooks/use-visibility-polling';
 
 interface ListeningPort {
   port: number;
@@ -32,7 +33,7 @@ export default function PortScanner() {
   const [autoRefresh, setAutoRefresh] = useState(false);
   const [killConfirm, setKillConfirm] = useState<number | null>(null);
   const [killMessage, setKillMessage] = useState<string | null>(null);
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
 
   const scan = useCallback(async () => {
     setLoading(true);
@@ -61,22 +62,8 @@ export default function PortScanner() {
     }
   }, [scan]);
 
-  // Auto-refresh polling
-  useEffect(() => {
-    if (autoRefresh) {
-      scan();
-      intervalRef.current = setInterval(scan, 5000);
-    } else if (intervalRef.current) {
-      clearInterval(intervalRef.current);
-      intervalRef.current = null;
-    }
-    return () => {
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
-        intervalRef.current = null;
-      }
-    };
-  }, [autoRefresh, scan]);
+  // Visibility-aware auto-refresh polling — pauses when app is backgrounded
+  useVisibilityPolling(scan, 5000, autoRefresh);
 
   // Clear kill message after 3 seconds
   useEffect(() => {

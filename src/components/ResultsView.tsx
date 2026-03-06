@@ -1,4 +1,4 @@
-import { useRef, useMemo } from 'react';
+import { useRef, useMemo, useCallback } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { useTranslation } from 'react-i18next';
 import { useShallow } from 'zustand/react/shallow';
@@ -32,6 +32,11 @@ export function ResultsView({
   // Action selectors (stable references, no need for useShallow)
   const setExpandedItem = useAppStore(s => s.setExpandedItem);
   const startAnalysis = useAppStore(s => s.startAnalysis);
+
+  // Stable toggle handler — avoids inline arrow defeating memo on every virtualized row
+  const handleToggleExpand = useCallback((itemId: number) => {
+    setExpandedItem(useAppStore.getState().expandedItem === itemId ? null : itemId);
+  }, [setExpandedItem]);
   const loadContextFiles = useAppStore(s => s.loadContextFiles);
   const clearContext = useAppStore(s => s.clearContext);
   const indexContext = useAppStore(s => s.indexContext);
@@ -385,7 +390,7 @@ export function ResultsView({
                         isExpanded={expandedItem === item.id}
                         isFocused={focusedIndex === idx}
                         isNew={newItemIds.has(item.id)}
-                        onToggleExpand={() => setExpandedItem(expandedItem === item.id ? null : item.id)}
+                        onToggleExpand={() => handleToggleExpand(item.id)}
                         feedbackGiven={feedbackGiven}
                         onRecordInteraction={recordInteraction}
                         comparePool={filteredResults}

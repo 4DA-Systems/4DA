@@ -182,7 +182,9 @@ pub(crate) async fn fetch_all_sources(
                         use std::collections::hash_map::DefaultHasher;
                         use std::hash::{Hash, Hasher};
                         let mut hasher = DefaultHasher::new();
-                        format!("{}:{}", source_type, item.source_id).hash(&mut hasher);
+                        source_type.hash(&mut hasher);
+                        ":".hash(&mut hasher);
+                        item.source_id.hash(&mut hasher);
                         hasher.finish()
                     };
 
@@ -593,20 +595,23 @@ pub(crate) async fn fetch_all_sources_deep(
                 }
             };
 
+            let mut items_to_insert = Vec::new();
             for ((item, _), embedding) in chunk.iter().cloned().zip(embeddings.into_iter()) {
                 let is_fallback = embedding.iter().all(|&v| v == 0.0);
                 if !is_fallback {
-                    db.upsert_source_item(
-                        &item.source_type,
-                        &item.source_id,
-                        item.url.as_deref(),
-                        &item.title,
-                        &item.content,
-                        &embedding,
-                    )
-                    .ok();
+                    items_to_insert.push((
+                        item.source_type.clone(),
+                        item.source_id.clone(),
+                        item.url.clone(),
+                        item.title.clone(),
+                        item.content.clone(),
+                        embedding.clone(),
+                    ));
                 }
                 all_items.push((item, embedding));
+            }
+            if !items_to_insert.is_empty() {
+                db.batch_upsert_source_items(&items_to_insert).ok();
             }
         }
     }

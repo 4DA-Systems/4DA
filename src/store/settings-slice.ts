@@ -76,20 +76,21 @@ export const createSettingsSlice: StateCreator<AppStore, [], [], SettingsSlice> 
     const { settingsForm, loadSettings } = get();
     set({ settingsStatus: 'Saving...' });
     try {
-      await invoke('set_llm_provider', {
-        provider: settingsForm.provider,
-        apiKey: settingsForm.apiKey || '',
-        model: settingsForm.model,
-        baseUrl: settingsForm.baseUrl || null,
-      });
-
-      await invoke('set_rerank_config', {
-        enabled: settingsForm.rerankEnabled,
-        maxItems: settingsForm.maxItems,
-        minScore: settingsForm.minScore,
-        dailyTokenLimit: settingsForm.dailyTokenLimit,
-        dailyCostLimit: settingsForm.dailyCostLimit,
-      });
+      await Promise.all([
+        invoke('set_llm_provider', {
+          provider: settingsForm.provider,
+          apiKey: settingsForm.apiKey || '',
+          model: settingsForm.model,
+          baseUrl: settingsForm.baseUrl || null,
+        }),
+        invoke('set_rerank_config', {
+          enabled: settingsForm.rerankEnabled,
+          maxItems: settingsForm.maxItems,
+          minScore: settingsForm.minScore,
+          dailyTokenLimit: settingsForm.dailyTokenLimit,
+          dailyCostLimit: settingsForm.dailyCostLimit,
+        }),
+      ]);
 
       set({ settingsStatus: 'Settings saved!' });
       await loadSettings();

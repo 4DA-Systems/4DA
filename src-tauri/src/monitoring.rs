@@ -293,13 +293,6 @@ pub fn start_scheduler<R: Runtime>(app: AppHandle<R>, state: Arc<MonitoringState
                     }
                 }
 
-                // Agent memory cleanup - runs with behavior decay (daily)
-                if let Ok(conn) = crate::open_db_connection() {
-                    if let Err(e) = crate::agent_memory::cleanup_expired(&conn) {
-                        warn!(target: "4da::monitor", error = %e, "Agent memory cleanup failed");
-                    }
-                }
-
                 // Coach nudge check - daily
                 let last_nudge = state.last_nudge_check.load(Ordering::Relaxed);
                 if now - last_nudge >= NUDGE_CHECK_INTERVAL {
@@ -348,16 +341,26 @@ pub fn start_scheduler<R: Runtime>(app: AppHandle<R>, state: Arc<MonitoringState
                     }
                 }
 
-                // Intelligence Metabolism: Autophagy-powered cleanup.
-                // Instead of blind DELETE, first extract meta-intelligence (calibration
-                // deltas, topic decay, source autopsies, anti-patterns) then prune.
-                {
+                // Open a shared connection for daily maintenance tasks
+                if let Ok(daily_conn) = crate::open_db_connection() {
+                    // Agent memory cleanup - runs with behavior decay (daily)
+                    if let Err(e) = crate::agent_memory::cleanup_expired(&daily_conn) {
+                        warn!(target: "4da::monitor", error = %e, "Agent memory cleanup failed");
+                    }
+
                     let max_age_days = {
                         let sm = crate::get_settings_manager().lock();
                         sm.get().monitoring.cleanup_max_age_days.unwrap_or(30)
                     };
-                    if let Ok(conn) = crate::open_db_connection() {
-                        match crate::autophagy::run_autophagy_cycle(&conn, max_age_days as i64) {
+
+                    // Intelligence Metabolism: Autophagy-powered cleanup.
+                    // Instead of blind DELETE, first extract meta-intelligence (calibration
+                    // deltas, topic decay, source autopsies, anti-patterns) then prune.
+                    {
+                        match crate::autophagy::run_autophagy_cycle(
+                            &daily_conn,
+                            max_age_days as i64,
+                        ) {
                             Ok(cycle) => {
                                 info!(
                                     target: "4da::monitor",
@@ -391,7 +394,7 @@ pub fn start_scheduler<R: Runtime>(app: AppHandle<R>, state: Arc<MonitoringState
                             let ace_conn = ace.get_conn().lock();
                             match crate::autophagy::bridge_accuracy_feedback(
                                 &ace_conn,
-                                &conn,
+                                &daily_conn,
                                 max_age_days as i64,
                             ) {
                                 Ok(count) if count > 0 => {

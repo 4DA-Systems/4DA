@@ -6,7 +6,7 @@ use crate::get_ace_engine;
 
 /// ACE-discovered context for relevance scoring
 /// PASIFA: Full context including confidence scores for weighted scoring
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub(crate) struct ACEContext {
     /// Active topics detected from project manifests and git history
     pub active_topics: Vec<String>,

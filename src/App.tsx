@@ -8,9 +8,10 @@ import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { useTranslation } from 'react-i18next';
 import './App.css';
-import sunLogo from './assets/sun-logo.jpg';
+import sunLogo from './assets/sun-logo.webp';
 import { SplashScreen } from './components/SplashScreen';
-import { Onboarding } from './components/Onboarding';
+// Onboarding — only shown on first launch, lazy-loaded for returning users
+const Onboarding = lazy(() => import('./components/Onboarding').then(m => ({ default: m.Onboarding })));
 import { VoidEngine } from './components/void-engine/VoidEngine';
 import { OllamaStatus } from './components/OllamaStatus';
 import { ToastContainer } from './components/Toast';
@@ -25,7 +26,7 @@ const FirstRunTransition = lazy(() => import('./components/FirstRunTransition').
 const NaturalLanguageSearch = lazy(() => import('./components/NaturalLanguageSearch').then(m => ({ default: m.NaturalLanguageSearch })));
 const LearningIndicator = lazy(() => import('./components/LearningIndicator').then(m => ({ default: m.LearningIndicator })));
 const PredictiveIndicator = lazy(() => import('./components/PredictiveIndicator').then(m => ({ default: m.PredictiveIndicator })));
-import { ProValueBadge } from './components/ProValueBadge';
+const ProValueBadge = lazy(() => import('./components/ProValueBadge').then(m => ({ default: m.ProValueBadge })));
 
 // Lazy-loaded views — each only loads when navigated to
 const BriefingView = lazy(() => import('./components/BriefingView').then(m => ({ default: m.BriefingView })));
@@ -330,16 +331,18 @@ function App() {
           <SplashScreen onComplete={() => setShowSplash(false)} minimumDisplayTime={800} />
         )}
 
-        {/* Onboarding Flow (first run) */}
+        {/* Onboarding Flow (first run) — lazy-loaded */}
         {!showSplash && showOnboarding && (
-          <Onboarding onComplete={() => {
-            setShowOnboarding(false);
-            setIsFirstRun(true);
-            loadSettings();
-            loadUserContext();
-            loadDiscoveredContext();
-            loadChannels();
-          }} />
+          <Suspense fallback={null}>
+            <Onboarding onComplete={() => {
+              setShowOnboarding(false);
+              setIsFirstRun(true);
+              loadSettings();
+              loadUserContext();
+              loadDiscoveredContext();
+              loadChannels();
+            }} />
+          </Suspense>
         )}
 
         {/* First-Run Transition (bridges onboarding to first analysis) */}
@@ -384,7 +387,7 @@ function App() {
               </div>
             )}
             <OllamaStatus provider={settingsForm.provider} />
-            <ProValueBadge />
+            <Suspense fallback={null}><ProValueBadge /></Suspense>
             <span className={`px-2 py-1 text-[10px] font-bold uppercase tracking-wider rounded ${
               isPro
                 ? 'bg-[#D4AF37]/20 text-[#D4AF37] border border-[#D4AF37]/30'

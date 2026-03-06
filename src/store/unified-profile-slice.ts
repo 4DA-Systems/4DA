@@ -20,19 +20,25 @@ export interface UnifiedProfileSlice {
 // Slice Creator
 // ============================================================================
 
-export const createUnifiedProfileSlice: StateCreator<AppStore, [], [], UnifiedProfileSlice> = (set) => {
-  // Listen for profile-updated events for auto-refresh
-  listen<string>('profile-updated', () => {
-    invoke<SovereignDeveloperProfile>('get_sovereign_developer_profile')
-      .then((data) => set({ unifiedProfile: data }))
-      .catch(() => { /* non-fatal */ });
-  }).catch(() => { /* listener setup failure is non-fatal */ });
+// Deferred listener setup — only registers once on first profile load
+let profileListenerSetup = false;
 
+export const createUnifiedProfileSlice: StateCreator<AppStore, [], [], UnifiedProfileSlice> = (set) => {
   return {
     unifiedProfile: null,
     unifiedProfileLoading: false,
 
     loadUnifiedProfile: async () => {
+      // Set up profile-updated listener on first load (deferred from store creation)
+      if (!profileListenerSetup) {
+        profileListenerSetup = true;
+        listen<string>('profile-updated', () => {
+          invoke<SovereignDeveloperProfile>('get_sovereign_developer_profile')
+            .then((data) => set({ unifiedProfile: data }))
+            .catch(() => { /* non-fatal */ });
+        }).catch(() => { /* listener setup failure is non-fatal */ });
+      }
+
       set({ unifiedProfileLoading: true });
       try {
         const data = await invoke<SovereignDeveloperProfile>('get_sovereign_developer_profile');

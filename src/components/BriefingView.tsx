@@ -21,6 +21,7 @@ import { DecisionWindowsPanel } from './DecisionWindowsPanel';
 import { CompoundAdvantageScore } from './CompoundAdvantageScore';
 import { IntelligenceProfileCard } from './IntelligenceProfileCard';
 import { useLicense } from '../hooks/use-license';
+import type { SourceRelevance } from '../types';
 
 // Stable skeleton widths — no Math.random() re-renders
 const SKELETON_WIDTHS = [85, 92, 78, 88, 70, 95];
@@ -74,6 +75,11 @@ export const BriefingView = memo(function BriefingView() {
 
   const [gapExpanded, setGapExpanded] = useState(false);
   const [metricsExpanded, setMetricsExpanded] = useState(false);
+
+  // Stable callbacks for memo-wrapped BriefingCard/SignalActionCard
+  const handleSave = useCallback((it: SourceRelevance) => recordInteraction(it.id, 'save', it), [recordInteraction]);
+  const handleDismiss = useCallback((it: SourceRelevance) => recordInteraction(it.id, 'dismiss', it), [recordInteraction]);
+  const handleRecordClick = useCallback((it: SourceRelevance) => recordInteraction(it.id, 'click', it), [recordInteraction]);
 
   // Load intelligence pulse from store
   useEffect(() => {
@@ -266,8 +272,8 @@ export const BriefingView = memo(function BriefingView() {
               key={item.id}
               item={item}
               feedbackGiven={feedbackGiven[item.id]}
-              onSave={(it) => recordInteraction(it.id, 'save', it)}
-              onDismiss={(it) => recordInteraction(it.id, 'dismiss', it)}
+              onSave={handleSave}
+              onDismiss={handleDismiss}
             />
           ))}
         </div>
@@ -313,9 +319,9 @@ export const BriefingView = memo(function BriefingView() {
                     item={item}
                     explanation={item.explanation}
                     feedbackGiven={feedbackGiven[item.id]}
-                    onSave={(it) => recordInteraction(it.id, 'save', it)}
-                    onDismiss={(it) => recordInteraction(it.id, 'dismiss', it)}
-                    onRecordInteraction={(it) => recordInteraction(it.id, 'click', it)}
+                    onSave={handleSave}
+                    onDismiss={handleDismiss}
+                    onRecordInteraction={handleRecordClick}
                   />
                 </div>
               );

@@ -1,9 +1,8 @@
-import { useEffect } from 'react';
 import { useAppStore } from '../store';
 
 /**
  * System health hook — thin wrapper around Zustand store.
- * All state lives in the store; this hook adds the init-load effect.
+ * Data is loaded lazily when the Health tab is first visited in SettingsModal.
  */
 export function useSystemHealth(_onStatusChange?: (status: string) => void) {
   const systemHealth = useAppStore(s => s.systemHealth);
@@ -15,10 +14,6 @@ export function useSystemHealth(_onStatusChange?: (status: string) => void) {
   const resolveAnomaly = useAppStore(s => s.resolveAnomaly);
   const findSimilarTopics = useAppStore(s => s.findSimilarTopics);
   const saveWatcherState = useAppStore(s => s.saveWatcherState);
-
-  useEffect(() => {
-    loadSystemHealth();
-  }, [loadSystemHealth]);
 
   return {
     systemHealth,

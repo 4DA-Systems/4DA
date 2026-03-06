@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
-import sunLogo from '../assets/sun-logo.jpg';
+import sunLogo from '../assets/sun-logo.webp';
 import { translateError } from '../utils/error-messages';
 import { registerGameComponent } from '../lib/game-components';
 
@@ -59,30 +59,17 @@ export function SplashScreen({ onComplete, minimumDisplayTime = 1500 }: SplashSc
 
     const checkBackend = async () => {
       try {
-        // Stage 1: Database
+        // Stage 1: Database — must succeed before proceeding
         setStage('database');
         await invoke('get_settings');
         if (cancelled) return;
 
-        // Stage 2: Embeddings/AI — non-blocking, just a visual step
+        // Stages 2-4: Parallel non-critical probes with animated stage advancement
         setStage('embeddings');
-
-        // Stage 3: Context engine
-        setStage('context');
-        try {
-          await invoke('get_context_stats');
-        } catch {
-          // Context might not be set up yet, that's ok
-        }
-        if (cancelled) return;
-
-        // Stage 4: Sources
-        setStage('sources');
-        try {
-          await invoke('get_sources');
-        } catch {
-          // Sources might fail, that's ok for startup
-        }
+        await Promise.allSettled([
+          invoke('get_context_stats'),
+          invoke('get_sources'),
+        ]);
         if (cancelled) return;
 
         // Stage 5: Ready

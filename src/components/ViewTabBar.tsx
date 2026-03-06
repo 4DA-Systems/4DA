@@ -1,5 +1,6 @@
-import { useMemo } from 'react';
+import { useMemo, memo } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useShallow } from 'zustand/react/shallow';
 import { useAppStore } from '../store';
 
 type ViewId = 'briefing' | 'channels' | 'results' | 'profile' | 'insights' | 'saved' | 'toolkit' | 'playbook' | 'coach' | 'calibrate';
@@ -24,14 +25,18 @@ const BADGE_COLORS: Partial<Record<ViewId, string>> = {
   profile: 'bg-amber-400',
 };
 
-export function ViewTabBar() {
+export const ViewTabBar = memo(function ViewTabBar() {
   const { t } = useTranslation();
-  const activeView = useAppStore(s => s.activeView);
+  const { activeView, resultsCount, windows, profilePct, channels } = useAppStore(
+    useShallow((s) => ({
+      activeView: s.activeView,
+      resultsCount: s.appState.relevanceResults.length,
+      windows: s.decisionWindows,
+      profilePct: s.unifiedProfile?.completeness.overall_percentage,
+      channels: s.channels ?? [],
+    })),
+  );
   const setActiveView = useAppStore(s => s.setActiveView);
-  const resultsCount = useAppStore(s => s.appState.relevanceResults.length);
-  const windows = useAppStore(s => s.decisionWindows);
-  const profilePct = useAppStore(s => s.unifiedProfile?.completeness.overall_percentage);
-  const channels = useAppStore(s => s.channels) ?? [];
 
   const badges = useMemo(() => {
     const b: Partial<Record<ViewId, boolean>> = {};
@@ -77,4 +82,4 @@ export function ViewTabBar() {
     </div>
     </nav>
   );
-}
+});

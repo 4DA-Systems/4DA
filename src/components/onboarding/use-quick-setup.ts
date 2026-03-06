@@ -311,9 +311,11 @@ export function useQuickSetup({ onComplete }: UseQuickSetupProps) {
       const interestsToSave = interests.length > 0
         ? interests
         : detectedTech.length > 0 ? detectedTech.slice(0, 5) : fallbackSuggestions.slice(0, 3);
-      for (const interest of interestsToSave) await invoke('add_interest', { topic: interest });
-      for (const tech of detectedTech) await invoke('add_tech_stack', { technology: tech });
-      if (selectedStacks.length > 0) await invoke('set_selected_stacks', { profileIds: selectedStacks });
+      await Promise.all([
+        ...interestsToSave.map(interest => invoke('add_interest', { topic: interest })),
+        ...detectedTech.map(tech => invoke('add_tech_stack', { technology: tech })),
+        ...(selectedStacks.length > 0 ? [invoke('set_selected_stacks', { profileIds: selectedStacks })] : []),
+      ]);
 
       try { localStorage.removeItem(SECTION_KEY); } catch { /* noop */ }
       onComplete();

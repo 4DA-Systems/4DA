@@ -153,8 +153,8 @@ vi.mock('../../hooks/use-license', () => ({
 }));
 
 // Mock sun-logo image import
-vi.mock('../../assets/sun-logo.jpg', () => ({
-  default: 'mock-sun-logo.jpg',
+vi.mock('../../assets/sun-logo.webp', () => ({
+  default: 'mock-sun-logo.webp',
 }));
 
 // Mock playbook markdown renderer

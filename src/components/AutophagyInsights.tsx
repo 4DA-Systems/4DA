@@ -1,5 +1,6 @@
 import { useEffect, useMemo, memo } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useShallow } from 'zustand/react/shallow';
 import { useAppStore } from '../store';
 import { ProGate } from './ProGate';
 import type { AutophagyStatus, AutophagyCycleResult } from '../types/autophagy';
@@ -61,9 +62,13 @@ function AntiPatternsSummary({ count, t }: { count: number; t: (key: string, opt
 
 const InsightsContent = memo(function InsightsContent() {
   const { t } = useTranslation();
-  const status = useAppStore(s => s.autophagyStatus);
-  const history = useAppStore(s => s.autophagyHistory);
-  const loading = useAppStore(s => s.autophagyLoading);
+  const { status, history, loading } = useAppStore(
+    useShallow(s => ({
+      status: s.autophagyStatus,
+      history: s.autophagyHistory,
+      loading: s.autophagyLoading,
+    }))
+  );
   const loadStatus = useAppStore(s => s.loadAutophagyStatus);
   const loadHistory = useAppStore(s => s.loadAutophagyHistory);
 

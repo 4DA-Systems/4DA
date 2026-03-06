@@ -98,10 +98,15 @@ pub(crate) fn analyze_sources(conn: &Connection, max_age_days: i64) -> Vec<super
 }
 
 /// Store source autopsies to `digested_intelligence`, superseding previous entries.
+/// Uses a transaction to batch all writes for performance.
 pub(crate) fn store_source_autopsies(
     conn: &Connection,
     autopsies: &[super::SourceAutopsy],
 ) -> Result<(), String> {
+    let tx = conn
+        .unchecked_transaction()
+        .map_err(|e| format!("Failed to begin transaction for source autopsies: {}", e))?;
+
     for autopsy in autopsies {
         let data = serde_json::to_string(&serde_json::json!({
             "source_type": autopsy.source_type,
@@ -114,7 +119,7 @@ pub(crate) fn store_source_autopsies(
         let subject = format!("{}:{}", autopsy.source_type, autopsy.topic);
 
         // Supersede previous autopsy for this source+topic
-        conn.execute(
+        tx.execute(
             "UPDATE digested_intelligence
              SET superseded_by = (SELECT COALESCE(MAX(id), 0) + 1 FROM digested_intelligence)
              WHERE digest_type = 'source_autopsy' AND subject = ?1 AND superseded_by IS NULL",
@@ -122,7 +127,7 @@ pub(crate) fn store_source_autopsies(
         )
         .map_err(|e| format!("Failed to supersede source autopsy for {}: {}", subject, e))?;
 
-        conn.execute(
+        tx.execute(
             "INSERT INTO digested_intelligence (digest_type, subject, data, confidence, sample_size)
              VALUES ('source_autopsy', ?1, ?2, ?3, ?4)",
             params![
@@ -134,6 +139,9 @@ pub(crate) fn store_source_autopsies(
         )
         .map_err(|e| format!("Failed to insert source autopsy for {}: {}", subject, e))?;
     }
+
+    tx.commit()
+        .map_err(|e| format!("Failed to commit source autopsies: {}", e))?;
 
     debug!(target: "4da::autophagy", count = autopsies.len(), "Stored source autopsies");
     Ok(())

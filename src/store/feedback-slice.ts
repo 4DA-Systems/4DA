@@ -75,14 +75,6 @@ export const createFeedbackSlice: StateCreator<AppStore, [], [], FeedbackSlice> 
         .filter(w => w.length > 3 && !STOP_WORDS.has(w))
         .slice(0, 5);
 
-      await invoke('ace_record_interaction', {
-        item_id: itemId,
-        action_type: actionType,
-        action_data: null,
-        item_topics: topics,
-        item_source: item.source_type || 'hackernews',
-      });
-
       const feedbackTypeMap: Record<string, string> = {
         save: 'save',
         dismiss: 'dismiss',
@@ -90,11 +82,20 @@ export const createFeedbackSlice: StateCreator<AppStore, [], [], FeedbackSlice> 
         click: 'click',
       };
 
-      await invoke('ace_record_accuracy_feedback', {
-        item_id: itemId,
-        predicted_score: item.top_score,
-        feedback_type: feedbackTypeMap[actionType],
-      });
+      await Promise.all([
+        invoke('ace_record_interaction', {
+          item_id: itemId,
+          action_type: actionType,
+          action_data: null,
+          item_topics: topics,
+          item_source: item.source_type || 'hackernews',
+        }),
+        invoke('ace_record_accuracy_feedback', {
+          item_id: itemId,
+          predicted_score: item.top_score,
+          feedback_type: feedbackTypeMap[actionType],
+        }),
+      ]);
 
       // Update feedback state
       set(state => ({

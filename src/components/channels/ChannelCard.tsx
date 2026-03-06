@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { ChannelSummary } from '../../types/channels';
 
@@ -7,7 +8,7 @@ interface Props {
   onClick: () => void;
 }
 
-export function ChannelCard({ channel, active, onClick }: Props) {
+export const ChannelCard = memo(function ChannelCard({ channel, active, onClick }: Props) {
   const { t } = useTranslation();
 
   const freshnessConfig = {
@@ -60,7 +61,7 @@ export function ChannelCard({ channel, active, onClick }: Props) {
       </div>
     </button>
   );
-}
+});
 
 function formatTimeAgo(dateStr: string): string {
   const date = new Date(dateStr + 'Z');

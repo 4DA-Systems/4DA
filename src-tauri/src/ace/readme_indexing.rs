@@ -276,17 +276,19 @@ pub(crate) async fn index_discovered_readmes(context_dirs: &[PathBuf]) -> usize 
     let readme_names = ["README.md", "README.txt", "README", "readme.md"];
     let total_projects = all_projects.len();
 
-    // Process each discovered project
-    for project_dir in &all_projects {
-        if consecutive_failures >= MAX_CONSECUTIVE_FAILURES {
-            warn!(target: "4da::pasifa",
-                failures = consecutive_failures,
-                "Stopping README indexing: {} consecutive embedding failures (check embedding provider)",
-                consecutive_failures
-            );
-            break;
-        }
+    // Collect all chunks with metadata before embedding
+    struct ChunkMeta {
+        source: String,
+        content: String,
+        weight: f32,
+        readme_path: String,
+        section_heading: String,
+    }
 
+    let mut all_chunks: Vec<ChunkMeta> = Vec::new();
+
+    // Phase 1: Discover and parse all README chunks
+    for project_dir in &all_projects {
         // Find README in this project
         let mut readme_found = false;
         for readme_name in &readme_names {
@@ -309,12 +311,8 @@ pub(crate) async fn index_discovered_readmes(context_dirs: &[PathBuf]) -> usize 
                         section_count += num_sections;
                         debug!(target: "4da::pasifa", path = %readme_path.display(), sections = num_sections, "Parsed README sections");
 
-                        // Process each section with appropriate weight
+                        // Collect chunks from each section
                         for section in &sections {
-                            if consecutive_failures >= MAX_CONSECUTIVE_FAILURES {
-                                break;
-                            }
-
                             let weight = section_weight(&section.heading);
 
                             // Skip very short sections
@@ -331,65 +329,17 @@ pub(crate) async fn index_discovered_readmes(context_dirs: &[PathBuf]) -> usize 
                                 if chunk_content.len() < 50 {
                                     continue;
                                 }
-                                if consecutive_failures >= MAX_CONSECUTIVE_FAILURES {
-                                    break;
-                                }
 
-                                // Generate embedding
-                                match embed_texts(std::slice::from_ref(&chunk_content)).await {
-                                    Ok(embeddings) if !embeddings.is_empty() => {
-                                        // Store with weight in context_chunks table
-                                        match db.upsert_context_weighted(
-                                            &chunk_source,
-                                            &chunk_content,
-                                            &embeddings[0],
-                                            weight,
-                                        ) {
-                                            Ok(_) => {
-                                                indexed_chunks += 1;
-                                                consecutive_failures = 0; // Reset on success
-                                                debug!(target: "4da::pasifa",
-                                                    section = &section.heading,
-                                                    weight = weight,
-                                                    "Indexed weighted section chunk"
-                                                );
-                                            }
-                                            Err(e) => {
-                                                consecutive_failures += 1;
-                                                warn!(target: "4da::pasifa",
-                                                    path = %readme_path.display(),
-                                                    section = &section.heading,
-                                                    error = %e,
-                                                    "Failed to upsert weighted context"
-                                                );
-                                            }
-                                        }
-                                    }
-                                    Ok(_) => {
-                                        consecutive_failures += 1;
-                                        debug!(target: "4da::pasifa", "Embedding returned empty result");
-                                    }
-                                    Err(e) => {
-                                        consecutive_failures += 1;
-                                        warn!(target: "4da::pasifa",
-                                            path = %readme_path.display(),
-                                            section = &section.heading,
-                                            error = %e,
-                                            failures = consecutive_failures,
-                                            "Embedding failed ({}/{})",
-                                            consecutive_failures, MAX_CONSECUTIVE_FAILURES,
-                                        );
-                                    }
-                                }
+                                all_chunks.push(ChunkMeta {
+                                    source: chunk_source,
+                                    content: chunk_content,
+                                    weight,
+                                    readme_path: readme_path.to_string_lossy().to_string(),
+                                    section_heading: section.heading.clone(),
+                                });
                             }
                         }
 
-                        info!(target: "4da::pasifa",
-                            path = %readme_path.display(),
-                            sections = sections.len(),
-                            chunks = indexed_chunks,
-                            "Indexed README with section weighting"
-                        );
                         break; // Only index first README found per project
                     }
                     Err(e) => {
@@ -401,6 +351,77 @@ pub(crate) async fn index_discovered_readmes(context_dirs: &[PathBuf]) -> usize 
 
         if !readme_found {
             debug!(target: "4da::pasifa", project = %project_dir.display(), "No README found in project");
+        }
+    }
+
+    info!(target: "4da::pasifa", total_chunks = all_chunks.len(), "Collected all README chunks, starting batch embedding");
+
+    // Phase 2: Batch embed all chunks (batches of 64)
+    const BATCH_SIZE: usize = 64;
+    for batch_start in (0..all_chunks.len()).step_by(BATCH_SIZE) {
+        if consecutive_failures >= MAX_CONSECUTIVE_FAILURES {
+            warn!(target: "4da::pasifa",
+                failures = consecutive_failures,
+                "Stopping README indexing: {} consecutive embedding failures (check embedding provider)",
+                consecutive_failures
+            );
+            break;
+        }
+
+        let batch_end = (batch_start + BATCH_SIZE).min(all_chunks.len());
+        let batch_texts: Vec<String> = all_chunks[batch_start..batch_end]
+            .iter()
+            .map(|c| c.content.clone())
+            .collect();
+
+        match embed_texts(&batch_texts).await {
+            Ok(embeddings) if embeddings.len() == batch_texts.len() => {
+                consecutive_failures = 0; // Reset on success
+                for (i, embedding) in embeddings.iter().enumerate() {
+                    let chunk = &all_chunks[batch_start + i];
+                    match db.upsert_context_weighted(
+                        &chunk.source,
+                        &chunk.content,
+                        embedding,
+                        chunk.weight,
+                    ) {
+                        Ok(_) => {
+                            indexed_chunks += 1;
+                            debug!(target: "4da::pasifa",
+                                section = &chunk.section_heading,
+                                weight = chunk.weight,
+                                "Indexed weighted section chunk"
+                            );
+                        }
+                        Err(e) => {
+                            warn!(target: "4da::pasifa",
+                                path = &chunk.readme_path,
+                                section = &chunk.section_heading,
+                                error = %e,
+                                "Failed to upsert weighted context"
+                            );
+                        }
+                    }
+                }
+            }
+            Ok(embeddings) => {
+                consecutive_failures += 1;
+                warn!(target: "4da::pasifa",
+                    expected = batch_texts.len(),
+                    got = embeddings.len(),
+                    "Embedding batch returned mismatched count"
+                );
+            }
+            Err(e) => {
+                consecutive_failures += 1;
+                warn!(target: "4da::pasifa",
+                    error = %e,
+                    failures = consecutive_failures,
+                    batch_size = batch_texts.len(),
+                    "Batch embedding failed ({}/{})",
+                    consecutive_failures, MAX_CONSECUTIVE_FAILURES,
+                );
+            }
         }
     }
 

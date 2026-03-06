@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { listen, UnlistenFn } from '@tauri-apps/api/event';
 import { invoke } from '@tauri-apps/api/core';
 
@@ -28,32 +28,39 @@ export function FirstRunTransition({ onComplete }: FirstRunTransitionProps) {
   const userContext = useAppStore(s => s.userContext);
   const startAnalysis = useAppStore(s => s.startAnalysis);
 
-  // Derived values from completed analysis
-  const relevantCount = appState.analysisComplete
-    ? appState.relevanceResults.filter(r => r.relevant).length
-    : 0;
+  // Derived values from completed analysis — memoized to avoid recomputing on every progress tick
+  const relevantCount = useMemo(
+    () => appState.analysisComplete ? appState.relevanceResults.filter(r => r.relevant).length : 0,
+    [appState.analysisComplete, appState.relevanceResults],
+  );
   const totalCount = appState.relevanceResults.length;
 
-  // Source breakdown for celebration
-  const sourceBreakdown = appState.analysisComplete
-    ? Array.from(
-        appState.relevanceResults.reduce((map, r) => {
-          const src = r.source_type || 'hackernews';
-          map.set(src, (map.get(src) || 0) + 1);
-          return map;
-        }, new Map<string, number>()),
-      ).sort((a, b) => b[1] - a[1])
-    : [];
+  const sourceBreakdown = useMemo(
+    () => appState.analysisComplete
+      ? Array.from(
+          appState.relevanceResults.reduce((map, r) => {
+            const src = r.source_type || 'hackernews';
+            map.set(src, (map.get(src) || 0) + 1);
+            return map;
+          }, new Map<string, number>()),
+        ).sort((a, b) => b[1] - a[1])
+      : [],
+    [appState.analysisComplete, appState.relevanceResults],
+  );
 
-  // Top signals for celebration — dep matches and skill gap matches first
-  const topSignal = appState.analysisComplete
-    ? appState.relevanceResults.find(r => r.relevant && r.score_breakdown?.dep_match_score && r.score_breakdown.dep_match_score > 0)
-      || appState.relevanceResults.find(r => r.relevant && r.score_breakdown?.skill_gap_boost && r.score_breakdown.skill_gap_boost > 0)
-      || appState.relevanceResults.find(r => r.relevant)
-    : null;
+  const topSignal = useMemo(
+    () => appState.analysisComplete
+      ? appState.relevanceResults.find(r => r.relevant && r.score_breakdown?.dep_match_score && r.score_breakdown.dep_match_score > 0)
+        || appState.relevanceResults.find(r => r.relevant && r.score_breakdown?.skill_gap_boost && r.score_breakdown.skill_gap_boost > 0)
+        || appState.relevanceResults.find(r => r.relevant)
+      : null,
+    [appState.analysisComplete, appState.relevanceResults],
+  );
 
-  // Stack-specific celebration insights
-  const stackInsights = appState.analysisComplete ? buildStackInsights(appState.relevanceResults, scanSummary) : [];
+  const stackInsights = useMemo(
+    () => appState.analysisComplete ? buildStackInsights(appState.relevanceResults, scanSummary) : [],
+    [appState.analysisComplete, appState.relevanceResults, scanSummary],
+  );
 
   // Fetch scan summary and trigger analysis on mount
   useEffect(() => {

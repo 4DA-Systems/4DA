@@ -1,18 +1,23 @@
 import { invoke } from '@tauri-apps/api/core';
 import { useTranslation } from 'react-i18next';
+import { useShallow } from 'zustand/react/shallow';
 import { useAppStore } from '../../store';
 
 export function PersonalizationSection() {
   const { t } = useTranslation();
-  const userContext = useAppStore(s => s.userContext);
-  const suggestedInterests = useAppStore(s => s.suggestedInterests);
-  const newInterest = useAppStore(s => s.newInterest);
+  const { userContext, suggestedInterests, newInterest, newExclusion, newTechStack, newRole } = useAppStore(
+    useShallow(s => ({
+      userContext: s.userContext,
+      suggestedInterests: s.suggestedInterests,
+      newInterest: s.newInterest,
+      newExclusion: s.newExclusion,
+      newTechStack: s.newTechStack,
+      newRole: s.newRole,
+    }))
+  );
   const setNewInterest = useAppStore(s => s.setNewInterest);
-  const newExclusion = useAppStore(s => s.newExclusion);
   const setNewExclusion = useAppStore(s => s.setNewExclusion);
-  const newTechStack = useAppStore(s => s.newTechStack);
   const setNewTechStack = useAppStore(s => s.setNewTechStack);
-  const newRole = useAppStore(s => s.newRole);
   const setNewRole = useAppStore(s => s.setNewRole);
   const addInterest = useAppStore(s => s.addInterest);
   const removeInterest = useAppStore(s => s.removeInterest);

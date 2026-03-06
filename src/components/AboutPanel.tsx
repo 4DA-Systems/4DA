@@ -1,5 +1,5 @@
 import { useTranslation } from 'react-i18next';
-import sunLogo from '../assets/sun-logo.jpg';
+import sunLogo from '../assets/sun-logo.webp';
 
 export function AboutPanel() {
   const { t } = useTranslation();

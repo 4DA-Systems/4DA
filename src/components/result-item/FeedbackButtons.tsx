@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { SourceRelevance, FeedbackAction } from '../../types';
 
@@ -7,7 +8,7 @@ interface FeedbackButtonsProps {
   onRecordInteraction: (itemId: number, actionType: FeedbackAction, item: SourceRelevance) => void;
 }
 
-export function FeedbackButtons({ item, feedback, onRecordInteraction }: FeedbackButtonsProps) {
+export const FeedbackButtons = memo(function FeedbackButtons({ item, feedback, onRecordInteraction }: FeedbackButtonsProps) {
   const { t } = useTranslation();
   return (
     <div className="flex gap-2 mb-3" role="group" aria-label={t('feedback.actions', { defaultValue: 'Feedback actions' })}>
@@ -75,4 +76,4 @@ export function FeedbackButtons({ item, feedback, onRecordInteraction }: Feedbac
       </button>
     </div>
   );
-}
+});
