@@ -84,7 +84,7 @@ pub fn compute_project_health(
     conn: &rusqlite::Connection,
     project_path: &str,
 ) -> Result<ProjectHealth, String> {
-    let deps = crate::temporal_dependencies::get_project_dependencies(conn, project_path)?;
+    let deps = crate::temporal::get_project_dependencies(conn, project_path)?;
     let project_name = std::path::Path::new(project_path)
         .file_name()
         .and_then(|n| n.to_str())
@@ -136,7 +136,7 @@ pub fn get_project_health(project_path: Option<String>) -> Result<Vec<ProjectHea
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::temporal_dependencies::upsert_dependency;
+    use crate::temporal::upsert_dependency;
     use rusqlite::Connection;
 
     /// Create an in-memory database with the tables needed by project_health.

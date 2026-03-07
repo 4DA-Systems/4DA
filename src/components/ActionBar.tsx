@@ -1,8 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { useTranslation } from 'react-i18next';
-import { AudioBriefing } from './AudioBriefing';
-import { ContextHandoff } from './ContextHandoff';
 import { getStageLabel } from '../utils/score';
 import { useAppStore } from '../store';
 import { registerGameComponent } from '../lib/game-components';
@@ -202,11 +200,6 @@ export function ActionBar({
                     {autoBriefingEnabled ? 'ON' : 'OFF'}
                   </span>
                 </button>
-                <div className="border-t border-border my-1" />
-                <div className="px-4 py-2 flex items-center gap-2">
-                  <AudioBriefing />
-                  <ContextHandoff onStatus={(msg) => { onToast(msg.includes('fail') ? 'error' : 'success', msg); setOverflowOpen(false); }} />
-                </div>
                 {state.analysisComplete && (
                   <>
                     <div className="border-t border-border my-1" />

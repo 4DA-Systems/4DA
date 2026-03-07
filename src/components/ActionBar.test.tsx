@@ -8,17 +8,6 @@ vi.mock('@tauri-apps/api/core', () => ({
   invoke: vi.fn(() => Promise.resolve({})),
 }));
 
-// Mock child components that use Tauri invoke internally
-vi.mock('./AudioBriefing', () => ({
-  AudioBriefing: () => <div data-testid="audio-briefing" />,
-}));
-
-vi.mock('./ContextHandoff', () => ({
-  ContextHandoff: ({ onStatus }: { onStatus: (msg: string) => void }) => (
-    <button data-testid="context-handoff" onClick={() => onStatus('success')} />
-  ),
-}));
-
 // Mock the Zustand store
 vi.mock('../store', () => ({
   useAppStore: vi.fn((selector: (s: Record<string, unknown>) => unknown) => {

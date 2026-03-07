@@ -406,9 +406,6 @@ pub(crate) fn run_post_analysis_hooks(results: &[SourceRelevance]) {
             );
         }
 
-        // 3. Scan for reverse mentions of user's projects
-        let _ = crate::reverse_relevance::scan_for_mentions(&conn, 24);
-
         info!(target: "4da::analysis", "Post-analysis innovation hooks complete");
     }
 }

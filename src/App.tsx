@@ -26,7 +26,6 @@ import { UpdateBanner } from './components/UpdateBanner';
 const FirstRunTransition = lazy(() => import('./components/FirstRunTransition').then(m => ({ default: m.FirstRunTransition })));
 const NaturalLanguageSearch = lazy(() => import('./components/NaturalLanguageSearch').then(m => ({ default: m.NaturalLanguageSearch })));
 const LearningIndicator = lazy(() => import('./components/LearningIndicator').then(m => ({ default: m.LearningIndicator })));
-const PredictiveIndicator = lazy(() => import('./components/PredictiveIndicator').then(m => ({ default: m.PredictiveIndicator })));
 const ProValueBadge = lazy(() => import('./components/ProValueBadge').then(m => ({ default: m.ProValueBadge })));
 
 // Lazy-loaded non-critical views and overlays
@@ -415,11 +414,6 @@ function App() {
             antiTopics={antiTopics}
             lastLearnedTopic={lastLearnedTopic}
           />
-        </Suspense>
-
-        {/* Predictive Context */}
-        <Suspense fallback={null}>
-          <PredictiveIndicator />
         </Suspense>
 
         {/* Natural Language Search */}
