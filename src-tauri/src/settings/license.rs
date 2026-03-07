@@ -1,8 +1,24 @@
 //! License verification, feature gating, and trial management.
 
 use serde::{Deserialize, Serialize};
+use tracing::{info, warn};
 
 use super::LicenseConfig;
+
+// ============================================================================
+// Keygen API Validation Constants
+// ============================================================================
+
+/// TODO: Replace with your real Keygen account ID from https://app.keygen.sh/settings
+const KEYGEN_ACCOUNT_ID: &str = "YOUR_ACCOUNT_ID";
+
+/// Base URL template for Keygen validation.
+/// Full URL: `https://api.keygen.sh/v1/accounts/{ACCOUNT_ID}/licenses/actions/validate-key`
+#[allow(dead_code)]
+const KEYGEN_VALIDATE_URL: &str = "https://api.keygen.sh/v1/licenses/actions/validate-key";
+
+/// Hours before a cached validation result is considered stale
+const VALIDATION_CACHE_HOURS: u64 = 24;
 
 // ============================================================================
 // Feature Tier Gating
@@ -122,8 +138,249 @@ pub struct TrialStatus {
 }
 
 // ============================================================================
-// License Key Verification (ed25519)
+// Keygen API Validation (online license verification)
 // ============================================================================
+
+/// Cached result of a Keygen API validation call.
+/// Stored as JSON in `data/license_cache.json`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct KeygenValidationCache {
+    /// ISO-8601 timestamp of the last successful validation
+    pub validated_at: String,
+    /// Tier returned by the validation (e.g. "pro", "free")
+    pub tier: String,
+    /// SHA-256 hash of the license key (detect key changes without storing the key)
+    pub key_hash: String,
+}
+
+/// Result returned by `validate_license_key_keygen`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct KeygenValidationResult {
+    /// Whether validation reached the API successfully
+    pub online: bool,
+    /// The resolved tier after validation
+    pub tier: String,
+    /// Whether a cached result was used
+    pub cached: bool,
+    /// Human-readable detail message
+    pub detail: String,
+}
+
+/// Get the path to the license validation cache file.
+fn cache_path() -> std::path::PathBuf {
+    let mut base = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    base.pop();
+    base.push("data");
+    base.push("license_cache.json");
+    base
+}
+
+/// SHA-256 hash a license key to a hex string (for cache comparison).
+fn hash_key(key: &str) -> String {
+    use sha2::Digest;
+    let mut hasher = sha2::Sha256::new();
+    hasher.update(key.as_bytes());
+    hex::encode(hasher.finalize())
+}
+
+/// Load the validation cache from disk. Returns `None` if missing or unparseable.
+fn load_validation_cache() -> Option<KeygenValidationCache> {
+    let path = cache_path();
+    let content = std::fs::read_to_string(&path).ok()?;
+    serde_json::from_str(&content).ok()
+}
+
+/// Persist the validation cache to disk.
+fn save_validation_cache(cache: &KeygenValidationCache) {
+    let path = cache_path();
+    if let Some(parent) = path.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    match serde_json::to_string_pretty(cache) {
+        Ok(json) => {
+            if let Err(e) = std::fs::write(&path, json) {
+                warn!(target: "4da::license", error = %e, "Failed to write license cache");
+            }
+        }
+        Err(e) => {
+            warn!(target: "4da::license", error = %e, "Failed to serialize license cache");
+        }
+    }
+}
+
+/// Check if the cached validation is still fresh (< VALIDATION_CACHE_HOURS old)
+/// and matches the current license key.
+fn is_cache_valid(cache: &KeygenValidationCache, current_key: &str) -> bool {
+    // Key must match
+    if cache.key_hash != hash_key(current_key) {
+        return false;
+    }
+    // Must not be stale
+    if let Ok(validated) = chrono::DateTime::parse_from_rfc3339(&cache.validated_at) {
+        let age = chrono::Utc::now().signed_duration_since(validated);
+        return age.num_hours() < VALIDATION_CACHE_HOURS as i64;
+    }
+    false
+}
+
+/// Validate a license key against the Keygen API.
+///
+/// **Offline-tolerant:** on network failure the current tier from settings
+/// is preserved (no downgrade). Invalid keys resolve to `"free"`.
+/// Results are cached for `VALIDATION_CACHE_HOURS` hours.
+pub async fn validate_license_key_keygen(
+    license_key: &str,
+    current_tier: &str,
+) -> KeygenValidationResult {
+    if license_key.trim().is_empty() {
+        return KeygenValidationResult {
+            online: false,
+            tier: "free".to_string(),
+            cached: false,
+            detail: "No license key provided".to_string(),
+        };
+    }
+
+    // Check cache first
+    if let Some(cache) = load_validation_cache() {
+        if is_cache_valid(&cache, license_key) {
+            info!(target: "4da::license", tier = %cache.tier, "Using cached Keygen validation");
+            return KeygenValidationResult {
+                online: false,
+                tier: cache.tier.clone(),
+                cached: true,
+                detail: format!("Cached validation from {}", cache.validated_at),
+            };
+        }
+    }
+
+    // Build request body
+    let body = serde_json::json!({
+        "meta": {
+            "key": license_key
+        }
+    });
+
+    let url = format!(
+        "https://api.keygen.sh/v1/accounts/{}/licenses/actions/validate-key",
+        KEYGEN_ACCOUNT_ID
+    );
+
+    // Make the API call
+    let client = reqwest::Client::new();
+    let response = client
+        .post(&url)
+        .header("Content-Type", "application/vnd.api+json")
+        .header("Accept", "application/vnd.api+json")
+        .json(&body)
+        .timeout(std::time::Duration::from_secs(10))
+        .send()
+        .await;
+
+    match response {
+        Ok(resp) => {
+            let status = resp.status();
+            match resp.text().await {
+                Ok(text) => parse_keygen_response(status.as_u16(), &text, license_key),
+                Err(e) => {
+                    // Could read status but not body — treat as network failure
+                    warn!(target: "4da::license", error = %e, "Failed to read Keygen response body");
+                    KeygenValidationResult {
+                        online: false,
+                        tier: current_tier.to_string(),
+                        cached: false,
+                        detail: format!("Network error reading response: {}", e),
+                    }
+                }
+            }
+        }
+        Err(e) => {
+            // Network failure — preserve current tier (offline tolerance)
+            warn!(target: "4da::license", error = %e, "Keygen API unreachable, keeping current tier");
+            KeygenValidationResult {
+                online: false,
+                tier: current_tier.to_string(),
+                cached: false,
+                detail: format!("Network error: {}", e),
+            }
+        }
+    }
+}
+
+/// Parse the JSON response from the Keygen validation endpoint and update cache.
+fn parse_keygen_response(
+    status: u16,
+    body: &str,
+    license_key: &str,
+) -> KeygenValidationResult {
+    let json: serde_json::Value = match serde_json::from_str(body) {
+        Ok(v) => v,
+        Err(e) => {
+            warn!(target: "4da::license", error = %e, status, "Failed to parse Keygen response");
+            return KeygenValidationResult {
+                online: true,
+                tier: "free".to_string(),
+                cached: false,
+                detail: format!("Invalid response from Keygen (HTTP {})", status),
+            };
+        }
+    };
+
+    // Keygen returns { "meta": { "valid": true/false, "code": "..." }, "data": { ... } }
+    let valid = json
+        .pointer("/meta/valid")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+
+    let validation_code = json
+        .pointer("/meta/code")
+        .and_then(|v| v.as_str())
+        .unwrap_or("UNKNOWN");
+
+    if valid {
+        // Extract tier from license metadata if available
+        let tier = json
+            .pointer("/data/attributes/metadata/tier")
+            .and_then(|v| v.as_str())
+            .unwrap_or("pro")
+            .to_string();
+
+        info!(target: "4da::license", tier = %tier, code = %validation_code, "Keygen validation succeeded");
+
+        // Cache the successful result
+        let cache = KeygenValidationCache {
+            validated_at: chrono::Utc::now().to_rfc3339(),
+            tier: tier.clone(),
+            key_hash: hash_key(license_key),
+        };
+        save_validation_cache(&cache);
+
+        KeygenValidationResult {
+            online: true,
+            tier,
+            cached: false,
+            detail: format!("Valid ({})", validation_code),
+        }
+    } else {
+        // Key is invalid or expired per Keygen
+        info!(target: "4da::license", code = %validation_code, "Keygen validation failed");
+
+        // Cache the failure so we don't keep hitting the API
+        let cache = KeygenValidationCache {
+            validated_at: chrono::Utc::now().to_rfc3339(),
+            tier: "free".to_string(),
+            key_hash: hash_key(license_key),
+        };
+        save_validation_cache(&cache);
+
+        KeygenValidationResult {
+            online: true,
+            tier: "free".to_string(),
+            cached: false,
+            detail: format!("Invalid key ({})", validation_code),
+        }
+    }
+}
 
 // ============================================================================
 // STREETS Feature Gating
