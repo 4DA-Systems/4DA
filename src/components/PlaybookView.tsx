@@ -1,4 +1,4 @@
-import { useEffect, useCallback, useMemo, useRef, memo } from 'react';
+import { useEffect, useCallback, useMemo, useRef, useState, memo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { listen } from '@tauri-apps/api/event';
 import { useAppStore } from '../store';
@@ -15,6 +15,7 @@ import { FeedEchoBlock } from './playbook/FeedEchoBlock';
 import { ProgressiveRevealBanner } from './playbook/ProgressiveRevealBanner';
 import { PersonalizationDepthIndicator } from './playbook/PersonalizationDepthIndicator';
 import { MODULE_IDS, CheckIcon, ProgressRing } from './playbook/PlaybookIcons';
+import { TemplateLibrary } from './playbook/TemplateLibrary';
 
 // 3a. Memoized lesson content — avoids re-parsing markdown on every parent render
 const LessonContent = memo(function LessonContent({ content, moduleId, lessonIdx }: {
@@ -54,15 +55,20 @@ export function PlaybookView() {
   const loadProgress = useAppStore((s) => s.loadPlaybookProgress);
   const markComplete = useAppStore((s) => s.markLessonComplete);
   const loadPersonalized = useAppStore((s) => s.loadPersonalizedContent);
+  const loadStreetsTier = useAppStore((s) => s.loadStreetsTier);
 
-  // Load modules and progress on mount
+  const [showTemplates, setShowTemplates] = useState(false);
+
+  // Load modules, progress, and streets tier on mount
   useEffect(() => {
     loadModules();
     loadProgress();
-  }, [loadModules, loadProgress]);
+    loadStreetsTier();
+  }, [loadModules, loadProgress, loadStreetsTier]);
 
   const handleModuleClick = useCallback(
     (moduleId: string) => {
+      setShowTemplates(false);
       loadContent(moduleId);
     },
     [loadContent],
@@ -203,7 +209,36 @@ export function PlaybookView() {
           );
         })}
 
-        {/* Coach upgrade nudge */}
+        {/* Templates */}
+        <button
+          onClick={() => setShowTemplates(true)}
+          className={`w-full text-left px-3 py-2.5 rounded-lg transition-all flex items-center gap-3 group ${
+            showTemplates
+              ? 'bg-[#D4AF37]/15 border border-[#D4AF37]/30'
+              : 'hover:bg-bg-tertiary border border-transparent'
+          }`}
+        >
+          <span
+            className={`w-7 h-7 rounded-md flex items-center justify-center text-xs flex-shrink-0 ${
+              showTemplates
+                ? 'bg-[#D4AF37]/20 text-[#D4AF37]'
+                : 'bg-bg-tertiary text-text-secondary'
+            }`}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+              <polyline points="14 2 14 8 20 8" />
+            </svg>
+          </span>
+          <div className="flex-1 min-w-0">
+            <p className={`text-sm truncate ${showTemplates ? 'text-white font-medium' : 'text-text-secondary'}`}>
+              Templates
+            </p>
+            <p className="text-[10px] text-[#666]">Launch &amp; growth tools</p>
+          </div>
+        </button>
+
+        {/* Upgrade nudge */}
         <div className="mt-4 pt-4 border-t border-border space-y-3">
           <p className="text-[10px] text-[#666] text-center">
             {t('streets:streets.freeForever')}
@@ -239,7 +274,13 @@ export function PlaybookView() {
           </div>
         )}
 
-        {!activeModuleId && !playbookLoading && (
+        {showTemplates && (
+          <div className="bg-bg-secondary border border-border rounded-xl p-6">
+            <TemplateLibrary />
+          </div>
+        )}
+
+        {!showTemplates && !activeModuleId && !playbookLoading && (
           <div className="flex flex-col items-center justify-center h-96 text-center">
             <div className="w-16 h-16 bg-[#D4AF37]/10 rounded-2xl flex items-center justify-center mb-4">
               <span className="text-2xl text-[#D4AF37] font-bold">S</span>
@@ -258,13 +299,13 @@ export function PlaybookView() {
           </div>
         )}
 
-        {playbookLoading && (
+        {!showTemplates && playbookLoading && (
           <div className="flex items-center justify-center h-96">
             <div className="w-6 h-6 border-2 border-[#D4AF37] border-t-transparent rounded-full animate-spin" />
           </div>
         )}
 
-        {playbookContent && !playbookLoading && (
+        {!showTemplates && playbookContent && !playbookLoading && (
           <div className="space-y-4">
             {/* Module Header */}
             <div className="bg-bg-secondary border border-border rounded-xl p-6">

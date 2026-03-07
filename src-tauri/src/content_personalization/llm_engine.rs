@@ -57,12 +57,23 @@ pub fn build_insight_prompt(
 /// This function is designed to be called asynchronously AFTER the no-LLM
 /// response has been returned to the frontend. The frontend subscribes to
 /// Tauri events for the upgraded prose.
+/// Get an LLM client from current settings, if configured.
+fn get_llm_client() -> Option<crate::llm::LLMClient> {
+    let manager = crate::get_settings_manager();
+    let guard = manager.lock();
+    let provider = guard.get().llm.clone();
+    if provider.api_key.is_empty() && provider.provider != "ollama" {
+        return None;
+    }
+    Some(crate::llm::LLMClient::new(provider))
+}
+
 pub async fn generate_insight_prose(
     card: &SovereignInsightCard,
     ctx: &PersonalizationContext,
     session_type: &str,
 ) -> Option<InsightContent> {
-    let client = crate::coach_context::get_llm_client().ok()?;
+    let client = get_llm_client()?;
     let system_prompt = build_insight_prompt(card, ctx, session_type);
 
     let user_message = format!(
@@ -78,13 +89,11 @@ pub async fn generate_insight_prose(
 
     match client.complete(&system_prompt, messages).await {
         Ok(response) => {
-            let (total_tokens, cost_cents) =
-                crate::coach_context::record_llm_usage(&client, &response);
+            let total_tokens = response.input_tokens + response.output_tokens;
 
             info!(
                 target: "4da::personalize",
                 tokens = total_tokens,
-                cost = cost_cents,
                 "LLM insight generated"
             );
 

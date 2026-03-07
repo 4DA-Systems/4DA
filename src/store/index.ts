@@ -19,7 +19,6 @@ import { createPlaybookSlice } from './playbook-slice';
 import { createCommandDeckSlice } from './command-deck-slice';
 import { createSovereignProfileSlice } from './sovereign-profile-slice';
 import { createSunsSlice } from './suns-slice';
-import { createCoachSlice } from './coach-slice';
 import { createAutophagySlice } from './autophagy-slice';
 import { createDecisionAdvantageSlice } from './decision-advantage-slice';
 import { createGameSlice } from './game-slice';
@@ -65,7 +64,6 @@ export const useAppStore = create<AppStore>()((...a) => ({
   ...createCommandDeckSlice(...a),
   ...createSovereignProfileSlice(...a),
   ...createSunsSlice(...a),
-  ...createCoachSlice(...a),
   ...createAutophagySlice(...a),
   ...createDecisionAdvantageSlice(...a),
   ...createGameSlice(...a),

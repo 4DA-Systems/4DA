@@ -21,7 +21,6 @@ const AchievementsPanel = lazy(() => import('./AchievementsPanel').then(m => ({ 
 const SovereignDeveloperProfile = lazy(() => import('./SovereignDeveloperProfile').then(m => ({ default: m.SovereignDeveloperProfile })));
 const ToolkitView = lazy(() => import('./toolkit/ToolkitView').then(m => ({ default: m.ToolkitView })));
 const PlaybookView = lazy(() => import('./PlaybookView').then(m => ({ default: m.PlaybookView })));
-const CoachView = lazy(() => import('./coach/CoachView').then(m => ({ default: m.CoachView })));
 const ChannelsView = lazy(() => import('./channels/ChannelsView').then(m => ({ default: m.ChannelsView })));
 const CalibrationView = lazy(() => import('./CalibrationView').then(m => ({ default: m.CalibrationView })));
 const SignalsPanel = lazy(() => import('./SignalsPanel').then(m => ({ default: m.SignalsPanel })));
@@ -82,10 +81,6 @@ export function ViewRouter({ newItemIds, focusedIndex }: ViewRouterProps) {
       ) : activeView === 'playbook' ? (
         <ViewErrorBoundary viewName="Playbook">
           <PlaybookView />
-        </ViewErrorBoundary>
-      ) : activeView === 'coach' ? (
-        <ViewErrorBoundary viewName="Coach">
-          <CoachView />
         </ViewErrorBoundary>
       ) : activeView === 'calibrate' ? (
         <ViewErrorBoundary viewName="Calibrate">
