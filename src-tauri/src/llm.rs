@@ -200,20 +200,12 @@ impl LLMClient {
             .json(&body)
             .send()
             .await
-            .map_err(|e| {
-                format!(
-                    "Ollama fallback also failed (is Ollama running?): {}",
-                    e
-                )
-            })?;
+            .map_err(|e| format!("Ollama fallback also failed (is Ollama running?): {}", e))?;
 
         if !response.status().is_success() {
             let status = response.status();
             let text = response.text().await.unwrap_or_default();
-            return Err(format!(
-                "Ollama fallback error {}: {}",
-                status, text
-            ));
+            return Err(format!("Ollama fallback error {}: {}", status, text));
         }
 
         let data: serde_json::Value = response
@@ -615,7 +607,8 @@ Output JSON array (one per article):
             .map_err(|e| format!("LLM relevance judging failed: {}", e))?;
 
         // Parse the score-based JSON response
-        let judgments = self.parse_judgments(&response.content, &items)
+        let judgments = self
+            .parse_judgments(&response.content, &items)
             .map_err(|e| format!("Failed to parse relevance judgments: {}", e))?;
 
         Ok((judgments, response.input_tokens, response.output_tokens))
@@ -797,7 +790,10 @@ mod tests {
             openai_api_key: String::new(),
         };
         let client = LLMClient::new(provider);
-        assert!(!client.is_configured(), "Anthropic with empty API key should not be configured");
+        assert!(
+            !client.is_configured(),
+            "Anthropic with empty API key should not be configured"
+        );
     }
 
     #[test]
@@ -810,7 +806,10 @@ mod tests {
             openai_api_key: String::new(),
         };
         let client = LLMClient::new(provider);
-        assert!(!client.is_configured(), "OpenAI with empty API key should not be configured");
+        assert!(
+            !client.is_configured(),
+            "OpenAI with empty API key should not be configured"
+        );
     }
 
     #[test]
@@ -823,7 +822,10 @@ mod tests {
             openai_api_key: String::new(),
         };
         let client = LLMClient::new(provider);
-        assert!(client.is_configured(), "Ollama should be configured without an API key");
+        assert!(
+            client.is_configured(),
+            "Ollama should be configured without an API key"
+        );
     }
 
     #[test]
@@ -836,7 +838,10 @@ mod tests {
             openai_api_key: String::new(),
         };
         let client = LLMClient::new(provider);
-        assert!(client.is_configured(), "Anthropic with API key should be configured");
+        assert!(
+            client.is_configured(),
+            "Anthropic with API key should be configured"
+        );
     }
 
     #[test]
@@ -849,7 +854,10 @@ mod tests {
             openai_api_key: String::new(),
         };
         let client = LLMClient::new(provider);
-        assert!(!client.is_configured(), "Unknown provider should not be configured");
+        assert!(
+            !client.is_configured(),
+            "Unknown provider should not be configured"
+        );
     }
 
     // ========================================================================
@@ -860,9 +868,11 @@ mod tests {
     fn test_parse_judgments_valid_response() {
         let provider = LLMProvider::default();
         let judge = RelevanceJudge::new(provider);
-        let items = vec![
-            ("item1".to_string(), "Title 1".to_string(), "Content 1".to_string()),
-        ];
+        let items = vec![(
+            "item1".to_string(),
+            "Title 1".to_string(),
+            "Content 1".to_string(),
+        )];
 
         let response = r#"[{"id": "item1", "score": 4, "reason": "Highly relevant"}]"#;
         let result = judge.parse_judgments(response, &items);
@@ -878,23 +888,29 @@ mod tests {
     fn test_parse_judgments_invalid_json() {
         let provider = LLMProvider::default();
         let judge = RelevanceJudge::new(provider);
-        let items = vec![
-            ("item1".to_string(), "Title 1".to_string(), "Content 1".to_string()),
-        ];
+        let items = vec![(
+            "item1".to_string(),
+            "Title 1".to_string(),
+            "Content 1".to_string(),
+        )];
 
         let response = "This is not valid JSON at all";
         let result = judge.parse_judgments(response, &items);
         assert!(result.is_err());
-        assert!(result.unwrap_err().contains("Failed to parse LLM response as JSON"));
+        assert!(result
+            .unwrap_err()
+            .contains("Failed to parse LLM response as JSON"));
     }
 
     #[test]
     fn test_parse_judgments_empty_array() {
         let provider = LLMProvider::default();
         let judge = RelevanceJudge::new(provider);
-        let items = vec![
-            ("item1".to_string(), "Title 1".to_string(), "Content 1".to_string()),
-        ];
+        let items = vec![(
+            "item1".to_string(),
+            "Title 1".to_string(),
+            "Content 1".to_string(),
+        )];
 
         let response = "[]";
         let result = judge.parse_judgments(response, &items);
@@ -912,9 +928,11 @@ mod tests {
     fn test_parse_judgments_json_with_surrounding_text() {
         let provider = LLMProvider::default();
         let judge = RelevanceJudge::new(provider);
-        let items = vec![
-            ("item1".to_string(), "Title".to_string(), "Content".to_string()),
-        ];
+        let items = vec![(
+            "item1".to_string(),
+            "Title".to_string(),
+            "Content".to_string(),
+        )];
 
         // LLM sometimes wraps response in text before/after the JSON array
         let response = r#"Here are the judgments:
@@ -931,9 +949,11 @@ That's it."#;
     fn test_parse_judgments_missing_fields_use_defaults() {
         let provider = LLMProvider::default();
         let judge = RelevanceJudge::new(provider);
-        let items = vec![
-            ("item1".to_string(), "Title".to_string(), "Content".to_string()),
-        ];
+        let items = vec![(
+            "item1".to_string(),
+            "Title".to_string(),
+            "Content".to_string(),
+        )];
 
         // Response with missing score, reason, etc.
         let response = r#"[{"id": "item1"}]"#;
@@ -951,8 +971,16 @@ That's it."#;
         let provider = LLMProvider::default();
         let judge = RelevanceJudge::new(provider);
         let items = vec![
-            ("item1".to_string(), "Title".to_string(), "Content".to_string()),
-            ("item2".to_string(), "Title 2".to_string(), "Content 2".to_string()),
+            (
+                "item1".to_string(),
+                "Title".to_string(),
+                "Content".to_string(),
+            ),
+            (
+                "item2".to_string(),
+                "Title 2".to_string(),
+                "Content 2".to_string(),
+            ),
         ];
 
         // Score 10 should be clamped to 5, score -3 should be clamped to 1
@@ -975,9 +1003,11 @@ That's it."#;
     fn test_parse_judgments_legacy_boolean_format() {
         let provider = LLMProvider::default();
         let judge = RelevanceJudge::new(provider);
-        let items = vec![
-            ("item1".to_string(), "Title".to_string(), "Content".to_string()),
-        ];
+        let items = vec![(
+            "item1".to_string(),
+            "Title".to_string(),
+            "Content".to_string(),
+        )];
 
         // Legacy format: "relevant" boolean instead of "score"
         let response = r#"[{"id": "item1", "relevant": true, "confidence": 0.85, "reasoning": "Very useful"}]"#;
@@ -992,9 +1022,7 @@ That's it."#;
     fn test_parse_judgments_numeric_id() {
         let provider = LLMProvider::default();
         let judge = RelevanceJudge::new(provider);
-        let items = vec![
-            ("42".to_string(), "Title".to_string(), "Content".to_string()),
-        ];
+        let items = vec![("42".to_string(), "Title".to_string(), "Content".to_string())];
 
         // LLM returns id as number instead of string
         let response = r#"[{"id": 42, "score": 3, "reason": "Worth knowing"}]"#;

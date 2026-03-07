@@ -163,7 +163,8 @@ pub(crate) async fn run_deep_initial_scan_impl(
 
     // Step 1: Check context
     emit_progress(app, "context", 0.02, "Checking context...", 0, 0);
-    let cached_context_count = db.context_count()
+    let cached_context_count = db
+        .context_count()
         .map_err(|e| format!("Failed to count context chunks: {}", e))?;
 
     if cached_context_count > 0 {
@@ -179,7 +180,8 @@ pub(crate) async fn run_deep_initial_scan_impl(
         0,
         0,
     );
-    let all_items = source_fetching::fetch_all_sources_deep(db, app, 100).await
+    let all_items = source_fetching::fetch_all_sources_deep(db, app, 100)
+        .await
         .map_err(|e| format!("Deep fetch failed: {}", e))?;
     info!(target: "4da::analysis", items = all_items.len(), "Deep fetched items from all sources");
 
@@ -193,7 +195,8 @@ pub(crate) async fn run_deep_initial_scan_impl(
     );
 
     // Step 3-4: Load all scoring context (user interests, exclusions, ACE context)
-    let scoring_ctx = scoring::build_scoring_context(db).await
+    let scoring_ctx = scoring::build_scoring_context(db)
+        .await
         .map_err(|e| format!("Failed to build scoring context for deep scan: {}", e))?;
     let interest_count = scoring_ctx.interest_count;
     let options = scoring::ScoringOptions {
@@ -322,7 +325,8 @@ pub(crate) async fn run_multi_source_analysis_impl(
         0,
         0,
     );
-    let cached_context_count = db.context_count()
+    let cached_context_count = db
+        .context_count()
         .map_err(|e| format!("Failed to count context chunks: {}", e))?;
 
     if cached_context_count > 0 {
@@ -333,7 +337,8 @@ pub(crate) async fn run_multi_source_analysis_impl(
 
     // Step 2: Fetch from all sources (50 items per source for comprehensive coverage)
     emit_progress(app, "fetch", 0.1, "Fetching from all sources...", 0, 0);
-    let all_items = source_fetching::fetch_all_sources(db, app, 50).await
+    let all_items = source_fetching::fetch_all_sources(db, app, 50)
+        .await
         .map_err(|e| format!("Multi-source fetch failed: {}", e))?;
     info!(target: "4da::analysis", items = all_items.len(), "Fetched items from all sources");
 
@@ -346,7 +351,8 @@ pub(crate) async fn run_multi_source_analysis_impl(
         0,
         all_items.len(),
     );
-    let scoring_ctx = scoring::build_scoring_context(db).await
+    let scoring_ctx = scoring::build_scoring_context(db)
+        .await
         .map_err(|e| format!("Failed to build scoring context: {}", e))?;
     let options = scoring::ScoringOptions {
         apply_freshness: false,
@@ -675,8 +681,12 @@ pub(crate) async fn analyze_cached_content_impl(
         );
 
         // Score only new items
-        let scoring_ctx = scoring::build_scoring_context(db).await
-            .map_err(|e| format!("Failed to build scoring context for differential analysis: {}", e))?;
+        let scoring_ctx = scoring::build_scoring_context(db).await.map_err(|e| {
+            format!(
+                "Failed to build scoring context for differential analysis: {}",
+                e
+            )
+        })?;
         let options = scoring::ScoringOptions {
             apply_freshness: true,
             apply_signals: true,
