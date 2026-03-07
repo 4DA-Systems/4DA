@@ -15,11 +15,12 @@ const Onboarding = lazy(() => import('./components/Onboarding').then(m => ({ def
 import { VoidEngine } from './components/void-engine/VoidEngine';
 import { OllamaStatus } from './components/OllamaStatus';
 import { ToastContainer } from './components/Toast';
-import { ResultsView } from './components/ResultsView';
 import { ActionBar } from './components/ActionBar';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { ViewErrorBoundary } from './components/ViewErrorBoundary';
 import { ViewTabBar } from './components/ViewTabBar';
+import { ViewRouter } from './components/ViewRouter';
+import { UpdateBanner } from './components/UpdateBanner';
 
 // Lazy-loaded non-critical-path components
 const FirstRunTransition = lazy(() => import('./components/FirstRunTransition').then(m => ({ default: m.FirstRunTransition })));
@@ -28,28 +29,10 @@ const LearningIndicator = lazy(() => import('./components/LearningIndicator').th
 const PredictiveIndicator = lazy(() => import('./components/PredictiveIndicator').then(m => ({ default: m.PredictiveIndicator })));
 const ProValueBadge = lazy(() => import('./components/ProValueBadge').then(m => ({ default: m.ProValueBadge })));
 
-// Lazy-loaded views — each only loads when navigated to
-const BriefingView = lazy(() => import('./components/BriefingView').then(m => ({ default: m.BriefingView })));
-const SavedItemsView = lazy(() => import('./components/SavedItemsView').then(m => ({ default: m.SavedItemsView })));
+// Lazy-loaded non-critical views and overlays
 const SettingsModal = lazy(() => import('./components/SettingsModal').then(m => ({ default: m.SettingsModal })));
 const KeyboardShortcutsModal = lazy(() => import('./components/KeyboardShortcutsModal').then(m => ({ default: m.KeyboardShortcutsModal })));
-const TechRadar = lazy(() => import('./components/TechRadar').then(m => ({ default: m.TechRadar })));
-const DecisionMemory = lazy(() => import('./components/DecisionMemory').then(m => ({ default: m.DecisionMemory })));
-const DelegationDashboard = lazy(() => import('./components/DelegationDashboard').then(m => ({ default: m.DelegationDashboard })));
-const AgentMemoryPanel = lazy(() => import('./components/AgentMemoryPanel').then(m => ({ default: m.AgentMemoryPanel })));
-const AutophagyInsights = lazy(() => import('./components/AutophagyInsights').then(m => ({ default: m.AutophagyInsights })));
-const DecisionJournal = lazy(() => import('./components/DecisionJournal').then(m => ({ default: m.DecisionJournal })));
-const AchievementsPanel = lazy(() => import('./components/AchievementsPanel').then(m => ({ default: m.AchievementsPanel })));
-const SovereignDeveloperProfile = lazy(() => import('./components/SovereignDeveloperProfile').then(m => ({ default: m.SovereignDeveloperProfile })));
-const ToolkitView = lazy(() => import('./components/toolkit/ToolkitView').then(m => ({ default: m.ToolkitView })));
-const PlaybookView = lazy(() => import('./components/PlaybookView').then(m => ({ default: m.PlaybookView })));
-const CoachView = lazy(() => import('./components/coach/CoachView').then(m => ({ default: m.CoachView })));
-const ChannelsView = lazy(() => import('./components/channels/ChannelsView').then(m => ({ default: m.ChannelsView })));
-const SignalsPanel = lazy(() => import('./components/SignalsPanel').then(m => ({ default: m.SignalsPanel })));
-const SignalChainsPanel = lazy(() => import('./components/SignalChains').then(m => ({ default: m.SignalChainsPanel })));
-const KnowledgeGapsPanel = lazy(() => import('./components/KnowledgeGapsPanel').then(m => ({ default: m.KnowledgeGapsPanel })));
 const CommandDeck = lazy(() => import('./components/command-deck/CommandDeck').then(m => ({ default: m.CommandDeck })));
-const CalibrationView = lazy(() => import('./components/CalibrationView').then(m => ({ default: m.CalibrationView })));
 const GameCelebration = lazy(() => import('./components/GameCelebration').then(m => ({ default: m.GameCelebration })));
 import {
   useSettings,
@@ -439,15 +422,6 @@ function App() {
           <PredictiveIndicator />
         </Suspense>
 
-        {/* Actionable Signals — only mount when Results view is active */}
-        {state.analysisComplete && activeView === 'results' && (
-          <Suspense fallback={null}>
-            <SignalsPanel results={state.relevanceResults} />
-            <SignalChainsPanel />
-            <KnowledgeGapsPanel />
-          </Suspense>
-        )}
-
         {/* Natural Language Search */}
         <div className="mb-6">
           <Suspense fallback={null}>
@@ -459,62 +433,7 @@ function App() {
         <ViewTabBar />
 
         {/* Conditional View Rendering */}
-        <Suspense fallback={<div className="flex items-center justify-center py-20 text-text-secondary text-sm">{t('action.loading')}</div>}>
-        {activeView === 'briefing' ? (
-          <ViewErrorBoundary viewName="Briefing">
-            <BriefingView />
-          </ViewErrorBoundary>
-        ) : activeView === 'channels' ? (
-          <ViewErrorBoundary viewName="Channels">
-            <ChannelsView />
-          </ViewErrorBoundary>
-        ) : activeView === 'profile' ? (
-          <ViewErrorBoundary viewName="Profile">
-            <SovereignDeveloperProfile />
-          </ViewErrorBoundary>
-        ) : activeView === 'insights' ? (
-          <ViewErrorBoundary viewName="Insights">
-            <section aria-label={t('nav.insights', { defaultValue: 'Insights' })} className="space-y-6">
-              <AchievementsPanel />
-              <TechRadar />
-              <DecisionJournal />
-              <DecisionMemory />
-              <AutophagyInsights />
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <DelegationDashboard />
-                <AgentMemoryPanel />
-              </div>
-            </section>
-          </ViewErrorBoundary>
-        ) : activeView === 'saved' ? (
-          <ViewErrorBoundary viewName="Saved">
-            <SavedItemsView />
-          </ViewErrorBoundary>
-        ) : activeView === 'toolkit' ? (
-          <ViewErrorBoundary viewName="Toolkit">
-            <ToolkitView />
-          </ViewErrorBoundary>
-        ) : activeView === 'playbook' ? (
-          <ViewErrorBoundary viewName="Playbook">
-            <PlaybookView />
-          </ViewErrorBoundary>
-        ) : activeView === 'coach' ? (
-          <ViewErrorBoundary viewName="Coach">
-            <CoachView />
-          </ViewErrorBoundary>
-        ) : activeView === 'calibrate' ? (
-          <ViewErrorBoundary viewName="Calibrate">
-            <CalibrationView />
-          </ViewErrorBoundary>
-        ) : (
-          <ViewErrorBoundary viewName="Results">
-            <ResultsView
-              newItemIds={newItemIds}
-              focusedIndex={focusedIndex}
-            />
-          </ViewErrorBoundary>
-        )}
-        </Suspense>
+        <ViewRouter newItemIds={newItemIds} focusedIndex={focusedIndex} />
 
         </main>
 
@@ -528,32 +447,12 @@ function App() {
 
         {/* Update Banner */}
         {update && (
-          <div className="fixed bottom-4 right-4 z-50 bg-bg-secondary border border-[#D4AF37]/40 rounded-xl px-5 py-4 shadow-lg max-w-sm">
-            <div className="flex items-start gap-3">
-              <div className="flex-1">
-                <p className="text-sm font-medium text-white">{t('update.available', { version: update.version })}</p>
-                <p className="text-xs text-gray-400 mt-1">
-                  {update.body ? update.body.slice(0, 100) : t('update.defaultBody')}
-                </p>
-              </div>
-              <button onClick={dismissUpdate} aria-label="Dismiss update notification" className="text-gray-500 hover:text-white text-lg leading-none">&times;</button>
-            </div>
-            <div className="flex gap-2 mt-3">
-              <button
-                onClick={installUpdate}
-                disabled={installing}
-                className="px-4 py-1.5 text-xs font-medium text-black bg-[#D4AF37] rounded-lg hover:bg-[#C4A030] transition-colors disabled:opacity-50"
-              >
-                {installing ? t('update.installing') : t('update.install')}
-              </button>
-              <button
-                onClick={dismissUpdate}
-                className="px-4 py-1.5 text-xs text-gray-400 hover:text-white transition-colors"
-              >
-                {t('update.later')}
-              </button>
-            </div>
-          </div>
+          <UpdateBanner
+            update={update}
+            installing={installing}
+            onInstall={installUpdate}
+            onDismiss={dismissUpdate}
+          />
         )}
 
         {/* Command Deck (slide-up panel) */}

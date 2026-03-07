@@ -1,0 +1,49 @@
+// Copyright (c) 2025-2026 Antony Lawrence Kiddie Pasifa. All rights reserved.
+// Licensed under the Functional Source License 1.1 (FSL-1.1-Apache-2.0). See LICENSE file.
+
+import { useTranslation } from 'react-i18next';
+
+interface UpdateInfo {
+  version: string;
+  body?: string | null;
+}
+
+interface UpdateBannerProps {
+  update: UpdateInfo;
+  installing: boolean;
+  onInstall: () => void;
+  onDismiss: () => void;
+}
+
+export function UpdateBanner({ update, installing, onInstall, onDismiss }: UpdateBannerProps) {
+  const { t } = useTranslation();
+
+  return (
+    <div className="fixed bottom-4 right-4 z-50 bg-bg-secondary border border-[#D4AF37]/40 rounded-xl px-5 py-4 shadow-lg max-w-sm">
+      <div className="flex items-start gap-3">
+        <div className="flex-1">
+          <p className="text-sm font-medium text-white">{t('update.available', { version: update.version })}</p>
+          <p className="text-xs text-gray-400 mt-1">
+            {update.body ? update.body.slice(0, 100) : t('update.defaultBody')}
+          </p>
+        </div>
+        <button onClick={onDismiss} aria-label="Dismiss update notification" className="text-gray-500 hover:text-white text-lg leading-none">&times;</button>
+      </div>
+      <div className="flex gap-2 mt-3">
+        <button
+          onClick={onInstall}
+          disabled={installing}
+          className="px-4 py-1.5 text-xs font-medium text-black bg-[#D4AF37] rounded-lg hover:bg-[#C4A030] transition-colors disabled:opacity-50"
+        >
+          {installing ? t('update.installing') : t('update.install')}
+        </button>
+        <button
+          onClick={onDismiss}
+          className="px-4 py-1.5 text-xs text-gray-400 hover:text-white transition-colors"
+        >
+          {t('update.later')}
+        </button>
+      </div>
+    </div>
+  );
+}
