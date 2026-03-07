@@ -370,7 +370,13 @@ mod tests {
             ("zh", "Simplified Chinese"),
         ];
         for (code, name) in supported {
-            assert_eq!(lang_name(code), name, "lang_name({}) should be {}", code, name);
+            assert_eq!(
+                lang_name(code),
+                name,
+                "lang_name({}) should be {}",
+                code,
+                name
+            );
         }
     }
 
@@ -442,7 +448,10 @@ mod tests {
         let mut translations = HashMap::new();
         translations.insert("ui:test.key1".to_string(), "Translated One".to_string());
         translations.insert("ui:test.key2".to_string(), "Translated Two".to_string());
-        translations.insert("errors:err.test".to_string(), "Error Translation".to_string());
+        translations.insert(
+            "errors:err.test".to_string(),
+            "Error Translation".to_string(),
+        );
 
         let count = save_translations(&translations, test_lang).expect("save should succeed");
         assert_eq!(count, 3);
@@ -457,8 +466,14 @@ mod tests {
         // Verify content
         let ui_content: HashMap<String, String> =
             serde_json::from_str(&std::fs::read_to_string(&ui_path).unwrap()).unwrap();
-        assert_eq!(ui_content.get("test.key1"), Some(&"Translated One".to_string()));
-        assert_eq!(ui_content.get("test.key2"), Some(&"Translated Two".to_string()));
+        assert_eq!(
+            ui_content.get("test.key1"),
+            Some(&"Translated One".to_string())
+        );
+        assert_eq!(
+            ui_content.get("test.key2"),
+            Some(&"Translated Two".to_string())
+        );
 
         // Clean up
         let _ = std::fs::remove_dir_all(&trans_dir);
@@ -486,11 +501,13 @@ mod tests {
         save_translations(&new_translations, test_lang).expect("save should succeed");
 
         // Verify merge: both old and new keys should exist
-        let merged: HashMap<String, String> = serde_json::from_str(
-            &std::fs::read_to_string(trans_dir.join("ui.json")).unwrap(),
-        )
-        .unwrap();
-        assert_eq!(merged.get("existing.key"), Some(&"Existing Value".to_string()));
+        let merged: HashMap<String, String> =
+            serde_json::from_str(&std::fs::read_to_string(trans_dir.join("ui.json")).unwrap())
+                .unwrap();
+        assert_eq!(
+            merged.get("existing.key"),
+            Some(&"Existing Value".to_string())
+        );
         assert_eq!(merged.get("new.key"), Some(&"New Value".to_string()));
 
         let _ = std::fs::remove_dir_all(&trans_dir);
@@ -506,7 +523,10 @@ mod tests {
         translations.insert("no_namespace_key".to_string(), "Value".to_string());
 
         let count = save_translations(&translations, test_lang).expect("save should succeed");
-        assert_eq!(count, 0, "Keys without namespace:key format should be skipped");
+        assert_eq!(
+            count, 0,
+            "Keys without namespace:key format should be skipped"
+        );
 
         let _ = std::fs::remove_dir_all(&trans_dir);
     }

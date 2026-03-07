@@ -308,11 +308,7 @@ pub async fn validate_license_key_keygen(
 }
 
 /// Parse the JSON response from the Keygen validation endpoint and update cache.
-fn parse_keygen_response(
-    status: u16,
-    body: &str,
-    license_key: &str,
-) -> KeygenValidationResult {
+fn parse_keygen_response(status: u16, body: &str, license_key: &str) -> KeygenValidationResult {
     let json: serde_json::Value = match serde_json::from_str(body) {
         Ok(v) => v,
         Err(e) => {

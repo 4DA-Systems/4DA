@@ -481,7 +481,10 @@ mod tests {
             "ui".to_string(),
             "some.key".to_string(),
         );
-        assert!(result.is_ok(), "Deleting from nonexistent file should succeed");
+        assert!(
+            result.is_ok(),
+            "Deleting from nonexistent file should succeed"
+        );
     }
 
     #[test]
@@ -512,7 +515,10 @@ mod tests {
         // Verify the key was removed but the other key remains
         let content: HashMap<String, String> =
             serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
-        assert!(!content.contains_key("key.to.delete"), "Deleted key should be gone");
+        assert!(
+            !content.contains_key("key.to.delete"),
+            "Deleted key should be gone"
+        );
         assert_eq!(content.get("key.to.keep"), Some(&"Keep Me".to_string()));
 
         // Cleanup
@@ -538,7 +544,10 @@ mod tests {
             test_ns.to_string(),
             "some.key".to_string(),
         );
-        assert!(result.is_ok(), "Malformed JSON should be handled gracefully");
+        assert!(
+            result.is_ok(),
+            "Malformed JSON should be handled gracefully"
+        );
 
         // File should now contain valid empty JSON
         let content: HashMap<String, String> =

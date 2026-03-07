@@ -1047,8 +1047,8 @@ mod tests {
         std::fs::create_dir_all(&tmp).expect("create temp dir");
 
         // Write valid settings.json
-        let settings_json = serde_json::to_string_pretty(&Settings::default())
-            .expect("serialize default settings");
+        let settings_json =
+            serde_json::to_string_pretty(&Settings::default()).expect("serialize default settings");
         std::fs::write(tmp.join("settings.json"), settings_json).expect("write settings");
 
         // Write malformed usage.json
@@ -1251,7 +1251,10 @@ mod tests {
         let json = serde_json::to_string(&settings).expect("serialize");
         let deserialized: Settings = serde_json::from_str(&json).expect("deserialize");
         assert_eq!(deserialized.llm.provider, settings.llm.provider);
-        assert_eq!(deserialized.embedding_threshold, settings.embedding_threshold);
+        assert_eq!(
+            deserialized.embedding_threshold,
+            settings.embedding_threshold
+        );
         assert_eq!(deserialized.rerank.enabled, settings.rerank.enabled);
     }
 
@@ -1267,6 +1270,9 @@ mod tests {
         let json = serde_json::to_string(&provider).expect("serialize");
         let deserialized: LLMProvider = serde_json::from_str(&json).expect("deserialize");
         assert_eq!(deserialized.provider, "openai");
-        assert_eq!(deserialized.base_url, Some("https://custom.openai.com".to_string()));
+        assert_eq!(
+            deserialized.base_url,
+            Some("https://custom.openai.com".to_string())
+        );
     }
 }
