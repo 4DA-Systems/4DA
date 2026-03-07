@@ -92,15 +92,15 @@ pub(crate) fn temporal_cluster_results(results: &mut Vec<SourceRelevance>) {
     for members in &multi_clusters {
         // Representative = highest score (results are pre-sorted by score desc,
         // so the first member in index order with lowest index is highest-scored)
-        let rep_idx = *members
-            .iter()
-            .min_by(|&&a, &&b| {
-                results[b]
-                    .top_score
-                    .partial_cmp(&results[a].top_score)
-                    .unwrap_or(std::cmp::Ordering::Equal)
-            })
-            .unwrap();
+        let rep_idx = match members.iter().min_by(|&&a, &&b| {
+            results[b]
+                .top_score
+                .partial_cmp(&results[a].top_score)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        }) {
+            Some(&idx) => idx,
+            None => continue,
+        };
 
         let mut extra_titles = Vec::new();
         for &idx in members {

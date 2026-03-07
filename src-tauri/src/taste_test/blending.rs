@@ -197,7 +197,7 @@ pub fn blend_profile(weights: &[f64; 9], threshold: f64) -> BlendedProfile {
     let dominant = weights
         .iter()
         .enumerate()
-        .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap())
+        .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
         .map(|(i, _)| i)
         .unwrap_or(0);
 
@@ -242,7 +242,7 @@ pub fn blend_profile(weights: &[f64; 9], threshold: f64) -> BlendedProfile {
 
     // Sort by weight descending
     let mut interests: Vec<(String, f32)> = interest_weights.into_iter().collect();
-    interests.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+    interests.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
 
     // Exclusions from dominant persona only
     let exclusions: Vec<String> = TEMPLATES[dominant]

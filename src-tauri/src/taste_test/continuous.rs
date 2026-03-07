@@ -209,8 +209,8 @@ pub fn update_posterior(
         target: "taste::continuous",
         dominant = PERSONA_NAMES[posterior.iter()
             .enumerate()
-            .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap())
-            .unwrap().0],
+            .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
+            .map(|(i, _)| i).unwrap_or(0)],
         updates = update_count + 1,
         "Updated continuous posterior"
     );
@@ -225,11 +225,14 @@ pub fn get_dominant_persona(conn: &Connection) -> Result<Option<(String, f64)>, 
         return Ok(None);
     }
 
-    let (idx, &max_w) = weights
+    let (idx, &max_w) = match weights
         .iter()
         .enumerate()
-        .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap())
-        .unwrap();
+        .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
+    {
+        Some(v) => v,
+        None => return Ok(None),
+    };
 
     Ok(Some((PERSONA_NAMES[idx].to_string(), max_w)))
 }
