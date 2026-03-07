@@ -299,7 +299,7 @@ fn normalize_gap_title(title: &str) -> String {
 /// Detect knowledge gaps across all tracked dependencies
 pub fn detect_knowledge_gaps(conn: &rusqlite::Connection) -> Result<Vec<KnowledgeGap>, String> {
     // Get all tracked dependencies
-    let deps = crate::temporal_dependencies::get_all_dependencies(conn)?;
+    let deps = crate::temporal::get_all_dependencies(conn)?;
     if deps.is_empty() {
         return Ok(vec![]);
     }

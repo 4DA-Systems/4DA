@@ -91,7 +91,6 @@ mod free_briefing;
 mod game_achievements;
 mod game_commands;
 mod game_engine;
-mod handoff;
 mod health;
 mod health_commands;
 mod job_queue;
@@ -103,14 +102,12 @@ mod monitoring_jobs;
 mod monitoring_notifications;
 mod novelty;
 mod ollama;
-mod predictive;
 mod pro_value;
 mod probes_corpus;
 mod probes_engine;
 mod project_health;
 mod project_health_dimensions;
 pub mod query;
-mod reverse_relevance;
 mod scoring;
 pub(crate) mod scoring_config;
 mod semantic_diff;
@@ -125,8 +122,6 @@ mod tech_radar;
 mod tech_radar_commands;
 mod tech_radar_compute;
 mod temporal;
-mod temporal_dependencies;
-mod tts;
 mod void_commands;
 mod void_engine;
 
@@ -159,8 +154,6 @@ mod toolkit_http;
 mod toolkit_intelligence;
 mod translation_commands;
 mod translation_pipeline;
-mod video_curriculum;
-
 use source_fetching::fill_cache_background;
 
 /// Shared test utilities — compiled unconditionally so integration tests
@@ -372,12 +365,6 @@ pub fn run() {
             developer_dna::get_developer_dna,
             developer_dna::export_developer_dna_markdown,
             developer_dna::export_developer_dna_svg,
-            // Audio & Handoff
-            tts::generate_audio_briefing,
-            tts::get_audio_briefing_status,
-            handoff::generate_context_packet,
-            // Predictive
-            predictive::get_predicted_context,
             // Content (article reader, AI summaries, saved items)
             content_commands::get_item_content,
             content_commands::get_item_summary,
@@ -471,10 +458,6 @@ pub fn run() {
             toolkit_intelligence::toolkit_test_feed,
             toolkit_intelligence::toolkit_score_sandbox,
             toolkit_export::toolkit_generate_export_pack,
-            // Video Curriculum (STREETS Cohort)
-            video_curriculum::get_video_curriculum,
-            video_curriculum::mark_video_progress,
-            video_curriculum::mark_video_complete,
             // Templates (STREETS Community)
             templates::get_templates,
             templates::get_template_content,

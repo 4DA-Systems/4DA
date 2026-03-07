@@ -61,6 +61,11 @@ vi.mock('../../store', () => ({
         loadPlaybookContent: vi.fn(),
         loadPlaybookProgress: vi.fn(),
         markLessonComplete: vi.fn(),
+        loadStreetsTier: vi.fn(),
+        activateStreetsLicense: vi.fn(),
+        personalizedLessons: {},
+        loadPersonalizedContent: vi.fn(),
+        loadPersonalizedContentBatch: vi.fn(),
 
         // street health
         streetHealth: null,
@@ -127,10 +132,14 @@ vi.mock('../../store', () => ({
       return selector(mockState);
     }),
     {
-      // Static getState method used by some components (e.g., ActionBar)
+      // Static getState/setState used by some components (e.g., ActionBar, PlaybookView)
       getState: () => ({
         setShowSettings: vi.fn(),
+        playbookProgress: null,
+        playbookContent: null,
+        personalizedLessons: {},
       }),
+      setState: vi.fn(),
     },
   ),
 }));
@@ -160,6 +169,38 @@ vi.mock('../../assets/sun-logo.webp', () => ({
 // Mock playbook markdown renderer
 vi.mock('../../utils/playbook-markdown', () => ({
   renderMarkdown: () => 'rendered markdown',
+}));
+
+// Mock playbook sub-components used by PlaybookView
+vi.mock('../playbook/SovereignProfile', () => ({
+  SovereignProfile: () => null,
+}));
+vi.mock('../playbook/StreetHealthBadge', () => ({
+  StreetHealthBadge: () => null,
+}));
+vi.mock('../playbook/SunsDashboard', () => ({
+  SunsDashboard: () => null,
+}));
+vi.mock('../playbook/SovereignInsightCard', () => ({
+  SovereignInsightCard: () => null,
+}));
+vi.mock('../playbook/SovereignConnectionBlock', () => ({
+  SovereignConnectionBlock: () => null,
+}));
+vi.mock('../playbook/DiffRibbon', () => ({
+  DiffRibbon: () => null,
+}));
+vi.mock('../playbook/FeedEchoBlock', () => ({
+  FeedEchoBlock: () => null,
+}));
+vi.mock('../playbook/ProgressiveRevealBanner', () => ({
+  ProgressiveRevealBanner: () => null,
+}));
+vi.mock('../playbook/PersonalizationDepthIndicator', () => ({
+  PersonalizationDepthIndicator: () => null,
+}));
+vi.mock('../playbook/TemplateLibrary', () => ({
+  TemplateLibrary: () => null,
 }));
 
 // Mock error messages util

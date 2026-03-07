@@ -41,13 +41,10 @@ import type {
   ItemSummary,
 } from '../types/sources';
 import type {
-  PredictedContext,
   KnowledgeGap,
   SignalChain,
   ProjectHealth,
   AttentionReport,
-  AudioBriefingStatus,
-  ContextPacket,
   DeveloperDna,
 } from '../types/innovation';
 import type {
@@ -237,9 +234,8 @@ interface CommandMap {
   search_documents: { params: { query: string; limit: number }; result: { results: DocumentSearchResult[] } };
   get_document_content: { params: { documentId: number }; result: DocumentContentResponse };
 
-  // -- Knowledge Gaps & Predictions --
+  // -- Knowledge Gaps --
   get_knowledge_gaps: { params: Record<string, never>; result: KnowledgeGap[] };
-  get_predicted_context: { params: Record<string, never>; result: PredictedContext };
 
   // -- Signal Chains --
   get_signal_chains: { params: Record<string, never>; result: SignalChain[] };
@@ -247,11 +243,6 @@ interface CommandMap {
 
   // -- Score Autopsy --
   mcp_score_autopsy: { params: { itemId: number; sourceType: string; synthesize: boolean; compact: boolean }; result: ScoreAutopsyResult };
-
-  // -- Audio & Context Handoff --
-  get_audio_briefing_status: { params: Record<string, never>; result: AudioBriefingStatus };
-  generate_audio_briefing: { params: Record<string, never>; result: string };
-  generate_context_packet: { params: Record<string, never>; result: ContextPacket };
 
   // -- Engagement & Attention --
   get_engagement_summary: { params: Record<string, never>; result: EngagementData };

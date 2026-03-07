@@ -1,13 +1,5 @@
 // Innovation feature types
 
-// Predictive Context
-export interface PredictedContext {
-  predicted_topics: [string, number][];
-  predicted_at: string;
-  reasoning: string;
-  confidence: number;
-}
-
 // Knowledge Decay
 export interface KnowledgeGap {
   dependency: string;
@@ -54,17 +46,6 @@ export interface SemanticShift {
   representative_items: number[];
   period: string;
   detected_at: string;
-}
-
-// Reverse Relevance
-export interface ReverseMention {
-  source_item_id: number;
-  title: string;
-  url: string | null;
-  mentioned_project: string;
-  mention_context: string;
-  source_type: string;
-  discovered_at: string;
 }
 
 // Project Health
@@ -127,51 +108,6 @@ export interface TrendPoint {
   date: string;
   topic: string;
   engagement_level: number;
-}
-
-// Audio Briefing
-export interface AudioBriefingStatus {
-  available: boolean;
-  file_path: string | null;
-  duration_seconds: number | null;
-  generated_at: string | null;
-  tts_engine: string;
-}
-
-// Context Handoff
-export interface ContextPacket {
-  generated_at: string;
-  version: string;
-  active_context: {
-    detected_tech: string[];
-    active_topics: string[];
-    interests: string[];
-    exclusions: string[];
-    context_dirs: string[];
-    recent_work_topics: string[];
-  };
-  open_signals: Array<{
-    item_id: number;
-    title: string;
-    signal_type: string;
-    priority: string;
-    action: string | null;
-    source_type: string;
-  }>;
-  saved_items: Array<{
-    item_id: number;
-    title: string;
-    url: string | null;
-    source_type: string;
-    saved_at: string;
-  }>;
-  recent_briefing: string | null;
-  attention_state: {
-    top_topics: [string, number][];
-    topic_count: number;
-    total_interactions: number;
-  };
-  suggested_actions: string[];
 }
 
 // Developer DNA

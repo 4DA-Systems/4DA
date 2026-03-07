@@ -36,6 +36,153 @@ pub struct ProjectDependency {
 }
 
 // ============================================================================
+// Project Dependencies
+// ============================================================================
+
+/// Upsert a project dependency
+pub fn upsert_dependency(
+    conn: &rusqlite::Connection,
+    project_path: &str,
+    manifest_type: &str,
+    package_name: &str,
+    version: Option<&str>,
+    is_dev: bool,
+    language: &str,
+) -> Result<(), String> {
+    conn.execute(
+        "INSERT INTO project_dependencies (project_path, manifest_type, package_name, version, is_dev, language, last_scanned)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, datetime('now'))
+         ON CONFLICT(project_path, package_name)
+         DO UPDATE SET version = ?4, is_dev = ?5, last_scanned = datetime('now')",
+        params![project_path, manifest_type, package_name, version, is_dev as i32, language],
+    )
+    .map_err(|e| format!("Failed to upsert dependency: {}", e))?;
+    Ok(())
+}
+
+/// Get all dependencies for a project
+pub fn get_project_dependencies(
+    conn: &rusqlite::Connection,
+    project_path: &str,
+) -> Result<Vec<ProjectDependency>, String> {
+    let mut stmt = conn
+        .prepare(
+            "SELECT id, project_path, manifest_type, package_name, version, is_dev, language, last_scanned
+             FROM project_dependencies
+             WHERE project_path = ?1
+             ORDER BY package_name",
+        )
+        .map_err(|e| e.to_string())?;
+
+    let results: Vec<ProjectDependency> = stmt
+        .query_map(params![project_path], |row| {
+            Ok(ProjectDependency {
+                id: row.get(0)?,
+                project_path: row.get(1)?,
+                manifest_type: row.get(2)?,
+                package_name: row.get(3)?,
+                version: row.get(4)?,
+                is_dev: row.get::<_, i32>(5)? != 0,
+                language: row.get(6)?,
+                last_scanned: row.get(7)?,
+            })
+        })
+        .map_err(|e| e.to_string())?
+        .filter_map(|r| r.ok())
+        .collect();
+
+    Ok(results)
+}
+
+/// Get all tracked dependencies, scoped to projects with recent git activity.
+/// Only includes deps from project trees that have commits in the last 60 days.
+/// Falls back to all deps if no git signals exist (first run).
+pub fn get_all_dependencies(conn: &rusqlite::Connection) -> Result<Vec<ProjectDependency>, String> {
+    // Get active repo roots from git_signals (repos with recent commits)
+    let active_roots: Vec<String> = conn
+        .prepare(
+            "SELECT DISTINCT repo_path FROM git_signals
+             WHERE commit_hash IS NOT NULL AND commit_hash != ''
+             AND timestamp > datetime('now', '-60 days')",
+        )
+        .and_then(|mut stmt| {
+            let rows = stmt.query_map([], |row| row.get::<_, String>(0))?;
+            Ok(rows.filter_map(|r| r.ok()).collect())
+        })
+        .unwrap_or_default();
+
+    let mut stmt = conn
+        .prepare(
+            "SELECT id, project_path, manifest_type, package_name, version, is_dev, language, last_scanned
+             FROM project_dependencies
+             ORDER BY project_path, package_name",
+        )
+        .map_err(|e| e.to_string())?;
+
+    let all_deps: Vec<ProjectDependency> = stmt
+        .query_map([], |row| {
+            Ok(ProjectDependency {
+                id: row.get(0)?,
+                project_path: row.get(1)?,
+                manifest_type: row.get(2)?,
+                package_name: row.get(3)?,
+                version: row.get(4)?,
+                is_dev: row.get::<_, i32>(5)? != 0,
+                language: row.get(6)?,
+                last_scanned: row.get(7)?,
+            })
+        })
+        .map_err(|e| e.to_string())?
+        .filter_map(|r| r.ok())
+        .collect();
+
+    // Filter to deps from active project trees only
+    if active_roots.is_empty() {
+        // No git signals yet — return all deps (first run fallback)
+        return Ok(all_deps);
+    }
+
+    let filtered: Vec<ProjectDependency> = all_deps
+        .into_iter()
+        .filter(|dep| {
+            // Normalize for case-insensitive comparison on Windows
+            let dep_path = dep.project_path.to_lowercase();
+            active_roots.iter().any(|root| {
+                let root_lower = root.to_lowercase();
+                dep_path.starts_with(&root_lower) || root_lower.starts_with(&dep_path)
+            })
+        })
+        .collect();
+
+    // If filtering eliminated everything, fall back to all deps
+    if filtered.is_empty() {
+        return Ok(conn
+            .prepare(
+                "SELECT id, project_path, manifest_type, package_name, version, is_dev, language, last_scanned
+                 FROM project_dependencies ORDER BY project_path, package_name",
+            )
+            .map_err(|e| e.to_string())?
+            .query_map([], |row| {
+                Ok(ProjectDependency {
+                    id: row.get(0)?,
+                    project_path: row.get(1)?,
+                    manifest_type: row.get(2)?,
+                    package_name: row.get(3)?,
+                    version: row.get(4)?,
+                    is_dev: row.get::<_, i32>(5)? != 0,
+                    language: row.get(6)?,
+                    last_scanned: row.get(7)?,
+                })
+            })
+            .map_err(|e| e.to_string())?
+            .filter_map(|r| r.ok())
+            .collect());
+    }
+
+    Ok(filtered)
+}
+
+// ============================================================================
 // Temporal Events
 // ============================================================================
 
@@ -176,9 +323,9 @@ pub fn get_temporal_event_count(event_type: String) -> Result<usize, String> {
 pub fn get_dependencies(project_path: Option<String>) -> Result<Vec<ProjectDependency>, String> {
     let conn = crate::open_db_connection()?;
     if let Some(path) = project_path {
-        crate::temporal_dependencies::get_project_dependencies(&conn, &path)
+        get_project_dependencies(&conn, &path)
     } else {
-        crate::temporal_dependencies::get_all_dependencies(&conn)
+        get_all_dependencies(&conn)
     }
 }
 

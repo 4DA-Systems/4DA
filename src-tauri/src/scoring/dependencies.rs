@@ -230,7 +230,7 @@ pub(crate) fn load_dependency_intelligence() -> (HashSet<String>, HashMap<String
         Err(_) => return (HashSet::new(), HashMap::new()),
     };
 
-    let all_deps = match crate::temporal_dependencies::get_all_dependencies(&db) {
+    let all_deps = match crate::temporal::get_all_dependencies(&db) {
         Ok(deps) => deps,
         Err(_) => return (HashSet::new(), HashMap::new()),
     };

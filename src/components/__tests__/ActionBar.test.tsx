@@ -40,15 +40,6 @@ vi.mock('../../utils/score', () => ({
   getStageLabel: (s: string) => s || 'Ready',
 }));
 
-// Mock AudioBriefing and ContextHandoff children
-vi.mock('../AudioBriefing', () => ({
-  AudioBriefing: () => <button data-testid="audio-briefing">Audio</button>,
-}));
-
-vi.mock('../ContextHandoff', () => ({
-  ContextHandoff: () => <button data-testid="context-handoff">Handoff</button>,
-}));
-
 // Mock game components
 vi.mock('../../lib/game-components', () => ({
   registerGameComponent: vi.fn(() => Promise.resolve()),

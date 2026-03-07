@@ -308,7 +308,7 @@ impl ACE {
                                     format!("{:?}", signal.manifest_type).to_lowercase();
                                 let language = signal.manifest_type.language();
                                 for dep in &signal.dependencies {
-                                    let _ = crate::temporal_dependencies::upsert_dependency(
+                                    let _ = crate::temporal::upsert_dependency(
                                         &conn,
                                         &project_path,
                                         &manifest_type,
@@ -319,7 +319,7 @@ impl ACE {
                                     );
                                 }
                                 for dep in &signal.dev_dependencies {
-                                    let _ = crate::temporal_dependencies::upsert_dependency(
+                                    let _ = crate::temporal::upsert_dependency(
                                         &conn,
                                         &project_path,
                                         &manifest_type,
