@@ -178,7 +178,10 @@ pub fn delete_translation_override(
         return Ok(());
     }
 
-    let content = std::fs::read_to_string(&path).unwrap_or_default();
+    let content = match std::fs::metadata(&path) {
+        Ok(m) if m.len() > 1_000_000 => return Err("Override file too large".to_string()),
+        _ => std::fs::read_to_string(&path).unwrap_or_default(),
+    };
     let mut map: HashMap<String, String> = serde_json::from_str(&content).unwrap_or_default();
     map.remove(&key);
 

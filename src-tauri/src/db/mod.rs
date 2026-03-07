@@ -148,27 +148,30 @@ impl Database {
             )
             .ok();
 
+        let tx = conn.unchecked_transaction()?;
         if let Some(id) = existing_id {
-            conn.execute(
+            tx.execute(
                 "UPDATE context_chunks SET source_file = ?1, weight = ?2, updated_at = datetime('now') WHERE id = ?3",
                 params![source_file, weight, id],
             )?;
-            conn.execute(
+            tx.execute(
                 "UPDATE context_vec SET embedding = ?1 WHERE rowid = ?2",
                 params![embedding_blob, id],
             )?;
+            tx.commit()?;
             Ok(id)
         } else {
-            conn.execute(
+            tx.execute(
                 "INSERT INTO context_chunks (source_file, content_hash, text, embedding, weight, updated_at)
                  VALUES (?1, ?2, ?3, ?4, ?5, datetime('now'))",
                 params![source_file, content_hash, text, embedding_blob, weight],
             )?;
-            let id = conn.last_insert_rowid();
-            conn.execute(
+            let id = tx.last_insert_rowid();
+            tx.execute(
                 "INSERT INTO context_vec (rowid, embedding) VALUES (?1, ?2)",
                 params![id, embedding_blob],
             )?;
+            tx.commit()?;
             Ok(id)
         }
     }

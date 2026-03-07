@@ -78,27 +78,30 @@ impl Database {
             )
             .ok();
 
+        let tx = conn.unchecked_transaction()?;
         if let Some(id) = existing_id {
-            conn.execute(
+            tx.execute(
                 "UPDATE source_items SET url = ?1, title = ?2, content = ?3, content_hash = ?4, embedding = ?5, last_seen = datetime('now') WHERE id = ?6",
                 params![url, title, content, content_hash, embedding_blob, id],
             )?;
-            conn.execute(
+            tx.execute(
                 "UPDATE source_vec SET embedding = ?1 WHERE rowid = ?2",
                 params![embedding_blob, id],
             )?;
+            tx.commit()?;
             Ok(id)
         } else {
-            conn.execute(
+            tx.execute(
                 "INSERT INTO source_items (source_type, source_id, url, title, content, content_hash, embedding, last_seen)
                  VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, datetime('now'))",
                 params![source_type, source_id, url, title, content, content_hash, embedding_blob],
             )?;
-            let id = conn.last_insert_rowid();
-            conn.execute(
+            let id = tx.last_insert_rowid();
+            tx.execute(
                 "INSERT INTO source_vec (rowid, embedding) VALUES (?1, ?2)",
                 params![id, embedding_blob],
             )?;
+            tx.commit()?;
             Ok(id)
         }
     }
@@ -252,15 +255,16 @@ impl Database {
         let conn = self.conn.lock();
         let embedding_blob = embedding_to_blob(embedding);
 
-        conn.execute(
+        let tx = conn.unchecked_transaction()?;
+        tx.execute(
             "UPDATE source_items SET embedding = ?1, embedding_status = 'complete', embed_text = NULL WHERE id = ?2",
             params![embedding_blob, id],
         )?;
-
-        conn.execute(
+        tx.execute(
             "INSERT OR REPLACE INTO source_vec (rowid, embedding) VALUES (?1, ?2)",
             params![id, embedding_blob],
         )?;
+        tx.commit()?;
 
         Ok(())
     }
