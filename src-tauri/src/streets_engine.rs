@@ -60,7 +60,7 @@ pub(crate) fn map_to_streets_engine(
         "{} {}",
         title_lower,
         if content_lower.len() > 500 {
-            &content_lower[..500]
+            &content_lower[..content_lower.floor_char_boundary(500)]
         } else {
             &content_lower
         }
