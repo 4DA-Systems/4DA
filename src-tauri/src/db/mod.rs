@@ -391,7 +391,11 @@ mod tests {
             let exists = db
                 .source_item_exists("stress_test", &format!("bulk_{}", check_idx))
                 .unwrap();
-            assert!(exists, "Item bulk_{} should exist after bulk insert", check_idx);
+            assert!(
+                exists,
+                "Item bulk_{} should exist after bulk insert",
+                check_idx
+            );
         }
 
         // Spot-check one item's content is correct
@@ -456,8 +460,13 @@ mod tests {
             handles.push(std::thread::spawn(move || {
                 for _ in 0..50 {
                     // Read total count — should never error
-                    let count = db_clone.total_item_count().expect("total_item_count should not fail");
-                    assert!(count >= 20, "Should always have at least the 20 pre-seeded items");
+                    let count = db_clone
+                        .total_item_count()
+                        .expect("total_item_count should not fail");
+                    assert!(
+                        count >= 20,
+                        "Should always have at least the 20 pre-seeded items"
+                    );
 
                     // Read specific items
                     let _ = db_clone.get_source_items("concurrent", 10);
@@ -477,7 +486,8 @@ mod tests {
         let expected = 20 + (num_writers * writes_per_thread) as i64;
         let actual = db.total_item_count().unwrap();
         assert_eq!(
-            actual, expected,
+            actual,
+            expected,
             "Final count should be {} (20 preseed + {} writer items), got {}",
             expected,
             num_writers * writes_per_thread,
@@ -711,7 +721,8 @@ mod tests {
         // Due to float precision in sqlite-vec, we check that the top-1 result
         // matches one of the top-3 expected items (allowing for minor reordering).
         let top_result_id = results[0].context_id;
-        let top3_expected_ids: Vec<i64> = expected_order.iter().take(3).map(|(id, _)| *id).collect();
+        let top3_expected_ids: Vec<i64> =
+            expected_order.iter().take(3).map(|(id, _)| *id).collect();
         assert!(
             top3_expected_ids.contains(&top_result_id),
             "Top KNN result (id={}) should be among the 3 closest expected items {:?}",
@@ -722,7 +733,8 @@ mod tests {
         // Verify the KNN results are a subset of the top expected items.
         // The top-10 KNN results should all appear within the top-15 expected items
         // (allowing wiggle room for floating point differences in sqlite-vec).
-        let top15_expected_ids: Vec<i64> = expected_order.iter().take(15).map(|(id, _)| *id).collect();
+        let top15_expected_ids: Vec<i64> =
+            expected_order.iter().take(15).map(|(id, _)| *id).collect();
         for result in &results {
             assert!(
                 top15_expected_ids.contains(&result.context_id),
