@@ -75,6 +75,8 @@ mod content_quality;
 mod context_commands;
 mod context_engine;
 pub mod db;
+mod decision_advantage;
+mod decision_advantage_commands;
 mod decisions;
 mod delegation;
 mod developer_dna;
@@ -82,10 +84,8 @@ mod diagnostics;
 mod digest;
 mod digest_commands;
 mod digest_config;
-mod document_index;
-mod document_search;
 mod domain_profile;
-pub(crate) mod domain_profile_data;
+mod domain_profile_data;
 pub mod extractors;
 mod free_briefing;
 mod game_achievements;
@@ -102,7 +102,6 @@ mod monitoring_jobs;
 mod monitoring_notifications;
 mod novelty;
 mod ollama;
-mod pro_value;
 mod probes_corpus;
 mod probes_engine;
 mod project_health;
@@ -118,6 +117,8 @@ mod signals;
 mod source_config;
 mod source_fetching;
 pub mod sources;
+mod suns;
+mod suns_commands;
 mod tech_radar;
 mod tech_radar_commands;
 mod tech_radar_compute;
@@ -131,11 +132,7 @@ pub mod stacks;
 pub mod taste_test;
 mod taste_test_commands;
 
-mod command_runner;
 mod content_personalization;
-mod decision_advantage;
-mod decision_advantage_commands;
-mod git_deck;
 pub(crate) mod i18n;
 mod playbook_commands;
 mod sovereign_developer_profile;
@@ -144,8 +141,6 @@ mod sovereign_profile;
 mod streets_commands;
 mod streets_engine;
 mod streets_localization;
-mod suns;
-mod suns_commands;
 mod template_data;
 mod templates;
 mod toolkit;
@@ -348,11 +343,6 @@ pub fn run() {
             commands::get_sources,
             commands::mcp_score_autopsy,
             commands::export_results,
-            document_index::get_indexed_documents,
-            document_index::get_document_content,
-            document_search::search_documents,
-            document_search::get_indexed_stats,
-            document_search::natural_language_query,
             // Void Engine
             void_commands::get_void_signal,
             // Intelligence panels
@@ -361,7 +351,6 @@ pub fn run() {
             signal_chains::get_signal_chains,
             signal_chains::resolve_signal_chain,
             project_health::get_project_health,
-            pro_value::get_pro_value_report,
             developer_dna::get_developer_dna,
             developer_dna::export_developer_dna_markdown,
             developer_dna::export_developer_dna_svg,
@@ -393,19 +382,6 @@ pub fn run() {
             // Delegation Scoring
             delegation::get_delegation_score,
             delegation::get_all_delegation_scores,
-            // Command Deck - Git Operations
-            git_deck::git_deck_status,
-            git_deck::git_deck_stage,
-            git_deck::git_deck_unstage,
-            git_deck::git_deck_commit,
-            git_deck::git_deck_push,
-            git_deck::git_deck_diff_stat,
-            git_deck::git_deck_log,
-            git_deck::git_deck_suggest_commit,
-            git_deck::git_deck_list_repos,
-            // Command Deck - Shell Runner
-            command_runner::run_shell_command,
-            command_runner::get_command_history,
             // Toolkit
             toolkit::toolkit_list_ports,
             toolkit::toolkit_kill_process,
@@ -447,13 +423,6 @@ pub fn run() {
             streets_localization::get_regional_data,
             streets_localization::format_currency,
             streets_localization::calculate_electricity_cost,
-            // Suns
-            suns_commands::get_sun_statuses,
-            suns_commands::toggle_sun,
-            suns_commands::get_sun_alerts,
-            suns_commands::acknowledge_sun_alert,
-            suns_commands::trigger_sun_manually,
-            suns_commands::get_street_health,
             // Toolkit Intelligence
             toolkit_intelligence::toolkit_test_feed,
             toolkit_intelligence::toolkit_score_sandbox,
@@ -461,13 +430,6 @@ pub fn run() {
             // Templates (STREETS Community)
             templates::get_templates,
             templates::get_template_content,
-            // Decision Advantage
-            decision_advantage_commands::get_decision_windows,
-            decision_advantage_commands::act_on_decision_window,
-            decision_advantage_commands::close_decision_window,
-            decision_advantage_commands::get_compound_advantage,
-            decision_advantage_commands::detect_windows,
-            decision_advantage_commands::get_decision_journal,
             // Diagnostics
             commands::get_diagnostics,
             // Autophagy (intelligent content metabolism)
