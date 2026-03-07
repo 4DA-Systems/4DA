@@ -1,8 +1,15 @@
 import { useEffect, useState, useMemo, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useAppStore } from '../../store';
-import { useShallow } from 'zustand/react/shallow';
-import type { CoachTemplate } from '../../types/coach';
+import { invoke } from '@tauri-apps/api/core';
+
+// Inline template type (previously in types/coach.ts)
+interface Template {
+  id: string;
+  title: string;
+  description: string;
+  category: string;
+  content: string;
+}
 
 // ---------------------------------------------------------------------------
 // Sub-components
@@ -17,7 +24,6 @@ function CategoryFilter({
   active: string;
   onSelect: (cat: string) => void;
 }) {
-  const { t } = useTranslation();
   return (
     <div className="flex flex-wrap gap-2">
       <button
@@ -28,7 +34,7 @@ function CategoryFilter({
             : 'bg-bg-tertiary text-text-secondary border-border hover:text-white hover:border-[#D4AF37]/20'
         }`}
       >
-        {t('coach.template.all')}
+        All
       </button>
       {categories.map(cat => (
         <button
@@ -59,8 +65,8 @@ function TemplateCard({
   template,
   onOpen,
 }: {
-  template: CoachTemplate;
-  onOpen: (t: CoachTemplate) => void;
+  template: Template;
+  onOpen: (t: Template) => void;
 }) {
   return (
     <button
@@ -84,7 +90,7 @@ function TemplateViewer({
   template,
   onClose,
 }: {
-  template: CoachTemplate;
+  template: Template;
   onClose: () => void;
 }) {
   const { t } = useTranslation();
@@ -160,21 +166,15 @@ function TemplateViewer({
 // ---------------------------------------------------------------------------
 
 export function TemplateLibrary() {
-  const { t } = useTranslation();
-  const { templates } = useAppStore(
-    useShallow(s => ({
-      templates: s.templates,
-    })),
-  );
-
-  const loadTemplates = useAppStore(s => s.loadTemplates);
-
+  const [templates, setTemplates] = useState<Template[]>([]);
   const [activeCategory, setActiveCategory] = useState('all');
-  const [viewingTemplate, setViewingTemplate] = useState<CoachTemplate | null>(null);
+  const [viewingTemplate, setViewingTemplate] = useState<Template | null>(null);
 
   useEffect(() => {
-    loadTemplates();
-  }, [loadTemplates]);
+    invoke<Template[]>('get_templates')
+      .then(setTemplates)
+      .catch(() => { /* non-fatal */ });
+  }, []);
 
   const categories = useMemo(() => {
     const cats = new Set(templates.map(t => t.category));
@@ -190,9 +190,9 @@ export function TemplateLibrary() {
     <div className="space-y-5">
       {/* Header */}
       <div>
-        <h3 className="text-sm font-semibold text-white">{t('coach.template.title')}</h3>
+        <h3 className="text-sm font-semibold text-white">Templates</h3>
         <p className="text-xs text-[#666] mt-0.5">
-          {t('coach.template.subtitle')}
+          Actionable templates for launching and growing your revenue engines
         </p>
       </div>
 
@@ -238,8 +238,8 @@ export function TemplateLibrary() {
           </div>
           <p className="text-sm text-text-secondary max-w-sm">
             {templates.length === 0
-              ? t('coach.template.emptyNoTemplates')
-              : t('coach.template.emptyNoMatch')}
+              ? 'No templates available yet.'
+              : 'No templates match this category.'}
           </p>
         </div>
       )}

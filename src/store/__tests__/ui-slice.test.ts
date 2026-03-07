@@ -102,11 +102,6 @@ describe('ui-slice', () => {
       expect(useAppStore.getState().activeView).toBe('playbook');
     });
 
-    it('changes active view to coach', () => {
-      useAppStore.getState().setActiveView('coach');
-      expect(useAppStore.getState().activeView).toBe('coach');
-    });
-
     it('can switch back to briefing', () => {
       useAppStore.getState().setActiveView('results');
       useAppStore.getState().setActiveView('briefing');

@@ -21,7 +21,7 @@ import { ProValuePanel } from './ProValuePanel';
 import { AboutPanel } from './AboutPanel';
 import { useAppStore } from '../store';
 import { translateError } from '../utils/error-messages';
-import type { StreetsTier } from '../types/coach';
+import type { StreetsTier } from '../store/playbook-slice';
 
 // ============================================================================
 // STREETS Membership Section

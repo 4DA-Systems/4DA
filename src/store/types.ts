@@ -107,13 +107,13 @@ export interface ToastSlice {
 export interface UiSlice {
   showSettings: boolean;
   showSplash: boolean;
-  activeView: 'briefing' | 'results' | 'saved' | 'insights' | 'toolkit' | 'playbook' | 'coach' | 'channels' | 'profile' | 'calibrate';
+  activeView: 'briefing' | 'results' | 'saved' | 'insights' | 'toolkit' | 'playbook' | 'channels' | 'profile' | 'calibrate';
   isFirstRun: boolean;
   firstRunDismissed: boolean;
   embeddingMode: 'semantic' | 'keyword-only' | null;
   setShowSettings: (show: boolean) => void;
   setShowSplash: (show: boolean) => void;
-  setActiveView: (view: 'briefing' | 'results' | 'saved' | 'insights' | 'toolkit' | 'playbook' | 'coach' | 'channels' | 'profile' | 'calibrate') => void;
+  setActiveView: (view: 'briefing' | 'results' | 'saved' | 'insights' | 'toolkit' | 'playbook' | 'channels' | 'profile' | 'calibrate') => void;
   setIsFirstRun: (v: boolean) => void;
   setFirstRunDismissed: (v: boolean) => void;
   setEmbeddingMode: (mode: 'semantic' | 'keyword-only' | null) => void;
@@ -348,7 +348,6 @@ export type AppStore =
   & import('./command-deck-slice').CommandDeckSlice
   & import('./sovereign-profile-slice').SovereignProfileSlice
   & import('./suns-slice').SunsSlice
-  & import('./coach-slice').CoachSlice
   & import('./autophagy-slice').AutophagySlice
   & import('./decision-advantage-slice').DecisionAdvantageSlice
   & import('./game-slice').GameSlice

@@ -4,6 +4,8 @@ import type { AppStore } from './types';
 import type { PlaybookModule, PlaybookContent, PlaybookProgress } from '../types/playbook';
 import type { PersonalizedLesson } from '../types/personalization';
 
+export type StreetsTier = 'playbook' | 'community' | 'cohort';
+
 export interface PlaybookSlice {
   playbookModules: PlaybookModule[];
   playbookContent: PlaybookContent | null;
@@ -12,6 +14,7 @@ export interface PlaybookSlice {
   playbookError: string | null;
   activeModuleId: string | null;
   personalizedLessons: Record<string, PersonalizedLesson>;
+  streetsTier: StreetsTier;
   loadPlaybookModules: () => Promise<void>;
   loadPlaybookContent: (moduleId: string) => Promise<void>;
   loadPlaybookProgress: () => Promise<void>;
@@ -19,6 +22,8 @@ export interface PlaybookSlice {
   setActiveModuleId: (id: string | null) => void;
   loadPersonalizedContent: (moduleId: string, lessonIdx: number) => Promise<void>;
   loadPersonalizedContentBatch: (moduleId: string, lessonCount: number) => Promise<void>;
+  loadStreetsTier: () => Promise<void>;
+  activateStreetsLicense: (key: string) => Promise<boolean>;
 }
 
 export const createPlaybookSlice: StateCreator<AppStore, [], [], PlaybookSlice> = (set, get) => ({
@@ -29,6 +34,7 @@ export const createPlaybookSlice: StateCreator<AppStore, [], [], PlaybookSlice> 
   playbookError: null,
   activeModuleId: null,
   personalizedLessons: {},
+  streetsTier: 'playbook',
 
   loadPlaybookModules: async () => {
     try {
@@ -112,6 +118,31 @@ export const createPlaybookSlice: StateCreator<AppStore, [], [], PlaybookSlice> 
       }
     } catch (e) {
       console.warn('Batch personalization failed, falling back to static content:', e);
+    }
+  },
+
+  loadStreetsTier: async () => {
+    try {
+      const result = await invoke<{ tier: string; expired?: boolean }>('get_streets_tier');
+      set({ streetsTier: (result.expired ? 'playbook' : result.tier) as StreetsTier });
+    } catch {
+      set({ streetsTier: 'playbook' });
+    }
+  },
+
+  activateStreetsLicense: async (key: string) => {
+    try {
+      const result = await invoke<{ success: boolean; streets_tier: string; tier: string }>(
+        'activate_streets_license',
+        { licenseKey: key },
+      );
+      if (result.success) {
+        set({ streetsTier: result.streets_tier as StreetsTier });
+        return true;
+      }
+      return false;
+    } catch {
+      return false;
     }
   },
 });

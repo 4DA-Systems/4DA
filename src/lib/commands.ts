@@ -57,17 +57,6 @@ import type {
   CompoundAdvantageScore,
 } from '../types/autophagy';
 import type {
-  CoachSession,
-  CoachMessage,
-  EngineRecommendation,
-  LaunchReviewResult,
-  CoachNudge,
-  CoachTemplate,
-  VideoLesson,
-  VideoCurriculumStatus,
-  CoachSessionType,
-} from '../types/coach';
-import type {
   PlaybookModule,
   PlaybookContent,
   PlaybookProgress,
@@ -195,22 +184,18 @@ interface CommandMap {
   start_trial: { params: Record<string, never>; result: { success: boolean; days_remaining?: number } };
   get_pro_value_report: { params: Record<string, never>; result: ProValueReport };
 
-  // -- STREETS Coach --
+  // -- STREETS Licensing --
   get_streets_tier: { params: Record<string, never>; result: { tier: string; expired?: boolean } };
   activate_streets_license: { params: { licenseKey: string }; result: { success: boolean; streets_tier: string; tier: string } };
-  coach_list_sessions: { params: Record<string, never>; result: CoachSession[] };
-  coach_create_session: { params: { sessionType: CoachSessionType; title?: string }; result: CoachSession };
-  coach_delete_session: { params: { sessionId: string }; result: void };
-  coach_send_message: { params: { sessionId: string; content: string }; result: CoachMessage };
-  coach_get_history: { params: { sessionId: string }; result: CoachMessage[] };
-  coach_recommend_engines: { params: Record<string, never>; result: EngineRecommendation };
-  coach_generate_strategy: { params: Record<string, never>; result: string };
-  coach_launch_review: { params: { projectDescription: string }; result: LaunchReviewResult };
-  coach_progress_check_in: { params: Record<string, never>; result: string };
-  get_coach_nudges: { params: Record<string, never>; result: CoachNudge[] };
-  dismiss_coach_nudge: { params: { nudgeId: number }; result: void };
-  get_templates: { params: Record<string, never>; result: CoachTemplate[] };
-  get_video_curriculum: { params: Record<string, never>; result: [VideoLesson[], VideoCurriculumStatus] };
+
+  // -- Templates --
+  get_templates: { params: Record<string, never>; result: Array<{ id: string; title: string; description: string; category: string; content: string }> };
+  get_template_content: { params: { templateId: string }; result: { id: string; title: string; description: string; category: string; content: string } };
+
+  // -- Video Curriculum --
+  get_video_curriculum: { params: Record<string, never>; result: [Array<{ id: number; video_id: string; title: string; duration_seconds: number; drip_day: number; watched: boolean; watch_progress_seconds: number; unlocked: boolean; unlocked_at: string | null; watched_at: string | null }>, { total_videos: number; unlocked_count: number; watched_count: number; total_duration_seconds: number; watched_duration_seconds: number; days_since_activation: number }] };
+  mark_video_progress: { params: { videoId: string; progressSeconds: number }; result: void };
+  mark_video_complete: { params: { videoId: string }; result: void };
 
   // -- Playbook (STREETS) --
   get_playbook_modules: { params: Record<string, never>; result: PlaybookModule[] };

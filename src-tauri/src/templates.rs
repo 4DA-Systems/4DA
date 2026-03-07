@@ -9,7 +9,7 @@
 use serde::{Deserialize, Serialize};
 use tracing::debug;
 
-use crate::coach_template_data::*;
+use crate::template_data::*;
 
 // ============================================================================
 // Types
