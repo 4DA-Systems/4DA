@@ -6,8 +6,9 @@
 //! - Ollama (local, free)
 
 use crate::settings::LLMProvider;
+use crate::state::{is_llm_limit_reached, record_llm_tokens};
 use serde::{Deserialize, Serialize};
-use tracing::debug;
+use tracing::{debug, warn};
 
 // ============================================================================
 // Types
@@ -75,18 +76,49 @@ impl LLMClient {
         }
     }
 
-    /// Send a completion request
+    /// Send a completion request.
+    /// Enforces the daily token limit — returns an error if the budget is exhausted.
     pub async fn complete(
         &self,
         system: &str,
         messages: Vec<Message>,
     ) -> Result<LLMResponse, String> {
-        match self.provider.provider.as_str() {
+        // Hard cutoff: refuse to call the LLM if daily limit is already reached
+        if is_llm_limit_reached() {
+            let (used, limit) = crate::state::get_llm_token_usage();
+            warn!(
+                target: "4da::llm",
+                used = used,
+                limit = limit,
+                "LLM call blocked — daily token limit reached"
+            );
+            return Err(format!(
+                "Daily LLM token limit reached ({}/{} tokens). Resets at midnight.",
+                used, limit
+            ));
+        }
+
+        let response = match self.provider.provider.as_str() {
             "anthropic" => self.complete_anthropic(system, messages).await,
             "openai" => self.complete_openai(system, messages).await,
             "ollama" => self.complete_ollama(system, messages).await,
-            _ => Err(format!("Unknown provider: {}", self.provider.provider)),
+            _ => return Err(format!("Unknown provider: {}", self.provider.provider)),
+        }?;
+
+        // Record token usage (atomic, lock-free for the counter itself)
+        let total_tokens = response.input_tokens + response.output_tokens;
+        if total_tokens > 0 {
+            let within_limit = record_llm_tokens(total_tokens);
+            if !within_limit {
+                debug!(
+                    target: "4da::llm",
+                    tokens = total_tokens,
+                    "Token limit exceeded after this call — future calls will be blocked"
+                );
+            }
         }
+
+        Ok(response)
     }
 
     /// Anthropic Claude API
