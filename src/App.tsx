@@ -366,11 +366,6 @@ function App() {
         {/* Header - Polished */}
         <header className="mb-8 flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <img
-              src={sunLogo}
-              alt="4DA"
-              className="w-10 h-10 rounded-lg object-cover flex-shrink-0"
-            />
             <div className="w-12 h-12 flex items-center justify-center flex-shrink-0">
               <VoidEngine size={48} />
             </div>

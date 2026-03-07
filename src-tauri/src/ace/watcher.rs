@@ -350,6 +350,11 @@ impl Drop for FileWatcher {
 
 /// Extract topics from a code file's content
 pub fn extract_topics_from_file(path: &Path) -> Result<Vec<String>, String> {
+    let metadata =
+        std::fs::metadata(path).map_err(|e| format!("Failed to stat {}: {}", path.display(), e))?;
+    if metadata.len() > 10_000_000 {
+        return Ok(Vec::new());
+    }
     let content = std::fs::read_to_string(path)
         .map_err(|e| format!("Failed to read {}: {}", path.display(), e))?;
 

@@ -31,14 +31,13 @@ const WGSL_F = `struct Uniforms {
 
 @group(0) @binding(0) var<uniform> u: Uniforms;
 
+@group(1) @binding(0) var prev_frame: texture_2d<f32>;
+@group(1) @binding(1) var prev_sampler: sampler;
+
 struct VertexOutput {
     @builtin(position) pos: vec4<f32>,
     @location(0) uv: vec2<f32>,
 };
-
-fn sdf_circle(p: vec2<f32>, radius: f32) -> f32 {
-    return length(p) - radius;
-}
 
 fn apply_glow(d: f32, intensity: f32) -> f32 {
     return exp(-max(d, 0.0) * intensity * 8.0);
@@ -52,45 +51,32 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
 
     var final_color = vec4<f32>(0.0, 0.0, 0.0, 1.0);
 
-    // ── Layer 0: track ──
+    // ── Layer 0: sweep ──
     {
         var p = vec2<f32>(uv.x * aspect, uv.y);
-        var sdf_result = abs(length(p) - 0.250000) - 0.008000;
+        { let ra = time * 3.000000; let rc = cos(ra); let rs = sin(ra);
+        p = vec2<f32>(p.x * rc - p.y * rs, p.x * rs + p.y * rc); }
+        var sdf_result = abs(length(p) - 0.280000) - 0.060000;
+        let arc_theta = atan2(p.x, p.y) + 3.14159265359;
+        sdf_result = select(999.0, sdf_result, arc_theta < 2.000000);
+        let glow_pulse = 2.800000 * (0.9 + 0.1 * sin(time * 2.0));
+        let glow_result = apply_glow(sdf_result, glow_pulse);
+        var color_result = vec4<f32>(vec3<f32>(glow_result), 1.0);
+        color_result = vec4<f32>(color_result.rgb * vec3<f32>(0.830000, 0.550000, 0.120000), 1.0);
+        let prev_color = textureSample(prev_frame, prev_sampler, input.uv);
+        color_result = mix(color_result, prev_color, 0.900000);
+        let lc = color_result.rgb;
+        final_color = vec4<f32>(final_color.rgb + lc, 1.0);
+    }
+
+    // ── Layer 1: track ──
+    {
+        var p = vec2<f32>(uv.x * aspect, uv.y);
+        var sdf_result = abs(length(p) - 0.280000) - 0.008000;
         let glow_pulse = 0.500000 * (0.9 + 0.1 * sin(time * 2.0));
         let glow_result = apply_glow(sdf_result, glow_pulse);
         var color_result = vec4<f32>(vec3<f32>(glow_result), 1.0);
-        color_result = vec4<f32>(color_result.rgb * vec3<f32>(0.300000, 0.250000, 0.100000), 1.0);
-        let lc = color_result.rgb;
-        final_color = vec4<f32>(final_color.rgb + lc, 1.0);
-    }
-
-    // ── Layer 1: sweep ──
-    {
-        var p = vec2<f32>(uv.x * aspect, uv.y);
-        { let ra = time * 3.000000; let rc = cos(ra); let rs = sin(ra);
-        p = vec2<f32>(p.x * rc - p.y * rs, p.x * rs + p.y * rc); }
-        var sdf_result = abs(length(p) - 0.250000) - 0.030000;
-        let arc_theta = atan2(p.x, p.y) + 3.14159265359;
-        sdf_result = select(999.0, sdf_result, arc_theta < 4.000000);
-        let glow_pulse = 2.500000 * (0.9 + 0.1 * sin(time * 2.0));
-        let glow_result = apply_glow(sdf_result, glow_pulse);
-        var color_result = vec4<f32>(vec3<f32>(glow_result), 1.0);
-        color_result = vec4<f32>(color_result.rgb * vec3<f32>(0.830000, 0.690000, 0.220000), 1.0);
-        let lc = color_result.rgb;
-        final_color = vec4<f32>(final_color.rgb + lc, 1.0);
-    }
-
-    // ── Layer 2: head ──
-    {
-        var p = vec2<f32>(uv.x * aspect, uv.y);
-        { let ra = time * 3.000000; let rc = cos(ra); let rs = sin(ra);
-        p = vec2<f32>(p.x * rc - p.y * rs, p.x * rs + p.y * rc); }
-        p = p - vec2<f32>(0.250000, 0.000000);
-        var sdf_result = sdf_circle(p, 0.020000);
-        let glow_pulse = 3.000000 * (0.9 + 0.1 * sin(time * 2.0));
-        let glow_result = apply_glow(sdf_result, glow_pulse);
-        var color_result = vec4<f32>(vec3<f32>(glow_result), 1.0);
-        color_result = vec4<f32>(color_result.rgb * vec3<f32>(1.000000, 0.900000, 0.500000), 1.0);
+        color_result = vec4<f32>(color_result.rgb * vec3<f32>(0.200000, 0.200000, 0.200000), 1.0);
         let lc = color_result.rgb;
         final_color = vec4<f32>(final_color.rgb + lc, 1.0);
     }
@@ -122,13 +108,11 @@ uniform float u_audio_energy;
 uniform float u_audio_beat;
 uniform vec2 u_resolution;
 uniform vec2 u_mouse;
+uniform sampler2D u_prev_frame;
+
 
 in vec2 v_uv;
 out vec4 fragColor;
-
-float sdf_circle(vec2 p, float radius){
-    return length(p) - radius;
-}
 
 float apply_glow(float d, float intensity){
     return exp(-max(d, 0.0) * intensity * 8.0);
@@ -141,48 +125,34 @@ void main(){
 
     vec4 final_color = vec4(0.0, 0.0, 0.0, 1.0);
 
-    // ── Layer 0: track ──
+    // ── Layer 0: sweep ──
     {
         vec2 p = vec2(uv.x * aspect, uv.y);
-        float sdf_result = abs(length(p) - 0.250000) - 0.008000;
+        { float ra = time * 3.000000; float rc = cos(ra); float rs = sin(ra);
+        p = vec2(p.x * rc - p.y * rs, p.x * rs + p.y * rc); }
+        float sdf_result = abs(length(p) - 0.280000) - 0.060000;
+        float arc_theta = atan(p.x, p.y) + 3.14159265359;
+        sdf_result = (arc_theta < 2.000000 ? sdf_result : 999.0);
+        float glow_pulse = 2.800000 * (0.9 + 0.1 * sin(time * 2.0));
+        float glow_result = apply_glow(sdf_result, glow_pulse);
+
+        vec4 color_result = vec4(vec3(glow_result), 1.0);
+        color_result = vec4(color_result.rgb * vec3(0.830000, 0.550000, 0.120000), 1.0);
+        vec4 prev_color = texture(u_prev_frame, v_uv);
+        color_result = mix(color_result, prev_color, 0.900000);
+        vec3 lc = color_result.rgb;
+        final_color = vec4(final_color.rgb + lc, 1.0);
+    }
+
+    // ── Layer 1: track ──
+    {
+        vec2 p = vec2(uv.x * aspect, uv.y);
+        float sdf_result = abs(length(p) - 0.280000) - 0.008000;
         float glow_pulse = 0.500000 * (0.9 + 0.1 * sin(time * 2.0));
         float glow_result = apply_glow(sdf_result, glow_pulse);
 
         vec4 color_result = vec4(vec3(glow_result), 1.0);
-        color_result = vec4(color_result.rgb * vec3(0.300000, 0.250000, 0.100000), 1.0);
-        vec3 lc = color_result.rgb;
-        final_color = vec4(final_color.rgb + lc, 1.0);
-    }
-
-    // ── Layer 1: sweep ──
-    {
-        vec2 p = vec2(uv.x * aspect, uv.y);
-        { float ra = time * 3.000000; float rc = cos(ra); float rs = sin(ra);
-        p = vec2(p.x * rc - p.y * rs, p.x * rs + p.y * rc); }
-        float sdf_result = abs(length(p) - 0.250000) - 0.030000;
-        float arc_theta = atan(p.x, p.y) + 3.14159265359;
-        sdf_result = (arc_theta < 4.000000 ? sdf_result : 999.0);
-        float glow_pulse = 2.500000 * (0.9 + 0.1 * sin(time * 2.0));
-        float glow_result = apply_glow(sdf_result, glow_pulse);
-
-        vec4 color_result = vec4(vec3(glow_result), 1.0);
-        color_result = vec4(color_result.rgb * vec3(0.830000, 0.690000, 0.220000), 1.0);
-        vec3 lc = color_result.rgb;
-        final_color = vec4(final_color.rgb + lc, 1.0);
-    }
-
-    // ── Layer 2: head ──
-    {
-        vec2 p = vec2(uv.x * aspect, uv.y);
-        { float ra = time * 3.000000; float rc = cos(ra); float rs = sin(ra);
-        p = vec2(p.x * rc - p.y * rs, p.x * rs + p.y * rc); }
-        p = p - vec2(0.250000, 0.000000);
-        float sdf_result = sdf_circle(p, 0.020000);
-        float glow_pulse = 3.000000 * (0.9 + 0.1 * sin(time * 2.0));
-        float glow_result = apply_glow(sdf_result, glow_pulse);
-
-        vec4 color_result = vec4(vec3(glow_result), 1.0);
-        color_result = vec4(color_result.rgb * vec3(1.000000, 0.900000, 0.500000), 1.0);
+        color_result = vec4(color_result.rgb * vec3(0.200000, 0.200000, 0.200000), 1.0);
         vec3 lc = color_result.rgb;
         final_color = vec4(final_color.rgb + lc, 1.0);
     }
@@ -191,7 +161,7 @@ void main(){
 }
 `;
 const UNIFORMS = [];
-const PASS_WGSL_0 = `// Post-processing pass: bloom
+const PASS_WGSL_0 = `// Post-processing pass: edge
 
 struct Uniforms {
     time: f32,
@@ -219,19 +189,8 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
     let pixel = textureSample(pass_tex, pass_sampler, uv);
     var color_result = pixel;
 
-    // blur pass
-    var blurred = vec4<f32>(0.0);
-    let texel = 1.0 / u.resolution;
-    let r = i32(1.500000);
-    var count = 0.0;
-    for (var dy = -r; dy <= r; dy++) {
-        for (var dx = -r; dx <= r; dx++) {
-            let offset = vec2<f32>(f32(dx), f32(dy)) * texel;
-            blurred += textureSample(pass_tex, pass_sampler, uv + offset);
-            count += 1.0;
-        }
-    }
-    color_result = blurred / count;
+    let vign = 1.0 - 0.300000 * length(uv - 0.5);
+    color_result = vec4<f32>(color_result.rgb * vign, color_result.a);
     return color_result;
 }
 `;
@@ -291,7 +250,11 @@ class GameRenderer {
       entries: [{ binding: 0, resource: { buffer: this.uniformBuffer } }]
     });
 
-    const pipelineLayout = this.device.createPipelineLayout({ bindGroupLayouts: [bindGroupLayout] });
+    // Memory/feedback: ping-pong textures (Group 1)
+    this._initMemory();
+    const pipelineLayout = this.device.createPipelineLayout({
+      bindGroupLayouts: [bindGroupLayout, this._memBindGroupLayout]
+    });
 
     this.pipeline = this.device.createRenderPipeline({
       layout: pipelineLayout,
@@ -367,8 +330,12 @@ class GameRenderer {
     });
     mainPass.setPipeline(this.pipeline);
     mainPass.setBindGroup(0, this.bindGroup);
+    mainPass.setBindGroup(1, this._memBindGroup);
     mainPass.draw(3);
     mainPass.end();
+
+    // Capture frame for memory/feedback
+    this._swapMemory(encoder, this._passFBOs[0]);
 
     // Post-processing chain (1 pass)
     for (let p = 0; p < 1; p++) {
@@ -397,6 +364,56 @@ class GameRenderer {
       pp.end();
     }
     this.device.queue.submit([encoder.finish()]);
+  }
+
+  _initMemory() {
+    const w = this.canvas.width || 1;
+    const h = this.canvas.height || 1;
+    const desc = {
+      size: { width: w, height: h },
+      format: 'rgba8unorm',
+      usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.COPY_SRC | GPUTextureUsage.COPY_DST
+    };
+    this._memTex = [this.device.createTexture(desc), this.device.createTexture(desc)];
+    this._memIdx = 0;
+    this._memSampler = this.device.createSampler({ magFilter: 'linear', minFilter: 'linear' });
+    this._memBindGroupLayout = this.device.createBindGroupLayout({
+      entries: [
+        { binding: 0, visibility: GPUShaderStage.FRAGMENT, texture: { sampleType: 'float' } },
+        { binding: 1, visibility: GPUShaderStage.FRAGMENT, sampler: { type: 'filtering' } }
+      ]
+    });
+    this._updateMemBindGroup();
+  }
+
+  _updateMemBindGroup() {
+    const readTex = this._memTex[this._memIdx];
+    this._memBindGroup = this.device.createBindGroup({
+      layout: this._memBindGroupLayout,
+      entries: [
+        { binding: 0, resource: readTex.createView() },
+        { binding: 1, resource: this._memSampler }
+      ]
+    });
+  }
+
+  _swapMemory(encoder, sourceTex) {
+    const writeTex = this._memTex[1 - this._memIdx];
+    encoder.copyTextureToTexture(
+      { texture: sourceTex },
+      { texture: writeTex },
+      { width: this.canvas.width, height: this.canvas.height }
+    );
+    this._memIdx = 1 - this._memIdx;
+    this._updateMemBindGroup();
+  }
+
+  _resizeMemory() {
+    if (this._memTex) {
+      this._memTex[0].destroy();
+      this._memTex[1].destroy();
+      this._initMemory();
+    }
   }
 
   _initPassFBOs() {
@@ -479,6 +496,7 @@ class GameRendererGL {
     for (const u of this.uniformDefs) {
       this.paramLocs[u.name] = gl.getUniformLocation(this.program, 'u_p_' + u.name);
     }
+    this._initMemoryGL();
     return true;
   }
 
@@ -515,6 +533,11 @@ class GameRendererGL {
     gl.clear(gl.COLOR_BUFFER_BIT);
     gl.useProgram(this.program);
 
+    // Bind previous frame texture
+    gl.activeTexture(gl.TEXTURE1);
+    gl.bindTexture(gl.TEXTURE_2D, this._memTex[this._memIdx]);
+    gl.uniform1i(this._memLoc, 1);
+
     gl.uniform1f(this.locs.time, t);
     gl.uniform1f(this.locs.bass, this.audioData.bass);
     gl.uniform1f(this.locs.mid, this.audioData.mid);
@@ -527,6 +550,56 @@ class GameRendererGL {
       gl.uniform1f(this.paramLocs[u.name], this.userParams[u.name] ?? u.default);
     }
     gl.drawArrays(gl.TRIANGLES, 0, 3);
+
+    // Capture frame for memory/feedback
+    this._swapMemoryGL();
+  }
+
+  _initMemoryGL() {
+    const gl = this.gl;
+    const w = this.canvas.width || 1;
+    const h = this.canvas.height || 1;
+    this._memFbo = [gl.createFramebuffer(), gl.createFramebuffer()];
+    this._memTex = [gl.createTexture(), gl.createTexture()];
+    for (let i = 0; i < 2; i++) {
+      gl.bindTexture(gl.TEXTURE_2D, this._memTex[i]);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, w, h, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+      gl.bindFramebuffer(gl.FRAMEBUFFER, this._memFbo[i]);
+      gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this._memTex[i], 0);
+    }
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    gl.bindTexture(gl.TEXTURE_2D, null);
+    this._memIdx = 0;
+    this._memLoc = gl.getUniformLocation(this.program, 'u_prev_frame');
+  }
+
+  _swapMemoryGL() {
+    const gl = this.gl;
+    const w = this.canvas.width;
+    const h = this.canvas.height;
+    const writeIdx = 1 - this._memIdx;
+    gl.bindFramebuffer(gl.READ_FRAMEBUFFER, null);
+    gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, this._memFbo[writeIdx]);
+    gl.blitFramebuffer(0, 0, w, h, 0, 0, w, h, gl.COLOR_BUFFER_BIT, gl.NEAREST);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    this._memIdx = writeIdx;
+  }
+
+  _resizeMemory() {
+    if (this._memTex) {
+      const gl = this.gl;
+      const w = this.canvas.width || 1;
+      const h = this.canvas.height || 1;
+      for (let i = 0; i < 2; i++) {
+        gl.bindTexture(gl.TEXTURE_2D, this._memTex[i]);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, w, h, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+      }
+      gl.bindTexture(gl.TEXTURE_2D, null);
+    }
   }
 
   setParam(name, value) { this.userParams[name] = value; }

@@ -3,7 +3,6 @@ import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
 import sunLogo from '../assets/sun-logo.webp';
 import { translateError } from '../utils/error-messages';
-import { registerGameComponent } from '../lib/game-components';
 
 interface SplashScreenProps {
   onComplete: () => void;
@@ -33,13 +32,6 @@ export function SplashScreen({ onComplete, minimumDisplayTime = 1500 }: SplashSc
   const { t } = useTranslation();
   const [fadeOut, setFadeOut] = useState(false);
   const [imageError, setImageError] = useState(false);
-  const [gpuRing, setGpuRing] = useState(false);
-
-  useEffect(() => {
-    registerGameComponent('game-boot-ring').then(() => {
-      if (customElements.get('game-boot-ring')) setGpuRing(true);
-    });
-  }, []);
   const [stage, setStage] = useState<InitStage>('starting');
   const [backendReady, setBackendReady] = useState(false);
   const [minTimeElapsed, setMinTimeElapsed] = useState(false);
@@ -151,29 +143,15 @@ export function SplashScreen({ onComplete, minimumDisplayTime = 1500 }: SplashSc
             </div>
           )}
         </div>
-        {/* Animated glow ring — GPU boot-ring with CSS fallback */}
-        {gpuRing ? (
-          <game-boot-ring
-            ref={(el: HTMLElement | null) => {
-              if (el && 'progress' in el) (el as HTMLElement & { progress: number }).progress = progress / 100;
-            }}
-            style={{
-              position: 'absolute',
-              inset: '-12px',
-              borderRadius: '50%',
-              pointerEvents: 'none',
-            }}
-          />
-        ) : (
-          <div style={{
-            position: 'absolute',
-            inset: '-8px',
-            borderRadius: '50%',
-            border: '2px solid transparent',
-            borderTopColor: '#F97316',
-            animation: 'spin 1.5s linear infinite',
-          }} />
-        )}
+        {/* Spinning ring around logo */}
+        <div style={{
+          position: 'absolute',
+          inset: '-8px',
+          borderRadius: '50%',
+          border: '2px solid transparent',
+          borderTopColor: '#F97316',
+          animation: 'spin 1.5s linear infinite',
+        }} />
       </div>
 
       {/* Brand Name */}

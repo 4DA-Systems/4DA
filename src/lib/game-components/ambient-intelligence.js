@@ -42,6 +42,9 @@ const WGSL_F = `struct Uniforms {
 
 @group(0) @binding(0) var<uniform> u: Uniforms;
 
+@group(1) @binding(0) var prev_frame: texture_2d<f32>;
+@group(1) @binding(1) var prev_sampler: sampler;
+
 struct VertexOutput {
     @builtin(position) pos: vec4<f32>,
     @location(0) uv: vec2<f32>,
@@ -49,23 +52,6 @@ struct VertexOutput {
 
 fn sdf_circle(p: vec2<f32>, radius: f32) -> f32 {
     return length(p) - radius;
-}
-
-fn sdf_star(p: vec2<f32>, n: f32, r: f32, ir: f32) -> f32 {
-    let an = 3.14159265 / n;
-    let a = atan2(p.y, p.x);
-    let period = 2.0 * an;
-    let sa = (a + an) - floor((a + an) / period) * period - an;
-    let q = length(p) * vec2<f32>(cos(sa), abs(sin(sa)));
-    let tip = vec2<f32>(r, 0.0);
-    let valley = vec2<f32>(ir * cos(an), ir * sin(an));
-    let e = tip - valley;
-    let d = q - valley;
-    let t = clamp(dot(d, e) / dot(e, e), 0.0, 1.0);
-    let closest = valley + e * t;
-    let dist = length(q - closest);
-    let cross_val = d.x * e.y - d.y * e.x;
-    return select(dist, -dist, cross_val > 0.0);
 }
 
 fn apply_glow(d: f32, intensity: f32) -> f32 {
@@ -103,6 +89,10 @@ fn fbm2(p: vec2<f32>, octaves: i32, persistence: f32, lacunarity: f32) -> f32 {
     return value / max_val;
 }
 
+fn cosine_palette(t: f32, a: vec3<f32>, b: vec3<f32>, c: vec3<f32>, d: vec3<f32>) -> vec3<f32> {
+    return a + b * cos(6.28318 * (c * t + d));
+}
+
 @fragment
 fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
     let uv = input.uv * 2.0 - 1.0;
@@ -123,19 +113,18 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
 
     var final_color = vec4<f32>(0.0, 0.0, 0.0, 1.0);
 
-    // ── Layer 1: deep_field ──
+    // ── Layer 1: nebula ──
     {
         var p = vec2<f32>(uv.x * aspect, uv.y);
-        { let warp_x = fbm2(p * 2.000000 + vec2<f32>(0.0, 1.3), i32(3.000000), 0.500000, 2.000000);
-        let warp_y = fbm2(p * 2.000000 + vec2<f32>(1.7, 0.0), i32(3.000000), 0.500000, 2.000000);
-        p = p + vec2<f32>(warp_x, warp_y) * 0.200000; }
-        var sdf_result = fbm2((p * 2.000000 + vec2<f32>(time * 0.1, time * 0.07)), i32(3.000000), 0.500000, 2.000000);
-        let glow_pulse = 1.000000 * (0.9 + 0.1 * sin(time * 2.0));
-        let glow_result = apply_glow(sdf_result, glow_pulse);
-        var color_result = vec4<f32>(vec3<f32>(glow_result), 1.0);
-        color_result = vec4<f32>(color_result.rgb * vec3<f32>(0.150000, 0.080000, 0.020000), 1.0);
+        { let warp_x = fbm2(p * 2.500000 + vec2<f32>(0.0, 1.3), i32(3.000000), 0.120000, 2.000000);
+        let warp_y = fbm2(p * 2.500000 + vec2<f32>(1.7, 0.0), i32(3.000000), 0.120000, 2.000000);
+        p = p + vec2<f32>(warp_x, warp_y) * 0.120000; }
+        var sdf_result = fbm2((p * 5.000000 + vec2<f32>(time * 0.1, time * 0.07)), i32(3.000000), 0.400000, 2.000000);
+        var color_result = vec4<f32>(cosine_palette(sdf_result, vec3<f32>(0.060000, 0.030000, 0.010000), vec3<f32>(0.350000, 0.200000, 0.080000), vec3<f32>(1.000000, 0.700000, 0.500000), vec3<f32>(0.000000, 0.120000, 0.250000)), 1.0);
+        let prev_color = textureSample(prev_frame, prev_sampler, input.uv);
+        color_result = mix(color_result, prev_color, 0.930000);
         let lc = color_result.rgb;
-        final_color = vec4<f32>(1.0 - (1.0 - final_color.rgb) * (1.0 - lc), 1.0);
+        final_color = vec4<f32>(final_color.rgb + lc, 1.0);
     }
 
     // ── Layer 2: core ──
@@ -147,57 +136,37 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
             var then_color: vec4<f32>;
             var else_color: vec4<f32>;
             { var p = p_then;
-            var sdf_result = sdf_star(p, 5.000000, 0.280000, 0.120000);
-            let glow_pulse = 3.000000 * (0.9 + 0.1 * sin(time * 2.0));
+            p = p + vec2<f32>(sin(p.y * 4.000000 + time * 1.200000), cos(p.x * 4.000000 + time * 1.200000)) * 0.150000;
+            var sdf_result = sdf_circle(p, 0.080000);
+            let glow_pulse = 3.500000 * (0.9 + 0.1 * sin(time * 2.0));
             let glow_result = apply_glow(sdf_result, glow_pulse);
             var color_result = vec4<f32>(vec3<f32>(glow_result), 1.0);
-            color_result = vec4<f32>(color_result.rgb * vec3<f32>(1.000000, 0.150000, 0.100000), 1.0);
+            color_result = vec4<f32>(color_result.rgb * vec3<f32>(1.000000, 0.200000, 0.080000), 1.0);
             then_color = color_result; }
             { var p = p_then;
-            var sdf_result = sdf_circle(p, 0.250000);
-            let glow_pulse = 2.000000 * (0.9 + 0.1 * sin(time * 2.0));
+            var sdf_result = sdf_circle(p, 0.070000);
+            let glow_pulse = 2.800000 * (0.9 + 0.1 * sin(time * 2.0));
             let glow_result = apply_glow(sdf_result, glow_pulse);
             var color_result = vec4<f32>(vec3<f32>(glow_result), 1.0);
-            color_result = vec4<f32>(color_result.rgb * vec3<f32>(0.550000, 0.280000, 0.060000), 1.0);
+            color_result = vec4<f32>(color_result.rgb * vec3<f32>(0.830000, 0.650000, 0.180000), 1.0);
             else_color = color_result; }
             color_result = select(else_color, then_color, (critical_count > 0.000000));
         }
+        let prev_color = textureSample(prev_frame, prev_sampler, input.uv);
+        color_result = mix(color_result, prev_color, 0.880000);
         let lc = color_result.rgb;
         final_color = vec4<f32>(final_color.rgb + lc, 1.0);
     }
 
-    // ── Layer 3: noise_halo ──
+    // ── Layer 3: corona ──
     {
         var p = vec2<f32>(uv.x * aspect, uv.y);
-        var sdf_result = fbm2((p * 3.000000 + vec2<f32>(time * 0.1, time * 0.07)), i32(4.000000), 0.500000, 2.000000);
-        let glow_pulse = 1.200000 * (0.9 + 0.1 * sin(time * 2.0));
+        p = vec2<f32>(length(p), atan2(p.y, p.x));
+        var sdf_result = noise2(p * 8.000000 + vec2<f32>(time * 0.1, time * 0.07));
+        let glow_pulse = 0.600000 * (0.9 + 0.1 * sin(time * 2.0));
         let glow_result = apply_glow(sdf_result, glow_pulse);
         var color_result = vec4<f32>(vec3<f32>(glow_result), 1.0);
-        color_result = vec4<f32>(color_result.rgb * vec3<f32>(1.000000, 0.820000, 0.300000), 1.0);
-        let lc = color_result.rgb;
-        final_color = vec4<f32>(final_color.rgb + lc, 1.0);
-    }
-
-    // ── Layer 4: sentinel_ring ──
-    {
-        var p = vec2<f32>(uv.x * aspect, uv.y);
-        var sdf_result = abs(length(p) - 0.380000) - 0.015000;
-        let glow_pulse = 1.500000 * (0.9 + 0.1 * sin(time * 2.0));
-        let glow_result = apply_glow(sdf_result, glow_pulse);
-        var color_result = vec4<f32>(vec3<f32>(glow_result), 1.0);
-        color_result = vec4<f32>(color_result.rgb * vec3<f32>(0.830000, 0.690000, 0.220000), 1.0);
-        let lc = color_result.rgb;
-        final_color = vec4<f32>(final_color.rgb + lc, 1.0);
-    }
-
-    // ── Layer 5: pulse_ring ──
-    {
-        var p = vec2<f32>(uv.x * aspect, uv.y);
-        var sdf_result = abs(length(p) - 0.320000) - 0.008000;
-        let glow_pulse = 2.000000 * (0.9 + 0.1 * sin(time * 2.0));
-        let glow_result = apply_glow(sdf_result, glow_pulse);
-        var color_result = vec4<f32>(vec3<f32>(glow_result), 1.0);
-        color_result = vec4<f32>(color_result.rgb * vec3<f32>(0.900000, 0.750000, 0.300000), 1.0);
+        color_result = vec4<f32>(color_result.rgb * vec3<f32>(0.250000, 0.150000, 0.060000), 1.0);
         let lc = color_result.rgb;
         final_color = vec4<f32>(final_color.rgb + lc, 1.0);
     }
@@ -240,29 +209,14 @@ uniform float u_p_signal_intensity;
 uniform float u_p_color_shift;
 uniform float u_p_critical_count;
 uniform float u_p_metabolism;
+uniform sampler2D u_prev_frame;
+
 
 in vec2 v_uv;
 out vec4 fragColor;
 
 float sdf_circle(vec2 p, float radius){
     return length(p) - radius;
-}
-
-float sdf_star(vec2 p, float n, float r, float ir){
-    float an = 3.14159265 / n;
-    float a = atan(p.y, p.x);
-    float period = 2.0 * an;
-    float sa = mod(a + an, period) - an;
-    vec2 q = length(p) * vec2(cos(sa), abs(sin(sa)));
-    vec2 tip = vec2(r, 0.0);
-    vec2 valley = vec2(ir * cos(an), ir * sin(an));
-    vec2 e = tip - valley;
-    vec2 d = q - valley;
-    float t = clamp(dot(d, e) / dot(e, e), 0.0, 1.0);
-    vec2 closest = valley + e * t;
-    float dist = length(q - closest);
-    float cross_val = d.x * e.y - d.y * e.x;
-    return cross_val > 0.0 ? -dist : dist;
 }
 
 float apply_glow(float d, float intensity){
@@ -300,6 +254,10 @@ float fbm2(vec2 p, int octaves, float persistence, float lacunarity){
     return value / max_val;
 }
 
+vec3 cosine_palette(float t, vec3 a, vec3 b, vec3 c, vec3 d){
+    return a + b * cos(6.28318 * (c * t + d));
+}
+
 void main(){
     vec2 uv = v_uv * 2.0 - 1.0;
     float aspect = u_resolution.x / u_resolution.y;
@@ -319,20 +277,18 @@ void main(){
 
     vec4 final_color = vec4(0.0, 0.0, 0.0, 1.0);
 
-    // ── Layer 1: deep_field ──
+    // ── Layer 1: nebula ──
     {
         vec2 p = vec2(uv.x * aspect, uv.y);
-        { float warp_x = fbm2(p * 2.000000 + vec2(0.0, 1.3), int(3.000000), 0.500000, 2.000000);
-        float warp_y = fbm2(p * 2.000000 + vec2(1.7, 0.0), int(3.000000), 0.500000, 2.000000);
-        p = p + vec2(warp_x, warp_y) * 0.200000; }
-        float sdf_result = fbm2((p * 2.000000 + vec2(time * 0.1, time * 0.07)), int(3.000000), 0.500000, 2.000000);
-        float glow_pulse = 1.000000 * (0.9 + 0.1 * sin(time * 2.0));
-        float glow_result = apply_glow(sdf_result, glow_pulse);
-
-        vec4 color_result = vec4(vec3(glow_result), 1.0);
-        color_result = vec4(color_result.rgb * vec3(0.150000, 0.080000, 0.020000), 1.0);
+        { float warp_x = fbm2(p * 2.500000 + vec2(0.0, 1.3), int(3.000000), 0.120000, 2.000000);
+        float warp_y = fbm2(p * 2.500000 + vec2(1.7, 0.0), int(3.000000), 0.120000, 2.000000);
+        p = p + vec2(warp_x, warp_y) * 0.120000; }
+        float sdf_result = fbm2((p * 5.000000 + vec2(time * 0.1, time * 0.07)), int(3.000000), 0.400000, 2.000000);
+        vec4 color_result = vec4(cosine_palette(sdf_result, vec3(0.060000, 0.030000, 0.010000), vec3(0.350000, 0.200000, 0.080000), vec3(1.000000, 0.700000, 0.500000), vec3(0.000000, 0.120000, 0.250000)), 1.0);
+        vec4 prev_color = texture(u_prev_frame, v_uv);
+        color_result = mix(color_result, prev_color, 0.930000);
         vec3 lc = color_result.rgb;
-        final_color = vec4(vec3(1.0) - (vec3(1.0) - final_color.rgb) * (vec3(1.0) - lc), 1.0);
+        final_color = vec4(final_color.rgb + lc, 1.0);
     }
 
     // ── Layer 2: core ──
@@ -344,62 +300,40 @@ void main(){
             vec4 then_color;
             vec4 else_color;
             { vec2 p = p_then;
-            float sdf_result = sdf_star(p, 5.000000, 0.280000, 0.120000);
-            float glow_pulse = 3.000000 * (0.9 + 0.1 * sin(time * 2.0));
+            p = p + vec2(sin(p.y * 4.000000 + time * 1.200000), cos(p.x * 4.000000 + time * 1.200000)) * 0.150000;
+            float sdf_result = sdf_circle(p, 0.080000);
+            float glow_pulse = 3.500000 * (0.9 + 0.1 * sin(time * 2.0));
             float glow_result = apply_glow(sdf_result, glow_pulse);
 
             vec4 color_result = vec4(vec3(glow_result), 1.0);
-            color_result = vec4(color_result.rgb * vec3(1.000000, 0.150000, 0.100000), 1.0);
+            color_result = vec4(color_result.rgb * vec3(1.000000, 0.200000, 0.080000), 1.0);
             then_color = color_result; }
             { vec2 p = p_then;
-            float sdf_result = sdf_circle(p, 0.250000);
-            float glow_pulse = 2.000000 * (0.9 + 0.1 * sin(time * 2.0));
+            float sdf_result = sdf_circle(p, 0.070000);
+            float glow_pulse = 2.800000 * (0.9 + 0.1 * sin(time * 2.0));
             float glow_result = apply_glow(sdf_result, glow_pulse);
 
             vec4 color_result = vec4(vec3(glow_result), 1.0);
-            color_result = vec4(color_result.rgb * vec3(0.550000, 0.280000, 0.060000), 1.0);
+            color_result = vec4(color_result.rgb * vec3(0.830000, 0.650000, 0.180000), 1.0);
             else_color = color_result; }
             color_result = (critical_count > 0.000000) ? then_color : else_color;
         }
+        vec4 prev_color = texture(u_prev_frame, v_uv);
+        color_result = mix(color_result, prev_color, 0.880000);
         vec3 lc = color_result.rgb;
         final_color = vec4(final_color.rgb + lc, 1.0);
     }
 
-    // ── Layer 3: noise_halo ──
+    // ── Layer 3: corona ──
     {
         vec2 p = vec2(uv.x * aspect, uv.y);
-        float sdf_result = fbm2((p * 3.000000 + vec2(time * 0.1, time * 0.07)), int(4.000000), 0.500000, 2.000000);
-        float glow_pulse = 1.200000 * (0.9 + 0.1 * sin(time * 2.0));
+        p = vec2(length(p), atan(p.y, p.x));
+        float sdf_result = noise2(p * 8.000000 + vec2(time * 0.1, time * 0.07));
+        float glow_pulse = 0.600000 * (0.9 + 0.1 * sin(time * 2.0));
         float glow_result = apply_glow(sdf_result, glow_pulse);
 
         vec4 color_result = vec4(vec3(glow_result), 1.0);
-        color_result = vec4(color_result.rgb * vec3(1.000000, 0.820000, 0.300000), 1.0);
-        vec3 lc = color_result.rgb;
-        final_color = vec4(final_color.rgb + lc, 1.0);
-    }
-
-    // ── Layer 4: sentinel_ring ──
-    {
-        vec2 p = vec2(uv.x * aspect, uv.y);
-        float sdf_result = abs(length(p) - 0.380000) - 0.015000;
-        float glow_pulse = 1.500000 * (0.9 + 0.1 * sin(time * 2.0));
-        float glow_result = apply_glow(sdf_result, glow_pulse);
-
-        vec4 color_result = vec4(vec3(glow_result), 1.0);
-        color_result = vec4(color_result.rgb * vec3(0.830000, 0.690000, 0.220000), 1.0);
-        vec3 lc = color_result.rgb;
-        final_color = vec4(final_color.rgb + lc, 1.0);
-    }
-
-    // ── Layer 5: pulse_ring ──
-    {
-        vec2 p = vec2(uv.x * aspect, uv.y);
-        float sdf_result = abs(length(p) - 0.320000) - 0.008000;
-        float glow_pulse = 2.000000 * (0.9 + 0.1 * sin(time * 2.0));
-        float glow_result = apply_glow(sdf_result, glow_pulse);
-
-        vec4 color_result = vec4(vec3(glow_result), 1.0);
-        color_result = vec4(color_result.rgb * vec3(0.900000, 0.750000, 0.300000), 1.0);
+        color_result = vec4(color_result.rgb * vec3(0.250000, 0.150000, 0.060000), 1.0);
         vec3 lc = color_result.rgb;
         final_color = vec4(final_color.rgb + lc, 1.0);
     }
@@ -408,7 +342,7 @@ void main(){
 }
 `;
 const UNIFORMS = [{name:'pulse',default:0},{name:'heat',default:0},{name:'burst',default:0},{name:'morph',default:0},{name:'error_val',default:0},{name:'staleness',default:0},{name:'opacity_val',default:0.9},{name:'signal_intensity',default:0},{name:'color_shift',default:0},{name:'critical_count',default:0},{name:'metabolism',default:0}];
-const PASS_WGSL_0 = `// Post-processing pass: bloom
+const PASS_WGSL_0 = `// Post-processing pass: edge
 
 struct Uniforms {
     time: f32,
@@ -436,19 +370,8 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
     let pixel = textureSample(pass_tex, pass_sampler, uv);
     var color_result = pixel;
 
-    // blur pass
-    var blurred = vec4<f32>(0.0);
-    let texel = 1.0 / u.resolution;
-    let r = i32(2.000000);
-    var count = 0.0;
-    for (var dy = -r; dy <= r; dy++) {
-        for (var dx = -r; dx <= r; dx++) {
-            let offset = vec2<f32>(f32(dx), f32(dy)) * texel;
-            blurred += textureSample(pass_tex, pass_sampler, uv + offset);
-            count += 1.0;
-        }
-    }
-    color_result = blurred / count;
+    let vign = 1.0 - 0.350000 * length(uv - 0.5);
+    color_result = vec4<f32>(color_result.rgb * vign, color_result.a);
     return color_result;
 }
 `;
@@ -508,7 +431,11 @@ class GameRenderer {
       entries: [{ binding: 0, resource: { buffer: this.uniformBuffer } }]
     });
 
-    const pipelineLayout = this.device.createPipelineLayout({ bindGroupLayouts: [bindGroupLayout] });
+    // Memory/feedback: ping-pong textures (Group 1)
+    this._initMemory();
+    const pipelineLayout = this.device.createPipelineLayout({
+      bindGroupLayouts: [bindGroupLayout, this._memBindGroupLayout]
+    });
 
     this.pipeline = this.device.createRenderPipeline({
       layout: pipelineLayout,
@@ -584,8 +511,12 @@ class GameRenderer {
     });
     mainPass.setPipeline(this.pipeline);
     mainPass.setBindGroup(0, this.bindGroup);
+    mainPass.setBindGroup(1, this._memBindGroup);
     mainPass.draw(3);
     mainPass.end();
+
+    // Capture frame for memory/feedback
+    this._swapMemory(encoder, this._passFBOs[0]);
 
     // Post-processing chain (1 pass)
     for (let p = 0; p < 1; p++) {
@@ -614,6 +545,56 @@ class GameRenderer {
       pp.end();
     }
     this.device.queue.submit([encoder.finish()]);
+  }
+
+  _initMemory() {
+    const w = this.canvas.width || 1;
+    const h = this.canvas.height || 1;
+    const desc = {
+      size: { width: w, height: h },
+      format: 'rgba8unorm',
+      usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.COPY_SRC | GPUTextureUsage.COPY_DST
+    };
+    this._memTex = [this.device.createTexture(desc), this.device.createTexture(desc)];
+    this._memIdx = 0;
+    this._memSampler = this.device.createSampler({ magFilter: 'linear', minFilter: 'linear' });
+    this._memBindGroupLayout = this.device.createBindGroupLayout({
+      entries: [
+        { binding: 0, visibility: GPUShaderStage.FRAGMENT, texture: { sampleType: 'float' } },
+        { binding: 1, visibility: GPUShaderStage.FRAGMENT, sampler: { type: 'filtering' } }
+      ]
+    });
+    this._updateMemBindGroup();
+  }
+
+  _updateMemBindGroup() {
+    const readTex = this._memTex[this._memIdx];
+    this._memBindGroup = this.device.createBindGroup({
+      layout: this._memBindGroupLayout,
+      entries: [
+        { binding: 0, resource: readTex.createView() },
+        { binding: 1, resource: this._memSampler }
+      ]
+    });
+  }
+
+  _swapMemory(encoder, sourceTex) {
+    const writeTex = this._memTex[1 - this._memIdx];
+    encoder.copyTextureToTexture(
+      { texture: sourceTex },
+      { texture: writeTex },
+      { width: this.canvas.width, height: this.canvas.height }
+    );
+    this._memIdx = 1 - this._memIdx;
+    this._updateMemBindGroup();
+  }
+
+  _resizeMemory() {
+    if (this._memTex) {
+      this._memTex[0].destroy();
+      this._memTex[1].destroy();
+      this._initMemory();
+    }
   }
 
   _initPassFBOs() {
@@ -696,6 +677,7 @@ class GameRendererGL {
     for (const u of this.uniformDefs) {
       this.paramLocs[u.name] = gl.getUniformLocation(this.program, 'u_p_' + u.name);
     }
+    this._initMemoryGL();
     return true;
   }
 
@@ -732,6 +714,11 @@ class GameRendererGL {
     gl.clear(gl.COLOR_BUFFER_BIT);
     gl.useProgram(this.program);
 
+    // Bind previous frame texture
+    gl.activeTexture(gl.TEXTURE1);
+    gl.bindTexture(gl.TEXTURE_2D, this._memTex[this._memIdx]);
+    gl.uniform1i(this._memLoc, 1);
+
     gl.uniform1f(this.locs.time, t);
     gl.uniform1f(this.locs.bass, this.audioData.bass);
     gl.uniform1f(this.locs.mid, this.audioData.mid);
@@ -744,11 +731,180 @@ class GameRendererGL {
       gl.uniform1f(this.paramLocs[u.name], this.userParams[u.name] ?? u.default);
     }
     gl.drawArrays(gl.TRIANGLES, 0, 3);
+
+    // Capture frame for memory/feedback
+    this._swapMemoryGL();
+  }
+
+  _initMemoryGL() {
+    const gl = this.gl;
+    const w = this.canvas.width || 1;
+    const h = this.canvas.height || 1;
+    this._memFbo = [gl.createFramebuffer(), gl.createFramebuffer()];
+    this._memTex = [gl.createTexture(), gl.createTexture()];
+    for (let i = 0; i < 2; i++) {
+      gl.bindTexture(gl.TEXTURE_2D, this._memTex[i]);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, w, h, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+      gl.bindFramebuffer(gl.FRAMEBUFFER, this._memFbo[i]);
+      gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this._memTex[i], 0);
+    }
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    gl.bindTexture(gl.TEXTURE_2D, null);
+    this._memIdx = 0;
+    this._memLoc = gl.getUniformLocation(this.program, 'u_prev_frame');
+  }
+
+  _swapMemoryGL() {
+    const gl = this.gl;
+    const w = this.canvas.width;
+    const h = this.canvas.height;
+    const writeIdx = 1 - this._memIdx;
+    gl.bindFramebuffer(gl.READ_FRAMEBUFFER, null);
+    gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, this._memFbo[writeIdx]);
+    gl.blitFramebuffer(0, 0, w, h, 0, 0, w, h, gl.COLOR_BUFFER_BIT, gl.NEAREST);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    this._memIdx = writeIdx;
+  }
+
+  _resizeMemory() {
+    if (this._memTex) {
+      const gl = this.gl;
+      const w = this.canvas.width || 1;
+      const h = this.canvas.height || 1;
+      for (let i = 0; i < 2; i++) {
+        gl.bindTexture(gl.TEXTURE_2D, this._memTex[i]);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, w, h, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+      }
+      gl.bindTexture(gl.TEXTURE_2D, null);
+    }
   }
 
   setParam(name, value) { this.userParams[name] = value; }
   setAudioData(d) { Object.assign(this.audioData, d); }
   destroy() { this.stop(); this.canvas.removeEventListener('mousemove', this._onMouseMove); }
+}
+
+
+class GameResonanceNetwork {
+  constructor() {
+    this._couplings = [
+      { source: 'pulse', target: 'core', field: 'brightness', weight: 0.5 },
+      { source: 'heat', target: 'nebula', field: 'intensity', weight: 0.4 },
+      { source: 'metabolism', target: 'core', field: 'scale', weight: 0.25 },
+      { source: 'signal_intensity', target: 'corona', field: 'intensity', weight: 0.3 },
+    ];
+    this._damping = 0.95;
+    this._maxDepth = 4;
+    this._state = new Map();
+    this._deltas = new Map();
+  }
+
+  propagate(uniforms) {
+    // Snapshot current values
+    const prev = new Map(this._state);
+    for (const [k, v] of Object.entries(uniforms)) {
+      this._state.set(k, v);
+    }
+
+    // Compute deltas from source changes
+    this._deltas.clear();
+    for (const c of this._couplings) {
+      const srcKey = c.source;
+      const curVal = this._state.get(srcKey) ?? 0;
+      const prevVal = prev.get(srcKey) ?? curVal;
+      const delta = (curVal - prevVal) * c.weight;
+      if (Math.abs(delta) > 0.0001) {
+        const tgtKey = `${c.target}.${c.field}`;
+        this._deltas.set(tgtKey, (this._deltas.get(tgtKey) ?? 0) + delta);
+      }
+    }
+
+    // Apply damped deltas to uniforms
+    const result = { ...uniforms };
+    for (const [key, delta] of this._deltas) {
+      const parts = key.split('.');
+      const paramName = parts.length > 1 ? parts[1] : parts[0];
+      if (paramName in result) {
+        result[paramName] += delta * this._damping;
+      }
+    }
+
+    // Multi-hop cascade (depth-limited)
+    for (let depth = 1; depth < this._maxDepth; depth++) {
+      let anyChange = false;
+      for (const c of this._couplings) {
+        const tgtKey = `${c.target}.${c.field}`;
+        const srcDelta = this._deltas.get(c.source) ?? 0;
+        if (Math.abs(srcDelta) > 0.0001) {
+          const cascadeDelta = srcDelta * c.weight * Math.pow(this._damping, depth);
+          this._deltas.set(tgtKey, (this._deltas.get(tgtKey) ?? 0) + cascadeDelta);
+          const parts = tgtKey.split('.');
+          const pn = parts.length > 1 ? parts[1] : parts[0];
+          if (pn in result) { result[pn] += cascadeDelta; anyChange = true; }
+        }
+      }
+      if (!anyChange) break;
+    }
+
+    // Update state for next frame
+    for (const [k, v] of Object.entries(result)) {
+      this._state.set(k, v);
+    }
+
+    return result;
+  }
+
+  get couplings() { return this._couplings; }
+  get activeDeltas() { return Object.fromEntries(this._deltas); }
+}
+
+
+const _gameEasings = {
+  linear: t => t,
+  ease_in_out: t => t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t,
+};
+
+class GameArcTimeline {
+  constructor() {
+    this._startTime = null;
+    this._entries = [
+      { target: 'morph', from: 0, to: 0.3, duration: 8, easing: 'ease_in_out' },
+    ];
+  }
+
+  evaluate(elapsedSec) {
+    if (this._startTime === null) this._startTime = elapsedSec;
+    const t = elapsedSec - this._startTime;
+    const values = {};
+
+    for (const e of this._entries) {
+      const progress = Math.min(t / e.duration, 1.0);
+      const easeFn = _gameEasings[e.easing] || _gameEasings.linear;
+      const eased = easeFn(progress);
+      values[e.target] = e.from + (e.to - e.from) * eased;
+    }
+
+    return values;
+  }
+
+  isComplete(elapsedSec) {
+    if (this._startTime === null) return false;
+    const t = elapsedSec - this._startTime;
+    return this._entries.every(e => t >= e.duration);
+  }
+
+  reset() { this._startTime = null; }
+
+  progress(elapsedSec) {
+    if (this._startTime === null) return 0;
+    const t = elapsedSec - this._startTime;
+    const maxDur = Math.max(...this._entries.map(e => e.duration));
+    return Math.min(t / maxDur, 1.0);
+  }
 }
 
 

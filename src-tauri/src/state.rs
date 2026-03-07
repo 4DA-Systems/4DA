@@ -4,9 +4,9 @@
 use once_cell::sync::{Lazy, OnceCell};
 use parking_lot::Mutex;
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
 use std::sync::Arc;
-use tracing::info;
+use tracing::{info, warn};
 
 use crate::ace;
 use crate::context_engine::ContextEngine;
@@ -306,6 +306,73 @@ pub(crate) fn get_job_queue(
 }
 
 // ============================================================================
+// LLM Daily Token Usage Counter (hard cutoff for cost protection)
+// ============================================================================
+
+/// Tracks total LLM tokens consumed today (all providers, all callers).
+static LLM_DAILY_TOKENS: AtomicU64 = AtomicU64::new(0);
+
+/// Stores the date string (YYYY-MM-DD local time) for daily reset detection.
+static LLM_DAILY_RESET_DATE: Lazy<Mutex<String>> =
+    Lazy::new(|| Mutex::new(chrono::Local::now().format("%Y-%m-%d").to_string()));
+
+/// Record LLM token usage and check if still under the daily limit.
+/// Returns `true` if usage is within the limit, `false` if the limit has been exceeded.
+/// Automatically resets the counter at midnight local time.
+pub(crate) fn record_llm_tokens(count: u64) -> bool {
+    maybe_reset_daily_counter();
+    let new_total = LLM_DAILY_TOKENS.fetch_add(count, Ordering::Relaxed) + count;
+    let limit = get_daily_token_limit();
+    if limit > 0 && new_total > limit {
+        warn!(
+            target: "4da::llm",
+            used = new_total,
+            limit = limit,
+            "Daily LLM token limit exceeded"
+        );
+        return false;
+    }
+    true
+}
+
+/// Check if the daily token limit has already been reached (pre-call gate).
+/// Returns `true` if we are over the limit.
+pub(crate) fn is_llm_limit_reached() -> bool {
+    maybe_reset_daily_counter();
+    let limit = get_daily_token_limit();
+    if limit == 0 {
+        return false; // 0 = unlimited
+    }
+    LLM_DAILY_TOKENS.load(Ordering::Relaxed) >= limit
+}
+
+/// Get current daily LLM token usage and the configured limit.
+/// Returns `(used, limit)` where limit=0 means unlimited.
+pub(crate) fn get_llm_token_usage() -> (u64, u64) {
+    maybe_reset_daily_counter();
+    let used = LLM_DAILY_TOKENS.load(Ordering::Relaxed);
+    let limit = get_daily_token_limit();
+    (used, limit)
+}
+
+/// Reset the counter if the date has changed (new day = fresh budget).
+fn maybe_reset_daily_counter() {
+    let today = chrono::Local::now().format("%Y-%m-%d").to_string();
+    let mut date = LLM_DAILY_RESET_DATE.lock();
+    if *date != today {
+        LLM_DAILY_TOKENS.store(0, Ordering::Relaxed);
+        info!(target: "4da::llm", old_date = %*date, new_date = %today, "Daily LLM token counter reset");
+        *date = today;
+    }
+}
+
+/// Read the daily_token_limit from settings (cached per call; settings rarely change).
+fn get_daily_token_limit() -> u64 {
+    let settings = get_settings_manager().lock();
+    settings.get().rerank.daily_token_limit
+}
+
+// ============================================================================
 // Configuration
 // ============================================================================
 
@@ -465,5 +532,35 @@ mod tests {
         assert!(SUPPORTED_EXTENSIONS.contains(&"py"));
         assert!(SUPPORTED_EXTENSIONS.contains(&"md"));
         assert_eq!(SUPPORTED_EXTENSIONS.len(), 6);
+    }
+
+    #[test]
+    fn test_llm_daily_tokens_tracks_usage() {
+        // Reset to known state
+        LLM_DAILY_TOKENS.store(0, Ordering::Relaxed);
+        let (used, _) = get_llm_token_usage();
+        assert_eq!(used, 0);
+
+        // Record some tokens
+        record_llm_tokens(1000);
+        let (used, _) = get_llm_token_usage();
+        assert_eq!(used, 1000);
+
+        // Record more
+        record_llm_tokens(500);
+        let (used, _) = get_llm_token_usage();
+        assert_eq!(used, 1500);
+
+        // Cleanup
+        LLM_DAILY_TOKENS.store(0, Ordering::Relaxed);
+    }
+
+    #[test]
+    fn test_llm_limit_not_reached_when_zero() {
+        LLM_DAILY_TOKENS.store(0, Ordering::Relaxed);
+        // With default limit > 0 and zero usage, should not be reached
+        // (depends on settings default being > 0, which it is: 500_000)
+        assert!(!is_llm_limit_reached());
+        LLM_DAILY_TOKENS.store(0, Ordering::Relaxed);
     }
 }
