@@ -85,7 +85,7 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
     let progress = u.p_progress;
     let urgency = u.p_urgency;
 
-    var final_color = vec4<f32>(0.0, 0.0, 0.0, 1.0);
+    var final_color = vec4<f32>(0.0, 0.0, 0.0, 0.0);
 
     // ── Layer 1: track ──
     {
@@ -93,10 +93,11 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
         var sdf_result = abs(length(p) - 0.340000) - 0.025000;
         let glow_pulse = 1.200000 * (0.9 + 0.1 * sin(time * 2.0));
         let glow_result = apply_glow(sdf_result, glow_pulse);
-        var color_result = vec4<f32>(vec3<f32>(glow_result), 1.0);
-        color_result = vec4<f32>(color_result.rgb * vec3<f32>(0.200000, 0.200000, 0.200000), 1.0);
+        var color_result = vec4<f32>(vec3<f32>(glow_result), glow_result);
+        color_result = vec4<f32>(color_result.rgb * vec3<f32>(0.200000, 0.200000, 0.200000), color_result.a);
+        let la = color_result.a;
         let lc = color_result.rgb;
-        final_color = vec4<f32>(final_color.rgb + lc, 1.0);
+        final_color = vec4<f32>(final_color.rgb * (1.0 - la) + lc, final_color.a * (1.0 - la) + la);
     }
 
     // ── Layer 2: countdown ──
@@ -116,8 +117,8 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
             sdf_result = select(999.0, sdf_result, arc_theta < progress);
             let glow_pulse = 3.000000 * (0.9 + 0.1 * sin(time * 2.0));
             let glow_result = apply_glow(sdf_result, glow_pulse);
-            var color_result = vec4<f32>(vec3<f32>(glow_result), 1.0);
-            color_result = vec4<f32>(color_result.rgb * vec3<f32>(1.000000, 0.150000, 0.080000), 1.0);
+            var color_result = vec4<f32>(vec3<f32>(glow_result), glow_result);
+            color_result = vec4<f32>(color_result.rgb * vec3<f32>(1.000000, 0.150000, 0.080000), color_result.a);
             then_color = color_result; }
             { var p = p_then;
             { let warp_x = fbm2(p * 5.000000 + vec2<f32>(0.0, 1.3), i32(2.000000), 0.050000, 2.000000);
@@ -128,15 +129,16 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
             sdf_result = select(999.0, sdf_result, arc_theta < progress);
             let glow_pulse = 2.200000 * (0.9 + 0.1 * sin(time * 2.0));
             let glow_result = apply_glow(sdf_result, glow_pulse);
-            var color_result = vec4<f32>(vec3<f32>(glow_result), 1.0);
-            color_result = vec4<f32>(color_result.rgb * vec3<f32>(0.830000, 0.550000, 0.120000), 1.0);
+            var color_result = vec4<f32>(vec3<f32>(glow_result), glow_result);
+            color_result = vec4<f32>(color_result.rgb * vec3<f32>(0.830000, 0.550000, 0.120000), color_result.a);
             else_color = color_result; }
             color_result = select(else_color, then_color, (urgency > 0.700000));
         }
         let prev_color = textureSample(prev_frame, prev_sampler, input.uv);
         color_result = mix(color_result, prev_color, 0.870000);
+        let la = color_result.a;
         let lc = color_result.rgb;
-        final_color = vec4<f32>(final_color.rgb + lc, 1.0);
+        final_color = vec4<f32>(final_color.rgb * (1.0 - la) + lc, final_color.a * (1.0 - la) + la);
     }
 
     return final_color;
@@ -217,7 +219,7 @@ void main(){
     float progress = u_p_progress;
     float urgency = u_p_urgency;
 
-    vec4 final_color = vec4(0.0, 0.0, 0.0, 1.0);
+    vec4 final_color = vec4(0.0, 0.0, 0.0, 0.0);
 
     // ── Layer 1: track ──
     {
@@ -226,10 +228,11 @@ void main(){
         float glow_pulse = 1.200000 * (0.9 + 0.1 * sin(time * 2.0));
         float glow_result = apply_glow(sdf_result, glow_pulse);
 
-        vec4 color_result = vec4(vec3(glow_result), 1.0);
-        color_result = vec4(color_result.rgb * vec3(0.200000, 0.200000, 0.200000), 1.0);
+        vec4 color_result = vec4(vec3(glow_result), glow_result);
+        color_result = vec4(color_result.rgb * vec3(0.200000, 0.200000, 0.200000), color_result.a);
+        float la = color_result.a;
         vec3 lc = color_result.rgb;
-        final_color = vec4(final_color.rgb + lc, 1.0);
+        final_color = vec4(final_color.rgb * (1.0 - la) + lc, final_color.a * (1.0 - la) + la);
     }
 
     // ── Layer 2: countdown ──
@@ -250,8 +253,8 @@ void main(){
             float glow_pulse = 3.000000 * (0.9 + 0.1 * sin(time * 2.0));
             float glow_result = apply_glow(sdf_result, glow_pulse);
 
-            vec4 color_result = vec4(vec3(glow_result), 1.0);
-            color_result = vec4(color_result.rgb * vec3(1.000000, 0.150000, 0.080000), 1.0);
+            vec4 color_result = vec4(vec3(glow_result), glow_result);
+            color_result = vec4(color_result.rgb * vec3(1.000000, 0.150000, 0.080000), color_result.a);
             then_color = color_result; }
             { vec2 p = p_then;
             { float warp_x = fbm2(p * 5.000000 + vec2(0.0, 1.3), int(2.000000), 0.050000, 2.000000);
@@ -263,15 +266,16 @@ void main(){
             float glow_pulse = 2.200000 * (0.9 + 0.1 * sin(time * 2.0));
             float glow_result = apply_glow(sdf_result, glow_pulse);
 
-            vec4 color_result = vec4(vec3(glow_result), 1.0);
-            color_result = vec4(color_result.rgb * vec3(0.830000, 0.550000, 0.120000), 1.0);
+            vec4 color_result = vec4(vec3(glow_result), glow_result);
+            color_result = vec4(color_result.rgb * vec3(0.830000, 0.550000, 0.120000), color_result.a);
             else_color = color_result; }
             color_result = (urgency > 0.700000) ? then_color : else_color;
         }
         vec4 prev_color = texture(u_prev_frame, v_uv);
         color_result = mix(color_result, prev_color, 0.870000);
+        float la = color_result.a;
         vec3 lc = color_result.rgb;
-        final_color = vec4(final_color.rgb + lc, 1.0);
+        final_color = vec4(final_color.rgb * (1.0 - la) + lc, final_color.a * (1.0 - la) + la);
     }
 
     fragColor = final_color;
@@ -376,7 +380,7 @@ class GameRenderer {
     this.pipeline = this.device.createRenderPipeline({
       layout: pipelineLayout,
       vertex: { module: vMod, entryPoint: 'vs_main' },
-      fragment: { module: fMod, entryPoint: 'fs_main', targets: [{ format }] },
+      fragment: { module: fMod, entryPoint: 'fs_main', targets: [{ format, blend: { color: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha' }, alpha: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha' } } }] },
       primitive: { topology: 'triangle-list' }
     });
 
@@ -396,7 +400,7 @@ class GameRenderer {
       this._passPipelines.push(this.device.createRenderPipeline({
         layout: passPL,
         vertex: { module: vMod, entryPoint: 'vs_main' },
-        fragment: { module: mod, entryPoint: 'fs_main', targets: [{ format }] },
+        fragment: { module: mod, entryPoint: 'fs_main', targets: [{ format, blend: { color: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha' }, alpha: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha' } } }] },
         primitive: { topology: 'triangle-list' }
       }));
     }
@@ -442,7 +446,7 @@ class GameRenderer {
     const mainPass = encoder.beginRenderPass({
       colorAttachments: [{
         view: this._passFBOs[0].createView(),
-        loadOp: 'clear', storeOp: 'store', clearValue: { r: 0, g: 0, b: 0, a: 1 }
+        loadOp: 'clear', storeOp: 'store', clearValue: { r: 0, g: 0, b: 0, a: 0 }
       }]
     });
     mainPass.setPipeline(this.pipeline);
@@ -472,7 +476,7 @@ class GameRenderer {
       const pp = encoder.beginRenderPass({
         colorAttachments: [{
           view: targetView,
-          loadOp: 'clear', storeOp: 'store', clearValue: { r: 0, g: 0, b: 0, a: 1 }
+          loadOp: 'clear', storeOp: 'store', clearValue: { r: 0, g: 0, b: 0, a: 0 }
         }]
       });
       pp.setPipeline(this._passPipelines[p]);
@@ -581,7 +585,7 @@ class GameRendererGL {
   }
 
   init() {
-    const gl = this.canvas.getContext('webgl2');
+    const gl = this.canvas.getContext('webgl2', { alpha: true, premultipliedAlpha: true });
     if (!gl) return false;
     this.gl = gl;
 
@@ -646,8 +650,10 @@ class GameRendererGL {
     const gl = this.gl;
     const t = performance.now() / 1000 - this.startTime;
     gl.viewport(0, 0, this.canvas.width, this.canvas.height);
-    gl.clearColor(0, 0, 0, 1);
+    gl.clearColor(0, 0, 0, 0);
     gl.clear(gl.COLOR_BUFFER_BIT);
+    gl.enable(gl.BLEND);
+    gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
     gl.useProgram(this.program);
 
     // Bind previous frame texture

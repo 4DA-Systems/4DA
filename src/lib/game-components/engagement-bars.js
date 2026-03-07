@@ -91,8 +91,8 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
     var sdf_result = noise2(p * 4.000000 + vec2<f32>(time * 0.1, time * 0.07));
     let glow_pulse = glow_val * (0.9 + 0.1 * sin(time * 2.0));
     let glow_result = apply_glow(sdf_result, glow_pulse);
-    var color_result = vec4<f32>(vec3<f32>(glow_result), 1.0);
-    color_result = vec4<f32>(color_result.rgb * vec3<f32>(0.080000, 0.450000, 0.100000), 1.0);
+    var color_result = vec4<f32>(vec3<f32>(glow_result), glow_result);
+    color_result = vec4<f32>(color_result.rgb * vec3<f32>(0.080000, 0.450000, 0.100000), color_result.a);
     let prev_color = textureSample(prev_frame, prev_sampler, input.uv);
     color_result = mix(color_result, prev_color, 0.880000);
     return color_result;
@@ -180,8 +180,8 @@ void main(){
     float glow_pulse = glow_val * (0.9 + 0.1 * sin(time * 2.0));
     float glow_result = apply_glow(sdf_result, glow_pulse);
 
-    vec4 color_result = vec4(vec3(glow_result), 1.0);
-    color_result = vec4(color_result.rgb * vec3(0.080000, 0.450000, 0.100000), 1.0);
+    vec4 color_result = vec4(vec3(glow_result), glow_result);
+    color_result = vec4(color_result.rgb * vec3(0.080000, 0.450000, 0.100000), color_result.a);
     vec4 prev_color = texture(u_prev_frame, v_uv);
     color_result = mix(color_result, prev_color, 0.880000);
     fragColor = color_result;
@@ -286,7 +286,7 @@ class GameRenderer {
     this.pipeline = this.device.createRenderPipeline({
       layout: pipelineLayout,
       vertex: { module: vMod, entryPoint: 'vs_main' },
-      fragment: { module: fMod, entryPoint: 'fs_main', targets: [{ format }] },
+      fragment: { module: fMod, entryPoint: 'fs_main', targets: [{ format, blend: { color: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha' }, alpha: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha' } } }] },
       primitive: { topology: 'triangle-list' }
     });
 
@@ -306,7 +306,7 @@ class GameRenderer {
       this._passPipelines.push(this.device.createRenderPipeline({
         layout: passPL,
         vertex: { module: vMod, entryPoint: 'vs_main' },
-        fragment: { module: mod, entryPoint: 'fs_main', targets: [{ format }] },
+        fragment: { module: mod, entryPoint: 'fs_main', targets: [{ format, blend: { color: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha' }, alpha: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha' } } }] },
         primitive: { topology: 'triangle-list' }
       }));
     }
@@ -352,7 +352,7 @@ class GameRenderer {
     const mainPass = encoder.beginRenderPass({
       colorAttachments: [{
         view: this._passFBOs[0].createView(),
-        loadOp: 'clear', storeOp: 'store', clearValue: { r: 0, g: 0, b: 0, a: 1 }
+        loadOp: 'clear', storeOp: 'store', clearValue: { r: 0, g: 0, b: 0, a: 0 }
       }]
     });
     mainPass.setPipeline(this.pipeline);
@@ -382,7 +382,7 @@ class GameRenderer {
       const pp = encoder.beginRenderPass({
         colorAttachments: [{
           view: targetView,
-          loadOp: 'clear', storeOp: 'store', clearValue: { r: 0, g: 0, b: 0, a: 1 }
+          loadOp: 'clear', storeOp: 'store', clearValue: { r: 0, g: 0, b: 0, a: 0 }
         }]
       });
       pp.setPipeline(this._passPipelines[p]);
@@ -491,7 +491,7 @@ class GameRendererGL {
   }
 
   init() {
-    const gl = this.canvas.getContext('webgl2');
+    const gl = this.canvas.getContext('webgl2', { alpha: true, premultipliedAlpha: true });
     if (!gl) return false;
     this.gl = gl;
 
@@ -556,8 +556,10 @@ class GameRendererGL {
     const gl = this.gl;
     const t = performance.now() / 1000 - this.startTime;
     gl.viewport(0, 0, this.canvas.width, this.canvas.height);
-    gl.clearColor(0, 0, 0, 1);
+    gl.clearColor(0, 0, 0, 0);
     gl.clear(gl.COLOR_BUFFER_BIT);
+    gl.enable(gl.BLEND);
+    gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
     gl.useProgram(this.program);
 
     // Bind previous frame texture
