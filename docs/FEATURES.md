@@ -43,16 +43,16 @@ Extracts context from your Git history:
 - Active branches
 - Commit frequency
 
-#### Behavior Learning
+#### Feedback Signals
 
-Learns from your interactions:
+Uses your interaction signals:
 
 - **Clicks**: Moderate positive signal
 - **Saves**: Strong positive signal
 - **Dismissals**: Strong negative signal
 - **Ignores**: Weak negative signal
 
-Over time, 4DA learns which topics resonate with you and which to filter out.
+Your feedback directly influences which topics score higher and which get filtered out.
 
 ### Multi-Source Analysis
 
