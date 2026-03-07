@@ -340,4 +340,190 @@ mod tests {
         let english = load_english_strings().unwrap();
         assert_eq!(untranslated.len(), english.len());
     }
+
+    // ========================================================================
+    // lang_name — nonexistent / unsupported language codes
+    // ========================================================================
+
+    #[test]
+    fn test_lang_name_returns_code_for_unknown() {
+        // Unsupported language codes should return the code itself
+        assert_eq!(lang_name("zz"), "zz");
+        assert_eq!(lang_name(""), "");
+        assert_eq!(lang_name("elvish"), "elvish");
+    }
+
+    #[test]
+    fn test_lang_name_covers_all_supported() {
+        let supported = [
+            ("ar", "Arabic"),
+            ("de", "German"),
+            ("es", "Spanish"),
+            ("fr", "French"),
+            ("hi", "Hindi"),
+            ("ja", "Japanese"),
+            ("ko", "Korean"),
+            ("nl", "Dutch"),
+            ("pl", "Polish"),
+            ("pt", "Portuguese"),
+            ("ru", "Russian"),
+            ("zh", "Simplified Chinese"),
+        ];
+        for (code, name) in supported {
+            assert_eq!(lang_name(code), name, "lang_name({}) should be {}", code, name);
+        }
+    }
+
+    // ========================================================================
+    // escape_json_value — edge cases
+    // ========================================================================
+
+    #[test]
+    fn test_escape_json_value_empty_string() {
+        assert_eq!(escape_json_value(""), "");
+    }
+
+    #[test]
+    fn test_escape_json_value_no_special_chars() {
+        assert_eq!(escape_json_value("Hello world"), "Hello world");
+    }
+
+    #[test]
+    fn test_escape_json_value_multiple_special_chars() {
+        assert_eq!(
+            escape_json_value(r#"She said "hello\" and left"#),
+            r#"She said \"hello\\\" and left"#
+        );
+    }
+
+    // ========================================================================
+    // strip_markdown_fences — edge cases
+    // ========================================================================
+
+    #[test]
+    fn test_strip_markdown_fences_generic_fence() {
+        let input = "```\n{\"key\": \"value\"}\n```";
+        assert_eq!(strip_markdown_fences(input), "{\"key\": \"value\"}");
+    }
+
+    #[test]
+    fn test_strip_markdown_fences_no_fences() {
+        let input = "{\"key\": \"value\"}";
+        assert_eq!(strip_markdown_fences(input), input);
+    }
+
+    #[test]
+    fn test_strip_markdown_fences_unmatched_opening() {
+        // Only opening fence, no closing — should return trimmed input
+        let input = "```json\n{\"key\": \"value\"}";
+        // No closing ```, so strip_prefix succeeds but strip_suffix fails -> returns trimmed original
+        assert_eq!(strip_markdown_fences(input), input);
+    }
+
+    #[test]
+    fn test_strip_markdown_fences_whitespace_handling() {
+        let input = "  ```json\n{\"a\": 1}\n```  ";
+        assert_eq!(strip_markdown_fences(input), "{\"a\": 1}");
+    }
+
+    // ========================================================================
+    // save_translations — round-trip through filesystem
+    // ========================================================================
+
+    #[test]
+    fn test_save_translations_and_reload() {
+        // Use a unique test language to avoid interfering with real data
+        let test_lang = "zz_test_save_roundtrip";
+        let trans_dir = crate::i18n::translations_dir().join(test_lang);
+
+        // Clean up from any previous test run
+        let _ = std::fs::remove_dir_all(&trans_dir);
+
+        let mut translations = HashMap::new();
+        translations.insert("ui:test.key1".to_string(), "Translated One".to_string());
+        translations.insert("ui:test.key2".to_string(), "Translated Two".to_string());
+        translations.insert("errors:err.test".to_string(), "Error Translation".to_string());
+
+        let count = save_translations(&translations, test_lang).expect("save should succeed");
+        assert_eq!(count, 3);
+
+        // Verify files exist
+        let ui_path = trans_dir.join("ui.json");
+        assert!(ui_path.exists(), "ui.json should have been created");
+
+        let errors_path = trans_dir.join("errors.json");
+        assert!(errors_path.exists(), "errors.json should have been created");
+
+        // Verify content
+        let ui_content: HashMap<String, String> =
+            serde_json::from_str(&std::fs::read_to_string(&ui_path).unwrap()).unwrap();
+        assert_eq!(ui_content.get("test.key1"), Some(&"Translated One".to_string()));
+        assert_eq!(ui_content.get("test.key2"), Some(&"Translated Two".to_string()));
+
+        // Clean up
+        let _ = std::fs::remove_dir_all(&trans_dir);
+    }
+
+    #[test]
+    fn test_save_translations_merges_with_existing() {
+        let test_lang = "zz_test_merge";
+        let trans_dir = crate::i18n::translations_dir().join(test_lang);
+        let _ = std::fs::remove_dir_all(&trans_dir);
+        std::fs::create_dir_all(&trans_dir).expect("create dir");
+
+        // Write initial translation
+        let mut initial: HashMap<String, String> = HashMap::new();
+        initial.insert("existing.key".to_string(), "Existing Value".to_string());
+        std::fs::write(
+            trans_dir.join("ui.json"),
+            serde_json::to_string_pretty(&initial).unwrap(),
+        )
+        .expect("write initial");
+
+        // Save new translations
+        let mut new_translations = HashMap::new();
+        new_translations.insert("ui:new.key".to_string(), "New Value".to_string());
+        save_translations(&new_translations, test_lang).expect("save should succeed");
+
+        // Verify merge: both old and new keys should exist
+        let merged: HashMap<String, String> = serde_json::from_str(
+            &std::fs::read_to_string(trans_dir.join("ui.json")).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(merged.get("existing.key"), Some(&"Existing Value".to_string()));
+        assert_eq!(merged.get("new.key"), Some(&"New Value".to_string()));
+
+        let _ = std::fs::remove_dir_all(&trans_dir);
+    }
+
+    #[test]
+    fn test_save_translations_ignores_keys_without_namespace() {
+        let test_lang = "zz_test_no_ns";
+        let trans_dir = crate::i18n::translations_dir().join(test_lang);
+        let _ = std::fs::remove_dir_all(&trans_dir);
+
+        let mut translations = HashMap::new();
+        translations.insert("no_namespace_key".to_string(), "Value".to_string());
+
+        let count = save_translations(&translations, test_lang).expect("save should succeed");
+        assert_eq!(count, 0, "Keys without namespace:key format should be skipped");
+
+        let _ = std::fs::remove_dir_all(&trans_dir);
+    }
+
+    // ========================================================================
+    // TranslationStatus struct
+    // ========================================================================
+
+    #[test]
+    fn test_translation_status_zero_total() {
+        let status = TranslationStatus {
+            language: "zz".to_string(),
+            total_keys: 0,
+            translated_keys: 0,
+            percentage: 0.0,
+        };
+        assert_eq!(status.total_keys, 0);
+        assert_eq!(status.percentage, 0.0);
+    }
 }
