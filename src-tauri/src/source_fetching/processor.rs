@@ -66,15 +66,42 @@ pub(crate) async fn fill_cache_background(app: &AppHandle) -> Result<usize, Stri
         lobsters_result,
         devto_result,
     ) = tokio::join!(
-        async { rl.wait_for_rate_limit("hackernews").await; hn_source.fetch_items_deep(50).await },
-        async { rl.wait_for_rate_limit("arxiv").await; arxiv_source.fetch_items_deep(50).await },
-        async { rl.wait_for_rate_limit("reddit").await; reddit_source.fetch_items_deep(50).await },
-        async { rl.wait_for_rate_limit("github").await; github_source.fetch_items().await },
-        async { rl.wait_for_rate_limit("rss").await; rss_source.fetch_items().await },
-        async { rl.wait_for_rate_limit("twitter").await; twitter_source.fetch_items_deep(50).await },
-        async { rl.wait_for_rate_limit("youtube").await; youtube_source.fetch_items().await },
-        async { rl.wait_for_rate_limit("lobsters").await; lobsters_source.fetch_items_deep(50).await },
-        async { rl.wait_for_rate_limit("devto").await; devto_source.fetch_items_deep(50).await },
+        async {
+            rl.wait_for_rate_limit("hackernews").await;
+            hn_source.fetch_items_deep(50).await
+        },
+        async {
+            rl.wait_for_rate_limit("arxiv").await;
+            arxiv_source.fetch_items_deep(50).await
+        },
+        async {
+            rl.wait_for_rate_limit("reddit").await;
+            reddit_source.fetch_items_deep(50).await
+        },
+        async {
+            rl.wait_for_rate_limit("github").await;
+            github_source.fetch_items().await
+        },
+        async {
+            rl.wait_for_rate_limit("rss").await;
+            rss_source.fetch_items().await
+        },
+        async {
+            rl.wait_for_rate_limit("twitter").await;
+            twitter_source.fetch_items_deep(50).await
+        },
+        async {
+            rl.wait_for_rate_limit("youtube").await;
+            youtube_source.fetch_items().await
+        },
+        async {
+            rl.wait_for_rate_limit("lobsters").await;
+            lobsters_source.fetch_items_deep(50).await
+        },
+        async {
+            rl.wait_for_rate_limit("devto").await;
+            devto_source.fetch_items_deep(50).await
+        },
     );
 
     // Process HN results
