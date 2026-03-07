@@ -78,6 +78,8 @@ impl LLMClient {
 
     /// Send a completion request.
     /// Enforces the daily token limit — returns an error if the budget is exhausted.
+    /// When a cloud provider (anthropic/openai) fails with a network or API error,
+    /// transparently falls back to local Ollama at localhost:11434.
     pub async fn complete(
         &self,
         system: &str,
@@ -98,12 +100,27 @@ impl LLMClient {
             ));
         }
 
-        let response = match self.provider.provider.as_str() {
-            "anthropic" => self.complete_anthropic(system, messages).await,
-            "openai" => self.complete_openai(system, messages).await,
-            "ollama" => self.complete_ollama(system, messages).await,
+        let result = match self.provider.provider.as_str() {
+            "anthropic" => self.complete_anthropic(system, messages.clone()).await,
+            "openai" => self.complete_openai(system, messages.clone()).await,
+            "ollama" => self.complete_ollama(system, messages.clone()).await,
             _ => return Err(format!("Unknown provider: {}", self.provider.provider)),
-        }?;
+        };
+
+        // If a cloud provider failed, attempt Ollama fallback
+        let response = match result {
+            Ok(resp) => resp,
+            Err(ref err) if self.should_fallback_to_ollama(err) => {
+                warn!(
+                    target: "4da::llm",
+                    provider = %self.provider.provider,
+                    error = %err,
+                    "Cloud LLM failed, falling back to local Ollama"
+                );
+                self.complete_ollama_fallback(system, messages).await?
+            }
+            Err(err) => return Err(err),
+        };
 
         // Record token usage (atomic, lock-free for the counter itself)
         let total_tokens = response.input_tokens + response.output_tokens;
@@ -119,6 +136,112 @@ impl LLMClient {
         }
 
         Ok(response)
+    }
+
+    /// Determine whether a failed LLM call should fall back to Ollama.
+    /// Only falls back when:
+    /// - The current provider is NOT already Ollama
+    /// - The error looks like a network/API issue (not a token-limit or budget error)
+    fn should_fallback_to_ollama(&self, error: &str) -> bool {
+        // Never fallback if already using Ollama
+        if self.provider.provider == "ollama" {
+            return false;
+        }
+
+        // Don't fallback for token/budget limit errors (these are intentional caps)
+        let is_limit_error = error.contains("token limit")
+            || error.contains("rate limit")
+            || error.contains("quota")
+            || error.contains("billing")
+            || error.contains("insufficient_quota");
+
+        !is_limit_error
+    }
+
+    /// Ollama fallback: uses localhost:11434 with a sensible default model.
+    /// This is only called when the primary cloud provider has failed.
+    async fn complete_ollama_fallback(
+        &self,
+        system: &str,
+        messages: Vec<Message>,
+    ) -> Result<LLMResponse, String> {
+        let fallback_base_url = "http://localhost:11434";
+        let fallback_model = "llama3";
+        let url = format!("{}/api/chat", fallback_base_url);
+
+        let mut all_messages = vec![serde_json::json!({
+            "role": "system",
+            "content": system
+        })];
+
+        for m in &messages {
+            all_messages.push(serde_json::json!({
+                "role": m.role,
+                "content": m.content
+            }));
+        }
+
+        let body = serde_json::json!({
+            "model": fallback_model,
+            "messages": all_messages,
+            "stream": false
+        });
+
+        // Use a longer timeout for Ollama cold starts
+        let fallback_client = reqwest::Client::builder()
+            .connect_timeout(std::time::Duration::from_secs(10))
+            .timeout(std::time::Duration::from_secs(120))
+            .build()
+            .unwrap_or_else(|_| reqwest::Client::new());
+
+        let response = fallback_client
+            .post(&url)
+            .header("content-type", "application/json")
+            .json(&body)
+            .send()
+            .await
+            .map_err(|e| {
+                format!(
+                    "Ollama fallback also failed (is Ollama running?): {}",
+                    e
+                )
+            })?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let text = response.text().await.unwrap_or_default();
+            return Err(format!(
+                "Ollama fallback error {}: {}",
+                status, text
+            ));
+        }
+
+        let data: serde_json::Value = response
+            .json()
+            .await
+            .map_err(|e| format!("Failed to parse Ollama fallback response: {}", e))?;
+
+        let content = data["message"]["content"]
+            .as_str()
+            .unwrap_or("")
+            .to_string();
+
+        let input_tokens = data["prompt_eval_count"].as_u64().unwrap_or(0);
+        let output_tokens = data["eval_count"].as_u64().unwrap_or(0);
+
+        warn!(
+            target: "4da::llm",
+            model = fallback_model,
+            input_tokens = input_tokens,
+            output_tokens = output_tokens,
+            "Ollama fallback succeeded"
+        );
+
+        Ok(LLMResponse {
+            content,
+            input_tokens,
+            output_tokens,
+        })
     }
 
     /// Anthropic Claude API
@@ -656,5 +779,290 @@ mod tests {
 
         let cost = client.estimate_cost_cents(100_000, 10_000);
         assert_eq!(cost, 0);
+    }
+
+    // ========================================================================
+    // is_configured — empty API key handling
+    // ========================================================================
+
+    #[test]
+    fn test_is_configured_empty_api_key_anthropic() {
+        let provider = LLMProvider {
+            provider: "anthropic".to_string(),
+            api_key: String::new(),
+            model: "claude-3-haiku-20240307".to_string(),
+            base_url: None,
+            openai_api_key: String::new(),
+        };
+        let client = LLMClient::new(provider);
+        assert!(!client.is_configured(), "Anthropic with empty API key should not be configured");
+    }
+
+    #[test]
+    fn test_is_configured_empty_api_key_openai() {
+        let provider = LLMProvider {
+            provider: "openai".to_string(),
+            api_key: String::new(),
+            model: "gpt-4o-mini".to_string(),
+            base_url: None,
+            openai_api_key: String::new(),
+        };
+        let client = LLMClient::new(provider);
+        assert!(!client.is_configured(), "OpenAI with empty API key should not be configured");
+    }
+
+    #[test]
+    fn test_is_configured_ollama_no_key_needed() {
+        let provider = LLMProvider {
+            provider: "ollama".to_string(),
+            api_key: String::new(),
+            model: "llama3".to_string(),
+            base_url: None,
+            openai_api_key: String::new(),
+        };
+        let client = LLMClient::new(provider);
+        assert!(client.is_configured(), "Ollama should be configured without an API key");
+    }
+
+    #[test]
+    fn test_is_configured_with_valid_api_key() {
+        let provider = LLMProvider {
+            provider: "anthropic".to_string(),
+            api_key: "sk-ant-test-key-12345".to_string(),
+            model: "claude-3-haiku-20240307".to_string(),
+            base_url: None,
+            openai_api_key: String::new(),
+        };
+        let client = LLMClient::new(provider);
+        assert!(client.is_configured(), "Anthropic with API key should be configured");
+    }
+
+    #[test]
+    fn test_is_configured_unknown_provider() {
+        let provider = LLMProvider {
+            provider: "unknown_provider".to_string(),
+            api_key: "some-key".to_string(),
+            model: "some-model".to_string(),
+            base_url: None,
+            openai_api_key: String::new(),
+        };
+        let client = LLMClient::new(provider);
+        assert!(!client.is_configured(), "Unknown provider should not be configured");
+    }
+
+    // ========================================================================
+    // parse_judgments — malformed / invalid API responses
+    // ========================================================================
+
+    #[test]
+    fn test_parse_judgments_valid_response() {
+        let provider = LLMProvider::default();
+        let judge = RelevanceJudge::new(provider);
+        let items = vec![
+            ("item1".to_string(), "Title 1".to_string(), "Content 1".to_string()),
+        ];
+
+        let response = r#"[{"id": "item1", "score": 4, "reason": "Highly relevant"}]"#;
+        let result = judge.parse_judgments(response, &items);
+        assert!(result.is_ok());
+        let judgments = result.unwrap();
+        assert_eq!(judgments.len(), 1);
+        assert_eq!(judgments[0].item_id, "item1");
+        assert!(judgments[0].relevant); // score 4 >= 3 -> relevant
+        assert!((judgments[0].confidence - 0.8).abs() < f32::EPSILON); // 4/5
+    }
+
+    #[test]
+    fn test_parse_judgments_invalid_json() {
+        let provider = LLMProvider::default();
+        let judge = RelevanceJudge::new(provider);
+        let items = vec![
+            ("item1".to_string(), "Title 1".to_string(), "Content 1".to_string()),
+        ];
+
+        let response = "This is not valid JSON at all";
+        let result = judge.parse_judgments(response, &items);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("Failed to parse LLM response as JSON"));
+    }
+
+    #[test]
+    fn test_parse_judgments_empty_array() {
+        let provider = LLMProvider::default();
+        let judge = RelevanceJudge::new(provider);
+        let items = vec![
+            ("item1".to_string(), "Title 1".to_string(), "Content 1".to_string()),
+        ];
+
+        let response = "[]";
+        let result = judge.parse_judgments(response, &items);
+        assert!(result.is_ok());
+        let judgments = result.unwrap();
+        // Missing item should get a default "no judgment" entry
+        assert_eq!(judgments.len(), 1);
+        assert_eq!(judgments[0].item_id, "item1");
+        assert!(!judgments[0].relevant);
+        assert!((judgments[0].confidence - 0.0).abs() < f32::EPSILON);
+        assert_eq!(judgments[0].reasoning, "No judgment provided by LLM");
+    }
+
+    #[test]
+    fn test_parse_judgments_json_with_surrounding_text() {
+        let provider = LLMProvider::default();
+        let judge = RelevanceJudge::new(provider);
+        let items = vec![
+            ("item1".to_string(), "Title".to_string(), "Content".to_string()),
+        ];
+
+        // LLM sometimes wraps response in text before/after the JSON array
+        let response = r#"Here are the judgments:
+[{"id": "item1", "score": 2, "reason": "Marginal relevance"}]
+That's it."#;
+        let result = judge.parse_judgments(response, &items);
+        assert!(result.is_ok());
+        let judgments = result.unwrap();
+        assert_eq!(judgments[0].item_id, "item1");
+        assert!(!judgments[0].relevant); // score 2 < 3 -> not relevant
+    }
+
+    #[test]
+    fn test_parse_judgments_missing_fields_use_defaults() {
+        let provider = LLMProvider::default();
+        let judge = RelevanceJudge::new(provider);
+        let items = vec![
+            ("item1".to_string(), "Title".to_string(), "Content".to_string()),
+        ];
+
+        // Response with missing score, reason, etc.
+        let response = r#"[{"id": "item1"}]"#;
+        let result = judge.parse_judgments(response, &items);
+        assert!(result.is_ok());
+        let judgments = result.unwrap();
+        assert_eq!(judgments[0].item_id, "item1");
+        // Default score is 1.0, so not relevant, confidence = 1/5 = 0.2
+        assert!(!judgments[0].relevant);
+        assert!((judgments[0].confidence - 0.2).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn test_parse_judgments_score_clamped_out_of_range() {
+        let provider = LLMProvider::default();
+        let judge = RelevanceJudge::new(provider);
+        let items = vec![
+            ("item1".to_string(), "Title".to_string(), "Content".to_string()),
+            ("item2".to_string(), "Title 2".to_string(), "Content 2".to_string()),
+        ];
+
+        // Score 10 should be clamped to 5, score -3 should be clamped to 1
+        let response = r#"[
+            {"id": "item1", "score": 10, "reason": "Over max"},
+            {"id": "item2", "score": -3, "reason": "Under min"}
+        ]"#;
+        let result = judge.parse_judgments(response, &items);
+        assert!(result.is_ok());
+        let judgments = result.unwrap();
+        // Score 10 clamped to 5 -> confidence = 5/5 = 1.0
+        assert!(judgments[0].relevant);
+        assert!((judgments[0].confidence - 1.0).abs() < f32::EPSILON);
+        // Score -3 clamped to 1 -> confidence = 1/5 = 0.2
+        assert!(!judgments[1].relevant);
+        assert!((judgments[1].confidence - 0.2).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn test_parse_judgments_legacy_boolean_format() {
+        let provider = LLMProvider::default();
+        let judge = RelevanceJudge::new(provider);
+        let items = vec![
+            ("item1".to_string(), "Title".to_string(), "Content".to_string()),
+        ];
+
+        // Legacy format: "relevant" boolean instead of "score"
+        let response = r#"[{"id": "item1", "relevant": true, "confidence": 0.85, "reasoning": "Very useful"}]"#;
+        let result = judge.parse_judgments(response, &items);
+        assert!(result.is_ok());
+        let judgments = result.unwrap();
+        assert!(judgments[0].relevant);
+        assert!((judgments[0].confidence - 0.85).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn test_parse_judgments_numeric_id() {
+        let provider = LLMProvider::default();
+        let judge = RelevanceJudge::new(provider);
+        let items = vec![
+            ("42".to_string(), "Title".to_string(), "Content".to_string()),
+        ];
+
+        // LLM returns id as number instead of string
+        let response = r#"[{"id": 42, "score": 3, "reason": "Worth knowing"}]"#;
+        let result = judge.parse_judgments(response, &items);
+        assert!(result.is_ok());
+        let judgments = result.unwrap();
+        assert_eq!(judgments[0].item_id, "42");
+    }
+
+    // ========================================================================
+    // judge_batch — empty items returns immediately
+    // ========================================================================
+
+    #[tokio::test]
+    async fn test_judge_batch_empty_items() {
+        let provider = LLMProvider::default();
+        let judge = RelevanceJudge::new(provider);
+
+        let result = judge.judge_batch("test context", vec![]).await;
+        assert!(result.is_ok());
+        let (judgments, input_tokens, output_tokens) = result.unwrap();
+        assert!(judgments.is_empty());
+        assert_eq!(input_tokens, 0);
+        assert_eq!(output_tokens, 0);
+    }
+
+    // ========================================================================
+    // Cost estimation edge cases
+    // ========================================================================
+
+    #[test]
+    fn test_cost_estimation_unknown_provider() {
+        let provider = LLMProvider {
+            provider: "unknown".to_string(),
+            api_key: String::new(),
+            model: "whatever".to_string(),
+            base_url: None,
+            openai_api_key: String::new(),
+        };
+        let client = LLMClient::new(provider);
+        let cost = client.estimate_cost_cents(100_000, 10_000);
+        assert_eq!(cost, 0, "Unknown provider should have zero cost");
+    }
+
+    #[test]
+    fn test_cost_estimation_zero_tokens() {
+        let provider = LLMProvider {
+            provider: "anthropic".to_string(),
+            api_key: "test".to_string(),
+            model: "claude-3-sonnet-20240229".to_string(),
+            base_url: None,
+            openai_api_key: String::new(),
+        };
+        let client = LLMClient::new(provider);
+        let cost = client.estimate_cost_cents(0, 0);
+        assert_eq!(cost, 0, "Zero tokens should cost zero");
+    }
+
+    #[test]
+    fn test_cost_estimation_openai_models() {
+        let provider = LLMProvider {
+            provider: "openai".to_string(),
+            api_key: "test".to_string(),
+            model: "gpt-4o-mini".to_string(),
+            base_url: None,
+            openai_api_key: String::new(),
+        };
+        let client = LLMClient::new(provider);
+        // gpt-4o-mini is the cheapest OpenAI model
+        let cost = client.estimate_cost_cents(10_000, 1_000);
+        assert!(cost < 1, "gpt-4o-mini should be very cheap for small usage");
     }
 }
