@@ -70,6 +70,19 @@ pub async fn get_settings() -> Result<serde_json::Value> {
     }))
 }
 
+/// Get current daily LLM token usage vs configured limit.
+/// Returns { used, limit, limit_reached, resets_at } for the frontend.
+#[tauri::command]
+pub async fn get_llm_usage() -> Result<serde_json::Value> {
+    let (used, limit) = crate::get_llm_token_usage();
+    Ok(serde_json::json!({
+        "used": used,
+        "limit": limit,
+        "limit_reached": limit > 0 && used >= limit,
+        "unlimited": limit == 0,
+    }))
+}
+
 /// Update LLM provider settings
 #[tauri::command]
 pub async fn set_llm_provider(
@@ -652,6 +665,46 @@ pub async fn start_trial() -> Result<serde_json::Value> {
     Ok(serde_json::json!({
         "success": true,
         "days_remaining": 30,
+    }))
+}
+
+/// Validate the current license key against the Keygen API.
+/// Returns the validation result and updates the tier in settings if needed.
+#[tauri::command]
+pub async fn validate_license() -> Result<serde_json::Value> {
+    // Read current license info (release lock before async work)
+    let (license_key, current_tier) = {
+        let manager = get_settings_manager();
+        let guard = manager.lock();
+        let license = &guard.get().license;
+        (license.license_key.clone(), license.tier.clone())
+    };
+
+    if license_key.is_empty() {
+        return Ok(serde_json::json!({
+            "validated": false,
+            "tier": "free",
+            "detail": "No license key configured",
+        }));
+    }
+
+    let result = crate::settings::validate_license_key_keygen(&license_key, &current_tier).await;
+
+    // Update tier in settings if it changed
+    if result.tier != current_tier {
+        let manager = get_settings_manager();
+        let mut guard = manager.lock();
+        let settings = guard.get_mut();
+        info!(target: "4da::license", old_tier = %current_tier, new_tier = %result.tier, "Tier updated after Keygen validation");
+        settings.license.tier = result.tier.clone();
+        let _ = guard.save();
+    }
+
+    Ok(serde_json::json!({
+        "validated": result.online || result.cached,
+        "tier": result.tier,
+        "cached": result.cached,
+        "detail": result.detail,
     }))
 }
 

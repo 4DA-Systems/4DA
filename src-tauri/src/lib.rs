@@ -44,7 +44,7 @@ pub use commands::{
 // Re-exports from state (preserves `use crate::accessor` interface)
 pub(crate) use state::{
     get_ace_engine, get_ace_engine_mut, get_analysis_abort, get_analysis_state, get_context_dir,
-    get_context_dirs, get_context_engine, get_database, get_monitoring_state,
+    get_context_dirs, get_context_engine, get_database, get_llm_token_usage, get_monitoring_state,
     get_relevance_threshold, get_settings_manager, get_source_registry, invalidate_context_engine,
     open_db_connection, register_sqlite_vec_extension, set_relevance_threshold,
     SUPPORTED_EXTENSIONS,
@@ -172,6 +172,9 @@ use source_fetching::fill_cache_background;
 #[doc(hidden)]
 pub mod test_utils;
 
+#[cfg(test)]
+mod privacy_tests;
+
 // ============================================================================
 // App Entry
 // ============================================================================
@@ -274,6 +277,7 @@ pub fn run() {
             analysis::cancel_analysis,
             // Settings
             settings_commands::get_settings,
+            settings_commands::get_llm_usage,
             settings_commands::set_llm_provider,
             settings_commands::mark_onboarding_complete,
             settings_commands::set_rerank_config,
@@ -291,6 +295,7 @@ pub fn run() {
             settings_commands::activate_license,
             settings_commands::get_trial_status,
             settings_commands::start_trial,
+            settings_commands::validate_license,
             settings_commands::get_locale,
             settings_commands::set_locale,
             settings_commands::get_streets_tier,
@@ -714,6 +719,48 @@ pub fn run() {
                     let warm_handle = app_handle.clone();
                     tauri::async_runtime::spawn(async move {
                         ollama::ensure_models_available(&model, &base_url, &warm_handle).await;
+                    });
+                }
+            }
+
+            // Validate license key against Keygen API (fire-and-forget, non-blocking)
+            {
+                let license_key = {
+                    let settings = get_settings_manager().lock();
+                    settings.get().license.license_key.clone()
+                };
+                if !license_key.is_empty() {
+                    let current_tier = {
+                        let settings = get_settings_manager().lock();
+                        settings.get().license.tier.clone()
+                    };
+                    tauri::async_runtime::spawn(async move {
+                        info!(target: "4da::license", "Startup license validation (Keygen)");
+                        let result = crate::settings::validate_license_key_keygen(
+                            &license_key,
+                            &current_tier,
+                        )
+                        .await;
+                        if result.tier != current_tier {
+                            let manager = get_settings_manager();
+                            let mut guard = manager.lock();
+                            let settings = guard.get_mut();
+                            info!(target: "4da::license",
+                                old_tier = %current_tier,
+                                new_tier = %result.tier,
+                                detail = %result.detail,
+                                "Tier updated after startup Keygen validation"
+                            );
+                            settings.license.tier = result.tier;
+                            let _ = guard.save();
+                        } else {
+                            info!(target: "4da::license",
+                                tier = %result.tier,
+                                cached = result.cached,
+                                detail = %result.detail,
+                                "Startup license validation complete"
+                            );
+                        }
                     });
                 }
             }
