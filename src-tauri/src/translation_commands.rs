@@ -439,4 +439,175 @@ mod tests {
             assert!(!status.is_empty(), "Status value should not be empty");
         }
     }
+
+    // ========================================================================
+    // File too large guard — delete_translation_override
+    // ========================================================================
+
+    #[test]
+    fn delete_override_file_too_large_guard() {
+        // The delete_translation_override function checks metadata for files > 1MB.
+        // We create a file > 1MB to verify the guard fires.
+        let test_lang = "zz_too_large_guard_test";
+        let test_ns = "ui";
+        let overrides_dir = crate::i18n::translations_dir()
+            .join("overrides")
+            .join(test_lang);
+        std::fs::create_dir_all(&overrides_dir).expect("create test dir");
+
+        let path = overrides_dir.join(format!("{}.json", test_ns));
+        // Write a file slightly over 1MB
+        let large_content = "x".repeat(1_000_001);
+        std::fs::write(&path, &large_content).expect("write large file");
+
+        let result = delete_translation_override(
+            test_lang.to_string(),
+            test_ns.to_string(),
+            "some.key".to_string(),
+        );
+
+        assert!(result.is_err(), "Should error on files > 1MB");
+        assert_eq!(result.unwrap_err(), "Override file too large");
+
+        // Cleanup
+        let _ = std::fs::remove_dir_all(&overrides_dir);
+    }
+
+    #[test]
+    fn delete_override_nonexistent_file_returns_ok() {
+        // When the override file doesn't exist, delete should be a no-op success.
+        let result = delete_translation_override(
+            "zz_nonexistent_delete_test".to_string(),
+            "ui".to_string(),
+            "some.key".to_string(),
+        );
+        assert!(result.is_ok(), "Deleting from nonexistent file should succeed");
+    }
+
+    #[test]
+    fn delete_override_removes_key_from_file() {
+        let test_lang = "zz_delete_key_test";
+        let test_ns = "ui";
+        let overrides_dir = crate::i18n::translations_dir()
+            .join("overrides")
+            .join(test_lang);
+        std::fs::create_dir_all(&overrides_dir).expect("create test dir");
+
+        let path = overrides_dir.join(format!("{}.json", test_ns));
+
+        // Write an override file with two keys
+        let mut map = HashMap::new();
+        map.insert("key.to.delete".to_string(), "Delete Me".to_string());
+        map.insert("key.to.keep".to_string(), "Keep Me".to_string());
+        std::fs::write(&path, serde_json::to_string_pretty(&map).unwrap())
+            .expect("write override file");
+
+        let result = delete_translation_override(
+            test_lang.to_string(),
+            test_ns.to_string(),
+            "key.to.delete".to_string(),
+        );
+        assert!(result.is_ok());
+
+        // Verify the key was removed but the other key remains
+        let content: HashMap<String, String> =
+            serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+        assert!(!content.contains_key("key.to.delete"), "Deleted key should be gone");
+        assert_eq!(content.get("key.to.keep"), Some(&"Keep Me".to_string()));
+
+        // Cleanup
+        let _ = std::fs::remove_dir_all(&overrides_dir);
+    }
+
+    #[test]
+    fn delete_override_malformed_json_file_returns_ok() {
+        // If the override file has malformed JSON, unwrap_or_default() gives an empty map,
+        // then the key removal is a no-op, and the file is rewritten with "{}".
+        let test_lang = "zz_malformed_delete_test";
+        let test_ns = "errors";
+        let overrides_dir = crate::i18n::translations_dir()
+            .join("overrides")
+            .join(test_lang);
+        std::fs::create_dir_all(&overrides_dir).expect("create test dir");
+
+        let path = overrides_dir.join(format!("{}.json", test_ns));
+        std::fs::write(&path, "not valid json {{{").expect("write malformed");
+
+        let result = delete_translation_override(
+            test_lang.to_string(),
+            test_ns.to_string(),
+            "some.key".to_string(),
+        );
+        assert!(result.is_ok(), "Malformed JSON should be handled gracefully");
+
+        // File should now contain valid empty JSON
+        let content: HashMap<String, String> =
+            serde_json::from_str(&std::fs::read_to_string(&path).unwrap())
+                .expect("File should now be valid JSON");
+        assert!(content.is_empty());
+
+        let _ = std::fs::remove_dir_all(&overrides_dir);
+    }
+
+    // ========================================================================
+    // save_translation_override — error paths
+    // ========================================================================
+
+    #[test]
+    fn save_override_creates_dir_and_file() {
+        let test_lang = "zz_save_override_test";
+        let test_ns = "ui";
+        let overrides_dir = crate::i18n::translations_dir()
+            .join("overrides")
+            .join(test_lang);
+        let _ = std::fs::remove_dir_all(&overrides_dir);
+
+        let result = save_translation_override(
+            test_lang.to_string(),
+            test_ns.to_string(),
+            "test.key".to_string(),
+            "Custom Value".to_string(),
+        );
+        assert!(result.is_ok());
+
+        let path = overrides_dir.join(format!("{}.json", test_ns));
+        assert!(path.exists(), "Override file should have been created");
+
+        let content: HashMap<String, String> =
+            serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+        assert_eq!(content.get("test.key"), Some(&"Custom Value".to_string()));
+
+        let _ = std::fs::remove_dir_all(&overrides_dir);
+    }
+
+    #[test]
+    fn save_override_merges_with_existing() {
+        let test_lang = "zz_save_merge_test";
+        let test_ns = "coach";
+        let overrides_dir = crate::i18n::translations_dir()
+            .join("overrides")
+            .join(test_lang);
+        std::fs::create_dir_all(&overrides_dir).expect("create dir");
+
+        let path = overrides_dir.join(format!("{}.json", test_ns));
+        let mut initial = HashMap::new();
+        initial.insert("existing.key".to_string(), "Existing".to_string());
+        std::fs::write(&path, serde_json::to_string_pretty(&initial).unwrap())
+            .expect("write initial");
+
+        let result = save_translation_override(
+            test_lang.to_string(),
+            test_ns.to_string(),
+            "new.key".to_string(),
+            "New Override".to_string(),
+        );
+        assert!(result.is_ok());
+
+        let content: HashMap<String, String> =
+            serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+        assert_eq!(content.get("existing.key"), Some(&"Existing".to_string()));
+        assert_eq!(content.get("new.key"), Some(&"New Override".to_string()));
+
+        let _ = std::fs::remove_dir_all(&overrides_dir);
+    }
 }
