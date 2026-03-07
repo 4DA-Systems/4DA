@@ -10,6 +10,7 @@ use crate::sources::devto::DevtoSource;
 use crate::sources::github::GitHubSource;
 use crate::sources::hackernews::HackerNewsSource;
 use crate::sources::lobsters::LobstersSource;
+use crate::sources::rate_limiter::rate_limiter;
 use crate::sources::reddit::RedditSource;
 use crate::sources::rss::RssSource;
 use crate::sources::twitter::TwitterSource;
@@ -52,7 +53,8 @@ pub(crate) async fn fill_cache_background(app: &AppHandle) -> Result<usize, Stri
     let mut total_cached = 0;
     let mut new_items_to_embed: Vec<(String, String, Option<String>, String, String)> = Vec::new();
 
-    // Fetch from all sources in parallel
+    // Fetch from all sources in parallel (with per-source rate limiting)
+    let rl = rate_limiter();
     let (
         hn_result,
         arxiv_result,
@@ -64,15 +66,15 @@ pub(crate) async fn fill_cache_background(app: &AppHandle) -> Result<usize, Stri
         lobsters_result,
         devto_result,
     ) = tokio::join!(
-        hn_source.fetch_items_deep(50),
-        arxiv_source.fetch_items_deep(50),
-        reddit_source.fetch_items_deep(50),
-        github_source.fetch_items(),
-        rss_source.fetch_items(),
-        twitter_source.fetch_items_deep(50),
-        youtube_source.fetch_items(),
-        lobsters_source.fetch_items_deep(50),
-        devto_source.fetch_items_deep(50),
+        async { rl.wait_for_rate_limit("hackernews").await; hn_source.fetch_items_deep(50).await },
+        async { rl.wait_for_rate_limit("arxiv").await; arxiv_source.fetch_items_deep(50).await },
+        async { rl.wait_for_rate_limit("reddit").await; reddit_source.fetch_items_deep(50).await },
+        async { rl.wait_for_rate_limit("github").await; github_source.fetch_items().await },
+        async { rl.wait_for_rate_limit("rss").await; rss_source.fetch_items().await },
+        async { rl.wait_for_rate_limit("twitter").await; twitter_source.fetch_items_deep(50).await },
+        async { rl.wait_for_rate_limit("youtube").await; youtube_source.fetch_items().await },
+        async { rl.wait_for_rate_limit("lobsters").await; lobsters_source.fetch_items_deep(50).await },
+        async { rl.wait_for_rate_limit("devto").await; devto_source.fetch_items_deep(50).await },
     );
 
     // Process HN results

@@ -9,6 +9,7 @@ use crate::sources::devto::DevtoSource;
 use crate::sources::github::GitHubSource;
 use crate::sources::hackernews::HackerNewsSource;
 use crate::sources::lobsters::LobstersSource;
+use crate::sources::rate_limiter::rate_limiter;
 use crate::sources::reddit::RedditSource;
 use crate::sources::rss::RssSource;
 use crate::sources::twitter::TwitterSource;
@@ -129,6 +130,9 @@ pub(crate) async fn fetch_all_sources(
                 }
             }
         }
+
+        // Centralized rate limiting: wait if we fetched this source too recently
+        rate_limiter().wait_for_rate_limit(source_type).await;
 
         // Fetch items from this source with exponential backoff retry
         let fetch_start = std::time::Instant::now();
@@ -411,6 +415,8 @@ pub(crate) async fn fetch_all_sources_deep(
         0,
     );
 
+    // Rate limit each source before parallel fetch (protects against rapid re-invocation)
+    let rl = rate_limiter();
     let (
         hn_result,
         arxiv_result,
@@ -422,15 +428,15 @@ pub(crate) async fn fetch_all_sources_deep(
         lobsters_result,
         devto_result,
     ) = tokio::join!(
-        hn_source.fetch_items_deep(items_per_category),
-        arxiv_source.fetch_items_deep(items_per_category),
-        reddit_source.fetch_items_deep(items_per_category),
-        github_source.fetch_items(),
-        rss_source.fetch_items(),
-        twitter_source.fetch_items_deep(items_per_category),
-        youtube_source.fetch_items(),
-        lobsters_source.fetch_items_deep(items_per_category),
-        devto_source.fetch_items_deep(items_per_category),
+        async { rl.wait_for_rate_limit("hackernews").await; hn_source.fetch_items_deep(items_per_category).await },
+        async { rl.wait_for_rate_limit("arxiv").await; arxiv_source.fetch_items_deep(items_per_category).await },
+        async { rl.wait_for_rate_limit("reddit").await; reddit_source.fetch_items_deep(items_per_category).await },
+        async { rl.wait_for_rate_limit("github").await; github_source.fetch_items().await },
+        async { rl.wait_for_rate_limit("rss").await; rss_source.fetch_items().await },
+        async { rl.wait_for_rate_limit("twitter").await; twitter_source.fetch_items_deep(items_per_category).await },
+        async { rl.wait_for_rate_limit("youtube").await; youtube_source.fetch_items().await },
+        async { rl.wait_for_rate_limit("lobsters").await; lobsters_source.fetch_items_deep(items_per_category).await },
+        async { rl.wait_for_rate_limit("devto").await; devto_source.fetch_items_deep(items_per_category).await },
     );
 
     // Process HN results

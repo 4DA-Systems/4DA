@@ -273,7 +273,7 @@ impl LLMClient {
             .json(&body)
             .send()
             .await
-            .map_err(|e| format!("Request failed: {}", e))?;
+            .map_err(|e| format!("Anthropic API request failed: {}", e))?;
 
         if !response.status().is_success() {
             let status = response.status();
@@ -284,7 +284,7 @@ impl LLMClient {
         let data: serde_json::Value = response
             .json()
             .await
-            .map_err(|e| format!("Failed to parse response: {}", e))?;
+            .map_err(|e| format!("Failed to parse Anthropic response: {}", e))?;
 
         let content = data["content"][0]["text"]
             .as_str()
@@ -339,7 +339,7 @@ impl LLMClient {
             .json(&body)
             .send()
             .await
-            .map_err(|e| format!("Request failed: {}", e))?;
+            .map_err(|e| format!("OpenAI API request failed: {}", e))?;
 
         if !response.status().is_success() {
             let status = response.status();
@@ -350,7 +350,7 @@ impl LLMClient {
         let data: serde_json::Value = response
             .json()
             .await
-            .map_err(|e| format!("Failed to parse response: {}", e))?;
+            .map_err(|e| format!("Failed to parse OpenAI response: {}", e))?;
 
         let content = data["choices"][0]["message"]["content"]
             .as_str()
@@ -611,10 +611,12 @@ Output JSON array (one per article):
                     content: user_message,
                 }],
             )
-            .await?;
+            .await
+            .map_err(|e| format!("LLM relevance judging failed: {}", e))?;
 
         // Parse the score-based JSON response
-        let judgments = self.parse_judgments(&response.content, &items)?;
+        let judgments = self.parse_judgments(&response.content, &items)
+            .map_err(|e| format!("Failed to parse relevance judgments: {}", e))?;
 
         Ok((judgments, response.input_tokens, response.output_tokens))
     }
