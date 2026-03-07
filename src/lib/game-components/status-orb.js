@@ -268,7 +268,7 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
     var color_result = pixel;
 
     let vign = 1.0 - 0.300000 * length(uv - 0.5);
-    color_result = vec4<f32>(color_result.rgb * vign, color_result.a);
+    color_result = vec4<f32>(color_result.rgb * vign, color_result.a * vign);
     return color_result;
 }
 `;

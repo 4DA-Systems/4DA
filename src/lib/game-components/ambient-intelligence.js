@@ -121,7 +121,7 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
         p = p + vec2<f32>(warp_x, warp_y) * 0.120000; }
         var sdf_result = fbm2((p * 5.000000 + vec2<f32>(time * 0.1, time * 0.07)), i32(3.000000), 0.400000, 2.000000);
         let pal_rgb = cosine_palette(sdf_result, vec3<f32>(0.060000, 0.030000, 0.010000), vec3<f32>(0.350000, 0.200000, 0.080000), vec3<f32>(1.000000, 0.700000, 0.500000), vec3<f32>(0.000000, 0.120000, 0.250000));
-        var color_result = vec4<f32>(pal_rgb, dot(pal_rgb, vec3<f32>(0.299, 0.587, 0.114)));
+        var color_result = vec4<f32>(pal_rgb, clamp(dot(pal_rgb, vec3<f32>(0.299, 0.587, 0.114)) * 2.0, 0.0, 1.0));
         let prev_color = textureSample(prev_frame, prev_sampler, input.uv);
         color_result = mix(color_result, prev_color, 0.930000);
         let la = color_result.a;
@@ -289,7 +289,7 @@ void main(){
         p = p + vec2(warp_x, warp_y) * 0.120000; }
         float sdf_result = fbm2((p * 5.000000 + vec2(time * 0.1, time * 0.07)), int(3.000000), 0.400000, 2.000000);
         vec3 pal_rgb = cosine_palette(sdf_result, vec3(0.060000, 0.030000, 0.010000), vec3(0.350000, 0.200000, 0.080000), vec3(1.000000, 0.700000, 0.500000), vec3(0.000000, 0.120000, 0.250000));
-        vec4 color_result = vec4(pal_rgb, dot(pal_rgb, vec3(0.299, 0.587, 0.114)));
+        vec4 color_result = vec4(pal_rgb, clamp(dot(pal_rgb, vec3(0.299, 0.587, 0.114)) * 2.0, 0.0, 1.0));
         vec4 prev_color = texture(u_prev_frame, v_uv);
         color_result = mix(color_result, prev_color, 0.930000);
         float la = color_result.a;
@@ -379,7 +379,7 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
     var color_result = pixel;
 
     let vign = 1.0 - 0.350000 * length(uv - 0.5);
-    color_result = vec4<f32>(color_result.rgb * vign, color_result.a);
+    color_result = vec4<f32>(color_result.rgb * vign, color_result.a * vign);
     return color_result;
 }
 `;

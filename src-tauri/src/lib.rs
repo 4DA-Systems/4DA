@@ -136,11 +136,6 @@ pub mod stacks;
 pub mod taste_test;
 mod taste_test_commands;
 
-mod coach_context;
-mod coach_nudges;
-mod coach_quarterly;
-mod coach_template_data;
-mod coach_templates;
 mod command_runner;
 mod content_personalization;
 mod decision_advantage;
@@ -151,12 +146,13 @@ mod playbook_commands;
 mod sovereign_developer_profile;
 mod sovereign_facts;
 mod sovereign_profile;
-mod streets_coach;
 mod streets_commands;
 mod streets_engine;
 mod streets_localization;
 mod suns;
 mod suns_commands;
+mod template_data;
+mod templates;
 mod toolkit;
 mod toolkit_export;
 mod toolkit_http;
@@ -471,9 +467,6 @@ pub fn run() {
             suns_commands::acknowledge_sun_alert,
             suns_commands::trigger_sun_manually,
             suns_commands::get_street_health,
-            // Coach Nudges
-            coach_nudges::get_coach_nudges,
-            coach_nudges::dismiss_coach_nudge,
             // Toolkit Intelligence
             toolkit_intelligence::toolkit_test_feed,
             toolkit_intelligence::toolkit_score_sandbox,
@@ -482,19 +475,9 @@ pub fn run() {
             video_curriculum::get_video_curriculum,
             video_curriculum::mark_video_progress,
             video_curriculum::mark_video_complete,
-            // Coach Templates (STREETS Community)
-            coach_templates::get_templates,
-            coach_templates::get_template_content,
-            // STREETS Coach (AI coaching system)
-            streets_coach::coach_create_session,
-            streets_coach::coach_send_message,
-            streets_coach::coach_get_history,
-            streets_coach::coach_list_sessions,
-            streets_coach::coach_delete_session,
-            streets_coach::coach_recommend_engines,
-            streets_coach::coach_generate_strategy,
-            streets_coach::coach_launch_review,
-            streets_coach::coach_progress_check_in,
+            // Templates (STREETS Community)
+            templates::get_templates,
+            templates::get_template_content,
             // Decision Advantage
             decision_advantage_commands::get_decision_windows,
             decision_advantage_commands::act_on_decision_window,
