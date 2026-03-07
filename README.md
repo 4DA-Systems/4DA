@@ -85,7 +85,7 @@ Then it scores every piece of incoming content against 5 independent signal axes
 | **Interest** | Alignment with your declared and learned topics |
 | **ACE** | Real-time signals from your Git commits and file edits |
 | **Dependency** | Direct matches against your installed packages |
-| **Learned** | Behavioral patterns from your save/dismiss feedback |
+| **Feedback** | Save/dismiss signals boost or suppress future scores |
 
 An item needs **2+ independent signals** to pass the confirmation gate. Everything else gets rejected. Typical rejection rate: **99%+**.
 
@@ -285,7 +285,7 @@ pnpm validate:all           # Full validation (lint + types + tests + build)
 ## Pricing
 
 **Free** — $0 forever. No credit card. No account. No expiration.
-- All 11 sources, full 5-axis scoring engine, confirmation gate, behavior learning, STREETS Playbook (all 7 modules), MCP server (30 tools), CLI
+- All 11 sources, full 5-axis scoring engine, confirmation gate, feedback-driven scoring, STREETS Playbook (all 7 modules), MCP server (30 tools), CLI
 
 **Pro** — $12/month or $99/year. BYOK — you bring your own API key.
 - Everything in Free, plus: AI daily briefings, Developer DNA profiling, Score Autopsy, intelligence panels, signal chain analysis, knowledge gap detection
