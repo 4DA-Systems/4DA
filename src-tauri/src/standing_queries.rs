@@ -448,3 +448,86 @@ pub fn evaluate_standing_queries(conn: &rusqlite::Connection) -> Vec<StandingQue
 
     alerts
 }
+
+// ============================================================================
+// Tests
+// ============================================================================
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn extract_keywords_filters_stop_words() {
+        let keywords = extract_keywords("show me the latest rust updates");
+        assert!(
+            !keywords.contains(&"show".to_string()),
+            "Stop word 'show' should be filtered"
+        );
+        assert!(
+            !keywords.contains(&"the".to_string()),
+            "Stop word 'the' should be filtered"
+        );
+        assert!(
+            keywords.contains(&"latest".to_string()),
+            "'latest' should be kept"
+        );
+        assert!(
+            keywords.contains(&"rust".to_string()),
+            "'rust' should be kept"
+        );
+        assert!(
+            keywords.contains(&"updates".to_string()),
+            "'updates' should be kept"
+        );
+    }
+
+    #[test]
+    fn extract_keywords_lowercases_input() {
+        let keywords = extract_keywords("Rust React TypeScript");
+        assert!(keywords.contains(&"rust".to_string()));
+        assert!(keywords.contains(&"react".to_string()));
+        assert!(keywords.contains(&"typescript".to_string()));
+    }
+
+    #[test]
+    fn extract_keywords_drops_short_words() {
+        let keywords = extract_keywords("go is ok but rust is better");
+        // "go", "is", "ok" are all <= 2 chars, should be filtered
+        assert!(
+            !keywords.contains(&"go".to_string()),
+            "2-char words should be filtered out"
+        );
+        assert!(
+            !keywords.contains(&"is".to_string()),
+            "2-char stop words should be filtered out"
+        );
+        assert!(
+            keywords.contains(&"rust".to_string()),
+            "'rust' (4 chars) should be kept"
+        );
+        assert!(
+            keywords.contains(&"better".to_string()),
+            "'better' should be kept"
+        );
+    }
+
+    #[test]
+    fn extract_keywords_preserves_hyphens_and_underscores() {
+        let keywords = extract_keywords("vue-router and nest_js");
+        assert!(
+            keywords.contains(&"vue-router".to_string()),
+            "Hyphenated terms should be kept intact"
+        );
+        assert!(
+            keywords.contains(&"nest_js".to_string()),
+            "Underscored terms should be kept intact"
+        );
+    }
+
+    #[test]
+    fn extract_keywords_empty_input() {
+        let keywords = extract_keywords("");
+        assert!(keywords.is_empty(), "Empty input should return no keywords");
+    }
+}

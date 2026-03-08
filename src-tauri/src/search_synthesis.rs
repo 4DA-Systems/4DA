@@ -348,3 +348,104 @@ pub async fn synthesize_search(
 
     Ok(synthesis)
 }
+
+// ============================================================================
+// Tests
+// ============================================================================
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn build_system_prompt_includes_stack_summary() {
+        let prompt = build_system_prompt("Rust, React, SQLite", &[], &[]);
+        assert!(
+            prompt.contains("Rust, React, SQLite"),
+            "Prompt should include the stack summary"
+        );
+        assert!(
+            prompt.contains("Their tech stack:"),
+            "Prompt should have the stack section header"
+        );
+    }
+
+    #[test]
+    fn build_system_prompt_includes_decisions() {
+        let decisions = vec![DecisionContext {
+            subject: "Database".to_string(),
+            decision: "Use SQLite with sqlite-vec".to_string(),
+        }];
+        let prompt = build_system_prompt("", &decisions, &[]);
+        assert!(
+            prompt.contains("Their active decisions:"),
+            "Prompt should have the decisions section"
+        );
+        assert!(
+            prompt.contains("Database: Use SQLite with sqlite-vec"),
+            "Prompt should include the decision detail"
+        );
+    }
+
+    #[test]
+    fn build_system_prompt_includes_gaps() {
+        let gaps = vec![GapContext {
+            technology: "React".to_string(),
+            severity: "stale".to_string(),
+        }];
+        let prompt = build_system_prompt("", &[], &gaps);
+        assert!(
+            prompt.contains("Knowledge gaps"),
+            "Prompt should have the gaps section"
+        );
+        assert!(
+            prompt.contains("React (stale)"),
+            "Prompt should include the gap detail"
+        );
+    }
+
+    #[test]
+    fn build_system_prompt_omits_empty_sections() {
+        let prompt = build_system_prompt("", &[], &[]);
+        assert!(
+            !prompt.contains("Their tech stack:"),
+            "Empty stack should not produce a stack section"
+        );
+        assert!(
+            !prompt.contains("Their active decisions:"),
+            "Empty decisions should not produce a decisions section"
+        );
+        assert!(
+            !prompt.contains("Knowledge gaps"),
+            "Empty gaps should not produce a gaps section"
+        );
+    }
+
+    #[test]
+    fn build_user_message_formats_items() {
+        let items = vec![
+            SynthesisItem {
+                title: "Rust 2024 Edition".to_string(),
+                preview: "New features in Rust".to_string(),
+                source_type: "hackernews".to_string(),
+            },
+            SynthesisItem {
+                title: "React Server Components".to_string(),
+                preview: "RSC deep dive".to_string(),
+                source_type: "reddit".to_string(),
+            },
+        ];
+        let msg = build_user_message("rust updates", &items);
+        assert!(msg.contains("Query: \"rust updates\""));
+        assert!(msg.contains("1. [hackernews] Rust 2024 Edition"));
+        assert!(msg.contains("2. [reddit] React Server Components"));
+        assert!(msg.contains("New features in Rust"));
+    }
+
+    #[test]
+    fn build_user_message_handles_empty_items() {
+        let msg = build_user_message("nonexistent topic", &[]);
+        assert!(msg.contains("No matching results found"));
+        assert!(msg.contains("nonexistent topic"));
+    }
+}
