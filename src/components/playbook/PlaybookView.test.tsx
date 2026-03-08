@@ -235,4 +235,163 @@ describe('PlaybookView', () => {
     render(<PlaybookView />);
     expect(screen.getByText('streets:streets.wantCoaching')).toBeInTheDocument();
   });
+
+  // -------------------------------------------------------------------------
+  // Template library section
+  // -------------------------------------------------------------------------
+  it('shows template library when Templates sidebar button is clicked', () => {
+    render(<PlaybookView />);
+
+    // Click the Templates button in the sidebar
+    fireEvent.click(screen.getByText('Templates'));
+
+    expect(screen.getByTestId('template-library')).toBeInTheDocument();
+  });
+
+  it('hides empty state when template library is shown', () => {
+    render(<PlaybookView />);
+
+    fireEvent.click(screen.getByText('Templates'));
+
+    // Empty state content should not be visible
+    expect(screen.queryByText('streets:streets.startWith')).not.toBeInTheDocument();
+    expect(screen.queryByText(/streets:streets\.selectModuleDescription/)).not.toBeInTheDocument();
+  });
+
+  // -------------------------------------------------------------------------
+  // Module switching
+  // -------------------------------------------------------------------------
+  it('switches from templates back to module content when a module is clicked', () => {
+    render(<PlaybookView />);
+
+    // First show templates
+    fireEvent.click(screen.getByText('Templates'));
+    expect(screen.getByTestId('template-library')).toBeInTheDocument();
+
+    // Click a module button — find the "S" module button in the sidebar
+    const moduleButtons = screen.getAllByText('S');
+    fireEvent.click(moduleButtons[0]);
+
+    // Templates should be hidden, module content should be loading
+    expect(screen.queryByTestId('template-library')).not.toBeInTheDocument();
+    expect(mockLoadContent).toHaveBeenCalledWith('S');
+  });
+
+  it('renders lesson completion toggle buttons', () => {
+    setStore({
+      activeModuleId: 'T',
+      playbookContent: {
+        module_id: 'T',
+        title: 'Traction Module',
+        description: 'Build traction.',
+        lessons: [
+          { title: 'Lesson A', content: 'Content A' },
+          { title: 'Lesson B', content: 'Content B' },
+        ],
+      },
+      playbookProgress: {
+        overall_percentage: 0,
+        modules: [{ module_id: 'T', percentage: 0, completed_lessons: [] }],
+      },
+    });
+    render(<PlaybookView />);
+
+    // Each lesson should have a toggle button
+    expect(screen.getByLabelText('Mark "Lesson A" complete')).toBeInTheDocument();
+    expect(screen.getByLabelText('Mark "Lesson B" complete')).toBeInTheDocument();
+  });
+
+  it('shows completed state for finished lessons', () => {
+    setStore({
+      activeModuleId: 'T',
+      playbookContent: {
+        module_id: 'T',
+        title: 'Traction Module',
+        description: 'Build traction.',
+        lessons: [
+          { title: 'Lesson A', content: 'Content A' },
+          { title: 'Lesson B', content: 'Content B' },
+        ],
+      },
+      playbookProgress: {
+        overall_percentage: 50,
+        modules: [{ module_id: 'T', percentage: 50, completed_lessons: [0] }],
+      },
+    });
+    render(<PlaybookView />);
+
+    // First lesson should show as completed (toggle to incomplete)
+    expect(screen.getByLabelText('Mark "Lesson A" incomplete')).toBeInTheDocument();
+    // Second lesson should show as not completed
+    expect(screen.getByLabelText('Mark "Lesson B" complete')).toBeInTheDocument();
+  });
+
+  it('calls markLessonComplete when lesson toggle is clicked', () => {
+    setStore({
+      activeModuleId: 'R',
+      playbookContent: {
+        module_id: 'R',
+        title: 'Resonance Module',
+        description: 'Find resonance.',
+        lessons: [
+          { title: 'Lesson X', content: 'Content X' },
+        ],
+      },
+      playbookProgress: {
+        overall_percentage: 0,
+        modules: [{ module_id: 'R', percentage: 0, completed_lessons: [] }],
+      },
+    });
+    render(<PlaybookView />);
+
+    fireEvent.click(screen.getByLabelText('Mark "Lesson X" complete'));
+    expect(mockMarkComplete).toHaveBeenCalledWith('R', 0);
+  });
+
+  it('does not show SovereignProfile for non-S modules', () => {
+    setStore({
+      activeModuleId: 'T',
+      playbookContent: {
+        module_id: 'T',
+        title: 'Traction',
+        description: 'Desc',
+        lessons: [],
+      },
+    });
+    render(<PlaybookView />);
+    expect(screen.queryByTestId('sovereign-profile')).not.toBeInTheDocument();
+  });
+
+  it('shows StreetHealthBadge in content area', () => {
+    render(<PlaybookView />);
+    expect(screen.getByTestId('street-health-badge')).toBeInTheDocument();
+  });
+
+  it('shows SunsDashboard when module S is active', () => {
+    setStore({
+      activeModuleId: 'S',
+      playbookContent: {
+        module_id: 'S',
+        title: 'Sovereignty',
+        description: 'Desc',
+        lessons: [],
+      },
+    });
+    render(<PlaybookView />);
+    expect(screen.getByTestId('suns-dashboard')).toBeInTheDocument();
+  });
+
+  it('does not show SunsDashboard for non-S modules', () => {
+    setStore({
+      activeModuleId: 'E1',
+      playbookContent: {
+        module_id: 'E1',
+        title: 'Execution',
+        description: 'Desc',
+        lessons: [],
+      },
+    });
+    render(<PlaybookView />);
+    expect(screen.queryByTestId('suns-dashboard')).not.toBeInTheDocument();
+  });
 });
