@@ -46,27 +46,42 @@ mod tests {
     // ========================================================================
 
     #[test]
-    fn test_settings_debug_exposes_api_keys_currently() {
+    fn test_settings_debug_redacts_api_keys() {
         let s = settings_with_keys();
         let debug_output = format!("{:?}", s);
 
-        // Document that Debug currently DOES contain the keys.
-        let keys_exposed = debug_output.contains(FAKE_ANTHROPIC_KEY)
-            || debug_output.contains(FAKE_OPENAI_EMBED_KEY)
-            || debug_output.contains(FAKE_X_BEARER)
-            || debug_output.contains(FAKE_LICENSE_KEY);
-
+        // Custom Debug impls must redact all API keys.
         assert!(
-            keys_exposed,
-            "POSITIVE CHANGE: Debug no longer exposes API keys! \
-             Update this test to assert redaction instead."
+            !debug_output.contains(FAKE_ANTHROPIC_KEY),
+            "Settings Debug must not contain Anthropic API key"
+        );
+        assert!(
+            !debug_output.contains(FAKE_OPENAI_EMBED_KEY),
+            "Settings Debug must not contain OpenAI embed key"
+        );
+        assert!(
+            !debug_output.contains(FAKE_X_BEARER),
+            "Settings Debug must not contain X bearer token"
+        );
+        assert!(
+            !debug_output.contains(FAKE_LICENSE_KEY),
+            "Settings Debug must not contain license key"
+        );
+
+        // Verify redaction markers are present.
+        assert!(
+            debug_output.contains("[REDACTED]"),
+            "Settings Debug should show [REDACTED] placeholders"
         );
 
         let llm_debug = format!("{:?}", s.llm);
         assert!(
-            llm_debug.contains(FAKE_ANTHROPIC_KEY),
-            "LLMProvider Debug currently exposes api_key (by design -- \
-             update this test when custom Debug is added)"
+            !llm_debug.contains(FAKE_ANTHROPIC_KEY),
+            "LLMProvider Debug must not contain api_key"
+        );
+        assert!(
+            llm_debug.contains("[REDACTED]"),
+            "LLMProvider Debug should show [REDACTED] placeholder"
         );
     }
 
