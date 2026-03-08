@@ -30,7 +30,7 @@ export function BadgeRow({ item }: BadgeRowProps) {
           className="flex-shrink-0 text-[10px] px-1.5 py-0.5 rounded font-medium bg-[#D4AF37]/10 text-[#D4AF37]"
           title={`Boosted because you've shown interest in ${matchedAffinityTopic}`}
         >
-          Learned
+          {t('results.learnedBadge')}
         </span>
       )}
       {item.serendipity && (

@@ -134,7 +134,6 @@ export function AboutPanel() {
             [',', t('shortcuts.openSettings')],
             ['?', t('shortcuts.showHelp')],
             ['Esc', t('shortcuts.closePanel')],
-            ['Ctrl+`', t('shortcuts.toggleCommandDeck')],
             ['S', t('shortcuts.saveItem')],
             ['J / K', t('shortcuts.navigateItems')],
           ].map(([key, desc]) => (

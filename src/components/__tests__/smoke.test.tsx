@@ -67,18 +67,6 @@ vi.mock('../../store', () => ({
         loadPersonalizedContent: vi.fn(),
         loadPersonalizedContentBatch: vi.fn(),
 
-        // street health
-        streetHealth: null,
-        loadStreetHealth: vi.fn(),
-
-        // suns dashboard
-        sunsModules: [],
-        sunsAlerts: [],
-        sunsLoading: false,
-        loadSunsModules: vi.fn(),
-        ackSunAlert: vi.fn(),
-        executeSunRecommendation: vi.fn(),
-
         // decisions
         decisions: [],
         decisionsLoading: false,
@@ -107,18 +95,10 @@ vi.mock('../../store', () => ({
         // pro value
         proValueReport: null,
 
-        // game
-        celebration: null,
-        clearCelebration: vi.fn(),
-        gameState: null,
-        loadGameState: vi.fn(),
-
         // agent memory
         agentMemories: [],
         agentMemoryLoading: false,
         loadAgentMemories: vi.fn(),
-        recordAgentMemory: vi.fn(),
-        deleteAgentMemory: vi.fn(),
 
         // license
         tier: 'free',

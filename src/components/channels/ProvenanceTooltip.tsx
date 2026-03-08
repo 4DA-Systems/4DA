@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import type { RenderProvenance } from '../../types/channels';
 
 interface Props {
@@ -7,6 +8,7 @@ interface Props {
 }
 
 export function ProvenanceTooltip({ provenance, children }: Props) {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -20,6 +22,16 @@ export function ProvenanceTooltip({ provenance, children }: Props) {
     };
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
+  }, [open]);
+
+  // Close on Escape key
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpen(false);
+    };
+    document.addEventListener('keydown', handler);
+    return () => document.removeEventListener('keydown', handler);
   }, [open]);
 
   return (
@@ -38,7 +50,7 @@ export function ProvenanceTooltip({ provenance, children }: Props) {
           role="tooltip"
         >
           <p className="text-text-muted text-xs mb-2 font-medium uppercase tracking-wide">
-            Source
+            {t('channels.provenance')}
           </p>
           {provenance.source_titles.map((title, i) => (
             <div key={i} className="mb-2 last:mb-0">

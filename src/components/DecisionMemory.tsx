@@ -1,4 +1,4 @@
-import { useState, useEffect, memo } from 'react';
+import { useState, useEffect, memo, useCallback, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useShallow } from 'zustand/react/shallow';
 import { useAppStore } from '../store';
@@ -73,40 +73,55 @@ export const DecisionMemory = memo(function DecisionMemory() {
   const recordDecision = useAppStore((s) => s.recordDecision);
   const updateDecision = useAppStore((s) => s.updateDecision);
   const removeTechDecision = useAppStore((s) => s.removeTechDecision);
+  const addToast = useAppStore((s) => s.addToast);
 
   useEffect(() => {
     loadDecisions();
   }, [loadDecisions]);
 
-  const grouped = DECISION_TYPES.reduce<Record<string, DeveloperDecision[]>>(
-    (acc, type) => {
-      const items = decisions.filter((d) => d.decision_type === type);
-      if (items.length > 0) acc[type] = items;
-      return acc;
-    },
-    {},
-  );
+  const grouped = useMemo(() =>
+    DECISION_TYPES.reduce<Record<string, DeveloperDecision[]>>(
+      (acc, type) => {
+        const items = decisions.filter((d) => d.decision_type === type);
+        if (items.length > 0) acc[type] = items;
+        return acc;
+      },
+      {},
+    ),
+  [decisions]);
 
-  const handleSubmit = async () => {
+  const handleSubmit = useCallback(async () => {
     if (!form.subject.trim() || !form.decision.trim()) return;
-    await recordDecision({
-      decision_type: form.decision_type,
-      subject: form.subject.trim(),
-      decision: form.decision.trim(),
-      rationale: form.rationale.trim() || undefined,
-      confidence: form.confidence,
-    });
-    setForm({ ...EMPTY_FORM });
-    setShowForm(false);
-  };
+    try {
+      await recordDecision({
+        decision_type: form.decision_type,
+        subject: form.subject.trim(),
+        decision: form.decision.trim(),
+        rationale: form.rationale.trim() || undefined,
+        confidence: form.confidence,
+      });
+      setForm({ ...EMPTY_FORM });
+      setShowForm(false);
+    } catch {
+      addToast('error', t('error.generic'));
+    }
+  }, [form, recordDecision, addToast, t]);
 
-  const handleSupersede = async (id: number) => {
-    await updateDecision(id, { status: 'superseded' });
-  };
+  const handleSupersede = useCallback(async (id: number) => {
+    try {
+      await updateDecision(id, { status: 'superseded' });
+    } catch {
+      addToast('error', t('error.generic'));
+    }
+  }, [updateDecision, addToast, t]);
 
-  const handleReconsider = async (id: number) => {
-    await updateDecision(id, { status: 'reconsidering' });
-  };
+  const handleReconsider = useCallback(async (id: number) => {
+    try {
+      await updateDecision(id, { status: 'reconsidering' });
+    } catch {
+      addToast('error', t('error.generic'));
+    }
+  }, [updateDecision, addToast, t]);
 
   return (
     <div className="bg-bg-secondary rounded-lg border border-border overflow-hidden">

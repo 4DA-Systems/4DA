@@ -137,13 +137,13 @@ describe('ActionBar', () => {
   it('shows auto-briefing toggle state as OFF', () => {
     render(<ActionBar {...defaultProps} autoBriefingEnabled={false} />);
     fireEvent.click(screen.getByLabelText('More actions'));
-    expect(screen.getByText('OFF')).toBeInTheDocument();
+    expect(screen.getByText('badge.off')).toBeInTheDocument();
   });
 
   it('shows auto-briefing toggle state as ON', () => {
     render(<ActionBar {...defaultProps} autoBriefingEnabled={true} />);
     fireEvent.click(screen.getByLabelText('More actions'));
-    expect(screen.getByText('ON')).toBeInTheDocument();
+    expect(screen.getByText('badge.on')).toBeInTheDocument();
   });
 
   it('calls onGenerateBriefing from overflow menu', () => {
@@ -192,7 +192,7 @@ describe('ActionBar', () => {
       } as Partial<Settings>),
     };
     render(<ActionBar {...props} />);
-    expect(screen.getByText('LLM')).toBeInTheDocument();
+    expect(screen.getByText('badge.llm')).toBeInTheDocument();
   });
 
   it('shows progress bar when loading with progress > 0', () => {

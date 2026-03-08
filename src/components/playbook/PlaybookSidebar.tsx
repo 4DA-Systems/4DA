@@ -97,9 +97,9 @@ export const PlaybookSidebar = memo(function PlaybookSidebar({
         </span>
         <div className="flex-1 min-w-0">
           <p className={`text-sm truncate ${showTemplates ? 'text-white font-medium' : 'text-text-secondary'}`}>
-            Templates
+            {t('playbook.templates')}
           </p>
-          <p className="text-[10px] text-[#666]">Launch &amp; growth tools</p>
+          <p className="text-[10px] text-[#666]">{t('playbook.templatesSubtitle')}</p>
         </div>
       </button>
 

@@ -210,12 +210,12 @@ describe('ActionBar', () => {
         })}
       />,
     );
-    expect(screen.getByText('LLM')).toBeInTheDocument();
+    expect(screen.getByText('badge.llm')).toBeInTheDocument();
   });
 
   it('does not show LLM badge when rerank is disabled', () => {
     render(<ActionBar {...defaultProps} />);
-    expect(screen.queryByText('LLM')).not.toBeInTheDocument();
+    expect(screen.queryByText('badge.llm')).not.toBeInTheDocument();
   });
 
   it('shows summary badges when provided', () => {
@@ -259,7 +259,7 @@ describe('ActionBar', () => {
       <ActionBar {...defaultProps} autoBriefingEnabled={true} />,
     );
     fireEvent.click(screen.getByLabelText('More actions'));
-    expect(screen.getByText('ON')).toBeInTheDocument();
+    expect(screen.getByText('badge.on')).toBeInTheDocument();
   });
 
   it('shows OFF state for auto briefing when disabled', () => {
@@ -267,7 +267,7 @@ describe('ActionBar', () => {
       <ActionBar {...defaultProps} autoBriefingEnabled={false} />,
     );
     fireEvent.click(screen.getByLabelText('More actions'));
-    expect(screen.getByText('OFF')).toBeInTheDocument();
+    expect(screen.getByText('badge.off')).toBeInTheDocument();
   });
 
   it('calls onGenerateBriefing from overflow menu', () => {
