@@ -6,6 +6,7 @@ import type { ChannelSummary, ChannelRender, RenderProvenance, ChannelChangelog 
 export interface ChannelsSlice {
   channels: ChannelSummary[];
   channelsLoading: boolean;
+  channelsError: string | null;
   activeChannelId: number | null;
   activeRender: ChannelRender | null;
   activeProvenance: RenderProvenance[];
@@ -25,6 +26,7 @@ export interface ChannelsSlice {
 export const createChannelsSlice: StateCreator<AppStore, [], [], ChannelsSlice> = (set, get) => ({
   channels: [],
   channelsLoading: false,
+  channelsError: null,
   activeChannelId: null,
   activeRender: null,
   activeProvenance: [],
@@ -33,12 +35,12 @@ export const createChannelsSlice: StateCreator<AppStore, [], [], ChannelsSlice> 
   renderError: null,
 
   loadChannels: async () => {
-    set({ channelsLoading: true });
+    set({ channelsLoading: true, channelsError: null });
     try {
       const channels = await invoke<ChannelSummary[]>('list_channels');
       set({ channels, channelsLoading: false });
-    } catch {
-      set({ channelsLoading: false });
+    } catch (e) {
+      set({ channelsLoading: false, channelsError: String(e) });
     }
   },
 

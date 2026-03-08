@@ -32,7 +32,7 @@ function CloseToTrayToggle({ initialValue }: { initialValue: boolean }) {
     <div className="flex items-center justify-between p-3 bg-bg-secondary rounded-lg border border-border">
       <div>
         <span className="text-sm text-white">{t('settings.monitoring.closeToTray')}</span>
-        <p className="text-xs text-gray-500">{t('settings.monitoring.closeToTrayDescription')}</p>
+        <p className="text-xs text-text-muted">{t('settings.monitoring.closeToTrayDescription')}</p>
       </div>
       <button
         onClick={toggle}
@@ -69,7 +69,7 @@ export function MonitoringSection({
         </div>
         <div>
           <h3 className="text-sm font-medium text-white">{t('settings.monitoring.backgroundTitle')}</h3>
-          <p className="text-xs text-gray-500">{t('settings.monitoring.backgroundDescription')}</p>
+          <p className="text-xs text-text-muted">{t('settings.monitoring.backgroundDescription')}</p>
         </div>
       </div>
 
@@ -86,7 +86,7 @@ export function MonitoringSection({
                 {monitoring.enabled ? (
                   <span className="text-green-400">{t('status.active')}</span>
                 ) : (
-                  <span className="text-gray-500">{t('status.inactive')}</span>
+                  <span className="text-text-muted">{t('status.inactive')}</span>
                 )}
               </span>
               {monitoring.is_checking && (
@@ -106,7 +106,7 @@ export function MonitoringSection({
           </div>
 
           <div className="flex items-center gap-3">
-            <label className="text-sm text-gray-400">{t('settings.monitoring.every')}</label>
+            <label className="text-sm text-text-secondary">{t('settings.monitoring.every')}</label>
             <input
               type="number"
               min="5"
@@ -115,17 +115,17 @@ export function MonitoringSection({
               onChange={(e) => setMonitoringInterval(parseInt(e.target.value) || 30)}
               className="w-20 px-3 py-2 bg-bg-secondary border border-border rounded-lg text-sm text-white text-center focus:border-orange-500 focus:outline-none"
             />
-            <span className="text-sm text-gray-400">{t('settings.monitoring.minutes')}</span>
+            <span className="text-sm text-text-secondary">{t('settings.monitoring.minutes')}</span>
             <button
               onClick={onUpdateInterval}
-              className="px-4 py-2 text-sm bg-bg-secondary border border-border text-gray-400 rounded-lg hover:text-white hover:border-orange-500/30 transition-all"
+              className="px-4 py-2 text-sm bg-bg-secondary border border-border text-text-secondary rounded-lg hover:text-white hover:border-orange-500/30 transition-all"
             >
               {t('settings.monitoring.update')}
             </button>
           </div>
 
           <div className="flex items-center gap-3">
-            <label className="text-sm text-gray-400">{t('settings.monitoring.notifications')}</label>
+            <label className="text-sm text-text-secondary">{t('settings.monitoring.notifications')}</label>
             <select
               value={notificationThreshold}
               onChange={(e) => onSetNotificationThreshold(e.target.value)}
@@ -140,7 +140,7 @@ export function MonitoringSection({
 
           <CloseToTrayToggle initialValue={monitoring.close_to_tray} />
 
-          <div className="flex items-center justify-between text-xs text-gray-500 px-1">
+          <div className="flex items-center justify-between text-xs text-text-muted px-1">
             <span>{t('settings.monitoring.totalChecks', { count: monitoring.total_checks })}</span>
             {monitoring.last_check_ago && (
               <span>{t('settings.monitoring.lastCheck', { time: monitoring.last_check_ago })}</span>
@@ -149,7 +149,7 @@ export function MonitoringSection({
 
           <button
             onClick={onTestNotification}
-            className="w-full px-4 py-2.5 text-sm bg-bg-secondary border border-border text-gray-400 rounded-lg hover:text-white hover:border-orange-500/30 transition-all"
+            className="w-full px-4 py-2.5 text-sm bg-bg-secondary border border-border text-text-secondary rounded-lg hover:text-white hover:border-orange-500/30 transition-all"
           >
             {t('settings.monitoring.testNotification')}
           </button>

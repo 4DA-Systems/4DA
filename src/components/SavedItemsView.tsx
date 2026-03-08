@@ -74,8 +74,8 @@ export function SavedItemsView() {
   if (items.length === 0) {
     return (
       <div className="bg-bg-secondary rounded-lg border border-border p-8 text-center">
-        <p className="text-sm text-gray-400 mb-2">{t('saved.empty.title')}</p>
-        <p className="text-xs text-gray-600">
+        <p className="text-sm text-text-secondary mb-2">{t('saved.empty.title')}</p>
+        <p className="text-xs text-text-muted">
           {t('saved.empty.subtitle')}
         </p>
       </div>
@@ -85,10 +85,10 @@ export function SavedItemsView() {
   return (
     <section aria-label={t('saved.title', { defaultValue: 'Saved items' })}>
       <div className="flex items-center justify-between mb-4">
-        <span className="text-xs text-gray-500">{t('saved.count', { count: items.length })}</span>
+        <span className="text-xs text-text-muted">{t('saved.count', { count: items.length })}</span>
         <button
           onClick={loadItems}
-          className="text-[10px] text-gray-500 hover:text-gray-300 transition-colors"
+          className="text-[10px] text-text-muted hover:text-text-secondary transition-colors"
         >
           {t('action.refresh')}
         </button>
@@ -122,20 +122,20 @@ export function SavedItemsView() {
                 )}
 
                 {item.summary ? (
-                  <p className="text-xs text-gray-400 mt-1 leading-relaxed">{item.summary}</p>
+                  <p className="text-xs text-text-secondary mt-1 leading-relaxed">{item.summary}</p>
                 ) : item.content_preview ? (
-                  <p className="text-xs text-gray-500 mt-1 leading-relaxed truncate">{item.content_preview}</p>
+                  <p className="text-xs text-text-muted mt-1 leading-relaxed truncate">{item.content_preview}</p>
                 ) : null}
 
                 <div className="flex items-center gap-3 mt-1.5">
-                  <span className="text-[10px] text-gray-600">
+                  <span className="text-[10px] text-text-muted">
                     {item.saved_at ? new Date(item.saved_at + 'Z').toLocaleDateString() : ''}
                   </span>
                   {item.url && (
                     <button
                       onClick={() => window.navigator.clipboard.writeText(item.url!)}
                       aria-label={`${t('saved.copyUrl')} for ${item.title}`}
-                      className="text-[10px] text-gray-600 hover:text-gray-400 transition-colors"
+                      className="text-[10px] text-text-muted hover:text-text-secondary transition-colors"
                     >
                       {t('saved.copyUrl')}
                     </button>
@@ -147,7 +147,7 @@ export function SavedItemsView() {
               <button
                 onClick={() => handleRemove(item.item_id)}
                 aria-label={`${t('saved.remove')} ${item.title}`}
-                className="flex-shrink-0 text-[10px] px-2 py-1 rounded text-gray-600 hover:text-red-400 hover:bg-red-500/10 transition-colors"
+                className="flex-shrink-0 text-[10px] px-2 py-1 rounded text-text-muted hover:text-red-400 hover:bg-red-500/10 transition-colors"
               >
                 {t('saved.remove')}
               </button>

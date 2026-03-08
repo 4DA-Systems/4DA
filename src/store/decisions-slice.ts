@@ -20,14 +20,15 @@ export interface DeveloperDecision {
 export const createDecisionsSlice: StateCreator<AppStore, [], [], DecisionsSlice> = (set) => ({
   decisions: [],
   decisionsLoading: false,
+  decisionsError: null,
 
   loadDecisions: async () => {
-    set({ decisionsLoading: true });
+    set({ decisionsLoading: true, decisionsError: null });
     try {
       const decisions = await invoke<DeveloperDecision[]>('get_decisions', {});
       set({ decisions, decisionsLoading: false });
-    } catch {
-      set({ decisionsLoading: false });
+    } catch (e) {
+      set({ decisionsLoading: false, decisionsError: String(e) });
     }
   },
 

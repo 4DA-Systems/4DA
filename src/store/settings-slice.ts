@@ -75,11 +75,19 @@ export const createSettingsSlice: StateCreator<AppStore, [], [], SettingsSlice> 
   saveSettings: async () => {
     const { settingsForm, loadSettings } = get();
     set({ settingsStatus: 'Saving...' });
+
+    // Trim and validate API key before saving
+    const trimmedApiKey = (settingsForm.apiKey || '').trim();
+    if (trimmedApiKey.length > 0 && trimmedApiKey.length < 20) {
+      set({ settingsStatus: 'Error: API key is too short (must be at least 20 characters)' });
+      return;
+    }
+
     try {
       await Promise.all([
         invoke('set_llm_provider', {
           provider: settingsForm.provider,
-          apiKey: settingsForm.apiKey || '',
+          apiKey: trimmedApiKey,
           model: settingsForm.model,
           baseUrl: settingsForm.baseUrl || null,
         }),

@@ -38,16 +38,23 @@ export const TechRadar = memo(function TechRadar() {
   const { t } = useTranslation();
   const [data, setData] = useState<TechRadarData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [selectedEntry, setSelectedEntry] = useState<RadarEntry | null>(null);
   const [userStack, setUserStack] = useState<string[]>([]);
 
-  // Load radar data
-  useEffect(() => {
+  const loadRadar = useCallback(() => {
+    setLoading(true);
+    setError(null);
     invoke<TechRadarData>('get_tech_radar')
       .then(setData)
-      .catch((e) => console.warn('TechRadar: failed to load radar data', e))
+      .catch((e) => setError(String(e)))
       .finally(() => setLoading(false));
   }, []);
+
+  // Load radar data
+  useEffect(() => {
+    loadRadar();
+  }, [loadRadar]);
 
   // Load user's tech stack for highlighting
   useEffect(() => {
@@ -83,7 +90,23 @@ export const TechRadar = memo(function TechRadar() {
     return (
       <div className="bg-bg-secondary rounded-lg border border-border p-8 flex flex-col items-center justify-center gap-2">
         <div className="w-5 h-5 border-2 border-gray-600 border-t-white rounded-full animate-spin" />
-        <div className="text-xs text-gray-500">{t('techRadar.loading')}</div>
+        <div className="text-xs text-text-muted">{t('techRadar.loading')}</div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="bg-bg-secondary rounded-lg border border-border p-8">
+        <div className="flex flex-col items-center justify-center gap-3 py-8 text-center">
+          <p className="text-text-secondary text-sm">{t('error.generic')}</p>
+          <button
+            onClick={loadRadar}
+            className="px-3 py-1.5 text-xs bg-bg-tertiary hover:bg-white/10 rounded transition-colors text-text-secondary"
+          >
+            {t('action.retry')}
+          </button>
+        </div>
       </div>
     );
   }
@@ -91,8 +114,8 @@ export const TechRadar = memo(function TechRadar() {
   if (!data || data.entries.length === 0) {
     return (
       <div className="bg-bg-secondary rounded-lg border border-border p-8 text-center">
-        <div className="text-sm text-gray-500">{t('techRadar.empty')}</div>
-        <div className="text-xs text-gray-600 mt-1">
+        <div className="text-sm text-text-muted">{t('techRadar.empty')}</div>
+        <div className="text-xs text-text-muted mt-1">
           {t('techRadar.emptyHint')}
         </div>
       </div>
@@ -104,11 +127,11 @@ export const TechRadar = memo(function TechRadar() {
       {/* Header */}
       <div className="px-5 py-4 border-b border-border flex items-center gap-3">
         <div className="w-8 h-8 bg-bg-tertiary rounded-lg flex items-center justify-center">
-          <span className="text-sm text-gray-400">R</span>
+          <span className="text-sm text-text-secondary">R</span>
         </div>
         <div>
           <h2 className="font-medium text-white text-sm">{t('techRadar.title')}</h2>
-          <p className="text-xs text-gray-500">
+          <p className="text-xs text-text-muted">
             {t('techRadar.count', { count: data.entries.length })}
           </p>
         </div>
@@ -128,40 +151,40 @@ export const TechRadar = memo(function TechRadar() {
       <TemporalSlider onSnapshotChange={handleSnapshotChange} />
 
       {/* Legend */}
-      <div className="px-5 py-3 border-t border-border flex items-center gap-5 text-[10px] text-gray-500">
+      <div className="px-5 py-3 border-t border-border flex items-center gap-5 text-[10px] text-text-muted">
         <div className="flex items-center gap-1.5">
-          <svg width="10" height="10" viewBox="0 0 10 10">
+          <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true">
             <polygon points="5,1 2,7 8,7" fill="#22C55E" />
           </svg>
           <span>{t('techRadar.movingIn')}</span>
         </div>
         <div className="flex items-center gap-1.5">
-          <svg width="10" height="10" viewBox="0 0 10 10">
+          <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true">
             <polygon points="5,9 2,3 8,3" fill="#EF4444" />
           </svg>
           <span>{t('techRadar.movingOut')}</span>
         </div>
         <div className="flex items-center gap-1.5">
-          <svg width="10" height="10" viewBox="0 0 10 10">
+          <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true">
             <polygon points="5,1 9,5 5,9 1,5" fill="#D4AF37" />
           </svg>
           <span>{t('techRadar.new')}</span>
         </div>
         <div className="flex items-center gap-1.5">
-          <svg width="8" height="8" viewBox="0 0 8 8">
+          <svg width="8" height="8" viewBox="0 0 8 8" aria-hidden="true">
             <circle cx="4" cy="4" r="3" fill="#FFFFFF" />
           </svg>
           <span>{t('techRadar.stable')}</span>
         </div>
         <div className="flex items-center gap-1.5">
-          <svg width="12" height="12" viewBox="0 0 12 12">
+          <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true">
             <circle cx="6" cy="6" r="3" fill="#FFFFFF" />
             <circle cx="6" cy="6" r="5" fill="none" stroke="#D4AF37" strokeWidth="1.5" />
           </svg>
           <span>{t('techRadar.yourStack')}</span>
         </div>
         {data.generated_at && (
-          <span className="ml-auto text-gray-600">
+          <span className="ml-auto text-text-muted">
             {t('techRadar.generated', { date: new Date(data.generated_at).toLocaleDateString() })}
           </span>
         )}

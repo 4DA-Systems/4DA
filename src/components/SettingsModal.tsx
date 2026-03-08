@@ -40,7 +40,7 @@ function StreetsMembershipSection({ onStatus }: { onStatus: (s: string) => void 
   useEffect(() => { loadStreetsTier(); }, [loadStreetsTier]);
 
   const tierLabels: Record<StreetsTier, { label: string; color: string }> = {
-    playbook: { label: t('settings.streets.tierPlaybook'), color: 'text-gray-400' },
+    playbook: { label: t('settings.streets.tierPlaybook'), color: 'text-text-secondary' },
     community: { label: t('settings.streets.tierCommunity'), color: 'text-[#D4AF37]' },
     cohort: { label: t('settings.streets.tierCohort'), color: 'text-[#22C55E]' },
   };
@@ -66,7 +66,7 @@ function StreetsMembershipSection({ onStatus }: { onStatus: (s: string) => void 
     <div className="bg-bg-tertiary rounded-lg p-4 border border-border">
       <h3 className="text-sm font-medium text-white mb-3">{t('settings.streets.title')}</h3>
       <div className="flex items-center gap-2 mb-3">
-        <span className="text-xs text-gray-500">{t('settings.streets.currentTier')}</span>
+        <span className="text-xs text-text-muted">{t('settings.streets.currentTier')}</span>
         <span className={`text-xs font-semibold ${color}`}>{label}</span>
       </div>
       {streetsTier === 'playbook' && (
@@ -107,6 +107,9 @@ function ShowAllViewsToggle() {
       </div>
       <button
         onClick={() => setShowAllViews(!showAllViews)}
+        role="switch"
+        aria-checked={showAllViews}
+        aria-label="Show all views"
         className={`relative w-10 h-5 rounded-full transition-colors ${
           showAllViews ? 'bg-green-500/40' : 'bg-gray-600'
         }`}
@@ -323,7 +326,7 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
             <button
               onClick={onClose}
               aria-label="Close settings"
-              className="w-8 h-8 rounded-lg bg-bg-tertiary text-gray-500 hover:text-white hover:bg-border flex items-center justify-center transition-all"
+              className="w-8 h-8 rounded-lg bg-bg-tertiary text-text-muted hover:text-white hover:bg-border flex items-center justify-center transition-all"
             >
               &times;
             </button>
@@ -341,7 +344,7 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
                 className={`px-4 py-3 text-sm transition-all relative ${
                   activeTab === tabId
                     ? 'text-orange-400 font-medium'
-                    : 'text-gray-500 hover:text-gray-300'
+                    : 'text-text-muted hover:text-text-secondary'
                 }`}
               >
                 {t(`settings.tabs.${tabId}`)}
@@ -422,7 +425,7 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
                   </button>
                   <button
                     onClick={testConnection}
-                    className="px-6 py-3 text-sm bg-bg-tertiary text-gray-300 border border-border rounded-lg hover:text-white hover:border-orange-500/30 transition-all"
+                    className="px-6 py-3 text-sm bg-bg-tertiary text-text-secondary border border-border rounded-lg hover:text-white hover:border-orange-500/30 transition-all"
                   >
                     {t('settings.testConnection')}
                   </button>

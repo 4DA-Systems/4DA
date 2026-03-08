@@ -118,17 +118,17 @@ export function ActionBar({
             </div>
           ) : (
             <div className="w-8 h-8 bg-bg-tertiary rounded-lg flex items-center justify-center flex-shrink-0">
-              <span className="text-gray-500">*</span>
+              <span className="text-text-muted">*</span>
             </div>
           )}
           <div className="min-w-0">
             <p className="text-sm text-white font-medium truncate">
               {state.loading ? t('action.analyzing') : state.analysisComplete ? t('action.analysisComplete') : t('action.ready')}
             </p>
-            <p className="text-xs text-gray-500 truncate">
+            <p className="text-xs text-text-muted truncate">
               {state.status}
               {state.lastAnalyzedAt && !state.loading && (
-                <span className="ml-2 text-gray-600">
+                <span className="ml-2 text-text-muted">
                   · {state.lastAnalyzedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                 </span>
               )}
@@ -157,7 +157,7 @@ export function ActionBar({
         {/* Summary Badges */}
         {summaryBadges && (
           <div className="flex items-center gap-1.5">
-            <span className="px-2 py-1 text-[11px] bg-bg-tertiary text-gray-400 rounded-lg font-mono">
+            <span className="px-2 py-1 text-[11px] bg-bg-tertiary text-text-secondary rounded-lg font-mono">
               {summaryBadges.total}
             </span>
             <span className="px-2 py-1 text-[11px] bg-green-500/10 text-green-400 rounded-lg font-mono">
@@ -207,7 +207,7 @@ export function ActionBar({
               aria-label="More actions"
               aria-expanded={overflowOpen}
               aria-haspopup="true"
-              className="w-10 h-10 rounded-lg flex items-center justify-center bg-bg-tertiary text-gray-400 border border-border hover:text-gray-200 hover:border-[#3A3A3A] transition-all"
+              className="w-10 h-10 rounded-lg flex items-center justify-center bg-bg-tertiary text-text-secondary border border-border hover:text-text-secondary hover:border-[#3A3A3A] transition-all"
               title="More actions"
             >
               <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
@@ -222,17 +222,17 @@ export function ActionBar({
                   role="menuitem"
                   onClick={() => { onGenerateBriefing(); setOverflowOpen(false); }}
                   disabled={aiBriefing.loading || state.relevanceResults.length === 0}
-                  className="w-full px-4 py-2.5 text-sm text-left text-gray-300 hover:bg-border disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                  className="w-full px-4 py-2.5 text-sm text-left text-text-secondary hover:bg-border disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
                 >
                   {t('action.regenerateBriefing')}
                 </button>
                 <button
                   role="menuitem"
                   onClick={() => { onToggleAutoBriefing(); setOverflowOpen(false); }}
-                  className="w-full px-4 py-2.5 text-sm text-left text-gray-300 hover:bg-border transition-colors flex items-center justify-between"
+                  className="w-full px-4 py-2.5 text-sm text-left text-text-secondary hover:bg-border transition-colors flex items-center justify-between"
                 >
                   {t('action.autoBriefing')}
-                  <span className={`text-xs px-2 py-0.5 rounded ${autoBriefingEnabled ? 'bg-orange-500/20 text-orange-400' : 'bg-border text-gray-500'}`}>
+                  <span className={`text-xs px-2 py-0.5 rounded ${autoBriefingEnabled ? 'bg-orange-500/20 text-orange-400' : 'bg-border text-text-muted'}`}>
                     {autoBriefingEnabled ? t('badge.on') : t('badge.off')}
                   </span>
                 </button>
@@ -251,7 +251,7 @@ export function ActionBar({
                         }
                         setOverflowOpen(false);
                       }}
-                      className="w-full px-4 py-2.5 text-sm text-left text-gray-300 hover:bg-border transition-colors"
+                      className="w-full px-4 py-2.5 text-sm text-left text-text-secondary hover:bg-border transition-colors"
                     >
                       {t('action.exportMarkdown')}
                     </button>
@@ -267,7 +267,7 @@ export function ActionBar({
                         }
                         setOverflowOpen(false);
                       }}
-                      className="w-full px-4 py-2.5 text-sm text-left text-gray-300 hover:bg-border transition-colors"
+                      className="w-full px-4 py-2.5 text-sm text-left text-text-secondary hover:bg-border transition-colors"
                     >
                       {t('action.exportDigest')}
                     </button>
@@ -282,7 +282,7 @@ export function ActionBar({
       {/* Progress Bar */}
       {state.loading && state.progress > 0 && (
         <div className="px-5 pb-4">
-          <div className="flex justify-between text-xs text-gray-500 mb-2">
+          <div className="flex justify-between text-xs text-text-muted mb-2">
             <span>{getStageLabel(state.progressStage)}</span>
             <span>{Math.round(state.progress * 100)}%</span>
           </div>

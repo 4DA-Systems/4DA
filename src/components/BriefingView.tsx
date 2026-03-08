@@ -248,7 +248,7 @@ export const BriefingView = memo(function BriefingView() {
                     ) : (
                       <span className="text-sm text-white">{item.title}</span>
                     )}
-                    <span className="text-xs text-gray-500 ml-2">{item.source}</span>
+                    <span className="text-xs text-text-muted ml-2">{item.source}</span>
                   </div>
                 </div>
               ))}
@@ -257,12 +257,12 @@ export const BriefingView = memo(function BriefingView() {
               <div className="mt-4 pt-3 border-t border-border">
                 <h3 className="text-xs font-medium text-amber-400 mb-2">{t('briefing.stackAlerts')}</h3>
                 {freeBriefing.stack_alerts.map((alert, i) => (
-                  <div key={i} className="text-xs text-gray-400 py-0.5">{alert.title}</div>
+                  <div key={i} className="text-xs text-text-secondary py-0.5">{alert.title}</div>
                 ))}
               </div>
             )}
             <div className="mt-3 pt-3 border-t border-border flex items-center justify-between">
-              <span className="text-xs text-gray-500">{t('briefing.itemsAnalyzed', { count: freeBriefing.total_items })}</span>
+              <span className="text-xs text-text-muted">{t('briefing.itemsAnalyzed', { count: freeBriefing.total_items })}</span>
               <ProGate feature="AI Briefings">
                 <button
                   onClick={generateBriefing}
@@ -328,7 +328,7 @@ export const BriefingView = memo(function BriefingView() {
         <div>
           <div className="flex items-center justify-between mb-3">
             <h3 className="text-sm font-medium text-white">{t('briefing.topPicks')}</h3>
-            <span className="text-xs text-gray-500">{t('briefing.itemCount', { count: topItems.length })}</span>
+            <span className="text-xs text-text-muted">{t('briefing.itemCount', { count: topItems.length })}</span>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             {topItems.map(item => {
@@ -393,14 +393,14 @@ export const BriefingView = memo(function BriefingView() {
             )}
             <button
               onClick={copyBriefing}
-              className="px-2.5 py-1.5 text-xs bg-bg-tertiary text-gray-400 border border-border rounded-lg hover:text-white hover:border-[#3A3A3A] transition-all"
+              className="px-2.5 py-1.5 text-xs bg-bg-tertiary text-text-secondary border border-border rounded-lg hover:text-white hover:border-[#3A3A3A] transition-all"
               title={t('briefing.copyTooltip')}
             >
               {t('action.copy')}
             </button>
             <button
               onClick={shareBriefing}
-              className="px-2.5 py-1.5 text-xs bg-bg-tertiary text-gray-400 border border-border rounded-lg hover:text-white hover:border-[#3A3A3A] transition-all"
+              className="px-2.5 py-1.5 text-xs bg-bg-tertiary text-text-secondary border border-border rounded-lg hover:text-white hover:border-[#3A3A3A] transition-all"
               title={t('briefing.shareTooltip')}
             >
               {t('briefing.share')}
@@ -436,11 +436,13 @@ export const BriefingView = memo(function BriefingView() {
             <button
               onClick={() => setGapExpanded(!gapExpanded)}
               className="w-full flex items-center justify-between text-left"
+              aria-expanded={gapExpanded}
+              aria-label={`${gaps.length} source${gaps.length > 1 ? 's' : ''} offline`}
             >
               <span className="text-xs text-amber-400">
                 {gaps.length} source{gaps.length > 1 ? 's' : ''} offline: {gaps.map(g => g.gap_message).join(', ')}
               </span>
-              <span className="text-xs text-amber-500 ml-2 flex-shrink-0">{gapExpanded ? '\u25B2' : '\u25BC'}</span>
+              <span className="text-xs text-amber-500 ml-2 flex-shrink-0" aria-hidden="true">{gapExpanded ? '\u25B2' : '\u25BC'}</span>
             </button>
             {gapExpanded && (
               <div className="mt-2 space-y-1">
@@ -449,7 +451,7 @@ export const BriefingView = memo(function BriefingView() {
                     <span className={s.status === 'healthy' ? 'text-green-400' : 'text-amber-400'}>
                       {s.source_type}
                     </span>
-                    <span className="text-gray-500">
+                    <span className="text-text-muted">
                       {s.status === 'healthy'
                         ? `${s.items_fetched} items${s.last_success_relative ? ` \u00B7 ${s.last_success_relative}` : ''}`
                         : s.status === 'circuit_open' ? 'circuit open' : 'error'}
@@ -498,7 +500,7 @@ export const BriefingView = memo(function BriefingView() {
         </div>
 
         {briefing.lastGenerated && (
-          <div className="px-5 py-3 border-t border-border text-xs text-gray-600">
+          <div className="px-5 py-3 border-t border-border text-xs text-text-muted">
             {t('briefing.generatedAt', { time: briefing.lastGenerated.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) })}
             {briefing.model && <span className="ml-2">{t('briefing.viaModel', { model: briefing.model })}</span>}
           </div>
@@ -512,13 +514,14 @@ export const BriefingView = memo(function BriefingView() {
       <div>
         <button
           onClick={() => setMetricsExpanded(prev => !prev)}
+          aria-expanded={metricsExpanded}
           className="flex items-center gap-2 text-xs text-text-muted cursor-pointer py-2 w-full text-left"
         >
           <span>{t('briefing.intelligenceMetrics')}</span>
           <span className="text-[10px] bg-white/5 px-1.5 py-0.5 rounded">
             {pulse?.calibration_accuracy != null ? `${(pulse.calibration_accuracy * 100).toFixed(0)}% accuracy` : '\u2014'}
           </span>
-          <span className={`ml-auto text-[10px] transition-transform duration-200 ${metricsExpanded ? 'rotate-90' : ''}`}>{'\u25B8'}</span>
+          <span className={`ml-auto text-[10px] transition-transform duration-200 ${metricsExpanded ? 'rotate-90' : ''}`} aria-hidden="true">{'\u25B8'}</span>
         </button>
         {metricsExpanded && (
           <div className="space-y-3 pt-2">
@@ -542,9 +545,16 @@ export const BriefingView = memo(function BriefingView() {
 
       {/* Error display */}
       {briefing.error && (
-        <div role="alert" className="p-3 bg-red-900/20 border border-red-500/30 rounded-lg text-red-300 text-sm flex items-center gap-2">
-          <span>!</span>
-          {briefing.error}
+        <div role="alert" className="p-4 bg-red-900/20 border border-red-500/30 rounded-lg">
+          <div className="flex flex-col items-center justify-center gap-3 text-center">
+            <p className="text-text-secondary text-sm">{t('error.generic')}</p>
+            <button
+              onClick={generateBriefing}
+              className="px-3 py-1.5 text-xs bg-bg-tertiary hover:bg-white/10 rounded transition-colors text-text-secondary"
+            >
+              {t('action.retry')}
+            </button>
+          </div>
         </div>
       )}
     </section>

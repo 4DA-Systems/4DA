@@ -114,7 +114,7 @@ export const RadarEntryPanel = memo(function RadarEntryPanel({ entry, onClose }:
           className="p-1 text-text-muted hover:text-white transition-colors"
           aria-label={t('techRadar.closePanel')}
         >
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
             <path d="M4 4L12 12M12 4L4 12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
           </svg>
         </button>

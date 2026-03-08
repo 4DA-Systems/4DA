@@ -39,7 +39,7 @@ export function ContextDiscoverySection({
             <h3 className="text-white font-medium">{t('settings.context.title')}</h3>
             <span className="px-2 py-0.5 text-[10px] bg-orange-500/20 text-orange-400 rounded-full font-medium">ACE</span>
           </div>
-          <p className="text-gray-500 text-sm mt-1">
+          <p className="text-text-muted text-sm mt-1">
             {t('settings.context.description')}
           </p>
         </div>
@@ -62,11 +62,11 @@ export function ContextDiscoverySection({
             onChange={(e) => setNewScanDir(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && addScanDirectory()}
             placeholder={t('settings.context.addDirPlaceholder')}
-            className="flex-1 px-3 py-2.5 bg-bg-secondary border border-border rounded-lg text-sm text-white placeholder:text-gray-500 focus:border-orange-500/50 focus:outline-none transition-colors"
+            className="flex-1 px-3 py-2.5 bg-bg-secondary border border-border rounded-lg text-sm text-white placeholder:text-text-muted focus:border-orange-500/50 focus:outline-none transition-colors"
           />
           <button
             onClick={addScanDirectory}
-            className="px-4 py-2.5 text-sm bg-bg-secondary border border-border rounded-lg text-gray-400 hover:text-white hover:border-orange-500/30 transition-all"
+            className="px-4 py-2.5 text-sm bg-bg-secondary border border-border rounded-lg text-text-secondary hover:text-white hover:border-orange-500/30 transition-all"
           >
             {t('action.add')}
           </button>
@@ -74,10 +74,10 @@ export function ContextDiscoverySection({
 
         <div className="space-y-2">
           {scanDirectories.length === 0 ? (
-            <p className="text-sm text-gray-500 text-center py-3">{t('settings.context.noDirs')}</p>
+            <p className="text-sm text-text-muted text-center py-3">{t('settings.context.noDirs')}</p>
           ) : (
             <>
-              <div className="text-xs text-gray-500 mb-2">{t('settings.context.configuredDirs', { count: scanDirectories.length })}</div>
+              <div className="text-xs text-text-muted mb-2">{t('settings.context.configuredDirs', { count: scanDirectories.length })}</div>
               <div className="space-y-1.5 max-h-32 overflow-y-auto">
                 {scanDirectories.map((dir) => (
                   <div key={dir} className="flex items-center justify-between px-3 py-2 bg-bg-secondary rounded-lg border border-border group">
@@ -85,7 +85,7 @@ export function ContextDiscoverySection({
                     <button
                       onClick={() => removeScanDirectory(dir)}
                       aria-label={t('settings.context.removeDir', { dir })}
-                      className="text-gray-500 hover:text-red-400 ml-2 opacity-0 group-hover:opacity-100 transition-opacity"
+                      className="text-text-muted hover:text-red-400 ml-2 opacity-0 group-hover:opacity-100 transition-opacity"
                     >
                       &times;
                     </button>
@@ -100,7 +100,7 @@ export function ContextDiscoverySection({
           <button
             onClick={runFullScan}
             disabled={isScanning}
-            className="w-full px-4 py-2.5 text-sm bg-bg-secondary border border-border rounded-lg text-gray-400 hover:text-white hover:border-orange-500/30 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+            className="w-full px-4 py-2.5 text-sm bg-bg-secondary border border-border rounded-lg text-text-secondary hover:text-white hover:border-orange-500/30 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {isScanning ? t('settings.context.scanning') : t('settings.context.rescan')}
           </button>
@@ -108,13 +108,13 @@ export function ContextDiscoverySection({
 
         {(discoveredContext.tech.length > 0 || discoveredContext.topics.length > 0) && (
           <div className="bg-bg-secondary rounded-lg p-4 border border-border space-y-3">
-            <div className="text-xs text-gray-500 flex items-center gap-2">
+            <div className="text-xs text-text-muted flex items-center gap-2">
               <span className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse" />
               {t('settings.context.discoveredContext')} {discoveredContext.lastScan && `(${new Date(discoveredContext.lastScan).toLocaleDateString()})`}
             </div>
             {discoveredContext.tech.length > 0 && (
               <div>
-                <div className="text-xs text-gray-400 mb-2">{t('settings.context.techStack')}</div>
+                <div className="text-xs text-text-secondary mb-2">{t('settings.context.techStack')}</div>
                 <div className="flex flex-wrap gap-1.5">
                   {discoveredContext.tech.slice(0, 10).map((tech) => (
                     <span
@@ -126,14 +126,14 @@ export function ContextDiscoverySection({
                     </span>
                   ))}
                   {discoveredContext.tech.length > 10 && (
-                    <span className="text-xs text-gray-500 self-center">{t('settings.context.more', { count: discoveredContext.tech.length - 10 })}</span>
+                    <span className="text-xs text-text-muted self-center">{t('settings.context.more', { count: discoveredContext.tech.length - 10 })}</span>
                   )}
                 </div>
               </div>
             )}
             {discoveredContext.topics.length > 0 && (
               <div>
-                <div className="text-xs text-gray-400 mb-2">{t('settings.context.topics')}</div>
+                <div className="text-xs text-text-secondary mb-2">{t('settings.context.topics')}</div>
                 <div className="flex flex-wrap gap-1.5">
                   {discoveredContext.topics.slice(0, 8).map((topic) => (
                     <span
@@ -144,7 +144,7 @@ export function ContextDiscoverySection({
                     </span>
                   ))}
                   {discoveredContext.topics.length > 8 && (
-                    <span className="text-xs text-gray-500 self-center">{t('settings.context.more', { count: discoveredContext.topics.length - 8 })}</span>
+                    <span className="text-xs text-text-muted self-center">{t('settings.context.more', { count: discoveredContext.topics.length - 8 })}</span>
                   )}
                 </div>
               </div>
