@@ -5,7 +5,7 @@ import { useAppStore } from '../store';
 import { useLicense } from '../hooks';
 import { trackEvent } from '../hooks/use-telemetry';
 import { StackHealthBar, type StackHealth } from './search/StackHealthBar';
-import { SynthesisPanel } from './search/SynthesisPanel';
+import { SynthesisPanel, type SynthesisResponse } from './search/SynthesisPanel';
 import { GhostPreview, type GhostPreviewData } from './search/GhostPreview';
 import { StandingQueries } from './search/StandingQueries';
 
@@ -59,7 +59,7 @@ export function NaturalLanguageSearch({ onStatusChange, defaultExpanded = true }
   const [expanded, setExpanded] = useState(defaultExpanded);
   const [error, setError] = useState<string | null>(null);
   const [stackHealth, setStackHealth] = useState<StackHealth | null>(null);
-  const [synthesis, setSynthesis] = useState<string | null>(null);
+  const [synthesis, setSynthesis] = useState<SynthesisResponse | null>(null);
   const [synthesisLoading, setSynthesisLoading] = useState(false);
   const analysisComplete = useAppStore((s) => s.appState.analysisComplete);
   const lastAnalyzedAt = useAppStore((s) => s.appState.lastAnalyzedAt);
@@ -75,8 +75,8 @@ export function NaturalLanguageSearch({ onStatusChange, defaultExpanded = true }
   const fetchSynthesis = useCallback(async (queryText: string) => {
     setSynthesisLoading(true);
     try {
-      const text = await invoke<string>('synthesize_search', { queryText });
-      setSynthesis(text);
+      const resp = await invoke<SynthesisResponse>('synthesize_search', { queryText });
+      setSynthesis(resp);
     } catch (err) {
       console.error('Synthesis failed:', err);
       setSynthesis(null);
