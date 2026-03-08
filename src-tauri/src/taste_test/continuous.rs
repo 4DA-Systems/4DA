@@ -142,7 +142,10 @@ pub fn snapshot_posterior_if_needed(conn: &Connection) -> Result<()> {
 
 /// Initialize the posterior from a taste test result.
 /// Called after taste_test_finalize to seed the continuous system.
-pub fn seed_from_taste_test(conn: &Connection, weights: &[f64; NUM_PERSONAS]) -> Result<()> {
+pub fn seed_from_taste_test(
+    conn: &Connection,
+    weights: &[f64; NUM_PERSONAS],
+) -> Result<()> {
     ensure_posterior_table(conn)?;
     save_posterior(conn, weights, 0, "taste_test")?;
     debug!(target: "taste::continuous", "Seeded posterior from taste test");
@@ -159,7 +162,11 @@ pub fn seed_from_taste_test(conn: &Connection, weights: &[f64; NUM_PERSONAS]) ->
 /// The update uses a dampened Bayes rule — implicit signals are weaker
 /// than explicit taste test responses, so we raise likelihoods to a
 /// fractional power (0.15) to prevent rapid posterior collapse.
-pub fn update_posterior(conn: &Connection, topics: &[String], signal_strength: f32) -> Result<()> {
+pub fn update_posterior(
+    conn: &Connection,
+    topics: &[String],
+    signal_strength: f32,
+) -> Result<()> {
     if topics.is_empty() {
         return Ok(());
     }

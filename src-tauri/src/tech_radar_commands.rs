@@ -144,7 +144,8 @@ pub async fn get_radar_at_snapshot(snapshot_date: String) -> Result<serde_json::
 
     match data {
         Some(json_str) => {
-            let parsed: serde_json::Value = serde_json::from_str(&json_str)?;
+            let parsed: serde_json::Value =
+                serde_json::from_str(&json_str)?;
             debug!(
                 target: "4da::tech_radar",
                 date = %snapshot_date,
