@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
 import type { AttentionReport } from '../../types';
@@ -9,12 +9,18 @@ export function AttentionDashboard() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [period, setPeriod] = useState(7);
+  const cache = useRef<Record<number, AttentionReport>>({});
 
   const loadReport = async (days: number) => {
+    if (cache.current[days]) {
+      setReport(cache.current[days]);
+      return;
+    }
     setLoading(true);
     setError(null);
     try {
       const r = await invoke<AttentionReport>('get_attention_report', { periodDays: days });
+      cache.current[days] = r;
       setReport(r);
     } catch (e) {
       setError(String(e));
@@ -24,7 +30,10 @@ export function AttentionDashboard() {
   };
 
   useEffect(() => {
-    loadReport(period);
+    const timer = setTimeout(() => {
+      loadReport(period);
+    }, 300);
+    return () => clearTimeout(timer);
   }, [period]);
 
   return (

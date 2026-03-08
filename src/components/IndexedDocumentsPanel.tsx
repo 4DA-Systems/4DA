@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
 import type {
@@ -57,8 +57,8 @@ export function IndexedDocumentsPanel({ onStatusChange }: IndexedDocumentsPanelP
   const [selectedDoc, setSelectedDoc] = useState<DocumentContentResponse | null>(null);
   const [filterType, setFilterType] = useState<string | null>(null);
   const [expanded, setExpanded] = useState(false);
+  const loaded = useRef(false);
 
-  // Load documents and stats
   const loadDocuments = async () => {
     setLoading(true);
     try {
@@ -72,6 +72,7 @@ export function IndexedDocumentsPanel({ onStatusChange }: IndexedDocumentsPanelP
       ]);
       setDocuments(docsResult.documents);
       setStats(statsResult);
+      loaded.current = true;
     } catch (error) {
       console.error('Failed to load indexed documents:', error);
       onStatusChange?.(`Error loading documents: ${error}`);
@@ -117,10 +118,11 @@ export function IndexedDocumentsPanel({ onStatusChange }: IndexedDocumentsPanelP
     }
   };
 
-  // Load on mount and when filter changes
   useEffect(() => {
-    loadDocuments();
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- loadDocuments is stable via useCallback, only re-run on filter change
+    if (expanded && loaded.current) {
+      loadDocuments();
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filterType]);
 
   // Handle search on Enter
@@ -193,7 +195,13 @@ export function IndexedDocumentsPanel({ onStatusChange }: IndexedDocumentsPanelP
     <div className="bg-bg-tertiary rounded-lg p-5 border border-border">
       <div
         className="flex items-center justify-between cursor-pointer"
-        onClick={() => setExpanded(!expanded)}
+        onClick={() => {
+          const willExpand = !expanded;
+          setExpanded(willExpand);
+          if (willExpand && !loaded.current) {
+            loadDocuments();
+          }
+        }}
       >
         <div className="flex items-center gap-3">
           <div className="w-8 h-8 bg-emerald-500/20 rounded-lg flex items-center justify-center flex-shrink-0">

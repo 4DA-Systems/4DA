@@ -471,7 +471,7 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
               4DA v1.0.0 &copy; 2025-2026 Antony Lawrence Kiddie Pasifa. All rights reserved.
             </p>
             <p className="text-xs text-text-muted mt-1">
-              Licensed under BSL-1.1
+              Licensed under FSL-1.1-Apache-2.0
             </p>
           </div>
         </div>

@@ -580,23 +580,42 @@ pub async fn get_license_tier() -> Result<serde_json::Value> {
     }))
 }
 
-/// Activate a license key with ed25519 verification
+/// Activate a license key — tries Keygen API first, falls back to ed25519 self-signed
 #[tauri::command]
 pub async fn activate_license(license_key: String) -> Result<serde_json::Value> {
     if license_key.trim().is_empty() {
         return Err("License key cannot be empty".into());
     }
 
-    let payload = crate::settings::verify_license_key(&license_key)?;
+    // Strategy: try Keygen API validation first (for Keygen-format keys like BE3529-...),
+    // then fall back to local ed25519 verification (for self-signed 4DA- keys).
+    let effective_tier: String;
+    let email: Option<String>;
+    let expires_at: Option<String>;
 
-    // Any paid license (pro, team, community, cohort) maps to "pro" tier
-    // for feature gating purposes. The specific STREETS tier is derived
-    // from features[] when needed by get_streets_tier().
-    let effective_tier = match payload.tier.as_str() {
-        "pro" | "team" => payload.tier.clone(),
-        "community" | "cohort" => "pro".to_string(),
-        _ => payload.tier.clone(),
-    };
+    if license_key.starts_with("4DA-") {
+        // Self-signed ed25519 key
+        let payload = crate::settings::verify_license_key(&license_key)?;
+        effective_tier = match payload.tier.as_str() {
+            "pro" | "team" => payload.tier.clone(),
+            "community" | "cohort" => "pro".to_string(),
+            _ => payload.tier.clone(),
+        };
+        email = Some(payload.email);
+        expires_at = Some(payload.expires_at);
+    } else {
+        // Keygen API key (e.g., BE3529-741BAF-...)
+        let result = crate::settings::validate_license_key_keygen(&license_key, "free").await;
+        if result.tier == "free" {
+            return Ok(serde_json::json!({
+                "success": false,
+                "reason": result.detail,
+            }));
+        }
+        effective_tier = result.tier;
+        email = None;
+        expires_at = None;
+    }
 
     let manager = get_settings_manager();
     let mut guard = manager.lock();
@@ -612,8 +631,8 @@ pub async fn activate_license(license_key: String) -> Result<serde_json::Value> 
     Ok(serde_json::json!({
         "success": true,
         "tier": effective_tier,
-        "email": payload.email,
-        "expires_at": payload.expires_at,
+        "email": email,
+        "expires_at": expires_at,
     }))
 }
 

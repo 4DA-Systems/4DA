@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
 import { ProGate } from '../ProGate';
@@ -24,21 +24,21 @@ export function ProjectHealthRadar() {
   const [projects, setProjects] = useState<ProjectHealth[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const loaded = useRef(false);
 
-  useEffect(() => {
-    const load = async () => {
-      setLoading(true);
-      try {
-        const result = await invoke<ProjectHealth[]>('get_project_health');
-        setProjects(result);
-      } catch (e) {
-        setError(String(e));
-      } finally {
-        setLoading(false);
-      }
-    };
-    load();
-  }, []);
+  const scanHealth = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const result = await invoke<ProjectHealth[]>('get_project_health');
+      setProjects(result);
+      loaded.current = true;
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <ProGate feature="Project Health">
@@ -64,7 +64,16 @@ export function ProjectHealthRadar() {
         <div className="text-xs text-red-400 p-3 bg-red-500/10 rounded border border-red-500/20">{error}</div>
       )}
 
-      {!loading && projects.length === 0 && !error && (
+      {!loading && !loaded.current && projects.length === 0 && !error && (
+        <button
+          onClick={scanHealth}
+          className="w-full px-4 py-3 text-sm bg-teal-500/10 border border-teal-500/20 text-teal-400 rounded-lg hover:bg-teal-500/20 transition-all"
+        >
+          {t('settings.health.scanning', 'Scan Project Health')}
+        </button>
+      )}
+
+      {!loading && loaded.current && projects.length === 0 && !error && (
         <p className="text-xs text-gray-500 text-center py-4">
           {t('settings.health.noProjects')}
         </p>
@@ -118,6 +127,15 @@ export function ProjectHealthRadar() {
           </div>
         </div>
       ))}
+
+      {loaded.current && !loading && (
+        <button
+          onClick={scanHealth}
+          className="w-full px-4 py-2 text-xs text-gray-500 hover:text-teal-400 transition-colors"
+        >
+          {t('action.refresh', 'Refresh')}
+        </button>
+      )}
     </div>
     </ProGate>
   );

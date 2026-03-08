@@ -1,6 +1,7 @@
 import { useEffect, useMemo, memo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../store';
+import { registerGameComponent } from '../lib/game-components';
 import type { DecisionWindow } from '../types/autophagy';
 
 const WINDOW_TYPE_CONFIG: Record<string, { label: string; color: string; border: string; bg: string }> = {
@@ -63,7 +64,12 @@ const WindowCard = memo(function WindowCard({
           )}
         </div>
         {timeLeft && (
-          <span className="text-[10px] text-gray-500 flex-shrink-0">{timeLeft}</span>
+          <div className="flex items-center gap-1.5 flex-shrink-0">
+            <div className="w-4 h-4 overflow-hidden">
+              <game-decision-countdown style={{ width: '16px', height: '16px' }} />
+            </div>
+            <span className="text-[10px] text-gray-500">{timeLeft}</span>
+          </div>
         )}
       </div>
       <h4 className="text-sm text-white font-medium mb-1 truncate">{window.title}</h4>
@@ -105,6 +111,8 @@ export const DecisionWindowsPanel = memo(function DecisionWindowsPanel() {
   useEffect(() => {
     loadWindows();
   }, [loadWindows]);
+
+  useEffect(() => { registerGameComponent('game-decision-countdown'); }, []);
 
   const openWindows = useMemo(
     () => (windows ?? []).filter(w => w.status === 'open').sort((a, b) => b.urgency - a.urgency),

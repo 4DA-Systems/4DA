@@ -1,7 +1,9 @@
+import { useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { VoidEngine } from '../void-engine/VoidEngine';
 import { getStageNarration } from '../../utils/first-run-messages';
+import { registerGameComponent } from '../../lib/game-components';
 import type { Phase, ScanSummary } from './utils';
 
 // ============================================================================
@@ -116,6 +118,8 @@ export function LoadingState({
 }: LoadingStateProps) {
   const { t } = useTranslation();
 
+  useEffect(() => { registerGameComponent('game-boot-ring'); }, []);
+
   // Intelligence preview phase
   if (phase === 'intelligence' && scanSummary) {
     return <IntelligencePreview summary={scanSummary} />;
@@ -126,6 +130,12 @@ export function LoadingState({
       <div className="mb-6">
         <VoidEngine size={80} />
       </div>
+
+      {phase === 'preparing' && (
+        <div className="w-10 h-10 mx-auto mb-2 opacity-60">
+          <game-boot-ring style={{ width: '40px', height: '40px' }} />
+        </div>
+      )}
 
       <h2 className="text-xl font-medium text-white mb-2">
         {phase === 'preparing' && t('firstRun.preparing')}
