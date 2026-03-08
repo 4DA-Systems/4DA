@@ -172,7 +172,7 @@ export function LearningIndicator({
           {/* Overflow indicator */}
           {learnedAffinities.filter((a) => a.affinity_score > 0).length > 5 && (
             <span className="text-[11px] text-gray-500 self-center">
-              +{learnedAffinities.filter((a) => a.affinity_score > 0).length - 5} more
+              {t('learnedBehavior.moreCount', { count: learnedAffinities.filter((a) => a.affinity_score > 0).length - 5 })}
             </span>
           )}
         </div>
