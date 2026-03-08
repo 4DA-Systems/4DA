@@ -311,6 +311,8 @@
   "briefing.stack": "Stack",
   "briefing.stackDeps": "Stack: {{deps}}",
   "briefing.viewAllResults": "View All {{count}} Results",
+  "briefing.systemLearned": "System learned",
+  "briefing.intelligenceMetrics": "Intelligence Metrics",
 
   "briefing.profile.title": "Your Intelligence Profile",
   "briefing.profile.autophagyAccuracy": "Autophagy Accuracy",

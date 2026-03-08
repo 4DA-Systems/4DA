@@ -684,7 +684,7 @@ pub(crate) async fn analyze_cached_content_impl(
         info!(target: "4da::analysis", since = since, "Differential analysis - checking for new items since last run");
 
         let new_items = db
-            .get_items_since_timestamp(since, 500)
+            .get_items_since_timestamp_tiered(since, 500)
             .map_err(|e| format!("Failed to load new items: {}", e))?;
 
         if new_items.is_empty() {
@@ -700,8 +700,9 @@ pub(crate) async fn analyze_cached_content_impl(
             );
 
             // Re-score existing items for updated freshness/affinities (7-day window)
+            // Respects free-tier 30-day history gate via get_items_tiered
             let all_items = db
-                .get_items_since_hours(168, 1000)
+                .get_items_tiered(168, 1000)
                 .map_err(|e| format!("Failed to load cached items: {}", e))?;
 
             if all_items.is_empty() {
@@ -826,8 +827,9 @@ pub(crate) async fn analyze_cached_content_impl(
 
     // Full analysis path (no previous results or first run)
     // Use 7-day window to include items from recent fetches
+    // Respects free-tier 30-day history gate via get_items_tiered
     let cached_items = db
-        .get_items_since_hours(168, 1000)
+        .get_items_tiered(168, 1000)
         .map_err(|e| format!("Failed to load cached items: {}", e))?;
 
     let total_cached = cached_items.len();
@@ -858,6 +860,10 @@ pub(crate) async fn cancel_analysis() -> Result<(), String> {
 }
 
 /// Get current analysis state (with timeout auto-recovery)
+///
+/// Applies free-tier history gate: non-Pro users only see items from the last 30 days.
+/// The gate is enforced here as a defense-in-depth measure on top of the DB-level
+/// filter in `get_items_tiered` / `get_items_since_timestamp_tiered`.
 #[tauri::command]
 pub(crate) async fn get_analysis_status() -> Result<AnalysisState, String> {
     let state = get_analysis_state();
@@ -880,7 +886,27 @@ pub(crate) async fn get_analysis_status() -> Result<AnalysisState, String> {
         }
     }
 
-    Ok(guard.clone())
+    let mut result = guard.clone();
+    drop(guard);
+
+    // Free-tier history gate: filter out items older than 30 days
+    if !crate::settings::is_pro() {
+        if let Some(ref mut results) = result.results {
+            let cutoff = chrono::Utc::now()
+                - chrono::Duration::hours(crate::db::FREE_HISTORY_LIMIT_HOURS);
+            if let Ok(db) = get_database() {
+                results.retain(|item| {
+                    match db.get_source_item_by_id(item.id as i64) {
+                        Ok(Some(stored)) => stored.created_at >= cutoff,
+                        // If we can't look up the item, keep it (fail open for UX)
+                        _ => true,
+                    }
+                });
+            }
+        }
+    }
+
+    Ok(result)
 }
 /// Get scoring rejection rate statistics
 #[tauri::command]

@@ -3,12 +3,11 @@ import { useTranslation } from 'react-i18next';
 import { useShallow } from 'zustand/react/shallow';
 import { BriefingCard } from './BriefingCard';
 import { SignalActionCard } from './briefing/SignalActionCard';
+import { BriefingAtmosphere, RelativeTimestamp, SKELETON_WIDTHS } from './briefing/BriefingHelpers';
 import { BriefingLoadingState, BriefingReadyState, BriefingNoDataState } from './BriefingEmptyStates';
 import { ProGate } from './ProGate';
 import { useAppStore } from '../store';
 import {
-  getRelativeTime,
-  getFreshnessColor,
   parseBriefingContent,
   SectionAccent,
   sectionTitleColor,
@@ -21,37 +20,7 @@ import { DecisionWindowsPanel } from './DecisionWindowsPanel';
 import { CompoundAdvantageScore } from './CompoundAdvantageScore';
 import { IntelligenceProfileCard } from './IntelligenceProfileCard';
 import { useLicense } from '../hooks/use-license';
-import { useGameComponent } from '../hooks/use-game-component';
 import type { SourceRelevance } from '../types';
-
-function BriefingAtmosphere({ signalCount, topCount, hasContent }: { signalCount: number; topCount: number; hasContent: boolean }) {
-  const { containerRef, elementRef } = useGameComponent('game-briefing-atmosphere');
-
-  useEffect(() => {
-    elementRef.current?.setParam?.('quality', hasContent ? 0.7 : 0.2);
-    elementRef.current?.setParam?.('signal_heat', Math.min(topCount / 20, 1));
-    elementRef.current?.setParam?.('decision_pressure', Math.min(signalCount / 5, 1));
-  }, [signalCount, topCount, hasContent, elementRef]);
-
-  return <div ref={containerRef} className="w-full h-16 rounded-lg overflow-hidden opacity-50 -mb-2" aria-hidden="true" />;
-}
-
-// Stable skeleton widths — no Math.random() re-renders
-const SKELETON_WIDTHS = [85, 92, 78, 88, 70, 95];
-
-// Isolated tick timer — only re-renders itself, not the whole view
-function RelativeTimestamp({ date }: { date: Date }) {
-  const [, setTick] = useState(0);
-  useEffect(() => {
-    const interval = setInterval(() => setTick(t => t + 1), 60_000);
-    return () => clearInterval(interval);
-  }, []);
-  return (
-    <span className={`text-xs font-medium ${getFreshnessColor(date)}`}>
-      {getRelativeTime(date)}
-    </span>
-  );
-}
 
 export const BriefingView = memo(function BriefingView() {
   const { t } = useTranslation();
