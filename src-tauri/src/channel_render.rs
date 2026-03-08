@@ -39,7 +39,7 @@ pub(crate) fn gather_channel_sources(
 
     // Get recent source items (last 30 days, up to 500)
     let items = db
-        .get_items_since_hours(30 * 24, 500)
+        .get_items_tiered(30 * 24, 500)
         .map_err(|e| e.to_string())?;
 
     let mut scored: Vec<(StoredSourceItem, f64)> = Vec::new();
@@ -93,7 +93,7 @@ pub(crate) fn preview_channel_sources(
     }
 
     let items = db
-        .get_items_since_hours(30 * 24, 500)
+        .get_items_tiered(30 * 24, 500)
         .map_err(|e| e.to_string())?;
 
     let mut matched_titles: Vec<(String, f64)> = Vec::new();

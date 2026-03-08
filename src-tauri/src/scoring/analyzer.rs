@@ -182,9 +182,9 @@ pub(crate) async fn run_background_analysis<R: tauri::Runtime>(
         guard.last_completed_at.clone()
     };
 
-    // Determine items to score
+    // Determine items to score (respects free-tier 30-day history gate)
     let items = if let Some(ref since) = last_completed_at {
-        match db.get_items_since_timestamp(since, 500) {
+        match db.get_items_since_timestamp_tiered(since, 500) {
             Ok(items) if !items.is_empty() => items,
             _ => {
                 // No new items
@@ -197,7 +197,7 @@ pub(crate) async fn run_background_analysis<R: tauri::Runtime>(
         }
     } else {
         // No previous analysis, do a full cache analysis
-        match db.get_items_since_hours(48, 500) {
+        match db.get_items_tiered(48, 500) {
             Ok(items) if !items.is_empty() => items,
             _ => {
                 state

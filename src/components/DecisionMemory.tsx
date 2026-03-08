@@ -59,6 +59,7 @@ export const DecisionMemory = memo(function DecisionMemory() {
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState<NewDecisionForm>({ ...EMPTY_FORM });
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Data selectors (may change, use useShallow)
   const { decisions, decisionsLoading } = useAppStore(
@@ -92,6 +93,7 @@ export const DecisionMemory = memo(function DecisionMemory() {
 
   const handleSubmit = useCallback(async () => {
     if (!form.subject.trim() || !form.decision.trim()) return;
+    setIsSubmitting(true);
     try {
       await recordDecision({
         decision_type: form.decision_type,
@@ -104,22 +106,30 @@ export const DecisionMemory = memo(function DecisionMemory() {
       setShowForm(false);
     } catch {
       addToast('error', t('error.generic'));
+    } finally {
+      setIsSubmitting(false);
     }
   }, [form, recordDecision, addToast, t]);
 
   const handleSupersede = useCallback(async (id: number) => {
+    setIsSubmitting(true);
     try {
       await updateDecision(id, { status: 'superseded' });
     } catch {
       addToast('error', t('error.generic'));
+    } finally {
+      setIsSubmitting(false);
     }
   }, [updateDecision, addToast, t]);
 
   const handleReconsider = useCallback(async (id: number) => {
+    setIsSubmitting(true);
     try {
       await updateDecision(id, { status: 'reconsidering' });
     } catch {
       addToast('error', t('error.generic'));
+    } finally {
+      setIsSubmitting(false);
     }
   }, [updateDecision, addToast, t]);
 
@@ -148,7 +158,7 @@ export const DecisionMemory = memo(function DecisionMemory() {
 
       {/* Inline Form */}
       {showForm && (
-        <div className="p-4 border-b border-border space-y-3">
+        <div role="form" aria-label={t('decisions.record')} aria-busy={isSubmitting} className="p-4 border-b border-border space-y-3">
           <div className="flex gap-3">
             <select
               value={form.decision_type}
@@ -174,6 +184,7 @@ export const DecisionMemory = memo(function DecisionMemory() {
             value={form.decision}
             onChange={(e) => setForm({ ...form, decision: e.target.value })}
             rows={2}
+            aria-required="true"
             className="w-full px-3 py-2 text-xs bg-bg-tertiary text-white border border-border rounded-lg placeholder-gray-600 focus:outline-none focus:border-white/30 resize-none"
           />
           <textarea
@@ -199,7 +210,7 @@ export const DecisionMemory = memo(function DecisionMemory() {
             />
             <button
               onClick={handleSubmit}
-              disabled={!form.subject.trim() || !form.decision.trim()}
+              disabled={isSubmitting || !form.subject.trim() || !form.decision.trim()}
               className="px-4 py-2 text-xs bg-white text-black rounded-lg font-medium hover:bg-gray-200 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
             >
               {t('action.save')}
@@ -219,6 +230,8 @@ export const DecisionMemory = memo(function DecisionMemory() {
         </div>
       )}
 
+      {/* Decisions list (live region) */}
+      <div aria-live="polite">
       {/* Loading */}
       {decisionsLoading && (
         <div className="p-4 text-xs text-gray-500 text-center">{t('decisions.loading')}</div>
