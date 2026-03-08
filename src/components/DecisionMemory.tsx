@@ -32,7 +32,7 @@ const STATUS_STYLES: Record<string, { text: string; bg: string; border: string }
     border: 'border-amber-500/20',
   },
   superseded: {
-    text: 'text-gray-500',
+    text: 'text-text-muted',
     bg: 'bg-gray-500/10',
     border: 'border-gray-500/20',
   },
@@ -62,10 +62,11 @@ export const DecisionMemory = memo(function DecisionMemory() {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Data selectors (may change, use useShallow)
-  const { decisions, decisionsLoading } = useAppStore(
+  const { decisions, decisionsLoading, decisionsError } = useAppStore(
     useShallow((s) => ({
       decisions: s.decisions,
       decisionsLoading: s.decisionsLoading,
+      decisionsError: s.decisionsError,
     })),
   );
 
@@ -139,18 +140,18 @@ export const DecisionMemory = memo(function DecisionMemory() {
       <div className="px-5 py-4 border-b border-border flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className="w-8 h-8 bg-bg-tertiary rounded-lg flex items-center justify-center">
-            <span className="text-sm text-gray-400">D</span>
+            <span className="text-sm text-text-secondary">D</span>
           </div>
           <div>
             <h2 className="font-medium text-white text-sm">{t('decisions.title')}</h2>
-            <p className="text-xs text-gray-500">
+            <p className="text-xs text-text-muted">
               {t('decisions.recorded', { count: decisions.length })}
             </p>
           </div>
         </div>
         <button
           onClick={() => setShowForm(!showForm)}
-          className="px-3 py-1.5 text-xs bg-bg-tertiary text-gray-300 border border-border rounded hover:border-white/20 transition-colors"
+          className="px-3 py-1.5 text-xs bg-bg-tertiary text-text-secondary border border-border rounded hover:border-white/20 transition-colors"
         >
           {showForm ? t('action.cancel') : t('decisions.record')}
         </button>
@@ -195,7 +196,7 @@ export const DecisionMemory = memo(function DecisionMemory() {
             className="w-full px-3 py-2 text-xs bg-bg-tertiary text-white border border-border rounded-lg placeholder-gray-600 focus:outline-none focus:border-white/30 resize-none"
           />
           <div className="flex items-center gap-3">
-            <label className="text-xs text-gray-500">
+            <label className="text-xs text-text-muted">
               {t('decisions.confidence', { value: Math.round(form.confidence * 100) })}
             </label>
             <input
@@ -225,36 +226,56 @@ export const DecisionMemory = memo(function DecisionMemory() {
           <span className="text-amber-400 text-xs mt-0.5 flex-shrink-0">!</span>
           <div className="flex-1 min-w-0">
             <p className="text-xs text-amber-400 font-medium">{t('decisions.autoDetectedNotice')}</p>
-            <p className="text-[10px] text-gray-500 mt-0.5">{t('decisions.autoDetectedHint')}</p>
+            <p className="text-[10px] text-text-muted mt-0.5">{t('decisions.autoDetectedHint')}</p>
           </div>
         </div>
       )}
 
       {/* Decisions list (live region) */}
       <div aria-live="polite">
+      {/* Error */}
+      {decisionsError && !decisionsLoading && (
+        <div className="flex flex-col items-center justify-center gap-3 py-8 text-center">
+          <p className="text-text-secondary text-sm">{t('error.generic')}</p>
+          <button
+            onClick={loadDecisions}
+            className="px-3 py-1.5 text-xs bg-bg-tertiary hover:bg-white/10 rounded transition-colors text-text-secondary"
+          >
+            {t('action.retry')}
+          </button>
+        </div>
+      )}
+
       {/* Loading */}
       {decisionsLoading && (
-        <div className="p-4 text-xs text-gray-500 text-center">{t('decisions.loading')}</div>
+        <div className="p-4 space-y-3">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <div key={i} className="rounded-lg border border-border bg-bg-tertiary/50 p-4">
+              <div className="h-4 w-32 bg-bg-tertiary rounded animate-pulse mb-2" />
+              <div className="h-3 w-56 bg-bg-tertiary rounded animate-pulse" />
+            </div>
+          ))}
+        </div>
       )}
 
       {/* Empty State */}
-      {!decisionsLoading && decisions.length === 0 && (
+      {!decisionsLoading && !decisionsError && decisions.length === 0 && (
         <div className="p-8 text-center">
-          <div className="text-sm text-gray-500">{t('decisions.noDecisions')}</div>
-          <div className="text-xs text-gray-600 mt-1">
+          <div className="text-sm text-text-muted">{t('decisions.noDecisions')}</div>
+          <div className="text-xs text-text-muted mt-1">
             {t('decisions.noDecisionsHint')}
           </div>
         </div>
       )}
 
       {/* Grouped Decisions */}
-      {!decisionsLoading && Object.entries(grouped).map(([type, items]) => (
+      {!decisionsLoading && !decisionsError && Object.entries(grouped).map(([type, items]) => (
         <div key={type} className="border-b border-border last:border-b-0">
           <div className="px-5 py-2.5 bg-bg-primary/50">
-            <span className="text-[10px] font-medium text-gray-500 uppercase tracking-wider">
+            <span className="text-[10px] font-medium text-text-muted uppercase tracking-wider">
               {TYPE_LABELS[type] || type}
             </span>
-            <span className="text-[10px] text-gray-600 ml-2">{items.length}</span>
+            <span className="text-[10px] text-text-muted ml-2">{items.length}</span>
           </div>
           <div className="p-3 space-y-2">
             {items.map((d) => {
@@ -281,13 +302,13 @@ export const DecisionMemory = memo(function DecisionMemory() {
                           {d.status}
                         </span>
                       </div>
-                      <p className="text-xs text-gray-400 mt-0.5 truncate">{d.decision}</p>
+                      <p className="text-xs text-text-secondary mt-0.5 truncate">{d.decision}</p>
                     </div>
                     <div className="flex items-center gap-2 flex-shrink-0">
-                      <span className="text-[10px] text-gray-600 font-mono">
+                      <span className="text-[10px] text-text-muted font-mono">
                         {Math.round(d.confidence * 100)}%
                       </span>
-                      <span className="text-gray-500 text-xs">
+                      <span className="text-text-muted text-xs">
                         {isExpanded ? '\u25BE' : '\u25B8'}
                       </span>
                     </div>
@@ -297,26 +318,26 @@ export const DecisionMemory = memo(function DecisionMemory() {
                     <div className="px-4 pb-3 border-t border-border/50 space-y-3">
                       {/* Decision text */}
                       <div className="mt-3">
-                        <div className="text-[10px] text-gray-500 uppercase tracking-wider mb-1">
+                        <div className="text-[10px] text-text-muted uppercase tracking-wider mb-1">
                           {t('decisions.decision')}
                         </div>
-                        <p className="text-xs text-gray-300">{d.decision}</p>
+                        <p className="text-xs text-text-secondary">{d.decision}</p>
                       </div>
 
                       {/* Rationale */}
                       {d.rationale && (
                         <div>
-                          <div className="text-[10px] text-gray-500 uppercase tracking-wider mb-1">
+                          <div className="text-[10px] text-text-muted uppercase tracking-wider mb-1">
                             {t('decisions.rationale')}
                           </div>
-                          <p className="text-xs text-gray-400">{d.rationale}</p>
+                          <p className="text-xs text-text-secondary">{d.rationale}</p>
                         </div>
                       )}
 
                       {/* Alternatives rejected */}
                       {d.alternatives_rejected.length > 0 && (
                         <div>
-                          <div className="text-[10px] text-gray-500 uppercase tracking-wider mb-1">
+                          <div className="text-[10px] text-text-muted uppercase tracking-wider mb-1">
                             {t('decisions.alternativesRejected')}
                           </div>
                           <div className="flex flex-wrap gap-1.5">
@@ -335,14 +356,14 @@ export const DecisionMemory = memo(function DecisionMemory() {
                       {/* Context tags */}
                       {d.context_tags.length > 0 && (
                         <div>
-                          <div className="text-[10px] text-gray-500 uppercase tracking-wider mb-1">
+                          <div className="text-[10px] text-text-muted uppercase tracking-wider mb-1">
                             {t('decisions.tags')}
                           </div>
                           <div className="flex flex-wrap gap-1.5">
                             {d.context_tags.map((tag, i) => (
                               <span
                                 key={i}
-                                className="text-[10px] px-2 py-0.5 bg-bg-secondary text-gray-400 border border-border rounded"
+                                className="text-[10px] px-2 py-0.5 bg-bg-secondary text-text-secondary border border-border rounded"
                               >
                                 {tag}
                               </span>
@@ -352,7 +373,7 @@ export const DecisionMemory = memo(function DecisionMemory() {
                       )}
 
                       {/* Metadata row */}
-                      <div className="flex items-center gap-3 text-[10px] text-gray-600">
+                      <div className="flex items-center gap-3 text-[10px] text-text-muted">
                         <span>Created {new Date(d.created_at).toLocaleDateString()}</span>
                         {d.updated_at !== d.created_at && (
                           <span>Updated {new Date(d.updated_at).toLocaleDateString()}</span>
@@ -375,7 +396,7 @@ export const DecisionMemory = memo(function DecisionMemory() {
                           </button>
                           <button
                             onClick={() => handleSupersede(d.id)}
-                            className="px-3 py-1.5 text-xs bg-gray-500/10 text-gray-400 border border-gray-500/20 rounded hover:bg-gray-500/20 transition-colors"
+                            className="px-3 py-1.5 text-xs bg-gray-500/10 text-text-secondary border border-gray-500/20 rounded hover:bg-gray-500/20 transition-colors"
                           >
                             {t('decisions.supersede')}
                           </button>
@@ -399,7 +420,7 @@ export const DecisionMemory = memo(function DecisionMemory() {
                           </button>
                           <button
                             onClick={() => handleSupersede(d.id)}
-                            className="px-3 py-1.5 text-xs bg-gray-500/10 text-gray-400 border border-gray-500/20 rounded hover:bg-gray-500/20 transition-colors"
+                            className="px-3 py-1.5 text-xs bg-gray-500/10 text-text-secondary border border-gray-500/20 rounded hover:bg-gray-500/20 transition-colors"
                           >
                             {t('decisions.supersede')}
                           </button>

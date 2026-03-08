@@ -63,7 +63,7 @@ export function PersonalizationSection() {
         </div>
         <div>
           <h3 className="text-white font-medium">{t('settings.personalization.title')}</h3>
-          <p className="text-gray-500 text-sm mt-1">
+          <p className="text-text-muted text-sm mt-1">
             {t('settings.personalization.description')}
           </p>
         </div>
@@ -73,7 +73,7 @@ export function PersonalizationSection() {
         <div className="space-y-5">
           {/* Role */}
           <div>
-            <label className="text-xs text-gray-400 block mb-2">{t('settings.personalization.role')}</label>
+            <label className="text-xs text-text-secondary block mb-2">{t('settings.personalization.role')}</label>
             <div className="flex gap-2">
               <input
                 type="text"
@@ -81,11 +81,11 @@ export function PersonalizationSection() {
                 value={newRole}
                 onChange={(e) => setNewRole(e.target.value)}
                 placeholder={t('settings.personalization.rolePlaceholder')}
-                className="flex-1 px-3 py-2.5 bg-bg-secondary border border-border rounded-lg text-sm text-white placeholder:text-gray-500 focus:border-blue-500/50 focus:outline-none transition-colors"
+                className="flex-1 px-3 py-2.5 bg-bg-secondary border border-border rounded-lg text-sm text-white placeholder:text-text-muted focus:border-blue-500/50 focus:outline-none transition-colors"
               />
               <button
                 onClick={updateRole}
-                className="px-4 py-2.5 text-sm bg-bg-secondary border border-border rounded-lg text-gray-400 hover:text-white hover:border-blue-500/30 transition-all"
+                className="px-4 py-2.5 text-sm bg-bg-secondary border border-border rounded-lg text-text-secondary hover:text-white hover:border-blue-500/30 transition-all"
               >
                 {t('settings.personalization.set')}
               </button>
@@ -94,7 +94,7 @@ export function PersonalizationSection() {
 
           {/* Tech Stack */}
           <div>
-            <label className="text-xs text-gray-400 block mb-2">{t('settings.personalization.techStack')}</label>
+            <label className="text-xs text-text-secondary block mb-2">{t('settings.personalization.techStack')}</label>
             <div className="flex gap-2 mb-3">
               <input
                 type="text"
@@ -103,11 +103,11 @@ export function PersonalizationSection() {
                 onChange={(e) => setNewTechStack(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && addTechStack()}
                 placeholder={t('settings.personalization.techPlaceholder')}
-                className="flex-1 px-3 py-2.5 bg-bg-secondary border border-border rounded-lg text-sm text-white placeholder:text-gray-500 focus:border-blue-500/50 focus:outline-none transition-colors"
+                className="flex-1 px-3 py-2.5 bg-bg-secondary border border-border rounded-lg text-sm text-white placeholder:text-text-muted focus:border-blue-500/50 focus:outline-none transition-colors"
               />
               <button
                 onClick={addTechStack}
-                className="px-4 py-2.5 text-sm bg-bg-secondary border border-border rounded-lg text-gray-400 hover:text-white hover:border-blue-500/30 transition-all"
+                className="px-4 py-2.5 text-sm bg-bg-secondary border border-border rounded-lg text-text-secondary hover:text-white hover:border-blue-500/30 transition-all"
               >
                 {t('action.add')}
               </button>
@@ -129,7 +129,7 @@ export function PersonalizationSection() {
                 </span>
               ))}
               {userContext.tech_stack.length === 0 && (
-                <span className="text-sm text-gray-500">{t('settings.personalization.noTech')}</span>
+                <span className="text-sm text-text-muted">{t('settings.personalization.noTech')}</span>
               )}
             </div>
           </div>
@@ -137,7 +137,7 @@ export function PersonalizationSection() {
           {/* Interests */}
           <div>
             <div className="flex items-center gap-2 mb-2">
-              <label className="text-xs text-gray-400">{t('settings.personalization.interests')}</label>
+              <label className="text-xs text-text-secondary">{t('settings.personalization.interests')}</label>
               <span className="px-1.5 py-0.5 text-[10px] bg-green-500/20 text-green-400 rounded">{userContext.interests.length}</span>
             </div>
             <div className="flex gap-2 mb-3">
@@ -148,7 +148,7 @@ export function PersonalizationSection() {
                 onChange={(e) => setNewInterest(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && addInterest()}
                 placeholder={t('settings.personalization.interestPlaceholder')}
-                className="flex-1 px-3 py-2.5 bg-bg-secondary border border-border rounded-lg text-sm text-white placeholder:text-gray-500 focus:border-green-500/50 focus:outline-none transition-colors"
+                className="flex-1 px-3 py-2.5 bg-bg-secondary border border-border rounded-lg text-sm text-white placeholder:text-text-muted focus:border-green-500/50 focus:outline-none transition-colors"
               />
               <button
                 onClick={addInterest}
@@ -176,7 +176,7 @@ export function PersonalizationSection() {
                 </span>
               ))}
               {userContext.interests.length === 0 && (
-                <span className="text-sm text-gray-500">{t('settings.personalization.noInterests')}</span>
+                <span className="text-sm text-text-muted">{t('settings.personalization.noInterests')}</span>
               )}
             </div>
           </div>
@@ -218,7 +218,7 @@ export function PersonalizationSection() {
           {/* Exclusions */}
           <div>
             <div className="flex items-center gap-2 mb-2">
-              <label className="text-xs text-gray-400">{t('settings.personalization.exclusions')}</label>
+              <label className="text-xs text-text-secondary">{t('settings.personalization.exclusions')}</label>
               <span className="px-1.5 py-0.5 text-[10px] bg-red-500/20 text-red-400 rounded">{userContext.exclusions.length}</span>
             </div>
             <div className="flex gap-2 mb-3">
@@ -229,7 +229,7 @@ export function PersonalizationSection() {
                 onChange={(e) => setNewExclusion(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && addExclusion()}
                 placeholder={t('settings.personalization.exclusionPlaceholder')}
-                className="flex-1 px-3 py-2.5 bg-bg-secondary border border-border rounded-lg text-sm text-white placeholder:text-gray-500 focus:border-red-500/50 focus:outline-none transition-colors"
+                className="flex-1 px-3 py-2.5 bg-bg-secondary border border-border rounded-lg text-sm text-white placeholder:text-text-muted focus:border-red-500/50 focus:outline-none transition-colors"
               />
               <button
                 onClick={addExclusion}
@@ -255,13 +255,13 @@ export function PersonalizationSection() {
                 </span>
               ))}
               {userContext.exclusions.length === 0 && (
-                <span className="text-sm text-gray-500">{t('settings.personalization.noExclusions')}</span>
+                <span className="text-sm text-text-muted">{t('settings.personalization.noExclusions')}</span>
               )}
             </div>
           </div>
         </div>
       ) : (
-        <div className="text-sm text-gray-500">{t('settings.personalization.loading')}</div>
+        <div className="text-sm text-text-muted">{t('settings.personalization.loading')}</div>
       )}
     </div>
   );

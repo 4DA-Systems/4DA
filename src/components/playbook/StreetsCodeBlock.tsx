@@ -259,11 +259,12 @@ export function StreetsCodeBlock({ code, language, moduleId, lessonIdx, blockInd
                           disabled={isRunning}
                           className="flex items-center justify-center w-5 h-5 text-[#22C55E] hover:bg-[#22C55E]/10 rounded transition-colors disabled:opacity-50"
                           title={t('playbook.code.runCommand')}
+                          aria-label={t('playbook.code.runCommand')}
                         >
                           {isRunning ? (
-                            <span className="w-3 h-3 border border-[#22C55E] border-t-transparent rounded-full animate-spin" />
+                            <span className="w-3 h-3 border border-[#22C55E] border-t-transparent rounded-full animate-spin" aria-hidden="true" />
                           ) : (
-                            <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor">
+                            <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
                               <polygon points="5,3 19,12 5,21" />
                             </svg>
                           )}
@@ -275,8 +276,9 @@ export function StreetsCodeBlock({ code, language, moduleId, lessonIdx, blockInd
                         onClick={ensureParsed}
                         className="flex items-center justify-center w-5 h-5 text-[#666] hover:text-text-secondary hover:bg-bg-tertiary rounded transition-colors"
                         title={t('playbook.code.parseCommands')}
+                        aria-label={t('playbook.code.parseCommands')}
                       >
-                        <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor">
+                        <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
                           <polygon points="5,3 19,12 5,21" />
                         </svg>
                       </button>

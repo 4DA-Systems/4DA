@@ -189,8 +189,18 @@ export function PlaybookView() {
         <StreetHealthBadge />
 
         {playbookError && (
-          <div className="mb-4 px-4 py-3 bg-[#EF4444]/10 border border-[#EF4444]/30 rounded-lg text-sm text-[#EF4444]">
-            {playbookError}
+          <div className="flex flex-col items-center justify-center gap-3 py-8 text-center">
+            <p className="text-text-secondary text-sm">{t('error.generic')}</p>
+            <button
+              onClick={() => {
+                loadModules();
+                loadProgress();
+                loadStreetsTier();
+              }}
+              className="px-3 py-1.5 text-xs bg-bg-tertiary hover:bg-white/10 rounded transition-colors text-text-secondary"
+            >
+              {t('action.retry')}
+            </button>
           </div>
         )}
 
@@ -200,7 +210,7 @@ export function PlaybookView() {
           </div>
         )}
 
-        {!showTemplates && !activeModuleId && !playbookLoading && (
+        {!showTemplates && !activeModuleId && !playbookLoading && !playbookError && (
           <div className="flex flex-col items-center justify-center h-96 text-center">
             <div className="w-16 h-16 bg-[#D4AF37]/10 rounded-2xl flex items-center justify-center mb-4">
               <span className="text-2xl text-[#D4AF37] font-bold">S</span>
@@ -220,8 +230,21 @@ export function PlaybookView() {
         )}
 
         {!showTemplates && playbookLoading && (
-          <div className="flex items-center justify-center h-96">
-            <div className="w-6 h-6 border-2 border-[#D4AF37] border-t-transparent rounded-full animate-spin" />
+          <div className="space-y-4">
+            <div className="bg-bg-secondary border border-border rounded-xl p-6">
+              <div className="h-5 w-48 bg-bg-tertiary rounded animate-pulse mb-3" />
+              <div className="h-4 w-72 bg-bg-tertiary rounded animate-pulse" />
+            </div>
+            {Array.from({ length: 3 }).map((_, i) => (
+              <div key={i} className="bg-bg-secondary border border-border rounded-xl p-6">
+                <div className="h-4 w-40 bg-bg-tertiary rounded animate-pulse mb-3" />
+                <div className="space-y-2">
+                  <div className="h-3 bg-bg-tertiary rounded animate-pulse" style={{ width: '90%' }} />
+                  <div className="h-3 bg-bg-tertiary rounded animate-pulse" style={{ width: '75%' }} />
+                  <div className="h-3 bg-bg-tertiary rounded animate-pulse" style={{ width: '60%' }} />
+                </div>
+              </div>
+            ))}
           </div>
         )}
 

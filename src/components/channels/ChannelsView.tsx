@@ -22,10 +22,11 @@ function SourceVitals({ channelCount, activeCount }: { channelCount: number; act
 
 export function ChannelsView() {
   const { t } = useTranslation();
-  const { channels, channelsLoading, activeChannelId } = useAppStore(
+  const { channels, channelsLoading, channelsError, activeChannelId } = useAppStore(
     useShallow(s => ({
       channels: s.channels,
       channelsLoading: s.channelsLoading,
+      channelsError: s.channelsError,
       activeChannelId: s.activeChannelId,
     })),
   );
@@ -44,6 +45,21 @@ export function ChannelsView() {
       selectChannel(channels[0].id);
     }
   }, [channels, activeChannelId, selectChannel]);
+
+  // Error state
+  if (channelsError && !channelsLoading && channels.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center gap-3 h-64 text-center">
+        <p className="text-text-secondary text-sm">{t('error.generic')}</p>
+        <button
+          onClick={loadChannels}
+          className="px-3 py-1.5 text-xs bg-bg-tertiary hover:bg-white/10 rounded transition-colors text-text-secondary"
+        >
+          {t('action.retry')}
+        </button>
+      </div>
+    );
+  }
 
   // Full-page loading state when no channels cached yet
   if (channelsLoading && channels.length === 0) {

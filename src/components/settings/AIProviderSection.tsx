@@ -49,13 +49,13 @@ export function AIProviderSection({
           </div>
           <div>
             <h3 className="text-sm font-medium text-white">{t('settings.ai.title')}</h3>
-            <p className="text-xs text-gray-500">{t('settings.ai.description')}</p>
+            <p className="text-xs text-text-muted">{t('settings.ai.description')}</p>
           </div>
         </div>
 
         <div className="space-y-4">
           <div>
-            <label className="text-xs text-gray-500 block mb-2">{t('settings.ai.provider')}</label>
+            <label className="text-xs text-text-muted block mb-2">{t('settings.ai.provider')}</label>
             <select
               value={settingsForm.provider}
               onChange={(e) => {
@@ -84,7 +84,7 @@ export function AIProviderSection({
           {settingsForm.provider === 'local' && (
             <div className="bg-bg-secondary rounded-lg p-3 border border-green-500/20">
               <p className="text-xs text-green-400 font-medium mb-1">{t('settings.ai.builtInModel')}</p>
-              <p className="text-xs text-gray-500">
+              <p className="text-xs text-text-muted">
                 {t('settings.ai.builtInDescription')}
               </p>
             </div>
@@ -92,20 +92,20 @@ export function AIProviderSection({
 
           {settingsForm.provider !== 'ollama' && settingsForm.provider !== 'local' && (
             <div>
-              <label className="text-xs text-gray-500 block mb-2">{t('settings.ai.apiKey')}</label>
+              <label className="text-xs text-text-muted block mb-2">{t('settings.ai.apiKey')}</label>
               <input
                 type="password"
                 value={settingsForm.apiKey}
                 onChange={(e) => setSettingsForm((f) => ({ ...f, apiKey: e.target.value }))}
                 placeholder={settings?.llm.has_api_key ? t('settings.ai.keySaved') : t('settings.ai.enterKey')}
-                className="w-full px-4 py-3 bg-bg-secondary border border-border rounded-lg text-sm text-white placeholder:text-gray-600 focus:border-orange-500 focus:outline-none font-mono"
+                className="w-full px-4 py-3 bg-bg-secondary border border-border rounded-lg text-sm text-white placeholder:text-text-muted focus:border-orange-500 focus:outline-none font-mono"
               />
             </div>
           )}
 
           {settingsForm.provider !== 'local' && (
             <div>
-              <label className="text-xs text-gray-500 block mb-2">{t('settings.ai.model')}</label>
+              <label className="text-xs text-text-muted block mb-2">{t('settings.ai.model')}</label>
               <select
                 value={settingsForm.model}
                 onChange={(e) => setSettingsForm((f) => ({ ...f, model: e.target.value }))}
@@ -120,14 +120,14 @@ export function AIProviderSection({
               </select>
               {settingsForm.provider === 'ollama' && (
                 <div className="flex items-center gap-2 mt-2">
-                  <p className="text-xs text-gray-500">
+                  <p className="text-xs text-text-muted">
                     {ollamaStatus?.running
                       ? <span className="text-green-400">&#x2713; {t('settings.ai.ollamaRunning', { version: ollamaStatus.version, count: ollamaModels.length })}</span>
                       : <span className="text-yellow-400">&#x25cb; {t('settings.ai.ollamaNotDetected')}</span>}
                   </p>
                   <button
                     onClick={() => checkOllamaStatus(settingsForm.baseUrl || undefined)}
-                    className="text-[10px] px-2 py-0.5 text-gray-500 hover:text-orange-400 bg-bg-tertiary rounded transition-colors"
+                    className="text-[10px] px-2 py-0.5 text-text-muted hover:text-orange-400 bg-bg-tertiary rounded transition-colors"
                   >
                     {t('settings.ai.recheck')}
                   </button>
@@ -138,13 +138,13 @@ export function AIProviderSection({
 
           {settingsForm.provider === 'ollama' && (
             <div>
-              <label className="text-xs text-gray-500 block mb-2">{t('settings.ai.baseUrl')}</label>
+              <label className="text-xs text-text-muted block mb-2">{t('settings.ai.baseUrl')}</label>
               <input
                 type="text"
                 value={settingsForm.baseUrl}
                 onChange={(e) => setSettingsForm((f) => ({ ...f, baseUrl: e.target.value }))}
                 placeholder="http://localhost:11434"
-                className="w-full px-4 py-3 bg-bg-secondary border border-border rounded-lg text-sm text-white placeholder:text-gray-600 focus:border-orange-500 focus:outline-none font-mono"
+                className="w-full px-4 py-3 bg-bg-secondary border border-border rounded-lg text-sm text-white placeholder:text-text-muted focus:border-orange-500 focus:outline-none font-mono"
               />
             </div>
           )}
@@ -159,7 +159,7 @@ export function AIProviderSection({
           </div>
           <div>
             <h3 className="text-sm font-medium text-white">{t('settings.ai.rerankTitle')}</h3>
-            <p className="text-xs text-gray-500">{t('settings.ai.rerankDescription')}</p>
+            <p className="text-xs text-text-muted">{t('settings.ai.rerankDescription')}</p>
           </div>
         </div>
 
@@ -173,13 +173,13 @@ export function AIProviderSection({
             />
             <div>
               <span className="text-sm text-white">{t('settings.ai.enableRerank')}</span>
-              <p className="text-xs text-gray-500 mt-0.5">{t('settings.ai.rerankNote')}</p>
+              <p className="text-xs text-text-muted mt-0.5">{t('settings.ai.rerankNote')}</p>
             </div>
           </label>
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="text-xs text-gray-500 block mb-2">{t('settings.ai.maxItemsBatch')}</label>
+              <label className="text-xs text-text-muted block mb-2">{t('settings.ai.maxItemsBatch')}</label>
               <input
                 type="number"
                 value={settingsForm.maxItems}
@@ -188,7 +188,7 @@ export function AIProviderSection({
               />
             </div>
             <div>
-              <label className="text-xs text-gray-500 block mb-2">{t('settings.ai.minScore')}</label>
+              <label className="text-xs text-text-muted block mb-2">{t('settings.ai.minScore')}</label>
               <input
                 type="number"
                 step="0.05"
@@ -201,7 +201,7 @@ export function AIProviderSection({
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="text-xs text-gray-500 block mb-2">{t('settings.ai.dailyTokenLimit')}</label>
+              <label className="text-xs text-text-muted block mb-2">{t('settings.ai.dailyTokenLimit')}</label>
               <input
                 type="number"
                 value={settingsForm.dailyTokenLimit}
@@ -210,7 +210,7 @@ export function AIProviderSection({
               />
             </div>
             <div>
-              <label className="text-xs text-gray-500 block mb-2">{t('settings.ai.costLimit')}</label>
+              <label className="text-xs text-text-muted block mb-2">{t('settings.ai.costLimit')}</label>
               <input
                 type="number"
                 value={settingsForm.dailyCostLimit}
@@ -231,21 +231,21 @@ export function AIProviderSection({
             </div>
             <div>
               <h3 className="text-sm font-medium text-white">{t('settings.ai.usageTitle')}</h3>
-              <p className="text-xs text-gray-500">{t('settings.ai.usageDescription')}</p>
+              <p className="text-xs text-text-muted">{t('settings.ai.usageDescription')}</p>
             </div>
           </div>
           <div className="grid grid-cols-3 gap-4">
             <div className="bg-bg-secondary rounded-lg p-3 text-center">
               <p className="text-xl font-semibold text-white">{settings.usage.tokens_today.toLocaleString()}</p>
-              <p className="text-xs text-gray-500">{t('settings.ai.tokens')}</p>
+              <p className="text-xs text-text-muted">{t('settings.ai.tokens')}</p>
             </div>
             <div className="bg-bg-secondary rounded-lg p-3 text-center">
               <p className="text-xl font-semibold text-green-400">${(settings.usage.cost_today_cents / 100).toFixed(2)}</p>
-              <p className="text-xs text-gray-500">{t('settings.ai.cost')}</p>
+              <p className="text-xs text-text-muted">{t('settings.ai.cost')}</p>
             </div>
             <div className="bg-bg-secondary rounded-lg p-3 text-center">
               <p className="text-xl font-semibold text-orange-400">{settings.usage.items_reranked}</p>
-              <p className="text-xs text-gray-500">{t('settings.ai.reranked')}</p>
+              <p className="text-xs text-text-muted">{t('settings.ai.reranked')}</p>
             </div>
           </div>
         </div>

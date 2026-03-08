@@ -280,6 +280,7 @@ export interface SystemHealthSlice {
 export interface DecisionsSlice {
   decisions: import('./decisions-slice').DeveloperDecision[];
   decisionsLoading: boolean;
+  decisionsError: string | null;
   loadDecisions: () => Promise<void>;
   recordDecision: (params: {
     decision_type: string;

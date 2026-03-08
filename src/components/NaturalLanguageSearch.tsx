@@ -135,35 +135,35 @@ export function NaturalLanguageSearch({ onStatusChange, defaultExpanded = true }
           </div>
           <div>
             <h3 className="text-white font-medium">{t('search.title')}</h3>
-            <p className="text-gray-500 text-sm">{t('search.subtitle')}</p>
+            <p className="text-text-muted text-sm">{t('search.subtitle')}</p>
           </div>
         </div>
-        <span className="text-gray-500 text-sm" aria-hidden="true">{expanded ? '\u25BC' : '\u25B6'}</span>
+        <span className="text-text-muted text-sm" aria-hidden="true">{expanded ? '\u25BC' : '\u25B6'}</span>
       </button>
 
       {expanded && !hasAnalysisRun && (
         <div className="mt-4">
           <div className="bg-bg-secondary rounded-lg border border-border p-5">
-            <p className="text-sm text-gray-300 font-medium mb-3">{t('search.noAnalysisTitle')}</p>
+            <p className="text-sm text-white font-medium mb-3">{t('search.noAnalysisTitle')}</p>
             <div className="grid grid-cols-2 gap-2 mb-3">
-              <div className="flex items-center gap-2 text-xs text-gray-400">
+              <div className="flex items-center gap-2 text-xs text-text-secondary">
                 <span className="text-cyan-400/50">{'\u2756'}</span>
                 {t('search.capabilityStack')}
               </div>
-              <div className="flex items-center gap-2 text-xs text-gray-400">
+              <div className="flex items-center gap-2 text-xs text-text-secondary">
                 <span className="text-cyan-400/50">{'\u2696'}</span>
                 {t('search.capabilityDecisions')}
               </div>
-              <div className="flex items-center gap-2 text-xs text-gray-400">
+              <div className="flex items-center gap-2 text-xs text-text-secondary">
                 <span className="text-cyan-400/50">{'\u25CE'}</span>
                 {t('search.capabilityGaps')}
               </div>
-              <div className="flex items-center gap-2 text-xs text-gray-400">
+              <div className="flex items-center gap-2 text-xs text-text-secondary">
                 <span className="text-cyan-400/50">{'\u2726'}</span>
                 {t('search.capabilitySynthesis')}
               </div>
             </div>
-            <p className="text-xs text-gray-500">{t('search.noAnalysisHint')}</p>
+            <p className="text-xs text-text-muted">{t('search.noAnalysisHint')}</p>
           </div>
         </div>
       )}
@@ -182,7 +182,7 @@ export function NaturalLanguageSearch({ onStatusChange, defaultExpanded = true }
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               onKeyDown={handleKeyDown}
-              className="flex-1 px-4 py-3 text-sm bg-bg-secondary border border-border rounded-lg text-white placeholder:text-gray-500 focus:outline-none focus:border-cyan-500/50 transition-colors"
+              className="flex-1 px-4 py-3 text-sm bg-bg-secondary border border-border rounded-lg text-white placeholder:text-text-muted focus:outline-none focus:border-cyan-500/50 transition-colors"
             />
             <button
               onClick={handleSearch}
@@ -201,9 +201,10 @@ export function NaturalLanguageSearch({ onStatusChange, defaultExpanded = true }
                 onClick={handleWatch}
                 disabled={watchCreated}
                 title={t('search.watchThis')}
-                className={`px-3 py-3 text-sm border rounded-lg transition-all ${watchCreated ? 'bg-green-500/10 border-green-500/30 text-green-400' : 'bg-bg-secondary border-border text-gray-400 hover:text-cyan-400 hover:border-cyan-500/30'}`}
+                aria-label={watchCreated ? t('search.watchCreated', 'Watch created') : t('search.watchThis')}
+                className={`px-3 py-3 text-sm border rounded-lg transition-all ${watchCreated ? 'bg-green-500/10 border-green-500/30 text-green-400' : 'bg-bg-secondary border-border text-text-secondary hover:text-cyan-400 hover:border-cyan-500/30'}`}
               >
-                {watchCreated ? '\u2713' : '\u229A'}
+                <span aria-hidden="true">{watchCreated ? '\u2713' : '\u229A'}</span>
               </button>
             )}
           </div>
@@ -220,7 +221,7 @@ export function NaturalLanguageSearch({ onStatusChange, defaultExpanded = true }
           {/* Example queries — stack-aware when available */}
           {!result && !error && (
             <div className="space-y-2">
-              <span className="text-xs text-gray-400 font-medium">
+              <span className="text-xs text-text-secondary font-medium">
                 {stackHealth?.suggested_queries?.length ? t('search.suggestedQueries') : t('search.tryThese')}
               </span>
               <div className="flex flex-wrap gap-2">
@@ -228,7 +229,7 @@ export function NaturalLanguageSearch({ onStatusChange, defaultExpanded = true }
                   ? stackHealth.suggested_queries.slice(0, 4)
                   : ['show me files about authentication', 'pdfs from last month', 'summarize my notes on rust', 'what did I work on last week']
                 ).map((example) => (
-                  <button key={example} onClick={() => setQuery(example)} className="px-3 py-1.5 text-xs bg-bg-secondary rounded-lg border border-border text-gray-400 hover:text-cyan-400 hover:border-cyan-500/30 transition-all">
+                  <button key={example} onClick={() => setQuery(example)} className="px-3 py-1.5 text-xs bg-bg-secondary rounded-lg border border-border text-text-secondary hover:text-cyan-400 hover:border-cyan-500/30 transition-all">
                     {example}
                   </button>
                 ))}
@@ -244,35 +245,35 @@ export function NaturalLanguageSearch({ onStatusChange, defaultExpanded = true }
 
               {/* Query parsing info */}
               <div className="flex items-center gap-2 p-3 bg-bg-secondary rounded-lg border border-border flex-wrap">
-                <span className="text-xs font-medium text-gray-500">{intentLabels[result.intent] || result.intent}</span>
+                <span className="text-xs font-medium text-text-muted">{intentLabels[result.intent] || result.intent}</span>
                 <span className="text-sm text-white">{'\u2022'}</span>
                 <span className="text-sm text-cyan-400">{result.parsed.keywords.join(', ')}</span>
                 {result.parsed.time_range && (
-                  <span className="px-2 py-1 text-xs bg-bg-tertiary rounded-md text-gray-300 border border-border">
+                  <span className="px-2 py-1 text-xs bg-bg-tertiary rounded-md text-text-secondary border border-border">
                     {result.parsed.time_range.relative || t('search.customRange')}
                   </span>
                 )}
                 {result.parsed.file_types.length > 0 && (
-                  <span className="px-2 py-1 text-xs bg-bg-tertiary rounded-md text-gray-300 border border-border">
+                  <span className="px-2 py-1 text-xs bg-bg-tertiary rounded-md text-text-secondary border border-border">
                     {result.parsed.file_types.join(', ')}
                   </span>
                 )}
-                <button onClick={clearResults} aria-label="Clear search results" className="ml-auto text-gray-500 hover:text-white transition-colors">{'\u2715'}</button>
+                <button onClick={clearResults} aria-label="Clear search results" className="ml-auto text-text-muted hover:text-white transition-colors">{'\u2715'}</button>
               </div>
 
               {/* Stack context */}
               {relevantStack.length > 0 && (
-                <div className="flex items-center gap-2 text-xs text-gray-400">
-                  <span className="text-gray-500">{t('search.yourStack')}:</span>
+                <div className="flex items-center gap-2 text-xs text-text-secondary">
+                  <span className="text-text-muted">{t('search.yourStack')}:</span>
                   {relevantStack.map((s) => (
-                    <span key={s.name} className="px-2 py-0.5 bg-bg-secondary rounded border border-border text-gray-300">{s.name}</span>
+                    <span key={s.name} className="px-2 py-0.5 bg-bg-secondary rounded border border-border text-text-secondary">{s.name}</span>
                   ))}
                 </div>
               )}
 
               {/* Summary */}
               {result.summary && (
-                <div className="text-sm text-gray-300 bg-bg-secondary rounded-lg p-4 border border-border">{result.summary}</div>
+                <div className="text-sm text-text-secondary bg-bg-secondary rounded-lg p-4 border border-border">{result.summary}</div>
               )}
 
               {/* Result items */}
@@ -280,16 +281,16 @@ export function NaturalLanguageSearch({ onStatusChange, defaultExpanded = true }
                 {result.items.map((item, index) => (
                   <div key={`${item.id}-${index}`} className="p-3 bg-bg-secondary rounded-lg border border-border hover:border-cyan-500/30 transition-colors">
                     <div className="flex items-start gap-3">
-                      <span className="text-[10px] text-gray-500 uppercase font-mono bg-bg-tertiary px-1.5 py-0.5 rounded">{sourceLabels[item.source_type] || 'SRC'}</span>
+                      <span className="text-[10px] text-text-muted uppercase font-mono bg-bg-tertiary px-1.5 py-0.5 rounded">{sourceLabels[item.source_type] || 'SRC'}</span>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2">
                           <span className="text-sm text-white font-medium truncate">{item.file_name || t('search.unknownFile')}</span>
-                          <span className={`text-xs px-2 py-0.5 rounded-md ${item.relevance > 0.7 ? 'bg-green-500/20 text-green-400' : item.relevance > 0.4 ? 'bg-yellow-500/20 text-yellow-400' : 'bg-gray-500/20 text-gray-400'}`}>
+                          <span className={`text-xs px-2 py-0.5 rounded-md ${item.relevance > 0.7 ? 'bg-green-500/20 text-green-400' : item.relevance > 0.4 ? 'bg-yellow-500/20 text-yellow-400' : 'bg-gray-500/20 text-text-secondary'}`}>
                             {(item.relevance * 100).toFixed(0)}%
                           </span>
                         </div>
-                        <p className="text-xs text-gray-500 mt-1 line-clamp-2">{item.preview}</p>
-                        <div className="flex items-center gap-2 mt-2 text-[10px] text-gray-500">
+                        <p className="text-xs text-text-muted mt-1 line-clamp-2">{item.preview}</p>
+                        <div className="flex items-center gap-2 mt-2 text-[10px] text-text-muted">
                           <span className="text-cyan-400/70">{item.match_reason}</span>
                           {item.timestamp && (
                             <>
@@ -304,8 +305,8 @@ export function NaturalLanguageSearch({ onStatusChange, defaultExpanded = true }
                 ))}
                 {result.items.length === 0 && (
                   <div className="text-center py-6 bg-bg-secondary rounded-lg border border-border">
-                    <div className="text-sm text-gray-400">{t('search.noResults')}</div>
-                    <div className="text-xs text-gray-500 mt-1">{t('search.tryDifferent')}</div>
+                    <div className="text-sm text-text-secondary">{t('search.noResults')}</div>
+                    <div className="text-xs text-text-muted mt-1">{t('search.tryDifferent')}</div>
                   </div>
                 )}
               </div>
@@ -313,12 +314,12 @@ export function NaturalLanguageSearch({ onStatusChange, defaultExpanded = true }
               {/* Related decisions (Pro) */}
               {isPro && result.related_decisions.length > 0 && (
                 <div className="space-y-1.5">
-                  <h4 className="text-xs text-gray-400 uppercase tracking-wider">{t('search.relatedDecisions')}</h4>
+                  <h4 className="text-xs text-text-secondary uppercase tracking-wider">{t('search.relatedDecisions')}</h4>
                   {result.related_decisions.map((d) => (
                     <div key={d.id} className="px-3 py-2 bg-bg-secondary rounded-lg border border-border text-xs">
-                      <span className="text-gray-300">{d.subject}</span>
-                      <span className="text-gray-500 mx-1.5">{'\u2014'}</span>
-                      <span className="text-gray-400">{d.decision}</span>
+                      <span className="text-text-secondary">{d.subject}</span>
+                      <span className="text-text-muted mx-1.5">{'\u2014'}</span>
+                      <span className="text-text-secondary">{d.decision}</span>
                     </div>
                   ))}
                 </div>
@@ -327,12 +328,12 @@ export function NaturalLanguageSearch({ onStatusChange, defaultExpanded = true }
               {/* Knowledge gaps (Pro) */}
               {isPro && result.knowledge_gaps.length > 0 && (
                 <div className="space-y-1.5">
-                  <h4 className="text-xs text-gray-400 uppercase tracking-wider">{t('search.knowledgeGaps')}</h4>
+                  <h4 className="text-xs text-text-secondary uppercase tracking-wider">{t('search.knowledgeGaps')}</h4>
                   {result.knowledge_gaps.map((gap, i) => (
                     <div key={i} className="flex items-center gap-2 px-3 py-2 bg-bg-secondary rounded-lg border border-border text-xs">
-                      <span className={gap.severity === 'critical' ? 'text-red-400' : gap.severity === 'high' ? 'text-yellow-400' : 'text-gray-400'}>{'\u25CF'}</span>
-                      <span className="text-gray-300">{gap.technology}</span>
-                      <span className="text-gray-500">{t('search.staleForDays', { days: gap.days_stale })}</span>
+                      <span className={gap.severity === 'critical' ? 'text-red-400' : gap.severity === 'high' ? 'text-yellow-400' : 'text-text-secondary'}>{'\u25CF'}</span>
+                      <span className="text-text-secondary">{gap.technology}</span>
+                      <span className="text-text-muted">{t('search.staleForDays', { days: gap.days_stale })}</span>
                     </div>
                   ))}
                 </div>
@@ -344,7 +345,7 @@ export function NaturalLanguageSearch({ onStatusChange, defaultExpanded = true }
               )}
 
               {/* Stats footer */}
-              <div className="text-xs text-gray-500 text-center pt-2 border-t border-border">
+              <div className="text-xs text-text-muted text-center pt-2 border-t border-border">
                 {t('search.stats', { count: result.total_count, ms: result.execution_ms, confidence: (result.parsed.confidence * 100).toFixed(0) })}
               </div>
             </div>

@@ -95,7 +95,7 @@ export function ResultsView({
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-3">
               <div className="w-8 h-8 bg-bg-tertiary rounded-lg flex items-center justify-center">
-                <span className="text-gray-500">R</span>
+                <span className="text-text-muted">R</span>
               </div>
               <div>
                 <div className="flex items-center gap-2">
@@ -106,7 +106,7 @@ export function ResultsView({
                     </span>
                   )}
                 </div>
-                <p className="text-xs text-gray-500" aria-live="polite">
+                <p className="text-xs text-text-muted" aria-live="polite">
                   {state.analysisComplete
                     ? t('results.itemsRelevant', { items: filteredResults.length, relevant: relevantCount })
                     : t('results.clickAnalyze')}
@@ -145,16 +145,16 @@ export function ResultsView({
                   aria-label="Search results by keyword"
                   className="bg-bg-tertiary text-sm text-white placeholder-gray-500 rounded-lg pl-8 pr-3 py-1.5 w-48 border border-transparent focus:border-border focus:outline-none transition-all"
                 />
-                <svg className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-text-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                 </svg>
                 {searchQuery && (
                   <button
                     onClick={() => setSearchQuery('')}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-300"
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-text-muted hover:text-text-secondary"
                     aria-label="Clear search"
                   >
-                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                     </svg>
                   </button>
@@ -163,7 +163,7 @@ export function ResultsView({
 
               {/* Source Filters */}
               <div className="flex items-center gap-2 bg-bg-tertiary px-3 py-1.5 rounded-lg flex-wrap" role="group" aria-label="Source filters">
-                <span className="text-xs text-gray-500">{t('results.sources')}</span>
+                <span className="text-xs text-text-muted">{t('results.sources')}</span>
                 {uniqueSources.map(id => (
                     <button
                       key={id}
@@ -173,7 +173,7 @@ export function ResultsView({
                       className={`px-2 py-1 text-xs rounded-lg transition-all ${
                         sourceFilters.has(id)
                           ? 'bg-orange-500/20 text-orange-400 border border-orange-500/30'
-                          : 'text-gray-500 hover:text-gray-300'
+                          : 'text-text-muted hover:text-text-secondary'
                       }`}
                     >
                       {getSourceLabel(id)}
@@ -183,14 +183,14 @@ export function ResultsView({
 
               {/* Sort */}
               <div className="flex items-center gap-2 bg-bg-tertiary px-3 py-1.5 rounded-lg" role="group" aria-label="Sort order">
-                <span className="text-xs text-gray-500">{t('results.sort')}</span>
+                <span className="text-xs text-text-muted">{t('results.sort')}</span>
                 <button
                   onClick={() => setSortBy('score')}
                   aria-pressed={sortBy === 'score'}
                   className={`px-2 py-1 text-xs rounded-lg transition-all ${
                     sortBy === 'score'
                       ? 'bg-white/10 text-white'
-                      : 'text-gray-500 hover:text-gray-300'
+                      : 'text-text-muted hover:text-text-secondary'
                   }`}
                 >
                   {t('results.score')}
@@ -201,7 +201,7 @@ export function ResultsView({
                   className={`px-2 py-1 text-xs rounded-lg transition-all ${
                     sortBy === 'date'
                       ? 'bg-white/10 text-white'
-                      : 'text-gray-500 hover:text-gray-300'
+                      : 'text-text-muted hover:text-text-secondary'
                   }`}
                 >
                   {t('results.recent')}
@@ -216,7 +216,7 @@ export function ResultsView({
                 className={`px-3 py-1.5 text-xs rounded-lg transition-all ${
                   showOnlyRelevant
                     ? 'bg-green-500/20 text-green-400 border border-green-500/30'
-                    : 'bg-bg-tertiary text-gray-500 hover:text-gray-300'
+                    : 'bg-bg-tertiary text-text-muted hover:text-text-secondary'
                 }`}
               >
                 {showOnlyRelevant ? t('results.relevantOnly') : t('results.showAllItems')}
@@ -230,7 +230,7 @@ export function ResultsView({
                 className={`px-3 py-1.5 text-xs rounded-lg transition-all ${
                   showSavedOnly
                     ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30'
-                    : 'bg-bg-tertiary text-gray-500 hover:text-gray-300'
+                    : 'bg-bg-tertiary text-text-muted hover:text-text-secondary'
                 }`}
               >
                 {t('results.saved')}
@@ -244,7 +244,7 @@ export function ResultsView({
                 <button
                   onClick={() => dismissAllBelow(0.3)}
                   aria-label="Dismiss all items below 30% relevance"
-                  className="px-3 py-1.5 text-xs bg-bg-tertiary text-gray-500 rounded-lg hover:bg-red-500/10 hover:text-red-400 transition-all"
+                  className="px-3 py-1.5 text-xs bg-bg-tertiary text-text-muted rounded-lg hover:bg-red-500/10 hover:text-red-400 transition-all"
                   title="Dismiss all items below 30% relevance"
                 >
                   x &lt;30%
@@ -252,7 +252,7 @@ export function ResultsView({
                 <button
                   onClick={() => saveAllAbove(0.6)}
                   aria-label="Save all items above 60% relevance"
-                  className="px-3 py-1.5 text-xs bg-bg-tertiary text-gray-500 rounded-lg hover:bg-green-500/10 hover:text-green-400 transition-all"
+                  className="px-3 py-1.5 text-xs bg-bg-tertiary text-text-muted rounded-lg hover:bg-green-500/10 hover:text-green-400 transition-all"
                   title="Save all items above 60% relevance"
                 >
                   + &gt;60%
@@ -270,10 +270,10 @@ export function ResultsView({
                     <div className="w-8 h-8 border-3 border-orange-500 border-t-transparent rounded-full animate-spin" />
                   </div>
                   <p className="text-lg text-white mb-2">{t('action.analyzing')}</p>
-                  <p className="text-sm text-gray-500">{state.progressMessage}</p>
+                  <p className="text-sm text-text-muted">{state.progressMessage}</p>
                   {state.progress > 0 && (
                     <div className="mt-4 max-w-xs mx-auto">
-                      <div className="flex justify-between text-xs text-gray-500 mb-1">
+                      <div className="flex justify-between text-xs text-text-muted mb-1">
                         <span>{getStageLabel(state.progressStage)}</span>
                         <span>{Math.round(state.progress * 100)}%</span>
                       </div>
@@ -289,12 +289,12 @@ export function ResultsView({
               ) : (
                 <>
                   <div className="w-16 h-16 mx-auto mb-4 bg-bg-tertiary rounded-full flex items-center justify-center">
-                    <svg className="w-7 h-7 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg className="w-7 h-7 text-text-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                     </svg>
                   </div>
                   <p className="text-lg text-white mb-2">{t('results.noResults')}</p>
-                  <p className="text-sm text-gray-500 mb-5">
+                  <p className="text-sm text-text-muted mb-5">
                     {t('results.startAnalysis')}
                   </p>
                   <button
@@ -303,8 +303,8 @@ export function ResultsView({
                   >
                     {t('results.analyzeNow')}
                   </button>
-                  <p className="text-xs text-gray-600 mt-3">
-                    or press <kbd className="px-1.5 py-0.5 bg-bg-tertiary rounded text-gray-500">R</kbd>
+                  <p className="text-xs text-text-muted mt-3">
+                    or press <kbd className="px-1.5 py-0.5 bg-bg-tertiary rounded text-text-muted">R</kbd>
                   </p>
                 </>
               )}
@@ -312,19 +312,19 @@ export function ResultsView({
           ) : filteredResults.length === 0 ? (
             <div className="text-center py-16">
               <div className="w-16 h-16 mx-auto mb-4 bg-bg-tertiary rounded-full flex items-center justify-center">
-                <svg className="w-7 h-7 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-7 h-7 text-text-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
                 </svg>
               </div>
               <p className="text-lg text-white mb-2">{t('results.noMatch')}</p>
-              <p className="text-sm text-gray-500 mb-5">
+              <p className="text-sm text-text-muted mb-5">
                 {t('results.analyzedNoMatch', { count: state.relevanceResults.length })}
               </p>
               <div className="flex items-center justify-center gap-3">
                 {showOnlyRelevant && (
                   <button
                     onClick={() => setShowOnlyRelevant(false)}
-                    className="px-4 py-2 text-sm bg-bg-tertiary text-gray-300 rounded-lg border border-border hover:border-orange-500/30 transition-all"
+                    className="px-4 py-2 text-sm bg-bg-tertiary text-text-secondary rounded-lg border border-border hover:border-orange-500/30 transition-all"
                   >
                     {t('results.showAll')}
                   </button>
@@ -332,12 +332,12 @@ export function ResultsView({
                 {sourceFilters.size > 0 && (
                   <button
                     onClick={() => sourceFilters.forEach(s => toggleSourceFilter(s))}
-                    className="px-4 py-2 text-sm bg-bg-tertiary text-gray-300 rounded-lg border border-border hover:border-orange-500/30 transition-all"
+                    className="px-4 py-2 text-sm bg-bg-tertiary text-text-secondary rounded-lg border border-border hover:border-orange-500/30 transition-all"
                   >
                     {t('results.clearSourceFilters')}
                   </button>
                 )}
-                {!showOnlyRelevant && sourceFilters.size === 0 && <p className="text-xs text-gray-600">Try a broader search query or add more interests in Settings</p>}
+                {!showOnlyRelevant && sourceFilters.size === 0 && <p className="text-xs text-text-muted">Try a broader search query or add more interests in Settings</p>}
               </div>
             </div>
           ) : (
@@ -377,7 +377,7 @@ export function ResultsView({
                         <span className={`text-xs font-medium px-2 py-1 rounded-lg ${
                           groupHeader === t('results.topPicksGroup') ? 'bg-orange-500/10 text-orange-400' :
                           groupHeader === t('results.relevantGroup') ? 'bg-green-500/10 text-green-400' :
-                          'bg-gray-500/10 text-gray-500'
+                          'bg-gray-500/10 text-text-muted'
                         }`}>
                           {groupHeader}
                         </span>

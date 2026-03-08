@@ -190,6 +190,10 @@ export const RadarSVG = memo(function RadarSVG({ entries, userStack, onEntryClic
           const transition = dotTransition(index);
           return (
             <g key={entry.name}
+              role="button"
+              aria-label={`${entry.name} — ${entry.ring}, ${entry.quadrant}, ${entry.movement}`}
+              tabIndex={0}
+              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); handleDotClick(entry); } }}
               onMouseEnter={() => handleMouseEnter(entry, pos.x, pos.y)}
               onMouseLeave={handleMouseLeave}
               onClick={(e) => { e.stopPropagation(); handleDotClick(entry); }}
