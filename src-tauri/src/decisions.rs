@@ -489,7 +489,13 @@ pub async fn get_decisions(
 ) -> Result<Vec<DeveloperDecision>, String> {
     let conn = crate::open_db_connection()?;
     let dt = decision_type.map(|s| DecisionType::from_str(&s));
-    let st = status.map(|s| DecisionStatus::from_str(&s));
+    // Default to "active" so superseded decisions don't show in the UI.
+    // Pass status="all" to explicitly bypass the filter and see everything.
+    let st = match status.as_deref() {
+        Some("all") => None,
+        Some(s) => Some(DecisionStatus::from_str(s)),
+        None => Some(DecisionStatus::Active),
+    };
     list_decisions(&conn, dt.as_ref(), st.as_ref(), limit.unwrap_or(50))
 }
 
@@ -536,9 +542,9 @@ pub async fn update_developer_decision(
     )
 }
 
-/// Remove a technology from tech_stack, explicit_interests, and supersede its decision.
+/// Fully delete a technology from all tables where it can persist.
 /// Used when ACE scanner detects a technology the user doesn't actually use.
-/// Cleans all three locations where a falsely-detected tech can persist.
+/// Performs hard deletion (not supersede) so the tech never resurfaces in the UI.
 #[tauri::command]
 pub async fn remove_tech_decision(technology: String) -> Result<(), String> {
     let conn = crate::open_db_connection()?;
@@ -557,14 +563,28 @@ pub async fn remove_tech_decision(technology: String) -> Result<(), String> {
     )
     .map_err(|e| format!("Failed to remove from interests: {}", e))?;
 
-    // 3. Supersede any matching active tech_choice decision
+    // 3. Delete any matching tech_choice decision (hard delete, not supersede)
     conn.execute(
-        "UPDATE developer_decisions SET status = 'superseded', updated_at = datetime('now') WHERE subject = ?1 AND decision_type = 'tech_choice' AND status = 'active'",
+        "DELETE FROM developer_decisions WHERE subject = ?1 AND decision_type = 'tech_choice'",
         params![technology],
     )
-    .map_err(|e| format!("Failed to supersede tech decision: {}", e))?;
+    .map_err(|e| format!("Failed to delete tech decision: {}", e))?;
 
-    info!(target: "4da::decisions", technology = %technology, "Technology fully removed: tech_stack + interests + decision superseded");
+    // 4. Remove from detected_tech (prevent re-seeding on next ACE scan)
+    conn.execute(
+        "DELETE FROM detected_tech WHERE technology = ?1",
+        params![technology],
+    )
+    .map_err(|e| format!("Failed to remove from detected_tech: {}", e))?;
+
+    // 5. Remove any learned affinity for this false tech
+    conn.execute(
+        "DELETE FROM topic_affinities WHERE topic = ?1",
+        params![technology],
+    )
+    .map_err(|e| format!("Failed to remove from topic_affinities: {}", e))?;
+
+    info!(target: "4da::decisions", technology = %technology, "Technology fully deleted: tech_stack + interests + decision + detected_tech + topic_affinities");
     Ok(())
 }
 
