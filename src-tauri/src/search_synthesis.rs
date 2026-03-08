@@ -179,7 +179,9 @@ fn gather_gap_context(conn: &rusqlite::Connection, keywords: &[String]) -> Vec<G
     };
 
     let techs: Vec<(String, String)> = stmt
-        .query_map([], |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)))
+        .query_map([], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+        })
         .ok()
         .map(|rows| rows.flatten().collect())
         .unwrap_or_default();
@@ -187,7 +189,10 @@ fn gather_gap_context(conn: &rusqlite::Connection, keywords: &[String]) -> Vec<G
     techs
         .into_iter()
         .filter(|(name, status)| {
-            status == "stale" && keywords.iter().any(|k| name.to_lowercase().contains(k.as_str()))
+            status == "stale"
+                && keywords
+                    .iter()
+                    .any(|k| name.to_lowercase().contains(k.as_str()))
         })
         .take(3)
         .map(|(technology, _)| GapContext {

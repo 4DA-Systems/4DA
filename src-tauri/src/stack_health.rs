@@ -488,7 +488,10 @@ mod tests {
                 .then(b.signal_count_7d.cmp(&a.signal_count_7d))
         });
 
-        assert_eq!(entries[0].name, "React", "Higher signal count should come first within same status");
+        assert_eq!(
+            entries[0].name, "React",
+            "Higher signal count should come first within same status"
+        );
         assert_eq!(entries[1].name, "Vite");
     }
 }
