@@ -72,6 +72,7 @@ export const DecisionMemory = memo(function DecisionMemory() {
   const loadDecisions = useAppStore((s) => s.loadDecisions);
   const recordDecision = useAppStore((s) => s.recordDecision);
   const updateDecision = useAppStore((s) => s.updateDecision);
+  const removeTechDecision = useAppStore((s) => s.removeTechDecision);
 
   useEffect(() => {
     loadDecisions();
@@ -188,6 +189,17 @@ export const DecisionMemory = memo(function DecisionMemory() {
             >
               {t('action.save')}
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Auto-detected tech notice */}
+      {!decisionsLoading && decisions.some(d => d.decision_type === 'tech_choice' && d.rationale === 'Inferred from project setup') && (
+        <div className="px-5 py-3 border-b border-border bg-amber-500/5 flex items-start gap-3">
+          <span className="text-amber-400 text-xs mt-0.5 flex-shrink-0">!</span>
+          <div className="flex-1 min-w-0">
+            <p className="text-xs text-amber-400 font-medium">{t('decisions.autoDetectedNotice')}</p>
+            <p className="text-[10px] text-gray-500 mt-0.5">{t('decisions.autoDetectedHint')}</p>
           </div>
         </div>
       )}
@@ -339,6 +351,14 @@ export const DecisionMemory = memo(function DecisionMemory() {
                           >
                             {t('decisions.supersede')}
                           </button>
+                          {d.decision_type === 'tech_choice' && (
+                            <button
+                              onClick={() => removeTechDecision(d.subject)}
+                              className="px-3 py-1.5 text-xs bg-red-500/10 text-red-400 border border-red-500/20 rounded hover:bg-red-500/20 transition-colors"
+                            >
+                              {t('decisions.remove')}
+                            </button>
+                          )}
                         </div>
                       )}
                       {d.status === 'reconsidering' && (

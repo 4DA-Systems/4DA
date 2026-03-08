@@ -1264,5 +1264,26 @@
   "channels.previewEmpty": "No sources match these topics yet. Run an analysis to fetch content, or try different keywords.",
   "channels.basicMode": "Basic Mode",
   "channels.configureOllama": "Configure Ollama for AI synthesis",
-  "coach.freeSession": "Free session {{current}}/{{max}}"
+  "coach.freeSession": "Free session {{current}}/{{max}}",
+
+  "decisions.title": "Decision Windows",
+  "decisions.recorded": "{{count}} decisions recorded",
+  "decisions.record": "Record Decision",
+  "decisions.decision": "Decision",
+  "decisions.rationale": "Rationale",
+  "decisions.alternativesRejected": "Alternatives Rejected",
+  "decisions.tags": "Context Tags",
+  "decisions.subject": "Subject",
+  "decisions.whatDecided": "What did you decide?",
+  "decisions.rationaleOptional": "Rationale (optional)",
+  "decisions.confidence": "Confidence: {{value}}%",
+  "decisions.loading": "Loading decisions...",
+  "decisions.noDecisions": "No decisions recorded yet",
+  "decisions.noDecisionsHint": "Record your tech choices, architecture patterns, and workflow decisions",
+  "decisions.reconsider": "Reconsider",
+  "decisions.supersede": "Supersede",
+  "decisions.reaffirm": "Reaffirm",
+  "decisions.remove": "Remove",
+  "decisions.autoDetectedNotice": "Some tech choices were auto-detected from your local projects",
+  "decisions.autoDetectedHint": "If something looks wrong, use the Remove button to correct it. This also updates your playbook and profile."
 }

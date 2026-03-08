@@ -75,7 +75,7 @@ export function LearningIndicator({
 
   return (
     <div
-      className="mb-6 bg-bg-secondary border border-border rounded-lg overflow-hidden transition-all duration-300 ease-in-out"
+      className="mb-6 bg-bg-secondary border border-border rounded-lg transition-all duration-300 ease-in-out"
     >
       {/* Collapsed / Header Row */}
       <button
@@ -121,7 +121,7 @@ export function LearningIndicator({
       {/* Expanded Content */}
       <div
         className={`transition-all duration-300 ease-in-out overflow-hidden ${
-          expanded ? 'max-h-40 opacity-100' : 'max-h-0 opacity-0'
+          expanded ? 'max-h-96 opacity-100' : 'max-h-0 opacity-0'
         }`}
       >
         <div className="px-4 pb-3 pt-1 flex flex-wrap gap-2">

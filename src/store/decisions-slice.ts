@@ -78,4 +78,14 @@ export const createDecisionsSlice: StateCreator<AppStore, [], [], DecisionsSlice
       console.error('Failed to update decision:', error);
     }
   },
+
+  removeTechDecision: async (technology: string) => {
+    try {
+      await invoke('remove_tech_decision', { technology });
+      const decisions = await invoke<DeveloperDecision[]>('get_decisions', {});
+      set({ decisions });
+    } catch (error) {
+      console.error('Failed to remove tech decision:', error);
+    }
+  },
 });

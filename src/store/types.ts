@@ -287,6 +287,7 @@ export interface DecisionsSlice {
     status?: string;
     confidence?: number;
   }) => Promise<void>;
+  removeTechDecision: (technology: string) => Promise<void>;
 }
 
 export interface AgentSlice {

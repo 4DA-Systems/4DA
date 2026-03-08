@@ -369,6 +369,7 @@ pub fn run() {
             decisions::get_decisions,
             decisions::record_developer_decision,
             decisions::update_developer_decision,
+            decisions::remove_tech_decision,
             // Agent Memory
             // Tech Radar
             tech_radar::get_tech_radar,

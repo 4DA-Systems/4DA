@@ -536,6 +536,38 @@ pub async fn update_developer_decision(
     )
 }
 
+/// Remove a technology from tech_stack, explicit_interests, and supersede its decision.
+/// Used when ACE scanner detects a technology the user doesn't actually use.
+/// Cleans all three locations where a falsely-detected tech can persist.
+#[tauri::command]
+pub async fn remove_tech_decision(technology: String) -> Result<(), String> {
+    let conn = crate::open_db_connection()?;
+
+    // 1. Remove from tech_stack (primary tech storage)
+    conn.execute(
+        "DELETE FROM tech_stack WHERE technology = ?1",
+        params![technology],
+    )
+    .map_err(|e| format!("Failed to remove technology from tech_stack: {}", e))?;
+
+    // 2. Remove from explicit_interests (may have been auto-seeded by ACE)
+    conn.execute(
+        "DELETE FROM explicit_interests WHERE topic = ?1",
+        params![technology],
+    )
+    .map_err(|e| format!("Failed to remove from interests: {}", e))?;
+
+    // 3. Supersede any matching active tech_choice decision
+    conn.execute(
+        "UPDATE developer_decisions SET status = 'superseded', updated_at = datetime('now') WHERE subject = ?1 AND decision_type = 'tech_choice' AND status = 'active'",
+        params![technology],
+    )
+    .map_err(|e| format!("Failed to supersede tech decision: {}", e))?;
+
+    info!(target: "4da::decisions", technology = %technology, "Technology fully removed: tech_stack + interests + decision superseded");
+    Ok(())
+}
+
 // ============================================================================
 // Tests
 // ============================================================================
