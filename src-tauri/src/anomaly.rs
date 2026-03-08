@@ -214,15 +214,17 @@ pub fn detect_context_drift(conn: &Connection) -> Result<Vec<Anomaly>> {
     let drift_threshold: f32 = 0.3;
 
     // Get topic affinities that were updated in the last 7 days
-    let mut stmt = conn.prepare(
-        "SELECT topic, affinity_score FROM topic_affinities
+    let mut stmt = conn
+        .prepare(
+            "SELECT topic, affinity_score FROM topic_affinities
              WHERE last_interaction > datetime('now', '-7 days')
              ORDER BY last_interaction DESC",
-    )?;
+        )?;
 
-    let rows = stmt.query_map([], |row| {
-        Ok((row.get::<_, String>(0)?, row.get::<_, f64>(1)?))
-    })?;
+    let rows = stmt
+        .query_map([], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, f64>(1)?))
+        })?;
 
     let topics: Vec<(String, f64)> = rows.flatten().collect();
 
@@ -267,20 +269,22 @@ pub fn detect_context_drift(conn: &Connection) -> Result<Vec<Anomaly>> {
 pub fn detect_contradictions(conn: &Connection) -> Result<Vec<Anomaly>> {
     let mut anomalies = Vec::new();
 
-    let mut stmt = conn.prepare(
-        "SELECT ta.topic, ta.affinity_score, at.confidence as anti_confidence
+    let mut stmt = conn
+        .prepare(
+            "SELECT ta.topic, ta.affinity_score, at.confidence as anti_confidence
              FROM topic_affinities ta
              JOIN anti_topics at ON ta.topic = at.topic
              WHERE ta.affinity_score > 0.3 AND at.confidence > 0.3",
-    )?;
+        )?;
 
-    let rows = stmt.query_map([], |row| {
-        Ok((
-            row.get::<_, String>(0)?,
-            row.get::<_, f64>(1)?,
-            row.get::<_, f64>(2)?,
-        ))
-    })?;
+    let rows = stmt
+        .query_map([], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, f64>(1)?,
+                row.get::<_, f64>(2)?,
+            ))
+        })?;
 
     for row in rows.flatten() {
         let (topic, affinity, anti_confidence) = row;
@@ -317,15 +321,17 @@ pub fn detect_abnormal_volume(conn: &Connection) -> Result<Vec<Anomaly>> {
     let volume_std_threshold: f32 = 2.0;
 
     // Get daily interaction counts for the past 7 days
-    let mut stmt = conn.prepare(
-        "SELECT date(timestamp) as day, COUNT(*) as count
+    let mut stmt = conn
+        .prepare(
+            "SELECT date(timestamp) as day, COUNT(*) as count
              FROM interactions
              WHERE timestamp > datetime('now', '-7 days')
              GROUP BY day
              ORDER BY day",
-    )?;
+        )?;
 
-    let rows = stmt.query_map([], |row| row.get::<_, u32>(1))?;
+    let rows = stmt
+        .query_map([], |row| row.get::<_, u32>(1))?;
 
     let volumes: Vec<u32> = rows.flatten().collect();
 
@@ -405,14 +411,15 @@ pub fn detect_confidence_mismatch(conn: &Connection) -> Result<Vec<Anomaly>> {
                AND (COALESCE(positive_signals, 0) + COALESCE(negative_signals, 0)) < 3",
         )?;
 
-    let rows = stmt.query_map([], |row| {
-        Ok((
-            row.get::<_, String>(0)?,
-            row.get::<_, f64>(1)?,
-            row.get::<_, f64>(2)?,
-            row.get::<_, i32>(3)?,
-        ))
-    })?;
+    let rows = stmt
+        .query_map([], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, f64>(1)?,
+                row.get::<_, f64>(2)?,
+                row.get::<_, i32>(3)?,
+            ))
+        })?;
 
     for row in rows.flatten() {
         let (topic, confidence, _affinity, evidence_count) = row;
@@ -475,29 +482,32 @@ pub fn store_anomaly(conn: &Connection, anomaly: &Anomaly) -> Result<i64> {
 
 /// Get all unresolved anomalies, ordered by most recent first
 pub fn get_unresolved(conn: &Connection) -> Result<Vec<Anomaly>> {
-    let mut stmt = conn.prepare(
-        "SELECT id, anomaly_type, topic, description, confidence, severity, evidence, detected_at
+    let mut stmt = conn
+        .prepare(
+            "SELECT id, anomaly_type, topic, description, confidence, severity, evidence, detected_at
              FROM anomalies
              WHERE resolved = 0
              ORDER BY detected_at DESC
              LIMIT 50",
-    )?;
+        )?;
 
-    let rows = stmt.query_map([], |row| {
-        let evidence_json: String = row.get::<_, String>(6).unwrap_or_else(|_| "[]".to_string());
+    let rows = stmt
+        .query_map([], |row| {
+            let evidence_json: String =
+                row.get::<_, String>(6).unwrap_or_else(|_| "[]".to_string());
 
-        Ok(Anomaly {
-            id: Some(row.get(0)?),
-            anomaly_type: AnomalyType::from_str(&row.get::<_, String>(1)?),
-            topic: row.get(2)?,
-            description: row.get(3)?,
-            confidence: row.get(4)?,
-            severity: AnomalySeverity::from_str(&row.get::<_, String>(5)?),
-            evidence: serde_json::from_str(&evidence_json).unwrap_or_default(),
-            detected_at: row.get(7)?,
-            resolved: false,
-        })
-    })?;
+            Ok(Anomaly {
+                id: Some(row.get(0)?),
+                anomaly_type: AnomalyType::from_str(&row.get::<_, String>(1)?),
+                topic: row.get(2)?,
+                description: row.get(3)?,
+                confidence: row.get(4)?,
+                severity: AnomalySeverity::from_str(&row.get::<_, String>(5)?),
+                evidence: serde_json::from_str(&evidence_json).unwrap_or_default(),
+                detected_at: row.get(7)?,
+                resolved: false,
+            })
+        })?;
 
     rows.collect::<std::result::Result<Vec<_>, _>>()
         .map_err(|e| e.into())
@@ -505,7 +515,8 @@ pub fn get_unresolved(conn: &Connection) -> Result<Vec<Anomaly>> {
 
 /// Mark an anomaly as resolved
 pub fn resolve_anomaly(conn: &Connection, id: i64) -> Result<()> {
-    let changed = conn.execute("UPDATE anomalies SET resolved = 1 WHERE id = ?1", [id])?;
+    let changed = conn
+        .execute("UPDATE anomalies SET resolved = 1 WHERE id = ?1", [id])?;
 
     if changed == 0 {
         return Err(format!("Anomaly with id {} not found", id).into());

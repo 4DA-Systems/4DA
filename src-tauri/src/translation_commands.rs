@@ -16,7 +16,9 @@ use std::collections::HashMap;
 /// Compares the English locale source files against the existing translations
 /// in `data/translations/{lang}/` and returns a percentage-complete report.
 #[tauri::command]
-pub fn get_translation_status(lang: String) -> Result<translation_pipeline::TranslationStatus> {
+pub fn get_translation_status(
+    lang: String,
+) -> Result<translation_pipeline::TranslationStatus> {
     let english = translation_pipeline::load_english_strings()?;
     let total = english.len();
 
@@ -163,7 +165,11 @@ pub fn get_translation_overrides(lang: String) -> Result<HashMap<String, String>
 
 /// Delete a single user override.
 #[tauri::command]
-pub fn delete_translation_override(lang: String, namespace: String, key: String) -> Result<()> {
+pub fn delete_translation_override(
+    lang: String,
+    namespace: String,
+    key: String,
+) -> Result<()> {
     let overrides_dir = crate::i18n::translations_dir()
         .join("overrides")
         .join(&lang);

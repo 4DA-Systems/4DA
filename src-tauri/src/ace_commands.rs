@@ -737,7 +737,7 @@ pub async fn ace_detect_anomalies() -> Result<serde_json::Value> {
 pub async fn ace_resolve_anomaly(anomaly_id: i64) -> Result<()> {
     let ace = crate::get_ace_engine()?;
     let conn = ace.get_conn().lock();
-    crate::anomaly::resolve_anomaly(&conn, anomaly_id)
+    Ok(crate::anomaly::resolve_anomaly(&conn, anomaly_id)?)
 }
 
 /// Get accuracy metrics calculated from interactions

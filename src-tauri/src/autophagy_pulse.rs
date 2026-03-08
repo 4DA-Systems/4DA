@@ -70,10 +70,7 @@ pub struct IntelligencePulse {
 pub async fn get_intelligence_pulse() -> Result<IntelligencePulse> {
     // Check cache before running 7 SQL queries
     {
-        let cache = PULSE_CACHE.lock().unwrap_or_else(|e| {
-            tracing::warn!("PULSE_CACHE mutex poisoned, recovering");
-            e.into_inner()
-        });
+        let cache = PULSE_CACHE.lock().unwrap_or_else(|e| e.into_inner());
         if let Some((ref result, ref instant)) = *cache {
             if instant.elapsed().as_secs() < PULSE_TTL_SECS {
                 return Ok(result.clone());
@@ -335,10 +332,7 @@ pub async fn get_intelligence_pulse() -> Result<IntelligencePulse> {
 
     // Store in cache
     {
-        let mut cache = PULSE_CACHE.lock().unwrap_or_else(|e| {
-            tracing::warn!("PULSE_CACHE mutex poisoned, recovering");
-            e.into_inner()
-        });
+        let mut cache = PULSE_CACHE.lock().unwrap_or_else(|e| e.into_inner());
         *cache = Some((pulse.clone(), Instant::now()));
     }
 

@@ -755,7 +755,8 @@ impl SettingsManager {
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
-            let _ = fs::set_permissions(&self.settings_path, fs::Permissions::from_mode(0o600));
+            let _ =
+                fs::set_permissions(&self.settings_path, fs::Permissions::from_mode(0o600));
         }
 
         Ok(())
