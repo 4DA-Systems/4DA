@@ -41,17 +41,26 @@ const WindowCard = memo(function WindowCard({
   window,
   onAct,
   onDismiss,
+  index = 0,
 }: {
   window: DecisionWindow;
   onAct: (id: number) => void;
   onDismiss: (id: number) => void;
+  /** Card position for staggered animation delay */
+  index?: number;
 }) {
   const { t } = useTranslation();
   const config = WINDOW_TYPE_CONFIG[window.window_type] ?? WINDOW_TYPE_CONFIG.knowledge;
   const timeLeft = getTimeRemaining(window.expires_at);
 
   return (
-    <div className={`bg-bg-secondary rounded-lg border ${config.border} p-4`}>
+    <div
+      className={`bg-bg-secondary rounded-lg border ${config.border} p-4`}
+      style={{
+        animation: 'slideInRight 0.4s ease-out both',
+        animationDelay: `${index * 80}ms`,
+      }}
+    >
       <div className="flex items-start justify-between gap-3 mb-2">
         <div className="flex items-center gap-2 flex-1 min-w-0">
           <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${config.color} ${config.bg}`}>
@@ -134,12 +143,13 @@ export const DecisionWindowsPanel = memo(function DecisionWindowsPanel() {
         <span className="text-[10px] text-text-muted">{t('decisions.subtitle')}</span>
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-        {openWindows.map(w => (
+        {openWindows.map((w, i) => (
           <WindowCard
             key={w.id}
             window={w}
             onAct={actOnWindow}
             onDismiss={closeWindow}
+            index={i}
           />
         ))}
       </div>

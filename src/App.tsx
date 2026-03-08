@@ -60,6 +60,7 @@ function App() {
   const setShowSettings = useAppStore(s => s.setShowSettings);
   const [showKeyboardHelp, setShowKeyboardHelp] = useState(false);
   const [newItemIds, setNewItemIds] = useState<Set<number>>(new Set());
+  const [analysisPulse, setAnalysisPulse] = useState(false);
   // Data selectors (may change, use useShallow)
   const { activeView, showOnlyRelevant, filteredResults } = useAppStore(
     useShallow((s) => ({
@@ -295,6 +296,11 @@ function App() {
       const item = filteredResults[index];
       if (item?.url) window.open(item.url, '_blank', 'noopener,noreferrer');
     },
+    onAnalyzeTriggered: () => {
+      addToast('info', t('analysis.keyboardTriggered'));
+      setAnalysisPulse(true);
+      setTimeout(() => setAnalysisPulse(false), 500);
+    },
   });
 
   return (
@@ -399,6 +405,7 @@ function App() {
           onGenerateBriefing={generateBriefing}
           onToggleAutoBriefing={() => setAutoBriefingEnabled(!autoBriefingEnabled)}
           onToast={addToast}
+          analysisPulse={analysisPulse}
         />
 
         {/* Learning Indicator - Visible Learning Loop */}

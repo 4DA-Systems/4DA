@@ -223,3 +223,9 @@ body {
   box-shadow: 0 0 40px rgba(212, 175, 55, 0.15), 0 0 80px rgba(212, 175, 55, 0.05);
   animation: card-appear 0.5s ease-out forwards, card-fade-out 0.5s ease-in 2.5s forwards;
 }
+
+/* Phase 7: Celebratory micro-interactions */
+@keyframes slideInRight {
+  from { transform: translateX(20px); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}

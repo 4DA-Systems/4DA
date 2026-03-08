@@ -57,6 +57,8 @@ interface ActionBarProps {
   onGenerateBriefing: () => void;
   onToggleAutoBriefing: () => void;
   onToast: (type: 'success' | 'error', message: string) => void;
+  /** Brief pulse animation when analysis triggered via keyboard shortcut */
+  analysisPulse?: boolean;
 }
 
 function getRefreshLabel(state: ActionBarProps['state'], briefingLoading: boolean, t: (key: string) => string): string {
@@ -78,6 +80,7 @@ export function ActionBar({
   onGenerateBriefing,
   onToggleAutoBriefing,
   onToast,
+  analysisPulse,
 }: ActionBarProps) {
   const { t } = useTranslation();
   const [overflowOpen, setOverflowOpen] = useState(false);
@@ -182,6 +185,13 @@ export function ActionBar({
                 ? 'bg-green-500/10 text-green-400 border border-green-500/20'
                 : 'bg-orange-500 text-white hover:bg-orange-600 hover:scale-105 active:scale-95'
             } disabled:opacity-50 disabled:cursor-not-allowed`}
+            style={analysisPulse ? {
+              boxShadow: '0 0 16px rgba(249, 115, 22, 0.6)',
+              transition: 'box-shadow 0.5s ease-out',
+            } : {
+              boxShadow: 'none',
+              transition: 'box-shadow 0.5s ease-out',
+            }}
           >
             {isRefreshing && (
               <div className="w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin" />

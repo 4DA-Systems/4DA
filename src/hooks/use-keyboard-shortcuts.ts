@@ -22,6 +22,8 @@ interface KeyboardShortcutActions {
   onToggleExpandResult?: (index: number) => void;
   /** Callback to open focused item URL */
   onOpenResult?: (index: number) => void;
+  /** Callback fired when analysis is triggered via keyboard shortcut */
+  onAnalyzeTriggered?: () => void;
 }
 
 export function useKeyboardShortcuts(actions: KeyboardShortcutActions) {
@@ -96,6 +98,7 @@ export function useKeyboardShortcuts(actions: KeyboardShortcutActions) {
 
       if (e.key === 'r' && !e.ctrlKey && !e.metaKey && !current.analyzeDisabled) {
         current.onAnalyze();
+        current.onAnalyzeTriggered?.();
         return;
       }
 
