@@ -149,7 +149,9 @@ mod game_commands {
 
     #[tauri::command]
     pub fn get_game_state() -> Result<serde_json::Value> {
-        Ok(serde_json::json!({"counters": [], "achievements": [], "streak": 0, "last_active": null}))
+        Ok(
+            serde_json::json!({"counters": [], "achievements": [], "streak": 0, "last_active": null}),
+        )
     }
 
     #[tauri::command]
@@ -261,9 +263,7 @@ mod toolkit_http {
     }
 
     #[tauri::command]
-    pub async fn toolkit_http_request(
-        _request: HttpProbeRequest,
-    ) -> Result<HttpProbeResponse> {
+    pub async fn toolkit_http_request(_request: HttpProbeRequest) -> Result<HttpProbeResponse> {
         Err(crate::error::FourDaError::Config(
             "HTTP toolkit is an experimental feature".into(),
         ))
@@ -274,8 +274,8 @@ mod toolkit_http {
         Ok(vec![])
     }
 }
-mod toolkit_intelligence;
 mod telemetry;
+mod toolkit_intelligence;
 mod translation_commands;
 #[cfg(test)]
 mod translation_commands_tests;

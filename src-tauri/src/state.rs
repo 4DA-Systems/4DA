@@ -115,8 +115,12 @@ pub(crate) fn get_database() -> Result<&'static Arc<Database>, String> {
                 // Also move WAL/SHM files if present
                 let wal = db_path.with_extension("db-wal");
                 let shm = db_path.with_extension("db-shm");
-                if wal.exists() { std::fs::remove_file(&wal).ok(); }
-                if shm.exists() { std::fs::remove_file(&shm).ok(); }
+                if wal.exists() {
+                    std::fs::remove_file(&wal).ok();
+                }
+                if shm.exists() {
+                    std::fs::remove_file(&shm).ok();
+                }
                 tracing::info!(
                     target: "4da::db",
                     corrupt = ?corrupt_path,
