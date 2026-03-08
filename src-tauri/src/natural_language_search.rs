@@ -1,18 +1,17 @@
-//! Natural Language Search — Pro-gated intelligent query engine.
+//! Natural Language Search — Intelligence Console query engine.
 //!
-//! Parses user queries locally (keyword extraction, time range detection,
-//! intent classification), then executes SQL text search + sqlite-vec
-//! vector similarity. Optional LLM enhancement for better intent parsing.
+//! Tiered search: free users get 3 results + ghost preview,
+//! Pro users get full results + decision/gap cross-referencing.
+//! Stack-aware boosting prioritises results matching the user's tech.
 
 use chrono::{Duration, Utc};
 use serde::{Deserialize, Serialize};
 use tracing::{debug, warn};
 
 use crate::db::embedding_to_blob;
-use crate::settings::require_pro_feature;
 
 // ============================================================================
-// Types (match existing frontend NaturalLanguageSearch.tsx interface)
+// Types
 // ============================================================================
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -45,6 +44,37 @@ pub struct TimeRange {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StackContextEntry {
+    pub name: String,
+    pub category: String,
+    pub relevant: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RelatedDecision {
+    pub id: i64,
+    pub subject: String,
+    pub decision: String,
+    pub relation: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct QueryGap {
+    pub technology: String,
+    pub days_stale: u32,
+    pub severity: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GhostPreview {
+    pub total_results: usize,
+    pub hidden_results: usize,
+    pub decision_count: usize,
+    pub gap_count: usize,
+    pub synthesis_available: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct QueryResult {
     pub query: String,
     pub intent: String,
@@ -53,22 +83,25 @@ pub struct QueryResult {
     pub execution_ms: u64,
     pub summary: Option<String>,
     pub parsed: ParsedQuery,
+    pub stack_context: Vec<StackContextEntry>,
+    pub related_decisions: Vec<RelatedDecision>,
+    pub knowledge_gaps: Vec<QueryGap>,
+    pub ghost_preview: Option<GhostPreview>,
+    pub is_pro: bool,
 }
 
 // ============================================================================
-// Stop words for keyword extraction
+// Stop words
 // ============================================================================
 
-const STOP_WORDS: &[&str] = &[
-    "a", "an", "the", "and", "or", "but", "in", "on", "at", "to", "for",
-    "of", "with", "by", "from", "is", "it", "that", "this", "was", "are",
-    "be", "has", "have", "had", "do", "does", "did", "will", "would",
-    "could", "should", "may", "might", "can", "shall", "not", "no",
-    "so", "if", "then", "than", "when", "where", "what", "which", "who",
-    "how", "all", "each", "every", "any", "some", "such", "only", "own",
-    "same", "other", "into", "about", "up", "out", "just", "also", "very",
-    "my", "me", "i", "we", "you", "your", "our", "they", "them", "their",
-    "show", "find", "get", "give", "tell", "list", "display",
+pub(crate) const STOP_WORDS: &[&str] = &[
+    "a", "an", "the", "and", "or", "but", "in", "on", "at", "to", "for", "of", "with", "by",
+    "from", "is", "it", "that", "this", "was", "are", "be", "has", "have", "had", "do", "does",
+    "did", "will", "would", "could", "should", "may", "might", "can", "shall", "not", "no", "so",
+    "if", "then", "than", "when", "where", "what", "which", "who", "how", "all", "each", "every",
+    "any", "some", "such", "only", "own", "same", "other", "into", "about", "up", "out", "just",
+    "also", "very", "my", "me", "i", "we", "you", "your", "our", "they", "them", "their", "show",
+    "find", "get", "give", "tell", "list", "display",
 ];
 
 // ============================================================================
@@ -132,26 +165,25 @@ fn detect_file_types(query: &str) -> Vec<String> {
     let q = query.to_lowercase();
     let mut types = Vec::new();
     if q.contains("pdf") {
-        types.push("pdf".to_string());
+        types.push("pdf".into());
     }
     if q.contains("doc") || q.contains("word") {
-        types.push("docx".to_string());
+        types.push("docx".into());
     }
-    if q.contains("spreadsheet") || q.contains("excel") || q.contains("xlsx") || q.contains("csv")
-    {
-        types.push("xlsx".to_string());
+    if q.contains("spreadsheet") || q.contains("excel") || q.contains("xlsx") || q.contains("csv") {
+        types.push("xlsx".into());
     }
     if q.contains("image") || q.contains("photo") || q.contains("screenshot") {
-        types.push("image".to_string());
+        types.push("image".into());
     }
     types
 }
 
 // ============================================================================
-// Keyword extraction
+// Keyword extraction (pub(crate) so standing_queries can reuse)
 // ============================================================================
 
-fn extract_keywords(query: &str) -> Vec<String> {
+pub(crate) fn extract_keywords(query: &str) -> Vec<String> {
     let stop_set: std::collections::HashSet<&str> = STOP_WORDS.iter().copied().collect();
     query
         .to_lowercase()
@@ -162,7 +194,7 @@ fn extract_keywords(query: &str) -> Vec<String> {
 }
 
 // ============================================================================
-// Local query parsing (no LLM required)
+// Local query parsing
 // ============================================================================
 
 fn parse_query_local(query: &str) -> ParsedQuery {
@@ -170,7 +202,13 @@ fn parse_query_local(query: &str) -> ParsedQuery {
     let time_range = detect_time_range(query);
     let file_types = detect_file_types(query);
     let intent_keywords: Vec<&str> = vec![
-        "summarize", "compare", "count", "timeline", "find", "show", "list",
+        "summarize",
+        "compare",
+        "count",
+        "timeline",
+        "find",
+        "show",
+        "list",
     ];
     let entities: Vec<String> = keywords
         .iter()
@@ -197,7 +235,139 @@ fn parse_query_local(query: &str) -> ParsedQuery {
 }
 
 // ============================================================================
-// SQL search execution
+// Stack context — detected technologies relevant to query
+// ============================================================================
+
+fn build_stack_context(conn: &rusqlite::Connection, keywords: &[String]) -> Vec<StackContextEntry> {
+    let sql =
+        "SELECT name, category FROM detected_tech WHERE confidence >= 0.5 ORDER BY confidence DESC";
+    let mut stmt = match conn.prepare(sql) {
+        Ok(s) => s,
+        Err(_) => return Vec::new(),
+    };
+
+    let rows = match stmt.query_map([], |row| {
+        let name: String = row.get(0)?;
+        let category: String = row.get(1)?;
+        Ok((name, category))
+    }) {
+        Ok(r) => r,
+        Err(_) => return Vec::new(),
+    };
+
+    let mut entries = Vec::new();
+    for row in rows.flatten() {
+        let (name, category) = row;
+        let name_lower = name.to_lowercase();
+        let relevant = keywords
+            .iter()
+            .any(|k| name_lower.contains(k.as_str()) || k.contains(name_lower.as_str()));
+        entries.push(StackContextEntry {
+            name,
+            category,
+            relevant,
+        });
+    }
+    entries
+}
+
+// ============================================================================
+// Stack-aware relevance boosting
+// ============================================================================
+
+fn boost_for_stack(items: &mut [QueryResultItem], stack: &[StackContextEntry]) {
+    let stack_names: Vec<String> = stack.iter().map(|s| s.name.to_lowercase()).collect();
+    if stack_names.is_empty() {
+        return;
+    }
+    for item in items.iter_mut() {
+        let title_lower = item.file_name.as_deref().unwrap_or("").to_lowercase();
+        let preview_lower = item.preview.to_lowercase();
+        let stack_matches: usize = stack_names
+            .iter()
+            .filter(|s| title_lower.contains(s.as_str()) || preview_lower.contains(s.as_str()))
+            .count();
+        if stack_matches > 0 {
+            item.relevance += 0.15 * (stack_matches as f64).min(3.0);
+            item.relevance = item.relevance.min(1.0);
+            if !item.match_reason.contains("stack") {
+                item.match_reason = format!("{} + stack match", item.match_reason);
+            }
+        }
+    }
+}
+
+// ============================================================================
+// Decision cross-referencing
+// ============================================================================
+
+fn find_related_decisions(
+    conn: &rusqlite::Connection,
+    keywords: &[String],
+) -> Vec<RelatedDecision> {
+    let decisions = match crate::decisions::list_decisions(conn, None, None, 50) {
+        Ok(d) => d,
+        Err(_) => return Vec::new(),
+    };
+
+    let mut related = Vec::new();
+    for dec in &decisions {
+        if dec.status == crate::decisions::DecisionStatus::Superseded {
+            continue;
+        }
+        let subject_lower = dec.subject.to_lowercase();
+        let tags_lower: Vec<String> = dec.context_tags.iter().map(|t| t.to_lowercase()).collect();
+
+        let matches = keywords.iter().any(|k| {
+            subject_lower.contains(k.as_str()) || tags_lower.iter().any(|t| t.contains(k.as_str()))
+        });
+
+        if matches {
+            related.push(RelatedDecision {
+                id: dec.id,
+                subject: dec.subject.clone(),
+                decision: dec.decision.clone(),
+                relation: "related".to_string(),
+            });
+        }
+    }
+    related.truncate(5);
+    related
+}
+
+// ============================================================================
+// Knowledge gap detection for query
+// ============================================================================
+
+fn find_query_gaps(conn: &rusqlite::Connection, keywords: &[String]) -> Vec<QueryGap> {
+    let gaps = match crate::knowledge_decay::detect_knowledge_gaps(conn) {
+        Ok(g) => g,
+        Err(_) => return Vec::new(),
+    };
+
+    let mut query_gaps = Vec::new();
+    for gap in &gaps {
+        let dep_lower = gap.dependency.to_lowercase();
+        if keywords
+            .iter()
+            .any(|k| dep_lower.contains(k.as_str()) || k.contains(dep_lower.as_str()))
+        {
+            query_gaps.push(QueryGap {
+                technology: gap.dependency.clone(),
+                days_stale: gap.days_since_last_engagement,
+                severity: serde_json::to_string(&gap.gap_severity)
+                    .unwrap_or_else(|_| format!("{:?}", gap.gap_severity))
+                    .trim_matches('"')
+                    .to_string(),
+            });
+        }
+    }
+    query_gaps.truncate(5);
+    query_gaps
+}
+
+// ============================================================================
+// SQL text search
 // ============================================================================
 
 fn execute_text_search(
@@ -209,16 +379,19 @@ fn execute_text_search(
         return Ok(Vec::new());
     }
 
-    // Build LIKE conditions for each keyword
     let conditions: Vec<String> = parsed
         .keywords
         .iter()
-        .map(|k| format!("(LOWER(s.title) LIKE '%{kw}%' OR LOWER(s.content) LIKE '%{kw}%')", kw = k.replace('\'', "''")))
+        .map(|k| {
+            format!(
+                "(LOWER(s.title) LIKE '%{kw}%' OR LOWER(s.content) LIKE '%{kw}%')",
+                kw = k.replace('\'', "''")
+            )
+        })
         .collect();
 
     let where_clause = conditions.join(" AND ");
 
-    // Source type filter
     let type_filter = if !parsed.file_types.is_empty() {
         let types: Vec<String> = parsed
             .file_types
@@ -230,7 +403,6 @@ fn execute_text_search(
         String::new()
     };
 
-    // Time range filter
     let time_filter = if let Some(ref tr) = parsed.time_range {
         format!(" AND s.created_at >= '{}'", tr.start)
     } else {
@@ -247,7 +419,9 @@ fn execute_text_search(
 
     debug!(target: "4da::search", sql = %sql, "Executing text search");
 
-    let mut stmt = conn.prepare(&sql).map_err(|e| format!("Query error: {e}"))?;
+    let mut stmt = conn
+        .prepare(&sql)
+        .map_err(|e| format!("Query error: {e}"))?;
     let rows = stmt
         .query_map([], |row| {
             let id: i64 = row.get(0)?;
@@ -268,7 +442,7 @@ fn execute_text_search(
                 file_path: url.clone(),
                 file_name: Some(title),
                 preview,
-                relevance: 0.5, // Text match base score
+                relevance: 0.5,
                 source_type,
                 timestamp: created_at,
                 match_reason: "keyword match".to_string(),
@@ -276,7 +450,7 @@ fn execute_text_search(
         })
         .map_err(|e| format!("Query error: {e}"))?;
 
-    let mut items: Vec<QueryResultItem> = Vec::new();
+    let mut items = Vec::new();
     for row in rows {
         match row {
             Ok(item) => items.push(item),
@@ -294,13 +468,11 @@ async fn execute_vector_search(
     parsed: &ParsedQuery,
     limit: usize,
 ) -> Result<Vec<QueryResultItem>, String> {
-    // Reconstruct search text from keywords
     let search_text = parsed.keywords.join(" ");
     if search_text.is_empty() {
         return Ok(Vec::new());
     }
 
-    // Embed the query
     let embeddings = crate::embeddings::embed_texts(&[search_text]).await?;
     if embeddings.is_empty() || embeddings[0].iter().all(|&v| v == 0.0) {
         debug!(target: "4da::search", "No embedding available, skipping vector search");
@@ -330,7 +502,6 @@ async fn execute_vector_search(
             let content: String = row.get(4)?;
             let created_at: Option<String> = row.get(5)?;
             let distance: f64 = row.get(6)?;
-
             let relevance = (1.0 - distance).max(0.0).min(1.0);
 
             let preview = if content.len() > 200 {
@@ -352,7 +523,7 @@ async fn execute_vector_search(
         })
         .map_err(|e| format!("Vector query error: {e}"))?;
 
-    let mut items: Vec<QueryResultItem> = Vec::new();
+    let mut items = Vec::new();
     for row in rows {
         match row {
             Ok(item) => items.push(item),
@@ -363,7 +534,7 @@ async fn execute_vector_search(
 }
 
 // ============================================================================
-// Merge and deduplicate results
+// Merge and deduplicate
 // ============================================================================
 
 fn merge_results(
@@ -373,7 +544,6 @@ fn merge_results(
     let mut seen_ids = std::collections::HashSet::new();
     let mut merged = Vec::new();
 
-    // Vector results first (higher quality), then text results
     for item in vector_results {
         if seen_ids.insert(item.id) {
             merged.push(item);
@@ -381,31 +551,46 @@ fn merge_results(
     }
     for mut item in text_results {
         if seen_ids.insert(item.id) {
-            // Boost text match if it also appeared in vector results conceptually
             item.relevance = 0.4;
             merged.push(item);
         }
     }
 
-    // Sort by relevance descending
-    merged.sort_by(|a, b| b.relevance.partial_cmp(&a.relevance).unwrap_or(std::cmp::Ordering::Equal));
-    merged.truncate(20);
+    merged.sort_by(|a, b| {
+        b.relevance
+            .partial_cmp(&a.relevance)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+    merged.truncate(30);
     merged
 }
 
 // ============================================================================
-// Tauri Command
+// LLM availability check
 // ============================================================================
+
+fn is_llm_configured() -> bool {
+    let manager = crate::get_settings_manager();
+    let guard = manager.lock();
+    let llm = &guard.get().llm;
+    !llm.provider.is_empty() && llm.provider != "none"
+}
+
+// ============================================================================
+// Tauri Command — tiered response (no hard Pro gate)
+// ============================================================================
+
+const FREE_RESULT_LIMIT: usize = 3;
 
 #[tauri::command]
 pub async fn natural_language_query(query_text: String) -> Result<QueryResult, String> {
-    require_pro_feature("natural_language_query")?;
-
     let start = std::time::Instant::now();
     let query_text = query_text.trim().to_string();
     if query_text.is_empty() {
         return Err("Query cannot be empty".to_string());
     }
+
+    let is_pro = crate::settings::is_pro();
 
     // 1. Parse intent locally
     let parsed = parse_query_local(&query_text);
@@ -413,29 +598,95 @@ pub async fn natural_language_query(query_text: String) -> Result<QueryResult, S
 
     debug!(
         target: "4da::search",
-        query = %query_text,
-        intent = %intent,
+        query = %query_text, intent = %intent, is_pro,
         keywords = ?parsed.keywords,
         "Processing natural language query"
     );
 
-    // 2. Execute text search
+    // 2. Stack context (available to all users)
     let conn = crate::open_db_connection()?;
-    let text_results = execute_text_search(&conn, &parsed, 20)?;
+    let stack_context = build_stack_context(&conn, &parsed.keywords);
+
+    // 3. Execute text search
+    let text_results = execute_text_search(&conn, &parsed, 30)?;
     drop(conn);
 
-    // 3. Execute vector search (async, may fail gracefully)
+    // 4. Execute vector search
     let vector_results = match execute_vector_search(&parsed, 20).await {
         Ok(results) => results,
         Err(e) => {
-            debug!(target: "4da::search", error = %e, "Vector search unavailable, using text only");
+            debug!(target: "4da::search", error = %e, "Vector search unavailable");
             Vec::new()
         }
     };
 
-    // 4. Merge and deduplicate
-    let items = merge_results(text_results, vector_results);
-    let total_count = items.len();
+    // 5. Merge, deduplicate, boost for stack
+    let mut all_items = merge_results(text_results, vector_results);
+    boost_for_stack(&mut all_items, &stack_context);
+    all_items.sort_by(|a, b| {
+        b.relevance
+            .partial_cmp(&a.relevance)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+
+    let total_count = all_items.len();
+
+    // 6. Pro-only intelligence: decisions + gaps
+    let (related_decisions, knowledge_gaps) = if is_pro {
+        let conn = crate::open_db_connection()?;
+        let decisions = find_related_decisions(&conn, &parsed.keywords);
+        let gaps = find_query_gaps(&conn, &parsed.keywords);
+        (decisions, gaps)
+    } else {
+        (Vec::new(), Vec::new())
+    };
+
+    // 7. Count Pro intelligence for ghost preview (even if user is Pro, compute for response)
+    let decision_count = if is_pro {
+        related_decisions.len()
+    } else {
+        let conn = crate::open_db_connection()?;
+        find_related_decisions(&conn, &parsed.keywords).len()
+    };
+    let gap_count = if is_pro {
+        knowledge_gaps.len()
+    } else {
+        let conn = crate::open_db_connection()?;
+        find_query_gaps(&conn, &parsed.keywords).len()
+    };
+
+    // 8. Build ghost preview (free users only)
+    let ghost_preview = if !is_pro && total_count > FREE_RESULT_LIMIT {
+        Some(GhostPreview {
+            total_results: total_count,
+            hidden_results: total_count.saturating_sub(FREE_RESULT_LIMIT),
+            decision_count,
+            gap_count,
+            synthesis_available: is_llm_configured(),
+        })
+    } else if !is_pro {
+        // Even with few results, show ghost if there's Pro intelligence
+        if decision_count > 0 || gap_count > 0 || is_llm_configured() {
+            Some(GhostPreview {
+                total_results: total_count,
+                hidden_results: 0,
+                decision_count,
+                gap_count,
+                synthesis_available: is_llm_configured(),
+            })
+        } else {
+            None
+        }
+    } else {
+        None
+    };
+
+    // 9. Truncate items for free users
+    let items = if !is_pro && all_items.len() > FREE_RESULT_LIMIT {
+        all_items[..FREE_RESULT_LIMIT].to_vec()
+    } else {
+        all_items
+    };
 
     let execution_ms = start.elapsed().as_millis() as u64;
 
@@ -447,5 +698,10 @@ pub async fn natural_language_query(query_text: String) -> Result<QueryResult, S
         execution_ms,
         summary: None,
         parsed,
+        stack_context,
+        related_decisions,
+        knowledge_gaps,
+        ghost_preview,
+        is_pro,
     })
 }

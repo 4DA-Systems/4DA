@@ -181,6 +181,67 @@ fn collect_topics(conn: &rusqlite::Connection) -> Vec<DigestTopic> {
 }
 
 // ============================================================================
+// Digest Scheduling
+// ============================================================================
+
+/// Check if a digest should be generated (weekly cadence).
+/// Returns true if no digest has ever been generated or the last one is 6+ days old.
+pub fn should_generate_digest(conn: &rusqlite::Connection) -> bool {
+    // Check settings for last_sent timestamp
+    let last: Option<String> = conn
+        .query_row(
+            "SELECT generated_at FROM briefings ORDER BY created_at DESC LIMIT 1",
+            [],
+            |row| row.get(0),
+        )
+        .ok();
+
+    match last {
+        None => true, // Never generated
+        Some(ts) => {
+            if let Ok(dt) = chrono::NaiveDateTime::parse_from_str(&ts, "%Y-%m-%dT%H:%M:%S") {
+                let now = Utc::now().naive_utc();
+                (now - dt).num_days() >= 6
+            } else if let Ok(dt) = chrono::NaiveDateTime::parse_from_str(&ts, "%Y-%m-%d %H:%M:%S") {
+                let now = Utc::now().naive_utc();
+                (now - dt).num_days() >= 6
+            } else {
+                true
+            }
+        }
+    }
+}
+
+/// Get the latest generated digest (for the DigestView component).
+#[tauri::command]
+pub async fn get_latest_digest() -> Result<WeeklyDigest, String> {
+    // Generate a fresh digest from the last 7 days of data
+    let conn = crate::open_db_connection()?;
+
+    let now = Utc::now();
+    let week_ago = now - Duration::days(7);
+
+    let highlights = collect_top_items(&conn, 7);
+    let stats = collect_stats(&conn, 7);
+    let top_topics = collect_topics(&conn);
+
+    if highlights.is_empty() && stats.total_items_analyzed == 0 {
+        return Err("No digest data available".to_string());
+    }
+
+    Ok(WeeklyDigest {
+        generated_at: now.to_rfc3339(),
+        period_start: week_ago.format("%Y-%m-%d").to_string(),
+        period_end: now.format("%Y-%m-%d").to_string(),
+        highlights,
+        top_topics,
+        active_signals: Vec::new(),
+        knowledge_gaps: Vec::new(),
+        stats,
+    })
+}
+
+// ============================================================================
 // Tauri Command
 // ============================================================================
 

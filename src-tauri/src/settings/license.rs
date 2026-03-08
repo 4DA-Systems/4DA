@@ -38,6 +38,7 @@ pub const PRO_FEATURES: &[&str] = &[
     "get_semantic_shifts",
     "generate_weekly_digest",
     "get_decision_signals",
+    "synthesize_search",
 ];
 
 /// Check if the current user has Pro (or Team) tier access.

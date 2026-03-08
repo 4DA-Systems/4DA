@@ -15,6 +15,14 @@ use std::collections::{HashMap, HashSet};
 // Core Types
 // ============================================================================
 
+/// A curated seed content item for a technology stack.
+/// Used during first analysis to guarantee high-quality results.
+pub struct SeedItem {
+    pub title: &'static str,
+    pub url: &'static str,
+    pub source_type: &'static str,
+}
+
 /// A known pain point for a technology stack.
 /// Requires 2+ keyword matches to trigger (prevents false positives).
 pub struct PainPoint {
@@ -44,6 +52,7 @@ pub struct StackProfile {
     pub source_preferences: &'static [(&'static str, f32)],
     pub detection_markers: &'static [&'static str],
     pub detection_threshold: usize,
+    pub seed_content: &'static [SeedItem],
 }
 
 /// Merged result of composing multiple stack profiles.
