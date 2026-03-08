@@ -6,7 +6,8 @@ import { useLicense } from '../hooks/use-license';
 
 export const IntelligenceProfileCard = memo(function IntelligenceProfileCard() {
   const { t } = useTranslation();
-  const learnedAffinities = useAppStore(s => s.learnedAffinities) ?? [];
+  const rawAffinities = useAppStore(s => s.learnedAffinities);
+  const learnedAffinities = useMemo(() => rawAffinities ?? [], [rawAffinities]);
   const pulse = useAppStore(s => s.intelligencePulse);
 
   const positiveAffinities = useMemo(() =>
