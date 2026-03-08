@@ -165,6 +165,9 @@ pub async fn refresh_channel_sources(channel_id: i64) -> Result<i64> {
 // Channel Creation & Deletion
 // ============================================================================
 
+/// Maximum custom channels allowed on the free tier.
+const FREE_TIER_MAX_CHANNELS: i64 = 3;
+
 /// Create a custom channel.
 #[tauri::command]
 pub async fn create_custom_channel(
@@ -175,6 +178,20 @@ pub async fn create_custom_channel(
     topic_query: Vec<String>,
 ) -> Result<i64> {
     let db = get_database()?;
+
+    // Free tier gate: limit custom channels
+    if !crate::settings::is_pro() {
+        let custom_count = db
+            .count_custom_channels()
+            .map_err(|e| format!("Failed to count channels: {}", e))?;
+        if custom_count >= FREE_TIER_MAX_CHANNELS {
+            return Err(format!(
+                "Free tier limited to {} custom channels. Upgrade to Pro for unlimited channels.",
+                FREE_TIER_MAX_CHANNELS
+            )
+            .into());
+        }
+    }
     let id = db
         .create_channel(&slug, &title, &description, &topic_query)
         .map_err(|e| format!("Failed to create channel: {}", e))?;

@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState, useEffect, useRef, memo } from 'react';
+import { useCallback, useMemo, useState, useEffect, memo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useShallow } from 'zustand/react/shallow';
 import { BriefingCard } from './BriefingCard';
@@ -21,38 +21,17 @@ import { DecisionWindowsPanel } from './DecisionWindowsPanel';
 import { CompoundAdvantageScore } from './CompoundAdvantageScore';
 import { IntelligenceProfileCard } from './IntelligenceProfileCard';
 import { useLicense } from '../hooks/use-license';
-import { registerGameComponent } from '../lib/game-components';
+import { useGameComponent } from '../hooks/use-game-component';
 import type { SourceRelevance } from '../types';
 
 function BriefingAtmosphere({ signalCount, topCount, hasContent }: { signalCount: number; topCount: number; hasContent: boolean }) {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const elementRef = useRef<HTMLElement | null>(null);
+  const { containerRef, elementRef } = useGameComponent('game-briefing-atmosphere');
 
   useEffect(() => {
-    registerGameComponent('game-briefing-atmosphere').then(() => {
-      if (!containerRef.current || elementRef.current) return;
-      const el = document.createElement('game-briefing-atmosphere');
-      el.style.width = '100%';
-      el.style.height = '100%';
-      el.style.display = 'block';
-      containerRef.current.appendChild(el);
-      elementRef.current = el;
-    });
-    const container = containerRef.current;
-    return () => {
-      if (elementRef.current && container?.contains(elementRef.current)) {
-        container.removeChild(elementRef.current);
-      }
-      elementRef.current = null;
-    };
-  }, []);
-
-  useEffect(() => {
-    const el = elementRef.current as (HTMLElement & { setParam?: (n: string, v: number) => void }) | null;
-    el?.setParam?.('quality', hasContent ? 0.7 : 0.2);
-    el?.setParam?.('signal_heat', Math.min(topCount / 20, 1));
-    el?.setParam?.('decision_pressure', Math.min(signalCount / 5, 1));
-  }, [signalCount, topCount, hasContent]);
+    elementRef.current?.setParam?.('quality', hasContent ? 0.7 : 0.2);
+    elementRef.current?.setParam?.('signal_heat', Math.min(topCount / 20, 1));
+    elementRef.current?.setParam?.('decision_pressure', Math.min(signalCount / 5, 1));
+  }, [signalCount, topCount, hasContent, elementRef]);
 
   return <div ref={containerRef} className="w-full h-16 rounded-lg overflow-hidden opacity-50 -mb-2" aria-hidden="true" />;
 }
@@ -322,7 +301,7 @@ export const BriefingView = memo(function BriefingView() {
       {/* 3. Learning Narrative Banner — one sentence from autophagy */}
       {pulse?.learning_narratives?.[0] && (
         <div className="bg-bg-secondary border border-border rounded-lg px-4 py-2.5 flex items-center gap-3">
-          <span className="text-[10px] text-text-muted uppercase tracking-wider shrink-0">System learned</span>
+          <span className="text-[10px] text-text-muted uppercase tracking-wider shrink-0">{t('briefing.systemLearned')}</span>
           <p className="text-xs text-white">{pulse.learning_narratives[0]}</p>
         </div>
       )}
@@ -499,7 +478,7 @@ export const BriefingView = memo(function BriefingView() {
           onClick={() => setMetricsExpanded(prev => !prev)}
           className="flex items-center gap-2 text-xs text-text-muted cursor-pointer py-2 w-full text-left"
         >
-          <span>Intelligence Metrics</span>
+          <span>{t('briefing.intelligenceMetrics')}</span>
           <span className="text-[10px] bg-white/5 px-1.5 py-0.5 rounded">
             {pulse?.calibration_accuracy != null ? `${(pulse.calibration_accuracy * 100).toFixed(0)}% accuracy` : '\u2014'}
           </span>

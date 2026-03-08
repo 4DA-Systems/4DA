@@ -151,6 +151,21 @@ impl Database {
         Ok(())
     }
 
+    /// Count active custom channels (excludes seed/default channels).
+    pub fn count_custom_channels(&self) -> SqliteResult<i64> {
+        let conn = self.conn.lock();
+        let seed_slugs: Vec<&str> = SEED_CHANNELS.iter().map(|s| s.slug).collect();
+        let placeholders: String = seed_slugs.iter().map(|_| "?").collect::<Vec<_>>().join(", ");
+        let sql = format!(
+            "SELECT COUNT(*) FROM channels WHERE status = 'active' AND slug NOT IN ({})",
+            placeholders
+        );
+        let mut stmt = conn.prepare(&sql)?;
+        let params: Vec<&dyn rusqlite::ToSql> =
+            seed_slugs.iter().map(|s| s as &dyn rusqlite::ToSql).collect();
+        stmt.query_row(params.as_slice(), |row| row.get(0))
+    }
+
     // ========================================================================
     // Source Matching
     // ========================================================================
