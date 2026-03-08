@@ -66,7 +66,7 @@ const WindowCard = memo(function WindowCard({
         {timeLeft && (
           <div className="flex items-center gap-1.5 flex-shrink-0">
             <div className="w-4 h-4 overflow-hidden">
-              <game-decision-countdown style={{ width: '16px', height: '16px' }} />
+              <game-decision-countdown style={{ width: '16px', height: '16px' }} aria-hidden="true" />
             </div>
             <span className="text-[10px] text-gray-500">{timeLeft}</span>
           </div>

@@ -88,4 +88,86 @@ mod tests {
         };
         assert!(is_pro_feature_available("generate_ai_briefing", &pro));
     }
+
+    /// Verify LicenseConfig survives a JSON serialization roundtrip.
+    /// This is the persistence path used by settings.json on disk.
+    #[test]
+    fn license_config_roundtrip() {
+        let activated = chrono::Utc::now().to_rfc3339();
+        let original = LicenseConfig {
+            tier: "pro".to_string(),
+            license_key: "4DA-test-key-abc123".to_string(),
+            activated_at: Some(activated.clone()),
+            trial_started_at: None,
+        };
+
+        let json = serde_json::to_string(&original).expect("serialize LicenseConfig");
+        let restored: LicenseConfig =
+            serde_json::from_str(&json).expect("deserialize LicenseConfig");
+
+        assert_eq!(restored.tier, "pro");
+        assert_eq!(restored.license_key, "4DA-test-key-abc123");
+        assert_eq!(restored.activated_at, Some(activated));
+        assert_eq!(restored.trial_started_at, None);
+    }
+
+    /// Verify the full Settings struct survives a JSON roundtrip.
+    /// Guards against serde regressions that could lose user configuration.
+    #[test]
+    fn settings_json_roundtrip() {
+        use super::super::Settings;
+
+        let mut original = Settings::default();
+        // Set non-default values across key subsystems
+        original.llm.provider = "anthropic".to_string();
+        original.llm.api_key = "sk-test-key".to_string();
+        original.llm.model = "claude-3-haiku-20240307".to_string();
+        original.embedding_threshold = 0.42;
+        original.monitoring.enabled = false;
+        original.monitoring.interval_minutes = 30;
+        original.license.tier = "pro".to_string();
+        original.license.license_key = "4DA-roundtrip-key".to_string();
+        original.license.activated_at = Some("2026-01-15T00:00:00Z".to_string());
+        original.rss_feeds = vec!["https://example.com/feed.xml".to_string()];
+        original.context_dirs = vec!["/home/dev/project".to_string()];
+        original.onboarding_complete = true;
+        original.locale.country = "AU".to_string();
+        original.locale.language = "en".to_string();
+        original.locale.currency = "AUD".to_string();
+
+        let json = serde_json::to_string_pretty(&original).expect("serialize Settings");
+        let restored: Settings = serde_json::from_str(&json).expect("deserialize Settings");
+
+        // LLM provider
+        assert_eq!(restored.llm.provider, "anthropic");
+        assert_eq!(restored.llm.api_key, "sk-test-key");
+        assert_eq!(restored.llm.model, "claude-3-haiku-20240307");
+
+        // Scoring threshold
+        assert!((restored.embedding_threshold - 0.42).abs() < f32::EPSILON);
+
+        // Monitoring
+        assert!(!restored.monitoring.enabled);
+        assert_eq!(restored.monitoring.interval_minutes, 30);
+
+        // License
+        assert_eq!(restored.license.tier, "pro");
+        assert_eq!(restored.license.license_key, "4DA-roundtrip-key");
+        assert_eq!(
+            restored.license.activated_at,
+            Some("2026-01-15T00:00:00Z".to_string())
+        );
+
+        // Content sources
+        assert_eq!(restored.rss_feeds, vec!["https://example.com/feed.xml"]);
+        assert_eq!(restored.context_dirs, vec!["/home/dev/project"]);
+
+        // Flags
+        assert!(restored.onboarding_complete);
+
+        // Locale
+        assert_eq!(restored.locale.country, "AU");
+        assert_eq!(restored.locale.language, "en");
+        assert_eq!(restored.locale.currency, "AUD");
+    }
 }

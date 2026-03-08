@@ -188,6 +188,19 @@
   "settings.license.startTrial": "Start 30-Day Free Trial",
   "settings.license.getKey": "Get a license key at 4da.ai/streets",
 
+  "settings.streets.title": "STREETS Membership",
+  "settings.streets.currentTier": "Current tier:",
+  "settings.streets.placeholder": "Enter STREETS license key",
+  "settings.streets.activated": "STREETS license activated successfully",
+  "settings.streets.invalidKey": "Error: Invalid STREETS license key",
+  "settings.streets.tierPlaybook": "Playbook (Free)",
+  "settings.streets.tierCommunity": "Community",
+  "settings.streets.tierCohort": "Cohort",
+
+  "settings.ai.builtInLocal": "Built-in (Local)",
+  "settings.ai.builtInModel": "all-MiniLM-L6-v2 (384 dimensions)",
+  "settings.ai.builtInDescription": "Zero-config local embeddings. No API key required. The model is downloaded automatically on first use (~90MB).",
+
   "settings.attention.title": "Attention Dashboard",
   "settings.attention.description": "Where your focus goes vs. where your code needs it",
   "settings.attention.days": "{{count}} days",

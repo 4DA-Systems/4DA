@@ -341,7 +341,8 @@ export const BriefingView = memo(function BriefingView() {
               <h2 className="font-medium text-orange-400">{t('briefing.intelligenceBriefing')}</h2>
               {healthSummary && (
                 <div className="flex items-center gap-1.5 mt-0.5">
-                  <span className={`inline-block w-1.5 h-1.5 rounded-full ${healthSummary.allHealthy ? 'bg-green-400' : 'bg-amber-400'}`} />
+                  <span className={`inline-block w-1.5 h-1.5 rounded-full ${healthSummary.allHealthy ? 'bg-green-400' : 'bg-amber-400'}`} aria-hidden="true" />
+                  <span className="sr-only">{healthSummary.allHealthy ? 'All sources healthy' : 'Some sources degraded'}</span>
                   <span className={`text-[11px] ${healthSummary.allHealthy ? 'text-green-400/70' : 'text-amber-400/70'}`}>
                     {t('briefing.sourcesHealth', { healthy: healthSummary.healthy, total: healthSummary.total })}
                   </span>

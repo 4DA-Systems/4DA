@@ -74,7 +74,7 @@ export function AIProviderSection({
               }}
               className="w-full px-4 py-3 bg-bg-secondary border border-border rounded-lg text-sm text-white focus:border-orange-500 focus:outline-none"
             >
-              <option value="local">Built-in (Local)</option>
+              <option value="local">{t('settings.ai.builtInLocal')}</option>
               <option value="anthropic">{t('settings.ai.providerAnthropic')}</option>
               <option value="openai">{t('settings.ai.providerOpenAI')}</option>
               <option value="ollama">{t('settings.ai.providerOllama')}</option>
@@ -83,9 +83,9 @@ export function AIProviderSection({
 
           {settingsForm.provider === 'local' && (
             <div className="bg-bg-secondary rounded-lg p-3 border border-green-500/20">
-              <p className="text-xs text-green-400 font-medium mb-1">all-MiniLM-L6-v2 (384 dimensions)</p>
+              <p className="text-xs text-green-400 font-medium mb-1">{t('settings.ai.builtInModel')}</p>
               <p className="text-xs text-gray-500">
-                Zero-config local embeddings. No API key required. The model is downloaded automatically on first use (~90MB).
+                {t('settings.ai.builtInDescription')}
               </p>
             </div>
           )}

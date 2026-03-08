@@ -141,6 +141,7 @@ export function OllamaStatus({ provider }: OllamaStatusProps) {
       {config.animate ? (
         <game-status-orb
           style={{ width: '10px', height: '10px', flexShrink: 0 }}
+          aria-hidden="true"
           ref={(el: HTMLElement | null) => {
             if (el && 'health' in el) (el as HTMLElement & { health: number }).health = 1.0;
           }}

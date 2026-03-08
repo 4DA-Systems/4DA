@@ -78,7 +78,7 @@ export function ActionBar({
         <div className="flex items-center gap-3 flex-1 min-w-0" role="status" aria-live="polite">
           {state.loading ? (
             <div className="w-8 h-8 bg-orange-500/20 rounded-lg flex items-center justify-center flex-shrink-0 overflow-hidden" aria-busy="true">
-              <game-scan-ring style={{ width: '20px', height: '20px' }} aria-label="Analysis in progress" />
+              <game-scan-ring style={{ width: '20px', height: '20px' }} aria-hidden="true" />
             </div>
           ) : (
             <div className="w-8 h-8 bg-bg-tertiary rounded-lg flex items-center justify-center flex-shrink-0">
@@ -174,7 +174,7 @@ export function ActionBar({
               className="w-10 h-10 rounded-lg flex items-center justify-center bg-bg-tertiary text-gray-400 border border-border hover:text-gray-200 hover:border-[#3A3A3A] transition-all"
               title="More actions"
             >
-              <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
                 <circle cx="8" cy="3" r="1.5" fill="currentColor" />
                 <circle cx="8" cy="8" r="1.5" fill="currentColor" />
                 <circle cx="8" cy="13" r="1.5" fill="currentColor" />
