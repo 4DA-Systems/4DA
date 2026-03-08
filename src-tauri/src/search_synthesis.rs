@@ -363,15 +363,19 @@ pub async fn synthesize_search(
     // Emit start event
     let _ = app.emit("search-synthesis-start", &query_text);
 
-    // Call LLM
+    // Call LLM with streaming (tokens emitted progressively via Tauri events)
     let client = LLMClient::new(provider);
+    let app_for_stream = app.clone();
     let response = client
-        .complete(
+        .stream_complete(
             &system,
             vec![Message {
                 role: "user".to_string(),
                 content: user_msg,
             }],
+            move |token| {
+                let _ = app_for_stream.emit("synthesis-token", token);
+            },
         )
         .await
         .map_err(|e| format!("Synthesis failed: {e}"))?;

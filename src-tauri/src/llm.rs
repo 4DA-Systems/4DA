@@ -453,6 +453,88 @@ impl LLMClient {
         })
     }
 
+    /// Send a streaming completion request.
+    /// Tokens are delivered progressively via `on_token` callback.
+    /// Falls back to local Ollama on cloud provider failure.
+    /// Returns the complete `LLMResponse` when finished.
+    pub async fn stream_complete<F>(
+        &self,
+        system: &str,
+        messages: Vec<Message>,
+        on_token: F,
+    ) -> Result<LLMResponse, String>
+    where
+        F: Fn(&str) + Send + 'static,
+    {
+        // Hard cutoff: refuse to call the LLM if daily limit is already reached
+        if is_llm_limit_reached() {
+            let (used, limit) = crate::state::get_llm_token_usage();
+            warn!(
+                target: "4da::llm",
+                used = used,
+                limit = limit,
+                "Streaming LLM call blocked — daily token limit reached"
+            );
+            return Err(format!(
+                "Daily LLM token limit reached ({}/{} tokens). Resets at midnight.",
+                used, limit
+            ));
+        }
+
+        let result = match self.provider.provider.as_str() {
+            "anthropic" => {
+                crate::llm_stream::stream_anthropic(
+                    &self.client, &self.provider, system, messages.clone(), on_token,
+                ).await
+            }
+            "openai" => {
+                crate::llm_stream::stream_openai(
+                    &self.client, &self.provider, system, messages.clone(), on_token,
+                ).await
+            }
+            "ollama" => {
+                crate::llm_stream::stream_ollama(
+                    &self.client, &self.provider, system, messages.clone(), on_token,
+                ).await
+            }
+            _ => return Err(format!("Unknown provider: {}", self.provider.provider)),
+        };
+
+        // If a cloud provider failed, attempt streaming Ollama fallback
+        let response = match result {
+            Ok(resp) => resp,
+            Err(ref err) if self.should_fallback_to_ollama(err) => {
+                warn!(
+                    target: "4da::llm",
+                    provider = %self.provider.provider,
+                    error = %err,
+                    "Cloud LLM streaming failed, falling back to local Ollama"
+                );
+                // on_token was consumed by the first attempt; create a no-op for fallback
+                // since partial tokens may have already been emitted
+                crate::llm_stream::stream_ollama_fallback(
+                    system, messages, |_| {},
+                ).await?
+            }
+            Err(err) => return Err(err),
+        };
+
+        // Record token usage
+        let total_tokens = response.input_tokens + response.output_tokens;
+        if total_tokens > 0 {
+            let within_limit = record_llm_tokens(total_tokens);
+            if !within_limit {
+                debug!(
+                    target: "4da::llm",
+                    tokens = total_tokens,
+                    "Token limit exceeded after streaming call — future calls will be blocked"
+                );
+            }
+        }
+
+        Ok(response)
+    }
+
     /// Estimate cost in cents based on provider and tokens
     pub fn estimate_cost_cents(&self, input_tokens: u64, output_tokens: u64) -> u64 {
         match self.provider.provider.as_str() {

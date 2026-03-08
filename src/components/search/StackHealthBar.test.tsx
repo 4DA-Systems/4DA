@@ -78,6 +78,23 @@ describe('StackHealthBar', () => {
     expect(screen.getByText('search.missedSignals')).toBeInTheDocument();
   });
 
+  it('shows example titles in missed signals details', () => {
+    const health = makeHealth({
+      missed_signals: {
+        total_count: 10,
+        critical_count: 1,
+        high_count: 3,
+        example_titles: ['CVE-2024-1234 in OpenSSL', 'React 19 breaking changes', 'SQLite 3.45 release'],
+      },
+    });
+    render(<StackHealthBar health={health} onSuggestedQuery={defaultOnQuery} />);
+    expect(screen.getByText('CVE-2024-1234 in OpenSSL')).toBeInTheDocument();
+    expect(screen.getByText('React 19 breaking changes')).toBeInTheDocument();
+    expect(screen.getByText('SQLite 3.45 release')).toBeInTheDocument();
+    // Shows "+7 more" for remaining signals
+    expect(screen.getByText('search.missedMore')).toBeInTheDocument();
+  });
+
   it('does not show missed signals banner when total_count is 0', () => {
     const health = makeHealth({
       missed_signals: { total_count: 0, critical_count: 0, high_count: 0, example_titles: [] },

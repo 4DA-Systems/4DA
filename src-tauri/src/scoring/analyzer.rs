@@ -6,6 +6,7 @@
 use tauri::Emitter;
 use tracing::{info, warn};
 
+use crate::analysis_narration::{emit_narration, NarrationEvent};
 use crate::scoring;
 use crate::{emit_progress, get_analysis_state, get_database, monitoring, SourceRelevance};
 
@@ -123,6 +124,15 @@ pub(crate) async fn score_items_full(
     }
 
     // LLM Reranking (if enabled and within daily limits)
+    emit_narration(
+        app,
+        NarrationEvent {
+            narration_type: "insight".into(),
+            message: "Ranking items against your profile...".into(),
+            source: None,
+            relevance: None,
+        },
+    );
     crate::analysis_rerank::apply_llm_reranking(app, &mut results, &scoring_ctx).await;
 
     emit_progress(

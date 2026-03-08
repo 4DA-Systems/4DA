@@ -110,6 +110,18 @@ pub(crate) async fn fetch_all_sources(
         let source_name = source.name();
 
         debug!(target: "4da::sources", source = source_name, "Fetching from source");
+
+        // Narration: per-source fetch start
+        emit_narration(
+            app,
+            NarrationEvent {
+                narration_type: "discovery".into(),
+                message: format!("Scanning {}...", source_name),
+                source: Some(source_type.to_string()),
+                relevance: None,
+            },
+        );
+
         emit_progress(
             app,
             "fetch",
@@ -289,6 +301,18 @@ pub(crate) async fn fetch_all_sources(
     // Embed new items with graceful degradation
     if !new_items_to_embed.is_empty() {
         debug!(target: "4da::embed", count = new_items_to_embed.len(), "Embedding new items");
+
+        // Narration: embedding start
+        emit_narration(
+            app,
+            NarrationEvent {
+                narration_type: "insight".into(),
+                message: "Analyzing content patterns...".into(),
+                source: None,
+                relevance: None,
+            },
+        );
+
         emit_progress(
             app,
             "embed",
@@ -432,6 +456,17 @@ pub(crate) async fn fetch_all_sources_deep(
     let mut new_items_to_embed: Vec<(GenericSourceItem, String)> = Vec::new();
 
     // Fetch from all sources in parallel using tokio::join!
+    // Narration: deep scan fetch start
+    emit_narration(
+        app,
+        NarrationEvent {
+            narration_type: "discovery".into(),
+            message: "Scanning all sources in parallel...".into(),
+            source: None,
+            relevance: None,
+        },
+    );
+
     emit_progress(
         app,
         "fetch",
@@ -741,6 +776,17 @@ pub(crate) async fn fetch_all_sources_deep(
 
     // Embed new items in batches for better progress feedback
     if !new_items_to_embed.is_empty() {
+        // Narration: embedding start (deep scan)
+        emit_narration(
+            app,
+            NarrationEvent {
+                narration_type: "insight".into(),
+                message: "Analyzing content patterns...".into(),
+                source: None,
+                relevance: None,
+            },
+        );
+
         let total_to_embed = new_items_to_embed.len();
         let batch_size = 20; // Smaller batches for better progress feedback
 

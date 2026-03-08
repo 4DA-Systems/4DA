@@ -1,11 +1,34 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { invoke } from '@tauri-apps/api/core';
 import { useAppStore } from '../store';
+
+interface SourceInfo {
+  type: string;
+  name: string;
+  enabled: boolean;
+}
 
 export function BriefingWarmupState({ onAnalyze }: { onAnalyze: () => void }) {
   const { t } = useTranslation();
   const userContext = useAppStore(s => s.userContext);
   const fired = useRef(false);
+  const [enabledSources, setEnabledSources] = useState<string[]>([]);
+
+  // Load actual configured sources from the backend
+  useEffect(() => {
+    invoke<SourceInfo[]>('get_sources')
+      .then(sources => {
+        const enabled = sources
+          .filter(s => s.enabled)
+          .map(s => s.name);
+        setEnabledSources(enabled.length > 0 ? enabled : ['Hacker News', 'Reddit', 'GitHub']);
+      })
+      .catch(() => {
+        // Fallback: always-on sources if backend unavailable
+        setEnabledSources(['Hacker News', 'Reddit', 'GitHub']);
+      });
+  }, []);
 
   // Auto-start analysis after 3 seconds so new users aren't stuck
   useEffect(() => {
@@ -19,8 +42,6 @@ export function BriefingWarmupState({ onAnalyze }: { onAnalyze: () => void }) {
 
   // Gather detected info
   const stack = userContext?.tech_stack || [];
-  const sources = ['Hacker News', 'Reddit', 'GitHub', 'arXiv', 'RSS'];
-  const enabledSources = sources; // Could filter by settings
 
   return (
     <div className="text-center py-12 px-6">

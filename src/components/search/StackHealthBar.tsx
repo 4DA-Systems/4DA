@@ -73,12 +73,30 @@ export function StackHealthBar({ health, onSuggestedQuery }: StackHealthBarProps
 
       {/* Missed signals banner */}
       {health.missed_signals.total_count > 0 && (
-        <div className="flex items-center gap-2 px-3 py-2 bg-yellow-500/10 border border-yellow-500/20 rounded-lg">
-          <span className="text-yellow-400 text-xs">{'\u26A0'}</span>
-          <span className="text-xs text-yellow-300">
-            {t('search.missedSignals', { count: health.missed_signals.total_count, critical: health.missed_signals.critical_count })}
-          </span>
-        </div>
+        <details className="group">
+          <summary className="flex items-center gap-2 px-3 py-2 bg-yellow-500/10 border border-yellow-500/20 rounded-lg cursor-pointer list-none select-none hover:bg-yellow-500/15 transition-colors">
+            <span className="text-yellow-400 text-xs">{'\u26A0'}</span>
+            <span className="text-xs text-yellow-300 flex-1">
+              {t('search.missedSignals', { count: health.missed_signals.total_count, critical: health.missed_signals.critical_count })}
+            </span>
+            <span className="text-[10px] text-yellow-400/60 group-open:rotate-90 transition-transform">{'\u25B6'}</span>
+          </summary>
+          {health.missed_signals.example_titles.length > 0 && (
+            <div className="mt-1.5 ml-6 space-y-1">
+              {health.missed_signals.example_titles.map((title, i) => (
+                <div key={i} className="flex items-center gap-2 text-[11px]">
+                  <span className="text-yellow-400/40">{'\u2022'}</span>
+                  <span className="text-text-secondary truncate">{title}</span>
+                </div>
+              ))}
+              {health.missed_signals.total_count > health.missed_signals.example_titles.length && (
+                <span className="text-[10px] text-text-muted">
+                  {t('search.missedMore', { count: health.missed_signals.total_count - health.missed_signals.example_titles.length })}
+                </span>
+              )}
+            </div>
+          )}
+        </details>
       )}
 
       {/* Suggested queries */}

@@ -21,6 +21,7 @@ interface SynthesisPanelProps {
   isPro: boolean;
   synthesis: SynthesisResponse | null;
   loading: boolean;
+  streamingText?: string;
   onRetry: () => void;
 }
 
@@ -58,7 +59,7 @@ function parseCitations(
   });
 }
 
-export function SynthesisPanel({ isPro, synthesis, loading, onRetry }: SynthesisPanelProps) {
+export function SynthesisPanel({ isPro, synthesis, loading, streamingText, onRetry }: SynthesisPanelProps) {
   const { t } = useTranslation();
 
   // Track when synthesis loading begins
@@ -85,7 +86,18 @@ export function SynthesisPanel({ isPro, synthesis, loading, onRetry }: Synthesis
         )}
       </div>
 
-      {loading ? (
+      {loading && streamingText ? (
+        <div>
+          <p className="text-sm text-text-secondary leading-relaxed">
+            {streamingText}
+            <span className="inline-block w-0.5 h-4 bg-cyan-400 ml-0.5 animate-pulse" />
+          </p>
+          <div className="flex items-center gap-2 mt-2">
+            <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse" />
+            <span className="text-[10px] text-text-muted">{t('search.synthesizing')}</span>
+          </div>
+        </div>
+      ) : loading ? (
         <div className="flex items-center gap-2">
           <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse" />
           <span className="text-sm text-text-secondary">{t('search.analyzingSignals')}</span>

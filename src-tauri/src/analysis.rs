@@ -592,6 +592,15 @@ pub(crate) async fn run_multi_source_analysis_impl(
     }
 
     // LLM Reranking (if enabled and within daily limits)
+    emit_narration(
+        app,
+        NarrationEvent {
+            narration_type: "insight".into(),
+            message: "Ranking items against your profile...".into(),
+            source: None,
+            relevance: None,
+        },
+    );
     analysis_rerank::apply_llm_reranking(app, &mut results, &scoring_ctx).await;
 
     // Narration: scoring complete
@@ -969,6 +978,15 @@ pub(crate) async fn analyze_cached_content_impl(
         }
 
         // LLM Reranking on new items only (if enabled)
+        emit_narration(
+            app,
+            NarrationEvent {
+                narration_type: "insight".into(),
+                message: "Ranking items against your profile...".into(),
+                source: None,
+                relevance: None,
+            },
+        );
         analysis_rerank::apply_llm_reranking(app, &mut new_results, &scoring_ctx).await;
 
         // Merge: take previous results, update/add new ones by ID

@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
+import { listen } from '@tauri-apps/api/event';
 import { useAppStore } from '../store';
 import { useLicense } from '../hooks';
 import { trackEvent } from '../hooks/use-telemetry';
@@ -61,6 +62,7 @@ export function NaturalLanguageSearch({ onStatusChange, defaultExpanded = true }
   const [stackHealth, setStackHealth] = useState<StackHealth | null>(null);
   const [synthesis, setSynthesis] = useState<SynthesisResponse | null>(null);
   const [synthesisLoading, setSynthesisLoading] = useState(false);
+  const [streamingText, setStreamingText] = useState('');
   const analysisComplete = useAppStore((s) => s.appState.analysisComplete);
   const lastAnalyzedAt = useAppStore((s) => s.appState.lastAnalyzedAt);
   const hasAnalysisRun = analysisComplete || lastAnalyzedAt !== null;
@@ -74,13 +76,22 @@ export function NaturalLanguageSearch({ onStatusChange, defaultExpanded = true }
 
   const fetchSynthesis = useCallback(async (queryText: string) => {
     setSynthesisLoading(true);
+    setStreamingText('');
+
+    // Listen for streaming tokens from the backend
+    const unlisten = await listen<string>('synthesis-token', (event) => {
+      setStreamingText(prev => prev + event.payload);
+    });
+
     try {
       const resp = await invoke<SynthesisResponse>('synthesize_search', { queryText });
       setSynthesis(resp);
+      setStreamingText(''); // Clear streaming text once we have full response
     } catch (err) {
       console.error('Synthesis failed:', err);
       setSynthesis(null);
     } finally {
+      unlisten();
       setSynthesisLoading(false);
     }
   }, []);
@@ -241,7 +252,7 @@ export function NaturalLanguageSearch({ onStatusChange, defaultExpanded = true }
           {result && (
             <div className="space-y-4">
               {/* Synthesis panel (Pro only) */}
-              <SynthesisPanel query={query} isPro={isPro} synthesis={synthesis} loading={synthesisLoading} onRetry={() => fetchSynthesis(query)} />
+              <SynthesisPanel query={query} isPro={isPro} synthesis={synthesis} loading={synthesisLoading} streamingText={streamingText} onRetry={() => fetchSynthesis(query)} />
 
               {/* Query parsing info */}
               <div className="flex items-center gap-2 p-3 bg-bg-secondary rounded-lg border border-border flex-wrap">

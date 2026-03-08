@@ -4,6 +4,7 @@
 //! anomaly-to-notification bridge, and smart notification batching.
 
 use tauri::{AppHandle, Emitter, Runtime};
+use tauri_plugin_notification::NotificationExt;
 use tracing::{info, warn};
 
 // ============================================================================
@@ -118,6 +119,20 @@ pub async fn maybe_generate_digest<R: Runtime>(app: &AppHandle<R>) {
                         }
                         info!(target: "4da::jobs", "Weekly intelligence digest generated and emitted");
                         let _ = app.emit("digest-ready", &digest);
+
+                        // Send system tray notification
+                        if let Err(e) = app
+                            .notification()
+                            .builder()
+                            .title("4DA - Weekly Digest")
+                            .body("Your weekly intelligence digest is ready")
+                            .show()
+                        {
+                            warn!(target: "4da::jobs", error = %e, "Failed to send weekly digest notification");
+                        } else {
+                            info!(target: "4da::jobs", "Sent weekly digest notification");
+                        }
+
                         return;
                     }
                     Err(e) => {
@@ -154,6 +169,24 @@ pub async fn maybe_generate_digest<R: Runtime>(app: &AppHandle<R>) {
                         "generated_at": now.to_rfc3339(),
                     }),
                 );
+
+                // Send system tray notification for the digest
+                let notif_body = if frequency == "weekly" {
+                    "Your weekly intelligence digest is ready".to_string()
+                } else {
+                    format!("{} new items in your {} digest", item_count, frequency)
+                };
+                if let Err(e) = app
+                    .notification()
+                    .builder()
+                    .title("4DA - Digest Ready")
+                    .body(&notif_body)
+                    .show()
+                {
+                    warn!(target: "4da::jobs", error = %e, "Failed to send digest notification");
+                } else {
+                    info!(target: "4da::jobs", "Sent digest notification");
+                }
             }
             Ok(_) => {
                 info!(target: "4da::jobs", "No items for digest, skipping");
