@@ -163,6 +163,9 @@ pub struct KeygenValidationResult {
     pub cached: bool,
     /// Human-readable detail message
     pub detail: String,
+    /// Raw Keygen validation code (e.g., "VALID", "NO_MACHINES", "NOT_FOUND")
+    #[serde(default)]
+    pub code: String,
 }
 
 /// Get the path to the license validation cache file.
@@ -231,29 +234,50 @@ pub async fn validate_license_key_keygen(
     license_key: &str,
     current_tier: &str,
 ) -> KeygenValidationResult {
+    validate_license_key_keygen_inner(license_key, current_tier, false).await
+}
+
+/// Force-validate without using cache. Used during explicit activation.
+pub async fn validate_license_key_keygen_fresh(
+    license_key: &str,
+    current_tier: &str,
+) -> KeygenValidationResult {
+    validate_license_key_keygen_inner(license_key, current_tier, true).await
+}
+
+async fn validate_license_key_keygen_inner(
+    license_key: &str,
+    current_tier: &str,
+    skip_cache: bool,
+) -> KeygenValidationResult {
     if license_key.trim().is_empty() {
         return KeygenValidationResult {
             online: false,
             tier: "free".to_string(),
             cached: false,
             detail: "No license key provided".to_string(),
+            code: String::new(),
         };
     }
 
-    // Check cache first
-    if let Some(cache) = load_validation_cache() {
-        if is_cache_valid(&cache, license_key) {
-            info!(target: "4da::license", tier = %cache.tier, "Using cached Keygen validation");
-            return KeygenValidationResult {
-                online: false,
-                tier: cache.tier.clone(),
-                cached: true,
-                detail: format!("Cached validation from {}", cache.validated_at),
-            };
+    // Check cache first (unless explicitly skipped, e.g. during activation)
+    if !skip_cache {
+        if let Some(cache) = load_validation_cache() {
+            if is_cache_valid(&cache, license_key) {
+                info!(target: "4da::license", tier = %cache.tier, "Using cached Keygen validation");
+                return KeygenValidationResult {
+                    online: false,
+                    tier: cache.tier.clone(),
+                    cached: true,
+                    detail: format!("Cached validation from {}", cache.validated_at),
+                    code: "CACHED".to_string(),
+                };
+            }
         }
     }
 
-    // Build request body
+    // Simple key-only validation (no fingerprint scope).
+    // Device-level licensing can be added later for Team tier if needed.
     let body = serde_json::json!({
         "meta": {
             "key": license_key
@@ -265,7 +289,6 @@ pub async fn validate_license_key_keygen(
         KEYGEN_ACCOUNT_ID
     );
 
-    // Make the API call
     let client = reqwest::Client::new();
     let response = client
         .post(&url)
@@ -282,25 +305,25 @@ pub async fn validate_license_key_keygen(
             match resp.text().await {
                 Ok(text) => parse_keygen_response(status.as_u16(), &text, license_key),
                 Err(e) => {
-                    // Could read status but not body — treat as network failure
                     warn!(target: "4da::license", error = %e, "Failed to read Keygen response body");
                     KeygenValidationResult {
                         online: false,
                         tier: current_tier.to_string(),
                         cached: false,
                         detail: format!("Network error reading response: {}", e),
+                        code: "NETWORK_ERROR".to_string(),
                     }
                 }
             }
         }
         Err(e) => {
-            // Network failure — preserve current tier (offline tolerance)
             warn!(target: "4da::license", error = %e, "Keygen API unreachable, keeping current tier");
             KeygenValidationResult {
                 online: false,
                 tier: current_tier.to_string(),
                 cached: false,
                 detail: format!("Network error: {}", e),
+                code: "NETWORK_ERROR".to_string(),
             }
         }
     }
@@ -317,6 +340,7 @@ fn parse_keygen_response(status: u16, body: &str, license_key: &str) -> KeygenVa
                 tier: "free".to_string(),
                 cached: false,
                 detail: format!("Invalid response from Keygen (HTTP {})", status),
+                code: "PARSE_ERROR".to_string(),
             };
         }
     };
@@ -330,7 +354,8 @@ fn parse_keygen_response(status: u16, body: &str, license_key: &str) -> KeygenVa
     let validation_code = json
         .pointer("/meta/code")
         .and_then(|v| v.as_str())
-        .unwrap_or("UNKNOWN");
+        .unwrap_or("UNKNOWN")
+        .to_string();
 
     if valid {
         // Extract tier from license metadata if available
@@ -355,24 +380,31 @@ fn parse_keygen_response(status: u16, body: &str, license_key: &str) -> KeygenVa
             tier,
             cached: false,
             detail: format!("Valid ({})", validation_code),
+            code: validation_code,
         }
     } else {
-        // Key is invalid or expired per Keygen
         info!(target: "4da::license", code = %validation_code, "Keygen validation failed");
 
-        // Cache the failure so we don't keep hitting the API
-        let cache = KeygenValidationCache {
-            validated_at: chrono::Utc::now().to_rfc3339(),
-            tier: "free".to_string(),
-            key_hash: hash_key(license_key),
-        };
-        save_validation_cache(&cache);
+        // Don't cache NO_MACHINES / NO_MACHINE — these are fixable by machine activation
+        let is_machine_issue = validation_code == "NO_MACHINES"
+            || validation_code == "NO_MACHINE"
+            || validation_code == "FINGERPRINT_SCOPE_REQUIRED";
+
+        if !is_machine_issue {
+            let cache = KeygenValidationCache {
+                validated_at: chrono::Utc::now().to_rfc3339(),
+                tier: "free".to_string(),
+                key_hash: hash_key(license_key),
+            };
+            save_validation_cache(&cache);
+        }
 
         KeygenValidationResult {
             online: true,
             tier: "free".to_string(),
             cached: false,
             detail: format!("Invalid key ({})", validation_code),
+            code: validation_code,
         }
     }
 }

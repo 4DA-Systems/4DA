@@ -38,6 +38,13 @@ vi.mock('./void-engine/VoidEngine', () => ({
 }));
 
 // ---------------------------------------------------------------------------
+// GAME components mock — custom elements use ResizeObserver (unsupported in jsdom)
+// ---------------------------------------------------------------------------
+vi.mock('../lib/game-components', () => ({
+  registerGameComponent: vi.fn(),
+}));
+
+// ---------------------------------------------------------------------------
 // Store mock
 // ---------------------------------------------------------------------------
 const mockStartAnalysis = vi.fn();

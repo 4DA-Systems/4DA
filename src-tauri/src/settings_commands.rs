@@ -606,8 +606,9 @@ pub async fn activate_license(license_key: String) -> Result<serde_json::Value> 
     } else {
         // Keygen API key (e.g., BE3529-741BAF-...)
         info!(target: "4da::license", "Validating Keygen key (format: {}...)", &license_key[..6.min(license_key.len())]);
-        let result = crate::settings::validate_license_key_keygen(&license_key, "free").await;
-        info!(target: "4da::license", tier = %result.tier, online = result.online, cached = result.cached, detail = %result.detail, "Keygen validation result");
+        let result = crate::settings::validate_license_key_keygen_fresh(&license_key, "free").await;
+        info!(target: "4da::license", tier = %result.tier, online = result.online, cached = result.cached, code = %result.code, detail = %result.detail, "Keygen validation result");
+
         if result.tier == "free" {
             return Ok(serde_json::json!({
                 "success": false,
