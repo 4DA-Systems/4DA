@@ -928,17 +928,23 @@ impl Database {
 
             // Phase 26: Drop unused tables
             if current_version < 26 {
-                Self::run_versioned_migration(&conn, 25, 26, "Phase 26: Drop unused tables", |c| {
-                    c.execute_batch(
-                        "DROP TABLE IF EXISTS git_commit_history;
+                Self::run_versioned_migration(
+                    &conn,
+                    25,
+                    26,
+                    "Phase 26: Drop unused tables",
+                    |c| {
+                        c.execute_batch(
+                            "DROP TABLE IF EXISTS git_commit_history;
                          DROP TABLE IF EXISTS chunk_sentiment;
                          DROP TABLE IF EXISTS item_relationships;
                          DROP TABLE IF EXISTS query_cache;
                          DROP TABLE IF EXISTS query_history;
                          DROP TABLE IF EXISTS file_metadata_cache;",
-                    )?;
-                    Ok(())
-                })?;
+                        )?;
+                        Ok(())
+                    },
+                )?;
             }
 
             info!(target: "4da::db", "Database schema initialized with sqlite-vec");

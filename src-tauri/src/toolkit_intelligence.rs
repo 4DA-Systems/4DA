@@ -80,7 +80,8 @@ pub async fn toolkit_test_feed(url: String) -> Result<FeedTestResult> {
             "HTTP {}: {}",
             status.as_u16(),
             status.canonical_reason().unwrap_or("Unknown")
-        ).into());
+        )
+        .into());
     }
 
     let xml = response

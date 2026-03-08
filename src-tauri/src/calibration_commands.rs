@@ -198,7 +198,10 @@ impl Metrics {
 pub async fn run_calibration() -> Result<CalibrationResult> {
     // Check cache before expensive work
     {
-        let cache = CALIBRATION_CACHE.lock().unwrap_or_else(|e| e.into_inner());
+        let cache = CALIBRATION_CACHE.lock().unwrap_or_else(|e| {
+            tracing::warn!("CALIBRATION_CACHE mutex poisoned, recovering");
+            e.into_inner()
+        });
         if let Some((ref result, ref instant)) = *cache {
             if instant.elapsed().as_secs() < CALIBRATION_TTL_SECS {
                 return Ok(result.clone());
@@ -357,7 +360,10 @@ pub async fn run_calibration() -> Result<CalibrationResult> {
 
     // Store in cache
     {
-        let mut cache = CALIBRATION_CACHE.lock().unwrap_or_else(|e| e.into_inner());
+        let mut cache = CALIBRATION_CACHE.lock().unwrap_or_else(|e| {
+            tracing::warn!("CALIBRATION_CACHE mutex poisoned, recovering");
+            e.into_inner()
+        });
         *cache = Some((result.clone(), Instant::now()));
     }
 

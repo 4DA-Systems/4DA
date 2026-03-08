@@ -62,7 +62,10 @@ impl LLMClient {
                 .connect_timeout(std::time::Duration::from_secs(10))
                 .timeout(std::time::Duration::from_secs(timeout_secs))
                 .build()
-                .unwrap_or_else(|_| reqwest::Client::new()),
+                .unwrap_or_else(|e| {
+                    warn!("Failed to build LLM HTTP client: {e}, using default");
+                    reqwest::Client::new()
+                }),
         }
     }
 
@@ -484,18 +487,33 @@ impl LLMClient {
         let result = match self.provider.provider.as_str() {
             "anthropic" => {
                 crate::llm_stream::stream_anthropic(
-                    &self.client, &self.provider, system, messages.clone(), on_token,
-                ).await
+                    &self.client,
+                    &self.provider,
+                    system,
+                    messages.clone(),
+                    on_token,
+                )
+                .await
             }
             "openai" => {
                 crate::llm_stream::stream_openai(
-                    &self.client, &self.provider, system, messages.clone(), on_token,
-                ).await
+                    &self.client,
+                    &self.provider,
+                    system,
+                    messages.clone(),
+                    on_token,
+                )
+                .await
             }
             "ollama" => {
                 crate::llm_stream::stream_ollama(
-                    &self.client, &self.provider, system, messages.clone(), on_token,
-                ).await
+                    &self.client,
+                    &self.provider,
+                    system,
+                    messages.clone(),
+                    on_token,
+                )
+                .await
             }
             _ => return Err(format!("Unknown provider: {}", self.provider.provider)),
         };
@@ -512,9 +530,7 @@ impl LLMClient {
                 );
                 // on_token was consumed by the first attempt; create a no-op for fallback
                 // since partial tokens may have already been emitted
-                crate::llm_stream::stream_ollama_fallback(
-                    system, messages, |_| {},
-                ).await?
+                crate::llm_stream::stream_ollama_fallback(system, messages, |_| {}).await?
             }
             Err(err) => return Err(err),
         };

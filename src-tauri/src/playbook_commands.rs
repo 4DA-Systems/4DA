@@ -202,10 +202,7 @@ pub fn get_playbook_modules(lang: Option<String>) -> Result<Vec<PlaybookModule>>
 }
 
 #[tauri::command]
-pub fn get_playbook_content(
-    module_id: String,
-    lang: Option<String>,
-) -> Result<PlaybookContent> {
+pub fn get_playbook_content(module_id: String, lang: Option<String>) -> Result<PlaybookContent> {
     let language = lang.unwrap_or_else(crate::i18n::get_user_language);
     let content_dir = get_content_dir_for_lang(&language);
     let filename = module_id_to_filename(&module_id)
@@ -258,8 +255,8 @@ pub fn get_playbook_progress() -> Result<PlaybookProgress> {
             None => 0,
         };
 
-        let mut stmt = conn
-            .prepare("SELECT lesson_idx FROM playbook_progress WHERE module_id = ?")?;
+        let mut stmt =
+            conn.prepare("SELECT lesson_idx FROM playbook_progress WHERE module_id = ?")?;
 
         let completed: Vec<u32> = stmt
             .query_map([id], |row| row.get(0))?

@@ -16,10 +16,7 @@ pub async fn get_decision_windows() -> Result<Vec<DecisionWindow>> {
 
 /// Record an action on a decision window (transition to "acted" status).
 #[tauri::command]
-pub async fn act_on_decision_window(
-    window_id: i64,
-    outcome: Option<String>,
-) -> Result<String> {
+pub async fn act_on_decision_window(window_id: i64, outcome: Option<String>) -> Result<String> {
     let conn = open_db_connection()?;
     crate::decision_advantage::windows::transition_window(
         &conn,
@@ -32,10 +29,7 @@ pub async fn act_on_decision_window(
 
 /// Close/dismiss a decision window without acting on it.
 #[tauri::command]
-pub async fn close_decision_window(
-    window_id: i64,
-    outcome: Option<String>,
-) -> Result<String> {
+pub async fn close_decision_window(window_id: i64, outcome: Option<String>) -> Result<String> {
     let conn = open_db_connection()?;
     crate::decision_advantage::windows::transition_window(
         &conn,
@@ -48,9 +42,7 @@ pub async fn close_decision_window(
 
 /// Calculate compound advantage score for a given period (daily, weekly, monthly).
 #[tauri::command]
-pub async fn get_compound_advantage(
-    period: Option<String>,
-) -> Result<CompoundAdvantageScore> {
+pub async fn get_compound_advantage(period: Option<String>) -> Result<CompoundAdvantageScore> {
     let conn = open_db_connection()?;
     let p = period.as_deref().unwrap_or("weekly");
     Ok(crate::decision_advantage::compute_compound_score(&conn, p))

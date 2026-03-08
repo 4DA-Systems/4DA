@@ -369,30 +369,28 @@ impl ACE {
     /// Get topic affinities
     pub fn get_topic_affinities(&self) -> Result<Vec<TopicAffinity>> {
         let conn = self.conn.lock();
-        let mut stmt = conn
-            .prepare(
-                "SELECT topic, positive_signals, negative_signals, total_exposures,
+        let mut stmt = conn.prepare(
+            "SELECT topic, positive_signals, negative_signals, total_exposures,
                     affinity_score, confidence, last_interaction
              FROM topic_affinities
              WHERE total_exposures >= 5
              ORDER BY ABS(affinity_score) DESC
              LIMIT 100",
-            )?;
+        )?;
 
-        let rows = stmt
-            .query_map([], |row| {
-                Ok(TopicAffinity {
-                    topic: row.get(0)?,
-                    embedding: None,
-                    positive_signals: row.get(1)?,
-                    negative_signals: row.get(2)?,
-                    total_exposures: row.get(3)?,
-                    affinity_score: row.get(4)?,
-                    confidence: row.get(5)?,
-                    last_interaction: row.get(6)?,
-                    decay_applied: false,
-                })
-            })?;
+        let rows = stmt.query_map([], |row| {
+            Ok(TopicAffinity {
+                topic: row.get(0)?,
+                embedding: None,
+                positive_signals: row.get(1)?,
+                negative_signals: row.get(2)?,
+                total_exposures: row.get(3)?,
+                affinity_score: row.get(4)?,
+                confidence: row.get(5)?,
+                last_interaction: row.get(6)?,
+                decay_applied: false,
+            })
+        })?;
 
         rows.collect::<std::result::Result<Vec<_>, _>>()
             .map_err(|e| e.into())
@@ -401,27 +399,25 @@ impl ACE {
     /// Get anti-topics
     pub fn get_anti_topics(&self, min_rejections: u32) -> Result<Vec<AntiTopic>> {
         let conn = self.conn.lock();
-        let mut stmt = conn
-            .prepare(
-                "SELECT topic, rejection_count, confidence, auto_detected, user_confirmed,
+        let mut stmt = conn.prepare(
+            "SELECT topic, rejection_count, confidence, auto_detected, user_confirmed,
                     first_rejection, last_rejection
              FROM anti_topics
              WHERE rejection_count >= ?1
              ORDER BY rejection_count DESC",
-            )?;
+        )?;
 
-        let rows = stmt
-            .query_map([min_rejections], |row| {
-                Ok(AntiTopic {
-                    topic: row.get(0)?,
-                    rejection_count: row.get(1)?,
-                    confidence: row.get(2)?,
-                    auto_detected: row.get::<_, i32>(3)? != 0,
-                    user_confirmed: row.get::<_, i32>(4)? != 0,
-                    first_rejection: row.get(5)?,
-                    last_rejection: row.get(6)?,
-                })
-            })?;
+        let rows = stmt.query_map([min_rejections], |row| {
+            Ok(AntiTopic {
+                topic: row.get(0)?,
+                rejection_count: row.get(1)?,
+                confidence: row.get(2)?,
+                auto_detected: row.get::<_, i32>(3)? != 0,
+                user_confirmed: row.get::<_, i32>(4)? != 0,
+                first_rejection: row.get(5)?,
+                last_rejection: row.get(6)?,
+            })
+        })?;
 
         rows.collect::<std::result::Result<Vec<_>, _>>()
             .map_err(|e| e.into())
@@ -477,10 +473,9 @@ impl ACE {
             .query_row("SELECT COUNT(*) FROM interactions", [], |row| row.get(0))
             .unwrap_or(0);
 
-        let mut stmt = conn
-            .prepare(
-                "SELECT source, score, interactions FROM source_preferences ORDER BY score DESC",
-            )?;
+        let mut stmt = conn.prepare(
+            "SELECT source, score, interactions FROM source_preferences ORDER BY score DESC",
+        )?;
 
         let source_prefs: Vec<SourcePreferenceSummary> = stmt
             .query_map([], |row| {
@@ -514,15 +509,13 @@ impl ACE {
     /// Get source preferences for scoring
     pub fn get_source_preferences(&self) -> Result<Vec<(String, f32)>> {
         let conn = self.conn.lock();
-        let mut stmt = conn
-            .prepare(
-                "SELECT source, score FROM source_preferences WHERE interactions >= 5 ORDER BY source",
-            )?;
+        let mut stmt = conn.prepare(
+            "SELECT source, score FROM source_preferences WHERE interactions >= 5 ORDER BY source",
+        )?;
 
-        let rows = stmt
-            .query_map([], |row| {
-                Ok((row.get::<_, String>(0)?, row.get::<_, f32>(1)?))
-            })?;
+        let rows = stmt.query_map([], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, f32>(1)?))
+        })?;
 
         rows.collect::<std::result::Result<Vec<_>, _>>()
             .map_err(|e| e.into())
@@ -550,13 +543,12 @@ impl ACE {
 
         // Fetch all affinities that haven't been interacted with in >1 day
         // Use last_decay_at to compute incremental decay (not decay from epoch)
-        let mut stmt = conn
-            .prepare(
-                "SELECT topic, affinity_score, confidence, last_interaction,
+        let mut stmt = conn.prepare(
+            "SELECT topic, affinity_score, confidence, last_interaction,
                         COALESCE(last_decay_at, last_interaction) as decay_baseline
                  FROM topic_affinities
                  WHERE julianday('now') - julianday(last_interaction) > 1",
-            )?;
+        )?;
 
         let rows: Vec<(String, f32, f32, String, String)> = stmt
             .query_map([], |row| {
