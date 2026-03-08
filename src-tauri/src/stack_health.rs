@@ -382,3 +382,113 @@ pub async fn get_missed_intelligence(days: Option<u32>) -> Result<MissedIntellig
     let effective_days = days.unwrap_or(30);
     Ok(compute_missed_intelligence(&conn, &techs, effective_days))
 }
+
+// ============================================================================
+// Tests
+// ============================================================================
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn status_rank_critical_is_lowest() {
+        assert_eq!(status_rank("critical"), 0);
+    }
+
+    #[test]
+    fn status_rank_ordering() {
+        assert!(status_rank("critical") < status_rank("attention"));
+        assert!(status_rank("attention") < status_rank("stale"));
+        assert!(status_rank("stale") < status_rank("healthy"));
+    }
+
+    #[test]
+    fn status_rank_unknown_is_highest() {
+        assert!(
+            status_rank("healthy") < status_rank("unknown"),
+            "Unknown statuses should sort after healthy"
+        );
+        assert_eq!(status_rank("bogus"), 4);
+    }
+
+    #[test]
+    fn sorting_by_status_rank_puts_critical_first() {
+        let mut entries = vec![
+            TechHealthEntry {
+                name: "React".to_string(),
+                category: "frontend".to_string(),
+                status: "healthy".to_string(),
+                signal_count_7d: 10,
+                days_since_engagement: 1,
+                has_knowledge_gap: false,
+            },
+            TechHealthEntry {
+                name: "OpenSSL".to_string(),
+                category: "security".to_string(),
+                status: "critical".to_string(),
+                signal_count_7d: 2,
+                days_since_engagement: 30,
+                has_knowledge_gap: true,
+            },
+            TechHealthEntry {
+                name: "Tailwind".to_string(),
+                category: "frontend".to_string(),
+                status: "stale".to_string(),
+                signal_count_7d: 0,
+                days_since_engagement: 14,
+                has_knowledge_gap: false,
+            },
+            TechHealthEntry {
+                name: "SQLite".to_string(),
+                category: "database".to_string(),
+                status: "attention".to_string(),
+                signal_count_7d: 1,
+                days_since_engagement: 7,
+                has_knowledge_gap: true,
+            },
+        ];
+
+        entries.sort_by(|a, b| {
+            status_rank(&a.status)
+                .cmp(&status_rank(&b.status))
+                .then(b.signal_count_7d.cmp(&a.signal_count_7d))
+        });
+
+        assert_eq!(entries[0].status, "critical");
+        assert_eq!(entries[1].status, "attention");
+        assert_eq!(entries[2].status, "stale");
+        assert_eq!(entries[3].status, "healthy");
+    }
+
+    #[test]
+    fn sorting_tiebreaks_by_signal_count_descending() {
+        let mut entries = vec![
+            TechHealthEntry {
+                name: "Vite".to_string(),
+                category: "tooling".to_string(),
+                status: "healthy".to_string(),
+                signal_count_7d: 3,
+                days_since_engagement: 1,
+                has_knowledge_gap: false,
+            },
+            TechHealthEntry {
+                name: "React".to_string(),
+                category: "frontend".to_string(),
+                status: "healthy".to_string(),
+                signal_count_7d: 15,
+                days_since_engagement: 1,
+                has_knowledge_gap: false,
+            },
+        ];
+
+        entries.sort_by(|a, b| {
+            status_rank(&a.status)
+                .cmp(&status_rank(&b.status))
+                .then(b.signal_count_7d.cmp(&a.signal_count_7d))
+        });
+
+        assert_eq!(entries[0].name, "React", "Higher signal count should come first within same status");
+        assert_eq!(entries[1].name, "Vite");
+    }
+}
