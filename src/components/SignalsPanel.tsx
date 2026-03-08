@@ -159,6 +159,8 @@ export const SignalsPanel = memo(function SignalsPanel({ results }: SignalsPanel
                 <button
                   key={type}
                   onClick={() => setTypeFilter(isActive ? null : type)}
+                  aria-label={`Filter by signal type: ${SIGNAL_LABELS[type] || type}`}
+                  aria-pressed={isActive}
                   className={`px-2.5 py-1 text-[11px] rounded-lg border transition-all flex items-center gap-1.5 ${
                     isActive
                       ? `${config?.bgColor || 'bg-white/10'} ${config?.color || 'text-white'} ${config?.borderColor || 'border-white/20'}`
@@ -187,6 +189,8 @@ export const SignalsPanel = memo(function SignalsPanel({ results }: SignalsPanel
                 <button
                   key={p}
                   onClick={() => setPriorityFilter(isActive ? null : p)}
+                  aria-label={`Filter by priority: ${config.label}`}
+                  aria-pressed={isActive}
                   className={`px-2 py-1 text-[10px] font-medium rounded-lg border transition-all flex items-center gap-1.5 ${
                     isActive
                       ? `${config.bgColor} ${config.color} border-current`
@@ -204,6 +208,7 @@ export const SignalsPanel = memo(function SignalsPanel({ results }: SignalsPanel
             {(typeFilter || priorityFilter) && (
               <button
                 onClick={() => { setTypeFilter(null); setPriorityFilter(null); }}
+                aria-label={t('signals.clear')}
                 className="px-2 py-1 text-[10px] text-text-muted hover:text-white transition-colors"
               >
                 {t('signals.clear')}
@@ -287,6 +292,8 @@ const SignalRow = ({ signal }: { signal: SignalItem }) => {
             {signal.signal_triggers.length > 0 && (
               <button
                 onClick={() => setShowTriggers(!showTriggers)}
+                aria-expanded={showTriggers}
+                aria-label={showTriggers ? t('signals.hideTriggers') : t('signals.triggers', { count: signal.signal_triggers.length })}
                 className="text-[10px] text-text-muted hover:text-text-secondary transition-colors ml-auto"
               >
                 {showTriggers ? t('signals.hideTriggers') : t('signals.triggers', { count: signal.signal_triggers.length })}

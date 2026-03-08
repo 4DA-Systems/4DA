@@ -33,6 +33,7 @@ export function ToastContainer({ toasts, onDismiss }: ToastContainerProps) {
             {toast.action && (
               <button
                 onClick={() => { toast.action!.onClick(); onDismiss(toast.id); }}
+                aria-label={toast.action.label}
                 className="text-xs font-medium text-orange-400 hover:text-orange-300 transition-colors flex-shrink-0 ml-1 px-2 py-1 bg-orange-500/10 rounded"
               >
                 {toast.action.label}

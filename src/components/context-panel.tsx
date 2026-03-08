@@ -62,6 +62,7 @@ export function ContextPanel({
                 disabled={loading}
                 className="px-3 py-1.5 text-xs bg-green-500/10 text-green-400 border border-green-500/30 rounded-lg hover:bg-green-500/20 transition-all disabled:opacity-50"
                 title={t('context.indexFiles')}
+                aria-label={t('context.indexFiles')}
               >
                 {t('context.index')}
               </button>
@@ -69,6 +70,7 @@ export function ContextPanel({
                 onClick={onClear}
                 className="px-3 py-1.5 text-xs bg-red-500/10 text-red-400 border border-red-500/30 rounded-lg hover:bg-red-500/20 transition-all"
                 title={t('context.clear')}
+                aria-label={t('context.clear')}
               >
                 {t('context.clear')}
               </button>

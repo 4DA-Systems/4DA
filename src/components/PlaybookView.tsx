@@ -197,6 +197,7 @@ export function PlaybookView() {
                 loadProgress();
                 loadStreetsTier();
               }}
+              aria-label={t('action.retry')}
               className="px-3 py-1.5 text-xs bg-bg-tertiary hover:bg-white/10 rounded transition-colors text-text-secondary"
             >
               {t('action.retry')}
@@ -222,6 +223,7 @@ export function PlaybookView() {
             </p>
             <button
               onClick={() => handleModuleClick('S')}
+              aria-label={t('streets:streets.startWith')}
               className="px-4 py-2 bg-[#D4AF37] text-black text-sm font-medium rounded-lg hover:bg-[#C4A030] transition-colors"
             >
               {t('streets:streets.startWith')}

@@ -27,7 +27,7 @@ interface SynthesisPanelProps {
 
 function parseCitations(
   text: string,
-  sources: SynthesisSource[]
+  sources: SynthesisSource[],
 ): React.ReactNode[] {
   const parts = text.split(/(\[\d+\])/g);
   return parts.map((part, i) => {

@@ -97,6 +97,7 @@ function DimensionCard({ dim, children, onAction }: { dim: DimensionCompleteness
           <span className="text-[10px] text-amber-400/80">{t(actionDef.labelKey)}</span>
           <button
             onClick={() => onAction?.(actionDef.action)}
+            aria-label={t(actionDef.buttonLabelKey)}
             className="px-2 py-0.5 text-[10px] font-medium text-black bg-amber-400 hover:bg-amber-300 rounded transition-colors"
           >
             {t(actionDef.buttonLabelKey)}
@@ -209,12 +210,14 @@ export const SovereignDeveloperProfile = memo(function SovereignDeveloperProfile
           {exportStatus && <span className="text-[10px] text-green-400">{exportStatus}</span>}
           <button
             onClick={() => handleExport('markdown')}
+            aria-label={t('profile.copyProfile')}
             className="px-2.5 py-1 text-[10px] text-white bg-white/10 hover:bg-white/15 border border-white/20 rounded font-medium transition-colors"
           >
             {t('profile.copyProfile')}
           </button>
           <button
             onClick={() => handleExport('json')}
+            aria-label={t('profile.exportJson')}
             className="px-2 py-1 text-[10px] text-text-secondary hover:text-white border border-border rounded transition-colors"
           >
             {t('profile.exportJson')}
@@ -395,7 +398,7 @@ function DeveloperDnaSection() {
           {/* Identity */}
           <div className="flex items-center justify-between">
             <p className="text-xs text-text-secondary">{dna.identity_summary}</p>
-            <button onClick={copyDna} className="px-2 py-1 text-[10px] text-white bg-white/10 hover:bg-white/15 border border-white/20 rounded transition-colors">
+            <button onClick={copyDna} aria-label={t('profile.copyDna')} className="px-2 py-1 text-[10px] text-white bg-white/10 hover:bg-white/15 border border-white/20 rounded transition-colors">
               {t('profile.copyDna')}
             </button>
           </div>

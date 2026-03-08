@@ -395,6 +395,7 @@ export const BriefingView = memo(function BriefingView() {
               onClick={copyBriefing}
               className="px-2.5 py-1.5 text-xs bg-bg-tertiary text-text-secondary border border-border rounded-lg hover:text-white hover:border-[#3A3A3A] transition-all"
               title={t('briefing.copyTooltip')}
+              aria-label={t('briefing.copyTooltip')}
             >
               {t('action.copy')}
             </button>
@@ -402,6 +403,7 @@ export const BriefingView = memo(function BriefingView() {
               onClick={shareBriefing}
               className="px-2.5 py-1.5 text-xs bg-bg-tertiary text-text-secondary border border-border rounded-lg hover:text-white hover:border-[#3A3A3A] transition-all"
               title={t('briefing.shareTooltip')}
+              aria-label={t('briefing.shareTooltip')}
             >
               {t('briefing.share')}
             </button>
@@ -410,6 +412,7 @@ export const BriefingView = memo(function BriefingView() {
                 onClick={generateBriefing}
                 className="px-3 py-1.5 text-xs bg-bg-tertiary text-orange-400 border border-orange-500/30 rounded-lg hover:bg-orange-500/10 transition-all font-medium"
                 title={t('briefing.refreshTooltip')}
+                aria-label={t('briefing.refreshTooltip')}
               >
                 {t('action.refresh')}
               </button>
@@ -424,6 +427,7 @@ export const BriefingView = memo(function BriefingView() {
             <button
               onClick={generateBriefing}
               className="text-xs text-yellow-400 hover:text-yellow-300 underline font-medium"
+              aria-label="Refresh stale briefing"
             >
               {t('action.refresh')}
             </button>
@@ -474,6 +478,7 @@ export const BriefingView = memo(function BriefingView() {
                 <button
                   onClick={() => setActiveView('calibrate')}
                   className="text-purple-400/70 hover:text-purple-300 transition-colors"
+                  aria-label={`Review source quality for ${s.source}`}
                 >
                   {t('briefing.reviewSource', 'Review')}
                 </button>
@@ -515,6 +520,7 @@ export const BriefingView = memo(function BriefingView() {
         <button
           onClick={() => setMetricsExpanded(prev => !prev)}
           aria-expanded={metricsExpanded}
+          aria-label={t('briefing.intelligenceMetrics')}
           className="flex items-center gap-2 text-xs text-text-muted cursor-pointer py-2 w-full text-left"
         >
           <span>{t('briefing.intelligenceMetrics')}</span>
@@ -551,6 +557,7 @@ export const BriefingView = memo(function BriefingView() {
             <button
               onClick={generateBriefing}
               className="px-3 py-1.5 text-xs bg-bg-tertiary hover:bg-white/10 rounded transition-colors text-text-secondary"
+              aria-label="Retry generating briefing"
             >
               {t('action.retry')}
             </button>

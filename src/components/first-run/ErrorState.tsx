@@ -52,6 +52,7 @@ export function ErrorState({ status, onRetry, onContinue }: ErrorStateProps) {
           </button>
           <button
             onClick={onContinue}
+            aria-label={t('firstRun.continueAnyway')}
             className="px-6 py-3 text-text-secondary hover:text-white transition-colors text-sm"
           >
             {t('firstRun.continueAnyway')}

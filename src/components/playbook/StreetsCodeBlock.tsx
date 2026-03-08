@@ -178,6 +178,7 @@ export function StreetsCodeBlock({ code, language, moduleId, lessonIdx, blockInd
             <button
               key={os}
               onClick={() => { setActiveOs(os); ensureParsed(); }}
+              aria-label={`Select OS: ${OS_LABELS[os]}`}
               className={`px-2 py-0.5 text-[10px] rounded font-medium transition-colors ${
                 activeOs === os
                   ? 'bg-[#D4AF37]/20 text-[#D4AF37] border border-[#D4AF37]/30'
@@ -193,14 +194,16 @@ export function StreetsCodeBlock({ code, language, moduleId, lessonIdx, blockInd
             <button
               onClick={runAllSafe}
               disabled={runningAny}
+              aria-label={t('playbook.code.runAllSafe', { count: safeCount })}
               className="flex items-center gap-1 px-2 py-1 text-[10px] font-medium text-[#22C55E] bg-[#22C55E]/10 border border-[#22C55E]/20 rounded hover:bg-[#22C55E]/20 transition-colors disabled:opacity-50"
             >
-              {runningAny && <span className="w-3 h-3 border border-[#22C55E] border-t-transparent rounded-full animate-spin" />}
+              {runningAny && <span className="w-3 h-3 border border-[#22C55E] border-t-transparent rounded-full animate-spin" aria-hidden="true" />}
               {t('playbook.code.runAllSafe', { count: safeCount })}
             </button>
           )}
           <button
             onClick={copyBlock}
+            aria-label={copied ? t('action.copied') : t('action.copy')}
             className="px-2 py-1 text-[10px] text-[#666] hover:text-text-secondary border border-border rounded transition-colors"
           >
             {copied ? t('action.copied') : t('action.copy')}
@@ -318,6 +321,7 @@ export function StreetsCodeBlock({ code, language, moduleId, lessonIdx, blockInd
               {result && !isExpanded && matchedCmd && (
                 <button
                   onClick={() => toggleResult(matchedCmd.id)}
+                  aria-label={result.success ? t('playbook.code.showOutput') : t('playbook.code.showError')}
                   className={`ml-1 mt-0.5 mb-1 px-2 py-0.5 text-[10px] rounded ${
                     result.success
                       ? 'text-[#22C55E] bg-[#22C55E]/5 hover:bg-[#22C55E]/10'

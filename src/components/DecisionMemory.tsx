@@ -213,6 +213,7 @@ export const DecisionMemory = memo(function DecisionMemory() {
               onClick={handleSubmit}
               disabled={isSubmitting || !form.subject.trim() || !form.decision.trim()}
               className="px-4 py-2 text-xs bg-white text-black rounded-lg font-medium hover:bg-gray-200 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+              aria-label={t('decisions.saveDecision', 'Save decision')}
             >
               {t('action.save')}
             </button>
@@ -240,6 +241,7 @@ export const DecisionMemory = memo(function DecisionMemory() {
           <button
             onClick={loadDecisions}
             className="px-3 py-1.5 text-xs bg-bg-tertiary hover:bg-white/10 rounded transition-colors text-text-secondary"
+            aria-label={t('decisions.retryLoad', 'Retry loading decisions')}
           >
             {t('action.retry')}
           </button>
@@ -290,6 +292,8 @@ export const DecisionMemory = memo(function DecisionMemory() {
                   <button
                     onClick={() => setExpandedId(isExpanded ? null : d.id)}
                     className="w-full px-4 py-3 flex items-center gap-3 text-left"
+                    aria-expanded={isExpanded}
+                    aria-label={t('decisions.toggleDetail', `${isExpanded ? 'Collapse' : 'Expand'} decision: ${d.subject}`)}
                   >
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
@@ -308,7 +312,7 @@ export const DecisionMemory = memo(function DecisionMemory() {
                       <span className="text-[10px] text-text-muted font-mono">
                         {Math.round(d.confidence * 100)}%
                       </span>
-                      <span className="text-text-muted text-xs">
+                      <span className="text-text-muted text-xs" aria-hidden="true">
                         {isExpanded ? '\u25BE' : '\u25B8'}
                       </span>
                     </div>
@@ -391,12 +395,14 @@ export const DecisionMemory = memo(function DecisionMemory() {
                           <button
                             onClick={() => handleReconsider(d.id)}
                             className="px-3 py-1.5 text-xs bg-amber-500/10 text-amber-400 border border-amber-500/20 rounded hover:bg-amber-500/20 transition-colors"
+                            aria-label={`${t('decisions.reconsider')} ${d.subject}`}
                           >
                             {t('decisions.reconsider')}
                           </button>
                           <button
                             onClick={() => handleSupersede(d.id)}
                             className="px-3 py-1.5 text-xs bg-gray-500/10 text-text-secondary border border-gray-500/20 rounded hover:bg-gray-500/20 transition-colors"
+                            aria-label={`${t('decisions.supersede')} ${d.subject}`}
                           >
                             {t('decisions.supersede')}
                           </button>
@@ -404,6 +410,7 @@ export const DecisionMemory = memo(function DecisionMemory() {
                             <button
                               onClick={() => removeTechDecision(d.subject)}
                               className="px-3 py-1.5 text-xs bg-red-500/10 text-red-400 border border-red-500/20 rounded hover:bg-red-500/20 transition-colors"
+                              aria-label={`${t('decisions.remove')} ${d.subject}`}
                             >
                               {t('decisions.remove')}
                             </button>
@@ -415,12 +422,14 @@ export const DecisionMemory = memo(function DecisionMemory() {
                           <button
                             onClick={() => updateDecision(d.id, { status: 'active' })}
                             className="px-3 py-1.5 text-xs bg-green-500/10 text-green-400 border border-green-500/20 rounded hover:bg-green-500/20 transition-colors"
+                            aria-label={`${t('decisions.reaffirm')} ${d.subject}`}
                           >
                             {t('decisions.reaffirm')}
                           </button>
                           <button
                             onClick={() => handleSupersede(d.id)}
                             className="px-3 py-1.5 text-xs bg-gray-500/10 text-text-secondary border border-gray-500/20 rounded hover:bg-gray-500/20 transition-colors"
+                            aria-label={`${t('decisions.supersede')} ${d.subject}`}
                           >
                             {t('decisions.supersede')}
                           </button>

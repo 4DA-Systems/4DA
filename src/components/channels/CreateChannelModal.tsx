@@ -223,6 +223,7 @@ export function CreateChannelModal({ open, onClose }: CreateChannelModalProps) {
         <div className="px-6 py-4 border-t border-border flex justify-end gap-2">
           <button
             onClick={onClose}
+            aria-label={t('action.cancel')}
             className="px-4 py-2 text-sm font-medium text-text-secondary bg-bg-tertiary border border-border rounded-lg hover:text-white transition-colors"
           >
             {t('action.cancel')}
@@ -230,6 +231,7 @@ export function CreateChannelModal({ open, onClose }: CreateChannelModalProps) {
           <button
             onClick={handleSubmit}
             disabled={!canSubmit}
+            aria-label={submitting ? t('action.loading') : t('channels.create')}
             className="px-4 py-2 text-sm font-medium text-black bg-white rounded-lg hover:bg-white/90 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
           >
             {submitting ? t('action.loading') : t('channels.create')}

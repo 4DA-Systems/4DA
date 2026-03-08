@@ -198,12 +198,14 @@ export function PersonalizationSection() {
                     <div className="flex gap-1 flex-shrink-0">
                       <button
                         onClick={() => handleAddSuggestion(suggestion.topic)}
+                        aria-label={t('settings.personalization.addSuggestion', { name: suggestion.topic })}
                         className="text-xs px-2 py-0.5 rounded bg-border text-success hover:bg-[#333] transition-colors"
                       >
                         {t('action.add')}
                       </button>
                       <button
                         onClick={() => handleDismissSuggestion(suggestion.topic)}
+                        aria-label={t('settings.personalization.dismissSuggestion', { name: suggestion.topic })}
                         className="text-xs px-2 py-0.5 rounded bg-border text-text-muted hover:bg-[#333] transition-colors"
                       >
                         {t('action.dismiss')}

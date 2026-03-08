@@ -112,7 +112,7 @@ describe('NaturalLanguageSearch', () => {
 
     it('collapses when header is clicked', () => {
       render(<NaturalLanguageSearch />);
-      fireEvent.click(screen.getByRole('button', { name: /search\.title/i }));
+      fireEvent.click(screen.getByRole('button', { name: /search\.collapsePanel/i }));
       expect(screen.queryByRole('search')).not.toBeInTheDocument();
     });
 
