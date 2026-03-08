@@ -62,7 +62,7 @@ pub fn build_domain_profile(conn: &rusqlite::Connection) -> DomainProfile {
 
     // 2. ACE-detected tech (secondary — auto-scanned)
     if let Ok(mut stmt) = conn.prepare(
-        "SELECT name FROM detected_tech WHERE category IN ('Language', 'Framework', 'Database', 'Library') AND confidence >= 0.5",
+        "SELECT name FROM detected_tech WHERE category IN ('Language', 'Framework', 'Database', 'Library') AND confidence >= 0.8",
     ) {
         if let Ok(rows) = stmt.query_map([], |row| row.get::<_, String>(0)) {
             for tech in rows.flatten() {

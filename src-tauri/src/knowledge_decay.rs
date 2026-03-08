@@ -59,7 +59,7 @@ fn build_tech_domain(conn: &rusqlite::Connection) -> std::collections::HashSet<S
 
     // Auto-detected tech (Language, Framework, Database, Library — not Platform)
     if let Ok(mut stmt) = conn.prepare(
-        "SELECT name FROM detected_tech WHERE category IN ('Language', 'Framework', 'Database', 'Library') AND confidence >= 0.5",
+        "SELECT name FROM detected_tech WHERE category IN ('Language', 'Framework', 'Database', 'Library') AND confidence >= 0.8",
     ) {
         if let Ok(rows) = stmt.query_map([], |row| row.get::<_, String>(0)) {
             for tech in rows.flatten() {
