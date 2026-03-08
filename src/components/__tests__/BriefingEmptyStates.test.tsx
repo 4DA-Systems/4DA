@@ -76,7 +76,7 @@ describe('BriefingLoadingState', () => {
 
   it('shows analysis running message', () => {
     render(<BriefingLoadingState />);
-    expect(screen.getByText('briefing.analysisRunning')).toBeInTheDocument();
+    expect(screen.getByText('briefing.loadingStageInit')).toBeInTheDocument();
   });
 
   it('does not show browse results when no results exist', () => {

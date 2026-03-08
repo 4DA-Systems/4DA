@@ -1,9 +1,21 @@
+import { useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../store';
 
 export function BriefingWarmupState({ onAnalyze }: { onAnalyze: () => void }) {
   const { t } = useTranslation();
   const userContext = useAppStore(s => s.userContext);
+  const fired = useRef(false);
+
+  // Auto-start analysis after 3 seconds so new users aren't stuck
+  useEffect(() => {
+    if (fired.current) return;
+    const timer = setTimeout(() => {
+      fired.current = true;
+      onAnalyze();
+    }, 3000);
+    return () => clearTimeout(timer);
+  }, [onAnalyze]);
 
   // Gather detected info
   const stack = userContext?.tech_stack || [];
