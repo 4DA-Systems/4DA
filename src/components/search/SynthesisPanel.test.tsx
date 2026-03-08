@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
-import { SynthesisPanel } from './SynthesisPanel';
+import { SynthesisPanel, type SynthesisResponse } from './SynthesisPanel';
 
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({
@@ -17,11 +17,20 @@ vi.mock('react-i18next', () => ({
   }),
 }));
 
+function makeSynthesis(text: string, sources: SynthesisResponse['sources'] = []): SynthesisResponse {
+  return {
+    text,
+    sources,
+    grounding_count: sources.length,
+    total_sources: sources.length,
+  };
+}
+
 describe('SynthesisPanel', () => {
   const defaultProps = {
     query: 'test query',
     isPro: true,
-    synthesis: null as string | null,
+    synthesis: null as SynthesisResponse | null,
     loading: false,
     onRetry: vi.fn(),
   };
@@ -53,7 +62,7 @@ describe('SynthesisPanel', () => {
     render(
       <SynthesisPanel
         {...defaultProps}
-        synthesis="Rust 1.80 introduces new async features that align with your stack."
+        synthesis={makeSynthesis('Rust 1.80 introduces new async features that align with your stack.')}
         loading={false}
       />,
     );
@@ -67,7 +76,7 @@ describe('SynthesisPanel', () => {
     render(
       <SynthesisPanel
         {...defaultProps}
-        synthesis="Some synthesis text"
+        synthesis={makeSynthesis('Some synthesis text')}
         loading={false}
         onRetry={retryFn}
       />,
@@ -82,7 +91,7 @@ describe('SynthesisPanel', () => {
     render(
       <SynthesisPanel
         {...defaultProps}
-        synthesis="Some synthesis text"
+        synthesis={makeSynthesis('Some synthesis text')}
         loading={true}
       />,
     );
@@ -91,8 +100,65 @@ describe('SynthesisPanel', () => {
 
   it('shows AI Synthesis header', () => {
     render(
-      <SynthesisPanel {...defaultProps} synthesis="text" loading={false} />,
+      <SynthesisPanel {...defaultProps} synthesis={makeSynthesis('text')} loading={false} />,
     );
     expect(screen.getByText('search.aiSynthesis')).toBeInTheDocument();
+  });
+
+  it('renders citation links for sources with URLs', () => {
+    const synthesis = makeSynthesis(
+      'Rust is evolving fast [1] with new async features [2].',
+      [
+        { index: 1, title: 'Rust Blog', url: 'https://blog.rust-lang.org', source_type: 'rss' },
+        { index: 2, title: 'HN Discussion', url: 'https://news.ycombinator.com/item?id=123', source_type: 'hn' },
+      ],
+    );
+    render(
+      <SynthesisPanel {...defaultProps} synthesis={synthesis} loading={false} />,
+    );
+    const links = screen.getAllByRole('link');
+    expect(links).toHaveLength(2);
+    expect(links[0]).toHaveAttribute('href', 'https://blog.rust-lang.org');
+    expect(links[1]).toHaveAttribute('href', 'https://news.ycombinator.com/item?id=123');
+  });
+
+  it('renders plain markers for sources without URLs', () => {
+    const synthesis = makeSynthesis(
+      'Local analysis shows [1] improvements.',
+      [{ index: 1, title: 'Local File', url: null, source_type: 'context' }],
+    );
+    const { container } = render(
+      <SynthesisPanel {...defaultProps} synthesis={synthesis} loading={false} />,
+    );
+    expect(screen.queryByRole('link')).not.toBeInTheDocument();
+    expect(container.textContent).toContain('[1]');
+  });
+
+  it('shows grounding indicator dots', () => {
+    const synthesis: SynthesisResponse = {
+      text: 'Summary text [1].',
+      sources: [
+        { index: 1, title: 'Source A', url: 'https://a.com', source_type: 'rss' },
+      ],
+      grounding_count: 1,
+      total_sources: 3,
+    };
+    const { container } = render(
+      <SynthesisPanel {...defaultProps} synthesis={synthesis} loading={false} />,
+    );
+    const dots = container.querySelectorAll('.rounded-full.w-1\\.5');
+    expect(dots).toHaveLength(3);
+  });
+
+  it('shows expandable sources list', () => {
+    const synthesis = makeSynthesis(
+      'Text [1].',
+      [{ index: 1, title: 'My Source', url: 'https://example.com', source_type: 'rss' }],
+    );
+    render(
+      <SynthesisPanel {...defaultProps} synthesis={synthesis} loading={false} />,
+    );
+    const details = screen.getByText('search.viewSources');
+    expect(details).toBeInTheDocument();
   });
 });
