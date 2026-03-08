@@ -353,6 +353,7 @@ pub fn run() {
             knowledge_decay::get_knowledge_gaps,
             signal_chains::get_signal_chains,
             signal_chains::resolve_signal_chain,
+            semantic_diff::get_semantic_shifts,
             project_health::get_project_health,
             developer_dna::get_developer_dna,
             developer_dna::export_developer_dna_markdown,

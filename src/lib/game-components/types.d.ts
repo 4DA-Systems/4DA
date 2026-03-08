@@ -10,7 +10,6 @@ declare module '*/ambient-intelligence.js';
 declare module '*/score-fingerprint.js';
 declare module '*/decision-countdown.js';
 declare module '*/signal-waveform.js';
-declare module '*/signal-waveform.js?v=2';
 declare module '*/knowledge-depth.js';
 declare module '*/source-vitals.js';
 declare module '*/briefing-atmosphere.js';

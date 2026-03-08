@@ -19,7 +19,7 @@ const COMPONENTS = {
   'game-ambient-intelligence': () => import('./game-components/ambient-intelligence.js'),
   'game-score-fingerprint': () => import('./game-components/score-fingerprint.js'),
   'game-decision-countdown': () => import('./game-components/decision-countdown.js'),
-  'game-signal-waveform': () => import('./game-components/signal-waveform.js?v=2'),
+  'game-signal-waveform': () => import('./game-components/signal-waveform.js'),
   'game-knowledge-depth': () => import('./game-components/knowledge-depth.js'),
   'game-source-vitals': () => import('./game-components/source-vitals.js'),
   'game-briefing-atmosphere': () => import('./game-components/briefing-atmosphere.js'),
