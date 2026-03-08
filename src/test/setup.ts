@@ -7,6 +7,15 @@
 
 import '@testing-library/jest-dom';
 
+// Polyfill ResizeObserver for JSDOM (used by GAME WebGL components)
+if (typeof globalThis.ResizeObserver === 'undefined') {
+  globalThis.ResizeObserver = class ResizeObserver {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  } as unknown as typeof ResizeObserver;
+}
+
 // Mock Tauri API for tests (since we can't access native APIs in jsdom)
 vi.mock('@tauri-apps/api', () => ({
   invoke: vi.fn(),
