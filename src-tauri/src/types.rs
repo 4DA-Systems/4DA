@@ -207,6 +207,9 @@ pub struct SourceRelevance {
     /// How much boost was applied from the decision window
     #[serde(default)]
     pub decision_boost_applied: f32,
+    /// When this item was first seen (ISO timestamp for age display)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub created_at: Option<String>,
 }
 
 pub(crate) fn default_source_type() -> String {

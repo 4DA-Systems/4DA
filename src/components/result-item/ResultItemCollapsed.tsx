@@ -1,7 +1,7 @@
 import { memo } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { SourceRelevance, FeedbackAction } from '../../types';
-import { formatScore, getScoreColor } from '../../utils/score';
+import { formatScore, getScoreColor, formatRelativeAge } from '../../utils/score';
 import { getSourceLabel, getSourceColorClass } from '../../config/sources';
 import { BadgeRow } from './BadgeRow';
 import { ProInsightRow } from './ProInsightRow';
@@ -80,9 +80,14 @@ export const ResultItemCollapsed = memo(function ResultItemCollapsed({
             )}
             <BadgeRow item={item} />
           </div>
-          {item.url && (
-            <div className="text-xs text-text-muted truncate font-mono mt-1">
-              {item.url}
+          {(item.url || item.created_at) && (
+            <div className="flex items-center gap-2 text-xs text-text-muted mt-1">
+              {item.url && <span className="truncate font-mono">{item.url}</span>}
+              {item.created_at && (
+                <span className="flex-shrink-0 text-text-muted/70" title={new Date(item.created_at).toLocaleString()}>
+                  {formatRelativeAge(item.created_at)}
+                </span>
+              )}
             </div>
           )}
           {(item.similar_count ?? 0) > 0 && (

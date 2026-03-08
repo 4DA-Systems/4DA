@@ -10,6 +10,21 @@ export function getScoreColor(score: number): string {
   return 'text-text-muted';
 }
 
+export function formatRelativeAge(isoTimestamp: string): string {
+  const now = Date.now();
+  const then = new Date(isoTimestamp).getTime();
+  if (isNaN(then)) return '';
+  const hours = Math.max(0, Math.floor((now - then) / 3_600_000));
+  if (hours < 1) return '<1h';
+  if (hours < 24) return `${hours}h`;
+  const days = Math.floor(hours / 24);
+  if (days < 7) return `${days}d`;
+  const weeks = Math.floor(days / 7);
+  if (weeks < 5) return `${weeks}w`;
+  const months = Math.floor(days / 30);
+  return `${months}mo`;
+}
+
 export function getStageLabel(stage: string): string {
   switch (stage) {
     case 'init': return 'Initializing';
