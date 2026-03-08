@@ -67,7 +67,7 @@ const InsightsContent = memo(function InsightsContent() {
       status: s.autophagyStatus,
       history: s.autophagyHistory,
       loading: s.autophagyLoading,
-    }))
+    })),
   );
   const loadStatus = useAppStore(s => s.loadAutophagyStatus);
   const loadHistory = useAppStore(s => s.loadAutophagyHistory);

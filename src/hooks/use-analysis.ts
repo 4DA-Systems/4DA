@@ -165,7 +165,7 @@ export function useAnalysis(
         listen<string[]>('stacks-auto-detected', (event) => {
           const profileIds = event.payload;
           useAppStore.getState().addToast('info',
-            `Auto-detected your stack: ${profileIds.join(', ')}. Scoring will prioritize matching sources.`
+            `Auto-detected your stack: ${profileIds.join(', ')}. Scoring will prioritize matching sources.`,
           );
         }),
       ]);

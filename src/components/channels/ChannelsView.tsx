@@ -47,7 +47,7 @@ export function ChannelsView() {
       channels: s.channels,
       channelsLoading: s.channelsLoading,
       activeChannelId: s.activeChannelId,
-    }))
+    })),
   );
   const loadChannels = useAppStore(s => s.loadChannels);
   const selectChannel = useAppStore(s => s.selectChannel);

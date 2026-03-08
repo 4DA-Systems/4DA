@@ -13,7 +13,7 @@ export function PersonalizationSection() {
       newExclusion: s.newExclusion,
       newTechStack: s.newTechStack,
       newRole: s.newRole,
-    }))
+    })),
   );
   const setNewInterest = useAppStore(s => s.setNewInterest);
   const setNewExclusion = useAppStore(s => s.setNewExclusion);
