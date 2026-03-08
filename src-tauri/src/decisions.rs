@@ -4,6 +4,7 @@
 //! Decisions persist across sessions and inform signal classification,
 //! technology radar, and AI agent context.
 
+use crate::error::Result;
 use rusqlite::{params, Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
 use tracing::info;
@@ -126,7 +127,7 @@ pub fn record_decision(
     alternatives_rejected: &[String],
     context_tags: &[String],
     confidence: f64,
-) -> Result<i64, String> {
+) -> Result<i64> {
     let alts_json =
         serde_json::to_string(alternatives_rejected).unwrap_or_else(|_| "[]".to_string());
     let tags_json = serde_json::to_string(context_tags).unwrap_or_else(|_| "[]".to_string());
@@ -143,8 +144,7 @@ pub fn record_decision(
             tags_json,
             confidence,
         ],
-    )
-    .map_err(|e| format!("Failed to record decision: {}", e))?;
+    )?;
 
     let id = conn.last_insert_rowid();
     info!(target: "4da::decisions", id = id, subject = subject, "Decision recorded");
@@ -153,15 +153,15 @@ pub fn record_decision(
 
 /// Get a single decision by ID.
 #[allow(dead_code)]
-pub fn get_decision(conn: &Connection, id: i64) -> Result<Option<DeveloperDecision>, String> {
-    conn.query_row(
-        "SELECT id, decision_type, subject, decision, rationale, alternatives_rejected, context_tags, confidence, status, superseded_by, created_at, updated_at
-         FROM developer_decisions WHERE id = ?1",
-        params![id],
-        |row| Ok(row_to_decision(row)),
-    )
-    .optional()
-    .map_err(|e| format!("Failed to get decision: {}", e))
+pub fn get_decision(conn: &Connection, id: i64) -> Result<Option<DeveloperDecision>> {
+    Ok(conn
+        .query_row(
+            "SELECT id, decision_type, subject, decision, rationale, alternatives_rejected, context_tags, confidence, status, superseded_by, created_at, updated_at
+             FROM developer_decisions WHERE id = ?1",
+            params![id],
+            |row| Ok(row_to_decision(row)),
+        )
+        .optional()?)
 }
 
 /// List decisions with optional type and status filter.
@@ -170,7 +170,7 @@ pub fn list_decisions(
     decision_type: Option<&DecisionType>,
     status: Option<&DecisionStatus>,
     limit: usize,
-) -> Result<Vec<DeveloperDecision>, String> {
+) -> Result<Vec<DeveloperDecision>> {
     let mut sql = String::from(
         "SELECT id, decision_type, subject, decision, rationale, alternatives_rejected, context_tags, confidence, status, superseded_by, created_at, updated_at
          FROM developer_decisions WHERE 1=1",
@@ -191,16 +191,12 @@ pub fn list_decisions(
     let params_ref: Vec<&dyn rusqlite::types::ToSql> =
         param_values.iter().map(|p| p.as_ref()).collect();
 
-    let mut stmt = conn
-        .prepare(&sql)
-        .map_err(|e| format!("Failed to prepare: {}", e))?;
-    let rows = stmt
-        .query_map(params_ref.as_slice(), |row| Ok(row_to_decision(row)))
-        .map_err(|e| format!("Failed to list decisions: {}", e))?;
+    let mut stmt = conn.prepare(&sql)?;
+    let rows = stmt.query_map(params_ref.as_slice(), |row| Ok(row_to_decision(row)))?;
 
     let mut decisions = Vec::new();
     for row in rows {
-        decisions.push(row.map_err(|e| format!("Row error: {}", e))?);
+        decisions.push(row?);
     }
     Ok(decisions)
 }
@@ -213,7 +209,7 @@ pub fn update_decision(
     rationale: Option<&str>,
     status: Option<&DecisionStatus>,
     confidence: Option<f64>,
-) -> Result<(), String> {
+) -> Result<()> {
     let mut sets = Vec::new();
     let mut param_values: Vec<Box<dyn rusqlite::types::ToSql>> = Vec::new();
 
@@ -249,8 +245,7 @@ pub fn update_decision(
     let params_ref: Vec<&dyn rusqlite::types::ToSql> =
         param_values.iter().map(|p| p.as_ref()).collect();
 
-    conn.execute(&sql, params_ref.as_slice())
-        .map_err(|e| format!("Failed to update decision: {}", e))?;
+    conn.execute(&sql, params_ref.as_slice())?;
 
     info!(target: "4da::decisions", id = id, "Decision updated");
     Ok(())
@@ -258,12 +253,11 @@ pub fn update_decision(
 
 /// Supersede an old decision with a new one.
 #[allow(dead_code)]
-pub fn supersede_decision(conn: &Connection, old_id: i64, new_id: i64) -> Result<(), String> {
+pub fn supersede_decision(conn: &Connection, old_id: i64, new_id: i64) -> Result<()> {
     conn.execute(
         "UPDATE developer_decisions SET status = 'superseded', superseded_by = ?1, updated_at = datetime('now') WHERE id = ?2",
         params![new_id, old_id],
-    )
-    .map_err(|e| format!("Failed to supersede decision: {}", e))?;
+    )?;
 
     info!(target: "4da::decisions", old = old_id, new = new_id, "Decision superseded");
     Ok(())
@@ -275,28 +269,24 @@ pub fn find_decisions_by_subject(
     conn: &Connection,
     subject: &str,
     limit: usize,
-) -> Result<Vec<DeveloperDecision>, String> {
+) -> Result<Vec<DeveloperDecision>> {
     let pattern = format!("%{}%", subject.to_lowercase());
-    let mut stmt = conn
-        .prepare(
-            "SELECT id, decision_type, subject, decision, rationale, alternatives_rejected, context_tags, confidence, status, superseded_by, created_at, updated_at
-             FROM developer_decisions
-             WHERE status = 'active'
-             AND (LOWER(subject) LIKE ?1 OR LOWER(context_tags) LIKE ?1)
-             ORDER BY confidence DESC
-             LIMIT ?2",
-        )
-        .map_err(|e| format!("Failed to prepare: {}", e))?;
+    let mut stmt = conn.prepare(
+        "SELECT id, decision_type, subject, decision, rationale, alternatives_rejected, context_tags, confidence, status, superseded_by, created_at, updated_at
+         FROM developer_decisions
+         WHERE status = 'active'
+         AND (LOWER(subject) LIKE ?1 OR LOWER(context_tags) LIKE ?1)
+         ORDER BY confidence DESC
+         LIMIT ?2",
+    )?;
 
-    let rows = stmt
-        .query_map(params![pattern, limit as i64], |row| {
-            Ok(row_to_decision(row))
-        })
-        .map_err(|e| format!("Failed to find decisions: {}", e))?;
+    let rows = stmt.query_map(params![pattern, limit as i64], |row| {
+        Ok(row_to_decision(row))
+    })?;
 
     let mut decisions = Vec::new();
     for row in rows {
-        decisions.push(row.map_err(|e| format!("Row error: {}", e))?);
+        decisions.push(row?);
     }
     Ok(decisions)
 }
@@ -308,30 +298,26 @@ pub fn check_alignment(
     conn: &Connection,
     technology: &str,
     pattern: Option<&str>,
-) -> Result<AlignmentResult, String> {
+) -> Result<AlignmentResult> {
     let search = technology.to_lowercase();
     let pattern_search = pattern.map(|p| p.to_lowercase());
 
     // Find all active decisions that relate to this technology
-    let mut stmt = conn
-        .prepare(
-            "SELECT id, decision_type, subject, decision, rationale, alternatives_rejected, context_tags, confidence, status, superseded_by, created_at, updated_at
-             FROM developer_decisions
-             WHERE status = 'active'
-             AND (LOWER(subject) LIKE ?1 OR LOWER(context_tags) LIKE ?1 OR LOWER(alternatives_rejected) LIKE ?1)",
-        )
-        .map_err(|e| format!("Failed to prepare: {}", e))?;
+    let mut stmt = conn.prepare(
+        "SELECT id, decision_type, subject, decision, rationale, alternatives_rejected, context_tags, confidence, status, superseded_by, created_at, updated_at
+         FROM developer_decisions
+         WHERE status = 'active'
+         AND (LOWER(subject) LIKE ?1 OR LOWER(context_tags) LIKE ?1 OR LOWER(alternatives_rejected) LIKE ?1)",
+    )?;
 
     let like_pattern = format!("%{}%", search);
-    let rows = stmt
-        .query_map(params![like_pattern], |row| Ok(row_to_decision(row)))
-        .map_err(|e| format!("Failed to check alignment: {}", e))?;
+    let rows = stmt.query_map(params![like_pattern], |row| Ok(row_to_decision(row)))?;
 
     let mut relevant_decisions = Vec::new();
     let mut conflicts = Vec::new();
 
     for row in rows {
-        let decision = row.map_err(|e| format!("Row error: {}", e))?;
+        let decision = row?;
 
         // Check if this technology was explicitly rejected
         let rejected = decision
@@ -358,22 +344,18 @@ pub fn check_alignment(
     // Also check pattern alignment if provided
     if let Some(pat) = &pattern_search {
         let pat_like = format!("%{}%", pat);
-        let mut stmt2 = conn
-            .prepare(
-                "SELECT id, decision_type, subject, decision, rationale, alternatives_rejected, context_tags, confidence, status, superseded_by, created_at, updated_at
-                 FROM developer_decisions
-                 WHERE status = 'active'
-                 AND decision_type IN ('architecture', 'pattern')
-                 AND (LOWER(subject) LIKE ?1 OR LOWER(decision) LIKE ?1)",
-            )
-            .map_err(|e| format!("Failed to prepare pattern query: {}", e))?;
+        let mut stmt2 = conn.prepare(
+            "SELECT id, decision_type, subject, decision, rationale, alternatives_rejected, context_tags, confidence, status, superseded_by, created_at, updated_at
+             FROM developer_decisions
+             WHERE status = 'active'
+             AND decision_type IN ('architecture', 'pattern')
+             AND (LOWER(subject) LIKE ?1 OR LOWER(decision) LIKE ?1)",
+        )?;
 
-        let rows2 = stmt2
-            .query_map(params![pat_like], |row| Ok(row_to_decision(row)))
-            .map_err(|e| format!("Failed to check pattern alignment: {}", e))?;
+        let rows2 = stmt2.query_map(params![pat_like], |row| Ok(row_to_decision(row)))?;
 
         for row in rows2 {
-            let decision = row.map_err(|e| format!("Row error: {}", e))?;
+            let decision = row?;
             if !relevant_decisions.iter().any(|d| d.id == decision.id) {
                 relevant_decisions.push(decision);
             }
@@ -407,26 +389,21 @@ pub fn check_alignment(
 
 /// Auto-seed decisions from tech_stack on first run.
 /// Creates TechChoice decisions with confidence=0.6 for each tech_stack entry.
-pub fn seed_decisions_from_profile(conn: &Connection) -> Result<usize, String> {
+pub fn seed_decisions_from_profile(conn: &Connection) -> Result<usize> {
     // Only seed if table is empty
-    let count: i64 = conn
-        .query_row("SELECT COUNT(*) FROM developer_decisions", [], |row| {
-            row.get(0)
-        })
-        .map_err(|e| format!("Failed to count decisions: {}", e))?;
+    let count: i64 = conn.query_row("SELECT COUNT(*) FROM developer_decisions", [], |row| {
+        row.get(0)
+    })?;
 
     if count > 0 {
         return Ok(0);
     }
 
     // Get tech_stack entries
-    let mut stmt = conn
-        .prepare("SELECT technology FROM tech_stack")
-        .map_err(|e| format!("Failed to read tech_stack: {}", e))?;
+    let mut stmt = conn.prepare("SELECT technology FROM tech_stack")?;
 
     let techs: Vec<String> = stmt
-        .query_map([], |row| row.get::<_, String>(0))
-        .map_err(|e| format!("Failed to query tech_stack: {}", e))?
+        .query_map([], |row| row.get::<_, String>(0))?
         .filter_map(|r| r.ok())
         .collect();
 
@@ -486,7 +463,7 @@ pub async fn get_decisions(
     decision_type: Option<String>,
     status: Option<String>,
     limit: Option<usize>,
-) -> Result<Vec<DeveloperDecision>, String> {
+) -> Result<Vec<DeveloperDecision>> {
     let conn = crate::open_db_connection()?;
     let dt = decision_type.map(|s| DecisionType::from_str(&s));
     // Default to "active" so superseded decisions don't show in the UI.
@@ -508,7 +485,7 @@ pub async fn record_developer_decision(
     alternatives_rejected: Option<Vec<String>>,
     context_tags: Option<Vec<String>>,
     confidence: Option<f64>,
-) -> Result<i64, String> {
+) -> Result<i64> {
     let conn = crate::open_db_connection()?;
     record_decision(
         &conn,
@@ -529,7 +506,7 @@ pub async fn update_developer_decision(
     rationale: Option<String>,
     status: Option<String>,
     confidence: Option<f64>,
-) -> Result<(), String> {
+) -> Result<()> {
     let conn = crate::open_db_connection()?;
     let st = status.map(|s| DecisionStatus::from_str(&s));
     update_decision(
@@ -546,43 +523,38 @@ pub async fn update_developer_decision(
 /// Used when ACE scanner detects a technology the user doesn't actually use.
 /// Performs hard deletion (not supersede) so the tech never resurfaces in the UI.
 #[tauri::command]
-pub async fn remove_tech_decision(technology: String) -> Result<(), String> {
+pub async fn remove_tech_decision(technology: String) -> Result<()> {
     let conn = crate::open_db_connection()?;
 
     // 1. Remove from tech_stack (primary tech storage)
     conn.execute(
         "DELETE FROM tech_stack WHERE technology = ?1",
         params![technology],
-    )
-    .map_err(|e| format!("Failed to remove technology from tech_stack: {}", e))?;
+    )?;
 
     // 2. Remove from explicit_interests (may have been auto-seeded by ACE)
     conn.execute(
         "DELETE FROM explicit_interests WHERE topic = ?1",
         params![technology],
-    )
-    .map_err(|e| format!("Failed to remove from interests: {}", e))?;
+    )?;
 
     // 3. Delete any matching tech_choice decision (hard delete, not supersede)
     conn.execute(
         "DELETE FROM developer_decisions WHERE subject = ?1 AND decision_type = 'tech_choice'",
         params![technology],
-    )
-    .map_err(|e| format!("Failed to delete tech decision: {}", e))?;
+    )?;
 
     // 4. Remove from detected_tech (prevent re-seeding on next ACE scan)
     conn.execute(
         "DELETE FROM detected_tech WHERE technology = ?1",
         params![technology],
-    )
-    .map_err(|e| format!("Failed to remove from detected_tech: {}", e))?;
+    )?;
 
     // 5. Remove any learned affinity for this false tech
     conn.execute(
         "DELETE FROM topic_affinities WHERE topic = ?1",
         params![technology],
-    )
-    .map_err(|e| format!("Failed to remove from topic_affinities: {}", e))?;
+    )?;
 
     info!(target: "4da::decisions", technology = %technology, "Technology fully deleted: tech_stack + interests + decision + detected_tech + topic_affinities");
     Ok(())

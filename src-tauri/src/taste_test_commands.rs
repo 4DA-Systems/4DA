@@ -4,11 +4,10 @@ use std::sync::{Mutex, OnceLock};
 
 use tauri::AppHandle;
 
+use crate::error::Result;
 use crate::state::open_db_connection;
 use crate::taste_test::inference::InferenceState;
 use crate::taste_test::{TasteProfileSummary, TasteResponse, TasteTestStep};
-
-type Result<T> = std::result::Result<T, String>;
 
 /// Global inference state (lives for the duration of one taste test session).
 static INFERENCE_STATE: OnceLock<Mutex<Option<InferenceState>>> = OnceLock::new();
@@ -41,7 +40,7 @@ pub async fn taste_test_respond(
         "interested" => TasteResponse::Interested,
         "not_interested" => TasteResponse::NotInterested,
         "strong_interest" => TasteResponse::StrongInterest,
-        _ => return Err(format!("Invalid response: {response}")),
+        _ => return Err(format!("Invalid response: {response}").into()),
     };
 
     let mutex = get_state();

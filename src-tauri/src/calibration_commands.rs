@@ -10,6 +10,7 @@ use serde::Serialize;
 use ts_rs::TS;
 
 use crate::calibration_probes;
+use crate::error::Result;
 
 // 5-minute TTL cache for calibration results (avoids re-running 12 probes + HTTP to Ollama)
 static CALIBRATION_CACHE: LazyLock<Mutex<Option<(CalibrationResult, Instant)>>> =
@@ -194,7 +195,7 @@ impl Metrics {
 // ============================================================================
 
 #[tauri::command]
-pub async fn run_calibration() -> Result<CalibrationResult, String> {
+pub async fn run_calibration() -> Result<CalibrationResult> {
     // Check cache before expensive work
     {
         let cache = CALIBRATION_CACHE.lock().unwrap_or_else(|e| e.into_inner());

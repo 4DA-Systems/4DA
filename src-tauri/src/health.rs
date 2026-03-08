@@ -8,6 +8,8 @@ use rusqlite::Connection;
 use serde::{Deserialize, Serialize};
 use tracing::{debug, warn};
 
+use crate::error::Result;
+
 // ============================================================================
 // Types
 // ============================================================================
@@ -55,7 +57,7 @@ pub struct SystemHealthReport {
 /// Check all system components and return a health report.
 ///
 /// Accepts a borrowed rusqlite Connection (from ACE engine's conn.lock()).
-pub fn check_all_components(conn: &Connection) -> Result<SystemHealthReport, String> {
+pub fn check_all_components(conn: &Connection) -> Result<SystemHealthReport> {
     let now = chrono::Utc::now().to_rfc3339();
     let components = vec![
         check_scanner(conn, &now),
@@ -100,7 +102,7 @@ pub fn check_all_components(conn: &Connection) -> Result<SystemHealthReport, Str
 
 /// Check scanner health: detected_projects count > 0
 fn check_scanner(conn: &Connection, now: &str) -> ComponentHealth {
-    let result: Result<i64, _> =
+    let result: std::result::Result<i64, _> =
         conn.query_row("SELECT COUNT(*) FROM detected_projects", [], |row| {
             row.get(0)
         });
@@ -139,7 +141,7 @@ fn check_scanner(conn: &Connection, now: &str) -> ComponentHealth {
 /// Check file watcher health: recent file_signals
 fn check_watcher(conn: &Connection, now: &str) -> ComponentHealth {
     // Check for signals in the last hour
-    let recent: Result<i64, _> = conn.query_row(
+    let recent: std::result::Result<i64, _> = conn.query_row(
         "SELECT COUNT(*) FROM file_signals WHERE timestamp > datetime('now', '-1 hour')",
         [],
         |row| row.get(0),
@@ -157,7 +159,7 @@ fn check_watcher(conn: &Connection, now: &str) -> ComponentHealth {
         }
         Ok(_) => {
             // No recent signals - check if any signals exist at all
-            let total: Result<i64, _> =
+            let total: std::result::Result<i64, _> =
                 conn.query_row("SELECT COUNT(*) FROM file_signals", [], |row| row.get(0));
 
             match total {
@@ -195,7 +197,7 @@ fn check_watcher(conn: &Connection, now: &str) -> ComponentHealth {
 
 /// Check git analyzer health: git_signals exist
 fn check_git(conn: &Connection, now: &str) -> ComponentHealth {
-    let result: Result<i64, _> =
+    let result: std::result::Result<i64, _> =
         conn.query_row("SELECT COUNT(*) FROM git_signals", [], |row| row.get(0));
 
     match result {
@@ -231,7 +233,7 @@ fn check_git(conn: &Connection, now: &str) -> ComponentHealth {
 
 /// Check database health: simple SELECT 1
 fn check_database(conn: &Connection, now: &str) -> ComponentHealth {
-    let result: Result<i64, _> = conn.query_row("SELECT 1", [], |row| row.get(0));
+    let result: std::result::Result<i64, _> = conn.query_row("SELECT 1", [], |row| row.get(0));
 
     match result {
         Ok(1) => ComponentHealth {

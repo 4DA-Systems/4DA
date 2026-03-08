@@ -6,6 +6,7 @@
 //!
 //! Export pack generation lives in `toolkit_export.rs`.
 
+use crate::error::Result;
 use serde::{Deserialize, Serialize};
 use tracing::info;
 
@@ -55,7 +56,7 @@ pub struct SandboxBreakdown {
 // ============================================================================
 
 #[tauri::command]
-pub async fn toolkit_test_feed(url: String) -> Result<FeedTestResult, String> {
+pub async fn toolkit_test_feed(url: String) -> Result<FeedTestResult> {
     info!(target: "4da::toolkit", url = %url, "Testing feed URL");
 
     // Validate URL
@@ -79,7 +80,7 @@ pub async fn toolkit_test_feed(url: String) -> Result<FeedTestResult, String> {
             "HTTP {}: {}",
             status.as_u16(),
             status.canonical_reason().unwrap_or("Unknown")
-        ));
+        ).into());
     }
 
     let xml = response
@@ -148,7 +149,7 @@ pub async fn toolkit_score_sandbox(
     title: String,
     content: Option<String>,
     source_type: Option<String>,
-) -> Result<SandboxScoreResult, String> {
+) -> Result<SandboxScoreResult> {
     info!(target: "4da::toolkit", title = %title, "Scoring sandbox request");
 
     let db = crate::get_database()?;
@@ -232,9 +233,9 @@ pub(crate) fn detect_feed_format(xml: &str) -> &'static str {
 }
 
 /// Validate a feed URL (must start with http:// or https://).
-pub(crate) fn validate_feed_url(url: &str) -> Result<(), String> {
+pub(crate) fn validate_feed_url(url: &str) -> Result<()> {
     if !url.starts_with("http://") && !url.starts_with("https://") {
-        return Err("URL must start with http:// or https://".to_string());
+        return Err("URL must start with http:// or https://".into());
     }
     Ok(())
 }
@@ -345,7 +346,6 @@ mod tests {
     // ----------------------------------------------------------------
     #[test]
     fn sandbox_breakdown_fallback_defaults() {
-        // Mirrors the else-branch in toolkit_score_sandbox (lines 206-213)
         let fallback = SandboxBreakdown {
             keyword_score: 0.0,
             interest_score: 0.0,
@@ -482,6 +482,6 @@ mod tests {
         assert!(validate_feed_url("file:///etc/passwd").is_err());
 
         let err = validate_feed_url("ftp://x").unwrap_err();
-        assert!(err.contains("http://"));
+        assert!(err.to_string().contains("http://"));
     }
 }

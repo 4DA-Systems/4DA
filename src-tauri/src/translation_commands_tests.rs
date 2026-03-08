@@ -232,7 +232,10 @@ mod tests {
         );
 
         assert!(result.is_err(), "Should error on files > 1MB");
-        assert_eq!(result.unwrap_err(), "Override file too large");
+        assert!(
+            result.unwrap_err().to_string().contains("Override file too large"),
+            "Error should mention file size limit"
+        );
 
         let _ = std::fs::remove_dir_all(&overrides_dir);
     }

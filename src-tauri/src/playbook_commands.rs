@@ -2,6 +2,8 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
 
+use crate::error::Result;
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PlaybookModule {
     pub id: String,
@@ -168,7 +170,7 @@ pub(crate) fn parse_lessons(content: &str) -> Vec<PlaybookLesson> {
 }
 
 #[tauri::command]
-pub fn get_playbook_modules(lang: Option<String>) -> Result<Vec<PlaybookModule>, String> {
+pub fn get_playbook_modules(lang: Option<String>) -> Result<Vec<PlaybookModule>> {
     let language = lang.unwrap_or_else(crate::i18n::get_user_language);
     let content_dir = get_content_dir_for_lang(&language);
     let mut modules = Vec::new();
@@ -203,7 +205,7 @@ pub fn get_playbook_modules(lang: Option<String>) -> Result<Vec<PlaybookModule>,
 pub fn get_playbook_content(
     module_id: String,
     lang: Option<String>,
-) -> Result<PlaybookContent, String> {
+) -> Result<PlaybookContent> {
     let language = lang.unwrap_or_else(crate::i18n::get_user_language);
     let content_dir = get_content_dir_for_lang(&language);
     let filename = module_id_to_filename(&module_id)
@@ -211,10 +213,10 @@ pub fn get_playbook_content(
     let path = content_dir.join(filename);
 
     if !path.exists() {
-        return Err(format!("Module file not found: {}", path.display()));
+        return Err(format!("Module file not found: {}", path.display()).into());
     }
 
-    let raw = fs::read_to_string(&path).map_err(|e| format!("Failed to read module: {}", e))?;
+    let raw = fs::read_to_string(&path)?;
 
     let lessons = parse_lessons(&raw);
 
@@ -234,7 +236,7 @@ pub fn get_playbook_content(
 }
 
 #[tauri::command]
-pub fn get_playbook_progress() -> Result<PlaybookProgress, String> {
+pub fn get_playbook_progress() -> Result<PlaybookProgress> {
     let conn = crate::open_db_connection()?;
 
     let content_dir = get_content_dir();
@@ -257,12 +259,10 @@ pub fn get_playbook_progress() -> Result<PlaybookProgress, String> {
         };
 
         let mut stmt = conn
-            .prepare("SELECT lesson_idx FROM playbook_progress WHERE module_id = ?")
-            .map_err(|e| e.to_string())?;
+            .prepare("SELECT lesson_idx FROM playbook_progress WHERE module_id = ?")?;
 
         let completed: Vec<u32> = stmt
-            .query_map([id], |row| row.get(0))
-            .map_err(|e| e.to_string())?
+            .query_map([id], |row| row.get(0))?
             .filter_map(|r| r.ok())
             .collect();
 
@@ -300,7 +300,7 @@ pub fn mark_lesson_complete(
     app: tauri::AppHandle,
     module_id: String,
     lesson_idx: u32,
-) -> Result<(), String> {
+) -> Result<()> {
     use tauri::Emitter;
 
     let conn = crate::open_db_connection()?;
@@ -308,8 +308,7 @@ pub fn mark_lesson_complete(
     conn.execute(
         "INSERT OR IGNORE INTO playbook_progress (module_id, lesson_idx) VALUES (?1, ?2)",
         rusqlite::params![module_id, lesson_idx],
-    )
-    .map_err(|e| e.to_string())?;
+    )?;
 
     // Extract topics from lesson content for affinity learning.
     // STREETS completions are strong positive signals — record them as

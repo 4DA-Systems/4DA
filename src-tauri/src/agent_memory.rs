@@ -213,7 +213,8 @@ pub fn promote_to_decision(conn: &Connection, memory_id: i64) -> Result<i64, Str
         &[],
         &tags,
         0.7,
-    )?;
+    )
+    .map_err(|e| e.to_string())?;
 
     // Mark memory as promoted
     conn.execute(

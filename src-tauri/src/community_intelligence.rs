@@ -106,7 +106,7 @@ pub async fn set_community_intelligence_enabled(enabled: bool) -> Result<()> {
         config.anonymous_id = Some(generate_anonymous_id());
     }
 
-    guard.save().map_err(crate::error::FourDaError::Config)?;
+    guard.save()?;
     Ok(())
 }
 
@@ -128,6 +128,6 @@ pub async fn set_community_frequency(frequency: String) -> Result<()> {
         .get_or_insert_with(CommunityIntelligenceConfig::default);
     config.frequency = frequency;
 
-    guard.save().map_err(crate::error::FourDaError::Config)?;
+    guard.save()?;
     Ok(())
 }

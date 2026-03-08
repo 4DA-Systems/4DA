@@ -7,6 +7,7 @@
 //! - Abnormal volume (activity z-score >2 from 7-day mean)
 //! - Confidence mismatch (high confidence with <3 supporting interactions)
 
+use crate::error::Result;
 use rusqlite::Connection;
 use serde::{Deserialize, Serialize};
 use tracing::{debug, info, warn};
@@ -104,7 +105,7 @@ pub struct Anomaly {
 // ============================================================================
 
 /// Run all anomaly detection checks
-pub fn detect_all(conn: &Connection) -> Result<Vec<Anomaly>, String> {
+pub fn detect_all(conn: &Connection) -> Result<Vec<Anomaly>> {
     let mut anomalies = Vec::new();
 
     match detect_stale_data(conn) {
@@ -140,7 +141,7 @@ pub fn detect_all(conn: &Connection) -> Result<Vec<Anomaly>, String> {
 ///
 /// Checks the `file_signals` table for the most recent signal timestamp.
 /// If no signals exist or the most recent is >24h old, flags as stale.
-pub fn detect_stale_data(conn: &Connection) -> Result<Vec<Anomaly>, String> {
+pub fn detect_stale_data(conn: &Connection) -> Result<Vec<Anomaly>> {
     let mut anomalies = Vec::new();
 
     // Check file_signals for most recent timestamp
@@ -208,7 +209,7 @@ pub fn detect_stale_data(conn: &Connection) -> Result<Vec<Anomaly>, String> {
 ///
 /// Checks `topic_affinities` for high variance in affinity scores.
 /// If std deviation of affinity scores exceeds threshold, flags as drift.
-pub fn detect_context_drift(conn: &Connection) -> Result<Vec<Anomaly>, String> {
+pub fn detect_context_drift(conn: &Connection) -> Result<Vec<Anomaly>> {
     let mut anomalies = Vec::new();
     let drift_threshold: f32 = 0.3;
 
@@ -218,14 +219,12 @@ pub fn detect_context_drift(conn: &Connection) -> Result<Vec<Anomaly>, String> {
             "SELECT topic, affinity_score FROM topic_affinities
              WHERE last_interaction > datetime('now', '-7 days')
              ORDER BY last_interaction DESC",
-        )
-        .map_err(|e| e.to_string())?;
+        )?;
 
     let rows = stmt
         .query_map([], |row| {
             Ok((row.get::<_, String>(0)?, row.get::<_, f64>(1)?))
-        })
-        .map_err(|e| e.to_string())?;
+        })?;
 
     let topics: Vec<(String, f64)> = rows.flatten().collect();
 
@@ -267,7 +266,7 @@ pub fn detect_context_drift(conn: &Connection) -> Result<Vec<Anomaly>, String> {
 ///
 /// Cross-checks `topic_affinities` and `anti_topics` tables for topics
 /// that appear in both with significant confidence.
-pub fn detect_contradictions(conn: &Connection) -> Result<Vec<Anomaly>, String> {
+pub fn detect_contradictions(conn: &Connection) -> Result<Vec<Anomaly>> {
     let mut anomalies = Vec::new();
 
     let mut stmt = conn
@@ -276,8 +275,7 @@ pub fn detect_contradictions(conn: &Connection) -> Result<Vec<Anomaly>, String> 
              FROM topic_affinities ta
              JOIN anti_topics at ON ta.topic = at.topic
              WHERE ta.affinity_score > 0.3 AND at.confidence > 0.3",
-        )
-        .map_err(|e| e.to_string())?;
+        )?;
 
     let rows = stmt
         .query_map([], |row| {
@@ -286,8 +284,7 @@ pub fn detect_contradictions(conn: &Connection) -> Result<Vec<Anomaly>, String> 
                 row.get::<_, f64>(1)?,
                 row.get::<_, f64>(2)?,
             ))
-        })
-        .map_err(|e| e.to_string())?;
+        })?;
 
     for row in rows.flatten() {
         let (topic, affinity, anti_confidence) = row;
@@ -319,7 +316,7 @@ pub fn detect_contradictions(conn: &Connection) -> Result<Vec<Anomaly>, String> 
 ///
 /// Analyzes daily interaction counts from the `interactions` table.
 /// If today's count deviates by more than 2 standard deviations, flags it.
-pub fn detect_abnormal_volume(conn: &Connection) -> Result<Vec<Anomaly>, String> {
+pub fn detect_abnormal_volume(conn: &Connection) -> Result<Vec<Anomaly>> {
     let mut anomalies = Vec::new();
     let volume_std_threshold: f32 = 2.0;
 
@@ -331,12 +328,10 @@ pub fn detect_abnormal_volume(conn: &Connection) -> Result<Vec<Anomaly>, String>
              WHERE timestamp > datetime('now', '-7 days')
              GROUP BY day
              ORDER BY day",
-        )
-        .map_err(|e| e.to_string())?;
+        )?;
 
     let rows = stmt
-        .query_map([], |row| row.get::<_, u32>(1))
-        .map_err(|e| e.to_string())?;
+        .query_map([], |row| row.get::<_, u32>(1))?;
 
     let volumes: Vec<u32> = rows.flatten().collect();
 
@@ -402,7 +397,7 @@ pub fn detect_abnormal_volume(conn: &Connection) -> Result<Vec<Anomaly>, String>
 ///
 /// Checks `topic_affinities` for topics where confidence is high (>0.7)
 /// but total evidence (positive_signals + negative_signals) is less than 3.
-pub fn detect_confidence_mismatch(conn: &Connection) -> Result<Vec<Anomaly>, String> {
+pub fn detect_confidence_mismatch(conn: &Connection) -> Result<Vec<Anomaly>> {
     let mut anomalies = Vec::new();
 
     // Find topics with high confidence but low interaction count
@@ -414,8 +409,7 @@ pub fn detect_confidence_mismatch(conn: &Connection) -> Result<Vec<Anomaly>, Str
              FROM topic_affinities
              WHERE confidence > 0.7
                AND (COALESCE(positive_signals, 0) + COALESCE(negative_signals, 0)) < 3",
-        )
-        .map_err(|e| e.to_string())?;
+        )?;
 
     let rows = stmt
         .query_map([], |row| {
@@ -425,8 +419,7 @@ pub fn detect_confidence_mismatch(conn: &Connection) -> Result<Vec<Anomaly>, Str
                 row.get::<_, f64>(2)?,
                 row.get::<_, i32>(3)?,
             ))
-        })
-        .map_err(|e| e.to_string())?;
+        })?;
 
     for row in rows.flatten() {
         let (topic, confidence, _affinity, evidence_count) = row;
@@ -466,7 +459,7 @@ pub fn detect_confidence_mismatch(conn: &Connection) -> Result<Vec<Anomaly>, Str
 // ============================================================================
 
 /// Store an anomaly in the database, returns the new row id
-pub fn store_anomaly(conn: &Connection, anomaly: &Anomaly) -> Result<i64, String> {
+pub fn store_anomaly(conn: &Connection, anomaly: &Anomaly) -> Result<i64> {
     let evidence_json =
         serde_json::to_string(&anomaly.evidence).unwrap_or_else(|_| "[]".to_string());
 
@@ -482,14 +475,13 @@ pub fn store_anomaly(conn: &Connection, anomaly: &Anomaly) -> Result<i64, String
             evidence_json,
             anomaly.detected_at,
         ],
-    )
-    .map_err(|e| format!("Failed to store anomaly: {}", e))?;
+    )?;
 
     Ok(conn.last_insert_rowid())
 }
 
 /// Get all unresolved anomalies, ordered by most recent first
-pub fn get_unresolved(conn: &Connection) -> Result<Vec<Anomaly>, String> {
+pub fn get_unresolved(conn: &Connection) -> Result<Vec<Anomaly>> {
     let mut stmt = conn
         .prepare(
             "SELECT id, anomaly_type, topic, description, confidence, severity, evidence, detected_at
@@ -497,8 +489,7 @@ pub fn get_unresolved(conn: &Connection) -> Result<Vec<Anomaly>, String> {
              WHERE resolved = 0
              ORDER BY detected_at DESC
              LIMIT 50",
-        )
-        .map_err(|e| e.to_string())?;
+        )?;
 
     let rows = stmt
         .query_map([], |row| {
@@ -516,21 +507,19 @@ pub fn get_unresolved(conn: &Connection) -> Result<Vec<Anomaly>, String> {
                 detected_at: row.get(7)?,
                 resolved: false,
             })
-        })
-        .map_err(|e| e.to_string())?;
+        })?;
 
-    rows.collect::<Result<Vec<_>, _>>()
-        .map_err(|e| e.to_string())
+    rows.collect::<std::result::Result<Vec<_>, _>>()
+        .map_err(|e| e.into())
 }
 
 /// Mark an anomaly as resolved
-pub fn resolve_anomaly(conn: &Connection, id: i64) -> Result<(), String> {
+pub fn resolve_anomaly(conn: &Connection, id: i64) -> Result<()> {
     let changed = conn
-        .execute("UPDATE anomalies SET resolved = 1 WHERE id = ?1", [id])
-        .map_err(|e| format!("Failed to resolve anomaly: {}", e))?;
+        .execute("UPDATE anomalies SET resolved = 1 WHERE id = ?1", [id])?;
 
     if changed == 0 {
-        return Err(format!("Anomaly with id {} not found", id));
+        return Err(format!("Anomaly with id {} not found", id).into());
     }
 
     info!(target: "4da::anomaly", anomaly_id = id, "Anomaly resolved");

@@ -27,8 +27,7 @@ pub async fn get_personalized_lesson(
     let start = std::time::Instant::now();
 
     // Step 1: Load raw lesson content using existing playbook system
-    let content = crate::playbook_commands::get_playbook_content(module_id.clone(), None)
-        .map_err(FourDaError::Internal)?;
+    let content = crate::playbook_commands::get_playbook_content(module_id.clone(), None)?;
 
     let lesson = content.lessons.get(lesson_idx as usize).ok_or_else(|| {
         FourDaError::Internal(format!(
@@ -38,7 +37,7 @@ pub async fn get_personalized_lesson(
     })?;
 
     // Step 2: Assemble context (sync — all local data)
-    let conn = crate::open_db_connection().map_err(FourDaError::Internal)?;
+    let conn = crate::open_db_connection()?;
     let ctx = assemble_personalization_context(&conn);
     let hash = context_hash(&ctx);
 
@@ -108,15 +107,14 @@ pub async fn get_personalized_lessons_batch(
     let start = std::time::Instant::now();
 
     // Shared connection + context (assembled once)
-    let conn = crate::open_db_connection().map_err(FourDaError::Internal)?;
+    let conn = crate::open_db_connection()?;
     let ctx = assemble_personalization_context(&conn);
     let hash = context_hash(&ctx);
 
     let mut results = Vec::with_capacity(requests.len());
 
     for (module_id, lesson_idx) in &requests {
-        let content = crate::playbook_commands::get_playbook_content(module_id.clone(), None)
-            .map_err(FourDaError::Internal)?;
+        let content = crate::playbook_commands::get_playbook_content(module_id.clone(), None)?;
 
         let lesson = match content.lessons.get(*lesson_idx as usize) {
             Some(l) => l,
@@ -178,7 +176,7 @@ pub async fn get_personalized_lessons_batch(
 /// Used by the frontend to check data availability before rendering.
 #[tauri::command]
 pub async fn get_personalization_context_summary() -> Result<serde_json::Value> {
-    let conn = crate::open_db_connection().map_err(FourDaError::Internal)?;
+    let conn = crate::open_db_connection()?;
     let ctx = assemble_personalization_context(&conn);
 
     Ok(serde_json::json!({
@@ -200,7 +198,7 @@ pub async fn get_personalization_context_summary() -> Result<serde_json::Value> 
 /// Prune stale cache entries. Called on app startup and periodically.
 #[tauri::command]
 pub async fn prune_personalization_cache() -> Result<serde_json::Value> {
-    let conn = crate::open_db_connection().map_err(FourDaError::Internal)?;
+    let conn = crate::open_db_connection()?;
     let deleted = cache::prune_cache(&conn);
     let stats = cache::cache_stats(&conn);
     Ok(serde_json::json!({
@@ -224,7 +222,7 @@ pub async fn hydrate_lesson_with_llm(
 ) -> Result<serde_json::Value> {
     use tauri::Emitter;
 
-    let conn = crate::open_db_connection().map_err(FourDaError::Internal)?;
+    let conn = crate::open_db_connection()?;
     let ctx = assemble_personalization_context(&conn);
 
     if !ctx.settings.has_llm {
@@ -232,8 +230,7 @@ pub async fn hydrate_lesson_with_llm(
     }
 
     // Re-compute the no-LLM insight blocks so we know what to upgrade
-    let content = crate::playbook_commands::get_playbook_content(module_id.clone(), None)
-        .map_err(FourDaError::Internal)?;
+    let content = crate::playbook_commands::get_playbook_content(module_id.clone(), None)?;
 
     let lesson = content.lessons.get(lesson_idx as usize).ok_or_else(|| {
         FourDaError::Internal(format!(

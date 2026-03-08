@@ -3,6 +3,7 @@
 //! Exposes `get_translation_status`, `trigger_translation`, and
 //! user-override CRUD to the frontend.
 
+use crate::error::Result;
 use crate::translation_pipeline;
 use std::collections::HashMap;
 
@@ -17,7 +18,7 @@ use std::collections::HashMap;
 #[tauri::command]
 pub fn get_translation_status(
     lang: String,
-) -> Result<translation_pipeline::TranslationStatus, String> {
+) -> Result<translation_pipeline::TranslationStatus> {
     let english = translation_pipeline::load_english_strings()?;
     let total = english.len();
 
@@ -45,7 +46,7 @@ pub fn get_translation_status(
 ///
 /// Returns a human-readable summary string.
 #[tauri::command]
-pub async fn trigger_translation(lang: String) -> Result<String, String> {
+pub async fn trigger_translation(lang: String) -> Result<String> {
     let untranslated = translation_pipeline::get_untranslated_keys(&lang)?;
     if untranslated.is_empty() {
         return Ok(format!("{} is fully translated", lang));
@@ -69,7 +70,7 @@ pub async fn trigger_translation(lang: String) -> Result<String, String> {
 /// Returns a map of `"namespace:key"` to `{ english, translated, status }` where
 /// status is one of: `"overridden"`, `"translated"`, `"untranslated"`.
 #[tauri::command]
-pub fn get_all_translations(lang: String) -> Result<HashMap<String, TranslationEntry>, String> {
+pub fn get_all_translations(lang: String) -> Result<HashMap<String, TranslationEntry>> {
     let english = translation_pipeline::load_english_strings()?;
     let overrides = load_overrides(&lang)?;
 
@@ -125,7 +126,7 @@ pub fn save_translation_override(
     namespace: String,
     key: String,
     value: String,
-) -> Result<(), String> {
+) -> Result<()> {
     let overrides_dir = crate::i18n::translations_dir()
         .join("overrides")
         .join(&lang);
@@ -158,7 +159,7 @@ pub fn save_translation_override(
 ///
 /// Returns a flat map of `"namespace:key"` to override value.
 #[tauri::command]
-pub fn get_translation_overrides(lang: String) -> Result<HashMap<String, String>, String> {
+pub fn get_translation_overrides(lang: String) -> Result<HashMap<String, String>> {
     load_overrides(&lang)
 }
 
@@ -168,7 +169,7 @@ pub fn delete_translation_override(
     lang: String,
     namespace: String,
     key: String,
-) -> Result<(), String> {
+) -> Result<()> {
     let overrides_dir = crate::i18n::translations_dir()
         .join("overrides")
         .join(&lang);
@@ -179,7 +180,7 @@ pub fn delete_translation_override(
     }
 
     let content = match std::fs::metadata(&path) {
-        Ok(m) if m.len() > 1_000_000 => return Err("Override file too large".to_string()),
+        Ok(m) if m.len() > 1_000_000 => return Err("Override file too large".into()),
         _ => std::fs::read_to_string(&path).unwrap_or_default(),
     };
     let mut map: HashMap<String, String> = serde_json::from_str(&content).unwrap_or_default();
@@ -212,7 +213,7 @@ pub struct TranslationEntry {
 // ============================================================================
 
 /// Load all override files for a language into a single flat map.
-pub(crate) fn load_overrides(lang: &str) -> Result<HashMap<String, String>, String> {
+pub(crate) fn load_overrides(lang: &str) -> Result<HashMap<String, String>> {
     let overrides_dir = crate::i18n::translations_dir().join("overrides").join(lang);
     let mut overrides: HashMap<String, String> = HashMap::new();
 
