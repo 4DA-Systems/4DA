@@ -1263,6 +1263,7 @@
 
   "learnedBehavior.learningCount": "Learning: {{count}} preference",
   "learnedBehavior.learningCount_other": "Learning: {{count}} preferences",
+  "learnedBehavior.moreCount": "+{{count}} more",
 
   "channels.renderNow": "Render Now",
   "channels.rerender": "Re-render",
