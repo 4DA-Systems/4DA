@@ -27,7 +27,6 @@ const VALIDATION_CACHE_HOURS: u64 = 24;
 pub const PRO_FEATURES: &[&str] = &[
     "generate_ai_briefing",
     "get_latest_briefing",
-    "generate_audio_briefing",
     "get_attention_report",
     "get_knowledge_gaps",
     "get_signal_chains",
@@ -35,10 +34,10 @@ pub const PRO_FEATURES: &[&str] = &[
     "get_developer_dna",
     "export_developer_dna_markdown",
     "export_developer_dna_svg",
-    "get_predicted_context",
-    "generate_context_packet",
     "natural_language_query",
     "get_semantic_shifts",
+    "generate_weekly_digest",
+    "get_decision_signals",
 ];
 
 /// Check if a feature is available for the given tier, including trial period
