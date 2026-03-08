@@ -21,9 +21,10 @@ static FEEDBACK_TOPIC_CACHE: LazyLock<Mutex<Option<Vec<FeedbackTopicSummary>>>> 
 /// Invalidate the feedback topic summary cache.
 /// Must be called after any feedback write (record_feedback, etc.).
 pub fn invalidate_feedback_topic_cache() {
-    let mut cache = FEEDBACK_TOPIC_CACHE
-        .lock()
-        .unwrap_or_else(|e| e.into_inner());
+    let mut cache = FEEDBACK_TOPIC_CACHE.lock().unwrap_or_else(|e| {
+        tracing::warn!("Mutex poisoned in db::sources, recovering");
+        e.into_inner()
+    });
     *cache = None;
 }
 
@@ -690,9 +691,10 @@ impl Database {
     pub fn get_feedback_topic_summary(&self) -> SqliteResult<Vec<FeedbackTopicSummary>> {
         // Check cache first
         {
-            let cache = FEEDBACK_TOPIC_CACHE
-                .lock()
-                .unwrap_or_else(|e| e.into_inner());
+            let cache = FEEDBACK_TOPIC_CACHE.lock().unwrap_or_else(|e| {
+                tracing::warn!("Mutex poisoned in db::sources, recovering");
+                e.into_inner()
+            });
             if let Some(ref cached) = *cache {
                 return Ok(cached.clone());
             }
@@ -762,9 +764,10 @@ impl Database {
 
         // Store in cache
         {
-            let mut cache = FEEDBACK_TOPIC_CACHE
-                .lock()
-                .unwrap_or_else(|e| e.into_inner());
+            let mut cache = FEEDBACK_TOPIC_CACHE.lock().unwrap_or_else(|e| {
+                tracing::warn!("Mutex poisoned in db::sources, recovering");
+                e.into_inner()
+            });
             *cache = Some(summaries.clone());
         }
 

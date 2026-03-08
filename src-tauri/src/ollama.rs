@@ -112,7 +112,10 @@ pub(crate) async fn warm_model(model: &str, base_url: &str, app: &AppHandle) {
         .connect_timeout(std::time::Duration::from_secs(10))
         .timeout(std::time::Duration::from_secs(120))
         .build()
-        .unwrap_or_else(|_| reqwest::Client::new());
+        .unwrap_or_else(|e| {
+            tracing::warn!("Failed to build Ollama HTTP client: {e}, using default");
+            reqwest::Client::new()
+        });
 
     let result = client.post(&url).json(&body).send().await;
 

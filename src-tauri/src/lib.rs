@@ -137,11 +137,11 @@ mod digest_config;
 mod domain_profile;
 mod domain_profile_data;
 pub mod extractors;
-mod http_client;
 mod free_briefing;
 mod game_achievements;
 #[cfg(feature = "experimental")]
 mod game_commands;
+mod http_client;
 #[cfg(not(feature = "experimental"))]
 #[allow(dead_code)]
 mod game_commands {
