@@ -74,7 +74,7 @@ export default function SourceDebugger() {
     } finally {
       setLoading(false);
     }
-  }, [url]);
+  }, [url, t]);
 
   const clear = useCallback(() => {
     setUrl('');

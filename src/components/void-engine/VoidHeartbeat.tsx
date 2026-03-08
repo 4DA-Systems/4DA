@@ -34,9 +34,10 @@ export function VoidHeartbeat({ signal, size = 200 }: VoidHeartbeatProps) {
     }).catch(() => {
       // GAME component failed — CSS fallback already visible
     });
+    const container = containerRef.current;
     return () => {
-      if (elementRef.current && containerRef.current?.contains(elementRef.current)) {
-        containerRef.current.removeChild(elementRef.current);
+      if (elementRef.current && container?.contains(elementRef.current)) {
+        container.removeChild(elementRef.current);
       }
       elementRef.current = null;
       registered.current = false;

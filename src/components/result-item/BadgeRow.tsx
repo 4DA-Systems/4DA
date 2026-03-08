@@ -10,7 +10,8 @@ interface BadgeRowProps {
 
 export function BadgeRow({ item }: BadgeRowProps) {
   const { t } = useTranslation();
-  const learnedAffinities = useAppStore(s => s.learnedAffinities) ?? [];
+  const rawAffinities = useAppStore(s => s.learnedAffinities);
+  const learnedAffinities = useMemo(() => rawAffinities ?? [], [rawAffinities]);
 
   // Find which learned topic matches this item (for tooltip)
   const matchedAffinityTopic = useMemo(() => {

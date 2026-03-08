@@ -31,9 +31,10 @@ function PlaybookPathway({ progress, streak }: { progress: number; streak: numbe
       containerRef.current.appendChild(el);
       elementRef.current = el;
     });
+    const container = containerRef.current;
     return () => {
-      if (elementRef.current && containerRef.current?.contains(elementRef.current)) {
-        containerRef.current.removeChild(elementRef.current);
+      if (elementRef.current && container?.contains(elementRef.current)) {
+        container.removeChild(elementRef.current);
       }
       elementRef.current = null;
     };
