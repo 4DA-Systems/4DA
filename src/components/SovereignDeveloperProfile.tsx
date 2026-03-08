@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef, memo, useCallback } from 'react';
+import { useEffect, useState, useRef, memo, useCallback, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
 import { useAppStore } from '../store';
@@ -111,6 +111,8 @@ function DimensionCard({ dim, children, onAction }: { dim: DimensionCompleteness
 // Main Component
 // ============================================================================
 
+const EMPTY_DIM = { depth: 'empty' as const, fact_count: 0, percentage: 0 };
+
 export const SovereignDeveloperProfile = memo(function SovereignDeveloperProfile() {
   const { t } = useTranslation();
   const profile = useAppStore((s) => s.unifiedProfile);
@@ -152,6 +154,23 @@ export const SovereignDeveloperProfile = memo(function SovereignDeveloperProfile
       setTimeout(() => setExportStatus(null), 2000);
     }
   };
+  const { infraDim, stackDim, skillsDim, prefsDim, ctxDim } = useMemo(() => {
+    if (!profile) return { infraDim: { name: 'Infrastructure', ...EMPTY_DIM }, stackDim: { name: 'Stack', ...EMPTY_DIM }, skillsDim: { name: 'Skills', ...EMPTY_DIM }, prefsDim: { name: 'Preferences', ...EMPTY_DIM }, ctxDim: { name: 'Context', ...EMPTY_DIM } };
+    const dims = profile.completeness.dimensions;
+    return {
+      infraDim: dims.find((d) => d.name === 'Infrastructure') || { name: 'Infrastructure', ...EMPTY_DIM },
+      stackDim: dims.find((d) => d.name === 'Stack') || { name: 'Stack', ...EMPTY_DIM },
+      skillsDim: dims.find((d) => d.name === 'Skills') || { name: 'Skills', ...EMPTY_DIM },
+      prefsDim: dims.find((d) => d.name === 'Preferences') || { name: 'Preferences', ...EMPTY_DIM },
+      ctxDim: dims.find((d) => d.name === 'Context') || { name: 'Context', ...EMPTY_DIM },
+    };
+  }, [profile]);
+
+  const hasIntelligence = useMemo(() => {
+    if (!profile) return false;
+    const intel = profile.intelligence;
+    return intel.skill_gaps.length > 0 || intel.optimization_opportunities.length > 0 || intel.infrastructure_mismatches.length > 0 || intel.ecosystem_alerts.length > 0;
+  }, [profile]);
 
   if (loading && !profile) {
     return (
@@ -171,15 +190,7 @@ export const SovereignDeveloperProfile = memo(function SovereignDeveloperProfile
 
   if (!profile) return null;
 
-  const dims = profile.completeness.dimensions;
-  const infraDim = dims.find((d) => d.name === 'Infrastructure') || { name: 'Infrastructure', depth: 'empty', fact_count: 0, percentage: 0 };
-  const stackDim = dims.find((d) => d.name === 'Stack') || { name: 'Stack', depth: 'empty', fact_count: 0, percentage: 0 };
-  const skillsDim = dims.find((d) => d.name === 'Skills') || { name: 'Skills', depth: 'empty', fact_count: 0, percentage: 0 };
-  const prefsDim = dims.find((d) => d.name === 'Preferences') || { name: 'Preferences', depth: 'empty', fact_count: 0, percentage: 0 };
-  const ctxDim = dims.find((d) => d.name === 'Context') || { name: 'Context', depth: 'empty', fact_count: 0, percentage: 0 };
-
   const intel = profile.intelligence;
-  const hasIntelligence = intel.skill_gaps.length > 0 || intel.optimization_opportunities.length > 0 || intel.infrastructure_mismatches.length > 0 || intel.ecosystem_alerts.length > 0;
 
   return (
     <div className="bg-bg-secondary border border-border rounded-lg p-5 space-y-5">
