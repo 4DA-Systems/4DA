@@ -53,8 +53,12 @@ export function BriefingWarmupState({ onAnalyze }: { onAnalyze: () => void }) {
           onClick={onAnalyze}
           className="px-6 py-2.5 bg-white text-black font-medium rounded-lg hover:bg-gray-200 transition-colors"
         >
-          {t('briefing.warmup.activate', 'Activate Intelligence')}
+          {t('briefing.warmup.activate', 'Start Intelligence')}
         </button>
+
+        <p className="text-xs text-gray-600 mt-3 animate-pulse">
+          {t('briefing.warmup.autoStart', 'Starting automatically...')}
+        </p>
       </div>
     </div>
   );

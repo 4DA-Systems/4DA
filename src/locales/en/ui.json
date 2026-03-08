@@ -800,9 +800,13 @@
   "briefing.warmup.sourcesReady": "Sources ready",
   "briefing.warmup.description": "4DA will scan sources, score every item against your profile, and surface what matters.",
   "briefing.warmup.activate": "Start Intelligence",
+  "briefing.warmup.autoStart": "Starting automatically...",
 
   "briefing.gatheringIntelligence": "Gathering Intelligence",
   "briefing.analysisRunning": "Analysis is running. Your briefing will be generated when results are ready.",
+  "briefing.loadingStageFetch": "Scanning sources for signals relevant to your stack...",
+  "briefing.loadingStageScore": "Scoring items against your profile...",
+  "briefing.loadingStageInit": "Preparing analysis...",
   "briefing.browseResults": "Browse {{count}} results while you wait",
   "briefing.readyToGenerate": "Briefing Ready to Generate",
   "briefing.resultsAnalyzed": "{{count}} results analyzed. Generate an AI briefing to surface what matters most.",
