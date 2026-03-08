@@ -54,6 +54,9 @@ data/usage.json
 # User settings (contains API keys and local paths)
 data/settings.json
 
+# License validation cache (runtime state)
+data/license_cache.json
+
 # Environment files (may contain secrets from `vercel env pull`)
 .env*
 !.env.example

@@ -156,6 +156,21 @@ export function AboutPanel() {
         <p className="text-[10px] text-gray-600 mt-1">
           All rights reserved. Built with vision, engineered with Claude.
         </p>
+        <div className="flex items-center justify-center gap-3 mt-2">
+          <button
+            onClick={() => import('@tauri-apps/plugin-opener').then(({ openUrl }) => openUrl('https://4da.ai/privacy'))}
+            className="text-[10px] text-gray-500 hover:text-gray-300 transition-colors underline underline-offset-2"
+          >
+            Privacy Policy
+          </button>
+          <span className="text-gray-600 text-[10px]">&middot;</span>
+          <button
+            onClick={() => import('@tauri-apps/plugin-opener').then(({ openUrl }) => openUrl('https://4da.ai/terms'))}
+            className="text-[10px] text-gray-500 hover:text-gray-300 transition-colors underline underline-offset-2"
+          >
+            Terms of Service
+          </button>
+        </div>
       </div>
     </div>
   );
