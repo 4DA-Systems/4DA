@@ -4,6 +4,8 @@ use rusqlite;
 use serde::{Deserialize, Serialize};
 use tracing::{debug, info};
 
+use crate::error::Result;
+
 use super::ACE;
 
 // ============================================================================
@@ -141,9 +143,9 @@ impl ACE {
         action: BehaviorAction,
         item_topics: Vec<String>,
         item_source: String,
-    ) -> Result<(), String> {
+    ) -> Result<()> {
         if !self.rate_limiter.check(&item_source) {
-            return Err("Rate limited: too many interactions".to_string());
+            return Err("Rate limited: too many interactions".into());
         }
 
         let signal_strength = action.compute_strength();
@@ -189,7 +191,7 @@ impl ACE {
     }
 
     /// Update hourly and daily activity pattern counters
-    fn update_activity_patterns(&self, signal: &BehaviorSignal) -> Result<(), String> {
+    fn update_activity_patterns(&self, signal: &BehaviorSignal) -> Result<()> {
         let conn = self.conn.lock();
         let now = chrono::Utc::now();
         let hour = now.format("%H").to_string();
@@ -203,7 +205,7 @@ impl ACE {
                 interaction_count = interaction_count + 1,
                 last_updated = ?2",
             rusqlite::params![hour, signal.timestamp],
-        ).map_err(|e| format!("Failed to update hourly pattern: {e}"))?;
+        )?;
 
         // Upsert daily pattern
         conn.execute(
@@ -213,7 +215,7 @@ impl ACE {
                 interaction_count = interaction_count + 1,
                 last_updated = ?2",
             rusqlite::params![day, signal.timestamp],
-        ).map_err(|e| format!("Failed to update daily pattern: {e}"))?;
+        )?;
 
         Ok(())
     }
@@ -223,7 +225,7 @@ impl ACE {
         self.rate_limiter.status(source)
     }
 
-    fn store_interaction(&self, signal: &BehaviorSignal) -> Result<(), String> {
+    fn store_interaction(&self, signal: &BehaviorSignal) -> Result<()> {
         let conn = self.conn.lock();
 
         let action_type = match &signal.action {
@@ -250,13 +252,12 @@ impl ACE {
                 signal.item_source,
                 signal.signal_strength
             ],
-        )
-        .map_err(|e| format!("Failed to store interaction: {}", e))?;
+        )?;
 
         Ok(())
     }
 
-    fn update_topic_affinities(&self, signal: &BehaviorSignal) -> Result<(), String> {
+    fn update_topic_affinities(&self, signal: &BehaviorSignal) -> Result<()> {
         let conn = self.conn.lock();
 
         for topic in &signal.item_topics {
@@ -296,8 +297,7 @@ impl ACE {
                         updated_at = datetime('now')",
                     rusqlite::params![topic],
                 )
-            }
-            .map_err(|e| format!("Failed to update topic affinity: {}", e))?;
+            }?;
 
             // For strong negative signals (MarkIrrelevant = -1.0, Dismiss = -0.8),
             // activate affinity immediately — don't wait for 5 exposures.
@@ -319,14 +319,13 @@ impl ACE {
                     END
                  WHERE topic = ?1",
                 rusqlite::params![topic],
-            )
-            .map_err(|e| format!("Failed to recompute affinity: {}", e))?;
+            )?;
         }
 
         Ok(())
     }
 
-    fn update_anti_topics(&self, topics: &[String], signal_strength: f32) -> Result<(), String> {
+    fn update_anti_topics(&self, topics: &[String], signal_strength: f32) -> Result<()> {
         if signal_strength >= -0.5 {
             return Ok(());
         }
@@ -343,14 +342,13 @@ impl ACE {
                     last_rejection = datetime('now'),
                     updated_at = datetime('now')",
                 rusqlite::params![topic],
-            )
-            .map_err(|e| format!("Failed to update anti-topic: {}", e))?;
+            )?;
         }
 
         Ok(())
     }
 
-    fn update_source_preference(&self, source: &str, signal_strength: f32) -> Result<(), String> {
+    fn update_source_preference(&self, source: &str, signal_strength: f32) -> Result<()> {
         let conn = self.conn.lock();
         let alpha = 0.1;
 
@@ -363,14 +361,13 @@ impl ACE {
                 last_interaction = datetime('now'),
                 updated_at = datetime('now')",
             rusqlite::params![source, signal_strength, alpha],
-        )
-        .map_err(|e| format!("Failed to update source preference: {}", e))?;
+        )?;
 
         Ok(())
     }
 
     /// Get topic affinities
-    pub fn get_topic_affinities(&self) -> Result<Vec<TopicAffinity>, String> {
+    pub fn get_topic_affinities(&self) -> Result<Vec<TopicAffinity>> {
         let conn = self.conn.lock();
         let mut stmt = conn
             .prepare(
@@ -380,8 +377,7 @@ impl ACE {
              WHERE total_exposures >= 5
              ORDER BY ABS(affinity_score) DESC
              LIMIT 100",
-            )
-            .map_err(|e| e.to_string())?;
+            )?;
 
         let rows = stmt
             .query_map([], |row| {
@@ -396,15 +392,14 @@ impl ACE {
                     last_interaction: row.get(6)?,
                     decay_applied: false,
                 })
-            })
-            .map_err(|e| e.to_string())?;
+            })?;
 
-        rows.collect::<Result<Vec<_>, _>>()
-            .map_err(|e| e.to_string())
+        rows.collect::<std::result::Result<Vec<_>, _>>()
+            .map_err(|e| e.into())
     }
 
     /// Get anti-topics
-    pub fn get_anti_topics(&self, min_rejections: u32) -> Result<Vec<AntiTopic>, String> {
+    pub fn get_anti_topics(&self, min_rejections: u32) -> Result<Vec<AntiTopic>> {
         let conn = self.conn.lock();
         let mut stmt = conn
             .prepare(
@@ -413,8 +408,7 @@ impl ACE {
              FROM anti_topics
              WHERE rejection_count >= ?1
              ORDER BY rejection_count DESC",
-            )
-            .map_err(|e| e.to_string())?;
+            )?;
 
         let rows = stmt
             .query_map([min_rejections], |row| {
@@ -427,23 +421,22 @@ impl ACE {
                     first_rejection: row.get(5)?,
                     last_rejection: row.get(6)?,
                 })
-            })
-            .map_err(|e| e.to_string())?;
+            })?;
 
-        rows.collect::<Result<Vec<_>, _>>()
-            .map_err(|e| e.to_string())
+        rows.collect::<std::result::Result<Vec<_>, _>>()
+            .map_err(|e| e.into())
     }
 
     /// Get behavior modifier for an item
     // Behavioral learning: consumed by future adaptive scoring
     #[allow(dead_code)]
-    pub fn get_behavior_modifier(&self, topics: &[String], source: &str) -> Result<f32, String> {
+    pub fn get_behavior_modifier(&self, topics: &[String], source: &str) -> Result<f32> {
         let conn = self.conn.lock();
         let mut modifier = 0.0;
         let mut count = 0;
 
         for topic in topics {
-            let result: Result<(f32, f32), _> = conn.query_row(
+            let result: std::result::Result<(f32, f32), _> = conn.query_row(
                 "SELECT affinity_score, confidence FROM topic_affinities WHERE topic = ?1",
                 [topic],
                 |row| Ok((row.get(0)?, row.get(1)?)),
@@ -474,7 +467,7 @@ impl ACE {
     /// Get learned behavior summary
     // Behavioral learning: consumed by future adaptive scoring
     #[allow(dead_code)]
-    pub fn get_learned_behavior(&self) -> Result<LearnedBehaviorSummary, String> {
+    pub fn get_learned_behavior(&self) -> Result<LearnedBehaviorSummary> {
         let affinities = self.get_topic_affinities()?;
         let anti_topics = self.get_anti_topics(5)?;
 
@@ -487,8 +480,7 @@ impl ACE {
         let mut stmt = conn
             .prepare(
                 "SELECT source, score, interactions FROM source_preferences ORDER BY score DESC",
-            )
-            .map_err(|e| e.to_string())?;
+            )?;
 
         let source_prefs: Vec<SourcePreferenceSummary> = stmt
             .query_map([], |row| {
@@ -497,10 +489,9 @@ impl ACE {
                     score: row.get(1)?,
                     interactions: row.get(2)?,
                 })
-            })
-            .map_err(|e| e.to_string())?
-            .collect::<Result<Vec<_>, _>>()
-            .map_err(|e| e.to_string())?;
+            })?
+            .collect::<std::result::Result<Vec<_>, _>>()
+            .map_err(|e| -> crate::error::FourDaError { e.into() })?;
 
         let learning_confidence = (total_interactions as f32 / 100.0).min(0.95);
 
@@ -521,35 +512,32 @@ impl ACE {
     }
 
     /// Get source preferences for scoring
-    pub fn get_source_preferences(&self) -> Result<Vec<(String, f32)>, String> {
+    pub fn get_source_preferences(&self) -> Result<Vec<(String, f32)>> {
         let conn = self.conn.lock();
         let mut stmt = conn
             .prepare(
                 "SELECT source, score FROM source_preferences WHERE interactions >= 5 ORDER BY source",
-            )
-            .map_err(|e| e.to_string())?;
+            )?;
 
         let rows = stmt
             .query_map([], |row| {
                 Ok((row.get::<_, String>(0)?, row.get::<_, f32>(1)?))
-            })
-            .map_err(|e| e.to_string())?;
+            })?;
 
-        rows.collect::<Result<Vec<_>, _>>()
-            .map_err(|e| e.to_string())
+        rows.collect::<std::result::Result<Vec<_>, _>>()
+            .map_err(|e| e.into())
     }
 
     /// Confirm an anti-topic
     // Behavioral learning: consumed by future adaptive scoring
     #[allow(dead_code)]
-    pub fn confirm_anti_topic(&self, topic: &str) -> Result<(), String> {
+    pub fn confirm_anti_topic(&self, topic: &str) -> Result<()> {
         let conn = self.conn.lock();
         conn.execute(
             "UPDATE anti_topics SET user_confirmed = 1, confidence = 1.0, updated_at = datetime('now')
              WHERE topic = ?1",
             [topic],
-        )
-        .map_err(|e| format!("Failed to confirm anti-topic: {}", e))?;
+        )?;
         Ok(())
     }
 
@@ -557,7 +545,7 @@ impl ACE {
     /// Uses 30-day half-life: after 30 days of no interaction, scores halve.
     /// Runs continuously based on time since last decay (not a one-shot boolean).
     /// Deletes fully-decayed affinities (|score| < 0.05).
-    pub fn apply_behavior_decay(&self) -> Result<usize, String> {
+    pub fn apply_behavior_decay(&self) -> Result<usize> {
         let conn = self.conn.lock();
 
         // Fetch all affinities that haven't been interacted with in >1 day
@@ -568,8 +556,7 @@ impl ACE {
                         COALESCE(last_decay_at, last_interaction) as decay_baseline
                  FROM topic_affinities
                  WHERE julianday('now') - julianday(last_interaction) > 1",
-            )
-            .map_err(|e| format!("Failed to prepare decay query: {}", e))?;
+            )?;
 
         let rows: Vec<(String, f32, f32, String, String)> = stmt
             .query_map([], |row| {
@@ -580,10 +567,9 @@ impl ACE {
                     row.get::<_, String>(3)?,
                     row.get::<_, String>(4)?,
                 ))
-            })
-            .map_err(|e| format!("Failed to query topics for decay: {}", e))?
-            .collect::<Result<Vec<_>, _>>()
-            .map_err(|e| format!("Failed to collect decay rows: {}", e))?;
+            })?
+            .collect::<std::result::Result<Vec<_>, _>>()
+            .map_err(|e| -> crate::error::FourDaError { e.into() })?;
 
         let mut updated = 0;
         let now = chrono::Utc::now().to_rfc3339();
@@ -615,8 +601,7 @@ impl ACE {
                 conn.execute(
                     "DELETE FROM topic_affinities WHERE topic = ?1",
                     rusqlite::params![topic],
-                )
-                .map_err(|e| format!("Failed to delete decayed topic: {}", e))?;
+                )?;
                 updated += 1;
                 continue;
             }
@@ -630,8 +615,7 @@ impl ACE {
                     decay_applied = 1
                  WHERE topic = ?4",
                 rusqlite::params![new_affinity, new_confidence, now, topic],
-            )
-            .map_err(|e| format!("Failed to update topic decay: {}", e))?;
+            )?;
 
             updated += 1;
         }

@@ -8,6 +8,7 @@
 
 use serde::Serialize;
 
+use crate::error::Result;
 use crate::stacks;
 
 // ============================================================================
@@ -67,22 +68,23 @@ pub fn get_stack_profiles() -> Vec<StackProfileSummary> {
 
 /// Get the user's currently selected stack profile IDs.
 #[tauri::command]
-pub fn get_selected_stacks() -> Result<Vec<String>, String> {
+pub fn get_selected_stacks() -> Result<Vec<String>> {
     let conn = crate::open_db_connection()?;
     Ok(stacks::load_selected_stacks(&conn))
 }
 
 /// Set the user's selected stack profiles (replaces existing selections).
 #[tauri::command]
-pub fn set_selected_stacks(profile_ids: Vec<String>) -> Result<(), String> {
+pub fn set_selected_stacks(profile_ids: Vec<String>) -> Result<()> {
     // Validate all IDs exist
     for id in &profile_ids {
         if stacks::get_profile(id).is_none() {
-            return Err(format!("Unknown stack profile: {}", id));
+            return Err(format!("Unknown stack profile: {}", id).into());
         }
     }
     let conn = crate::open_db_connection()?;
-    stacks::save_selected_stacks(&conn, &profile_ids).map_err(|e| e.to_string())
+    stacks::save_selected_stacks(&conn, &profile_ids)?;
+    Ok(())
 }
 
 /// Auto-detect matching stack profiles from ACE context.
@@ -102,7 +104,7 @@ pub fn detect_stack_profiles() -> Vec<StackDetectionResult> {
 
 /// Get the composed (merged) stack summary for debugging/UI display.
 #[tauri::command]
-pub fn get_composed_stack() -> Result<ComposedStackSummary, String> {
+pub fn get_composed_stack() -> Result<ComposedStackSummary> {
     let conn = crate::open_db_connection()?;
     let composed = stacks::load_composed_stack(&conn);
     Ok(ComposedStackSummary {

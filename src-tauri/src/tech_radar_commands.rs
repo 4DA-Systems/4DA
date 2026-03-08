@@ -7,6 +7,8 @@ use rusqlite::params;
 use serde_json::json;
 use tracing::debug;
 
+use crate::error::Result;
+
 // ============================================================================
 // Entry Detail
 // ============================================================================
@@ -16,7 +18,7 @@ use tracing::debug;
 /// - Related source items mentioning this technology
 /// - Decision details if decision_ref is present
 #[tauri::command]
-pub async fn get_radar_entry_detail(name: String) -> Result<serde_json::Value, String> {
+pub async fn get_radar_entry_detail(name: String) -> Result<serde_json::Value> {
     let conn = crate::open_db_connection()?;
     let radar = crate::tech_radar::compute_radar(&conn)?;
     let entry = radar
@@ -27,27 +29,23 @@ pub async fn get_radar_entry_detail(name: String) -> Result<serde_json::Value, S
     // Query recent source items that mention this technology
     let pattern = format!("%{}%", name);
     let related_items: Vec<serde_json::Value> = {
-        let mut stmt = conn
-            .prepare(
-                "SELECT title, source_type, url, created_at
-                 FROM source_items
-                 WHERE (LOWER(title) LIKE ?1 OR LOWER(content) LIKE ?1)
-                 AND created_at >= datetime('now', '-30 days')
-                 ORDER BY created_at DESC
-                 LIMIT 10",
-            )
-            .map_err(|e| e.to_string())?;
+        let mut stmt = conn.prepare(
+            "SELECT title, source_type, url, created_at
+             FROM source_items
+             WHERE (LOWER(title) LIKE ?1 OR LOWER(content) LIKE ?1)
+             AND created_at >= datetime('now', '-30 days')
+             ORDER BY created_at DESC
+             LIMIT 10",
+        )?;
 
-        let rows = stmt
-            .query_map(params![pattern], |row| {
-                Ok(json!({
-                    "title": row.get::<_, String>(0)?,
-                    "source_type": row.get::<_, String>(1)?,
-                    "url": row.get::<_, Option<String>>(2)?,
-                    "created_at": row.get::<_, String>(3)?,
-                }))
-            })
-            .map_err(|e| e.to_string())?;
+        let rows = stmt.query_map(params![pattern], |row| {
+            Ok(json!({
+                "title": row.get::<_, String>(0)?,
+                "source_type": row.get::<_, String>(1)?,
+                "url": row.get::<_, Option<String>>(2)?,
+                "created_at": row.get::<_, String>(3)?,
+            }))
+        })?;
 
         rows.flatten().collect()
     };
@@ -99,25 +97,22 @@ pub async fn get_radar_entry_detail(name: String) -> Result<serde_json::Value, S
 /// Returns available radar snapshot dates from temporal_events.
 /// Each snapshot represents a point-in-time radar state.
 #[tauri::command]
-pub async fn get_radar_snapshots() -> Result<Vec<serde_json::Value>, String> {
+pub async fn get_radar_snapshots() -> Result<Vec<serde_json::Value>> {
     let conn = crate::open_db_connection()?;
 
-    let mut stmt = conn
-        .prepare(
-            "SELECT created_at
-             FROM temporal_events
-             WHERE event_type = 'radar_snapshot'
-             ORDER BY created_at DESC
-             LIMIT 30",
-        )
-        .map_err(|e| e.to_string())?;
+    let mut stmt = conn.prepare(
+        "SELECT created_at
+         FROM temporal_events
+         WHERE event_type = 'radar_snapshot'
+         ORDER BY created_at DESC
+         LIMIT 30",
+    )?;
 
     let snapshots: Vec<serde_json::Value> = stmt
         .query_map([], |row| {
             let date: String = row.get(0)?;
             Ok(json!({ "date": date }))
-        })
-        .map_err(|e| e.to_string())?
+        })?
         .flatten()
         .collect();
 
@@ -133,7 +128,7 @@ pub async fn get_radar_snapshots() -> Result<Vec<serde_json::Value>, String> {
 /// Load a historical radar state from a specific temporal snapshot.
 /// Returns the stored radar data for that point in time.
 #[tauri::command]
-pub async fn get_radar_at_snapshot(snapshot_date: String) -> Result<serde_json::Value, String> {
+pub async fn get_radar_at_snapshot(snapshot_date: String) -> Result<serde_json::Value> {
     let conn = crate::open_db_connection()?;
 
     let data: Option<String> = conn
@@ -150,7 +145,7 @@ pub async fn get_radar_at_snapshot(snapshot_date: String) -> Result<serde_json::
     match data {
         Some(json_str) => {
             let parsed: serde_json::Value =
-                serde_json::from_str(&json_str).map_err(|e| e.to_string())?;
+                serde_json::from_str(&json_str)?;
             debug!(
                 target: "4da::tech_radar",
                 date = %snapshot_date,
@@ -161,7 +156,7 @@ pub async fn get_radar_at_snapshot(snapshot_date: String) -> Result<serde_json::
         None => {
             // No snapshot found at this date — return current radar instead
             let radar = crate::tech_radar::compute_radar(&conn)?;
-            Ok(serde_json::to_value(radar).map_err(|e| e.to_string())?)
+            Ok(serde_json::to_value(radar)?)
         }
     }
 }

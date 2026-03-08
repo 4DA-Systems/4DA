@@ -4,6 +4,7 @@
 //! Uses `open_db_connection()` for ad-hoc queries against the `indexed_documents`
 //! and `document_chunks` tables created by the ACE extractor pipeline.
 
+use crate::error::Result;
 use crate::open_db_connection;
 use rusqlite::params;
 
@@ -13,7 +14,7 @@ pub async fn get_indexed_documents(
     limit: i64,
     offset: i64,
     file_type: Option<String>,
-) -> Result<serde_json::Value, String> {
+) -> Result<serde_json::Value> {
     let conn = open_db_connection()?;
 
     let total: i64 = if let Some(ref ft) = file_type {
@@ -31,30 +32,22 @@ pub async fn get_indexed_documents(
     };
 
     let docs: Vec<serde_json::Value> = if let Some(ref ft) = file_type {
-        let mut stmt = conn
-            .prepare(
-                "SELECT id, file_path, file_name, file_type, file_size, word_count,
-                        extraction_confidence, indexed_at
-                 FROM indexed_documents WHERE file_type = ?1
-                 ORDER BY indexed_at DESC LIMIT ?2 OFFSET ?3",
-            )
-            .map_err(|e| e.to_string())?;
-        let rows = stmt
-            .query_map(params![ft, limit, offset], row_to_doc)
-            .map_err(|e| e.to_string())?;
+        let mut stmt = conn.prepare(
+            "SELECT id, file_path, file_name, file_type, file_size, word_count,
+                    extraction_confidence, indexed_at
+             FROM indexed_documents WHERE file_type = ?1
+             ORDER BY indexed_at DESC LIMIT ?2 OFFSET ?3",
+        )?;
+        let rows = stmt.query_map(params![ft, limit, offset], row_to_doc)?;
         rows.filter_map(|r| r.ok()).collect()
     } else {
-        let mut stmt = conn
-            .prepare(
-                "SELECT id, file_path, file_name, file_type, file_size, word_count,
-                        extraction_confidence, indexed_at
-                 FROM indexed_documents
-                 ORDER BY indexed_at DESC LIMIT ?1 OFFSET ?2",
-            )
-            .map_err(|e| e.to_string())?;
-        let rows = stmt
-            .query_map(params![limit, offset], row_to_doc)
-            .map_err(|e| e.to_string())?;
+        let mut stmt = conn.prepare(
+            "SELECT id, file_path, file_name, file_type, file_size, word_count,
+                    extraction_confidence, indexed_at
+             FROM indexed_documents
+             ORDER BY indexed_at DESC LIMIT ?1 OFFSET ?2",
+        )?;
+        let rows = stmt.query_map(params![limit, offset], row_to_doc)?;
         rows.filter_map(|r| r.ok()).collect()
     };
 
@@ -68,7 +61,7 @@ pub async fn get_indexed_documents(
 
 /// Get aggregate statistics about the indexed document corpus.
 #[tauri::command]
-pub async fn get_indexed_stats() -> Result<serde_json::Value, String> {
+pub async fn get_indexed_stats() -> Result<serde_json::Value> {
     let conn = open_db_connection()?;
 
     let total: i64 = conn
@@ -85,12 +78,10 @@ pub async fn get_indexed_stats() -> Result<serde_json::Value, String> {
         )
         .unwrap_or(0);
 
-    let mut stmt = conn
-        .prepare(
-            "SELECT file_type, COUNT(*) FROM indexed_documents
-             GROUP BY file_type ORDER BY COUNT(*) DESC",
-        )
-        .map_err(|e| e.to_string())?;
+    let mut stmt = conn.prepare(
+        "SELECT file_type, COUNT(*) FROM indexed_documents
+         GROUP BY file_type ORDER BY COUNT(*) DESC",
+    )?;
 
     let types: Vec<serde_json::Value> = stmt
         .query_map([], |row| {
@@ -98,8 +89,7 @@ pub async fn get_indexed_stats() -> Result<serde_json::Value, String> {
                 "file_type": row.get::<_, String>(0)?,
                 "count": row.get::<_, i64>(1)?
             }))
-        })
-        .map_err(|e| e.to_string())?
+        })?
         .filter_map(|r| r.ok())
         .collect();
 
@@ -113,19 +103,17 @@ pub async fn get_indexed_stats() -> Result<serde_json::Value, String> {
 
 /// Search document chunks by text content (LIKE query).
 #[tauri::command]
-pub async fn search_documents(query: String, limit: i64) -> Result<serde_json::Value, String> {
+pub async fn search_documents(query: String, limit: i64) -> Result<serde_json::Value> {
     let conn = open_db_connection()?;
     let search_pattern = format!("%{}%", query);
 
-    let mut stmt = conn
-        .prepare(
-            "SELECT d.id, d.file_path, d.file_name, d.file_type, c.content, c.chunk_index
-             FROM document_chunks c
-             JOIN indexed_documents d ON d.id = c.document_id
-             WHERE c.content LIKE ?1
-             LIMIT ?2",
-        )
-        .map_err(|e| e.to_string())?;
+    let mut stmt = conn.prepare(
+        "SELECT d.id, d.file_path, d.file_name, d.file_type, c.content, c.chunk_index
+         FROM document_chunks c
+         JOIN indexed_documents d ON d.id = c.document_id
+         WHERE c.content LIKE ?1
+         LIMIT ?2",
+    )?;
 
     let results: Vec<serde_json::Value> = stmt
         .query_map(params![search_pattern, limit], |row| {
@@ -137,8 +125,7 @@ pub async fn search_documents(query: String, limit: i64) -> Result<serde_json::V
                 "content_preview": row.get::<_, String>(4)?,
                 "chunk_index": row.get::<_, i64>(5)?
             }))
-        })
-        .map_err(|e| e.to_string())?
+        })?
         .filter_map(|r| r.ok())
         .collect();
 
@@ -147,7 +134,7 @@ pub async fn search_documents(query: String, limit: i64) -> Result<serde_json::V
 
 /// Get full content of a single indexed document by reassembling its chunks.
 #[tauri::command]
-pub async fn get_document_content(document_id: i64) -> Result<serde_json::Value, String> {
+pub async fn get_document_content(document_id: i64) -> Result<serde_json::Value> {
     let conn = open_db_connection()?;
 
     let doc = conn
@@ -168,16 +155,13 @@ pub async fn get_document_content(document_id: i64) -> Result<serde_json::Value,
         )
         .map_err(|e| format!("Document not found: {e}"))?;
 
-    let mut stmt = conn
-        .prepare(
-            "SELECT content, chunk_index FROM document_chunks
-             WHERE document_id = ?1 ORDER BY chunk_index",
-        )
-        .map_err(|e| e.to_string())?;
+    let mut stmt = conn.prepare(
+        "SELECT content, chunk_index FROM document_chunks
+         WHERE document_id = ?1 ORDER BY chunk_index",
+    )?;
 
     let chunks: Vec<String> = stmt
-        .query_map([document_id], |row| row.get::<_, String>(0))
-        .map_err(|e| e.to_string())?
+        .query_map([document_id], |row| row.get::<_, String>(0))?
         .filter_map(|r| r.ok())
         .collect();
 

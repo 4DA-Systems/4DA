@@ -13,6 +13,7 @@ pub use license::*;
 
 use crate::community_intelligence::CommunityIntelligenceConfig;
 use crate::digest::DigestConfig;
+use crate::error::Result;
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
@@ -742,13 +743,13 @@ impl SettingsManager {
     }
 
     /// Save settings to disk (excludes usage — that's saved separately)
-    pub fn save(&self) -> Result<(), String> {
+    pub fn save(&self) -> Result<()> {
         if let Some(parent) = self.settings_path.parent() {
-            fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+            fs::create_dir_all(parent)?;
         }
 
-        let json = serde_json::to_string_pretty(&self.settings).map_err(|e| e.to_string())?;
-        fs::write(&self.settings_path, json).map_err(|e| e.to_string())?;
+        let json = serde_json::to_string_pretty(&self.settings)?;
+        fs::write(&self.settings_path, json)?;
 
         // Restrict file permissions to owner-only (contains API keys)
         #[cfg(unix)]
@@ -762,13 +763,13 @@ impl SettingsManager {
     }
 
     /// Save usage stats to disk
-    fn save_usage(&self) -> Result<(), String> {
+    fn save_usage(&self) -> Result<()> {
         if let Some(parent) = self.usage_path.parent() {
-            fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+            fs::create_dir_all(parent)?;
         }
 
-        let json = serde_json::to_string_pretty(&self.usage).map_err(|e| e.to_string())?;
-        fs::write(&self.usage_path, json).map_err(|e| e.to_string())?;
+        let json = serde_json::to_string_pretty(&self.usage)?;
+        fs::write(&self.usage_path, json)?;
         Ok(())
     }
 
@@ -783,19 +784,19 @@ impl SettingsManager {
     }
 
     /// Update LLM provider settings
-    pub fn set_llm_provider(&mut self, provider: LLMProvider) -> Result<(), String> {
+    pub fn set_llm_provider(&mut self, provider: LLMProvider) -> Result<()> {
         self.settings.llm = provider;
         self.save()
     }
 
     /// Update re-rank configuration
-    pub fn set_rerank_config(&mut self, config: RerankConfig) -> Result<(), String> {
+    pub fn set_rerank_config(&mut self, config: RerankConfig) -> Result<()> {
         self.settings.rerank = config;
         self.save()
     }
 
     /// Update monitoring configuration
-    pub fn set_monitoring_config(&mut self, config: MonitoringConfig) -> Result<(), String> {
+    pub fn set_monitoring_config(&mut self, config: MonitoringConfig) -> Result<()> {
         self.settings.monitoring = config;
         self.save()
     }
@@ -863,19 +864,19 @@ impl SettingsManager {
     }
 
     /// Mark auto-discovery as completed
-    pub fn mark_auto_discovery_completed(&mut self) -> Result<(), String> {
+    pub fn mark_auto_discovery_completed(&mut self) -> Result<()> {
         self.settings.auto_discovery_completed = true;
         self.save()
     }
 
     /// Mark onboarding as completed
-    pub fn mark_onboarding_complete(&mut self) -> Result<(), String> {
+    pub fn mark_onboarding_complete(&mut self) -> Result<()> {
         self.settings.onboarding_complete = true;
         self.save()
     }
 
     /// Add discovered directories to context_dirs
-    pub fn add_context_dirs(&mut self, dirs: Vec<String>) -> Result<(), String> {
+    pub fn add_context_dirs(&mut self, dirs: Vec<String>) -> Result<()> {
         for dir in dirs {
             if !self.settings.context_dirs.contains(&dir) {
                 self.settings.context_dirs.push(dir);
@@ -890,7 +891,7 @@ impl SettingsManager {
     }
 
     /// Add an RSS feed URL
-    pub fn add_rss_feed(&mut self, url: String) -> Result<(), String> {
+    pub fn add_rss_feed(&mut self, url: String) -> Result<()> {
         if !self.settings.rss_feeds.contains(&url) {
             self.settings.rss_feeds.push(url);
             self.save()?;
@@ -899,13 +900,13 @@ impl SettingsManager {
     }
 
     /// Remove an RSS feed URL
-    pub fn remove_rss_feed(&mut self, url: &str) -> Result<(), String> {
+    pub fn remove_rss_feed(&mut self, url: &str) -> Result<()> {
         self.settings.rss_feeds.retain(|f| f != url);
         self.save()
     }
 
     /// Set all RSS feed URLs (replacing existing)
-    pub fn set_rss_feeds(&mut self, feeds: Vec<String>) -> Result<(), String> {
+    pub fn set_rss_feeds(&mut self, feeds: Vec<String>) -> Result<()> {
         self.settings.rss_feeds = feeds;
         self.save()
     }
@@ -916,7 +917,7 @@ impl SettingsManager {
     }
 
     /// Add a Twitter handle
-    pub fn add_twitter_handle(&mut self, handle: String) -> Result<(), String> {
+    pub fn add_twitter_handle(&mut self, handle: String) -> Result<()> {
         if !self.settings.twitter_handles.contains(&handle) {
             self.settings.twitter_handles.push(handle);
             self.save()?;
@@ -925,13 +926,13 @@ impl SettingsManager {
     }
 
     /// Remove a Twitter handle
-    pub fn remove_twitter_handle(&mut self, handle: &str) -> Result<(), String> {
+    pub fn remove_twitter_handle(&mut self, handle: &str) -> Result<()> {
         self.settings.twitter_handles.retain(|h| h != handle);
         self.save()
     }
 
     /// Set all Twitter handles (replacing existing)
-    pub fn set_twitter_handles(&mut self, handles: Vec<String>) -> Result<(), String> {
+    pub fn set_twitter_handles(&mut self, handles: Vec<String>) -> Result<()> {
         self.settings.twitter_handles = handles;
         self.save()
     }
@@ -945,7 +946,7 @@ impl SettingsManager {
     }
 
     /// Set Nitter instance
-    pub fn set_nitter_instance(&mut self, instance: String) -> Result<(), String> {
+    pub fn set_nitter_instance(&mut self, instance: String) -> Result<()> {
         self.settings.nitter_instance = Some(instance);
         self.save()
     }
@@ -956,7 +957,7 @@ impl SettingsManager {
     }
 
     /// Set X API Bearer Token
-    pub fn set_x_api_key(&mut self, key: String) -> Result<(), String> {
+    pub fn set_x_api_key(&mut self, key: String) -> Result<()> {
         self.settings.x_api_key = key;
         self.save()
     }
@@ -967,7 +968,7 @@ impl SettingsManager {
     }
 
     /// Add a YouTube channel ID
-    pub fn add_youtube_channel(&mut self, channel_id: String) -> Result<(), String> {
+    pub fn add_youtube_channel(&mut self, channel_id: String) -> Result<()> {
         if !self.settings.youtube_channels.contains(&channel_id) {
             self.settings.youtube_channels.push(channel_id);
             self.save()?;
@@ -976,13 +977,13 @@ impl SettingsManager {
     }
 
     /// Remove a YouTube channel ID
-    pub fn remove_youtube_channel(&mut self, channel_id: &str) -> Result<(), String> {
+    pub fn remove_youtube_channel(&mut self, channel_id: &str) -> Result<()> {
         self.settings.youtube_channels.retain(|c| c != channel_id);
         self.save()
     }
 
     /// Set all YouTube channel IDs (replacing existing)
-    pub fn set_youtube_channels(&mut self, channels: Vec<String>) -> Result<(), String> {
+    pub fn set_youtube_channels(&mut self, channels: Vec<String>) -> Result<()> {
         self.settings.youtube_channels = channels;
         self.save()
     }
@@ -993,7 +994,7 @@ impl SettingsManager {
     }
 
     /// Set GitHub languages to track (replacing existing)
-    pub fn set_github_languages(&mut self, languages: Vec<String>) -> Result<(), String> {
+    pub fn set_github_languages(&mut self, languages: Vec<String>) -> Result<()> {
         self.settings.github_languages = languages;
         self.save()
     }

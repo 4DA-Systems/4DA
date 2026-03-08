@@ -10,6 +10,8 @@
 use rusqlite::{params, Connection};
 use tracing::debug;
 
+use crate::error::Result;
+
 use super::blending::TEMPLATES;
 use super::PERSONA_NAMES;
 
@@ -49,7 +51,7 @@ fn topic_persona_likelihood(topic: &str, persona_idx: usize) -> f64 {
 }
 
 /// Ensure the persona_posterior table exists in the ACE database.
-pub fn ensure_posterior_table(conn: &Connection) -> Result<(), String> {
+pub fn ensure_posterior_table(conn: &Connection) -> Result<()> {
     conn.execute_batch(
         "CREATE TABLE IF NOT EXISTS persona_posterior (
             id INTEGER PRIMARY KEY CHECK (id = 1),
@@ -65,18 +67,17 @@ pub fn ensure_posterior_table(conn: &Connection) -> Result<(), String> {
             snapshot_date TEXT NOT NULL DEFAULT (date('now')),
             UNIQUE(snapshot_date)
         );",
-    )
-    .map_err(|e| format!("Failed to create posterior tables: {e}"))?;
+    )?;
     Ok(())
 }
 
 /// Load the current posterior. Returns uniform prior if none stored.
-pub fn load_posterior(conn: &Connection) -> Result<([f64; NUM_PERSONAS], i64), String> {
+pub fn load_posterior(conn: &Connection) -> Result<([f64; NUM_PERSONAS], i64)> {
     if ensure_posterior_table(conn).is_err() {
         return Ok(([1.0 / NUM_PERSONAS as f64; NUM_PERSONAS], 0));
     }
 
-    let result: Result<(String, i64), _> = conn.query_row(
+    let result: std::result::Result<(String, i64), _> = conn.query_row(
         "SELECT weights, update_count FROM persona_posterior WHERE id = 1",
         [],
         |row| Ok((row.get(0)?, row.get(1)?)),
@@ -84,8 +85,7 @@ pub fn load_posterior(conn: &Connection) -> Result<([f64; NUM_PERSONAS], i64), S
 
     match result {
         Ok((json, count)) => {
-            let vec: Vec<f64> =
-                serde_json::from_str(&json).map_err(|e| format!("Bad posterior JSON: {e}"))?;
+            let vec: Vec<f64> = serde_json::from_str(&json)?;
             if vec.len() != NUM_PERSONAS {
                 return Ok(([1.0 / NUM_PERSONAS as f64; NUM_PERSONAS], 0));
             }
@@ -103,9 +103,8 @@ fn save_posterior(
     weights: &[f64; NUM_PERSONAS],
     update_count: i64,
     source: &str,
-) -> Result<(), String> {
-    let json = serde_json::to_string(&weights.to_vec())
-        .map_err(|e| format!("Failed to serialize posterior: {e}"))?;
+) -> Result<()> {
+    let json = serde_json::to_string(&weights.to_vec())?;
 
     conn.execute(
         "INSERT INTO persona_posterior (id, weights, update_count, last_updated, source)
@@ -116,30 +115,27 @@ fn save_posterior(
             last_updated = datetime('now'),
             source = ?3",
         params![json, update_count, source],
-    )
-    .map_err(|e| format!("Failed to save posterior: {e}"))?;
+    )?;
 
     Ok(())
 }
 
 /// Take a daily snapshot of the posterior (for drift detection).
-pub fn snapshot_posterior_if_needed(conn: &Connection) -> Result<(), String> {
+pub fn snapshot_posterior_if_needed(conn: &Connection) -> Result<()> {
     ensure_posterior_table(conn)?;
     let (weights, count) = load_posterior(conn)?;
     if count == 0 {
         return Ok(()); // Nothing to snapshot
     }
 
-    let json = serde_json::to_string(&weights.to_vec())
-        .map_err(|e| format!("Failed to serialize snapshot: {e}"))?;
+    let json = serde_json::to_string(&weights.to_vec())?;
 
     // INSERT OR IGNORE — only one snapshot per day
     conn.execute(
         "INSERT OR IGNORE INTO posterior_snapshots (weights, update_count, snapshot_date)
          VALUES (?1, ?2, date('now'))",
         params![json, count],
-    )
-    .map_err(|e| format!("Failed to save snapshot: {e}"))?;
+    )?;
 
     Ok(())
 }
@@ -149,7 +145,7 @@ pub fn snapshot_posterior_if_needed(conn: &Connection) -> Result<(), String> {
 pub fn seed_from_taste_test(
     conn: &Connection,
     weights: &[f64; NUM_PERSONAS],
-) -> Result<(), String> {
+) -> Result<()> {
     ensure_posterior_table(conn)?;
     save_posterior(conn, weights, 0, "taste_test")?;
     debug!(target: "taste::continuous", "Seeded posterior from taste test");
@@ -170,7 +166,7 @@ pub fn update_posterior(
     conn: &Connection,
     topics: &[String],
     signal_strength: f32,
-) -> Result<(), String> {
+) -> Result<()> {
     if topics.is_empty() {
         return Ok(());
     }
@@ -219,7 +215,7 @@ pub fn update_posterior(
 }
 
 /// Get the dominant persona name and weight from the current posterior.
-pub fn get_dominant_persona(conn: &Connection) -> Result<Option<(String, f64)>, String> {
+pub fn get_dominant_persona(conn: &Connection) -> Result<Option<(String, f64)>> {
     let (weights, count) = load_posterior(conn)?;
     if count == 0 {
         return Ok(None);
@@ -307,7 +303,7 @@ pub struct DriftReport {
 ///
 /// `lookback_days`: how far back to look for the reference snapshot (default: 30).
 /// Returns None if no reference snapshot exists.
-pub fn detect_drift(conn: &Connection, lookback_days: i64) -> Result<Option<DriftReport>, String> {
+pub fn detect_drift(conn: &Connection, lookback_days: i64) -> Result<Option<DriftReport>> {
     ensure_posterior_table(conn)?;
     let (current, current_count) = load_posterior(conn)?;
     if current_count < 5 {
@@ -315,7 +311,7 @@ pub fn detect_drift(conn: &Connection, lookback_days: i64) -> Result<Option<Drif
     }
 
     // Load oldest snapshot within lookback window
-    let result: Result<(String, String), _> = conn.query_row(
+    let result: std::result::Result<(String, String), _> = conn.query_row(
         "SELECT weights, snapshot_date FROM posterior_snapshots
          WHERE snapshot_date <= date('now', ?1)
          ORDER BY snapshot_date ASC LIMIT 1",
@@ -328,8 +324,7 @@ pub fn detect_drift(conn: &Connection, lookback_days: i64) -> Result<Option<Drif
         Err(_) => return Ok(None), // No reference snapshot
     };
 
-    let ref_vec: Vec<f64> =
-        serde_json::from_str(&ref_json).map_err(|e| format!("Bad snapshot JSON: {e}"))?;
+    let ref_vec: Vec<f64> = serde_json::from_str(&ref_json)?;
     if ref_vec.len() != NUM_PERSONAS {
         return Ok(None);
     }

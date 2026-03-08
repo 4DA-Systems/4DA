@@ -4,11 +4,12 @@
 //! Core logic lives in `decision_advantage::windows` and `decision_advantage::compound_score`.
 
 use crate::decision_advantage::{CompoundAdvantageScore, DecisionWindow};
+use crate::error::Result;
 use crate::open_db_connection;
 
 /// Get all open decision windows, ordered by urgency descending.
 #[tauri::command]
-pub async fn get_decision_windows() -> Result<Vec<DecisionWindow>, String> {
+pub async fn get_decision_windows() -> Result<Vec<DecisionWindow>> {
     let conn = open_db_connection()?;
     Ok(crate::decision_advantage::get_open_windows(&conn))
 }
@@ -18,7 +19,7 @@ pub async fn get_decision_windows() -> Result<Vec<DecisionWindow>, String> {
 pub async fn act_on_decision_window(
     window_id: i64,
     outcome: Option<String>,
-) -> Result<String, String> {
+) -> Result<String> {
     let conn = open_db_connection()?;
     crate::decision_advantage::windows::transition_window(
         &conn,
@@ -34,7 +35,7 @@ pub async fn act_on_decision_window(
 pub async fn close_decision_window(
     window_id: i64,
     outcome: Option<String>,
-) -> Result<String, String> {
+) -> Result<String> {
     let conn = open_db_connection()?;
     crate::decision_advantage::windows::transition_window(
         &conn,
@@ -49,7 +50,7 @@ pub async fn close_decision_window(
 #[tauri::command]
 pub async fn get_compound_advantage(
     period: Option<String>,
-) -> Result<CompoundAdvantageScore, String> {
+) -> Result<CompoundAdvantageScore> {
     let conn = open_db_connection()?;
     let p = period.as_deref().unwrap_or("weekly");
     Ok(crate::decision_advantage::compute_compound_score(&conn, p))

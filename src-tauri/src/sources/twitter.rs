@@ -7,6 +7,8 @@ use async_trait::async_trait;
 use serde::Deserialize;
 use tracing::{debug, info, warn};
 
+use crate::error::{FourDaError, Result};
+
 use super::{Source, SourceConfig, SourceError, SourceItem, SourceResult};
 
 // ============================================================================
@@ -154,7 +156,7 @@ impl TwitterSource {
     }
 
     /// Look up a user ID from a username
-    async fn lookup_user_id(&self, username: &str) -> Result<String, String> {
+    async fn lookup_user_id(&self, username: &str) -> Result<String> {
         let url = format!("https://api.x.com/2/users/by/username/{}", username);
 
         let resp = self
@@ -163,28 +165,28 @@ impl TwitterSource {
             .bearer_auth(&self.api_key)
             .send()
             .await
-            .map_err(|e| format!("Network error looking up @{}: {}", username, e))?;
+            .map_err(|e| FourDaError::Internal(format!("Network error looking up @{}: {}", username, e)))?;
 
         if resp.status() == 429 {
-            return Err(format!("Rate limited looking up @{}", username));
+            return Err(FourDaError::Internal(format!("Rate limited looking up @{}", username)));
         }
 
         if !resp.status().is_success() {
-            return Err(format!(
+            return Err(FourDaError::Internal(format!(
                 "X API error for @{}: HTTP {}",
                 username,
                 resp.status()
-            ));
+            )));
         }
 
         let body: XUserLookupResponse = resp
             .json()
             .await
-            .map_err(|e| format!("Parse error for @{}: {}", username, e))?;
+            .map_err(|e| FourDaError::Internal(format!("Parse error for @{}: {}", username, e)))?;
 
         body.data
             .map(|d| d.id)
-            .ok_or_else(|| format!("User @{} not found", username))
+            .ok_or_else(|| FourDaError::Internal(format!("User @{} not found", username)))
     }
 
     /// Fetch recent tweets for a user by their ID
@@ -192,7 +194,7 @@ impl TwitterSource {
         &self,
         user_id: &str,
         username: &str,
-    ) -> Result<Vec<SourceItem>, String> {
+    ) -> Result<Vec<SourceItem>> {
         let url = format!(
             "https://api.x.com/2/users/{}/tweets?max_results=10&tweet.fields=created_at,public_metrics,author_id&expansions=author_id&user.fields=username,name",
             user_id
@@ -206,24 +208,24 @@ impl TwitterSource {
             .bearer_auth(&self.api_key)
             .send()
             .await
-            .map_err(|e| format!("Network error fetching tweets for @{}: {}", username, e))?;
+            .map_err(|e| FourDaError::Internal(format!("Network error fetching tweets for @{}: {}", username, e)))?;
 
         if resp.status() == 429 {
-            return Err(format!("Rate limited fetching tweets for @{}", username));
+            return Err(FourDaError::Internal(format!("Rate limited fetching tweets for @{}", username)));
         }
 
         if !resp.status().is_success() {
-            return Err(format!(
+            return Err(FourDaError::Internal(format!(
                 "X API error for @{}: HTTP {}",
                 username,
                 resp.status()
-            ));
+            )));
         }
 
         let body: XApiResponse = resp
             .json()
             .await
-            .map_err(|e| format!("Parse error for @{}: {}", username, e))?;
+            .map_err(|e| FourDaError::Internal(format!("Parse error for @{}: {}", username, e)))?;
 
         let tweets = body.data.unwrap_or_default();
         let users = body.includes.and_then(|i| i.users).unwrap_or_default();
@@ -281,7 +283,7 @@ impl TwitterSource {
         &self,
         query: &str,
         max_results: u32,
-    ) -> Result<Vec<SourceItem>, String> {
+    ) -> Result<Vec<SourceItem>> {
         let url = format!(
             "https://api.x.com/2/tweets/search/recent?query={}&max_results={}&tweet.fields=created_at,public_metrics,author_id&expansions=author_id&user.fields=username,name",
             urlencoding::encode(query),
@@ -296,20 +298,20 @@ impl TwitterSource {
             .bearer_auth(&self.api_key)
             .send()
             .await
-            .map_err(|e| format!("Network error searching tweets: {}", e))?;
+            .map_err(|e| FourDaError::Internal(format!("Network error searching tweets: {}", e)))?;
 
         if resp.status() == 429 {
-            return Err("Rate limited on tweet search".to_string());
+            return Err(FourDaError::Internal("Rate limited on tweet search".to_string()));
         }
 
         if !resp.status().is_success() {
-            return Err(format!("X API search error: HTTP {}", resp.status()));
+            return Err(FourDaError::Internal(format!("X API search error: HTTP {}", resp.status())));
         }
 
         let body: XApiResponse = resp
             .json()
             .await
-            .map_err(|e| format!("Parse error on search: {}", e))?;
+            .map_err(|e| FourDaError::Internal(format!("Parse error on search: {}", e)))?;
 
         let tweets = body.data.unwrap_or_default();
         let users = body.includes.and_then(|i| i.users).unwrap_or_default();
@@ -421,7 +423,7 @@ impl Source for TwitterSource {
                         all_items.extend(items);
                     }
                     Err(e) => {
-                        if e.contains("Rate limited") {
+                        if e.to_string().contains("Rate limited") {
                             warn!("X API rate limited - stopping handle fetches");
                             rate_limited = true;
                         } else {
@@ -430,7 +432,7 @@ impl Source for TwitterSource {
                     }
                 },
                 Err(e) => {
-                    if e.contains("Rate limited") {
+                    if e.to_string().contains("Rate limited") {
                         warn!("X API rate limited - stopping handle fetches");
                         rate_limited = true;
                     } else {
@@ -477,7 +479,7 @@ impl Source for TwitterSource {
                     all_items.extend(items);
                 }
                 Err(e) => {
-                    if e.contains("Rate limited") {
+                    if e.to_string().contains("Rate limited") {
                         warn!("X API rate limited - stopping searches");
                         break;
                     }

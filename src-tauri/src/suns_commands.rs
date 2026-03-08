@@ -6,6 +6,8 @@
 use once_cell::sync::Lazy;
 use parking_lot::Mutex;
 
+use crate::error::Result;
+
 // ============================================================================
 // Global Sun Registry
 // ============================================================================
@@ -31,7 +33,7 @@ const MODULE_NAMES: &[(&str, &str)] = &[
 /// Get STREETS health score across all modules.
 /// Combines sun run success rates with playbook lesson progress.
 #[tauri::command]
-pub async fn get_street_health() -> Result<crate::suns::StreetHealthScore, String> {
+pub async fn get_street_health() -> Result<crate::suns::StreetHealthScore> {
     let registry = get_sun_registry();
     let sun_counts = registry.get_module_sun_counts();
     drop(registry);

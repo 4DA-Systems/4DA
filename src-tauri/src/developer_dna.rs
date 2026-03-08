@@ -8,6 +8,7 @@ use serde::{Deserialize, Serialize};
 use tracing::info;
 
 use crate::domain_profile;
+use crate::error::Result;
 
 // ============================================================================
 // Types
@@ -87,7 +88,7 @@ pub struct DnaStats {
 // ============================================================================
 
 /// Generate a complete Developer DNA snapshot
-pub fn generate_dna() -> Result<DeveloperDna, String> {
+pub fn generate_dna() -> Result<DeveloperDna> {
     let conn = crate::open_db_connection()?;
 
     info!(target: "4da::dna", "Generating Developer DNA snapshot");
@@ -229,25 +230,21 @@ pub fn export_as_markdown(dna: &DeveloperDna) -> String {
 // Internal helpers
 // ============================================================================
 
-fn get_top_dependencies(conn: &rusqlite::Connection) -> Result<Vec<DependencyEntry>, String> {
+fn get_top_dependencies(conn: &rusqlite::Connection) -> Result<Vec<DependencyEntry>> {
     let mut deps = Vec::new();
-    let mut stmt = conn
-        .prepare(
-            "SELECT DISTINCT package_name, project_path FROM project_dependencies
+    let mut stmt = conn.prepare(
+        "SELECT DISTINCT package_name, project_path FROM project_dependencies
              WHERE is_dev = 0
              ORDER BY package_name
              LIMIT 50",
-        )
-        .map_err(|e| format!("Failed to query dependencies: {}", e))?;
+    )?;
 
-    let rows = stmt
-        .query_map([], |row| {
-            Ok(DependencyEntry {
-                name: row.get(0)?,
-                project_path: row.get(1)?,
-            })
+    let rows = stmt.query_map([], |row| {
+        Ok(DependencyEntry {
+            name: row.get(0)?,
+            project_path: row.get(1)?,
         })
-        .map_err(|e| format!("Failed to read dependencies: {}", e))?;
+    })?;
 
     for row in rows.flatten() {
         deps.push(row);
@@ -255,7 +252,7 @@ fn get_top_dependencies(conn: &rusqlite::Connection) -> Result<Vec<DependencyEnt
     Ok(deps)
 }
 
-fn get_top_engaged_topics(conn: &rusqlite::Connection) -> Result<Vec<EngagedTopic>, String> {
+fn get_top_engaged_topics(conn: &rusqlite::Connection) -> Result<Vec<EngagedTopic>> {
     // Pull from topic_affinities (learned behavior)
     let mut topics = Vec::new();
 
@@ -286,7 +283,7 @@ fn get_top_engaged_topics(conn: &rusqlite::Connection) -> Result<Vec<EngagedTopi
     Ok(topics)
 }
 
-fn get_blind_spots(conn: &rusqlite::Connection) -> Result<Vec<BlindSpotEntry>, String> {
+fn get_blind_spots(conn: &rusqlite::Connection) -> Result<Vec<BlindSpotEntry>> {
     // Simplified: find dependencies we haven't engaged with recently
     let mut spots = Vec::new();
 
@@ -320,7 +317,7 @@ fn get_blind_spots(conn: &rusqlite::Connection) -> Result<Vec<BlindSpotEntry>, S
     Ok(spots)
 }
 
-fn get_source_engagement(conn: &rusqlite::Connection) -> Result<Vec<SourceEngagement>, String> {
+fn get_source_engagement(conn: &rusqlite::Connection) -> Result<Vec<SourceEngagement>> {
     let mut sources = Vec::new();
 
     // Total items by source
@@ -357,7 +354,7 @@ fn get_source_engagement(conn: &rusqlite::Connection) -> Result<Vec<SourceEngage
     Ok(sources)
 }
 
-fn compute_stats(conn: &rusqlite::Connection) -> Result<DnaStats, String> {
+fn compute_stats(conn: &rusqlite::Connection) -> Result<DnaStats> {
     let total_items: u32 = conn
         .query_row("SELECT COUNT(*) FROM source_items", [], |row| row.get(0))
         .unwrap_or(0);
@@ -479,20 +476,20 @@ fn bar_chart(percent: f32) -> String {
 // ============================================================================
 
 #[tauri::command]
-pub async fn get_developer_dna() -> Result<DeveloperDna, String> {
+pub async fn get_developer_dna() -> Result<DeveloperDna> {
     crate::settings::require_pro_feature("get_developer_dna")?;
     generate_dna()
 }
 
 #[tauri::command]
-pub async fn export_developer_dna_markdown() -> Result<String, String> {
+pub async fn export_developer_dna_markdown() -> Result<String> {
     crate::settings::require_pro_feature("export_developer_dna_markdown")?;
     let dna = generate_dna()?;
     Ok(export_as_markdown(&dna))
 }
 
 #[tauri::command]
-pub async fn export_developer_dna_svg() -> Result<String, String> {
+pub async fn export_developer_dna_svg() -> Result<String> {
     crate::settings::require_pro_feature("export_developer_dna_svg")?;
     let dna = generate_dna()?;
     Ok(export_as_svg(&dna))

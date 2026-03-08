@@ -4,6 +4,7 @@
 //! from English into other languages. Translations are saved to
 //! `data/translations/{lang}/` and loaded by the i18n module at runtime.
 
+use crate::error::Result;
 use crate::llm;
 use std::collections::HashMap;
 use tracing::{info, warn};
@@ -23,7 +24,7 @@ const BATCH_SIZE: usize = 50;
 pub async fn translate_batch(
     strings: &HashMap<String, String>,
     target_lang: &str,
-) -> Result<HashMap<String, String>, String> {
+) -> Result<HashMap<String, String>> {
     let client = get_llm_client()?;
 
     let target_name = lang_name(target_lang);
@@ -82,7 +83,7 @@ pub async fn translate_batch(
 
 /// Translate markdown content preserving structure.
 #[allow(dead_code)] // Public API for STREETS lesson translation
-pub async fn translate_markdown(content: &str, target_lang: &str) -> Result<String, String> {
+pub async fn translate_markdown(content: &str, target_lang: &str) -> Result<String> {
     let client = get_llm_client()?;
 
     let system = format!(
@@ -115,7 +116,7 @@ pub async fn translate_markdown(content: &str, target_lang: &str) -> Result<Stri
 ///
 /// Returns a map of `"namespace:flat.key" -> "English value"` for every key
 /// present in the English locale files but absent in the target translations.
-pub fn get_untranslated_keys(target_lang: &str) -> Result<HashMap<String, String>, String> {
+pub fn get_untranslated_keys(target_lang: &str) -> Result<HashMap<String, String>> {
     let english_strings = load_english_strings()?;
 
     // Load existing translations for target language
@@ -146,12 +147,12 @@ pub fn get_untranslated_keys(target_lang: &str) -> Result<HashMap<String, String
 
 /// Load all English source strings from the bundled locale files.
 /// Returns `"namespace:flat.key" -> "English value"`.
-pub fn load_english_strings() -> Result<HashMap<String, String>, String> {
+pub fn load_english_strings() -> Result<HashMap<String, String>> {
     let manifest_dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let locales_dir = manifest_dir
         .parent()
         .map(|p| p.join("src").join("locales").join("en"))
-        .ok_or_else(|| "Cannot resolve locales directory".to_string())?;
+        .ok_or_else(|| String::from("Cannot resolve locales directory"))?;
 
     let mut english_strings: HashMap<String, String> = HashMap::new();
 
@@ -180,10 +181,9 @@ pub fn load_english_strings() -> Result<HashMap<String, String>, String> {
 pub fn save_translations(
     translations: &HashMap<String, String>,
     target_lang: &str,
-) -> Result<usize, String> {
+) -> Result<usize> {
     let trans_dir = crate::i18n::translations_dir().join(target_lang);
-    std::fs::create_dir_all(&trans_dir)
-        .map_err(|e| format!("Cannot create translation dir: {}", e))?;
+    std::fs::create_dir_all(&trans_dir)?;
 
     // Group by namespace
     let mut by_ns: HashMap<String, HashMap<String, String>> = HashMap::new();
@@ -213,9 +213,8 @@ pub fn save_translations(
             count += 1;
         }
 
-        let json = serde_json::to_string_pretty(&existing)
-            .map_err(|e| format!("JSON serialize error: {}", e))?;
-        std::fs::write(&path, json).map_err(|e| format!("Write error: {}", e))?;
+        let json = serde_json::to_string_pretty(&existing)?;
+        std::fs::write(&path, json)?;
     }
 
     info!(target: "4da::i18n", lang = target_lang, count, "Saved translations");
@@ -240,12 +239,12 @@ pub struct TranslationStatus {
 // ============================================================================
 
 /// Build an LLM client from the user's current settings.
-fn get_llm_client() -> Result<llm::LLMClient, String> {
+fn get_llm_client() -> Result<llm::LLMClient> {
     let manager = crate::get_settings_manager();
     let guard = manager.lock();
     let provider = guard.get().llm.clone();
     if provider.api_key.is_empty() && provider.provider != "ollama" {
-        return Err("LLM not configured -- set up your API key in Settings".to_string());
+        return Err("LLM not configured -- set up your API key in Settings".into());
     }
     Ok(llm::LLMClient::new(provider))
 }
