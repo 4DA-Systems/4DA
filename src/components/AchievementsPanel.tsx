@@ -61,6 +61,7 @@ export function AchievementsPanel() {
                   total_achievements > 0 ? total_unlocked / total_achievements : 0;
               }
             }}
+            aria-hidden="true"
             style={{ width: '32px', height: '32px' }}
           />
         ) : (

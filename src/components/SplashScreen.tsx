@@ -245,7 +245,7 @@ export function SplashScreen({ onComplete, minimumDisplayTime = 1500 }: SplashSc
               fontSize: '0.8125rem',
             }}
           >
-            Retry
+            {t('action.retry')}
           </button>
         )}
       </div>
@@ -310,7 +310,7 @@ export function SplashScreen({ onComplete, minimumDisplayTime = 1500 }: SplashSc
         aria-label={t('splash.refreshIfStuck')}
         title={t('splash.refreshIfStuck')}
       >
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
           <path d="M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15" />
         </svg>
         {t('action.refresh')}

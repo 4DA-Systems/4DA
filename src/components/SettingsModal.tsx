@@ -29,6 +29,7 @@ import type { StreetsTier } from '../store/playbook-slice';
 // ============================================================================
 
 function StreetsMembershipSection({ onStatus }: { onStatus: (s: string) => void }) {
+  const { t } = useTranslation();
   const streetsTier = useAppStore(s => s.streetsTier);
   const activateStreetsLicense = useAppStore(s => s.activateStreetsLicense);
   const loadStreetsTier = useAppStore(s => s.loadStreetsTier);
@@ -38,9 +39,9 @@ function StreetsMembershipSection({ onStatus }: { onStatus: (s: string) => void 
   useEffect(() => { loadStreetsTier(); }, [loadStreetsTier]);
 
   const tierLabels: Record<StreetsTier, { label: string; color: string }> = {
-    playbook: { label: 'Playbook (Free)', color: 'text-gray-400' },
-    community: { label: 'Community', color: 'text-[#D4AF37]' },
-    cohort: { label: 'Cohort', color: 'text-[#22C55E]' },
+    playbook: { label: t('settings.streets.tierPlaybook'), color: 'text-gray-400' },
+    community: { label: t('settings.streets.tierCommunity'), color: 'text-[#D4AF37]' },
+    cohort: { label: t('settings.streets.tierCohort'), color: 'text-[#22C55E]' },
   };
 
   const { label, color } = tierLabels[streetsTier] || tierLabels.playbook;
@@ -51,20 +52,20 @@ function StreetsMembershipSection({ onStatus }: { onStatus: (s: string) => void 
     const ok = await activateStreetsLicense(key.trim());
     setActivating(false);
     if (ok) {
-      onStatus('STREETS license activated successfully');
+      onStatus(t('settings.streets.activated'));
       setKey('');
       setTimeout(() => onStatus(''), 3000);
     } else {
-      onStatus('Error: Invalid STREETS license key');
+      onStatus(t('settings.streets.invalidKey'));
       setTimeout(() => onStatus(''), 3000);
     }
   };
 
   return (
     <div className="bg-bg-tertiary rounded-lg p-4 border border-border">
-      <h3 className="text-sm font-medium text-white mb-3">STREETS Membership</h3>
+      <h3 className="text-sm font-medium text-white mb-3">{t('settings.streets.title')}</h3>
       <div className="flex items-center gap-2 mb-3">
-        <span className="text-xs text-gray-500">Current tier:</span>
+        <span className="text-xs text-gray-500">{t('settings.streets.currentTier')}</span>
         <span className={`text-xs font-semibold ${color}`}>{label}</span>
       </div>
       {streetsTier === 'playbook' && (
@@ -73,7 +74,7 @@ function StreetsMembershipSection({ onStatus }: { onStatus: (s: string) => void 
             type="text"
             value={key}
             onChange={e => setKey(e.target.value)}
-            placeholder="Enter STREETS license key"
+            placeholder={t('settings.streets.placeholder')}
             className="flex-1 px-3 py-2 bg-bg-primary border border-border rounded-lg text-sm text-white placeholder-gray-600 focus:outline-none focus:border-[#D4AF37]/50"
           />
           <button
@@ -81,7 +82,7 @@ function StreetsMembershipSection({ onStatus }: { onStatus: (s: string) => void 
             disabled={activating || !key.trim()}
             className="px-4 py-2 text-sm font-medium text-black bg-[#D4AF37] rounded-lg hover:bg-[#C4A030] transition-colors disabled:opacity-50"
           >
-            {activating ? '...' : 'Activate'}
+            {activating ? '...' : t('action.activate')}
           </button>
         </div>
       )}
@@ -286,7 +287,7 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
           <div className="px-6 py-4 border-b border-border flex items-center justify-between">
             <div className="flex items-center gap-3">
               <div className="w-8 h-8 bg-orange-500/20 rounded-lg flex items-center justify-center">
-                <span>&#x2699;&#xfe0f;</span>
+                <span aria-hidden="true">&#x2699;&#xfe0f;</span>
               </div>
               <h2 id="settings-modal-title" className="text-lg font-medium text-white">{t('settings.title')}</h2>
             </div>
@@ -300,7 +301,7 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
           </div>
 
           {/* Tab Bar */}
-          <div className="px-6 flex gap-1 border-b border-border" role="tablist">
+          <div className="px-6 flex gap-1 border-b border-border" role="tablist" aria-label="Settings navigation">
             {TAB_IDS.map(tabId => (
               <button
                 key={tabId}

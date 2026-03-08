@@ -68,6 +68,7 @@ export function GameCelebration() {
       {gpuReady ? (
         <game-celebration-burst
           ref={burstRef}
+          aria-hidden="true"
           style={{
             position: 'absolute',
             width: '320px',
