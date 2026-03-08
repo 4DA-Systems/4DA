@@ -100,6 +100,7 @@ mod monitoring;
 mod monitoring_commands;
 mod monitoring_jobs;
 mod monitoring_notifications;
+mod natural_language_search;
 mod novelty;
 mod ollama;
 mod probes_corpus;
@@ -465,7 +466,9 @@ pub fn run() {
             channel_commands::auto_render_all_channels,
             channel_commands::create_custom_channel,
             channel_commands::preview_channel_sources,
-            channel_commands::delete_channel
+            channel_commands::delete_channel,
+            // Natural Language Search (Pro)
+            natural_language_search::natural_language_query
         ])
         .setup(|app| {
             // Record app start time for diagnostics uptime tracking
