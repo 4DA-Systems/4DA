@@ -1,7 +1,76 @@
 // Score formatting and color utilities
+import type { SourceRelevance } from '../types';
 
 export function formatScore(score: number): string {
   return `${Math.round(score * 100)}%`;
+}
+
+/**
+ * Returns an array of i18n keys describing the top scoring factors for a result item.
+ * Used for score badge tooltips to make scoring transparent.
+ */
+export function getScoreFactorKeys(item: SourceRelevance): string[] {
+  const factors: string[] = [];
+  const b = item.score_breakdown;
+
+  // Context-based factors
+  if (b && b.context_score > 0.3) {
+    factors.push('scoreTooltip.stackMatch');
+  } else if (b && b.context_score > 0) {
+    factors.push('scoreTooltip.partialStackMatch');
+  }
+
+  // Interest match
+  if (b && b.interest_score > 0.3) {
+    factors.push('scoreTooltip.interestMatch');
+  }
+
+  // Freshness (from breakdown)
+  if (b && (b.freshness_mult ?? 1) > 1.0) {
+    factors.push('scoreTooltip.freshContent');
+  }
+
+  // Confirmation signals
+  if (b && (b.signal_count ?? 0) >= 3) {
+    factors.push('scoreTooltip.multipleSignals');
+  }
+
+  // Decision window
+  if (item.decision_window_match) {
+    factors.push('scoreTooltip.decisionWindow');
+  }
+
+  // Dependency match
+  if (b && (b.dep_match_score ?? 0) > 0) {
+    factors.push('scoreTooltip.dependencyMatch');
+  }
+
+  // Learned preference (taste/feedback)
+  if (b && (b.feedback_boost ?? 0) > 0) {
+    factors.push('scoreTooltip.calibratedTaste');
+  }
+
+  // Topic affinity
+  if (b && b.affinity_mult > 1.05) {
+    factors.push('scoreTooltip.topicAffinity');
+  }
+
+  // Content quality
+  if (b && (b.content_quality_mult ?? 1) > 1.0) {
+    factors.push('scoreTooltip.highQuality');
+  }
+
+  // Novelty
+  if (b && (b.novelty_mult ?? 1) > 1.0) {
+    factors.push('scoreTooltip.novelContent');
+  }
+
+  // Serendipity
+  if (item.serendipity) {
+    factors.push('scoreTooltip.serendipity');
+  }
+
+  return factors;
 }
 
 export function getScoreColor(score: number): string {

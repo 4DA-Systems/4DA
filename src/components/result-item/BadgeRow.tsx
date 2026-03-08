@@ -35,8 +35,28 @@ export function BadgeRow({ item }: BadgeRowProps) {
         </span>
       )}
       {item.decision_window_match && (
-        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-amber-500/10 text-amber-400 text-[10px] rounded border border-amber-500/20">
-          Decision: {item.decision_window_match}
+        <span
+          className="flex-shrink-0 inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded font-medium bg-amber-500/10 text-amber-400 border border-amber-500/20"
+          title={t('results.decisionMatch', { subject: item.decision_window_match })}
+        >
+          <svg
+            width="10"
+            height="10"
+            viewBox="0 0 16 16"
+            fill="none"
+            xmlns="http://www.w3.org/2000/svg"
+            className="flex-shrink-0"
+            aria-hidden="true"
+          >
+            <path
+              d="M8 1v14M8 1L3 6h10L8 1ZM3 6L1 10c0 1.1 0.9 2 2 2s2-0.9 2-2L3 6ZM13 6l-2 4c0 1.1 0.9 2 2 2s2-0.9 2-2L13 6Z"
+              stroke="currentColor"
+              strokeWidth="1.2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+          {t('results.decisionMatch', { subject: item.decision_window_match })}
         </span>
       )}
       {item.serendipity && (
