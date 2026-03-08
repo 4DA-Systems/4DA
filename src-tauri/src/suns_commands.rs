@@ -17,8 +17,140 @@ pub fn get_sun_registry() -> parking_lot::MutexGuard<'static, crate::suns::SunRe
     SUN_REGISTRY.lock()
 }
 
+/// Module definitions: (id, display_name)
+const MODULE_NAMES: &[(&str, &str)] = &[
+    ("S", "Sovereign Setup"),
+    ("T", "Technical Moats"),
+    ("R", "Revenue Engines"),
+    ("E1", "Execution Playbook"),
+    ("E2", "Evolving Edge"),
+    ("T2", "Tactical Automation"),
+    ("S2", "Stacking Streams"),
+];
+
+/// Get STREETS health score across all modules.
+/// Combines sun run success rates with playbook lesson progress.
+#[tauri::command]
+pub async fn get_street_health() -> Result<crate::suns::StreetHealthScore, String> {
+    let registry = get_sun_registry();
+    let sun_counts = registry.get_module_sun_counts();
+    drop(registry);
+
+    // Get lesson progress from DB
+    let conn = crate::open_db_connection()?;
+
+    let mut module_scores = Vec::new();
+    let mut total_score: f32 = 0.0;
+
+    for (id, name) in MODULE_NAMES {
+        let sun_count = sun_counts.get(*id).copied().unwrap_or(0);
+
+        // Sun success rate: count successful runs in last 7 days
+        let (success_runs, total_runs): (i64, i64) = conn
+            .query_row(
+                "SELECT COALESCE(SUM(CASE WHEN success = 1 THEN 1 ELSE 0 END), 0),
+                        COALESCE(COUNT(*), 0)
+                 FROM sun_runs
+                 WHERE module_id = ?1 AND run_at > datetime('now', '-7 days')",
+                rusqlite::params![id],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .unwrap_or((0, 0));
+
+        let success_rate = if total_runs > 0 {
+            success_runs as f32 / total_runs as f32
+        } else {
+            0.0
+        };
+
+        // Lesson progress
+        let lessons_completed: usize = conn
+            .query_row(
+                "SELECT COUNT(*) FROM playbook_progress WHERE module_id = ?1",
+                rusqlite::params![id],
+                |row| row.get::<_, i64>(0),
+            )
+            .unwrap_or(0) as usize;
+
+        let total_lessons = get_module_lesson_count(id);
+
+        // Last activity timestamp
+        let last_activity: Option<String> = conn
+            .query_row(
+                "SELECT MAX(completed_at) FROM playbook_progress WHERE module_id = ?1",
+                rusqlite::params![id],
+                |row| row.get(0),
+            )
+            .unwrap_or(None);
+
+        // Score: 50% lesson progress + 50% sun success rate
+        let lesson_ratio = if total_lessons > 0 {
+            lessons_completed as f32 / total_lessons as f32
+        } else {
+            0.0
+        };
+        let score = (lesson_ratio * 0.5 + success_rate * 0.5).clamp(0.0, 1.0);
+
+        total_score += score;
+
+        module_scores.push(crate::suns::ModuleHealth {
+            module_id: id.to_string(),
+            module_name: name.to_string(),
+            score,
+            sun_count,
+            success_rate,
+            lessons_completed,
+            total_lessons,
+            last_activity,
+        });
+    }
+
+    let module_count = module_scores.len() as f32;
+    let overall = if module_count > 0.0 {
+        total_score / module_count
+    } else {
+        0.0
+    };
+
+    // Determine trend from recent sun runs
+    let recent_success: f32 = conn
+        .query_row(
+            "SELECT COALESCE(AVG(CASE WHEN success = 1 THEN 1.0 ELSE 0.0 END), 0.0)
+             FROM sun_runs WHERE run_at > datetime('now', '-7 days')",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap_or(0.0);
+
+    let trend = if recent_success > 0.7 {
+        "improving"
+    } else if recent_success > 0.3 {
+        "stable"
+    } else {
+        "declining"
+    }
+    .to_string();
+
+    // Top action: recommend the lowest-scoring module
+    let top_action = module_scores
+        .iter()
+        .min_by(|a, b| {
+            a.score
+                .partial_cmp(&b.score)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        })
+        .map(|m| format!("Focus on {}", m.module_name))
+        .unwrap_or_else(|| "Start the STREETS playbook".to_string());
+
+    Ok(crate::suns::StreetHealthScore {
+        overall,
+        module_scores,
+        trend,
+        top_action,
+    })
+}
+
 /// Get approximate lesson count for a module (from content files if available, else default).
-#[cfg(test)]
 fn get_module_lesson_count(module_id: &str) -> usize {
     if let Some(filename) = crate::playbook_commands::module_id_to_filename(module_id) {
         let content_dir = crate::playbook_commands::get_content_dir();

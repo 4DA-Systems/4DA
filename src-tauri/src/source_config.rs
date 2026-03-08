@@ -134,6 +134,13 @@ fn sanitize_x_api_key(raw: &str) -> String {
     key
 }
 
+/// Get X API Bearer Token
+#[tauri::command]
+pub async fn get_x_api_key() -> Result<String, String> {
+    let settings_guard = get_settings_manager().lock();
+    Ok(settings_guard.get_x_api_key())
+}
+
 /// Set X API Bearer Token
 #[tauri::command]
 pub async fn set_x_api_key(key: String) -> Result<serde_json::Value, String> {
