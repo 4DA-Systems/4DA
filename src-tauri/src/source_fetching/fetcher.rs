@@ -182,12 +182,15 @@ pub(crate) async fn fetch_all_sources(
                 );
 
                 // Narration: per-source fetch complete
-                emit_narration(app, NarrationEvent {
-                    narration_type: "discovery".into(),
-                    message: format!("{}: {} items found", source_name, item_count),
-                    source: Some(source_type.to_string()),
-                    relevance: None,
-                });
+                emit_narration(
+                    app,
+                    NarrationEvent {
+                        narration_type: "discovery".into(),
+                        message: format!("{}: {} items found", source_name, item_count),
+                        source: Some(source_type.to_string()),
+                        relevance: None,
+                    },
+                );
 
                 for (idx, item) in items.into_iter().take(max_items_per_source).enumerate() {
                     // Generate a numeric ID from source_id hash
@@ -380,12 +383,18 @@ pub(crate) async fn fetch_all_sources(
     }
 
     // Narration: all sources fetched
-    emit_narration(app, NarrationEvent {
-        narration_type: "discovery".into(),
-        message: format!("All sources scanned \u{2014} {} total items collected", all_items.len()),
-        source: None,
-        relevance: None,
-    });
+    emit_narration(
+        app,
+        NarrationEvent {
+            narration_type: "discovery".into(),
+            message: format!(
+                "All sources scanned \u{2014} {} total items collected",
+                all_items.len()
+            ),
+            source: None,
+            relevance: None,
+        },
+    );
 
     info!(target: "4da::sources", total = all_items.len(), "Total items from all sources");
     Ok(all_items)
@@ -499,12 +508,15 @@ pub(crate) async fn fetch_all_sources_deep(
                 "hackernews",
             );
             deep_source_count += 1;
-            emit_narration(app, NarrationEvent {
-                narration_type: "discovery".into(),
-                message: format!("Hacker News: {} items found", count),
-                source: Some("hackernews".into()),
-                relevance: None,
-            });
+            emit_narration(
+                app,
+                NarrationEvent {
+                    narration_type: "discovery".into(),
+                    message: format!("Hacker News: {} items found", count),
+                    source: Some("hackernews".into()),
+                    relevance: None,
+                },
+            );
         }
         Err(e) => {
             warn!(target: "4da::sources", source = "hackernews", error = ?e, "Deep fetch failed");
@@ -518,12 +530,15 @@ pub(crate) async fn fetch_all_sources_deep(
             info!(target: "4da::sources", source = "arxiv", count, "Deep fetched arXiv papers");
             process_source_items(db, &mut all_items, &mut new_items_to_embed, items, "arxiv");
             deep_source_count += 1;
-            emit_narration(app, NarrationEvent {
-                narration_type: "discovery".into(),
-                message: format!("arXiv: {} items found", count),
-                source: Some("arxiv".into()),
-                relevance: None,
-            });
+            emit_narration(
+                app,
+                NarrationEvent {
+                    narration_type: "discovery".into(),
+                    message: format!("arXiv: {} items found", count),
+                    source: Some("arxiv".into()),
+                    relevance: None,
+                },
+            );
         }
         Err(e) => {
             warn!(target: "4da::sources", source = "arxiv", error = ?e, "Deep fetch failed");
@@ -537,12 +552,15 @@ pub(crate) async fn fetch_all_sources_deep(
             info!(target: "4da::sources", source = "reddit", count, "Deep fetched Reddit posts");
             process_source_items(db, &mut all_items, &mut new_items_to_embed, items, "reddit");
             deep_source_count += 1;
-            emit_narration(app, NarrationEvent {
-                narration_type: "discovery".into(),
-                message: format!("Reddit: {} items found", count),
-                source: Some("reddit".into()),
-                relevance: None,
-            });
+            emit_narration(
+                app,
+                NarrationEvent {
+                    narration_type: "discovery".into(),
+                    message: format!("Reddit: {} items found", count),
+                    source: Some("reddit".into()),
+                    relevance: None,
+                },
+            );
         }
         Err(e) => {
             warn!(target: "4da::sources", source = "reddit", error = ?e, "Deep fetch failed");
@@ -556,12 +574,15 @@ pub(crate) async fn fetch_all_sources_deep(
             info!(target: "4da::sources", source = "github", count, "Fetched GitHub repos");
             process_source_items(db, &mut all_items, &mut new_items_to_embed, items, "github");
             deep_source_count += 1;
-            emit_narration(app, NarrationEvent {
-                narration_type: "discovery".into(),
-                message: format!("GitHub: {} items found", count),
-                source: Some("github".into()),
-                relevance: None,
-            });
+            emit_narration(
+                app,
+                NarrationEvent {
+                    narration_type: "discovery".into(),
+                    message: format!("GitHub: {} items found", count),
+                    source: Some("github".into()),
+                    relevance: None,
+                },
+            );
         }
         Err(e) => {
             warn!(target: "4da::sources", source = "github", error = ?e, "Fetch failed");
@@ -575,12 +596,15 @@ pub(crate) async fn fetch_all_sources_deep(
             info!(target: "4da::sources", source = "rss", count, "Fetched RSS items");
             process_source_items(db, &mut all_items, &mut new_items_to_embed, items, "rss");
             deep_source_count += 1;
-            emit_narration(app, NarrationEvent {
-                narration_type: "discovery".into(),
-                message: format!("RSS: {} items found", count),
-                source: Some("rss".into()),
-                relevance: None,
-            });
+            emit_narration(
+                app,
+                NarrationEvent {
+                    narration_type: "discovery".into(),
+                    message: format!("RSS: {} items found", count),
+                    source: Some("rss".into()),
+                    relevance: None,
+                },
+            );
         }
         Err(e) => {
             warn!(target: "4da::sources", source = "rss", error = ?e, "Fetch failed");
@@ -600,12 +624,15 @@ pub(crate) async fn fetch_all_sources_deep(
                 "twitter",
             );
             deep_source_count += 1;
-            emit_narration(app, NarrationEvent {
-                narration_type: "discovery".into(),
-                message: format!("Twitter: {} items found", count),
-                source: Some("twitter".into()),
-                relevance: None,
-            });
+            emit_narration(
+                app,
+                NarrationEvent {
+                    narration_type: "discovery".into(),
+                    message: format!("Twitter: {} items found", count),
+                    source: Some("twitter".into()),
+                    relevance: None,
+                },
+            );
         }
         Err(e) => {
             warn!(target: "4da::sources", source = "twitter", error = ?e, "Fetch failed");
@@ -625,12 +652,15 @@ pub(crate) async fn fetch_all_sources_deep(
                 "youtube",
             );
             deep_source_count += 1;
-            emit_narration(app, NarrationEvent {
-                narration_type: "discovery".into(),
-                message: format!("YouTube: {} items found", count),
-                source: Some("youtube".into()),
-                relevance: None,
-            });
+            emit_narration(
+                app,
+                NarrationEvent {
+                    narration_type: "discovery".into(),
+                    message: format!("YouTube: {} items found", count),
+                    source: Some("youtube".into()),
+                    relevance: None,
+                },
+            );
         }
         Err(e) => {
             warn!(target: "4da::sources", source = "youtube", error = ?e, "Fetch failed");
@@ -650,12 +680,15 @@ pub(crate) async fn fetch_all_sources_deep(
                 "lobsters",
             );
             deep_source_count += 1;
-            emit_narration(app, NarrationEvent {
-                narration_type: "discovery".into(),
-                message: format!("Lobsters: {} items found", count),
-                source: Some("lobsters".into()),
-                relevance: None,
-            });
+            emit_narration(
+                app,
+                NarrationEvent {
+                    narration_type: "discovery".into(),
+                    message: format!("Lobsters: {} items found", count),
+                    source: Some("lobsters".into()),
+                    relevance: None,
+                },
+            );
         }
         Err(e) => {
             warn!(target: "4da::sources", source = "lobsters", error = ?e, "Deep fetch failed");
@@ -669,12 +702,15 @@ pub(crate) async fn fetch_all_sources_deep(
             info!(target: "4da::sources", source = "devto", count, "Deep fetched Dev.to articles");
             process_source_items(db, &mut all_items, &mut new_items_to_embed, items, "devto");
             deep_source_count += 1;
-            emit_narration(app, NarrationEvent {
-                narration_type: "discovery".into(),
-                message: format!("Dev.to: {} items found", count),
-                source: Some("devto".into()),
-                relevance: None,
-            });
+            emit_narration(
+                app,
+                NarrationEvent {
+                    narration_type: "discovery".into(),
+                    message: format!("Dev.to: {} items found", count),
+                    source: Some("devto".into()),
+                    relevance: None,
+                },
+            );
         }
         Err(e) => {
             warn!(target: "4da::sources", source = "devto", error = ?e, "Deep fetch failed");
@@ -683,12 +719,18 @@ pub(crate) async fn fetch_all_sources_deep(
 
     // Narration: all sources fetched (deep)
     let total_pre_embed = all_items.len() + new_items_to_embed.len();
-    emit_narration(app, NarrationEvent {
-        narration_type: "discovery".into(),
-        message: format!("All sources scanned \u{2014} {} total items collected", total_pre_embed),
-        source: None,
-        relevance: None,
-    });
+    emit_narration(
+        app,
+        NarrationEvent {
+            narration_type: "discovery".into(),
+            message: format!(
+                "All sources scanned \u{2014} {} total items collected",
+                total_pre_embed
+            ),
+            source: None,
+            relevance: None,
+        },
+    );
     let _ = deep_source_count; // suppress unused warning
 
     info!(target: "4da::sources",

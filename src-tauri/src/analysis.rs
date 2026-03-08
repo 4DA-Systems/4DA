@@ -194,12 +194,15 @@ pub(crate) async fn run_deep_initial_scan_impl(
     info!(target: "4da::analysis", "Fetching 300-500+ items from HN (5 categories), arXiv (16 categories), Reddit (40+ subreddits)...");
 
     // Narration: analysis start
-    emit_narration(app, NarrationEvent {
-        narration_type: "discovery".into(),
-        message: "Scanning sources for intelligence...".into(),
-        source: None,
-        relevance: None,
-    });
+    emit_narration(
+        app,
+        NarrationEvent {
+            narration_type: "discovery".into(),
+            message: "Scanning sources for intelligence...".into(),
+            source: None,
+            relevance: None,
+        },
+    );
 
     emit_progress(
         app,
@@ -269,12 +272,15 @@ pub(crate) async fn run_deep_initial_scan_impl(
     let total_items = all_items.len();
 
     // Narration: scoring start
-    emit_narration(app, NarrationEvent {
-        narration_type: "insight".into(),
-        message: format!("Scoring {} items against your profile...", total_items),
-        source: None,
-        relevance: None,
-    });
+    emit_narration(
+        app,
+        NarrationEvent {
+            narration_type: "insight".into(),
+            message: format!("Scoring {} items against your profile...", total_items),
+            source: None,
+            relevance: None,
+        },
+    );
 
     let mut high_match_count: usize = 0;
 
@@ -324,12 +330,15 @@ pub(crate) async fn run_deep_initial_scan_impl(
             if scored.top_score > 0.7 && high_match_count < 3 {
                 high_match_count += 1;
                 let title_preview: String = item.title.chars().take(60).collect();
-                emit_narration(app, NarrationEvent {
-                    narration_type: "match".into(),
-                    message: format!("High match: \"{}\"", title_preview),
-                    source: Some(item.source_type.clone()),
-                    relevance: Some(scored.top_score),
-                });
+                emit_narration(
+                    app,
+                    NarrationEvent {
+                        narration_type: "match".into(),
+                        message: format!("High match: \"{}\"", title_preview),
+                        source: Some(item.source_type.clone()),
+                        relevance: Some(scored.top_score),
+                    },
+                );
             }
         }
     }
@@ -339,23 +348,37 @@ pub(crate) async fn run_deep_initial_scan_impl(
     // Narration: scoring complete
     {
         let relevant_count = results.iter().filter(|r| r.relevant && !r.excluded).count();
-        emit_narration(app, NarrationEvent {
-            narration_type: "insight".into(),
-            message: format!("{} items scored, {} above your threshold", results.len(), relevant_count),
-            source: None,
-            relevance: None,
-        });
+        emit_narration(
+            app,
+            NarrationEvent {
+                narration_type: "insight".into(),
+                message: format!(
+                    "{} items scored, {} above your threshold",
+                    results.len(),
+                    relevant_count
+                ),
+                source: None,
+                relevance: None,
+            },
+        );
     }
 
     // Narration: top signal
     if let Some(top) = results.first() {
         let title_preview: String = top.title.chars().take(50).collect();
-        emit_narration(app, NarrationEvent {
-            narration_type: "insight".into(),
-            message: format!("Top signal: \"{}\" ({:.0}%)", title_preview, top.top_score * 100.0),
-            source: Some(top.source_type.clone()),
-            relevance: Some(top.top_score),
-        });
+        emit_narration(
+            app,
+            NarrationEvent {
+                narration_type: "insight".into(),
+                message: format!(
+                    "Top signal: \"{}\" ({:.0}%)",
+                    title_preview,
+                    top.top_score * 100.0
+                ),
+                source: Some(top.source_type.clone()),
+                relevance: Some(top.top_score),
+            },
+        );
     }
 
     emit_progress(
@@ -403,12 +426,15 @@ pub(crate) async fn run_multi_source_analysis_impl(
     info!(target: "4da::analysis", "=== MULTI-SOURCE ANALYSIS STARTED ===");
 
     // Narration: analysis start
-    emit_narration(app, NarrationEvent {
-        narration_type: "discovery".into(),
-        message: "Scanning sources for intelligence...".into(),
-        source: None,
-        relevance: None,
-    });
+    emit_narration(
+        app,
+        NarrationEvent {
+            narration_type: "discovery".into(),
+            message: "Scanning sources for intelligence...".into(),
+            source: None,
+            relevance: None,
+        },
+    );
 
     emit_progress(
         app,
@@ -476,12 +502,15 @@ pub(crate) async fn run_multi_source_analysis_impl(
     let mut results: Vec<SourceRelevance> = Vec::new();
 
     // Narration: scoring start
-    emit_narration(app, NarrationEvent {
-        narration_type: "insight".into(),
-        message: format!("Scoring {} items against your profile...", all_items.len()),
-        source: None,
-        relevance: None,
-    });
+    emit_narration(
+        app,
+        NarrationEvent {
+            narration_type: "insight".into(),
+            message: format!("Scoring {} items against your profile...", all_items.len()),
+            source: None,
+            relevance: None,
+        },
+    );
 
     let mut high_match_count: usize = 0;
 
@@ -528,12 +557,15 @@ pub(crate) async fn run_multi_source_analysis_impl(
             if scored.top_score > 0.7 && high_match_count < 3 {
                 high_match_count += 1;
                 let title_preview: String = item.title.chars().take(60).collect();
-                emit_narration(app, NarrationEvent {
-                    narration_type: "match".into(),
-                    message: format!("High match: \"{}\"", title_preview),
-                    source: Some(item.source_type.clone()),
-                    relevance: Some(scored.top_score),
-                });
+                emit_narration(
+                    app,
+                    NarrationEvent {
+                        narration_type: "match".into(),
+                        message: format!("High match: \"{}\"", title_preview),
+                        source: Some(item.source_type.clone()),
+                        relevance: Some(scored.top_score),
+                    },
+                );
             }
         }
     }
@@ -565,23 +597,37 @@ pub(crate) async fn run_multi_source_analysis_impl(
     // Narration: scoring complete
     {
         let narr_relevant = results.iter().filter(|r| r.relevant && !r.excluded).count();
-        emit_narration(app, NarrationEvent {
-            narration_type: "insight".into(),
-            message: format!("{} items scored, {} above your threshold", results.len(), narr_relevant),
-            source: None,
-            relevance: None,
-        });
+        emit_narration(
+            app,
+            NarrationEvent {
+                narration_type: "insight".into(),
+                message: format!(
+                    "{} items scored, {} above your threshold",
+                    results.len(),
+                    narr_relevant
+                ),
+                source: None,
+                relevance: None,
+            },
+        );
     }
 
     // Narration: top signal
     if let Some(top) = results.first() {
         let title_preview: String = top.title.chars().take(50).collect();
-        emit_narration(app, NarrationEvent {
-            narration_type: "insight".into(),
-            message: format!("Top signal: \"{}\" ({:.0}%)", title_preview, top.top_score * 100.0),
-            source: Some(top.source_type.clone()),
-            relevance: Some(top.top_score),
-        });
+        emit_narration(
+            app,
+            NarrationEvent {
+                narration_type: "insight".into(),
+                message: format!(
+                    "Top signal: \"{}\" ({:.0}%)",
+                    title_preview,
+                    top.top_score * 100.0
+                ),
+                source: Some(top.source_type.clone()),
+                relevance: Some(top.top_score),
+            },
+        );
     }
 
     emit_progress(
