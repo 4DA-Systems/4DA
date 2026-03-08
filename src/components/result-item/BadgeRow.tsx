@@ -81,6 +81,20 @@ export function BadgeRow({ item }: BadgeRowProps) {
           {item.streets_engine.replace(/^Engine \d+: /, '')}
         </span>
       )}
+      {item.score_breakdown?.content_quality_mult != null && item.score_breakdown.content_quality_mult >= 1.1 && (
+        <span className="flex-shrink-0 text-[10px] px-1.5 py-0.5 rounded font-medium bg-emerald-500/15 text-emerald-400"
+          title={`Content quality: ${(item.score_breakdown.content_quality_mult * 100).toFixed(0)}%`}
+        >
+          {t('results.highQualityBadge')}
+        </span>
+      )}
+      {item.score_breakdown?.content_quality_mult != null && item.score_breakdown.content_quality_mult <= 0.6 && (
+        <span className="flex-shrink-0 text-[10px] px-1.5 py-0.5 rounded font-medium bg-orange-500/15 text-orange-400"
+          title={`Content quality: ${(item.score_breakdown.content_quality_mult * 100).toFixed(0)}%`}
+        >
+          {t('results.lowQualityBadge')}
+        </span>
+      )}
       {(() => {
         const badge = getContentTypeBadge(item.score_breakdown?.content_type);
         return badge ? (

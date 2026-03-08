@@ -488,14 +488,18 @@ mod tests {
     fn build_user_message_formats_items() {
         let items = vec![
             SynthesisItem {
+                id: 1,
                 title: "Rust 2024 Edition".to_string(),
                 preview: "New features in Rust".to_string(),
                 source_type: "hackernews".to_string(),
+                url: Some("https://example.com/rust".to_string()),
             },
             SynthesisItem {
+                id: 2,
                 title: "React Server Components".to_string(),
                 preview: "RSC deep dive".to_string(),
                 source_type: "reddit".to_string(),
+                url: None,
             },
         ];
         let msg = build_user_message("rust updates", &items);
@@ -510,5 +514,21 @@ mod tests {
         let msg = build_user_message("nonexistent topic", &[]);
         assert!(msg.contains("No matching results found"));
         assert!(msg.contains("nonexistent topic"));
+    }
+
+    #[test]
+    fn count_citations_finds_markers() {
+        assert_eq!(count_citations("This [1] and that [3] point.", 5), 2);
+        assert_eq!(count_citations("No citations here.", 3), 0);
+        assert_eq!(count_citations("[1][2][3] all cited", 3), 3);
+    }
+
+    #[test]
+    fn build_system_prompt_includes_citation_instruction() {
+        let prompt = build_system_prompt("Rust", &[], &[]);
+        assert!(
+            prompt.contains("[1], [2]"),
+            "Prompt should instruct LLM to use citation markers"
+        );
     }
 }
