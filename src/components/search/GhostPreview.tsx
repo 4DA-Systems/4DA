@@ -1,4 +1,6 @@
+import { useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
+import { trackEvent } from '../../hooks/use-telemetry';
 
 export interface GhostPreviewData {
   total_results: number;
@@ -23,10 +25,16 @@ export function GhostPreview({ preview }: GhostPreviewProps) {
   ];
 
   const visibleLines = lines.filter((l) => l.show);
+
+  // Track ghost preview impression on render
+  useEffect(() => {
+    if (visibleLines.length > 0) trackEvent('ghost_preview_shown');
+  }, [visibleLines.length]);
+
   if (visibleLines.length === 0) return null;
 
   return (
-    <div className="rounded-lg bg-[#D4AF37]/[0.03] p-3 border border-[#D4AF37]/10" role="complementary" aria-label={t('search.proIntelligence')}>
+    <div className="rounded-lg bg-[#D4AF37]/[0.03] p-3 border border-[#D4AF37]/10 cursor-pointer" role="complementary" aria-label={t('search.proIntelligence')} onClick={() => trackEvent('ghost_preview_clicked')}>
       <div className="text-[10px] text-[#D4AF37]/70 uppercase tracking-wider font-medium mb-2">
         {t('search.proIntelligence')}
       </div>

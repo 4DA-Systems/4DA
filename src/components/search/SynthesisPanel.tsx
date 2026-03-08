@@ -1,4 +1,6 @@
+import { useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
+import { trackEvent } from '../../hooks/use-telemetry';
 
 interface SynthesisPanelProps {
   query: string;
@@ -10,6 +12,11 @@ interface SynthesisPanelProps {
 
 export function SynthesisPanel({ isPro, synthesis, loading, onRetry }: SynthesisPanelProps) {
   const { t } = useTranslation();
+
+  // Track when synthesis loading begins
+  useEffect(() => {
+    if (loading) trackEvent('synthesis_triggered');
+  }, [loading]);
 
   if (!isPro) return null;
   if (!loading && !synthesis) return null;
