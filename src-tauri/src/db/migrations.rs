@@ -218,7 +218,7 @@ impl Database {
             .query_row("SELECT version FROM schema_version", [], |row| row.get(0))
             .unwrap_or(1);
 
-        const TARGET_VERSION: i64 = 22;
+        const TARGET_VERSION: i64 = 24;
         if current_version < TARGET_VERSION {
             // Drop the conn lock briefly to allow backup (needs filesystem access)
             drop(conn);
@@ -880,6 +880,30 @@ impl Database {
                          CREATE INDEX IF NOT EXISTS idx_digest_superseded ON digested_intelligence(superseded_by);
                          CREATE INDEX IF NOT EXISTS idx_channel_renders_channel_version ON channel_renders(channel_id, version);",
                     )
+                    },
+                )?;
+            }
+
+            // Phase 24 migration: Intelligence History (Trajectory Phase 2)
+            if current_version < 24 {
+                Self::run_versioned_migration(
+                    &conn,
+                    23,
+                    24,
+                    "Phase 24: intelligence history",
+                    |c| {
+                        c.execute_batch(
+                            "CREATE TABLE IF NOT EXISTS intelligence_history (
+                                id INTEGER PRIMARY KEY,
+                                recorded_at TEXT NOT NULL DEFAULT (datetime('now')),
+                                accuracy REAL NOT NULL,
+                                topics_learned INTEGER NOT NULL,
+                                items_analyzed INTEGER NOT NULL,
+                                relevant_found INTEGER NOT NULL
+                            );
+                            CREATE INDEX IF NOT EXISTS idx_intelligence_history_recorded
+                                ON intelligence_history(recorded_at);",
+                        )
                     },
                 )?;
             }

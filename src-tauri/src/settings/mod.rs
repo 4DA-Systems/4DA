@@ -11,6 +11,7 @@ mod license_tests;
 pub use discovery::*;
 pub use license::*;
 
+use crate::community_intelligence::CommunityIntelligenceConfig;
 use crate::digest::DigestConfig;
 use serde::{Deserialize, Serialize};
 use std::fs;
@@ -541,6 +542,9 @@ pub struct Settings {
     /// Locale configuration for regional content
     #[serde(default)]
     pub locale: LocaleConfig,
+    /// Community intelligence configuration (opt-in anonymous pattern sharing)
+    #[serde(default)]
+    pub community_intelligence: Option<CommunityIntelligenceConfig>,
 }
 
 impl std::fmt::Debug for Settings {
@@ -573,6 +577,10 @@ impl std::fmt::Debug for Settings {
             .field("github_languages", &self.github_languages)
             .field("license", &self.license)
             .field("locale", &self.locale)
+            .field(
+                "community_intelligence",
+                &self.community_intelligence.is_some(),
+            )
             .finish_non_exhaustive()
     }
 }
@@ -649,6 +657,7 @@ impl Default for Settings {
             source_resilience: default_source_resilience(),
             rate_budgets: default_rate_budgets(),
             locale: LocaleConfig::default(),
+            community_intelligence: None,
         }
     }
 }

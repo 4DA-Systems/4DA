@@ -4,7 +4,7 @@
 //! pain points, ecosystem shifts, keyword boosts, source preferences, and
 //! auto-detection markers.
 
-use super::{EcosystemShift, PainPoint, StackProfile};
+use super::{EcosystemShift, PainPoint, SeedItem, StackProfile};
 
 // ============================================================================
 // Next.js Fullstack
@@ -118,6 +118,28 @@ pub static NEXTJS_FULLSTACK: StackProfile = StackProfile {
         "@vercel/",
     ],
     detection_threshold: 2,
+    seed_content: &[
+        SeedItem {
+            title: "Vercel Blog",
+            url: "https://vercel.com/blog",
+            source_type: "web",
+        },
+        SeedItem {
+            title: "Next.js Blog",
+            url: "https://nextjs.org/blog",
+            source_type: "web",
+        },
+        SeedItem {
+            title: "React Blog",
+            url: "https://react.dev/blog",
+            source_type: "web",
+        },
+        SeedItem {
+            title: "r/nextjs",
+            url: "https://www.reddit.com/r/nextjs/",
+            source_type: "reddit",
+        },
+    ],
 };
 
 // ============================================================================
@@ -221,6 +243,28 @@ pub static RUST_SYSTEMS: StackProfile = StackProfile {
         "tauri",
     ],
     detection_threshold: 2,
+    seed_content: &[
+        SeedItem {
+            title: "This Week in Rust",
+            url: "https://this-week-in-rust.org/",
+            source_type: "rss",
+        },
+        SeedItem {
+            title: "Rust Security Advisories",
+            url: "https://rustsec.org/advisories/",
+            source_type: "web",
+        },
+        SeedItem {
+            title: "Rust Blog",
+            url: "https://blog.rust-lang.org/",
+            source_type: "rss",
+        },
+        SeedItem {
+            title: "r/rust",
+            url: "https://www.reddit.com/r/rust/",
+            source_type: "reddit",
+        },
+    ],
 };
 
 // ============================================================================
@@ -352,6 +396,33 @@ pub static PYTHON_ML: StackProfile = StackProfile {
         "pyproject.toml",
     ],
     detection_threshold: 2,
+    seed_content: &[
+        SeedItem {
+            title: "Hugging Face Blog",
+            url: "https://huggingface.co/blog",
+            source_type: "web",
+        },
+        SeedItem {
+            title: "PyTorch Blog",
+            url: "https://pytorch.org/blog/",
+            source_type: "web",
+        },
+        SeedItem {
+            title: "arXiv ML",
+            url: "https://arxiv.org/list/cs.LG/recent",
+            source_type: "arxiv",
+        },
+        SeedItem {
+            title: "r/MachineLearning",
+            url: "https://www.reddit.com/r/MachineLearning/",
+            source_type: "reddit",
+        },
+        SeedItem {
+            title: "Papers With Code",
+            url: "https://paperswithcode.com/",
+            source_type: "web",
+        },
+    ],
 };
 
 // ============================================================================
@@ -461,6 +532,28 @@ pub static GO_BACKEND: StackProfile = StackProfile {
         "docker",
     ],
     detection_threshold: 2,
+    seed_content: &[
+        SeedItem {
+            title: "Go Blog",
+            url: "https://go.dev/blog/",
+            source_type: "web",
+        },
+        SeedItem {
+            title: "Go Weekly",
+            url: "https://golangweekly.com/",
+            source_type: "rss",
+        },
+        SeedItem {
+            title: "r/golang",
+            url: "https://www.reddit.com/r/golang/",
+            source_type: "reddit",
+        },
+        SeedItem {
+            title: "Kubernetes Blog",
+            url: "https://kubernetes.io/blog/",
+            source_type: "web",
+        },
+    ],
 };
 
 // ============================================================================
@@ -570,6 +663,28 @@ pub static REACT_NATIVE: StackProfile = StackProfile {
         "react-native.config",
     ],
     detection_threshold: 2,
+    seed_content: &[
+        SeedItem {
+            title: "React Native Blog",
+            url: "https://reactnative.dev/blog",
+            source_type: "web",
+        },
+        SeedItem {
+            title: "Expo Blog",
+            url: "https://expo.dev/blog",
+            source_type: "web",
+        },
+        SeedItem {
+            title: "r/reactnative",
+            url: "https://www.reddit.com/r/reactnative/",
+            source_type: "reddit",
+        },
+        SeedItem {
+            title: "React Native Newsletter",
+            url: "https://reactnativenewsletter.com/",
+            source_type: "rss",
+        },
+    ],
 };
 
 // ============================================================================
@@ -667,6 +782,28 @@ pub static LARAVEL: StackProfile = StackProfile {
         "livewire",
     ],
     detection_threshold: 2,
+    seed_content: &[
+        SeedItem {
+            title: "Laravel News",
+            url: "https://laravel-news.com/",
+            source_type: "rss",
+        },
+        SeedItem {
+            title: "Laravel Blog",
+            url: "https://blog.laravel.com/",
+            source_type: "web",
+        },
+        SeedItem {
+            title: "r/laravel",
+            url: "https://www.reddit.com/r/laravel/",
+            source_type: "reddit",
+        },
+        SeedItem {
+            title: "Laracasts Discussions",
+            url: "https://laracasts.com/discuss",
+            source_type: "web",
+        },
+    ],
 };
 
 // ============================================================================
@@ -766,6 +903,28 @@ pub static DJANGO: StackProfile = StackProfile {
         "wagtail",
     ],
     detection_threshold: 2,
+    seed_content: &[
+        SeedItem {
+            title: "Django Project Blog",
+            url: "https://www.djangoproject.com/weblog/",
+            source_type: "web",
+        },
+        SeedItem {
+            title: "Django Weekly",
+            url: "https://django-news.com/",
+            source_type: "rss",
+        },
+        SeedItem {
+            title: "r/django",
+            url: "https://www.reddit.com/r/django/",
+            source_type: "reddit",
+        },
+        SeedItem {
+            title: "Real Python Django",
+            url: "https://realpython.com/tutorials/django/",
+            source_type: "web",
+        },
+    ],
 };
 
 // ============================================================================
@@ -857,6 +1016,28 @@ pub static VUE_FRONTEND: StackProfile = StackProfile {
     source_preferences: &[("devto", 0.10), ("reddit", 0.05)],
     detection_markers: &["vue", "nuxt", "pinia", "nuxt.config", "vite.config", ".vue"],
     detection_threshold: 2,
+    seed_content: &[
+        SeedItem {
+            title: "Vue.js Blog",
+            url: "https://blog.vuejs.org/",
+            source_type: "web",
+        },
+        SeedItem {
+            title: "Nuxt Blog",
+            url: "https://nuxt.com/blog",
+            source_type: "web",
+        },
+        SeedItem {
+            title: "Vue.js News",
+            url: "https://news.vuejs.org/",
+            source_type: "rss",
+        },
+        SeedItem {
+            title: "r/vuejs",
+            url: "https://www.reddit.com/r/vuejs/",
+            source_type: "reddit",
+        },
+    ],
 };
 
 // ============================================================================
@@ -964,6 +1145,33 @@ pub static DEVOPS_SRE: StackProfile = StackProfile {
         "k8s",
     ],
     detection_threshold: 2,
+    seed_content: &[
+        SeedItem {
+            title: "Kubernetes Blog",
+            url: "https://kubernetes.io/blog/",
+            source_type: "web",
+        },
+        SeedItem {
+            title: "CNCF Blog",
+            url: "https://www.cncf.io/blog/",
+            source_type: "web",
+        },
+        SeedItem {
+            title: "HashiCorp Blog",
+            url: "https://www.hashicorp.com/blog",
+            source_type: "web",
+        },
+        SeedItem {
+            title: "r/devops",
+            url: "https://www.reddit.com/r/devops/",
+            source_type: "reddit",
+        },
+        SeedItem {
+            title: "SRE Weekly",
+            url: "https://sreweekly.com/",
+            source_type: "rss",
+        },
+    ],
 };
 
 // ============================================================================
@@ -1048,6 +1256,28 @@ pub static HASKELL_FP: StackProfile = StackProfile {
         "flake.nix",
     ],
     detection_threshold: 2,
+    seed_content: &[
+        SeedItem {
+            title: "Haskell Weekly",
+            url: "https://haskellweekly.news/",
+            source_type: "rss",
+        },
+        SeedItem {
+            title: "r/haskell",
+            url: "https://www.reddit.com/r/haskell/",
+            source_type: "reddit",
+        },
+        SeedItem {
+            title: "Haskell Planet",
+            url: "https://planet.haskell.org/",
+            source_type: "rss",
+        },
+        SeedItem {
+            title: "NixOS Discourse",
+            url: "https://discourse.nixos.org/",
+            source_type: "web",
+        },
+    ],
 };
 
 // ============================================================================
@@ -1114,6 +1344,28 @@ pub static BOOTSTRAP_WEBDEV: StackProfile = StackProfile {
         "npm",
     ],
     detection_threshold: 2,
+    seed_content: &[
+        SeedItem {
+            title: "JavaScript Weekly",
+            url: "https://javascriptweekly.com/",
+            source_type: "rss",
+        },
+        SeedItem {
+            title: "React Blog",
+            url: "https://react.dev/blog",
+            source_type: "web",
+        },
+        SeedItem {
+            title: "Node.js Blog",
+            url: "https://nodejs.org/en/blog",
+            source_type: "web",
+        },
+        SeedItem {
+            title: "r/javascript",
+            url: "https://www.reddit.com/r/javascript/",
+            source_type: "reddit",
+        },
+    ],
 };
 
 // ============================================================================
