@@ -136,20 +136,19 @@ describe('SplashScreen', () => {
     unmount();
   });
 
-  it('handles backend errors gracefully and still completes', async () => {
+  it('handles backend errors gracefully and shows error state', async () => {
     const onComplete = vi.fn();
     mockInvoke.mockRejectedValue(new Error('Backend unavailable'));
 
     render(<SplashScreen onComplete={onComplete} minimumDisplayTime={0} />);
 
-    // Should show error label and still call onComplete
+    // Should show error label (stays in error state with retry/refresh)
     await waitFor(() => {
       expect(screen.getByRole('status')).toHaveAttribute('aria-label', 'splash.error');
     }, { timeout: 3000 });
 
-    await waitFor(() => {
-      expect(onComplete).toHaveBeenCalled();
-    }, { timeout: 3000 });
+    // Should NOT auto-complete — user must retry or refresh
+    expect(onComplete).not.toHaveBeenCalled();
   });
 
   it('shows stage indicator dots', async () => {
