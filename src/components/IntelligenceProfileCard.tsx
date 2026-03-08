@@ -58,7 +58,7 @@ export const IntelligenceProfileCard = memo(function IntelligenceProfileCard() {
   useEffect(() => {
     invoke<IntelligenceGrowthData>('get_intelligence_growth')
       .then(setGrowth)
-      .catch(() => {});
+      .catch((e) => console.warn('IntelligenceProfileCard: failed to load growth data', e));
   }, []);
 
   const positiveAffinities = useMemo(() =>
@@ -221,7 +221,7 @@ function KnowledgeGapsCard() {
     if (!isPro) return;
     invoke<KnowledgeGap[]>('get_knowledge_gaps')
       .then(g => setGaps(g))
-      .catch(() => {});
+      .catch((e) => console.warn('IntelligenceProfileCard: failed to load profile', e));
   }, [isPro]);
 
   if (!isPro) return null;

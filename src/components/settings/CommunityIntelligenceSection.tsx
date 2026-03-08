@@ -17,7 +17,7 @@ export function CommunityIntelligenceSection() {
   const loadStatus = useCallback(() => {
     invoke<CommunityStatus>('get_community_status')
       .then(setStatus)
-      .catch(() => {});
+      .catch((e) => console.warn('CommunityIntelligence: failed to load status', e));
   }, []);
 
   useEffect(() => {

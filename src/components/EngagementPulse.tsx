@@ -17,7 +17,7 @@ export const EngagementPulse = memo(function EngagementPulse() {
   useEffect(() => {
     invoke<EngagementData>('get_engagement_summary')
       .then(setData)
-      .catch(() => {}); // Silent — supplementary data
+      .catch((e) => console.warn('EngagementPulse: failed to load pulse data', e));
   }, []);
 
   if (!data) return null;
