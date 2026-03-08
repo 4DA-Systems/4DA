@@ -25,6 +25,19 @@ vi.mock('@tauri-apps/api', () => ({
   },
 }));
 
+// Mock Tauri core (invoke) and event listener subpath imports
+vi.mock('@tauri-apps/api/core', () => ({
+  invoke: vi.fn(),
+  transformCallback: vi.fn(),
+  Channel: vi.fn(),
+}));
+
+vi.mock('@tauri-apps/api/event', () => ({
+  listen: vi.fn(() => Promise.resolve(() => {})),
+  emit: vi.fn(),
+  once: vi.fn(() => Promise.resolve(() => {})),
+}));
+
 // Mock Tauri plugin opener
 vi.mock('@tauri-apps/plugin-opener', () => ({
   open: vi.fn(),
