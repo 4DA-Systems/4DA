@@ -96,6 +96,26 @@ export const BriefingView = memo(function BriefingView() {
     [sourceHealth],
   );
 
+  // Source quality analysis — flag sources with < 5% relevance ratio
+  const lowQualitySources = useMemo(() => {
+    if (results.length < 10) return [];
+    const bySource: Record<string, { total: number; relevant: number }> = {};
+    for (const r of results) {
+      const src = r.source_type ?? 'unknown';
+      if (!bySource[src]) bySource[src] = { total: 0, relevant: 0 };
+      bySource[src].total++;
+      if (r.relevant) bySource[src].relevant++;
+    }
+    return Object.entries(bySource)
+      .filter(([, stats]) => stats.total >= 5 && (stats.relevant / stats.total) < 0.05)
+      .map(([source, stats]) => ({
+        source,
+        total: stats.total,
+        relevant: stats.relevant,
+        ratio: Math.round((stats.relevant / stats.total) * 100),
+      }));
+  }, [results]);
+
   // Source health summary for header badge
   const healthSummary = useMemo(() => {
     if (sourceHealth.length === 0) return null;
@@ -438,6 +458,25 @@ export const BriefingView = memo(function BriefingView() {
                 ))}
               </div>
             )}
+          </div>
+        )}
+
+        {/* Source quality suggestions */}
+        {lowQualitySources.length > 0 && (
+          <div className="px-5 py-2.5 bg-purple-500/5 border-b border-purple-500/10">
+            {lowQualitySources.map(s => (
+              <div key={s.source} className="flex items-center justify-between text-xs py-0.5">
+                <span className="text-purple-400">
+                  {s.source}: {s.ratio}% of {s.total} items relevant to you
+                </span>
+                <button
+                  onClick={() => setActiveView('calibrate')}
+                  className="text-purple-400/70 hover:text-purple-300 transition-colors"
+                >
+                  {t('briefing.reviewSource', 'Review')}
+                </button>
+              </div>
+            ))}
           </div>
         )}
 
