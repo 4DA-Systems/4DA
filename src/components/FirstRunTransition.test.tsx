@@ -512,7 +512,7 @@ describe('FirstRunTransition', () => {
     });
 
     // Should show narration for fetch stage
-    expect(screen.getByText('Gathering stories from across the internet...')).toBeDefined();
+    expect(screen.getByText('Connecting to 11 intelligence sources...')).toBeDefined();
 
     // Should show progress percentage
     expect(screen.getByText('30%')).toBeDefined();

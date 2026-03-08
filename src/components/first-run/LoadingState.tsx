@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { VoidEngine } from '../void-engine/VoidEngine';
@@ -151,6 +151,26 @@ export function LoadingState({
 
   useEffect(() => { registerGameComponent('game-boot-ring'); }, []);
 
+  // Estimated time remaining — starts at 90s, decrements every second
+  // Uses a ref-based counter to avoid infinite timer chains in test environments
+  const [estimatedSeconds, setEstimatedSeconds] = useState(90);
+  const counterRef = useRef(90);
+
+  useEffect(() => {
+    if (phase === 'intelligence' || phase === 'celebrating' || phase === 'fading') return;
+
+    const interval = setInterval(() => {
+      if (counterRef.current <= 0) {
+        clearInterval(interval);
+        return;
+      }
+      counterRef.current -= 1;
+      setEstimatedSeconds(counterRef.current);
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [phase]);
+
   // Intelligence preview phase
   if (phase === 'intelligence' && scanSummary) {
     return <IntelligencePreview summary={scanSummary} />;
@@ -178,6 +198,18 @@ export function LoadingState({
       <p className="text-sm text-text-secondary mb-6">
         {getStageNarration(progressStage || 'init')}
       </p>
+
+      {/* Estimated time remaining */}
+      {(phase === 'preparing' || phase === 'fetching' || phase === 'analyzing') && (
+        <p className="text-sm text-text-secondary mb-4" aria-live="polite">
+          {estimatedSeconds <= 0
+            ? t('firstRun.estimatedTimeAlmost', 'Almost there...')
+            : estimatedSeconds < 30
+              ? t('firstRun.estimatedTimeLow', '< 30s remaining')
+              : t('firstRun.estimatedTime', { seconds: estimatedSeconds, defaultValue: '~{{seconds}}s remaining' })
+          }
+        </p>
+      )}
 
       {/* User interests (preparing phase) */}
       {phase === 'preparing' && interests.length > 0 && (

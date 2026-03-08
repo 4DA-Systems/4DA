@@ -72,34 +72,50 @@ export function Onboarding({ onComplete }: OnboardingProps) {
   return (
     <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-bg-primary p-8" role="dialog" aria-modal="true" aria-label="Setup wizard">
       {/* Progress indicator */}
-      <div className="absolute top-8 flex items-center gap-1" role="group" aria-label={`Step ${currentIndex + 1} of ${steps.length}: ${stepLabels[step]}`}>
-        {steps.map((s, i) => (
-          <div key={s} className="flex items-center">
-            <div
-              className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-medium transition-all duration-300 ${
-                i < currentIndex
-                  ? 'bg-orange-500 text-white'
-                  : i === currentIndex
-                  ? 'bg-orange-500/20 text-orange-400 ring-2 ring-orange-500'
-                  : 'bg-bg-tertiary text-text-muted'
-              }`}
-            >
-              {i < currentIndex ? '\u2713' : i + 1}
-            </div>
-            {i < steps.length - 1 && (
-              <div
-                className={`w-8 h-0.5 transition-colors duration-300 ${
-                  i < currentIndex ? 'bg-orange-500' : 'bg-bg-tertiary'
-                }`}
-              />
-            )}
-          </div>
-        ))}
-      </div>
+      <div className="absolute top-8 flex flex-col items-center gap-2">
+        {/* Step X of Y text */}
+        <p className="text-xs text-text-muted">
+          {t('onboarding.stepProgress', { current: currentIndex + 1, total: steps.length, defaultValue: 'Step {{current}} of {{total}}' })}
+        </p>
 
-      {/* Step label */}
-      <div className="absolute top-[70px] text-xs text-text-muted">
-        {stepLabels[step]}
+        {/* Step circles */}
+        <div className="flex items-center gap-1" role="group" aria-label={`Step ${currentIndex + 1} of ${steps.length}: ${stepLabels[step]}`}>
+          {steps.map((s, i) => (
+            <div key={s} className="flex items-center">
+              <div
+                className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-medium transition-all duration-300 ${
+                  i < currentIndex
+                    ? 'bg-orange-500 text-white'
+                    : i === currentIndex
+                    ? 'bg-orange-500/20 text-orange-400 ring-2 ring-orange-500'
+                    : 'bg-bg-tertiary text-text-muted'
+                }`}
+              >
+                {i < currentIndex ? '\u2713' : i + 1}
+              </div>
+              {i < steps.length - 1 && (
+                <div
+                  className={`w-8 h-0.5 transition-colors duration-300 ${
+                    i < currentIndex ? 'bg-orange-500' : 'bg-bg-tertiary'
+                  }`}
+                />
+              )}
+            </div>
+          ))}
+        </div>
+
+        {/* Progress bar */}
+        <div className="w-48 h-1 bg-bg-tertiary rounded-full overflow-hidden">
+          <div
+            className="h-full bg-orange-500 rounded-full transition-all duration-500 ease-out"
+            style={{ width: `${((currentIndex + 1) / steps.length) * 100}%` }}
+          />
+        </div>
+
+        {/* Step label */}
+        <div className="text-xs text-text-muted">
+          {stepLabels[step]}
+        </div>
       </div>
 
       {/* Step content */}

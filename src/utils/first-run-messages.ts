@@ -5,22 +5,22 @@ import { getSourceLabel } from '../config/sources';
 
 export function getStageNarration(stage: string): string {
   switch (stage) {
-    case 'init': return 'Preparing analysis engine...';
-    case 'context': return 'Loading your project context...';
-    case 'fetch': return 'Gathering stories from across the internet...';
-    case 'scrape': return 'Extracting article content...';
-    case 'embed': return 'Understanding content semantics...';
-    case 'relevance': return 'Scoring relevance against your interests...';
-    case 'rerank': return 'AI is re-ranking the best matches...';
-    case 'complete': return 'Analysis complete!';
+    case 'init': return 'Initializing your intelligence engine...';
+    case 'context': return 'Reading your project context to personalize results...';
+    case 'fetch': return 'Connecting to 11 intelligence sources...';
+    case 'scrape': return 'Extracting full article content for deeper analysis...';
+    case 'embed': return 'Building semantic understanding of each article...';
+    case 'relevance': return 'Scoring and ranking for relevance to your stack...';
+    case 'rerank': return 'AI is re-ranking the best matches for precision...';
+    case 'complete': return 'Analysis complete — your briefing is ready!';
     default: return 'Processing...';
   }
 }
 
 export function getSourceNarration(source: string, count: number): string {
   const label = getSourceLabel(source);
-  if (count === 0) return `Checked ${label} — nothing new`;
-  return `Found ${count} ${count === 1 ? 'story' : 'stories'} from ${label}`;
+  if (count === 0) return `Checked ${label} — nothing new right now`;
+  return `Found ${count} ${count === 1 ? 'item' : 'items'} matching your interests from ${label}`;
 }
 
 export function getCelebrationMessage(relevantCount: number, total: number): string {
