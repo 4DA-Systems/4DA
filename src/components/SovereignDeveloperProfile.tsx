@@ -131,7 +131,7 @@ export const SovereignDeveloperProfile = memo(function SovereignDeveloperProfile
     switch (action) {
       case 'scan_infra':
       case 'scan_stack':
-        invoke('ace_scan_all_projects').catch(() => {});
+        invoke('ace_auto_discover').catch(() => {});
         break;
       case 'open_playbook':
         setActiveView('playbook');

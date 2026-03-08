@@ -1113,6 +1113,18 @@ pub async fn activate_streets_license(license_key: String) -> Result<serde_json:
     }))
 }
 
+/// Get a Pro value report summarizing pipeline impact.
+/// TODO: aggregate real data from analysis history once Pro analytics are built.
+#[tauri::command]
+pub async fn get_pro_value_report() -> Result<serde_json::Value> {
+    Ok(serde_json::json!({
+        "total_saved_hours": 0.0,
+        "total_signals_processed": 0,
+        "top_discoveries": [],
+        "period_days": 30
+    }))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

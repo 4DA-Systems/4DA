@@ -55,6 +55,7 @@ mod ace_commands;
 mod agent_brief;
 mod agent_memory;
 mod analysis;
+mod analysis_narration;
 mod analysis_rerank;
 mod anomaly;
 mod attention;
@@ -68,6 +69,7 @@ mod channel_commands;
 mod channel_provenance;
 mod channel_render;
 pub mod channels;
+mod community_intelligence;
 mod competing_tech;
 mod content_commands;
 mod content_dna;
@@ -94,6 +96,8 @@ mod game_commands;
 mod game_engine;
 mod health;
 mod health_commands;
+mod indexed_documents_commands;
+mod intelligence_history;
 mod job_queue;
 mod knowledge_decay;
 mod llm;
@@ -111,6 +115,7 @@ mod project_health_dimensions;
 pub mod query;
 mod scoring;
 pub(crate) mod scoring_config;
+mod search_synthesis;
 mod semantic_diff;
 pub mod settings;
 mod settings_commands;
@@ -119,6 +124,7 @@ mod signals;
 mod source_config;
 mod source_fetching;
 pub mod sources;
+mod standing_queries;
 mod suns;
 mod suns_commands;
 mod tech_radar;
@@ -130,6 +136,7 @@ mod void_engine;
 mod weekly_digest;
 
 mod stack_commands;
+mod stack_health;
 pub mod stacks;
 
 pub mod taste_test;
@@ -260,6 +267,7 @@ pub fn run() {
             context_commands::index_context,
             context_commands::index_project_readmes,
             context_commands::set_context_dirs,
+            context_commands::get_context_dirs,
             // Analysis
             analysis::run_deep_initial_scan,
             analysis::run_cached_analysis,
@@ -291,6 +299,7 @@ pub fn run() {
             settings_commands::set_locale,
             settings_commands::get_streets_tier,
             settings_commands::activate_streets_license,
+            settings_commands::get_pro_value_report,
             settings_commands::get_user_context,
             settings_commands::set_user_role,
             settings_commands::add_tech_stack,
@@ -335,6 +344,7 @@ pub fn run() {
             source_config::get_twitter_handles,
             source_config::set_twitter_handles,
             source_config::set_x_api_key,
+            source_config::get_x_api_key,
             source_config::get_youtube_channels,
             source_config::set_youtube_channels,
             source_config::get_github_languages,
@@ -374,6 +384,11 @@ pub fn run() {
             decisions::record_developer_decision,
             decisions::update_developer_decision,
             decisions::remove_tech_decision,
+            // Decision Advantage
+            decision_advantage_commands::get_decision_windows,
+            decision_advantage_commands::act_on_decision_window,
+            decision_advantage_commands::close_decision_window,
+            decision_advantage_commands::get_compound_advantage,
             // Agent Memory
             // Tech Radar
             tech_radar::get_tech_radar,
@@ -402,6 +417,9 @@ pub fn run() {
             stack_commands::set_selected_stacks,
             stack_commands::detect_stack_profiles,
             stack_commands::get_composed_stack,
+            // Stack Health Engine
+            stack_health::get_stack_health,
+            stack_health::get_missed_intelligence,
             // Playbook (STREETS Course)
             playbook_commands::get_playbook_modules,
             playbook_commands::get_playbook_content,
@@ -471,10 +489,30 @@ pub fn run() {
             channel_commands::delete_channel,
             // Natural Language Search (Pro)
             natural_language_search::natural_language_query,
+            // Search Synthesis — LLM briefings (Pro)
+            search_synthesis::synthesize_search,
             // Weekly Intelligence Digest (Pro)
             weekly_digest::generate_weekly_digest,
             // Decision Impact Tracking (Pro)
-            decision_signals::get_decision_signals
+            decision_signals::get_decision_signals,
+            // Standing Queries (Pro)
+            standing_queries::create_standing_query,
+            standing_queries::list_standing_queries,
+            standing_queries::delete_standing_query,
+            standing_queries::get_standing_query_matches,
+            // Indexed Documents
+            indexed_documents_commands::get_indexed_documents,
+            indexed_documents_commands::get_indexed_stats,
+            indexed_documents_commands::search_documents,
+            indexed_documents_commands::get_document_content,
+            // STREETS Health
+            suns_commands::get_street_health,
+            // Intelligence History
+            intelligence_history::get_intelligence_growth,
+            // Community Intelligence
+            community_intelligence::get_community_status,
+            community_intelligence::set_community_intelligence_enabled,
+            community_intelligence::set_community_frequency
         ])
         .setup(|app| {
             // Record app start time for diagnostics uptime tracking
@@ -636,6 +674,23 @@ pub fn run() {
                                     warn!(target: "4da::channels", error = %e, "Channel auto-render failed");
                                 }
                             });
+
+                            // Evaluate standing queries for Pro users
+                            if crate::settings::is_pro() {
+                                let standing_handle = handle.clone();
+                                tauri::async_runtime::spawn(async move {
+                                    if let Ok(conn) = crate::open_db_connection() {
+                                        let alerts = standing_queries::evaluate_standing_queries(&conn);
+                                        if !alerts.is_empty() {
+                                            let total_new: i64 = alerts.iter().map(|a| a.new_matches).sum();
+                                            let _ = standing_handle.emit("standing-query-matches", &alerts);
+                                            if total_new > 0 {
+                                                void_signal_notification(&standing_handle, false, total_new as usize);
+                                            }
+                                        }
+                                    }
+                                });
+                            }
                         }
                         Err(e) => {
                             error!(target: "4da::monitor", error = %e, "Scheduled analysis failed");

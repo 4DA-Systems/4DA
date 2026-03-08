@@ -181,11 +181,6 @@ interface CommandMap {
   get_templates: { params: Record<string, never>; result: Array<{ id: string; title: string; description: string; category: string; content: string }> };
   get_template_content: { params: { templateId: string }; result: { id: string; title: string; description: string; category: string; content: string } };
 
-  // -- Video Curriculum --
-  get_video_curriculum: { params: Record<string, never>; result: [Array<{ id: number; video_id: string; title: string; duration_seconds: number; drip_day: number; watched: boolean; watch_progress_seconds: number; unlocked: boolean; unlocked_at: string | null; watched_at: string | null }>, { total_videos: number; unlocked_count: number; watched_count: number; total_duration_seconds: number; watched_duration_seconds: number; days_since_activation: number }] };
-  mark_video_progress: { params: { videoId: string; progressSeconds: number }; result: void };
-  mark_video_complete: { params: { videoId: string }; result: void };
-
   // -- Playbook (STREETS) --
   get_playbook_modules: { params: Record<string, never>; result: PlaybookModule[] };
   get_playbook_content: { params: { moduleId: string }; result: PlaybookContent };
@@ -194,12 +189,7 @@ interface CommandMap {
   parse_lesson_commands: { params: { moduleId: string; lessonIdx: number }; result: ParsedCommand[] };
   execute_streets_command: { params: { commandId: string; command: string; riskLevel: string }; result: CommandExecutionResult };
 
-  // -- Suns (Autonomous Engines) --
-  get_sun_statuses: { params: Record<string, never>; result: SunStatus[] };
-  get_sun_alerts: { params: Record<string, never>; result: SunAlert[] };
-  toggle_sun: { params: { sunId: string; enabled: boolean }; result: void };
-  acknowledge_sun_alert: { params: { alertId: number }; result: void };
-  trigger_sun_manually: { params: { sunId: string }; result: SunRunResult };
+  // -- STREETS Health --
   get_street_health: { params: Record<string, never>; result: StreetHealthScore };
 
   // -- Sovereign Profile --
@@ -350,36 +340,20 @@ interface ProValueReport {
   period_days: number;
 }
 
-interface SunStatus {
-  id: string;
-  name: string;
-  enabled: boolean;
-  last_run: string | null;
-  next_run: string | null;
-  status: string;
-}
-
-interface SunAlert {
-  id: number;
-  sun_id: string;
-  alert_type: string;
-  message: string;
-  severity: string;
-  acknowledged: boolean;
-  created_at: string;
-}
-
-interface SunRunResult {
-  success: boolean;
-  items_processed: number;
-  duration_ms: number;
-  message: string;
-}
-
 interface StreetHealthScore {
   overall: number;
-  dimensions: Record<string, number>;
-  recommendations: string[];
+  module_scores: Array<{
+    module_id: string;
+    module_name: string;
+    score: number;
+    sun_count: number;
+    success_rate: number;
+    lessons_completed: number;
+    total_lessons: number;
+    last_activity: string | null;
+  }>;
+  trend: string;
+  top_action: string;
 }
 
 interface SovereignProfileData {
@@ -579,9 +553,6 @@ export type {
   AgentMemoryEntry,
   DelegationScoreEntry,
   ProValueReport,
-  SunStatus,
-  SunAlert,
-  SunRunResult,
   StreetHealthScore,
   SovereignProfileData,
   ProfileCompleteness,

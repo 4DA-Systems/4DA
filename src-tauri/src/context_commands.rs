@@ -10,8 +10,8 @@ use tracing::{debug, info, warn};
 
 use crate::error::Result;
 use crate::{
-    ace_commands, chunk_text, embed_texts, get_context_dir, get_context_dirs, get_database,
-    get_settings_manager, ContextFile, SUPPORTED_EXTENSIONS,
+    ace_commands, chunk_text, embed_texts, get_context_dir, get_database, get_settings_manager,
+    ContextFile, SUPPORTED_EXTENSIONS,
 };
 
 /// Directories to skip during recursive context scanning
@@ -214,7 +214,7 @@ pub async fn index_context() -> Result<String> {
 pub async fn index_project_readmes() -> Result<String> {
     info!(target: "4da::context", "Indexing READMEs from all configured directories");
 
-    let context_dirs = get_context_dirs();
+    let context_dirs = crate::get_context_dirs();
     if context_dirs.is_empty() {
         return Err("No context directories configured".into());
     }
@@ -282,6 +282,14 @@ pub async fn set_context_dirs(dirs: Vec<String>) -> Result<String> {
         "Context directories updated: {} directories configured",
         converted_dirs.len()
     ))
+}
+
+#[tauri::command]
+pub async fn get_context_dirs() -> Result<Vec<String>> {
+    Ok(crate::get_context_dirs()
+        .into_iter()
+        .map(|p| p.to_string_lossy().to_string())
+        .collect())
 }
 
 #[cfg(test)]
