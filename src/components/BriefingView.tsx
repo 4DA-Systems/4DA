@@ -4,7 +4,10 @@ import { useShallow } from 'zustand/react/shallow';
 import { BriefingCard } from './BriefingCard';
 import { SignalActionCard } from './briefing/SignalActionCard';
 import { BriefingAtmosphere, RelativeTimestamp, SKELETON_WIDTHS } from './briefing/BriefingHelpers';
-import { BriefingLoadingState, BriefingReadyState, BriefingNoDataState } from './BriefingEmptyStates';
+import { BriefingLoadingState, BriefingReadyState } from './BriefingEmptyStates';
+import { BriefingWarmupState } from './BriefingWarmupState';
+import { DigestView } from './DigestView';
+import { CommunityInsights } from './CommunityInsights';
 import { ProGate } from './ProGate';
 import { useAppStore } from '../store';
 import {
@@ -52,6 +55,7 @@ export const BriefingView = memo(function BriefingView() {
   const addToast = useAppStore(s => s.addToast);
   const generateFreeBriefing = useAppStore(s => s.generateFreeBriefing);
   const loadPulse = useAppStore(s => s.loadIntelligencePulse);
+  const startAnalysis = useAppStore(s => s.startAnalysis);
 
   const { isPro } = useLicense();
 
@@ -237,7 +241,7 @@ export const BriefingView = memo(function BriefingView() {
     }
 
     if (analysisComplete && results.length > 0) return <BriefingReadyState />;
-    return <BriefingNoDataState />;
+    return <BriefingWarmupState onAnalyze={startAnalysis} />;
   }
 
   // Briefing content view
@@ -248,6 +252,12 @@ export const BriefingView = memo(function BriefingView() {
         topCount={topItems.length}
         hasContent={!!briefing.content}
       />
+
+      {/* 0a. Weekly Digest — self-hides when no digest available */}
+      <DigestView />
+
+      {/* 0b. Community Intelligence status — self-hides when not enabled */}
+      <CommunityInsights />
 
       {/* 1. Decision Windows — urgency first */}
       <DecisionWindowsPanel />

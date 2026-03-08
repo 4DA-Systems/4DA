@@ -34,6 +34,11 @@ export function BadgeRow({ item }: BadgeRowProps) {
           {t('results.learnedBadge')}
         </span>
       )}
+      {item.decision_window_match && (
+        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-amber-500/10 text-amber-400 text-[10px] rounded border border-amber-500/20">
+          Decision: {item.decision_window_match}
+        </span>
+      )}
       {item.serendipity && (
         <span className="flex-shrink-0 text-[10px] px-1.5 py-0.5 rounded font-medium bg-fuchsia-500/20 text-fuchsia-400">
           {t('results.serendipity')}

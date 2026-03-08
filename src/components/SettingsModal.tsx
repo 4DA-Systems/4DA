@@ -14,6 +14,7 @@ import { LocaleSection } from './settings/LocaleSection';
 import { LicenseSection } from './settings/LicenseSection';
 import { ContextDiscoverySection } from './settings/ContextDiscoverySection';
 import { PersonalizationSection } from './settings/PersonalizationSection';
+import { CommunityIntelligenceSection } from './settings/CommunityIntelligenceSection';
 import { DeveloperDnaPanel } from './DeveloperDna';
 import { AttentionDashboard } from './settings/AttentionDashboard';
 import { ProjectHealthRadar } from './settings/ProjectHealthRadar';
@@ -367,6 +368,10 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
 
                 <PanelErrorBoundary name="Digest">
                   <DigestSection setSettingsStatus={setSettingsStatus} />
+                </PanelErrorBoundary>
+
+                <PanelErrorBoundary name="Community Intelligence">
+                  <CommunityIntelligenceSection />
                 </PanelErrorBoundary>
 
                 <PanelErrorBoundary name="License">

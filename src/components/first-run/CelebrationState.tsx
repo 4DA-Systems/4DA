@@ -7,10 +7,14 @@ import { getSourceFullName } from '../../config/sources';
 interface TopSignal {
   title: string;
   url: string | null;
+  top_score?: number;
+  source_type?: string;
   score_breakdown?: {
     dep_match_score?: number;
     matched_deps?: string[];
     skill_gap_boost?: number;
+    stack_boost?: number;
+    domain_relevance?: number;
   };
 }
 
@@ -24,6 +28,25 @@ interface CelebrationStateProps {
   onDismiss: (view: 'briefing' | 'results' | 'playbook') => void;
 }
 
+/** Build a human-readable insight explaining why the top signal matched */
+function buildMatchReason(signal: TopSignal): string | null {
+  const parts: string[] = [];
+  const sb = signal.score_breakdown;
+  if (!sb) return null;
+
+  if (sb.matched_deps && sb.matched_deps.length > 0) {
+    parts.push(`Matches your dependencies: ${sb.matched_deps.slice(0, 4).join(', ')}`);
+  }
+  if (sb.stack_boost && sb.stack_boost > 0) {
+    parts.push('Relevant to your stack profile');
+  }
+  if (sb.skill_gap_boost && sb.skill_gap_boost > 0) {
+    parts.push('Covers a technology gap in your profile');
+  }
+
+  return parts.length > 0 ? parts.join(' \u00b7 ') : null;
+}
+
 export function CelebrationState({
   relevantCount,
   totalCount,
@@ -34,6 +57,10 @@ export function CelebrationState({
   onDismiss,
 }: CelebrationStateProps) {
   const { t } = useTranslation();
+  const matchReason = topSignal ? buildMatchReason(topSignal) : null;
+
+  // Count items matching active dependencies
+  const depMatchCount = sourceBreakdown.reduce((sum, [, count]) => sum + count, 0);
 
   return (
     <div className="text-center px-8 max-w-lg">
@@ -41,17 +68,77 @@ export function CelebrationState({
         <VoidEngine size={80} />
       </div>
 
-      {/* Big relevant count */}
-      <div className="mb-4">
-        <span className="text-6xl font-bold text-white tabular-nums">{relevantCount}</span>
-        <p className="text-sm text-gray-400 mt-2">
-          {getCelebrationMessage(relevantCount, totalCount)}
-        </p>
+      {/* Intelligence Activated header */}
+      <h2 className="text-lg font-medium text-white mb-4">
+        {t('firstRun.intelligenceActivated', 'Intelligence Activated')}
+      </h2>
+
+      {/* Stats row */}
+      <div className="flex justify-center gap-8 mb-6">
+        <div className="text-center">
+          <span className="text-3xl font-bold text-white tabular-nums">{totalCount}</span>
+          <p className="text-[10px] text-gray-500 uppercase tracking-wider mt-0.5">
+            {t('firstRun.itemsAnalyzed', 'analyzed')}
+          </p>
+        </div>
+        <div className="text-center">
+          <span className="text-3xl font-bold text-white tabular-nums">{relevantCount}</span>
+          <p className="text-[10px] text-gray-500 uppercase tracking-wider mt-0.5">
+            {t('firstRun.relevantToYou', 'relevant')}
+          </p>
+        </div>
+        {depMatchCount > 0 && depMatchCount !== totalCount && (
+          <div className="text-center">
+            <span className="text-3xl font-bold text-white tabular-nums">{sourceBreakdown.length}</span>
+            <p className="text-[10px] text-gray-500 uppercase tracking-wider mt-0.5">
+              {t('firstRun.sourcesScanned', 'sources')}
+            </p>
+          </div>
+        )}
       </div>
+
+      {/* Celebration message */}
+      <p className="text-sm text-gray-400 mb-6">
+        {getCelebrationMessage(relevantCount, totalCount)}
+      </p>
+
+      {/* Top signal highlight with match reasoning */}
+      {topSignal && (
+        <div className="mb-6 p-4 bg-bg-secondary rounded-lg border border-orange-500/20 text-left max-w-sm mx-auto">
+          <p className="text-[10px] text-orange-400 font-medium uppercase tracking-wider mb-1">
+            {topSignal.score_breakdown?.dep_match_score && topSignal.score_breakdown.dep_match_score > 0
+              ? t('firstRun.topMatchStack', 'Matches your stack')
+              : t('firstRun.topMatch')}
+            {topSignal.top_score != null && (
+              <span className="ml-2 text-gray-500 normal-case">{(topSignal.top_score).toFixed(2)}</span>
+            )}
+            {topSignal.source_type && (
+              <span className="ml-2 text-gray-500 normal-case">{getSourceFullName(topSignal.source_type)}</span>
+            )}
+          </p>
+          <p className="text-sm text-white font-medium leading-snug line-clamp-2">{topSignal.title}</p>
+          {topSignal.score_breakdown?.matched_deps && topSignal.score_breakdown.matched_deps.length > 0 && (
+            <div className="flex flex-wrap gap-1 mt-2">
+              {topSignal.score_breakdown.matched_deps.slice(0, 4).map(dep => (
+                <span key={dep} className="px-1.5 py-0.5 text-[10px] bg-blue-500/10 text-blue-400 rounded">
+                  {dep}
+                </span>
+              ))}
+            </div>
+          )}
+          {matchReason && (
+            <p className="text-[10px] text-gray-400 mt-2 italic">{matchReason}</p>
+          )}
+          <p className="text-xs text-gray-500 mt-1 truncate">{topSignal.url}</p>
+        </div>
+      )}
 
       {/* Stack-specific insights */}
       {stackInsights.length > 0 && (
         <div className="mb-6 space-y-2 max-w-sm mx-auto">
+          <p className="text-[10px] text-gray-500 uppercase tracking-wider mb-1 text-left">
+            {t('firstRun.stackInsight', 'Stack Insight')}
+          </p>
           {stackInsights.slice(0, 3).map((insight, i) => (
             <div key={i} className="px-4 py-2.5 bg-bg-secondary rounded-lg border border-border text-left">
               <p className="text-xs text-gray-300 leading-relaxed">{insight}</p>
@@ -68,24 +155,6 @@ export function CelebrationState({
               {getSourceFullName(src)} <span className="text-gray-500">{count}</span>
             </span>
           ))}
-        </div>
-      )}
-
-      {/* Top signal highlight */}
-      {topSignal && (
-        <div className="mb-6 p-4 bg-bg-secondary rounded-lg border border-orange-500/20 text-left max-w-sm mx-auto">
-          <p className="text-[10px] text-orange-400 font-medium uppercase tracking-wider mb-1">
-            {topSignal.score_breakdown?.dep_match_score && topSignal.score_breakdown.dep_match_score > 0
-              ? t('firstRun.topMatchStack', 'Matches your stack')
-              : t('firstRun.topMatch')}
-          </p>
-          <p className="text-sm text-white font-medium leading-snug line-clamp-2">{topSignal.title}</p>
-          {topSignal.score_breakdown?.matched_deps && topSignal.score_breakdown.matched_deps.length > 0 && (
-            <p className="text-[10px] text-blue-400 mt-1">
-              {topSignal.score_breakdown.matched_deps.slice(0, 3).join(', ')}
-            </p>
-          )}
-          <p className="text-xs text-gray-500 mt-1 truncate">{topSignal.url}</p>
         </div>
       )}
 

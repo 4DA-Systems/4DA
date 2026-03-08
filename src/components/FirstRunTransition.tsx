@@ -87,6 +87,13 @@ export function FirstRunTransition({ onComplete }: FirstRunTransitionProps) {
     init();
   }, [startAnalysis]);
 
+  // Narration events from backend analysis
+  const [narrationEvents, setNarrationEvents] = useState<Array<{
+    type: string;
+    message: string;
+    timestamp: number;
+  }>>([]);
+
   // Listen for source-fetched events for real-time narration
   useEffect(() => {
     let unlisten: UnlistenFn | null = null;
@@ -95,6 +102,27 @@ export function FirstRunTransition({ onComplete }: FirstRunTransitionProps) {
         const { source, count } = event.payload;
         setItemCount(prev => prev + count);
         setSourceMessages(prev => [...prev.slice(-4), getSourceNarration(source, count)]);
+      });
+    };
+    setup();
+    return () => { if (unlisten) unlisten(); };
+  }, []);
+
+  // Listen for analysis-narration events for live narration feed
+  useEffect(() => {
+    let unlisten: UnlistenFn | null = null;
+    const setup = async () => {
+      unlisten = await listen<{
+        narration_type: string;
+        message: string;
+        source: string | null;
+        relevance: number | null;
+      }>('analysis-narration', (event) => {
+        setNarrationEvents(prev => [...prev.slice(-20), {
+          type: event.payload.narration_type,
+          message: event.payload.message,
+          timestamp: Date.now(),
+        }]);
       });
     };
     setup();
@@ -180,6 +208,7 @@ export function FirstRunTransition({ onComplete }: FirstRunTransitionProps) {
         interests={interests}
         embeddingMode={embeddingMode}
         scanSummary={scanSummary}
+        narrationEvents={narrationEvents}
       />
     );
   };

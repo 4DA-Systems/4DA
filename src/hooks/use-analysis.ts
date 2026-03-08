@@ -1,10 +1,18 @@
-import { useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { listen, UnlistenFn } from '@tauri-apps/api/event';
 import i18n from 'i18next';
 import type { SourceRelevance, AnalysisProgress } from '../types';
 import { getSourceLabel } from '../config/sources';
 import { useAppStore } from '../store';
+
+export interface NarrationEvent {
+  type: string;
+  message: string;
+  source?: string;
+  relevance?: number;
+  timestamp: number;
+}
 
 /**
  * Analysis hook — thin wrapper around Zustand store.
@@ -23,6 +31,13 @@ export function useAnalysis(
   const loadContextFiles = useAppStore(s => s.loadContextFiles);
   const clearContext = useAppStore(s => s.clearContext);
   const indexContext = useAppStore(s => s.indexContext);
+
+  // Live analysis narration events
+  const [narrationEvents, setNarrationEvents] = useState<NarrationEvent[]>([]);
+
+  const clearNarrationEvents = useCallback(() => {
+    setNarrationEvents([]);
+  }, []);
 
   // Set up event listeners for background analysis — all write to store
   useEffect(() => {
@@ -169,6 +184,21 @@ export function useAnalysis(
             i18n.t('analysis.stackDetected', { stack: profileIds.join(', ') }),
           );
         }),
+
+        listen<{
+          narration_type: string;
+          message: string;
+          source: string | null;
+          relevance: number | null;
+        }>('analysis-narration', (event) => {
+          setNarrationEvents(prev => [...prev.slice(-20), {
+            type: event.payload.narration_type,
+            message: event.payload.message,
+            source: event.payload.source ?? undefined,
+            relevance: event.payload.relevance ?? undefined,
+            timestamp: Date.now(),
+          }]);
+        }),
       ]);
 
       unlistens = results;
@@ -210,5 +240,7 @@ export function useAnalysis(
     indexContext,
     startAnalysis,
     setStatus,
+    narrationEvents,
+    clearNarrationEvents,
   };
 }

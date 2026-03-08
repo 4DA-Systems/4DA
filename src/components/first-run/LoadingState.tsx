@@ -95,6 +95,35 @@ function IntelligencePreview({ summary }: { summary: ScanSummary }) {
 // Loading State — preparing, intelligence, fetching, analyzing phases
 // ============================================================================
 
+// ============================================================================
+// Narration Feed — live analysis narration events
+// ============================================================================
+
+interface NarrationFeedEvent {
+  type: string;
+  message: string;
+  timestamp: number;
+}
+
+function NarrationFeed({ events }: { events: NarrationFeedEvent[] }) {
+  const visible = events.slice(-6);
+  if (visible.length === 0) return null;
+
+  return (
+    <div className="space-y-1.5 max-h-40 overflow-hidden max-w-xs mx-auto mt-4">
+      {visible.map((event, i) => (
+        <div
+          key={event.timestamp}
+          className="text-xs text-text-secondary animate-fade-in"
+          style={{ opacity: i === visible.length - 1 ? 1 : 0.5 + (i * 0.1) }}
+        >
+          {event.message}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 interface LoadingStateProps {
   phase: Phase;
   progress: number;
@@ -104,6 +133,7 @@ interface LoadingStateProps {
   interests: string[];
   embeddingMode: string | null;
   scanSummary: ScanSummary | null;
+  narrationEvents?: NarrationFeedEvent[];
 }
 
 export function LoadingState({
@@ -115,6 +145,7 @@ export function LoadingState({
   interests,
   embeddingMode,
   scanSummary,
+  narrationEvents,
 }: LoadingStateProps) {
   const { t } = useTranslation();
 
@@ -189,6 +220,11 @@ export function LoadingState({
             </p>
           ))}
         </div>
+      )}
+
+      {/* Narration feed (fetching + analyzing phases) */}
+      {(phase === 'fetching' || phase === 'analyzing') && narrationEvents && narrationEvents.length > 0 && (
+        <NarrationFeed events={narrationEvents} />
       )}
 
       {/* Analyzing phase — keyword-only note */}

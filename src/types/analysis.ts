@@ -27,6 +27,10 @@ export interface SourceRelevance {
   serendipity?: boolean;
   /** STREETS revenue engine match (e.g. "Engine 1: Digital Products") */
   streets_engine?: string;
+  /** Subject of the decision window that matched this item */
+  decision_window_match?: string;
+  /** How much score boost was applied from the decision window */
+  decision_boost_applied?: number;
 }
 
 export interface ScoreBreakdown {

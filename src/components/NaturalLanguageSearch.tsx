@@ -1,7 +1,12 @@
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
 import { useAppStore } from '../store';
+import { useLicense } from '../hooks';
+import { StackHealthBar, type StackHealth } from './search/StackHealthBar';
+import { SynthesisPanel } from './search/SynthesisPanel';
+import { GhostPreview, type GhostPreviewData } from './search/GhostPreview';
+import { StandingQueries } from './search/StandingQueries';
 
 interface QueryResultItem {
   id: number;
@@ -24,32 +29,20 @@ interface QueryResult {
   parsed: {
     keywords: string[];
     entities: string[];
-    time_range: {
-      start: string;
-      end: string;
-      relative: string | null;
-    } | null;
+    time_range: { start: string; end: string; relative: string | null } | null;
     file_types: string[];
     sentiment: string | null;
     confidence: number;
   };
+  stack_context: { name: string; category: string; relevant: boolean }[];
+  related_decisions: { id: number; subject: string; decision: string; relation: string }[];
+  knowledge_gaps: { technology: string; days_stale: number; severity: string }[];
+  ghost_preview: GhostPreviewData | null;
+  is_pro: boolean;
 }
 
-const intentIcons: Record<string, string> = {
-  Find: '🔍',
-  Summarize: '📝',
-  Compare: '⚖️',
-  Timeline: '📅',
-  Count: '#️⃣',
-};
-
-const sourceIcons: Record<string, string> = {
-  pdf: '📄',
-  docx: '📝',
-  xlsx: '📊',
-  image: '🖼️',
-  context: '📁',
-};
+const intentLabels: Record<string, string> = { Find: 'Find', Summarize: 'Summarize', Compare: 'Compare', Timeline: 'Timeline', Count: 'Count' };
+const sourceLabels: Record<string, string> = { pdf: 'PDF', docx: 'DOC', xlsx: 'XLS', image: 'IMG', context: 'CTX' };
 
 interface NaturalLanguageSearchProps {
   onStatusChange?: (status: string) => void;
@@ -58,26 +51,51 @@ interface NaturalLanguageSearchProps {
 
 export function NaturalLanguageSearch({ onStatusChange, defaultExpanded = true }: NaturalLanguageSearchProps) {
   const { t } = useTranslation();
+  const { isPro } = useLicense();
   const [query, setQuery] = useState('');
   const [result, setResult] = useState<QueryResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [expanded, setExpanded] = useState(defaultExpanded);
   const [error, setError] = useState<string | null>(null);
+  const [stackHealth, setStackHealth] = useState<StackHealth | null>(null);
+  const [synthesis, setSynthesis] = useState<string | null>(null);
+  const [synthesisLoading, setSynthesisLoading] = useState(false);
   const analysisComplete = useAppStore((s) => s.appState.analysisComplete);
   const lastAnalyzedAt = useAppStore((s) => s.appState.lastAnalyzedAt);
   const hasAnalysisRun = analysisComplete || lastAnalyzedAt !== null;
 
+  // Load stack health on mount
+  useEffect(() => {
+    invoke<StackHealth>('get_stack_health')
+      .then(setStackHealth)
+      .catch((err) => console.error('Stack health load failed:', err));
+  }, []);
+
+  const fetchSynthesis = useCallback(async (queryText: string) => {
+    setSynthesisLoading(true);
+    try {
+      const text = await invoke<string>('synthesize_search', { queryText });
+      setSynthesis(text);
+    } catch (err) {
+      console.error('Synthesis failed:', err);
+      setSynthesis(null);
+    } finally {
+      setSynthesisLoading(false);
+    }
+  }, []);
+
   const handleSearch = async () => {
     if (!query.trim()) return;
-
     setLoading(true);
     setError(null);
+    setSynthesis(null);
     try {
-      const searchResult = await invoke<QueryResult>('natural_language_query', {
-        queryText: query,
-      });
+      const searchResult = await invoke<QueryResult>('natural_language_query', { queryText: query });
       setResult(searchResult);
       onStatusChange?.(`Found ${searchResult.total_count} results in ${searchResult.execution_ms}ms`);
+      if (searchResult.is_pro) {
+        fetchSynthesis(query);
+      }
     } catch (err) {
       const msg = String(err);
       console.error('Search failed:', err);
@@ -88,16 +106,19 @@ export function NaturalLanguageSearch({ onStatusChange, defaultExpanded = true }
     }
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') {
-      handleSearch();
-    }
+  const handleKeyDown = (e: React.KeyboardEvent) => { if (e.key === 'Enter') handleSearch(); };
+  const handleSuggestedQuery = (sq: string) => setQuery(sq);
+  const clearResults = () => { setResult(null); setQuery(''); setSynthesis(null); };
+  const [watchCreated, setWatchCreated] = useState(false);
+  const handleWatch = async () => {
+    if (!query.trim()) return;
+    try {
+      await invoke('create_standing_query', { queryText: query });
+      setWatchCreated(true);
+      setTimeout(() => setWatchCreated(false), 2000);
+    } catch (err) { console.error('Watch creation failed:', err); }
   };
-
-  const clearResults = () => {
-    setResult(null);
-    setQuery('');
-  };
+  const relevantStack = result?.stack_context?.filter((s) => s.relevant) ?? [];
 
   return (
     <div className="bg-bg-tertiary rounded-lg p-5 border border-border">
@@ -108,20 +129,19 @@ export function NaturalLanguageSearch({ onStatusChange, defaultExpanded = true }
       >
         <div className="flex items-center gap-3">
           <div className="w-8 h-8 bg-cyan-500/20 rounded-lg flex items-center justify-center flex-shrink-0">
-            <span className="text-cyan-400">💬</span>
+            <span className="text-cyan-400 text-sm font-bold">{'\u2756'}</span>
           </div>
           <div>
             <h3 className="text-white font-medium">{t('search.title')}</h3>
             <p className="text-gray-500 text-sm">{t('search.subtitle')}</p>
           </div>
         </div>
-        <span className="text-gray-500 text-sm" aria-hidden="true">{expanded ? '▼' : '▶'}</span>
+        <span className="text-gray-500 text-sm" aria-hidden="true">{expanded ? '\u25BC' : '\u25B6'}</span>
       </button>
 
       {expanded && !hasAnalysisRun && (
         <div className="mt-4">
           <div className="text-center py-8 bg-bg-secondary rounded-lg border border-border">
-            <div className="text-2xl mb-3">🔍</div>
             <p className="text-sm text-gray-300 font-medium mb-1">{t('search.noAnalysisTitle')}</p>
             <p className="text-xs text-gray-500">{t('search.noAnalysisHint')}</p>
           </div>
@@ -130,6 +150,9 @@ export function NaturalLanguageSearch({ onStatusChange, defaultExpanded = true }
 
       {expanded && hasAnalysisRun && (
         <div className="mt-4 space-y-4">
+          {/* Stack health bar */}
+          <StackHealthBar health={stackHealth} onSuggestedQuery={handleSuggestedQuery} />
+
           {/* Search input */}
           <div className="flex gap-2" role="search">
             <input
@@ -153,33 +176,39 @@ export function NaturalLanguageSearch({ onStatusChange, defaultExpanded = true }
                 </span>
               ) : t('action.search')}
             </button>
+            {isPro && result && (
+              <button
+                onClick={handleWatch}
+                disabled={watchCreated}
+                title={t('search.watchThis')}
+                className={`px-3 py-3 text-sm border rounded-lg transition-all ${watchCreated ? 'bg-green-500/10 border-green-500/30 text-green-400' : 'bg-bg-secondary border-border text-gray-400 hover:text-cyan-400 hover:border-cyan-500/30'}`}
+              >
+                {watchCreated ? '\u2713' : '\u229A'}
+              </button>
+            )}
           </div>
 
           {/* Error display */}
           {error && (
             <div role="alert" className="flex items-center gap-2 px-3 py-2 bg-red-900/20 border border-red-500/30 rounded-lg">
-              <span className="text-red-400 text-xs" aria-hidden="true">⚠</span>
+              <span className="text-red-400 text-xs" aria-hidden="true">{'\u26A0'}</span>
               <span className="text-xs text-red-300 flex-1">{error}</span>
-              <button onClick={() => setError(null)} aria-label="Dismiss error" className="text-red-400/60 hover:text-red-400 text-xs">✕</button>
+              <button onClick={() => setError(null)} aria-label="Dismiss error" className="text-red-400/60 hover:text-red-400 text-xs">{'\u2715'}</button>
             </div>
           )}
 
-          {/* Example queries */}
+          {/* Example queries — stack-aware when available */}
           {!result && !error && (
             <div className="space-y-2">
-              <span className="text-xs text-gray-400 font-medium">{t('search.tryThese')}</span>
+              <span className="text-xs text-gray-400 font-medium">
+                {stackHealth?.suggested_queries?.length ? t('search.suggestedQueries') : t('search.tryThese')}
+              </span>
               <div className="flex flex-wrap gap-2">
-                {[
-                  'show me files about authentication',
-                  'pdfs from last month',
-                  'summarize my notes on rust',
-                  'what did I work on last week',
-                ].map((example) => (
-                  <button
-                    key={example}
-                    onClick={() => setQuery(example)}
-                    className="px-3 py-1.5 text-xs bg-bg-secondary rounded-lg border border-border text-gray-400 hover:text-cyan-400 hover:border-cyan-500/30 transition-all"
-                  >
+                {(stackHealth?.suggested_queries?.length
+                  ? stackHealth.suggested_queries.slice(0, 4)
+                  : ['show me files about authentication', 'pdfs from last month', 'summarize my notes on rust', 'what did I work on last week']
+                ).map((example) => (
+                  <button key={example} onClick={() => setQuery(example)} className="px-3 py-1.5 text-xs bg-bg-secondary rounded-lg border border-border text-gray-400 hover:text-cyan-400 hover:border-cyan-500/30 transition-all">
                     {example}
                   </button>
                 ))}
@@ -190,16 +219,14 @@ export function NaturalLanguageSearch({ onStatusChange, defaultExpanded = true }
           {/* Results */}
           {result && (
             <div className="space-y-4">
+              {/* Synthesis panel (Pro only) */}
+              <SynthesisPanel query={query} isPro={isPro} synthesis={synthesis} loading={synthesisLoading} onRetry={() => fetchSynthesis(query)} />
+
               {/* Query parsing info */}
-              <div className="flex items-center gap-2 p-3 bg-bg-secondary rounded-lg border border-border">
-                <span className="text-lg">{intentIcons[result.intent] || '🔍'}</span>
-                <span className="text-sm text-gray-400">
-                  {t('search.queryType', { intent: result.intent })}
-                </span>
-                <span className="text-sm text-white">•</span>
-                <span className="text-sm text-cyan-400">
-                  {result.parsed.keywords.join(', ')}
-                </span>
+              <div className="flex items-center gap-2 p-3 bg-bg-secondary rounded-lg border border-border flex-wrap">
+                <span className="text-xs font-medium text-gray-500">{intentLabels[result.intent] || result.intent}</span>
+                <span className="text-sm text-white">{'\u2022'}</span>
+                <span className="text-sm text-cyan-400">{result.parsed.keywords.join(', ')}</span>
                 {result.parsed.time_range && (
                   <span className="px-2 py-1 text-xs bg-bg-tertiary rounded-md text-gray-300 border border-border">
                     {result.parsed.time_range.relative || t('search.customRange')}
@@ -210,56 +237,43 @@ export function NaturalLanguageSearch({ onStatusChange, defaultExpanded = true }
                     {result.parsed.file_types.join(', ')}
                   </span>
                 )}
-                <button
-                  onClick={clearResults}
-                  aria-label="Clear search results"
-                  className="ml-auto text-gray-500 hover:text-white transition-colors"
-                >
-                  ✕
-                </button>
+                <button onClick={clearResults} aria-label="Clear search results" className="ml-auto text-gray-500 hover:text-white transition-colors">{'\u2715'}</button>
               </div>
+
+              {/* Stack context */}
+              {relevantStack.length > 0 && (
+                <div className="flex items-center gap-2 text-xs text-gray-400">
+                  <span className="text-gray-500">{t('search.yourStack')}:</span>
+                  {relevantStack.map((s) => (
+                    <span key={s.name} className="px-2 py-0.5 bg-bg-secondary rounded border border-border text-gray-300">{s.name}</span>
+                  ))}
+                </div>
+              )}
 
               {/* Summary */}
               {result.summary && (
-                <div className="text-sm text-gray-300 bg-bg-secondary rounded-lg p-4 border border-border">
-                  {result.summary}
-                </div>
+                <div className="text-sm text-gray-300 bg-bg-secondary rounded-lg p-4 border border-border">{result.summary}</div>
               )}
 
               {/* Result items */}
               <div className="space-y-2 max-h-64 overflow-y-auto">
                 {result.items.map((item, index) => (
-                  <div
-                    key={`${item.id}-${index}`}
-                    className="p-3 bg-bg-secondary rounded-lg border border-border hover:border-cyan-500/30 transition-colors"
-                  >
+                  <div key={`${item.id}-${index}`} className="p-3 bg-bg-secondary rounded-lg border border-border hover:border-cyan-500/30 transition-colors">
                     <div className="flex items-start gap-3">
-                      <span className="text-lg">
-                        {sourceIcons[item.source_type] || '📁'}
-                      </span>
+                      <span className="text-[10px] text-gray-500 uppercase font-mono bg-bg-tertiary px-1.5 py-0.5 rounded">{sourceLabels[item.source_type] || 'SRC'}</span>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2">
-                          <span className="text-sm text-white font-medium truncate">
-                            {item.file_name || t('search.unknownFile')}
-                          </span>
-                          <span className={`text-xs px-2 py-0.5 rounded-md ${
-                            item.relevance > 0.7
-                              ? 'bg-green-500/20 text-green-400'
-                              : item.relevance > 0.4
-                              ? 'bg-yellow-500/20 text-yellow-400'
-                              : 'bg-gray-500/20 text-gray-400'
-                          }`}>
+                          <span className="text-sm text-white font-medium truncate">{item.file_name || t('search.unknownFile')}</span>
+                          <span className={`text-xs px-2 py-0.5 rounded-md ${item.relevance > 0.7 ? 'bg-green-500/20 text-green-400' : item.relevance > 0.4 ? 'bg-yellow-500/20 text-yellow-400' : 'bg-gray-500/20 text-gray-400'}`}>
                             {(item.relevance * 100).toFixed(0)}%
                           </span>
                         </div>
-                        <p className="text-xs text-gray-500 mt-1 line-clamp-2">
-                          {item.preview}
-                        </p>
+                        <p className="text-xs text-gray-500 mt-1 line-clamp-2">{item.preview}</p>
                         <div className="flex items-center gap-2 mt-2 text-[10px] text-gray-500">
                           <span className="text-cyan-400/70">{item.match_reason}</span>
                           {item.timestamp && (
                             <>
-                              <span>•</span>
+                              <span>{'\u2022'}</span>
                               <span>{new Date(item.timestamp).toLocaleDateString()}</span>
                             </>
                           )}
@@ -268,15 +282,46 @@ export function NaturalLanguageSearch({ onStatusChange, defaultExpanded = true }
                     </div>
                   </div>
                 ))}
-
                 {result.items.length === 0 && (
                   <div className="text-center py-6 bg-bg-secondary rounded-lg border border-border">
-                    <div className="text-2xl mb-2">🔍</div>
                     <div className="text-sm text-gray-400">{t('search.noResults')}</div>
                     <div className="text-xs text-gray-500 mt-1">{t('search.tryDifferent')}</div>
                   </div>
                 )}
               </div>
+
+              {/* Related decisions (Pro) */}
+              {isPro && result.related_decisions.length > 0 && (
+                <div className="space-y-1.5">
+                  <h4 className="text-xs text-gray-400 uppercase tracking-wider">{t('search.relatedDecisions')}</h4>
+                  {result.related_decisions.map((d) => (
+                    <div key={d.id} className="px-3 py-2 bg-bg-secondary rounded-lg border border-border text-xs">
+                      <span className="text-gray-300">{d.subject}</span>
+                      <span className="text-gray-500 mx-1.5">{'\u2014'}</span>
+                      <span className="text-gray-400">{d.decision}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Knowledge gaps (Pro) */}
+              {isPro && result.knowledge_gaps.length > 0 && (
+                <div className="space-y-1.5">
+                  <h4 className="text-xs text-gray-400 uppercase tracking-wider">{t('search.knowledgeGaps')}</h4>
+                  {result.knowledge_gaps.map((gap, i) => (
+                    <div key={i} className="flex items-center gap-2 px-3 py-2 bg-bg-secondary rounded-lg border border-border text-xs">
+                      <span className={gap.severity === 'critical' ? 'text-red-400' : gap.severity === 'high' ? 'text-yellow-400' : 'text-gray-400'}>{'\u25CF'}</span>
+                      <span className="text-gray-300">{gap.technology}</span>
+                      <span className="text-gray-500">{t('search.staleForDays', { days: gap.days_stale })}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Ghost preview (non-Pro insight) */}
+              {result.ghost_preview && !result.is_pro && (
+                <GhostPreview preview={result.ghost_preview} />
+              )}
 
               {/* Stats footer */}
               <div className="text-xs text-gray-500 text-center pt-2 border-t border-border">
@@ -284,6 +329,9 @@ export function NaturalLanguageSearch({ onStatusChange, defaultExpanded = true }
               </div>
             </div>
           )}
+
+          {/* Standing queries (Pro) */}
+          {isPro && <StandingQueries isPro={isPro} />}
         </div>
       )}
     </div>

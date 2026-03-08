@@ -4,11 +4,62 @@ import { invoke } from '@tauri-apps/api/core';
 import { useAppStore } from '../store';
 import { useLicense } from '../hooks/use-license';
 
+// ============================================================================
+// Intelligence Growth Types & Components
+// ============================================================================
+
+interface IntelligenceGrowthData {
+  current_accuracy: number;
+  initial_accuracy: number;
+  improvement_pct: number;
+  topics_learned: number;
+  anti_topics: number;
+  total_items_analyzed: number;
+  days_active: number;
+  snapshots: Array<{
+    recorded_at: string;
+    accuracy: number;
+    topics_learned: number;
+    items_analyzed: number;
+    relevant_found: number;
+  }>;
+}
+
+/** Simple SVG sparkline for visualizing accuracy trend over time */
+function Sparkline({ data, color = '#22C55E' }: { data: number[]; color?: string }) {
+  if (data.length < 2) return null;
+  const max = Math.max(...data);
+  const min = Math.min(...data);
+  const range = max - min || 1;
+  const w = 120;
+  const h = 24;
+  const points = data
+    .map(
+      (v, i) =>
+        `${(i / (data.length - 1)) * w},${h - ((v - min) / range) * h}`,
+    )
+    .join(' ');
+
+  return (
+    <svg width={w} height={h} className="inline-block">
+      <polyline fill="none" stroke={color} strokeWidth="1.5" points={points} />
+    </svg>
+  );
+}
+
 export const IntelligenceProfileCard = memo(function IntelligenceProfileCard() {
   const { t } = useTranslation();
   const rawAffinities = useAppStore(s => s.learnedAffinities);
   const learnedAffinities = useMemo(() => rawAffinities ?? [], [rawAffinities]);
   const pulse = useAppStore(s => s.intelligencePulse);
+
+  const [growth, setGrowth] = useState<IntelligenceGrowthData | null>(null);
+
+  useEffect(() => {
+    invoke<IntelligenceGrowthData>('get_intelligence_growth')
+      .then(setGrowth)
+      .catch(() => {});
+  }, []);
 
   const positiveAffinities = useMemo(() =>
     learnedAffinities.filter(a => a.affinity_score > 0),
@@ -49,6 +100,39 @@ export const IntelligenceProfileCard = memo(function IntelligenceProfileCard() {
           <div className="flex-shrink-0 w-24 h-2 bg-bg-tertiary rounded-full overflow-hidden">
             <div className={`h-full rounded-full transition-all ${accuracyPct >= 70 ? 'bg-green-500' : accuracyPct >= 40 ? 'bg-amber-500' : 'bg-red-500'}`}
               style={{ width: `${accuracyPct}%` }} />
+          </div>
+        </div>
+      )}
+
+      {/* Intelligence Growth (visible after 3+ snapshots) */}
+      {growth && growth.days_active >= 3 && (
+        <div className="bg-[#1F1F1F] rounded-lg border border-border p-4">
+          <h4 className="text-sm font-medium text-white mb-2">
+            {t('briefing.profile.intelligenceGrowth', 'Intelligence Growth')}
+          </h4>
+          <div className="flex items-center gap-2 text-xs text-text-secondary mb-1">
+            <span>Day 1: {Math.round(growth.initial_accuracy * 100)}%</span>
+            <span className="text-text-muted">&rarr;</span>
+            <span className="text-white">Today: {Math.round(growth.current_accuracy * 100)}%</span>
+            {growth.improvement_pct > 0 && (
+              <span className="text-green-400 ml-auto">+{Math.round(growth.improvement_pct)}%</span>
+            )}
+          </div>
+          <div className="w-full h-1.5 bg-bg-primary rounded-full overflow-hidden">
+            <div
+              className="h-full bg-green-500 rounded-full transition-all"
+              style={{ width: `${Math.min(growth.current_accuracy * 100, 100)}%` }}
+            />
+          </div>
+          {growth.snapshots.length >= 2 && (
+            <div className="mt-2 flex items-center gap-2">
+              <span className="text-[10px] text-text-muted">Accuracy trend</span>
+              <Sparkline data={growth.snapshots.map(s => s.accuracy)} />
+            </div>
+          )}
+          <div className="flex gap-3 mt-2 text-xs text-text-muted">
+            <span>{growth.topics_learned} topics learned</span>
+            <span>{growth.anti_topics} anti-topics</span>
           </div>
         </div>
       )}

@@ -25,7 +25,6 @@ import { UpdateBanner } from './components/UpdateBanner';
 // Lazy-loaded non-critical-path components
 const FirstRunTransition = lazy(() => import('./components/FirstRunTransition').then(m => ({ default: m.FirstRunTransition })));
 const NaturalLanguageSearch = lazy(() => import('./components/NaturalLanguageSearch').then(m => ({ default: m.NaturalLanguageSearch })));
-const ProGate = lazy(() => import('./components/ProGate').then(m => ({ default: m.ProGate })));
 const LearningIndicator = lazy(() => import('./components/LearningIndicator').then(m => ({ default: m.LearningIndicator })));
 const ProValueBadge = lazy(() => import('./components/ProValueBadge').then(m => ({ default: m.ProValueBadge })));
 
@@ -405,12 +404,10 @@ function App() {
           />
         </Suspense>
 
-        {/* Natural Language Search (Pro) */}
+        {/* Intelligence Console */}
         <div className="mb-6">
           <Suspense fallback={null}>
-            <ProGate feature="Natural Language Search">
-              <NaturalLanguageSearch defaultExpanded={true} />
-            </ProGate>
+            <NaturalLanguageSearch defaultExpanded={true} />
           </Suspense>
         </div>
 
