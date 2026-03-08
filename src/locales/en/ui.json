@@ -628,7 +628,7 @@
   "toolkit.utilities": "Utilities ({{count}})",
   "toolkit.noMatch": "No tools match \"{{query}}\"",
 
-  "advantage.score": "Advantage Score",
+  "advantage.score": "Your Edge",
   "advantage.acted": "{{acted}}/{{opened}} acted",
   "advantage.avgLead": "{{hours}}h avg lead",
 
@@ -1181,7 +1181,7 @@
   "audio.playFailed": "Failed to play audio",
   "audio.playbackBlocked": "Audio playback blocked",
 
-  "autophagy.title": "Intelligence Metabolism",
+  "autophagy.title": "How 4DA Learns",
   "autophagy.feature": "Autophagy Insights",
   "autophagy.calibrationAccuracy": "Calibration Accuracy",
   "autophagy.noCycles": "No autophagy cycles yet. Runs daily during cleanup.",
@@ -1192,12 +1192,12 @@
   "autophagy.antiPatterns": "Anti-Patterns",
   "autophagy.recentCycles": "Recent Cycles",
 
-  "decisions.title": "Decision Windows",
+  "decisions.title": "Decisions to Make",
   "decisions.subtitle": "Time-bounded opportunities",
   "decisions.affects": "Affects",
   "decisions.act": "Act",
 
-  "delegation.title": "Delegation Scores",
+  "delegation.title": "Task Coaching",
   "delegation.empty": "No delegation data available",
   "delegation.emptyHint": "Add your tech stack in settings to see delegation scores.",
   "delegation.count": "{{count}} technology scored",
@@ -1205,7 +1205,7 @@
   "delegation.factorBreakdown": "Factor Breakdown",
   "delegation.caveats": "Caveats",
   "delegation.delegatable": "of your stack can be fully delegated to AI",
-  "delegation.advisorTitle": "Delegation Advisor",
+  "delegation.advisorTitle": "Task Coaching",
   "delegation.advisorSubtitle": "What is safe to delegate to AI vs. what needs your review",
   "delegation.noTechAssessed": "No technologies assessed yet. Add projects and dependencies to see delegation recommendations.",
   "delegation.recFullyDelegate": "Safe to Delegate",
@@ -1227,6 +1227,12 @@
   "knowledgeGaps.missedArticles_other": "{{count}} relevant articles you haven't engaged with",
   "knowledgeGaps.noEngagement": "No engagement recorded",
   "knowledgeGaps.daysSinceEngagement": "{{days}}d since last engagement",
+
+  "intelligence.title": "Live Signals",
+  "intelligence.feature": "Live Signals",
+
+  "standingQueries.singleMatch": "\"{{query}}\" — {{count}} new match found",
+  "standingQueries.multiMatch": "{{count}} standing queries have new matches",
 
   "learnedBehavior.title": "Feedback & Affinities",
   "learnedBehavior.subtitle": "Topics influenced by your save and dismiss actions",
@@ -1391,7 +1397,7 @@
 
   "toolkit.title": "Developer Toolkit",
 
-  "decisions.title": "Decision Windows",
+  "decisions.title": "Decisions to Make",
   "decisions.recorded": "{{count}} decisions recorded",
   "decisions.record": "Record Decision",
   "decisions.decision": "Decision",

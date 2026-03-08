@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useState, useEffect, memo } from 'react';
+import { listen } from '@tauri-apps/api/event';
 import { useTranslation } from 'react-i18next';
 import { useShallow } from 'zustand/react/shallow';
 import { BriefingCard } from './BriefingCard';
@@ -71,6 +72,23 @@ export const BriefingView = memo(function BriefingView() {
   useEffect(() => {
     loadPulse();
   }, [loadPulse]);
+
+  // Listen for standing query matches from background monitoring
+  useEffect(() => {
+    const unlisten = listen<Array<{ query_id: number; query_text: string; new_matches: number; example_title: string | null }>>(
+      'standing-query-matches',
+      (event) => {
+        const alerts = event.payload.filter(a => a.new_matches > 0);
+        if (alerts.length > 0) {
+          const msg = alerts.length === 1
+            ? t('standingQueries.singleMatch', { query: alerts[0].query_text, count: alerts[0].new_matches })
+            : t('standingQueries.multiMatch', { count: alerts.length });
+          addToast('info', msg);
+        }
+      },
+    );
+    return () => { unlisten.then(fn => fn()); };
+  }, [addToast, t]);
 
   // Intelligence gaps — non-healthy sources
   const gaps = useMemo(
