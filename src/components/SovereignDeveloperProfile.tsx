@@ -1,4 +1,5 @@
 import { useEffect, useState, useRef, memo, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
 import { useAppStore } from '../store';
 import type { DimensionCompleteness } from '../types/profile';
@@ -74,6 +75,7 @@ const DIMENSION_ACTIONS: Record<string, { label: string; buttonLabel: string; ac
 };
 
 function DimensionCard({ dim, children, onAction }: { dim: DimensionCompleteness; children: React.ReactNode; onAction?: (action: string) => void }) {
+  const { t } = useTranslation();
   const needsAction = dim.depth === 'empty' || dim.depth === 'minimal';
   const actionDef = needsAction ? DIMENSION_ACTIONS[dim.name] : null;
 
@@ -84,7 +86,7 @@ function DimensionCard({ dim, children, onAction }: { dim: DimensionCompleteness
           <CompletenessRing percentage={dim.percentage} size={36} />
           <div>
             <h3 className="text-sm font-medium text-white">{dim.name}</h3>
-            <span className="text-[10px] text-text-muted">{dim.fact_count} facts</span>
+            <span className="text-[10px] text-text-muted">{t('profile.factCount', { count: dim.fact_count })}</span>
           </div>
         </div>
         <DepthBadge depth={dim.depth} />
@@ -110,6 +112,7 @@ function DimensionCard({ dim, children, onAction }: { dim: DimensionCompleteness
 // ============================================================================
 
 export const SovereignDeveloperProfile = memo(function SovereignDeveloperProfile() {
+  const { t } = useTranslation();
   const profile = useAppStore((s) => s.unifiedProfile);
   const loading = useAppStore((s) => s.unifiedProfileLoading);
   const loadProfile = useAppStore((s) => s.loadUnifiedProfile);
@@ -142,10 +145,10 @@ export const SovereignDeveloperProfile = memo(function SovereignDeveloperProfile
     try {
       const content = format === 'markdown' ? await exportMarkdown() : await exportJson();
       await window.navigator.clipboard.writeText(content);
-      setExportStatus(format === 'markdown' ? 'Markdown copied' : 'JSON copied');
+      setExportStatus(format === 'markdown' ? t('profile.export.markdownCopied') : t('profile.export.jsonCopied'));
       setTimeout(() => setExportStatus(null), 2000);
     } catch {
-      setExportStatus('Copy failed');
+      setExportStatus(t('profile.export.failed'));
       setTimeout(() => setExportStatus(null), 2000);
     }
   };
@@ -187,7 +190,7 @@ export const SovereignDeveloperProfile = memo(function SovereignDeveloperProfile
           <div>
             <h2 className="text-base font-semibold text-white">{profile.identity_summary}</h2>
             <p className="text-xs text-text-muted">
-              Profile {Math.round(profile.completeness.overall_percentage)}% complete
+              {t('profile.percentComplete', { percent: Math.round(profile.completeness.overall_percentage) })}
             </p>
           </div>
         </div>
@@ -197,13 +200,13 @@ export const SovereignDeveloperProfile = memo(function SovereignDeveloperProfile
             onClick={() => handleExport('markdown')}
             className="px-2.5 py-1 text-[10px] text-white bg-white/10 hover:bg-white/15 border border-white/20 rounded font-medium transition-colors"
           >
-            Copy Profile
+            {t('profile.copyProfile')}
           </button>
           <button
             onClick={() => handleExport('json')}
             className="px-2 py-1 text-[10px] text-text-secondary hover:text-white border border-border rounded transition-colors"
           >
-            Export JSON
+            {t('profile.exportJson')}
           </button>
         </div>
       </div>
@@ -263,11 +266,11 @@ export const SovereignDeveloperProfile = memo(function SovereignDeveloperProfile
       {/* Intelligence Section */}
       {hasIntelligence && (
         <div className="border-t border-border pt-4 space-y-3">
-          <h3 className="text-xs font-medium text-text-secondary uppercase tracking-wider">Intelligence</h3>
+          <h3 className="text-xs font-medium text-text-secondary uppercase tracking-wider">{t('profile.intelligence')}</h3>
 
           {intel.skill_gaps.length > 0 && (
             <div>
-              <h4 className="text-[11px] font-medium text-amber-400 mb-1">Skill Gaps ({intel.skill_gaps.length})</h4>
+              <h4 className="text-[11px] font-medium text-amber-400 mb-1">{t('profile.skillGaps', { count: intel.skill_gaps.length })}</h4>
               <div className="flex flex-wrap gap-1.5">
                 {intel.skill_gaps.slice(0, 6).map((g) => (
                   <span key={g.dependency} className="px-2 py-0.5 text-[10px] bg-amber-500/10 text-amber-300 rounded-full">
@@ -280,7 +283,7 @@ export const SovereignDeveloperProfile = memo(function SovereignDeveloperProfile
 
           {intel.optimization_opportunities.length > 0 && (
             <div>
-              <h4 className="text-[11px] font-medium text-blue-400 mb-1">Optimizations</h4>
+              <h4 className="text-[11px] font-medium text-blue-400 mb-1">{t('profile.optimizations')}</h4>
               {intel.optimization_opportunities.slice(0, 3).map((o, i) => (
                 <p key={i} className="text-[11px] text-text-secondary">
                   <span className="text-blue-300">{o.area}</span> — {o.suggestion}
@@ -291,7 +294,7 @@ export const SovereignDeveloperProfile = memo(function SovereignDeveloperProfile
 
           {intel.infrastructure_mismatches.length > 0 && (
             <div>
-              <h4 className="text-[11px] font-medium text-red-400 mb-1">Infrastructure Mismatches</h4>
+              <h4 className="text-[11px] font-medium text-red-400 mb-1">{t('profile.infraMismatches')}</h4>
               {intel.infrastructure_mismatches.map((m, i) => (
                 <p key={i} className="text-[11px] text-text-secondary">
                   <span className="text-red-300">{m.category}</span> — {m.issue}
@@ -302,7 +305,7 @@ export const SovereignDeveloperProfile = memo(function SovereignDeveloperProfile
 
           {intel.ecosystem_alerts.length > 0 && (
             <div>
-              <h4 className="text-[11px] font-medium text-purple-400 mb-1">Ecosystem Alerts</h4>
+              <h4 className="text-[11px] font-medium text-purple-400 mb-1">{t('profile.ecosystemAlerts')}</h4>
               {intel.ecosystem_alerts.map((a, i) => (
                 <p key={i} className="text-[11px] text-text-secondary">
                   <span className="text-purple-300">{a.from_tech} → {a.to_tech}</span> — {a.description}
@@ -324,6 +327,7 @@ export const SovereignDeveloperProfile = memo(function SovereignDeveloperProfile
 // ============================================================================
 
 function DeveloperDnaSection() {
+  const { t } = useTranslation();
   const addToast = useAppStore(s => s.addToast);
   const [dna, setDna] = useState<DeveloperDna | null>(null);
   const [loading, setLoading] = useState(false);
@@ -347,7 +351,7 @@ function DeveloperDnaSection() {
     try {
       const md = await invoke<string>('export_developer_dna_markdown');
       await window.navigator.clipboard.writeText(md);
-      addToast('success', 'Developer DNA copied');
+      addToast('success', t('profile.dnaCopied'));
     } catch { /* clipboard may fail */ }
   };
 
@@ -359,18 +363,20 @@ function DeveloperDnaSection() {
           setExpanded(willExpand);
           if (willExpand && !loaded.current) loadDna();
         }}
+        aria-expanded={expanded}
+        aria-label={t('profile.toggleDna')}
         className="flex items-center gap-2 w-full text-left group"
       >
         <span className={`text-gray-500 text-xs transition-transform ${expanded ? 'rotate-90' : ''}`}>&#9654;</span>
         <h3 className="text-xs font-medium text-gray-500 uppercase tracking-wider group-hover:text-gray-400 transition-colors">
-          Developer DNA
+          {t('profile.developerDna')}
         </h3>
       </button>
 
       {expanded && loading && (
         <div className="flex items-center gap-2 py-6 justify-center">
           <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-          <span className="text-xs text-gray-500">Building DNA profile...</span>
+          <span className="text-xs text-gray-500">{t('profile.buildingDna')}</span>
         </div>
       )}
 
@@ -380,14 +386,14 @@ function DeveloperDnaSection() {
           <div className="flex items-center justify-between">
             <p className="text-xs text-gray-400">{dna.identity_summary}</p>
             <button onClick={copyDna} className="px-2 py-1 text-[10px] text-white bg-white/10 hover:bg-white/15 border border-white/20 rounded transition-colors">
-              Copy DNA
+              {t('profile.copyDna')}
             </button>
           </div>
 
           {/* Attention Distribution */}
           {dna.top_engaged_topics.length > 0 && (
             <div>
-              <h4 className="text-[11px] font-medium text-gray-500 mb-2">Attention Distribution</h4>
+              <h4 className="text-[11px] font-medium text-gray-500 mb-2">{t('profile.attentionDistribution')}</h4>
               <div className="space-y-1.5">
                 {dna.top_engaged_topics.slice(0, 6).map((topic) => (
                   <div key={topic.topic} className="flex items-center gap-3">
@@ -405,7 +411,7 @@ function DeveloperDnaSection() {
           {/* Blind Spots */}
           {dna.blind_spots.length > 0 && (
             <div>
-              <h4 className="text-[11px] font-medium text-amber-400 mb-1.5">Blind Spots</h4>
+              <h4 className="text-[11px] font-medium text-amber-400 mb-1.5">{t('profile.blindSpots')}</h4>
               <div className="flex flex-wrap gap-1.5">
                 {dna.blind_spots.slice(0, 5).map((spot) => (
                   <span key={spot.dependency} className="px-2 py-0.5 text-[10px] bg-amber-500/10 text-amber-300 rounded-full border border-amber-500/20">
@@ -419,7 +425,7 @@ function DeveloperDnaSection() {
           {/* Source Engagement */}
           {dna.source_engagement.length > 0 && (
             <div>
-              <h4 className="text-[11px] font-medium text-gray-500 mb-1.5">Source Engagement</h4>
+              <h4 className="text-[11px] font-medium text-gray-500 mb-1.5">{t('profile.sourceEngagement')}</h4>
               <div className="grid grid-cols-2 lg:grid-cols-3 gap-2">
                 {dna.source_engagement.map((src) => (
                   <div key={src.source_type} className="px-2.5 py-1.5 bg-[#1A1A1A] rounded border border-border">
@@ -433,9 +439,9 @@ function DeveloperDnaSection() {
 
           {/* Stats */}
           <div className="flex gap-6 pt-2 border-t border-border/50">
-            <div><span className="text-xs text-white">{dna.stats.project_count}</span><span className="text-[10px] text-gray-500 ml-1">projects</span></div>
-            <div><span className="text-xs text-white">{dna.stats.dependency_count}</span><span className="text-[10px] text-gray-500 ml-1">deps</span></div>
-            <div><span className="text-xs text-white">{dna.stats.rejection_rate.toFixed(1)}%</span><span className="text-[10px] text-gray-500 ml-1">filtered</span></div>
+            <div><span className="text-xs text-white">{dna.stats.project_count}</span><span className="text-[10px] text-gray-500 ml-1">{t('profile.projects')}</span></div>
+            <div><span className="text-xs text-white">{dna.stats.dependency_count}</span><span className="text-[10px] text-gray-500 ml-1">{t('profile.deps')}</span></div>
+            <div><span className="text-xs text-white">{dna.stats.rejection_rate.toFixed(1)}%</span><span className="text-[10px] text-gray-500 ml-1">{t('profile.filtered')}</span></div>
           </div>
         </div>
       )}

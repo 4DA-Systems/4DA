@@ -21,7 +21,7 @@ const CX = 300;
 const CY = 300;
 const FULL_VIEWBOX = '0 0 600 600';
 const RING_RADII: Record<string, number> = { adopt: 75, trial: 150, assess: 225, hold: 280 };
-const RING_LABELS = ['Adopt', 'Trial', 'Assess', 'Hold'];
+const RING_LABEL_KEYS = ['techRadar.ringAdopt', 'techRadar.ringTrial', 'techRadar.ringAssess', 'techRadar.ringHold'];
 const RING_KEYS = ['adopt', 'trial', 'assess', 'hold'];
 
 const QUADRANT_CONFIG: Record<string, { label: string; startAngle: number; endAngle: number }> = {
@@ -137,6 +137,8 @@ export const RadarSVG = memo(function RadarSVG({ entries, userStack, onEntryClic
     <div className="relative">
       <svg
         viewBox={currentViewBox}
+        role="img"
+        aria-label={t('techRadar.svgLabel')}
         className="w-full max-w-[560px]"
         style={{ fontFamily: 'Inter, sans-serif', transition: 'all 0.4s cubic-bezier(0.4, 0, 0.2, 1)' }}
       >
@@ -162,7 +164,7 @@ export const RadarSVG = memo(function RadarSVG({ entries, userStack, onEntryClic
           return (
             <text key={ring} x={CX + (prevR + RING_RADII[ring]) / 2} y={CY - 6}
               textAnchor="middle" fill="#666666" fontSize="9" fontWeight="500">
-              {RING_LABELS[i]}
+              {t(RING_LABEL_KEYS[i])}
             </text>
           );
         })}

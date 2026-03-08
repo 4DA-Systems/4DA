@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { cmd } from '../lib/commands';
@@ -9,13 +10,13 @@ import type { CalibrationResult, Recommendation } from '../types/calibration';
 import type { PullProgress } from './calibration/calibration-utils';
 
 export function CalibrationView() {
+  const { t } = useTranslation();
   const [result, setResult] = useState<CalibrationResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [prevGrade, setPrevGrade] = useState<string | null>(null);
   const [pullProgress, setPullProgress] = useState<PullProgress | null>(null);
   const [actionInProgress, setActionInProgress] = useState<string | null>(null);
-  const [, setDetectingStack] = useState(false);
   const hasAutoRun = useRef(false);
   const setShowSettings = useAppStore(s => s.setShowSettings);
   const setActiveView = useAppStore(s => s.setActiveView);
@@ -81,7 +82,6 @@ export function CalibrationView() {
         break;
       }
       case 'auto_detect_stacks': {
-        setDetectingStack(true);
         setActionInProgress('auto_detect_stacks');
         try {
           const detected = await invoke<Array<{ profile_id: string; confidence: number }>>('detect_stack_profiles');
@@ -97,7 +97,6 @@ export function CalibrationView() {
         } catch (e) {
           setError(`Stack detection failed: ${e instanceof Error ? e.message : String(e)}`);
         } finally {
-          setDetectingStack(false);
           setActionInProgress(null);
         }
         break;
@@ -116,81 +115,73 @@ export function CalibrationView() {
   const gradeImproved = prevGrade && result && prevGrade !== result.grade;
 
   return (
-    <div style={{ padding: '24px', maxWidth: 720 }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
+    <div className="p-6 max-w-[720px]">
+      <div className="flex items-center justify-between mb-6">
         <div>
-          <h2 style={{ margin: 0, fontSize: 20, fontWeight: 600, color: '#FFFFFF' }}>
-            Calibrate Your Rig
+          <h2 className="m-0 text-xl font-semibold text-white">
+            {t('calibration.title')}
           </h2>
-          <p style={{ margin: '4px 0 0', color: '#A0A0A0', fontSize: 13 }}>
-            Honest scoring quality assessment for your setup
+          <p className="mt-1 mb-0 text-text-secondary text-[13px]">
+            {t('calibration.subtitle')}
           </p>
         </div>
         <button
           onClick={runCalibration}
           disabled={loading}
-          style={{
-            padding: '8px 20px',
-            background: loading ? '#2A2A2A' : '#FFFFFF',
-            color: loading ? '#666666' : '#0A0A0A',
-            border: 'none',
-            borderRadius: 6,
-            fontSize: 13,
-            fontWeight: 600,
-            cursor: loading ? 'not-allowed' : 'pointer',
-            fontFamily: 'Inter, sans-serif',
-          }}
+          aria-label={loading ? t('calibration.running') : t('calibration.reCalibrate')}
+          className={`px-5 py-2 border-none rounded-md text-[13px] font-semibold font-[Inter,sans-serif] ${
+            loading
+              ? 'bg-border text-text-muted cursor-not-allowed'
+              : 'bg-white text-bg-primary cursor-pointer'
+          }`}
         >
-          {loading ? 'Calibrating...' : 'Re-calibrate'}
+          {loading ? t('calibration.running') : t('calibration.reCalibrate')}
         </button>
       </div>
 
       {error && (
-        <div style={{ padding: 12, background: '#1a0000', border: '1px solid #EF4444', borderRadius: 6, color: '#EF4444', fontSize: 13, marginBottom: 16 }}>
+        <div className="p-3 bg-[#1a0000] border border-error rounded-md text-error text-[13px] mb-4" role="alert">
           {error}
         </div>
       )}
 
       {/* Grade improvement banner */}
       {gradeImproved && (
-        <div style={{
-          padding: 12,
-          background: '#0a1a0a',
-          border: '1px solid #22C55E',
-          borderRadius: 6,
-          marginBottom: 16,
-          display: 'flex',
-          alignItems: 'center',
-          gap: 8,
-        }}>
-          <span style={{ fontSize: 18 }}>&#x2191;</span>
-          <span style={{ fontSize: 13, color: '#22C55E', fontWeight: 600 }}>
-            Grade improved: {prevGrade} &#x2192; {result.grade}
+        <div className="p-3 bg-[#0a1a0a] border border-success rounded-md mb-4 flex items-center gap-2" role="status" aria-label={t('calibration.gradeImproved', { prev: prevGrade, next: result.grade })}>
+          <span className="text-lg">&#x2191;</span>
+          <span className="text-[13px] text-success font-semibold">
+            {t('calibration.gradeImproved', { prev: prevGrade, next: result.grade })}
           </span>
         </div>
       )}
 
       {/* Pull progress bar */}
       {pullProgress && (
-        <div style={{ marginBottom: 16 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-            <span style={{ fontSize: 11, color: '#A0A0A0' }}>
-              Pulling {pullProgress.model}...
+        <div className="mb-4">
+          <div className="flex justify-between mb-1">
+            <span className="text-[11px] text-text-secondary">
+              {t('calibration.pulling', { model: pullProgress.model })}
             </span>
-            <span style={{ fontSize: 11, color: '#D4AF37', fontFamily: 'JetBrains Mono, monospace' }}>
-              {pullProgress.done ? 'Done' : `${pullProgress.percent}%`}
+            <span className="text-[11px] text-accent-gold font-mono">
+              {pullProgress.done ? t('calibration.pullDone') : `${pullProgress.percent}%`}
             </span>
           </div>
-          <div style={{ height: 4, background: '#2A2A2A', borderRadius: 2, overflow: 'hidden' }}>
-            <div style={{
-              height: '100%',
-              width: `${pullProgress.done ? 100 : pullProgress.percent}%`,
-              background: pullProgress.done ? '#22C55E' : '#D4AF37',
-              borderRadius: 2,
-              transition: 'width 0.3s ease',
-            }} />
+          <div
+            className="h-1 bg-border rounded-sm overflow-hidden"
+            role="progressbar"
+            aria-valuenow={pullProgress.done ? 100 : pullProgress.percent}
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-label={t('calibration.pulling', { model: pullProgress.model })}
+          >
+            <div
+              className={`h-full rounded-sm transition-[width] duration-300 ease-in-out ${
+                pullProgress.done ? 'bg-success' : 'bg-accent-gold'
+              }`}
+              style={{ width: `${pullProgress.done ? 100 : pullProgress.percent}%` }}
+            />
           </div>
-          <div style={{ fontSize: 10, color: '#666666', marginTop: 2 }}>
+          <div className="text-[10px] text-text-muted mt-0.5">
             {pullProgress.status}
           </div>
         </div>
@@ -199,36 +190,32 @@ export function CalibrationView() {
       {result && (
         <>
           {/* Grade Card */}
-          <div style={{ display: 'flex', gap: 16, marginBottom: 20 }}>
-            <div style={{
-              flex: '0 0 120px',
-              background: '#141414',
-              border: '1px solid #2A2A2A',
-              borderRadius: 8,
-              padding: 20,
-              textAlign: 'center',
-            }}>
-              <div style={{ fontSize: 48, fontWeight: 700, color: gradeColor(result.grade), fontFamily: 'JetBrains Mono, monospace' }}>
+          <div className="flex gap-4 mb-5">
+            <div
+              className="flex-[0_0_120px] bg-bg-secondary border border-border rounded-lg p-5 text-center"
+              role="status"
+              aria-label={`Grade ${result.grade}, score ${result.grade_score} out of 100`}
+            >
+              <div className="text-5xl font-bold font-mono" style={{ color: gradeColor(result.grade) }}>
                 {result.grade}
               </div>
-              <div style={{ fontSize: 12, color: '#666666', marginTop: 4 }}>
+              <div className="text-xs text-text-muted mt-1">
                 {result.grade_score}/100
               </div>
             </div>
-            <div style={{ flex: 1, background: '#141414', border: '1px solid #2A2A2A', borderRadius: 8, padding: 16 }}>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                <DimensionBar label="Infrastructure" score={result.infrastructure_score} />
-                <DimensionBar label="Context" score={result.context_richness_score} />
-                <DimensionBar label="Signal Coverage" score={result.signal_coverage_score} />
-                <DimensionBar label="Discrimination" score={result.discrimination_score} />
+            <div className="flex-1 bg-bg-secondary border border-border rounded-lg p-4">
+              <div className="flex flex-col gap-2">
+                <DimensionBar label={t('calibration.dimension.infrastructure')} score={result.infrastructure_score} />
+                <DimensionBar label={t('calibration.dimension.context')} score={result.context_richness_score} />
+                <DimensionBar label={t('calibration.dimension.signalCoverage')} score={result.signal_coverage_score} />
+                <DimensionBar label={t('calibration.dimension.discrimination')} score={result.discrimination_score} />
               </div>
               {result.active_signal_axes.length > 0 && (
-                <div style={{ display: 'flex', gap: 4, marginTop: 10, flexWrap: 'wrap' }}>
+                <div className="flex gap-1 mt-2.5 flex-wrap">
                   {result.active_signal_axes.map(axis => (
-                    <span key={axis} style={{
-                      padding: '2px 8px', background: '#1F1F1F', borderRadius: 10,
-                      fontSize: 10, color: '#22C55E', fontFamily: 'JetBrains Mono, monospace',
-                    }}>{axis}</span>
+                    <span key={axis} className="px-2 py-0.5 bg-bg-tertiary rounded-[10px] text-[10px] text-success font-mono">
+                      {axis}
+                    </span>
                   ))}
                 </div>
               )}
@@ -236,40 +223,40 @@ export function CalibrationView() {
           </div>
 
           {/* Rig Requirements */}
-          <div style={{ background: '#141414', border: '1px solid #2A2A2A', borderRadius: 8, padding: 16, marginBottom: 20 }}>
-            <h3 style={{ margin: '0 0 12px', fontSize: 14, fontWeight: 600, color: '#FFFFFF' }}>
-              Rig Status
+          <div className="bg-bg-secondary border border-border rounded-lg p-4 mb-5">
+            <h3 className="m-0 mb-3 text-sm font-semibold text-white">
+              {t('calibration.rigStatus')}
             </h3>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+            <div className="grid grid-cols-2 gap-2">
               <StatusRow
-                label="Ollama"
+                label={t('calibration.label.ollama')}
                 ok={result.rig_requirements.ollama_running}
-                detail={result.rig_requirements.ollama_running ? 'Running' : 'Not detected'}
+                detail={result.rig_requirements.ollama_running ? t('calibration.ollamaRunning') : t('calibration.ollamaNotDetected')}
               />
               <StatusRow
-                label="Embeddings"
+                label={t('calibration.label.embeddings')}
                 ok={result.rig_requirements.embedding_available}
-                detail={result.rig_requirements.embedding_model || 'Not available'}
+                detail={result.rig_requirements.embedding_model || t('calibration.notAvailable')}
               />
               <StatusRow
-                label="Grade A Capable"
+                label={t('calibration.gradeACapable')}
                 ok={result.rig_requirements.can_reach_grade_a}
-                detail={result.rig_requirements.can_reach_grade_a ? 'Yes' : 'Needs setup'}
+                detail={result.rig_requirements.can_reach_grade_a ? t('calibration.yes') : t('calibration.needsSetup')}
               />
               <StatusRow
-                label="Recommended RAM"
+                label={t('calibration.label.recommendedRam')}
                 ok={true}
-                detail={`${result.rig_requirements.estimated_ram_gb} GB`}
+                detail={`${result.rig_requirements.estimated_ram_gb} ${t('calibration.gbUnit')}`}
               />
             </div>
 
             {!result.rig_requirements.can_reach_grade_a && (
-              <div style={{ marginTop: 12, padding: 12, background: '#1F1F1F', borderRadius: 6 }}>
-                <div style={{ fontSize: 12, fontWeight: 600, color: '#D4AF37', marginBottom: 6 }}>
-                  To reach Grade A:
+              <div className="mt-3 p-3 bg-bg-tertiary rounded-md">
+                <div className="text-xs font-semibold text-accent-gold mb-1.5">
+                  {t('calibration.toReachGradeA')}
                 </div>
                 {result.rig_requirements.grade_a_requirements.map((req, i) => (
-                  <div key={i} style={{ fontSize: 12, color: '#A0A0A0', padding: '2px 0', paddingLeft: 12 }}>
+                  <div key={i} className="text-xs text-text-secondary py-0.5 pl-3">
                     {req}
                   </div>
                 ))}
@@ -279,14 +266,14 @@ export function CalibrationView() {
 
           {/* Recommendations with action buttons */}
           {result.recommendations.length > 0 && (
-            <div style={{ background: '#141414', border: '1px solid #2A2A2A', borderRadius: 8, padding: 16 }}>
-              <h3 style={{ margin: '0 0 4px', fontSize: 14, fontWeight: 600, color: '#FFFFFF' }}>
+            <div className="bg-bg-secondary border border-border rounded-lg p-4">
+              <h3 className="m-0 mb-1 text-sm font-semibold text-white">
                 {result.grade.startsWith('A')
-                  ? 'Maintaining Grade A'
-                  : `Upgrade Path to Grade A`}
+                  ? t('calibration.maintainingGradeA')
+                  : t('calibration.upgradePath')}
               </h3>
-              <p style={{ margin: '0 0 12px', fontSize: 11, color: '#666666' }}>
-                Fix these to improve your grade. Actions auto-recalibrate when complete.
+              <p className="m-0 mb-3 text-[11px] text-text-muted">
+                {t('calibration.recommendationsHint')}
               </p>
               {result.recommendations.map((rec, i) => (
                 <RecommendationItem
@@ -302,19 +289,13 @@ export function CalibrationView() {
 
           {/* Grade A achieved */}
           {result.recommendations.length === 0 && (
-            <div style={{
-              background: '#0a1a0a',
-              border: '1px solid #22C55E',
-              borderRadius: 8,
-              padding: 20,
-              textAlign: 'center',
-            }}>
-              <div style={{ fontSize: 24, marginBottom: 8 }}>&#x2713;</div>
-              <div style={{ fontSize: 14, fontWeight: 600, color: '#22C55E' }}>
-                Your rig is fully calibrated
+            <div className="bg-[#0a1a0a] border border-success rounded-lg p-5 text-center" role="status" aria-label={t('calibration.fullyCalibrated')}>
+              <div className="text-2xl mb-2">&#x2713;</div>
+              <div className="text-sm font-semibold text-success">
+                {t('calibration.fullyCalibrated')}
               </div>
-              <div style={{ fontSize: 12, color: '#A0A0A0', marginTop: 4 }}>
-                All scoring systems are operating at maximum accuracy for your setup.
+              <div className="text-xs text-text-secondary mt-1">
+                {t('calibration.allScoringReady')}
               </div>
             </div>
           )}
@@ -322,13 +303,8 @@ export function CalibrationView() {
       )}
 
       {!result && loading && (
-        <div style={{
-          textAlign: 'center',
-          padding: '60px 20px',
-          color: '#A0A0A0',
-          fontSize: 13,
-        }}>
-          Analyzing your rig and scoring accuracy...
+        <div className="text-center py-[60px] px-5 text-text-secondary text-[13px]" role="status" aria-label={t('calibration.analyzing')}>
+          {t('calibration.analyzing')}
         </div>
       )}
     </div>

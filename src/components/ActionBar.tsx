@@ -138,7 +138,7 @@ export function ActionBar({
         {/* LLM Badge */}
         {settings?.rerank.enabled && settings?.llm.has_api_key && (
           <div className="px-3 py-1.5 bg-orange-500/10 text-orange-400 text-xs rounded-lg border border-orange-500/20">
-            LLM
+            {t('badge.llm')}
           </div>
         )}
 
@@ -232,7 +232,7 @@ export function ActionBar({
                 >
                   {t('action.autoBriefing')}
                   <span className={`text-xs px-2 py-0.5 rounded ${autoBriefingEnabled ? 'bg-orange-500/20 text-orange-400' : 'bg-border text-gray-500'}`}>
-                    {autoBriefingEnabled ? 'ON' : 'OFF'}
+                    {autoBriefingEnabled ? t('badge.on') : t('badge.off')}
                   </span>
                 </button>
                 {state.analysisComplete && (

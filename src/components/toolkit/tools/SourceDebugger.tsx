@@ -53,11 +53,11 @@ export default function SourceDebugger() {
 
     // Client-side validation
     if (!trimmed) {
-      setValidationError('Enter a feed URL');
+      setValidationError(t('toolkit.sourceDebugger.validationEmpty'));
       return;
     }
     if (!isValidUrl(trimmed)) {
-      setValidationError('URL must start with http:// or https://');
+      setValidationError(t('toolkit.sourceDebugger.validationUrl'));
       return;
     }
 
@@ -196,7 +196,7 @@ export default function SourceDebugger() {
             )}
 
             <div className="flex items-center gap-4 ml-auto text-xs text-text-secondary font-mono shrink-0">
-              <span>{result.item_count} item{result.item_count !== 1 ? 's' : ''}</span>
+              <span>{t('toolkit.sourceDebugger.itemCount', { count: result.item_count })}</span>
               <span>{result.fetch_duration_ms}ms</span>
             </div>
           </div>

@@ -232,7 +232,7 @@ describe('PlaybookView', () => {
     render(<PlaybookView />);
 
     // Click the Templates button in the sidebar
-    fireEvent.click(screen.getByText('Templates'));
+    fireEvent.click(screen.getByText('playbook.templates'));
 
     expect(screen.getByTestId('template-library')).toBeInTheDocument();
   });
@@ -240,7 +240,7 @@ describe('PlaybookView', () => {
   it('hides empty state when template library is shown', () => {
     render(<PlaybookView />);
 
-    fireEvent.click(screen.getByText('Templates'));
+    fireEvent.click(screen.getByText('playbook.templates'));
 
     // Empty state content should not be visible
     expect(screen.queryByText('streets:streets.startWith')).not.toBeInTheDocument();
@@ -254,7 +254,7 @@ describe('PlaybookView', () => {
     render(<PlaybookView />);
 
     // First show templates
-    fireEvent.click(screen.getByText('Templates'));
+    fireEvent.click(screen.getByText('playbook.templates'));
     expect(screen.getByTestId('template-library')).toBeInTheDocument();
 
     // Click a module button — find the "S" module button in the sidebar

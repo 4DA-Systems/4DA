@@ -18,12 +18,12 @@ interface SandboxScoreResult {
 }
 
 const SOURCE_TYPES = [
-  { value: 'sandbox', label: 'Sandbox' },
-  { value: 'hackernews', label: 'Hacker News' },
-  { value: 'reddit', label: 'Reddit' },
-  { value: 'rss', label: 'RSS' },
-  { value: 'arxiv', label: 'arXiv' },
-  { value: 'github', label: 'GitHub' },
+  { value: 'sandbox', labelKey: 'toolkit.scoringSandbox.sourceSandbox' },
+  { value: 'hackernews', labelKey: 'toolkit.scoringSandbox.sourceHackerNews' },
+  { value: 'reddit', labelKey: 'toolkit.scoringSandbox.sourceReddit' },
+  { value: 'rss', labelKey: 'toolkit.scoringSandbox.sourceRss' },
+  { value: 'arxiv', labelKey: 'toolkit.scoringSandbox.sourceArxiv' },
+  { value: 'github', labelKey: 'toolkit.scoringSandbox.sourceGitHub' },
 ];
 
 function scoreColor(score: number): string {
@@ -136,7 +136,7 @@ export default function ScoringSandbox() {
             >
               {SOURCE_TYPES.map((st) => (
                 <option key={st.value} value={st.value}>
-                  {st.label}
+                  {t(st.labelKey)}
                 </option>
               ))}
             </select>
@@ -221,12 +221,12 @@ export default function ScoringSandbox() {
               {t('toolkit.scoringSandbox.scoreBreakdown')}
             </h4>
             <div className="space-y-0.5">
-              <BreakdownBar label="Keyword Score" value={result.breakdown.keyword_score} />
-              <BreakdownBar label="Interest Score" value={result.breakdown.interest_score} />
-              <BreakdownBar label="ACE Boost" value={result.breakdown.ace_boost} />
-              <BreakdownBar label="Affinity Multiplier" value={result.breakdown.affinity_mult} />
-              <BreakdownBar label="Domain Relevance" value={result.breakdown.domain_relevance} />
-              <BreakdownBar label="Content Quality" value={result.breakdown.content_quality} />
+              <BreakdownBar label={t('toolkit.scoringSandbox.keywordScore')} value={result.breakdown.keyword_score} />
+              <BreakdownBar label={t('toolkit.scoringSandbox.interestScore')} value={result.breakdown.interest_score} />
+              <BreakdownBar label={t('toolkit.scoringSandbox.aceBoost')} value={result.breakdown.ace_boost} />
+              <BreakdownBar label={t('toolkit.scoringSandbox.affinityMultiplier')} value={result.breakdown.affinity_mult} />
+              <BreakdownBar label={t('toolkit.scoringSandbox.domainRelevance')} value={result.breakdown.domain_relevance} />
+              <BreakdownBar label={t('toolkit.scoringSandbox.contentQuality')} value={result.breakdown.content_quality} />
             </div>
           </div>
 
