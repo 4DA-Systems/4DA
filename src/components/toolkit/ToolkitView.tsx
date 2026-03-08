@@ -34,7 +34,9 @@ export function ToolkitView() {
     const ToolComponent = activeToolDescriptor.component;
     return (
       <ToolkitShell toolName={activeToolDescriptor.name} onBack={closeTool}>
-        <ToolComponent />
+        <div role="tabpanel" aria-labelledby={`toolkit-tab-${activeTool}`}>
+          <ToolComponent />
+        </div>
       </ToolkitShell>
     );
   }
@@ -42,10 +44,13 @@ export function ToolkitView() {
   // Render tool cards
   return (
     <section aria-label={t('toolkit.title', { defaultValue: 'Developer Toolkit' })}>
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-2xl">
+      <div role="tablist" aria-label={t('toolkit.title', { defaultValue: 'Developer Toolkit' })} className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-2xl">
         {TOOLS.map((tool) => (
           <button
             key={tool.id}
+            id={`toolkit-tab-${tool.id}`}
+            role="tab"
+            aria-selected={activeTool === tool.id}
             onClick={() => openTool(tool.id)}
             className="flex flex-col gap-2 p-5 bg-bg-secondary border border-border rounded-xl text-left hover:border-white/20 hover:bg-bg-tertiary transition-all group"
           >

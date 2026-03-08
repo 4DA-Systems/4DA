@@ -413,6 +413,7 @@ export const DecisionMemory = memo(function DecisionMemory() {
           </div>
         </div>
       ))}
+      </div>
     </div>
   );
 });
