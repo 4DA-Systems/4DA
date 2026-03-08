@@ -58,7 +58,7 @@ export function StackHealthBar({ health, onSuggestedQuery }: StackHealthBarProps
             className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs rounded-full bg-bg-secondary border border-border"
             title={`${tech.name}: ${tech.status} (${tech.signal_count_7d} signals this week)`}
           >
-            <span className="text-gray-300">{tech.name}</span>
+            <span className="text-text-secondary">{tech.name}</span>
             <span style={{ color: statusColors[tech.status] || '#666666' }}>
               {statusIcons[tech.status] || '\u25CF'}
             </span>
@@ -88,7 +88,7 @@ export function StackHealthBar({ health, onSuggestedQuery }: StackHealthBarProps
             <button
               key={sq}
               onClick={() => onSuggestedQuery(sq)}
-              className="px-2.5 py-1 text-xs bg-bg-secondary rounded-md border border-border text-gray-400 hover:text-cyan-400 hover:border-cyan-500/30 transition-all"
+              className="px-2.5 py-1 text-xs bg-bg-secondary rounded-md border border-border text-text-secondary hover:text-cyan-400 hover:border-cyan-500/30 transition-all"
             >
               {sq}
             </button>

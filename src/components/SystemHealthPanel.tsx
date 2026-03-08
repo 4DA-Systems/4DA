@@ -39,7 +39,7 @@ export function SystemHealthPanel({
           </div>
           <div>
             <h3 className="text-white font-medium">{t('systemHealth.title')}</h3>
-            <p className="text-gray-500 text-sm">{t('systemHealth.loading')}</p>
+            <p className="text-text-muted text-sm">{t('systemHealth.loading')}</p>
           </div>
         </div>
       </div>
@@ -54,7 +54,7 @@ export function SystemHealthPanel({
         </div>
         <div>
           <h3 className="text-white font-medium">{t('systemHealth.title')}</h3>
-          <p className="text-gray-500 text-sm">
+          <p className="text-text-muted text-sm">
             {t('systemHealth.subtitle')}
           </p>
         </div>
@@ -64,7 +64,7 @@ export function SystemHealthPanel({
         {/* Service Status */}
         <div className="grid grid-cols-2 gap-3">
           <div className="p-3 bg-bg-secondary rounded-lg border border-border">
-            <div className="text-xs text-gray-500 mb-1">{t('systemHealth.embedding')}</div>
+            <div className="text-xs text-text-muted mb-1">{t('systemHealth.embedding')}</div>
             <div className="flex items-center gap-2">
               <div className={`w-2 h-2 rounded-full ${health.embeddingOperational ? 'bg-green-500' : 'bg-red-500'}`} />
               <span className={`text-sm font-medium ${health.embeddingOperational ? 'text-green-400' : 'text-red-400'}`}>
@@ -73,7 +73,7 @@ export function SystemHealthPanel({
             </div>
           </div>
           <div className="p-3 bg-bg-secondary rounded-lg border border-border">
-            <div className="text-xs text-gray-500 mb-1">{t('systemHealth.rateLimit')}</div>
+            <div className="text-xs text-text-muted mb-1">{t('systemHealth.rateLimit')}</div>
             <div className="flex items-center gap-2">
               <div className={`w-2 h-2 rounded-full ${
                 health.rateLimitStatus
@@ -87,7 +87,7 @@ export function SystemHealthPanel({
                   ? health.rateLimitStatus.is_limited
                     ? 'text-red-400'
                     : 'text-green-400'
-                  : 'text-gray-500'
+                  : 'text-text-muted'
               }`}>
                 {health.rateLimitStatus
                   ? health.rateLimitStatus.is_limited
@@ -102,30 +102,30 @@ export function SystemHealthPanel({
         {/* Accuracy Metrics */}
         {health.accuracyMetrics && (
           <div className="p-4 bg-bg-secondary rounded-lg border border-border">
-            <div className="text-xs text-gray-400 mb-3 font-medium">{t('systemHealth.accuracyMetrics')}</div>
+            <div className="text-xs text-text-secondary mb-3 font-medium">{t('systemHealth.accuracyMetrics')}</div>
             <div className="grid grid-cols-3 gap-3">
               <div className="text-center">
                 <div className="text-lg font-semibold text-white">
                   {(health.accuracyMetrics.precision * 100).toFixed(0)}%
                 </div>
-                <div className="text-xs text-gray-500">{t('systemHealth.precision')}</div>
+                <div className="text-xs text-text-muted">{t('systemHealth.precision')}</div>
               </div>
               <div className="text-center">
                 <div className="text-lg font-semibold text-white">
                   {(health.accuracyMetrics.engagement_rate * 100).toFixed(0)}%
                 </div>
-                <div className="text-xs text-gray-500">{t('systemHealth.engagement')}</div>
+                <div className="text-xs text-text-muted">{t('systemHealth.engagement')}</div>
               </div>
               <div className="text-center">
                 <div className="text-lg font-semibold text-white">
                   {(health.accuracyMetrics.calibration_error * 100).toFixed(1)}%
                 </div>
-                <div className="text-xs text-gray-500">{t('systemHealth.calibration')}</div>
+                <div className="text-xs text-text-muted">{t('systemHealth.calibration')}</div>
               </div>
             </div>
             {health.accuracyMetrics.precision === 0 &&
               health.accuracyMetrics.engagement_rate === 0 && (
-                <div className="text-xs text-gray-500 mt-3 text-center">
+                <div className="text-xs text-text-muted mt-3 text-center">
                   {t('systemHealth.metricsUpdate')}
                 </div>
               )}
@@ -136,7 +136,7 @@ export function SystemHealthPanel({
         <div>
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2">
-              <span className="text-xs text-gray-400 font-medium">{t('systemHealth.anomalies')}</span>
+              <span className="text-xs text-text-secondary font-medium">{t('systemHealth.anomalies')}</span>
               <span className={`px-2 py-0.5 text-xs rounded-md ${
                 health.anomalyCount > 0
                   ? 'bg-red-500/20 text-red-400'
@@ -147,7 +147,7 @@ export function SystemHealthPanel({
             </div>
             <button
               onClick={onRunAnomalyDetection}
-              className="px-3 py-1.5 text-xs bg-bg-secondary border border-border rounded-lg text-gray-400 hover:text-white hover:border-rose-500/30 transition-all"
+              className="px-3 py-1.5 text-xs bg-bg-secondary border border-border rounded-lg text-text-secondary hover:text-white hover:border-rose-500/30 transition-all"
             >
               {t('systemHealth.scanNow')}
             </button>
@@ -171,7 +171,7 @@ export function SystemHealthPanel({
 
         {/* Topic Similarity Search */}
         <div>
-          <label className="text-xs text-gray-400 font-medium block mb-2">
+          <label className="text-xs text-text-secondary font-medium block mb-2">
             {t('systemHealth.findSimilarTopics')}
           </label>
           <div className="flex gap-2 mb-3">
@@ -181,7 +181,7 @@ export function SystemHealthPanel({
               onChange={(e) => onSimilarTopicQueryChange(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && onFindSimilarTopics()}
               placeholder={t('systemHealth.topicPlaceholder')}
-              className="flex-1 px-3 py-2.5 bg-bg-secondary border border-border rounded-lg text-sm text-white placeholder:text-gray-500 focus:border-rose-500/50 focus:outline-none transition-colors"
+              className="flex-1 px-3 py-2.5 bg-bg-secondary border border-border rounded-lg text-sm text-white placeholder:text-text-muted focus:border-rose-500/50 focus:outline-none transition-colors"
             />
             <button
               onClick={onFindSimilarTopics}
@@ -211,13 +211,13 @@ export function SystemHealthPanel({
         <div className="flex gap-2 pt-2">
           <button
             onClick={onSaveWatcherState}
-            className="flex-1 px-4 py-2.5 text-sm bg-bg-secondary border border-border rounded-lg text-gray-400 hover:text-white hover:border-rose-500/30 transition-all"
+            className="flex-1 px-4 py-2.5 text-sm bg-bg-secondary border border-border rounded-lg text-text-secondary hover:text-white hover:border-rose-500/30 transition-all"
           >
             {t('systemHealth.saveWatcherState')}
           </button>
           <button
             onClick={onRefresh}
-            className="px-4 py-2.5 text-sm bg-bg-secondary border border-border rounded-lg text-gray-400 hover:text-white hover:border-rose-500/30 transition-all"
+            className="px-4 py-2.5 text-sm bg-bg-secondary border border-border rounded-lg text-text-secondary hover:text-white hover:border-rose-500/30 transition-all"
           >
             {t('action.refresh')}
           </button>
@@ -252,12 +252,12 @@ function AnomalyItem({ anomaly, onResolve }: AnomalyItemProps) {
               ? 'text-red-400'
               : isMediumSeverity
               ? 'text-yellow-400'
-              : 'text-gray-300'
+              : 'text-text-secondary'
           }`}>
             {anomaly.anomaly_type.replace(/_/g, ' ')}
           </span>
           {anomaly.topic && (
-            <span className="text-xs text-gray-500 ml-2">({anomaly.topic})</span>
+            <span className="text-xs text-text-muted ml-2">({anomaly.topic})</span>
           )}
         </div>
         {anomaly.id && (
@@ -269,7 +269,7 @@ function AnomalyItem({ anomaly, onResolve }: AnomalyItemProps) {
           </button>
         )}
       </div>
-      <div className="text-xs text-gray-500 mt-1">{anomaly.description}</div>
+      <div className="text-xs text-text-muted mt-1">{anomaly.description}</div>
     </div>
   );
 }

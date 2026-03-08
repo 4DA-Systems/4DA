@@ -73,7 +73,7 @@ export const ScoreBreakdownDrawer = memo(function ScoreBreakdownDrawer({
           <span className="text-lg font-bold font-mono text-white">
             {Math.round(finalScore * 100)}%
           </span>
-          <span className="text-[10px] text-gray-500 uppercase tracking-wider">
+          <span className="text-[10px] text-text-muted uppercase tracking-wider">
             {t('scoreDrawer.title', 'Score Breakdown')}
           </span>
           {feedbackCount > 0 && (
@@ -84,7 +84,7 @@ export const ScoreBreakdownDrawer = memo(function ScoreBreakdownDrawer({
         </div>
         <button
           onClick={onClose}
-          className="text-gray-500 hover:text-white transition-colors text-sm px-2 py-1"
+          className="text-text-muted hover:text-white transition-colors text-sm px-2 py-1"
           aria-label="Close score breakdown"
         >
           &times;
@@ -94,7 +94,7 @@ export const ScoreBreakdownDrawer = memo(function ScoreBreakdownDrawer({
       <div className="px-4 py-3 space-y-4 max-h-[50vh] overflow-y-auto">
         {/* Confirmation Gate */}
         <div className="flex items-center gap-2 flex-wrap">
-          <span className="text-[10px] text-gray-500 uppercase tracking-wider">
+          <span className="text-[10px] text-text-muted uppercase tracking-wider">
             {t('scoreDrawer.signals', 'Signals')}
           </span>
           {['context', 'interest', 'ace', 'learned', 'dependency'].map(axis => {
@@ -105,14 +105,14 @@ export const ScoreBreakdownDrawer = memo(function ScoreBreakdownDrawer({
                 className={`text-[10px] px-1.5 py-0.5 rounded border ${
                   confirmed
                     ? 'bg-green-500/15 text-green-400 border-green-500/30'
-                    : 'bg-bg-tertiary text-gray-600 border-border'
+                    : 'bg-bg-tertiary text-text-muted border-border'
                 }`}
               >
                 {confirmed ? '\u2713' : '\u2717'} {axis}
               </span>
             );
           })}
-          <span className="text-[10px] text-gray-500 ml-1">
+          <span className="text-[10px] text-text-muted ml-1">
             {signalCount}/5
           </span>
         </div>
@@ -155,13 +155,13 @@ export const ScoreBreakdownDrawer = memo(function ScoreBreakdownDrawer({
           {compareBreakdown && compareScore != null ? (
             <div className="flex items-center justify-between">
               <div className="min-w-0">
-                <p className="text-[10px] text-gray-500 uppercase tracking-wider mb-1">
+                <p className="text-[10px] text-text-muted uppercase tracking-wider mb-1">
                   {t('scoreDrawer.comparing', 'Comparing with')}
                 </p>
-                <p className="text-xs text-gray-400 truncate">{compareTitle}</p>
+                <p className="text-xs text-text-secondary truncate">{compareTitle}</p>
                 <p className="text-sm font-mono text-white mt-1">
                   {Math.round(compareScore * 100)}% vs {Math.round(finalScore * 100)}%
-                  <span className={`ml-2 text-xs ${compareScore > finalScore ? 'text-green-400' : compareScore < finalScore ? 'text-amber-400' : 'text-gray-500'}`}>
+                  <span className={`ml-2 text-xs ${compareScore > finalScore ? 'text-green-400' : compareScore < finalScore ? 'text-amber-400' : 'text-text-muted'}`}>
                     ({compareScore > finalScore ? '+' : ''}{Math.round((compareScore - finalScore) * 100)})
                   </span>
                 </p>
@@ -169,7 +169,7 @@ export const ScoreBreakdownDrawer = memo(function ScoreBreakdownDrawer({
               {selectedCompareId != null && (
                 <button
                   onClick={() => setSelectedCompareId(null)}
-                  className="text-[10px] text-gray-600 hover:text-white px-2 py-1"
+                  className="text-[10px] text-text-muted hover:text-white px-2 py-1"
                   aria-label="Clear comparison"
                 >
                   &times;
@@ -178,13 +178,13 @@ export const ScoreBreakdownDrawer = memo(function ScoreBreakdownDrawer({
             </div>
           ) : comparePool && comparePool.length > 1 ? (
             <div>
-              <p className="text-[10px] text-gray-500 uppercase tracking-wider mb-1.5">
+              <p className="text-[10px] text-text-muted uppercase tracking-wider mb-1.5">
                 {t('scoreDrawer.compareWith', 'Compare with')}
               </p>
               <select
                 value=""
                 onChange={(e) => setSelectedCompareId(Number(e.target.value))}
-                className="w-full bg-bg-tertiary text-xs text-gray-300 rounded border border-border px-2 py-1.5 focus:border-white/30 focus:outline-none"
+                className="w-full bg-bg-tertiary text-xs text-text-secondary rounded border border-border px-2 py-1.5 focus:border-white/30 focus:outline-none"
               >
                 <option value="" disabled>{t('scoreDrawer.selectItem', 'Select an item...')}</option>
                 {comparePool

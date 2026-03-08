@@ -28,7 +28,7 @@ export function ErrorState({ status, onRetry, onContinue }: ErrorStateProps) {
         </svg>
       </div>
       <h2 className="text-xl font-medium text-white mb-2">{t('firstRun.errorTitle')}</h2>
-      <p className="text-sm text-gray-400 mb-4">
+      <p className="text-sm text-text-secondary mb-4">
         {isEmbeddingError
           ? t('firstRun.errorEmbedding')
           : isFetchError
@@ -36,7 +36,7 @@ export function ErrorState({ status, onRetry, onContinue }: ErrorStateProps) {
           : t('firstRun.errorGeneric')}
       </p>
       {isEmbeddingError && (
-        <p className="text-xs text-gray-500 mb-6 px-4">
+        <p className="text-xs text-text-muted mb-6 px-4">
           {t('firstRun.basicModeExplainer')}
         </p>
       )}
@@ -52,12 +52,12 @@ export function ErrorState({ status, onRetry, onContinue }: ErrorStateProps) {
           </button>
           <button
             onClick={onContinue}
-            className="px-6 py-3 text-gray-400 hover:text-white transition-colors text-sm"
+            className="px-6 py-3 text-text-secondary hover:text-white transition-colors text-sm"
           >
             {t('firstRun.continueAnyway')}
           </button>
         </div>
-        <p className="text-xs text-gray-600">
+        <p className="text-xs text-text-muted">
           {t('firstRun.settingsHint')}
         </p>
       </div>

@@ -78,7 +78,7 @@ export const ViewTabBar = memo(function ViewTabBar() {
             className={`relative px-4 py-1.5 text-sm rounded-md transition-all ${
               activeView === tab.id
                 ? `${tab.activeColor} font-medium`
-                : 'text-gray-500 hover:text-gray-300'
+                : 'text-text-muted hover:text-text-secondary'
             }`}
             title={t(tab.subtitleKey)}
           >

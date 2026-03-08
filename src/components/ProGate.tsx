@@ -72,10 +72,10 @@ export function ProGate({ children, feature }: ProGateProps) {
             </svg>
             <span className="text-sm font-semibold text-[#D4AF37] tracking-wide uppercase">{t('tier.pro')}</span>
           </div>
-          <p className="text-sm text-gray-300 mb-1">
+          <p className="text-sm text-text-secondary mb-1">
             {feature ? t('pro.featureGated', { feature }) : t('pro.genericGated')}
           </p>
-          <p className="text-xs text-gray-500 mb-4">
+          <p className="text-xs text-text-muted mb-4">
             {licenseExpired
               ? t('pro.licenseExpired')
               : trialExpired
@@ -95,7 +95,7 @@ export function ProGate({ children, feature }: ProGateProps) {
               <button
                 onClick={handleStartTrial}
                 disabled={starting}
-                className="px-5 py-2 text-sm font-medium text-gray-300 border border-gray-600 rounded-lg hover:border-gray-400 hover:text-white transition-colors disabled:opacity-50"
+                className="px-5 py-2 text-sm font-medium text-text-secondary border border-gray-600 rounded-lg hover:border-gray-400 hover:text-white transition-colors disabled:opacity-50"
               >
                 {starting ? t('pro.startingTrial') : t('pro.startTrial')}
               </button>
@@ -105,7 +105,7 @@ export function ProGate({ children, feature }: ProGateProps) {
             {!showKeyInput ? (
               <button
                 onClick={() => setShowKeyInput(true)}
-                className="text-xs text-gray-500 hover:text-[#D4AF37] transition-colors"
+                className="text-xs text-text-muted hover:text-[#D4AF37] transition-colors"
               >
                 {t('pro.haveLicenseKey')}
               </button>

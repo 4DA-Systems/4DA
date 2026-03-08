@@ -33,12 +33,12 @@ export const ProValueBadge = memo(function ProValueBadge() {
       className="hidden md:flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-bg-tertiary/50 border border-border/50"
       title={t('pro.intelligenceSummary', { summary: parts.join(', '), days: report.period_days })}
     >
-      <svg width="12" height="12" viewBox="0 0 16 16" fill="none" className="text-gray-500 flex-shrink-0">
+      <svg width="12" height="12" viewBox="0 0 16 16" fill="none" className="text-text-muted flex-shrink-0">
         <rect x="1" y="8" width="3" height="6" rx="0.5" fill="currentColor" opacity="0.4" />
         <rect x="6" y="4" width="3" height="10" rx="0.5" fill="currentColor" opacity="0.6" />
         <rect x="11" y="1" width="3" height="13" rx="0.5" fill="currentColor" opacity="0.9" />
       </svg>
-      <span className="text-[10px] text-gray-500 whitespace-nowrap">
+      <span className="text-[10px] text-text-muted whitespace-nowrap">
         {parts.join(' · ')}
       </span>
     </div>

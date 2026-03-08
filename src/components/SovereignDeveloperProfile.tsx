@@ -48,7 +48,7 @@ function CompletenessRing({ percentage, size = 48 }: { percentage: number; size?
 
 function DepthBadge({ depth }: { depth: string }) {
   const colors: Record<string, string> = {
-    empty: 'bg-white/5 text-gray-500',
+    empty: 'bg-white/5 text-text-muted',
     minimal: 'bg-red-500/10 text-red-400',
     partial: 'bg-amber-500/10 text-amber-400',
     good: 'bg-green-500/10 text-green-400',
@@ -377,8 +377,8 @@ function DeveloperDnaSection() {
         aria-label={t('profile.toggleDna')}
         className="flex items-center gap-2 w-full text-left group"
       >
-        <span className={`text-gray-500 text-xs transition-transform ${expanded ? 'rotate-90' : ''}`}>&#9654;</span>
-        <h3 className="text-xs font-medium text-gray-500 uppercase tracking-wider group-hover:text-gray-400 transition-colors">
+        <span className={`text-text-muted text-xs transition-transform ${expanded ? 'rotate-90' : ''}`}>&#9654;</span>
+        <h3 className="text-xs font-medium text-text-muted uppercase tracking-wider group-hover:text-text-secondary transition-colors">
           {t('profile.developerDna')}
         </h3>
       </button>
@@ -386,7 +386,7 @@ function DeveloperDnaSection() {
       {expanded && loading && (
         <div className="flex items-center gap-2 py-6 justify-center">
           <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-          <span className="text-xs text-gray-500">{t('profile.buildingDna')}</span>
+          <span className="text-xs text-text-muted">{t('profile.buildingDna')}</span>
         </div>
       )}
 
@@ -394,7 +394,7 @@ function DeveloperDnaSection() {
         <div className="mt-3 space-y-4">
           {/* Identity */}
           <div className="flex items-center justify-between">
-            <p className="text-xs text-gray-400">{dna.identity_summary}</p>
+            <p className="text-xs text-text-secondary">{dna.identity_summary}</p>
             <button onClick={copyDna} className="px-2 py-1 text-[10px] text-white bg-white/10 hover:bg-white/15 border border-white/20 rounded transition-colors">
               {t('profile.copyDna')}
             </button>
@@ -403,15 +403,15 @@ function DeveloperDnaSection() {
           {/* Attention Distribution */}
           {dna.top_engaged_topics.length > 0 && (
             <div>
-              <h4 className="text-[11px] font-medium text-gray-500 mb-2">{t('profile.attentionDistribution')}</h4>
+              <h4 className="text-[11px] font-medium text-text-muted mb-2">{t('profile.attentionDistribution')}</h4>
               <div className="space-y-1.5">
                 {dna.top_engaged_topics.slice(0, 6).map((topic) => (
                   <div key={topic.topic} className="flex items-center gap-3">
-                    <span className="text-[11px] text-gray-400 w-24 truncate">{topic.topic}</span>
+                    <span className="text-[11px] text-text-secondary w-24 truncate">{topic.topic}</span>
                     <div className="flex-1 h-1.5 bg-bg-tertiary rounded-full overflow-hidden">
                       <div className="h-full bg-white/20 rounded-full" style={{ width: `${Math.min(100, topic.percent_of_total)}%` }} />
                     </div>
-                    <span className="text-[10px] text-gray-500 w-8 text-right">{topic.percent_of_total.toFixed(0)}%</span>
+                    <span className="text-[10px] text-text-muted w-8 text-right">{topic.percent_of_total.toFixed(0)}%</span>
                   </div>
                 ))}
               </div>
@@ -435,12 +435,12 @@ function DeveloperDnaSection() {
           {/* Source Engagement */}
           {dna.source_engagement.length > 0 && (
             <div>
-              <h4 className="text-[11px] font-medium text-gray-500 mb-1.5">{t('profile.sourceEngagement')}</h4>
+              <h4 className="text-[11px] font-medium text-text-muted mb-1.5">{t('profile.sourceEngagement')}</h4>
               <div className="grid grid-cols-2 lg:grid-cols-3 gap-2">
                 {dna.source_engagement.map((src) => (
                   <div key={src.source_type} className="px-2.5 py-1.5 bg-[#1A1A1A] rounded border border-border">
-                    <div className="text-[11px] font-medium text-gray-300">{getSourceFullName(src.source_type)}</div>
-                    <div className="text-[10px] text-gray-500">{t('sovereignProfile.sourceStats', { seen: src.items_seen.toLocaleString(), saved: src.items_saved })}</div>
+                    <div className="text-[11px] font-medium text-text-secondary">{getSourceFullName(src.source_type)}</div>
+                    <div className="text-[10px] text-text-muted">{t('sovereignProfile.sourceStats', { seen: src.items_seen.toLocaleString(), saved: src.items_saved })}</div>
                   </div>
                 ))}
               </div>
@@ -449,9 +449,9 @@ function DeveloperDnaSection() {
 
           {/* Stats */}
           <div className="flex gap-6 pt-2 border-t border-border/50">
-            <div><span className="text-xs text-white">{dna.stats.project_count}</span><span className="text-[10px] text-gray-500 ml-1">{t('profile.projects')}</span></div>
-            <div><span className="text-xs text-white">{dna.stats.dependency_count}</span><span className="text-[10px] text-gray-500 ml-1">{t('profile.deps')}</span></div>
-            <div><span className="text-xs text-white">{dna.stats.rejection_rate.toFixed(1)}%</span><span className="text-[10px] text-gray-500 ml-1">{t('profile.filtered')}</span></div>
+            <div><span className="text-xs text-white">{dna.stats.project_count}</span><span className="text-[10px] text-text-muted ml-1">{t('profile.projects')}</span></div>
+            <div><span className="text-xs text-white">{dna.stats.dependency_count}</span><span className="text-[10px] text-text-muted ml-1">{t('profile.deps')}</span></div>
+            <div><span className="text-xs text-white">{dna.stats.rejection_rate.toFixed(1)}%</span><span className="text-[10px] text-text-muted ml-1">{t('profile.filtered')}</span></div>
           </div>
         </div>
       )}

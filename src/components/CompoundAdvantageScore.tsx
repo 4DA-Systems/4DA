@@ -5,7 +5,7 @@ import { useAppStore } from '../store';
 function TrendArrow({ trend }: { trend: number }) {
   if (trend > 0.1) return <span className="text-green-400 text-xs">&#8593;</span>;
   if (trend < -0.1) return <span className="text-red-400 text-xs">&#8595;</span>;
-  return <span className="text-gray-500 text-xs">&#8594;</span>;
+  return <span className="text-text-muted text-xs">&#8594;</span>;
 }
 
 function MiniSparkline({ data }: { data: number[] }) {
@@ -48,7 +48,7 @@ export const CompoundAdvantageScore = memo(function CompoundAdvantageScore() {
   const displayScore = Math.round(advantage.score);
   const scoreColor = displayScore >= 60 ? 'text-green-400'
     : displayScore >= 30 ? 'text-[#D4AF37]'
-    : 'text-gray-400';
+    : 'text-text-secondary';
 
   return (
     <div className="flex items-center gap-4 px-4 py-2.5 bg-bg-secondary rounded-lg border border-border">
@@ -57,13 +57,13 @@ export const CompoundAdvantageScore = memo(function CompoundAdvantageScore() {
         <TrendArrow trend={advantage.trend} />
       </div>
       <div className="flex-1 min-w-0">
-        <div className="text-[10px] text-gray-500 uppercase tracking-wider">{t('advantage.score')}</div>
+        <div className="text-[10px] text-text-muted uppercase tracking-wider">{t('advantage.score')}</div>
         <div className="flex items-center gap-3 mt-0.5">
-          <span className="text-[10px] text-gray-400">
+          <span className="text-[10px] text-text-secondary">
             {t('advantage.acted', { acted: advantage.windows_acted, opened: advantage.windows_opened })}
           </span>
           {advantage.avg_lead_time_hours > 0 && (
-            <span className="text-[10px] text-gray-400">
+            <span className="text-[10px] text-text-secondary">
               {t('advantage.avgLead', { hours: Math.round(advantage.avg_lead_time_hours) })}
             </span>
           )}

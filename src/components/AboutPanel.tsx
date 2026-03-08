@@ -13,8 +13,8 @@ export function AboutPanel() {
           className="w-28 h-28 rounded-2xl object-cover shadow-lg shadow-orange-500/20 mb-4"
         />
         <h3 className="text-xl font-semibold text-white">{t('app.title')}</h3>
-        <p className="text-sm text-gray-400 mt-1">{t('about.fullName')}</p>
-        <p className="text-xs text-gray-500 mt-0.5">{t('app.tagline')}</p>
+        <p className="text-sm text-text-secondary mt-1">{t('about.fullName')}</p>
+        <p className="text-xs text-text-muted mt-0.5">{t('app.tagline')}</p>
       </div>
 
       {/* Built With Section */}
@@ -23,7 +23,7 @@ export function AboutPanel() {
           {t('about.attribution')}
         </h4>
 
-        <div className="space-y-3 text-sm text-gray-300 leading-relaxed">
+        <div className="space-y-3 text-sm text-text-secondary leading-relaxed">
           <p>
             {t('about.attributionCreatorBefore')}{' '}
             <span className="text-white font-medium">{t('about.attributionCreatorName')}</span>{' '}
@@ -36,7 +36,7 @@ export function AboutPanel() {
             {t('about.attributionClaudeAfter')}
           </p>
 
-          <p className="text-gray-400 text-xs">
+          <p className="text-text-secondary text-xs">
             {t('about.attributionLegitimacy')}
           </p>
         </div>
@@ -51,7 +51,7 @@ export function AboutPanel() {
                 <circle cx="12" cy="7" r="4" />
               </svg>
             </div>
-            <span className="text-[10px] text-gray-500 font-medium uppercase tracking-wider">{t('about.vision')}</span>
+            <span className="text-[10px] text-text-muted font-medium uppercase tracking-wider">{t('about.vision')}</span>
           </div>
 
           {/* Connection */}
@@ -61,7 +61,7 @@ export function AboutPanel() {
               <div className="w-2 h-2 rounded-full bg-orange-500/60" />
               <div className="w-6 h-px bg-gray-600" />
             </div>
-            <span className="text-[9px] text-gray-600">{t('about.collaborative')}</span>
+            <span className="text-[9px] text-text-muted">{t('about.collaborative')}</span>
           </div>
 
           {/* Claude */}
@@ -76,7 +76,7 @@ export function AboutPanel() {
                 <path d="M10 16h4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
               </svg>
             </div>
-            <span className="text-[10px] text-gray-500 font-medium uppercase tracking-wider">{t('about.engine')}</span>
+            <span className="text-[10px] text-text-muted font-medium uppercase tracking-wider">{t('about.engine')}</span>
           </div>
         </div>
       </div>
@@ -90,7 +90,7 @@ export function AboutPanel() {
           </svg>
           <div>
             <p className="text-xs font-medium text-green-400">{t('about.verifiable')}</p>
-            <p className="text-xs text-gray-500 mt-1">
+            <p className="text-xs text-text-muted mt-1">
               {t('about.verifiableDescription')}
             </p>
           </div>
@@ -100,20 +100,20 @@ export function AboutPanel() {
       {/* Technical Details */}
       <div className="grid grid-cols-2 gap-3 text-xs">
         <div className="bg-bg-tertiary/30 rounded-lg p-3 border border-border/50">
-          <p className="text-gray-500 mb-1">{t('about.stack')}</p>
-          <p className="text-gray-300">{t('about.stackValue')}</p>
+          <p className="text-text-muted mb-1">{t('about.stack')}</p>
+          <p className="text-text-secondary">{t('about.stackValue')}</p>
         </div>
         <div className="bg-bg-tertiary/30 rounded-lg p-3 border border-border/50">
-          <p className="text-gray-500 mb-1">{t('about.framework')}</p>
-          <p className="text-gray-300">{t('about.frameworkValue')}</p>
+          <p className="text-text-muted mb-1">{t('about.framework')}</p>
+          <p className="text-text-secondary">{t('about.frameworkValue')}</p>
         </div>
         <div className="bg-bg-tertiary/30 rounded-lg p-3 border border-border/50">
-          <p className="text-gray-500 mb-1">{t('about.license')}</p>
-          <p className="text-gray-300">{t('about.licenseValue')}</p>
+          <p className="text-text-muted mb-1">{t('about.license')}</p>
+          <p className="text-text-secondary">{t('about.licenseValue')}</p>
         </div>
         <div className="bg-bg-tertiary/30 rounded-lg p-3 border border-border/50">
-          <p className="text-gray-500 mb-1">{t('about.privacyModel')}</p>
-          <p className="text-gray-300">{t('about.privacyValue')}</p>
+          <p className="text-text-muted mb-1">{t('about.privacyModel')}</p>
+          <p className="text-text-secondary">{t('about.privacyValue')}</p>
         </div>
       </div>
 
@@ -134,10 +134,10 @@ export function AboutPanel() {
             ['J / K', t('shortcuts.navigateItems')],
           ].map(([key, desc]) => (
             <div key={key} className="flex items-center gap-2">
-              <kbd className="px-1.5 py-0.5 bg-bg-secondary rounded border border-border text-gray-400 font-mono text-[11px] min-w-[28px] text-center">
+              <kbd className="px-1.5 py-0.5 bg-bg-secondary rounded border border-border text-text-secondary font-mono text-[11px] min-w-[28px] text-center">
                 {key}
               </kbd>
-              <span className="text-gray-500">{desc}</span>
+              <span className="text-text-muted">{desc}</span>
             </div>
           ))}
         </div>
@@ -145,23 +145,23 @@ export function AboutPanel() {
 
       {/* Version + Copyright */}
       <div className="text-center pt-2 border-t border-border/50">
-        <p className="text-xs text-gray-500">
+        <p className="text-xs text-text-muted">
           {t('about.copyright', { version: __APP_VERSION__ })}
         </p>
-        <p className="text-[10px] text-gray-600 mt-1">
+        <p className="text-[10px] text-text-muted mt-1">
           {t('about.tagline')}
         </p>
         <div className="flex items-center justify-center gap-3 mt-2">
           <button
             onClick={() => import('@tauri-apps/plugin-opener').then(({ openUrl }) => openUrl('https://4da.ai/privacy'))}
-            className="text-[10px] text-gray-500 hover:text-gray-300 transition-colors underline underline-offset-2"
+            className="text-[10px] text-text-muted hover:text-text-secondary transition-colors underline underline-offset-2"
           >
             {t('about.privacyPolicy')}
           </button>
-          <span className="text-gray-600 text-[10px]">&middot;</span>
+          <span className="text-text-muted text-[10px]">&middot;</span>
           <button
             onClick={() => import('@tauri-apps/plugin-opener').then(({ openUrl }) => openUrl('https://4da.ai/terms'))}
-            className="text-[10px] text-gray-500 hover:text-gray-300 transition-colors underline underline-offset-2"
+            className="text-[10px] text-text-muted hover:text-text-secondary transition-colors underline underline-offset-2"
           >
             {t('about.termsOfService')}
           </button>

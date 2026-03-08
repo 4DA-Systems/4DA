@@ -81,7 +81,7 @@ export function Onboarding({ onComplete }: OnboardingProps) {
                   ? 'bg-orange-500 text-white'
                   : i === currentIndex
                   ? 'bg-orange-500/20 text-orange-400 ring-2 ring-orange-500'
-                  : 'bg-bg-tertiary text-gray-600'
+                  : 'bg-bg-tertiary text-text-muted'
               }`}
             >
               {i < currentIndex ? '\u2713' : i + 1}
@@ -98,7 +98,7 @@ export function Onboarding({ onComplete }: OnboardingProps) {
       </div>
 
       {/* Step label */}
-      <div className="absolute top-[70px] text-xs text-gray-500">
+      <div className="absolute top-[70px] text-xs text-text-muted">
         {stepLabels[step]}
       </div>
 
@@ -134,7 +134,7 @@ export function Onboarding({ onComplete }: OnboardingProps) {
       </div>
 
       {/* Version */}
-      <p className="absolute bottom-6 text-xs text-gray-600">{t('onboarding.version', { version: __APP_VERSION__ })}</p>
+      <p className="absolute bottom-6 text-xs text-text-muted">{t('onboarding.version', { version: __APP_VERSION__ })}</p>
     </div>
   );
 }

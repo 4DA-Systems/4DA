@@ -104,7 +104,7 @@ export function CalibrationStep({ isAnimating, onComplete, onBack }: Calibration
   return (
     <div className={`transition-all duration-300 ${isAnimating ? 'opacity-0 translate-y-4' : 'opacity-100 translate-y-0'}`}>
       <h1 className="text-2xl font-semibold text-white mb-2 text-center">{t('calibration.title')}</h1>
-      <p className="text-sm text-gray-400 mb-6 text-center">
+      <p className="text-sm text-text-secondary mb-6 text-center">
         {t('calibration.onboarding.subtitle')}
       </p>
 
@@ -216,7 +216,7 @@ export function CalibrationStep({ isAnimating, onComplete, onBack }: Calibration
 
       {/* Navigation */}
       <div className="flex justify-between mt-6">
-        <button onClick={onBack} className="px-4 py-2 text-sm text-gray-400 hover:text-white transition-colors">
+        <button onClick={onBack} className="px-4 py-2 text-sm text-text-secondary hover:text-white transition-colors">
           {t('onboarding.nav.back')}
         </button>
         <button

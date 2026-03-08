@@ -28,7 +28,7 @@ export function SetupInterests({
     <div className="mt-2 p-4 bg-bg-secondary rounded-lg border border-border space-y-3">
       {/* Role selector */}
       <div>
-        <label className="block text-xs text-gray-500 mb-2">{t('onboarding.interests.roleLabel')}</label>
+        <label className="block text-xs text-text-muted mb-2">{t('onboarding.interests.roleLabel')}</label>
         <select
           value={role}
           onChange={(e) => onRoleChange(e.target.value)}
@@ -83,7 +83,7 @@ export function SetupInterests({
 
       {/* Suggestions */}
       <div>
-        <p className="text-xs text-gray-500 mb-2">{t('onboarding.interests.quickAdd')}:</p>
+        <p className="text-xs text-text-muted mb-2">{t('onboarding.interests.quickAdd')}:</p>
         <div className="flex flex-wrap gap-2">
           {suggestions
             .filter(s => !interests.includes(s))
@@ -92,7 +92,7 @@ export function SetupInterests({
               <button
                 key={suggestion}
                 onClick={() => onToggleInterest(suggestion)}
-                className="px-3 py-1.5 bg-bg-tertiary text-gray-400 rounded-full text-sm hover:bg-border hover:text-white transition-all"
+                className="px-3 py-1.5 bg-bg-tertiary text-text-secondary rounded-full text-sm hover:bg-border hover:text-white transition-all"
               >
                 + {suggestion}
               </button>
@@ -100,7 +100,7 @@ export function SetupInterests({
         </div>
       </div>
 
-      <p className="text-xs text-gray-500">
+      <p className="text-xs text-text-muted">
         {t('onboarding.interests.hint')}
       </p>
     </div>

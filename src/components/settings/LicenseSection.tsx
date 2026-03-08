@@ -57,7 +57,7 @@ export function LicenseSection({ onStatus }: { onStatus: (s: string) => void }) 
   };
 
   const tierConfig: Record<string, { label: string; color: string }> = {
-    free: { label: t('tier.free'), color: 'text-gray-400' },
+    free: { label: t('tier.free'), color: 'text-text-secondary' },
     pro: { label: t('tier.pro'), color: 'text-[#D4AF37]' },
     team: { label: t('settings.license.tierTeam'), color: 'text-[#22C55E]' },
   };
@@ -69,7 +69,7 @@ export function LicenseSection({ onStatus }: { onStatus: (s: string) => void }) 
 
       {/* Current tier */}
       <div className="flex items-center gap-2 mb-3">
-        <span className="text-xs text-gray-500">{t('settings.license.currentTier')}</span>
+        <span className="text-xs text-text-muted">{t('settings.license.currentTier')}</span>
         <span className={`text-xs font-semibold ${tierColor}`}>{tierLabel}</span>
         {trialActive && (
           <span className="text-[10px] px-1.5 py-0.5 bg-[#D4AF37]/15 text-[#D4AF37] rounded">
@@ -117,7 +117,7 @@ export function LicenseSection({ onStatus }: { onStatus: (s: string) => void }) 
 
       {/* Pro badge — show what's unlocked */}
       {isPro && (
-        <p className="text-xs text-gray-500 mb-3">
+        <p className="text-xs text-text-muted mb-3">
           {t('settings.license.proUnlocked')}{expiresAt && !expiryWarning ? ` ${t('settings.license.renewsOn', { date: new Date(expiresAt).toLocaleDateString() })}` : ` ${t('settings.license.verified')}`}
         </p>
       )}
@@ -157,7 +157,7 @@ export function LicenseSection({ onStatus }: { onStatus: (s: string) => void }) 
             <button
               onClick={handleStartTrial}
               disabled={starting}
-              className="w-full px-4 py-2 text-xs font-medium text-gray-300 border border-gray-600 rounded-lg hover:border-gray-400 hover:text-white transition-colors disabled:opacity-50"
+              className="w-full px-4 py-2 text-xs font-medium text-text-secondary border border-gray-600 rounded-lg hover:border-gray-400 hover:text-white transition-colors disabled:opacity-50"
             >
               {starting ? t('settings.license.starting') : t('settings.license.startTrial')}
             </button>

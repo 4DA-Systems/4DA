@@ -23,7 +23,7 @@ export function BriefingLoadingState() {
           <div className="w-6 h-6 border-2 border-orange-400 border-t-transparent rounded-full animate-spin" />
         </div>
         <h2 className="text-xl font-medium text-white mb-2">{t('briefing.gatheringIntelligence')}</h2>
-        <p className="text-sm text-gray-400 text-center max-w-md">
+        <p className="text-sm text-text-secondary text-center max-w-md">
           {stageLabel}
         </p>
         {progress > 0 && (
@@ -34,11 +34,11 @@ export function BriefingLoadingState() {
                 style={{ width: `${Math.max(progress * 100, 5)}%` }}
               />
             </div>
-            <span className="text-xs text-gray-600 mt-1 block text-center">{Math.round(progress * 100)}%</span>
+            <span className="text-xs text-text-muted mt-1 block text-center">{Math.round(progress * 100)}%</span>
           </div>
         )}
         {results.length > 0 && (
-          <button onClick={() => setActiveView('results')} className="mt-6 text-sm text-gray-500 hover:text-gray-300 transition-colors">
+          <button onClick={() => setActiveView('results')} className="mt-6 text-sm text-text-muted hover:text-text-secondary transition-colors">
             {t('briefing.browseResults', { count: results.length })}
           </button>
         )}
@@ -72,7 +72,7 @@ export function BriefingReadyState() {
           </svg>
         </div>
         <h2 className="text-xl font-medium text-white mb-2">{t('briefing.readyToGenerate')}</h2>
-        <p className="text-sm text-gray-500 text-center max-w-md mb-6">
+        <p className="text-sm text-text-muted text-center max-w-md mb-6">
           {t('briefing.resultsAnalyzed', { count: results.length })}
         </p>
         <button onClick={handleGenerate} disabled={busy} aria-label="Generate intelligence briefing" className="px-6 py-2.5 bg-orange-500 text-white text-sm font-medium rounded-lg hover:bg-orange-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
@@ -97,19 +97,19 @@ export function BriefingNoDataState() {
     <div className="bg-bg-primary rounded-lg">
       <div className="flex flex-col items-center justify-center py-20 px-8">
         <div className="w-20 h-20 mb-6 bg-bg-secondary rounded-2xl border border-border flex items-center justify-center">
-          <svg className="w-8 h-8 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg className="w-8 h-8 text-text-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
           </svg>
         </div>
         <h2 className="text-xl font-medium text-white mb-2">{t('briefing.noIntelligence')}</h2>
-        <p className="text-sm text-gray-500 text-center max-w-md mb-6">
+        <p className="text-sm text-text-muted text-center max-w-md mb-6">
           {t('briefing.runAnalysis')}
         </p>
         <button onClick={startAnalysis} aria-label="Start content analysis" className="px-6 py-2.5 bg-orange-500 text-white text-sm font-medium rounded-lg hover:bg-orange-600 transition-colors">
           {t('results.analyzeNow')}
         </button>
-        <p className="text-xs text-gray-600 mt-3">
-          {t('briefing.orPress')} <kbd className="px-1.5 py-0.5 bg-bg-tertiary rounded text-gray-500">R</kbd>
+        <p className="text-xs text-text-muted mt-3">
+          {t('briefing.orPress')} <kbd className="px-1.5 py-0.5 bg-bg-tertiary rounded text-text-muted">R</kbd>
         </p>
       </div>
     </div>

@@ -70,14 +70,14 @@ export const FactorBar = memo(function FactorBar({
       {/* Teach Me — thumbs up/down (only visible on hover) */}
       <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
         {feedbackGiven ? (
-          <span className="text-[10px] text-gray-600 w-8 text-center">
+          <span className="text-[10px] text-text-muted w-8 text-center">
             {feedbackGiven === 'up' ? '\u2713' : '\u2717'}
           </span>
         ) : (
           <>
             <button
               onClick={() => handleFeedback('up')}
-              className="text-[10px] text-gray-600 hover:text-green-400 transition-colors px-0.5"
+              className="text-[10px] text-text-muted hover:text-green-400 transition-colors px-0.5"
               title="This factor was relevant"
               aria-label={`${factor.label} was relevant`}
             >
@@ -85,7 +85,7 @@ export const FactorBar = memo(function FactorBar({
             </button>
             <button
               onClick={() => handleFeedback('down')}
-              className="text-[10px] text-gray-600 hover:text-amber-400 transition-colors px-0.5"
+              className="text-[10px] text-text-muted hover:text-amber-400 transition-colors px-0.5"
               title="This factor wasn't relevant"
               aria-label={`${factor.label} was not relevant`}
             >
@@ -97,7 +97,7 @@ export const FactorBar = memo(function FactorBar({
 
       {/* Detail text */}
       {factor.detail && (
-        <span className="text-[9px] text-gray-600 truncate max-w-[100px] flex-shrink-0" title={factor.detail}>
+        <span className="text-[9px] text-text-muted truncate max-w-[100px] flex-shrink-0" title={factor.detail}>
           {factor.detail}
         </span>
       )}

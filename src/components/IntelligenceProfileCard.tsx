@@ -238,7 +238,7 @@ function KnowledgeGapsCard() {
           </span>
         ))}
         {gaps.length > 8 && (
-          <span className="text-[10px] text-gray-500 self-center">{t('briefing.profile.moreGaps', { count: gaps.length - 8 })}</span>
+          <span className="text-[10px] text-text-muted self-center">{t('briefing.profile.moreGaps', { count: gaps.length - 8 })}</span>
         )}
       </div>
     </div>

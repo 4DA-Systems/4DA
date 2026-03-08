@@ -43,7 +43,7 @@ export class ViewErrorBoundary extends Component<ViewErrorBoundaryProps, ViewErr
               viewName: this.props.viewName,
             })}
           </h2>
-          <p className="text-sm text-gray-400 mb-4">
+          <p className="text-sm text-text-secondary mb-4">
             {i18n.t('error.viewRecovery', {
               defaultValue: 'An unexpected error occurred. You can retry loading this view.',
             })}

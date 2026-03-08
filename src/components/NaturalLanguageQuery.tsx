@@ -39,7 +39,7 @@ const SOURCE_COLORS: Record<string, string> = {
   context: 'bg-cyan-500/15 text-cyan-400 border-cyan-500/20',
 };
 
-const DEFAULT_SOURCE = 'bg-gray-500/15 text-gray-400 border-gray-500/20';
+const DEFAULT_SOURCE = 'bg-gray-500/15 text-text-secondary border-gray-500/20';
 export const NaturalLanguageQueryPanel = memo(function NaturalLanguageQueryPanel() {
   const { t } = useTranslation();
   const [query, setQuery] = useState('');
@@ -73,14 +73,14 @@ export const NaturalLanguageQueryPanel = memo(function NaturalLanguageQueryPanel
         {/* Header */}
         <div className="px-5 py-4 border-b border-border flex items-center gap-3">
           <div className="w-8 h-8 bg-bg-tertiary rounded-lg flex items-center justify-center">
-            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" className="text-gray-400">
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" className="text-text-secondary">
               <circle cx="6" cy="6" r="5" stroke="currentColor" strokeWidth="1.5" />
               <path d="M10 10L13 13" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
             </svg>
           </div>
           <div>
             <h2 className="font-medium text-white text-sm">{t('search.nlqTitle')}</h2>
-            <p className="text-xs text-gray-500">{t('search.nlqSubtitle')}</p>
+            <p className="text-xs text-text-muted">{t('search.nlqSubtitle')}</p>
           </div>
         </div>
 
@@ -93,12 +93,12 @@ export const NaturalLanguageQueryPanel = memo(function NaturalLanguageQueryPanel
               onChange={(e) => setQuery(e.target.value)}
               onKeyDown={handleKeyDown}
               placeholder={t('search.nlqPlaceholder')}
-              className="flex-1 px-3 py-2 text-sm bg-bg-primary border border-border rounded-lg text-white placeholder:text-gray-600 focus:outline-none focus:border-gray-500 transition-colors"
+              className="flex-1 px-3 py-2 text-sm bg-bg-primary border border-border rounded-lg text-white placeholder:text-text-muted focus:outline-none focus:border-gray-500 transition-colors"
             />
             <button
               onClick={handleSubmit}
               disabled={loading || !query.trim()}
-              className="px-4 py-2 text-sm bg-bg-tertiary border border-border text-gray-400 rounded-lg hover:text-white hover:border-gray-500 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+              className="px-4 py-2 text-sm bg-bg-tertiary border border-border text-text-secondary rounded-lg hover:text-white hover:border-gray-500 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
             >
               {loading ? (
                 <span className="w-4 h-4 border-2 border-gray-600 border-t-gray-300 rounded-full animate-spin inline-block" />
@@ -119,7 +119,7 @@ export const NaturalLanguageQueryPanel = memo(function NaturalLanguageQueryPanel
         {/* Empty state */}
         {!result && !error && !loading && (
           <div className="px-4 pb-4">
-            <p className="text-xs text-gray-600 text-center py-3">
+            <p className="text-xs text-text-muted text-center py-3">
               {t('search.nlqHint')}
             </p>
           </div>
@@ -130,18 +130,18 @@ export const NaturalLanguageQueryPanel = memo(function NaturalLanguageQueryPanel
           <div className="px-4 pb-4 space-y-3">
             {/* Parsed query info */}
             <div className="flex flex-wrap items-center gap-1.5">
-              <span className="text-[10px] text-gray-500 uppercase tracking-wider">{result.intent}</span>
+              <span className="text-[10px] text-text-muted uppercase tracking-wider">{result.intent}</span>
               {result.parsed.keywords.map((kw) => (
-                <span key={kw} className="px-1.5 py-0.5 text-[10px] bg-bg-tertiary text-gray-400 rounded border border-border">
+                <span key={kw} className="px-1.5 py-0.5 text-[10px] bg-bg-tertiary text-text-secondary rounded border border-border">
                   {kw}
                 </span>
               ))}
               {result.parsed.time_range?.relative && (
-                <span className="px-1.5 py-0.5 text-[10px] bg-bg-tertiary text-gray-500 rounded border border-border">
+                <span className="px-1.5 py-0.5 text-[10px] bg-bg-tertiary text-text-muted rounded border border-border">
                   {result.parsed.time_range.relative}
                 </span>
               )}
-              <span className="text-[10px] text-gray-600 ml-auto font-mono">
+              <span className="text-[10px] text-text-muted ml-auto font-mono">
                 {(result.parsed.confidence * 100).toFixed(0)}% conf
               </span>
             </div>
@@ -149,7 +149,7 @@ export const NaturalLanguageQueryPanel = memo(function NaturalLanguageQueryPanel
             {/* Summary callout */}
             {result.summary && (
               <div className="px-3 py-2.5 bg-bg-primary rounded-lg border border-border">
-                <p className="text-xs text-gray-300 leading-relaxed">{result.summary}</p>
+                <p className="text-xs text-text-secondary leading-relaxed">{result.summary}</p>
               </div>
             )}
 
@@ -164,15 +164,15 @@ export const NaturalLanguageQueryPanel = memo(function NaturalLanguageQueryPanel
                           {item.file_name ? (
                             <span className="text-xs text-white font-medium truncate">{item.file_name}</span>
                           ) : (
-                            <span className="text-xs text-gray-400 truncate">{t('search.untitled')}</span>
+                            <span className="text-xs text-text-secondary truncate">{t('search.untitled')}</span>
                           )}
                           <span className={`text-[10px] px-1.5 py-0.5 rounded border ${SOURCE_COLORS[item.source_type] || DEFAULT_SOURCE}`}>
                             {item.source_type}
                           </span>
                         </div>
-                        <p className="text-[11px] text-gray-500 mt-1 line-clamp-2">{item.preview}</p>
+                        <p className="text-[11px] text-text-muted mt-1 line-clamp-2">{item.preview}</p>
                         {item.timestamp && (
-                          <span className="text-[10px] text-gray-600 mt-1 inline-block">
+                          <span className="text-[10px] text-text-muted mt-1 inline-block">
                             {new Date(item.timestamp).toLocaleDateString()}
                           </span>
                         )}
@@ -183,14 +183,14 @@ export const NaturalLanguageQueryPanel = memo(function NaturalLanguageQueryPanel
               </div>
             ) : (
               <div className="text-center py-4">
-                <p className="text-xs text-gray-500">{t('search.noResults')}</p>
-                <p className="text-[10px] text-gray-600 mt-0.5">{t('search.tryDifferent')}</p>
+                <p className="text-xs text-text-muted">{t('search.noResults')}</p>
+                <p className="text-[10px] text-text-muted mt-0.5">{t('search.tryDifferent')}</p>
               </div>
             )}
 
             {/* Stats bar */}
             <div className="pt-2 border-t border-border">
-              <p className="text-[10px] text-gray-600 text-center font-mono">
+              <p className="text-[10px] text-text-muted text-center font-mono">
                 {t('search.resultStats', { count: result.total_count, ms: result.execution_ms })}
               </p>
             </div>

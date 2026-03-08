@@ -63,13 +63,13 @@ export const ScoringDelta = memo(function ScoringDelta() {
       <div className="mb-4 bg-bg-secondary rounded-lg border border-border overflow-hidden">
         <div className="px-4 py-3 flex items-center gap-3 border-b border-border/50">
           <div className="w-8 h-8 bg-bg-tertiary rounded-lg flex items-center justify-center flex-shrink-0">
-            <span className="text-sm text-gray-400">&#x2194;</span>
+            <span className="text-sm text-text-secondary">&#x2194;</span>
           </div>
           <div>
             <h3 className="text-sm font-medium text-white">
               {t('scoringDelta.title', 'Your scoring has shifted')}
             </h3>
-            <p className="text-xs text-gray-500">
+            <p className="text-xs text-text-muted">
               {t('scoringDelta.subtitle', 'Based on your feedback')}
             </p>
           </div>
@@ -79,18 +79,18 @@ export const ScoringDelta = memo(function ScoringDelta() {
           {/* Topics gaining weight */}
           {gaining.length > 0 && (
             <div>
-              <p className="text-[10px] text-gray-500 uppercase tracking-wider mb-1.5">
+              <p className="text-[10px] text-text-muted uppercase tracking-wider mb-1.5">
                 {t('scoringDelta.gaining', 'Gaining weight')}
               </p>
               <div className="space-y-1">
                 {gaining.map(d => (
                   <div key={d.topic} className="flex items-center gap-2">
                     <span className="text-green-400 text-xs">{'\u2191'}</span>
-                    <span className="text-xs text-gray-300 flex-1 truncate">{d.topic}</span>
+                    <span className="text-xs text-text-secondary flex-1 truncate">{d.topic}</span>
                     <span className="text-[10px] font-mono text-green-400">
                       +{Math.round(d.score * 100)}%
                     </span>
-                    <span className="text-[10px] text-gray-600">
+                    <span className="text-[10px] text-text-muted">
                       {d.positives} saves
                     </span>
                   </div>
@@ -102,18 +102,18 @@ export const ScoringDelta = memo(function ScoringDelta() {
           {/* Topics losing weight */}
           {losing.length > 0 && (
             <div>
-              <p className="text-[10px] text-gray-500 uppercase tracking-wider mb-1.5">
+              <p className="text-[10px] text-text-muted uppercase tracking-wider mb-1.5">
                 {t('scoringDelta.losing', 'Losing weight')}
               </p>
               <div className="space-y-1">
                 {losing.map(d => (
                   <div key={d.topic} className="flex items-center gap-2">
                     <span className="text-amber-400 text-xs">{'\u2193'}</span>
-                    <span className="text-xs text-gray-300 flex-1 truncate">{d.topic}</span>
+                    <span className="text-xs text-text-secondary flex-1 truncate">{d.topic}</span>
                     <span className="text-[10px] font-mono text-amber-400">
                       {Math.round(d.score * 100)}%
                     </span>
-                    <span className="text-[10px] text-gray-600">
+                    <span className="text-[10px] text-text-muted">
                       {d.negatives} dismissed
                     </span>
                   </div>

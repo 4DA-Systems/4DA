@@ -45,8 +45,8 @@ export function SetupAIProvider({
           {Object.entries(pullProgress).map(([model, p]) => (
             <div key={model} className="space-y-1">
               <div className="flex items-center justify-between text-xs">
-                <span className="text-gray-300 font-mono">{model}</span>
-                <span className="text-gray-500">
+                <span className="text-text-secondary font-mono">{model}</span>
+                <span className="text-text-muted">
                   {p.done ? t('onboarding.apiKeys.pullComplete') : p.status || `${p.percent}%`}
                 </span>
               </div>
@@ -60,7 +60,7 @@ export function SetupAIProvider({
               </div>
             </div>
           ))}
-          <p className="text-xs text-gray-500">
+          <p className="text-xs text-text-muted">
             {t('onboarding.apiKeys.pullWaitMessage')}
           </p>
         </div>
@@ -83,7 +83,7 @@ export function SetupAIProvider({
                 <div className="text-sm font-medium text-white">
                   {p === 'ollama' ? 'Ollama' : p === 'anthropic' ? 'Anthropic' : 'OpenAI'}
                 </div>
-                <div className="text-xs text-gray-500 mt-1">
+                <div className="text-xs text-text-muted mt-1">
                   {p === 'ollama' ? t('onboarding.setupAi.local') : p === 'anthropic' ? 'Claude' : 'GPT-4o'}
                 </div>
               </button>
@@ -94,7 +94,7 @@ export function SetupAIProvider({
           {(provider === 'anthropic' || provider === 'openai') && (
             <div>
               <div className="flex items-center justify-between mb-2">
-                <label className="text-xs text-gray-500">
+                <label className="text-xs text-text-muted">
                   {provider === 'anthropic' ? 'Anthropic' : 'OpenAI'} {t('settings.llm.apiKey')}
                 </label>
                 <a
@@ -120,7 +120,7 @@ export function SetupAIProvider({
 
           {/* Ollama not running hint */}
           {provider === 'ollama' && !ollamaStatus?.running && (
-            <div className="text-gray-400 text-sm p-3 bg-bg-tertiary rounded-lg border border-border">
+            <div className="text-text-secondary text-sm p-3 bg-bg-tertiary rounded-lg border border-border">
               <p className="mb-1.5">
                 {t('onboarding.setupAi.ollamaNotDetected')}{' '}
                 <a href="https://ollama.ai" target="_blank" rel="noopener noreferrer" className="text-orange-500 hover:underline">
@@ -128,7 +128,7 @@ export function SetupAIProvider({
                 </a>
                 {' '}{t('onboarding.setupAi.orChooseCloud')}
               </p>
-              <p className="text-xs text-gray-500">
+              <p className="text-xs text-text-muted">
                 {t('onboarding.setupAi.basicModeHint')}
               </p>
             </div>
@@ -136,14 +136,14 @@ export function SetupAIProvider({
 
           {/* Cloud provider without key — basic mode hint */}
           {(provider === 'anthropic' || provider === 'openai') && !apiKey.trim() && (
-            <div className="text-xs text-gray-500 p-3 bg-bg-tertiary rounded-lg border border-border">
+            <div className="text-xs text-text-muted p-3 bg-bg-tertiary rounded-lg border border-border">
               {t('onboarding.setupAi.noKeyHint')}
             </div>
           )}
         </>
       )}
 
-      <p className="text-xs text-gray-500">
+      <p className="text-xs text-text-muted">
         {t('onboarding.setupAi.keywordHint')}
       </p>
     </div>

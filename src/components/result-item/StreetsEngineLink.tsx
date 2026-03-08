@@ -94,7 +94,7 @@ export function StreetsEngineLink({ item }: StreetsEngineLinkProps) {
           {item.streets_engine}
         </span>
       </div>
-      <p className="text-xs text-gray-400 leading-relaxed">
+      <p className="text-xs text-text-secondary leading-relaxed">
         {description}
       </p>
       <button

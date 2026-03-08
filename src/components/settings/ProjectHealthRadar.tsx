@@ -7,14 +7,14 @@ import type { ProjectHealth } from '../../types';
 function ScoreBar({ label, score, color }: { label: string; score: number; color: string }) {
   return (
     <div className="flex items-center gap-2">
-      <span className="text-[11px] text-gray-400 w-20">{label}</span>
+      <span className="text-[11px] text-text-secondary w-20">{label}</span>
       <div className="flex-1 h-2.5 bg-bg-tertiary rounded-full overflow-hidden">
         <div
           className={`h-full rounded-full transition-all ${color}`}
           style={{ width: `${Math.round(score * 100)}%` }}
         />
       </div>
-      <span className="text-[10px] text-gray-500 w-8 text-right">{Math.round(score * 100)}</span>
+      <span className="text-[10px] text-text-muted w-8 text-right">{Math.round(score * 100)}</span>
     </div>
   );
 }
@@ -49,14 +49,14 @@ export function ProjectHealthRadar() {
         </div>
         <div>
           <h3 className="text-sm font-medium text-white">{t('settings.health.title')}</h3>
-          <p className="text-xs text-gray-500">{t('settings.health.description')}</p>
+          <p className="text-xs text-text-muted">{t('settings.health.description')}</p>
         </div>
       </div>
 
       {loading && (
         <div className="flex items-center gap-2 py-4 justify-center">
           <div className="w-4 h-4 border-2 border-teal-500 border-t-transparent rounded-full animate-spin" />
-          <span className="text-xs text-gray-500">{t('settings.health.scanning')}</span>
+          <span className="text-xs text-text-muted">{t('settings.health.scanning')}</span>
         </div>
       )}
 
@@ -74,7 +74,7 @@ export function ProjectHealthRadar() {
       )}
 
       {!loading && loaded.current && projects.length === 0 && !error && (
-        <p className="text-xs text-gray-500 text-center py-4">
+        <p className="text-xs text-text-muted text-center py-4">
           {t('settings.health.noProjects')}
         </p>
       )}
@@ -100,7 +100,7 @@ export function ProjectHealthRadar() {
           </div>
 
           {/* Details on hover/click */}
-          <div className="mt-3 grid grid-cols-2 gap-2 text-[10px] text-gray-500">
+          <div className="mt-3 grid grid-cols-2 gap-2 text-[10px] text-text-muted">
             <span title={p.freshness.details}>{p.freshness.label}</span>
             <span title={p.security.details}>{p.security.label}</span>
             <span title={p.momentum.details}>{p.momentum.label}</span>
@@ -116,13 +116,13 @@ export function ProjectHealthRadar() {
                     alert.severity === 'critical' ? 'bg-red-400' :
                     alert.severity === 'high' ? 'bg-amber-400' : 'bg-gray-400'
                   }`} />
-                  <span className="text-gray-400">{alert.message}</span>
+                  <span className="text-text-secondary">{alert.message}</span>
                 </div>
               ))}
             </div>
           )}
 
-          <div className="mt-2 text-[10px] text-gray-600">
+          <div className="mt-2 text-[10px] text-text-muted">
             {t('settings.health.dependencies', { count: p.dependency_count })} · {t('settings.health.lastChecked', { date: p.last_checked ? new Date(p.last_checked).toLocaleDateString() : t('settings.health.never') })}
           </div>
         </div>
@@ -131,7 +131,7 @@ export function ProjectHealthRadar() {
       {loaded.current && !loading && (
         <button
           onClick={scanHealth}
-          className="w-full px-4 py-2 text-xs text-gray-500 hover:text-teal-400 transition-colors"
+          className="w-full px-4 py-2 text-xs text-text-muted hover:text-teal-400 transition-colors"
         >
           {t('action.refresh', 'Refresh')}
         </button>

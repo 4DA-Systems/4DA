@@ -39,18 +39,18 @@ export function ContextPanel({
       <div className="px-5 py-4 border-b border-border flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className="w-8 h-8 bg-bg-tertiary rounded-lg flex items-center justify-center">
-            <span className="text-gray-500">F</span>
+            <span className="text-text-muted">F</span>
           </div>
           <div>
             <h2 className="font-medium text-white">{t('context.title')}</h2>
-            <p className="text-xs text-gray-500">{t('context.filesIndexed', { count: contextFiles.length })}</p>
+            <p className="text-xs text-text-muted">{t('context.filesIndexed', { count: contextFiles.length })}</p>
           </div>
         </div>
         <div className="flex gap-2">
           <button
             onClick={onReload}
             aria-label="Reload context files"
-            className="w-8 h-8 flex items-center justify-center text-sm bg-bg-tertiary text-gray-400 rounded-lg hover:bg-border hover:text-white transition-all"
+            className="w-8 h-8 flex items-center justify-center text-sm bg-bg-tertiary text-text-secondary rounded-lg hover:bg-border hover:text-white transition-all"
             title={t('context.reloadFiles')}
           >
             R
@@ -80,12 +80,12 @@ export function ContextPanel({
         {contextFiles.length === 0 ? (
           <div className="text-center py-8 px-4">
             <div className="w-12 h-12 mx-auto mb-3 bg-bg-tertiary rounded-full flex items-center justify-center">
-              <svg className="w-5 h-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="w-5 h-5 text-text-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
               </svg>
             </div>
-            <p className="text-gray-400 text-sm mb-1">{t('context.autoDiscovered')}</p>
-            <p className="text-xs text-gray-600">{t('context.autoDiscoveredHint')}</p>
+            <p className="text-text-secondary text-sm mb-1">{t('context.autoDiscovered')}</p>
+            <p className="text-xs text-text-muted">{t('context.autoDiscoveredHint')}</p>
           </div>
         ) : (
           <ul className="space-y-2">
@@ -97,7 +97,7 @@ export function ContextPanel({
                 <div className="font-mono text-white text-sm truncate">
                   {file.path.split('/').pop()?.split('\\').pop()}
                 </div>
-                <div className="text-xs text-gray-500 mt-1">{file.lines} lines</div>
+                <div className="text-xs text-text-muted mt-1">{file.lines} lines</div>
               </li>
             ))}
           </ul>
@@ -106,7 +106,7 @@ export function ContextPanel({
         {/* ACE Discovered Context */}
         {(discoveredContext.tech.length > 0 || discoveredContext.topics.length > 0) && (
           <div className="mt-4 pt-4 border-t border-border">
-            <div className="text-xs text-gray-500 mb-3 flex items-center gap-2">
+            <div className="text-xs text-text-muted mb-3 flex items-center gap-2">
               <span>{t('context.autoDiscoveredLabel')}</span>
               <span className="px-1.5 py-0.5 text-[10px] bg-orange-500/20 text-orange-400 rounded" title="Auto Context Engine - score boost from your local project context">ACE</span>
             </div>
@@ -123,7 +123,7 @@ export function ContextPanel({
                     </span>
                   ))}
                   {discoveredContext.tech.length > 6 && (
-                    <span className="text-[11px] text-gray-500 self-center">+{discoveredContext.tech.length - 6}</span>
+                    <span className="text-[11px] text-text-muted self-center">+{discoveredContext.tech.length - 6}</span>
                   )}
                 </div>
               </div>
@@ -139,7 +139,7 @@ export function ContextPanel({
                   </span>
                 ))}
                 {discoveredContext.topics.length > 4 && (
-                  <span className="text-[11px] text-gray-500 self-center">+{discoveredContext.topics.length - 4}</span>
+                  <span className="text-[11px] text-text-muted self-center">+{discoveredContext.topics.length - 4}</span>
                 )}
               </div>
             )}

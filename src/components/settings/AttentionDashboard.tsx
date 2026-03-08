@@ -45,13 +45,13 @@ export function AttentionDashboard() {
           </div>
           <div>
             <h3 className="text-sm font-medium text-white">{t('settings.attention.title')}</h3>
-            <p className="text-xs text-gray-500">{t('settings.attention.description')}</p>
+            <p className="text-xs text-text-muted">{t('settings.attention.description')}</p>
           </div>
         </div>
         <select
           value={period}
           onChange={(e) => setPeriod(Number(e.target.value))}
-          className="bg-bg-tertiary border border-border rounded px-2 py-1 text-xs text-gray-300"
+          className="bg-bg-tertiary border border-border rounded px-2 py-1 text-xs text-text-secondary"
         >
           <option value={7}>{t('settings.attention.days', { count: 7 })}</option>
           <option value={14}>{t('settings.attention.days', { count: 14 })}</option>
@@ -62,7 +62,7 @@ export function AttentionDashboard() {
       {loading && (
         <div className="flex items-center gap-2 py-4 justify-center">
           <div className="w-4 h-4 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
-          <span className="text-xs text-gray-500">{t('settings.attention.loading')}</span>
+          <span className="text-xs text-text-muted">{t('settings.attention.loading')}</span>
         </div>
       )}
 
@@ -75,19 +75,19 @@ export function AttentionDashboard() {
           {/* Topic Engagement */}
           {report.topic_engagement.length > 0 && (
             <div>
-              <h4 className="text-xs font-medium text-gray-400 mb-2">{t('settings.attention.engagement')}</h4>
+              <h4 className="text-xs font-medium text-text-secondary mb-2">{t('settings.attention.engagement')}</h4>
               <div className="space-y-1.5">
                 {report.topic_engagement.slice(0, 8).map((te) => (
                   <div key={te.topic} className="flex items-center gap-2">
-                    <span className="text-[11px] text-gray-300 w-24 truncate" title={te.topic}>{te.topic}</span>
+                    <span className="text-[11px] text-text-secondary w-24 truncate" title={te.topic}>{te.topic}</span>
                     <div className="flex-1 h-3 bg-bg-tertiary rounded-full overflow-hidden">
                       <div
                         className="h-full bg-indigo-500/60 rounded-full transition-all"
                         style={{ width: `${Math.min(te.percent_of_total, 100)}%` }}
                       />
                     </div>
-                    <span className="text-[10px] text-gray-500 w-10 text-right">{Math.round(te.percent_of_total)}%</span>
-                    <span className="text-[10px] text-gray-600 w-6 text-right">{te.interactions}</span>
+                    <span className="text-[10px] text-text-muted w-10 text-right">{Math.round(te.percent_of_total)}%</span>
+                    <span className="text-[10px] text-text-muted w-6 text-right">{te.interactions}</span>
                   </div>
                 ))}
               </div>
@@ -97,7 +97,7 @@ export function AttentionDashboard() {
           {/* Codebase Topics */}
           {report.codebase_topics.length > 0 && (
             <div>
-              <h4 className="text-xs font-medium text-gray-400 mb-2">{t('settings.attention.codebaseTopics')}</h4>
+              <h4 className="text-xs font-medium text-text-secondary mb-2">{t('settings.attention.codebaseTopics')}</h4>
               <div className="flex flex-wrap gap-1.5">
                 {report.codebase_topics.slice(0, 12).map((ct) => (
                   <span key={ct.topic} className="px-2 py-1 text-[10px] bg-emerald-500/10 text-emerald-400 rounded border border-emerald-500/20">
@@ -111,7 +111,7 @@ export function AttentionDashboard() {
           {/* Blind Spots */}
           {report.blind_spots.length > 0 && (
             <div>
-              <h4 className="text-xs font-medium text-gray-400 mb-2">{t('settings.attention.blindSpots')}</h4>
+              <h4 className="text-xs font-medium text-text-secondary mb-2">{t('settings.attention.blindSpots')}</h4>
               <div className="space-y-2">
                 {report.blind_spots.map((bs) => (
                   <div key={bs.topic} className="px-3 py-2 bg-amber-500/5 border border-amber-500/20 rounded">
@@ -121,9 +121,9 @@ export function AttentionDashboard() {
                         bs.risk_level === 'medium' ? 'bg-amber-400' : 'bg-gray-400'
                       }`} />
                       <span className="text-xs text-amber-300 font-medium">{bs.topic}</span>
-                      <span className="text-[10px] text-gray-500 ml-auto">{t('settings.attention.risk', { level: bs.risk_level })}</span>
+                      <span className="text-[10px] text-text-muted ml-auto">{t('settings.attention.risk', { level: bs.risk_level })}</span>
                     </div>
-                    <p className="text-[11px] text-gray-400 mt-1">{bs.gap_description}</p>
+                    <p className="text-[11px] text-text-secondary mt-1">{bs.gap_description}</p>
                   </div>
                 ))}
               </div>
@@ -131,7 +131,7 @@ export function AttentionDashboard() {
           )}
 
           {report.topic_engagement.length === 0 && report.blind_spots.length === 0 && (
-            <p className="text-xs text-gray-500 text-center py-4">
+            <p className="text-xs text-text-muted text-center py-4">
               {t('settings.attention.noData')}
             </p>
           )}

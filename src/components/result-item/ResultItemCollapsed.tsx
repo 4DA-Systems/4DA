@@ -87,14 +87,14 @@ export const ResultItemCollapsed = memo(function ResultItemCollapsed({
           )}
           {(item.similar_count ?? 0) > 0 && (
             <details className="mt-0.5 group">
-              <summary className="text-[10px] text-gray-500 cursor-pointer hover:text-gray-400 select-none list-none flex items-center gap-1">
-                <span className="text-[10px] text-gray-600 group-open:rotate-90 transition-transform">&#9654;</span>
+              <summary className="text-[10px] text-text-muted cursor-pointer hover:text-text-secondary select-none list-none flex items-center gap-1">
+                <span className="text-[10px] text-text-muted group-open:rotate-90 transition-transform">&#9654;</span>
                 {t('results.relatedArticles', { count: item.similar_count })}
               </summary>
               {item.similar_titles && item.similar_titles.length > 0 && (
                 <ul className="mt-1 ml-3 space-y-0.5">
                   {item.similar_titles.map((title, i) => (
-                    <li key={i} className="text-[10px] text-gray-500 truncate">
+                    <li key={i} className="text-[10px] text-text-muted truncate">
                       {title}
                     </li>
                   ))}

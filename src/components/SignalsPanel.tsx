@@ -41,7 +41,7 @@ const PRIORITY_CONFIG: Record<string, { label: string; color: string; bgColor: s
   critical: { label: 'CRITICAL', color: 'text-red-400', bgColor: 'bg-red-500/20', dot: 'bg-red-400' },
   high: { label: 'HIGH', color: 'text-orange-400', bgColor: 'bg-orange-500/20', dot: 'bg-orange-400' },
   medium: { label: 'MED', color: 'text-yellow-400', bgColor: 'bg-yellow-500/20', dot: 'bg-yellow-400' },
-  low: { label: 'LOW', color: 'text-gray-400', bgColor: 'bg-gray-500/20', dot: 'bg-gray-400' },
+  low: { label: 'LOW', color: 'text-text-secondary', bgColor: 'bg-gray-500/20', dot: 'bg-gray-400' },
 };
 
 const SIGNAL_LABELS: Record<string, string> = {
@@ -121,11 +121,11 @@ export const SignalsPanel = memo(function SignalsPanel({ results }: SignalsPanel
       >
         <div className="flex items-center gap-3">
           <div className="w-8 h-8 bg-bg-tertiary rounded-lg flex items-center justify-center">
-            <span className="text-gray-400">⚡</span>
+            <span className="text-text-secondary">⚡</span>
           </div>
           <div className="text-left">
             <h2 className="font-medium text-white">{t('signals.title')}</h2>
-            <p className="text-xs text-gray-500">
+            <p className="text-xs text-text-muted">
               {t('signals.actionable', { count: signals.length })}
               {criticalCount > 0 && (
                 <span className="ml-2 text-red-400">{t('signals.critical', { count: criticalCount })}</span>
@@ -143,7 +143,7 @@ export const SignalsPanel = memo(function SignalsPanel({ results }: SignalsPanel
             {highCount > 0 && <span className="w-2 h-2 rounded-full bg-orange-400" title={`${highCount} high`} />}
             {(priorityCounts['medium'] || 0) > 0 && <span className="w-2 h-2 rounded-full bg-yellow-400" title={`${priorityCounts['medium']} medium`} />}
           </div>
-          <span className="text-gray-500 text-sm">{expanded ? '▾' : '▸'}</span>
+          <span className="text-text-muted text-sm">{expanded ? '▾' : '▸'}</span>
         </div>
       </button>
 
@@ -162,7 +162,7 @@ export const SignalsPanel = memo(function SignalsPanel({ results }: SignalsPanel
                   className={`px-2.5 py-1 text-[11px] rounded-lg border transition-all flex items-center gap-1.5 ${
                     isActive
                       ? `${config?.bgColor || 'bg-white/10'} ${config?.color || 'text-white'} ${config?.borderColor || 'border-white/20'}`
-                      : 'bg-bg-tertiary text-gray-400 border-border hover:border-[#3A3A3A]'
+                      : 'bg-bg-tertiary text-text-secondary border-border hover:border-[#3A3A3A]'
                   }`}
                 >
                   <span>{config?.icon || '?'}</span>
@@ -190,7 +190,7 @@ export const SignalsPanel = memo(function SignalsPanel({ results }: SignalsPanel
                   className={`px-2 py-1 text-[10px] font-medium rounded-lg border transition-all flex items-center gap-1.5 ${
                     isActive
                       ? `${config.bgColor} ${config.color} border-current`
-                      : 'bg-bg-tertiary text-gray-500 border-border hover:border-[#3A3A3A]'
+                      : 'bg-bg-tertiary text-text-muted border-border hover:border-[#3A3A3A]'
                   }`}
                 >
                   <span className={`w-1.5 h-1.5 rounded-full ${config.dot}`} />
@@ -204,7 +204,7 @@ export const SignalsPanel = memo(function SignalsPanel({ results }: SignalsPanel
             {(typeFilter || priorityFilter) && (
               <button
                 onClick={() => { setTypeFilter(null); setPriorityFilter(null); }}
-                className="px-2 py-1 text-[10px] text-gray-500 hover:text-white transition-colors"
+                className="px-2 py-1 text-[10px] text-text-muted hover:text-white transition-colors"
               >
                 {t('signals.clear')}
               </button>
@@ -214,7 +214,7 @@ export const SignalsPanel = memo(function SignalsPanel({ results }: SignalsPanel
           {/* Signal Items */}
           <div className="space-y-2 max-h-[400px] overflow-y-auto">
             {filtered.length === 0 ? (
-              <p className="text-center text-sm text-gray-500 py-4">{t('signals.noMatch')}</p>
+              <p className="text-center text-sm text-text-muted py-4">{t('signals.noMatch')}</p>
             ) : (
               filtered.map((signal) => (
                 <SignalRow key={signal.id} signal={signal} />
@@ -262,13 +262,13 @@ const SignalRow = ({ signal }: { signal: SignalItem }) => {
                 href={signal.url}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-xs text-gray-400 hover:text-white truncate transition-colors"
+                className="text-xs text-text-secondary hover:text-white truncate transition-colors"
                 title={signal.title}
               >
                 {signal.title}
               </a>
             ) : (
-              <span className="text-xs text-gray-400 truncate">{signal.title}</span>
+              <span className="text-xs text-text-secondary truncate">{signal.title}</span>
             )}
           </div>
 
@@ -280,14 +280,14 @@ const SignalRow = ({ signal }: { signal: SignalItem }) => {
             <span className={`px-1.5 py-0.5 text-[10px] font-medium rounded ${priority.bgColor} ${priority.color}`}>
               {priority.label}
             </span>
-            <span className="text-[10px] text-gray-500">
+            <span className="text-[10px] text-text-muted">
               {t('signals.match', { score: Math.round(signal.top_score * 100) })}
             </span>
-            <span className="text-[10px] text-gray-600">{signal.source_type}</span>
+            <span className="text-[10px] text-text-muted">{signal.source_type}</span>
             {signal.signal_triggers.length > 0 && (
               <button
                 onClick={() => setShowTriggers(!showTriggers)}
-                className="text-[10px] text-gray-500 hover:text-gray-300 transition-colors ml-auto"
+                className="text-[10px] text-text-muted hover:text-text-secondary transition-colors ml-auto"
               >
                 {showTriggers ? t('signals.hideTriggers') : t('signals.triggers', { count: signal.signal_triggers.length })}
               </button>
@@ -296,9 +296,9 @@ const SignalRow = ({ signal }: { signal: SignalItem }) => {
 
           {/* Similar items grouped */}
           {signal.similar_count > 0 && (
-            <div className="mt-1.5 text-[10px] text-gray-500">
+            <div className="mt-1.5 text-[10px] text-text-muted">
               +{t('signals.similar', { count: signal.similar_count })}{signal.similar_titles.length > 0 && (
-                <span className="text-gray-600"> ({signal.similar_titles.slice(0, 2).join(', ')}{signal.similar_titles.length > 2 ? '...' : ''})</span>
+                <span className="text-text-muted"> ({signal.similar_titles.slice(0, 2).join(', ')}{signal.similar_titles.length > 2 ? '...' : ''})</span>
               )}
             </div>
           )}
@@ -307,7 +307,7 @@ const SignalRow = ({ signal }: { signal: SignalItem }) => {
           {showTriggers && (
             <div className="flex flex-wrap gap-1 mt-2">
               {signal.signal_triggers.map((t, i) => (
-                <span key={i} className="px-1.5 py-0.5 text-[10px] bg-bg-tertiary text-gray-400 rounded border border-border">
+                <span key={i} className="px-1.5 py-0.5 text-[10px] bg-bg-tertiary text-text-secondary rounded border border-border">
                   {t}
                 </span>
               ))}

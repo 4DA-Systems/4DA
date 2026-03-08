@@ -35,13 +35,13 @@ function IntelligencePreview({ summary }: { summary: ScanSummary }) {
       <div className="flex justify-center gap-6 mb-5">
         <div className="text-center">
           <span className="text-2xl font-bold text-white tabular-nums">{summary.projects_scanned}</span>
-          <p className="text-[10px] text-gray-500 uppercase tracking-wider mt-0.5">
+          <p className="text-[10px] text-text-muted uppercase tracking-wider mt-0.5">
             {t('firstRun.projects', 'projects')}
           </p>
         </div>
         <div className="text-center">
           <span className="text-2xl font-bold text-white tabular-nums">{summary.total_dependencies}</span>
-          <p className="text-[10px] text-gray-500 uppercase tracking-wider mt-0.5">
+          <p className="text-[10px] text-text-muted uppercase tracking-wider mt-0.5">
             {t('firstRun.dependencies', 'dependencies')}
           </p>
         </div>
@@ -50,7 +50,7 @@ function IntelligencePreview({ summary }: { summary: ScanSummary }) {
       {/* Primary stack */}
       {summary.primary_stack && (
         <div className="mb-5 px-4 py-3 bg-bg-secondary rounded-lg border border-border">
-          <p className="text-[10px] text-gray-500 uppercase tracking-wider mb-1.5">
+          <p className="text-[10px] text-text-muted uppercase tracking-wider mb-1.5">
             {t('firstRun.primaryStack', 'Primary stack')}
           </p>
           <p className="text-sm text-white font-medium">{summary.primary_stack}</p>
@@ -61,8 +61,8 @@ function IntelligencePreview({ summary }: { summary: ScanSummary }) {
       {ecosystems.length > 0 && (
         <div className="flex flex-wrap justify-center gap-2 mb-5">
           {ecosystems.map(({ label, count }) => (
-            <span key={label} className="px-2.5 py-1 text-xs bg-bg-secondary text-gray-300 rounded-lg border border-border">
-              {label} <span className="text-gray-500">{count}</span>
+            <span key={label} className="px-2.5 py-1 text-xs bg-bg-secondary text-text-secondary rounded-lg border border-border">
+              {label} <span className="text-text-muted">{count}</span>
             </span>
           ))}
         </div>
@@ -74,7 +74,7 @@ function IntelligencePreview({ summary }: { summary: ScanSummary }) {
           <p className="text-[10px] text-orange-400 font-medium uppercase tracking-wider mb-2">
             {t('firstRun.watchingFor', "I'll watch for")}
           </p>
-          <p className="text-xs text-gray-400 leading-relaxed">
+          <p className="text-xs text-text-secondary leading-relaxed">
             {t('firstRun.watchingDescription', {
               packages: summary.key_packages.slice(0, 5).join(', '),
               defaultValue: `Security advisories, breaking changes, and updates for ${summary.key_packages.slice(0, 5).join(', ')}`,
@@ -84,7 +84,7 @@ function IntelligencePreview({ summary }: { summary: ScanSummary }) {
       )}
 
       {/* Loading indicator */}
-      <p className="text-xs text-gray-600 animate-pulse">
+      <p className="text-xs text-text-muted animate-pulse">
         {t('firstRun.startingAnalysis', 'Starting content analysis...')}
       </p>
     </div>
@@ -175,7 +175,7 @@ export function LoadingState({
       </h2>
 
       {/* Stage narration */}
-      <p className="text-sm text-gray-400 mb-6">
+      <p className="text-sm text-text-secondary mb-6">
         {getStageNarration(progressStage || 'init')}
       </p>
 
@@ -199,7 +199,7 @@ export function LoadingState({
               style={{ width: `${Math.max(progress * 100, 5)}%` }}
             />
           </div>
-          <div className="flex justify-between text-xs text-gray-600 mt-1.5">
+          <div className="flex justify-between text-xs text-text-muted mt-1.5">
             <span>{itemCount > 0 ? t('firstRun.itemsFound', { count: itemCount }) : ''}</span>
             <span>{Math.round(progress * 100)}%</span>
           </div>
@@ -213,7 +213,7 @@ export function LoadingState({
             <p
               key={`${msg}-${i}`}
               className={`text-xs transition-opacity ${
-                i === arr.length - 1 ? 'text-gray-300' : 'text-gray-600'
+                i === arr.length - 1 ? 'text-text-secondary' : 'text-text-muted'
               }`}
             >
               {msg}
@@ -229,7 +229,7 @@ export function LoadingState({
 
       {/* Analyzing phase — keyword-only note */}
       {phase === 'analyzing' && embeddingMode === 'keyword-only' && (
-        <p className="text-xs text-gray-500 mt-4">
+        <p className="text-xs text-text-muted mt-4">
           {t('firstRun.keywordMatching')}
         </p>
       )}

@@ -68,7 +68,7 @@ export function BriefingWarmupState({ onAnalyze }: { onAnalyze: () => void }) {
           {t('briefing.warmup.activate', 'Start Intelligence')}
         </button>
 
-        <p className="text-xs text-gray-600 mt-3 animate-pulse">
+        <p className="text-xs text-text-muted mt-3 animate-pulse">
           {t('briefing.warmup.autoStart', 'Starting automatically...')}
         </p>
       </div>

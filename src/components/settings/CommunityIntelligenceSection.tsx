@@ -77,7 +77,7 @@ export function CommunityIntelligenceSection() {
             <h3 className="text-white font-medium text-sm">
               {t('settings.community.title', 'Community Intelligence')}
             </h3>
-            <p className="text-gray-500 text-xs">
+            <p className="text-text-muted text-xs">
               {t('settings.community.subtitle', 'Help improve scoring for all 4DA users')}
             </p>
           </div>

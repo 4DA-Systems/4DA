@@ -135,7 +135,7 @@ function ProInsightDetail({ item }: { item: SourceRelevance }) {
       )}
       {/* Score explanation */}
       {parts.length > 0 && (
-        <div className="text-[10px] text-gray-500 leading-snug">
+        <div className="text-[10px] text-text-muted leading-snug">
           {parts.slice(0, 3).join(' · ')}
         </div>
       )}

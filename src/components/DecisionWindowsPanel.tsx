@@ -32,7 +32,7 @@ function UrgencyBar({ urgency }: { urgency: number }) {
       <div className="flex-1 h-1 bg-bg-tertiary rounded-full overflow-hidden">
         <div className={`h-full rounded-full transition-all ${color}`} style={{ width: `${pct}%` }} />
       </div>
-      <span className="text-[10px] text-gray-500 tabular-nums">{pct}%</span>
+      <span className="text-[10px] text-text-muted tabular-nums">{pct}%</span>
     </div>
   );
 }
@@ -68,17 +68,17 @@ const WindowCard = memo(function WindowCard({
             <div className="w-4 h-4 overflow-hidden">
               <game-decision-countdown style={{ width: '16px', height: '16px' }} aria-hidden="true" />
             </div>
-            <span className="text-[10px] text-gray-500">{timeLeft}</span>
+            <span className="text-[10px] text-text-muted">{timeLeft}</span>
           </div>
         )}
       </div>
       <h4 className="text-sm text-white font-medium mb-1 truncate">{window.title}</h4>
       {window.description && (
-        <p className="text-xs text-gray-400 mb-2 line-clamp-2">{window.description}</p>
+        <p className="text-xs text-text-secondary mb-2 line-clamp-2">{window.description}</p>
       )}
       {window.dependency && (
-        <div className="text-[10px] text-gray-500 mb-2">
-          {t('decisions.affects')}: <span className="text-gray-300 font-mono">{window.dependency}</span>
+        <div className="text-[10px] text-text-muted mb-2">
+          {t('decisions.affects')}: <span className="text-text-secondary font-mono">{window.dependency}</span>
         </div>
       )}
       <UrgencyBar urgency={window.urgency} />
@@ -91,7 +91,7 @@ const WindowCard = memo(function WindowCard({
         </button>
         <button
           onClick={() => onDismiss(window.id)}
-          className="px-3 py-1.5 text-xs text-gray-500 bg-bg-tertiary rounded-lg hover:text-gray-300 hover:bg-[#2A2A2A] transition-colors"
+          className="px-3 py-1.5 text-xs text-text-muted bg-bg-tertiary rounded-lg hover:text-text-secondary hover:bg-[#2A2A2A] transition-colors"
         >
           {t('action.dismiss')}
         </button>
@@ -127,11 +127,11 @@ export const DecisionWindowsPanel = memo(function DecisionWindowsPanel() {
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
           <h3 className="text-sm font-medium text-white">{t('decisions.title')}</h3>
-          <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-bg-tertiary text-gray-400">
+          <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-bg-tertiary text-text-secondary">
             {openWindows.length}
           </span>
         </div>
-        <span className="text-[10px] text-gray-500">{t('decisions.subtitle')}</span>
+        <span className="text-[10px] text-text-muted">{t('decisions.subtitle')}</span>
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
         {openWindows.map(w => (

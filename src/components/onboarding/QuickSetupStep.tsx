@@ -80,16 +80,16 @@ export function QuickSetupStep({ isAnimating, onComplete, onBack }: QuickSetupSt
             &#x25CB;
           </span>
         ) : (
-          <span className="w-6 h-6 bg-bg-tertiary rounded-full flex items-center justify-center text-gray-500 text-xs">
+          <span className="w-6 h-6 bg-bg-tertiary rounded-full flex items-center justify-center text-text-muted text-xs">
             &#x25CB;
           </span>
         )}
         <div className="text-left">
           <div className="text-white font-medium text-sm">{title}</div>
-          <div className="text-gray-500 text-xs">{subtitle}</div>
+          <div className="text-text-muted text-xs">{subtitle}</div>
         </div>
       </div>
-      <span className={`text-gray-500 text-xs transition-transform ${isOpen ? 'rotate-180' : ''}`}>
+      <span className={`text-text-muted text-xs transition-transform ${isOpen ? 'rotate-180' : ''}`}>
         &#x25BC;
       </span>
     </button>
@@ -98,7 +98,7 @@ export function QuickSetupStep({ isAnimating, onComplete, onBack }: QuickSetupSt
   return (
     <div className={`transition-all duration-300 ${isAnimating ? 'opacity-0 translate-y-4' : 'opacity-100 translate-y-0'}`}>
       <h2 className="text-3xl font-semibold text-white mb-2 text-center">{t('onboarding.setup.title')}</h2>
-      <p className="text-gray-400 mb-6 text-center">
+      <p className="text-text-secondary mb-6 text-center">
         {t('onboarding.setup.subtitle')}
       </p>
 
@@ -229,7 +229,7 @@ export function QuickSetupStep({ isAnimating, onComplete, onBack }: QuickSetupSt
         <button
           onClick={onBack}
           aria-label={t('onboarding.setup.goBack')}
-          className="px-6 py-2 text-gray-400 hover:text-white transition-colors"
+          className="px-6 py-2 text-text-secondary hover:text-white transition-colors"
         >
           &larr; {t('onboarding.nav.back')}
         </button>
@@ -246,13 +246,13 @@ export function QuickSetupStep({ isAnimating, onComplete, onBack }: QuickSetupSt
             <button
               onClick={handleSkipDownload}
               aria-label={t('onboarding.setup.skipModelDownload')}
-              className="text-xs text-gray-500 hover:text-gray-300 transition-colors"
+              className="text-xs text-text-muted hover:text-text-secondary transition-colors"
             >
               {t('onboarding.setup.skipModelDownloadLabel')}
             </button>
           )}
           {!pullingModels && !skippedDownload && (
-            <p className="text-[11px] text-gray-600">
+            <p className="text-[11px] text-text-muted">
               {t('onboarding.setup.allSectionsOptional')}
             </p>
           )}

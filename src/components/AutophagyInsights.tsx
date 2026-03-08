@@ -15,8 +15,8 @@ function CalibrationHeatmap({ status, t }: { status: AutophagyStatus; t: (key: s
   return (
     <div>
       <div className="flex items-center justify-between mb-1">
-        <span className="text-xs text-gray-400">{t('autophagy.calibrationAccuracy')}</span>
-        <span className="text-xs text-gray-300 tabular-nums">{pct}%</span>
+        <span className="text-xs text-text-secondary">{t('autophagy.calibrationAccuracy')}</span>
+        <span className="text-xs text-text-secondary tabular-nums">{pct}%</span>
       </div>
       <div className="h-1.5 bg-bg-tertiary rounded-full overflow-hidden">
         <div className={`h-full rounded-full transition-all ${color}`} style={{ width: `${pct}%` }} />
@@ -27,7 +27,7 @@ function CalibrationHeatmap({ status, t }: { status: AutophagyStatus; t: (key: s
 
 function CycleHistory({ history, t }: { history: AutophagyCycleResult[]; t: (key: string) => string }) {
   if (history.length === 0) {
-    return <p className="text-xs text-gray-500">{t('autophagy.noCycles')}</p>;
+    return <p className="text-xs text-text-muted">{t('autophagy.noCycles')}</p>;
   }
 
   return (
@@ -35,13 +35,13 @@ function CycleHistory({ history, t }: { history: AutophagyCycleResult[]; t: (key
       {history.slice(0, 5).map((cycle: AutophagyCycleResult, i: number) => (
         <div key={i} className="flex items-center justify-between text-xs">
           <div className="flex items-center gap-3">
-            <span className="text-gray-500 tabular-nums">{cycle.items_analyzed} items</span>
+            <span className="text-text-muted tabular-nums">{cycle.items_analyzed} items</span>
             <span className="text-green-400/60 tabular-nums">+{cycle.calibrations_produced} cal</span>
             {cycle.anti_patterns_detected > 0 && (
               <span className="text-amber-400/60 tabular-nums">{cycle.anti_patterns_detected} anti</span>
             )}
           </div>
-          <span className="text-gray-600 tabular-nums">{cycle.duration_ms}ms</span>
+          <span className="text-text-muted tabular-nums">{cycle.duration_ms}ms</span>
         </div>
       ))}
     </div>
@@ -103,15 +103,15 @@ const InsightsContent = memo(function InsightsContent() {
         <div className="grid grid-cols-3 gap-3">
           <div className="text-center">
             <div className="text-lg font-semibold text-white tabular-nums">{stats.cycles}</div>
-            <div className="text-[10px] text-gray-500 uppercase">{t('autophagy.cycles')}</div>
+            <div className="text-[10px] text-text-muted uppercase">{t('autophagy.cycles')}</div>
           </div>
           <div className="text-center">
             <div className="text-lg font-semibold text-green-400 tabular-nums">{stats.calibrations}</div>
-            <div className="text-[10px] text-gray-500 uppercase">{t('autophagy.calibrations')}</div>
+            <div className="text-[10px] text-text-muted uppercase">{t('autophagy.calibrations')}</div>
           </div>
           <div className="text-center">
             <div className="text-lg font-semibold text-amber-400 tabular-nums">{stats.antiPatterns}</div>
-            <div className="text-[10px] text-gray-500 uppercase">{t('autophagy.antiPatterns')}</div>
+            <div className="text-[10px] text-text-muted uppercase">{t('autophagy.antiPatterns')}</div>
           </div>
         </div>
       )}
@@ -124,7 +124,7 @@ const InsightsContent = memo(function InsightsContent() {
 
       {/* Cycle History */}
       <div>
-        <h4 className="text-xs font-medium text-gray-300 mb-2">{t('autophagy.recentCycles')}</h4>
+        <h4 className="text-xs font-medium text-white mb-2">{t('autophagy.recentCycles')}</h4>
         <CycleHistory history={history} t={t} />
       </div>
     </div>

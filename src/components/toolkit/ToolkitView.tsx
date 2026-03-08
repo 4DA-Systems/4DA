@@ -57,7 +57,7 @@ export function ToolkitView() {
             <h3 className="text-sm font-medium text-white group-hover:text-orange-400 transition-colors">
               {tool.name}
             </h3>
-            <p className="text-xs text-gray-500 leading-relaxed">
+            <p className="text-xs text-text-muted leading-relaxed">
               {tool.description}
             </p>
           </button>

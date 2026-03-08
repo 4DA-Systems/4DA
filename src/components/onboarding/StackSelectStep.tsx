@@ -72,7 +72,7 @@ export function StackSelectStep({ selected, onSelectionChange, compact }: StackS
 
   if (loading) {
     return (
-      <div className="flex items-center gap-2 text-sm text-gray-400 py-4">
+      <div className="flex items-center gap-2 text-sm text-text-secondary py-4">
         <div className="w-4 h-4 border-2 border-orange-500 border-t-transparent rounded-full animate-spin" />
         {t('onboarding.stack.loading')}
       </div>
@@ -82,7 +82,7 @@ export function StackSelectStep({ selected, onSelectionChange, compact }: StackS
   return (
     <div>
       {!compact && (
-        <p className="text-xs text-gray-500 mb-3">
+        <p className="text-xs text-text-muted mb-3">
           {t('onboarding.stack.description')}
         </p>
       )}
@@ -131,7 +131,7 @@ export function StackSelectStep({ selected, onSelectionChange, compact }: StackS
                 {profile.core_tech.slice(0, 3).map((tech) => (
                   <span
                     key={tech}
-                    className="text-[10px] px-1.5 py-0.5 bg-bg-primary text-gray-500 rounded"
+                    className="text-[10px] px-1.5 py-0.5 bg-bg-primary text-text-muted rounded"
                   >
                     {tech}
                   </span>
@@ -140,7 +140,7 @@ export function StackSelectStep({ selected, onSelectionChange, compact }: StackS
 
               {/* Pain points / shifts count */}
               {!compact && (
-                <div className="mt-2 text-[10px] text-gray-600">
+                <div className="mt-2 text-[10px] text-text-muted">
                   {t('onboarding.stack.painPoints', { count: profile.pain_point_count })} &middot; {t('onboarding.stack.shifts', { count: profile.ecosystem_shift_count })}
                 </div>
               )}
@@ -160,14 +160,14 @@ export function StackSelectStep({ selected, onSelectionChange, compact }: StackS
 
       {/* Detection summary */}
       {detections.length > 0 && !compact && (
-        <p className="text-xs text-gray-500 mt-3">
+        <p className="text-xs text-text-muted mt-3">
           {t('onboarding.stack.autoDetected', { count: detections.length })}
           {' '}{t('onboarding.stack.clickToToggle')}
         </p>
       )}
 
       {selected.length === 0 && !compact && (
-        <p className="text-xs text-gray-600 mt-2">
+        <p className="text-xs text-text-muted mt-2">
           {t('onboarding.stack.noSelection')}
         </p>
       )}

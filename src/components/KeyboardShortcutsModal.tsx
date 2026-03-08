@@ -60,7 +60,7 @@ export function KeyboardShortcutsModal({ onClose }: KeyboardShortcutsModalProps)
             ref={closeButtonRef}
             onClick={onClose}
             aria-label={t('shortcuts.close')}
-            className="w-8 h-8 rounded-lg bg-bg-tertiary text-gray-500 hover:text-white hover:bg-border flex items-center justify-center transition-all"
+            className="w-8 h-8 rounded-lg bg-bg-tertiary text-text-muted hover:text-white hover:bg-border flex items-center justify-center transition-all"
           >
             &times;
           </button>

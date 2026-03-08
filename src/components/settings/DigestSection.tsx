@@ -53,7 +53,7 @@ export function DigestSection({ setSettingsStatus }: DigestSectionProps) {
         </div>
         <div>
           <h3 className="text-white font-medium">{t('settings.digest.title')}</h3>
-          <p className="text-gray-500 text-sm mt-1">
+          <p className="text-text-muted text-sm mt-1">
             {t('settings.digest.description')}
           </p>
         </div>
@@ -64,7 +64,7 @@ export function DigestSection({ setSettingsStatus }: DigestSectionProps) {
           <div className="flex items-center justify-between p-3 bg-bg-secondary rounded-lg border border-border">
             <div className="flex items-center gap-3">
               <div className={`w-2 h-2 rounded-full ${digestConfig.enabled ? 'bg-green-500' : 'bg-gray-500'}`} />
-              <span className="text-sm text-gray-300">
+              <span className="text-sm text-text-secondary">
                 {digestConfig.enabled ? t('status.active') : t('status.inactive')}
               </span>
             </div>
@@ -83,22 +83,22 @@ export function DigestSection({ setSettingsStatus }: DigestSectionProps) {
           {digestConfig.enabled && (
             <div className="grid grid-cols-3 gap-3">
               <div className="p-3 bg-bg-secondary rounded-lg border border-border text-center">
-                <div className="text-xs text-gray-500 mb-1">{t('settings.digest.frequency')}</div>
+                <div className="text-xs text-text-muted mb-1">{t('settings.digest.frequency')}</div>
                 <div className="text-sm text-white font-medium">{digestConfig.frequency}</div>
               </div>
               <div className="p-3 bg-bg-secondary rounded-lg border border-border text-center">
-                <div className="text-xs text-gray-500 mb-1">{t('settings.digest.minScore')}</div>
+                <div className="text-xs text-text-muted mb-1">{t('settings.digest.minScore')}</div>
                 <div className="text-sm text-white font-medium">{Math.round(digestConfig.min_score * 100)}%</div>
               </div>
               <div className="p-3 bg-bg-secondary rounded-lg border border-border text-center">
-                <div className="text-xs text-gray-500 mb-1">{t('settings.digest.maxItems')}</div>
+                <div className="text-xs text-text-muted mb-1">{t('settings.digest.maxItems')}</div>
                 <div className="text-sm text-white font-medium">{digestConfig.max_items}</div>
               </div>
             </div>
           )}
         </div>
       ) : (
-        <div className="text-sm text-gray-500">{t('settings.digest.loading')}</div>
+        <div className="text-sm text-text-muted">{t('settings.digest.loading')}</div>
       )}
     </div>
   );

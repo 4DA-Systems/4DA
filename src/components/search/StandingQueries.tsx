@@ -52,16 +52,16 @@ export function StandingQueries({ isPro }: StandingQueriesProps) {
 
   return (
     <div className="space-y-2">
-      <h4 className="text-xs text-gray-400 uppercase tracking-wider font-medium">
+      <h4 className="text-xs text-text-secondary uppercase tracking-wider font-medium">
         {t('search.myWatches')}
       </h4>
 
       {loading && (
-        <div className="text-xs text-gray-500">{t('action.loading')}</div>
+        <div className="text-xs text-text-muted">{t('action.loading')}</div>
       )}
 
       {!loading && watches.length === 0 && (
-        <p className="text-xs text-gray-500">{t('search.watchHint')}</p>
+        <p className="text-xs text-text-muted">{t('search.watchHint')}</p>
       )}
 
       {watches.map((watch) => (
@@ -69,8 +69,8 @@ export function StandingQueries({ isPro }: StandingQueriesProps) {
           key={watch.id}
           className="flex items-center gap-2 px-3 py-2 bg-bg-secondary rounded-lg border border-border group"
         >
-          <span className="text-sm text-gray-300 flex-1 truncate">{watch.query_text}</span>
-          <span className="text-xs text-gray-500">{watch.total_matches}</span>
+          <span className="text-sm text-text-secondary flex-1 truncate">{watch.query_text}</span>
+          <span className="text-xs text-text-muted">{watch.total_matches}</span>
           {watch.new_matches > 0 && (
             <span className="px-1.5 py-0.5 text-[10px] rounded-full bg-cyan-500/20 text-cyan-400 font-medium">
               +{watch.new_matches}
@@ -78,7 +78,7 @@ export function StandingQueries({ isPro }: StandingQueriesProps) {
           )}
           <button
             onClick={() => handleDelete(watch.id)}
-            className="text-gray-600 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-all text-xs"
+            className="text-text-muted hover:text-red-400 opacity-0 group-hover:opacity-100 transition-all text-xs"
             aria-label={t('action.delete')}
           >
             {'\u2715'}

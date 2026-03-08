@@ -30,7 +30,7 @@ export function SynthesisPanel({ isPro, synthesis, loading, onRetry }: Synthesis
         {synthesis && !loading && (
           <button
             onClick={onRetry}
-            className="text-[10px] text-gray-500 hover:text-cyan-400 transition-colors"
+            className="text-[10px] text-text-muted hover:text-cyan-400 transition-colors"
           >
             {t('action.retry')}
           </button>
@@ -40,10 +40,10 @@ export function SynthesisPanel({ isPro, synthesis, loading, onRetry }: Synthesis
       {loading ? (
         <div className="flex items-center gap-2">
           <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse" />
-          <span className="text-sm text-gray-400">{t('search.analyzingSignals')}</span>
+          <span className="text-sm text-text-secondary">{t('search.analyzingSignals')}</span>
         </div>
       ) : (
-        <p className="text-sm text-gray-300 leading-relaxed whitespace-pre-wrap">{synthesis}</p>
+        <p className="text-sm text-text-secondary leading-relaxed whitespace-pre-wrap">{synthesis}</p>
       )}
     </div>
   );

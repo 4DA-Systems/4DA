@@ -15,7 +15,7 @@ const PRIORITY_TEXT: Record<string, string> = {
   critical: 'text-red-400',
   high: 'text-amber-400',
   medium: 'text-yellow-400',
-  low: 'text-gray-400',
+  low: 'text-text-secondary',
 };
 
 export const SignalChainsPanel = memo(function SignalChainsPanel() {
@@ -50,22 +50,22 @@ export const SignalChainsPanel = memo(function SignalChainsPanel() {
       {chains.length === 0 ? (
         <div className="px-5 py-4 flex items-center gap-3">
           <div className="w-8 h-8 bg-bg-tertiary rounded-lg flex items-center justify-center">
-            <span className="text-gray-400">🔗</span>
+            <span className="text-text-secondary">🔗</span>
           </div>
           <div>
             <h2 className="font-medium text-white text-sm">{t('signals.title')}</h2>
-            <p className="text-xs text-gray-500">{t('signals.noChains', 'No active chains — monitoring for emerging patterns')}</p>
+            <p className="text-xs text-text-muted">{t('signals.noChains', 'No active chains — monitoring for emerging patterns')}</p>
           </div>
         </div>
       ) : (
       <>
       <div className="px-5 py-4 border-b border-border flex items-center gap-3">
         <div className="w-8 h-8 bg-bg-tertiary rounded-lg flex items-center justify-center">
-          <span className="text-gray-400">🔗</span>
+          <span className="text-text-secondary">🔗</span>
         </div>
         <div>
           <h2 className="font-medium text-white text-sm">{t('signals.title')}</h2>
-          <p className="text-xs text-gray-500">{t('signals.activeChains', { count: chains.length })}</p>
+          <p className="text-xs text-text-muted">{t('signals.activeChains', { count: chains.length })}</p>
         </div>
       </div>
 
@@ -95,15 +95,15 @@ export const SignalChainsPanel = memo(function SignalChainsPanel() {
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className={`text-sm font-medium ${textColor}`}>{chain.chain_name}</p>
-                  <p className="text-xs text-gray-400 mt-0.5">{chain.suggested_action}</p>
+                  <p className="text-xs text-text-secondary mt-0.5">{chain.suggested_action}</p>
                   <div className="flex items-center gap-2 mt-1.5">
-                    <span className="text-[10px] text-gray-500">{t('signals.signalCount', { count: chain.links.length })}</span>
-                    <span className="text-[10px] text-gray-600">
+                    <span className="text-[10px] text-text-muted">{t('signals.signalCount', { count: chain.links.length })}</span>
+                    <span className="text-[10px] text-text-muted">
                       {new Date(chain.created_at).toLocaleDateString()}
                     </span>
                   </div>
                 </div>
-                <span className="text-gray-500 text-xs">{isExpanded ? '▾' : '▸'}</span>
+                <span className="text-text-muted text-xs">{isExpanded ? '▾' : '▸'}</span>
               </button>
 
               {isExpanded && (
@@ -116,11 +116,11 @@ export const SignalChainsPanel = memo(function SignalChainsPanel() {
                           {i < chain.links.length - 1 && <div className="w-px h-full bg-gray-700" />}
                         </div>
                         <div className="flex-1">
-                          <p className="text-xs text-gray-300">{link.description}</p>
+                          <p className="text-xs text-text-secondary">{link.description}</p>
                           <div className="flex items-center gap-2 mt-0.5">
-                            <span className="text-[10px] text-gray-500">{link.signal_type}</span>
-                            <span className="text-[10px] text-gray-600">{link.title}</span>
-                            <span className="text-[10px] text-gray-700 ml-auto">
+                            <span className="text-[10px] text-text-muted">{link.signal_type}</span>
+                            <span className="text-[10px] text-text-muted">{link.title}</span>
+                            <span className="text-[10px] text-text-muted ml-auto">
                               {new Date(link.timestamp).toLocaleDateString()}
                             </span>
                           </div>

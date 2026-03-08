@@ -13,7 +13,7 @@ const STATUS_STYLES: Record<string, string> = {
   open: 'text-amber-400 bg-amber-400/10',
   acted: 'text-green-400 bg-green-400/10',
   expired: 'text-red-400 bg-red-400/10',
-  closed: 'text-gray-500 bg-gray-500/10',
+  closed: 'text-text-muted bg-gray-500/10',
 };
 
 export const DecisionJournal = memo(function DecisionJournal() {
@@ -47,7 +47,7 @@ export const DecisionJournal = memo(function DecisionJournal() {
     <div className="bg-bg-secondary rounded-lg border border-border overflow-hidden">
       <div className="px-4 py-3 border-b border-border/50">
         <h3 className="text-sm font-medium text-white">Decision Windows</h3>
-        <p className="text-xs text-gray-500 mt-0.5">
+        <p className="text-xs text-text-muted mt-0.5">
           Time-bounded opportunities requiring attention
         </p>
       </div>
@@ -68,7 +68,7 @@ export const DecisionJournal = memo(function DecisionJournal() {
                     {w.status}
                   </span>
                 </div>
-                <p className="text-[11px] text-gray-500 mt-0.5 line-clamp-2">
+                <p className="text-[11px] text-text-muted mt-0.5 line-clamp-2">
                   {w.description}
                 </p>
                 {w.expires_at && (
@@ -92,7 +92,7 @@ export const DecisionJournal = memo(function DecisionJournal() {
               <span className="text-xs">
                 {TYPE_ICONS[w.window_type] || '\u{1F4CB}'}
               </span>
-              <span className="text-[11px] text-gray-400 truncate flex-1">
+              <span className="text-[11px] text-text-secondary truncate flex-1">
                 {w.title}
               </span>
               <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${STATUS_STYLES[w.status]}`}>

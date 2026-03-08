@@ -34,7 +34,7 @@ export function LearnedBehaviorPanel({
         </div>
         <div>
           <h3 className="text-white font-medium">{t('learnedBehavior.title')}</h3>
-          <p className="text-gray-500 text-sm mt-1">
+          <p className="text-text-muted text-sm mt-1">
             {t('learnedBehavior.subtitle')}
           </p>
         </div>
@@ -43,7 +43,7 @@ export function LearnedBehaviorPanel({
       {/* Affinities */}
       {affinities.length > 0 ? (
         <div className="space-y-3">
-          <div className="text-xs text-gray-400 font-medium">
+          <div className="text-xs text-text-secondary font-medium">
             {t('learnedBehavior.topicAffinities')}
           </div>
           <div className="space-y-1.5 max-h-40 overflow-y-auto">
@@ -58,7 +58,7 @@ export function LearnedBehaviorPanel({
                       ? 'text-green-400'
                       : affinity.affinity_score < -0.3
                       ? 'text-red-400'
-                      : 'text-gray-500'
+                      : 'text-text-muted'
                   }`}
                 >
                   {affinity.affinity_score > 0 ? '+' : ''}
@@ -67,7 +67,7 @@ export function LearnedBehaviorPanel({
                 <div className="flex-1 text-white truncate">
                   {affinity.topic}
                 </div>
-                <div className="text-gray-500 text-[10px]">
+                <div className="text-text-muted text-[10px]">
                   <span className="text-green-400/70">+{affinity.positive_signals}</span>
                   {' / '}
                   <span className="text-red-400/70">-{affinity.negative_signals}</span>
@@ -76,16 +76,16 @@ export function LearnedBehaviorPanel({
             ))}
           </div>
           {affinities.length > 10 && (
-            <div className="text-xs text-gray-500 text-center">
+            <div className="text-xs text-text-muted text-center">
               {t('learnedBehavior.moreTopics', { count: affinities.length - 10 })}
             </div>
           )}
         </div>
       ) : (
-        <div className="text-sm text-gray-500 bg-bg-secondary rounded-lg p-4 text-center border border-border">
+        <div className="text-sm text-text-muted bg-bg-secondary rounded-lg p-4 text-center border border-border">
           <div className="text-2xl mb-2">📊</div>
           <div>{t('learnedBehavior.noAffinities')}</div>
-          <div className="text-xs text-gray-600 mt-1">
+          <div className="text-xs text-text-muted mt-1">
             {t('learnedBehavior.noAffinitiesHint')}
           </div>
         </div>
@@ -94,7 +94,7 @@ export function LearnedBehaviorPanel({
       {/* Anti-Topics */}
       {antiTopics.length > 0 && (
         <div className="mt-4 space-y-3">
-          <div className="text-xs text-gray-400 font-medium">
+          <div className="text-xs text-text-secondary font-medium">
             {t('learnedBehavior.antiTopics')}
           </div>
           <div className="flex flex-wrap gap-1.5">
@@ -110,7 +110,7 @@ export function LearnedBehaviorPanel({
               </span>
             ))}
           </div>
-          <div className="text-xs text-gray-500">
+          <div className="text-xs text-text-muted">
             {t('learnedBehavior.antiTopicsHint')}
           </div>
         </div>
@@ -119,7 +119,7 @@ export function LearnedBehaviorPanel({
       {/* Refresh button */}
       <button
         onClick={onRefresh}
-        className="mt-4 w-full px-4 py-2.5 text-sm bg-bg-secondary border border-border rounded-lg text-gray-400 hover:text-white hover:border-indigo-500/30 transition-all"
+        className="mt-4 w-full px-4 py-2.5 text-sm bg-bg-secondary border border-border rounded-lg text-text-secondary hover:text-white hover:border-indigo-500/30 transition-all"
       >
         {t('learnedBehavior.refresh')}
       </button>

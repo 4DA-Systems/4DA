@@ -23,11 +23,11 @@ export function UpdateBanner({ update, installing, onInstall, onDismiss }: Updat
       <div className="flex items-start gap-3">
         <div className="flex-1">
           <p className="text-sm font-medium text-white">{t('update.available', { version: update.version })}</p>
-          <p className="text-xs text-gray-400 mt-1">
+          <p className="text-xs text-text-secondary mt-1">
             {update.body ? update.body.slice(0, 100) : t('update.defaultBody')}
           </p>
         </div>
-        <button onClick={onDismiss} aria-label="Dismiss update notification" className="text-gray-500 hover:text-white text-lg leading-none">&times;</button>
+        <button onClick={onDismiss} aria-label="Dismiss update notification" className="text-text-muted hover:text-white text-lg leading-none">&times;</button>
       </div>
       <div className="flex gap-2 mt-3">
         <button
@@ -39,7 +39,7 @@ export function UpdateBanner({ update, installing, onInstall, onDismiss }: Updat
         </button>
         <button
           onClick={onDismiss}
-          className="px-4 py-1.5 text-xs text-gray-400 hover:text-white transition-colors"
+          className="px-4 py-1.5 text-xs text-text-secondary hover:text-white transition-colors"
         >
           {t('update.later')}
         </button>

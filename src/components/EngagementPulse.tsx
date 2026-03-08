@@ -36,7 +36,7 @@ export const EngagementPulse = memo(function EngagementPulse() {
       ? 'text-green-400'
       : data.accuracy_trend === 'declining'
         ? 'text-red-400'
-        : 'text-gray-400';
+        : 'text-text-secondary';
 
   return (
     <div className="flex items-center gap-4 px-4 py-2.5 bg-bg-secondary rounded-lg border border-border">
@@ -54,7 +54,7 @@ export const EngagementPulse = memo(function EngagementPulse() {
                 }}
                 title={`${day.day}: ${day.count} interactions`}
               />
-              <span className="text-[8px] text-gray-600">{day.day.charAt(0)}</span>
+              <span className="text-[8px] text-text-muted">{day.day.charAt(0)}</span>
             </div>
           );
         })}
@@ -65,13 +65,13 @@ export const EngagementPulse = memo(function EngagementPulse() {
         <span className="text-xs font-mono font-medium text-orange-400">
           {data.streak_days}d
         </span>
-        <span className="text-[10px] text-gray-500">{t('engagement.streak')}</span>
+        <span className="text-[10px] text-text-muted">{t('engagement.streak')}</span>
       </div>
 
       {/* Trend */}
       <div className="flex items-center gap-1" title={`Learning trend: ${data.accuracy_trend} (${data.recent_positive_rate} positive)`}>
         <span className={`text-sm font-medium ${trendColor}`}>{trendIcon}</span>
-        <span className="text-[10px] text-gray-500">{data.recent_positive_rate}</span>
+        <span className="text-[10px] text-text-muted">{data.recent_positive_rate}</span>
       </div>
     </div>
   );

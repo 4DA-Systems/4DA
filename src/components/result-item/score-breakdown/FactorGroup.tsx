@@ -18,7 +18,7 @@ export function FactorGroup({
 }: FactorGroupProps) {
   return (
     <div>
-      <p className="text-[10px] text-gray-500 uppercase tracking-wider mb-1.5">{label}</p>
+      <p className="text-[10px] text-text-muted uppercase tracking-wider mb-1.5">{label}</p>
       <div className="space-y-1.5">
         {factors.map(f => (
           <FactorBar

@@ -122,7 +122,7 @@ export function LocaleSection() {
         </div>
         <div>
           <h3 className="text-white font-medium">{t('settings.locale.title')}</h3>
-          <p className="text-gray-500 text-sm mt-1">
+          <p className="text-text-muted text-sm mt-1">
             {t('settings.locale.description')}
           </p>
         </div>
@@ -131,7 +131,7 @@ export function LocaleSection() {
       {loaded ? (
         <div className="space-y-3">
           <div>
-            <label className="block text-xs text-gray-500 uppercase tracking-wider mb-1.5">
+            <label className="block text-xs text-text-muted uppercase tracking-wider mb-1.5">
               {t('settings.locale.country')}
             </label>
             <select
@@ -147,7 +147,7 @@ export function LocaleSection() {
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs text-gray-500 uppercase tracking-wider mb-1.5">
+              <label className="block text-xs text-text-muted uppercase tracking-wider mb-1.5">
                 {t('settings.locale.language')}
               </label>
               <select
@@ -161,7 +161,7 @@ export function LocaleSection() {
               </select>
             </div>
             <div>
-              <label className="block text-xs text-gray-500 uppercase tracking-wider mb-1.5">
+              <label className="block text-xs text-text-muted uppercase tracking-wider mb-1.5">
                 {t('settings.locale.currency')}
               </label>
               <select
@@ -176,7 +176,7 @@ export function LocaleSection() {
             </div>
           </div>
 
-          <p className="text-xs text-gray-500 pt-1">
+          <p className="text-xs text-text-muted pt-1">
             {t('settings.locale.priceInfo', { currency, language: getLanguageName(language) })}
           </p>
 
@@ -199,7 +199,7 @@ export function LocaleSection() {
           )}
         </div>
       ) : (
-        <div className="text-sm text-gray-500">Detecting region...</div>
+        <div className="text-sm text-text-muted">Detecting region...</div>
       )}
     </div>
   );

@@ -102,13 +102,13 @@ export function LearningIndicator({
           </svg>
         </div>
 
-        <span className="text-xs text-gray-400 flex-1 text-left">
+        <span className="text-xs text-text-secondary flex-1 text-left">
           {t('learnedBehavior.learningCount', { count: totalPreferences })}
         </span>
 
         {/* Expand/Collapse chevron */}
         <svg
-          className={`w-3.5 h-3.5 text-gray-500 transition-transform duration-200 ${expanded ? 'rotate-180' : ''}`}
+          className={`w-3.5 h-3.5 text-text-muted transition-transform duration-200 ${expanded ? 'rotate-180' : ''}`}
           fill="none"
           stroke="currentColor"
           viewBox="0 0 24 24"
@@ -171,7 +171,7 @@ export function LearningIndicator({
 
           {/* Overflow indicator */}
           {learnedAffinities.filter((a) => a.affinity_score > 0).length > 5 && (
-            <span className="text-[11px] text-gray-500 self-center">
+            <span className="text-[11px] text-text-muted self-center">
               {t('learnedBehavior.moreCount', { count: learnedAffinities.filter((a) => a.affinity_score > 0).length - 5 })}
             </span>
           )}

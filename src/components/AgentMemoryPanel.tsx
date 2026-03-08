@@ -19,7 +19,7 @@ const AGENT_TYPE_COLORS: Record<string, { bg: string; text: string; border: stri
 
 const DEFAULT_AGENT_STYLE = {
   bg: 'bg-gray-500/10',
-  text: 'text-gray-400',
+  text: 'text-text-secondary',
   border: 'border-gray-500/20',
 };
 
@@ -196,7 +196,7 @@ export const AgentMemoryPanel = memo(function AgentMemoryPanel() {
                     <div className="flex items-center gap-2">
                       <span className="text-sm text-white font-medium truncate">{m.subject}</span>
                       {expired && (
-                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-gray-500/10 text-gray-500 border border-gray-500/20">
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-gray-500/10 text-text-muted border border-gray-500/20">
                           {t('agentMemory.expired')}
                         </span>
                       )}

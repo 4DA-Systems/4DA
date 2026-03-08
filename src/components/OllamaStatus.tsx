@@ -75,7 +75,7 @@ const STATUS_CONFIG: Record<OllamaConnectionStatus, {
   },
   offline: {
     dotClass: 'bg-gray-500',
-    textClass: 'text-gray-500',
+    textClass: 'text-text-muted',
     labelKey: 'ollama.basicMode',
     animate: false,
   },

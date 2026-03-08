@@ -65,7 +65,7 @@ export const BriefingCard = memo(function BriefingCard({
           )}
 
           {(explanation || item.explanation) && (
-            <p className="text-xs text-gray-400 mt-1.5 leading-relaxed">
+            <p className="text-xs text-text-secondary mt-1.5 leading-relaxed">
               {explanation || item.explanation}
             </p>
           )}
@@ -75,7 +75,7 @@ export const BriefingCard = memo(function BriefingCard({
         <div className="flex items-center gap-1.5 flex-shrink-0">
           {feedbackGiven ? (
             <span className={`text-xs px-2 py-1 rounded ${
-              feedbackGiven === 'save' ? 'bg-green-500/20 text-green-400' : 'bg-gray-500/20 text-gray-500'
+              feedbackGiven === 'save' ? 'bg-green-500/20 text-green-400' : 'bg-gray-500/20 text-text-muted'
             }`}>
               {feedbackGiven === 'save' ? t('feedback.saved') : t('feedback.dismissed')}
             </span>
@@ -92,7 +92,7 @@ export const BriefingCard = memo(function BriefingCard({
               {onDismiss && (
                 <button
                   onClick={() => onDismiss(item)}
-                  className="px-2.5 py-1.5 text-xs bg-border text-gray-500 border border-[#333] rounded-lg hover:bg-red-500/10 hover:text-red-400 hover:border-red-500/20 transition-all font-medium"
+                  className="px-2.5 py-1.5 text-xs bg-border text-text-muted border border-[#333] rounded-lg hover:bg-red-500/10 hover:text-red-400 hover:border-red-500/20 transition-all font-medium"
                 >
                   {t('action.dismiss')}
                 </button>

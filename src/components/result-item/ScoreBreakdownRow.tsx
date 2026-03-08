@@ -52,7 +52,7 @@ export function ScoreBreakdownRow({ item, isNew, isTopPick, isHighConfidence }: 
               className={`${
                 (item.score_breakdown.signal_count ?? 0) >= 2
                   ? 'text-green-400/80'
-                  : 'text-gray-500/80'
+                  : 'text-text-muted'
               }`}
               title={item.score_breakdown.confirmed_signals?.join(', ') || 'none'}
             >
@@ -70,7 +70,7 @@ export function ScoreBreakdownRow({ item, isNew, isTopPick, isHighConfidence }: 
             </span>
           )}
           {item.score_breakdown.freshness_mult != null && item.score_breakdown.freshness_mult !== 1.0 && (
-            <span className={item.score_breakdown.freshness_mult > 1.0 ? 'text-teal-400/80' : 'text-gray-500/80'}>
+            <span className={item.score_breakdown.freshness_mult > 1.0 ? 'text-teal-400/80' : 'text-text-muted/80'}>
               {t('score.fresh')} {item.score_breakdown.freshness_mult > 1.0 ? '+' : ''}{Math.round((item.score_breakdown.freshness_mult - 1.0) * 100)}%
             </span>
           )}

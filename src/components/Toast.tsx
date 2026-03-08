@@ -29,7 +29,7 @@ export function ToastContainer({ toasts, onDismiss }: ToastContainerProps) {
             <span className={`${style.text} font-bold text-sm flex-shrink-0 mt-0.5`}>
               {style.icon}
             </span>
-            <p className="text-sm text-gray-300 flex-1 min-w-0 break-words">{toast.message}</p>
+            <p className="text-sm text-text-secondary flex-1 min-w-0 break-words">{toast.message}</p>
             {toast.action && (
               <button
                 onClick={() => { toast.action!.onClick(); onDismiss(toast.id); }}
@@ -40,7 +40,7 @@ export function ToastContainer({ toasts, onDismiss }: ToastContainerProps) {
             )}
             <button
               onClick={() => onDismiss(toast.id)}
-              className="text-gray-600 hover:text-gray-300 transition-colors flex-shrink-0 ml-1"
+              className="text-text-muted hover:text-text-secondary transition-colors flex-shrink-0 ml-1"
               aria-label={t('action.dismiss')}
             >
               x

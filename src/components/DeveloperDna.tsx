@@ -101,12 +101,12 @@ export const DeveloperDnaPanel = memo(function DeveloperDnaPanel() {
           </div>
           <div className="text-left">
             <h2 className="font-medium text-white text-sm">{t('dna.title')}</h2>
-            <p className="text-xs text-gray-500">
+            <p className="text-xs text-text-muted">
               {dna ? dna.identity_summary : t('dna.defaultSubtitle')}
             </p>
           </div>
         </div>
-        <span className="text-gray-500 text-sm">{expanded ? '\u25BE' : '\u25B8'}</span>
+        <span className="text-text-muted text-sm">{expanded ? '\u25BE' : '\u25B8'}</span>
       </button>
 
       {expanded && (
@@ -114,7 +114,7 @@ export const DeveloperDnaPanel = memo(function DeveloperDnaPanel() {
           {loading && (
             <div className="flex items-center gap-2 py-8 justify-center">
               <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-              <span className="text-xs text-gray-500">{t('dna.building')}</span>
+              <span className="text-xs text-text-muted">{t('dna.building')}</span>
             </div>
           )}
 
@@ -130,7 +130,7 @@ export const DeveloperDnaPanel = memo(function DeveloperDnaPanel() {
               <div className="flex items-center justify-between">
                 <div>
                   <h3 className="text-lg font-semibold text-white">{dna.identity_summary}</h3>
-                  <p className="text-xs text-gray-500 mt-1">
+                  <p className="text-xs text-text-muted mt-1">
                     {t('dna.statsLine', { days: dna.stats.days_active, items: dna.stats.total_items_processed.toLocaleString(), rate: dna.stats.rejection_rate.toFixed(1) })}
                   </p>
                 </div>
@@ -149,13 +149,13 @@ export const DeveloperDnaPanel = memo(function DeveloperDnaPanel() {
                   </button>
                   <button
                     onClick={downloadBadge}
-                    className="px-3 py-1.5 text-xs bg-bg-tertiary hover:bg-border border border-border rounded-lg text-gray-300 transition-colors"
+                    className="px-3 py-1.5 text-xs bg-bg-tertiary hover:bg-border border border-border rounded-lg text-text-secondary transition-colors"
                   >
                     {t('dna.downloadBadge')}
                   </button>
                   <button
                     onClick={copyAsMarkdown}
-                    className="px-3 py-1.5 text-xs bg-bg-tertiary hover:bg-border border border-border rounded-lg text-gray-300 transition-colors"
+                    className="px-3 py-1.5 text-xs bg-bg-tertiary hover:bg-border border border-border rounded-lg text-text-secondary transition-colors"
                   >
                     {copied ? t('action.copied') : t('dna.markdown')}
                   </button>
@@ -192,7 +192,7 @@ export const DeveloperDnaPanel = memo(function DeveloperDnaPanel() {
                       <Tag key={`${dep.name}-${dep.project_path}`} label={dep.name} variant="dep" />
                     ))}
                     {dna.top_dependencies.length > 20 && (
-                      <span className="text-xs text-gray-500 self-center">
+                      <span className="text-xs text-text-muted self-center">
                         {t('dna.moreItems', { count: dna.top_dependencies.length - 20 })}
                       </span>
                     )}
@@ -217,14 +217,14 @@ export const DeveloperDnaPanel = memo(function DeveloperDnaPanel() {
                   <div className="space-y-2">
                     {dna.top_engaged_topics.slice(0, 8).map((topic) => (
                       <div key={topic.topic} className="flex items-center gap-3">
-                        <span className="text-xs text-gray-400 w-28 truncate">{topic.topic}</span>
+                        <span className="text-xs text-text-secondary w-28 truncate">{topic.topic}</span>
                         <div className="flex-1 h-2 bg-bg-tertiary rounded-full overflow-hidden">
                           <div
                             className="h-full bg-white/20 rounded-full"
                             style={{ width: `${Math.min(100, topic.percent_of_total)}%` }}
                           />
                         </div>
-                        <span className="text-xs text-gray-500 w-10 text-right">
+                        <span className="text-xs text-text-muted w-10 text-right">
                           {topic.percent_of_total.toFixed(0)}%
                         </span>
                       </div>
@@ -243,7 +243,7 @@ export const DeveloperDnaPanel = memo(function DeveloperDnaPanel() {
                         className="flex items-center justify-between px-3 py-2 bg-amber-500/5 rounded border border-amber-500/10"
                       >
                         <span className="text-xs text-amber-300 font-mono">{spot.dependency}</span>
-                        <span className="text-xs text-gray-500">{spot.severity} &middot; {t('dna.daysStale', { days: spot.days_stale })}</span>
+                        <span className="text-xs text-text-muted">{spot.severity} &middot; {t('dna.daysStale', { days: spot.days_stale })}</span>
                       </div>
                     ))}
                   </div>
@@ -259,10 +259,10 @@ export const DeveloperDnaPanel = memo(function DeveloperDnaPanel() {
                         key={src.source_type}
                         className="px-3 py-2 bg-[#1A1A1A] rounded border border-border"
                       >
-                        <div className="text-xs font-medium text-gray-300">
+                        <div className="text-xs font-medium text-text-secondary">
                           {getSourceFullName(src.source_type)}
                         </div>
-                        <div className="text-xs text-gray-500 mt-0.5">
+                        <div className="text-xs text-text-muted mt-0.5">
                           {t('dna.sourceStats', { seen: src.items_seen.toLocaleString(), saved: src.items_saved })}
                         </div>
                       </div>
@@ -278,7 +278,7 @@ export const DeveloperDnaPanel = memo(function DeveloperDnaPanel() {
                   <Stat label={t('dna.dependencies')} value={dna.stats.dependency_count} />
                   <Stat label={t('dna.rejectionRate')} value={`${dna.stats.rejection_rate.toFixed(1)}%`} />
                 </div>
-                <span className="text-xs text-gray-600">
+                <span className="text-xs text-text-muted">
                   {t('dna.generatedAt', { date: dna.generated_at.slice(0, 10) })}
                 </span>
               </div>
@@ -298,7 +298,7 @@ export const DeveloperDnaPanel = memo(function DeveloperDnaPanel() {
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div>
-      <h4 className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">{title}</h4>
+      <h4 className="text-xs font-medium text-text-muted uppercase tracking-wider mb-2">{title}</h4>
       {children}
     </div>
   );
@@ -306,7 +306,7 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 
 const TAG_VARIANTS: Record<string, string> = {
   primary: 'bg-white/10 text-white border-white/20',
-  secondary: 'bg-white/5 text-gray-400 border-white/10',
+  secondary: 'bg-white/5 text-text-secondary border-white/10',
   dep: 'bg-blue-500/10 text-blue-300 border-blue-500/20',
   interest: 'bg-emerald-500/10 text-emerald-300 border-emerald-500/20',
 };
@@ -324,7 +324,7 @@ function Stat({ label, value }: { label: string; value: string | number }) {
   return (
     <div>
       <div className="text-sm font-medium text-white">{typeof value === 'number' ? value.toLocaleString() : value}</div>
-      <div className="text-xs text-gray-500">{label}</div>
+      <div className="text-xs text-text-muted">{label}</div>
     </div>
   );
 }

@@ -17,11 +17,11 @@ export function WelcomeStep({ isAnimating, onNext }: WelcomeStepProps) {
       </div>
       <h1 className="text-4xl font-semibold text-white mb-3">{t('onboarding.welcome.title')}</h1>
       <p className="text-xl text-orange-400 mb-2 font-medium">{t('onboarding.welcome.tagline')}</p>
-      <p className="text-gray-500 mb-8 max-w-md mx-auto">
+      <p className="text-text-muted mb-8 max-w-md mx-auto">
         {t('onboarding.welcome.description')}
       </p>
       <div className="space-y-3 text-left bg-bg-secondary p-5 rounded-lg mb-8 max-w-md mx-auto">
-        <ul className="text-gray-400 space-y-3">
+        <ul className="text-text-secondary space-y-3">
           <li className="flex items-start gap-3">
             <span className="flex-shrink-0 w-8 h-8 bg-green-500/20 rounded-lg flex items-center justify-center">
               <span className="text-green-400">&#x1f512;</span>
@@ -57,7 +57,7 @@ export function WelcomeStep({ isAnimating, onNext }: WelcomeStepProps) {
       >
         {t('onboarding.welcome.getStarted')} &rarr;
       </button>
-      <p className="text-xs text-gray-600 mt-4">{t('onboarding.welcome.quickSetupHint')}</p>
+      <p className="text-xs text-text-muted mt-4">{t('onboarding.welcome.quickSetupHint')}</p>
     </div>
   );
 }

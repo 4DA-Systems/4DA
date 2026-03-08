@@ -182,18 +182,18 @@ export function SourceConfigPanel({ onStatusChange }: SourceConfigPanelProps) {
               {t('sources.customCount', { count: totalSources })}
             </span>
           </div>
-          <p className="text-gray-500 text-sm mt-0.5">
+          <p className="text-text-muted text-sm mt-0.5">
             {t('sources.subtitle')}
           </p>
         </div>
-        <span className="text-gray-500 text-xs">{expanded ? '−' : '+'}</span>
+        <span className="text-text-muted text-xs">{expanded ? '−' : '+'}</span>
       </button>
 
       {expanded && (
         <div className="mt-4 space-y-5">
           {/* RSS Feeds */}
           <div>
-            <label className="text-xs text-gray-400 block mb-2">{t('sources.rss.label')}</label>
+            <label className="text-xs text-text-secondary block mb-2">{t('sources.rss.label')}</label>
             <div className="flex gap-2 mb-2">
               <input
                 type="text"
@@ -201,11 +201,11 @@ export function SourceConfigPanel({ onStatusChange }: SourceConfigPanelProps) {
                 onChange={(e) => setNewRssFeed(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && addRssFeed()}
                 placeholder="https://example.com/feed.xml"
-                className="flex-1 px-3 py-2 bg-bg-secondary border border-border rounded-lg text-sm text-white placeholder:text-gray-600 focus:border-cyan-500/50 focus:outline-none font-mono"
+                className="flex-1 px-3 py-2 bg-bg-secondary border border-border rounded-lg text-sm text-white placeholder:text-text-muted focus:border-cyan-500/50 focus:outline-none font-mono"
               />
               <button
                 onClick={addRssFeed}
-                className="px-3 py-2 text-sm bg-bg-secondary border border-border rounded-lg text-gray-400 hover:text-white hover:border-cyan-500/30 transition-all"
+                className="px-3 py-2 text-sm bg-bg-secondary border border-border rounded-lg text-text-secondary hover:text-white hover:border-cyan-500/30 transition-all"
               >
                 {t('action.add')}
               </button>
@@ -217,12 +217,12 @@ export function SourceConfigPanel({ onStatusChange }: SourceConfigPanelProps) {
                     key={feed}
                     className="flex items-center justify-between px-3 py-1.5 bg-bg-secondary rounded border border-border group"
                   >
-                    <span className="font-mono text-xs text-gray-300 truncate">
+                    <span className="font-mono text-xs text-text-secondary truncate">
                       {feed}
                     </span>
                     <button
                       onClick={() => removeRssFeed(feed)}
-                      className="text-gray-600 hover:text-red-400 ml-2 opacity-0 group-hover:opacity-100 transition-opacity text-xs"
+                      className="text-text-muted hover:text-red-400 ml-2 opacity-0 group-hover:opacity-100 transition-opacity text-xs"
                     >
                       x
                     </button>
@@ -230,15 +230,15 @@ export function SourceConfigPanel({ onStatusChange }: SourceConfigPanelProps) {
                 ))}
               </div>
             ) : (
-              <p className="text-xs text-gray-600">{t('sources.rss.empty')}</p>
+              <p className="text-xs text-text-muted">{t('sources.rss.empty')}</p>
             )}
           </div>
 
           {/* YouTube Channels */}
           <div>
-            <label className="text-xs text-gray-400 block mb-2">
+            <label className="text-xs text-text-secondary block mb-2">
               {t('sources.youtube.label')}
-              <span className="text-gray-600 ml-1">{t('sources.youtube.noKeyNeeded')}</span>
+              <span className="text-text-muted ml-1">{t('sources.youtube.noKeyNeeded')}</span>
             </label>
             <div className="flex gap-2 mb-2">
               <input
@@ -247,11 +247,11 @@ export function SourceConfigPanel({ onStatusChange }: SourceConfigPanelProps) {
                 onChange={(e) => setNewYoutubeChannel(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && addYoutubeChannel()}
                 placeholder="Channel ID e.g. UCsBjURrPoezykLs9EqgamOA"
-                className="flex-1 px-3 py-2 bg-bg-secondary border border-border rounded-lg text-sm text-white placeholder:text-gray-600 focus:border-cyan-500/50 focus:outline-none font-mono"
+                className="flex-1 px-3 py-2 bg-bg-secondary border border-border rounded-lg text-sm text-white placeholder:text-text-muted focus:border-cyan-500/50 focus:outline-none font-mono"
               />
               <button
                 onClick={addYoutubeChannel}
-                className="px-3 py-2 text-sm bg-bg-secondary border border-border rounded-lg text-gray-400 hover:text-white hover:border-cyan-500/30 transition-all"
+                className="px-3 py-2 text-sm bg-bg-secondary border border-border rounded-lg text-text-secondary hover:text-white hover:border-cyan-500/30 transition-all"
               >
                 {t('action.add')}
               </button>
@@ -274,7 +274,7 @@ export function SourceConfigPanel({ onStatusChange }: SourceConfigPanelProps) {
                 ))}
               </div>
             ) : (
-              <p className="text-xs text-gray-600">
+              <p className="text-xs text-text-muted">
                 {t('sources.youtube.defaultChannels')}
               </p>
             )}
@@ -282,9 +282,9 @@ export function SourceConfigPanel({ onStatusChange }: SourceConfigPanelProps) {
 
           {/* GitHub Languages */}
           <div>
-            <label className="text-xs text-gray-400 block mb-2">
+            <label className="text-xs text-text-secondary block mb-2">
               {t('sources.github.label')}
-              <span className="text-gray-600 ml-1">{t('sources.github.trendingFilter')}</span>
+              <span className="text-text-muted ml-1">{t('sources.github.trendingFilter')}</span>
             </label>
             <div className="flex gap-2 mb-2">
               <input
@@ -293,11 +293,11 @@ export function SourceConfigPanel({ onStatusChange }: SourceConfigPanelProps) {
                 onChange={(e) => setNewGithubLanguage(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && addGithubLanguage()}
                 placeholder="e.g. go, java, swift"
-                className="flex-1 px-3 py-2 bg-bg-secondary border border-border rounded-lg text-sm text-white placeholder:text-gray-600 focus:border-cyan-500/50 focus:outline-none"
+                className="flex-1 px-3 py-2 bg-bg-secondary border border-border rounded-lg text-sm text-white placeholder:text-text-muted focus:border-cyan-500/50 focus:outline-none"
               />
               <button
                 onClick={addGithubLanguage}
-                className="px-3 py-2 text-sm bg-bg-secondary border border-border rounded-lg text-gray-400 hover:text-white hover:border-cyan-500/30 transition-all"
+                className="px-3 py-2 text-sm bg-bg-secondary border border-border rounded-lg text-text-secondary hover:text-white hover:border-cyan-500/30 transition-all"
               >
                 {t('action.add')}
               </button>
@@ -322,7 +322,7 @@ export function SourceConfigPanel({ onStatusChange }: SourceConfigPanelProps) {
 
           {/* Twitter/X */}
           <div>
-            <label className="text-xs text-gray-400 block mb-2">
+            <label className="text-xs text-text-secondary block mb-2">
               {t('sources.twitter.label')}
               {hasXApiKey ? (
                 <span className="text-green-400 ml-1">{t('sources.twitter.keySet')}</span>
@@ -337,11 +337,11 @@ export function SourceConfigPanel({ onStatusChange }: SourceConfigPanelProps) {
                 onChange={(e) => setNewTwitterHandle(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && addTwitterHandle()}
                 placeholder="@handle"
-                className="flex-1 px-3 py-2 bg-bg-secondary border border-border rounded-lg text-sm text-white placeholder:text-gray-600 focus:border-cyan-500/50 focus:outline-none"
+                className="flex-1 px-3 py-2 bg-bg-secondary border border-border rounded-lg text-sm text-white placeholder:text-text-muted focus:border-cyan-500/50 focus:outline-none"
               />
               <button
                 onClick={addTwitterHandle}
-                className="px-3 py-2 text-sm bg-bg-secondary border border-border rounded-lg text-gray-400 hover:text-white hover:border-cyan-500/30 transition-all"
+                className="px-3 py-2 text-sm bg-bg-secondary border border-border rounded-lg text-text-secondary hover:text-white hover:border-cyan-500/30 transition-all"
               >
                 {t('action.add')}
               </button>
@@ -364,7 +364,7 @@ export function SourceConfigPanel({ onStatusChange }: SourceConfigPanelProps) {
                 ))}
               </div>
             ) : (
-              <p className="text-xs text-gray-600 mb-3">
+              <p className="text-xs text-text-muted mb-3">
                 {t('sources.twitter.defaultHandles')}
               </p>
             )}
@@ -376,11 +376,11 @@ export function SourceConfigPanel({ onStatusChange }: SourceConfigPanelProps) {
                 value={xApiKey}
                 onChange={(e) => setXApiKey(e.target.value)}
                 placeholder={hasXApiKey ? '(key saved)' : 'X API Bearer Token'}
-                className="flex-1 px-3 py-2 bg-bg-secondary border border-border rounded-lg text-sm text-white placeholder:text-gray-600 focus:border-cyan-500/50 focus:outline-none font-mono"
+                className="flex-1 px-3 py-2 bg-bg-secondary border border-border rounded-lg text-sm text-white placeholder:text-text-muted focus:border-cyan-500/50 focus:outline-none font-mono"
               />
               <button
                 onClick={saveXApiKey}
-                className="px-3 py-2 text-sm bg-bg-secondary border border-border rounded-lg text-gray-400 hover:text-white hover:border-cyan-500/30 transition-all"
+                className="px-3 py-2 text-sm bg-bg-secondary border border-border rounded-lg text-text-secondary hover:text-white hover:border-cyan-500/30 transition-all"
               >
                 {hasXApiKey ? t('sources.twitter.update') : t('action.save')}
               </button>

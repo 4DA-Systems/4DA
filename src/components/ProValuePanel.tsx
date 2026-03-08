@@ -14,7 +14,7 @@ const STATS_CONFIG = [
 
 function ChartIcon() {
   return (
-    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" className="text-gray-400">
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" className="text-text-secondary">
       <rect x="1" y="8" width="3" height="6" rx="0.5" fill="currentColor" opacity="0.4" />
       <rect x="6" y="4" width="3" height="10" rx="0.5" fill="currentColor" opacity="0.6" />
       <rect x="11" y="1" width="3" height="13" rx="0.5" fill="currentColor" opacity="0.9" />
@@ -49,7 +49,7 @@ export const ProValuePanel = memo(function ProValuePanel() {
       <div className="mb-6 bg-bg-secondary rounded-lg border border-border p-5">
         <div className="flex items-center gap-3">
           <div className="w-4 h-4 border-2 border-gray-600 border-t-gray-300 rounded-full animate-spin" />
-          <span className="text-xs text-gray-500">{t('proValue.loading')}</span>
+          <span className="text-xs text-text-muted">{t('proValue.loading')}</span>
         </div>
       </div>
     );
@@ -76,9 +76,9 @@ export const ProValuePanel = memo(function ProValuePanel() {
         </div>
         <div>
           <h2 className="font-medium text-white text-sm">{t('proValue.title')}</h2>
-          <p className="text-xs text-gray-500">
+          <p className="text-xs text-text-muted">
             {t('proValue.lastDays', { days: report.period_days })}
-            {activeSinceFormatted && <span className="text-gray-600"> / {t('proValue.activeSince', { date: activeSinceFormatted })}</span>}
+            {activeSinceFormatted && <span className="text-text-muted"> / {t('proValue.activeSince', { date: activeSinceFormatted })}</span>}
           </p>
         </div>
       </div>
@@ -91,12 +91,12 @@ export const ProValuePanel = memo(function ProValuePanel() {
               <div className="text-3xl font-semibold text-white tracking-tight">
                 {report.estimated_hours_saved}<span className="text-teal-400/80 text-lg ml-1">{t('proValue.hoursSaved')}</span>
               </div>
-              <p className="text-xs text-gray-500 mt-1">
+              <p className="text-xs text-text-muted mt-1">
                 {t('proValue.itemsSurfaced', { count: report.items_surfaced })}
               </p>
             </>
           ) : (
-            <p className="text-sm text-gray-500">{t('proValue.startTrial')}</p>
+            <p className="text-sm text-text-muted">{t('proValue.startTrial')}</p>
           )}
         </div>
 
@@ -108,7 +108,7 @@ export const ProValuePanel = memo(function ProValuePanel() {
                 <div className="text-lg font-semibold text-white">
                   {report[key as keyof ProValueReport] as number}
                 </div>
-                <div className="text-xs text-gray-500 mt-0.5">{t(labelKey)}</div>
+                <div className="text-xs text-text-muted mt-0.5">{t(labelKey)}</div>
               </div>
             ))}
           </div>
@@ -117,8 +117,8 @@ export const ProValuePanel = memo(function ProValuePanel() {
         {/* Data Depth Indicator */}
         {!isTrialCta && (report.total_feedback_events > 0 || report.data_age_days > 0) && (
           <div className="px-3 py-2.5 bg-bg-primary rounded-lg border border-border">
-            <div className="text-[10px] text-gray-600 uppercase tracking-wider mb-2">{t('proValue.dataDepth')}</div>
-            <div className="flex items-center justify-between text-xs text-gray-400 mb-2">
+            <div className="text-[10px] text-text-muted uppercase tracking-wider mb-2">{t('proValue.dataDepth')}</div>
+            <div className="flex items-center justify-between text-xs text-text-secondary mb-2">
               <span>{t('proValue.learningInteractions', { count: report.total_feedback_events })}</span>
               <span>{t('proValue.dataSpans', { days: report.data_age_days })}</span>
             </div>
@@ -134,7 +134,7 @@ export const ProValuePanel = memo(function ProValuePanel() {
         {/* Value Bar / Trial CTA */}
         {isTrialCta && (
           <div className="px-4 py-3 bg-bg-primary rounded-lg border border-border text-center">
-            <p className="text-xs text-gray-400 leading-relaxed">
+            <p className="text-xs text-text-secondary leading-relaxed">
               {t('proValue.trialCta')}
             </p>
           </div>

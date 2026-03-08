@@ -39,7 +39,7 @@ export const IntelligencePulse = memo(function IntelligencePulse() {
           className="w-full px-4 py-3 flex items-center gap-3 text-left hover:bg-bg-tertiary/30 transition-colors"
         >
           <div className="w-8 h-8 bg-bg-tertiary rounded-lg flex items-center justify-center flex-shrink-0">
-            <span className="text-sm text-gray-400">&#x2699;</span>
+            <span className="text-sm text-text-secondary">&#x2699;</span>
           </div>
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2">
@@ -53,7 +53,7 @@ export const IntelligencePulse = memo(function IntelligencePulse() {
               )}
             </div>
             {/* Summary line */}
-            <p className="text-xs text-gray-500 mt-0.5">
+            <p className="text-xs text-text-muted mt-0.5">
               {t('intelligence.summary', {
                 analyzed: data.items_analyzed_7d.toLocaleString(),
                 surfaced: data.items_surfaced_7d,
@@ -62,7 +62,7 @@ export const IntelligencePulse = memo(function IntelligencePulse() {
               })}
             </p>
           </div>
-          <span className="text-gray-500 text-xs flex-shrink-0">
+          <span className="text-text-muted text-xs flex-shrink-0">
             {expanded ? '\u25BE' : '\u25B8'}
           </span>
         </button>
@@ -73,7 +73,7 @@ export const IntelligencePulse = memo(function IntelligencePulse() {
             {/* Calibration accuracy */}
             <div className="pt-3">
               <div className="flex items-center justify-between mb-2">
-                <span className="text-[10px] text-gray-500 uppercase tracking-wider">
+                <span className="text-[10px] text-text-muted uppercase tracking-wider">
                   {t('intelligence.calibration', 'Calibration Accuracy')}
                 </span>
                 <span className="text-sm font-mono text-white">
@@ -94,7 +94,7 @@ export const IntelligencePulse = memo(function IntelligencePulse() {
             {/* What the system learned */}
             {hasCalibrations && (
               <div>
-                <p className="text-[10px] text-gray-500 uppercase tracking-wider mb-2">
+                <p className="text-[10px] text-text-muted uppercase tracking-wider mb-2">
                   {t('intelligence.learned', 'What the system learned')}
                 </p>
                 <div className="space-y-1.5">
@@ -105,13 +105,13 @@ export const IntelligencePulse = memo(function IntelligencePulse() {
                         <span className={`text-xs ${isUnderScored ? 'text-green-400' : 'text-amber-400'}`}>
                           {isUnderScored ? '\u2191' : '\u2193'}
                         </span>
-                        <span className="text-xs text-gray-300 flex-1 truncate">
+                        <span className="text-xs text-text-secondary flex-1 truncate">
                           {cal.topic}
                         </span>
                         <span className={`text-[10px] font-mono ${isUnderScored ? 'text-green-400' : 'text-amber-400'}`}>
                           {isUnderScored ? '+' : ''}{Math.round(cal.delta * 100)}%
                         </span>
-                        <span className="text-[10px] text-gray-600">
+                        <span className="text-[10px] text-text-muted">
                           {cal.sample_size} items
                         </span>
                       </div>
@@ -124,13 +124,13 @@ export const IntelligencePulse = memo(function IntelligencePulse() {
             {/* Source quality */}
             {hasSourceQuality && (
               <div>
-                <p className="text-[10px] text-gray-500 uppercase tracking-wider mb-2">
+                <p className="text-[10px] text-text-muted uppercase tracking-wider mb-2">
                   {t('intelligence.sourceQuality', 'Source quality')}
                 </p>
                 <div className="space-y-1.5">
                   {data.source_quality.slice(0, 5).map((sq) => (
                     <div key={sq.source_type} className="flex items-center gap-2">
-                      <span className="text-xs text-gray-300 w-24 truncate">
+                      <span className="text-xs text-text-secondary w-24 truncate">
                         {formatSourceLabel(sq.source_type)}
                       </span>
                       <div className="flex-1 h-1.5 bg-bg-tertiary rounded-full overflow-hidden">
@@ -139,10 +139,10 @@ export const IntelligencePulse = memo(function IntelligencePulse() {
                           style={{ width: `${Math.min(sq.engagement_rate * 100, 100)}%` }}
                         />
                       </div>
-                      <span className="text-[10px] font-mono text-gray-400 w-10 text-right">
+                      <span className="text-[10px] font-mono text-text-secondary w-10 text-right">
                         {Math.round(sq.engagement_rate * 100)}%
                       </span>
-                      <span className="text-[10px] text-gray-600 w-12 text-right">
+                      <span className="text-[10px] text-text-muted w-12 text-right">
                         {sq.items_engaged}/{sq.items_surfaced}
                       </span>
                     </div>
@@ -155,7 +155,7 @@ export const IntelligencePulse = memo(function IntelligencePulse() {
             {data.anti_patterns_detected > 0 && (
               <div className="flex items-center gap-2 text-xs">
                 <span className="text-amber-400">!</span>
-                <span className="text-gray-400">
+                <span className="text-text-secondary">
                   {t('intelligence.antiPatterns', {
                     count: data.anti_patterns_detected,
                     defaultValue: '{{count}} scoring anti-pattern(s) detected and corrected',

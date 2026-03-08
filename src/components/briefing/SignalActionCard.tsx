@@ -65,17 +65,17 @@ export const SignalActionCard = memo(function SignalActionCard({
             <p className="text-sm font-medium text-white">{item.title}</p>
           )}
           {item.signal_action && item.title !== item.signal_action && (
-            <p className="text-xs text-gray-400 mt-1">{item.title}</p>
+            <p className="text-xs text-text-secondary mt-1">{item.title}</p>
           )}
           {item.explanation && (
-            <p className="text-xs text-gray-500 mt-1.5 leading-relaxed">{item.explanation}</p>
+            <p className="text-xs text-text-muted mt-1.5 leading-relaxed">{item.explanation}</p>
           )}
         </div>
 
         <div className="flex items-center gap-1.5 flex-shrink-0">
           {feedbackGiven ? (
             <span className={`text-xs px-2 py-1 rounded ${
-              feedbackGiven === 'save' ? 'bg-green-500/20 text-green-400' : 'bg-gray-500/20 text-gray-500'
+              feedbackGiven === 'save' ? 'bg-green-500/20 text-green-400' : 'bg-gray-500/20 text-text-muted'
             }`}>
               {feedbackGiven === 'save' ? t('feedback.saved') : t('feedback.dismissed')}
             </span>
@@ -84,7 +84,7 @@ export const SignalActionCard = memo(function SignalActionCard({
               {item.url && (
                 <button
                   onClick={() => window.open(item.url!, '_blank', 'noopener,noreferrer')}
-                  className="px-2.5 py-1.5 text-xs bg-bg-tertiary text-gray-300 border border-border rounded-lg hover:bg-border transition-all font-medium"
+                  className="px-2.5 py-1.5 text-xs bg-bg-tertiary text-text-secondary border border-border rounded-lg hover:bg-border transition-all font-medium"
                 >
                   {t('briefing.read')}
                 </button>
@@ -97,7 +97,7 @@ export const SignalActionCard = memo(function SignalActionCard({
               </button>
               <button
                 onClick={() => onDismiss(item)}
-                className="px-2.5 py-1.5 text-xs bg-border text-gray-500 border border-[#333] rounded-lg hover:bg-red-500/10 hover:text-red-400 hover:border-red-500/20 transition-all font-medium"
+                className="px-2.5 py-1.5 text-xs bg-border text-text-muted border border-[#333] rounded-lg hover:bg-red-500/10 hover:text-red-400 hover:border-red-500/20 transition-all font-medium"
               >
                 {t('action.dismiss')}
               </button>

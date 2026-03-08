@@ -77,20 +77,20 @@ export function CelebrationState({
       <div className="flex justify-center gap-8 mb-6">
         <div className="text-center">
           <span className="text-3xl font-bold text-white tabular-nums">{totalCount}</span>
-          <p className="text-[10px] text-gray-500 uppercase tracking-wider mt-0.5">
+          <p className="text-[10px] text-text-muted uppercase tracking-wider mt-0.5">
             {t('firstRun.itemsAnalyzed', 'analyzed')}
           </p>
         </div>
         <div className="text-center">
           <span className="text-3xl font-bold text-white tabular-nums">{relevantCount}</span>
-          <p className="text-[10px] text-gray-500 uppercase tracking-wider mt-0.5">
+          <p className="text-[10px] text-text-muted uppercase tracking-wider mt-0.5">
             {t('firstRun.relevantToYou', 'relevant')}
           </p>
         </div>
         {depMatchCount > 0 && depMatchCount !== totalCount && (
           <div className="text-center">
             <span className="text-3xl font-bold text-white tabular-nums">{sourceBreakdown.length}</span>
-            <p className="text-[10px] text-gray-500 uppercase tracking-wider mt-0.5">
+            <p className="text-[10px] text-text-muted uppercase tracking-wider mt-0.5">
               {t('firstRun.sourcesScanned', 'sources')}
             </p>
           </div>
@@ -98,7 +98,7 @@ export function CelebrationState({
       </div>
 
       {/* Celebration message */}
-      <p className="text-sm text-gray-400 mb-6">
+      <p className="text-sm text-text-secondary mb-6">
         {getCelebrationMessage(relevantCount, totalCount)}
       </p>
 
@@ -110,10 +110,10 @@ export function CelebrationState({
               ? t('firstRun.topMatchStack', 'Matches your stack')
               : t('firstRun.topMatch')}
             {topSignal.top_score != null && (
-              <span className="ml-2 text-gray-500 normal-case">{(topSignal.top_score).toFixed(2)}</span>
+              <span className="ml-2 text-text-muted normal-case">{(topSignal.top_score).toFixed(2)}</span>
             )}
             {topSignal.source_type && (
-              <span className="ml-2 text-gray-500 normal-case">{getSourceFullName(topSignal.source_type)}</span>
+              <span className="ml-2 text-text-muted normal-case">{getSourceFullName(topSignal.source_type)}</span>
             )}
           </p>
           <p className="text-sm text-white font-medium leading-snug line-clamp-2">{topSignal.title}</p>
@@ -127,21 +127,21 @@ export function CelebrationState({
             </div>
           )}
           {matchReason && (
-            <p className="text-[10px] text-gray-400 mt-2 italic">{matchReason}</p>
+            <p className="text-[10px] text-text-secondary mt-2 italic">{matchReason}</p>
           )}
-          <p className="text-xs text-gray-500 mt-1 truncate">{topSignal.url}</p>
+          <p className="text-xs text-text-muted mt-1 truncate">{topSignal.url}</p>
         </div>
       )}
 
       {/* Stack-specific insights */}
       {stackInsights.length > 0 && (
         <div className="mb-6 space-y-2 max-w-sm mx-auto">
-          <p className="text-[10px] text-gray-500 uppercase tracking-wider mb-1 text-left">
+          <p className="text-[10px] text-text-muted uppercase tracking-wider mb-1 text-left">
             {t('firstRun.stackInsight', 'Stack Insight')}
           </p>
           {stackInsights.slice(0, 3).map((insight, i) => (
             <div key={i} className="px-4 py-2.5 bg-bg-secondary rounded-lg border border-border text-left">
-              <p className="text-xs text-gray-300 leading-relaxed">{insight}</p>
+              <p className="text-xs text-text-secondary leading-relaxed">{insight}</p>
             </div>
           ))}
         </div>
@@ -151,8 +151,8 @@ export function CelebrationState({
       {sourceBreakdown.length > 0 && (
         <div className="flex flex-wrap justify-center gap-2 mb-6">
           {sourceBreakdown.map(([src, count]) => (
-            <span key={src} className="px-2.5 py-1 text-xs bg-bg-secondary text-gray-300 rounded-lg border border-border">
-              {getSourceFullName(src)} <span className="text-gray-500">{count}</span>
+            <span key={src} className="px-2.5 py-1 text-xs bg-bg-secondary text-text-secondary rounded-lg border border-border">
+              {getSourceFullName(src)} <span className="text-text-muted">{count}</span>
             </span>
           ))}
         </div>
@@ -182,7 +182,7 @@ export function CelebrationState({
         <button
           onClick={() => onDismiss('results')}
           aria-label={t('firstRun.ariaBrowseResults', { count: totalCount })}
-          className="text-sm text-gray-500 hover:text-gray-300 transition-colors"
+          className="text-sm text-text-muted hover:text-text-secondary transition-colors"
         >
           {t('firstRun.browseResults', { count: totalCount })}
         </button>
@@ -190,7 +190,7 @@ export function CelebrationState({
 
       {/* STREETS nudge */}
       <div className="mt-8 pt-4 border-t border-border/50">
-        <p className="text-xs text-gray-500 mb-1">{t('firstRun.streetsNudge')}</p>
+        <p className="text-xs text-text-muted mb-1">{t('firstRun.streetsNudge')}</p>
         <button
           onClick={() => onDismiss('playbook')}
           aria-label={t('firstRun.ariaExploreStreets')}
