@@ -97,8 +97,8 @@ pub async fn set_monitoring_interval(minutes: u64) -> Result<serde_json::Value> 
         let manager = get_settings_manager();
         let guard = manager.lock();
         let license = &guard.get().license;
-        let is_pro = matches!(license.tier.as_str(), "pro" | "team")
-            || settings::is_trial_active(license);
+        let is_pro =
+            matches!(license.tier.as_str(), "pro" | "team") || settings::is_trial_active(license);
 
         if is_pro {
             if minutes < 5 {

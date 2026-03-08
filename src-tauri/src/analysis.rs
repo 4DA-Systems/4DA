@@ -892,8 +892,8 @@ pub(crate) async fn get_analysis_status() -> Result<AnalysisState, String> {
     // Free-tier history gate: filter out items older than 30 days
     if !crate::settings::is_pro() {
         if let Some(ref mut results) = result.results {
-            let cutoff = chrono::Utc::now()
-                - chrono::Duration::hours(crate::db::FREE_HISTORY_LIMIT_HOURS);
+            let cutoff =
+                chrono::Utc::now() - chrono::Duration::hours(crate::db::FREE_HISTORY_LIMIT_HOURS);
             if let Ok(db) = get_database() {
                 results.retain(|item| {
                     match db.get_source_item_by_id(item.id as i64) {
