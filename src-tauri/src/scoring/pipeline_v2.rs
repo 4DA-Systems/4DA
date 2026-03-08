@@ -600,7 +600,7 @@ fn apply_final_adjustments(score: f32, title: &str) -> f32 {
 // Signal classification (mirrors V1 logic)
 // ============================================================================
 
-#[allow(clippy::too_many_arguments)]
+#[allow(clippy::too_many_arguments, clippy::type_complexity)]
 fn classify_signals(
     relevant: bool,
     combined_score: f32,

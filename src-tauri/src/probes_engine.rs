@@ -394,17 +394,12 @@ pub(crate) fn audit_signal_axes(ctx: &ScoringContext, db: &crate::db::Database) 
     let result = score_item(&input, ctx, db, &opts, None);
     let bd = result.score_breakdown.as_ref();
 
-    let context_fires =
-        bd.map_or(false, |b| b.context_score >= 0.45) || ctx.cached_context_count > 0;
-    let interest_fires = bd.map_or(false, |b| {
-        b.interest_score >= 0.50 || b.keyword_score >= 0.60
-    });
+    let context_fires = bd.is_some_and(|b| b.context_score >= 0.45) || ctx.cached_context_count > 0;
+    let interest_fires = bd.is_some_and(|b| b.interest_score >= 0.50 || b.keyword_score >= 0.60);
     let ace_fires =
-        bd.map_or(false, |b| b.ace_boost >= 0.12) || !ctx.ace_ctx.active_topics.is_empty();
-    let learned_fires = bd.map_or(false, |b| {
-        b.feedback_boost > 0.05 || b.affinity_mult >= 1.15
-    });
-    let dependency_fires = bd.map_or(false, |b| b.dep_match_score >= 0.20);
+        bd.is_some_and(|b| b.ace_boost >= 0.12) || !ctx.ace_ctx.active_topics.is_empty();
+    let learned_fires = bd.is_some_and(|b| b.feedback_boost > 0.05 || b.affinity_mult >= 1.15);
+    let dependency_fires = bd.is_some_and(|b| b.dep_match_score >= 0.20);
 
     let mut axes = Vec::new();
     if context_fires {

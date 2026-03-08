@@ -30,6 +30,12 @@ pub struct InferenceState {
     shown_slots: [bool; NUM_ITEMS],
 }
 
+impl Default for InferenceState {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl InferenceState {
     /// Initialize with uniform prior.
     pub fn new() -> Self {
@@ -74,21 +80,20 @@ impl InferenceState {
             None => 1.0, // No latency data: full weight
         };
 
-        for j in 0..NUM_PERSONAS {
+        for (j, post) in self.posterior.iter_mut().enumerate().take(NUM_PERSONAS) {
             let p = likelihoods[j];
             let base_likelihood = match response {
                 TasteResponse::Interested => p,
                 TasteResponse::NotInterested => 1.0 - p,
                 TasteResponse::StrongInterest => {
                     // Squaring function: amplifies differences
-                    let sq = p * p / (p * p + (1.0 - p) * (1.0 - p));
-                    sq
+                    p * p / (p * p + (1.0 - p) * (1.0 - p))
                 }
             };
             // Apply latency modulation: raise likelihood to latency_power
             // This dampens the update for deliberate responses
             let likelihood = base_likelihood.powf(latency_power);
-            self.posterior[j] *= likelihood;
+            *post *= likelihood;
         }
 
         // Normalize

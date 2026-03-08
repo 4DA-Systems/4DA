@@ -9,7 +9,7 @@ export function AboutPanel() {
       <div className="flex flex-col items-center text-center">
         <img
           src={sunLogo}
-          alt="4DA Sun Logo"
+          alt={t('about.logoAlt')}
           className="w-28 h-28 rounded-2xl object-cover shadow-lg shadow-orange-500/20 mb-4"
         />
         <h3 className="text-xl font-semibold text-white">{t('app.title')}</h3>
@@ -25,23 +25,19 @@ export function AboutPanel() {
 
         <div className="space-y-3 text-sm text-gray-300 leading-relaxed">
           <p>
-            4DA was conceived, designed, and directed by{' '}
-            <span className="text-white font-medium">Antony Lawrence Kiddie Pasifa</span>{' '}
-            (4DA Systems) &mdash; product vision, architecture decisions, design philosophy,
-            quality standards, and every choice that defines what 4DA is.
+            {t('about.attributionCreatorBefore')}{' '}
+            <span className="text-white font-medium">{t('about.attributionCreatorName')}</span>{' '}
+            {t('about.attributionCreatorAfter')}
           </p>
 
           <p>
-            The codebase was primarily engineered through collaborative sessions with{' '}
-            <span className="text-white font-medium">Claude</span>{' '}
-            (Anthropic &mdash; Opus 4.5 and Opus 4.6 models), serving as the principal
-            implementation engine across thousands of iterative development cycles.
+            {t('about.attributionClaudeBefore')}{' '}
+            <span className="text-white font-medium">{t('about.attributionClaudeName')}</span>{' '}
+            {t('about.attributionClaudeAfter')}
           </p>
 
           <p className="text-gray-400 text-xs">
-            This human-directed, AI-implemented development model is a legitimate and
-            increasingly standard approach to software engineering. The complete git
-            history serves as a verifiable, externally auditable record of this process.
+            {t('about.attributionLegitimacy')}
           </p>
         </div>
 
@@ -150,24 +146,24 @@ export function AboutPanel() {
       {/* Version + Copyright */}
       <div className="text-center pt-2 border-t border-border/50">
         <p className="text-xs text-gray-500">
-          v{__APP_VERSION__} &middot; &copy; 2025&ndash;2026 4DA Systems
+          {t('about.copyright', { version: __APP_VERSION__ })}
         </p>
         <p className="text-[10px] text-gray-600 mt-1">
-          All rights reserved. Built with vision, engineered with Claude.
+          {t('about.tagline')}
         </p>
         <div className="flex items-center justify-center gap-3 mt-2">
           <button
             onClick={() => import('@tauri-apps/plugin-opener').then(({ openUrl }) => openUrl('https://4da.ai/privacy'))}
             className="text-[10px] text-gray-500 hover:text-gray-300 transition-colors underline underline-offset-2"
           >
-            Privacy Policy
+            {t('about.privacyPolicy')}
           </button>
           <span className="text-gray-600 text-[10px]">&middot;</span>
           <button
             onClick={() => import('@tauri-apps/plugin-opener').then(({ openUrl }) => openUrl('https://4da.ai/terms'))}
             className="text-[10px] text-gray-500 hover:text-gray-300 transition-colors underline underline-offset-2"
           >
-            Terms of Service
+            {t('about.termsOfService')}
           </button>
         </div>
       </div>

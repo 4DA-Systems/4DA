@@ -66,12 +66,12 @@ function DepthBadge({ depth }: { depth: string }) {
 // ============================================================================
 
 // Actionable suggestions per dimension when data is thin — with CTA buttons
-const DIMENSION_ACTIONS: Record<string, { label: string; buttonLabel: string; action: string }> = {
-  Infrastructure: { label: 'Detect your GPU, CPU, and LLM setup', buttonLabel: 'Scan Now', action: 'scan_infra' },
-  Stack: { label: 'Discover your tech stack from projects', buttonLabel: 'Scan Projects', action: 'scan_stack' },
-  Skills: { label: 'Build skills data with STREETS Module 1', buttonLabel: 'Open Playbook', action: 'open_playbook' },
-  Preferences: { label: 'Add interests to sharpen your feed', buttonLabel: 'Open Settings', action: 'open_settings' },
-  Context: { label: 'Point 4DA at a project folder', buttonLabel: 'Open Settings', action: 'open_settings' },
+const DIMENSION_ACTIONS: Record<string, { labelKey: string; buttonLabelKey: string; action: string }> = {
+  Infrastructure: { labelKey: 'sovereignProfile.action.infraLabel', buttonLabelKey: 'sovereignProfile.action.scanNow', action: 'scan_infra' },
+  Stack: { labelKey: 'sovereignProfile.action.stackLabel', buttonLabelKey: 'sovereignProfile.action.scanProjects', action: 'scan_stack' },
+  Skills: { labelKey: 'sovereignProfile.action.skillsLabel', buttonLabelKey: 'sovereignProfile.action.openPlaybook', action: 'open_playbook' },
+  Preferences: { labelKey: 'sovereignProfile.action.prefsLabel', buttonLabelKey: 'sovereignProfile.action.openSettings', action: 'open_settings' },
+  Context: { labelKey: 'sovereignProfile.action.contextLabel', buttonLabelKey: 'sovereignProfile.action.openSettings', action: 'open_settings' },
 };
 
 function DimensionCard({ dim, children, onAction }: { dim: DimensionCompleteness; children: React.ReactNode; onAction?: (action: string) => void }) {
@@ -94,12 +94,12 @@ function DimensionCard({ dim, children, onAction }: { dim: DimensionCompleteness
       <div className="text-xs text-text-secondary space-y-1">{children}</div>
       {actionDef && (
         <div className="mt-2 flex items-center gap-2">
-          <span className="text-[10px] text-amber-400/80">{actionDef.label}</span>
+          <span className="text-[10px] text-amber-400/80">{t(actionDef.labelKey)}</span>
           <button
             onClick={() => onAction?.(actionDef.action)}
             className="px-2 py-0.5 text-[10px] font-medium text-black bg-amber-400 hover:bg-amber-300 rounded transition-colors"
           >
-            {actionDef.buttonLabel}
+            {t(actionDef.buttonLabelKey)}
           </button>
         </div>
       )}
@@ -226,50 +226,49 @@ export const SovereignDeveloperProfile = memo(function SovereignDeveloperProfile
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
         {/* Infrastructure */}
         <DimensionCard dim={infraDim} onAction={handleDimensionAction}>
-          {profile.infrastructure.gpu_tier !== 'none' && <p>GPU: {profile.infrastructure.gpu_tier}</p>}
-          <p>LLM: {profile.infrastructure.llm_tier}</p>
+          {profile.infrastructure.gpu_tier !== 'none' && <p>{t('sovereignProfile.gpu', { tier: profile.infrastructure.gpu_tier })}</p>}
+          <p>{t('sovereignProfile.llm', { tier: profile.infrastructure.llm_tier })}</p>
           {Object.keys(profile.infrastructure.cpu).length > 0 && (
-            <p>CPU: {profile.infrastructure.cpu.model || profile.infrastructure.cpu.name || 'detected'}</p>
+            <p>{t('sovereignProfile.cpu', { model: profile.infrastructure.cpu.model || profile.infrastructure.cpu.name || t('sovereignProfile.detected') })}</p>
           )}
         </DimensionCard>
 
         {/* Stack */}
         <DimensionCard dim={stackDim} onAction={handleDimensionAction}>
           {profile.stack.primary_stack.length > 0 && (
-            <p>Primary: {profile.stack.primary_stack.slice(0, 4).join(', ')}</p>
+            <p>{t('sovereignProfile.primaryStack', { stack: profile.stack.primary_stack.slice(0, 4).join(', ') })}</p>
           )}
           {profile.stack.selected_profiles.length > 0 && (
-            <p>Profiles: {profile.stack.selected_profiles.join(', ')}</p>
+            <p>{t('sovereignProfile.profiles', { profiles: profile.stack.selected_profiles.join(', ') })}</p>
           )}
-          <p>{profile.stack.dependencies.length} dependencies tracked</p>
+          <p>{t('sovereignProfile.dependenciesTracked', { count: profile.stack.dependencies.length })}</p>
         </DimensionCard>
 
         {/* Skills */}
         <DimensionCard dim={skillsDim} onAction={handleDimensionAction}>
           {profile.skills.top_affinities.length > 0 && (
-            <p>Top: {profile.skills.top_affinities.slice(0, 3).map((a) => a.topic).join(', ')}</p>
+            <p>{t('sovereignProfile.topAffinities', { topics: profile.skills.top_affinities.slice(0, 3).map((a) => a.topic).join(', ') })}</p>
           )}
           <p>
-            STREETS: {profile.skills.playbook_progress.completed_lessons}/
-            {profile.skills.playbook_progress.total_lessons} lessons
+            {t('sovereignProfile.streetsProgress', { completed: profile.skills.playbook_progress.completed_lessons, total: profile.skills.playbook_progress.total_lessons })}
           </p>
         </DimensionCard>
 
         {/* Preferences */}
         <DimensionCard dim={prefsDim} onAction={handleDimensionAction}>
           {profile.preferences.interests.length > 0 && (
-            <p>Interests: {profile.preferences.interests.slice(0, 4).join(', ')}</p>
+            <p>{t('sovereignProfile.interests', { interests: profile.preferences.interests.slice(0, 4).join(', ') })}</p>
           )}
           {profile.preferences.active_decisions.length > 0 && (
-            <p>{profile.preferences.active_decisions.length} active decisions</p>
+            <p>{t('sovereignProfile.activeDecisions', { count: profile.preferences.active_decisions.length })}</p>
           )}
         </DimensionCard>
 
         {/* Context */}
         <DimensionCard dim={ctxDim} onAction={handleDimensionAction}>
-          <p>{profile.context.projects_monitored} projects monitored</p>
+          <p>{t('sovereignProfile.projectsMonitored', { count: profile.context.projects_monitored })}</p>
           {profile.context.active_topics.length > 0 && (
-            <p>Active: {profile.context.active_topics.slice(0, 4).join(', ')}</p>
+            <p>{t('sovereignProfile.activeTopics', { topics: profile.context.active_topics.slice(0, 4).join(', ') })}</p>
           )}
         </DimensionCard>
       </div>
@@ -441,7 +440,7 @@ function DeveloperDnaSection() {
                 {dna.source_engagement.map((src) => (
                   <div key={src.source_type} className="px-2.5 py-1.5 bg-[#1A1A1A] rounded border border-border">
                     <div className="text-[11px] font-medium text-gray-300">{getSourceFullName(src.source_type)}</div>
-                    <div className="text-[10px] text-gray-500">{src.items_seen.toLocaleString()} seen &middot; {src.items_saved} saved</div>
+                    <div className="text-[10px] text-gray-500">{t('sovereignProfile.sourceStats', { seen: src.items_seen.toLocaleString(), saved: src.items_saved })}</div>
                   </div>
                 ))}
               </div>

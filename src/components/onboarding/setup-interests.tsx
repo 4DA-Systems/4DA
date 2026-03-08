@@ -51,7 +51,7 @@ export function SetupInterests({
               {interest}
               <button
                 onClick={() => onToggleInterest(interest)}
-                aria-label={`Remove ${interest}`}
+                aria-label={t('onboarding.interests.remove', { topic: interest })}
                 className="hover:text-white text-orange-400/70"
               >
                 &times;
@@ -65,7 +65,7 @@ export function SetupInterests({
       <div className="flex gap-2">
         <input
           type="text"
-          aria-label="Add a topic of interest"
+          aria-label={t('onboarding.interests.addLabel')}
           value={newInterest}
           onChange={(e) => onNewInterestChange(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && onAddInterest()}

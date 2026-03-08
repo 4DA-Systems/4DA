@@ -1,4 +1,5 @@
 import { memo } from 'react';
+import { useTranslation } from 'react-i18next';
 
 interface TasteCardData {
   id: number;
@@ -23,6 +24,7 @@ export const TasteTestCard = memo(function TasteTestCard({
   onStrongInterest,
   isAnimating,
 }: TasteTestCardProps) {
+  const { t } = useTranslation();
   return (
     <div
       className={`bg-bg-secondary border border-border rounded-lg p-6 transition-all duration-200 ${
@@ -51,23 +53,23 @@ export const TasteTestCard = memo(function TasteTestCard({
       <div className="flex items-center gap-3">
         <button
           onClick={onInterested}
-          aria-label={`Mark "${card.title}" as interesting`}
+          aria-label={t('tasteTest.markInteresting', { title: card.title })}
           className="flex-1 bg-white text-black font-medium text-sm py-2.5 px-4 rounded-md hover:bg-gray-100 transition-colors"
         >
-          I'd read this
+          {t('tasteTest.readThis')}
         </button>
         <button
           onClick={onSkip}
-          aria-label={`Skip "${card.title}"`}
+          aria-label={t('tasteTest.skipTitle', { title: card.title })}
           className="flex-1 border border-border text-text-secondary text-sm py-2.5 px-4 rounded-md hover:bg-bg-tertiary transition-colors"
         >
-          Skip
+          {t('tasteTest.skip')}
         </button>
         <button
           onClick={onStrongInterest}
-          aria-label={`Love "${card.title}"`}
+          aria-label={t('tasteTest.loveTitle', { title: card.title })}
           className="w-10 h-10 flex items-center justify-center border border-border rounded-md hover:bg-bg-tertiary hover:border-[#D4AF37] hover:text-[#D4AF37] text-text-muted transition-colors"
-          title="Love this"
+          title={t('tasteTest.loveThis')}
         >
           ★
         </button>

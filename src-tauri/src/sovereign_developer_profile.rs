@@ -305,7 +305,7 @@ fn assemble_stack(
     let primary_stack = rank_primary_stack(conn, domain.primary_stack.clone());
     let mut adjacent_tech: Vec<String> = domain.adjacent_tech.iter().cloned().collect();
     adjacent_tech.sort();
-    let mut dependencies: Vec<String> = domain.dependency_names.iter().cloned().take(30).collect();
+    let mut dependencies: Vec<String> = domain.dependency_names.iter().take(30).cloned().collect();
     dependencies.sort();
 
     // Detected tech with confidence

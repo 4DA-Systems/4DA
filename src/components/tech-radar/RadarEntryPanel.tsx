@@ -33,22 +33,22 @@ export interface RadarEntryPanelProps {
 // ============================================================================
 
 const SCORE_WEIGHTS = [
-  { label: 'Stack',      key: 'stack',      weight: 0.4, color: '#D4AF37' },
-  { label: 'Engagement', key: 'engagement', weight: 0.3, color: '#22C55E' },
-  { label: 'Trend',      key: 'trend',      weight: 0.2, color: '#3B82F6' },
-  { label: 'Decision',   key: 'decision',   weight: 0.1, color: '#A855F7' },
+  { labelKey: 'techRadar.weightStack',      key: 'stack',      weight: 0.4, color: '#D4AF37' },
+  { labelKey: 'techRadar.weightEngagement', key: 'engagement', weight: 0.3, color: '#22C55E' },
+  { labelKey: 'techRadar.weightTrend',      key: 'trend',      weight: 0.2, color: '#3B82F6' },
+  { labelKey: 'techRadar.weightDecision',   key: 'decision',   weight: 0.1, color: '#A855F7' },
 ];
 
 // ============================================================================
 // Helpers
 // ============================================================================
 
-function movementIcon(movement: RadarEntry['movement']): { icon: string; color: string; label: string } {
+function movementIcon(movement: RadarEntry['movement']): { icon: string; color: string; labelKey: string } {
   switch (movement) {
-    case 'up':     return { icon: '\u25B2', color: '#22C55E', label: 'Moving In' };
-    case 'down':   return { icon: '\u25BC', color: '#EF4444', label: 'Moving Out' };
-    case 'new':    return { icon: '\u25C6', color: '#D4AF37', label: 'New Entry' };
-    case 'stable': return { icon: '\u25CF', color: '#666666', label: 'Stable' };
+    case 'up':     return { icon: '\u25B2', color: '#22C55E', labelKey: 'techRadar.movementIn' };
+    case 'down':   return { icon: '\u25BC', color: '#EF4444', labelKey: 'techRadar.movementOut' };
+    case 'new':    return { icon: '\u25C6', color: '#D4AF37', labelKey: 'techRadar.movementNew' };
+    case 'stable': return { icon: '\u25CF', color: '#666666', labelKey: 'techRadar.movementStable' };
   }
 }
 
@@ -112,7 +112,7 @@ export const RadarEntryPanel = memo(function RadarEntryPanel({ entry, onClose }:
         <button
           onClick={onClose}
           className="p-1 text-text-muted hover:text-white transition-colors"
-          aria-label="Close panel"
+          aria-label={t('techRadar.closePanel')}
         >
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
             <path d="M4 4L12 12M12 4L4 12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
@@ -123,9 +123,9 @@ export const RadarEntryPanel = memo(function RadarEntryPanel({ entry, onClose }:
       {/* Movement */}
       <div className="px-4 py-3 border-b border-border flex items-center gap-2">
         <span style={{ color: mv.color }} className="text-sm">{mv.icon}</span>
-        <span className="text-xs text-text-secondary">{mv.label}</span>
+        <span className="text-xs text-text-secondary">{t(mv.labelKey)}</span>
         <span className="ml-auto text-xs font-mono text-text-muted">
-          Score: {entry.score.toFixed(2)}
+          {t('techRadar.score', { score: entry.score.toFixed(2) })}
         </span>
       </div>
 
@@ -133,9 +133,9 @@ export const RadarEntryPanel = memo(function RadarEntryPanel({ entry, onClose }:
       <div className="px-4 py-3 border-b border-border">
         <h3 className="text-[11px] text-text-muted uppercase tracking-wide mb-2">{t('techRadar.scoreBreakdown')}</h3>
         <div className="space-y-2">
-          {SCORE_WEIGHTS.map(({ label, weight, color }) => (
-            <div key={label} className="flex items-center gap-2">
-              <span className="text-[10px] text-text-secondary w-16 flex-shrink-0">{label}</span>
+          {SCORE_WEIGHTS.map(({ labelKey, key: wKey, weight, color }) => (
+            <div key={wKey} className="flex items-center gap-2">
+              <span className="text-[10px] text-text-secondary w-16 flex-shrink-0">{t(labelKey)}</span>
               <div className="flex-1 h-1.5 bg-bg-tertiary rounded-full overflow-hidden">
                 <div
                   className="h-full rounded-full transition-all duration-500"
@@ -178,7 +178,7 @@ export const RadarEntryPanel = memo(function RadarEntryPanel({ entry, onClose }:
           ) : detail?.decision ? (
             <div className="space-y-1">
               <div className="text-xs text-[#D4AF37] font-medium">
-                Decision #{detail.decision.id}
+                {t('techRadar.decisionRef', { id: detail.decision.id })}
               </div>
               <div className="text-xs text-text-secondary">{detail.decision.decision}</div>
               {detail.decision.rationale && (
@@ -186,7 +186,7 @@ export const RadarEntryPanel = memo(function RadarEntryPanel({ entry, onClose }:
               )}
             </div>
           ) : (
-            <div className="text-xs text-[#D4AF37]">Decision #{entry.decision_ref}</div>
+            <div className="text-xs text-[#D4AF37]">{t('techRadar.decisionRef', { id: entry.decision_ref })}</div>
           )}
         </div>
       )}

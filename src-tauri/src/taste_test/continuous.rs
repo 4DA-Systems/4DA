@@ -184,11 +184,11 @@ pub fn update_posterior(
     let dampen = 0.15_f64;
 
     for topic in topics {
-        for j in 0..NUM_PERSONAS {
+        for (j, post) in posterior.iter_mut().enumerate().take(NUM_PERSONAS) {
             let p = topic_persona_likelihood(topic, j);
             let likelihood = if signal_strength > 0.0 { p } else { 1.0 - p };
             // Raise to dampened power
-            posterior[j] *= likelihood.powf(dampen);
+            *post *= likelihood.powf(dampen);
         }
     }
 

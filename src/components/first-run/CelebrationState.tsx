@@ -29,19 +29,19 @@ interface CelebrationStateProps {
 }
 
 /** Build a human-readable insight explaining why the top signal matched */
-function buildMatchReason(signal: TopSignal): string | null {
+function buildMatchReason(signal: TopSignal, t: (key: string, opts?: Record<string, unknown>) => string): string | null {
   const parts: string[] = [];
   const sb = signal.score_breakdown;
   if (!sb) return null;
 
   if (sb.matched_deps && sb.matched_deps.length > 0) {
-    parts.push(`Matches your dependencies: ${sb.matched_deps.slice(0, 4).join(', ')}`);
+    parts.push(t('firstRun.matchesDependencies', { deps: sb.matched_deps.slice(0, 4).join(', ') }));
   }
   if (sb.stack_boost && sb.stack_boost > 0) {
-    parts.push('Relevant to your stack profile');
+    parts.push(t('firstRun.relevantToStack'));
   }
   if (sb.skill_gap_boost && sb.skill_gap_boost > 0) {
-    parts.push('Covers a technology gap in your profile');
+    parts.push(t('firstRun.coversGap'));
   }
 
   return parts.length > 0 ? parts.join(' \u00b7 ') : null;
@@ -57,7 +57,7 @@ export function CelebrationState({
   onDismiss,
 }: CelebrationStateProps) {
   const { t } = useTranslation();
-  const matchReason = topSignal ? buildMatchReason(topSignal) : null;
+  const matchReason = topSignal ? buildMatchReason(topSignal, t) : null;
 
   // Count items matching active dependencies
   const depMatchCount = sourceBreakdown.reduce((sum, [, count]) => sum + count, 0);
@@ -174,14 +174,14 @@ export function CelebrationState({
       <div className="flex flex-col items-center gap-3">
         <button
           onClick={() => onDismiss('briefing')}
-          aria-label="View your intelligence briefing"
+          aria-label={t('firstRun.ariaSeeBriefing')}
           className="px-8 py-3 bg-orange-500 text-white font-medium rounded-lg hover:bg-orange-600 hover:scale-105 active:scale-95 transition-all"
         >
           {t('firstRun.seeBriefing')}
         </button>
         <button
           onClick={() => onDismiss('results')}
-          aria-label={`Browse ${totalCount} analyzed results`}
+          aria-label={t('firstRun.ariaBrowseResults', { count: totalCount })}
           className="text-sm text-gray-500 hover:text-gray-300 transition-colors"
         >
           {t('firstRun.browseResults', { count: totalCount })}
@@ -193,7 +193,7 @@ export function CelebrationState({
         <p className="text-xs text-gray-500 mb-1">{t('firstRun.streetsNudge')}</p>
         <button
           onClick={() => onDismiss('playbook')}
-          aria-label="Explore the STREETS developer playbook"
+          aria-label={t('firstRun.ariaExploreStreets')}
           className="text-xs font-medium hover:underline transition-colors"
           style={{ color: '#D4AF37' }}
         >

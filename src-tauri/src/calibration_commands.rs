@@ -229,7 +229,7 @@ pub async fn run_calibration() -> Result<CalibrationResult, String> {
     let db = crate::get_database()?;
 
     // Build the user's actual scoring context
-    let ctx = crate::scoring::build_scoring_context(&db)
+    let ctx = crate::scoring::build_scoring_context(db)
         .await
         .map_err(|e| format!("Context build failed: {e}"))?;
 
@@ -245,11 +245,11 @@ pub async fn run_calibration() -> Result<CalibrationResult, String> {
     let context_score = calibration_probes::compute_context_score(&ctx);
 
     // Dimension 3: Signal Coverage (audit which axes fire)
-    let audit = calibration_probes::audit_signal_axes(&ctx, &db);
+    let audit = calibration_probes::audit_signal_axes(&ctx, db);
     let signal_score = calibration_probes::compute_signal_score(&audit);
 
     // Dimension 4: Discrimination (run domain-aware probes)
-    let probe_results = calibration_probes::run_probe_calibration(&ctx, &db);
+    let probe_results = calibration_probes::run_probe_calibration(&ctx, db);
     let disc_score = calibration_probes::compute_discrimination_score(&probe_results);
 
     // Compute grade from 4 dimensions
@@ -390,7 +390,7 @@ pub(crate) async fn check_rig_requirements() -> RigRequirements {
     let ollama_check = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(3))
         .build()
-        .and_then(|c| Ok(c.get(format!("{}/api/tags", ollama_url))));
+        .map(|c| c.get(format!("{}/api/tags", ollama_url)));
 
     let (ollama_running, embedding_model, models_list) = match ollama_check {
         Ok(req) => match req.send().await {

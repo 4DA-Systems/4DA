@@ -70,7 +70,7 @@ export function CalibrationView() {
             baseUrl: null,
           });
         } catch (e) {
-          setError(`Model pull failed: ${e instanceof Error ? e.message : String(e)}`);
+          setError(t('calibration.modelPullFailed', { error: e instanceof Error ? e.message : String(e) }));
           setActionInProgress(null);
           setPullProgress(null);
         }
@@ -95,7 +95,7 @@ export function CalibrationView() {
             setShowSettings(true);
           }
         } catch (e) {
-          setError(`Stack detection failed: ${e instanceof Error ? e.message : String(e)}`);
+          setError(t('calibration.stackDetectionFailed', { error: e instanceof Error ? e.message : String(e) }));
         } finally {
           setActionInProgress(null);
         }
@@ -194,7 +194,7 @@ export function CalibrationView() {
             <div
               className="flex-[0_0_120px] bg-bg-secondary border border-border rounded-lg p-5 text-center"
               role="status"
-              aria-label={`Grade ${result.grade}, score ${result.grade_score} out of 100`}
+              aria-label={t('calibration.ariaGradeScore', { grade: result.grade, score: result.grade_score })}
             >
               <div className="text-5xl font-bold font-mono" style={{ color: gradeColor(result.grade) }}>
                 {result.grade}

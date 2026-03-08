@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { cmd } from '../../lib/commands';
@@ -18,6 +19,7 @@ interface PullProgress {
 }
 
 export function CalibrationStep({ isAnimating, onComplete, onBack }: CalibrationStepProps) {
+  const { t } = useTranslation();
   const [result, setResult] = useState<CalibrationResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -68,7 +70,7 @@ export function CalibrationStep({ isAnimating, onComplete, onBack }: Calibration
             baseUrl: null,
           });
         } catch (e) {
-          setError(`Model pull failed: ${e instanceof Error ? e.message : String(e)}`);
+          setError(t('calibration.onboarding.pullFailed', { error: e instanceof Error ? e.message : String(e) }));
           setActionInProgress(null);
           setPullProgress(null);
         }
@@ -101,9 +103,9 @@ export function CalibrationStep({ isAnimating, onComplete, onBack }: Calibration
 
   return (
     <div className={`transition-all duration-300 ${isAnimating ? 'opacity-0 translate-y-4' : 'opacity-100 translate-y-0'}`}>
-      <h1 className="text-2xl font-semibold text-white mb-2 text-center">Calibrate Your Rig</h1>
+      <h1 className="text-2xl font-semibold text-white mb-2 text-center">{t('calibration.title')}</h1>
       <p className="text-sm text-gray-400 mb-6 text-center">
-        Measuring your scoring engine across 4 dimensions
+        {t('calibration.onboarding.subtitle')}
       </p>
 
       {error && (
@@ -115,9 +117,9 @@ export function CalibrationStep({ isAnimating, onComplete, onBack }: Calibration
       {pullProgress && (
         <div style={{ marginBottom: 12 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 2 }}>
-            <span style={{ fontSize: 11, color: '#A0A0A0' }}>Pulling {pullProgress.model}...</span>
+            <span style={{ fontSize: 11, color: '#A0A0A0' }}>{t('calibration.pulling', { model: pullProgress.model })}</span>
             <span style={{ fontSize: 11, color: '#D4AF37', fontFamily: 'JetBrains Mono, monospace' }}>
-              {pullProgress.done ? 'Done' : `${pullProgress.percent}%`}
+              {pullProgress.done ? t('calibration.pullDone') : `${pullProgress.percent}%`}
             </span>
           </div>
           <div style={{ height: 4, background: '#2A2A2A', borderRadius: 2, overflow: 'hidden' }}>
@@ -129,8 +131,8 @@ export function CalibrationStep({ isAnimating, onComplete, onBack }: Calibration
       {loading && !result && (
         <div style={{ textAlign: 'center', padding: '40px 0' }}>
           <div style={{ width: 24, height: 24, border: '2px solid #2A2A2A', borderTopColor: '#D4AF37', borderRadius: '50%', animation: 'spin 0.8s linear infinite', margin: '0 auto 12px' }} />
-          <div style={{ color: '#A0A0A0', fontSize: 13 }}>Analyzing your rig...</div>
-          <div style={{ color: '#666666', fontSize: 11, marginTop: 4 }}>Checking infrastructure, context, and signal coverage</div>
+          <div style={{ color: '#A0A0A0', fontSize: 13 }}>{t('calibration.onboarding.analyzing')}</div>
+          <div style={{ color: '#666666', fontSize: 11, marginTop: 4 }}>{t('calibration.onboarding.analyzingDetail')}</div>
         </div>
       )}
 
@@ -146,10 +148,10 @@ export function CalibrationStep({ isAnimating, onComplete, onBack }: Calibration
             </div>
             <div style={{ flex: 1, background: '#141414', border: '1px solid #2A2A2A', borderRadius: 8, padding: 12 }}>
               {[
-                { label: 'Infrastructure', score: result.infrastructure_score },
-                { label: 'Context', score: result.context_richness_score },
-                { label: 'Signal Coverage', score: result.signal_coverage_score },
-                { label: 'Discrimination', score: result.discrimination_score },
+                { label: t('calibration.dimension.infrastructure'), score: result.infrastructure_score },
+                { label: t('calibration.dimension.context'), score: result.context_richness_score },
+                { label: t('calibration.dimension.signalCoverage'), score: result.signal_coverage_score },
+                { label: t('calibration.dimension.discrimination'), score: result.discrimination_score },
               ].map(d => {
                 const pct = Math.round((d.score / 25) * 100);
                 const c = pct >= 80 ? '#22C55E' : pct >= 50 ? '#D4AF37' : pct >= 25 ? '#F59E0B' : '#EF4444';
@@ -194,7 +196,7 @@ export function CalibrationStep({ isAnimating, onComplete, onBack }: Calibration
                         border: 'none', borderRadius: 4, fontSize: 10, fontWeight: 600, cursor: actionInProgress ? 'not-allowed' : 'pointer',
                       }}
                     >
-                      {actionInProgress === rec.action_type ? 'Working...' : 'Fix'}
+                      {actionInProgress === rec.action_type ? t('calibration.action.working') : t('calibration.action.fix')}
                     </button>
                   )}
                 </div>
@@ -207,21 +209,21 @@ export function CalibrationStep({ isAnimating, onComplete, onBack }: Calibration
       {/* No-result explanation */}
       {!loading && !result && !error && (
         <div style={{ textAlign: 'center', padding: '24px 0', color: '#A0A0A0', fontSize: 13 }}>
-          <p>Calibration requires content to analyze.</p>
-          <p style={{ fontSize: 11, color: '#666666', marginTop: 4 }}>Run an analysis first, then come back to calibrate.</p>
+          <p>{t('calibration.onboarding.noContent')}</p>
+          <p style={{ fontSize: 11, color: '#666666', marginTop: 4 }}>{t('calibration.onboarding.noContentHint')}</p>
         </div>
       )}
 
       {/* Navigation */}
       <div className="flex justify-between mt-6">
         <button onClick={onBack} className="px-4 py-2 text-sm text-gray-400 hover:text-white transition-colors">
-          Back
+          {t('onboarding.nav.back')}
         </button>
         <button
           onClick={onComplete}
           className="px-6 py-2 bg-orange-500 hover:bg-orange-600 text-white text-sm font-medium rounded-lg transition-colors"
         >
-          {result ? 'Finish Setup' : 'Skip for now'}
+          {result ? t('onboarding.interests.finishSetup') : t('onboarding.nav.skipForNow')}
         </button>
       </div>
     </div>

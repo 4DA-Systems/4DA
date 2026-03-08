@@ -106,7 +106,7 @@ export function QuickSetupStep({ isAnimating, onComplete, onBack }: QuickSetupSt
         <div role="alert" className="mb-4 p-3 bg-red-900/30 border border-red-500/30 rounded-lg text-sm text-red-200 flex items-start gap-2">
           <span className="text-red-400 flex-shrink-0" aria-hidden="true">&#x26a0;</span>
           <span className="flex-1">{error}</span>
-          <button onClick={() => setError(null)} aria-label="Dismiss error" className="text-red-400 hover:text-red-300">&times;</button>
+          <button onClick={() => setError(null)} aria-label={t('action.dismiss')} className="text-red-400 hover:text-red-300">&times;</button>
         </div>
       )}
 

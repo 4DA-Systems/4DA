@@ -1,4 +1,5 @@
 import { useEffect, useState, memo } from 'react';
+import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
 import { ProGate } from './ProGate';
 
@@ -23,11 +24,11 @@ const REC_COLORS: Record<string, string> = {
   HumanOnly: 'text-red-400',
 };
 
-const REC_LABELS: Record<string, string> = {
-  FullyDelegate: 'Safe to Delegate',
-  DelegateWithReview: 'Delegate with Review',
-  CollaborateRealtime: 'Collaborate',
-  HumanOnly: 'Human Only',
+const REC_LABEL_KEYS: Record<string, string> = {
+  FullyDelegate: 'delegation.recFullyDelegate',
+  DelegateWithReview: 'delegation.recDelegateWithReview',
+  CollaborateRealtime: 'delegation.recCollaborate',
+  HumanOnly: 'delegation.recHumanOnly',
 };
 
 const REC_ORDER = ['HumanOnly', 'CollaborateRealtime', 'DelegateWithReview', 'FullyDelegate'];
@@ -45,6 +46,7 @@ function FactorBar({ label, value }: { label: string; value: number }) {
 }
 
 export const DelegationAdvisor = memo(function DelegationAdvisor() {
+  const { t } = useTranslation();
   const [scores, setScores] = useState<DelegationScore[]>([]);
   const [loading, setLoading] = useState(true);
   const [expandedTech, setExpandedTech] = useState<string | null>(null);
@@ -70,8 +72,8 @@ export const DelegationAdvisor = memo(function DelegationAdvisor() {
   if (scores.length === 0) {
     return (
       <div className="bg-bg-secondary border border-border rounded-lg p-4">
-        <h3 className="text-sm font-medium text-white mb-1">Delegation Advisor</h3>
-        <p className="text-xs text-text-muted">No technologies assessed yet. Add projects and dependencies to see delegation recommendations.</p>
+        <h3 className="text-sm font-medium text-white mb-1">{t('delegation.advisorTitle')}</h3>
+        <p className="text-xs text-text-muted">{t('delegation.noTechAssessed')}</p>
       </div>
     );
   }
@@ -85,12 +87,12 @@ export const DelegationAdvisor = memo(function DelegationAdvisor() {
   return (
     <ProGate feature="delegation_advisor">
       <div className="bg-bg-secondary border border-border rounded-lg p-4 space-y-3">
-        <h3 className="text-sm font-medium text-white">Delegation Advisor</h3>
-        <p className="text-[10px] text-text-muted">What is safe to delegate to AI vs. what needs your review</p>
+        <h3 className="text-sm font-medium text-white">{t('delegation.advisorTitle')}</h3>
+        <p className="text-[10px] text-text-muted">{t('delegation.advisorSubtitle')}</p>
         {REC_ORDER.filter(r => grouped[r]).map(rec => (
           <div key={rec}>
             <h4 className={`text-[11px] font-medium mb-1.5 ${REC_COLORS[rec] || 'text-white'}`}>
-              {REC_LABELS[rec] || rec} ({grouped[rec].length})
+              {REC_LABEL_KEYS[rec] ? t(REC_LABEL_KEYS[rec]) : rec} ({grouped[rec].length})
             </h4>
             <div className="space-y-1">
               {grouped[rec].map(s => {
@@ -103,11 +105,11 @@ export const DelegationAdvisor = memo(function DelegationAdvisor() {
                     </button>
                     {isExpanded && (
                       <div className="mt-2 space-y-1.5">
-                        <FactorBar label="Complexity" value={s.factors.complexity} />
-                        <FactorBar label="Risk" value={s.factors.risk} />
-                        <FactorBar label="Maturity" value={s.factors.maturity} />
-                        <FactorBar label="Reversibility" value={s.factors.reversibility} />
-                        <FactorBar label="Security" value={s.factors.security_sensitivity} />
+                        <FactorBar label={t('delegation.factorComplexity')} value={s.factors.complexity} />
+                        <FactorBar label={t('delegation.factorRisk')} value={s.factors.risk} />
+                        <FactorBar label={t('delegation.factorMaturity')} value={s.factors.maturity} />
+                        <FactorBar label={t('delegation.factorReversibility')} value={s.factors.reversibility} />
+                        <FactorBar label={t('delegation.factorSecurity')} value={s.factors.security_sensitivity} />
                         {s.caveats.length > 0 && (
                           <div className="mt-1 pt-1 border-t border-border">
                             {s.caveats.map((c, i) => (

@@ -33,6 +33,7 @@ impl Default for CommunityIntelligenceConfig {
 }
 
 #[derive(Serialize, Clone, Debug)]
+#[allow(dead_code)]
 pub struct CommunityContribution {
     pub anonymous_id: String,
     pub app_version: String,
@@ -41,6 +42,7 @@ pub struct CommunityContribution {
 }
 
 #[derive(Serialize, Clone, Debug)]
+#[allow(dead_code)]
 pub struct ScoringWeightContribution {
     pub accuracy_aggregate: f64,
     pub signal_effectiveness: std::collections::HashMap<String, f64>,
@@ -49,6 +51,7 @@ pub struct ScoringWeightContribution {
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
+#[allow(dead_code)]
 pub struct CommunityWeights {
     pub version: u32,
     pub generated_at: String,
@@ -57,6 +60,7 @@ pub struct CommunityWeights {
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
+#[allow(dead_code)]
 pub struct ProfileAdjustment {
     pub keyword_boost_multiplier: f64,
     pub signal_type_weights: std::collections::HashMap<String, f64>,
@@ -136,9 +140,7 @@ pub async fn set_community_intelligence_enabled(enabled: bool) -> Result<()> {
         config.anonymous_id = Some(generate_anonymous_id());
     }
 
-    guard
-        .save()
-        .map_err(|e| crate::error::FourDaError::Config(e))?;
+    guard.save().map_err(crate::error::FourDaError::Config)?;
     Ok(())
 }
 
@@ -160,8 +162,6 @@ pub async fn set_community_frequency(frequency: String) -> Result<()> {
         .get_or_insert_with(CommunityIntelligenceConfig::default);
     config.frequency = frequency;
 
-    guard
-        .save()
-        .map_err(|e| crate::error::FourDaError::Config(e))?;
+    guard.save().map_err(crate::error::FourDaError::Config)?;
     Ok(())
 }

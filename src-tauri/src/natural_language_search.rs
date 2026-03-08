@@ -502,7 +502,7 @@ async fn execute_vector_search(
             let content: String = row.get(4)?;
             let created_at: Option<String> = row.get(5)?;
             let distance: f64 = row.get(6)?;
-            let relevance = (1.0 - distance).max(0.0).min(1.0);
+            let relevance = (1.0 - distance).clamp(0.0, 1.0);
 
             let preview = if content.len() > 200 {
                 format!("{}...", &content[..200])
