@@ -40,6 +40,15 @@ pub const PRO_FEATURES: &[&str] = &[
     "get_decision_signals",
 ];
 
+/// Check if the current user has Pro (or Team) tier access.
+/// Returns true for "pro", "team", or an active trial.
+pub fn is_pro() -> bool {
+    let manager = crate::get_settings_manager();
+    let guard = manager.lock();
+    let license = &guard.get().license;
+    matches!(license.tier.as_str(), "pro" | "team") || is_trial_active(license)
+}
+
 /// Check if a feature is available for the given tier, including trial period
 pub fn is_pro_feature_available(feature: &str, license: &LicenseConfig) -> bool {
     match license.tier.as_str() {

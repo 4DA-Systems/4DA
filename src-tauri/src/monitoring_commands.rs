@@ -91,6 +91,27 @@ pub async fn set_monitoring_enabled(enabled: bool) -> Result<serde_json::Value> 
 #[tauri::command]
 pub async fn set_monitoring_interval(minutes: u64) -> Result<serde_json::Value> {
     let minutes = minutes.clamp(1, 1440);
+
+    // Tier-based minimum interval enforcement
+    {
+        let manager = get_settings_manager();
+        let guard = manager.lock();
+        let license = &guard.get().license;
+        let is_pro = matches!(license.tier.as_str(), "pro" | "team")
+            || settings::is_trial_active(license);
+
+        if is_pro {
+            if minutes < 5 {
+                return Err("Minimum monitoring interval is 5 minutes.".into());
+            }
+        } else if minutes < 30 {
+            return Err(
+                "Free tier minimum monitoring interval is 30 minutes. Upgrade to Pro for intervals as low as 5 minutes."
+                    .into(),
+            );
+        }
+    }
+
     let state = get_monitoring_state();
     let secs = minutes * 60;
     state.set_interval(secs);
