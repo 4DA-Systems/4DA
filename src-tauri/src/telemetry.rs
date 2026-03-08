@@ -311,8 +311,22 @@ mod tests {
     fn test_record_and_count_events() {
         let conn = setup_test_db();
         record_event(&conn, "app_launch", None, None, Some("s1")).unwrap();
-        record_event(&conn, "view_open:results", Some("results"), None, Some("s1")).unwrap();
-        record_event(&conn, "search_query", None, Some(r#"{"q":"rust"}"#), Some("s1")).unwrap();
+        record_event(
+            &conn,
+            "view_open:results",
+            Some("results"),
+            None,
+            Some("s1"),
+        )
+        .unwrap();
+        record_event(
+            &conn,
+            "search_query",
+            None,
+            Some(r#"{"q":"rust"}"#),
+            Some("s1"),
+        )
+        .unwrap();
 
         let report = get_usage_report(&conn, 1).unwrap();
         assert_eq!(report.total_events, 3);
