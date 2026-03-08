@@ -167,17 +167,18 @@ describe('PlaybookView', () => {
     expect(mockLoadContent).toHaveBeenCalledWith('S');
   });
 
-  it('shows loading spinner when playbookLoading is true', () => {
+  it('shows loading skeleton when playbookLoading is true', () => {
     setStore({ playbookLoading: true });
     const { container } = render(<PlaybookView />);
-    const spinner = container.querySelector('.animate-spin');
-    expect(spinner).toBeInTheDocument();
+    const pulseElements = container.querySelectorAll('.animate-pulse');
+    expect(pulseElements.length).toBeGreaterThan(0);
   });
 
-  it('shows error message when playbookError is set', () => {
+  it('shows error with retry button when playbookError is set', () => {
     setStore({ playbookError: 'Failed to load modules' });
     render(<PlaybookView />);
-    expect(screen.getByText('Failed to load modules')).toBeInTheDocument();
+    expect(screen.getByText('error.generic')).toBeInTheDocument();
+    expect(screen.getByText('action.retry')).toBeInTheDocument();
   });
 
   it('renders module content when playbookContent is available', () => {

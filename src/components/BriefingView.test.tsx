@@ -248,13 +248,14 @@ describe('BriefingView', () => {
   });
 
   describe('error state', () => {
-    it('renders error message when briefing has error', () => {
+    it('renders error with retry button when briefing has error', () => {
       setMockState({
         aiBriefing: { content: '## Test\nContent', loading: false, error: 'API key invalid', model: null, lastGenerated: null },
         appState: { relevanceResults: [] },
       });
       render(<BriefingView />);
-      expect(screen.getByText('API key invalid')).toBeInTheDocument();
+      expect(screen.getByText('error.generic')).toBeInTheDocument();
+      expect(screen.getByText('action.retry')).toBeInTheDocument();
     });
   });
 });

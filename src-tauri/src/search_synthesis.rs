@@ -19,9 +19,34 @@ use crate::natural_language_search::extract_keywords;
 /// Lightweight input gathered from the DB for synthesis context.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct SynthesisItem {
+    id: i64,
     title: String,
     preview: String,
     source_type: String,
+    url: Option<String>,
+}
+
+/// Synthesis response with citation sources for trust/verification.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SynthesisResponse {
+    /// The synthesized text with [N] citation markers
+    pub text: String,
+    /// Sources referenced in the synthesis (1-indexed)
+    pub sources: Vec<SynthesisSource>,
+    /// How many sources the LLM actually cited
+    pub grounding_count: usize,
+    /// Total sources provided to the LLM
+    pub total_sources: usize,
+}
+
+/// A source that can be cited in synthesis text.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SynthesisSource {
+    /// 1-based index matching [N] markers in synthesis text
+    pub index: usize,
+    pub title: String,
+    pub url: Option<String>,
+    pub source_type: String,
 }
 
 /// Active decision relevant to the query.
@@ -64,7 +89,7 @@ fn gather_result_context(
 
     let where_clause = conditions.join(" OR ");
     let sql = format!(
-        "SELECT s.title, s.content, s.source_type
+        "SELECT s.id, s.title, s.content, s.source_type, s.url
          FROM source_items s
          WHERE ({where_clause})
          ORDER BY s.last_seen DESC
@@ -80,18 +105,22 @@ fn gather_result_context(
     };
 
     let rows = match stmt.query_map([], |row| {
-        let title: String = row.get(0)?;
-        let content: String = row.get(1)?;
-        let source_type: String = row.get(2)?;
+        let id: i64 = row.get(0)?;
+        let title: String = row.get(1)?;
+        let content: String = row.get(2)?;
+        let source_type: String = row.get(3)?;
+        let url: Option<String> = row.get(4)?;
         let preview = if content.len() > 300 {
             format!("{}...", &content[..300])
         } else {
             content
         };
         Ok(SynthesisItem {
+            id,
             title,
             preview,
             source_type,
+            url,
         })
     }) {
         Ok(r) => r,
@@ -217,6 +246,8 @@ fn build_system_prompt(
          Rules:\n\
          - 2-4 sentences max. Dense, not verbose.\n\
          - Reference specific technologies, versions, and dates from the results.\n\
+         - Reference sources by number: [1], [2], etc. Every factual claim must cite its source.\n\
+         - Example: \"React 19 brings compiler optimizations [1] affecting server hydration [3].\"\n\
          - If something affects their stack, say which technology and why.\n\
          - If a result contradicts or supports one of their decisions, flag it.\n\
          - If they have a knowledge gap in a queried area, mention it.\n\
@@ -266,6 +297,13 @@ fn build_user_message(query: &str, items: &[SynthesisItem]) -> String {
     parts.join("\n\n")
 }
 
+/// Count which citation markers [1]..[max] appear in the synthesis text.
+fn count_citations(text: &str, max: usize) -> usize {
+    (1..=max)
+        .filter(|i| text.contains(&format!("[{i}]")))
+        .count()
+}
+
 // ============================================================================
 // Tauri Command
 // ============================================================================
@@ -274,7 +312,7 @@ fn build_user_message(query: &str, items: &[SynthesisItem]) -> String {
 pub async fn synthesize_search(
     app: tauri::AppHandle,
     query_text: String,
-) -> Result<String, String> {
+) -> Result<SynthesisResponse, String> {
     crate::settings::require_pro_feature("synthesize_search")?;
 
     let query_text = query_text.trim().to_string();
@@ -340,18 +378,38 @@ pub async fn synthesize_search(
 
     let synthesis = response.content.trim().to_string();
 
+    let sources: Vec<SynthesisSource> = items
+        .iter()
+        .enumerate()
+        .map(|(i, item)| SynthesisSource {
+            index: i + 1,
+            title: item.title.clone(),
+            url: item.url.clone(),
+            source_type: item.source_type.clone(),
+        })
+        .collect();
+
+    let total_sources = sources.len();
+    let grounding_count = count_citations(&synthesis, total_sources);
+
     debug!(
         target: "4da::synthesis",
         input_tokens = response.input_tokens,
         output_tokens = response.output_tokens,
         len = synthesis.len(),
+        grounding = %format!("{}/{}", grounding_count, total_sources),
         "Synthesis complete"
     );
 
     // Emit completion event
     let _ = app.emit("search-synthesis-complete", &synthesis);
 
-    Ok(synthesis)
+    Ok(SynthesisResponse {
+        text: synthesis,
+        sources,
+        grounding_count,
+        total_sources,
+    })
 }
 
 // ============================================================================

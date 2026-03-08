@@ -23,6 +23,7 @@ const mockUpdateDecision = vi.fn(() => Promise.resolve());
 const defaultStoreState: Record<string, unknown> = {
   decisions: [],
   decisionsLoading: false,
+  decisionsError: null,
   loadDecisions: mockLoadDecisions,
   recordDecision: mockRecordDecision,
   updateDecision: mockUpdateDecision,
@@ -85,10 +86,18 @@ describe('DecisionMemory', () => {
     expect(screen.getByText('decisions.noDecisionsHint')).toBeInTheDocument();
   });
 
-  it('shows loading text when decisionsLoading is true', () => {
+  it('shows loading skeleton when decisionsLoading is true', () => {
     currentStore = { ...defaultStoreState, decisionsLoading: true };
+    const { container } = render(<DecisionMemory />);
+    const pulseElements = container.querySelectorAll('.animate-pulse');
+    expect(pulseElements.length).toBeGreaterThan(0);
+  });
+
+  it('shows error with retry button when decisionsError is set', () => {
+    currentStore = { ...defaultStoreState, decisionsError: 'Network error' };
     render(<DecisionMemory />);
-    expect(screen.getByText('decisions.loading')).toBeInTheDocument();
+    expect(screen.getByText('error.generic')).toBeInTheDocument();
+    expect(screen.getByText('action.retry')).toBeInTheDocument();
   });
 
   it('renders grouped decisions by type', () => {
