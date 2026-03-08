@@ -2,6 +2,9 @@ import type { ScoreBreakdown } from '../../../types';
 
 export interface Factor {
   key: string;
+  /** i18n key for the factor label */
+  labelKey: string;
+  /** Fallback label (English) */
   label: string;
   value: number;
   /** 'boost' = positive contribution, 'penalty' = reduced score, 'neutral' = no effect */
@@ -19,57 +22,57 @@ export function extractFactors(b: ScoreBreakdown): Factor[] {
 
   if (b.context_score > 0) {
     factors.push({
-      key: 'context', label: 'Project context', value: b.context_score,
+      key: 'context', labelKey: 'scoreDrawer.factor.context', label: 'Project context', value: b.context_score,
       effect: b.context_score > 0.3 ? 'boost' : 'neutral', format: 'score', max: 1,
     });
   }
   if (b.interest_score > 0) {
     factors.push({
-      key: 'interest', label: 'Interest match', value: b.interest_score,
+      key: 'interest', labelKey: 'scoreDrawer.factor.interest', label: 'Interest match', value: b.interest_score,
       effect: b.interest_score > 0.3 ? 'boost' : 'neutral', format: 'score', max: 1,
     });
   }
   if ((b.dep_match_score ?? 0) > 0) {
     factors.push({
-      key: 'dependency', label: 'Dependency match', value: b.dep_match_score ?? 0,
+      key: 'dependency', labelKey: 'scoreDrawer.factor.dependency', label: 'Dependency match', value: b.dep_match_score ?? 0,
       effect: 'boost', format: 'score', max: 1,
       detail: b.matched_deps?.slice(0, 3).join(', '),
     });
   }
   if (b.ace_boost > 0) {
     factors.push({
-      key: 'ace', label: 'ACE context boost', value: b.ace_boost,
+      key: 'ace', labelKey: 'scoreDrawer.factor.ace', label: 'ACE context boost', value: b.ace_boost,
       effect: 'boost', format: 'raw', max: 0.5,
     });
   }
   if ((b.intent_boost ?? 0) > 0) {
     factors.push({
-      key: 'intent', label: 'Active work match', value: b.intent_boost ?? 0,
+      key: 'intent', labelKey: 'scoreDrawer.factor.intent', label: 'Active work match', value: b.intent_boost ?? 0,
       effect: 'boost', format: 'raw', max: 0.25,
     });
   }
   if ((b.skill_gap_boost ?? 0) > 0) {
     factors.push({
-      key: 'skill_gap', label: 'Skill gap', value: b.skill_gap_boost ?? 0,
+      key: 'skill_gap', labelKey: 'scoreDrawer.factor.skillGap', label: 'Skill gap', value: b.skill_gap_boost ?? 0,
       effect: 'boost', format: 'raw', max: 0.20,
     });
   }
   if ((b.stack_boost ?? 0) > 0) {
     factors.push({
-      key: 'stack', label: 'Stack pain point', value: b.stack_boost ?? 0,
+      key: 'stack', labelKey: 'scoreDrawer.factor.stack', label: 'Stack pain point', value: b.stack_boost ?? 0,
       effect: 'boost', format: 'raw', max: 0.20,
     });
   }
   if ((b.window_boost ?? 0) > 0) {
     factors.push({
-      key: 'window', label: 'Decision window', value: b.window_boost ?? 0,
+      key: 'window', labelKey: 'scoreDrawer.factor.window', label: 'Decision window', value: b.window_boost ?? 0,
       effect: 'boost', format: 'raw', max: 0.20,
     });
   }
   if ((b.feedback_boost ?? 0) !== 0) {
     const fb = b.feedback_boost ?? 0;
     factors.push({
-      key: 'feedback', label: 'Learned preference', value: Math.abs(fb),
+      key: 'feedback', labelKey: 'scoreDrawer.factor.feedback', label: 'Learned preference', value: Math.abs(fb),
       effect: fb > 0 ? 'boost' : 'penalty', format: 'raw', max: 0.20,
     });
   }
@@ -78,51 +81,51 @@ export function extractFactors(b: ScoreBreakdown): Factor[] {
   if ((b.freshness_mult ?? 1) !== 1) {
     const f = b.freshness_mult ?? 1;
     factors.push({
-      key: 'freshness', label: 'Freshness', value: f,
+      key: 'freshness', labelKey: 'scoreDrawer.factor.freshness', label: 'Freshness', value: f,
       effect: f > 1 ? 'boost' : f < 0.95 ? 'penalty' : 'neutral', format: 'mult', max: 1.15,
     });
   }
   if ((b.content_quality_mult ?? 1) !== 1) {
     const q = b.content_quality_mult ?? 1;
     factors.push({
-      key: 'quality', label: 'Content quality', value: q,
+      key: 'quality', labelKey: 'scoreDrawer.factor.quality', label: 'Content quality', value: q,
       effect: q > 1 ? 'boost' : q < 0.9 ? 'penalty' : 'neutral', format: 'mult', max: 1.3,
     });
   }
   if ((b.novelty_mult ?? 1) !== 1) {
     const n = b.novelty_mult ?? 1;
     factors.push({
-      key: 'novelty', label: 'Novelty', value: n,
+      key: 'novelty', labelKey: 'scoreDrawer.factor.novelty', label: 'Novelty', value: n,
       effect: n > 1 ? 'boost' : n < 0.9 ? 'penalty' : 'neutral', format: 'mult', max: 1.15,
     });
   }
   if ((b.domain_relevance ?? 1) < 0.95) {
     factors.push({
-      key: 'domain', label: 'Domain relevance', value: b.domain_relevance ?? 1,
+      key: 'domain', labelKey: 'scoreDrawer.factor.domain', label: 'Domain relevance', value: b.domain_relevance ?? 1,
       effect: (b.domain_relevance ?? 1) < 0.8 ? 'penalty' : 'neutral', format: 'mult', max: 1.1,
     });
   }
   if ((b.competing_mult ?? 1) < 0.95) {
     factors.push({
-      key: 'competing', label: 'Competing tech penalty', value: b.competing_mult ?? 1,
+      key: 'competing', labelKey: 'scoreDrawer.factor.competing', label: 'Competing tech penalty', value: b.competing_mult ?? 1,
       effect: 'penalty', format: 'mult', max: 1,
     });
   }
   if (b.affinity_mult > 1.05) {
     factors.push({
-      key: 'affinity', label: 'Topic affinity', value: b.affinity_mult,
+      key: 'affinity', labelKey: 'scoreDrawer.factor.affinity', label: 'Topic affinity', value: b.affinity_mult,
       effect: 'boost', format: 'mult', max: 1.7,
     });
   }
   if (b.anti_penalty < 0.95) {
     factors.push({
-      key: 'anti', label: 'Anti-topic penalty', value: b.anti_penalty,
+      key: 'anti', labelKey: 'scoreDrawer.factor.anti', label: 'Anti-topic penalty', value: b.anti_penalty,
       effect: 'penalty', format: 'mult', max: 1,
     });
   }
   if ((b.confirmation_mult ?? 1) !== 1) {
     factors.push({
-      key: 'confirmation', label: 'Signal confirmation gate', value: b.confirmation_mult ?? 1,
+      key: 'confirmation', labelKey: 'scoreDrawer.factor.confirmation', label: 'Signal confirmation gate', value: b.confirmation_mult ?? 1,
       effect: (b.confirmation_mult ?? 1) > 1 ? 'boost' : 'penalty', format: 'mult', max: 1.25,
     });
   }

@@ -142,9 +142,9 @@ describe('ScoreBreakdownDrawer', () => {
   it('shows boost factors for positive values', () => {
     render(<ScoreBreakdownDrawer {...defaultProps} />);
     // context_score > 0.3 => boost, interest_score > 0.3 => boost, ace_boost > 0 => boost
-    expect(screen.getByText('Project context')).toBeInTheDocument();
-    expect(screen.getByText('Interest match')).toBeInTheDocument();
-    expect(screen.getByText('ACE context boost')).toBeInTheDocument();
+    expect(screen.getByText('scoreDrawer.factor.context')).toBeInTheDocument();
+    expect(screen.getByText('scoreDrawer.factor.interest')).toBeInTheDocument();
+    expect(screen.getByText('scoreDrawer.factor.ace')).toBeInTheDocument();
   });
 
   // =========================================================================
@@ -161,8 +161,8 @@ describe('ScoreBreakdownDrawer', () => {
         breakdown={penaltyBreakdown}
       />,
     );
-    expect(screen.getByText('Anti-topic penalty')).toBeInTheDocument();
-    expect(screen.getByText('Competing tech penalty')).toBeInTheDocument();
+    expect(screen.getByText('scoreDrawer.factor.anti')).toBeInTheDocument();
+    expect(screen.getByText('scoreDrawer.factor.competing')).toBeInTheDocument();
   });
 
   // =========================================================================
@@ -171,6 +171,7 @@ describe('ScoreBreakdownDrawer', () => {
   it('feedback buttons have accessible names', () => {
     render(<ScoreBreakdownDrawer {...defaultProps} />);
     // Each boost factor gets a "was relevant" and "was not relevant" button
+    // Labels now use i18n keys (e.g. "scoreDrawer.factor.context was relevant")
     const relevantBtns = screen.getAllByLabelText(/was relevant$/);
     const notRelevantBtns = screen.getAllByLabelText(/was not relevant$/);
     expect(relevantBtns.length).toBeGreaterThan(0);
@@ -213,7 +214,7 @@ describe('ScoreBreakdownDrawer', () => {
     render(
       <ScoreBreakdownDrawer {...defaultProps} breakdown={breakdown} />,
     );
-    expect(screen.getByText('Dependency match')).toBeInTheDocument();
+    expect(screen.getByText('scoreDrawer.factor.dependency')).toBeInTheDocument();
     expect(screen.getByText('react, tauri, sqlite')).toBeInTheDocument();
   });
 

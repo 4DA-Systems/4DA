@@ -75,6 +75,10 @@ export const IntelligenceProfileCard = memo(function IntelligenceProfileCard() {
     positiveAffinities.length > 0 ? positiveAffinities.slice(0, 3) : topByStrength,
   [positiveAffinities, topByStrength]);
 
+  // Count feedback events from current session feedbackGiven map
+  const feedbackGiven = useAppStore(s => s.feedbackGiven);
+  const feedbackCount = useMemo(() => Object.keys(feedbackGiven ?? {}).length, [feedbackGiven]);
+
   if (learnedAffinities.length === 0 && (!pulse || pulse.total_cycles === 0)) {
     return null;
   }
@@ -100,6 +104,20 @@ export const IntelligenceProfileCard = memo(function IntelligenceProfileCard() {
           <div className="flex-shrink-0 w-24 h-2 bg-bg-tertiary rounded-full overflow-hidden">
             <div className={`h-full rounded-full transition-all ${accuracyPct >= 70 ? 'bg-green-500' : accuracyPct >= 40 ? 'bg-amber-500' : 'bg-red-500'}`}
               style={{ width: `${accuracyPct}%` }} />
+          </div>
+        </div>
+      )}
+
+      {/* Feedback Impact */}
+      {feedbackCount > 0 && (
+        <div className="bg-[#1F1F1F] rounded-lg border border-border p-4 flex items-center gap-4">
+          <div className="flex-shrink-0 w-12 h-12 rounded-lg bg-bg-tertiary flex items-center justify-center">
+            <span className="text-lg font-bold text-accent-gold">{feedbackCount}</span>
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-xs text-text-secondary">
+              {t('briefing.profile.feedbackImpact', { count: feedbackCount })}
+            </p>
           </div>
         </div>
       )}

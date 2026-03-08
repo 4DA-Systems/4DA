@@ -1,4 +1,5 @@
 import { memo, useCallback, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
 import {
   EFFECT_COLORS,
@@ -20,9 +21,11 @@ export const FactorBar = memo(function FactorBar({
   itemId,
   onFeedbackGiven,
 }: FactorBarProps) {
+  const { t } = useTranslation();
   const [feedbackGiven, setFeedbackGiven] = useState<'up' | 'down' | null>(null);
   const colors = EFFECT_COLORS[factor.effect];
   const barWidth = getBarWidth(factor);
+  const factorLabel = t(factor.labelKey, factor.label);
 
   const handleFeedback = useCallback(async (vote: 'up' | 'down') => {
     setFeedbackGiven(vote);
@@ -44,7 +47,7 @@ export const FactorBar = memo(function FactorBar({
     <div className="group flex items-center gap-2">
       {/* Label */}
       <span className={`text-[11px] w-28 flex-shrink-0 ${colors.label}`}>
-        {factor.label}
+        {factorLabel}
       </span>
 
       {/* Bar container */}
@@ -79,7 +82,7 @@ export const FactorBar = memo(function FactorBar({
               onClick={() => handleFeedback('up')}
               className="text-[10px] text-text-muted hover:text-green-400 transition-colors px-0.5"
               title="This factor was relevant"
-              aria-label={`${factor.label} was relevant`}
+              aria-label={`${factorLabel} was relevant`}
             >
               +
             </button>
@@ -87,7 +90,7 @@ export const FactorBar = memo(function FactorBar({
               onClick={() => handleFeedback('down')}
               className="text-[10px] text-text-muted hover:text-amber-400 transition-colors px-0.5"
               title="This factor wasn't relevant"
-              aria-label={`${factor.label} was not relevant`}
+              aria-label={`${factorLabel} was not relevant`}
             >
               &minus;
             </button>

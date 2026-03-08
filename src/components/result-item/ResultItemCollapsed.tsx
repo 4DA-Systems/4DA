@@ -1,7 +1,7 @@
-import { memo } from 'react';
+import { memo, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { SourceRelevance, FeedbackAction } from '../../types';
-import { formatScore, getScoreColor, formatRelativeAge } from '../../utils/score';
+import { formatScore, getScoreColor, formatRelativeAge, getScoreFactorKeys } from '../../utils/score';
 import { getSourceLabel, getSourceColorClass } from '../../config/sources';
 import { BadgeRow } from './BadgeRow';
 import { ProInsightRow } from './ProInsightRow';
@@ -26,6 +26,11 @@ export const ResultItemCollapsed = memo(function ResultItemCollapsed({
   fallbackReason,
 }: ResultItemCollapsedProps) {
   const { t } = useTranslation();
+  const scoreTooltip = useMemo(() => {
+    const keys = getScoreFactorKeys(item);
+    if (keys.length === 0) return undefined;
+    return keys.map(k => t(k)).join('\n');
+  }, [item, t]);
   return (
     <div className="w-full px-4 py-3">
       <div className="flex items-start gap-3">
@@ -36,6 +41,7 @@ export const ResultItemCollapsed = memo(function ResultItemCollapsed({
             onClick={onToggleBreakdown && item.score_breakdown ? onToggleBreakdown : onToggleExpand}
             aria-expanded={showBreakdown}
             aria-label={item.score_breakdown ? t('scoreDrawer.toggle', 'Toggle score breakdown') : undefined}
+            title={scoreTooltip}
             className={`w-14 text-center py-1 rounded font-mono text-sm font-medium cursor-pointer transition-all ${getScoreColor(
               item.top_score,
             )} ${showBreakdown ? 'ring-1 ring-white/30' : ''} ${item.score_breakdown ? 'hover:ring-1 hover:ring-white/20' : ''}`}
