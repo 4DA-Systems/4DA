@@ -45,6 +45,45 @@ pub struct HttpHistoryEntry {
 // HTTP Probe
 // ============================================================================
 
+/// Allowlist of domains that toolkit HTTP requests may target.
+/// Covers LLM providers, source APIs, license validation, and localhost.
+const ALLOWED_DOMAINS: &[&str] = &[
+    // LLM providers
+    "api.openai.com",
+    "api.anthropic.com",
+    "generativelanguage.googleapis.com",
+    // Localhost (Ollama, dev servers)
+    "localhost",
+    "127.0.0.1",
+    "0.0.0.0",
+    // License validation
+    "api.keygen.sh",
+    // Source APIs
+    "hacker-news.firebaseio.com",
+    "www.reddit.com",
+    "oauth.reddit.com",
+    "api.github.com",
+    "api.x.com",
+    "export.arxiv.org",
+    "www.youtube.com",
+    "lobste.rs",
+    "dev.to",
+    "www.producthunt.com",
+];
+
+/// Check if a URL targets an allowed domain.
+fn is_domain_allowed(url: &str) -> bool {
+    // Parse the host from the URL
+    let host = url
+        .strip_prefix("https://")
+        .or_else(|| url.strip_prefix("http://"))
+        .and_then(|rest| rest.split('/').next())
+        .and_then(|host_port| host_port.split(':').next())
+        .unwrap_or("");
+
+    ALLOWED_DOMAINS.iter().any(|allowed| host.eq_ignore_ascii_case(allowed))
+}
+
 #[tauri::command]
 pub async fn toolkit_http_request(request: HttpProbeRequest) -> Result<HttpProbeResponse> {
     // Validate URL
@@ -52,6 +91,14 @@ pub async fn toolkit_http_request(request: HttpProbeRequest) -> Result<HttpProbe
         return Err(FourDaError::Config(
             "URL must start with http:// or https://".into(),
         ));
+    }
+
+    // Enforce domain allowlist to prevent data exfiltration
+    if !is_domain_allowed(&request.url) {
+        return Err(FourDaError::Config(format!(
+            "Domain not allowed. Requests are restricted to known APIs (LLM providers, source APIs, localhost). URL: {}",
+            request.url
+        )));
     }
 
     let client = reqwest::Client::builder()

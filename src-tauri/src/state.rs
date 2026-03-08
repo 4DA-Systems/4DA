@@ -69,7 +69,8 @@ pub(crate) fn open_db_connection() -> Result<rusqlite::Connection, String> {
 
     // Ensure parent directory exists
     if let Some(parent) = db_path.parent() {
-        std::fs::create_dir_all(parent).ok();
+        std::fs::create_dir_all(parent)
+            .map_err(|e| format!("Cannot create data directory {}: {}", parent.display(), e))?;
     }
 
     register_sqlite_vec_extension();

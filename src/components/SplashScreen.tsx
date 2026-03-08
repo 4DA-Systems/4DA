@@ -71,8 +71,8 @@ export function SplashScreen({ onComplete, minimumDisplayTime = 1500 }: SplashSc
       } catch (e) {
         console.error('[SplashScreen] Backend check failed:', e);
         setError(translateError(e));
-        // Still mark as ready after error so app can show error state
-        setBackendReady(true);
+        // Do NOT mark as ready — block the app on database failure.
+        // The user can use the refresh button to retry.
       }
     };
 
@@ -229,8 +229,25 @@ export function SplashScreen({ onComplete, minimumDisplayTime = 1500 }: SplashSc
           color: error ? 'var(--color-error)' : stage === 'ready' ? 'var(--color-success)' : '#9CA3AF',
           transition: 'color 300ms',
         }}>
-          {error ? t('splash.error') : t(stageKeys[stage])}
+          {error || t(stageKeys[stage])}
         </span>
+        {error && (
+          <button
+            onClick={() => window.location.reload()}
+            style={{
+              marginTop: '1rem',
+              padding: '0.5rem 1.5rem',
+              background: 'var(--color-error)',
+              color: '#fff',
+              border: 'none',
+              borderRadius: '0.375rem',
+              cursor: 'pointer',
+              fontSize: '0.8125rem',
+            }}
+          >
+            Retry
+          </button>
+        )}
       </div>
 
       {/* Stage indicators */}

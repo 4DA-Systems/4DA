@@ -111,13 +111,6 @@ pub async fn set_twitter_handles(handles: Vec<String>) -> Result<serde_json::Val
 // X API Key Commands
 // ============================================================================
 
-/// Get configured X API Bearer Token
-#[tauri::command]
-pub async fn get_x_api_key() -> Result<String, String> {
-    let settings_guard = get_settings_manager().lock();
-    Ok(settings_guard.get_x_api_key())
-}
-
 /// Sanitize an X API Bearer Token (trim, URL-decode, extract from pasted blobs)
 fn sanitize_x_api_key(raw: &str) -> String {
     let mut key = raw.trim().to_string();
