@@ -1,8 +1,9 @@
 //! Search Synthesis — LLM-powered briefings for Intelligence Console queries.
 //!
-//! Pro-gated. Takes a natural language query, gathers lightweight context
-//! from the local DB, and calls the configured LLM to produce a 2-3 sentence
-//! intelligence briefing grounded in the user's stack and search results.
+//! Pro-gated. Takes a natural language query, gathers deep context from the
+//! local DB (search results, tech stack, active decisions, knowledge gaps),
+//! and calls the configured LLM to produce a grounded intelligence briefing
+//! that references the user's specific context.
 
 use serde::{Deserialize, Serialize};
 use tauri::Emitter;
@@ -23,12 +24,25 @@ struct SynthesisItem {
     source_type: String,
 }
 
+/// Active decision relevant to the query.
+#[derive(Debug, Clone)]
+struct DecisionContext {
+    subject: String,
+    decision: String,
+}
+
+/// Knowledge gap relevant to the query.
+#[derive(Debug, Clone)]
+struct GapContext {
+    technology: String,
+    severity: String,
+}
+
 // ============================================================================
 // Context gathering
 // ============================================================================
 
-/// Pull the top matching source_items for the query keywords (lightweight — no
-/// embedding or vector search, just LIKE matching on title/content).
+/// Pull the top matching source_items for the query keywords.
 fn gather_result_context(
     conn: &rusqlite::Connection,
     keywords: &[String],
@@ -108,35 +122,133 @@ fn gather_stack_summary(conn: &rusqlite::Connection) -> String {
     names.join(", ")
 }
 
+/// Find active decisions whose subject overlaps with query keywords.
+fn gather_decision_context(
+    conn: &rusqlite::Connection,
+    keywords: &[String],
+) -> Vec<DecisionContext> {
+    if keywords.is_empty() {
+        return Vec::new();
+    }
+
+    let sql = "SELECT subject, decision FROM decisions WHERE status != 'superseded' LIMIT 50";
+    let mut stmt = match conn.prepare(sql) {
+        Ok(s) => s,
+        Err(_) => return Vec::new(),
+    };
+
+    let all: Vec<(String, String)> = stmt
+        .query_map([], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+        })
+        .ok()
+        .map(|rows| rows.flatten().collect())
+        .unwrap_or_default();
+
+    all.into_iter()
+        .filter(|(subject, _)| {
+            let lower = subject.to_lowercase();
+            keywords.iter().any(|k| lower.contains(k.as_str()))
+        })
+        .take(3)
+        .map(|(subject, decision)| DecisionContext { subject, decision })
+        .collect()
+}
+
+/// Find knowledge gaps whose technology matches query keywords.
+fn gather_gap_context(conn: &rusqlite::Connection, keywords: &[String]) -> Vec<GapContext> {
+    if keywords.is_empty() {
+        return Vec::new();
+    }
+
+    // Knowledge gaps are computed, not stored — check detected_tech with
+    // no recent signals as a lightweight proxy.
+    let sql = "SELECT dt.name, \
+               CASE \
+                 WHEN NOT EXISTS (SELECT 1 FROM source_items s \
+                   WHERE (LOWER(s.title) LIKE '%' || LOWER(dt.name) || '%' \
+                     OR LOWER(s.content) LIKE '%' || LOWER(dt.name) || '%') \
+                   AND s.created_at >= datetime('now', '-21 days')) \
+                 THEN 'stale' ELSE 'ok' END as gap_status \
+               FROM detected_tech dt \
+               WHERE dt.confidence >= 0.5";
+
+    let mut stmt = match conn.prepare(sql) {
+        Ok(s) => s,
+        Err(_) => return Vec::new(),
+    };
+
+    let techs: Vec<(String, String)> = stmt
+        .query_map([], |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)))
+        .ok()
+        .map(|rows| rows.flatten().collect())
+        .unwrap_or_default();
+
+    techs
+        .into_iter()
+        .filter(|(name, status)| {
+            status == "stale" && keywords.iter().any(|k| name.to_lowercase().contains(k.as_str()))
+        })
+        .take(3)
+        .map(|(technology, _)| GapContext {
+            technology,
+            severity: "stale".to_string(),
+        })
+        .collect()
+}
+
 // ============================================================================
 // Prompt construction
 // ============================================================================
 
-fn build_system_prompt(stack_summary: &str) -> String {
-    let stack_part = if stack_summary.is_empty() {
-        String::new()
-    } else {
-        format!(" You know their stack: {}.", stack_summary)
-    };
+fn build_system_prompt(
+    stack_summary: &str,
+    decisions: &[DecisionContext],
+    gaps: &[GapContext],
+) -> String {
+    let mut prompt = String::from(
+        "You are a senior technical advisor who knows this developer's exact setup. \
+         Your job: synthesize search results into a sharp, specific briefing they can act on.\n\n\
+         Rules:\n\
+         - 2-4 sentences max. Dense, not verbose.\n\
+         - Reference specific technologies, versions, and dates from the results.\n\
+         - If something affects their stack, say which technology and why.\n\
+         - If a result contradicts or supports one of their decisions, flag it.\n\
+         - If they have a knowledge gap in a queried area, mention it.\n\
+         - ONLY use information from the provided results. Never fabricate.\n\
+         - Write like a colleague in Slack, not a chatbot. No greetings or filler.",
+    );
 
-    format!(
-        "You are the user's technical intelligence advisor.{stack_part} \
-         Synthesize the search results into a 2-3 sentence briefing. \
-         Be specific about versions, dates, and actionable items. \
-         Reference their stack directly. Do not hallucinate — only reference \
-         information from the provided results. \
-         If no results are relevant, say so briefly."
-    )
+    if !stack_summary.is_empty() {
+        prompt.push_str(&format!("\n\nTheir tech stack: {stack_summary}"));
+    }
+
+    if !decisions.is_empty() {
+        prompt.push_str("\n\nTheir active decisions:");
+        for d in decisions {
+            prompt.push_str(&format!("\n- {}: {}", d.subject, d.decision));
+        }
+    }
+
+    if !gaps.is_empty() {
+        prompt.push_str("\n\nKnowledge gaps (no recent signals):");
+        for g in gaps {
+            prompt.push_str(&format!("\n- {} ({})", g.technology, g.severity));
+        }
+    }
+
+    prompt
 }
 
 fn build_user_message(query: &str, items: &[SynthesisItem]) -> String {
     if items.is_empty() {
         return format!(
-            "Query: \"{query}\"\n\nNo matching results were found in the local database."
+            "Query: \"{query}\"\n\nNo matching results found. \
+             Respond with a brief note that no signals were found for this query."
         );
     }
 
-    let mut parts = vec![format!("Query: \"{query}\"\n\nSearch results:")];
+    let mut parts = vec![format!("Query: \"{query}\"\n\nSignals:")];
     for (i, item) in items.iter().enumerate() {
         parts.push(format!(
             "{}. [{}] {}\n   {}",
@@ -174,31 +286,35 @@ pub async fn synthesize_search(
 
     if provider.provider.is_empty() || provider.provider == "none" {
         return Err(
-            "No LLM provider configured. Set up Ollama (free, local) or a cloud provider in Settings."
+            "No LLM provider configured. Set up Ollama (free, local) or add an API key in Settings."
                 .to_string(),
         );
     }
 
     debug!(target: "4da::synthesis", query = %query_text, "Starting search synthesis");
 
-    // Gather context from DB
+    // Gather deep context from DB
     let keywords = extract_keywords(&query_text);
-    let (items, stack_summary) = {
+    let (items, stack_summary, decisions, gaps) = {
         let conn = crate::open_db_connection()?;
         let items = gather_result_context(&conn, &keywords, 7);
         let stack = gather_stack_summary(&conn);
-        (items, stack)
+        let decisions = gather_decision_context(&conn, &keywords);
+        let gaps = gather_gap_context(&conn, &keywords);
+        (items, stack, decisions, gaps)
     };
 
     debug!(
         target: "4da::synthesis",
-        result_count = items.len(),
+        results = items.len(),
         stack = %stack_summary,
+        decisions = decisions.len(),
+        gaps = gaps.len(),
         "Context gathered"
     );
 
     // Build prompts
-    let system = build_system_prompt(&stack_summary);
+    let system = build_system_prompt(&stack_summary, &decisions, &gaps);
     let user_msg = build_user_message(&query_text, &items);
 
     // Emit start event
