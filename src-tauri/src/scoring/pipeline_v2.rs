@@ -735,6 +735,7 @@ pub(crate) fn score_item(
             streets_engine: None,
             decision_window_match: None,
             decision_boost_applied: 0.0,
+            created_at: None,
         };
     }
 
@@ -976,5 +977,6 @@ pub(crate) fn score_item(
                 .map(|w| w.title.clone())
         }),
         decision_boost_applied: window_boost,
+        created_at: None,
     }
 }

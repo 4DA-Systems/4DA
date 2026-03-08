@@ -81,4 +81,8 @@ decision_window_match: string | null,
 /**
  * How much boost was applied from the decision window
  */
-decision_boost_applied: number, };
+decision_boost_applied: number, 
+/**
+ * When this item was first seen (ISO timestamp for age display)
+ */
+created_at: string | null, };

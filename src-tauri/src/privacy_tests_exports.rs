@@ -232,6 +232,7 @@ mod tests {
             streets_engine: None,
             decision_window_match: None,
             decision_boost_applied: 0.0,
+            created_at: None,
         }];
 
         // Serialize the results as the frontend would receive them
