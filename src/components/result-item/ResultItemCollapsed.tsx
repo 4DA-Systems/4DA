@@ -53,6 +53,7 @@ export const ResultItemCollapsed = memo(function ResultItemCollapsed({
             onClick={onToggleExpand}
             aria-expanded={isExpanded}
             aria-controls={`result-detail-${item.id}`}
+            aria-label={`Source: ${getSourceLabel(item.source_type || '') || item.source_type || t('results.unknownSource')}`}
             className={`text-[10px] px-1.5 py-0.5 rounded font-medium cursor-pointer ${getSourceColorClass(item.source_type || '')}`}
           >
             {getSourceLabel(item.source_type || '') || item.source_type || t('results.unknownSource')}
@@ -77,6 +78,7 @@ export const ResultItemCollapsed = memo(function ResultItemCollapsed({
             ) : (
               <button
                 onClick={onToggleExpand}
+                aria-label={`Expand details: ${item.title}`}
                 className={`text-sm flex-1 text-left ${
                   item.relevant ? 'text-text-primary' : 'text-text-secondary'
                 }`}
@@ -149,7 +151,7 @@ export const ResultItemCollapsed = memo(function ResultItemCollapsed({
       {/* Why This Matters - Preview (shown when not expanded) */}
       {!isExpanded && (
         <>
-          <button onClick={onToggleExpand} className="w-full text-left">
+          <button onClick={onToggleExpand} aria-label="Show full explanation" className="w-full text-left">
             <div className="mt-1.5 text-xs text-text-secondary pl-[4.25rem]">
               {item.explanation || fallbackReason}
             </div>

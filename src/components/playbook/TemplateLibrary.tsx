@@ -28,6 +28,7 @@ function CategoryFilter({
     <div className="flex flex-wrap gap-2">
       <button
         onClick={() => onSelect('all')}
+        aria-label="Filter: All categories"
         className={`px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors ${
           active === 'all'
             ? 'bg-[#D4AF37]/15 text-[#D4AF37] border-[#D4AF37]/30'
@@ -40,6 +41,7 @@ function CategoryFilter({
         <button
           key={cat}
           onClick={() => onSelect(cat)}
+          aria-label={`Filter: ${cat}`}
           className={`px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors ${
             active === cat
               ? 'bg-[#D4AF37]/15 text-[#D4AF37] border-[#D4AF37]/30'
@@ -71,6 +73,7 @@ function TemplateCard({
   return (
     <button
       onClick={() => onOpen(template)}
+      aria-label={`Open template: ${template.title}`}
       className="w-full text-left bg-bg-secondary border border-border rounded-xl p-4 transition-colors hover:border-[#D4AF37]/30 group"
     >
       <div className="flex items-start justify-between gap-2 mb-2">
@@ -120,6 +123,7 @@ function TemplateViewer({
           <div className="flex items-center gap-2 flex-shrink-0">
             <button
               onClick={handleCopy}
+              aria-label={copied ? t('action.copied') : t('action.copy')}
               className={`px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors ${
                 copied
                   ? 'bg-[#22C55E]/15 text-[#22C55E] border-[#22C55E]/30'
@@ -142,6 +146,7 @@ function TemplateViewer({
                 strokeWidth="2"
                 strokeLinecap="round"
                 strokeLinejoin="round"
+                aria-hidden="true"
               >
                 <line x1="18" y1="6" x2="6" y2="18" />
                 <line x1="6" y1="6" x2="18" y2="18" />

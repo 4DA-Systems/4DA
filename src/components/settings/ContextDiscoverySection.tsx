@@ -49,6 +49,7 @@ export function ContextDiscoverySection({
         <button
           onClick={runAutoDiscovery}
           disabled={isScanning}
+          aria-label={isScanning ? t('settings.context.discovering') : t('settings.context.autoDiscover')}
           className="w-full px-4 py-3 text-sm bg-gradient-to-r from-orange-500/20 to-orange-600/10 text-orange-400 border border-orange-500/30 rounded-lg hover:from-orange-500/30 hover:to-orange-600/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed font-medium"
         >
           {isScanning ? t('settings.context.discovering') : t('settings.context.autoDiscover')}
@@ -66,6 +67,7 @@ export function ContextDiscoverySection({
           />
           <button
             onClick={addScanDirectory}
+            aria-label={t('settings.context.addDirectory')}
             className="px-4 py-2.5 text-sm bg-bg-secondary border border-border rounded-lg text-text-secondary hover:text-white hover:border-orange-500/30 transition-all"
           >
             {t('action.add')}

@@ -33,12 +33,14 @@ export function UpdateBanner({ update, installing, onInstall, onDismiss }: Updat
         <button
           onClick={onInstall}
           disabled={installing}
+          aria-label={installing ? t('update.installing') : t('update.install')}
           className="px-4 py-1.5 text-xs font-medium text-black bg-[#D4AF37] rounded-lg hover:bg-[#C4A030] transition-colors disabled:opacity-50"
         >
           {installing ? t('update.installing') : t('update.install')}
         </button>
         <button
           onClick={onDismiss}
+          aria-label={t('update.later')}
           className="px-4 py-1.5 text-xs text-text-secondary hover:text-white transition-colors"
         >
           {t('update.later')}

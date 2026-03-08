@@ -68,6 +68,7 @@ export function QuickSetupStep({ isAnimating, onComplete, onBack }: QuickSetupSt
     <button
       onClick={onToggle}
       aria-expanded={isOpen}
+      aria-label={title}
       className="w-full flex items-center justify-between p-4 bg-bg-secondary rounded-lg border border-border hover:border-[#3A3A3A] transition-colors"
     >
       <div className="flex items-center gap-3">

@@ -139,6 +139,7 @@ export function NaturalLanguageSearch({ onStatusChange, defaultExpanded = true }
         className="flex items-center justify-between cursor-pointer w-full text-left"
         onClick={() => setExpanded(!expanded)}
         aria-expanded={expanded}
+        aria-label={expanded ? t('search.collapsePanel') : t('search.expandPanel')}
       >
         <div className="flex items-center gap-3">
           <div className="w-8 h-8 bg-cyan-500/20 rounded-lg flex items-center justify-center flex-shrink-0">
@@ -198,6 +199,7 @@ export function NaturalLanguageSearch({ onStatusChange, defaultExpanded = true }
             <button
               onClick={handleSearch}
               disabled={loading || !query.trim()}
+              aria-label={loading ? t('search.searching') : t('action.search')}
               className="px-5 py-3 text-sm bg-cyan-500/20 border border-cyan-500/30 text-cyan-400 rounded-lg hover:bg-cyan-500/30 disabled:opacity-50 disabled:cursor-not-allowed transition-all font-medium"
             >
               {loading ? (

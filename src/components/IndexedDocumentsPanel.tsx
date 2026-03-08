@@ -270,6 +270,7 @@ export function IndexedDocumentsPanel({ onStatusChange }: IndexedDocumentsPanelP
                     setSearchResults(null);
                     setSearchQuery('');
                   }}
+                  aria-label="Clear search results"
                   className="text-text-muted hover:text-white transition-colors"
                 >
                   ✕ Clear

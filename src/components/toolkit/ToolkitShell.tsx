@@ -72,6 +72,7 @@ export function ToolkitShell({ toolName, onBack, children }: ToolkitShellProps) 
       <div className="flex items-center gap-3 mb-4">
         <button
           onClick={onBack}
+          aria-label={t('toolkit.shell.back')}
           className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-text-secondary bg-bg-secondary border border-border rounded-lg hover:text-white hover:border-white/20 transition-all"
         >
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">

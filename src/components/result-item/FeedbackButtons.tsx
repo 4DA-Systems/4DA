@@ -66,6 +66,7 @@ export const FeedbackButtons = memo(function FeedbackButtons({ item, feedback, o
       <button
         onClick={handleSave}
         disabled={!!feedback}
+        aria-label={feedback === 'save' ? t('feedback.saved') : t('action.save')}
         className={`px-3 py-1.5 text-xs rounded font-medium relative transition-all duration-200 ${
           feedback === 'save'
             ? 'bg-success/20 text-success cursor-default'

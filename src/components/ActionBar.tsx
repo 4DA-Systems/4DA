@@ -151,6 +151,7 @@ export function ActionBar({
           <button
             className="px-3 py-1.5 bg-amber-500/10 text-amber-400 text-xs rounded-lg border border-amber-500/20 cursor-pointer hover:bg-amber-500/20 transition-colors"
             title="No embedding model available. Click to configure AI provider for semantic matching."
+            aria-label="No embedding model available. Click to configure AI provider for semantic matching."
             onClick={() => useAppStore.getState().setShowSettings(true)}
           >
             {t('action.keywordOnly')}
@@ -180,6 +181,7 @@ export function ActionBar({
           <button
             onClick={onAnalyze}
             disabled={isRefreshing}
+            aria-label={t('action.runAnalysis', 'Run analysis')}
             className={`px-5 py-2.5 text-sm font-medium rounded-lg transition-all flex items-center gap-2 ${
               isUpToDate
                 ? 'bg-green-500/10 text-green-400 border border-green-500/20'
@@ -194,10 +196,10 @@ export function ActionBar({
             }}
           >
             {isRefreshing && (
-              <div className="w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin" />
+              <div className="w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin" aria-hidden="true" />
             )}
             {isUpToDate && !isRefreshing && (
-              <div className="w-2 h-2 bg-green-400 rounded-full" />
+              <div className="w-2 h-2 bg-green-400 rounded-full" aria-hidden="true" />
             )}
             {refreshLabel}
           </button>
@@ -205,6 +207,7 @@ export function ActionBar({
             <button
               onClick={() => invoke('cancel_analysis')}
               className="px-3 py-2.5 text-sm bg-bg-tertiary text-red-400 border border-red-500/30 font-medium rounded-lg hover:bg-red-500/10 transition-all"
+              aria-label={t('action.cancelAnalysis', 'Cancel analysis')}
             >
               {t('action.cancel')}
             </button>
@@ -233,6 +236,7 @@ export function ActionBar({
                   onClick={() => { onGenerateBriefing(); setOverflowOpen(false); }}
                   disabled={aiBriefing.loading || state.relevanceResults.length === 0}
                   className="w-full px-4 py-2.5 text-sm text-left text-text-secondary hover:bg-border disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                  aria-label={t('action.regenerateBriefing')}
                 >
                   {t('action.regenerateBriefing')}
                 </button>
@@ -240,6 +244,7 @@ export function ActionBar({
                   role="menuitem"
                   onClick={() => { onToggleAutoBriefing(); setOverflowOpen(false); }}
                   className="w-full px-4 py-2.5 text-sm text-left text-text-secondary hover:bg-border transition-colors flex items-center justify-between"
+                  aria-label={`${t('action.autoBriefing')}: ${autoBriefingEnabled ? t('badge.on') : t('badge.off')}`}
                 >
                   {t('action.autoBriefing')}
                   <span className={`text-xs px-2 py-0.5 rounded ${autoBriefingEnabled ? 'bg-orange-500/20 text-orange-400' : 'bg-border text-text-muted'}`}>
@@ -313,7 +318,7 @@ export function ActionBar({
       {/* AI Briefing Error */}
       {aiBriefing.error && (
         <div role="alert" className="mx-5 mb-4 p-3 bg-red-900/20 border border-red-500/30 rounded-lg text-red-300 text-sm flex items-center gap-2">
-          <span>!</span>
+          <span aria-hidden="true">!</span>
           {aiBriefing.error}
         </div>
       )}

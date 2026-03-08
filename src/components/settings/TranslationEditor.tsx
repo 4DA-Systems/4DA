@@ -232,6 +232,7 @@ export function TranslationEditor({ language }: TranslationEditorProps) {
           </button>
         ))}
         <button onClick={handleAutoTranslate} disabled={translating || pct === 100}
+          aria-label={translating ? t('settings.translations.translating') : t('settings.translations.autoTranslate')}
           style={{ ...s.auto, ...(translating || pct === 100 ? { opacity: 0.5, cursor: 'not-allowed' } : {}) }}>
           {translating ? t('settings.translations.translating') : t('settings.translations.autoTranslate')}
         </button>
