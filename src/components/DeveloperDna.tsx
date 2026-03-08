@@ -1,4 +1,4 @@
-import { useState, useEffect, memo } from 'react';
+import { useState, useRef, memo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
 import type { DeveloperDna } from '../types';
@@ -15,6 +15,7 @@ export const DeveloperDnaPanel = memo(function DeveloperDnaPanel() {
   const [copied, setCopied] = useState(false);
   const [badgeCopied, setBadgeCopied] = useState(false);
   const [expanded, setExpanded] = useState(false);
+  const loaded = useRef(false);
 
   const loadDna = async () => {
     setLoading(true);
@@ -22,16 +23,13 @@ export const DeveloperDnaPanel = memo(function DeveloperDnaPanel() {
     try {
       const d = await invoke<DeveloperDna>('get_developer_dna');
       setDna(d);
+      loaded.current = true;
     } catch (e) {
       setError(String(e));
     } finally {
       setLoading(false);
     }
   };
-
-  useEffect(() => {
-    loadDna();
-  }, []);
 
   const copyAsMarkdown = async () => {
     try {
@@ -88,7 +86,13 @@ export const DeveloperDnaPanel = memo(function DeveloperDnaPanel() {
     <ProGate feature="Developer DNA">
     <div className="bg-bg-secondary rounded-lg border border-border overflow-hidden">
       <button
-        onClick={() => setExpanded(!expanded)}
+        onClick={() => {
+          const willExpand = !expanded;
+          setExpanded(willExpand);
+          if (willExpand && !loaded.current) {
+            loadDna();
+          }
+        }}
         className="w-full px-5 py-4 flex items-center justify-between hover:bg-[#1A1A1A] transition-colors"
       >
         <div className="flex items-center gap-3">

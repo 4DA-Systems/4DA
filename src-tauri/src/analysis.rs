@@ -12,9 +12,10 @@ use std::panic::AssertUnwindSafe;
 use std::sync::atomic::Ordering;
 
 use crate::scoring;
+use crate::stacks;
 use crate::{
     analysis_rerank, emit_progress, game_engine, get_analysis_abort, get_analysis_state,
-    get_database, monitoring, signals, source_fetching, truncate_utf8,
+    get_database, monitoring, open_db_connection, signals, source_fetching, truncate_utf8,
     void_signal_analysis_complete, void_signal_error, AnalysisState, SourceRelevance,
     ANALYSIS_TIMEOUT_SECS,
 };
@@ -120,6 +121,30 @@ pub(crate) async fn run_deep_initial_scan(app: AppHandle) -> Result<(), String> 
                             game_engine::increment_counter(db, "sources", source_types.len() as u64)
                         {
                             crate::events::emit_achievement_unlocked(&app, &a);
+                        }
+                    }
+                }
+
+                // Auto-detect stack profiles if none selected (first analysis)
+                if let Ok(db) = open_db_connection() {
+                    let selected = stacks::load_selected_stacks(&db);
+                    if selected.is_empty() {
+                        let ace_ctx = scoring::get_ace_context();
+                        let detections = stacks::detection::detect_matching_profiles(&ace_ctx);
+                        if !detections.is_empty() {
+                            let top_ids: Vec<String> = detections.iter()
+                                .filter(|d| d.confidence >= 0.2)
+                                .take(3)
+                                .map(|d| d.profile_id.clone())
+                                .collect();
+                            if !top_ids.is_empty() {
+                                info!(target: "4da::analysis",
+                                    "Auto-selected stack profiles: {:?}",
+                                    top_ids
+                                );
+                                let _ = stacks::save_selected_stacks(&db, &top_ids);
+                                let _ = app.emit("stacks-auto-detected", &top_ids);
+                            }
                         }
                     }
                 }
@@ -540,6 +565,30 @@ pub(crate) async fn run_cached_analysis(app: AppHandle) -> Result<(), String> {
                             game_engine::increment_counter(db, "sources", source_types.len() as u64)
                         {
                             crate::events::emit_achievement_unlocked(&app, &a);
+                        }
+                    }
+                }
+
+                // Auto-detect stack profiles if none selected (first analysis)
+                if let Ok(db) = open_db_connection() {
+                    let selected = stacks::load_selected_stacks(&db);
+                    if selected.is_empty() {
+                        let ace_ctx = scoring::get_ace_context();
+                        let detections = stacks::detection::detect_matching_profiles(&ace_ctx);
+                        if !detections.is_empty() {
+                            let top_ids: Vec<String> = detections.iter()
+                                .filter(|d| d.confidence >= 0.2)
+                                .take(3)
+                                .map(|d| d.profile_id.clone())
+                                .collect();
+                            if !top_ids.is_empty() {
+                                info!(target: "4da::analysis",
+                                    "Auto-selected stack profiles: {:?}",
+                                    top_ids
+                                );
+                                let _ = stacks::save_selected_stacks(&db, &top_ids);
+                                let _ = app.emit("stacks-auto-detected", &top_ids);
+                            }
                         }
                     }
                 }

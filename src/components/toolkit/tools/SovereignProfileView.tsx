@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
+import { registerGameComponent } from '../../../lib/game-components';
 
 // --- Types ---
 
@@ -66,6 +67,8 @@ export default function SovereignProfileView() {
     loadData();
   }, [loadData]);
 
+  useEffect(() => { registerGameComponent('game-score-fingerprint'); }, []);
+
   const generateDocument = useCallback(async () => {
     setDocLoading(true);
     try {
@@ -124,6 +127,10 @@ export default function SovereignProfileView() {
         <>
           {/* Completeness header */}
           <div className="flex items-center gap-6 bg-bg-secondary border border-border rounded-xl p-4">
+            {/* Score fingerprint */}
+            <div className="w-12 h-12 flex-shrink-0 rounded-lg overflow-hidden bg-bg-tertiary">
+              <game-score-fingerprint style={{ width: '48px', height: '48px' }} />
+            </div>
             {/* SVG Ring */}
             <div className="relative shrink-0" style={{ width: 80, height: 80 }}>
               <svg width="80" height="80" viewBox="0 0 80 80">

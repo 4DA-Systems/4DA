@@ -161,6 +161,13 @@ export function useAnalysis(
             .sort((a, b) => b.top_score - a.top_score);
           state.setAppStateFull(s => ({ ...s, relevanceResults: merged }));
         }),
+
+        listen<string[]>('stacks-auto-detected', (event) => {
+          const profileIds = event.payload;
+          useAppStore.getState().addToast('info',
+            `Auto-detected your stack: ${profileIds.join(', ')}. Scoring will prioritize matching sources.`
+          );
+        }),
       ]);
 
       unlistens = results;

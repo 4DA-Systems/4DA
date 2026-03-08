@@ -16,6 +16,9 @@ declare module 'react' {
       'game-boot-ring': React.DetailedHTMLProps<React.HTMLAttributes<HTMLElement>, HTMLElement>;
       'game-engagement-bars': React.DetailedHTMLProps<React.HTMLAttributes<HTMLElement>, HTMLElement>;
       'game-achievement-progress': React.DetailedHTMLProps<React.HTMLAttributes<HTMLElement>, HTMLElement>;
+      'game-ambient-intelligence': React.DetailedHTMLProps<React.HTMLAttributes<HTMLElement>, HTMLElement>;
+      'game-score-fingerprint': React.DetailedHTMLProps<React.HTMLAttributes<HTMLElement>, HTMLElement>;
+      'game-decision-countdown': React.DetailedHTMLProps<React.HTMLAttributes<HTMLElement>, HTMLElement>;
     }
   }
 }
