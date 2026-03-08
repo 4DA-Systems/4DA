@@ -9,8 +9,7 @@ use super::LicenseConfig;
 // Keygen API Validation Constants
 // ============================================================================
 
-/// TODO: Replace with your real Keygen account ID from https://app.keygen.sh/settings
-const KEYGEN_ACCOUNT_ID: &str = "YOUR_ACCOUNT_ID";
+const KEYGEN_ACCOUNT_ID: &str = "runyourempirehq";
 
 /// Base URL template for Keygen validation.
 /// Full URL: `https://api.keygen.sh/v1/accounts/{ACCOUNT_ID}/licenses/actions/validate-key`
