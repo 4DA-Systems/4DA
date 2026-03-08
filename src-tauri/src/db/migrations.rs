@@ -218,7 +218,7 @@ impl Database {
             .query_row("SELECT version FROM schema_version", [], |row| row.get(0))
             .unwrap_or(1);
 
-        const TARGET_VERSION: i64 = 25;
+        const TARGET_VERSION: i64 = 26;
         if current_version < TARGET_VERSION {
             // Drop the conn lock briefly to allow backup (needs filesystem access)
             drop(conn);
@@ -394,7 +394,6 @@ impl Database {
                         );
                         CREATE INDEX IF NOT EXISTS idx_cmd_history_created ON command_history(created_at);
 
-                        -- STATUS: Unused — no production queries. Candidate for deprecation.
                         CREATE TABLE IF NOT EXISTS git_commit_history (
                             id INTEGER PRIMARY KEY AUTOINCREMENT,
                             repo_path TEXT NOT NULL,
@@ -927,6 +926,21 @@ impl Database {
                 })?;
             }
 
+            // Phase 26: Drop unused tables
+            if current_version < 26 {
+                Self::run_versioned_migration(&conn, 25, 26, "Phase 26: Drop unused tables", |c| {
+                    c.execute_batch(
+                        "DROP TABLE IF EXISTS git_commit_history;
+                         DROP TABLE IF EXISTS chunk_sentiment;
+                         DROP TABLE IF EXISTS item_relationships;
+                         DROP TABLE IF EXISTS query_cache;
+                         DROP TABLE IF EXISTS query_history;
+                         DROP TABLE IF EXISTS file_metadata_cache;",
+                    )?;
+                    Ok(())
+                })?;
+            }
+
             info!(target: "4da::db", "Database schema initialized with sqlite-vec");
             return Ok(());
         }
@@ -1026,7 +1040,6 @@ impl Database {
         info!("Created extraction_jobs table");
 
         // Create file_metadata_cache table to avoid reprocessing
-        // STATUS: Unused — no production queries. Candidate for deprecation.
         conn.execute_batch(
             "
             CREATE TABLE IF NOT EXISTS file_metadata_cache (
@@ -1051,7 +1064,6 @@ impl Database {
     fn migrate_to_phase_2(conn: &Connection) -> SqliteResult<()> {
         conn.execute_batch(
             "
-            -- STATUS: Unused — no production queries. Candidate for deprecation.
             CREATE TABLE IF NOT EXISTS query_cache (
                 query_hash TEXT PRIMARY KEY,
                 natural_language TEXT NOT NULL,
@@ -1067,7 +1079,6 @@ impl Database {
 
         conn.execute_batch(
             "
-            -- STATUS: Unused — no production queries. Candidate for deprecation.
             CREATE TABLE IF NOT EXISTS query_history (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 query TEXT NOT NULL,
@@ -1086,7 +1097,6 @@ impl Database {
 
         conn.execute_batch(
             "
-            -- STATUS: Unused — no production queries. Candidate for deprecation.
             CREATE TABLE IF NOT EXISTS chunk_sentiment (
                 chunk_id INTEGER PRIMARY KEY,
                 sentiment TEXT NOT NULL CHECK(sentiment IN ('positive', 'negative', 'neutral', 'mixed')),
@@ -1186,7 +1196,6 @@ impl Database {
 
         conn.execute_batch(
             "
-            -- STATUS: Unused — no production queries. Candidate for deprecation.
             CREATE TABLE IF NOT EXISTS item_relationships (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 source_item_id INTEGER NOT NULL,
