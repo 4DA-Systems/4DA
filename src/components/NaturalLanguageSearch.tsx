@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
 import { useAppStore } from '../store';
 import { useLicense } from '../hooks';
+import { trackEvent } from '../hooks/use-telemetry';
 import { StackHealthBar, type StackHealth } from './search/StackHealthBar';
 import { SynthesisPanel } from './search/SynthesisPanel';
 import { GhostPreview, type GhostPreviewData } from './search/GhostPreview';
@@ -86,6 +87,7 @@ export function NaturalLanguageSearch({ onStatusChange, defaultExpanded = true }
 
   const handleSearch = async () => {
     if (!query.trim()) return;
+    trackEvent('search_query', undefined, { query_length: query.trim().length });
     setLoading(true);
     setError(null);
     setSynthesis(null);

@@ -157,6 +157,7 @@ mod toolkit;
 mod toolkit_export;
 mod toolkit_http;
 mod toolkit_intelligence;
+mod telemetry;
 mod translation_commands;
 #[cfg(test)]
 mod translation_commands_tests;
@@ -493,6 +494,7 @@ pub fn run() {
             search_synthesis::synthesize_search,
             // Weekly Intelligence Digest (Pro)
             weekly_digest::generate_weekly_digest,
+            weekly_digest::get_latest_digest,
             // Decision Impact Tracking (Pro)
             decision_signals::get_decision_signals,
             // Standing Queries (Pro)
@@ -512,7 +514,11 @@ pub fn run() {
             // Community Intelligence
             community_intelligence::get_community_status,
             community_intelligence::set_community_intelligence_enabled,
-            community_intelligence::set_community_frequency
+            community_intelligence::set_community_frequency,
+            // Local Telemetry (privacy-first, never leaves machine)
+            telemetry::track_event,
+            telemetry::get_usage_analytics,
+            telemetry::clear_telemetry
         ])
         .setup(|app| {
             // Record app start time for diagnostics uptime tracking

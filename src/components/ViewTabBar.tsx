@@ -2,6 +2,7 @@ import { useMemo, memo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useShallow } from 'zustand/react/shallow';
 import { useAppStore } from '../store';
+import { trackEvent } from '../hooks/use-telemetry';
 import type { ViewTier } from '../store/types';
 
 type ViewId = 'briefing' | 'channels' | 'results' | 'profile' | 'insights' | 'saved' | 'toolkit' | 'playbook' | 'calibrate';
@@ -73,7 +74,7 @@ export const ViewTabBar = memo(function ViewTabBar() {
             role="tab"
             aria-selected={activeView === tab.id}
             aria-controls={`view-panel-${tab.id}`}
-            onClick={() => setActiveView(tab.id)}
+            onClick={() => { trackEvent(`view_open:${tab.id}`, tab.id); setActiveView(tab.id); }}
             className={`relative px-4 py-1.5 text-sm rounded-md transition-all ${
               activeView === tab.id
                 ? `${tab.activeColor} font-medium`

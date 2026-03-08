@@ -48,6 +48,7 @@ import { useShallow } from 'zustand/react/shallow';
 
 import { useAppStore } from './store';
 import { useUpdateCheck } from './hooks/use-update-check';
+import { trackEvent } from './hooks/use-telemetry';
 import { useDirection } from './i18n/rtl';
 import type { SourceRelevance } from './types';
 
@@ -181,6 +182,7 @@ function App() {
 
   // Load persisted briefing + source health + license + pro value + game state on mount (instant, from DB)
   useEffect(() => {
+    trackEvent('app_launch');
     loadPersistedBriefing();
     loadSourceHealth();
     loadLicense();
@@ -249,10 +251,11 @@ function App() {
         }
 
         // No cached results — auto-trigger full analysis after splash settles
-        // (Skip if first-run — FirstRunTransition handles analysis trigger)
+        // (Skip if first-run or onboarding — FirstRunTransition handles analysis trigger)
         if (cancelled || useAppStore.getState().isFirstRun) return;
         autoTimer = setTimeout(() => {
-          if (!cancelled) startAnalysis();
+          const s = useAppStore.getState();
+          if (!cancelled && !s.isFirstRun && !s.showOnboarding) startAnalysis();
         }, 2000);
       } catch {
         // Silently ignore failures

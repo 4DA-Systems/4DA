@@ -218,7 +218,7 @@ impl Database {
             .query_row("SELECT version FROM schema_version", [], |row| row.get(0))
             .unwrap_or(1);
 
-        const TARGET_VERSION: i64 = 24;
+        const TARGET_VERSION: i64 = 25;
         if current_version < TARGET_VERSION {
             // Drop the conn lock briefly to allow backup (needs filesystem access)
             drop(conn);
@@ -903,6 +903,30 @@ impl Database {
                             );
                             CREATE INDEX IF NOT EXISTS idx_intelligence_history_recorded
                                 ON intelligence_history(recorded_at);",
+                        )
+                    },
+                )?;
+            }
+
+            // Phase 25 migration: Local Telemetry
+            if current_version < 25 {
+                Self::run_versioned_migration(
+                    &conn,
+                    24,
+                    25,
+                    "Phase 25: local telemetry",
+                    |c| {
+                        c.execute_batch(
+                            "CREATE TABLE IF NOT EXISTS user_events (
+                                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                                event_type TEXT NOT NULL,
+                                view_id TEXT,
+                                metadata TEXT,
+                                created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                                session_id TEXT
+                            );
+                            CREATE INDEX IF NOT EXISTS idx_user_events_type ON user_events(event_type);
+                            CREATE INDEX IF NOT EXISTS idx_user_events_created ON user_events(created_at);",
                         )
                     },
                 )?;
