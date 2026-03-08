@@ -21,6 +21,7 @@ pub struct AchievementUnlocked {
 }
 
 /// Game state returned to frontend
+#[allow(dead_code)] // Used by game_commands (experimental feature)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GameState {
     pub counters: Vec<CounterState>,
@@ -29,12 +30,14 @@ pub struct GameState {
     pub last_active: Option<String>,
 }
 
+#[allow(dead_code)] // Used by game_commands (experimental feature)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CounterState {
     pub counter_type: String,
     pub value: u64,
 }
 
+#[allow(dead_code)] // Used by game_commands (experimental feature)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AchievementState {
     pub id: String,
@@ -78,6 +81,7 @@ pub fn create_tables(conn: &rusqlite::Connection) -> rusqlite::Result<()> {
 /// Called once when the frontend loads. Updates the streak counter (consecutive
 /// days of usage) and returns any newly unlocked streak achievements. This
 /// ensures streak achievements fire from normal app usage, not only from scans.
+#[allow(dead_code)] // Used by game_commands (experimental feature)
 pub fn check_daily_streak(db: &Database) -> Vec<AchievementUnlocked> {
     let conn = db.conn.lock();
     update_streak(&conn);
@@ -286,6 +290,7 @@ fn get_current_streak(conn: &rusqlite::Connection) -> u32 {
 }
 
 /// Get the full game state
+#[allow(dead_code)] // Used by game_commands (experimental feature)
 pub fn get_game_state(db: &Database) -> GameState {
     let conn = db.conn.lock();
     let achievements_def = all_achievements();

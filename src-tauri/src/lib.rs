@@ -81,7 +81,54 @@ mod decision_advantage;
 mod decision_advantage_commands;
 mod decision_signals;
 mod decisions;
+#[cfg(feature = "experimental")]
 mod delegation;
+#[cfg(not(feature = "experimental"))]
+#[allow(dead_code)]
+mod delegation {
+    use serde::{Deserialize, Serialize};
+    use ts_rs::TS;
+
+    #[derive(Debug, Clone, Serialize, Deserialize, TS)]
+    #[ts(export, export_to = "bindings/")]
+    pub struct DelegationScore {
+        pub subject: String,
+        pub overall_score: f64,
+        pub factors: DelegationFactors,
+        pub recommendation: DelegationRec,
+        pub caveats: Vec<String>,
+    }
+
+    #[derive(Debug, Clone, Serialize, Deserialize, TS)]
+    #[ts(export, export_to = "bindings/")]
+    pub struct DelegationFactors {
+        pub pattern_stability: f64,
+        pub security_sensitivity: f64,
+        pub codebase_complexity: f64,
+        pub decision_density: f64,
+        pub ai_track_record: f64,
+    }
+
+    #[derive(Debug, Clone, Serialize, Deserialize, TS, PartialEq)]
+    #[serde(rename_all = "snake_case")]
+    #[ts(export, export_to = "bindings/")]
+    pub enum DelegationRec {
+        FullyDelegate,
+        DelegateWithReview,
+        CollaborateRealtime,
+        HumanOnly,
+    }
+
+    #[tauri::command]
+    pub async fn get_delegation_score(_subject: String) -> Result<DelegationScore, String> {
+        Err("Delegation scoring is an experimental feature".into())
+    }
+
+    #[tauri::command]
+    pub async fn get_all_delegation_scores() -> Result<Vec<DelegationScore>, String> {
+        Err("Delegation scoring is an experimental feature".into())
+    }
+}
 mod developer_dna;
 mod diagnostics;
 mod digest;
@@ -92,7 +139,29 @@ mod domain_profile_data;
 pub mod extractors;
 mod free_briefing;
 mod game_achievements;
+#[cfg(feature = "experimental")]
 mod game_commands;
+#[cfg(not(feature = "experimental"))]
+#[allow(dead_code)]
+mod game_commands {
+    use crate::error::Result;
+    use tauri::AppHandle;
+
+    #[tauri::command]
+    pub fn get_game_state() -> Result<serde_json::Value> {
+        Ok(serde_json::json!({"counters": [], "achievements": [], "streak": 0, "last_active": null}))
+    }
+
+    #[tauri::command]
+    pub fn get_achievements() -> Result<serde_json::Value> {
+        Ok(serde_json::json!([]))
+    }
+
+    #[tauri::command]
+    pub fn check_daily_streak(_app: AppHandle) -> Result<serde_json::Value> {
+        Ok(serde_json::json!([]))
+    }
+}
 mod game_engine;
 mod health;
 mod health_commands;
@@ -155,7 +224,56 @@ mod template_data;
 mod templates;
 mod toolkit;
 mod toolkit_export;
+#[cfg(feature = "experimental")]
 mod toolkit_http;
+#[cfg(not(feature = "experimental"))]
+#[allow(dead_code)]
+mod toolkit_http {
+    use crate::error::Result;
+    use serde::{Deserialize, Serialize};
+
+    #[derive(Debug, Clone, Serialize, Deserialize)]
+    pub struct HttpProbeRequest {
+        pub method: String,
+        pub url: String,
+        pub headers: Vec<(String, String)>,
+        pub body: Option<String>,
+    }
+
+    #[derive(Debug, Clone, Serialize, Deserialize)]
+    pub struct HttpProbeResponse {
+        pub status: u16,
+        pub status_text: String,
+        pub headers: Vec<(String, String)>,
+        pub body: String,
+        pub duration_ms: u64,
+        pub size_bytes: usize,
+    }
+
+    #[derive(Debug, Clone, Serialize, Deserialize)]
+    pub struct HttpHistoryEntry {
+        pub id: i64,
+        pub method: String,
+        pub url: String,
+        pub status: u16,
+        pub duration_ms: u64,
+        pub created_at: String,
+    }
+
+    #[tauri::command]
+    pub async fn toolkit_http_request(
+        _request: HttpProbeRequest,
+    ) -> Result<HttpProbeResponse> {
+        Err(crate::error::FourDaError::Config(
+            "HTTP toolkit is an experimental feature".into(),
+        ))
+    }
+
+    #[tauri::command]
+    pub async fn toolkit_get_http_history(_limit: Option<u32>) -> Result<Vec<HttpHistoryEntry>> {
+        Ok(vec![])
+    }
+}
 mod toolkit_intelligence;
 mod telemetry;
 mod translation_commands;
