@@ -395,4 +395,3 @@ fn derive_topic(category: &ContentCategory) -> String {
         _ => "general".to_string(),
     }
 }
-

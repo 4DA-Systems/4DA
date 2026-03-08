@@ -4,8 +4,8 @@
 
 #[cfg(test)]
 mod tests {
-    use super::super::feedback_sim::*;
     use super::super::corpus::corpus;
+    use super::super::feedback_sim::*;
     use std::collections::HashMap;
 
     #[test]

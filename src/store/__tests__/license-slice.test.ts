@@ -114,7 +114,7 @@ describe('license-slice', () => {
       const result = await useAppStore.getState().activateLicense('PRO-KEY-123');
 
       expect(invoke).toHaveBeenCalledWith('activate_license', { licenseKey: 'PRO-KEY-123' });
-      expect(result).toBe(true);
+      expect(result.ok).toBe(true);
       expect(useAppStore.getState().tier).toBe('pro');
       expect(useAppStore.getState().licenseKey).toBe('PRO-KEY-123');
       expect(useAppStore.getState().licenseLoading).toBe(false);
@@ -122,21 +122,23 @@ describe('license-slice', () => {
       expect(useAppStore.getState().expiresAt).toBe('2025-06-01');
     });
 
-    it('returns false when activation fails', async () => {
-      vi.mocked(invoke).mockResolvedValueOnce({ success: false });
+    it('returns failure with reason when activation fails', async () => {
+      vi.mocked(invoke).mockResolvedValueOnce({ success: false, reason: 'Invalid key (NOT_FOUND)' });
 
       const result = await useAppStore.getState().activateLicense('BAD-KEY');
 
-      expect(result).toBe(false);
+      expect(result.ok).toBe(false);
+      expect(result.reason).toBe('Invalid key (NOT_FOUND)');
       expect(useAppStore.getState().licenseLoading).toBe(false);
     });
 
-    it('returns false on error', async () => {
-      vi.mocked(invoke).mockRejectedValueOnce(new Error('fail'));
+    it('returns failure with error message on exception', async () => {
+      vi.mocked(invoke).mockRejectedValueOnce(new Error('Network timeout'));
 
       const result = await useAppStore.getState().activateLicense('KEY');
 
-      expect(result).toBe(false);
+      expect(result.ok).toBe(false);
+      expect(result.reason).toBe('Network timeout');
       expect(useAppStore.getState().licenseLoading).toBe(false);
     });
   });

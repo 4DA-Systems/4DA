@@ -81,7 +81,9 @@ fn is_domain_allowed(url: &str) -> bool {
         .and_then(|host_port| host_port.split(':').next())
         .unwrap_or("");
 
-    ALLOWED_DOMAINS.iter().any(|allowed| host.eq_ignore_ascii_case(allowed))
+    ALLOWED_DOMAINS
+        .iter()
+        .any(|allowed| host.eq_ignore_ascii_case(allowed))
 }
 
 #[tauri::command]

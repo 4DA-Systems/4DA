@@ -176,7 +176,8 @@ mod tests {
 
     #[test]
     fn load_overrides_nonexistent_lang_returns_empty() {
-        let result = crate::translation_commands::load_overrides("zz_nonexistent_test_language_xyz");
+        let result =
+            crate::translation_commands::load_overrides("zz_nonexistent_test_language_xyz");
         assert!(result.is_ok());
         assert!(result.unwrap().is_empty());
     }

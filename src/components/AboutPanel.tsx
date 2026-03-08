@@ -27,8 +27,8 @@ export function AboutPanel() {
           <p>
             4DA was conceived, designed, and directed by{' '}
             <span className="text-white font-medium">Antony Lawrence Kiddie Pasifa</span>{' '}
-            &mdash; product vision, architecture decisions, design philosophy, quality
-            standards, and every choice that defines what 4DA is.
+            (4DA Systems) &mdash; product vision, architecture decisions, design philosophy,
+            quality standards, and every choice that defines what 4DA is.
           </p>
 
           <p>
@@ -151,7 +151,7 @@ export function AboutPanel() {
       {/* Version + Copyright */}
       <div className="text-center pt-2 border-t border-border/50">
         <p className="text-xs text-gray-500">
-          v1.0.0 &middot; &copy; 2025&ndash;2026 Antony Lawrence Kiddie Pasifa
+          v{__APP_VERSION__} &middot; &copy; 2025&ndash;2026 4DA Systems
         </p>
         <p className="text-[10px] text-gray-600 mt-1">
           All rights reserved. Built with vision, engineered with Claude.

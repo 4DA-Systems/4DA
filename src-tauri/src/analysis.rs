@@ -132,7 +132,8 @@ pub(crate) async fn run_deep_initial_scan(app: AppHandle) -> Result<(), String> 
                         let ace_ctx = scoring::get_ace_context();
                         let detections = stacks::detection::detect_matching_profiles(&ace_ctx);
                         if !detections.is_empty() {
-                            let top_ids: Vec<String> = detections.iter()
+                            let top_ids: Vec<String> = detections
+                                .iter()
                                 .filter(|d| d.confidence >= 0.2)
                                 .take(3)
                                 .map(|d| d.profile_id.clone())
@@ -576,7 +577,8 @@ pub(crate) async fn run_cached_analysis(app: AppHandle) -> Result<(), String> {
                         let ace_ctx = scoring::get_ace_context();
                         let detections = stacks::detection::detect_matching_profiles(&ace_ctx);
                         if !detections.is_empty() {
-                            let top_ids: Vec<String> = detections.iter()
+                            let top_ids: Vec<String> = detections
+                                .iter()
                                 .filter(|d| d.confidence >= 0.2)
                                 .take(3)
                                 .map(|d| d.profile_id.clone())

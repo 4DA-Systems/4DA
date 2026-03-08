@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useShallow } from 'zustand/react/shallow';
+import { PanelErrorBoundary } from './PanelErrorBoundary';
 import { LearnedBehaviorPanel } from './LearnedBehaviorPanel';
 import { SystemHealthPanel } from './SystemHealthPanel';
 import { IndexedDocumentsPanel } from './IndexedDocumentsPanel';
@@ -335,33 +336,45 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
           {activeTab === 'general' && (
             <div id="tabpanel-general" role="tabpanel">
               <div className="space-y-6">
-                <LocaleSection />
+                <PanelErrorBoundary name="Language">
+                  <LocaleSection />
+                </PanelErrorBoundary>
 
-                <AIProviderSection
-                  settings={settings}
-                  settingsForm={settingsForm}
-                  setSettingsForm={setSettingsFormFull}
-                  ollamaStatus={ollamaStatus}
-                  ollamaModels={ollamaModels}
-                  checkOllamaStatus={checkOllamaStatus}
-                />
+                <PanelErrorBoundary name="AI Provider">
+                  <AIProviderSection
+                    settings={settings}
+                    settingsForm={settingsForm}
+                    setSettingsForm={setSettingsFormFull}
+                    ollamaStatus={ollamaStatus}
+                    ollamaModels={ollamaModels}
+                    checkOllamaStatus={checkOllamaStatus}
+                  />
+                </PanelErrorBoundary>
 
-                <MonitoringSection
-                  monitoring={monitoring}
-                  monitoringInterval={monitoringInterval}
-                  setMonitoringInterval={setMonitoringInterval}
-                  notificationThreshold={notificationThreshold}
-                  onSetNotificationThreshold={setNotificationThreshold}
-                  onToggle={handleToggleMonitoring}
-                  onUpdateInterval={handleUpdateMonitoringInterval}
-                  onTestNotification={handleTestNotification}
-                />
+                <PanelErrorBoundary name="Monitoring">
+                  <MonitoringSection
+                    monitoring={monitoring}
+                    monitoringInterval={monitoringInterval}
+                    setMonitoringInterval={setMonitoringInterval}
+                    notificationThreshold={notificationThreshold}
+                    onSetNotificationThreshold={setNotificationThreshold}
+                    onToggle={handleToggleMonitoring}
+                    onUpdateInterval={handleUpdateMonitoringInterval}
+                    onTestNotification={handleTestNotification}
+                  />
+                </PanelErrorBoundary>
 
-                <DigestSection setSettingsStatus={setSettingsStatus} />
+                <PanelErrorBoundary name="Digest">
+                  <DigestSection setSettingsStatus={setSettingsStatus} />
+                </PanelErrorBoundary>
 
-                <LicenseSection onStatus={setSettingsStatus} />
+                <PanelErrorBoundary name="License">
+                  <LicenseSection onStatus={setSettingsStatus} />
+                </PanelErrorBoundary>
 
-                <StreetsMembershipSection onStatus={setSettingsStatus} />
+                <PanelErrorBoundary name="STREETS Membership">
+                  <StreetsMembershipSection onStatus={setSettingsStatus} />
+                </PanelErrorBoundary>
 
                 {/* Actions */}
                 <div className="flex gap-3 pt-2">
@@ -385,7 +398,9 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
           {/* Sources Tab */}
           {activeTab === 'sources' && (
             <div id="tabpanel-sources" role="tabpanel">
-              <SourceConfigPanel onStatusChange={setSettingsStatus} />
+              <PanelErrorBoundary name="Source Configuration">
+                <SourceConfigPanel onStatusChange={setSettingsStatus} />
+              </PanelErrorBoundary>
             </div>
           )}
 
@@ -393,15 +408,21 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
           {activeTab === 'profile' && (
             <div id="tabpanel-profile" role="tabpanel">
               <div className="space-y-6">
-                <PersonalizationSection />
+                <PanelErrorBoundary name="Personalization">
+                  <PersonalizationSection />
+                </PanelErrorBoundary>
 
-                <DeveloperDnaPanel />
+                <PanelErrorBoundary name="Developer DNA">
+                  <DeveloperDnaPanel />
+                </PanelErrorBoundary>
 
-                <LearnedBehaviorPanel
-                  affinities={learnedAffinities}
-                  antiTopics={antiTopics}
-                  onRefresh={loadLearnedBehavior}
-                />
+                <PanelErrorBoundary name="Learned Behavior">
+                  <LearnedBehaviorPanel
+                    affinities={learnedAffinities}
+                    antiTopics={antiTopics}
+                    onRefresh={loadLearnedBehavior}
+                  />
+                </PanelErrorBoundary>
               </div>
             </div>
           )}
@@ -410,21 +431,27 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
           {activeTab === 'discovery' && (
             <div id="tabpanel-discovery" role="tabpanel">
               <div className="space-y-6">
-                <ContextDiscoverySection
-                  scanDirectories={scanDirectories}
-                  newScanDir={newScanDir}
-                  setNewScanDir={setNewScanDir}
-                  isScanning={isScanning}
-                  discoveredContext={discoveredContext}
-                  runAutoDiscovery={runAutoDiscovery}
-                  runFullScan={runFullScan}
-                  addScanDirectory={addScanDirectory}
-                  removeScanDirectory={removeScanDirectory}
-                />
+                <PanelErrorBoundary name="Context Discovery">
+                  <ContextDiscoverySection
+                    scanDirectories={scanDirectories}
+                    newScanDir={newScanDir}
+                    setNewScanDir={setNewScanDir}
+                    isScanning={isScanning}
+                    discoveredContext={discoveredContext}
+                    runAutoDiscovery={runAutoDiscovery}
+                    runFullScan={runFullScan}
+                    addScanDirectory={addScanDirectory}
+                    removeScanDirectory={removeScanDirectory}
+                  />
+                </PanelErrorBoundary>
 
-                <IndexedDocumentsPanel onStatusChange={setSettingsStatus} />
+                <PanelErrorBoundary name="Indexed Documents">
+                  <IndexedDocumentsPanel onStatusChange={setSettingsStatus} />
+                </PanelErrorBoundary>
 
-                <NaturalLanguageSearch onStatusChange={setSettingsStatus} />
+                <PanelErrorBoundary name="Natural Language Search">
+                  <NaturalLanguageSearch onStatusChange={setSettingsStatus} />
+                </PanelErrorBoundary>
               </div>
             </div>
           )}
@@ -433,25 +460,35 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
           {activeTab === 'health' && (
             <div id="tabpanel-health" role="tabpanel">
               <div className="space-y-6">
-                <ProValuePanel />
+                <PanelErrorBoundary name="Pro Value">
+                  <ProValuePanel />
+                </PanelErrorBoundary>
 
-                <AttentionDashboard />
+                <PanelErrorBoundary name="Attention Dashboard">
+                  <AttentionDashboard />
+                </PanelErrorBoundary>
 
-                <NaturalLanguageQueryPanel />
+                <PanelErrorBoundary name="Query Panel">
+                  <NaturalLanguageQueryPanel />
+                </PanelErrorBoundary>
 
-                <ProjectHealthRadar />
+                <PanelErrorBoundary name="Project Health">
+                  <ProjectHealthRadar />
+                </PanelErrorBoundary>
 
-                <SystemHealthPanel
-                  health={systemHealth}
-                  similarTopicQuery={similarTopicQuery}
-                  onSimilarTopicQueryChange={setSimilarTopicQuery}
-                  similarTopicResults={similarTopicResults}
-                  onRunAnomalyDetection={runAnomalyDetection}
-                  onResolveAnomaly={resolveAnomaly}
-                  onFindSimilarTopics={findSimilarTopics}
-                  onSaveWatcherState={saveWatcherState}
-                  onRefresh={loadSystemHealth}
-                />
+                <PanelErrorBoundary name="System Health">
+                  <SystemHealthPanel
+                    health={systemHealth}
+                    similarTopicQuery={similarTopicQuery}
+                    onSimilarTopicQueryChange={setSimilarTopicQuery}
+                    similarTopicResults={similarTopicResults}
+                    onRunAnomalyDetection={runAnomalyDetection}
+                    onResolveAnomaly={resolveAnomaly}
+                    onFindSimilarTopics={findSimilarTopics}
+                    onSaveWatcherState={saveWatcherState}
+                    onRefresh={loadSystemHealth}
+                  />
+                </PanelErrorBoundary>
               </div>
             </div>
           )}
@@ -459,7 +496,9 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
           {/* About Tab */}
           {activeTab === 'about' && (
             <div id="tabpanel-about" role="tabpanel">
-              <AboutPanel />
+              <PanelErrorBoundary name="About">
+                <AboutPanel />
+              </PanelErrorBoundary>
             </div>
           )}
         </div>
@@ -468,7 +507,7 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
         <div className="px-6 pb-6">
           <div className="pt-4 border-t border-border text-center">
             <p className="text-xs text-text-muted">
-              4DA v1.0.0 &copy; 2025-2026 Antony Lawrence Kiddie Pasifa. All rights reserved.
+              4DA v{__APP_VERSION__} &copy; 2025-2026 4DA Systems. All rights reserved.
             </p>
             <p className="text-xs text-text-muted mt-1">
               Licensed under FSL-1.1-Apache-2.0

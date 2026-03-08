@@ -41,10 +41,24 @@ impl std::fmt::Debug for LLMProvider {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("LLMProvider")
             .field("provider", &self.provider)
-            .field("api_key", &if self.api_key.is_empty() { "(empty)" } else { "[REDACTED]" })
+            .field(
+                "api_key",
+                &if self.api_key.is_empty() {
+                    "(empty)"
+                } else {
+                    "[REDACTED]"
+                },
+            )
             .field("model", &self.model)
             .field("base_url", &self.base_url)
-            .field("openai_api_key", &if self.openai_api_key.is_empty() { "(empty)" } else { "[REDACTED]" })
+            .field(
+                "openai_api_key",
+                &if self.openai_api_key.is_empty() {
+                    "(empty)"
+                } else {
+                    "[REDACTED]"
+                },
+            )
             .finish()
     }
 }
@@ -249,7 +263,14 @@ impl std::fmt::Debug for LicenseConfig {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("LicenseConfig")
             .field("tier", &self.tier)
-            .field("license_key", &if self.license_key.is_empty() { "(empty)" } else { "[REDACTED]" })
+            .field(
+                "license_key",
+                &if self.license_key.is_empty() {
+                    "(empty)"
+                } else {
+                    "[REDACTED]"
+                },
+            )
             .field("activated_at", &self.activated_at)
             .field("trial_started_at", &self.trial_started_at)
             .finish()
@@ -533,9 +554,22 @@ impl std::fmt::Debug for Settings {
             .field("auto_discovery_completed", &self.auto_discovery_completed)
             .field("onboarding_complete", &self.onboarding_complete)
             .field("rss_feeds", &format!("[{} feeds]", self.rss_feeds.len()))
-            .field("twitter_handles", &format!("[{} handles]", self.twitter_handles.len()))
-            .field("x_api_key", &if self.x_api_key.is_empty() { "(empty)" } else { "[REDACTED]" })
-            .field("youtube_channels", &format!("[{} channels]", self.youtube_channels.len()))
+            .field(
+                "twitter_handles",
+                &format!("[{} handles]", self.twitter_handles.len()),
+            )
+            .field(
+                "x_api_key",
+                &if self.x_api_key.is_empty() {
+                    "(empty)"
+                } else {
+                    "[REDACTED]"
+                },
+            )
+            .field(
+                "youtube_channels",
+                &format!("[{} channels]", self.youtube_channels.len()),
+            )
             .field("github_languages", &self.github_languages)
             .field("license", &self.license)
             .field("locale", &self.locale)

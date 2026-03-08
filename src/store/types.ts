@@ -317,7 +317,7 @@ export interface LicenseSlice {
   expired: boolean;
   proValueReport: import('../types').ProValueReport | null;
   loadLicense: () => Promise<void>;
-  activateLicense: (key: string) => Promise<boolean>;
+  activateLicense: (key: string) => Promise<{ ok: boolean; reason?: string }>;
   loadTrialStatus: () => Promise<void>;
   startTrial: () => Promise<boolean>;
   isPro: () => boolean;

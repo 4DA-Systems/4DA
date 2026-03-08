@@ -353,5 +353,4 @@ mod tests {
             assert!((a - b).abs() < 1e-6);
         }
     }
-
 }

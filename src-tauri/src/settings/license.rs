@@ -566,4 +566,3 @@ pub fn verify_license_key(key: &str) -> Result<LicensePayload, String> {
 
     Ok(payload)
 }
-

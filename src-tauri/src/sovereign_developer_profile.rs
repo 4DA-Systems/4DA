@@ -298,7 +298,10 @@ fn assemble_infrastructure(conn: &Connection) -> InfrastructureDimension {
     dim
 }
 
-fn assemble_stack(conn: &Connection, domain: &crate::domain_profile::DomainProfile) -> StackDimension {
+fn assemble_stack(
+    conn: &Connection,
+    domain: &crate::domain_profile::DomainProfile,
+) -> StackDimension {
     let primary_stack = rank_primary_stack(conn, domain.primary_stack.clone());
     let mut adjacent_tech: Vec<String> = domain.adjacent_tech.iter().cloned().collect();
     adjacent_tech.sort();

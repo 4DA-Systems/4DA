@@ -34,10 +34,10 @@ export const createLicenseSlice: StateCreator<AppStore, [], [], LicenseSlice> = 
     }
   },
 
-  activateLicense: async (key: string) => {
+  activateLicense: async (key: string): Promise<{ ok: boolean; reason?: string }> => {
     set({ licenseLoading: true });
     try {
-      const result = await invoke<{ success: boolean; tier: string; expires_at?: string }>('activate_license', {
+      const result = await invoke<{ success: boolean; tier: string; expires_at?: string; reason?: string }>('activate_license', {
         licenseKey: key,
       });
       if (result.success) {
@@ -51,13 +51,14 @@ export const createLicenseSlice: StateCreator<AppStore, [], [], LicenseSlice> = 
         });
         // Also refresh STREETS tier in case this key has STREETS features
         get().loadStreetsTier?.();
-        return true;
+        return { ok: true };
       }
       set({ licenseLoading: false });
-      return false;
-    } catch {
+      return { ok: false, reason: result.reason ?? 'Validation failed' };
+    } catch (e) {
       set({ licenseLoading: false });
-      return false;
+      const msg = e instanceof Error ? e.message : typeof e === 'string' ? e : 'Unknown error';
+      return { ok: false, reason: msg };
     }
   },
 

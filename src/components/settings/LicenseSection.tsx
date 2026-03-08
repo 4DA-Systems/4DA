@@ -17,6 +17,7 @@ export function LicenseSection({ onStatus }: { onStatus: (s: string) => void }) 
 
   const [key, setKey] = useState('');
   const [starting, setStarting] = useState(false);
+  const [activationResult, setActivationResult] = useState<{ ok: boolean; reason?: string } | null>(null);
 
   useEffect(() => {
     loadLicense();
@@ -31,14 +32,16 @@ export function LicenseSection({ onStatus }: { onStatus: (s: string) => void }) 
 
   const handleActivate = async () => {
     if (!key.trim()) return;
-    const ok = await activateLicense(key.trim());
-    if (ok) {
+    setActivationResult(null);
+    const result = await activateLicense(key.trim());
+    setActivationResult(result);
+    if (result.ok) {
       onStatus(t('settings.license.activated'));
       setKey('');
     } else {
-      onStatus(t('settings.license.invalidKey'));
+      onStatus(result.reason ? `Error: ${result.reason}` : t('settings.license.invalidKey'));
     }
-    setTimeout(() => onStatus(''), 3000);
+    setTimeout(() => onStatus(''), 5000);
   };
 
   const handleStartTrial = async () => {
@@ -127,7 +130,7 @@ export function LicenseSection({ onStatus }: { onStatus: (s: string) => void }) 
               type="text"
               value={key}
               onChange={e => setKey(e.target.value)}
-              placeholder="4DA-xxxxx.xxxxx"
+              placeholder="XXXXXX-XXXXXX-XXXXXX-XXXXXX-XXXXXX-V3"
               onKeyDown={e => e.key === 'Enter' && handleActivate()}
               className="flex-1 px-3 py-2 bg-bg-primary border border-border rounded-lg text-sm text-white placeholder-gray-600 focus:outline-none focus:border-[#D4AF37]/50 font-mono text-xs"
             />
@@ -139,6 +142,15 @@ export function LicenseSection({ onStatus }: { onStatus: (s: string) => void }) 
               {licenseLoading ? '...' : t('action.activate')}
             </button>
           </div>
+
+          {/* Activation result feedback */}
+          {activationResult && (
+            <div className={`text-xs p-2 rounded ${activationResult.ok ? 'bg-green-500/10 text-green-400 border border-green-500/30' : 'bg-red-500/10 text-red-400 border border-red-500/30'}`}>
+              {activationResult.ok
+                ? t('settings.license.activated')
+                : activationResult.reason || t('settings.license.invalidKey')}
+            </div>
+          )}
 
           {/* Trial button */}
           {canStartTrial && (
