@@ -15,37 +15,16 @@ import { ProgressiveRevealBanner } from './playbook/ProgressiveRevealBanner';
 import { PersonalizationDepthIndicator } from './playbook/PersonalizationDepthIndicator';
 import { TemplateLibrary } from './playbook/TemplateLibrary';
 import { PlaybookSidebar } from './playbook/PlaybookSidebar';
-import { registerGameComponent } from '../lib/game-components';
+import { useGameComponent } from '../hooks/use-game-component';
 
 function PlaybookPathway({ progress, streak }: { progress: number; streak: number }) {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const elementRef = useRef<HTMLElement | null>(null);
+  const { containerRef, elementRef } = useGameComponent('game-playbook-pathway');
 
   useEffect(() => {
-    registerGameComponent('game-playbook-pathway').then(() => {
-      if (!containerRef.current || elementRef.current) return;
-      const el = document.createElement('game-playbook-pathway');
-      el.style.width = '100%';
-      el.style.height = '100%';
-      el.style.display = 'block';
-      containerRef.current.appendChild(el);
-      elementRef.current = el;
-    });
-    const container = containerRef.current;
-    return () => {
-      if (elementRef.current && container?.contains(elementRef.current)) {
-        container.removeChild(elementRef.current);
-      }
-      elementRef.current = null;
-    };
-  }, []);
-
-  useEffect(() => {
-    const el = elementRef.current as (HTMLElement & { setParam?: (n: string, v: number) => void }) | null;
-    el?.setParam?.('progress', progress);
-    el?.setParam?.('streak', streak);
-    el?.setParam?.('momentum', Math.max(0.3, progress));
-  }, [progress, streak]);
+    elementRef.current?.setParam?.('progress', progress);
+    elementRef.current?.setParam?.('streak', streak);
+    elementRef.current?.setParam?.('momentum', Math.max(0.3, progress));
+  }, [progress, streak, elementRef]);
 
   return <div ref={containerRef} className="w-full h-10 rounded-lg overflow-hidden opacity-50" aria-hidden="true" />;
 }
@@ -129,12 +108,12 @@ export function PlaybookView() {
         if (lessonTitle) {
           addToast(
             'success',
-            `Your scoring engine just learned about ${lessonTitle}. Future results will reflect this.`,
+            t('streets:streets.lessonLearned', { title: lessonTitle }),
           );
         }
       }
     },
-    [markComplete, addToast],
+    [markComplete, addToast, t],
   );
 
   // 3c. Track already-requested personalization keys to avoid duplicate IPC calls

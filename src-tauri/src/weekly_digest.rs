@@ -121,27 +121,8 @@ fn collect_stats(conn: &rusqlite::Connection, days: i64) -> DigestStats {
         )
         .unwrap_or(0);
 
-    let relevant: u32 = conn
-        .query_row(
-            "SELECT COUNT(*) FROM relevance_results r
-             JOIN source_items s ON s.id = r.item_id
-             WHERE s.created_at >= ?1 AND r.relevant = 1",
-            rusqlite::params![cutoff],
-            |row| row.get(0),
-        )
-        .unwrap_or(0);
-
-    let avg_score: f64 = conn
-        .query_row(
-            "SELECT COALESCE(AVG(r.top_score), 0) FROM relevance_results r
-             JOIN source_items s ON s.id = r.item_id
-             WHERE s.created_at >= ?1",
-            rusqlite::params![cutoff],
-            |row| row.get(0),
-        )
-        .unwrap_or(0.0);
-
-    let new_sources: u32 = conn
+    // Count distinct source types active this period
+    let active_sources: u32 = conn
         .query_row(
             "SELECT COUNT(DISTINCT source_type) FROM source_items WHERE created_at >= ?1",
             rusqlite::params![cutoff],
@@ -149,11 +130,21 @@ fn collect_stats(conn: &rusqlite::Connection, days: i64) -> DigestStats {
         )
         .unwrap_or(0);
 
+    // Count items with embeddings (proxy for "analyzed" items)
+    let analyzed: u32 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM source_items
+             WHERE created_at >= ?1 AND LENGTH(embedding) > 0",
+            rusqlite::params![cutoff],
+            |row| row.get(0),
+        )
+        .unwrap_or(0);
+
     DigestStats {
         total_items_analyzed: total,
-        relevant_items: relevant,
-        new_sources_discovered: new_sources,
-        avg_relevance_score: avg_score,
+        relevant_items: analyzed,
+        new_sources_discovered: active_sources,
+        avg_relevance_score: 0.0, // Relevance computed in-memory, not persisted
     }
 }
 

@@ -1,42 +1,21 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useShallow } from 'zustand/react/shallow';
 import { useAppStore } from '../../store';
 import { ChannelCard } from './ChannelCard';
 import { ChannelContent } from './ChannelContent';
 import { CreateChannelModal } from './CreateChannelModal';
-import { registerGameComponent } from '../../lib/game-components';
+import { useGameComponent } from '../../hooks/use-game-component';
 
 function SourceVitals({ channelCount, activeCount }: { channelCount: number; activeCount: number }) {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const elementRef = useRef<HTMLElement | null>(null);
+  const { containerRef, elementRef } = useGameComponent('game-source-vitals');
 
   useEffect(() => {
-    registerGameComponent('game-source-vitals').then(() => {
-      if (!containerRef.current || elementRef.current) return;
-      const el = document.createElement('game-source-vitals');
-      el.style.width = '100%';
-      el.style.height = '100%';
-      el.style.display = 'block';
-      containerRef.current.appendChild(el);
-      elementRef.current = el;
-    });
-    const container = containerRef.current;
-    return () => {
-      if (elementRef.current && container?.contains(elementRef.current)) {
-        container.removeChild(elementRef.current);
-      }
-      elementRef.current = null;
-    };
-  }, []);
-
-  useEffect(() => {
-    const el = elementRef.current as (HTMLElement & { setParam?: (n: string, v: number) => void }) | null;
     const health = channelCount > 0 ? activeCount / channelCount : 0;
-    el?.setParam?.('health_avg', health);
-    el?.setParam?.('active_ratio', health);
-    el?.setParam?.('error_rate', 0);
-  }, [channelCount, activeCount]);
+    elementRef.current?.setParam?.('health_avg', health);
+    elementRef.current?.setParam?.('active_ratio', health);
+    elementRef.current?.setParam?.('error_rate', 0);
+  }, [channelCount, activeCount, elementRef]);
 
   return <div ref={containerRef} className="w-full h-12 rounded-lg overflow-hidden opacity-40" aria-hidden="true" />;
 }

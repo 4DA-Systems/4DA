@@ -10,6 +10,10 @@ use super::{
     ScoringStatsAggregate,
 };
 
+/// Maximum history depth for free-tier users (30 days in hours).
+/// Pro and trial users have unlimited history access.
+pub const FREE_HISTORY_LIMIT_HOURS: i64 = 30 * 24;
+
 // Cache for feedback topic summary — invalidated on feedback writes.
 static FEEDBACK_TOPIC_CACHE: LazyLock<Mutex<Option<Vec<FeedbackTopicSummary>>>> =
     LazyLock::new(|| Mutex::new(None));
@@ -361,6 +365,24 @@ impl Database {
         rows.collect()
     }
 
+    /// Get recent source items respecting the free-tier history gate.
+    ///
+    /// Free users are limited to 30 days of history (`FREE_HISTORY_LIMIT_HOURS`).
+    /// Pro / trial users receive the full requested window.
+    /// The gate is applied at the SQL level so older items are never loaded.
+    pub fn get_items_tiered(
+        &self,
+        requested_hours: i64,
+        limit: usize,
+    ) -> SqliteResult<Vec<StoredSourceItem>> {
+        let effective_hours = if crate::settings::is_pro() {
+            requested_hours
+        } else {
+            requested_hours.min(FREE_HISTORY_LIMIT_HOURS)
+        };
+        self.get_items_since_hours(effective_hours, limit)
+    }
+
     /// Get recent source items within a time window (hours)
     pub fn get_items_since_hours(
         &self,
@@ -395,6 +417,29 @@ impl Database {
         })?;
 
         rows.collect()
+    }
+
+    /// Get items added since a specific ISO timestamp (for differential analysis).
+    /// Respects free-tier 30-day history gate.
+    pub fn get_items_since_timestamp_tiered(
+        &self,
+        since: &str,
+        limit: usize,
+    ) -> SqliteResult<Vec<StoredSourceItem>> {
+        if crate::settings::is_pro() {
+            self.get_items_since_timestamp(since, limit)
+        } else {
+            // Free tier: clamp to 30-day floor even if `since` is older
+            let cutoff_30d = chrono::Utc::now() - chrono::Duration::hours(FREE_HISTORY_LIMIT_HOURS);
+            let cutoff_str = cutoff_30d.format("%Y-%m-%d %H:%M:%S").to_string();
+            // Use whichever is more recent: the requested timestamp or the 30-day cutoff
+            let effective_since = if since > cutoff_str.as_str() {
+                since.to_string()
+            } else {
+                cutoff_str
+            };
+            self.get_items_since_timestamp(&effective_since, limit)
+        }
     }
 
     /// Get items added since a specific ISO timestamp (for differential analysis)

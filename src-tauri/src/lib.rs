@@ -77,6 +77,7 @@ mod context_engine;
 pub mod db;
 mod decision_advantage;
 mod decision_advantage_commands;
+mod decision_signals;
 mod decisions;
 mod delegation;
 mod developer_dna;
@@ -126,6 +127,7 @@ mod tech_radar_compute;
 mod temporal;
 mod void_commands;
 mod void_engine;
+mod weekly_digest;
 
 mod stack_commands;
 pub mod stacks;
@@ -468,7 +470,11 @@ pub fn run() {
             channel_commands::preview_channel_sources,
             channel_commands::delete_channel,
             // Natural Language Search (Pro)
-            natural_language_search::natural_language_query
+            natural_language_search::natural_language_query,
+            // Weekly Intelligence Digest (Pro)
+            weekly_digest::generate_weekly_digest,
+            // Decision Impact Tracking (Pro)
+            decision_signals::get_decision_signals
         ])
         .setup(|app| {
             // Record app start time for diagnostics uptime tracking

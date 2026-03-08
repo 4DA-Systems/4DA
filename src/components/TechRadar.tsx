@@ -1,7 +1,7 @@
-import { useState, useEffect, useCallback, useRef, memo } from 'react';
+import { useState, useEffect, useCallback, memo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
-import { registerGameComponent } from '../lib/game-components';
+import { useGameComponent } from '../hooks/use-game-component';
 
 import { RadarSVG } from './tech-radar/RadarSVG';
 import { RadarEntryPanel } from './tech-radar/RadarEntryPanel';
@@ -14,30 +14,10 @@ interface TechRadarData {
 }
 
 function RadarField({ entries, userStack }: { entries: RadarEntry[]; userStack: string[] }) {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const elementRef = useRef<HTMLElement | null>(null);
+  const { containerRef, elementRef } = useGameComponent('game-radar-field');
 
   useEffect(() => {
-    registerGameComponent('game-radar-field').then(() => {
-      if (!containerRef.current || elementRef.current) return;
-      const el = document.createElement('game-radar-field');
-      el.style.width = '100%';
-      el.style.height = '100%';
-      el.style.display = 'block';
-      containerRef.current.appendChild(el);
-      elementRef.current = el;
-    });
-    const container = containerRef.current;
-    return () => {
-      if (elementRef.current && container?.contains(elementRef.current)) {
-        container.removeChild(elementRef.current);
-      }
-      elementRef.current = null;
-    };
-  }, []);
-
-  useEffect(() => {
-    const el = elementRef.current as (HTMLElement & { setParam?: (n: string, v: number) => void }) | null;
+    const el = elementRef.current;
     if (!el || entries.length === 0) return;
     const total = entries.length;
     const byQuad = (q: string) => entries.filter(e => e.quadrant === q).length / total;
@@ -49,7 +29,7 @@ function RadarField({ entries, userStack }: { entries: RadarEntry[]; userStack: 
     el.setParam?.('moving_out', entries.filter(e => e.movement === 'down').length / total);
     const stackLower = userStack.map(s => s.toLowerCase());
     el.setParam?.('stack_glow', entries.filter(e => stackLower.includes(e.name.toLowerCase())).length / total);
-  }, [entries, userStack]);
+  }, [entries, userStack, elementRef]);
 
   return <div ref={containerRef} className="absolute inset-0 rounded-lg overflow-hidden" aria-hidden="true" />;
 }
