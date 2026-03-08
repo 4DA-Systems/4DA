@@ -1,10 +1,44 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useShallow } from 'zustand/react/shallow';
 import { useAppStore } from '../../store';
 import { ChannelCard } from './ChannelCard';
 import { ChannelContent } from './ChannelContent';
 import { CreateChannelModal } from './CreateChannelModal';
+import { registerGameComponent } from '../../lib/game-components';
+
+function SourceVitals({ channelCount, activeCount }: { channelCount: number; activeCount: number }) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const elementRef = useRef<HTMLElement | null>(null);
+
+  useEffect(() => {
+    registerGameComponent('game-source-vitals').then(() => {
+      if (!containerRef.current || elementRef.current) return;
+      const el = document.createElement('game-source-vitals');
+      el.style.width = '100%';
+      el.style.height = '100%';
+      el.style.display = 'block';
+      containerRef.current.appendChild(el);
+      elementRef.current = el;
+    });
+    return () => {
+      if (elementRef.current && containerRef.current?.contains(elementRef.current)) {
+        containerRef.current.removeChild(elementRef.current);
+      }
+      elementRef.current = null;
+    };
+  }, []);
+
+  useEffect(() => {
+    const el = elementRef.current as (HTMLElement & { setParam?: (n: string, v: number) => void }) | null;
+    const health = channelCount > 0 ? activeCount / channelCount : 0;
+    el?.setParam?.('health_avg', health);
+    el?.setParam?.('active_ratio', health);
+    el?.setParam?.('error_rate', 0);
+  }, [channelCount, activeCount]);
+
+  return <div ref={containerRef} className="w-full h-12 rounded-lg overflow-hidden opacity-40" aria-hidden="true" />;
+}
 
 export function ChannelsView() {
   const { t } = useTranslation();
@@ -77,6 +111,10 @@ export function ChannelsView() {
             </svg>
           </button>
         </div>
+        <SourceVitals
+          channelCount={channels.length}
+          activeCount={channels.filter(c => c.freshness !== 'never_rendered').length}
+        />
         {channels.map((channel) => (
           <ChannelCard
             key={channel.id}

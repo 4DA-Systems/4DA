@@ -7,7 +7,6 @@ import { renderMarkdown } from '../utils/playbook-markdown';
 import type { InsightContent } from '../types/personalization';
 import { SovereignProfile } from './playbook/SovereignProfile';
 import { StreetHealthBadge } from './playbook/StreetHealthBadge';
-import { SunsDashboard } from './playbook/SunsDashboard';
 import { SovereignInsightCard } from './playbook/SovereignInsightCard';
 import { SovereignConnectionBlock } from './playbook/SovereignConnectionBlock';
 import { DiffRibbon } from './playbook/DiffRibbon';
@@ -16,6 +15,39 @@ import { ProgressiveRevealBanner } from './playbook/ProgressiveRevealBanner';
 import { PersonalizationDepthIndicator } from './playbook/PersonalizationDepthIndicator';
 import { TemplateLibrary } from './playbook/TemplateLibrary';
 import { PlaybookSidebar } from './playbook/PlaybookSidebar';
+import { registerGameComponent } from '../lib/game-components';
+
+function PlaybookPathway({ progress, streak }: { progress: number; streak: number }) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const elementRef = useRef<HTMLElement | null>(null);
+
+  useEffect(() => {
+    registerGameComponent('game-playbook-pathway').then(() => {
+      if (!containerRef.current || elementRef.current) return;
+      const el = document.createElement('game-playbook-pathway');
+      el.style.width = '100%';
+      el.style.height = '100%';
+      el.style.display = 'block';
+      containerRef.current.appendChild(el);
+      elementRef.current = el;
+    });
+    return () => {
+      if (elementRef.current && containerRef.current?.contains(elementRef.current)) {
+        containerRef.current.removeChild(elementRef.current);
+      }
+      elementRef.current = null;
+    };
+  }, []);
+
+  useEffect(() => {
+    const el = elementRef.current as (HTMLElement & { setParam?: (n: string, v: number) => void }) | null;
+    el?.setParam?.('progress', progress);
+    el?.setParam?.('streak', streak);
+    el?.setParam?.('momentum', Math.max(0.3, progress));
+  }, [progress, streak]);
+
+  return <div ref={containerRef} className="w-full h-10 rounded-lg overflow-hidden opacity-50" aria-hidden="true" />;
+}
 
 // 3a. Memoized lesson content — avoids re-parsing markdown on every parent render
 const LessonContent = memo(function LessonContent({ content, moduleId, lessonIdx }: {
@@ -215,6 +247,11 @@ export function PlaybookView() {
 
         {!showTemplates && playbookContent && !playbookLoading && (
           <div className="space-y-4">
+            <PlaybookPathway
+              progress={playbookContent.lessons.length > 0 ? completedSet.size / playbookContent.lessons.length : 0}
+              streak={Object.keys(personalizedLessons).length > 0 ? 0.7 : 0.3}
+            />
+
             {/* Module Header */}
             <div className="bg-bg-secondary border border-border rounded-xl p-6">
               <div className="flex items-center gap-3 mb-2">
@@ -331,8 +368,6 @@ export function PlaybookView() {
               />
             )}
 
-            {/* 3b. Suns Dashboard — only mount when SUNS module is active */}
-            {activeModuleId === 'S' && <SunsDashboard />}
           </div>
         )}
       </main>

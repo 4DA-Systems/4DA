@@ -140,7 +140,7 @@ export const RadarSVG = memo(function RadarSVG({ entries, userStack, onEntryClic
         className="w-full max-w-[560px]"
         style={{ fontFamily: 'Inter, sans-serif', transition: 'all 0.4s cubic-bezier(0.4, 0, 0.2, 1)' }}
       >
-        <rect x="0" y="0" width="600" height="600" fill="#0A0A0A" rx="8" />
+        <rect x="0" y="0" width="600" height="600" fill="transparent" rx="8" />
         {isZoomed && (
           <rect x="0" y="0" width="600" height="600" fill="transparent"
             onClick={handleBackClick} style={{ cursor: 'pointer' }} />
