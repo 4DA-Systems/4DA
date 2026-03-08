@@ -113,13 +113,14 @@ describe('SynthesisPanel', () => {
         { index: 2, title: 'HN Discussion', url: 'https://news.ycombinator.com/item?id=123', source_type: 'hn' },
       ],
     );
-    render(
+    const { container } = render(
       <SynthesisPanel {...defaultProps} synthesis={synthesis} loading={false} />,
     );
-    const links = screen.getAllByRole('link');
-    expect(links).toHaveLength(2);
-    expect(links[0]).toHaveAttribute('href', 'https://blog.rust-lang.org');
-    expect(links[1]).toHaveAttribute('href', 'https://news.ycombinator.com/item?id=123');
+    // Citation links are the inline superscript links (have bg-cyan-500/20 class)
+    const citationLinks = container.querySelectorAll('a.bg-cyan-500\\/20');
+    expect(citationLinks).toHaveLength(2);
+    expect(citationLinks[0]).toHaveAttribute('href', 'https://blog.rust-lang.org');
+    expect(citationLinks[1]).toHaveAttribute('href', 'https://news.ycombinator.com/item?id=123');
   });
 
   it('renders plain markers for sources without URLs', () => {
