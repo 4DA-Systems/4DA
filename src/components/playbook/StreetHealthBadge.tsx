@@ -28,7 +28,7 @@ export function StreetHealthBadge() {
   useEffect(() => {
     invoke<StreetHealthScore>('get_street_health')
       .then(setStreetHealth)
-      .catch(() => {});
+      .catch((e) => console.warn('StreetHealthBadge: failed to load progress', e));
   }, []);
 
   if (!streetHealth) return null;

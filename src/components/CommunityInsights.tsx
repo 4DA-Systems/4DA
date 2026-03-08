@@ -16,7 +16,7 @@ export function CommunityInsights() {
   useEffect(() => {
     invoke<CommunityStatus>('get_community_status')
       .then(setStatus)
-      .catch(() => {});
+      .catch((e) => console.warn('CommunityInsights: failed to load status', e));
   }, []);
 
   // Only show if community intelligence is enabled

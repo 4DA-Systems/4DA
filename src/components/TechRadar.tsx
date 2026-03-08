@@ -45,7 +45,7 @@ export const TechRadar = memo(function TechRadar() {
   useEffect(() => {
     invoke<TechRadarData>('get_tech_radar')
       .then(setData)
-      .catch(() => {})
+      .catch((e) => console.warn('TechRadar: failed to load radar data', e))
       .finally(() => setLoading(false));
   }, []);
 
@@ -53,7 +53,7 @@ export const TechRadar = memo(function TechRadar() {
   useEffect(() => {
     invoke<{ tech_stack: string[] }>('get_user_context')
       .then((ctx) => setUserStack(ctx.tech_stack))
-      .catch(() => {});
+      .catch((e) => console.warn('TechRadar: failed to load evolution data', e));
   }, []);
 
   const handleEntryClick = useCallback((entry: RadarEntry) => {
@@ -72,10 +72,10 @@ export const TechRadar = memo(function TechRadar() {
             setData(snapshot as TechRadarData);
           }
         })
-        .catch(() => {});
+        .catch((e) => console.warn('TechRadar: failed to trigger assessment', e));
     } else {
       // Reload current radar
-      invoke<TechRadarData>('get_tech_radar').then(setData).catch(() => {});
+      invoke<TechRadarData>('get_tech_radar').then(setData).catch((e) => console.warn('TechRadar: failed to load radar after assessment', e));
     }
   }, []);
 

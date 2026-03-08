@@ -141,7 +141,7 @@ export function FirstRunTransition({ onComplete }: FirstRunTransitionProps) {
     if (appState.analysisComplete) {
       setPhase('celebrating');
       // Auto-render channels in background while user sees celebration
-      invoke('auto_render_all_channels').catch(() => {});
+      invoke('auto_render_all_channels').catch((e) => console.warn('FirstRunTransition: auto-render channels failed', e));
       return;
     }
 

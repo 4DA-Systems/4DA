@@ -23,7 +23,7 @@ export function DigestView() {
   useEffect(() => {
     invoke<DigestData>('get_latest_digest')
       .then(setDigest)
-      .catch(() => {})
+      .catch((e) => console.warn('DigestView: failed to load digest', e))
       .finally(() => setLoading(false));
   }, []);
 
