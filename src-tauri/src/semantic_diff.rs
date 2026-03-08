@@ -3,6 +3,7 @@
 //! Tracks how the conversation around topics shifts over time.
 //! Instead of "new post about X," surfaces "the narrative about X shifted from A to B."
 
+use crate::error::Result;
 use serde::{Deserialize, Serialize};
 use tracing::{debug, info};
 
@@ -32,7 +33,7 @@ pub fn record_topic_centroid(
     item_count: u32,
     avg_score: f32,
     top_titles: &[String],
-) -> Result<(), String> {
+) -> Result<()> {
     let data = serde_json::json!({
         "item_count": item_count,
         "avg_score": avg_score,
@@ -57,7 +58,7 @@ pub fn record_topic_centroid(
 pub fn detect_shifts(
     conn: &rusqlite::Connection,
     lookback_days: u32,
-) -> Result<Vec<SemanticShift>, String> {
+) -> Result<Vec<SemanticShift>> {
     let since = format!(
         "{}",
         (chrono::Utc::now() - chrono::Duration::days(lookback_days as i64))
@@ -242,7 +243,7 @@ fn compute_title_overlap(recent: &[String], older: &[String]) -> f32 {
 // ============================================================================
 
 #[tauri::command]
-pub fn get_semantic_shifts(lookback_days: Option<u32>) -> Result<Vec<SemanticShift>, String> {
+pub fn get_semantic_shifts(lookback_days: Option<u32>) -> Result<Vec<SemanticShift>> {
     crate::settings::require_pro_feature("get_semantic_shifts")?;
     let conn = crate::open_db_connection()?;
     detect_shifts(&conn, lookback_days.unwrap_or(7))
@@ -251,12 +252,12 @@ pub fn get_semantic_shifts(lookback_days: Option<u32>) -> Result<Vec<SemanticShi
 #[allow(dead_code)] // Reserved for MCP integration
 pub fn get_topic_centroids(
     topic: Option<String>,
-) -> Result<Vec<crate::temporal::TemporalEvent>, String> {
+) -> Result<Vec<crate::temporal::TemporalEvent>> {
     let conn = crate::open_db_connection()?;
     if let Some(t) = topic {
-        crate::temporal::query_events_by_subject(&conn, &t, 20)
+        crate::temporal::query_events_by_subject(&conn, &t, 20).map_err(|e| e.into())
     } else {
-        crate::temporal::query_events(&conn, "topic_centroid", None, 50)
+        crate::temporal::query_events(&conn, "topic_centroid", None, 50).map_err(|e| e.into())
     }
 }
 
