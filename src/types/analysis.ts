@@ -31,6 +31,8 @@ export interface SourceRelevance {
   decision_window_match?: string;
   /** How much score boost was applied from the decision window */
   decision_boost_applied?: number;
+  /** When this item was first seen (ISO timestamp) */
+  created_at?: string;
 }
 
 export interface ScoreBreakdown {
