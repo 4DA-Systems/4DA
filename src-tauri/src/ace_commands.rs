@@ -100,6 +100,21 @@ pub async fn ace_full_scan(paths: Vec<String>) -> Result<serde_json::Value> {
             .collect()
     };
 
+    // Validate paths are within home directory
+    let scan_paths: Vec<PathBuf> = scan_paths
+        .into_iter()
+        .filter(|path| {
+            let canonical = std::fs::canonicalize(path).unwrap_or_else(|_| path.clone());
+            if let Some(home) = dirs::home_dir() {
+                if !canonical.starts_with(&home) {
+                    warn!(target: "ace", path = %canonical.display(), "Rejected path outside home directory");
+                    return false;
+                }
+            }
+            true
+        })
+        .collect();
+
     info!(target: "4da::ace", paths = scan_paths.len(), "Starting full scan");
 
     // Phase 1 & 2: Manifest scanning and Git analysis (scoped to release ACE lock)

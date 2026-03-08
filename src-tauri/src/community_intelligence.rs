@@ -33,40 +33,6 @@ impl Default for CommunityIntelligenceConfig {
 }
 
 #[derive(Serialize, Clone, Debug)]
-#[allow(dead_code)]
-pub struct CommunityContribution {
-    pub anonymous_id: String,
-    pub app_version: String,
-    pub contribution_type: String,
-    pub payload: ScoringWeightContribution,
-}
-
-#[derive(Serialize, Clone, Debug)]
-#[allow(dead_code)]
-pub struct ScoringWeightContribution {
-    pub accuracy_aggregate: f64,
-    pub signal_effectiveness: std::collections::HashMap<String, f64>,
-    pub total_items_scored: u64,
-    pub avg_relevant_ratio: f64,
-}
-
-#[derive(Serialize, Deserialize, Clone, Debug)]
-#[allow(dead_code)]
-pub struct CommunityWeights {
-    pub version: u32,
-    pub generated_at: String,
-    pub contributors: u64,
-    pub profile_adjustments: std::collections::HashMap<String, ProfileAdjustment>,
-}
-
-#[derive(Serialize, Deserialize, Clone, Debug)]
-#[allow(dead_code)]
-pub struct ProfileAdjustment {
-    pub keyword_boost_multiplier: f64,
-    pub signal_type_weights: std::collections::HashMap<String, f64>,
-}
-
-#[derive(Serialize, Clone, Debug)]
 pub struct CommunityStatus {
     pub enabled: bool,
     pub frequency: String,

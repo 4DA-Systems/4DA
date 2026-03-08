@@ -190,27 +190,6 @@ impl Metrics {
 }
 
 // ============================================================================
-// Persona Display
-// ============================================================================
-
-#[allow(dead_code)]
-fn persona_display_name(name: &str) -> String {
-    match name {
-        "rust_systems" => "Rust / Systems",
-        "python_ml" => "Python / ML",
-        "fullstack_ts" => "Full-Stack TypeScript",
-        "devops_sre" => "DevOps / SRE",
-        "mobile_dev" => "Mobile Developer",
-        "bootstrap" => "First-Run (Bootstrap)",
-        "power_user" => "Power User",
-        "context_switcher" => "Context Switcher",
-        "niche_specialist" => "Niche Specialist",
-        _ => name,
-    }
-    .to_string()
-}
-
-// ============================================================================
 // Tauri Commands
 // ============================================================================
 

@@ -137,6 +137,7 @@ mod digest_config;
 mod domain_profile;
 mod domain_profile_data;
 pub mod extractors;
+mod http_client;
 mod free_briefing;
 mod game_achievements;
 #[cfg(feature = "experimental")]

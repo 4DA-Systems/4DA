@@ -382,23 +382,6 @@ fn disc_score_zero() {
 }
 
 // ------------------------------------------------------------------
-// Persona display names
-// ------------------------------------------------------------------
-
-#[test]
-fn persona_names() {
-    assert_eq!(persona_display_name("rust_systems"), "Rust / Systems");
-    assert_eq!(persona_display_name("python_ml"), "Python / ML");
-    assert_eq!(
-        persona_display_name("fullstack_ts"),
-        "Full-Stack TypeScript"
-    );
-    assert_eq!(persona_display_name("devops_sre"), "DevOps / SRE");
-    assert_eq!(persona_display_name("bootstrap"), "First-Run (Bootstrap)");
-    assert_eq!(persona_display_name("unknown_thing"), "unknown_thing");
-}
-
-// ------------------------------------------------------------------
 // Probe calibration — end-to-end via calibration_probes
 // ------------------------------------------------------------------
 

@@ -81,13 +81,13 @@ pdf-extract = "0.7"          # PDF text extraction
 lopdf = "0.32"               # PDF manipulation
 docx-rs = "0.4"              # Word document parsing
 calamine = "0.25"            # Excel spreadsheet parsing
-image = "0.25"               # Image loading/preprocessing (Month 2 - OCR)
-ocrs = "0.12"               # Pure Rust OCR engine
-rten = "0.24"               # Model loading for ocrs (text-detection.rten, text-recognition.rten)
+image = { version = "0.25", optional = true }    # Image loading/preprocessing (Month 2 - OCR)
+ocrs = { version = "0.12", optional = true }     # Pure Rust OCR engine
+rten = { version = "0.24", optional = true }     # Model loading for ocrs (text-detection.rten, text-recognition.rten)
 # whisper-rs = "0.14"       # DISABLED: Requires vcpkg/system deps - audio.rs stubbed
-zip = "0.6"                  # ZIP archive extraction
-tar = "0.4"                  # TAR archive extraction
-flate2 = "1.0"               # Gzip compression/decompression
+zip = { version = "0.6", optional = true }        # ZIP archive extraction
+tar = { version = "0.4", optional = true }        # TAR archive extraction
+flate2 = { version = "1.0", optional = true }     # Gzip compression/decompression
 
 # Compile-time scoring macros
 fourda-macros = { path = "fourda-macros" }
@@ -98,6 +98,21 @@ tauri-plugin-deep-link = "2.4.7"
 name = "4da"
 path = "src/bin/cli.rs"
 
+[[bin]]
+name = "test_ocr_full"
+path = "src/bin/test_ocr_full.rs"
+required-features = ["ocr"]
+
+[[bin]]
+name = "test_ocr"
+path = "src/bin/test_ocr.rs"
+required-features = ["ocr"]
+
+[[bin]]
+name = "test_ocr_text"
+path = "src/bin/test_ocr_text.rs"
+required-features = ["ocr"]
+
 [dev-dependencies]
 tempfile = "3"
 criterion = { version = "0.5", features = ["html_reports"] }
@@ -107,7 +122,9 @@ name = "db_scale"
 harness = false
 
 [features]
-default = []
+default = ["ocr", "archive"]
+ocr = ["dep:ocrs", "dep:rten", "dep:image"]
+archive = ["dep:zip", "dep:tar", "dep:flate2"]
 void-universe = []
 sql-check = []
 calibrated-sim = []

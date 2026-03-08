@@ -566,8 +566,15 @@ mod tests {
         assert_eq!(SUPPORTED_EXTENSIONS.len(), 6);
     }
 
+    // Tests that share global LLM_DAILY_TOKENS must not run in parallel.
+    static LLM_TEST_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
     #[test]
     fn test_llm_daily_tokens_tracks_usage() {
+        let _guard = LLM_TEST_LOCK.lock().unwrap();
+        // Ensure date matches so maybe_reset_daily_counter() won't clear our values
+        *LLM_DAILY_RESET_DATE.lock() = chrono::Local::now().format("%Y-%m-%d").to_string();
+
         // Reset to known state
         LLM_DAILY_TOKENS.store(0, Ordering::Relaxed);
         let (used, _) = get_llm_token_usage();
@@ -589,6 +596,7 @@ mod tests {
 
     #[test]
     fn test_llm_limit_not_reached_when_zero() {
+        let _guard = LLM_TEST_LOCK.lock().unwrap();
         LLM_DAILY_TOKENS.store(0, Ordering::Relaxed);
         // With default limit > 0 and zero usage, should not be reached
         // (depends on settings default being > 0, which it is: 500_000)

@@ -141,47 +141,6 @@ pub fn recall_memories(
     Ok(memories)
 }
 
-/// Recall memories by context tags.
-#[allow(dead_code)]
-pub fn recall_by_tags(
-    conn: &Connection,
-    tags: &[String],
-    limit: usize,
-) -> Result<Vec<AgentMemoryEntry>, String> {
-    if tags.is_empty() {
-        return Ok(Vec::new());
-    }
-
-    // Build OR conditions for each tag
-    let conditions: Vec<String> = tags
-        .iter()
-        .map(|t| format!("LOWER(context_tags) LIKE '%{}%'", t.to_lowercase()))
-        .collect();
-    let where_clause = conditions.join(" OR ");
-
-    let sql = format!(
-        "SELECT id, session_id, agent_type, memory_type, subject, content, context_tags, created_at, expires_at, promoted_to_decision_id
-         FROM agent_memory
-         WHERE ({})
-         AND (expires_at IS NULL OR expires_at > datetime('now'))
-         ORDER BY created_at DESC LIMIT ?1",
-        where_clause
-    );
-
-    let mut stmt = conn
-        .prepare(&sql)
-        .map_err(|e| format!("Failed to prepare: {}", e))?;
-    let rows = stmt
-        .query_map(params![limit as i64], |row| Ok(row_to_memory(row)))
-        .map_err(|e| format!("Failed to recall by tags: {}", e))?;
-
-    let mut memories = Vec::new();
-    for row in rows {
-        memories.push(row.map_err(|e| format!("Row error: {}", e))?);
-    }
-    Ok(memories)
-}
-
 /// Get memories since a timestamp, optionally filtered by agent type.
 pub fn get_memories_since(
     conn: &Connection,
@@ -410,37 +369,6 @@ mod tests {
         assert_eq!(memories.len(), 1);
         assert_eq!(memories[0].subject, "sqlite optimization");
         assert_eq!(memories[0].agent_type, "claude_code");
-    }
-
-    #[test]
-    fn test_recall_by_tags() {
-        let conn = setup_test_db();
-        store_memory(
-            &conn,
-            "s1",
-            "claude",
-            &MemoryType::Warning,
-            "security issue",
-            "Found XSS vulnerability",
-            &["security".to_string()],
-            None,
-        )
-        .unwrap();
-        store_memory(
-            &conn,
-            "s1",
-            "cursor",
-            &MemoryType::Discovery,
-            "new pattern",
-            "Discovered builder pattern works well",
-            &["patterns".to_string()],
-            None,
-        )
-        .unwrap();
-
-        let results = recall_by_tags(&conn, &["security".to_string()], 10).unwrap();
-        assert_eq!(results.len(), 1);
-        assert_eq!(results[0].subject, "security issue");
     }
 
     #[test]

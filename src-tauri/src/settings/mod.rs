@@ -749,6 +749,15 @@ impl SettingsManager {
 
         let json = serde_json::to_string_pretty(&self.settings).map_err(|e| e.to_string())?;
         fs::write(&self.settings_path, json).map_err(|e| e.to_string())?;
+
+        // Restrict file permissions to owner-only (contains API keys)
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let _ =
+                fs::set_permissions(&self.settings_path, fs::Permissions::from_mode(0o600));
+        }
+
         Ok(())
     }
 

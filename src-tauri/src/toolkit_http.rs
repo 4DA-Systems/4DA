@@ -103,18 +103,12 @@ pub async fn toolkit_http_request(request: HttpProbeRequest) -> Result<HttpProbe
         )));
     }
 
-    let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(30))
-        .danger_accept_invalid_certs(false)
-        .build()
-        .map_err(|e| FourDaError::Internal(format!("Failed to build HTTP client: {e}")))?;
-
     let method = request
         .method
         .parse::<reqwest::Method>()
         .map_err(|e| FourDaError::Config(format!("Invalid HTTP method: {e}")))?;
 
-    let mut req = client.request(method, &request.url);
+    let mut req = crate::http_client::HTTP_CLIENT.request(method, &request.url);
 
     for (key, value) in &request.headers {
         req = req.header(key.as_str(), value.as_str());

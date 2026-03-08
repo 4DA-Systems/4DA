@@ -298,8 +298,7 @@ async fn validate_license_key_keygen_inner(
         KEYGEN_ACCOUNT_ID
     );
 
-    let client = reqwest::Client::new();
-    let response = client
+    let response = crate::http_client::HTTP_CLIENT
         .post(&url)
         .header("Content-Type", "application/vnd.api+json")
         .header("Accept", "application/vnd.api+json")

@@ -7,8 +7,10 @@ use std::collections::HashMap;
 use std::path::Path;
 
 // Re-export sub-modules
+#[cfg(feature = "archive")]
 pub mod archive;
 pub mod audio;
+#[cfg(feature = "ocr")]
 pub mod image;
 pub mod office;
 pub mod pdf;
@@ -108,8 +110,10 @@ impl ExtractorRegistry {
         // Register all extractors
         registry.register(Box::new(pdf::PdfExtractor::new()));
         registry.register(Box::new(office::OfficeExtractor::new()));
+        #[cfg(feature = "ocr")]
         registry.register(Box::new(image::ImageExtractor::new()));
         registry.register(Box::new(audio::AudioExtractor::new()));
+        #[cfg(feature = "archive")]
         registry.register(Box::new(archive::ArchiveExtractor::new()));
 
         registry
@@ -168,7 +172,8 @@ mod tests {
         assert!(extensions.contains(&"docx".to_string()));
 
         // Should have multiple extractors registered
-        assert!(registry.extractors.len() >= 5);
+        // Count depends on features: base 3 (pdf, office, audio) + ocr + archive
+        assert!(registry.extractors.len() >= 3);
     }
 
     #[test]
