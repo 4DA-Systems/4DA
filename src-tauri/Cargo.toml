@@ -112,6 +112,7 @@ void-universe = []
 sql-check = []
 calibrated-sim = []
 generate-sim-fixtures = []
+experimental = []
 
 [[test]]
 name = "sql_checker"
