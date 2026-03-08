@@ -178,9 +178,6 @@ vi.mock('../playbook/SovereignProfile', () => ({
 vi.mock('../playbook/StreetHealthBadge', () => ({
   StreetHealthBadge: () => null,
 }));
-vi.mock('../playbook/SunsDashboard', () => ({
-  SunsDashboard: () => null,
-}));
 vi.mock('../playbook/SovereignInsightCard', () => ({
   SovereignInsightCard: () => null,
 }));
@@ -257,7 +254,7 @@ import { ScoreBreakdownRow } from '../result-item/ScoreBreakdownRow';
 import { AboutPanel } from '../AboutPanel';
 import { ProGate } from '../ProGate';
 import { ProValueBadge } from '../ProValueBadge';
-import { GameCelebration } from '../GameCelebration';
+
 import { ViewTabBar } from '../ViewTabBar';
 import { PlaybookView } from '../PlaybookView';
 import { DecisionMemory } from '../DecisionMemory';
@@ -382,10 +379,6 @@ const SMOKE_COMPONENTS: Array<{
   {
     name: 'ProValueBadge',
     render: () => <ProValueBadge />,
-  },
-  {
-    name: 'GameCelebration (no celebration)',
-    render: () => <GameCelebration />,
   },
   {
     name: 'ViewTabBar',

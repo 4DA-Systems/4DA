@@ -31,8 +31,6 @@ const ProValueBadge = lazy(() => import('./components/ProValueBadge').then(m => 
 // Lazy-loaded non-critical views and overlays
 const SettingsModal = lazy(() => import('./components/SettingsModal').then(m => ({ default: m.SettingsModal })));
 const KeyboardShortcutsModal = lazy(() => import('./components/KeyboardShortcutsModal').then(m => ({ default: m.KeyboardShortcutsModal })));
-const CommandDeck = lazy(() => import('./components/command-deck/CommandDeck').then(m => ({ default: m.CommandDeck })));
-const GameCelebration = lazy(() => import('./components/GameCelebration').then(m => ({ default: m.GameCelebration })));
 import {
   useSettings,
   useMonitoring,
@@ -78,8 +76,6 @@ function App() {
   const loadLicense = useAppStore(s => s.loadLicense);
   const loadTrialStatus = useAppStore(s => s.loadTrialStatus);
   const loadProValueReport = useAppStore(s => s.loadProValueReport);
-  const loadGameState = useAppStore(s => s.loadGameState);
-  const initGameListeners = useAppStore(s => s.initGameListeners);
   const loadChannels = useAppStore(s => s.loadChannels);
 
   // First-run state
@@ -189,17 +185,9 @@ function App() {
     loadLicense();
     loadTrialStatus();
     loadProValueReport();
-    loadGameState();
     // Prune stale personalization cache (non-blocking)
     invoke('prune_personalization_cache').catch(() => {});
-  }, [loadPersistedBriefing, loadSourceHealth, loadLicense, loadTrialStatus, loadProValueReport, loadGameState]);
-
-  // GAME achievement listeners
-  useEffect(() => {
-    let cleanup: (() => void) | undefined;
-    initGameListeners().then((fn) => { cleanup = fn; });
-    return () => { cleanup?.(); };
-  }, [initGameListeners]);
+  }, [loadPersistedBriefing, loadSourceHealth, loadLicense, loadTrialStatus, loadProValueReport]);
 
   // Deep-link handler: 4da://activate?key=...
   const activateLicense = useAppStore(s => s.activateLicense);
@@ -449,22 +437,8 @@ function App() {
           />
         )}
 
-        {/* Command Deck (slide-up panel) */}
-        <Suspense fallback={null}>
-          <ViewErrorBoundary viewName="Command Deck">
-            <CommandDeck />
-          </ViewErrorBoundary>
-        </Suspense>
-
         {/* Toast Notifications */}
         <ToastContainer toasts={toasts} onDismiss={removeToast} />
-
-        {/* GAME Achievement Celebration Overlay */}
-        <Suspense fallback={null}>
-          <ViewErrorBoundary viewName="Celebration">
-            <GameCelebration />
-          </ViewErrorBoundary>
-        </Suspense>
 
         {/* Keyboard Shortcuts Help Modal */}
         {showKeyboardHelp && (

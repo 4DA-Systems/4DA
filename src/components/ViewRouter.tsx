@@ -13,18 +13,12 @@ const BriefingView = lazy(() => import('./BriefingView').then(m => ({ default: m
 const SavedItemsView = lazy(() => import('./SavedItemsView').then(m => ({ default: m.SavedItemsView })));
 const TechRadar = lazy(() => import('./TechRadar').then(m => ({ default: m.TechRadar })));
 const DecisionMemory = lazy(() => import('./DecisionMemory').then(m => ({ default: m.DecisionMemory })));
-const DelegationDashboard = lazy(() => import('./DelegationDashboard').then(m => ({ default: m.DelegationDashboard })));
-const AgentMemoryPanel = lazy(() => import('./AgentMemoryPanel').then(m => ({ default: m.AgentMemoryPanel })));
-const AutophagyInsights = lazy(() => import('./AutophagyInsights').then(m => ({ default: m.AutophagyInsights })));
-const DecisionJournal = lazy(() => import('./DecisionJournal').then(m => ({ default: m.DecisionJournal })));
-const AchievementsPanel = lazy(() => import('./AchievementsPanel').then(m => ({ default: m.AchievementsPanel })));
 const SovereignDeveloperProfile = lazy(() => import('./SovereignDeveloperProfile').then(m => ({ default: m.SovereignDeveloperProfile })));
 const ToolkitView = lazy(() => import('./toolkit/ToolkitView').then(m => ({ default: m.ToolkitView })));
 const PlaybookView = lazy(() => import('./PlaybookView').then(m => ({ default: m.PlaybookView })));
 const ChannelsView = lazy(() => import('./channels/ChannelsView').then(m => ({ default: m.ChannelsView })));
 const CalibrationView = lazy(() => import('./CalibrationView').then(m => ({ default: m.CalibrationView })));
 const SignalsPanel = lazy(() => import('./SignalsPanel').then(m => ({ default: m.SignalsPanel })));
-const SignalChainsPanel = lazy(() => import('./SignalChains').then(m => ({ default: m.SignalChainsPanel })));
 const KnowledgeGapsPanel = lazy(() => import('./KnowledgeGapsPanel').then(m => ({ default: m.KnowledgeGapsPanel })));
 
 interface ViewRouterProps {
@@ -58,16 +52,9 @@ export function ViewRouter({ newItemIds, focusedIndex }: ViewRouterProps) {
         </ViewErrorBoundary>
       ) : activeView === 'insights' ? (
         <ViewErrorBoundary viewName="Insights">
-          <section aria-label={t('nav.insights', { defaultValue: 'Insights' })} className="space-y-6">
-            <AchievementsPanel />
+          <section aria-label={t('nav.insights', { defaultValue: 'Strategy' })} className="space-y-6">
             <TechRadar />
-            <DecisionJournal />
             <DecisionMemory />
-            <AutophagyInsights />
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <DelegationDashboard />
-              <AgentMemoryPanel />
-            </div>
           </section>
         </ViewErrorBoundary>
       ) : activeView === 'saved' ? (
@@ -91,7 +78,6 @@ export function ViewRouter({ newItemIds, focusedIndex }: ViewRouterProps) {
           {analysisComplete && (
             <Suspense fallback={null}>
               <SignalsPanel results={relevanceResults} />
-              <SignalChainsPanel />
               <KnowledgeGapsPanel />
             </Suspense>
           )}

@@ -3,7 +3,7 @@ export * from './settings';
 export * from './sources';
 export * from './innovation';
 export * from './common';
-export * from './command-deck';
+
 export * from './stacks';
 export * from './playbook';
 export * from './streets';

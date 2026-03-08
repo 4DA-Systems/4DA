@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { useAppStore } from '../store';
+
 
 interface KeyboardShortcutActions {
   onAnalyze: () => void;
@@ -44,13 +44,6 @@ export function useKeyboardShortcuts(actions: KeyboardShortcutActions) {
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Ctrl+` toggles Command Deck (works even in inputs)
-      if (e.key === '`' && e.ctrlKey) {
-        e.preventDefault();
-        useAppStore.getState().toggleCommandDeck();
-        return;
-      }
-
       const tag = (e.target as HTMLElement).tagName;
       if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
 

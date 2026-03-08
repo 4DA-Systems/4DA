@@ -71,7 +71,7 @@ export function KeyboardShortcutsModal({ onClose }: KeyboardShortcutsModalProps)
             { key: 'F', label: t('shortcuts.toggleFilter') },
             { key: 'B', label: t('shortcuts.switchView') },
             { key: ',', label: t('shortcuts.openSettings') },
-            { key: 'Ctrl+`', label: t('shortcuts.toggleCommandDeck') },
+
             { key: 'Esc', label: t('shortcuts.closePanel') },
             { key: '?', label: t('shortcuts.showHelp') },
           ].map(({ key, label }) => (

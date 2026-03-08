@@ -21,7 +21,7 @@ const mockLoadContent = vi.fn();
 const mockLoadProgress = vi.fn();
 const mockMarkComplete = vi.fn();
 const mockLoadStreetHealth = vi.fn();
-const mockLoadSunsModules = vi.fn();
+
 
 function makeDefaultStore(): Record<string, unknown> {
   return {
@@ -51,13 +51,6 @@ function makeDefaultStore(): Record<string, unknown> {
     // Toast
     addToast: vi.fn(),
 
-    // SunsDashboard slice
-    sunsModules: [],
-    sunsAlerts: [],
-    sunsLoading: false,
-    loadSunsModules: mockLoadSunsModules,
-    ackSunAlert: vi.fn(),
-    executeSunRecommendation: vi.fn(),
   };
 }
 
@@ -96,10 +89,6 @@ vi.mock('../playbook/SovereignProfile', () => ({
 
 vi.mock('../playbook/StreetHealthBadge', () => ({
   StreetHealthBadge: () => <div data-testid="street-health-badge" />,
-}));
-
-vi.mock('../playbook/SunsDashboard', () => ({
-  SunsDashboard: () => <div data-testid="suns-dashboard" />,
 }));
 
 vi.mock('../playbook/SovereignInsightCard', () => ({
@@ -367,31 +356,4 @@ describe('PlaybookView', () => {
     expect(screen.getByTestId('street-health-badge')).toBeInTheDocument();
   });
 
-  it('shows SunsDashboard when module S is active', () => {
-    setStore({
-      activeModuleId: 'S',
-      playbookContent: {
-        module_id: 'S',
-        title: 'Sovereignty',
-        description: 'Desc',
-        lessons: [],
-      },
-    });
-    render(<PlaybookView />);
-    expect(screen.getByTestId('suns-dashboard')).toBeInTheDocument();
-  });
-
-  it('does not show SunsDashboard for non-S modules', () => {
-    setStore({
-      activeModuleId: 'E1',
-      playbookContent: {
-        module_id: 'E1',
-        title: 'Execution',
-        description: 'Desc',
-        lessons: [],
-      },
-    });
-    render(<PlaybookView />);
-    expect(screen.queryByTestId('suns-dashboard')).not.toBeInTheDocument();
-  });
 });

@@ -346,12 +346,9 @@ export type AppStore =
   & LicenseSlice
   & ToolkitSlice
   & import('./playbook-slice').PlaybookSlice
-  & import('./command-deck-slice').CommandDeckSlice
   & import('./sovereign-profile-slice').SovereignProfileSlice
-  & import('./suns-slice').SunsSlice
   & import('./autophagy-slice').AutophagySlice
   & import('./decision-advantage-slice').DecisionAdvantageSlice
-  & import('./game-slice').GameSlice
   & import('./channels-slice').ChannelsSlice
   & import('./unified-profile-slice').UnifiedProfileSlice
   & import('./intelligence-pulse-slice').IntelligencePulseSlice;

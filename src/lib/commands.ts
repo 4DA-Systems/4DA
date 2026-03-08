@@ -59,14 +59,6 @@ import type {
   PlaybookProgress,
 } from '../types/playbook';
 import type { ParsedCommand, CommandExecutionResult } from '../types/streets';
-import type {
-  CommandOutput,
-  GitDeckStatus,
-  CommitSummary,
-  SuggestedCommitMessage,
-  CommandHistoryEntry,
-  RepoInfo,
-} from '../types/command-deck';
 import type { StackProfileSummary, StackDetection } from '../types/stacks';
 
 
@@ -290,19 +282,6 @@ interface CommandMap {
   // -- Digest --
   get_digest_config: { params: Record<string, never>; result: DigestConfig };
   set_digest_config: { params: { enabled: boolean }; result: void };
-
-  // -- Command Deck (Git) --
-  git_deck_list_repos: { params: Record<string, never>; result: RepoInfo[] };
-  git_deck_status: { params: { repoPath: string }; result: GitDeckStatus };
-  git_deck_stage: { params: { repoPath: string; paths: string[] }; result: void };
-  git_deck_unstage: { params: { repoPath: string; paths: string[] }; result: void };
-  git_deck_commit: { params: { repoPath: string; message: string }; result: { short_hash: string; files_changed: number } };
-  git_deck_push: { params: { repoPath: string; branch: string | null }; result: void };
-  git_deck_suggest_commit: { params: { repoPath: string }; result: SuggestedCommitMessage };
-  git_deck_log: { params: { repoPath: string; count: number }; result: CommitSummary[] };
-  git_deck_diff_stat: { params: { repoPath: string; staged: boolean }; result: string };
-  run_shell_command: { params: { command: string; workingDir: string | null }; result: CommandOutput };
-  get_command_history: { params: { limit: number }; result: CommandHistoryEntry[] };
 
   // -- Toolkit --
   toolkit_list_ports: { params: Record<string, never>; result: ListeningPort[] };

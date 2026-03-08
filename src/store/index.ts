@@ -16,12 +16,9 @@ import { createAgentSlice } from './agent-slice';
 import { createLicenseSlice } from './license-slice';
 import { createToolkitSlice } from './toolkit-slice';
 import { createPlaybookSlice } from './playbook-slice';
-import { createCommandDeckSlice } from './command-deck-slice';
 import { createSovereignProfileSlice } from './sovereign-profile-slice';
-import { createSunsSlice } from './suns-slice';
 import { createAutophagySlice } from './autophagy-slice';
 import { createDecisionAdvantageSlice } from './decision-advantage-slice';
-import { createGameSlice } from './game-slice';
 import { createChannelsSlice } from './channels-slice';
 import { createUnifiedProfileSlice } from './unified-profile-slice';
 import { createIntelligencePulseSlice } from './intelligence-pulse-slice';
@@ -61,12 +58,9 @@ export const useAppStore = create<AppStore>()((...a) => ({
   ...createLicenseSlice(...a),
   ...createToolkitSlice(...a),
   ...createPlaybookSlice(...a),
-  ...createCommandDeckSlice(...a),
   ...createSovereignProfileSlice(...a),
-  ...createSunsSlice(...a),
   ...createAutophagySlice(...a),
   ...createDecisionAdvantageSlice(...a),
-  ...createGameSlice(...a),
   ...createChannelsSlice(...a),
   ...createUnifiedProfileSlice(...a),
   ...createIntelligencePulseSlice(...a),

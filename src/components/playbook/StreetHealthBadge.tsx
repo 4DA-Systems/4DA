@@ -1,7 +1,19 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useAppStore } from '../../store';
-import { useShallow } from 'zustand/react/shallow';
+import { invoke } from '@tauri-apps/api/core';
+
+interface ModuleHealth {
+  module_id: string;
+  module_name: string;
+  score: number;
+}
+
+interface StreetHealthScore {
+  overall: number;
+  module_scores: ModuleHealth[];
+  trend: string;
+  top_action: string;
+}
 
 const TREND_ICONS: Record<string, { symbol: string; color: string }> = {
   improving: { symbol: '\u25B2', color: '#22C55E' },
@@ -11,21 +23,18 @@ const TREND_ICONS: Record<string, { symbol: string; color: string }> = {
 
 export function StreetHealthBadge() {
   const { t } = useTranslation();
-  const { streetHealth } = useAppStore(
-    useShallow((s) => ({ streetHealth: s.streetHealth })),
-  );
-  const loadStreetHealth = useAppStore((s) => s.loadStreetHealth);
+  const [streetHealth, setStreetHealth] = useState<StreetHealthScore | null>(null);
 
   useEffect(() => {
-    loadStreetHealth();
-  }, [loadStreetHealth]);
+    invoke<StreetHealthScore>('get_street_health')
+      .then(setStreetHealth)
+      .catch(() => {});
+  }, []);
 
   if (!streetHealth) return null;
 
   const pct = Math.round(streetHealth.overall * 100);
   const trendInfo = TREND_ICONS[streetHealth.trend] || TREND_ICONS.stable;
-
-  // Color based on score
   const scoreColor =
     pct >= 70 ? '#22C55E' : pct >= 40 ? '#D4AF37' : '#EF4444';
 
