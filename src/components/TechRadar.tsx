@@ -1,6 +1,7 @@
-import { useState, useEffect, useCallback, memo } from 'react';
+import { useState, useEffect, useCallback, useRef, memo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
+import { registerGameComponent } from '../lib/game-components';
 
 import { RadarSVG } from './tech-radar/RadarSVG';
 import { RadarEntryPanel } from './tech-radar/RadarEntryPanel';
@@ -10,6 +11,46 @@ import type { RadarEntry } from './tech-radar/RadarSVG';
 interface TechRadarData {
   generated_at: string;
   entries: RadarEntry[];
+}
+
+function RadarField({ entries, userStack }: { entries: RadarEntry[]; userStack: string[] }) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const elementRef = useRef<HTMLElement | null>(null);
+
+  useEffect(() => {
+    registerGameComponent('game-radar-field').then(() => {
+      if (!containerRef.current || elementRef.current) return;
+      const el = document.createElement('game-radar-field');
+      el.style.width = '100%';
+      el.style.height = '100%';
+      el.style.display = 'block';
+      containerRef.current.appendChild(el);
+      elementRef.current = el;
+    });
+    return () => {
+      if (elementRef.current && containerRef.current?.contains(elementRef.current)) {
+        containerRef.current.removeChild(elementRef.current);
+      }
+      elementRef.current = null;
+    };
+  }, []);
+
+  useEffect(() => {
+    const el = elementRef.current as (HTMLElement & { setParam?: (n: string, v: number) => void }) | null;
+    if (!el || entries.length === 0) return;
+    const total = entries.length;
+    const byQuad = (q: string) => entries.filter(e => e.quadrant === q).length / total;
+    el.setParam?.('lang_energy', byQuad('languages'));
+    el.setParam?.('fw_energy', byQuad('frameworks'));
+    el.setParam?.('tool_energy', byQuad('tools'));
+    el.setParam?.('plat_energy', byQuad('platforms'));
+    el.setParam?.('moving_in', entries.filter(e => e.movement === 'up').length / total);
+    el.setParam?.('moving_out', entries.filter(e => e.movement === 'down').length / total);
+    const stackLower = userStack.map(s => s.toLowerCase());
+    el.setParam?.('stack_glow', entries.filter(e => stackLower.includes(e.name.toLowerCase())).length / total);
+  }, [entries, userStack]);
+
+  return <div ref={containerRef} className="absolute inset-0 rounded-lg overflow-hidden" aria-hidden="true" />;
 }
 
 export const TechRadar = memo(function TechRadar() {
@@ -92,8 +133,9 @@ export const TechRadar = memo(function TechRadar() {
         </div>
       </div>
 
-      {/* Radar SVG */}
-      <div className="p-4 flex justify-center">
+      {/* Radar SVG with GAME background */}
+      <div className="relative p-4 flex justify-center">
+        <RadarField entries={data.entries} userStack={userStack} />
         <RadarSVG
           entries={data.entries}
           userStack={userStack}

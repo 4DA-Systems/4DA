@@ -6,6 +6,38 @@ import { useAppStore } from '../store';
 import { registerGameComponent } from '../lib/game-components';
 import type { Settings, SourceRelevance } from '../types';
 
+function SignalWaveform({ signalCount, relevanceAvg, freshness }: { signalCount: number; relevanceAvg: number; freshness: number }) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const elementRef = useRef<HTMLElement | null>(null);
+
+  useEffect(() => {
+    registerGameComponent('game-signal-waveform').then(() => {
+      if (!containerRef.current || elementRef.current) return;
+      const el = document.createElement('game-signal-waveform');
+      el.style.width = '100%';
+      el.style.height = '100%';
+      el.style.display = 'block';
+      containerRef.current.appendChild(el);
+      elementRef.current = el;
+    });
+    return () => {
+      if (elementRef.current && containerRef.current?.contains(elementRef.current)) {
+        containerRef.current.removeChild(elementRef.current);
+      }
+      elementRef.current = null;
+    };
+  }, []);
+
+  useEffect(() => {
+    const el = elementRef.current as (HTMLElement & { setParam?: (n: string, v: number) => void }) | null;
+    el?.setParam?.('signal_count', signalCount);
+    el?.setParam?.('relevance_avg', relevanceAvg);
+    el?.setParam?.('freshness', freshness);
+  }, [signalCount, relevanceAvg, freshness]);
+
+  return <div ref={containerRef} className="w-full h-12 opacity-80" aria-hidden="true" />;
+}
+
 interface ActionBarProps {
   state: {
     loading: boolean;
@@ -50,8 +82,11 @@ export function ActionBar({
   const [overflowOpen, setOverflowOpen] = useState(false);
   const overflowRef = useRef<HTMLDivElement>(null);
 
-  // Register GPU scan-ring component
-  useEffect(() => { registerGameComponent('game-scan-ring'); }, []);
+  // Register GPU components
+  useEffect(() => {
+    registerGameComponent('game-scan-ring');
+    registerGameComponent('game-signal-waveform');
+  }, []);
 
   // Close overflow on outside click
   useEffect(() => {
@@ -270,6 +305,15 @@ export function ActionBar({
           <span>!</span>
           {aiBriefing.error}
         </div>
+      )}
+
+      {/* Signal Waveform — intelligence pulse */}
+      {state.analysisComplete && summaryBadges && (
+        <SignalWaveform
+          signalCount={summaryBadges.total > 0 ? Math.min(summaryBadges.relevantCount / Math.max(summaryBadges.total, 1), 1) : 0}
+          relevanceAvg={summaryBadges.total > 0 ? summaryBadges.topCount / Math.max(summaryBadges.total, 1) : 0}
+          freshness={state.lastAnalyzedAt ? Math.max(0, 1 - (Date.now() - state.lastAnalyzedAt.getTime()) / 3600000) : 0}
+        />
       )}
     </div>
   );

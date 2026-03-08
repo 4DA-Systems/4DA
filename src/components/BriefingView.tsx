@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState, useEffect, memo } from 'react';
+import { useCallback, useMemo, useState, useEffect, useRef, memo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useShallow } from 'zustand/react/shallow';
 import { BriefingCard } from './BriefingCard';
@@ -21,7 +21,40 @@ import { DecisionWindowsPanel } from './DecisionWindowsPanel';
 import { CompoundAdvantageScore } from './CompoundAdvantageScore';
 import { IntelligenceProfileCard } from './IntelligenceProfileCard';
 import { useLicense } from '../hooks/use-license';
+import { registerGameComponent } from '../lib/game-components';
 import type { SourceRelevance } from '../types';
+
+function BriefingAtmosphere({ signalCount, topCount, hasContent }: { signalCount: number; topCount: number; hasContent: boolean }) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const elementRef = useRef<HTMLElement | null>(null);
+
+  useEffect(() => {
+    registerGameComponent('game-briefing-atmosphere').then(() => {
+      if (!containerRef.current || elementRef.current) return;
+      const el = document.createElement('game-briefing-atmosphere');
+      el.style.width = '100%';
+      el.style.height = '100%';
+      el.style.display = 'block';
+      containerRef.current.appendChild(el);
+      elementRef.current = el;
+    });
+    return () => {
+      if (elementRef.current && containerRef.current?.contains(elementRef.current)) {
+        containerRef.current.removeChild(elementRef.current);
+      }
+      elementRef.current = null;
+    };
+  }, []);
+
+  useEffect(() => {
+    const el = elementRef.current as (HTMLElement & { setParam?: (n: string, v: number) => void }) | null;
+    el?.setParam?.('quality', hasContent ? 0.7 : 0.2);
+    el?.setParam?.('signal_heat', Math.min(topCount / 20, 1));
+    el?.setParam?.('decision_pressure', Math.min(signalCount / 5, 1));
+  }, [signalCount, topCount, hasContent]);
+
+  return <div ref={containerRef} className="w-full h-16 rounded-lg overflow-hidden opacity-50 -mb-2" aria-hidden="true" />;
+}
 
 // Stable skeleton widths — no Math.random() re-renders
 const SKELETON_WIDTHS = [85, 92, 78, 88, 70, 95];
@@ -261,6 +294,12 @@ export const BriefingView = memo(function BriefingView() {
   // Briefing content view
   return (
     <section aria-label={t('briefing.intelligenceBriefing')} className="bg-bg-primary rounded-lg space-y-6">
+      <BriefingAtmosphere
+        signalCount={signalItems.length}
+        topCount={topItems.length}
+        hasContent={!!briefing.content}
+      />
+
       {/* 1. Decision Windows — urgency first */}
       <DecisionWindowsPanel />
 

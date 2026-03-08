@@ -19,6 +19,12 @@ const COMPONENTS = {
   'game-ambient-intelligence': () => import('./game-components/ambient-intelligence.js'),
   'game-score-fingerprint': () => import('./game-components/score-fingerprint.js'),
   'game-decision-countdown': () => import('./game-components/decision-countdown.js'),
+  'game-signal-waveform': () => import('./game-components/signal-waveform.js?v=2'),
+  'game-knowledge-depth': () => import('./game-components/knowledge-depth.js'),
+  'game-source-vitals': () => import('./game-components/source-vitals.js'),
+  'game-briefing-atmosphere': () => import('./game-components/briefing-atmosphere.js'),
+  'game-playbook-pathway': () => import('./game-components/playbook-pathway.js'),
+  'game-radar-field': () => import('./game-components/radar-field.js'),
 } as const;
 
 export type GameComponentTag = keyof typeof COMPONENTS;
