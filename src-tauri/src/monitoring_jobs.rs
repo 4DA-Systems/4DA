@@ -104,7 +104,31 @@ pub async fn maybe_generate_digest<R: Runtime>(app: &AppHandle<R>) {
 
     info!(target: "4da::jobs", frequency = %frequency, "Digest is due, generating");
 
-    // Generate the digest using the existing digest module
+    // For weekly frequency on Pro, try the full weekly digest with signal chains + knowledge gaps
+    if frequency == "weekly" && crate::settings::is_pro() {
+        if let Ok(conn) = crate::open_db_connection() {
+            if crate::weekly_digest::should_generate_digest(&conn) {
+                match crate::weekly_digest::generate_weekly_digest().await {
+                    Ok(digest) => {
+                        // Update last_sent timestamp
+                        {
+                            let mut settings = crate::get_settings_manager().lock();
+                            settings.get_mut().digest.last_sent = Some(now);
+                            let _ = settings.save();
+                        }
+                        info!(target: "4da::jobs", "Weekly intelligence digest generated and emitted");
+                        let _ = app.emit("digest-ready", &digest);
+                        return;
+                    }
+                    Err(e) => {
+                        warn!(target: "4da::jobs", error = %e, "Full weekly digest failed, falling back to simple digest");
+                    }
+                }
+            }
+        }
+    }
+
+    // Generate the simple digest using the existing digest module
     if let Ok(db) = crate::get_database() {
         let period_start = match frequency.as_str() {
             "weekly" => now - chrono::Duration::days(7),

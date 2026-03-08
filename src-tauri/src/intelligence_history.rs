@@ -30,6 +30,24 @@ pub struct IntelligenceGrowth {
     pub total_relevant: i64,
 }
 
+/// Record a snapshot of intelligence metrics after analysis completes.
+/// Called automatically after each successful analysis run.
+pub fn record_intelligence_snapshot(
+    conn: &rusqlite::Connection,
+    accuracy: f64,
+    topics_learned: i64,
+    items_analyzed: i64,
+    relevant_found: i64,
+) -> Result<()> {
+    conn.execute(
+        "INSERT INTO intelligence_history (accuracy, topics_learned, items_analyzed, relevant_found)
+         VALUES (?1, ?2, ?3, ?4)",
+        rusqlite::params![accuracy, topics_learned, items_analyzed, relevant_found],
+    )
+    .map_err(FourDaError::Db)?;
+    Ok(())
+}
+
 /// Get the intelligence growth trajectory from recorded history.
 #[tauri::command]
 pub async fn get_intelligence_growth() -> Result<IntelligenceGrowth> {

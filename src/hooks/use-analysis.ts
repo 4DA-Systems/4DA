@@ -73,6 +73,9 @@ export function useAnalysis(
           }));
           useAppStore.getState().addToast('success', i18n.t('analysis.complete', { count: relevantCount }));
 
+          // Track analysis cycle for progressive disclosure
+          useAppStore.getState().incrementAnalysisCycle();
+
           // Auto-enable monitoring after first successful analysis
           const { monitoring } = useAppStore.getState();
           if (monitoring && !monitoring.enabled && relevantCount > 0) {

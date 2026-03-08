@@ -11,6 +11,7 @@ use futures::FutureExt;
 use std::panic::AssertUnwindSafe;
 use std::sync::atomic::Ordering;
 
+use crate::analysis_narration::{emit_narration, NarrationEvent};
 use crate::scoring;
 use crate::stacks;
 use crate::{
@@ -99,6 +100,22 @@ pub(crate) async fn run_deep_initial_scan(app: AppHandle) -> Result<(), String> 
                 // Run post-analysis innovation hooks (non-blocking)
                 scoring::run_post_analysis_hooks(&results);
 
+                // Record intelligence snapshot for growth tracking
+                if let Ok(conn) = open_db_connection() {
+                    let total = results.len() as f64;
+                    let relevant = relevant_count as f64;
+                    let accuracy = if total > 0.0 { relevant / total } else { 0.0 };
+                    if let Err(e) = crate::intelligence_history::record_intelligence_snapshot(
+                        &conn,
+                        accuracy,
+                        relevant_count as i64,
+                        results.len() as i64,
+                        relevant_count as i64,
+                    ) {
+                        warn!(target: "4da::analysis", error = %e, "Failed to record intelligence snapshot");
+                    }
+                }
+
                 // GAME: track scan, discoveries, and source diversity
                 if let Ok(db) = crate::get_database() {
                     // Increment scan counter
@@ -176,6 +193,14 @@ pub(crate) async fn run_deep_initial_scan_impl(
     info!(target: "4da::analysis", "=== DEEP INITIAL SCAN STARTED ===");
     info!(target: "4da::analysis", "Fetching 300-500+ items from HN (5 categories), arXiv (16 categories), Reddit (40+ subreddits)...");
 
+    // Narration: analysis start
+    emit_narration(app, NarrationEvent {
+        narration_type: "discovery".into(),
+        message: "Scanning sources for intelligence...".into(),
+        source: None,
+        relevance: None,
+    });
+
     emit_progress(
         app,
         "init",
@@ -243,6 +268,16 @@ pub(crate) async fn run_deep_initial_scan_impl(
     let mut results: Vec<SourceRelevance> = Vec::new();
     let total_items = all_items.len();
 
+    // Narration: scoring start
+    emit_narration(app, NarrationEvent {
+        narration_type: "insight".into(),
+        message: format!("Scoring {} items against your profile...", total_items),
+        source: None,
+        relevance: None,
+    });
+
+    let mut high_match_count: usize = 0;
+
     for (idx, (item, item_embedding)) in all_items.iter().enumerate() {
         if is_aborted() {
             info!(target: "4da::analysis", scored = idx, "Deep scan aborted by user");
@@ -283,9 +318,45 @@ pub(crate) async fn run_deep_initial_scan_impl(
             &options,
             Some(&SIGNAL_CLASSIFIER),
         ));
+
+        // Narration: high-relevance match (max 3)
+        if let Some(scored) = results.last() {
+            if scored.top_score > 0.7 && high_match_count < 3 {
+                high_match_count += 1;
+                let title_preview: String = item.title.chars().take(60).collect();
+                emit_narration(app, NarrationEvent {
+                    narration_type: "match".into(),
+                    message: format!("High match: \"{}\"", title_preview),
+                    source: Some(item.source_type.clone()),
+                    relevance: Some(scored.top_score),
+                });
+            }
+        }
     }
 
     scoring::sort_results(&mut results);
+
+    // Narration: scoring complete
+    {
+        let relevant_count = results.iter().filter(|r| r.relevant && !r.excluded).count();
+        emit_narration(app, NarrationEvent {
+            narration_type: "insight".into(),
+            message: format!("{} items scored, {} above your threshold", results.len(), relevant_count),
+            source: None,
+            relevance: None,
+        });
+    }
+
+    // Narration: top signal
+    if let Some(top) = results.first() {
+        let title_preview: String = top.title.chars().take(50).collect();
+        emit_narration(app, NarrationEvent {
+            narration_type: "insight".into(),
+            message: format!("Top signal: \"{}\" ({:.0}%)", title_preview, top.top_score * 100.0),
+            source: Some(top.source_type.clone()),
+            relevance: Some(top.top_score),
+        });
+    }
 
     emit_progress(
         app,
@@ -330,6 +401,14 @@ pub(crate) async fn run_multi_source_analysis_impl(
     app: &AppHandle,
 ) -> Result<Vec<SourceRelevance>, String> {
     info!(target: "4da::analysis", "=== MULTI-SOURCE ANALYSIS STARTED ===");
+
+    // Narration: analysis start
+    emit_narration(app, NarrationEvent {
+        narration_type: "discovery".into(),
+        message: "Scanning sources for intelligence...".into(),
+        source: None,
+        relevance: None,
+    });
 
     emit_progress(
         app,
@@ -396,6 +475,16 @@ pub(crate) async fn run_multi_source_analysis_impl(
     );
     let mut results: Vec<SourceRelevance> = Vec::new();
 
+    // Narration: scoring start
+    emit_narration(app, NarrationEvent {
+        narration_type: "insight".into(),
+        message: format!("Scoring {} items against your profile...", all_items.len()),
+        source: None,
+        relevance: None,
+    });
+
+    let mut high_match_count: usize = 0;
+
     for (idx, (item, item_embedding)) in all_items.iter().enumerate() {
         if is_aborted() {
             info!(target: "4da::analysis", scored = idx, "Multi-source analysis aborted by user");
@@ -433,6 +522,20 @@ pub(crate) async fn run_multi_source_analysis_impl(
             &options,
             Some(&SIGNAL_CLASSIFIER),
         ));
+
+        // Narration: high-relevance match (max 3)
+        if let Some(scored) = results.last() {
+            if scored.top_score > 0.7 && high_match_count < 3 {
+                high_match_count += 1;
+                let title_preview: String = item.title.chars().take(60).collect();
+                emit_narration(app, NarrationEvent {
+                    narration_type: "match".into(),
+                    message: format!("High match: \"{}\"", title_preview),
+                    source: Some(item.source_type.clone()),
+                    relevance: Some(scored.top_score),
+                });
+            }
+        }
     }
 
     scoring::sort_results(&mut results);
@@ -458,6 +561,28 @@ pub(crate) async fn run_multi_source_analysis_impl(
 
     // LLM Reranking (if enabled and within daily limits)
     analysis_rerank::apply_llm_reranking(app, &mut results, &scoring_ctx).await;
+
+    // Narration: scoring complete
+    {
+        let narr_relevant = results.iter().filter(|r| r.relevant && !r.excluded).count();
+        emit_narration(app, NarrationEvent {
+            narration_type: "insight".into(),
+            message: format!("{} items scored, {} above your threshold", results.len(), narr_relevant),
+            source: None,
+            relevance: None,
+        });
+    }
+
+    // Narration: top signal
+    if let Some(top) = results.first() {
+        let title_preview: String = top.title.chars().take(50).collect();
+        emit_narration(app, NarrationEvent {
+            narration_type: "insight".into(),
+            message: format!("Top signal: \"{}\" ({:.0}%)", title_preview, top.top_score * 100.0),
+            source: Some(top.source_type.clone()),
+            relevance: Some(top.top_score),
+        });
+    }
 
     emit_progress(
         app,
@@ -546,6 +671,22 @@ pub(crate) async fn run_cached_analysis(app: AppHandle) -> Result<(), String> {
 
                 // Run post-analysis innovation hooks (non-blocking)
                 scoring::run_post_analysis_hooks(&results);
+
+                // Record intelligence snapshot for growth tracking
+                if let Ok(conn) = open_db_connection() {
+                    let total = results.len() as f64;
+                    let relevant = relevant_count as f64;
+                    let accuracy = if total > 0.0 { relevant / total } else { 0.0 };
+                    if let Err(e) = crate::intelligence_history::record_intelligence_snapshot(
+                        &conn,
+                        accuracy,
+                        relevant_count as i64,
+                        results.len() as i64,
+                        relevant_count as i64,
+                    ) {
+                        warn!(target: "4da::analysis", error = %e, "Failed to record intelligence snapshot");
+                    }
+                }
 
                 // GAME: track scan, discoveries, and source diversity
                 if let Ok(db) = crate::get_database() {

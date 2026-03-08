@@ -77,6 +77,7 @@ function App() {
   const loadTrialStatus = useAppStore(s => s.loadTrialStatus);
   const loadProValueReport = useAppStore(s => s.loadProValueReport);
   const loadChannels = useAppStore(s => s.loadChannels);
+  const computeViewTier = useAppStore(s => s.computeViewTier);
 
   // First-run state
   const isFirstRun = useAppStore(s => s.isFirstRun);
@@ -185,9 +186,11 @@ function App() {
     loadLicense();
     loadTrialStatus();
     loadProValueReport();
+    // Compute progressive disclosure tier from persisted state
+    computeViewTier();
     // Prune stale personalization cache (non-blocking)
     invoke('prune_personalization_cache').catch(() => {});
-  }, [loadPersistedBriefing, loadSourceHealth, loadLicense, loadTrialStatus, loadProValueReport]);
+  }, [loadPersistedBriefing, loadSourceHealth, loadLicense, loadTrialStatus, loadProValueReport, computeViewTier]);
 
   // Deep-link handler: 4da://activate?key=...
   const activateLicense = useAppStore(s => s.activateLicense);

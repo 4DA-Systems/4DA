@@ -141,8 +141,26 @@ export function NaturalLanguageSearch({ onStatusChange, defaultExpanded = true }
 
       {expanded && !hasAnalysisRun && (
         <div className="mt-4">
-          <div className="text-center py-8 bg-bg-secondary rounded-lg border border-border">
-            <p className="text-sm text-gray-300 font-medium mb-1">{t('search.noAnalysisTitle')}</p>
+          <div className="bg-bg-secondary rounded-lg border border-border p-5">
+            <p className="text-sm text-gray-300 font-medium mb-3">{t('search.noAnalysisTitle')}</p>
+            <div className="grid grid-cols-2 gap-2 mb-3">
+              <div className="flex items-center gap-2 text-xs text-gray-400">
+                <span className="text-cyan-400/50">{'\u2756'}</span>
+                {t('search.capabilityStack')}
+              </div>
+              <div className="flex items-center gap-2 text-xs text-gray-400">
+                <span className="text-cyan-400/50">{'\u2696'}</span>
+                {t('search.capabilityDecisions')}
+              </div>
+              <div className="flex items-center gap-2 text-xs text-gray-400">
+                <span className="text-cyan-400/50">{'\u25CE'}</span>
+                {t('search.capabilityGaps')}
+              </div>
+              <div className="flex items-center gap-2 text-xs text-gray-400">
+                <span className="text-cyan-400/50">{'\u2726'}</span>
+                {t('search.capabilitySynthesis')}
+              </div>
+            </div>
             <p className="text-xs text-gray-500">{t('search.noAnalysisHint')}</p>
           </div>
         </div>

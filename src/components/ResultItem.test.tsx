@@ -57,7 +57,7 @@ describe('ResultItem', () => {
     );
 
     expect(screen.getByText('My Great Article')).toBeInTheDocument();
-    expect(screen.getByText('75.0%')).toBeInTheDocument();
+    expect(screen.getByText('75%')).toBeInTheDocument();
   });
 
   it('shows preview explanation when collapsed', () => {

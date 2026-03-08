@@ -49,9 +49,9 @@ export function StackHealthBar({ health, onSuggestedQuery }: StackHealthBarProps
   if (!health) return null;
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-3" role="region" aria-label={t('search.stackContext')}>
       {/* Tech pills row */}
-      <div className="flex items-center gap-2 flex-wrap">
+      <div className="flex items-center gap-2 flex-wrap" role="list">
         {health.technologies.map((tech) => (
           <span
             key={tech.name}

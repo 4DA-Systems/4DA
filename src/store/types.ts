@@ -104,6 +104,8 @@ export interface ToastSlice {
   removeToast: (id: number) => void;
 }
 
+export type ViewTier = 'core' | 'explorer' | 'invested' | 'power';
+
 export interface UiSlice {
   showSettings: boolean;
   showSplash: boolean;
@@ -111,12 +113,19 @@ export interface UiSlice {
   isFirstRun: boolean;
   firstRunDismissed: boolean;
   embeddingMode: 'semantic' | 'keyword-only' | null;
+  viewTier: ViewTier;
+  showAllViews: boolean;
+  analysisCycleCount: number;
+  firstAnalysisDate: string | null;
   setShowSettings: (show: boolean) => void;
   setShowSplash: (show: boolean) => void;
   setActiveView: (view: 'briefing' | 'results' | 'saved' | 'insights' | 'toolkit' | 'playbook' | 'channels' | 'profile' | 'calibrate') => void;
   setIsFirstRun: (v: boolean) => void;
   setFirstRunDismissed: (v: boolean) => void;
   setEmbeddingMode: (mode: 'semantic' | 'keyword-only' | null) => void;
+  incrementAnalysisCycle: () => void;
+  setShowAllViews: (show: boolean) => void;
+  computeViewTier: () => void;
 }
 
 export interface ToolkitSlice {

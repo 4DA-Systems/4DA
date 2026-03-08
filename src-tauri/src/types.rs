@@ -201,6 +201,12 @@ pub struct SourceRelevance {
     /// STREETS revenue engine match (e.g. "Engine 1: Digital Products")
     #[serde(default)]
     pub streets_engine: Option<String>,
+    /// Decision window that boosted this item (subject of matched window)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub decision_window_match: Option<String>,
+    /// How much boost was applied from the decision window
+    #[serde(default)]
+    pub decision_boost_applied: f32,
 }
 
 pub(crate) fn default_source_type() -> String {

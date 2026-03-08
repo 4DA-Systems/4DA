@@ -67,6 +67,8 @@ pub(crate) fn score_item(
             similar_titles: vec![],
             serendipity: false,
             streets_engine: None,
+            decision_window_match: None,
+            decision_boost_applied: 0.0,
         };
     }
 
@@ -696,6 +698,10 @@ pub(crate) fn score_item(
         similar_titles: vec![],
         serendipity: false,
         streets_engine,
+        decision_window_match: matched_window_id.and_then(|wid| {
+            ctx.open_windows.iter().find(|w| w.id == wid).map(|w| w.title.clone())
+        }),
+        decision_boost_applied: window_boost,
     }
 }
 

@@ -50,11 +50,11 @@ describe('ViewErrorBoundary', () => {
 
   it('displays viewName in error message', () => {
     render(
-      <ViewErrorBoundary viewName="Insights">
+      <ViewErrorBoundary viewName="Decisions">
         <ThrowingChild />
       </ViewErrorBoundary>,
     );
-    expect(screen.getByText('Insights failed to load')).toBeInTheDocument();
+    expect(screen.getByText('Decisions failed to load')).toBeInTheDocument();
   });
 
   it('Retry button resets error state and renders children again', () => {

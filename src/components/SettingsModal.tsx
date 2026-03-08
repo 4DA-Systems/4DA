@@ -92,12 +92,40 @@ function StreetsMembershipSection({ onStatus }: { onStatus: (s: string) => void 
 }
 
 // ============================================================================
+// Show All Views Toggle
+// ============================================================================
+
+function ShowAllViewsToggle() {
+  const showAllViews = useAppStore(s => s.showAllViews);
+  const setShowAllViews = useAppStore(s => s.setShowAllViews);
+
+  return (
+    <div className="flex items-center justify-between py-3">
+      <div>
+        <span className="text-white text-sm">Show all views</span>
+        <p className="text-text-muted text-xs">Display all 9 navigation tabs regardless of usage</p>
+      </div>
+      <button
+        onClick={() => setShowAllViews(!showAllViews)}
+        className={`relative w-10 h-5 rounded-full transition-colors ${
+          showAllViews ? 'bg-green-500/40' : 'bg-gray-600'
+        }`}
+      >
+        <span className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white transition-transform ${
+          showAllViews ? 'translate-x-5' : 'translate-x-0'
+        }`} />
+      </button>
+    </div>
+  );
+}
+
+// ============================================================================
 // Types
 // ============================================================================
 
-type SettingsTab = 'general' | 'sources' | 'profile' | 'discovery' | 'health' | 'about';
+type SettingsTab = 'general' | 'sources' | 'profile' | 'projects' | 'advanced' | 'about';
 
-const TAB_IDS: SettingsTab[] = ['general', 'sources', 'profile', 'discovery', 'health', 'about'];
+const TAB_IDS: SettingsTab[] = ['general', 'sources', 'profile', 'projects', 'advanced', 'about'];
 
 // ============================================================================
 // Props
@@ -192,10 +220,10 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
         loadSuggestedInterests();
         loadLearnedBehavior();
         break;
-      case 'discovery':
+      case 'projects':
         loadDiscoveredContext();
         break;
-      case 'health':
+      case 'advanced':
         loadSystemHealth();
         break;
     }
@@ -342,6 +370,8 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
                   <LocaleSection />
                 </PanelErrorBoundary>
 
+                <ShowAllViewsToggle />
+
                 <PanelErrorBoundary name="AI Provider">
                   <AIProviderSection
                     settings={settings}
@@ -433,9 +463,9 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
             </div>
           )}
 
-          {/* Discovery Tab */}
-          {activeTab === 'discovery' && (
-            <div id="tabpanel-discovery" role="tabpanel">
+          {/* Projects Tab */}
+          {activeTab === 'projects' && (
+            <div id="tabpanel-projects" role="tabpanel">
               <div className="space-y-6">
                 <PanelErrorBoundary name="Context Discovery">
                   <ContextDiscoverySection
@@ -462,9 +492,9 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
             </div>
           )}
 
-          {/* Health Tab */}
-          {activeTab === 'health' && (
-            <div id="tabpanel-health" role="tabpanel">
+          {/* Advanced Tab */}
+          {activeTab === 'advanced' && (
+            <div id="tabpanel-advanced" role="tabpanel">
               <div className="space-y-6">
                 <PanelErrorBoundary name="Pro Value">
                   <ProValuePanel />

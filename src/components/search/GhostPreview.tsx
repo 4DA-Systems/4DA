@@ -26,7 +26,7 @@ export function GhostPreview({ preview }: GhostPreviewProps) {
   if (visibleLines.length === 0) return null;
 
   return (
-    <div className="rounded-lg bg-[#D4AF37]/[0.03] p-3 border border-[#D4AF37]/10">
+    <div className="rounded-lg bg-[#D4AF37]/[0.03] p-3 border border-[#D4AF37]/10" role="complementary" aria-label={t('search.proIntelligence')}>
       <div className="text-[10px] text-[#D4AF37]/70 uppercase tracking-wider font-medium mb-2">
         {t('search.proIntelligence')}
       </div>

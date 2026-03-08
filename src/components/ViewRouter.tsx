@@ -51,8 +51,8 @@ export function ViewRouter({ newItemIds, focusedIndex }: ViewRouterProps) {
           <SovereignDeveloperProfile />
         </ViewErrorBoundary>
       ) : activeView === 'insights' ? (
-        <ViewErrorBoundary viewName="Insights">
-          <section aria-label={t('nav.insights', { defaultValue: 'Strategy' })} className="space-y-6">
+        <ViewErrorBoundary viewName="Decisions">
+          <section aria-label={t('nav.insights', { defaultValue: 'Decisions' })} className="space-y-6">
             <TechRadar />
             <DecisionMemory />
           </section>
@@ -70,7 +70,7 @@ export function ViewRouter({ newItemIds, focusedIndex }: ViewRouterProps) {
           <PlaybookView />
         </ViewErrorBoundary>
       ) : activeView === 'calibrate' ? (
-        <ViewErrorBoundary viewName="Calibrate">
+        <ViewErrorBoundary viewName="System">
           <CalibrationView />
         </ViewErrorBoundary>
       ) : (

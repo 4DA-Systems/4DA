@@ -73,4 +73,12 @@ serendipity: boolean,
 /**
  * STREETS revenue engine match (e.g. "Engine 1: Digital Products")
  */
-streets_engine: string | null, };
+streets_engine: string | null, 
+/**
+ * Decision window that boosted this item (subject of matched window)
+ */
+decision_window_match: string | null, 
+/**
+ * How much boost was applied from the decision window
+ */
+decision_boost_applied: number, };

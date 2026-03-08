@@ -108,7 +108,7 @@ export const IntelligenceProfileCard = memo(function IntelligenceProfileCard() {
       {growth && growth.days_active >= 3 && (
         <div className="bg-[#1F1F1F] rounded-lg border border-border p-4">
           <h4 className="text-sm font-medium text-white mb-2">
-            {t('briefing.profile.intelligenceGrowth', 'Intelligence Growth')}
+            {t('briefing.profile.intelligenceGrowth', 'Learning Progress')}
           </h4>
           <div className="flex items-center gap-2 text-xs text-text-secondary mb-1">
             <span>Day 1: {Math.round(growth.initial_accuracy * 100)}%</span>

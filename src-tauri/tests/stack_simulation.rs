@@ -1403,10 +1403,10 @@ fn integrity_no_boosted_competitor() {
 fn integrity_all_keywords_lowercase() {
     for profile in stacks::list_profiles() {
         for pp in profile.pain_points {
-            for kw in pp.keywords.iter() {
+            for &kw in pp.keywords.iter() {
                 let lower = kw.to_lowercase();
                 assert_eq!(
-                    *kw,
+                    kw,
                     lower.as_str(),
                     "{}: pain point keyword '{}' not lowercase",
                     profile.id,
@@ -1415,10 +1415,10 @@ fn integrity_all_keywords_lowercase() {
             }
         }
         for es in profile.ecosystem_shifts {
-            for kw in es.keywords.iter() {
+            for &kw in es.keywords.iter() {
                 let lower: String = kw.to_lowercase();
                 assert_eq!(
-                    *kw,
+                    kw,
                     lower.as_str(),
                     "{}: shift keyword '{}' not lowercase",
                     profile.id,
@@ -2178,7 +2178,7 @@ fn threshold_single_keyword_no_ecosystem_shift() {
         let profile = stacks::get_profile(profile_id).unwrap();
 
         for es in profile.ecosystem_shifts {
-            for kw in es.keywords.iter() {
+            for &kw in es.keywords.iter() {
                 let topics: Vec<String> = vec![kw.to_string()];
                 let title = format!("Article discussing {} trends", kw);
                 let mult = scoring::detect_ecosystem_shift(&topics, &title, &stack);

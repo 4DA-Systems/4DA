@@ -1,7 +1,7 @@
 // Score formatting and color utilities
 
 export function formatScore(score: number): string {
-  return (score * 100).toFixed(1) + '%';
+  return `${Math.round(score * 100)}%`;
 }
 
 export function getScoreColor(score: number): string {

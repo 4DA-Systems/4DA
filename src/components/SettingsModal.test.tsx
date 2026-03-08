@@ -195,7 +195,7 @@ describe('SettingsModal', () => {
     render(<SettingsModal onClose={vi.fn()} />);
     const tabs = screen.getAllByRole('tab');
     expect(tabs).toHaveLength(6);
-    expect(tabs.map(t => t.textContent)).toEqual(['settings.tabs.general', 'settings.tabs.sources', 'settings.tabs.profile', 'settings.tabs.discovery', 'settings.tabs.health', 'settings.tabs.about']);
+    expect(tabs.map(t => t.textContent)).toEqual(['settings.tabs.general', 'settings.tabs.sources', 'settings.tabs.profile', 'settings.tabs.projects', 'settings.tabs.advanced', 'settings.tabs.about']);
   });
 
   it('General tab is active by default', () => {
@@ -219,9 +219,9 @@ describe('SettingsModal', () => {
     expect(screen.getByTestId('developer-dna-panel')).toBeInTheDocument();
   });
 
-  it('switches to Health tab and shows health panels', () => {
+  it('switches to Advanced tab and shows health panels', () => {
     render(<SettingsModal onClose={vi.fn()} />);
-    fireEvent.click(screen.getByRole('tab', { name: 'settings.tabs.health' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'settings.tabs.advanced' }));
     expect(screen.getByTestId('attention-dashboard')).toBeInTheDocument();
     expect(screen.getByTestId('system-health-panel')).toBeInTheDocument();
   });

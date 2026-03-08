@@ -15,7 +15,7 @@ export function SynthesisPanel({ isPro, synthesis, loading, onRetry }: Synthesis
   if (!loading && !synthesis) return null;
 
   return (
-    <div className="rounded-lg bg-cyan-500/5 border border-cyan-500/20 p-4">
+    <div className="rounded-lg bg-cyan-500/5 border border-cyan-500/20 p-4" role="region" aria-label={t('search.aiSynthesis')} aria-live="polite">
       <div className="flex items-center justify-between mb-2">
         <span className="text-[10px] text-cyan-400 uppercase tracking-wider font-medium">
           {t('search.aiSynthesis')}
