@@ -121,8 +121,10 @@ export function SynthesisPanel({ isPro, synthesis, loading, streamingText, onRet
                   />
                 ))}
               </div>
-              <span className="text-[10px] text-text-muted">
-                {t('search.groundedIn', { count: synthesis!.grounding_count, total: synthesis!.total_sources })}
+              <span className={`text-[10px] ${synthesis!.grounding_count === 0 ? 'text-amber-400' : 'text-text-muted'}`}>
+                {synthesis!.grounding_count === 0
+                  ? t('search.ungrounded')
+                  : t('search.groundedIn', { count: synthesis!.grounding_count, total: synthesis!.total_sources })}
               </span>
             </div>
           )}

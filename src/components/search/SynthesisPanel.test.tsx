@@ -151,6 +151,33 @@ describe('SynthesisPanel', () => {
     expect(dots).toHaveLength(3);
   });
 
+  it('shows ungrounded warning when zero citations', () => {
+    const synthesis: SynthesisResponse = {
+      text: 'A synthesis with no citations at all.',
+      sources: [
+        { index: 1, title: 'Source A', url: 'https://a.com', source_type: 'rss' },
+        { index: 2, title: 'Source B', url: 'https://b.com', source_type: 'hn' },
+      ],
+      grounding_count: 0,
+      total_sources: 2,
+    };
+    render(
+      <SynthesisPanel {...defaultProps} synthesis={synthesis} loading={false} />,
+    );
+    expect(screen.getByText('search.ungrounded')).toBeInTheDocument();
+  });
+
+  it('shows streaming text with cursor when loading with tokens', () => {
+    const { container } = render(
+      <SynthesisPanel {...defaultProps} loading={true} streamingText="Partial synthesis..." />,
+    );
+    expect(screen.getByText('Partial synthesis...')).toBeInTheDocument();
+    expect(screen.getByText('search.synthesizing')).toBeInTheDocument();
+    // Blinking cursor should be present
+    const cursor = container.querySelector('.animate-pulse.bg-cyan-400');
+    expect(cursor).toBeInTheDocument();
+  });
+
   it('shows expandable sources list', () => {
     const synthesis = makeSynthesis(
       'Text [1].',

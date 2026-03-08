@@ -377,6 +377,7 @@
   "search.analyzingSignals": "Analyzing signals...",
   "search.synthesizing": "Synthesizing...",
   "search.groundedIn": "Grounded in {{count}} of {{total}} signals",
+  "search.ungrounded": "Ungrounded \u2014 no sources cited. Verify independently.",
   "search.viewSources": "{{count}} sources",
   "search.myWatches": "My Watches",
   "search.watchHint": "Watch a search to get notified of new matches",
