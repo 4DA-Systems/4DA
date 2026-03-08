@@ -108,16 +108,16 @@ describe('BriefingView', () => {
       expect(screen.getByText('briefing.resultsAnalyzed')).toBeInTheDocument();
     });
 
-    it('shows "No Intelligence Yet" when no analysis has run', () => {
+    it('shows warmup title when no analysis has run', () => {
       setMockState({
         aiBriefing: { content: null, loading: false, error: null, model: null, lastGenerated: null },
         appState: { relevanceResults: [], loading: false, analysisComplete: false },
       });
       render(<BriefingView />);
-      expect(screen.getByText('briefing.noIntelligence')).toBeInTheDocument();
+      expect(screen.getByText('briefing.warmup.title')).toBeInTheDocument();
     });
 
-    it('shows "Analyze Now" button in no-data state', () => {
+    it('shows "Activate Intelligence" button in warmup state', () => {
       const startFn = vi.fn();
       setMockState({
         aiBriefing: { content: null, loading: false, error: null, model: null, lastGenerated: null },
@@ -125,7 +125,7 @@ describe('BriefingView', () => {
         startAnalysis: startFn,
       });
       render(<BriefingView />);
-      fireEvent.click(screen.getByText('results.analyzeNow'));
+      fireEvent.click(screen.getByText('briefing.warmup.activate'));
       expect(startFn).toHaveBeenCalledTimes(1);
     });
   });

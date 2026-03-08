@@ -340,9 +340,9 @@ describe('FirstRunTransition', () => {
       await vi.runAllTimersAsync();
     });
 
-    // Source full names should appear
-    expect(screen.getByText((content) => content.includes('Hacker News'))).toBeDefined();
-    expect(screen.getByText((content) => content.includes('Reddit'))).toBeDefined();
+    // Source full names should appear (may match multiple elements)
+    expect(screen.getAllByText((content) => content.includes('Hacker News')).length).toBeGreaterThan(0);
+    expect(screen.getAllByText((content) => content.includes('Reddit')).length).toBeGreaterThan(0);
   });
 
   // -------------------------------------------------------------------------
