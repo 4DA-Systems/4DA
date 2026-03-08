@@ -32,7 +32,10 @@ pub struct SunResult {
     pub data: Option<serde_json::Value>,
 }
 
+// These structs are part of the Suns dashboard API, currently used only in tests.
+// They will be wired to the frontend when the Suns dashboard is registered.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[allow(dead_code)]
 pub struct SunStatus {
     pub id: String,
     pub name: String,
@@ -46,6 +49,7 @@ pub struct SunStatus {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[allow(dead_code)]
 pub struct SunAlert {
     pub id: i64,
     pub sun_id: String,
@@ -56,6 +60,7 @@ pub struct SunAlert {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[allow(dead_code)]
 pub struct ModuleHealth {
     pub module_id: String,
     pub module_name: String,
@@ -68,6 +73,7 @@ pub struct ModuleHealth {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[allow(dead_code)]
 pub struct StreetHealthScore {
     pub overall: f32, // 0.0 - 1.0
     pub module_scores: Vec<ModuleHealth>,
@@ -90,6 +96,7 @@ pub struct SunRegistry {
 
 struct SunDef {
     id: String,
+    #[allow(dead_code)] // read by get_statuses(), currently test-only
     name: String,
     module_id: String,
     interval_secs: u64,
@@ -210,6 +217,7 @@ impl SunRegistry {
     }
 
     /// Return status for each registered sun.
+    #[allow(dead_code)] // used in tests; will be wired to frontend
     pub fn get_statuses(&self) -> Vec<SunStatus> {
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -270,6 +278,7 @@ impl SunRegistry {
     }
 
     /// Get sun definitions grouped by module ID.
+    #[allow(dead_code)] // used in tests; will be wired to frontend
     pub fn get_module_sun_counts(&self) -> HashMap<String, usize> {
         let mut counts = HashMap::new();
         for sun in &self.suns {
@@ -279,6 +288,7 @@ impl SunRegistry {
     }
 
     /// Enable or disable a sun by ID.
+    #[allow(dead_code)] // used in tests; will be wired to frontend
     pub fn set_enabled(&mut self, sun_id: &str, enabled: bool) {
         self.enabled.insert(sun_id.to_string(), enabled);
         info!(target: "4da::suns", sun = sun_id, enabled, "Sun toggled");
@@ -343,6 +353,7 @@ impl SunRegistry {
     }
 
     /// Execute a specific sun by ID, bypassing the interval check.
+    #[allow(dead_code)] // used in tests; will be wired to frontend
     pub fn execute_one(&mut self, sun_id: &str) -> Option<SunResult> {
         let sun = self.suns.iter().find(|s| s.id == sun_id)?;
 

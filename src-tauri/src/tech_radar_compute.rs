@@ -4,7 +4,7 @@
 //! Contains the classify/score/overlay pipeline; public types and Tauri commands
 //! remain in `tech_radar`.
 
-use rusqlite::{params, Connection};
+use rusqlite::Connection;
 use std::collections::HashMap;
 use tracing::info;
 
@@ -307,32 +307,33 @@ fn overlay_affinities(conn: &Connection, entries: &mut HashMap<String, EntryBuil
 }
 
 /// Overlay signal trend data from source_items mentions in last 30 days.
+///
+/// Uses a single batch query to fetch all recent titles, then counts mentions
+/// per tech in-memory. Replaces the previous N+1 pattern (one query per tech).
 fn overlay_signal_trends(conn: &Connection, entries: &mut HashMap<String, EntryBuilder>) {
-    let tech_names: Vec<String> = entries.keys().cloned().collect();
-    for tech in &tech_names {
-        let pattern = format!("%{}%", tech);
-        let count: i64 = conn
-            .query_row(
-                "SELECT COUNT(*) FROM source_items
-             WHERE (LOWER(title) LIKE ?1 OR LOWER(content) LIKE ?1)
-             AND created_at >= datetime('now', '-30 days')",
-                params![pattern],
-                |row| row.get(0),
-            )
-            .unwrap_or(0);
+    // Batch: fetch all titles from last 30 days in one query
+    let mut titles: Vec<String> = Vec::new();
+    if let Ok(mut stmt) = conn.prepare(
+        "SELECT LOWER(title) FROM source_items WHERE created_at >= datetime('now', '-30 days')",
+    ) {
+        if let Ok(rows) = stmt.query_map([], |row| row.get::<_, String>(0)) {
+            titles = rows.flatten().collect();
+        }
+    }
 
-        if let Some(eb) = entries.get_mut(tech) {
-            eb.trend = match count {
-                0 => 0.0,
-                1..=3 => 0.3,
-                4..=10 => 0.6,
-                _ => 1.0,
-            };
-            if count > 5 {
-                eb.movement = RadarMovement::Up;
-                eb.signals
-                    .push(format!("{} mentions in last 30 days", count));
-            }
+    // Count mentions per tech in-memory
+    for (tech, eb) in entries.iter_mut() {
+        let count = titles.iter().filter(|t| t.contains(tech.as_str())).count() as i64;
+        eb.trend = match count {
+            0 => 0.0,
+            1..=3 => 0.3,
+            4..=10 => 0.6,
+            _ => 1.0,
+        };
+        if count > 5 {
+            eb.movement = RadarMovement::Up;
+            eb.signals
+                .push(format!("{} mentions in last 30 days", count));
         }
     }
 }

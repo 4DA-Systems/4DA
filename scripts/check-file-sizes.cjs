@@ -62,6 +62,7 @@ const EXCEPTIONS = {
   'src-tauri/src/scoring/simulation/domain_embeddings.rs': 'Scoring simulation — domain embedding fixtures for persona-based testing',
   'src-tauri/src/scoring/simulation/tier2_semantic.rs': 'Scoring simulation — semantic/embedding scoring validation with 12 tests',
   'src-tauri/src/scoring/simulation/golden_snapshot.rs': 'Scoring simulation — golden snapshot test assertions for pipeline validation',
+  'src-tauri/src/scoring/simulation/persona_data.rs': 'Scoring simulation — per-persona enrichment data structs (pure data, no logic)',
   'src-tauri/src/void_engine/universe.rs': 'Void Universe renderer — experimental, feature-gated',
   'src-tauri/src/sovereign_developer_profile.rs': 'Unified profile aggregation — 10 data sources + markdown/JSON export',
   'src-tauri/src/game_engine.rs':               'GAME engine — 404 lines production + 730 lines integration tests',

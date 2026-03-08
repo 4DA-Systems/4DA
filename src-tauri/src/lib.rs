@@ -148,6 +148,8 @@ mod toolkit_export;
 mod toolkit_http;
 mod toolkit_intelligence;
 mod translation_commands;
+#[cfg(test)]
+mod translation_commands_tests;
 mod translation_pipeline;
 use source_fetching::fill_cache_background;
 
@@ -158,6 +160,8 @@ pub mod test_utils;
 
 #[cfg(test)]
 mod privacy_tests;
+#[cfg(test)]
+mod privacy_tests_exports;
 
 // ============================================================================
 // App Entry
@@ -327,7 +331,6 @@ pub fn run() {
             source_config::set_rss_feeds,
             source_config::get_twitter_handles,
             source_config::set_twitter_handles,
-            source_config::get_x_api_key,
             source_config::set_x_api_key,
             source_config::get_youtube_channels,
             source_config::set_youtube_channels,

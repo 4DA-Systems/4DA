@@ -18,6 +18,8 @@ pub(super) mod domain_embeddings;
 pub(super) mod enriched_lifecycle;
 pub(super) mod enrichment;
 pub(super) mod feedback_sim;
+#[cfg(test)]
+pub(super) mod feedback_sim_tests;
 pub(super) mod first_run;
 pub(super) mod golden_snapshot;
 pub(super) mod lifecycle;

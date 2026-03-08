@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
-import { ProGate } from './ProGate';
+import { useAppStore } from '../store';
 
 interface QueryResultItem {
   id: number;
@@ -63,6 +63,9 @@ export function NaturalLanguageSearch({ onStatusChange, defaultExpanded = true }
   const [loading, setLoading] = useState(false);
   const [expanded, setExpanded] = useState(defaultExpanded);
   const [error, setError] = useState<string | null>(null);
+  const analysisComplete = useAppStore((s) => s.appState.analysisComplete);
+  const lastAnalyzedAt = useAppStore((s) => s.appState.lastAnalyzedAt);
+  const hasAnalysisRun = analysisComplete || lastAnalyzedAt !== null;
 
   const handleSearch = async () => {
     if (!query.trim()) return;
@@ -97,7 +100,6 @@ export function NaturalLanguageSearch({ onStatusChange, defaultExpanded = true }
   };
 
   return (
-    <ProGate feature="Semantic Search">
     <div className="bg-bg-tertiary rounded-lg p-5 border border-border">
       <button
         className="flex items-center justify-between cursor-pointer w-full text-left"
@@ -116,7 +118,17 @@ export function NaturalLanguageSearch({ onStatusChange, defaultExpanded = true }
         <span className="text-gray-500 text-sm" aria-hidden="true">{expanded ? '▼' : '▶'}</span>
       </button>
 
-      {expanded && (
+      {expanded && !hasAnalysisRun && (
+        <div className="mt-4">
+          <div className="text-center py-8 bg-bg-secondary rounded-lg border border-border">
+            <div className="text-2xl mb-3">🔍</div>
+            <p className="text-sm text-gray-300 font-medium mb-1">{t('search.noAnalysisTitle')}</p>
+            <p className="text-xs text-gray-500">{t('search.noAnalysisHint')}</p>
+          </div>
+        </div>
+      )}
+
+      {expanded && hasAnalysisRun && (
         <div className="mt-4 space-y-4">
           {/* Search input */}
           <div className="flex gap-2" role="search">
@@ -275,6 +287,5 @@ export function NaturalLanguageSearch({ onStatusChange, defaultExpanded = true }
         </div>
       )}
     </div>
-    </ProGate>
   );
 }

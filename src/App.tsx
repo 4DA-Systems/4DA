@@ -451,7 +451,9 @@ function App() {
 
         {/* Command Deck (slide-up panel) */}
         <Suspense fallback={null}>
-          <CommandDeck />
+          <ViewErrorBoundary viewName="Command Deck">
+            <CommandDeck />
+          </ViewErrorBoundary>
         </Suspense>
 
         {/* Toast Notifications */}
@@ -459,22 +461,28 @@ function App() {
 
         {/* GAME Achievement Celebration Overlay */}
         <Suspense fallback={null}>
-          <GameCelebration />
+          <ViewErrorBoundary viewName="Celebration">
+            <GameCelebration />
+          </ViewErrorBoundary>
         </Suspense>
 
         {/* Keyboard Shortcuts Help Modal */}
         {showKeyboardHelp && (
           <Suspense fallback={null}>
-            <KeyboardShortcutsModal onClose={() => setShowKeyboardHelp(false)} />
+            <ViewErrorBoundary viewName="Keyboard Shortcuts">
+              <KeyboardShortcutsModal onClose={() => setShowKeyboardHelp(false)} />
+            </ViewErrorBoundary>
           </Suspense>
         )}
 
         {/* Settings Modal - now self-sufficient via Zustand store */}
         {showSettings && (
           <Suspense fallback={null}>
-            <SettingsModal
-              onClose={() => setShowSettings(false)}
-            />
+            <ViewErrorBoundary viewName="Settings" onReset={() => setShowSettings(false)}>
+              <SettingsModal
+                onClose={() => setShowSettings(false)}
+              />
+            </ViewErrorBoundary>
           </Suspense>
         )}
       </div>

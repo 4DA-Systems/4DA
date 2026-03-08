@@ -191,7 +191,10 @@ pub struct DimensionCompleteness {
 /// No new tables — reads from 12+ existing tables and computes intelligence.
 pub fn assemble_profile(conn: &Connection) -> SovereignDeveloperProfile {
     let infrastructure = assemble_infrastructure(conn);
-    let stack = assemble_stack(conn);
+    // Build domain_profile once — previously built separately in assemble_stack
+    // AND again inside compute_radar (called by assemble_preferences).
+    let domain = crate::domain_profile::build_domain_profile(conn);
+    let stack = assemble_stack(conn, &domain);
     let skills = assemble_skills(conn);
     let preferences = assemble_preferences(conn);
     let context = assemble_context(conn);
@@ -295,14 +298,11 @@ fn assemble_infrastructure(conn: &Connection) -> InfrastructureDimension {
     dim
 }
 
-fn assemble_stack(conn: &Connection) -> StackDimension {
-    let domain = crate::domain_profile::build_domain_profile(conn);
-
-    let mut primary_stack: Vec<String> = domain.primary_stack.into_iter().collect();
-    primary_stack.sort();
-    let mut adjacent_tech: Vec<String> = domain.adjacent_tech.into_iter().collect();
+fn assemble_stack(conn: &Connection, domain: &crate::domain_profile::DomainProfile) -> StackDimension {
+    let primary_stack = rank_primary_stack(conn, domain.primary_stack.clone());
+    let mut adjacent_tech: Vec<String> = domain.adjacent_tech.iter().cloned().collect();
     adjacent_tech.sort();
-    let mut dependencies: Vec<String> = domain.dependency_names.into_iter().take(30).collect();
+    let mut dependencies: Vec<String> = domain.dependency_names.iter().cloned().take(30).collect();
     dependencies.sort();
 
     // Detected tech with confidence
@@ -451,30 +451,10 @@ fn assemble_preferences(conn: &Connection) -> PreferencesDimension {
         })
         .unwrap_or_default();
 
-    // Tech radar
-    let tech_radar = match crate::tech_radar::compute_radar(conn) {
-        Ok(radar) => {
-            let by_ring = |ring: &str| {
-                radar
-                    .entries
-                    .iter()
-                    .filter(|e| format!("{:?}", e.ring).to_lowercase() == ring)
-                    .take(10)
-                    .map(|e| e.name.clone())
-                    .collect()
-            };
-            TechRadarSummary {
-                adopt: by_ring("adopt"),
-                trial: by_ring("trial"),
-                assess: by_ring("assess"),
-                hold: by_ring("hold"),
-            }
-        }
-        Err(e) => {
-            debug!(target: "4da::sdp", error = %e, "Tech radar unavailable");
-            TechRadarSummary::default()
-        }
-    };
+    // Tech radar — use last cached snapshot instead of full recomputation.
+    // compute_radar() rebuilds domain_profile internally, which duplicates the
+    // work already done in assemble_stack. Reading the snapshot is O(1) vs O(N).
+    let tech_radar = load_radar_summary_from_snapshot(conn);
 
     PreferencesDimension {
         interests,
@@ -482,6 +462,48 @@ fn assemble_preferences(conn: &Connection) -> PreferencesDimension {
         active_decisions,
         tech_radar,
     }
+}
+
+/// Load a TechRadarSummary from the latest temporal_events snapshot.
+/// Falls back to an empty summary if no snapshot exists yet (the full radar
+/// will be computed on its own schedule and the snapshot will be available
+/// on the next profile load).
+fn load_radar_summary_from_snapshot(conn: &Connection) -> TechRadarSummary {
+    let data: Option<String> = conn
+        .query_row(
+            "SELECT data FROM temporal_events
+             WHERE event_type = 'radar_snapshot'
+             ORDER BY created_at DESC LIMIT 1",
+            [],
+            |row| row.get(0),
+        )
+        .ok();
+
+    let data = match data {
+        Some(d) => d,
+        None => {
+            debug!(target: "4da::sdp", "No radar snapshot found — returning empty summary");
+            return TechRadarSummary::default();
+        }
+    };
+
+    // Snapshot format is HashMap<tech_name, ring_name> (e.g. {"rust": "adopt"})
+    let map: HashMap<String, String> = serde_json::from_str(&data).unwrap_or_default();
+
+    let mut summary = TechRadarSummary::default();
+    for (name, ring) in &map {
+        let list = match ring.as_str() {
+            "adopt" => &mut summary.adopt,
+            "trial" => &mut summary.trial,
+            "assess" => &mut summary.assess,
+            "hold" => &mut summary.hold,
+            _ => continue,
+        };
+        if list.len() < 10 {
+            list.push(name.clone());
+        }
+    }
+    summary
 }
 
 fn assemble_context(conn: &Connection) -> ContextDimension {
@@ -786,10 +808,26 @@ fn build_identity_summary(stack: &StackDimension) -> String {
     if stack.primary_stack.is_empty() {
         return "Developer — configure your stack to personalize".to_string();
     }
-    let stack_str = stack
+    // Only use identity-worthy tech for the title (languages, frameworks, platforms)
+    let worthy: Vec<&String> = stack
         .primary_stack
         .iter()
+        .filter(|s| is_identity_worthy(s))
         .take(3)
+        .collect();
+    if worthy.is_empty() {
+        // Fallback to first 3 if nothing is "worthy"
+        let stack_str = stack
+            .primary_stack
+            .iter()
+            .take(3)
+            .map(|s| capitalize(s))
+            .collect::<Vec<_>>()
+            .join("/");
+        return format!("{} developer", stack_str);
+    }
+    let stack_str = worthy
+        .iter()
         .map(|s| capitalize(s))
         .collect::<Vec<_>>()
         .join("/");
@@ -802,6 +840,128 @@ fn capitalize(s: &str) -> String {
         None => String::new(),
         Some(c) => c.to_uppercase().collect::<String>() + chars.as_str(),
     }
+}
+
+/// Rank primary stack by relevance instead of alphabetically.
+/// Scoring: identity-worthy techs first, then by dependency frequency, then by
+/// detected_tech confidence, with alphabetical as tiebreaker.
+fn rank_primary_stack(conn: &Connection, raw_stack: HashSet<String>) -> Vec<String> {
+    // Get dependency frequency counts
+    let mut freq: HashMap<String, i64> = HashMap::new();
+    if let Ok(mut stmt) = conn.prepare(
+        "SELECT LOWER(package_name), COUNT(*) FROM project_dependencies GROUP BY LOWER(package_name)",
+    ) {
+        if let Ok(rows) = stmt.query_map([], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?))
+        }) {
+            for pair in rows.flatten() {
+                freq.insert(pair.0, pair.1);
+            }
+        }
+    }
+
+    // Get detected tech confidence scores
+    let mut confidence: HashMap<String, f64> = HashMap::new();
+    if let Ok(mut stmt) = conn.prepare("SELECT LOWER(name), confidence FROM detected_tech") {
+        if let Ok(rows) = stmt.query_map([], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, f64>(1)?))
+        }) {
+            for pair in rows.flatten() {
+                confidence.insert(pair.0, pair.1);
+            }
+        }
+    }
+
+    let mut ranked: Vec<(String, i64)> = raw_stack
+        .into_iter()
+        .map(|tech| {
+            let tech_lower = tech.to_lowercase();
+            let score = if is_identity_worthy(&tech_lower) {
+                1000
+            } else {
+                0
+            } + freq.get(&tech_lower).copied().unwrap_or(0) * 10
+                + (confidence.get(&tech_lower).copied().unwrap_or(0.0) * 100.0) as i64;
+            (tech, score)
+        })
+        .collect();
+    ranked.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| a.0.cmp(&b.0)));
+    ranked.into_iter().map(|(t, _)| t).collect()
+}
+
+/// Filter for techs that should appear in the developer identity title.
+/// Languages, frameworks, platforms = yes. ORMs, utility libs, build tools = no.
+fn is_identity_worthy(tech: &str) -> bool {
+    const WORTHY: &[&str] = &[
+        "rust",
+        "typescript",
+        "javascript",
+        "python",
+        "go",
+        "java",
+        "kotlin",
+        "swift",
+        "c",
+        "cpp",
+        "c++",
+        "csharp",
+        "c#",
+        "ruby",
+        "php",
+        "scala",
+        "elixir",
+        "haskell",
+        "dart",
+        "zig",
+        "nim",
+        "lua",
+        "r",
+        "julia",
+        "wgsl",
+        "glsl",
+        "sql",
+        // Major frameworks / platforms
+        "react",
+        "vue",
+        "angular",
+        "svelte",
+        "nextjs",
+        "next.js",
+        "nuxt",
+        "remix",
+        "tauri",
+        "electron",
+        "flutter",
+        "react-native",
+        "django",
+        "flask",
+        "fastapi",
+        "rails",
+        "spring",
+        "express",
+        "nest",
+        "nestjs",
+        "actix",
+        "axum",
+        "rocket",
+        "tensorflow",
+        "pytorch",
+        "node",
+        "nodejs",
+        "deno",
+        "bun",
+        // Platforms
+        "aws",
+        "gcp",
+        "azure",
+        "docker",
+        "kubernetes",
+        "linux",
+        "wasm",
+        "webgpu",
+    ];
+
+    WORTHY.contains(&tech)
 }
 
 // ============================================================================
@@ -1122,6 +1282,64 @@ mod tests {
         infra.ram.insert("total".to_string(), "4 GB".to_string());
         let mismatches = detect_infrastructure_mismatches(&infra);
         assert!(mismatches.iter().any(|m| m.issue.contains("swap")));
+    }
+
+    #[test]
+    fn test_is_identity_worthy() {
+        // Languages should be worthy
+        assert!(is_identity_worthy("rust"));
+        assert!(is_identity_worthy("typescript"));
+        assert!(is_identity_worthy("python"));
+        assert!(is_identity_worthy("javascript"));
+        // Frameworks should be worthy
+        assert!(is_identity_worthy("react"));
+        assert!(is_identity_worthy("tauri"));
+        assert!(is_identity_worthy("vue"));
+        // ORMs, utility libs, build tools should NOT be worthy
+        assert!(!is_identity_worthy("drizzle"));
+        assert!(!is_identity_worthy("webpack"));
+        assert!(!is_identity_worthy("eslint"));
+        assert!(!is_identity_worthy("prisma"));
+    }
+
+    #[test]
+    fn test_identity_summary_filters_unworthy_tech() {
+        // Simulates the "Drizzle developer" bug: drizzle should be filtered out
+        let stack = StackDimension {
+            primary_stack: vec![
+                "rust".to_string(),
+                "typescript".to_string(),
+                "react".to_string(),
+                "drizzle".to_string(),
+            ],
+            ..Default::default()
+        };
+        let summary = build_identity_summary(&stack);
+        assert!(
+            !summary.to_lowercase().contains("drizzle"),
+            "Drizzle should not appear in identity: {}",
+            summary
+        );
+        assert!(summary.contains("Rust"));
+        assert!(summary.contains("Typescript"));
+        assert!(summary.contains("React"));
+    }
+
+    #[test]
+    fn test_identity_summary_fallback_when_no_worthy() {
+        // If no tech is identity-worthy, fallback to first 3
+        let stack = StackDimension {
+            primary_stack: vec![
+                "drizzle".to_string(),
+                "prisma".to_string(),
+                "webpack".to_string(),
+            ],
+            ..Default::default()
+        };
+        let summary = build_identity_summary(&stack);
+        // Should still produce a developer title using the fallback
+        assert!(summary.contains("developer"));
+        assert!(summary.contains("Drizzle"));
     }
 
     #[test]
