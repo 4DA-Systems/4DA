@@ -85,12 +85,16 @@ pub async fn run_background_anomaly_detection_with_results() -> Result<Vec<crate
 pub async fn run_background_behavior_decay() -> Result<serde_json::Value> {
     let ace = get_ace_engine()?;
 
-    // Apply decay to behavior signals
+    // Apply decay to behavior signals (topic affinities)
     let decayed_count = ace.apply_behavior_decay()?;
+
+    // Apply decay to detected technologies (60-day half-life)
+    let tech_decayed = ace.apply_detected_tech_decay().unwrap_or(0);
 
     info!(
         target: "4da::decay",
         signals_decayed = decayed_count,
+        tech_decayed = tech_decayed,
         "Background behavior decay applied"
     );
 
@@ -114,6 +118,7 @@ pub async fn run_background_behavior_decay() -> Result<serde_json::Value> {
 
     Ok(serde_json::json!({
         "signals_decayed": decayed_count,
+        "tech_decayed": tech_decayed,
         "threshold_adjusted": threshold_adjusted,
         "current_threshold": get_relevance_threshold(),
         "timestamp": chrono::Utc::now().to_rfc3339()

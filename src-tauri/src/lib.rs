@@ -502,6 +502,7 @@ pub fn run() {
             content_commands::remove_saved_item,
             // Source Health
             health_commands::get_source_health_status,
+            health_commands::get_source_quality,
             // Decision Intelligence
             decisions::get_decisions,
             decisions::record_developer_decision,

@@ -47,6 +47,14 @@ export interface SourceHealthStatus {
   gap_message: string | null;
 }
 
+export interface SourceQualityReport {
+  source_type: string;
+  total_items: number;
+  relevant_items: number;
+  relevance_ratio: number;
+  below_threshold: boolean;
+}
+
 export interface SavedItem {
   item_id: number;
   title: string;

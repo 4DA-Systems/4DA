@@ -74,6 +74,18 @@ pub async fn get_source_health_status() -> Result<Vec<SourceHealthStatus>> {
 }
 
 // ============================================================================
+// Source Quality Analysis
+// ============================================================================
+
+/// Returns per-source relevance quality ratios.
+/// Sources below 5% relevance ratio are flagged for potential replacement.
+#[tauri::command]
+pub async fn get_source_quality() -> Result<Vec<crate::health::SourceQualityReport>> {
+    let conn = crate::state::open_db_connection()?;
+    Ok(crate::health::compute_source_quality(&conn, 30))
+}
+
+// ============================================================================
 // Tests
 // ============================================================================
 
