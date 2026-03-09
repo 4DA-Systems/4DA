@@ -137,7 +137,13 @@ pub fn compute_all_delegation_scores(conn: &Connection) -> Result<Vec<Delegation
     let techs: Vec<String> = stmt
         .query_map([], |row| row.get::<_, String>(0))
         .map_err(|e| format!("Failed to read tech_stack: {}", e))?
-        .filter_map(|r| r.ok())
+        .filter_map(|r| match r {
+            Ok(v) => Some(v),
+            Err(e) => {
+                tracing::warn!("Row processing failed in delegation: {e}");
+                None
+            }
+        })
         .collect();
 
     let mut scores = Vec::with_capacity(techs.len());

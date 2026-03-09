@@ -106,7 +106,14 @@ fn collect_top_items(conn: &rusqlite::Connection, days: i64) -> Vec<DigestHighli
         }
     };
 
-    rows.filter_map(|r| r.ok()).collect()
+    rows.filter_map(|r| match r {
+        Ok(v) => Some(v),
+        Err(e) => {
+            tracing::warn!("Row processing failed in weekly_digest: {e}");
+            None
+        }
+    })
+    .collect()
 }
 
 fn collect_stats(conn: &rusqlite::Connection, days: i64) -> DigestStats {
@@ -178,7 +185,14 @@ fn collect_topics(conn: &rusqlite::Connection) -> Vec<DigestTopic> {
         Err(_) => return Vec::new(),
     };
 
-    rows.filter_map(|r| r.ok()).collect()
+    rows.filter_map(|r| match r {
+        Ok(v) => Some(v),
+        Err(e) => {
+            tracing::warn!("Row processing failed in weekly_digest: {e}");
+            None
+        }
+    })
+    .collect()
 }
 
 // ============================================================================

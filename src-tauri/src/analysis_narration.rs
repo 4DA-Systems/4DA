@@ -15,5 +15,7 @@ pub struct NarrationEvent {
 }
 
 pub fn emit_narration(app: &tauri::AppHandle, event: NarrationEvent) {
-    let _ = app.emit("analysis-narration", &event);
+    if let Err(e) = app.emit("analysis-narration", &event) {
+        tracing::warn!("Failed to emit 'analysis-narration': {e}");
+    }
 }

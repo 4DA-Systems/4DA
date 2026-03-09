@@ -452,7 +452,13 @@ fn find_missed_items(conn: &rusqlite::Connection, package_name: &str) -> Result<
             })
         })
         .map_err(|e| e.to_string())?
-        .filter_map(|r| r.ok())
+        .filter_map(|r| match r {
+            Ok(v) => Some(v),
+            Err(e) => {
+                tracing::warn!("Row processing failed in knowledge_decay: {e}");
+                None
+            }
+        })
         .collect();
 
     // Post-filter: verify word-boundary match in title to avoid false positives

@@ -78,7 +78,9 @@ impl EmbeddingService {
         };
 
         // Initialize embedding cache table
-        let _ = Self::init_cache_table(&conn);
+        if let Err(e) = Self::init_cache_table(&conn) {
+            tracing::warn!("Initialization failed: {e}");
+        }
 
         Self {
             config,
@@ -134,7 +136,9 @@ impl EmbeddingService {
 
         // Cache it
         if self.config.cache_enabled {
-            let _ = self.cache_embedding(text, &embedding);
+            if let Err(e) = self.cache_embedding(text, &embedding) {
+                tracing::warn!("Cache operation failed: {e}");
+            }
         }
         let mut cache = self.cache.lock();
         if cache.len() >= Self::MAX_CACHE_ENTRIES {
@@ -173,7 +177,9 @@ impl EmbeddingService {
 
             for ((i, text), embedding) in chunk.iter().zip(embeddings) {
                 if self.config.cache_enabled {
-                    let _ = self.cache_embedding(text, &embedding);
+                    if let Err(e) = self.cache_embedding(text, &embedding) {
+                        tracing::warn!("Cache operation failed: {e}");
+                    }
                 }
                 self.cache.lock().insert(text.clone(), embedding.clone());
                 results.push((*i, embedding));

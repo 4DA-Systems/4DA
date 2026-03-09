@@ -195,7 +195,15 @@ fn load_detected_techs(conn: &rusqlite::Connection) -> Vec<(String, String)> {
     });
 
     match rows {
-        Ok(iter) => iter.filter_map(|r| r.ok()).collect(),
+        Ok(iter) => iter
+            .filter_map(|r| match r {
+                Ok(v) => Some(v),
+                Err(e) => {
+                    tracing::warn!("Row processing failed in stack_health: {e}");
+                    None
+                }
+            })
+            .collect(),
         Err(e) => {
             warn!(target: "4da::stack_health", error = %e, "Failed to query detected_tech");
             vec![]
@@ -310,7 +318,15 @@ fn compute_missed_intelligence(
     let rows: Vec<(i64, String)> = match stmt.query_map(params![interval], |row| {
         Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?))
     }) {
-        Ok(iter) => iter.filter_map(|r| r.ok()).collect(),
+        Ok(iter) => iter
+            .filter_map(|r| match r {
+                Ok(v) => Some(v),
+                Err(e) => {
+                    tracing::warn!("Row processing failed in stack_health: {e}");
+                    None
+                }
+            })
+            .collect(),
         Err(e) => {
             debug!(target: "4da::stack_health", error = %e, "Missed intelligence query_map failed");
             return MissedIntelligence {

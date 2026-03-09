@@ -81,7 +81,13 @@ pub async fn get_sovereign_profile() -> Result<SovereignProfileData> {
             })
         })
         .map_err(FourDaError::Db)?
-        .filter_map(|r| r.ok())
+        .filter_map(|r| match r {
+            Ok(v) => Some(v),
+            Err(e) => {
+                tracing::warn!("Row processing failed in sovereign_profile: {e}");
+                None
+            }
+        })
         .collect();
 
     // Build category summaries
@@ -118,7 +124,13 @@ pub async fn get_sovereign_profile_completeness() -> Result<ProfileCompleteness>
     let filled: std::collections::HashSet<String> = stmt
         .query_map([], |row| row.get::<_, String>(0))
         .map_err(FourDaError::Db)?
-        .filter_map(|r| r.ok())
+        .filter_map(|r| match r {
+            Ok(v) => Some(v),
+            Err(e) => {
+                tracing::warn!("Row processing failed in sovereign_profile: {e}");
+                None
+            }
+        })
         .collect();
 
     let total = ALL_CATEGORIES.len();
@@ -254,7 +266,13 @@ pub async fn get_execution_log(
         let result: Vec<serde_json::Value> = stmt
             .query_map(params![module_id, idx as i64], row_to_json)
             .map_err(FourDaError::Db)?
-            .filter_map(|r| r.ok())
+            .filter_map(|r| match r {
+                Ok(v) => Some(v),
+                Err(e) => {
+                    tracing::warn!("Row processing failed in sovereign_profile: {e}");
+                    None
+                }
+            })
             .collect();
         result
     } else {
@@ -270,7 +288,13 @@ pub async fn get_execution_log(
         let result: Vec<serde_json::Value> = stmt
             .query_map(params![module_id], row_to_json)
             .map_err(FourDaError::Db)?
-            .filter_map(|r| r.ok())
+            .filter_map(|r| match r {
+                Ok(v) => Some(v),
+                Err(e) => {
+                    tracing::warn!("Row processing failed in sovereign_profile: {e}");
+                    None
+                }
+            })
             .collect();
         result
     };

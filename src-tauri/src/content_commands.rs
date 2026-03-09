@@ -177,7 +177,13 @@ pub async fn get_saved_items() -> Result<Vec<SavedItem>> {
             })
         })
         .map_err(FourDaError::Db)?
-        .filter_map(|r| r.ok())
+        .filter_map(|r| match r {
+            Ok(v) => Some(v),
+            Err(e) => {
+                tracing::warn!("Row processing failed in content_commands: {e}");
+                None
+            }
+        })
         .collect();
 
     Ok(items)

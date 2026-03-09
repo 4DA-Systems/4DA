@@ -195,7 +195,9 @@ impl FileWatcher {
         // Create the watcher
         let watcher = RecommendedWatcher::new(
             move |res| {
-                let _ = tx.send(res);
+                if let Err(e) = tx.send(res) {
+                    tracing::warn!("Channel send failed: {e}");
+                }
             },
             Config::default().with_poll_interval(Duration::from_millis(500)),
         )

@@ -169,7 +169,14 @@ pub fn load_selected_stacks(conn: &Connection) -> Vec<String> {
         Ok(r) => r,
         Err(_) => return Vec::new(),
     };
-    rows.filter_map(|r| r.ok()).collect()
+    rows.filter_map(|r| match r {
+        Ok(v) => Some(v),
+        Err(e) => {
+            tracing::warn!("Row processing failed in stacks: {e}");
+            None
+        }
+    })
+    .collect()
 }
 
 /// Save selected stack IDs to the database (replaces existing).

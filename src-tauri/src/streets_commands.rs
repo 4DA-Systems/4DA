@@ -324,11 +324,15 @@ fn execute_command_blocking(command: &str) -> Result<CommandExecutionResult> {
             let mut stderr = String::new();
             if let Some(mut out) = child.stdout.take() {
                 use std::io::Read;
-                let _ = out.read_to_string(&mut stdout);
+                if let Err(e) = out.read_to_string(&mut stdout) {
+                    tracing::warn!("Process cleanup failed: {e}");
+                }
             }
             if let Some(mut err) = child.stderr.take() {
                 use std::io::Read;
-                let _ = err.read_to_string(&mut stderr);
+                if let Err(e) = err.read_to_string(&mut stderr) {
+                    tracing::warn!("Process cleanup failed: {e}");
+                }
             }
 
             if stdout.len() > MAX_STDOUT {
@@ -352,8 +356,12 @@ fn execute_command_blocking(command: &str) -> Result<CommandExecutionResult> {
             })
         }
         None => {
-            let _ = child.kill();
-            let _ = child.wait();
+            if let Err(e) = child.kill() {
+                tracing::warn!("Process cleanup failed: {e}");
+            }
+            if let Err(e) = child.wait() {
+                tracing::warn!("Process cleanup failed: {e}");
+            }
             warn!(target: "4da::streets_cmd", timeout_secs = TIMEOUT_SECS, "Command timed out");
             Ok(CommandExecutionResult {
                 command_id: String::new(),

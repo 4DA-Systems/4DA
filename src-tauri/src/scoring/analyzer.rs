@@ -81,7 +81,9 @@ pub(crate) async fn score_items_full(
             if !results.is_empty() {
                 let batch_end = results.len();
                 let batch_start = batch_end.saturating_sub(50);
-                let _ = app.emit("partial-results", &results[batch_start..batch_end]);
+                if let Err(e) = app.emit("partial-results", &results[batch_start..batch_end]) {
+                    tracing::warn!("Failed to emit 'partial-results': {e}");
+                }
             }
         }
 
@@ -338,7 +340,9 @@ pub(crate) async fn run_background_analysis<R: tauri::Runtime>(
     }
 
     // Emit background results event to frontend (silent - no UI progress)
-    let _ = app.emit("background-results", &new_results);
+    if let Err(e) = app.emit("background-results", &new_results) {
+        tracing::warn!("Failed to emit 'background-results': {e}");
+    }
 
     // Complete the scheduled check (handles notifications)
     monitoring::complete_scheduled_check(

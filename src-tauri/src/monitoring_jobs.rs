@@ -60,7 +60,9 @@ pub async fn maybe_auto_briefing<R: Runtime>(app: &AppHandle<R>) {
                 .unwrap_or(false)
             {
                 info!(target: "4da::jobs", "Auto-briefing generated successfully");
-                let _ = app.emit("briefing-auto-generated", &result);
+                if let Err(e) = app.emit("briefing-auto-generated", &result) {
+                    tracing::warn!("Failed to emit 'briefing-auto-generated': {e}");
+                }
             }
         }
         Err(e) => {
@@ -115,10 +117,14 @@ pub async fn maybe_generate_digest<R: Runtime>(app: &AppHandle<R>) {
                         {
                             let mut settings = crate::get_settings_manager().lock();
                             settings.get_mut().digest.last_sent = Some(now);
-                            let _ = settings.save();
+                            if let Err(e) = settings.save() {
+                                tracing::warn!("Failed to save: {e}");
+                            }
                         }
                         info!(target: "4da::jobs", "Weekly intelligence digest generated and emitted");
-                        let _ = app.emit("digest-ready", &digest);
+                        if let Err(e) = app.emit("digest-ready", &digest) {
+                            tracing::warn!("Failed to emit 'digest-ready': {e}");
+                        }
 
                         // Send system tray notification
                         if let Err(e) = app
@@ -156,7 +162,9 @@ pub async fn maybe_generate_digest<R: Runtime>(app: &AppHandle<R>) {
                 {
                     let mut settings = crate::get_settings_manager().lock();
                     settings.get_mut().digest.last_sent = Some(now);
-                    let _ = settings.save();
+                    if let Err(e) = settings.save() {
+                        tracing::warn!("Failed to save: {e}");
+                    }
                 }
 
                 let item_count = items.len();
@@ -237,7 +245,9 @@ pub async fn process_anomalies<R: Runtime>(
         .any(|a| a.anomaly_type == crate::anomaly::AnomalyType::StaleData);
     if has_stale {
         info!(target: "4da::jobs", "StaleData detected -- triggering context rescan");
-        let _ = app.emit("scheduled-analysis", ());
+        if let Err(e) = app.emit("scheduled-analysis", ()) {
+            tracing::warn!("Failed to emit 'scheduled-analysis': {e}");
+        }
     }
 
     // If any critical anomalies, trigger auto-briefing

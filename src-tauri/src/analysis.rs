@@ -85,7 +85,9 @@ pub(crate) async fn run_deep_initial_scan(app: AppHandle) -> Result<()> {
                 drop(guard);
 
                 // Use original results for downstream operations
-                let _ = app.emit("analysis-complete", &results);
+                if let Err(e) = app.emit("analysis-complete", &results) {
+                    tracing::warn!("Failed to emit 'analysis-complete': {e}");
+                }
                 analysis_rerank::maybe_save_digest(&results);
 
                 let relevant_count = results.iter().filter(|r| r.relevant).count();
@@ -161,8 +163,12 @@ pub(crate) async fn run_deep_initial_scan(app: AppHandle) -> Result<()> {
                                     "Auto-selected stack profiles: {:?}",
                                     top_ids
                                 );
-                                let _ = stacks::save_selected_stacks(&db, &top_ids);
-                                let _ = app.emit("stacks-auto-detected", &top_ids);
+                                if let Err(e) = stacks::save_selected_stacks(&db, &top_ids) {
+                                    tracing::warn!("Failed to save selection: {e}");
+                                }
+                                if let Err(e) = app.emit("stacks-auto-detected", &top_ids) {
+                                    tracing::warn!("Failed to emit 'stacks-auto-detected': {e}");
+                                }
                             }
                         }
                     }
@@ -173,14 +179,18 @@ pub(crate) async fn run_deep_initial_scan(app: AppHandle) -> Result<()> {
                 let err_str = e.to_string();
                 guard.error = Some(err_str.clone());
                 drop(guard);
-                let _ = app.emit("analysis-error", &err_str);
+                if let Err(e) = app.emit("analysis-error", &err_str) {
+                    tracing::warn!("Failed to emit 'analysis-error': {e}");
+                }
             }
             Err(_panic) => {
                 let msg = "Deep scan panicked (internal error)".to_string();
                 error!(target: "4da::analysis", "Deep scan task panicked — running flag cleared");
                 guard.error = Some(msg.clone());
                 drop(guard);
-                let _ = app.emit("analysis-error", &msg);
+                if let Err(e) = app.emit("analysis-error", &msg) {
+                    tracing::warn!("Failed to emit 'analysis-error': {e}");
+                }
             }
         }
     });
@@ -305,7 +315,9 @@ pub(crate) async fn run_deep_initial_scan_impl(app: &AppHandle) -> Result<Vec<So
             if !results.is_empty() {
                 let batch_end = results.len();
                 let batch_start = batch_end.saturating_sub(50);
-                let _ = app.emit("partial-results", &results[batch_start..batch_end]);
+                if let Err(e) = app.emit("partial-results", &results[batch_start..batch_end]) {
+                    tracing::warn!("Failed to emit 'partial-results': {e}");
+                }
             }
         }
 
@@ -714,7 +726,9 @@ pub(crate) async fn run_cached_analysis(app: AppHandle) -> Result<()> {
                 drop(guard);
 
                 // Use original results for downstream operations
-                let _ = app.emit("analysis-complete", &results);
+                if let Err(e) = app.emit("analysis-complete", &results) {
+                    tracing::warn!("Failed to emit 'analysis-complete': {e}");
+                }
                 analysis_rerank::maybe_save_digest(&results);
 
                 let relevant_count = results.iter().filter(|r| r.relevant).count();
@@ -784,8 +798,12 @@ pub(crate) async fn run_cached_analysis(app: AppHandle) -> Result<()> {
                                     "Auto-selected stack profiles: {:?}",
                                     top_ids
                                 );
-                                let _ = stacks::save_selected_stacks(&db, &top_ids);
-                                let _ = app.emit("stacks-auto-detected", &top_ids);
+                                if let Err(e) = stacks::save_selected_stacks(&db, &top_ids) {
+                                    tracing::warn!("Failed to save selection: {e}");
+                                }
+                                if let Err(e) = app.emit("stacks-auto-detected", &top_ids) {
+                                    tracing::warn!("Failed to emit 'stacks-auto-detected': {e}");
+                                }
                             }
                         }
                     }
@@ -795,7 +813,9 @@ pub(crate) async fn run_cached_analysis(app: AppHandle) -> Result<()> {
                 let err_str = e.to_string();
                 guard.error = Some(err_str.clone());
                 drop(guard);
-                let _ = app.emit("analysis-error", &err_str);
+                if let Err(e) = app.emit("analysis-error", &err_str) {
+                    tracing::warn!("Failed to emit 'analysis-error': {e}");
+                }
                 void_signal_error(&app);
             }
             Err(_panic) => {
@@ -803,7 +823,9 @@ pub(crate) async fn run_cached_analysis(app: AppHandle) -> Result<()> {
                 error!(target: "4da::analysis", "Analysis task panicked — running flag cleared");
                 guard.error = Some(msg.clone());
                 drop(guard);
-                let _ = app.emit("analysis-error", &msg);
+                if let Err(e) = app.emit("analysis-error", &msg) {
+                    tracing::warn!("Failed to emit 'analysis-error': {e}");
+                }
                 void_signal_error(&app);
             }
         }

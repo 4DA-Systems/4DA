@@ -76,7 +76,16 @@ pub(crate) fn get_open_windows(conn: &Connection) -> Vec<DecisionWindow> {
     };
     stmt.query_map([], row_to_window)
         .ok()
-        .map(|rows| rows.filter_map(|r| r.ok()).collect())
+        .map(|rows| {
+            rows.filter_map(|r| match r {
+                Ok(v) => Some(v),
+                Err(e) => {
+                    tracing::warn!("Row processing failed in decision_advantage_windows: {e}");
+                    None
+                }
+            })
+            .collect()
+        })
         .unwrap_or_default()
 }
 
@@ -98,7 +107,16 @@ pub(crate) fn get_decision_journal(conn: &Connection) -> Vec<DecisionWindow> {
     };
     stmt.query_map([], row_to_window)
         .ok()
-        .map(|rows| rows.filter_map(|r| r.ok()).collect())
+        .map(|rows| {
+            rows.filter_map(|r| match r {
+                Ok(v) => Some(v),
+                Err(e) => {
+                    tracing::warn!("Row processing failed in decision_advantage_windows: {e}");
+                    None
+                }
+            })
+            .collect()
+        })
         .unwrap_or_default()
 }
 /// Transition a window to a new status (acted, expired, closed).
@@ -179,7 +197,16 @@ fn get_user_dependencies(conn: &Connection) -> Vec<String> {
         };
     stmt.query_map([], |r| r.get::<_, String>(0))
         .ok()
-        .map(|rows| rows.filter_map(|r| r.ok()).collect())
+        .map(|rows| {
+            rows.filter_map(|r| match r {
+                Ok(v) => Some(v),
+                Err(e) => {
+                    tracing::warn!("Row processing failed in decision_advantage_windows: {e}");
+                    None
+                }
+            })
+            .collect()
+        })
         .unwrap_or_default()
 }
 
@@ -207,7 +234,16 @@ fn query_items_with_keywords(
     };
     stmt.query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)))
         .ok()
-        .map(|rows| rows.filter_map(|r| r.ok()).collect())
+        .map(|rows| {
+            rows.filter_map(|r| match r {
+                Ok(v) => Some(v),
+                Err(e) => {
+                    tracing::warn!("Row processing failed in decision_advantage_windows: {e}");
+                    None
+                }
+            })
+            .collect()
+        })
         .unwrap_or_default()
 }
 
@@ -319,7 +355,16 @@ fn detect_knowledge_windows(conn: &Connection, windows: &mut Vec<DecisionWindow>
             ))
         })
         .ok()
-        .map(|rows| rows.filter_map(|r| r.ok()).collect())
+        .map(|rows| {
+            rows.filter_map(|r| match r {
+                Ok(v) => Some(v),
+                Err(e) => {
+                    tracing::warn!("Row processing failed in decision_advantage_windows: {e}");
+                    None
+                }
+            })
+            .collect()
+        })
         .unwrap_or_default();
     for (_, subject, _data, confidence) in &gaps {
         let urgency = (*confidence * 0.8).clamp(0.3, 0.80);
@@ -344,7 +389,16 @@ fn deduplicate_and_store(conn: &Connection, windows: &mut Vec<DecisionWindow>) {
         };
         stmt.query_map([], |r| Ok((r.get(0)?, r.get(1)?)))
             .ok()
-            .map(|rows| rows.filter_map(|r| r.ok()).collect())
+            .map(|rows| {
+                rows.filter_map(|r| match r {
+                    Ok(v) => Some(v),
+                    Err(e) => {
+                        tracing::warn!("Row processing failed in decision_advantage_windows: {e}");
+                        None
+                    }
+                })
+                .collect()
+            })
             .unwrap_or_default()
     };
     windows.retain(|w| {

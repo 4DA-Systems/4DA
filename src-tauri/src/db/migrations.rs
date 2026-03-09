@@ -15,7 +15,9 @@ impl Database {
             .with_extension(format!("db.backup.v{}", current_version));
         // Checkpoint WAL so the main db file is consistent for copy
         if let Some(conn) = self.conn.try_lock() {
-            let _ = conn.execute_batch("PRAGMA wal_checkpoint(TRUNCATE)");
+            if let Err(e) = conn.execute_batch("PRAGMA wal_checkpoint(TRUNCATE)") {
+                tracing::warn!("DB execute failed: {e}");
+            }
         }
         match std::fs::copy(&self.db_path, &backup_path) {
             Ok(bytes) => {
@@ -29,7 +31,13 @@ impl Database {
         if let Some(parent) = self.db_path.parent() {
             if let Ok(entries) = std::fs::read_dir(parent) {
                 let mut backups: Vec<PathBuf> = entries
-                    .filter_map(|e| e.ok())
+                    .filter_map(|e| match e {
+                        Ok(v) => Some(v),
+                        Err(e) => {
+                            tracing::warn!("Row processing failed in db_migrations: {e}");
+                            None
+                        }
+                    })
                     .map(|e| e.path())
                     .filter(|p| p.to_string_lossy().contains(".db.backup.v"))
                     .collect();

@@ -200,7 +200,15 @@ fn assemble_profile(conn: &Connection) -> ProfileData {
             row.get::<_, String>(2)?,
         ))
     }) {
-        Ok(mapped) => mapped.filter_map(|r| r.ok()).collect(),
+        Ok(mapped) => mapped
+            .filter_map(|r| match r {
+                Ok(v) => Some(v),
+                Err(e) => {
+                    tracing::warn!("Row processing failed in content_personalization_context: {e}");
+                    None
+                }
+            })
+            .collect(),
         Err(e) => {
             warn!(target: "4da::personalize", error = %e, "Failed to map sovereign_profile rows");
             return data;
@@ -323,7 +331,15 @@ fn assemble_decisions(conn: &Connection) -> Vec<DecisionEntry> {
             decision: row.get(1)?,
         })
     }) {
-        Ok(mapped) => mapped.filter_map(|r| r.ok()).collect(),
+        Ok(mapped) => mapped
+            .filter_map(|r| match r {
+                Ok(v) => Some(v),
+                Err(e) => {
+                    tracing::warn!("Row processing failed in content_personalization_context: {e}");
+                    None
+                }
+            })
+            .collect(),
         Err(_) => Vec::new(),
     };
     result
@@ -339,7 +355,15 @@ fn assemble_progress(conn: &Connection) -> ProgressData {
     };
 
     let rows: Vec<(String, u32)> = match stmt.query_map([], |row| Ok((row.get(0)?, row.get(1)?))) {
-        Ok(mapped) => mapped.filter_map(|r| r.ok()).collect(),
+        Ok(mapped) => mapped
+            .filter_map(|r| match r {
+                Ok(v) => Some(v),
+                Err(e) => {
+                    tracing::warn!("Row processing failed in content_personalization_context: {e}");
+                    None
+                }
+            })
+            .collect(),
         Err(_) => return data,
     };
 

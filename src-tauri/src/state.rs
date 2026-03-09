@@ -25,6 +25,19 @@ use crate::sources::{
     youtube::YouTubeSource, SourceRegistry,
 };
 use crate::AnalysisState;
+n// ============================================================================
+// LOCK ORDERING (acquire in this order to prevent deadlocks)
+//
+// 1. SETTINGS_MANAGER   — lightweight reads, released immediately
+// 2. DATABASE            — connection pool, held for queries only
+// 3. CONTEXT_ENGINE      — depends on DB reads
+// 4. ACE_ENGINE          — depends on settings + DB
+// 5. SOURCE_REGISTRY     — depends on settings
+// 6. ANALYSIS_STATE      — leaf node, no further locks needed
+//
+// CRITICAL: Never hold a MutexGuard<T> across an .await point.
+//           parking_lot::Mutex is not Send across yield points.
+// ============================================================================
 
 // ============================================================================
 // Analysis Abort Flag

@@ -43,7 +43,7 @@ fn find_models_dir() -> Option<PathBuf> {
 }
 
 /// Get or initialize the OCR engine (lazy singleton)
-fn get_ocr_engine() -> std::result::Result<&'static OcrEngine, String> {
+fn get_ocr_engine() -> crate::error::Result<&'static OcrEngine> {
     let engine = OCR_ENGINE.get_or_init(|| {
         let models_dir = find_models_dir().ok_or_else(|| {
             "OCR models not found. Please download:\n\
@@ -72,7 +72,7 @@ fn get_ocr_engine() -> std::result::Result<&'static OcrEngine, String> {
 
     match engine {
         Ok(e) => Ok(e),
-        Err(e) => Err(e.clone()),
+        Err(e) => Err(e.clone().into()),
     }
 }
 

@@ -238,7 +238,15 @@ fn assemble_infrastructure(conn: &Connection) -> InfrastructureDimension {
 
     let rows: Vec<(String, String, String)> =
         match stmt.query_map([], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?))) {
-            Ok(mapped) => mapped.filter_map(|r| r.ok()).collect(),
+            Ok(mapped) => mapped
+                .filter_map(|r| match r {
+                    Ok(v) => Some(v),
+                    Err(e) => {
+                        tracing::warn!("Row processing failed in sovereign_developer_profile: {e}");
+                        None
+                    }
+                })
+                .collect(),
             Err(_) => return dim,
         };
 
@@ -320,7 +328,16 @@ fn assemble_stack(
                     confidence: row.get(1)?,
                 })
             })
-            .map(|rows| rows.filter_map(|r| r.ok()).collect::<Vec<_>>())
+            .map(|rows| {
+                rows.filter_map(|r| match r {
+                    Ok(v) => Some(v),
+                    Err(e) => {
+                        tracing::warn!("Row processing failed in sovereign_developer_profile: {e}");
+                        None
+                    }
+                })
+                .collect::<Vec<_>>()
+            })
         })
         .unwrap_or_default();
 
@@ -347,7 +364,13 @@ fn assemble_skills(conn: &Connection) -> SkillsDimension {
                     score: row.get(1)?,
                 })
             })
-            .map(|rows| rows.filter_map(|r| r.ok()).collect::<Vec<_>>())
+            .map(|rows| rows.filter_map(|r| match r {
+    Ok(v) => Some(v),
+    Err(e) => {
+        tracing::warn!("Row processing failed in sovereign_developer_profile: {e}");
+        None
+    }
+}).collect::<Vec<_>>())
         })
         .unwrap_or_default();
 
@@ -369,7 +392,13 @@ fn assemble_skills(conn: &Connection) -> SkillsDimension {
                     items_saved: row.get(2)?,
                 })
             })
-            .map(|rows| rows.filter_map(|r| r.ok()).collect::<Vec<_>>())
+            .map(|rows| rows.filter_map(|r| match r {
+    Ok(v) => Some(v),
+    Err(e) => {
+        tracing::warn!("Row processing failed in sovereign_developer_profile: {e}");
+        None
+    }
+}).collect::<Vec<_>>())
         })
         .unwrap_or_default();
 
@@ -388,7 +417,18 @@ fn assemble_playbook_progress(conn: &Connection) -> PlaybookProgressSummary {
         .prepare("SELECT module_id, lesson_idx FROM playbook_progress")
         .and_then(|mut stmt| {
             stmt.query_map([], |row| Ok((row.get(0)?, row.get(1)?)))
-                .map(|rows| rows.filter_map(|r| r.ok()).collect())
+                .map(|rows| {
+                    rows.filter_map(|r| match r {
+                        Ok(v) => Some(v),
+                        Err(e) => {
+                            tracing::warn!(
+                                "Row processing failed in sovereign_developer_profile: {e}"
+                            );
+                            None
+                        }
+                    })
+                    .collect()
+                })
         })
         .unwrap_or_default();
 
@@ -427,7 +467,18 @@ fn assemble_preferences(conn: &Connection) -> PreferencesDimension {
         .prepare("SELECT topic FROM explicit_interests ORDER BY topic")
         .and_then(|mut stmt| {
             stmt.query_map([], |row| row.get::<_, String>(0))
-                .map(|rows| rows.filter_map(|r| r.ok()).collect::<Vec<_>>())
+                .map(|rows| {
+                    rows.filter_map(|r| match r {
+                        Ok(v) => Some(v),
+                        Err(e) => {
+                            tracing::warn!(
+                                "Row processing failed in sovereign_developer_profile: {e}"
+                            );
+                            None
+                        }
+                    })
+                    .collect::<Vec<_>>()
+                })
         })
         .unwrap_or_default();
 
@@ -436,7 +487,18 @@ fn assemble_preferences(conn: &Connection) -> PreferencesDimension {
         .prepare("SELECT topic FROM exclusions ORDER BY topic")
         .and_then(|mut stmt| {
             stmt.query_map([], |row| row.get::<_, String>(0))
-                .map(|rows| rows.filter_map(|r| r.ok()).collect::<Vec<_>>())
+                .map(|rows| {
+                    rows.filter_map(|r| match r {
+                        Ok(v) => Some(v),
+                        Err(e) => {
+                            tracing::warn!(
+                                "Row processing failed in sovereign_developer_profile: {e}"
+                            );
+                            None
+                        }
+                    })
+                    .collect::<Vec<_>>()
+                })
         })
         .unwrap_or_default();
 
@@ -452,7 +514,16 @@ fn assemble_preferences(conn: &Connection) -> PreferencesDimension {
                     decision: row.get(1)?,
                 })
             })
-            .map(|rows| rows.filter_map(|r| r.ok()).collect::<Vec<_>>())
+            .map(|rows| {
+                rows.filter_map(|r| match r {
+                    Ok(v) => Some(v),
+                    Err(e) => {
+                        tracing::warn!("Row processing failed in sovereign_developer_profile: {e}");
+                        None
+                    }
+                })
+                .collect::<Vec<_>>()
+            })
         })
         .unwrap_or_default();
 
@@ -517,7 +588,18 @@ fn assemble_context(conn: &Connection) -> ContextDimension {
         .prepare("SELECT topic FROM active_topics ORDER BY last_seen DESC LIMIT 20")
         .and_then(|mut stmt| {
             stmt.query_map([], |row| row.get::<_, String>(0))
-                .map(|rows| rows.filter_map(|r| r.ok()).collect::<Vec<_>>())
+                .map(|rows| {
+                    rows.filter_map(|r| match r {
+                        Ok(v) => Some(v),
+                        Err(e) => {
+                            tracing::warn!(
+                                "Row processing failed in sovereign_developer_profile: {e}"
+                            );
+                            None
+                        }
+                    })
+                    .collect::<Vec<_>>()
+                })
         })
         .unwrap_or_default();
 

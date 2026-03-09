@@ -362,7 +362,9 @@ pub async fn synthesize_search(
     let user_msg = build_user_message(&query_text, &items);
 
     // Emit start event
-    let _ = app.emit("search-synthesis-start", &query_text);
+    if let Err(e) = app.emit("search-synthesis-start", &query_text) {
+        tracing::warn!("Failed to emit 'search-synthesis-start': {e}");
+    }
 
     // Call LLM with streaming (tokens emitted progressively via Tauri events)
     let client = LLMClient::new(provider);
@@ -375,7 +377,9 @@ pub async fn synthesize_search(
                 content: user_msg,
             }],
             move |token| {
-                let _ = app_for_stream.emit("synthesis-token", token);
+                if let Err(e) = app_for_stream.emit("synthesis-token", token) {
+                    tracing::warn!("Failed to emit 'synthesis-token': {e}");
+                }
             },
         )
         .await
@@ -407,7 +411,9 @@ pub async fn synthesize_search(
     );
 
     // Emit completion event
-    let _ = app.emit("search-synthesis-complete", &synthesis);
+    if let Err(e) = app.emit("search-synthesis-complete", &synthesis) {
+        tracing::warn!("Failed to emit 'search-synthesis-complete': {e}");
+    }
 
     Ok(SynthesisResponse {
         text: synthesis,

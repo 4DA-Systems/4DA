@@ -336,7 +336,16 @@ pub fn migrate(conn: &Arc<Mutex<Connection>>) -> Result<()> {
             .map(|mut stmt| {
                 let cols: Vec<String> = stmt
                     .query_map([], |row| row.get::<_, String>(1))
-                    .map(|rows| rows.filter_map(|r| r.ok()).collect())
+                    .map(|rows| {
+                        rows.filter_map(|r| match r {
+                            Ok(v) => Some(v),
+                            Err(e) => {
+                                tracing::warn!("Row processing failed in ace_db: {e}");
+                                None
+                            }
+                        })
+                        .collect()
+                    })
                     .unwrap_or_default();
                 cols.iter().any(|c| c == "hourly_engagement")
             })

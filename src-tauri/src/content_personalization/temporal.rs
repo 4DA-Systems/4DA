@@ -378,7 +378,17 @@ fn compute_feed_echoes(
     let param_refs: Vec<&dyn rusqlite::types::ToSql> = params.iter().map(|p| p.as_ref()).collect();
 
     let raw_items: Vec<FeedEchoItem> = match stmt.query_map(param_refs.as_slice(), map_row) {
-        Ok(rows) => rows.filter_map(|r| r.ok()).collect(),
+        Ok(rows) => rows
+            .filter_map(|r| match r {
+                Ok(v) => Some(v),
+                Err(e) => {
+                    tracing::warn!(
+                        "Row processing failed in content_personalization_temporal: {e}"
+                    );
+                    None
+                }
+            })
+            .collect(),
         Err(_) => return None,
     };
 

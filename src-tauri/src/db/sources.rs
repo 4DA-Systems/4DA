@@ -714,7 +714,13 @@ impl Database {
             .query_map([], |row| {
                 Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)? != 0))
             })?
-            .filter_map(|r| r.ok())
+            .filter_map(|r| match r {
+                Ok(v) => Some(v),
+                Err(e) => {
+                    tracing::warn!("Row processing failed in db_sources: {e}");
+                    None
+                }
+            })
             .collect();
 
         let mut topic_map: std::collections::HashMap<String, (i64, i64)> =

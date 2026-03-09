@@ -39,7 +39,14 @@ pub async fn get_indexed_documents(
              ORDER BY indexed_at DESC LIMIT ?2 OFFSET ?3",
         )?;
         let rows = stmt.query_map(params![ft, limit, offset], row_to_doc)?;
-        rows.filter_map(|r| r.ok()).collect()
+        rows.filter_map(|r| match r {
+            Ok(v) => Some(v),
+            Err(e) => {
+                tracing::warn!("Row processing failed in indexed_documents_commands: {e}");
+                None
+            }
+        })
+        .collect()
     } else {
         let mut stmt = conn.prepare(
             "SELECT id, file_path, file_name, file_type, file_size, word_count,
@@ -48,7 +55,14 @@ pub async fn get_indexed_documents(
              ORDER BY indexed_at DESC LIMIT ?1 OFFSET ?2",
         )?;
         let rows = stmt.query_map(params![limit, offset], row_to_doc)?;
-        rows.filter_map(|r| r.ok()).collect()
+        rows.filter_map(|r| match r {
+            Ok(v) => Some(v),
+            Err(e) => {
+                tracing::warn!("Row processing failed in indexed_documents_commands: {e}");
+                None
+            }
+        })
+        .collect()
     };
 
     Ok(serde_json::json!({
@@ -90,7 +104,13 @@ pub async fn get_indexed_stats() -> Result<serde_json::Value> {
                 "count": row.get::<_, i64>(1)?
             }))
         })?
-        .filter_map(|r| r.ok())
+        .filter_map(|r| match r {
+            Ok(v) => Some(v),
+            Err(e) => {
+                tracing::warn!("Row processing failed in indexed_documents_commands: {e}");
+                None
+            }
+        })
         .collect();
 
     Ok(serde_json::json!({
@@ -126,7 +146,13 @@ pub async fn search_documents(query: String, limit: i64) -> Result<serde_json::V
                 "chunk_index": row.get::<_, i64>(5)?
             }))
         })?
-        .filter_map(|r| r.ok())
+        .filter_map(|r| match r {
+            Ok(v) => Some(v),
+            Err(e) => {
+                tracing::warn!("Row processing failed in indexed_documents_commands: {e}");
+                None
+            }
+        })
         .collect();
 
     Ok(serde_json::json!({ "results": results }))
@@ -162,7 +188,13 @@ pub async fn get_document_content(document_id: i64) -> Result<serde_json::Value>
 
     let chunks: Vec<String> = stmt
         .query_map([document_id], |row| row.get::<_, String>(0))?
-        .filter_map(|r| r.ok())
+        .filter_map(|r| match r {
+            Ok(v) => Some(v),
+            Err(e) => {
+                tracing::warn!("Row processing failed in indexed_documents_commands: {e}");
+                None
+            }
+        })
         .collect();
 
     let chunk_count = chunks.len();

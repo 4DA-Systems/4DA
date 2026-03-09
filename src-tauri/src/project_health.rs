@@ -56,7 +56,13 @@ pub fn compute_all_project_health(conn: &rusqlite::Connection) -> Result<Vec<Pro
     let paths: Vec<String> = stmt
         .query_map([], |row| row.get(0))
         .map_err(|e| e.to_string())?
-        .filter_map(|r| r.ok())
+        .filter_map(|r| match r {
+            Ok(v) => Some(v),
+            Err(e) => {
+                tracing::warn!("Row processing failed in project_health: {e}");
+                None
+            }
+        })
         .collect();
 
     let mut results = Vec::new();

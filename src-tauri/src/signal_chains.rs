@@ -71,7 +71,13 @@ pub fn detect_chains(conn: &rusqlite::Connection) -> Result<Vec<SignalChain>> {
             ))
         })
         .map_err(|e| e.to_string())?
-        .filter_map(|r| r.ok())
+        .filter_map(|r| match r {
+            Ok(v) => Some(v),
+            Err(e) => {
+                tracing::warn!("Row processing failed in signal_chains: {e}");
+                None
+            }
+        })
         .collect();
 
     if items.is_empty() {

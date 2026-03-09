@@ -162,7 +162,9 @@ pub async fn index_context() -> Result<String> {
     let db = get_database()?;
 
     // First clear existing context to avoid duplicates
-    let _ = db.clear_contexts();
+    if let Err(e) = db.clear_contexts() {
+        tracing::warn!("Failed to clear contexts: {e}");
+    }
 
     // Read context files from configured directories
     let context_files = get_context_files().await?;

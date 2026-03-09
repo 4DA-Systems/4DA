@@ -46,7 +46,9 @@ pub(crate) async fn fetch_all_sources(
 
     if !online {
         warn!(target: "4da::sources", "Network unavailable - using cached content only");
-        let _ = app.emit("network-offline", ());
+        if let Err(e) = app.emit("network-offline", ()) {
+            tracing::warn!("Failed to emit 'network-offline': {e}");
+        }
         return Ok(Vec::new()); // Return empty; caller falls back to cache
     }
 
@@ -344,7 +346,11 @@ pub(crate) async fn fetch_all_sources(
                         }),
                     );
                 } else {
-                    let _ = app.emit("embedding-mode", serde_json::json!({ "mode": "semantic" }));
+                    if let Err(e) =
+                        app.emit("embedding-mode", serde_json::json!({ "mode": "semantic" }))
+                    {
+                        tracing::warn!("Failed to emit 'embedding-mode': {e}");
+                    }
                 }
                 emb
             }

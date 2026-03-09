@@ -260,7 +260,13 @@ pub fn get_playbook_progress() -> Result<PlaybookProgress> {
 
         let completed: Vec<u32> = stmt
             .query_map([id], |row| row.get(0))?
-            .filter_map(|r| r.ok())
+            .filter_map(|r| match r {
+                Ok(v) => Some(v),
+                Err(e) => {
+                    tracing::warn!("Row processing failed in playbook_commands: {e}");
+                    None
+                }
+            })
             .collect();
 
         let percentage = if lesson_count > 0 {
@@ -340,7 +346,9 @@ pub fn mark_lesson_complete(
     }
 
     // Notify frontend that profile data has changed
-    let _ = app.emit("profile-updated", "lesson-complete");
+    if let Err(e) = app.emit("profile-updated", "lesson-complete") {
+        tracing::warn!("Failed to emit 'profile-updated': {e}");
+    }
 
     Ok(())
 }

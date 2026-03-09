@@ -72,7 +72,13 @@ pub async fn get_intelligence_growth() -> Result<IntelligenceGrowth> {
             })
         })
         .map_err(FourDaError::Db)?
-        .filter_map(|r| r.ok())
+        .filter_map(|r| match r {
+            Ok(v) => Some(v),
+            Err(e) => {
+                tracing::warn!("Row processing failed in intelligence_history: {e}");
+                None
+            }
+        })
         .collect();
 
     let (current_accuracy, total_topics, total_analyzed, total_relevant) =

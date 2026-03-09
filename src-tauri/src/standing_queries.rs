@@ -352,7 +352,15 @@ pub fn evaluate_standing_queries(conn: &rusqlite::Connection) -> Vec<StandingQue
             row.get::<_, Option<String>>(3)?,
         ))
     }) {
-        Ok(rows) => rows.filter_map(|r| r.ok()).collect(),
+        Ok(rows) => rows
+            .filter_map(|r| match r {
+                Ok(v) => Some(v),
+                Err(e) => {
+                    tracing::warn!("Row processing failed in standing_queries: {e}");
+                    None
+                }
+            })
+            .collect(),
         Err(e) => {
             warn!(target: "4da::watches", error = %e, "Failed to iterate standing queries");
             return Vec::new();
@@ -409,7 +417,15 @@ pub fn evaluate_standing_queries(conn: &rusqlite::Connection) -> Vec<StandingQue
                 let match_rows: Vec<(i64, String)> = match match_stmt.query_map([], |row| {
                     Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?))
                 }) {
-                    Ok(rows) => rows.filter_map(|r| r.ok()).collect(),
+                    Ok(rows) => rows
+                        .filter_map(|r| match r {
+                            Ok(v) => Some(v),
+                            Err(e) => {
+                                tracing::warn!("Row processing failed in standing_queries: {e}");
+                                None
+                            }
+                        })
+                        .collect(),
                     Err(e) => {
                         warn!(target: "4da::watches", error = %e, id = id, "Match query failed");
                         continue;

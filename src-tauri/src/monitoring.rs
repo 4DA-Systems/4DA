@@ -157,11 +157,15 @@ pub fn setup_tray<R: Runtime>(app: &AppHandle<R>) -> Result<TrayIcon<R>> {
                 }
                 "analyze" => {
                     // Emit event to trigger analysis
-                    let _ = app.emit("tray-analyze", ());
+                    if let Err(e) = app.emit("tray-analyze", ()) {
+                        tracing::warn!("Failed to emit 'tray-analyze': {e}");
+                    }
                 }
                 "toggle_monitoring" => {
                     // Emit event to toggle monitoring
-                    let _ = app.emit("tray-toggle-monitoring", ());
+                    if let Err(e) = app.emit("tray-toggle-monitoring", ()) {
+                        tracing::warn!("Failed to emit 'tray-toggle-monitoring': {e}");
+                    }
                 }
                 "quit" => {
                     app.exit(0);
@@ -267,7 +271,9 @@ pub fn start_scheduler<R: Runtime>(app: AppHandle<R>, state: Arc<MonitoringState
                             expired, detected = detected.len(),
                             "Decision windows updated"
                         );
-                        let _ = app.emit("decision-windows-updated", &detected);
+                        if let Err(e) = app.emit("decision-windows-updated", &detected) {
+                            tracing::warn!("Failed to emit 'decision-windows-updated': {e}");
+                        }
                     }
                     // Compute compound advantage score (weekly period)
                     let _ = crate::decision_advantage::compute_compound_score(&conn, "weekly");
@@ -349,7 +355,11 @@ pub fn start_scheduler<R: Runtime>(app: AppHandle<R>, state: Arc<MonitoringState
                                     "Autophagy cycle completed"
                                 );
                                 // Emit event so frontend can refresh insights
-                                let _ = app.emit("autophagy-cycle-complete", &cycle);
+                                if let Err(e) = app.emit("autophagy-cycle-complete", &cycle) {
+                                    tracing::warn!(
+                                        "Failed to emit 'autophagy-cycle-complete': {e}"
+                                    );
+                                }
 
                                 // GAME: track calibrations produced
                                 if cycle.calibrations_produced > 0 {

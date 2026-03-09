@@ -90,7 +90,13 @@ pub fn get_project_dependencies(
             })
         })
         .map_err(|e| e.to_string())?
-        .filter_map(|r| r.ok())
+        .filter_map(|r| match r {
+            Ok(v) => Some(v),
+            Err(e) => {
+                tracing::warn!("Row processing failed in temporal: {e}");
+                None
+            }
+        })
         .collect();
 
     Ok(results)
@@ -109,7 +115,15 @@ pub fn get_all_dependencies(conn: &rusqlite::Connection) -> Result<Vec<ProjectDe
         )
         .and_then(|mut stmt| {
             let rows = stmt.query_map([], |row| row.get::<_, String>(0))?;
-            Ok(rows.filter_map(|r| r.ok()).collect())
+            Ok(rows
+                .filter_map(|r| match r {
+                    Ok(v) => Some(v),
+                    Err(e) => {
+                        tracing::warn!("Row processing failed in temporal: {e}");
+                        None
+                    }
+                })
+                .collect())
         })
         .unwrap_or_default();
 
@@ -135,7 +149,13 @@ pub fn get_all_dependencies(conn: &rusqlite::Connection) -> Result<Vec<ProjectDe
             })
         })
         .map_err(|e| e.to_string())?
-        .filter_map(|r| r.ok())
+        .filter_map(|r| match r {
+            Ok(v) => Some(v),
+            Err(e) => {
+                tracing::warn!("Row processing failed in temporal: {e}");
+                None
+            }
+        })
         .collect();
 
     // Filter to deps from active project trees only
@@ -177,7 +197,13 @@ pub fn get_all_dependencies(conn: &rusqlite::Connection) -> Result<Vec<ProjectDe
                 })
             })
             .map_err(|e| e.to_string())?
-            .filter_map(|r| r.ok())
+            .filter_map(|r| match r {
+                Ok(v) => Some(v),
+                Err(e) => {
+                    tracing::warn!("Row processing failed in temporal: {e}");
+                    None
+                }
+            })
             .collect());
     }
 
@@ -234,7 +260,13 @@ pub fn query_events(
         stmt.query_map(params![event_type, limit as i64], map_event)
     }
     .map_err(|e| e.to_string())?
-    .filter_map(|r| r.ok())
+    .filter_map(|r| match r {
+        Ok(v) => Some(v),
+        Err(e) => {
+            tracing::warn!("Row processing failed in temporal: {e}");
+            None
+        }
+    })
     .collect();
 
     Ok(results)
@@ -259,7 +291,13 @@ pub fn query_events_by_subject(
     let results: Vec<TemporalEvent> = stmt
         .query_map(params![subject, limit as i64], map_event)
         .map_err(|e| e.to_string())?
-        .filter_map(|r| r.ok())
+        .filter_map(|r| match r {
+            Ok(v) => Some(v),
+            Err(e) => {
+                tracing::warn!("Row processing failed in temporal: {e}");
+                None
+            }
+        })
         .collect();
 
     Ok(results)

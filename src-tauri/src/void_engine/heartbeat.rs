@@ -115,7 +115,9 @@ pub fn emit_if_changed(app: &AppHandle, new_signal: VoidSignal) {
         debug!(target: "4da::void", pulse = new_signal.pulse, heat = new_signal.heat,
                burst = new_signal.burst, staleness = new_signal.staleness,
                items = new_signal.item_count, "Emitting void signal");
-        let _ = app.emit("void-signal", &new_signal);
+        if let Err(e) = app.emit("void-signal", &new_signal) {
+            tracing::warn!("Failed to emit 'void-signal': {e}");
+        }
         *last = Some(new_signal);
     }
 }

@@ -210,7 +210,9 @@ pub async fn ace_auto_discover() -> Result<serde_json::Value> {
         if let Err(e) = settings.add_context_dirs(dirs_to_add.clone()) {
             return Err(format!("Failed to save discovered directories: {}", e).into());
         }
-        let _ = settings.mark_auto_discovery_completed();
+        if let Err(e) = settings.mark_auto_discovery_completed() {
+            tracing::warn!("Failed to mark state: {e}");
+        }
     }
 
     // Now run full ACE scan on discovered directories
@@ -495,7 +497,9 @@ pub(crate) async fn auto_seed_interests_from_ace() -> Result<()> {
                     .take(10)
                     .collect();
                 for t in &seeded {
-                    let _ = context_engine.add_technology(&t.name);
+                    if let Err(e) = context_engine.add_technology(&t.name) {
+                        tracing::warn!("Context update failed: {e}");
+                    }
                 }
                 if !seeded.is_empty() {
                     info!(target: "4da::startup", count = seeded.len(), "Backfilled tech_stack from detected_tech");
@@ -511,7 +515,9 @@ pub(crate) async fn auto_seed_interests_from_ace() -> Result<()> {
         if interest.source == crate::context_engine::InterestSource::Inferred {
             let topic = interest.topic.to_lowercase();
             if topic.starts_with('@') || topic.contains('/') {
-                let _ = context_engine.remove_interest(&interest.topic);
+                if let Err(e) = context_engine.remove_interest(&interest.topic) {
+                    tracing::warn!("Context update failed: {e}");
+                }
                 cleaned += 1;
             }
         }
@@ -724,7 +730,9 @@ pub async fn ace_detect_anomalies() -> Result<serde_json::Value> {
     let conn = ace.get_conn().lock();
     let anomalies = crate::anomaly::detect_all(&conn)?;
     for a in &anomalies {
-        let _ = crate::anomaly::store_anomaly(&conn, a);
+        if let Err(e) = crate::anomaly::store_anomaly(&conn, a) {
+            tracing::warn!("Failed to store anomaly: {e}");
+        }
     }
     Ok(serde_json::json!({
         "anomalies": anomalies,
@@ -883,7 +891,15 @@ pub async fn get_engagement_summary() -> Result<serde_json::Value> {
         let result = stmt
             .query_map([], |row| row.get::<_, String>(0))
             .map_err(|e| e.to_string())?;
-        result.filter_map(|r| r.ok()).collect()
+        result
+            .filter_map(|r| match r {
+                Ok(v) => Some(v),
+                Err(e) => {
+                    tracing::warn!("Row processing failed in ace_commands: {e}");
+                    None
+                }
+            })
+            .collect()
     };
 
     if !rows.is_empty() {

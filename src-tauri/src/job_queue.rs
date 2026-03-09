@@ -164,7 +164,13 @@ impl JobQueue {
                 })
             })
             .map_err(|e| format!("Failed to query jobs: {}", e))?
-            .filter_map(|r| r.ok())
+            .filter_map(|r| match r {
+                Ok(v) => Some(v),
+                Err(e) => {
+                    tracing::warn!("Row processing failed in job_queue: {e}");
+                    None
+                }
+            })
             .collect();
 
         Ok(jobs)

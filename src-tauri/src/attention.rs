@@ -97,7 +97,13 @@ fn compute_topic_engagement(
             Ok((title, relevant))
         })
         .map_err(|e| e.to_string())?
-        .filter_map(|r| r.ok())
+        .filter_map(|r| match r {
+            Ok(v) => Some(v),
+            Err(e) => {
+                tracing::warn!("Row processing failed in attention: {e}");
+                None
+            }
+        })
         .collect();
 
     // Extract topics from titles and aggregate
@@ -227,7 +233,13 @@ fn compute_trend(conn: &rusqlite::Connection, period_days: u32) -> Result<Vec<Tr
             Ok((row.get(0)?, row.get(1)?))
         })
         .map_err(|e| e.to_string())?
-        .filter_map(|r| r.ok())
+        .filter_map(|r| match r {
+            Ok(v) => Some(v),
+            Err(e) => {
+                tracing::warn!("Row processing failed in attention: {e}");
+                None
+            }
+        })
         .collect();
 
     // Group by date and top topics

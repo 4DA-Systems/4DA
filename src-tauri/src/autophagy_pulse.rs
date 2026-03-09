@@ -163,7 +163,13 @@ pub async fn get_intelligence_pulse() -> Result<IntelligencePulse> {
                 ))
             })
             .map_err(FourDaError::Db)?
-            .filter_map(|r| r.ok())
+            .filter_map(|r| match r {
+                Ok(v) => Some(v),
+                Err(e) => {
+                    tracing::warn!("Row processing failed in autophagy_pulse: {e}");
+                    None
+                }
+            })
             .filter_map(|(topic, data_json, confidence, sample_size)| {
                 let data: serde_json::Value = serde_json::from_str(&data_json).ok()?;
                 let delta = data.get("delta")?.as_f64()?;
@@ -204,7 +210,13 @@ pub async fn get_intelligence_pulse() -> Result<IntelligencePulse> {
         let rows: Vec<String> = stmt
             .query_map([], |row| row.get::<_, String>(0))
             .map_err(FourDaError::Db)?
-            .filter_map(|r| r.ok())
+            .filter_map(|r| match r {
+                Ok(v) => Some(v),
+                Err(e) => {
+                    tracing::warn!("Row processing failed in autophagy_pulse: {e}");
+                    None
+                }
+            })
             .collect();
 
         for data_json in rows {

@@ -21,7 +21,9 @@ pub(crate) fn emit_progress(
         items_processed: processed,
         items_total: total,
     };
-    let _ = app.emit("analysis-progress", &status);
+    if let Err(e) = app.emit("analysis-progress", &status) {
+        tracing::warn!("Failed to emit 'analysis-progress': {e}");
+    }
 }
 
 // ============================================================================

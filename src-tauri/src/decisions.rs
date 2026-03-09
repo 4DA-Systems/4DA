@@ -404,7 +404,13 @@ pub fn seed_decisions_from_profile(conn: &Connection) -> Result<usize> {
 
     let techs: Vec<String> = stmt
         .query_map([], |row| row.get::<_, String>(0))?
-        .filter_map(|r| r.ok())
+        .filter_map(|r| match r {
+            Ok(v) => Some(v),
+            Err(e) => {
+                tracing::warn!("Row processing failed in decisions: {e}");
+                None
+            }
+        })
         .collect();
 
     if techs.is_empty() {

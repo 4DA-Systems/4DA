@@ -173,7 +173,9 @@ impl ProjectScanner {
             let entry_path = entry.path();
             if entry_path.is_dir() {
                 // Don't propagate errors from subdirectories - just skip them
-                let _ = self.scan_recursive(&entry_path, depth + 1, signals, visited);
+                if let Err(e) = self.scan_recursive(&entry_path, depth + 1, signals, visited) {
+                    tracing::warn!("Recursive scan failed: {e}");
+                }
             }
         }
 
