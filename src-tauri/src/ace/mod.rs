@@ -124,12 +124,14 @@ impl ACE {
         let watcher_persistence = WatcherStatePersistence::new(conn.clone()).ok();
 
         // Determine embedding provider from user's LLM settings.
-        // Any non-Mock provider triggers the real embed_texts pipeline.
+        // Maps to the correct provider variant so EmbeddingService can
+        // select the right dimension size and code path.
         let embedding_provider = {
             let settings = crate::get_settings_manager().lock();
             let llm_provider = &settings.get().llm.provider;
             match llm_provider.as_str() {
-                "openai" | "anthropic" | "ollama" => embedding::EmbeddingProvider::Ollama,
+                "openai" => embedding::EmbeddingProvider::OpenAI,
+                "anthropic" | "ollama" => embedding::EmbeddingProvider::Ollama,
                 _ => embedding::EmbeddingProvider::Ollama,
             }
         };

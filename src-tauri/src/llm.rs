@@ -621,7 +621,6 @@ pub async fn list_ollama_models(base_url: &str) -> Result<Vec<String>> {
     Ok(models)
 }
 
-
 // ============================================================================
 // Tests
 // ============================================================================
@@ -746,7 +745,6 @@ mod tests {
             "Unknown provider should not be configured"
         );
     }
-
 
     // ========================================================================
     // Cost estimation edge cases
