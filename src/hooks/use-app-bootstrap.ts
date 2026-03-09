@@ -196,6 +196,7 @@ export function useAppBootstrap() {
           running: boolean;
           completed: boolean;
           results: SourceRelevance[] | null;
+          near_misses: SourceRelevance[] | null;
         }>('get_analysis_status');
 
         if (cancelled) return;
@@ -206,6 +207,7 @@ export function useAppBootstrap() {
           setState(s => ({
             ...s,
             relevanceResults: results,
+            nearMisses: analysisState.near_misses ?? null,
             status: `${relevantCount}/${results.length} items relevant (cached)`,
             analysisComplete: true,
             loading: false,

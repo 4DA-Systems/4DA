@@ -73,8 +73,8 @@ impl QueryExecutor {
     /// Returns None if embedding fails (API not configured, etc.)
     /// Uses block_in_place to bridge sync QueryExecutor to async embed_texts
     fn try_embed_query(&self, query_text: &str) -> Option<Vec<f32>> {
-        // Use the crate-level embed_texts function (async) via block_in_place bridge
-        let texts = vec![query_text.to_string()];
+        // Preprocess query text to match the pipeline used for source embeddings
+        let texts = vec![crate::utils::preprocess_content(query_text)];
         let result = tokio::task::block_in_place(|| {
             tokio::runtime::Handle::current().block_on(crate::embed_texts(&texts))
         });

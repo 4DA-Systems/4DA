@@ -85,6 +85,8 @@ export interface BriefingState {
 export interface AppState {
   contextFiles: ContextFile[];
   relevanceResults: SourceRelevance[];
+  /** Items that almost passed the relevance threshold (for zero-result guidance) */
+  nearMisses: SourceRelevance[] | null;
   status: string;
   loading: boolean;
   analysisComplete: boolean;

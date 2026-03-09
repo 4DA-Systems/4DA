@@ -61,9 +61,21 @@ export function useAnalysis(
         listen<SourceRelevance[]>('analysis-complete', (event) => {
           const results = event.payload;
           const relevantCount = results.filter((r) => r.relevant).length;
+
+          // Extract near misses: items that almost passed the threshold
+          const NEAR_MISS_FLOOR = 0.20;
+          const NEAR_MISS_LIMIT = 5;
+          const nearMisses = relevantCount < 3
+            ? results
+                .filter((r) => !r.relevant && !r.excluded && r.top_score >= NEAR_MISS_FLOOR)
+                .sort((a, b) => b.top_score - a.top_score)
+                .slice(0, NEAR_MISS_LIMIT)
+            : null;
+
           useAppStore.getState().setAppStateFull((s) => ({
             ...s,
             relevanceResults: results,
+            nearMisses: nearMisses && nearMisses.length > 0 ? nearMisses : null,
             status: i18n.t('analysis.statusRelevant', { relevant: relevantCount, total: results.length }),
             loading: false,
             analysisComplete: true,

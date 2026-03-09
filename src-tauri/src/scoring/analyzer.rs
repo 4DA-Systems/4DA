@@ -333,7 +333,9 @@ pub(crate) async fn run_background_analysis<R: tauri::Runtime>(
             existing.retain(|r| !existing_ids.contains(&r.id));
             existing.extend(new_results.clone());
             scoring::sort_results(existing);
+            guard.near_misses = crate::types::extract_near_misses(existing);
         } else {
+            guard.near_misses = crate::types::extract_near_misses(&new_results);
             guard.results = Some(new_results.clone());
         }
         guard.last_completed_at = Some(chrono::Utc::now().format("%Y-%m-%d %H:%M:%S").to_string());

@@ -57,6 +57,7 @@ pub(crate) async fn run_cached_analysis(app: AppHandle) -> Result<()> {
         match result {
             Ok(Ok(results)) => {
                 guard.completed = true;
+                guard.near_misses = crate::types::extract_near_misses(&results);
                 guard.results = Some(results.clone());
                 guard.last_completed_at =
                     Some(chrono::Utc::now().format("%Y-%m-%d %H:%M:%S").to_string());

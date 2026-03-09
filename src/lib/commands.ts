@@ -70,7 +70,7 @@ import type { StackProfileSummary, StackDetection } from '../types/stacks';
 /** Full IPC contract: command name → parameter type & return type. */
 interface CommandMap {
   // -- Analysis & Core --
-  get_analysis_status: { params: Record<string, never>; result: { running: boolean; completed: boolean; error: string | null; results: SourceRelevance[] | null; started_at: number | null; last_completed_at: string | null } };
+  get_analysis_status: { params: Record<string, never>; result: { running: boolean; completed: boolean; error: string | null; results: SourceRelevance[] | null; started_at: number | null; last_completed_at: string | null; near_misses: SourceRelevance[] | null } };
   run_cached_analysis: { params: Record<string, never>; result: void };
   run_deep_initial_scan: { params: Record<string, never>; result: void };
   cancel_analysis: { params: Record<string, never>; result: void };

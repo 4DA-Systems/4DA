@@ -40,7 +40,7 @@ pub(crate) fn build_embedding_text(title: &str, content: &str) -> String {
 
 /// Preprocess content for embedding: strip noise, normalize whitespace, cap length.
 /// Goal: maximize signal density in the text sent to the embedding model.
-fn preprocess_content(content: &str) -> String {
+pub(crate) fn preprocess_content(content: &str) -> String {
     // Order matters: strip tags FIRST (raw HTML), THEN decode entities.
     // This prevents &lt;word&gt; from being decoded to <word> and then stripped as a tag.
     let text = strip_html_tags(content);
