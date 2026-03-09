@@ -131,7 +131,7 @@ impl ACE {
             let llm_provider = &settings.get().llm.provider;
             match llm_provider.as_str() {
                 "openai" => embedding::EmbeddingProvider::OpenAI,
-                "anthropic" | "ollama" => embedding::EmbeddingProvider::Ollama,
+                // Anthropic has no embedding API; all non-OpenAI providers use Ollama
                 _ => embedding::EmbeddingProvider::Ollama,
             }
         };
