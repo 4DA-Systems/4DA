@@ -134,6 +134,7 @@ interface LoadingStateProps {
   embeddingMode: string | null;
   scanSummary: ScanSummary | null;
   narrationEvents?: NarrationFeedEvent[];
+  estimatedSeconds?: number;
 }
 
 export function LoadingState({
@@ -146,15 +147,17 @@ export function LoadingState({
   embeddingMode,
   scanSummary,
   narrationEvents,
+  estimatedSeconds: estimatedSecondsProp,
 }: LoadingStateProps) {
   const { t } = useTranslation();
 
   useEffect(() => { registerGameComponent('game-boot-ring'); }, []);
 
-  // Estimated time remaining — starts at 90s, decrements every second
+  // Estimated time remaining — initialized from parent's source-count estimate
   // Uses a ref-based counter to avoid infinite timer chains in test environments
-  const [estimatedSeconds, setEstimatedSeconds] = useState(90);
-  const counterRef = useRef(90);
+  const initialSeconds = estimatedSecondsProp ?? 240;
+  const [estimatedSeconds, setEstimatedSeconds] = useState(initialSeconds);
+  const counterRef = useRef(initialSeconds);
 
   useEffect(() => {
     if (phase === 'intelligence' || phase === 'celebrating' || phase === 'fading') return;
@@ -201,12 +204,16 @@ export function LoadingState({
 
       {/* Estimated time remaining */}
       {(phase === 'preparing' || phase === 'fetching' || phase === 'analyzing') && (
-        <p className="text-sm text-text-secondary mb-4" aria-live="polite">
+        <p className={`text-sm text-text-secondary mb-4${estimatedSeconds <= 0 ? ' animate-pulse' : ''}`} aria-live="polite">
           {estimatedSeconds <= 0
-            ? t('firstRun.estimatedTimeAlmost', 'Almost there...')
+            ? t('firstRun.estimatedTimeFinishing', 'Finishing up...')
             : estimatedSeconds < 30
-              ? t('firstRun.estimatedTimeLow', '< 30s remaining')
-              : t('firstRun.estimatedTime', { seconds: estimatedSeconds, defaultValue: '~{{seconds}}s remaining' })
+              ? t('firstRun.estimatedTimeAlmost', 'Almost there...')
+              : estimatedSeconds < 60
+                ? t('firstRun.estimatedTimeLessThanMinute', '< 1 minute remaining')
+                : estimatedSeconds <= 120
+                  ? t('firstRun.estimatedTimeOneToTwo', '~1-2 minutes remaining')
+                  : t('firstRun.estimatedTimeMinutes', { minutes: Math.ceil(estimatedSeconds / 60), defaultValue: '~{{minutes}} minutes remaining' })
           }
         </p>
       )}

@@ -20,6 +20,7 @@ export function FirstRunTransition({ onComplete }: FirstRunTransitionProps) {
   const [itemCount, setItemCount] = useState(0);
   const [hasError, setHasError] = useState(false);
   const [scanSummary, setScanSummary] = useState<ScanSummary | null>(null);
+  const [estimatedSeconds, setEstimatedSeconds] = useState(240);
   const startedRef = useRef(false);
 
   // Read store state
@@ -68,6 +69,13 @@ export function FirstRunTransition({ onComplete }: FirstRunTransitionProps) {
     startedRef.current = true;
 
     const init = async () => {
+      // Estimate time based on enabled source count
+      try {
+        const sources = await invoke<Array<{ enabled: boolean }>>('get_sources');
+        const enabledCount = sources.filter(s => s.enabled).length;
+        setEstimatedSeconds(120 + enabledCount * 10);
+      } catch { /* default 240s */ }
+
       // Fetch scan summary BEFORE starting analysis
       try {
         const summary = await invoke<ScanSummary>('ace_get_scan_summary');
@@ -209,6 +217,7 @@ export function FirstRunTransition({ onComplete }: FirstRunTransitionProps) {
         embeddingMode={embeddingMode}
         scanSummary={scanSummary}
         narrationEvents={narrationEvents}
+        estimatedSeconds={estimatedSeconds}
       />
     );
   };

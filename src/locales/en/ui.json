@@ -730,9 +730,11 @@
   "firstRun.ariaSeeBriefing": "View your intelligence briefing",
   "firstRun.ariaBrowseResults": "Browse {{count}} analyzed results",
   "firstRun.ariaExploreStreets": "Explore the STREETS developer playbook",
-  "firstRun.estimatedTime": "~{{seconds}}s remaining",
-  "firstRun.estimatedTimeLow": "< 30s remaining",
+  "firstRun.estimatedTimeMinutes": "~{{minutes}} minutes remaining",
+  "firstRun.estimatedTimeOneToTwo": "~1-2 minutes remaining",
+  "firstRun.estimatedTimeLessThanMinute": "< 1 minute remaining",
   "firstRun.estimatedTimeAlmost": "Almost there...",
+  "firstRun.estimatedTimeFinishing": "Finishing up...",
 
   "shortcuts.title": "Keyboard Shortcuts",
   "shortcuts.close": "Close keyboard shortcuts",
