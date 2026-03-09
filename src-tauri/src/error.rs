@@ -41,6 +41,10 @@ pub enum FourDaError {
     #[error("LLM error: {0}")]
     Llm(String),
 
+    /// Tauri runtime errors (menus, tray, windows)
+    #[error("Tauri error: {0}")]
+    Tauri(#[from] tauri::Error),
+
     /// Generic internal error (catch-all, bridges legacy `Result<_, String>`)
     #[error("{0}")]
     Internal(String),

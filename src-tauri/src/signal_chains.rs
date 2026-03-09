@@ -50,15 +50,13 @@ pub enum ChainResolution {
 /// Detect signal chains from recent temporal events
 pub fn detect_chains(conn: &rusqlite::Connection) -> Result<Vec<SignalChain>> {
     // Get recent signal-worthy source items (with signal classification)
-    let mut stmt = conn
-        .prepare(
-            "SELECT si.id, si.title, si.source_type, si.created_at, si.content
+    let mut stmt = conn.prepare(
+        "SELECT si.id, si.title, si.source_type, si.created_at, si.content
              FROM source_items si
              WHERE si.created_at >= datetime('now', '-7 days')
              ORDER BY si.created_at DESC
              LIMIT 200",
-        )
-        .map_err(|e| e.to_string())?;
+    )?;
 
     let items: Vec<(i64, String, String, String, String)> = stmt
         .query_map([], |row| {
@@ -69,8 +67,7 @@ pub fn detect_chains(conn: &rusqlite::Connection) -> Result<Vec<SignalChain>> {
                 row.get(3)?,
                 row.get::<_, String>(4).unwrap_or_default(),
             ))
-        })
-        .map_err(|e| e.to_string())?
+        })?
         .filter_map(|r| match r {
             Ok(v) => Some(v),
             Err(e) => {

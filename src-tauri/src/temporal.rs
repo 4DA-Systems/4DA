@@ -74,7 +74,7 @@ pub fn get_project_dependencies(
              WHERE project_path = ?1
              ORDER BY package_name",
         )
-        .map_err(|e| e.to_string())?;
+        ?;
 
     let results: Vec<ProjectDependency> = stmt
         .query_map(params![project_path], |row| {
@@ -88,8 +88,7 @@ pub fn get_project_dependencies(
                 language: row.get(6)?,
                 last_scanned: row.get(7)?,
             })
-        })
-        .map_err(|e| e.to_string())?
+        })?
         .filter_map(|r| match r {
             Ok(v) => Some(v),
             Err(e) => {
@@ -133,7 +132,7 @@ pub fn get_all_dependencies(conn: &rusqlite::Connection) -> Result<Vec<ProjectDe
              FROM project_dependencies
              ORDER BY project_path, package_name",
         )
-        .map_err(|e| e.to_string())?;
+        ?;
 
     let all_deps: Vec<ProjectDependency> = stmt
         .query_map([], |row| {
@@ -147,8 +146,7 @@ pub fn get_all_dependencies(conn: &rusqlite::Connection) -> Result<Vec<ProjectDe
                 language: row.get(6)?,
                 last_scanned: row.get(7)?,
             })
-        })
-        .map_err(|e| e.to_string())?
+        })?
         .filter_map(|r| match r {
             Ok(v) => Some(v),
             Err(e) => {
@@ -183,7 +181,7 @@ pub fn get_all_dependencies(conn: &rusqlite::Connection) -> Result<Vec<ProjectDe
                 "SELECT id, project_path, manifest_type, package_name, version, is_dev, language, last_scanned
                  FROM project_dependencies ORDER BY project_path, package_name",
             )
-            .map_err(|e| e.to_string())?
+            ?
             .query_map([], |row| {
                 Ok(ProjectDependency {
                     id: row.get(0)?,
@@ -196,7 +194,7 @@ pub fn get_all_dependencies(conn: &rusqlite::Connection) -> Result<Vec<ProjectDe
                     last_scanned: row.get(7)?,
                 })
             })
-            .map_err(|e| e.to_string())?
+            ?
             .filter_map(|r| match r {
                 Ok(v) => Some(v),
                 Err(e) => {
@@ -223,7 +221,7 @@ pub fn record_event(
     source_item_id: Option<i64>,
     expires_at: Option<&str>,
 ) -> Result<i64> {
-    let data_str = serde_json::to_string(data).map_err(|e| e.to_string())?;
+    let data_str = serde_json::to_string(data)?;
     conn.execute(
         "INSERT INTO temporal_events (event_type, subject, data, source_item_id, expires_at)
          VALUES (?1, ?2, ?3, ?4, ?5)",
@@ -252,14 +250,13 @@ pub fn query_events(
          ORDER BY created_at DESC LIMIT ?2"
     };
 
-    let mut stmt = conn.prepare(query).map_err(|e| e.to_string())?;
+    let mut stmt = conn.prepare(query)?;
 
     let results: Vec<TemporalEvent> = if let Some(since_val) = since {
         stmt.query_map(params![event_type, since_val, limit as i64], map_event)
     } else {
         stmt.query_map(params![event_type, limit as i64], map_event)
-    }
-    .map_err(|e| e.to_string())?
+    }?
     .filter_map(|r| match r {
         Ok(v) => Some(v),
         Err(e) => {
@@ -279,18 +276,15 @@ pub fn query_events_by_subject(
     subject: &str,
     limit: usize,
 ) -> Result<Vec<TemporalEvent>> {
-    let mut stmt = conn
-        .prepare(
-            "SELECT id, event_type, subject, data, source_item_id, created_at, expires_at
+    let mut stmt = conn.prepare(
+        "SELECT id, event_type, subject, data, source_item_id, created_at, expires_at
              FROM temporal_events
              WHERE subject = ?1
              ORDER BY created_at DESC LIMIT ?2",
-        )
-        .map_err(|e| e.to_string())?;
+    )?;
 
     let results: Vec<TemporalEvent> = stmt
-        .query_map(params![subject, limit as i64], map_event)
-        .map_err(|e| e.to_string())?
+        .query_map(params![subject, limit as i64], map_event)?
         .filter_map(|r| match r {
             Ok(v) => Some(v),
             Err(e) => {
@@ -306,12 +300,10 @@ pub fn query_events_by_subject(
 /// Clean up expired temporal events
 #[allow(dead_code)] // Used by cleanup_temporal_events (reserved for scheduled maintenance)
 pub fn cleanup_expired(conn: &rusqlite::Connection) -> Result<usize> {
-    let deleted = conn
-        .execute(
-            "DELETE FROM temporal_events WHERE expires_at IS NOT NULL AND expires_at < datetime('now')",
-            [],
-        )
-        .map_err(|e| e.to_string())?;
+    let deleted = conn.execute(
+        "DELETE FROM temporal_events WHERE expires_at IS NOT NULL AND expires_at < datetime('now')",
+        [],
+    )?;
     if deleted > 0 {
         debug!(target: "4da::temporal", deleted, "Cleaned up expired temporal events");
     }
@@ -349,13 +341,11 @@ pub fn get_temporal_events(
 #[allow(dead_code)] // Reserved for MCP integration
 pub fn get_temporal_event_count(event_type: String) -> Result<usize> {
     let conn = crate::open_db_connection()?;
-    let count: i64 = conn
-        .query_row(
-            "SELECT COUNT(*) FROM temporal_events WHERE event_type = ?1",
-            params![event_type],
-            |row| row.get(0),
-        )
-        .map_err(|e| e.to_string())?;
+    let count: i64 = conn.query_row(
+        "SELECT COUNT(*) FROM temporal_events WHERE event_type = ?1",
+        params![event_type],
+        |row| row.get(0),
+    )?;
     Ok(count as usize)
 }
 

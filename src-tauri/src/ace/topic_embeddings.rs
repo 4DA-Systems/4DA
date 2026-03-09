@@ -84,21 +84,17 @@ pub fn load_topic_embeddings(
     let conn = conn.lock();
     let mut result = std::collections::HashMap::new();
 
-    let mut stmt = conn
-        .prepare(
-            "SELECT topic, embedding FROM active_topics
+    let mut stmt = conn.prepare(
+        "SELECT topic, embedding FROM active_topics
              WHERE embedding IS NOT NULL
              AND julianday('now') - julianday(last_seen) <= 7",
-        )
-        .map_err(|e| e.to_string())?;
+    )?;
 
-    let rows = stmt
-        .query_map([], |row| {
-            let topic: String = row.get(0)?;
-            let blob: Vec<u8> = row.get(1)?;
-            Ok((topic, blob))
-        })
-        .map_err(|e| e.to_string())?;
+    let rows = stmt.query_map([], |row| {
+        let topic: String = row.get(0)?;
+        let blob: Vec<u8> = row.get(1)?;
+        Ok((topic, blob))
+    })?;
 
     for (topic, blob) in rows.flatten() {
         let embedding = blob_to_embedding(&blob);
@@ -121,21 +117,16 @@ pub async fn generate_missing_topic_embeddings(conn: &Arc<Mutex<Connection>>) ->
     // Find topics without embeddings
     let topics_without_embeddings: Vec<(i64, String)> = {
         let conn_guard = conn.lock();
-        let mut stmt = conn_guard
-            .prepare(
-                "SELECT id, topic FROM active_topics
+        let mut stmt = conn_guard.prepare(
+            "SELECT id, topic FROM active_topics
                  WHERE embedding IS NULL
                  AND julianday('now') - julianday(last_seen) <= 7
                  LIMIT 50",
-            )
-            .map_err(|e| e.to_string())?;
+        )?;
 
-        let rows = stmt
-            .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))
-            .map_err(|e| e.to_string())?;
+        let rows = stmt.query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?;
 
-        rows.collect::<std::result::Result<Vec<_>, _>>()
-            .map_err(|e| e.to_string())?
+        rows.collect::<std::result::Result<Vec<_>, _>>()?
     };
 
     if topics_without_embeddings.is_empty() {

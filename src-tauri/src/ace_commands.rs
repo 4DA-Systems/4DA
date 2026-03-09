@@ -882,15 +882,11 @@ pub async fn get_engagement_summary() -> Result<serde_json::Value> {
     // Streak: consecutive days with at least 1 interaction (looking back from today)
     let mut streak: i64 = 0;
     let rows: Vec<String> = {
-        let mut stmt = conn
-            .prepare(
-                "SELECT DISTINCT date(timestamp) as d FROM interactions
+        let mut stmt = conn.prepare(
+            "SELECT DISTINCT date(timestamp) as d FROM interactions
                  ORDER BY d DESC LIMIT 30",
-            )
-            .map_err(|e| e.to_string())?;
-        let result = stmt
-            .query_map([], |row| row.get::<_, String>(0))
-            .map_err(|e| e.to_string())?;
+        )?;
+        let result = stmt.query_map([], |row| row.get::<_, String>(0))?;
         result
             .filter_map(|r| match r {
                 Ok(v) => Some(v),

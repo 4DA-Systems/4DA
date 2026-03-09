@@ -79,15 +79,13 @@ fn compute_topic_engagement(
     period_days: u32,
 ) -> Result<Vec<TopicEngagement>> {
     // Get interactions from feedback table within the period
-    let mut stmt = conn
-        .prepare(
-            "SELECT si.title, f.relevant
+    let mut stmt = conn.prepare(
+        "SELECT si.title, f.relevant
              FROM feedback f
              JOIN source_items si ON si.id = f.source_item_id
              WHERE f.created_at >= datetime('now', ?1)
              ORDER BY f.created_at DESC",
-        )
-        .map_err(|e| e.to_string())?;
+    )?;
 
     let since = format!("-{} days", period_days);
     let rows: Vec<(String, bool)> = stmt
@@ -95,8 +93,7 @@ fn compute_topic_engagement(
             let title: String = row.get(0)?;
             let relevant: bool = row.get::<_, i32>(1)? != 0;
             Ok((title, relevant))
-        })
-        .map_err(|e| e.to_string())?
+        })?
         .filter_map(|r| match r {
             Ok(v) => Some(v),
             Err(e) => {
@@ -218,21 +215,18 @@ fn identify_blind_spots(
 
 fn compute_trend(conn: &rusqlite::Connection, period_days: u32) -> Result<Vec<TrendPoint>> {
     let since = format!("-{} days", period_days);
-    let mut stmt = conn
-        .prepare(
-            "SELECT date(f.created_at) as d, si.title
+    let mut stmt = conn.prepare(
+        "SELECT date(f.created_at) as d, si.title
              FROM feedback f
              JOIN source_items si ON si.id = f.source_item_id
              WHERE f.created_at >= datetime('now', ?1)
              ORDER BY d",
-        )
-        .map_err(|e| e.to_string())?;
+    )?;
 
     let rows: Vec<(String, String)> = stmt
         .query_map(rusqlite::params![since], |row| {
             Ok((row.get(0)?, row.get(1)?))
-        })
-        .map_err(|e| e.to_string())?
+        })?
         .filter_map(|r| match r {
             Ok(v) => Some(v),
             Err(e) => {

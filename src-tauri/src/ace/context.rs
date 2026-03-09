@@ -372,15 +372,13 @@ pub fn apply_freshness_decay(conn: &Arc<Mutex<Connection>>) -> Result<usize> {
 pub fn get_realtime_context(conn: &Arc<Mutex<Connection>>) -> Result<RealtimeContext> {
     let conn = conn.lock();
 
-    let mut stmt = conn
-        .prepare(
-            "SELECT topic, weight, confidence, source, last_seen
+    let mut stmt = conn.prepare(
+        "SELECT topic, weight, confidence, source, last_seen
          FROM active_topics
          WHERE julianday('now') - julianday(last_seen) <= 7
          ORDER BY weight DESC
          LIMIT 50",
-        )
-        .map_err(|e| e.to_string())?;
+    )?;
 
     let topics: Vec<ActiveTopic> = stmt
         .query_map([], |row| {
@@ -398,19 +396,15 @@ pub fn get_realtime_context(conn: &Arc<Mutex<Connection>>) -> Result<RealtimeCon
                 last_seen: row.get(4)?,
                 embedding: None,
             })
-        })
-        .map_err(|e| e.to_string())?
-        .collect::<std::result::Result<Vec<_>, _>>()
-        .map_err(|e| e.to_string())?;
+        })?
+        .collect::<std::result::Result<Vec<_>, _>>()?;
 
-    let mut stmt = conn
-        .prepare(
-            "SELECT name, category, confidence, source
+    let mut stmt = conn.prepare(
+        "SELECT name, category, confidence, source
          FROM detected_tech
          ORDER BY confidence DESC
          LIMIT 20",
-        )
-        .map_err(|e| e.to_string())?;
+    )?;
 
     let tech: Vec<DetectedTech> = stmt
         .query_map([], |row| {
@@ -437,10 +431,8 @@ pub fn get_realtime_context(conn: &Arc<Mutex<Connection>>) -> Result<RealtimeCon
                 },
                 evidence: Vec::new(),
             })
-        })
-        .map_err(|e| e.to_string())?
-        .collect::<std::result::Result<Vec<_>, _>>()
-        .map_err(|e| e.to_string())?;
+        })?
+        .collect::<std::result::Result<Vec<_>, _>>()?;
 
     let context_confidence = if topics.is_empty() && tech.is_empty() {
         0.3

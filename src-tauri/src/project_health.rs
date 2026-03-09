@@ -49,13 +49,10 @@ pub struct HealthAlert {
 /// Compute health for all tracked projects
 pub fn compute_all_project_health(conn: &rusqlite::Connection) -> Result<Vec<ProjectHealth>> {
     // Get unique project paths from dependencies
-    let mut stmt = conn
-        .prepare("SELECT DISTINCT project_path FROM project_dependencies")
-        .map_err(|e| e.to_string())?;
+    let mut stmt = conn.prepare("SELECT DISTINCT project_path FROM project_dependencies")?;
 
     let paths: Vec<String> = stmt
-        .query_map([], |row| row.get(0))
-        .map_err(|e| e.to_string())?
+        .query_map([], |row| row.get(0))?
         .filter_map(|r| match r {
             Ok(v) => Some(v),
             Err(e) => {

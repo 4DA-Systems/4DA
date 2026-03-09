@@ -107,22 +107,18 @@ impl MonitoringState {
 /// Set up the system tray with menu
 pub fn setup_tray<R: Runtime>(app: &AppHandle<R>) -> Result<TrayIcon<R>> {
     // Create menu items
-    let show_item = MenuItem::with_id(app, "show", "Show 4DA Home", true, None::<&str>)
-        .map_err(|e| e.to_string())?;
-    let analyze_item = MenuItem::with_id(app, "analyze", "Analyze Now", true, None::<&str>)
-        .map_err(|e| e.to_string())?;
-    let separator = PredefinedMenuItem::separator(app).map_err(|e| e.to_string())?;
+    let show_item = MenuItem::with_id(app, "show", "Show 4DA Home", true, None::<&str>)?;
+    let analyze_item = MenuItem::with_id(app, "analyze", "Analyze Now", true, None::<&str>)?;
+    let separator = PredefinedMenuItem::separator(app)?;
     let monitoring_item = MenuItem::with_id(
         app,
         "toggle_monitoring",
         "Start Monitoring",
         true,
         None::<&str>,
-    )
-    .map_err(|e| e.to_string())?;
-    let separator2 = PredefinedMenuItem::separator(app).map_err(|e| e.to_string())?;
-    let quit_item =
-        MenuItem::with_id(app, "quit", "Quit", true, None::<&str>).map_err(|e| e.to_string())?;
+    )?;
+    let separator2 = PredefinedMenuItem::separator(app)?;
+    let quit_item = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
 
     // Build menu
     let menu = Menu::with_items(
@@ -135,8 +131,7 @@ pub fn setup_tray<R: Runtime>(app: &AppHandle<R>) -> Result<TrayIcon<R>> {
             &separator2,
             &quit_item,
         ],
-    )
-    .map_err(|e| e.to_string())?;
+    )?;
 
     // Build tray icon
     let tray = TrayIconBuilder::new()
@@ -187,8 +182,7 @@ pub fn setup_tray<R: Runtime>(app: &AppHandle<R>) -> Result<TrayIcon<R>> {
                 }
             }
         })
-        .build(app)
-        .map_err(|e| e.to_string())?;
+        .build(app)?;
 
     info!(target: "4da::tray", "System tray initialized");
     Ok(tray)
@@ -483,11 +477,9 @@ pub fn update_tray_menu<R: Runtime>(
     app: &AppHandle<R>,
     monitoring_enabled: bool,
 ) -> Result<()> {
-    let show_item = MenuItem::with_id(app, "show", "Show 4DA Home", true, None::<&str>)
-        .map_err(|e| e.to_string())?;
-    let analyze_item = MenuItem::with_id(app, "analyze", "Analyze Now", true, None::<&str>)
-        .map_err(|e| e.to_string())?;
-    let separator = PredefinedMenuItem::separator(app).map_err(|e| e.to_string())?;
+    let show_item = MenuItem::with_id(app, "show", "Show 4DA Home", true, None::<&str>)?;
+    let analyze_item = MenuItem::with_id(app, "analyze", "Analyze Now", true, None::<&str>)?;
+    let separator = PredefinedMenuItem::separator(app)?;
 
     let monitoring_text = if monitoring_enabled {
         "Stop Monitoring"
@@ -500,12 +492,10 @@ pub fn update_tray_menu<R: Runtime>(
         monitoring_text,
         true,
         None::<&str>,
-    )
-    .map_err(|e| e.to_string())?;
+    )?;
 
-    let separator2 = PredefinedMenuItem::separator(app).map_err(|e| e.to_string())?;
-    let quit_item =
-        MenuItem::with_id(app, "quit", "Quit", true, None::<&str>).map_err(|e| e.to_string())?;
+    let separator2 = PredefinedMenuItem::separator(app)?;
+    let quit_item = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
 
     let menu = Menu::with_items(
         app,
@@ -517,10 +507,9 @@ pub fn update_tray_menu<R: Runtime>(
             &separator2,
             &quit_item,
         ],
-    )
-    .map_err(|e| e.to_string())?;
+    )?;
 
-    tray.set_menu(Some(menu)).map_err(|e| e.to_string())?;
+    tray.set_menu(Some(menu))?;
 
     // Update tooltip
     let tooltip = if monitoring_enabled {
@@ -528,7 +517,7 @@ pub fn update_tray_menu<R: Runtime>(
     } else {
         "4DA Home - All signal. No feed."
     };
-    tray.set_tooltip(Some(tooltip)).map_err(|e| e.to_string())?;
+    tray.set_tooltip(Some(tooltip))?;
 
     Ok(())
 }

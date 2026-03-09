@@ -54,9 +54,7 @@ pub async fn set_rss_feeds(feeds: Vec<String>) -> Result<serde_json::Value> {
     }
 
     let mut settings_guard = get_settings_manager().lock();
-    settings_guard
-        .set_rss_feeds(feeds.clone())
-        .map_err(|e| e.to_string())?;
+    settings_guard.set_rss_feeds(feeds.clone())?;
 
     info!(target: "4da::rss", count = feeds.len(), "Set RSS feeds");
 
@@ -98,9 +96,7 @@ pub async fn set_twitter_handles(handles: Vec<String>) -> Result<serde_json::Val
         .collect();
 
     let mut settings_guard = get_settings_manager().lock();
-    settings_guard
-        .set_twitter_handles(clean_handles.clone())
-        .map_err(|e| e.to_string())?;
+    settings_guard.set_twitter_handles(clean_handles.clone())?;
 
     info!(target: "4da::twitter", count = clean_handles.len(), "Set Twitter handles");
 
@@ -151,9 +147,7 @@ pub async fn set_x_api_key(key: String) -> Result<serde_json::Value> {
 
     if cleaned.is_empty() {
         let mut settings_guard = get_settings_manager().lock();
-        settings_guard
-            .set_x_api_key(String::new())
-            .map_err(|e| e.to_string())?;
+        settings_guard.set_x_api_key(String::new())?;
         return Ok(serde_json::json!({
             "success": true,
             "has_key": false,
@@ -175,9 +169,7 @@ pub async fn set_x_api_key(key: String) -> Result<serde_json::Value> {
         Ok(r) if r.status().is_success() => {
             info!(target: "4da::twitter", "X API key validated successfully");
             let mut settings_guard = get_settings_manager().lock();
-            settings_guard
-                .set_x_api_key(cleaned)
-                .map_err(|e| e.to_string())?;
+            settings_guard.set_x_api_key(cleaned)?;
             Ok(serde_json::json!({
                 "success": true,
                 "has_key": true,
@@ -192,9 +184,7 @@ pub async fn set_x_api_key(key: String) -> Result<serde_json::Value> {
             // Rate limited - token format looks valid if we got this far, save it
             info!(target: "4da::twitter", "X API rate limited during validation - saving token anyway");
             let mut settings_guard = get_settings_manager().lock();
-            settings_guard
-                .set_x_api_key(cleaned)
-                .map_err(|e| e.to_string())?;
+            settings_guard.set_x_api_key(cleaned)?;
             Ok(serde_json::json!({
                 "success": true,
                 "has_key": true,
@@ -206,9 +196,7 @@ pub async fn set_x_api_key(key: String) -> Result<serde_json::Value> {
             // 403 can mean the token works but doesn't have the right access level
             warn!(target: "4da::twitter", status = %r.status(), "X API key may lack permissions");
             let mut settings_guard = get_settings_manager().lock();
-            settings_guard
-                .set_x_api_key(cleaned)
-                .map_err(|e| e.to_string())?;
+            settings_guard.set_x_api_key(cleaned)?;
             Ok(serde_json::json!({
                 "success": true,
                 "has_key": true,
@@ -228,9 +216,7 @@ pub async fn set_x_api_key(key: String) -> Result<serde_json::Value> {
             warn!(target: "4da::twitter", error = %e, "Could not reach X API for validation");
             // Save anyway - might be a network issue, not a bad token
             let mut settings_guard = get_settings_manager().lock();
-            settings_guard
-                .set_x_api_key(cleaned)
-                .map_err(|e| e.to_string())?;
+            settings_guard.set_x_api_key(cleaned)?;
             Ok(serde_json::json!({
                 "success": true,
                 "has_key": true,
@@ -266,9 +252,7 @@ pub async fn set_youtube_channels(channels: Vec<String>) -> Result<serde_json::V
         validate_input_length(channel, "YouTube channel ID", 100)?;
     }
     let mut settings_guard = get_settings_manager().lock();
-    settings_guard
-        .set_youtube_channels(channels.clone())
-        .map_err(|e| e.to_string())?;
+    settings_guard.set_youtube_channels(channels.clone())?;
 
     info!(target: "4da::youtube", count = channels.len(), "Set YouTube channels");
 
@@ -316,9 +300,7 @@ pub async fn set_github_languages(languages: Vec<String>) -> Result<serde_json::
         validate_input_length(lang, "Language", 50)?;
     }
     let mut settings_guard = get_settings_manager().lock();
-    settings_guard
-        .set_github_languages(languages.clone())
-        .map_err(|e| e.to_string())?;
+    settings_guard.set_github_languages(languages.clone())?;
 
     info!(target: "4da::github", count = languages.len(), "Set GitHub languages");
 
