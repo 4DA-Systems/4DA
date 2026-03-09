@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { memo, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { SourceRelevance } from '../../types';
 import { getContentTypeBadge } from '../../config/content-types';
@@ -8,7 +8,7 @@ interface BadgeRowProps {
   item: SourceRelevance;
 }
 
-export function BadgeRow({ item }: BadgeRowProps) {
+export const BadgeRow = memo(function BadgeRow({ item }: BadgeRowProps) {
   const { t } = useTranslation();
   const rawAffinities = useAppStore(s => s.learnedAffinities);
   const learnedAffinities = useMemo(() => rawAffinities ?? [], [rawAffinities]);
@@ -29,7 +29,7 @@ export function BadgeRow({ item }: BadgeRowProps) {
       {matchedAffinityTopic && (
         <span
           className="flex-shrink-0 text-[10px] px-1.5 py-0.5 rounded font-medium bg-[#D4AF37]/10 text-[#D4AF37]"
-          title={`Boosted because you've shown interest in ${matchedAffinityTopic}`}
+          title={t('results.affinityBoost', { topic: matchedAffinityTopic })}
         >
           {t('results.learnedBadge')}
         </span>
@@ -70,9 +70,7 @@ export function BadgeRow({ item }: BadgeRowProps) {
           item.signal_priority === 'high' ? 'bg-amber-500/20 text-amber-400' :
           'bg-cyan-500/20 text-cyan-400'
         }`}>
-          {{ security_alert: 'Security', breaking_change: 'Breaking', tool_discovery: 'Tool',
-             tech_trend: 'Trend', learning: 'Learn', competitive_intel: 'Intel',
-          }[item.signal_type] || item.signal_type}
+          {t(`results.signal.${item.signal_type}`, { defaultValue: item.signal_type })}
         </span>
       )}
       {item.score_breakdown?.matched_deps && item.score_breakdown.matched_deps.length > 0 && (
@@ -125,4 +123,4 @@ export function BadgeRow({ item }: BadgeRowProps) {
       })()}
     </>
   );
-}
+});
