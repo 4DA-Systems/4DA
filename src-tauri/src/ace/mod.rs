@@ -572,27 +572,23 @@ impl ACE {
     pub fn get_recent_work_topics(&self, hours: u64) -> Result<Vec<(String, f32)>> {
         let conn = self.conn.lock();
 
-        let mut stmt = conn
-            .prepare(
-                "SELECT extracted_topics, timestamp FROM file_signals
+        let mut stmt = conn.prepare(
+            "SELECT extracted_topics, timestamp FROM file_signals
                  WHERE timestamp > datetime('now', ?1)
                  ORDER BY timestamp DESC LIMIT 50",
-            )
-            .map_err(|e| e.to_string())?;
+        )?;
 
         let hours_param = format!("-{} hours", hours);
-        let rows = stmt
-            .query_map([&hours_param], |row| {
-                Ok((row.get::<_, Option<String>>(0)?, row.get::<_, String>(1)?))
-            })
-            .map_err(|e| e.to_string())?;
+        let rows = stmt.query_map([&hours_param], |row| {
+            Ok((row.get::<_, Option<String>>(0)?, row.get::<_, String>(1)?))
+        })?;
 
         let mut topic_weights: std::collections::HashMap<String, f32> =
             std::collections::HashMap::new();
         let max_hours = hours as f32;
 
         for row in rows {
-            let (topics_json, timestamp_str) = row.map_err(|e| e.to_string())?;
+            let (topics_json, timestamp_str) = row?;
 
             if let Some(json_str) = topics_json {
                 // Parse JSON array of topics

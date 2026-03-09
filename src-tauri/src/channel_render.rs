@@ -39,9 +39,7 @@ pub(crate) fn gather_channel_sources(
     }
 
     // Get recent source items (last 30 days, up to 500)
-    let items = db
-        .get_items_tiered(30 * 24, 500)
-        .map_err(|e| e.to_string())?;
+    let items = db.get_items_tiered(30 * 24, 500)?;
 
     let mut scored: Vec<(StoredSourceItem, f64)> = Vec::new();
     let ace_ctx = get_ace_context();
@@ -93,9 +91,7 @@ pub(crate) fn preview_channel_sources(
         return Ok((0, vec![]));
     }
 
-    let items = db
-        .get_items_tiered(30 * 24, 500)
-        .map_err(|e| e.to_string())?;
+    let items = db.get_items_tiered(30 * 24, 500)?;
 
     let mut matched_titles: Vec<(String, f64)> = Vec::new();
 
@@ -256,7 +252,7 @@ pub(crate) fn generate_fallback_content(
 /// Flow: load channel -> gather sources -> check LLM -> build prompt -> call LLM
 ///       -> extract provenance -> save render -> compute changelog
 pub(crate) async fn render_channel(channel_id: i64) -> Result<ChannelRender> {
-    let db = crate::get_database().map_err(|e| e.to_string())?;
+    let db = crate::get_database()?;
 
     // Load channel
     let channel = db
@@ -275,9 +271,7 @@ pub(crate) async fn render_channel(channel_id: i64) -> Result<ChannelRender> {
 
     if items.is_empty() {
         let fallback = generate_fallback_content(&channel, &items);
-        let render = db
-            .save_channel_render(channel_id, &fallback, &[], None, None, None)
-            .map_err(|e| e.to_string())?;
+        let render = db.save_channel_render(channel_id, &fallback, &[], None, None, None)?;
         return Ok(render);
     }
 
@@ -294,9 +288,8 @@ pub(crate) async fn render_channel(channel_id: i64) -> Result<ChannelRender> {
     if !has_llm {
         let fallback = generate_fallback_content(&channel, &items);
         let source_ids: Vec<i64> = items.iter().map(|(item, _)| item.id).collect();
-        let render = db
-            .save_channel_render(channel_id, &fallback, &source_ids, None, None, None)
-            .map_err(|e| e.to_string())?;
+        let render =
+            db.save_channel_render(channel_id, &fallback, &source_ids, None, None, None)?;
         return Ok(render);
     }
 
@@ -420,16 +413,14 @@ pub(crate) async fn render_channel(channel_id: i64) -> Result<ChannelRender> {
             let source_ids: Vec<i64> = items.iter().map(|(item, _)| item.id).collect();
 
             // Save render
-            let render = db
-                .save_channel_render(
-                    channel_id,
-                    &response.content,
-                    &source_ids,
-                    Some(&llm_settings.model),
-                    Some(total_tokens),
-                    Some(elapsed.as_millis() as i64),
-                )
-                .map_err(|e| e.to_string())?;
+            let render = db.save_channel_render(
+                channel_id,
+                &response.content,
+                &source_ids,
+                Some(&llm_settings.model),
+                Some(total_tokens),
+                Some(elapsed.as_millis() as i64),
+            )?;
 
             // Extract and save provenance
             let provenance = extract_provenance(render.id, &response.content, &items);
@@ -450,9 +441,8 @@ pub(crate) async fn render_channel(channel_id: i64) -> Result<ChannelRender> {
             );
             let fallback = generate_fallback_content(&channel, &items);
             let source_ids: Vec<i64> = items.iter().map(|(item, _)| item.id).collect();
-            let render = db
-                .save_channel_render(channel_id, &fallback, &source_ids, None, None, None)
-                .map_err(|e| e.to_string())?;
+            let render =
+                db.save_channel_render(channel_id, &fallback, &source_ids, None, None, None)?;
             Ok(render)
         }
     }
@@ -466,8 +456,8 @@ pub(crate) async fn render_channel(channel_id: i64) -> Result<ChannelRender> {
 /// Iterates through every active channel, checks freshness, and renders
 /// any that need updating. Logs each attempt and continues on failure.
 pub(crate) async fn auto_render_stale_channels() -> Result<()> {
-    let db = crate::get_database().map_err(|e| e.to_string())?;
-    let channels = db.list_channels().map_err(|e| e.to_string())?;
+    let db = crate::get_database()?;
+    let channels = db.list_channels()?;
 
     let stale: Vec<_> = channels
         .iter()

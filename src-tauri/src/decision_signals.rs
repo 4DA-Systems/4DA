@@ -200,8 +200,7 @@ pub async fn get_decision_signals() -> Result<Vec<DecisionSignals>> {
     let conn = crate::open_db_connection()?;
 
     // Get active decisions (all types, all statuses, reasonable limit)
-    let decisions =
-        crate::decisions::list_decisions(&conn, None, None, 50).map_err(|e| e.to_string())?;
+    let decisions = crate::decisions::list_decisions(&conn, None, None, 50)?;
 
     debug!(
         target: "4da::decisions",

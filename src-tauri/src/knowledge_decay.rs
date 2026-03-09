@@ -428,9 +428,8 @@ fn find_missed_items(conn: &rusqlite::Connection, package_name: &str) -> Result<
     // Title-only matching (content LIKE is too noisy for short dep names)
     let pattern = format!("%{}%", package_name);
 
-    let mut stmt = conn
-        .prepare(
-            "SELECT si.id, si.title, si.url, si.source_type, si.created_at
+    let mut stmt = conn.prepare(
+        "SELECT si.id, si.title, si.url, si.source_type, si.created_at
              FROM source_items si
              LEFT JOIN feedback f ON f.source_item_id = si.id
              WHERE si.title LIKE ?1
@@ -438,8 +437,7 @@ fn find_missed_items(conn: &rusqlite::Connection, package_name: &str) -> Result<
                AND f.id IS NULL
              ORDER BY si.created_at DESC
              LIMIT 30",
-        )
-        .map_err(|e| e.to_string())?;
+    )?;
 
     let candidates: Vec<MissedItem> = stmt
         .query_map(params![pattern], |row| {
@@ -450,8 +448,7 @@ fn find_missed_items(conn: &rusqlite::Connection, package_name: &str) -> Result<
                 source_type: row.get(3)?,
                 created_at: row.get(4)?,
             })
-        })
-        .map_err(|e| e.to_string())?
+        })?
         .filter_map(|r| match r {
             Ok(v) => Some(v),
             Err(e) => {
