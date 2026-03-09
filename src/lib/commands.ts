@@ -6,7 +6,7 @@
  *
  * Benefits:
  * - Compile-time checking of command names, parameter types, and return types
- * - IDE autocomplete for all 107 commands
+ * - IDE autocomplete for all 211 commands
  * - Single source of truth for the IPC contract
  *
  * Generated from Rust #[tauri::command] signatures + frontend usage analysis.
@@ -71,15 +71,19 @@ interface CommandMap {
   // -- Analysis & Core --
   get_analysis_status: { params: Record<string, never>; result: { running: boolean; completed: boolean; error: string | null; results: SourceRelevance[] | null; started_at: number | null; last_completed_at: string | null } };
   run_cached_analysis: { params: Record<string, never>; result: void };
+  run_deep_initial_scan: { params: Record<string, never>; result: void };
   cancel_analysis: { params: Record<string, never>; result: void };
+  get_scoring_stats: { params: Record<string, never>; result: ScoringStats };
   get_context_files: { params: Record<string, never>; result: ContextFile[] };
   clear_context: { params: Record<string, never>; result: string };
   index_context: { params: Record<string, never>; result: string };
   index_project_readmes: { params: Record<string, never>; result: string };
   export_results: { params: { format: string }; result: string };
+  get_diagnostics: { params: Record<string, never>; result: DiagnosticsSnapshot };
 
   // -- Settings & Configuration --
   get_settings: { params: Record<string, never>; result: Settings };
+  get_llm_usage: { params: Record<string, never>; result: { used: number; limit: number; limit_reached: boolean; unlimited: boolean } };
   set_llm_provider: { params: { provider: string; apiKey: string; model: string; baseUrl: string | null; openaiApiKey?: string | null }; result: void };
   set_rerank_config: { params: { enabled: boolean; maxItems: number; minScore: number; dailyTokenLimit: number; dailyCostLimit: number }; result: void };
   test_llm_connection: { params: Record<string, never>; result: { success: boolean; message: string } };
@@ -88,6 +92,7 @@ interface CommandMap {
   pull_ollama_model: { params: { model: string; baseUrl: string | null }; result: void };
   run_calibration: { params: Record<string, never>; result: CalibrationResult };
   set_close_to_tray: { params: { enabled: boolean }; result: void };
+  record_interaction: { params: { sourceItemId: number; action: string }; result: unknown };
 
   // -- Taste Test Calibration --
   taste_test_start: { params: Record<string, never>; result: TasteTestStepResult };
@@ -106,8 +111,10 @@ interface CommandMap {
   remove_tech_stack: { params: { technology: string }; result: void };
   set_user_role: { params: { role: string | null }; result: void };
   set_selected_stacks: { params: { profileIds: string[] }; result: void };
+  get_selected_stacks: { params: Record<string, never>; result: string[] };
   get_stack_profiles: { params: Record<string, never>; result: StackProfileSummary[] };
   detect_stack_profiles: { params: Record<string, never>; result: StackDetection[] };
+  get_composed_stack: { params: Record<string, never>; result: ComposedStackSummary };
 
   // -- ACE (Autonomous Context Engine) --
   ace_record_interaction: { params: { item_id: number; action_type: string; action_data: string | null; item_topics: string[]; item_source: string }; result: void };
@@ -128,6 +135,7 @@ interface CommandMap {
   ace_get_accuracy_metrics: { params: Record<string, never>; result: { precision: number; engagement_rate: number; calibration_error: number } };
   ace_find_similar_topics: { params: { query: string; topK: number }; result: { query: string; results: Array<{ topic: string; similarity: number }> } };
   ace_save_watcher_state: { params: Record<string, never>; result: void };
+  ace_get_scan_summary: { params: Record<string, never>; result: ScanSummary };
 
   // -- Context Directories --
   get_context_dirs: { params: Record<string, never>; result: string[] };
@@ -150,9 +158,13 @@ interface CommandMap {
   get_decisions: { params: { limit?: number; decisionType?: string; status?: string }; result: DeveloperDecision[] };
   record_developer_decision: { params: { decisionType: string; subject: string; decision: string; rationale: string | null; alternativesRejected: string[]; contextTags: string[]; confidence: number }; result: DeveloperDecision };
   update_developer_decision: { params: { id: number; decision: string | null; rationale: string | null; status: string | null; confidence: number | null }; result: DeveloperDecision };
+  remove_tech_decision: { params: { technology: string }; result: void };
 
   // -- Agent Memory --
+  store_agent_memory: { params: { sessionId: string; agentType: string; memoryType: string; subject: string; content: string; contextTags?: string[]; expiresAt?: string }; result: number };
   recall_agent_memories: { params: { subject: string; limit: number }; result: AgentMemoryEntry[] };
+  generate_agent_brief: { params: { agentType?: string; since?: string }; result: AgentSessionBrief };
+  get_delegation_score: { params: { subject: string }; result: DelegationScoreResult };
   get_all_delegation_scores: { params: Record<string, never>; result: DelegationScoreEntry[] };
   promote_memory_to_decision: { params: { memoryId: number }; result: void };
 
@@ -165,10 +177,13 @@ interface CommandMap {
   // -- Autophagy --
   get_autophagy_status: { params: Record<string, never>; result: AutophagyStatus };
   get_autophagy_history: { params: { limit: number }; result: AutophagyCycleResult[] };
+  trigger_autophagy_cycle: { params: Record<string, never>; result: AutophagyCycleResult };
+  get_intelligence_pulse: { params: Record<string, never>; result: IntelligencePulseData };
 
   // -- License & Trial --
   get_license_tier: { params: Record<string, never>; result: { tier: string; has_key: boolean; activated_at: string | null; expires_at: string | null; days_remaining: number; expired: boolean } };
   activate_license: { params: { licenseKey: string }; result: { success: boolean; tier: string; expires_at?: string } };
+  validate_license: { params: Record<string, never>; result: unknown };
   get_trial_status: { params: Record<string, never>; result: { active: boolean; days_remaining: number; started_at: string | null } };
   start_trial: { params: Record<string, never>; result: { success: boolean; days_remaining?: number } };
   get_pro_value_report: { params: Record<string, never>; result: ProValueReport };
@@ -188,6 +203,12 @@ interface CommandMap {
   mark_lesson_complete: { params: { moduleId: string; lessonIdx: number }; result: void };
   parse_lesson_commands: { params: { moduleId: string; lessonIdx: number }; result: ParsedCommand[] };
   execute_streets_command: { params: { commandId: string; command: string; riskLevel: string }; result: CommandExecutionResult };
+  execute_lesson_commands: { params: { moduleId: string; lessonIdx: number; maxRisk: string }; result: CommandExecutionResult[] };
+  get_personalized_lesson: { params: { moduleId: string; lessonIdx: number }; result: PersonalizedLesson };
+  get_personalized_lessons_batch: { params: { requests: Array<[string, number]> }; result: PersonalizedLesson[] };
+  get_personalization_context_summary: { params: Record<string, never>; result: unknown };
+  prune_personalization_cache: { params: Record<string, never>; result: unknown };
+  hydrate_lesson_with_llm: { params: { moduleId: string; lessonIdx: number }; result: unknown };
 
   // -- STREETS Health --
   get_street_health: { params: Record<string, never>; result: StreetHealthScore };
@@ -197,6 +218,12 @@ interface CommandMap {
   get_sovereign_profile_completeness: { params: Record<string, never>; result: ProfileCompleteness };
   save_sovereign_fact: { params: { category: string; key: string; value: string }; result: void };
   generate_sovereign_stack_document: { params: Record<string, never>; result: string };
+  get_execution_log: { params: { moduleId: string; lessonIdx?: number }; result: unknown[] };
+
+  // -- Sovereign Developer Profile (Unified) --
+  get_sovereign_developer_profile: { params: Record<string, never>; result: SovereignDeveloperProfileData };
+  export_sovereign_profile_markdown: { params: Record<string, never>; result: string };
+  export_sovereign_profile_json: { params: Record<string, never>; result: string };
 
   // -- Saved Items & Feedback --
   get_saved_items: { params: Record<string, never>; result: SavedItem[] };
@@ -237,12 +264,16 @@ interface CommandMap {
 
   // -- Tech Radar --
   get_tech_radar: { params: Record<string, never>; result: TechRadarData };
+  get_radar_entry: { params: { name: string }; result: RadarEntry | null };
   get_radar_at_snapshot: { params: { snapshotDate: string }; result: TechRadarData };
   get_radar_entry_detail: { params: { name: string }; result: RadarEntryDetail };
   get_radar_snapshots: { params: Record<string, never>; result: Array<{ date: string }> };
 
   // -- Project Health --
   get_project_health: { params: Record<string, never>; result: ProjectHealth[] };
+
+  // -- Semantic Shifts --
+  get_semantic_shifts: { params: { lookbackDays?: number }; result: SemanticShift[] };
 
   // -- Void Engine --
   get_void_signal: { params: Record<string, never>; result: VoidSignal };
@@ -267,7 +298,13 @@ interface CommandMap {
   get_translation_status: { params: { lang: string }; result: TranslationStatus };
   get_all_translations: { params: { lang: string }; result: Record<string, TranslationEntry> };
   save_translation_override: { params: { lang: string; namespace: string; key: string; value: string }; result: void };
+  get_translation_overrides: { params: { lang: string }; result: Record<string, string> };
+  delete_translation_override: { params: { lang: string; namespace: string; key: string }; result: void };
   trigger_translation: { params: { lang: string }; result: void };
+
+  // -- STREETS Localization --
+  get_regional_data: { params: Record<string, never>; result: RegionalData };
+  calculate_electricity_cost: { params: { watts: number; hoursPerDay: number }; result: unknown };
 
   // -- Digest --
   get_digest_config: { params: Record<string, never>; result: DigestConfig };
@@ -284,12 +321,59 @@ interface CommandMap {
   toolkit_env_snapshot: { params: { workingDir: string | null }; result: EnvSnapshot };
 
   // -- Channels --
+  list_channels: { params: Record<string, never>; result: ChannelSummary[] };
+  get_channel: { params: { channelId: number }; result: Channel };
+  get_channel_content: { params: { channelId: number }; result: ChannelRender | null };
+  render_channel_now: { params: { channelId: number }; result: ChannelRender };
+  get_channel_provenance: { params: { renderId: number }; result: RenderProvenance[] };
+  get_channel_changelog: { params: { channelId: number }; result: ChannelChangelog | null };
+  get_channel_sources: { params: { channelId: number; limit?: number }; result: ChannelSourceMatch[] };
+  refresh_channel_sources: { params: { channelId: number }; result: number };
   auto_render_all_channels: { params: Record<string, never>; result: void };
   create_custom_channel: { params: { slug: string; title: string; description: string; topicQuery: string[] }; result: number };
+  preview_channel_sources: { params: { topics: string[] }; result: { count: number; topTitles: string[] } };
   delete_channel: { params: { channelId: number }; result: void };
 
   // -- Splash Probes --
   get_context_stats: { params: Record<string, never>; result: unknown };
+
+  // -- Natural Language Search (Pro) --
+  synthesize_search: { params: { queryText: string }; result: SynthesisResponse };
+
+  // -- Weekly Intelligence Digest (Pro) --
+  generate_weekly_digest: { params: Record<string, never>; result: WeeklyDigest };
+  get_latest_digest: { params: Record<string, never>; result: WeeklyDigest };
+
+  // -- Decision Impact Tracking (Pro) --
+  get_decision_signals: { params: Record<string, never>; result: DecisionSignals[] };
+
+  // -- Standing Queries (Pro) --
+  create_standing_query: { params: { queryText: string }; result: number };
+  list_standing_queries: { params: Record<string, never>; result: StandingQuery[] };
+  delete_standing_query: { params: { id: number }; result: void };
+  get_standing_query_matches: { params: { id: number; limit?: number }; result: StandingQueryMatch[] };
+
+  // -- Intelligence History --
+  get_intelligence_growth: { params: Record<string, never>; result: IntelligenceGrowthData };
+
+  // -- Community Intelligence --
+  get_community_status: { params: Record<string, never>; result: CommunityStatus };
+  set_community_intelligence_enabled: { params: { enabled: boolean }; result: void };
+  set_community_frequency: { params: { frequency: string }; result: void };
+
+  // -- Stack Health --
+  get_stack_health: { params: Record<string, never>; result: StackHealthData };
+  get_missed_intelligence: { params: { days?: number }; result: MissedIntelligence };
+
+  // -- Telemetry (Local, Privacy-First) --
+  track_event: { params: { eventType: string; viewId?: string; metadata?: string }; result: void };
+  get_usage_analytics: { params: { days?: number }; result: UsageReport };
+  clear_telemetry: { params: Record<string, never>; result: void };
+
+  // -- GAME Engine --
+  get_game_state: { params: Record<string, never>; result: unknown };
+  get_achievements: { params: Record<string, never>; result: unknown };
+  check_daily_streak: { params: Record<string, never>; result: unknown };
 }
 
 
@@ -492,6 +576,285 @@ interface EnvSnapshot {
   env_vars: Record<string, string>;
 }
 
+interface ScanSummary {
+  languages: string[];
+  frameworks: string[];
+  rust_deps: number;
+  npm_deps: number;
+  python_deps: number;
+  other_deps: number;
+  total_topics: number;
+  topics: string[];
+}
+
+interface ScoringStats {
+  total_runs: number;
+  total_scored: number;
+  total_relevant: number;
+  lifetime_rejection_rate: number;
+  last_run_rejection_rate: number | null;
+}
+
+interface DiagnosticsSnapshot {
+  memory_bytes: number;
+  db_size_bytes: number;
+  source_item_count: number;
+  context_chunk_count: number;
+  feedback_count: number;
+  uptime_secs: number;
+  source_health: Array<{ source_type: string; status: string }>;
+  schema_version: number;
+}
+
+interface ComposedStackSummary {
+  active: boolean;
+  pain_point_count: number;
+  ecosystem_shift_count: number;
+  keyword_boost_count: number;
+  source_preferences: Array<[string, number]>;
+  all_tech: string[];
+  competing: string[];
+}
+
+interface AgentSessionBrief {
+  generated_at: string;
+  version: string;
+  agent_type: string | null;
+  active_decisions: Array<{ id: number; subject: string; decision: string; status: string; confidence: number }>;
+  ecosystem_changes: Array<{ topic: string; change_type: string; summary: string }>;
+  active_concerns: Array<{ concern_type: string; subject: string; severity: string; detail: string }>;
+  open_signals: Array<{ chain_id: string; topic: string; signal_count: number; latest_signal: string }>;
+  recent_briefing: string | null;
+  agent_memories: AgentMemoryEntry[];
+}
+
+interface DelegationScoreResult {
+  subject: string;
+  overall_score: number;
+  factors: { complexity: number; reversibility: number; domain_familiarity: number; time_sensitivity: number; strategic_value: number };
+  recommendation: { level: string; summary: string };
+  caveats: string[];
+}
+
+interface IntelligencePulseData {
+  items_analyzed_7d: number;
+  items_surfaced_7d: number;
+  rejection_rate: number;
+  calibration_accuracy: number;
+  top_calibrations: Array<{ topic: string; delta: number; direction: string }>;
+  source_quality: Array<{ source_type: string; avg_score: number; item_count: number }>;
+  anti_patterns_detected: number;
+  total_autophagy_cycles: number;
+}
+
+interface PersonalizedLesson {
+  content: string;
+  insight_blocks: Array<{ block_type: string; title: string; content: string }>;
+  mirror_blocks: Array<{ block_type: string; title: string; content: string }>;
+  temporal_blocks: Array<{ block_type: string; title: string; content: string }>;
+  depth: string;
+}
+
+interface SovereignDeveloperProfileData {
+  generated_at: string;
+  identity_summary: string;
+  infrastructure: unknown;
+  stack: unknown;
+  skills: unknown;
+  preferences: unknown;
+  context: unknown;
+  intelligence: unknown;
+  completeness: unknown;
+}
+
+interface RadarEntry {
+  name: string;
+  ring: string;
+  quadrant: string;
+  movement: string;
+  signals: string[];
+  decision_ref: number | null;
+  score: number;
+}
+
+interface SemanticShift {
+  topic: string;
+  drift_magnitude: number;
+  direction: string;
+  representative_items: number[];
+  period: string;
+  detected_at: string;
+}
+
+interface RegionalData {
+  country: string;
+  currency: string;
+  currency_symbol: string;
+  electricity_kwh: number;
+  internet_typical_monthly: number;
+  business_registration_cost: number;
+  business_entity_type: string;
+  tax_note: string;
+  payment_processors: string[];
+  bank_recommendation: string;
+  isp_note: string;
+}
+
+interface ChannelSummary {
+  id: number;
+  slug: string;
+  title: string;
+  description: string;
+  source_count: number;
+  render_count: number;
+  freshness: string;
+  last_rendered_at: string | null;
+}
+
+interface Channel {
+  id: number;
+  slug: string;
+  title: string;
+  description: string;
+  topic_query: string[];
+  status: string;
+  source_count: number;
+  render_count: number;
+  last_rendered_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+interface ChannelRender {
+  id: number;
+  channel_id: number;
+  version: number;
+  content_markdown: string;
+  content_hash: string;
+  source_item_ids: number[];
+  model: string | null;
+  tokens_used: number | null;
+  latency_ms: number | null;
+  rendered_at: string;
+}
+
+interface RenderProvenance {
+  render_id: number;
+  claim_index: number;
+  claim_text: string;
+  source_item_ids: number[];
+  source_titles: string[];
+  source_urls: string[];
+}
+
+interface ChannelChangelog {
+  channel_id: number;
+  from_version: number;
+  to_version: number;
+  summary: string;
+  added_lines: string[];
+  removed_lines: string[];
+  changed_at: string;
+}
+
+interface ChannelSourceMatch {
+  channel_id: number;
+  source_item_id: number;
+  title: string;
+  url: string | null;
+  source_type: string;
+  match_score: number;
+  matched_at: string;
+}
+
+interface SynthesisResponse {
+  text: string;
+  sources: Array<{ title: string; url: string | null; source_type: string }>;
+  grounding_count: number;
+  total_sources: number;
+}
+
+interface WeeklyDigest {
+  generated_at: string;
+  period_start: string;
+  period_end: string;
+  highlights: Array<{ title: string; source_type: string; score: number }>;
+  top_topics: Array<{ topic: string; count: number }>;
+  active_signals: Array<{ chain_id: string; topic: string }>;
+  knowledge_gaps: Array<{ topic: string; gap_type: string }>;
+  stats: { items_analyzed: number; items_surfaced: number; sources_active: number };
+}
+
+interface DecisionSignals {
+  decision_id: number;
+  subject: string;
+  decision: string;
+  supporting: Array<{ item_id: number; title: string; source_type: string; url: string | null; relevance: number; reason: string }>;
+  challenging: Array<{ item_id: number; title: string; source_type: string; url: string | null; relevance: number; reason: string }>;
+}
+
+interface StandingQuery {
+  id: number;
+  query_text: string;
+  keywords: string[];
+  created_at: string;
+  last_run: string | null;
+  total_matches: number;
+  new_matches: number;
+  active: boolean;
+}
+
+interface StandingQueryMatch {
+  item_id: number;
+  title: string;
+  source_type: string;
+  url: string | null;
+  discovered_at: string | null;
+}
+
+interface IntelligenceGrowthData {
+  snapshots: Array<{ recorded_at: string; accuracy: number; topics_learned: number; items_analyzed: number; relevant_found: number }>;
+  current_accuracy: number;
+  total_topics: number;
+  total_analyzed: number;
+  total_relevant: number;
+}
+
+interface CommunityStatus {
+  enabled: boolean;
+  frequency: string;
+  last_contributed: string | null;
+  anonymous_id_preview: string | null;
+}
+
+interface StackHealthData {
+  technologies: Array<{ name: string; signal_count: number; trend: string; health: string }>;
+  stack_score: number;
+  signals_this_week: number;
+  suggested_queries: string[];
+  missed_signals: MissedIntelligence;
+}
+
+interface MissedIntelligence {
+  total_count: number;
+  critical_count: number;
+  high_count: number;
+  example_titles: string[];
+}
+
+interface UsageReport {
+  period_days: number;
+  total_events: number;
+  sessions: number;
+  view_usage: Array<{ view_id: string; count: number }>;
+  search_count: number;
+  synthesis_count: number;
+  ghost_preview_impressions: number;
+  ghost_preview_clicks: number;
+  ghost_click_rate: number;
+  avg_session_views: number;
+}
+
 
 // ============================================================================
 // Typed invoke — the core wrapper
@@ -551,15 +914,19 @@ export type CommandResult<K extends CommandName> = CommandMap[K]['result'];
 export type {
   DeveloperDecision,
   AgentMemoryEntry,
+  AgentSessionBrief,
   DelegationScoreEntry,
+  DelegationScoreResult,
   ProValueReport,
   StreetHealthScore,
   SovereignProfileData,
+  SovereignDeveloperProfileData,
   ProfileCompleteness,
   NLQResult,
   ScoreAutopsyResult,
   EngagementData,
   TechRadarData,
+  RadarEntry,
   RadarEntryDetail,
   TranslationStatus,
   TranslationEntry,
@@ -572,4 +939,28 @@ export type {
   SandboxScoreResult,
   ExportPackResult,
   EnvSnapshot,
+  ScanSummary,
+  ScoringStats,
+  DiagnosticsSnapshot,
+  ComposedStackSummary,
+  IntelligencePulseData,
+  PersonalizedLesson,
+  SemanticShift,
+  RegionalData,
+  ChannelSummary,
+  Channel,
+  ChannelRender,
+  RenderProvenance,
+  ChannelChangelog,
+  ChannelSourceMatch,
+  SynthesisResponse,
+  WeeklyDigest,
+  DecisionSignals,
+  StandingQuery,
+  StandingQueryMatch,
+  IntelligenceGrowthData,
+  CommunityStatus,
+  StackHealthData,
+  MissedIntelligence,
+  UsageReport,
 };
