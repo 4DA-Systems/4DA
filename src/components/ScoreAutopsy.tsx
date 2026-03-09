@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { invoke } from '@tauri-apps/api/core';
+import { cmd } from '../lib/commands';
 
 interface ScoreAutopsyProps {
   itemId: number;
@@ -63,12 +63,12 @@ export const ScoreAutopsy: React.FC<ScoreAutopsyProps> = ({
     setLoading(true);
     setError(null);
     try {
-      const result = await invoke<AutopsyResult>('mcp_score_autopsy', {
+      const result = await cmd('mcp_score_autopsy', {
         itemId,
         sourceType,
         synthesize: true,
         compact: false,
-      });
+      }) as unknown as AutopsyResult;
       setAutopsy(result);
     } catch (err) {
       console.error('Autopsy failed:', err);

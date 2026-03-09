@@ -1,4 +1,4 @@
-import { invoke } from '@tauri-apps/api/core';
+import { cmd } from '../../lib/commands';
 import { useTranslation } from 'react-i18next';
 import { useShallow } from 'zustand/react/shallow';
 import { useAppStore } from '../../store';
@@ -32,7 +32,7 @@ export function PersonalizationSection() {
 
   const handleAddSuggestion = async (topic: string) => {
     try {
-      await invoke('add_interest', { topic });
+      await cmd('add_interest', { topic });
       await loadUserContext();
       await loadSuggestedInterests();
       setSettingsStatus(t('settings.personalization.interestAdded'));
@@ -44,7 +44,7 @@ export function PersonalizationSection() {
 
   const handleDismissSuggestion = async (topic: string) => {
     try {
-      await invoke('add_exclusion', { topic });
+      await cmd('add_exclusion', { topic });
       await loadUserContext();
       await loadSuggestedInterests();
       setSettingsStatus(t('settings.personalization.suggestionDismissed'));

@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
-import { invoke } from '@tauri-apps/api/core';
+import { cmd } from '../../../lib/commands';
 
 interface SandboxScoreResult {
   score: number;
@@ -64,11 +64,11 @@ export default function ScoringSandbox() {
     setLoading(true);
     setError(null);
     try {
-      const res = await invoke<SandboxScoreResult>('toolkit_score_sandbox', {
+      const res = await cmd('toolkit_score_sandbox', {
         title: title.trim(),
         content: content.trim() || null,
         sourceType: sourceType,
-      });
+      }) as unknown as SandboxScoreResult;
       setResult(res);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));

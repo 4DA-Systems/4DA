@@ -50,7 +50,7 @@ describe('autophagy-slice', () => {
 
       await useAppStore.getState().loadAutophagyStatus();
 
-      expect(invoke).toHaveBeenCalledWith('get_autophagy_status');
+      expect(invoke).toHaveBeenCalledWith('get_autophagy_status', {});
       expect(useAppStore.getState().autophagyStatus).toEqual(mockStatus);
       expect(useAppStore.getState().autophagyLoading).toBe(false);
     });

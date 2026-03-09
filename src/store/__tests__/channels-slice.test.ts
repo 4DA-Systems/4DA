@@ -64,7 +64,7 @@ describe('channels-slice', () => {
 
       await useAppStore.getState().loadChannels();
 
-      expect(invoke).toHaveBeenCalledWith('list_channels');
+      expect(invoke).toHaveBeenCalledWith('list_channels', {});
       expect(useAppStore.getState().channels).toEqual(mockChannels);
       expect(useAppStore.getState().channelsLoading).toBe(false);
     });

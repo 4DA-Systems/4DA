@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
-import { invoke } from '@tauri-apps/api/core';
+import { cmd } from '../../lib/commands';
 
 interface DigestSectionProps {
   setSettingsStatus: (status: string) => void;
@@ -24,7 +24,7 @@ export function DigestSection({ setSettingsStatus }: DigestSectionProps) {
 
   const loadDigestConfig = async () => {
     try {
-      const config = await invoke<DigestConfig>('get_digest_config');
+      const config = await cmd('get_digest_config') as unknown as DigestConfig;
       setDigestConfig(config);
     } catch (error) {
       console.error('Failed to load digest config:', error);
@@ -34,7 +34,7 @@ export function DigestSection({ setSettingsStatus }: DigestSectionProps) {
   const handleToggleDigest = async () => {
     if (!digestConfig) return;
     try {
-      await invoke('set_digest_config', {
+      await cmd('set_digest_config', {
         enabled: !digestConfig.enabled,
       });
       setDigestConfig({ ...digestConfig, enabled: !digestConfig.enabled });

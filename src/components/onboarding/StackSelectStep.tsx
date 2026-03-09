@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
-import { invoke } from '@tauri-apps/api/core';
+import { cmd } from '../../lib/commands';
 import type { StackProfileSummary, StackDetection } from '../../types/stacks';
 
 // Stack profile display metadata
@@ -34,8 +34,8 @@ export function StackSelectStep({ selected, onSelectionChange, compact }: StackS
     (async () => {
       try {
         const [profileList, detected] = await Promise.all([
-          invoke<StackProfileSummary[]>('get_stack_profiles'),
-          invoke<StackDetection[]>('detect_stack_profiles'),
+          cmd('get_stack_profiles'),
+          cmd('detect_stack_profiles'),
         ]);
         if (cancelled) return;
         setProfiles(profileList);

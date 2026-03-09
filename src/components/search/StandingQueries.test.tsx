@@ -120,7 +120,7 @@ describe('StandingQueries', () => {
     mockInvoke.mockResolvedValue([]);
     render(<StandingQueries isPro={true} />);
     await waitFor(() => {
-      expect(mockInvoke).toHaveBeenCalledWith('list_standing_queries');
+      expect(mockInvoke).toHaveBeenCalledWith('list_standing_queries', {});
     });
   });
 });

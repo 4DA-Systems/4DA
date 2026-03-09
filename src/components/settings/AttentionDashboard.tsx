@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import { invoke } from '@tauri-apps/api/core';
+import { cmd } from '../../lib/commands';
 import type { AttentionReport } from '../../types';
 
 export function AttentionDashboard() {
@@ -19,7 +19,7 @@ export function AttentionDashboard() {
     setLoading(true);
     setError(null);
     try {
-      const r = await invoke<AttentionReport>('get_attention_report', { periodDays: days });
+      const r = await cmd('get_attention_report', { periodDays: days });
       cache.current[days] = r;
       setReport(r);
     } catch (e) {

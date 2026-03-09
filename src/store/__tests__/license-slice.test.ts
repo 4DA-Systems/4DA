@@ -67,7 +67,7 @@ describe('license-slice', () => {
 
       await useAppStore.getState().loadLicense();
 
-      expect(invoke).toHaveBeenCalledWith('get_license_tier');
+      expect(invoke).toHaveBeenCalledWith('get_license_tier', {});
       expect(useAppStore.getState().tier).toBe('pro');
       expect(useAppStore.getState().expiresAt).toBe('2025-01-01');
       expect(useAppStore.getState().daysRemaining).toBe(180);
@@ -153,7 +153,7 @@ describe('license-slice', () => {
 
       await useAppStore.getState().loadTrialStatus();
 
-      expect(invoke).toHaveBeenCalledWith('get_trial_status');
+      expect(invoke).toHaveBeenCalledWith('get_trial_status', {});
       expect(useAppStore.getState().trialStatus).toEqual(mockStatus);
     });
 
@@ -175,7 +175,7 @@ describe('license-slice', () => {
 
       const result = await useAppStore.getState().startTrial();
 
-      expect(invoke).toHaveBeenCalledWith('start_trial');
+      expect(invoke).toHaveBeenCalledWith('start_trial', {});
       expect(result).toBe(true);
       expect(useAppStore.getState().trialStatus).not.toBeNull();
       expect(useAppStore.getState().trialStatus!.active).toBe(true);
@@ -248,7 +248,7 @@ describe('license-slice', () => {
 
       await useAppStore.getState().loadProValueReport();
 
-      expect(invoke).toHaveBeenCalledWith('get_pro_value_report');
+      expect(invoke).toHaveBeenCalledWith('get_pro_value_report', {});
       expect(useAppStore.getState().proValueReport).toEqual(mockReport);
     });
 

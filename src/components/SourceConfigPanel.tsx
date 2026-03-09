@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
-import { invoke } from '@tauri-apps/api/core';
+import { cmd } from '../lib/commands';
 import { translateError } from '../utils/error-messages';
 
 interface SourceConfigPanelProps {
@@ -26,11 +26,11 @@ export function SourceConfigPanel({ onStatusChange }: SourceConfigPanelProps) {
   const loadSources = useCallback(async () => {
     try {
       const [rss, youtube, twitter, xKey, github] = await Promise.all([
-        invoke<{ feeds: string[]; count: number }>('get_rss_feeds'),
-        invoke<{ channels: string[]; count: number }>('get_youtube_channels'),
-        invoke<{ handles: string[]; count: number }>('get_twitter_handles'),
-        invoke<string>('get_x_api_key'),
-        invoke<{ languages: string[]; count: number }>('get_github_languages'),
+        cmd('get_rss_feeds'),
+        cmd('get_youtube_channels'),
+        cmd('get_twitter_handles'),
+        cmd('get_x_api_key'),
+        cmd('get_github_languages'),
       ]);
       setRssFeeds(rss.feeds);
       setYoutubeChannels(youtube.channels);
@@ -50,7 +50,7 @@ export function SourceConfigPanel({ onStatusChange }: SourceConfigPanelProps) {
     const url = newRssFeed.trim();
     if (!url) return;
     try {
-      await invoke('set_rss_feeds', { feeds: [...rssFeeds, url] });
+      await cmd('set_rss_feeds', { feeds: [...rssFeeds, url] });
       setRssFeeds((f) => [...f, url]);
       setNewRssFeed('');
       onStatusChange(t('sources.rss.added'));
@@ -63,7 +63,7 @@ export function SourceConfigPanel({ onStatusChange }: SourceConfigPanelProps) {
   const removeRssFeed = async (url: string) => {
     const updated = rssFeeds.filter((f) => f !== url);
     try {
-      await invoke('set_rss_feeds', { feeds: updated });
+      await cmd('set_rss_feeds', { feeds: updated });
       setRssFeeds(updated);
       onStatusChange(t('sources.rss.removed'));
       setTimeout(() => onStatusChange(''), 2000);
@@ -76,7 +76,7 @@ export function SourceConfigPanel({ onStatusChange }: SourceConfigPanelProps) {
     const id = newYoutubeChannel.trim();
     if (!id) return;
     try {
-      await invoke('set_youtube_channels', { channels: [...youtubeChannels, id] });
+      await cmd('set_youtube_channels', { channels: [...youtubeChannels, id] });
       setYoutubeChannels((c) => [...c, id]);
       setNewYoutubeChannel('');
       onStatusChange(t('sources.youtube.added'));
@@ -89,7 +89,7 @@ export function SourceConfigPanel({ onStatusChange }: SourceConfigPanelProps) {
   const removeYoutubeChannel = async (id: string) => {
     const updated = youtubeChannels.filter((c) => c !== id);
     try {
-      await invoke('set_youtube_channels', { channels: updated });
+      await cmd('set_youtube_channels', { channels: updated });
       setYoutubeChannels(updated);
       onStatusChange(t('sources.youtube.removed'));
       setTimeout(() => onStatusChange(''), 2000);
@@ -102,7 +102,7 @@ export function SourceConfigPanel({ onStatusChange }: SourceConfigPanelProps) {
     const handle = newTwitterHandle.trim().replace(/^@/, '');
     if (!handle) return;
     try {
-      await invoke('set_twitter_handles', { handles: [...twitterHandles, handle] });
+      await cmd('set_twitter_handles', { handles: [...twitterHandles, handle] });
       setTwitterHandles((h) => [...h, handle]);
       setNewTwitterHandle('');
       onStatusChange(t('sources.twitter.added'));
@@ -115,7 +115,7 @@ export function SourceConfigPanel({ onStatusChange }: SourceConfigPanelProps) {
   const removeTwitterHandle = async (handle: string) => {
     const updated = twitterHandles.filter((h) => h !== handle);
     try {
-      await invoke('set_twitter_handles', { handles: updated });
+      await cmd('set_twitter_handles', { handles: updated });
       setTwitterHandles(updated);
       onStatusChange(t('sources.twitter.removed'));
       setTimeout(() => onStatusChange(''), 2000);
@@ -127,7 +127,7 @@ export function SourceConfigPanel({ onStatusChange }: SourceConfigPanelProps) {
   const saveXApiKey = async () => {
     const key = xApiKey.trim();
     try {
-      await invoke('set_x_api_key', { key });
+      await cmd('set_x_api_key', { key });
       setHasXApiKey(key.length > 0);
       setXApiKey('');
       onStatusChange(key ? t('sources.twitter.keySaved') : t('sources.twitter.keyCleared'));
@@ -142,7 +142,7 @@ export function SourceConfigPanel({ onStatusChange }: SourceConfigPanelProps) {
     if (!lang || githubLanguages.includes(lang)) return;
     const updated = [...githubLanguages, lang];
     try {
-      await invoke('set_github_languages', { languages: updated });
+      await cmd('set_github_languages', { languages: updated });
       setGithubLanguages(updated);
       setNewGithubLanguage('');
       onStatusChange(t('sources.github.added'));
@@ -155,7 +155,7 @@ export function SourceConfigPanel({ onStatusChange }: SourceConfigPanelProps) {
   const removeGithubLanguage = async (lang: string) => {
     const updated = githubLanguages.filter((l) => l !== lang);
     try {
-      await invoke('set_github_languages', { languages: updated });
+      await cmd('set_github_languages', { languages: updated });
       setGithubLanguages(updated);
       onStatusChange(t('sources.github.removed'));
       setTimeout(() => onStatusChange(''), 2000);

@@ -63,7 +63,7 @@ describe('sovereign-profile-slice', () => {
 
       await useAppStore.getState().loadSovereignProfile();
 
-      expect(invoke).toHaveBeenCalledWith('get_sovereign_profile');
+      expect(invoke).toHaveBeenCalledWith('get_sovereign_profile', {});
       expect(useAppStore.getState().sovereignProfile).toEqual(mockProfile);
       expect(useAppStore.getState().profileLoading).toBe(false);
     });
@@ -108,7 +108,7 @@ describe('sovereign-profile-slice', () => {
 
       await useAppStore.getState().loadProfileCompleteness();
 
-      expect(invoke).toHaveBeenCalledWith('get_sovereign_profile_completeness');
+      expect(invoke).toHaveBeenCalledWith('get_sovereign_profile_completeness', {});
       expect(useAppStore.getState().profileCompleteness).toEqual(mockCompleteness);
     });
 
@@ -152,7 +152,7 @@ describe('sovereign-profile-slice', () => {
 
       await useAppStore.getState().generateDocument();
 
-      expect(invoke).toHaveBeenCalledWith('generate_sovereign_stack_document');
+      expect(invoke).toHaveBeenCalledWith('generate_sovereign_stack_document', {});
       expect(useAppStore.getState().generatedDocument).toBe('# My Sovereign Stack\n\nRust, React...');
     });
 

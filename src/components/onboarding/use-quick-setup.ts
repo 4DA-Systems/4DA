@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
-import { invoke } from '@tauri-apps/api/core';
+import { cmd } from '../../lib/commands';
 import { listen } from '@tauri-apps/api/event';
 
 import type { OllamaStatus, PullProgress } from './types';
@@ -11,13 +11,6 @@ interface UseQuickSetupProps {
   isAnimating: boolean;
   onComplete: () => void;
   onBack: () => void;
-}
-
-interface SuggestedInterest {
-  topic: string;
-  source: string;
-  confidence: number;
-  already_declared: boolean;
 }
 
 export function useQuickSetup({ onComplete }: UseQuickSetupProps) {
@@ -89,7 +82,7 @@ export function useQuickSetup({ onComplete }: UseQuickSetupProps) {
           ...prev,
           [model]: { model, status: 'downloading', percent: 0, done: false },
         }));
-        await invoke('pull_ollama_model', {
+        await cmd('pull_ollama_model', {
           model,
           baseUrl: status.base_url || null,
         });
@@ -104,7 +97,7 @@ export function useQuickSetup({ onComplete }: UseQuickSetupProps) {
       for (let attempt = 0; attempt < 5; attempt++) {
         await new Promise(r => setTimeout(r, attempt === 0 ? 2000 : 3000));
         try {
-          const s = await invoke<OllamaStatus>('check_ollama_status', { baseUrl: null });
+          const s = await cmd('check_ollama_status', { baseUrl: null }) as unknown as OllamaStatus;
           if (s.running && s.models.length > 0) {
             refreshed = s;
             break;
@@ -127,7 +120,7 @@ export function useQuickSetup({ onComplete }: UseQuickSetupProps) {
     let cancelled = false;
     (async () => {
       try {
-        const status = await invoke<OllamaStatus>('check_ollama_status', { baseUrl: null });
+        const status = await cmd('check_ollama_status', { baseUrl: null }) as unknown as OllamaStatus;
         if (cancelled) return;
         setOllamaStatus(status);
 
@@ -141,7 +134,7 @@ export function useQuickSetup({ onComplete }: UseQuickSetupProps) {
           pullMissingModels(status);
         }
       } catch {
-        setOllamaStatus({ running: false, version: null, models: [], base_url: 'http://localhost:11434' });
+        setOllamaStatus({ running: false, version: null, models: [], base_url: 'http://localhost:11434' } as OllamaStatus);
       }
     })();
     return () => { cancelled = true; };
@@ -152,12 +145,7 @@ export function useQuickSetup({ onComplete }: UseQuickSetupProps) {
     let cancelled = false;
     (async () => {
       try {
-        const result = await invoke<{
-          success: boolean;
-          scan_result?: {
-            combined?: { topics?: string[] };
-          };
-        }>('ace_auto_discover');
+        const result = await cmd('ace_auto_discover');
         if (cancelled) return;
         setDiscoveryDone(true);
 
@@ -177,9 +165,9 @@ export function useQuickSetup({ onComplete }: UseQuickSetupProps) {
     let cancelled = false;
     (async () => {
       try {
-        const calibrated = await invoke<boolean>('taste_test_is_calibrated');
+        const calibrated = await cmd('taste_test_is_calibrated');
         if (cancelled || !calibrated) return;
-        const profile = await invoke<{ topInterests: string[]; dominantPersonaName: string } | null>('taste_test_get_profile');
+        const profile = await cmd('taste_test_get_profile');
         if (cancelled || !profile) return;
         if (profile.topInterests.length > 0) {
           setInterests(prev => prev.length === 0 ? profile.topInterests : prev);
@@ -198,7 +186,7 @@ export function useQuickSetup({ onComplete }: UseQuickSetupProps) {
     let cancelled = false;
     (async () => {
       try {
-        const result = await invoke<SuggestedInterest[]>('ace_get_suggested_interests');
+        const result = await cmd('ace_get_suggested_interests');
         if (cancelled) return;
         const topics = result
           .filter(s => !s.already_declared)
@@ -283,21 +271,21 @@ export function useQuickSetup({ onComplete }: UseQuickSetupProps) {
     if (provider === 'ollama') {
       if (ollamaStatus?.running) {
         const ollamaModel = ollamaStatus.models?.find(m => !m.startsWith('nomic-embed-text')) || 'llama3.2';
-        await invoke('set_llm_provider', {
+        await cmd('set_llm_provider', {
           provider: 'ollama', apiKey: '', model: ollamaModel,
           baseUrl: ollamaStatus.base_url || 'http://localhost:11434', openaiApiKey: null,
         });
       } else {
-        await invoke('set_llm_provider', noProvider);
+        await cmd('set_llm_provider', noProvider);
       }
     } else if (apiKey.trim()) {
       const model = provider === 'anthropic' ? 'claude-3-haiku-20240307' : 'gpt-4o-mini';
-      await invoke('set_llm_provider', {
+      await cmd('set_llm_provider', {
         provider, apiKey, model, baseUrl: null,
         openaiApiKey: provider === 'openai' ? apiKey : null,
       });
     } else {
-      await invoke('set_llm_provider', noProvider);
+      await cmd('set_llm_provider', noProvider);
     }
   };
 
@@ -306,15 +294,15 @@ export function useQuickSetup({ onComplete }: UseQuickSetupProps) {
     setIsSaving(true);
     try {
       await saveLlmProvider();
-      if (role) await invoke('set_user_role', { role });
+      if (role) await cmd('set_user_role', { role });
 
       const interestsToSave = interests.length > 0
         ? interests
         : detectedTech.length > 0 ? detectedTech.slice(0, 5) : fallbackSuggestions.slice(0, 3);
       await Promise.all([
-        ...interestsToSave.map(interest => invoke('add_interest', { topic: interest })),
-        ...detectedTech.map(tech => invoke('add_tech_stack', { technology: tech })),
-        ...(selectedStacks.length > 0 ? [invoke('set_selected_stacks', { profileIds: selectedStacks })] : []),
+        ...interestsToSave.map(interest => cmd('add_interest', { topic: interest })),
+        ...detectedTech.map(tech => cmd('add_tech_stack', { technology: tech })),
+        ...(selectedStacks.length > 0 ? [cmd('set_selected_stacks', { profileIds: selectedStacks })] : []),
       ]);
 
       try { localStorage.removeItem(SECTION_KEY); } catch { /* noop */ }

@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { invoke } from '@tauri-apps/api/core';
+import { cmd } from '../../lib/commands';
 import { useTranslation } from 'react-i18next';
 
 interface CommunityStatus {
@@ -15,7 +15,7 @@ export function CommunityIntelligenceSection() {
   const [showConfirm, setShowConfirm] = useState(false);
 
   const loadStatus = useCallback(() => {
-    invoke<CommunityStatus>('get_community_status')
+    cmd('get_community_status')
       .then(setStatus)
       .catch((e) => console.warn('CommunityIntelligence: failed to load status', e));
   }, []);
@@ -34,19 +34,19 @@ export function CommunityIntelligenceSection() {
     }
 
     // Disable directly
-    await invoke('set_community_intelligence_enabled', { enabled: false });
+    await cmd('set_community_intelligence_enabled', { enabled: false });
     loadStatus();
   }, [status, loadStatus]);
 
   const confirmEnable = useCallback(async () => {
-    await invoke('set_community_intelligence_enabled', { enabled: true });
+    await cmd('set_community_intelligence_enabled', { enabled: true });
     setShowConfirm(false);
     loadStatus();
   }, [loadStatus]);
 
   const handleFrequencyChange = useCallback(
     async (freq: string) => {
-      await invoke('set_community_frequency', { frequency: freq });
+      await cmd('set_community_frequency', { frequency: freq });
       loadStatus();
     },
     [loadStatus],

@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
-import { invoke } from '@tauri-apps/api/core';
+import { cmd } from '../lib/commands';
 import type { SavedItem } from '../types';
 import { getSourceLabel, getSourceColorClass } from '../config/sources';
 import { useAppStore } from '../store';
@@ -18,7 +18,7 @@ export function SavedItemsView() {
     setLoading(true);
     setError(null);
     try {
-      const result = await invoke<SavedItem[]>('get_saved_items');
+      const result = await cmd('get_saved_items');
       setItems(result);
     } catch (e) {
       setError(translateError(e));
@@ -40,7 +40,7 @@ export function SavedItemsView() {
     });
 
     try {
-      await invoke('remove_saved_item', { itemId });
+      await cmd('remove_saved_item', { itemId });
       addToast('success', t('saved.itemRemoved'));
     } catch (e) {
       // Revert on failure

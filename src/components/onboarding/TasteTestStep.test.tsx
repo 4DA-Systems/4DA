@@ -144,7 +144,7 @@ describe('TasteTestStep', () => {
       await vi.runAllTimersAsync();
     });
 
-    expect(invoke).toHaveBeenCalledWith('taste_test_start');
+    expect(invoke).toHaveBeenCalledWith('taste_test_start', {});
     expect(screen.getByTestId('taste-test-card')).toBeInTheDocument();
     expect(screen.getByTestId('card-title')).toHaveTextContent('Understanding Rust Lifetimes');
   });
@@ -301,7 +301,7 @@ describe('TasteTestStep', () => {
       await vi.runAllTimersAsync();
     });
 
-    expect(invoke).toHaveBeenCalledWith('taste_test_finalize');
+    expect(invoke).toHaveBeenCalledWith('taste_test_finalize', {});
     expect(screen.getByTestId('calibration-summary')).toBeInTheDocument();
     expect(screen.getByTestId('persona-name')).toHaveTextContent('Systems Architect');
   });

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { invoke } from '@tauri-apps/api/core';
+import { cmd } from '../../lib/commands';
 
 interface ModuleHealth {
   module_id: string;
@@ -26,7 +26,7 @@ export function StreetHealthBadge() {
   const [streetHealth, setStreetHealth] = useState<StreetHealthScore | null>(null);
 
   useEffect(() => {
-    invoke<StreetHealthScore>('get_street_health')
+    cmd('get_street_health')
       .then(setStreetHealth)
       .catch((e) => console.warn('StreetHealthBadge: failed to load progress', e));
   }, []);

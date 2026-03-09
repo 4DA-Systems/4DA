@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
-import { invoke } from '@tauri-apps/api/core';
+import { cmd } from '../../../lib/commands';
 
 // --- Types ---
 
@@ -67,7 +67,7 @@ export default function SourceDebugger() {
     setResult(null);
 
     try {
-      const res = await invoke<FeedTestResult>('toolkit_test_feed', { url: trimmed });
+      const res = await cmd('toolkit_test_feed', { url: trimmed }) as unknown as FeedTestResult;
       setResult(res);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));

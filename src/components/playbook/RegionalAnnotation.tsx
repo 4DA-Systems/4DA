@@ -11,19 +11,13 @@
 
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
-import { invoke } from '@tauri-apps/api/core';
+import { cmd } from '../../lib/commands';
 
 interface RegionalAnnotationProps {
   /** The amount in USD to convert. */
   usdAmount: number;
   /** Optional unit suffix, e.g. "/kWh", "/month". */
   unit?: string;
-}
-
-interface LocaleData {
-  country: string;
-  language: string;
-  currency: string;
 }
 
 export function RegionalAnnotation({ usdAmount, unit = '' }: RegionalAnnotationProps) {
@@ -36,12 +30,12 @@ export function RegionalAnnotation({ usdAmount, unit = '' }: RegionalAnnotationP
 
     const load = async () => {
       try {
-        const locale = await invoke<LocaleData>('get_locale');
+        const locale = await cmd('get_locale');
         if (cancelled) return;
         if (locale.currency === 'USD') return; // No annotation needed
 
         setCurrency(locale.currency);
-        const result = await invoke<string>('format_currency', { amount: usdAmount });
+        const result = await cmd('format_currency', { amount: usdAmount });
         if (!cancelled) {
           setFormatted(result);
         }

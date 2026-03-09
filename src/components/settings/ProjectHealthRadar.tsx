@@ -1,6 +1,6 @@
 import { useState, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import { invoke } from '@tauri-apps/api/core';
+import { cmd } from '../../lib/commands';
 import { ProGate } from '../ProGate';
 import type { ProjectHealth } from '../../types';
 
@@ -30,7 +30,7 @@ export function ProjectHealthRadar() {
     setLoading(true);
     setError(null);
     try {
-      const result = await invoke<ProjectHealth[]>('get_project_health');
+      const result = await cmd('get_project_health');
       setProjects(result);
       loaded.current = true;
     } catch (e) {

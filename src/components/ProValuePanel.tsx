@@ -1,6 +1,6 @@
 import { useState, useEffect, memo } from 'react';
 import { useTranslation } from 'react-i18next';
-import { invoke } from '@tauri-apps/api/core';
+import { cmd } from '../lib/commands';
 import type { ProValueReport } from '../types';
 
 const STATS_CONFIG = [
@@ -31,7 +31,7 @@ export const ProValuePanel = memo(function ProValuePanel() {
   useEffect(() => {
     const load = async () => {
       try {
-        const r = await invoke<ProValueReport>('get_pro_value_report');
+        const r = await cmd('get_pro_value_report') as unknown as ProValueReport;
         setReport(r);
       } catch {
         setError(true);

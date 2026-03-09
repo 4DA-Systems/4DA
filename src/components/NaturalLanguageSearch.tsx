@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
-import { invoke } from '@tauri-apps/api/core';
+import { cmd } from '../lib/commands';
 import { listen } from '@tauri-apps/api/event';
 import { useAppStore } from '../store';
 import { useLicense } from '../hooks';
@@ -69,9 +69,10 @@ export function NaturalLanguageSearch({ onStatusChange, defaultExpanded = true }
 
   // Load stack health on mount
   useEffect(() => {
-    invoke<StackHealth>('get_stack_health')
+    cmd('get_stack_health')
+      .then(r => r as unknown as StackHealth)
       .then(setStackHealth)
-      .catch((err) => console.error('Stack health load failed:', err));
+      .catch((err: unknown) => console.error('Stack health load failed:', err));
   }, []);
 
   const fetchSynthesis = useCallback(async (queryText: string) => {
@@ -84,7 +85,7 @@ export function NaturalLanguageSearch({ onStatusChange, defaultExpanded = true }
     });
 
     try {
-      const resp = await invoke<SynthesisResponse>('synthesize_search', { queryText });
+      const resp = await cmd('synthesize_search', { queryText }) as unknown as SynthesisResponse;
       setSynthesis(resp);
       setStreamingText(''); // Clear streaming text once we have full response
     } catch (err) {
@@ -103,7 +104,7 @@ export function NaturalLanguageSearch({ onStatusChange, defaultExpanded = true }
     setError(null);
     setSynthesis(null);
     try {
-      const searchResult = await invoke<QueryResult>('natural_language_query', { queryText: query });
+      const searchResult = await cmd('natural_language_query', { queryText: query }) as unknown as QueryResult;
       setResult(searchResult);
       onStatusChange?.(`Found ${searchResult.total_count} results in ${searchResult.execution_ms}ms`);
       if (searchResult.is_pro) {
@@ -126,7 +127,7 @@ export function NaturalLanguageSearch({ onStatusChange, defaultExpanded = true }
   const handleWatch = async () => {
     if (!query.trim()) return;
     try {
-      await invoke('create_standing_query', { queryText: query });
+      await cmd('create_standing_query', { queryText: query });
       setWatchCreated(true);
       setTimeout(() => setWatchCreated(false), 2000);
     } catch (err) { console.error('Watch creation failed:', err); }

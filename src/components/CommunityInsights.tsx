@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { invoke } from '@tauri-apps/api/core';
+import { cmd } from '../lib/commands';
 import { useTranslation } from 'react-i18next';
 
 interface CommunityStatus {
@@ -14,7 +14,7 @@ export function CommunityInsights() {
   const [status, setStatus] = useState<CommunityStatus | null>(null);
 
   useEffect(() => {
-    invoke<CommunityStatus>('get_community_status')
+    cmd('get_community_status')
       .then(setStatus)
       .catch((e) => console.warn('CommunityInsights: failed to load status', e));
   }, []);

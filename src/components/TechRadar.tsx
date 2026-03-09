@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, memo } from 'react';
 import { useTranslation } from 'react-i18next';
-import { invoke } from '@tauri-apps/api/core';
+import { cmd } from '../lib/commands';
 import { useGameComponent } from '../hooks/use-game-component';
 
 import { RadarSVG } from './tech-radar/RadarSVG';
@@ -45,9 +45,10 @@ export const TechRadar = memo(function TechRadar() {
   const loadRadar = useCallback(() => {
     setLoading(true);
     setError(null);
-    invoke<TechRadarData>('get_tech_radar')
+    cmd('get_tech_radar')
+      .then(r => r as unknown as TechRadarData)
       .then(setData)
-      .catch((e) => setError(String(e)))
+      .catch((e: unknown) => setError(String(e)))
       .finally(() => setLoading(false));
   }, []);
 
@@ -58,7 +59,7 @@ export const TechRadar = memo(function TechRadar() {
 
   // Load user's tech stack for highlighting
   useEffect(() => {
-    invoke<{ tech_stack: string[] }>('get_user_context')
+    cmd('get_user_context')
       .then((ctx) => setUserStack(ctx.tech_stack))
       .catch((e) => console.warn('TechRadar: failed to load evolution data', e));
   }, []);
@@ -73,16 +74,16 @@ export const TechRadar = memo(function TechRadar() {
 
   const handleSnapshotChange = useCallback((date: string | null) => {
     if (date) {
-      invoke<TechRadarData>('get_radar_at_snapshot', { snapshotDate: date })
+      cmd('get_radar_at_snapshot', { snapshotDate: date })
         .then((snapshot) => {
           if (snapshot && (snapshot as unknown as { entries?: unknown[] }).entries) {
-            setData(snapshot as TechRadarData);
+            setData(snapshot as unknown as TechRadarData);
           }
         })
         .catch((e) => console.warn('TechRadar: failed to trigger assessment', e));
     } else {
       // Reload current radar
-      invoke<TechRadarData>('get_tech_radar').then(setData).catch((e) => console.warn('TechRadar: failed to load radar after assessment', e));
+      cmd('get_tech_radar').then(r => r as unknown as TechRadarData).then(setData).catch((e: unknown) => console.warn('TechRadar: failed to load radar after assessment', e));
     }
   }, []);
 

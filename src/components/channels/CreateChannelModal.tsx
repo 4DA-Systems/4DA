@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect, useRef, type KeyboardEvent } from 'react';
 import { useTranslation } from 'react-i18next';
-import { invoke } from '@tauri-apps/api/core';
+import { cmd } from '../../lib/commands';
 import { useAppStore } from '../../store';
 
 interface SourcePreview {
@@ -47,7 +47,7 @@ export function CreateChannelModal({ open, onClose }: CreateChannelModalProps) {
     }
     if (previewTimer.current) clearTimeout(previewTimer.current);
     previewTimer.current = setTimeout(() => {
-      invoke<SourcePreview>('preview_channel_sources', { topics })
+      cmd('preview_channel_sources', { topics })
         .then(setSourcePreview)
         .catch(() => setSourcePreview(null));
     }, 400);
@@ -81,14 +81,14 @@ export function CreateChannelModal({ open, onClose }: CreateChannelModalProps) {
     setSubmitting(true);
     setError(null);
     try {
-      await invoke<number>('create_custom_channel', {
+      await cmd('create_custom_channel', {
         slug,
         title: title.trim(),
         description: description.trim(),
         topicQuery: topics,
       });
       loadChannels();
-      invoke('auto_render_all_channels').catch((e) => console.warn('CreateChannelModal: auto-render channels failed', e));
+      cmd('auto_render_all_channels').catch((e) => console.warn('CreateChannelModal: auto-render channels failed', e));
       setTitle('');
       setDescription('');
       setTopics([]);

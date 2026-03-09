@@ -1,6 +1,6 @@
 import { useState, useEffect, memo } from 'react';
 import { useTranslation } from 'react-i18next';
-import { invoke } from '@tauri-apps/api/core';
+import { cmd } from '../lib/commands';
 import { ProGate } from './ProGate';
 import type { SignalChain } from '../types';
 
@@ -26,7 +26,7 @@ export const SignalChainsPanel = memo(function SignalChainsPanel() {
   useEffect(() => {
     const load = async () => {
       try {
-        const c = await invoke<SignalChain[]>('get_signal_chains');
+        const c = await cmd('get_signal_chains');
         setChains(c.filter(ch => ch.resolution === 'open'));
       } catch {
         // Signal chains are optional, don't error
@@ -37,7 +37,7 @@ export const SignalChainsPanel = memo(function SignalChainsPanel() {
 
   const resolveChain = async (chainId: string) => {
     try {
-      await invoke('resolve_signal_chain', { chainId, resolution: 'resolved' });
+      await cmd('resolve_signal_chain', { chainId, resolution: 'resolved' });
       setChains(prev => prev.filter(c => c.id !== chainId));
     } catch (e) {
       console.error('Failed to resolve chain:', e);

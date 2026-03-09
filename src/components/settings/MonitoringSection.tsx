@@ -1,4 +1,4 @@
-import { invoke } from '@tauri-apps/api/core';
+import { cmd } from '../../lib/commands';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { MonitoringStatus } from '../../types';
@@ -22,7 +22,7 @@ function CloseToTrayToggle({ initialValue }: { initialValue: boolean }) {
     const next = !enabled;
     setEnabled(next);
     try {
-      await invoke('set_close_to_tray', { enabled: next });
+      await cmd('set_close_to_tray', { enabled: next });
     } catch {
       setEnabled(!next); // revert on error
     }

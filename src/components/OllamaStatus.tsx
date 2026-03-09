@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { listen } from '@tauri-apps/api/event';
-import { invoke } from '@tauri-apps/api/core';
+import { cmd } from '../lib/commands';
 import { registerGameComponent } from '../lib/game-components';
 
 // ============================================================================
@@ -116,7 +116,7 @@ export function OllamaStatus({ provider }: OllamaStatusProps) {
     setStatus('warming');
     setErrorMsg(null);
     try {
-      await invoke('check_ollama_status', { baseUrl: null });
+      await cmd('check_ollama_status', { baseUrl: null });
       // The backend ensure_models_available will handle pulling + warming
       // via ollama-status events, so we just need to trigger a re-check
     } catch (err) {

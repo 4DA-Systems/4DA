@@ -1,6 +1,6 @@
 import { useState, useEffect, memo } from 'react';
 import { useTranslation } from 'react-i18next';
-import { invoke } from '@tauri-apps/api/core';
+import { cmd } from '../lib/commands';
 import { ProGate } from './ProGate';
 import type { KnowledgeGap } from '../types';
 
@@ -19,7 +19,7 @@ export const KnowledgeGapsPanel = memo(function KnowledgeGapsPanel() {
   useEffect(() => {
     const load = async () => {
       try {
-        const g = await invoke<KnowledgeGap[]>('get_knowledge_gaps');
+        const g = await cmd('get_knowledge_gaps');
         setGaps(g);
       } catch {
         // Knowledge gaps are optional

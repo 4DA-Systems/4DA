@@ -1,6 +1,6 @@
 import { useState, useRef, memo } from 'react';
 import { useTranslation } from 'react-i18next';
-import { invoke } from '@tauri-apps/api/core';
+import { cmd } from '../lib/commands';
 import type { DeveloperDna } from '../types';
 import { getSourceFullName } from '../config/sources';
 import { useAppStore } from '../store';
@@ -21,7 +21,7 @@ export const DeveloperDnaPanel = memo(function DeveloperDnaPanel() {
     setLoading(true);
     setError(null);
     try {
-      const d = await invoke<DeveloperDna>('get_developer_dna');
+      const d = await cmd('get_developer_dna');
       setDna(d);
       loaded.current = true;
     } catch (e) {
@@ -33,7 +33,7 @@ export const DeveloperDnaPanel = memo(function DeveloperDnaPanel() {
 
   const copyAsMarkdown = async () => {
     try {
-      const md = await invoke<string>('export_developer_dna_markdown');
+      const md = await cmd('export_developer_dna_markdown');
       await window.navigator.clipboard.writeText(md);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
@@ -44,7 +44,7 @@ export const DeveloperDnaPanel = memo(function DeveloperDnaPanel() {
 
   const copyBadge = async () => {
     try {
-      const svg = await invoke<string>('export_developer_dna_svg');
+      const svg = await cmd('export_developer_dna_svg');
       await window.navigator.clipboard.writeText(svg);
       setBadgeCopied(true);
       setTimeout(() => setBadgeCopied(false), 2000);
@@ -55,7 +55,7 @@ export const DeveloperDnaPanel = memo(function DeveloperDnaPanel() {
 
   const downloadBadge = async () => {
     try {
-      const svg = await invoke<string>('export_developer_dna_svg');
+      const svg = await cmd('export_developer_dna_svg');
       const blob = new Blob([svg], { type: 'image/svg+xml' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');

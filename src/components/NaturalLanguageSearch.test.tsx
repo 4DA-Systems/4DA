@@ -142,7 +142,7 @@ describe('NaturalLanguageSearch', () => {
   describe('stack health on mount', () => {
     it('calls get_stack_health and renders StackHealthBar', () => {
       render(<NaturalLanguageSearch />);
-      expect(mockInvoke).toHaveBeenCalledWith('get_stack_health');
+      expect(mockInvoke).toHaveBeenCalledWith('get_stack_health', {});
       expect(screen.getByTestId('stack-health-bar')).toBeInTheDocument();
     });
   });

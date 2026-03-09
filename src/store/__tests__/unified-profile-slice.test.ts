@@ -45,7 +45,7 @@ describe('unified-profile-slice', () => {
 
       await useAppStore.getState().loadUnifiedProfile();
 
-      expect(invoke).toHaveBeenCalledWith('get_sovereign_developer_profile');
+      expect(invoke).toHaveBeenCalledWith('get_sovereign_developer_profile', {});
       expect(useAppStore.getState().unifiedProfile).toEqual(mockProfile);
       expect(useAppStore.getState().unifiedProfileLoading).toBe(false);
     });
@@ -84,7 +84,7 @@ describe('unified-profile-slice', () => {
 
       const result = await useAppStore.getState().exportProfileMarkdown();
 
-      expect(invoke).toHaveBeenCalledWith('export_sovereign_profile_markdown');
+      expect(invoke).toHaveBeenCalledWith('export_sovereign_profile_markdown', {});
       expect(result).toBe('# Developer Profile\n\nRust engineer...');
     });
   });
@@ -99,7 +99,7 @@ describe('unified-profile-slice', () => {
 
       const result = await useAppStore.getState().exportProfileJson();
 
-      expect(invoke).toHaveBeenCalledWith('export_sovereign_profile_json');
+      expect(invoke).toHaveBeenCalledWith('export_sovereign_profile_json', {});
       expect(result).toBe(jsonStr);
     });
   });

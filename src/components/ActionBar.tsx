@@ -1,8 +1,8 @@
 import { useState, useRef, useEffect } from 'react';
-import { invoke } from '@tauri-apps/api/core';
 import { useTranslation } from 'react-i18next';
 import { getStageLabel } from '../utils/score';
 import { useAppStore } from '../store';
+import { cmd } from '../lib/commands';
 import { registerGameComponent } from '../lib/game-components';
 import type { Settings, SourceRelevance } from '../types';
 
@@ -205,7 +205,7 @@ export function ActionBar({
           </button>
           {state.loading && (
             <button
-              onClick={() => invoke('cancel_analysis')}
+              onClick={() => cmd('cancel_analysis')}
               className="px-3 py-2.5 text-sm bg-bg-tertiary text-red-400 border border-red-500/30 font-medium rounded-lg hover:bg-red-500/10 transition-all"
               aria-label={t('action.cancelAnalysis', 'Cancel analysis')}
             >
@@ -258,7 +258,7 @@ export function ActionBar({
                       role="menuitem"
                       onClick={async () => {
                         try {
-                          const md = await invoke<string>('export_results', { format: 'markdown' });
+                          const md = await cmd('export_results', { format: 'markdown' });
                           await window.navigator.clipboard.writeText(md);
                           onToast('success', 'Results copied to clipboard');
                         } catch (e) {
@@ -274,7 +274,7 @@ export function ActionBar({
                       role="menuitem"
                       onClick={async () => {
                         try {
-                          const digest = await invoke<string>('export_results', { format: 'digest' });
+                          const digest = await cmd('export_results', { format: 'digest' });
                           await window.navigator.clipboard.writeText(digest);
                           onToast('success', 'Shareable digest copied');
                         } catch (e) {

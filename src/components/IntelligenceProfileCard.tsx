@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, memo } from 'react';
 import { useTranslation } from 'react-i18next';
-import { invoke } from '@tauri-apps/api/core';
+import { cmd } from '../lib/commands';
 import { useAppStore } from '../store';
 import { useLicense } from '../hooks/use-license';
 
@@ -56,9 +56,10 @@ export const IntelligenceProfileCard = memo(function IntelligenceProfileCard() {
   const [growth, setGrowth] = useState<IntelligenceGrowthData | null>(null);
 
   useEffect(() => {
-    invoke<IntelligenceGrowthData>('get_intelligence_growth')
+    cmd('get_intelligence_growth')
+      .then(r => r as unknown as IntelligenceGrowthData)
       .then(setGrowth)
-      .catch((e) => console.warn('IntelligenceProfileCard: failed to load growth data', e));
+      .catch((e: unknown) => console.warn('IntelligenceProfileCard: failed to load growth data', e));
   }, []);
 
   const positiveAffinities = useMemo(() =>
@@ -237,9 +238,10 @@ function KnowledgeGapsCard() {
 
   useEffect(() => {
     if (!isPro) return;
-    invoke<KnowledgeGap[]>('get_knowledge_gaps')
+    cmd('get_knowledge_gaps')
+      .then(r => r as unknown as KnowledgeGap[])
       .then(g => setGaps(g))
-      .catch((e) => console.warn('IntelligenceProfileCard: failed to load profile', e));
+      .catch((e: unknown) => console.warn('IntelligenceProfileCard: failed to load profile', e));
   }, [isPro]);
 
   if (!isPro) return null;

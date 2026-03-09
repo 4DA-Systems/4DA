@@ -1,6 +1,6 @@
 import { memo, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { invoke } from '@tauri-apps/api/core';
+import { cmd } from '../../lib/commands';
 import type { RadarEntry } from './RadarSVG';
 
 // ============================================================================
@@ -77,7 +77,8 @@ export const RadarEntryPanel = memo(function RadarEntryPanel({ entry, onClose }:
       return;
     }
     setLoading(true);
-    invoke<EntryDetail>('get_radar_entry_detail', { name: entry.name })
+    cmd('get_radar_entry_detail', { name: entry.name })
+      .then(r => r as unknown as EntryDetail)
       .then(setDetail)
       .catch(() => setDetail(null))
       .finally(() => setLoading(false));

@@ -61,9 +61,9 @@ describe('context-discovery-slice', () => {
 
       await useAppStore.getState().loadDiscoveredContext();
 
-      expect(invoke).toHaveBeenCalledWith('get_context_dirs');
-      expect(invoke).toHaveBeenCalledWith('ace_get_detected_tech');
-      expect(invoke).toHaveBeenCalledWith('ace_get_active_topics');
+      expect(invoke).toHaveBeenCalledWith('get_context_dirs', {});
+      expect(invoke).toHaveBeenCalledWith('ace_get_detected_tech', {});
+      expect(invoke).toHaveBeenCalledWith('ace_get_active_topics', {});
       expect(useAppStore.getState().scanDirectories).toEqual(['/home/user/project1', '/home/user/project2']);
       expect(useAppStore.getState().discoveredContext.tech).toHaveLength(1);
       expect(useAppStore.getState().discoveredContext.topics).toEqual(['web-dev']);

@@ -1,6 +1,6 @@
 import { useEffect, useState, memo } from 'react';
 import { useTranslation } from 'react-i18next';
-import { invoke } from '@tauri-apps/api/core';
+import { cmd } from '../lib/commands';
 
 interface EngagementData {
   today_interactions: number;
@@ -15,9 +15,10 @@ export const EngagementPulse = memo(function EngagementPulse() {
   const [data, setData] = useState<EngagementData | null>(null);
 
   useEffect(() => {
-    invoke<EngagementData>('get_engagement_summary')
+    cmd('get_engagement_summary')
+      .then(r => r as unknown as EngagementData)
       .then(setData)
-      .catch((e) => console.warn('EngagementPulse: failed to load pulse data', e));
+      .catch((e: unknown) => console.warn('EngagementPulse: failed to load pulse data', e));
   }, []);
 
   if (!data) return null;

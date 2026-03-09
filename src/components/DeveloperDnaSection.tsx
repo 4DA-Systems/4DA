@@ -1,6 +1,6 @@
 import { useState, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import { invoke } from '@tauri-apps/api/core';
+import { cmd } from '../lib/commands';
 import { useAppStore } from '../store';
 import type { DeveloperDna } from '../types';
 import { getSourceFullName } from '../config/sources';
@@ -20,7 +20,7 @@ export function DeveloperDnaSection() {
   const loadDna = async () => {
     setLoading(true);
     try {
-      const d = await invoke<DeveloperDna>('get_developer_dna');
+      const d = await cmd('get_developer_dna');
       setDna(d);
       loaded.current = true;
     } catch {
@@ -32,7 +32,7 @@ export function DeveloperDnaSection() {
 
   const copyDna = async () => {
     try {
-      const md = await invoke<string>('export_developer_dna_markdown');
+      const md = await cmd('export_developer_dna_markdown');
       await window.navigator.clipboard.writeText(md);
       addToast('success', t('profile.dnaCopied'));
     } catch { /* clipboard may fail */ }

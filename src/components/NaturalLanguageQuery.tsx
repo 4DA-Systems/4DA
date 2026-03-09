@@ -1,6 +1,6 @@
 import { useState, useCallback, memo } from 'react';
 import { useTranslation } from 'react-i18next';
-import { invoke } from '@tauri-apps/api/core';
+import { cmd } from '../lib/commands';
 import { ProGate } from './ProGate';
 
 interface NLQItem {
@@ -53,7 +53,7 @@ export const NaturalLanguageQueryPanel = memo(function NaturalLanguageQueryPanel
     setLoading(true);
     setError(null);
     try {
-      const r = await invoke<NLQResult>('natural_language_query', { queryText: trimmed });
+      const r = await cmd('natural_language_query', { queryText: trimmed }) as unknown as NLQResult;
       setResult(r);
     } catch (err) {
       const msg = String(err);

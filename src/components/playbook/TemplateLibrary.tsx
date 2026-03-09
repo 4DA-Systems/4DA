@@ -1,6 +1,6 @@
 import { useEffect, useState, useMemo, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
-import { invoke } from '@tauri-apps/api/core';
+import { cmd } from '../../lib/commands';
 
 // Inline template type (previously in types/coach.ts)
 interface Template {
@@ -176,7 +176,7 @@ export function TemplateLibrary() {
   const [viewingTemplate, setViewingTemplate] = useState<Template | null>(null);
 
   useEffect(() => {
-    invoke<Template[]>('get_templates')
+    cmd('get_templates')
       .then(setTemplates)
       .catch(() => { /* non-fatal */ });
   }, []);

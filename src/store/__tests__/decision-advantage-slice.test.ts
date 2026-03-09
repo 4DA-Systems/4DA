@@ -43,7 +43,7 @@ describe('decision-advantage-slice', () => {
 
       await useAppStore.getState().loadDecisionWindows();
 
-      expect(invoke).toHaveBeenCalledWith('get_decision_windows');
+      expect(invoke).toHaveBeenCalledWith('get_decision_windows', {});
       expect(useAppStore.getState().decisionWindows).toEqual(mockWindows);
       expect(useAppStore.getState().decisionWindowsLoading).toBe(false);
     });
@@ -84,7 +84,7 @@ describe('decision-advantage-slice', () => {
 
       await useAppStore.getState().loadCompoundAdvantage();
 
-      expect(invoke).toHaveBeenCalledWith('get_compound_advantage');
+      expect(invoke).toHaveBeenCalledWith('get_compound_advantage', {});
       expect(useAppStore.getState().compoundAdvantage).toEqual(mockScore);
     });
 

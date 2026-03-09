@@ -1,7 +1,7 @@
 import { useState, useCallback, useRef } from 'react';
-import { invoke } from '@tauri-apps/api/core';
+import { cmd } from '../../lib/commands';
 
-import type { TasteTestStepResult, TasteProfileSummary } from '../../types/calibration';
+import type { TasteProfileSummary } from '../../types/calibration';
 import { TasteTestCard } from './TasteTestCard';
 import { CalibrationSummary } from './CalibrationSummary';
 
@@ -36,7 +36,7 @@ export function TasteTestStep({ isAnimating, onComplete, onSkip }: TasteTestStep
   const startTest = useCallback(async () => {
     setStarting(true);
     try {
-      const result = await invoke<TasteTestStepResult>('taste_test_start');
+      const result = await cmd('taste_test_start');
       if (result.type === 'nextCard') {
         setCurrentCard(result.card);
         setProgress(result.progress);
@@ -61,7 +61,7 @@ export function TasteTestStep({ isAnimating, onComplete, onSkip }: TasteTestStep
     await new Promise(r => setTimeout(r, 150));
 
     try {
-      const result = await invoke<TasteTestStepResult>('taste_test_respond', {
+      const result = await cmd('taste_test_respond', {
         itemSlot: currentCard.slot,
         response,
         responseTimeMs,
@@ -76,7 +76,7 @@ export function TasteTestStep({ isAnimating, onComplete, onSkip }: TasteTestStep
       } else if (result.type === 'complete') {
         setPhase('finalizing');
         try {
-          const finalSummary = await invoke<TasteProfileSummary>('taste_test_finalize');
+          const finalSummary = await cmd('taste_test_finalize');
           setSummary(finalSummary);
           setPhase('complete');
         } catch (e) {

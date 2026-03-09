@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import { invoke } from '@tauri-apps/api/core';
+import { cmd } from '../../lib/commands';
 
 interface SetupLocaleProps {
   onLocaleChange: (country: string, language: string, currency: string) => void;
@@ -74,7 +74,7 @@ export function SetupLocale({ onLocaleChange }: SetupLocaleProps) {
     let cancelled = false;
     (async () => {
       try {
-        const locale = await invoke<{ country: string; language: string; currency: string }>('get_locale');
+        const locale = await cmd('get_locale');
         if (cancelled || userInteracted.current) return;
         setCountry(locale.country);
         setLanguage(locale.language);
@@ -90,7 +90,7 @@ export function SetupLocale({ onLocaleChange }: SetupLocaleProps) {
   const saveLocale = useCallback(async (c: string, l: string, cur: string) => {
     setSaveError(null);
     try {
-      await invoke('set_locale', { country: c, language: l, currency: cur });
+      await cmd('set_locale', { country: c, language: l, currency: cur });
       onLocaleChange(c, l, cur);
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);

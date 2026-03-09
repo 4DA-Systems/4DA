@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
-import { invoke } from '@tauri-apps/api/core';
+import { cmd } from '../lib/commands';
 import type { ItemContent } from '../types';
 import { getContentTypeBadge } from '../config/content-types';
 
@@ -21,7 +21,7 @@ export function ArticleReader({ itemId, url, contentType }: ArticleReaderProps) 
     setLoading(true);
     setError(null);
     try {
-      const result = await invoke<ItemContent>('get_item_content', { itemId });
+      const result = await cmd('get_item_content', { itemId });
       if (!result.content || result.content.trim().length === 0) {
         setError(t('reader.noContent'));
         setContent(null);

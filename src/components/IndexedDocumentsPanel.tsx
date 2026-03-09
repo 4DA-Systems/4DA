@@ -1,9 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import { invoke } from '@tauri-apps/api/core';
+import { cmd } from '../lib/commands';
 import type {
   IndexedDocument,
-  IndexedDocumentsResponse,
   DocumentContentResponse,
   DocumentSearchResult,
   IndexedStats,
@@ -63,12 +62,12 @@ export function IndexedDocumentsPanel({ onStatusChange }: IndexedDocumentsPanelP
     setLoading(true);
     try {
       const [docsResult, statsResult] = await Promise.all([
-        invoke<IndexedDocumentsResponse>('get_indexed_documents', {
+        cmd('get_indexed_documents', {
           limit: 20,
           offset: 0,
           fileType: filterType,
         }),
-        invoke<IndexedStats>('get_indexed_stats'),
+        cmd('get_indexed_stats'),
       ]);
       setDocuments(docsResult.documents);
       setStats(statsResult);
@@ -89,7 +88,7 @@ export function IndexedDocumentsPanel({ onStatusChange }: IndexedDocumentsPanelP
     }
     setLoading(true);
     try {
-      const result = await invoke<{ results: DocumentSearchResult[] }>('search_documents', {
+      const result = await cmd('search_documents', {
         query: searchQuery,
         limit: 10,
       });
@@ -106,7 +105,7 @@ export function IndexedDocumentsPanel({ onStatusChange }: IndexedDocumentsPanelP
   const loadDocumentContent = async (docId: number) => {
     setLoading(true);
     try {
-      const result = await invoke<DocumentContentResponse>('get_document_content', {
+      const result = await cmd('get_document_content', {
         documentId: docId,
       });
       setSelectedDoc(result);

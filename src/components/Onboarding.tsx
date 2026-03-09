@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
-import { invoke } from '@tauri-apps/api/core';
+import { cmd } from '../lib/commands';
 
 import type { Step } from './onboarding/types';
 import { WelcomeStep } from './onboarding/WelcomeStep';
@@ -61,7 +61,7 @@ export function Onboarding({ onComplete }: OnboardingProps) {
 
   const handleSetupComplete = async () => {
     try {
-      await invoke('mark_onboarding_complete');
+      await cmd('mark_onboarding_complete');
     } catch {
       // Non-critical — continue anyway
     }

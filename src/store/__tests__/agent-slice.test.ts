@@ -116,7 +116,7 @@ describe('agent-slice', () => {
 
       await useAppStore.getState().loadDelegationScores();
 
-      expect(invoke).toHaveBeenCalledWith('get_all_delegation_scores');
+      expect(invoke).toHaveBeenCalledWith('get_all_delegation_scores', {});
       expect(useAppStore.getState().delegationScores).toEqual(mockScores);
     });
 

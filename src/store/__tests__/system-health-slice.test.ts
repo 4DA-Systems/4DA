@@ -98,7 +98,7 @@ describe('system-health-slice', () => {
 
       await useAppStore.getState().runAnomalyDetection();
 
-      expect(invoke).toHaveBeenCalledWith('ace_detect_anomalies');
+      expect(invoke).toHaveBeenCalledWith('ace_detect_anomalies', {});
     });
 
     it('handles errors gracefully', async () => {
@@ -186,7 +186,7 @@ describe('system-health-slice', () => {
 
       await useAppStore.getState().saveWatcherState();
 
-      expect(invoke).toHaveBeenCalledWith('ace_save_watcher_state');
+      expect(invoke).toHaveBeenCalledWith('ace_save_watcher_state', {});
     });
 
     it('handles errors gracefully', async () => {

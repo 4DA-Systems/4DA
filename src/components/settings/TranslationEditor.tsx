@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { invoke } from '@tauri-apps/api/core';
+import { cmd } from '../../lib/commands';
 import { useTranslation } from 'react-i18next';
 
 // ============================================================================
@@ -138,11 +138,11 @@ export function TranslationEditor({ language }: TranslationEditorProps) {
     if (!language || language === 'en') return;
     try {
       const [st, en] = await Promise.all([
-        invoke<TranslationStatus>('get_translation_status', { lang: language }),
-        invoke<Record<string, TranslationEntry>>('get_all_translations', { lang: language }),
+        cmd('get_translation_status', { lang: language }),
+        cmd('get_all_translations', { lang: language }),
       ]);
-      setStatus(st);
-      setEntries(en);
+      setStatus(st as unknown as TranslationStatus);
+      setEntries(en as unknown as Record<string, TranslationEntry>);
     } catch { /* non-critical */ }
   }, [language]);
 
@@ -177,7 +177,7 @@ export function TranslationEditor({ language }: TranslationEditorProps) {
     if (!editingKey) return;
     const [namespace, ...rest] = editingKey.split(':');
     try {
-      await invoke('save_translation_override', {
+      await cmd('save_translation_override', {
         lang: language, namespace, key: rest.join(':'), value: editValue,
       });
       setEditingKey(null);
@@ -189,7 +189,7 @@ export function TranslationEditor({ language }: TranslationEditorProps) {
 
   const handleAutoTranslate = useCallback(async () => {
     setTranslating(true);
-    try { await invoke('trigger_translation', { lang: language }); await loadData(); }
+    try { await cmd('trigger_translation', { lang: language }); await loadData(); }
     catch { /* silent */ }
     setTranslating(false);
   }, [language, loadData]);

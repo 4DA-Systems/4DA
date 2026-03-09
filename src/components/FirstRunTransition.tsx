@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { listen, UnlistenFn } from '@tauri-apps/api/event';
-import { invoke } from '@tauri-apps/api/core';
+import { cmd } from '../lib/commands';
 
 import { useAppStore } from '../store';
 import { getSourceNarration } from '../utils/first-run-messages';
@@ -71,14 +71,14 @@ export function FirstRunTransition({ onComplete }: FirstRunTransitionProps) {
     const init = async () => {
       // Estimate time based on enabled source count
       try {
-        const sources = await invoke<Array<{ enabled: boolean }>>('get_sources');
+        const sources = await cmd('get_sources') as Array<{ enabled: boolean }>;
         const enabledCount = sources.filter(s => s.enabled).length;
         setEstimatedSeconds(120 + enabledCount * 10);
       } catch { /* default 240s */ }
 
       // Fetch scan summary BEFORE starting analysis
       try {
-        const summary = await invoke<ScanSummary>('ace_get_scan_summary');
+        const summary = await cmd('ace_get_scan_summary') as unknown as ScanSummary;
         if (summary.has_data) {
           setScanSummary(summary);
           setPhase('intelligence');
@@ -149,7 +149,7 @@ export function FirstRunTransition({ onComplete }: FirstRunTransitionProps) {
     if (appState.analysisComplete) {
       setPhase('celebrating');
       // Auto-render channels in background while user sees celebration
-      invoke('auto_render_all_channels').catch((e) => console.warn('FirstRunTransition: auto-render channels failed', e));
+      cmd('auto_render_all_channels').catch((e) => console.warn('FirstRunTransition: auto-render channels failed', e));
       return;
     }
 

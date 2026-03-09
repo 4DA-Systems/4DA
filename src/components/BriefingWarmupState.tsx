@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { invoke } from '@tauri-apps/api/core';
+import { cmd } from '../lib/commands';
 import { useAppStore } from '../store';
 
 interface SourceInfo {
@@ -17,7 +17,8 @@ export function BriefingWarmupState({ onAnalyze }: { onAnalyze: () => void }) {
 
   // Load actual configured sources from the backend
   useEffect(() => {
-    invoke<SourceInfo[]>('get_sources')
+    cmd('get_sources')
+      .then(r => r as unknown as SourceInfo[])
       .then(sources => {
         const enabled = sources
           .filter(s => s.enabled)

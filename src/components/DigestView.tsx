@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { invoke } from '@tauri-apps/api/core';
+import { cmd } from '../lib/commands';
 import { useTranslation } from 'react-i18next';
 
 interface DigestData {
@@ -21,9 +21,10 @@ export function DigestView() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    invoke<DigestData>('get_latest_digest')
+    cmd('get_latest_digest')
+      .then(r => r as unknown as DigestData)
       .then(setDigest)
-      .catch((e) => console.warn('DigestView: failed to load digest', e))
+      .catch((e: unknown) => console.warn('DigestView: failed to load digest', e))
       .finally(() => setLoading(false));
   }, []);
 

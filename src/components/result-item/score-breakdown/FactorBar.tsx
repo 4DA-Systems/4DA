@@ -1,6 +1,6 @@
 import { memo, useCallback, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { invoke } from '@tauri-apps/api/core';
+import { cmd } from '../../../lib/commands';
 import {
   EFFECT_COLORS,
   formatFactorValue,
@@ -30,12 +30,12 @@ export const FactorBar = memo(function FactorBar({
   const handleFeedback = useCallback(async (vote: 'up' | 'down') => {
     setFeedbackGiven(vote);
     try {
-      await invoke('ace_record_interaction', {
-        itemId,
-        actionType: vote === 'up' ? 'click' : 'dismiss',
-        actionData: { factor: factor.key, dwell_time_seconds: 0 },
-        itemTopics: [factor.key],
-        itemSource: 'score_feedback',
+      await cmd('ace_record_interaction', {
+        item_id: itemId,
+        action_type: vote === 'up' ? 'click' : 'dismiss',
+        action_data: JSON.stringify({ factor: factor.key, dwell_time_seconds: 0 }),
+        item_topics: [factor.key],
+        item_source: 'score_feedback',
       });
       onFeedbackGiven(factor.key, vote);
     } catch {

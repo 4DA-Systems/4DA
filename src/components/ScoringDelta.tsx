@@ -1,6 +1,6 @@
 import { useState, useEffect, memo } from 'react';
 import { useTranslation } from 'react-i18next';
-import { invoke } from '@tauri-apps/api/core';
+import { cmd } from '../lib/commands';
 import { ProGate } from './ProGate';
 
 interface TopicAffinity {
@@ -28,11 +28,12 @@ export const ScoringDelta = memo(function ScoringDelta() {
   useEffect(() => {
     const load = async () => {
       try {
-        const result = await invoke<{ affinities: TopicAffinity[] }>('ace_get_topic_affinities');
-        if (!result.affinities || result.affinities.length === 0) return;
+        const result = await cmd('ace_get_topic_affinities');
+        const affinities = result.affinities as unknown as TopicAffinity[];
+        if (!affinities || affinities.length === 0) return;
 
         // Filter to topics with recent interactions and meaningful signal
-        const meaningful = result.affinities
+        const meaningful = affinities
           .filter(a => (a.positive_signals + a.negative_signals) >= 2 && a.confidence > 0.1)
           .map(a => ({
             topic: a.topic,

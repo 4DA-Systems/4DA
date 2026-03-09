@@ -1,6 +1,6 @@
 import { useEffect, useState, memo } from 'react';
 import { useTranslation } from 'react-i18next';
-import { invoke } from '@tauri-apps/api/core';
+import { cmd } from '../lib/commands';
 import { ProGate } from './ProGate';
 
 interface DelegationScore {
@@ -52,7 +52,8 @@ export const DelegationAdvisor = memo(function DelegationAdvisor() {
   const [expandedTech, setExpandedTech] = useState<string | null>(null);
 
   useEffect(() => {
-    invoke<DelegationScore[]>('get_all_delegation_scores')
+    cmd('get_all_delegation_scores')
+      .then(r => r as unknown as DelegationScore[])
       .then(setScores)
       .catch(() => setScores([]))
       .finally(() => setLoading(false));

@@ -1,6 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { cmd } from '../../lib/commands';
 import type { CalibrationResult, Recommendation } from '../../types/calibration';
@@ -65,7 +64,7 @@ export function CalibrationStep({ isAnimating, onComplete, onBack }: Calibration
       case 'pull_embedding_model': {
         setActionInProgress('pull_embedding_model');
         try {
-          await invoke('pull_ollama_model', {
+          await cmd('pull_ollama_model', {
             model: result?.rig_requirements.recommended_model || 'nomic-embed-text',
             baseUrl: null,
           });
@@ -79,9 +78,9 @@ export function CalibrationStep({ isAnimating, onComplete, onBack }: Calibration
       case 'auto_detect_stacks': {
         setActionInProgress('auto_detect_stacks');
         try {
-          const detected = await invoke<Array<{ profile_id: string; confidence: number }>>('detect_stack_profiles');
+          const detected = await cmd('detect_stack_profiles');
           if (detected.length > 0) {
-            await invoke('set_selected_stacks', { profileIds: detected.slice(0, 3).map(d => d.profile_id) });
+            await cmd('set_selected_stacks', { profileIds: detected.slice(0, 3).map(d => d.profile_id) });
             await runCalibration();
           }
         } catch {

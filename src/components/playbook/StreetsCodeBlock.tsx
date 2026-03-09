@@ -1,6 +1,6 @@
 import { useState, useCallback, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
-import { invoke } from '@tauri-apps/api/core';
+import { cmd as tauriCmd } from '../../lib/commands';
 import type { ParsedCommand, CommandExecutionResult, OsTarget, RiskLevel } from '../../types/streets';
 
 interface StreetsCodeBlockProps {
@@ -47,7 +47,7 @@ export function StreetsCodeBlock({ code, language, moduleId, lessonIdx, blockInd
   const ensureParsed = useCallback(async () => {
     if (parsed) return commands;
     try {
-      const result = await invoke<ParsedCommand[]>('parse_lesson_commands', {
+      const result = await tauriCmd('parse_lesson_commands', {
         moduleId,
         lessonIdx,
       });
@@ -99,7 +99,7 @@ export function StreetsCodeBlock({ code, language, moduleId, lessonIdx, blockInd
     setRunning((prev) => new Set(prev).add(cmd.id));
     setExpandedResults((prev) => new Set(prev).add(cmd.id));
     try {
-      const result = await invoke<CommandExecutionResult>('execute_streets_command', {
+      const result = await tauriCmd('execute_streets_command', {
         commandId: cmd.id,
         command: cmd.command,
         riskLevel: cmd.risk_level,

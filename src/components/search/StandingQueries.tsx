@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
-import { invoke } from '@tauri-apps/api/core';
+import { cmd } from '../../lib/commands';
 
 interface StandingQuery {
   id: number;
@@ -26,7 +26,7 @@ export function StandingQueries({ isPro }: StandingQueriesProps) {
     if (!isPro) return;
     setLoading(true);
     try {
-      const result = await invoke<StandingQuery[]>('list_standing_queries');
+      const result = await cmd('list_standing_queries') as unknown as StandingQuery[];
       setWatches(result);
     } catch (err) {
       console.error('Failed to load standing queries:', err);
@@ -41,7 +41,7 @@ export function StandingQueries({ isPro }: StandingQueriesProps) {
 
   const handleDelete = async (id: number) => {
     try {
-      await invoke('delete_standing_query', { id });
+      await cmd('delete_standing_query', { id });
       setWatches((prev) => prev.filter((w) => w.id !== id));
     } catch (err) {
       console.error('Failed to delete standing query:', err);

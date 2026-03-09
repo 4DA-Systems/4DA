@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { invoke } from '@tauri-apps/api/core';
+import { cmd } from '../../lib/commands';
 import { useTranslation } from 'react-i18next';
 import { TranslationEditor } from './TranslationEditor';
 
@@ -68,7 +68,7 @@ export function LocaleSection() {
     let cancelled = false;
     (async () => {
       try {
-        const locale = await invoke<{ country: string; language: string; currency: string }>('get_locale');
+        const locale = await cmd('get_locale');
         if (cancelled) return;
         setCountry(locale.country);
         setLanguage(locale.language);
@@ -83,7 +83,7 @@ export function LocaleSection() {
 
   const saveLocale = useCallback(async (c: string, l: string, cur: string) => {
     try {
-      await invoke('set_locale', { country: c, language: l, currency: cur });
+      await cmd('set_locale', { country: c, language: l, currency: cur });
     } catch {
       // Silent failure - locale is not critical
     }

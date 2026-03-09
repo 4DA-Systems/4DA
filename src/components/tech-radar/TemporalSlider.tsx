@@ -1,6 +1,6 @@
 import { useState, useEffect, memo, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
-import { invoke } from '@tauri-apps/api/core';
+import { cmd } from '../../lib/commands';
 
 // ============================================================================
 // Types
@@ -26,7 +26,7 @@ export const TemporalSlider = memo(function TemporalSlider({ onSnapshotChange }:
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    invoke<Array<{ date: string }>>('get_radar_snapshots')
+    cmd('get_radar_snapshots')
       .then((data) => {
         const mapped = data.map((s) => ({
           date: s.date,

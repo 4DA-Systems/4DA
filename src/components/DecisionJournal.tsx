@@ -1,5 +1,5 @@
 import { useEffect, useState, memo } from 'react';
-import { invoke } from '@tauri-apps/api/core';
+import { cmd } from '../lib/commands';
 import type { DecisionWindow } from '../types/autophagy';
 
 const TYPE_ICONS: Record<string, string> = {
@@ -23,7 +23,7 @@ export const DecisionJournal = memo(function DecisionJournal() {
   useEffect(() => {
     const load = async () => {
       try {
-        const result = await invoke<DecisionWindow[]>('get_decision_windows');
+        const result = await cmd('get_decision_windows');
         setWindows(result);
       } catch {
         // Decision windows are supplementary

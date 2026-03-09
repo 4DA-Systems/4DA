@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
-import { invoke } from '@tauri-apps/api/core';
+import { cmd } from '../lib/commands';
 import sunLogo from '../assets/sun-logo.webp';
 import { translateError } from '../utils/error-messages';
 
@@ -53,14 +53,14 @@ export function SplashScreen({ onComplete, minimumDisplayTime = 1500 }: SplashSc
       try {
         // Stage 1: Database — must succeed before proceeding
         setStage('database');
-        await invoke('get_settings');
+        await cmd('get_settings');
         if (cancelled) return;
 
         // Stages 2-4: Parallel non-critical probes with animated stage advancement
         setStage('embeddings');
         await Promise.allSettled([
-          invoke('get_context_stats'),
-          invoke('get_sources'),
+          cmd('get_context_stats'),
+          cmd('get_sources'),
         ]);
         if (cancelled) return;
 

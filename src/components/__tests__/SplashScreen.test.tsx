@@ -130,7 +130,7 @@ describe('SplashScreen', () => {
     const { unmount } = render(<SplashScreen onComplete={vi.fn()} minimumDisplayTime={0} />);
 
     await waitFor(() => {
-      expect(mockInvoke).toHaveBeenCalledWith('get_settings');
+      expect(mockInvoke).toHaveBeenCalledWith('get_settings', {});
     }, { timeout: 3000 });
 
     unmount();
