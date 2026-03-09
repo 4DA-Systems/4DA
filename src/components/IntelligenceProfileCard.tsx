@@ -144,13 +144,13 @@ export const IntelligenceProfileCard = memo(function IntelligenceProfileCard() {
           </div>
           {growth.snapshots.length >= 2 && (
             <div className="mt-2 flex items-center gap-2">
-              <span className="text-[10px] text-text-muted">Accuracy trend</span>
+              <span className="text-[10px] text-text-muted">{t('briefing.profile.accuracyTrend')}</span>
               <Sparkline data={growth.snapshots.map(s => s.accuracy)} />
             </div>
           )}
           <div className="flex gap-3 mt-2 text-xs text-text-muted">
-            <span>{growth.topics_learned} topics learned</span>
-            <span>{growth.anti_topics} anti-topics</span>
+            <span>{t('briefing.profile.topicsLearned', { count: growth.topics_learned })}</span>
+            <span>{t('briefing.profile.antiTopics', { count: growth.anti_topics })}</span>
           </div>
         </div>
       )}

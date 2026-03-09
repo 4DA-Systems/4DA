@@ -323,7 +323,7 @@ describe('ResultItem', () => {
       />,
     );
 
-    expect(screen.getByText('Security')).toBeInTheDocument();
+    expect(screen.getByText('results.signal.security_alert')).toBeInTheDocument();
   });
 
   it('sets correct aria-expanded and aria-controls attributes', () => {
