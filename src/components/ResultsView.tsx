@@ -339,6 +339,34 @@ export function ResultsView({
                 )}
                 {!showOnlyRelevant && sourceFilters.size === 0 && <p className="text-xs text-text-muted">Try a broader search query or add more interests in Settings</p>}
               </div>
+              {state.nearMisses && state.nearMisses.length > 0 && (
+                <div className="mt-8 mx-auto max-w-lg">
+                  <p className="text-xs font-medium text-text-muted uppercase tracking-wider mb-3">
+                    {t('results.nearMissesTitle', 'Almost relevant')}
+                  </p>
+                  <div className="space-y-2">
+                    {state.nearMisses.map((item) => (
+                      <div
+                        key={item.id}
+                        className="flex items-center gap-3 px-3 py-2 bg-bg-secondary rounded-lg border border-border text-left"
+                      >
+                        <span className="text-xs font-mono text-text-muted shrink-0">
+                          {Math.round(item.top_score * 100)}%
+                        </span>
+                        <span className="text-sm text-text-secondary truncate">
+                          {item.title}
+                        </span>
+                        <span className="text-[10px] text-text-muted shrink-0 ml-auto">
+                          {item.source_type}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                  <p className="text-[10px] text-text-muted mt-2">
+                    {t('results.nearMissesHint', 'These items scored close to your relevance threshold. Adjust interests in Settings to include them.')}
+                  </p>
+                </div>
+              )}
             </div>
           ) : (
             <div style={{ height: `${virtualizer.getTotalSize()}px`, width: '100%', position: 'relative' }}>

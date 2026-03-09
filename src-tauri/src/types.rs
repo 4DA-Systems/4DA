@@ -249,6 +249,42 @@ pub struct AnalysisState {
 /// Maximum analysis duration in seconds before auto-timeout
 pub(crate) const ANALYSIS_TIMEOUT_SECS: i64 = 300;
 
+/// Near-miss threshold: items scoring above this but below relevance threshold
+/// are candidates for "almost relevant" guidance.
+const NEAR_MISS_FLOOR: f32 = 0.20;
+/// Maximum near misses to keep
+const NEAR_MISS_LIMIT: usize = 5;
+/// Only populate near misses when relevant results are below this count
+const NEAR_MISS_RELEVANT_CEILING: usize = 3;
+
+/// Extract near-miss items from scored results.
+/// Returns `Some(near_misses)` when few items passed the relevance gate,
+/// giving users guidance on what *almost* made it through.
+pub(crate) fn extract_near_misses(results: &[SourceRelevance]) -> Option<Vec<SourceRelevance>> {
+    let relevant_count = results.iter().filter(|r| r.relevant).count();
+    if relevant_count >= NEAR_MISS_RELEVANT_CEILING {
+        return None;
+    }
+
+    let mut candidates: Vec<SourceRelevance> = results
+        .iter()
+        .filter(|r| !r.relevant && !r.excluded && r.top_score >= NEAR_MISS_FLOOR)
+        .cloned()
+        .collect();
+
+    if candidates.is_empty() {
+        return None;
+    }
+
+    candidates.sort_by(|a, b| {
+        b.top_score
+            .partial_cmp(&a.top_score)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+    candidates.truncate(NEAR_MISS_LIMIT);
+    Some(candidates)
+}
+
 /// LLM judgment attached to a relevance result
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[ts(export, export_to = "bindings/")]

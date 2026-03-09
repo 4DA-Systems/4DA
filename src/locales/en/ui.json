@@ -290,6 +290,8 @@
   "results.analyzedNoMatch": "{{count}} items analyzed, but none match your current filters.",
   "results.showAll": "Show All Results",
   "results.clearSourceFilters": "Clear Source Filters",
+  "results.nearMissesTitle": "Almost relevant",
+  "results.nearMissesHint": "These items scored close to your relevance threshold. Adjust interests in Settings to include them.",
   "results.searchPlaceholder": "Search results...",
   "results.sources": "Sources:",
   "results.sort": "Sort:",

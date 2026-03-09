@@ -464,7 +464,7 @@ fn execute_text_search(
 // ============================================================================
 
 async fn execute_vector_search(parsed: &ParsedQuery, limit: usize) -> Result<Vec<QueryResultItem>> {
-    let search_text = parsed.keywords.join(" ");
+    let search_text = crate::utils::preprocess_content(&parsed.keywords.join(" "));
     if search_text.is_empty() {
         return Ok(Vec::new());
     }

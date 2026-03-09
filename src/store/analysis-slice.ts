@@ -6,6 +6,7 @@ import { translateError } from '../utils/error-messages';
 const initialAppState: AppState = {
   contextFiles: [],
   relevanceResults: [],
+  nearMisses: null,
   status: 'Ready to analyze',
   loading: false,
   analysisComplete: false,

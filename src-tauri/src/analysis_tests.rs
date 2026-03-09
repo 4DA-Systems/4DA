@@ -1,7 +1,39 @@
 #[cfg(test)]
 mod tests {
     use crate::analysis::is_aborted;
-    use crate::{get_analysis_abort, AnalysisState, ANALYSIS_TIMEOUT_SECS};
+    use crate::types::extract_near_misses;
+    use crate::{get_analysis_abort, AnalysisState, SourceRelevance, ANALYSIS_TIMEOUT_SECS};
+
+    fn make_item(id: u64, top_score: f32, relevant: bool, excluded: bool) -> SourceRelevance {
+        SourceRelevance {
+            id,
+            title: format!("Item {id}"),
+            url: None,
+            top_score,
+            matches: vec![],
+            relevant,
+            context_score: 0.0,
+            interest_score: 0.0,
+            excluded,
+            excluded_by: None,
+            source_type: "hackernews".to_string(),
+            explanation: None,
+            confidence: None,
+            score_breakdown: None,
+            signal_type: None,
+            signal_priority: None,
+            signal_action: None,
+            signal_triggers: None,
+            signal_horizon: None,
+            similar_count: 0,
+            similar_titles: vec![],
+            serendipity: false,
+            streets_engine: None,
+            decision_window_match: None,
+            decision_boost_applied: 0.0,
+            created_at: None,
+        }
+    }
 
     // ========================================================================
     // AnalysisState construction and defaults
@@ -152,5 +184,65 @@ mod tests {
 
         // Clean up
         get_analysis_abort().store(false, std::sync::atomic::Ordering::SeqCst);
+    }
+
+    // ========================================================================
+    // Near-miss extraction
+    // ========================================================================
+
+    #[test]
+    fn test_near_misses_none_when_enough_relevant() {
+        // 3+ relevant items → no near misses needed
+        let results = vec![
+            make_item(1, 0.60, true, false),
+            make_item(2, 0.55, true, false),
+            make_item(3, 0.50, true, false),
+            make_item(4, 0.30, false, false), // would be a candidate
+        ];
+        assert!(extract_near_misses(&results).is_none());
+    }
+
+    #[test]
+    fn test_near_misses_populated_on_zero_relevant() {
+        let results = vec![
+            make_item(1, 0.30, false, false),
+            make_item(2, 0.25, false, false),
+            make_item(3, 0.10, false, false), // below floor
+        ];
+        let misses = extract_near_misses(&results).expect("should have near misses");
+        assert_eq!(misses.len(), 2); // item 3 is below 0.20 floor
+        assert_eq!(misses[0].id, 1); // sorted by score desc
+        assert_eq!(misses[1].id, 2);
+    }
+
+    #[test]
+    fn test_near_misses_excludes_excluded_items() {
+        let results = vec![
+            make_item(1, 0.30, false, true), // excluded → skip
+            make_item(2, 0.25, false, false),
+        ];
+        let misses = extract_near_misses(&results).expect("should have near misses");
+        assert_eq!(misses.len(), 1);
+        assert_eq!(misses[0].id, 2);
+    }
+
+    #[test]
+    fn test_near_misses_limited_to_5() {
+        let results: Vec<SourceRelevance> = (1..=10)
+            .map(|i| make_item(i, 0.20 + (i as f32 * 0.01), false, false))
+            .collect();
+        let misses = extract_near_misses(&results).expect("should have near misses");
+        assert_eq!(misses.len(), 5);
+        // Should be highest-scored first
+        assert!(misses[0].top_score > misses[4].top_score);
+    }
+
+    #[test]
+    fn test_near_misses_none_when_all_below_floor() {
+        let results = vec![
+            make_item(1, 0.10, false, false),
+            make_item(2, 0.05, false, false),
+        ];
+        assert!(extract_near_misses(&results).is_none());
     }
 }

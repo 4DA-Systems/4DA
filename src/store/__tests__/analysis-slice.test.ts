@@ -125,6 +125,7 @@ describe('analysis-slice', () => {
       const newState = {
         contextFiles: [],
         relevanceResults: [],
+        nearMisses: null,
         status: 'Brand new state',
         loading: false,
         analysisComplete: true,
