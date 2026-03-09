@@ -618,6 +618,74 @@ impl ACE {
 
         Ok(updated)
     }
+
+    /// Apply temporal decay to detected technologies.
+    /// Uses 60-day half-life (longer than topics since tech stacks change slower).
+    /// Technologies below 0.15 confidence are removed.
+    pub fn apply_detected_tech_decay(&self) -> Result<usize> {
+        let conn = self.conn.lock();
+
+        // Only decay entries not seen in >7 days (avoid decaying active projects)
+        let mut stmt = conn.prepare(
+            "SELECT name, category, confidence, last_seen
+             FROM detected_tech
+             WHERE julianday('now') - julianday(last_seen) > 7",
+        )?;
+
+        let rows: Vec<(String, String, f32, String)> = stmt
+            .query_map([], |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, f32>(2)?,
+                    row.get::<_, String>(3)?,
+                ))
+            })?
+            .collect::<std::result::Result<Vec<_>, _>>()
+            .map_err(|e| -> crate::error::FourDaError { e.into() })?;
+
+        let mut updated = 0;
+
+        for (name, _category, confidence, last_seen) in &rows {
+            let baseline = chrono::DateTime::parse_from_rfc3339(last_seen)
+                .or_else(|_| {
+                    chrono::NaiveDateTime::parse_from_str(last_seen, "%Y-%m-%d %H:%M:%S")
+                        .map(|dt| dt.and_utc().fixed_offset())
+                })
+                .unwrap_or_else(|_| chrono::Utc::now().fixed_offset());
+
+            let days_since = (chrono::Utc::now() - baseline.with_timezone(&chrono::Utc)).num_hours()
+                as f32
+                / 24.0;
+
+            if days_since < 7.0 {
+                continue;
+            }
+
+            // 60-day half-life (tech stacks change slower than topic interests)
+            let decay_factor = 0.5_f32.powf(days_since / 60.0);
+            let new_confidence = confidence * decay_factor;
+
+            if new_confidence < 0.15 {
+                conn.execute(
+                    "DELETE FROM detected_tech WHERE name = ?1",
+                    rusqlite::params![name],
+                )?;
+            } else {
+                conn.execute(
+                    "UPDATE detected_tech SET confidence = ?1 WHERE name = ?2",
+                    rusqlite::params![new_confidence, name],
+                )?;
+            }
+            updated += 1;
+        }
+
+        if updated > 0 {
+            info!(target: "ace::behavior", updated = updated, "Applied temporal decay to detected technologies");
+        }
+
+        Ok(updated)
+    }
 }
 
 #[cfg(test)]

@@ -257,7 +257,25 @@ impl ACE {
                         projects_found += 1;
 
                         // Simple confidence check (was using validator)
-                        let confidence = 0.8; // Default high confidence for manifest detection
+                        // Confidence based on evidence density:
+                        // - Base: 0.5 (manifest exists)
+                        // - +0.1 if project has a name (not anonymous)
+                        // - +0.05 per framework detected (max +0.15)
+                        // - +0.05 per unique language detected (max +0.10)
+                        // - +0.05 if has dev_dependencies (active development indicator)
+                        // Cap at 0.90
+                        let confidence = {
+                            let mut conf = 0.50; // Base: manifest file exists
+                            if signal.project_name.is_some() {
+                                conf += 0.10;
+                            }
+                            conf += (signal.frameworks.len() as f32 * 0.05).min(0.15);
+                            conf += (signal.languages.len() as f32 * 0.05).min(0.10);
+                            if !signal.dev_dependencies.is_empty() {
+                                conf += 0.05;
+                            }
+                            conf.min(0.90)
+                        };
 
                         if confidence >= 0.3 {
                             for lang in &signal.languages {
