@@ -11,7 +11,7 @@ use tracing::{info, warn};
 use crate::ace;
 use crate::context_engine::ContextEngine;
 use crate::db::Database;
-use crate::error::Result;
+use crate::error::{Result, ResultExt};
 use crate::job_queue;
 use crate::monitoring;
 use crate::settings::SettingsManager;
@@ -90,12 +90,11 @@ pub(crate) fn open_db_connection() -> Result<rusqlite::Connection> {
 
     register_sqlite_vec_extension();
 
-    let conn = rusqlite::Connection::open(&db_path)
-        .map_err(|e| format!("Failed to open database: {}", e))?;
+    let conn = rusqlite::Connection::open(&db_path).context("Failed to open database")?;
 
     // Set busy_timeout to prevent "database is locked" errors
     conn.execute_batch("PRAGMA busy_timeout = 5000;")
-        .map_err(|e| format!("Failed to set busy_timeout: {}", e))?;
+        .context("Failed to set busy_timeout")?;
 
     Ok(conn)
 }
@@ -173,7 +172,7 @@ static CONTEXT_ENGINE: Lazy<parking_lot::RwLock<Option<Arc<ContextEngine>>>> =
 fn init_context_engine() -> Result<Arc<ContextEngine>> {
     let conn = open_db_connection()?;
     let engine = ContextEngine::new(Arc::new(parking_lot::Mutex::new(conn)))
-        .map_err(|e| format!("Failed to initialize context engine: {}", e))?;
+        .context("Failed to initialize context engine")?;
     info!(target: "4da::context", "Context engine initialized");
     Ok(Arc::new(engine))
 }
@@ -216,7 +215,7 @@ fn init_ace_engine() -> Result<Arc<parking_lot::RwLock<ace::ACE>>> {
     let conn = open_db_connection()?;
 
     let engine = ace::ACE::new(Arc::new(parking_lot::Mutex::new(conn)))
-        .map_err(|e| format!("Failed to initialize ACE: {}", e))?;
+        .context("Failed to initialize ACE")?;
 
     info!(target: "4da::ace", "Autonomous Context Engine ready");
     Ok(Arc::new(parking_lot::RwLock::new(engine)))
@@ -312,6 +311,7 @@ pub(crate) fn get_analysis_state() -> &'static Mutex<AnalysisState> {
             results: None,
             started_at: None,
             last_completed_at: None,
+            near_misses: None,
         })
     })
 }

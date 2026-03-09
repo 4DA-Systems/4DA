@@ -14,6 +14,7 @@ mod tests {
             completed: false,
             error: None,
             results: None,
+            near_misses: None,
             started_at: None,
             last_completed_at: None,
         };
@@ -21,6 +22,7 @@ mod tests {
         assert!(!state.completed);
         assert!(state.error.is_none());
         assert!(state.results.is_none());
+        assert!(state.near_misses.is_none());
         assert!(state.started_at.is_none());
         assert!(state.last_completed_at.is_none());
     }
@@ -33,6 +35,7 @@ mod tests {
             completed: false,
             error: None,
             results: None,
+            near_misses: None,
             started_at: Some(now),
             last_completed_at: None,
         };
@@ -48,6 +51,7 @@ mod tests {
             completed: false,
             error: Some("test error".to_string()),
             results: None,
+            near_misses: None,
             started_at: Some(1700000000),
             last_completed_at: Some("2025-01-01 00:00:00".to_string()),
         };
@@ -106,6 +110,7 @@ mod tests {
             completed: false,
             error: None,
             results: None,
+            near_misses: None,
             started_at: Some(chrono::Utc::now().timestamp() - 600),
             last_completed_at: None,
         };

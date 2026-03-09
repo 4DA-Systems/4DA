@@ -241,6 +241,9 @@ pub struct AnalysisState {
     /// When analysis last completed successfully (ISO string for DB query compat)
     #[serde(default)]
     pub last_completed_at: Option<String>,
+    /// Top items that fell just below the relevance threshold (for zero-result guidance)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub near_misses: Option<Vec<SourceRelevance>>,
 }
 
 /// Maximum analysis duration in seconds before auto-timeout

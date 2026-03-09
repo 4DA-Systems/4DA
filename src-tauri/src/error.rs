@@ -72,3 +72,25 @@ impl From<&str> for FourDaError {
         FourDaError::Internal(s.to_string())
     }
 }
+
+/// Extension trait for adding context to Results (like anyhow::Context).
+///
+/// Use `.context("message")` instead of `.map_err(|e| format!("message: {e}"))`.
+/// Preserves the error message while providing a consistent, concise pattern.
+pub trait ResultExt<T> {
+    /// Add static context to an error.
+    fn context(self, msg: &str) -> Result<T>;
+
+    /// Add dynamic context to an error (evaluated lazily on failure).
+    fn with_context<F: FnOnce() -> String>(self, f: F) -> Result<T>;
+}
+
+impl<T, E: std::fmt::Display> ResultExt<T> for std::result::Result<T, E> {
+    fn context(self, msg: &str) -> Result<T> {
+        self.map_err(|e| FourDaError::Internal(format!("{msg}: {e}")))
+    }
+
+    fn with_context<F: FnOnce() -> String>(self, f: F) -> Result<T> {
+        self.map_err(|e| FourDaError::Internal(format!("{}: {e}", f())))
+    }
+}

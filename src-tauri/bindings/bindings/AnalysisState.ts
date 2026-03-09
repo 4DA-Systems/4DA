@@ -12,4 +12,8 @@ started_at: bigint | null,
 /**
  * When analysis last completed successfully (ISO string for DB query compat)
  */
-last_completed_at: string | null, };
+last_completed_at: string | null, 
+/**
+ * Top items that fell just below the relevance threshold (for zero-result guidance)
+ */
+near_misses: Array<SourceRelevance> | null, };
