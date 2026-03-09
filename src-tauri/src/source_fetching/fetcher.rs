@@ -5,6 +5,7 @@ use tracing::{debug, error, info, warn};
 
 use crate::analysis_narration::{emit_narration, NarrationEvent};
 use crate::db::Database;
+use crate::error::Result;
 use crate::sources::arxiv::ArxivSource;
 use crate::sources::devto::DevtoSource;
 use crate::sources::github::GitHubSource;
@@ -30,7 +31,7 @@ pub(crate) async fn fetch_all_sources(
     db: &Database,
     app: &AppHandle,
     max_items_per_source: usize,
-) -> Result<Vec<(GenericSourceItem, Vec<f32>)>, String> {
+) -> Result<Vec<(GenericSourceItem, Vec<f32>)>> {
     use sources::Source;
 
     // Phase 4: Network connectivity check before fetching
@@ -430,7 +431,7 @@ pub(crate) async fn fetch_all_sources_deep(
     db: &Database,
     app: &AppHandle,
     items_per_category: usize,
-) -> Result<Vec<(GenericSourceItem, Vec<f32>)>, String> {
+) -> Result<Vec<(GenericSourceItem, Vec<f32>)>> {
     use sources::Source;
 
     info!(target: "4da::sources", items_per_category, "DEEP SCAN: Fetching from all sources comprehensively");

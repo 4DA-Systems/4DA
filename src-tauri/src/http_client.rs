@@ -22,5 +22,8 @@ pub(crate) static HTTP_CLIENT: LazyLock<reqwest::Client> = LazyLock::new(|| {
         .timeout(Duration::from_secs(30))
         .connect_timeout(Duration::from_secs(10))
         .build()
-        .unwrap_or_else(|_| reqwest::Client::new())
+        .unwrap_or_else(|e| {
+            tracing::warn!("Failed to build HTTP client: {e}, using default");
+            reqwest::Client::new()
+        })
 });

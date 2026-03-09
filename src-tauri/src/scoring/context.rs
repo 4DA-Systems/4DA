@@ -20,7 +20,10 @@ pub(crate) async fn build_scoring_context(db: &Database) -> Result<ScoringContex
     {
         let cache = SCORING_CONTEXT_CACHE
             .lock()
-            .unwrap_or_else(|e| e.into_inner());
+            .unwrap_or_else(|e| {
+                tracing::warn!("SCORING_CONTEXT_CACHE mutex poisoned, recovering");
+                e.into_inner()
+            });
         if let Some((ref ctx, ref instant)) = *cache {
             if instant.elapsed().as_secs() < SCORING_CONTEXT_TTL_SECS {
                 return Ok(ctx.clone());
@@ -196,7 +199,10 @@ pub(crate) async fn build_scoring_context(db: &Database) -> Result<ScoringContex
     {
         let mut cache = SCORING_CONTEXT_CACHE
             .lock()
-            .unwrap_or_else(|e| e.into_inner());
+            .unwrap_or_else(|e| {
+                tracing::warn!("SCORING_CONTEXT_CACHE mutex poisoned, recovering");
+                e.into_inner()
+            });
         *cache = Some((context.clone(), Instant::now()));
     }
 

@@ -13,7 +13,10 @@ static EMBEDDING_CLIENT: Lazy<reqwest::Client> = Lazy::new(|| {
         .timeout(std::time::Duration::from_secs(90))
         .user_agent("4DA/1.0")
         .build()
-        .unwrap_or_else(|_| reqwest::Client::new())
+        .unwrap_or_else(|e| {
+            tracing::warn!("Failed to build HTTP client: {e}, using default");
+            reqwest::Client::new()
+        })
 });
 
 // ============================================================================

@@ -23,7 +23,10 @@ static FEEDBACK_TOPIC_CACHE: LazyLock<Mutex<Option<Vec<FeedbackTopicSummary>>>> 
 pub fn invalidate_feedback_topic_cache() {
     let mut cache = FEEDBACK_TOPIC_CACHE
         .lock()
-        .unwrap_or_else(|e| e.into_inner());
+        .unwrap_or_else(|e| {
+            tracing::warn!("FEEDBACK_TOPIC_CACHE mutex poisoned, recovering");
+            e.into_inner()
+        });
     *cache = None;
 }
 
@@ -692,7 +695,10 @@ impl Database {
         {
             let cache = FEEDBACK_TOPIC_CACHE
                 .lock()
-                .unwrap_or_else(|e| e.into_inner());
+                .unwrap_or_else(|e| {
+                    tracing::warn!("FEEDBACK_TOPIC_CACHE mutex poisoned, recovering");
+                    e.into_inner()
+                });
             if let Some(ref cached) = *cache {
                 return Ok(cached.clone());
             }
@@ -764,7 +770,10 @@ impl Database {
         {
             let mut cache = FEEDBACK_TOPIC_CACHE
                 .lock()
-                .unwrap_or_else(|e| e.into_inner());
+                .unwrap_or_else(|e| {
+                    tracing::warn!("FEEDBACK_TOPIC_CACHE mutex poisoned, recovering");
+                    e.into_inner()
+                });
             *cache = Some(summaries.clone());
         }
 

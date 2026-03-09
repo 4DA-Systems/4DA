@@ -398,7 +398,10 @@ where
         .connect_timeout(std::time::Duration::from_secs(10))
         .timeout(std::time::Duration::from_secs(120))
         .build()
-        .unwrap_or_else(|_| reqwest::Client::new());
+        .unwrap_or_else(|e| {
+            warn!("Failed to build HTTP client: {e}, using default");
+            reqwest::Client::new()
+        });
 
     let fallback_provider = LLMProvider {
         provider: "ollama".to_string(),
