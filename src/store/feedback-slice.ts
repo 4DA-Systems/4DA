@@ -1,7 +1,7 @@
 import type { StateCreator } from 'zustand';
-import { invoke } from '@tauri-apps/api/core';
-import type { FeedbackAction, SavedItem } from '../types';
-import type { AppStore, FeedbackSlice, TopicAffinity, AntiTopic } from './types';
+import { cmd } from '../lib/commands';
+import type { FeedbackAction } from '../types';
+import type { AppStore, FeedbackSlice, AntiTopic } from './types';
 
 // Client-side score adjustment multipliers for immediate feedback
 const FEEDBACK_ADJUSTMENTS: Record<FeedbackAction, number> = {
@@ -33,7 +33,7 @@ export const createFeedbackSlice: StateCreator<AppStore, [], [], FeedbackSlice> 
 
   loadPersistedSavedIds: async () => {
     try {
-      const items = await invoke<SavedItem[]>('get_saved_items');
+      const items = await cmd('get_saved_items');
       if (items.length > 0) {
         set(state => {
           const next = { ...state.feedbackGiven };
@@ -52,8 +52,8 @@ export const createFeedbackSlice: StateCreator<AppStore, [], [], FeedbackSlice> 
 
   loadLearnedBehavior: async () => {
     const [affinityResult, antiResult] = await Promise.allSettled([
-      invoke<{ affinities: TopicAffinity[]; count: number }>('ace_get_topic_affinities'),
-      invoke<{ anti_topics: AntiTopic[]; count: number }>('ace_get_anti_topics', { min_rejections: 2 }),
+      cmd('ace_get_topic_affinities'),
+      cmd('ace_get_anti_topics', { min_rejections: 2 }),
     ]);
 
     if (affinityResult.status === 'fulfilled' && affinityResult.value.affinities) {
@@ -64,7 +64,7 @@ export const createFeedbackSlice: StateCreator<AppStore, [], [], FeedbackSlice> 
     }
 
     if (antiResult.status === 'fulfilled' && antiResult.value.anti_topics) {
-      set({ antiTopics: antiResult.value.anti_topics });
+      set({ antiTopics: antiResult.value.anti_topics as unknown as AntiTopic[] });
     }
   },
 
@@ -83,14 +83,14 @@ export const createFeedbackSlice: StateCreator<AppStore, [], [], FeedbackSlice> 
       };
 
       await Promise.all([
-        invoke('ace_record_interaction', {
+        cmd('ace_record_interaction', {
           item_id: itemId,
           action_type: actionType,
           action_data: null,
           item_topics: topics,
           item_source: item.source_type || 'hackernews',
         }),
-        invoke('ace_record_accuracy_feedback', {
+        cmd('ace_record_accuracy_feedback', {
           item_id: itemId,
           predicted_score: item.top_score,
           feedback_type: feedbackTypeMap[actionType],
@@ -125,7 +125,7 @@ export const createFeedbackSlice: StateCreator<AppStore, [], [], FeedbackSlice> 
       let affinityScore: number | null = null;
       if (primaryTopic) {
         try {
-          const result = await invoke<{ affinity: { topic: string; positive_signals: number; negative_signals: number; affinity_score: number } | null }>('ace_get_single_affinity', { topic: primaryTopic });
+          const result = await cmd('ace_get_single_affinity', { topic: primaryTopic });
           if (result.affinity) {
             affinityScore = Math.round(result.affinity.affinity_score * 100);
           }

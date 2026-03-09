@@ -1,6 +1,6 @@
 /* global IntersectionObserver */
 import { useRef, useEffect, useCallback } from 'react';
-import { invoke } from '@tauri-apps/api/core';
+import { cmd } from '../lib/commands';
 
 interface UseViewTrackingOptions {
   itemId: number;
@@ -44,12 +44,12 @@ export function useViewTracking({
       if (scrollRecorded.current) return;
       scrollRecorded.current = true;
 
-      invoke('ace_record_interaction', {
-        itemId,
-        actionType: 'scroll',
-        actionData: JSON.stringify({ visible_seconds: visibleSeconds }),
-        itemTopics,
-        itemSource: sourceType,
+      cmd('ace_record_interaction', {
+        item_id: itemId,
+        action_type: 'scroll',
+        action_data: JSON.stringify({ visible_seconds: visibleSeconds }),
+        item_topics: itemTopics,
+        item_source: sourceType,
       }).catch(() => {
         // Silent — passive signal, not critical
       });
@@ -61,12 +61,12 @@ export function useViewTracking({
     if (ignoreRecorded.current || hasExplicitFeedback) return;
     ignoreRecorded.current = true;
 
-    invoke('ace_record_interaction', {
-      itemId,
-      actionType: 'ignore',
-      actionData: null,
-      itemTopics,
-      itemSource: sourceType,
+    cmd('ace_record_interaction', {
+      item_id: itemId,
+      action_type: 'ignore',
+      action_data: null,
+      item_topics: itemTopics,
+      item_source: sourceType,
     }).catch(() => {
       // Silent — passive signal
     });

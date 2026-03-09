@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { invoke } from '@tauri-apps/api/core';
+import { cmd } from '../lib/commands';
 
 /**
  * Fire-and-forget telemetry event — never blocks UI.
@@ -10,7 +10,7 @@ export function trackEvent(
   viewId?: string,
   metadata?: Record<string, unknown>,
 ) {
-  invoke('track_event', {
+  cmd('track_event', {
     eventType,
     viewId,
     metadata: metadata ? JSON.stringify(metadata) : undefined,

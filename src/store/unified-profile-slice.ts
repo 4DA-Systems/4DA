@@ -1,5 +1,5 @@
 import type { StateCreator } from 'zustand';
-import { invoke } from '@tauri-apps/api/core';
+import { cmd } from '../lib/commands';
 import { listen } from '@tauri-apps/api/event';
 import type { AppStore } from './types';
 import type { SovereignDeveloperProfile } from '../types/profile';
@@ -33,15 +33,15 @@ export const createUnifiedProfileSlice: StateCreator<AppStore, [], [], UnifiedPr
       if (!profileListenerSetup) {
         profileListenerSetup = true;
         listen<string>('profile-updated', () => {
-          invoke<SovereignDeveloperProfile>('get_sovereign_developer_profile')
-            .then((data) => set({ unifiedProfile: data }))
+          (cmd('get_sovereign_developer_profile') as Promise<unknown>)
+            .then((data) => set({ unifiedProfile: data as SovereignDeveloperProfile }))
             .catch(() => { /* non-fatal */ });
         }).catch(() => { /* listener setup failure is non-fatal */ });
       }
 
       set({ unifiedProfileLoading: true });
       try {
-        const data = await invoke<SovereignDeveloperProfile>('get_sovereign_developer_profile');
+        const data = await cmd('get_sovereign_developer_profile') as unknown as SovereignDeveloperProfile;
         set({ unifiedProfile: data, unifiedProfileLoading: false });
       } catch {
         set({ unifiedProfileLoading: false });
@@ -49,11 +49,11 @@ export const createUnifiedProfileSlice: StateCreator<AppStore, [], [], UnifiedPr
     },
 
     exportProfileMarkdown: async () => {
-      return invoke<string>('export_sovereign_profile_markdown');
+      return cmd('export_sovereign_profile_markdown');
     },
 
     exportProfileJson: async () => {
-      return invoke<string>('export_sovereign_profile_json');
+      return cmd('export_sovereign_profile_json');
     },
   };
 };

@@ -1,9 +1,9 @@
 import { useState, useEffect, useCallback } from 'react';
-import { invoke } from '@tauri-apps/api/core';
 import { listen, UnlistenFn } from '@tauri-apps/api/event';
 import i18n from 'i18next';
 import type { SourceRelevance, AnalysisProgress } from '../types';
 import { getSourceLabel } from '../config/sources';
+import { cmd } from '../lib/commands';
 import { useAppStore } from '../store';
 
 export interface NarrationEvent {
@@ -79,7 +79,7 @@ export function useAnalysis(
           // Auto-enable monitoring after first successful analysis
           const { monitoring } = useAppStore.getState();
           if (monitoring && !monitoring.enabled && relevantCount > 0) {
-            invoke('set_monitoring_enabled', { enabled: true }).then(() => {
+            cmd('set_monitoring_enabled', { enabled: true }).then(() => {
               useAppStore.getState().loadMonitoringStatus();
             }).catch(() => {});
           }

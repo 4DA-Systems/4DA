@@ -1,5 +1,5 @@
 import type { StateCreator } from 'zustand';
-import { invoke } from '@tauri-apps/api/core';
+import { cmd } from '../lib/commands';
 import type { DecisionWindow, CompoundAdvantageScore } from '../types/autophagy';
 
 export interface DecisionAdvantageSlice {
@@ -22,7 +22,7 @@ export const createDecisionAdvantageSlice: StateCreator<
   loadDecisionWindows: async () => {
     set({ decisionWindowsLoading: true });
     try {
-      const windows = await invoke<DecisionWindow[]>('get_decision_windows');
+      const windows = await cmd('get_decision_windows');
       set({ decisionWindows: windows });
     } catch {
       // Silent — windows may not exist yet
@@ -33,7 +33,7 @@ export const createDecisionAdvantageSlice: StateCreator<
 
   loadCompoundAdvantage: async () => {
     try {
-      const score = await invoke<CompoundAdvantageScore>('get_compound_advantage');
+      const score = await cmd('get_compound_advantage');
       set({ compoundAdvantage: score });
     } catch {
       // Silent
@@ -42,7 +42,7 @@ export const createDecisionAdvantageSlice: StateCreator<
 
   actOnWindow: async (windowId: number, outcome?: string) => {
     try {
-      await invoke('act_on_decision_window', { windowId, outcome: outcome ?? null });
+      await cmd('act_on_decision_window', { windowId, outcome: outcome ?? null });
       // Refresh the list
       get().loadDecisionWindows();
       get().loadCompoundAdvantage();
@@ -53,7 +53,7 @@ export const createDecisionAdvantageSlice: StateCreator<
 
   closeWindow: async (windowId: number) => {
     try {
-      await invoke('close_decision_window', { windowId });
+      await cmd('close_decision_window', { windowId });
       get().loadDecisionWindows();
     } catch {
       // Silent

@@ -1,6 +1,5 @@
 import type { StateCreator } from 'zustand';
-import { invoke } from '@tauri-apps/api/core';
-import type { SourceHealthStatus } from '../types';
+import { cmd } from '../lib/commands';
 import type { AppStore, BriefingSlice, BriefingState, FreeBriefingData } from './types';
 
 const initialBriefingState: BriefingState = {
@@ -26,12 +25,7 @@ export const createBriefingSlice: StateCreator<AppStore, [], [], BriefingSlice> 
 
   loadPersistedBriefing: async () => {
     try {
-      const result = await invoke<{
-        content: string;
-        model: string | null;
-        item_count: number;
-        created_at: string;
-      } | null>('get_latest_briefing');
+      const result = await cmd('get_latest_briefing');
 
       if (result) {
         set({
@@ -52,7 +46,7 @@ export const createBriefingSlice: StateCreator<AppStore, [], [], BriefingSlice> 
 
   loadSourceHealth: async () => {
     try {
-      const health = await invoke<SourceHealthStatus[]>('get_source_health_status');
+      const health = await cmd('get_source_health_status');
       set({ sourceHealth: health });
     } catch {
       // Silently ignore — source health is supplementary
@@ -64,14 +58,7 @@ export const createBriefingSlice: StateCreator<AppStore, [], [], BriefingSlice> 
       aiBriefing: { ...state.aiBriefing, loading: true, error: null },
     }));
     try {
-      const result = await invoke<{
-        success: boolean;
-        briefing: string | null;
-        error?: string;
-        model?: string;
-        item_count?: number;
-        latency_ms?: number;
-      }>('generate_ai_briefing');
+      const result = await cmd('generate_ai_briefing');
 
       if (result.success && result.briefing) {
         set({
@@ -107,7 +94,7 @@ export const createBriefingSlice: StateCreator<AppStore, [], [], BriefingSlice> 
   generateFreeBriefing: async () => {
     set({ freeBriefingLoading: true });
     try {
-      const result = await invoke<FreeBriefingData>('generate_free_briefing');
+      const result = await cmd('generate_free_briefing') as unknown as FreeBriefingData;
       set({ freeBriefing: result, freeBriefingLoading: false });
     } catch {
       set({ freeBriefingLoading: false });

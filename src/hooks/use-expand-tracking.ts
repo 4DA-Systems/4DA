@@ -1,5 +1,5 @@
 import { useRef, useEffect } from 'react';
-import { invoke } from '@tauri-apps/api/core';
+import { cmd } from '../lib/commands';
 
 /**
  * Track dwell time when a content item is expanded.
@@ -24,12 +24,12 @@ export function useExpandTracking(
       const dwellSeconds = Math.round((Date.now() - expandedAt.current) / 1000);
       if (dwellSeconds >= 1) {
         emitted.current = true;
-        invoke('ace_record_interaction', {
-          itemId,
-          actionType: 'click',
-          actionData: JSON.stringify({ type: 'click', dwell_time_seconds: dwellSeconds }),
-          itemTopics,
-          itemSource: sourceType,
+        cmd('ace_record_interaction', {
+          item_id: itemId,
+          action_type: 'click',
+          action_data: JSON.stringify({ type: 'click', dwell_time_seconds: dwellSeconds }),
+          item_topics: itemTopics,
+          item_source: sourceType,
         }).catch(() => {
           // Silent — passive signal
         });
@@ -45,12 +45,12 @@ export function useExpandTracking(
         const dwellSeconds = Math.round((Date.now() - expandedAt.current) / 1000);
         if (dwellSeconds >= 1) {
           emitted.current = true;
-          invoke('ace_record_interaction', {
-            itemId,
-            actionType: 'click',
-            actionData: JSON.stringify({ type: 'click', dwell_time_seconds: dwellSeconds }),
-            itemTopics,
-            itemSource: sourceType,
+          cmd('ace_record_interaction', {
+            item_id: itemId,
+            action_type: 'click',
+            action_data: JSON.stringify({ type: 'click', dwell_time_seconds: dwellSeconds }),
+            item_topics: itemTopics,
+            item_source: sourceType,
           }).catch(() => {});
         }
       }

@@ -1,6 +1,5 @@
 import type { StateCreator } from 'zustand';
-import { invoke } from '@tauri-apps/api/core';
-import type { Settings } from '../types';
+import { cmd } from '../lib/commands';
 import type { AppStore, SettingsSlice, SettingsForm, OllamaStatus } from './types';
 import { translateError } from '../utils/error-messages';
 
@@ -45,7 +44,7 @@ export const createSettingsSlice: StateCreator<AppStore, [], [], SettingsSlice> 
 
   loadSettings: async () => {
     try {
-      const s = await invoke<Settings>('get_settings');
+      const s = await cmd('get_settings');
       set(state => ({
         settings: s,
         settingsForm: {
@@ -85,13 +84,13 @@ export const createSettingsSlice: StateCreator<AppStore, [], [], SettingsSlice> 
 
     try {
       await Promise.all([
-        invoke('set_llm_provider', {
+        cmd('set_llm_provider', {
           provider: settingsForm.provider,
           apiKey: trimmedApiKey,
           model: settingsForm.model,
           baseUrl: settingsForm.baseUrl || null,
         }),
-        invoke('set_rerank_config', {
+        cmd('set_rerank_config', {
           enabled: settingsForm.rerankEnabled,
           maxItems: settingsForm.maxItems,
           minScore: settingsForm.minScore,
@@ -116,7 +115,7 @@ export const createSettingsSlice: StateCreator<AppStore, [], [], SettingsSlice> 
       await saveSettings();
 
       const timeoutMs = isOllama ? 90_000 : 30_000;
-      const testPromise = invoke<{ success: boolean; message: string }>('test_llm_connection');
+      const testPromise = cmd('test_llm_connection');
       const timeoutPromise = new Promise<never>((_, reject) =>
         setTimeout(() => reject(new Error(
           isOllama
@@ -134,7 +133,7 @@ export const createSettingsSlice: StateCreator<AppStore, [], [], SettingsSlice> 
 
   checkOllamaStatus: async (baseUrl?: string) => {
     try {
-      const status = await invoke<OllamaStatus>('check_ollama_status', { baseUrl });
+      const status = await cmd('check_ollama_status', { baseUrl: baseUrl ?? null }) as unknown as OllamaStatus;
       set({ ollamaStatus: status });
       if (status.running && status.models.length > 0) {
         set({ ollamaModels: status.models });

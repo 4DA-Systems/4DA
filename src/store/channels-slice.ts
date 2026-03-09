@@ -1,5 +1,5 @@
 import type { StateCreator } from 'zustand';
-import { invoke } from '@tauri-apps/api/core';
+import { cmd } from '../lib/commands';
 import type { AppStore } from './types';
 import type { ChannelSummary, ChannelRender, RenderProvenance, ChannelChangelog } from '../types/channels';
 
@@ -37,7 +37,7 @@ export const createChannelsSlice: StateCreator<AppStore, [], [], ChannelsSlice> 
   loadChannels: async () => {
     set({ channelsLoading: true, channelsError: null });
     try {
-      const channels = await invoke<ChannelSummary[]>('list_channels');
+      const channels = await cmd('list_channels') as unknown as ChannelSummary[];
       set({ channels, channelsLoading: false });
     } catch (e) {
       set({ channelsLoading: false, channelsError: String(e) });
@@ -47,7 +47,7 @@ export const createChannelsSlice: StateCreator<AppStore, [], [], ChannelsSlice> 
   selectChannel: async (id: number) => {
     set({ activeChannelId: id, renderLoading: true, renderError: null, activeProvenance: [], activeChangelog: null });
     try {
-      const render = await invoke<ChannelRender | null>('get_channel_content', { channelId: id });
+      const render = await cmd('get_channel_content', { channelId: id });
       set({ activeRender: render, renderLoading: false });
 
       // Auto-load provenance and changelog
@@ -63,7 +63,7 @@ export const createChannelsSlice: StateCreator<AppStore, [], [], ChannelsSlice> 
   renderChannel: async (id: number) => {
     set({ renderLoading: true, renderError: null });
     try {
-      const render = await invoke<ChannelRender>('render_channel_now', { channelId: id });
+      const render = await cmd('render_channel_now', { channelId: id });
       set({ activeRender: render, renderLoading: false });
 
       // Reload channels list to update freshness badges
@@ -81,7 +81,7 @@ export const createChannelsSlice: StateCreator<AppStore, [], [], ChannelsSlice> 
 
   loadProvenance: async (renderId: number) => {
     try {
-      const provenance = await invoke<RenderProvenance[]>('get_channel_provenance', { renderId });
+      const provenance = await cmd('get_channel_provenance', { renderId });
       set({ activeProvenance: provenance });
     } catch {
       // Silently ignore — provenance is supplementary
@@ -90,7 +90,7 @@ export const createChannelsSlice: StateCreator<AppStore, [], [], ChannelsSlice> 
 
   loadChangelog: async (channelId: number) => {
     try {
-      const changelog = await invoke<ChannelChangelog | null>('get_channel_changelog', { channelId });
+      const changelog = await cmd('get_channel_changelog', { channelId });
       set({ activeChangelog: changelog });
     } catch {
       // Silently ignore — changelog is supplementary
@@ -99,7 +99,7 @@ export const createChannelsSlice: StateCreator<AppStore, [], [], ChannelsSlice> 
 
   refreshChannelSources: async (channelId: number) => {
     try {
-      await invoke<number>('refresh_channel_sources', { channelId });
+      await cmd('refresh_channel_sources', { channelId });
       // Reload channels to update source counts
       get().loadChannels();
     } catch {
@@ -108,12 +108,12 @@ export const createChannelsSlice: StateCreator<AppStore, [], [], ChannelsSlice> 
   },
 
   createChannel: async (slug, title, description, topicQuery) => {
-    await invoke<number>('create_custom_channel', { slug, title, description, topicQuery });
+    await cmd('create_custom_channel', { slug, title, description, topicQuery });
     get().loadChannels();
   },
 
   deleteChannel: async (channelId) => {
-    await invoke<void>('delete_channel', { channelId });
+    await cmd('delete_channel', { channelId });
     const state = get();
     if (state.activeChannelId === channelId) {
       set({ activeChannelId: null, activeRender: null });

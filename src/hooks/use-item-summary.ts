@@ -1,6 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { invoke } from '@tauri-apps/api/core';
-import type { ItemSummary } from '../types';
+import { cmd } from '../lib/commands';
 
 export interface ItemSummaryState {
   summary: string | null;
@@ -18,7 +17,7 @@ export function useItemSummary(itemId: number, isExpanded: boolean): ItemSummary
   useEffect(() => {
     if (!isExpanded) return;
     let cancelled = false;
-    invoke<ItemSummary>('get_item_summary', { itemId })
+    cmd('get_item_summary', { itemId })
       .then(result => { if (!cancelled) setSummary(result.summary); })
       .catch(() => {}); // No cached summary — that's fine
     return () => { cancelled = true; };
@@ -28,7 +27,7 @@ export function useItemSummary(itemId: number, isExpanded: boolean): ItemSummary
     setSummaryLoading(true);
     setSummaryError(null);
     try {
-      const result = await invoke<ItemSummary>('generate_item_summary', { itemId });
+      const result = await cmd('generate_item_summary', { itemId });
       setSummary(result.summary);
     } catch (e) {
       setSummaryError(String(e));

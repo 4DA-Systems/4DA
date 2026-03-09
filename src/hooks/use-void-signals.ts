@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
-import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import type { VoidSignal } from '../types';
+import { cmd } from '../lib/commands';
 
 const IDLE_SIGNAL: VoidSignal = {
   pulse: 0,
@@ -39,7 +39,7 @@ export function useVoidSignals() {
 
   // Fetch initial state on mount
   useEffect(() => {
-    invoke<VoidSignal>('get_void_signal')
+    cmd('get_void_signal')
       .then((s) => {
         targetRef.current = s;
         currentRef.current = s;

@@ -1,6 +1,5 @@
 import type { StateCreator } from 'zustand';
-import { invoke } from '@tauri-apps/api/core';
-import type { ContextFile } from '../types';
+import { cmd } from '../lib/commands';
 import type { AppStore, AnalysisSlice, AppState } from './types';
 import { translateError } from '../utils/error-messages';
 
@@ -52,7 +51,7 @@ export const createAnalysisSlice: StateCreator<AppStore, [], [], AnalysisSlice> 
     }));
 
     try {
-      await invoke('run_cached_analysis');
+      await cmd('run_cached_analysis');
     } catch (error) {
       const errorMsg = String(error);
       if (errorMsg.includes('invoke') || errorMsg.includes('__TAURI__')) {
@@ -86,7 +85,7 @@ export const createAnalysisSlice: StateCreator<AppStore, [], [], AnalysisSlice> 
       appState: { ...state.appState, loading: true, status: 'Loading context files...' },
     }));
     try {
-      const files = await invoke<ContextFile[]>('get_context_files');
+      const files = await cmd('get_context_files');
       set(state => ({
         appState: {
           ...state.appState,
@@ -117,8 +116,8 @@ export const createAnalysisSlice: StateCreator<AppStore, [], [], AnalysisSlice> 
 
   clearContext: async () => {
     try {
-      const result = await invoke<string>('clear_context');
-      const files = await invoke<ContextFile[]>('get_context_files');
+      const result = await cmd('clear_context');
+      const files = await cmd('get_context_files');
       set(state => ({
         appState: {
           ...state.appState,
@@ -140,13 +139,13 @@ export const createAnalysisSlice: StateCreator<AppStore, [], [], AnalysisSlice> 
       appState: { ...state.appState, loading: true, status: 'Indexing project READMEs...' },
     }));
     try {
-      const readmeResult = await invoke<string>('index_project_readmes');
+      const readmeResult = await cmd('index_project_readmes');
       set(state => ({
         appState: { ...state.appState, status: `${readmeResult}. Indexing local files...` },
       }));
 
-      const result = await invoke<string>('index_context');
-      const files = await invoke<ContextFile[]>('get_context_files');
+      const result = await cmd('index_context');
+      const files = await cmd('get_context_files');
       set(state => ({
         appState: {
           ...state.appState,

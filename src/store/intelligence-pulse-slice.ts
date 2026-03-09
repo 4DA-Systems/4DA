@@ -1,5 +1,5 @@
 import type { StateCreator } from 'zustand';
-import { invoke } from '@tauri-apps/api/core';
+import { cmd } from '../lib/commands';
 import type { IntelligencePulseData } from '../types/autophagy';
 
 export interface IntelligencePulseSlice {
@@ -24,7 +24,7 @@ export const createIntelligencePulseSlice: StateCreator<
     const doLoad = async () => {
       set({ intelligencePulseLoading: true });
       try {
-        const pulse = await invoke<IntelligencePulseData>('get_intelligence_pulse');
+        const pulse = await cmd('get_intelligence_pulse') as unknown as IntelligencePulseData;
         set({ intelligencePulse: pulse });
       } catch {
         // Silent — intelligence pulse is supplementary

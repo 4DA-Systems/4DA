@@ -1,5 +1,5 @@
 import type { StateCreator } from 'zustand';
-import { invoke } from '@tauri-apps/api/core';
+import { cmd } from '../lib/commands';
 import type { AutophagyStatus, AutophagyCycleResult } from '../types/autophagy';
 
 export interface AutophagySlice {
@@ -18,7 +18,7 @@ export const createAutophagySlice: StateCreator<AutophagySlice, [], [], Autophag
   loadAutophagyStatus: async () => {
     set({ autophagyLoading: true });
     try {
-      const status = await invoke<AutophagyStatus>('get_autophagy_status');
+      const status = await cmd('get_autophagy_status');
       set({ autophagyStatus: status });
     } catch {
       // Silent — autophagy data may not exist yet
@@ -29,7 +29,7 @@ export const createAutophagySlice: StateCreator<AutophagySlice, [], [], Autophag
 
   loadAutophagyHistory: async (limit = 10) => {
     try {
-      const history = await invoke<AutophagyCycleResult[]>('get_autophagy_history', { limit });
+      const history = await cmd('get_autophagy_history', { limit });
       set({ autophagyHistory: history });
     } catch {
       // Silent — data may not exist yet

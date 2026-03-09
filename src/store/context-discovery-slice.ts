@@ -1,5 +1,5 @@
 import type { StateCreator } from 'zustand';
-import { invoke } from '@tauri-apps/api/core';
+import { cmd } from '../lib/commands';
 import type { AppStore, ContextDiscoverySlice } from './types';
 
 export const createContextDiscoverySlice: StateCreator<AppStore, [], [], ContextDiscoverySlice> = (set, get) => ({
@@ -12,13 +12,9 @@ export const createContextDiscoverySlice: StateCreator<AppStore, [], [], Context
 
   loadDiscoveredContext: async () => {
     const [dirsResult, techResult, topicsResult] = await Promise.allSettled([
-      invoke<string[]>('get_context_dirs'),
-      invoke<{
-        detected_tech: Array<{ name: string; category: string; confidence: number }>;
-      }>('ace_get_detected_tech'),
-      invoke<{
-        topics: Array<{ topic: string; weight: number }>;
-      }>('ace_get_active_topics'),
+      cmd('get_context_dirs'),
+      cmd('ace_get_detected_tech'),
+      cmd('ace_get_active_topics'),
     ]);
 
     if (dirsResult.status === 'fulfilled' && dirsResult.value && dirsResult.value.length > 0) {
@@ -47,25 +43,12 @@ export const createContextDiscoverySlice: StateCreator<AppStore, [], [], Context
     setSettingsStatus('Auto-discovering your development context...');
 
     try {
-      const result = await invoke<{
-        success: boolean;
-        directories_found: number;
-        projects_found: number;
-        directories_added: number;
-        directories: string[];
-        scan_result: {
-          manifest_scan: { detected_tech: number; confidence: number };
-          git_scan: { repos_analyzed: number; total_commits: number };
-          combined: { total_topics: number; topics: string[] };
-        };
-      }>('ace_auto_discover');
+      const result = await cmd('ace_auto_discover');
 
       if (result.success) {
         set({ scanDirectories: result.directories || [] });
 
-        const techResult = await invoke<{
-          detected_tech: Array<{ name: string; category: string; confidence: number }>;
-        }>('ace_get_detected_tech');
+        const techResult = await cmd('ace_get_detected_tech');
 
         set({
           discoveredContext: {
@@ -102,16 +85,9 @@ export const createContextDiscoverySlice: StateCreator<AppStore, [], [], Context
     setSettingsStatus('Scanning directories for context...');
 
     try {
-      const result = await invoke<{
-        success: boolean;
-        manifest_scan: { detected_tech: number; confidence: number };
-        git_scan: { repos_analyzed: number; total_commits: number };
-        combined: { total_topics: number; topics: string[] };
-      }>('ace_full_scan', { paths: scanDirectories });
+      const result = await cmd('ace_full_scan', { paths: scanDirectories });
 
-      const techResult = await invoke<{
-        detected_tech: Array<{ name: string; category: string; confidence: number }>;
-      }>('ace_get_detected_tech');
+      const techResult = await cmd('ace_get_detected_tech');
 
       set({
         discoveredContext: {
@@ -150,7 +126,7 @@ export const createContextDiscoverySlice: StateCreator<AppStore, [], [], Context
     const newDirs = [...scanDirectories, dirToAdd];
 
     try {
-      await invoke('set_context_dirs', { dirs: newDirs });
+      await cmd('set_context_dirs', { dirs: newDirs });
       set({ scanDirectories: newDirs, newScanDir: '' });
       setSettingsStatus(`Added: ${dirToAdd}`);
       setTimeout(() => set({ settingsStatus: '' }), 2000);
@@ -165,7 +141,7 @@ export const createContextDiscoverySlice: StateCreator<AppStore, [], [], Context
     const { scanDirectories, setSettingsStatus } = get();
     const newDirs = scanDirectories.filter(d => d !== dir);
     try {
-      await invoke('set_context_dirs', { dirs: newDirs });
+      await cmd('set_context_dirs', { dirs: newDirs });
       set({ scanDirectories: newDirs });
       setSettingsStatus(`Removed: ${dir}`);
       setTimeout(() => set({ settingsStatus: '' }), 2000);

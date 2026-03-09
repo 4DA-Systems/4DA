@@ -1,5 +1,5 @@
 import type { StateCreator } from 'zustand';
-import { invoke } from '@tauri-apps/api/core';
+import { cmd } from '../lib/commands';
 import type { AppStore, AgentSlice } from './types';
 
 export interface AgentMemoryEntry {
@@ -38,10 +38,10 @@ export const createAgentSlice: StateCreator<AppStore, [], [], AgentSlice> = (set
   loadAgentMemories: async () => {
     set({ agentMemoryLoading: true });
     try {
-      const memories = await invoke<AgentMemoryEntry[]>('recall_agent_memories', {
+      const memories = await cmd('recall_agent_memories', {
         subject: '',
         limit: 50,
-      });
+      }) as unknown as AgentMemoryEntry[];
       set({ agentMemories: memories, agentMemoryLoading: false });
     } catch {
       set({ agentMemoryLoading: false });
@@ -50,7 +50,7 @@ export const createAgentSlice: StateCreator<AppStore, [], [], AgentSlice> = (set
 
   loadDelegationScores: async () => {
     try {
-      const scores = await invoke<DelegationScoreEntry[]>('get_all_delegation_scores');
+      const scores = await cmd('get_all_delegation_scores') as unknown as DelegationScoreEntry[];
       set({ delegationScores: scores });
     } catch (error) {
       console.error('Failed to load delegation scores:', error);
@@ -65,10 +65,10 @@ export const createAgentSlice: StateCreator<AppStore, [], [], AgentSlice> = (set
       return;
     }
     try {
-      const memories = await invoke<AgentMemoryEntry[]>('recall_agent_memories', {
+      const memories = await cmd('recall_agent_memories', {
         subject: '',
         limit: 1,
-      });
+      }) as unknown as AgentMemoryEntry[];
       set({ agentDataExists: memories.length > 0 });
     } catch {
       set({ agentDataExists: false });
@@ -77,12 +77,12 @@ export const createAgentSlice: StateCreator<AppStore, [], [], AgentSlice> = (set
 
   promoteMemoryToDecision: async (memoryId: number) => {
     try {
-      await invoke('promote_memory_to_decision', { memoryId });
+      await cmd('promote_memory_to_decision', { memoryId });
       // Reload agent memories and decisions after promotion
-      const memories = await invoke<AgentMemoryEntry[]>('recall_agent_memories', {
+      const memories = await cmd('recall_agent_memories', {
         subject: '',
         limit: 50,
-      });
+      }) as unknown as AgentMemoryEntry[];
       set({ agentMemories: memories });
       // Also reload decisions if available
       get().loadDecisions();

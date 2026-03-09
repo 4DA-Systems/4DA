@@ -1,5 +1,5 @@
 import type { StateCreator } from 'zustand';
-import { invoke } from '@tauri-apps/api/core';
+import { cmd } from '../lib/commands';
 import type { AppStore, DecisionsSlice } from './types';
 
 export interface DeveloperDecision {
@@ -25,7 +25,7 @@ export const createDecisionsSlice: StateCreator<AppStore, [], [], DecisionsSlice
   loadDecisions: async () => {
     set({ decisionsLoading: true, decisionsError: null });
     try {
-      const decisions = await invoke<DeveloperDecision[]>('get_decisions', {});
+      const decisions = await cmd('get_decisions', {}) as unknown as DeveloperDecision[];
       set({ decisions, decisionsLoading: false });
     } catch (e) {
       set({ decisionsLoading: false, decisionsError: String(e) });
@@ -42,7 +42,7 @@ export const createDecisionsSlice: StateCreator<AppStore, [], [], DecisionsSlice
     confidence?: number;
   }) => {
     try {
-      await invoke('record_developer_decision', {
+      await cmd('record_developer_decision', {
         decisionType: params.decision_type,
         subject: params.subject,
         decision: params.decision,
@@ -52,7 +52,7 @@ export const createDecisionsSlice: StateCreator<AppStore, [], [], DecisionsSlice
         confidence: params.confidence ?? 0.8,
       });
       // Reload decisions after recording
-      const decisions = await invoke<DeveloperDecision[]>('get_decisions', {});
+      const decisions = await cmd('get_decisions', {}) as unknown as DeveloperDecision[];
       set({ decisions });
     } catch (error) {
       console.error('Failed to record decision:', error);
@@ -66,14 +66,14 @@ export const createDecisionsSlice: StateCreator<AppStore, [], [], DecisionsSlice
     confidence?: number;
   }) => {
     try {
-      await invoke('update_developer_decision', {
+      await cmd('update_developer_decision', {
         id,
         decision: updates.decision || null,
         rationale: updates.rationale || null,
         status: updates.status || null,
         confidence: updates.confidence ?? null,
       });
-      const decisions = await invoke<DeveloperDecision[]>('get_decisions', {});
+      const decisions = await cmd('get_decisions', {}) as unknown as DeveloperDecision[];
       set({ decisions });
     } catch (error) {
       console.error('Failed to update decision:', error);
@@ -82,8 +82,8 @@ export const createDecisionsSlice: StateCreator<AppStore, [], [], DecisionsSlice
 
   removeTechDecision: async (technology: string) => {
     try {
-      await invoke('remove_tech_decision', { technology });
-      const decisions = await invoke<DeveloperDecision[]>('get_decisions', {});
+      await cmd('remove_tech_decision', { technology });
+      const decisions = await cmd('get_decisions', {}) as unknown as DeveloperDecision[];
       set({ decisions });
     } catch (error) {
       console.error('Failed to remove tech decision:', error);

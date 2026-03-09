@@ -1,5 +1,5 @@
-import { invoke } from '@tauri-apps/api/core';
 import type { StateCreator } from 'zustand';
+import { cmd } from '../lib/commands';
 import type { ProValueReport } from '../types';
 import type { AppStore, LicenseSlice, TrialStatus } from './types';
 
@@ -15,14 +15,7 @@ export const createLicenseSlice: StateCreator<AppStore, [], [], LicenseSlice> = 
 
   loadLicense: async () => {
     try {
-      const result = await invoke<{
-        tier: string;
-        has_key: boolean;
-        activated_at: string | null;
-        expires_at: string | null;
-        days_remaining: number;
-        expired: boolean;
-      }>('get_license_tier');
+      const result = await cmd('get_license_tier');
       set({
         tier: result.expired ? 'free' : result.tier as 'free' | 'pro' | 'team',
         expiresAt: result.expires_at,
@@ -37,7 +30,7 @@ export const createLicenseSlice: StateCreator<AppStore, [], [], LicenseSlice> = 
   activateLicense: async (key: string): Promise<{ ok: boolean; reason?: string }> => {
     set({ licenseLoading: true });
     try {
-      const result = await invoke<{ success: boolean; tier: string; expires_at?: string; reason?: string }>('activate_license', {
+      const result = await cmd('activate_license', {
         licenseKey: key,
       });
       if (result.success) {
@@ -54,7 +47,7 @@ export const createLicenseSlice: StateCreator<AppStore, [], [], LicenseSlice> = 
         return { ok: true };
       }
       set({ licenseLoading: false });
-      return { ok: false, reason: result.reason ?? 'Validation failed' };
+      return { ok: false, reason: (result as unknown as { reason?: string }).reason ?? 'Validation failed' };
     } catch (e) {
       set({ licenseLoading: false });
       const msg = e instanceof Error ? e.message : typeof e === 'string' ? e : 'Unknown error';
@@ -64,7 +57,7 @@ export const createLicenseSlice: StateCreator<AppStore, [], [], LicenseSlice> = 
 
   loadTrialStatus: async () => {
     try {
-      const status = await invoke<TrialStatus>('get_trial_status');
+      const status = await cmd('get_trial_status') as unknown as TrialStatus;
       set({ trialStatus: status });
     } catch {
       set({ trialStatus: null });
@@ -73,7 +66,7 @@ export const createLicenseSlice: StateCreator<AppStore, [], [], LicenseSlice> = 
 
   startTrial: async () => {
     try {
-      const result = await invoke<{ success: boolean; days_remaining?: number }>('start_trial');
+      const result = await cmd('start_trial');
       if (result.success) {
         set({
           trialStatus: {
@@ -99,7 +92,7 @@ export const createLicenseSlice: StateCreator<AppStore, [], [], LicenseSlice> = 
 
   loadProValueReport: async () => {
     try {
-      const report = await invoke<ProValueReport>('get_pro_value_report');
+      const report = await cmd('get_pro_value_report') as unknown as ProValueReport;
       set({ proValueReport: report });
     } catch {
       // Silently ignore — badge just won't show

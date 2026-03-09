@@ -1,5 +1,5 @@
 import type { StateCreator } from 'zustand';
-import { invoke } from '@tauri-apps/api/core';
+import { cmd } from '../lib/commands';
 import type { AppStore } from './types';
 import type { PlaybookModule, PlaybookContent, PlaybookProgress } from '../types/playbook';
 import type { PersonalizedLesson } from '../types/personalization';
@@ -38,7 +38,7 @@ export const createPlaybookSlice: StateCreator<AppStore, [], [], PlaybookSlice> 
 
   loadPlaybookModules: async () => {
     try {
-      const modules = await invoke<PlaybookModule[]>('get_playbook_modules');
+      const modules = await cmd('get_playbook_modules');
       set({ playbookModules: modules });
     } catch (e) {
       set({ playbookError: String(e) });
@@ -48,7 +48,7 @@ export const createPlaybookSlice: StateCreator<AppStore, [], [], PlaybookSlice> 
   loadPlaybookContent: async (moduleId: string) => {
     set({ playbookLoading: true, playbookError: null, activeModuleId: moduleId });
     try {
-      const content = await invoke<PlaybookContent>('get_playbook_content', { moduleId });
+      const content = await cmd('get_playbook_content', { moduleId });
       set({ playbookContent: content, playbookLoading: false });
     } catch (e) {
       set({ playbookError: String(e), playbookLoading: false });
@@ -57,7 +57,7 @@ export const createPlaybookSlice: StateCreator<AppStore, [], [], PlaybookSlice> 
 
   loadPlaybookProgress: async () => {
     try {
-      const progress = await invoke<PlaybookProgress>('get_playbook_progress');
+      const progress = await cmd('get_playbook_progress');
       set({ playbookProgress: progress });
     } catch (e) {
       set({ playbookError: String(e) });
@@ -66,7 +66,7 @@ export const createPlaybookSlice: StateCreator<AppStore, [], [], PlaybookSlice> 
 
   markLessonComplete: async (moduleId: string, lessonIdx: number) => {
     try {
-      await invoke('mark_lesson_complete', { moduleId, lessonIdx });
+      await cmd('mark_lesson_complete', { moduleId, lessonIdx });
       // Reload progress
       get().loadPlaybookProgress();
     } catch (e) {
@@ -79,15 +79,15 @@ export const createPlaybookSlice: StateCreator<AppStore, [], [], PlaybookSlice> 
   loadPersonalizedContent: async (moduleId: string, lessonIdx: number) => {
     const key = `${moduleId}:${lessonIdx}`;
     try {
-      const lesson = await invoke<PersonalizedLesson>('get_personalized_lesson', {
+      const lesson = await cmd('get_personalized_lesson', {
         moduleId,
         lessonIdx,
-      });
+      }) as unknown as PersonalizedLesson;
       set({ personalizedLessons: { ...get().personalizedLessons, [key]: lesson } });
 
       // If LLM is available, trigger async hydration in the background
       if (lesson.depth.llm_pending) {
-        invoke('hydrate_lesson_with_llm', { moduleId, lessonIdx }).catch((e) => {
+        cmd('hydrate_lesson_with_llm', { moduleId, lessonIdx }).catch((e) => {
           console.warn('LLM hydration failed (non-fatal):', e);
         });
       }
@@ -101,7 +101,7 @@ export const createPlaybookSlice: StateCreator<AppStore, [], [], PlaybookSlice> 
     if (lessonCount <= 0) return;
     try {
       const requests: [string, number][] = Array.from({ length: lessonCount }, (_, i) => [moduleId, i]);
-      const lessons = await invoke<PersonalizedLesson[]>('get_personalized_lessons_batch', { requests });
+      const lessons = await cmd('get_personalized_lessons_batch', { requests }) as unknown as PersonalizedLesson[];
       const updated = { ...get().personalizedLessons };
       lessons.forEach((lesson, i) => {
         updated[`${moduleId}:${i}`] = lesson;
@@ -111,7 +111,7 @@ export const createPlaybookSlice: StateCreator<AppStore, [], [], PlaybookSlice> 
       // Trigger LLM hydration for any lessons that need it
       for (let i = 0; i < lessons.length; i++) {
         if (lessons[i].depth.llm_pending) {
-          invoke('hydrate_lesson_with_llm', { moduleId, lessonIdx: i }).catch((e) => {
+          cmd('hydrate_lesson_with_llm', { moduleId, lessonIdx: i }).catch((e) => {
             console.warn('LLM hydration failed (non-fatal):', e);
           });
         }
@@ -123,7 +123,7 @@ export const createPlaybookSlice: StateCreator<AppStore, [], [], PlaybookSlice> 
 
   loadStreetsTier: async () => {
     try {
-      const result = await invoke<{ tier: string; expired?: boolean }>('get_streets_tier');
+      const result = await cmd('get_streets_tier');
       set({ streetsTier: (result.expired ? 'playbook' : result.tier) as StreetsTier });
     } catch {
       set({ streetsTier: 'playbook' });
@@ -132,10 +132,7 @@ export const createPlaybookSlice: StateCreator<AppStore, [], [], PlaybookSlice> 
 
   activateStreetsLicense: async (key: string) => {
     try {
-      const result = await invoke<{ success: boolean; streets_tier: string; tier: string }>(
-        'activate_streets_license',
-        { licenseKey: key },
-      );
+      const result = await cmd('activate_streets_license', { licenseKey: key });
       if (result.success) {
         set({ streetsTier: result.streets_tier as StreetsTier });
         return true;

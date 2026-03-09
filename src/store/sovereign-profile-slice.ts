@@ -1,5 +1,5 @@
 import type { StateCreator } from 'zustand';
-import { invoke } from '@tauri-apps/api/core';
+import { cmd } from '../lib/commands';
 import type { AppStore } from './types';
 
 // ============================================================================
@@ -55,7 +55,7 @@ export const createSovereignProfileSlice: StateCreator<AppStore, [], [], Soverei
   loadSovereignProfile: async () => {
     set({ profileLoading: true });
     try {
-      const data = await invoke<SovereignProfileData>('get_sovereign_profile');
+      const data = await cmd('get_sovereign_profile') as unknown as SovereignProfileData;
       set({ sovereignProfile: data, profileLoading: false });
     } catch {
       set({ profileLoading: false });
@@ -64,14 +64,14 @@ export const createSovereignProfileSlice: StateCreator<AppStore, [], [], Soverei
 
   loadProfileCompleteness: async () => {
     try {
-      const data = await invoke<ProfileCompleteness>('get_sovereign_profile_completeness');
+      const data = await cmd('get_sovereign_profile_completeness') as unknown as ProfileCompleteness;
       set({ profileCompleteness: data });
     } catch { /* non-fatal */ }
   },
 
   saveFact: async (category: string, key: string, value: string) => {
     try {
-      await invoke('save_sovereign_fact', { category, key, value });
+      await cmd('save_sovereign_fact', { category, key, value });
       get().loadSovereignProfile();
       get().loadProfileCompleteness();
     } catch { /* non-fatal */ }
@@ -79,7 +79,7 @@ export const createSovereignProfileSlice: StateCreator<AppStore, [], [], Soverei
 
   generateDocument: async () => {
     try {
-      const doc = await invoke<string>('generate_sovereign_stack_document');
+      const doc = await cmd('generate_sovereign_stack_document');
       set({ generatedDocument: doc });
     } catch { /* non-fatal */ }
   },
