@@ -66,6 +66,11 @@ const EXCEPTIONS = {
   'src-tauri/src/void_engine/universe.rs': 'Void Universe renderer — experimental, feature-gated',
   'src-tauri/src/sovereign_developer_profile.rs': 'Unified profile aggregation — 10 data sources + markdown/JSON export',
   'src-tauri/src/game_engine.rs':               'GAME engine — 404 lines production + 730 lines integration tests',
+  'src-tauri/src/settings/license.rs':          'License validation — Keygen API + caching + activation',
+  'src-tauri/src/db/channels.rs':               'Channel DB operations — CRUD + subscription + filtering',
+  'src-tauri/src/state.rs':                     'App state management — global state + init + cleanup',
+  'src-tauri/src/sources/twitter.rs':           'Twitter source adapter — API + parsing + rate limiting',
+  'src-tauri/src/natural_language_search.rs':   'NLS query engine — tiered search + stack boosting + ghost preview',
 
   // TypeScript — type registries and complex UI
   'src/lib/commands.ts':                             'IPC command registry — all 107 typed Tauri commands',
@@ -84,6 +89,11 @@ const EXCEPTIONS = {
   'src/components/ResultsView.test.tsx':                  'ResultsView tests — 17 accessibility and state tests + required mocks',
   'src/components/__tests__/ActionBar.test.tsx':           'ActionBar tests — 26 tests covering all UI states and interactions',
   'src/store/types.ts':                                    'Store type registry — combined slice interfaces and AppStore union type',
+  'src/components/onboarding/TasteTestStep.test.tsx':      'TasteTest tests — 22 tests across all onboarding phases',
+  'src/components/PlaybookView.tsx':                        'Playbook — STREETS module viewer + progress tracking',
+  'src/components/NaturalLanguageSearch.tsx':               'NLS UI — search interface + results + ghost preview',
+  'src/components/NaturalLanguageSearch.test.tsx':          'NLS tests — 14 tests for search UI states and interactions',
+  'src/components/playbook/PlaybookView.test.tsx':         'Playbook tests — 15 tests for module navigation and progress',
 };
 
 const SCAN_DIRS = ['src', 'src-tauri/src'];
