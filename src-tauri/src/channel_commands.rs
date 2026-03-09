@@ -8,7 +8,7 @@ use tracing::{error, info};
 use crate::channels::{
     ChannelChangelog, ChannelRender, ChannelSourceMatch, ChannelSummary, RenderProvenance,
 };
-use crate::error::Result;
+use crate::error::{Result, ResultExt};
 use crate::get_database;
 use tauri::AppHandle;
 
@@ -20,9 +20,7 @@ use tauri::AppHandle;
 #[tauri::command]
 pub async fn list_channels() -> Result<Vec<ChannelSummary>> {
     let db = get_database()?;
-    let channels = db
-        .list_channels()
-        .map_err(|e| format!("Failed to list channels: {}", e))?;
+    let channels = db.list_channels().context("Failed to list channels")?;
     Ok(channels)
 }
 
@@ -30,9 +28,7 @@ pub async fn list_channels() -> Result<Vec<ChannelSummary>> {
 #[tauri::command]
 pub async fn get_channel(channel_id: i64) -> Result<crate::channels::Channel> {
     let db = get_database()?;
-    let channel = db
-        .get_channel(channel_id)
-        .map_err(|e| format!("Channel not found: {}", e))?;
+    let channel = db.get_channel(channel_id).context("Channel not found")?;
     Ok(channel)
 }
 
@@ -79,7 +75,7 @@ pub async fn get_channel_provenance(render_id: i64) -> Result<Vec<RenderProvenan
     let db = get_database()?;
     let provenance = db
         .get_render_provenance(render_id)
-        .map_err(|e| format!("Failed to get provenance: {}", e))?;
+        .context("Failed to get provenance")?;
     Ok(provenance)
 }
 
@@ -89,7 +85,7 @@ pub async fn get_channel_changelog(channel_id: i64) -> Result<Option<ChannelChan
     let db = get_database()?;
     let renders = db
         .get_render_history(channel_id, 2)
-        .map_err(|e| format!("Failed to get render history: {}", e))?;
+        .context("Failed to get render history")?;
 
     if renders.len() < 2 {
         return Ok(None);
@@ -126,7 +122,7 @@ pub async fn get_channel_sources(
     let limit = limit.unwrap_or(20);
     let sources = db
         .get_channel_source_items(channel_id, limit)
-        .map_err(|e| format!("Failed to get channel sources: {}", e))?;
+        .context("Failed to get channel sources")?;
     Ok(sources)
 }
 
@@ -134,9 +130,7 @@ pub async fn get_channel_sources(
 #[tauri::command]
 pub async fn refresh_channel_sources(channel_id: i64) -> Result<i64> {
     let db = get_database()?;
-    let channel = db
-        .get_channel(channel_id)
-        .map_err(|e| format!("Channel not found: {}", e))?;
+    let channel = db.get_channel(channel_id).context("Channel not found")?;
 
     info!(target: "4da::channels", channel = %channel.slug, "Refreshing channel sources");
 
@@ -144,7 +138,7 @@ pub async fn refresh_channel_sources(channel_id: i64) -> Result<i64> {
 
     let count = db
         .refresh_channel_source_count(channel_id)
-        .map_err(|e| format!("Failed to refresh count: {}", e))?;
+        .context("Failed to refresh count")?;
 
     info!(
         target: "4da::channels",
@@ -178,7 +172,7 @@ pub async fn create_custom_channel(
     if !crate::settings::is_pro() {
         let custom_count = db
             .count_custom_channels()
-            .map_err(|e| format!("Failed to count channels: {}", e))?;
+            .context("Failed to count channels")?;
         if custom_count >= FREE_TIER_MAX_CHANNELS {
             return Err(format!(
                 "Free tier limited to {} custom channels. Upgrade to Pro for unlimited channels.",
@@ -189,7 +183,7 @@ pub async fn create_custom_channel(
     }
     let id = db
         .create_channel(&slug, &title, &description, &topic_query)
-        .map_err(|e| format!("Failed to create channel: {}", e))?;
+        .context("Failed to create channel")?;
     info!(target: "4da::channels", slug = %slug, id, "Created custom channel");
 
     // GAME: track channel creation
@@ -224,7 +218,7 @@ pub async fn preview_channel_sources(topics: Vec<String>) -> Result<serde_json::
 pub async fn delete_channel(channel_id: i64) -> Result<()> {
     let db = get_database()?;
     db.update_channel_status(channel_id, &crate::channels::ChannelStatus::Archived)
-        .map_err(|e| format!("Failed to archive channel: {}", e))?;
+        .context("Failed to archive channel")?;
     info!(target: "4da::channels", channel_id, "Channel archived");
     Ok(())
 }

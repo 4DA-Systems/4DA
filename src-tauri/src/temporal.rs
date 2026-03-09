@@ -8,7 +8,7 @@ use rusqlite::params;
 use serde::{Deserialize, Serialize};
 use tracing::debug;
 
-use crate::error::Result;
+use crate::error::{Result, ResultExt};
 
 // ============================================================================
 // Types
@@ -58,7 +58,7 @@ pub fn upsert_dependency(
          DO UPDATE SET version = ?4, is_dev = ?5, last_scanned = datetime('now')",
         params![project_path, manifest_type, package_name, version, is_dev as i32, language],
     )
-    .map_err(|e| format!("Failed to upsert dependency: {}", e))?;
+    .context("Failed to upsert dependency")?;
     Ok(())
 }
 
@@ -227,7 +227,7 @@ pub fn record_event(
          VALUES (?1, ?2, ?3, ?4, ?5)",
         params![event_type, subject, data_str, source_item_id, expires_at],
     )
-    .map_err(|e| format!("Failed to record temporal event: {}", e))?;
+    .context("Failed to record temporal event")?;
     Ok(conn.last_insert_rowid())
 }
 

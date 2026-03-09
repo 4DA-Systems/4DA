@@ -4,7 +4,7 @@ use std::time::Instant;
 use tracing::info;
 
 use crate::db::Database;
-use crate::error::Result;
+use crate::error::{Result, ResultExt};
 use crate::taste_test::continuous;
 
 use super::{compute_taste_embedding, get_ace_context, get_topic_embeddings, ScoringContext};
@@ -34,7 +34,7 @@ pub(crate) async fn build_scoring_context(db: &Database) -> Result<ScoringContex
     let context_engine = crate::get_context_engine()?;
     let static_identity = context_engine
         .get_static_identity()
-        .map_err(|e| format!("Failed to load context: {}", e))?;
+        .context("Failed to load context")?;
 
     // User's explicit tech stack from onboarding (small, curated list)
     let declared_tech: Vec<String> = static_identity

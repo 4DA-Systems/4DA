@@ -3,7 +3,7 @@
 
 use once_cell::sync::Lazy;
 
-use crate::error::Result;
+use crate::error::{Result, ResultExt};
 use crate::get_settings_manager;
 
 /// Shared HTTP client for embedding API calls (reused across requests)
@@ -141,12 +141,12 @@ async fn embed_texts_openai(texts: &[String], api_key: &str) -> Result<Vec<Vec<f
         .json(&body)
         .send()
         .await
-        .map_err(|e| format!("OpenAI API request failed: {}", e))?;
+        .context("OpenAI API request failed")?;
 
     let json: serde_json::Value = response
         .json()
         .await
-        .map_err(|e| format!("Failed to parse OpenAI response: {}", e))?;
+        .context("Failed to parse OpenAI response")?;
 
     // Phase 5: Record usage from API response
     if let Some(usage) = json.get("usage") {
@@ -228,7 +228,7 @@ async fn embed_texts_ollama(texts: &[String], base_url: &Option<String>) -> Resu
             let json: serde_json::Value = response
                 .json()
                 .await
-                .map_err(|e| format!("Failed to parse Ollama batch response: {}", e))?;
+                .context("Failed to parse Ollama batch response")?;
 
             let embeddings_array =
                 json["embeddings"]
@@ -332,7 +332,7 @@ async fn embed_texts_ollama_single(texts: &[String], base: &str) -> Result<Vec<V
         let json: serde_json::Value = response
             .json()
             .await
-            .map_err(|e| format!("Failed to parse Ollama response: {}", e))?;
+            .context("Failed to parse Ollama response")?;
 
         let raw = json["embedding"]
             .as_array()

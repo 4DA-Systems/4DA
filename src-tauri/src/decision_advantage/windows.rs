@@ -8,7 +8,7 @@ use rusqlite::{params, Connection};
 use tracing::{info, warn};
 
 use super::DecisionWindow;
-use crate::error::Result;
+use crate::error::{Result, ResultExt};
 
 const SECURITY_KEYWORDS: &[&str] = &[
     "cve",
@@ -157,7 +157,7 @@ pub(crate) fn transition_window(
             &sql,
             params![status, outcome.unwrap_or(""), lead_time_hours, id],
         )
-        .map_err(|e| format!("Failed to transition window {id}: {e}"))?;
+        .with_context(|| format!("Failed to transition window {id}"))?;
     if affected == 0 {
         return Err(format!("Window {id} not found").into());
     }

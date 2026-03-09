@@ -5,7 +5,7 @@
 //! - OpenAI GPT
 //! - Ollama (local, free)
 
-use crate::error::Result;
+use crate::error::{Result, ResultExt};
 use crate::settings::LLMProvider;
 use crate::state::{is_llm_limit_reached, record_llm_tokens};
 use serde::{Deserialize, Serialize};
@@ -204,7 +204,7 @@ impl LLMClient {
             .json(&body)
             .send()
             .await
-            .map_err(|e| format!("Ollama fallback also failed (is Ollama running?): {}", e))?;
+            .context("Ollama fallback also failed (is Ollama running?)")?;
 
         if !response.status().is_success() {
             let status = response.status();
@@ -215,7 +215,7 @@ impl LLMClient {
         let data: serde_json::Value = response
             .json()
             .await
-            .map_err(|e| format!("Failed to parse Ollama fallback response: {}", e))?;
+            .context("Failed to parse Ollama fallback response")?;
 
         let content = data["message"]["content"]
             .as_str()
@@ -269,7 +269,7 @@ impl LLMClient {
             .json(&body)
             .send()
             .await
-            .map_err(|e| format!("Anthropic API request failed: {}", e))?;
+            .context("Anthropic API request failed")?;
 
         if !response.status().is_success() {
             let status = response.status();
@@ -280,7 +280,7 @@ impl LLMClient {
         let data: serde_json::Value = response
             .json()
             .await
-            .map_err(|e| format!("Failed to parse Anthropic response: {}", e))?;
+            .context("Failed to parse Anthropic response")?;
 
         let content = data["content"][0]["text"]
             .as_str()
@@ -331,7 +331,7 @@ impl LLMClient {
             .json(&body)
             .send()
             .await
-            .map_err(|e| format!("OpenAI API request failed: {}", e))?;
+            .context("OpenAI API request failed")?;
 
         if !response.status().is_success() {
             let status = response.status();
@@ -342,7 +342,7 @@ impl LLMClient {
         let data: serde_json::Value = response
             .json()
             .await
-            .map_err(|e| format!("Failed to parse OpenAI response: {}", e))?;
+            .context("Failed to parse OpenAI response")?;
 
         let content = data["choices"][0]["message"]["content"]
             .as_str()
@@ -433,7 +433,7 @@ impl LLMClient {
         let data: serde_json::Value = response
             .json()
             .await
-            .map_err(|e| format!("Failed to parse Ollama response: {}", e))?;
+            .context("Failed to parse Ollama response")?;
 
         let content = data["message"]["content"]
             .as_str()
@@ -591,23 +591,20 @@ pub async fn list_ollama_models(base_url: &str) -> Result<Vec<String>> {
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(5))
         .build()
-        .map_err(|e| format!("Failed to create HTTP client: {}", e))?;
+        .context("Failed to create HTTP client")?;
 
     let url = format!("{}/api/tags", base_url);
     let response = client
         .get(&url)
         .send()
         .await
-        .map_err(|e| format!("Failed to connect to Ollama: {}", e))?;
+        .context("Failed to connect to Ollama")?;
 
     if !response.status().is_success() {
         return Err(format!("Ollama returned error: {}", response.status()).into());
     }
 
-    let data: serde_json::Value = response
-        .json()
-        .await
-        .map_err(|e| format!("Failed to parse response: {}", e))?;
+    let data: serde_json::Value = response.json().await.context("Failed to parse response")?;
 
     let models = data["models"]
         .as_array()

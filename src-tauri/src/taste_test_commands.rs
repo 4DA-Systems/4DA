@@ -4,7 +4,7 @@ use std::sync::{Mutex, OnceLock};
 
 use tauri::AppHandle;
 
-use crate::error::Result;
+use crate::error::{Result, ResultExt};
 use crate::state::open_db_connection;
 use crate::taste_test::inference::InferenceState;
 use crate::taste_test::{TasteProfileSummary, TasteResponse, TasteTestStep};
@@ -23,7 +23,7 @@ pub async fn taste_test_start() -> Result<TasteTestStep> {
     let step = state.next_step();
 
     let mutex = get_state();
-    let mut guard = mutex.lock().map_err(|e| format!("Lock error: {e}"))?;
+    let mut guard = mutex.lock().context("Lock error")?;
     *guard = Some(state);
 
     Ok(step)
@@ -44,7 +44,7 @@ pub async fn taste_test_respond(
     };
 
     let mutex = get_state();
-    let mut guard = mutex.lock().map_err(|e| format!("Lock error: {e}"))?;
+    let mut guard = mutex.lock().context("Lock error")?;
     let state = guard.as_mut().ok_or("No active taste test session")?;
 
     state.update_with_latency(item_slot, &taste_response, response_time_ms);
@@ -58,7 +58,7 @@ pub async fn taste_test_respond(
 pub async fn taste_test_finalize(app: AppHandle) -> Result<TasteProfileSummary> {
     let (profile, responses, latencies, summary) = {
         let mutex = get_state();
-        let mut guard = mutex.lock().map_err(|e| format!("Lock error: {e}"))?;
+        let mut guard = mutex.lock().context("Lock error")?;
         let state = guard.take().ok_or("No active taste test session")?;
 
         let profile = state.finalize();

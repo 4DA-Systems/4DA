@@ -5,7 +5,7 @@ use rusqlite::Connection;
 use std::sync::Arc;
 use tracing::{debug, info};
 
-use crate::error::Result;
+use crate::error::{Result, ResultExt};
 
 use super::ACE;
 
@@ -53,7 +53,7 @@ pub fn store_topic_embedding(
             "UPDATE active_topics SET embedding = ?1 WHERE id = ?2",
             rusqlite::params![embedding_blob, id],
         )
-        .map_err(|e| format!("Failed to update topic embedding: {}", e))?;
+        .context("Failed to update topic embedding")?;
 
         // Update or insert into vec0 index
         // First try to update existing, then insert if not found
@@ -70,7 +70,7 @@ pub fn store_topic_embedding(
                 "INSERT OR REPLACE INTO topic_vec (rowid, embedding) VALUES (?1, ?2)",
                 rusqlite::params![id, embedding_blob],
             )
-            .map_err(|e| format!("Failed to insert topic into vec0: {}", e))?;
+            .context("Failed to insert topic into vec0")?;
         }
     }
 

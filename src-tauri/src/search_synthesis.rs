@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 use tauri::Emitter;
 use tracing::debug;
 
-use crate::error::Result;
+use crate::error::{Result, ResultExt};
 use crate::llm::{LLMClient, Message};
 use crate::natural_language_search::extract_keywords;
 
@@ -383,7 +383,7 @@ pub async fn synthesize_search(
             },
         )
         .await
-        .map_err(|e| format!("Synthesis failed: {e}"))?;
+        .context("Synthesis failed")?;
 
     let synthesis = response.content.trim().to_string();
 

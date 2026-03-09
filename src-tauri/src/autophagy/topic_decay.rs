@@ -8,7 +8,7 @@ use rusqlite::{params, Connection};
 use std::collections::HashMap;
 use tracing::{debug, info, warn};
 
-use crate::error::Result;
+use crate::error::{Result, ResultExt};
 
 /// Default half-life in hours when insufficient data exists.
 const DEFAULT_HALF_LIFE_HOURS: f32 = 72.0;
@@ -178,7 +178,7 @@ pub(crate) fn store_decay_profiles(
              VALUES ('topic_decay', ?1, ?2, 0.8, 0)",
             params![profile.topic, data],
         )
-        .map_err(|e| format!("Failed to insert decay profile for {}: {}", profile.topic, e))?;
+        .with_context(|| format!("Failed to insert decay profile for{}", profile.topic))?;
     }
 
     debug!(target: "4da::autophagy", count = profiles.len(), "Stored topic decay profiles");

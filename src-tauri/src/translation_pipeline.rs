@@ -4,7 +4,7 @@
 //! from English into other languages. Translations are saved to
 //! `data/translations/{lang}/` and loaded by the i18n module at runtime.
 
-use crate::error::Result;
+use crate::error::{Result, ResultExt};
 use crate::llm;
 use std::collections::HashMap;
 use tracing::{info, warn};
@@ -54,7 +54,7 @@ pub async fn translate_batch(
                 }],
             )
             .await
-            .map_err(|e| format!("Translation failed: {}", e))?;
+            .context("Translation failed")?;
 
         // Strip markdown fences if the LLM wraps the response
         let clean = strip_markdown_fences(&response.content);
@@ -103,7 +103,7 @@ pub async fn translate_markdown(content: &str, target_lang: &str) -> Result<Stri
             }],
         )
         .await
-        .map_err(|e| format!("Markdown translation failed: {}", e))?;
+        .context("Markdown translation failed")?;
 
     Ok(response.content)
 }

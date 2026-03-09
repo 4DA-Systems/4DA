@@ -8,7 +8,7 @@ use std::path::{Path, PathBuf};
 
 use tracing::{debug, info, warn};
 
-use crate::error::Result;
+use crate::error::{Result, ResultExt};
 use crate::{
     ace_commands, chunk_text, embed_texts, get_context_dir, get_database, get_settings_manager,
     ContextFile, SUPPORTED_EXTENSIONS,
@@ -143,9 +143,7 @@ pub async fn clear_context() -> Result<String> {
     // Use the singleton database connection (same one used by analysis)
     let db = get_database()?;
 
-    let cleared = db
-        .clear_contexts()
-        .map_err(|e| format!("Failed to clear context: {}", e))?;
+    let cleared = db.clear_contexts().context("Failed to clear context")?;
 
     info!(target: "4da::context", chunks_removed = cleared, "Context cleared successfully");
     Ok(format!(
@@ -199,7 +197,7 @@ pub async fn index_context() -> Result<String> {
     debug!(target: "4da::context", chunks = all_chunks.len(), "Storing context chunks in database");
     for ((source, text), embedding) in all_chunks.iter().zip(chunk_embeddings.iter()) {
         db.upsert_context(source, text, embedding)
-            .map_err(|e| format!("Failed to store context: {}", e))?;
+            .context("Failed to store context")?;
     }
 
     info!(target: "4da::context", files = context_files.len(), chunks = all_chunks.len(), "Context indexed successfully");

@@ -6,7 +6,7 @@
 //!
 //! Export pack generation lives in `toolkit_export.rs`.
 
-use crate::error::Result;
+use crate::error::{Result, ResultExt};
 use serde::{Deserialize, Serialize};
 use tracing::info;
 
@@ -72,7 +72,7 @@ pub async fn toolkit_test_feed(url: String) -> Result<FeedTestResult> {
         .header("User-Agent", "4DA/1.0 Feed Tester")
         .send()
         .await
-        .map_err(|e| format!("Fetch failed: {}", e))?;
+        .context("Fetch failed")?;
 
     let status = response.status();
     if !status.is_success() {
@@ -84,10 +84,7 @@ pub async fn toolkit_test_feed(url: String) -> Result<FeedTestResult> {
         .into());
     }
 
-    let xml = response
-        .text()
-        .await
-        .map_err(|e| format!("Failed to read response: {}", e))?;
+    let xml = response.text().await.context("Failed to read response")?;
 
     let fetch_duration_ms = start.elapsed().as_millis() as u64;
 

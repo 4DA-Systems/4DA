@@ -8,7 +8,7 @@ use super::{
     PERSONA_NAMES,
 };
 use crate::autophagy::CalibrationDelta;
-use crate::error::Result;
+use crate::error::{Result, ResultExt};
 
 // ============================================================================
 // Schema
@@ -35,7 +35,7 @@ pub fn ensure_taste_test_tables(conn: &Connection) -> Result<()> {
             response_time_ms INTEGER
         );",
     )
-    .map_err(|e| format!("Failed to create taste test tables: {e}"))?;
+    .context("Failed to create taste test tables")?;
     Ok(())
 }
 
@@ -53,7 +53,7 @@ pub fn save_taste_result(
     ensure_taste_test_tables(conn)?;
 
     let weights_json = serde_json::to_string(&profile.persona_weights.to_vec())
-        .map_err(|e| format!("Failed to serialize weights: {e}"))?;
+        .context("Failed to serialize weights")?;
 
     conn.execute(
         "INSERT INTO taste_test_results (items_shown, confidence, persona_weights, dominant_persona)
@@ -64,7 +64,7 @@ pub fn save_taste_result(
             weights_json,
             profile.dominant_persona as i64,
         ],
-    ).map_err(|e| format!("Failed to save taste test result: {e}"))?;
+    ).context("Failed to save taste test result")?;
 
     let test_id = conn.last_insert_rowid();
 
@@ -80,7 +80,7 @@ pub fn save_taste_result(
              VALUES (?1, ?2, ?3, ?4)",
             params![test_id, *slot as i64, response_str, latency_ms],
         )
-        .map_err(|e| format!("Failed to save taste test response: {e}"))?;
+        .context("Failed to save taste test response")?;
     }
 
     Ok(test_id)
@@ -177,7 +177,7 @@ pub fn apply_taste_to_context(conn: &Connection, profile: &TasteProfile) -> Resu
              VALUES (?1, ?2, ?3)",
             params![topic, weight, "inferred"],
         )
-        .map_err(|e| format!("Failed to add interest '{topic}': {e}"))?;
+        .with_context(|| format!("Failed to add interest '{topic}'"))?;
     }
 
     // Add exclusions
@@ -186,7 +186,7 @@ pub fn apply_taste_to_context(conn: &Connection, profile: &TasteProfile) -> Resu
             "INSERT OR IGNORE INTO exclusions (topic) VALUES (?1)",
             params![topic],
         )
-        .map_err(|e| format!("Failed to add exclusion '{topic}': {e}"))?;
+        .with_context(|| format!("Failed to add exclusion '{topic}'"))?;
     }
 
     // Store calibration deltas via autophagy

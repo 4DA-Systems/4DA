@@ -14,7 +14,7 @@ use tracing::{error, info, warn};
 use crate::channel_provenance::extract_provenance;
 use crate::channels::{Channel, ChannelRender};
 use crate::db::{Database, StoredSourceItem};
-use crate::error::Result;
+use crate::error::{Result, ResultExt};
 use crate::extract_topics;
 use crate::scoring::{compute_affinity_multiplier, get_ace_context};
 
@@ -255,9 +255,7 @@ pub(crate) async fn render_channel(channel_id: i64) -> Result<ChannelRender> {
     let db = crate::get_database()?;
 
     // Load channel
-    let channel = db
-        .get_channel(channel_id)
-        .map_err(|e| format!("Channel not found: {}", e))?;
+    let channel = db.get_channel(channel_id).context("Channel not found")?;
 
     // Gather sources (sync, no await)
     let items = gather_channel_sources(db, &channel)?;

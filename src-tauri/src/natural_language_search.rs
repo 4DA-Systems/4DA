@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 use tracing::{debug, warn};
 
 use crate::db::embedding_to_blob;
-use crate::error::Result;
+use crate::error::{Result, ResultExt};
 
 // ============================================================================
 // Types
@@ -420,9 +420,7 @@ fn execute_text_search(
 
     debug!(target: "4da::search", sql = %sql, "Executing text search");
 
-    let mut stmt = conn
-        .prepare(&sql)
-        .map_err(|e| format!("Query error: {e}"))?;
+    let mut stmt = conn.prepare(&sql).context("Query error")?;
     let rows = stmt
         .query_map([], |row| {
             let id: i64 = row.get(0)?;
@@ -449,7 +447,7 @@ fn execute_text_search(
                 match_reason: "keyword match".to_string(),
             })
         })
-        .map_err(|e| format!("Query error: {e}"))?;
+        .context("Query error")?;
 
     let mut items = Vec::new();
     for row in rows {
@@ -489,7 +487,7 @@ async fn execute_vector_search(parsed: &ParsedQuery, limit: usize) -> Result<Vec
              WHERE v.embedding MATCH ?1 AND k = ?2
              ORDER BY v.distance",
         )
-        .map_err(|e| format!("Vector query error: {e}"))?;
+        .context("Vector query error")?;
 
     let rows = stmt
         .query_map(rusqlite::params![blob, limit as i64], |row| {
@@ -519,7 +517,7 @@ async fn execute_vector_search(parsed: &ParsedQuery, limit: usize) -> Result<Vec
                 match_reason: format!("semantic similarity ({:.0}%)", relevance * 100.0),
             })
         })
-        .map_err(|e| format!("Vector query error: {e}"))?;
+        .context("Vector query error")?;
 
     let mut items = Vec::new();
     for row in rows {

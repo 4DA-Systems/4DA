@@ -7,7 +7,7 @@ use rusqlite::{params, Connection};
 use std::collections::HashMap;
 use tracing::{debug, info, warn};
 
-use crate::error::Result;
+use crate::error::{Result, ResultExt};
 
 /// Analyze sources: compute engagement rates per source_type within the analysis window.
 ///
@@ -107,7 +107,7 @@ pub(crate) fn store_source_autopsies(
 ) -> Result<()> {
     let tx = conn
         .unchecked_transaction()
-        .map_err(|e| format!("Failed to begin transaction for source autopsies: {}", e))?;
+        .context("Failed to begin transaction for source autopsies")?;
 
     for autopsy in autopsies {
         let data = serde_json::to_string(&serde_json::json!({
@@ -126,7 +126,7 @@ pub(crate) fn store_source_autopsies(
              WHERE digest_type = 'source_autopsy' AND subject = ?1 AND superseded_by IS NULL",
             params![subject],
         )
-        .map_err(|e| format!("Failed to supersede source autopsy for {}: {}", subject, e))?;
+        .with_context(|| format!("Failed to supersede source autopsy for{}", subject))?;
 
         tx.execute(
             "INSERT INTO digested_intelligence (digest_type, subject, data, confidence, sample_size)
@@ -138,11 +138,10 @@ pub(crate) fn store_source_autopsies(
                 autopsy.items_surfaced,
             ],
         )
-        .map_err(|e| format!("Failed to insert source autopsy for {}: {}", subject, e))?;
+        .with_context(|| format!("Failed to insert source autopsy for{}", subject))?;
     }
 
-    tx.commit()
-        .map_err(|e| format!("Failed to commit source autopsies: {}", e))?;
+    tx.commit().context("Failed to commit source autopsies")?;
 
     debug!(target: "4da::autophagy", count = autopsies.len(), "Stored source autopsies");
     Ok(())

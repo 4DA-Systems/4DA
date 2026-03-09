@@ -5,7 +5,7 @@
 
 use tracing::{error, info};
 
-use crate::error::Result;
+use crate::error::{Result, ResultExt};
 use crate::scoring::get_ace_context;
 use crate::{get_analysis_state, get_database, get_settings_manager};
 
@@ -108,7 +108,7 @@ pub(crate) async fn generate_briefing_internal(
         let db = get_database()?;
         let period_start = Utc::now() - Duration::hours(72);
         db.get_relevant_items_since(period_start, 0.1, 30)
-            .map_err(|e| format!("Failed to fetch items: {}", e))?
+            .context("Failed to fetch items")?
     } else {
         mem_items
     };

@@ -4,7 +4,7 @@
 /// - DOCX (Word) using docx-rs
 /// - XLSX (Excel) using calamine
 use super::{DocumentExtractor, ExtractedDocument, PageContent};
-use crate::error::Result;
+use crate::error::{Result, ResultExt};
 use calamine::{open_workbook, Reader, Xlsx};
 use docx_rs::read_docx;
 use std::collections::HashMap;
@@ -20,10 +20,9 @@ impl OfficeExtractor {
 
     /// Extract text from a DOCX file
     fn extract_docx(&self, path: &Path) -> Result<ExtractedDocument> {
-        let bytes = fs::read(path).map_err(|e| format!("Failed to read DOCX file: {}", e))?;
+        let bytes = fs::read(path).context("Failed to read DOCX file")?;
 
-        let docx =
-            read_docx(&bytes).map_err(|e| format!("Failed to parse DOCX structure: {}", e))?;
+        let docx = read_docx(&bytes).context("Failed to parse DOCX structure")?;
 
         let mut text_parts: Vec<String> = Vec::new();
         let metadata = HashMap::new();
@@ -85,8 +84,7 @@ impl OfficeExtractor {
 
     /// Extract text from an XLSX file
     fn extract_xlsx(&self, path: &Path) -> Result<ExtractedDocument> {
-        let mut workbook: Xlsx<_> =
-            open_workbook(path).map_err(|e| format!("Failed to open Excel workbook: {}", e))?;
+        let mut workbook: Xlsx<_> = open_workbook(path).context("Failed to open Excel workbook")?;
 
         let mut all_text: Vec<String> = Vec::new();
         let mut metadata = HashMap::new();

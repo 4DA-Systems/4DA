@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
 
-use crate::error::Result;
+use crate::error::{Result, ResultExt};
 
 /// Email digest configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -668,18 +668,15 @@ impl DigestManager {
                 .join("digests")
         });
 
-        std::fs::create_dir_all(&output_dir)
-            .map_err(|e| format!("Failed to create digest directory: {}", e))?;
+        std::fs::create_dir_all(&output_dir).context("Failed to create digest directory")?;
 
         // Save as markdown
         let md_path = output_dir.join(format!("{}.md", digest.id));
-        std::fs::write(&md_path, digest.to_markdown())
-            .map_err(|e| format!("Failed to save markdown digest: {}", e))?;
+        std::fs::write(&md_path, digest.to_markdown()).context("Failed to save markdown digest")?;
 
         // Save as HTML
         let html_path = output_dir.join(format!("{}.html", digest.id));
-        std::fs::write(&html_path, digest.to_html())
-            .map_err(|e| format!("Failed to save HTML digest: {}", e))?;
+        std::fs::write(&html_path, digest.to_html()).context("Failed to save HTML digest")?;
 
         Ok(md_path)
     }

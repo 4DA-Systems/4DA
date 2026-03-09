@@ -7,7 +7,7 @@ use rusqlite::Connection;
 use std::sync::Arc;
 use tracing::info;
 
-use crate::error::Result;
+use crate::error::{Result, ResultExt};
 
 /// Run all ACE database migrations
 pub fn migrate(conn: &Arc<Mutex<Connection>>) -> Result<()> {
@@ -298,7 +298,7 @@ pub fn migrate(conn: &Arc<Mutex<Connection>>) -> Result<()> {
 
     "#,
     )
-    .map_err(|e| format!("ACE migration failed: {}", e))?;
+    .context("ACE migration failed")?;
 
     // Phase 1B migration: Add last_decay_at column for continuous decay tracking
     // This replaces the boolean decay_applied flag with a timestamp
@@ -385,7 +385,7 @@ pub fn migrate(conn: &Arc<Mutex<Connection>>) -> Result<()> {
         );
     ",
     )
-    .map_err(|e| format!("Failed to create topic vec0 tables: {}", e))?;
+    .context("Failed to create topic vec0 tables")?;
 
     // Key-value store for persisting runtime settings (e.g., auto-tuned relevance threshold)
     conn.execute_batch(

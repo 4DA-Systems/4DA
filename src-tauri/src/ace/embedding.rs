@@ -11,7 +11,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use tracing::warn;
 
-use crate::error::Result;
+use crate::error::{Result, ResultExt};
 
 // ============================================================================
 // Embedding Provider Configuration
@@ -103,7 +103,7 @@ impl EmbeddingService {
             );
             CREATE INDEX IF NOT EXISTS idx_embedding_cache_text ON embedding_cache(text);",
         )
-        .map_err(|e| format!("Failed to create embedding cache table: {}", e))?;
+        .context("Failed to create embedding cache table")?;
         Ok(())
     }
 
@@ -300,7 +300,7 @@ impl EmbeddingService {
             "INSERT OR REPLACE INTO embedding_cache (text, embedding, model) VALUES (?1, ?2, ?3)",
             rusqlite::params![text, bytes, self.config.model],
         )
-        .map_err(|e| format!("Failed to cache embedding: {}", e))?;
+        .context("Failed to cache embedding")?;
 
         Ok(())
     }

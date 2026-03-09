@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 use tracing::info;
 use ts_rs::TS;
 
-use crate::error::Result;
+use crate::error::{Result, ResultExt};
 
 // ============================================================================
 // Types
@@ -168,16 +168,14 @@ where
     F: Fn(&rusqlite::Row) -> rusqlite::Result<Option<T>>,
 {
     let (sql, needs_param) = time_filtered_sql(select, since, limit);
-    let mut stmt = conn
-        .prepare(&sql)
-        .map_err(|e| format!("Prepare error: {}", e))?;
+    let mut stmt = conn.prepare(&sql).context("Prepare error")?;
 
     let rows = if needs_param {
         stmt.query_map(params![since.unwrap_or("")], &map_fn)
     } else {
         stmt.query_map([], &map_fn)
     }
-    .map_err(|e| format!("Query error: {}", e))?;
+    .context("Query error")?;
 
     let mut results = Vec::new();
     for row in rows {
@@ -198,7 +196,7 @@ fn query_active_decisions(conn: &Connection) -> Result<Vec<DecisionSummary>> {
              ORDER BY confidence DESC
              LIMIT 20",
         )
-        .map_err(|e| format!("Failed to prepare decisions query: {}", e))?;
+        .context("Failed to prepare decisions query")?;
 
     let rows = stmt
         .query_map([], |row| {
@@ -211,11 +209,11 @@ fn query_active_decisions(conn: &Connection) -> Result<Vec<DecisionSummary>> {
                 status: row.get(5)?,
             })
         })
-        .map_err(|e| format!("Failed to query decisions: {}", e))?;
+        .context("Failed to query decisions")?;
 
     let mut decisions = Vec::new();
     for row in rows {
-        decisions.push(row.map_err(|e| format!("Decision row error: {}", e))?);
+        decisions.push(row.context("Decision row error")?);
     }
     Ok(decisions)
 }

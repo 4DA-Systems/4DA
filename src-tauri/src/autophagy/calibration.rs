@@ -7,7 +7,7 @@ use rusqlite::{params, Connection};
 use std::collections::HashMap;
 use tracing::{debug, info, warn};
 
-use crate::error::Result;
+use crate::error::{Result, ResultExt};
 
 /// Analyze calibration: compare scored items vs actual user engagement.
 ///
@@ -133,14 +133,14 @@ pub(crate) fn store_calibrations(
              WHERE digest_type = 'calibration' AND subject = ?1 AND superseded_by IS NULL",
             params![delta.topic],
         )
-        .map_err(|e| format!("Failed to supersede calibration for {}: {}", delta.topic, e))?;
+        .with_context(|| format!("Failed to supersede calibration for{}", delta.topic))?;
 
         conn.execute(
             "INSERT INTO digested_intelligence (digest_type, subject, data, confidence, sample_size)
              VALUES ('calibration', ?1, ?2, ?3, ?4)",
             params![delta.topic, data, delta.confidence, delta.sample_size],
         )
-        .map_err(|e| format!("Failed to insert calibration for {}: {}", delta.topic, e))?;
+        .with_context(|| format!("Failed to insert calibration for{}", delta.topic))?;
     }
 
     debug!(target: "4da::autophagy", count = deltas.len(), "Stored calibration deltas");

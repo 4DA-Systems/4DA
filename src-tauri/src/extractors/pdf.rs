@@ -4,7 +4,7 @@
 /// Handles text-based PDFs (embedded fonts). Scanned PDFs
 /// will be handled via OCR in the image extractor.
 use super::{DocumentExtractor, ExtractedDocument, PageContent};
-use crate::error::Result;
+use crate::error::{Result, ResultExt};
 use lopdf::Document;
 use std::collections::HashMap;
 use std::path::Path;
@@ -18,8 +18,7 @@ impl PdfExtractor {
 
     /// Extract text from a PDF file using pdf-extract
     fn extract_text(&self, path: &Path) -> Result<String> {
-        Ok(pdf_extract::extract_text(path)
-            .map_err(|e| format!("Failed to extract text from PDF: {}", e))?)
+        Ok(pdf_extract::extract_text(path).context("Failed to extract text from PDF")?)
     }
 
     /// Extract metadata from a PDF using lopdf

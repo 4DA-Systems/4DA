@@ -7,7 +7,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use tracing::{debug, info, warn};
 
-use crate::error::Result;
+use crate::error::{Result, ResultExt};
 
 use super::{
     ActiveTopic, DetectedTech, DetectionSource, FileChange, FileChangeType, GitSignal,
@@ -234,7 +234,7 @@ pub fn process_file_changes(conn: &Arc<Mutex<Connection>>, changes: &[FileChange
              VALUES (?1, ?2, ?3, datetime('now'))",
             rusqlite::params![change.path.to_string_lossy(), change_type_str, topics_json],
         )
-        .map_err(|e| format!("Failed to store file signal: {}", e))?;
+        .context("Failed to store file signal")?;
 
         for topic in &topics {
             conn.execute(
@@ -245,7 +245,7 @@ pub fn process_file_changes(conn: &Arc<Mutex<Connection>>, changes: &[FileChange
                     last_seen = datetime('now')",
                 rusqlite::params![topic],
             )
-            .map_err(|e| format!("Failed to update active topic: {}", e))?;
+            .context("Failed to update active topic")?;
         }
 
         // Store extracted document content in indexed_documents and document_chunks
@@ -353,11 +353,11 @@ pub fn apply_freshness_decay(conn: &Arc<Mutex<Connection>>) -> Result<usize> {
            AND julianday('now') - julianday(last_seen) > 1",
             [],
         )
-        .map_err(|e| format!("Failed to apply decay: {}", e))?;
+        .context("Failed to apply decay")?;
 
     let removed = conn
         .execute("DELETE FROM active_topics WHERE weight < 0.1", [])
-        .map_err(|e| format!("Failed to clean up topics: {}", e))?;
+        .context("Failed to clean up topics")?;
 
     if updated > 0 || removed > 0 {
         debug!(target: "ace::decay", updated = updated, removed = removed, "Applied freshness decay");
@@ -477,7 +477,7 @@ pub fn store_git_signals(conn: &Arc<Mutex<Connection>>, signals: &[GitSignal]) -
                     last_seen = datetime('now')",
                 rusqlite::params![topic, 0.7, signal.confidence],
             )
-            .map_err(|e| format!("Failed to store git topic: {}", e))?;
+            .context("Failed to store git topic")?;
         }
 
         let topics_json = serde_json::to_string(&signal.extracted_topics).unwrap_or_default();
@@ -512,7 +512,7 @@ pub fn store_git_signals(conn: &Arc<Mutex<Connection>>, signals: &[GitSignal]) -
                 topics_json
             ],
         )
-        .map_err(|e| format!("Failed to store git signal: {}", e))?;
+        .context("Failed to store git signal")?;
     }
 
     Ok(())
@@ -559,7 +559,7 @@ pub fn store_detected_context(
                 t.evidence.join("; ")
             ],
         )
-        .map_err(|e| format!("Failed to store detected tech: {}", e))?;
+        .context("Failed to store detected tech")?;
     }
 
     for topic in topics {
@@ -586,7 +586,7 @@ pub fn store_detected_context(
                 topic.last_seen
             ],
         )
-        .map_err(|e| format!("Failed to store active topic: {}", e))?;
+        .context("Failed to store active topic")?;
     }
 
     Ok(())

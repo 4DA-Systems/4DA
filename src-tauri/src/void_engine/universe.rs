@@ -8,7 +8,7 @@ use std::collections::HashMap;
 
 use crate::context_engine::ContextEngine;
 use crate::db::Database;
-use crate::error::Result;
+use crate::error::{Result, ResultExt};
 use tracing::info;
 
 pub const PROJ_DIM: usize = 3;
@@ -228,12 +228,12 @@ pub fn build_universe(
     // 1. Fetch source items with embeddings
     let source_items = db
         .get_source_items_for_projection(cap)
-        .map_err(|e| format!("Failed to get source items: {e}"))?;
+        .context("Failed to get source items")?;
 
     // 2. Fetch context chunks with embeddings
     let context_chunks = db
         .get_context_chunks_for_projection(cap / 5) // Context is 20% of budget
-        .map_err(|e| format!("Failed to get context chunks: {e}"))?;
+        .context("Failed to get context chunks")?;
 
     // 3. Determine embedding dimension from first available embedding
     let emb_dim = source_items
