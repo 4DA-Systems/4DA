@@ -305,6 +305,85 @@ fn check_embedding(now: &str) -> ComponentHealth {
 }
 
 // ============================================================================
+// Source Quality Analysis (ASCENT-PLAN Phase 4.4)
+// ============================================================================
+
+/// Per-source relevance quality report
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SourceQualityReport {
+    pub source_type: String,
+    pub total_items: i64,
+    pub relevant_items: i64,
+    /// Ratio of relevant items to total (0.0-1.0)
+    pub relevance_ratio: f64,
+    /// Whether this source is below the 5% threshold
+    pub below_threshold: bool,
+}
+
+/// Compute per-source relevance ratios from the last N analyses.
+///
+/// Returns sources that have been fetched, with their relevance ratios.
+/// Sources below 5% relevance are flagged for potential replacement.
+pub fn compute_source_quality(conn: &Connection, lookback_days: i64) -> Vec<SourceQualityReport> {
+    let query = r#"
+        SELECT
+            source_type,
+            COUNT(*) as total,
+            SUM(CASE WHEN relevance_score >= COALESCE(
+                (SELECT CAST(value AS REAL) FROM settings_kv WHERE key = 'relevance_threshold'),
+                0.35
+            ) THEN 1 ELSE 0 END) as relevant
+        FROM source_items
+        WHERE fetched_at >= datetime('now', ? || ' days')
+        GROUP BY source_type
+        HAVING total >= 5
+        ORDER BY relevant * 1.0 / total ASC
+    "#;
+
+    let lookback = format!("-{lookback_days}");
+    let mut stmt = match conn.prepare(query) {
+        Ok(s) => s,
+        Err(e) => {
+            warn!(target: "4da::health", "Failed to prepare source quality query: {e}");
+            return Vec::new();
+        }
+    };
+
+    let rows = match stmt.query_map([&lookback], |row| {
+        let source_type: String = row.get(0)?;
+        let total: i64 = row.get(1)?;
+        let relevant: i64 = row.get(2)?;
+        let ratio = if total > 0 {
+            relevant as f64 / total as f64
+        } else {
+            0.0
+        };
+        Ok(SourceQualityReport {
+            source_type,
+            total_items: total,
+            relevant_items: relevant,
+            relevance_ratio: ratio,
+            below_threshold: ratio < 0.05,
+        })
+    }) {
+        Ok(r) => r,
+        Err(e) => {
+            warn!(target: "4da::health", "Failed to query source quality: {e}");
+            return Vec::new();
+        }
+    };
+
+    rows.filter_map(|r| match r {
+        Ok(v) => Some(v),
+        Err(e) => {
+            warn!(target: "4da::health", "Row processing failed in source quality: {e}");
+            None
+        }
+    })
+    .collect()
+}
+
+// ============================================================================
 // Quality & Fallback Computations
 // ============================================================================
 

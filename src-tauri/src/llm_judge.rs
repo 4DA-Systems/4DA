@@ -2,7 +2,7 @@
 //!
 //! Extracted from llm.rs to keep files under 1000-line limit.
 
-use crate::error::Result;
+use crate::error::{Result, ResultExt};
 use crate::llm::{LLMClient, Message, RelevanceJudgment};
 use crate::settings::LLMProvider;
 use tracing::debug;
@@ -80,12 +80,12 @@ Output JSON array (one per article):
                 }],
             )
             .await
-            .map_err(|e| format!("LLM relevance judging failed: {}", e))?;
+            .context("LLM relevance judging failed")?;
 
         // Parse the score-based JSON response
         let judgments = self
             .parse_judgments(&response.content, &items)
-            .map_err(|e| format!("Failed to parse relevance judgments: {}", e))?;
+            .context("Failed to parse relevance judgments")?;
 
         Ok((judgments, response.input_tokens, response.output_tokens))
     }
