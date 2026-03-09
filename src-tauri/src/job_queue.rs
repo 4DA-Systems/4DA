@@ -4,7 +4,7 @@
 //! Handles async processing of document extraction jobs (OCR, audio transcription).
 //! Uses the extraction_jobs table for persistence and recovery.
 
-use crate::error::Result;
+use crate::error::{Result, ResultExt};
 use crate::extractors::{ExtractedDocument, ExtractorRegistry};
 use parking_lot::Mutex;
 use rusqlite::{Connection, OptionalExtension};
@@ -85,7 +85,7 @@ impl JobQueue {
             "INSERT INTO extraction_jobs (file_path, file_type, status) VALUES (?1, ?2, 'pending')",
             [file_path, file_type],
         )
-        .map_err(|e| format!("Failed to create job: {}", e))?;
+        .context("Failed to create job")?;
 
         let job_id = conn.last_insert_rowid();
         info!(target: "job_queue", job_id = job_id, file_path = file_path, "Created extraction job");
@@ -101,7 +101,7 @@ impl JobQueue {
                         extracted_chunks, created_at
                  FROM extraction_jobs WHERE id = ?1",
             )
-            .map_err(|e| format!("Failed to prepare statement: {}", e))?;
+            .context("Failed to prepare statement")?;
 
         let job = stmt
             .query_row([job_id], |row| {
@@ -118,7 +118,7 @@ impl JobQueue {
                 })
             })
             .optional()
-            .map_err(|e| format!("Failed to get job: {}", e))?;
+            .context("Failed to get job")?;
 
         Ok(job)
     }
@@ -142,9 +142,7 @@ impl JobQueue {
             ),
         };
 
-        let mut stmt = conn
-            .prepare(sql)
-            .map_err(|e| format!("Failed to prepare statement: {}", e))?;
+        let mut stmt = conn.prepare(sql).context("Failed to prepare statement")?;
 
         let params_refs: Vec<&dyn rusqlite::ToSql> =
             params.iter().map(|s| s as &dyn rusqlite::ToSql).collect();
@@ -163,7 +161,7 @@ impl JobQueue {
                     created_at: row.get(8)?,
                 })
             })
-            .map_err(|e| format!("Failed to query jobs: {}", e))?
+            .context("Failed to query jobs")?
             .filter_map(|r| match r {
                 Ok(v) => Some(v),
                 Err(e) => {
@@ -185,7 +183,7 @@ impl JobQueue {
                         extracted_chunks, created_at
                  FROM extraction_jobs WHERE status = 'pending' ORDER BY created_at ASC LIMIT 1",
             )
-            .map_err(|e| format!("Failed to prepare statement: {}", e))?;
+            .context("Failed to prepare statement")?;
 
         let job = stmt
             .query_row([], |row| {
@@ -202,7 +200,7 @@ impl JobQueue {
                 })
             })
             .optional()
-            .map_err(|e| format!("Failed to get pending job: {}", e))?;
+            .context("Failed to get pending job")?;
 
         Ok(job)
     }
@@ -224,28 +222,28 @@ impl JobQueue {
                     "UPDATE extraction_jobs SET status = ?1, started_at = ?2 WHERE id = ?3",
                     rusqlite::params![status.as_str(), now, job_id],
                 )
-                .map_err(|e| format!("Failed to update job: {}", e))?;
+                .context("Failed to update job")?;
             }
             JobStatus::Completed => {
                 conn.execute(
                     "UPDATE extraction_jobs SET status = ?1, completed_at = ?2, extracted_chunks = ?3 WHERE id = ?4",
                     rusqlite::params![status.as_str(), now, chunks.unwrap_or(0), job_id],
                 )
-                .map_err(|e| format!("Failed to update job: {}", e))?;
+                .context("Failed to update job")?;
             }
             JobStatus::Failed => {
                 conn.execute(
                     "UPDATE extraction_jobs SET status = ?1, completed_at = ?2, error = ?3 WHERE id = ?4",
                     rusqlite::params![status.as_str(), now, error, job_id],
                 )
-                .map_err(|e| format!("Failed to update job: {}", e))?;
+                .context("Failed to update job")?;
             }
             JobStatus::Pending => {
                 conn.execute(
                     "UPDATE extraction_jobs SET status = 'pending' WHERE id = ?1",
                     [job_id],
                 )
-                .map_err(|e| format!("Failed to update job: {}", e))?;
+                .context("Failed to update job")?;
             }
         }
 
@@ -260,7 +258,7 @@ impl JobQueue {
             "UPDATE extraction_jobs SET status = 'failed', error = 'Cancelled by user' WHERE id = ?1 AND status IN ('pending', 'processing')",
             [job_id],
         )
-        .map_err(|e| format!("Failed to cancel job: {}", e))?;
+        .context("Failed to cancel job")?;
 
         info!(target: "job_queue", job_id = job_id, "Cancelled job");
         Ok(())
@@ -276,7 +274,7 @@ impl JobQueue {
                  AND created_at < datetime('now', ?1)",
                 [format!("-{} days", days)],
             )
-            .map_err(|e| format!("Failed to cleanup jobs: {}", e))?;
+            .context("Failed to cleanup jobs")?;
 
         info!(target: "job_queue", deleted = deleted, "Cleaned up old jobs");
         Ok(deleted)
@@ -398,7 +396,7 @@ impl JobQueue {
                 [],
                 |row| row.get(0),
             )
-            .map_err(|e| format!("Failed to get pending count: {}", e))?;
+            .context("Failed to get pending count")?;
 
         let processing: i64 = conn
             .query_row(
@@ -406,7 +404,7 @@ impl JobQueue {
                 [],
                 |row| row.get(0),
             )
-            .map_err(|e| format!("Failed to get processing count: {}", e))?;
+            .context("Failed to get processing count")?;
 
         let completed: i64 = conn
             .query_row(
@@ -414,7 +412,7 @@ impl JobQueue {
                 [],
                 |row| row.get(0),
             )
-            .map_err(|e| format!("Failed to get completed count: {}", e))?;
+            .context("Failed to get completed count")?;
 
         let failed: i64 = conn
             .query_row(
@@ -422,7 +420,7 @@ impl JobQueue {
                 [],
                 |row| row.get(0),
             )
-            .map_err(|e| format!("Failed to get failed count: {}", e))?;
+            .context("Failed to get failed count")?;
 
         Ok(QueueStats {
             pending: pending as u32,

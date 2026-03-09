@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use tracing::{debug, info, warn};
 
-use crate::error::Result;
+use crate::error::{Result, ResultExt};
 
 // ============================================================================
 // Types
@@ -87,7 +87,7 @@ pub fn ensure_table(conn: &rusqlite::Connection) -> Result<()> {
             active INTEGER DEFAULT 1
         );",
     )
-    .map_err(|e| format!("Failed to create standing_queries table: {e}"))?;
+    .context("Failed to create standing_queries table")?;
 
     debug!(target: "4da::watches", "standing_queries table ensured");
     Ok(())
@@ -124,7 +124,7 @@ pub async fn create_standing_query(query_text: String) -> Result<i64> {
             [],
             |row| row.get(0),
         )
-        .map_err(|e| format!("Failed to count active queries: {e}"))?;
+        .context("Failed to count active queries")?;
 
     if active_count >= 10 {
         return Err(
@@ -132,14 +132,13 @@ pub async fn create_standing_query(query_text: String) -> Result<i64> {
         );
     }
 
-    let keywords_json = serde_json::to_string(&keywords)
-        .map_err(|e| format!("Failed to serialize keywords: {e}"))?;
+    let keywords_json = serde_json::to_string(&keywords).context("Failed to serialize keywords")?;
 
     conn.execute(
         "INSERT INTO standing_queries (query_text, keywords) VALUES (?1, ?2)",
         rusqlite::params![query_text, keywords_json],
     )
-    .map_err(|e| format!("Failed to insert standing query: {e}"))?;
+    .context("Failed to insert standing query")?;
 
     let id = conn.last_insert_rowid();
     info!(target: "4da::watches", id = id, query = %query_text, keywords = ?keywords, "Standing query created");
@@ -162,7 +161,7 @@ pub async fn list_standing_queries() -> Result<Vec<StandingQuery>> {
              WHERE active = 1
              ORDER BY created_at DESC",
         )
-        .map_err(|e| format!("Failed to prepare query: {e}"))?;
+        .context("Failed to prepare query")?;
 
     let rows = stmt
         .query_map([], |row| {
@@ -178,7 +177,7 @@ pub async fn list_standing_queries() -> Result<Vec<StandingQuery>> {
                 row.get::<_, bool>(7)?,
             ))
         })
-        .map_err(|e| format!("Failed to query standing queries: {e}"))?;
+        .context("Failed to query standing queries")?;
 
     let mut queries = Vec::new();
     for row in rows {
@@ -229,7 +228,7 @@ pub async fn delete_standing_query(id: i64) -> Result<()> {
             "UPDATE standing_queries SET active = 0 WHERE id = ?1",
             rusqlite::params![id],
         )
-        .map_err(|e| format!("Failed to delete standing query: {e}"))?;
+        .context("Failed to delete standing query")?;
 
     if affected == 0 {
         return Err(format!("Standing query with id {id} not found").into());
@@ -259,7 +258,7 @@ pub async fn get_standing_query_matches(
             rusqlite::params![id],
             |row| row.get(0),
         )
-        .map_err(|e| format!("Standing query {id} not found: {e}"))?;
+        .with_context(|| format!("Standing query {id} not found"))?;
 
     let keywords: Vec<String> = serde_json::from_str(&keywords_json).unwrap_or_default();
     if keywords.is_empty() {
@@ -287,9 +286,7 @@ pub async fn get_standing_query_matches(
          LIMIT {limit}"
     );
 
-    let mut stmt = conn
-        .prepare(&sql)
-        .map_err(|e| format!("Query error: {e}"))?;
+    let mut stmt = conn.prepare(&sql).context("Query error")?;
 
     let rows = stmt
         .query_map([], |row| {
@@ -301,7 +298,7 @@ pub async fn get_standing_query_matches(
                 discovered_at: row.get(4)?,
             })
         })
-        .map_err(|e| format!("Query error: {e}"))?;
+        .context("Query error")?;
 
     let mut matches = Vec::new();
     for row in rows {

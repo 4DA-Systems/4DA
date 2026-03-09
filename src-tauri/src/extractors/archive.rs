@@ -3,7 +3,7 @@
 /// Recursively extracts and processes files from archive formats.
 /// Prevents zip bombs with depth and size limits.
 use super::{DocumentExtractor, ExtractedDocument, PageContent};
-use crate::error::Result;
+use crate::error::{Result, ResultExt};
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::Read;
@@ -26,9 +26,8 @@ impl ArchiveExtractor {
 
     /// Extract a ZIP archive
     fn extract_zip(&self, path: &Path) -> Result<ExtractedDocument> {
-        let file = File::open(path).map_err(|e| format!("Failed to open ZIP: {}", e))?;
-        let mut archive =
-            ZipArchive::new(file).map_err(|e| format!("Failed to read ZIP archive: {}", e))?;
+        let file = File::open(path).context("Failed to open ZIP")?;
+        let mut archive = ZipArchive::new(file).context("Failed to read ZIP archive")?;
 
         let mut all_text = Vec::new();
         let mut metadata = HashMap::new();
@@ -43,9 +42,7 @@ impl ArchiveExtractor {
                 break;
             }
 
-            let mut file = archive
-                .by_index(i)
-                .map_err(|e| format!("Failed to read ZIP entry: {}", e))?;
+            let mut file = archive.by_index(i).context("Failed to read ZIP entry")?;
 
             // Security: Check for path traversal
             let name = match file.enclosed_name() {
@@ -109,7 +106,7 @@ impl ArchiveExtractor {
 
     /// Extract a TAR archive (optionally compressed)
     fn extract_tar(&self, path: &Path) -> Result<ExtractedDocument> {
-        let file = File::open(path).map_err(|e| format!("Failed to open TAR: {}", e))?;
+        let file = File::open(path).context("Failed to open TAR")?;
 
         // Detect compression based on extension
         let ext = path
@@ -124,9 +121,7 @@ impl ArchiveExtractor {
         };
 
         let mut archive = TarArchive::new(reader);
-        let entries = archive
-            .entries()
-            .map_err(|e| format!("Failed to read TAR entries: {}", e))?;
+        let entries = archive.entries().context("Failed to read TAR entries")?;
 
         let mut all_text = Vec::new();
         let mut metadata = HashMap::new();

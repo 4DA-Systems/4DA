@@ -7,7 +7,7 @@ use async_trait::async_trait;
 use tracing::{debug, info, warn};
 
 use super::{Source, SourceConfig, SourceError, SourceItem, SourceResult};
-use crate::error::Result;
+use crate::error::{Result, ResultExt};
 
 // ============================================================================
 // YouTube Source
@@ -82,7 +82,7 @@ impl YouTubeSource {
             .get(&url)
             .send()
             .await
-            .map_err(|e| format!("Network error for {}: {}", channel.name, e))?;
+            .with_context(|| format!("Network error for{}", channel.name))?;
 
         if !resp.status().is_success() {
             return Err(format!(
@@ -96,7 +96,7 @@ impl YouTubeSource {
         let xml = resp
             .text()
             .await
-            .map_err(|e| format!("Failed to read feed for {}: {}", channel.name, e))?;
+            .with_context(|| format!("Failed to read feed for{}", channel.name))?;
 
         self.parse_atom_feed(&xml, &channel.name)
     }

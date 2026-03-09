@@ -3,7 +3,7 @@
 //! Exposes `get_translation_status`, `trigger_translation`, and
 //! user-override CRUD to the frontend.
 
-use crate::error::Result;
+use crate::error::{Result, ResultExt};
 use crate::translation_pipeline;
 use std::collections::HashMap;
 
@@ -128,8 +128,7 @@ pub fn save_translation_override(
     let overrides_dir = crate::i18n::translations_dir()
         .join("overrides")
         .join(&lang);
-    std::fs::create_dir_all(&overrides_dir)
-        .map_err(|e| format!("Cannot create overrides dir: {}", e))?;
+    std::fs::create_dir_all(&overrides_dir).context("Cannot create overrides dir")?;
 
     let path = overrides_dir.join(format!("{}.json", namespace));
 
@@ -142,9 +141,8 @@ pub fn save_translation_override(
 
     existing.insert(key.clone(), value);
 
-    let json = serde_json::to_string_pretty(&existing)
-        .map_err(|e| format!("JSON serialize error: {}", e))?;
-    std::fs::write(&path, json).map_err(|e| format!("Write error: {}", e))?;
+    let json = serde_json::to_string_pretty(&existing).context("JSON serialize error")?;
+    std::fs::write(&path, json).context("Write error")?;
 
     // Clear cache so the override takes effect immediately
     crate::i18n::clear_cache();
@@ -180,9 +178,8 @@ pub fn delete_translation_override(lang: String, namespace: String, key: String)
     let mut map: HashMap<String, String> = serde_json::from_str(&content).unwrap_or_default();
     map.remove(&key);
 
-    let json =
-        serde_json::to_string_pretty(&map).map_err(|e| format!("JSON serialize error: {}", e))?;
-    std::fs::write(&path, json).map_err(|e| format!("Write error: {}", e))?;
+    let json = serde_json::to_string_pretty(&map).context("JSON serialize error")?;
+    std::fs::write(&path, json).context("Write error")?;
 
     crate::i18n::clear_cache();
 

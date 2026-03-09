@@ -9,7 +9,7 @@
 /// https://ocrs-models.s3-accelerate.amazonaws.com/text-detection.rten
 /// https://ocrs-models.s3-accelerate.amazonaws.com/text-recognition.rten
 use super::{DocumentExtractor, ExtractedDocument, PageContent};
-use crate::error::Result;
+use crate::error::{Result, ResultExt};
 use image::ImageReader;
 use ocrs::{ImageSource, OcrEngine, OcrEngineParams};
 use rten::Model;
@@ -57,9 +57,9 @@ fn get_ocr_engine() -> crate::error::Result<&'static OcrEngine> {
         let recognition_path = models_dir.join("text-recognition.rten");
 
         let detection_model = Model::load_file(&detection_path)
-            .map_err(|e| format!("Failed to load detection model: {}", e))?;
+            .map_err(|e| format!("Failed to load detection model: {e}"))?;
         let recognition_model = Model::load_file(&recognition_path)
-            .map_err(|e| format!("Failed to load recognition model: {}", e))?;
+            .map_err(|e| format!("Failed to load recognition model: {e}"))?;
 
         let params = OcrEngineParams {
             detection_model: Some(detection_model),
@@ -67,7 +67,7 @@ fn get_ocr_engine() -> crate::error::Result<&'static OcrEngine> {
             ..Default::default()
         };
 
-        OcrEngine::new(params).map_err(|e| format!("Failed to initialize OCR engine: {}", e))
+        OcrEngine::new(params).map_err(|e| format!("Failed to initialize OCR engine: {e}"))
     });
 
     match engine {
@@ -98,9 +98,9 @@ impl DocumentExtractor for ImageExtractor {
     fn extract(&self, path: &Path) -> Result<ExtractedDocument> {
         // Load the image
         let img = ImageReader::open(path)
-            .map_err(|e| format!("Failed to open image: {}", e))?
+            .context("Failed to open image")?
             .decode()
-            .map_err(|e| format!("Failed to decode image: {}", e))?;
+            .context("Failed to decode image")?;
 
         // Convert to RGB8 format for OCR
         let rgb_img = img.to_rgb8();
@@ -108,25 +108,25 @@ impl DocumentExtractor for ImageExtractor {
 
         // Create image source for OCR engine
         let img_source = ImageSource::from_bytes(rgb_img.as_raw(), (width, height))
-            .map_err(|e| format!("Failed to create image source: {}", e))?;
+            .context("Failed to create image source")?;
 
         // Get OCR engine and run recognition
         let engine = get_ocr_engine()?;
         let ocr_input = engine
             .prepare_input(img_source)
-            .map_err(|e| format!("Failed to prepare OCR input: {}", e))?;
+            .context("Failed to prepare OCR input")?;
 
         // Detect text lines
         let word_rects = engine
             .detect_words(&ocr_input)
-            .map_err(|e| format!("Failed to detect words: {}", e))?;
+            .context("Failed to detect words")?;
 
         let line_rects = engine.find_text_lines(&ocr_input, &word_rects);
 
         // Recognize text from detected lines
         let line_texts: Vec<String> = engine
             .recognize_text(&ocr_input, &line_rects)
-            .map_err(|e| format!("Failed to recognize text: {}", e))?
+            .context("Failed to recognize text")?
             .iter()
             .filter_map(|line| line.as_ref().map(|l| l.to_string()))
             .collect();

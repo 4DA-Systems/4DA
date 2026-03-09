@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 use tracing::info;
 use ts_rs::TS;
 
-use crate::error::Result;
+use crate::error::{Result, ResultExt};
 
 // ============================================================================
 // Types
@@ -94,7 +94,7 @@ pub fn store_memory(
             expires_at,
         ],
     )
-    .map_err(|e| format!("Failed to store memory: {}", e))?;
+    .context("Failed to store memory")?;
 
     let id = conn.last_insert_rowid();
     info!(target: "4da::agent_memory", id = id, agent = agent_type, subject = subject, "Memory stored");
@@ -129,16 +129,14 @@ pub fn recall_memories(
     let params_ref: Vec<&dyn rusqlite::types::ToSql> =
         param_values.iter().map(|p| p.as_ref()).collect();
 
-    let mut stmt = conn
-        .prepare(&sql)
-        .map_err(|e| format!("Failed to prepare: {}", e))?;
+    let mut stmt = conn.prepare(&sql).context("Failed to prepare")?;
     let rows = stmt
         .query_map(params_ref.as_slice(), |row| Ok(row_to_memory(row)))
-        .map_err(|e| format!("Failed to recall memories: {}", e))?;
+        .context("Failed to recall memories")?;
 
     let mut memories = Vec::new();
     for row in rows {
-        memories.push(row.map_err(|e| format!("Row error: {}", e))?);
+        memories.push(row.context("Row error")?);
     }
     Ok(memories)
 }
@@ -168,16 +166,14 @@ pub fn get_memories_since(
     let params_ref: Vec<&dyn rusqlite::types::ToSql> =
         param_values.iter().map(|p| p.as_ref()).collect();
 
-    let mut stmt = conn
-        .prepare(&sql)
-        .map_err(|e| format!("Failed to prepare: {}", e))?;
+    let mut stmt = conn.prepare(&sql).context("Failed to prepare")?;
     let rows = stmt
         .query_map(params_ref.as_slice(), |row| Ok(row_to_memory(row)))
-        .map_err(|e| format!("Failed to get memories since: {}", e))?;
+        .context("Failed to get memories since")?;
 
     let mut memories = Vec::new();
     for row in rows {
-        memories.push(row.map_err(|e| format!("Row error: {}", e))?);
+        memories.push(row.context("Row error")?);
     }
     Ok(memories)
 }
@@ -199,7 +195,7 @@ pub fn promote_to_decision(conn: &Connection, memory_id: i64) -> Result<i64> {
             },
         )
         .optional()
-        .map_err(|e| format!("Failed to get memory: {}", e))?
+        .context("Failed to get memory")?
         .ok_or_else(|| format!("Memory {} not found", memory_id))?;
 
     let (_, subject, content, tags_str) = memory;
@@ -222,7 +218,7 @@ pub fn promote_to_decision(conn: &Connection, memory_id: i64) -> Result<i64> {
         "UPDATE agent_memory SET promoted_to_decision_id = ?1 WHERE id = ?2",
         params![decision_id, memory_id],
     )
-    .map_err(|e| format!("Failed to mark memory as promoted: {}", e))?;
+    .context("Failed to mark memory as promoted")?;
 
     info!(target: "4da::agent_memory", memory_id = memory_id, decision_id = decision_id, "Memory promoted to decision");
     Ok(decision_id)
@@ -235,7 +231,7 @@ pub fn cleanup_expired(conn: &Connection) -> Result<usize> {
             "DELETE FROM agent_memory WHERE expires_at IS NOT NULL AND expires_at <= datetime('now')",
             [],
         )
-        .map_err(|e| format!("Failed to cleanup expired: {}", e))?;
+        .context("Failed to cleanup expired")?;
 
     if deleted > 0 {
         info!(target: "4da::agent_memory", deleted = deleted, "Expired memories cleaned up");

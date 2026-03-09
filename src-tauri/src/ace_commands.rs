@@ -10,7 +10,7 @@ use tracing::{debug, info, warn};
 
 use crate::ace;
 use crate::context_engine::InterestSource;
-use crate::error::Result;
+use crate::error::{Result, ResultExt};
 use crate::scoring::get_ace_context;
 use crate::{
     embed_texts, get_ace_engine, get_ace_engine_mut, get_context_engine, get_settings_manager,
@@ -529,7 +529,7 @@ pub(crate) async fn auto_seed_interests_from_ace() -> Result<()> {
     // Check if interests are already configured
     let existing_interests = context_engine
         .get_interests()
-        .map_err(|e| format!("Failed to get interests: {}", e))?;
+        .context("Failed to get interests")?;
 
     if !existing_interests.is_empty() {
         debug!(target: "4da::startup", count = existing_interests.len(), "Interests already configured, skipping auto-seed");
@@ -834,7 +834,7 @@ pub async fn ace_record_accuracy_feedback(
         "INSERT INTO interactions (item_id, action_type, action_data, signal_strength) VALUES (?1, 'accuracy_feedback', ?2, ?3)",
         rusqlite::params![item_id as i64, action_data.to_string(), actual_score],
     )
-    .map_err(|e| format!("Failed to record accuracy feedback: {}", e))?;
+    .context("Failed to record accuracy feedback")?;
 
     Ok(())
 }

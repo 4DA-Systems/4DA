@@ -3,7 +3,7 @@
 //! Extracted from `llm.rs` to keep file sizes within limits.
 //! Supports SSE (Anthropic, OpenAI) and NDJSON (Ollama) streaming formats.
 
-use crate::error::Result;
+use crate::error::{Result, ResultExt};
 use crate::llm::{LLMResponse, Message};
 use crate::settings::LLMProvider;
 use futures::StreamExt;
@@ -119,7 +119,7 @@ where
         .json(&body)
         .send()
         .await
-        .map_err(|e| format!("Anthropic streaming request failed: {}", e))?;
+        .context("Anthropic streaming request failed")?;
 
     if !response.status().is_success() {
         let status = response.status();
@@ -134,7 +134,7 @@ where
     let mut output_tokens: u64 = 0;
 
     while let Some(chunk) = stream.next().await {
-        let bytes = chunk.map_err(|e| format!("Stream read error: {}", e))?;
+        let bytes = chunk.context("Stream read error")?;
         buffer.push_str(&String::from_utf8_lossy(&bytes));
 
         // Process complete lines
@@ -226,7 +226,7 @@ where
         .json(&body)
         .send()
         .await
-        .map_err(|e| format!("OpenAI streaming request failed: {}", e))?;
+        .context("OpenAI streaming request failed")?;
 
     if !response.status().is_success() {
         let status = response.status();
@@ -239,7 +239,7 @@ where
     let mut full_text = String::new();
 
     while let Some(chunk) = stream.next().await {
-        let bytes = chunk.map_err(|e| format!("Stream read error: {}", e))?;
+        let bytes = chunk.context("Stream read error")?;
         buffer.push_str(&String::from_utf8_lossy(&bytes));
 
         while let Some(newline_pos) = buffer.find('\n') {
@@ -345,7 +345,7 @@ where
     let mut output_tokens: u64 = 0;
 
     while let Some(chunk) = stream.next().await {
-        let bytes = chunk.map_err(|e| format!("Stream read error: {}", e))?;
+        let bytes = chunk.context("Stream read error")?;
         buffer.push_str(&String::from_utf8_lossy(&bytes));
 
         while let Some(newline_pos) = buffer.find('\n') {

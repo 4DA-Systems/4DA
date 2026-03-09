@@ -10,7 +10,7 @@ use serde::Serialize;
 use ts_rs::TS;
 
 use crate::calibration_probes;
-use crate::error::Result;
+use crate::error::{Result, ResultExt};
 
 // 5-minute TTL cache for calibration results (avoids re-running 12 probes + HTTP to Ollama)
 static CALIBRATION_CACHE: LazyLock<Mutex<Option<(CalibrationResult, Instant)>>> =
@@ -214,7 +214,7 @@ pub async fn run_calibration() -> Result<CalibrationResult> {
     // Build the user's actual scoring context
     let ctx = crate::scoring::build_scoring_context(db)
         .await
-        .map_err(|e| format!("Context build failed: {e}"))?;
+        .context("Context build failed")?;
 
     // Check Ollama/embedding status
     let rig = check_rig_requirements().await;

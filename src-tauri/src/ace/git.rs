@@ -11,7 +11,7 @@ use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use crate::error::Result;
+use crate::error::{Result, ResultExt};
 
 /// Git analyzer configuration
 #[derive(Debug, Clone)]
@@ -199,7 +199,7 @@ impl GitAnalyzer {
             .args(&args)
             .current_dir(repo_path)
             .output()
-            .map_err(|e| format!("Failed to run git log: {}", e))?;
+            .context("Failed to run git log")?;
 
         if !output.status.success() {
             return Err(format!(
@@ -259,7 +259,7 @@ impl GitAnalyzer {
             .args(["branch", "-v", "--no-color"])
             .current_dir(repo_path)
             .output()
-            .map_err(|e| format!("Failed to run git branch: {}", e))?;
+            .context("Failed to run git branch")?;
 
         if !output.status.success() {
             return Err(format!(

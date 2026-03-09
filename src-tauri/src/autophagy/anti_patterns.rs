@@ -6,7 +6,7 @@
 //! **Under-scored**: source_types where engaged items exist but total surfacing is low.
 //! The system may be filtering out valuable content.
 
-use crate::error::Result;
+use crate::error::{Result, ResultExt};
 use rusqlite::{params, Connection};
 use tracing::{debug, info, warn};
 
@@ -151,7 +151,7 @@ pub(crate) fn store_anti_patterns(
              WHERE digest_type = 'anti_pattern' AND subject = ?1 AND superseded_by IS NULL",
             params![subject],
         )
-        .map_err(|e| format!("Failed to supersede anti-pattern for {}: {}", subject, e))?;
+        .with_context(|| format!("Failed to supersede anti-pattern for{}", subject))?;
 
         conn.execute(
             "INSERT INTO digested_intelligence (digest_type, subject, data, confidence, sample_size)
@@ -163,7 +163,7 @@ pub(crate) fn store_anti_patterns(
                 pattern.exposure_count,
             ],
         )
-        .map_err(|e| format!("Failed to insert anti-pattern for {}: {}", subject, e))?;
+        .with_context(|| format!("Failed to insert anti-pattern for{}", subject))?;
     }
 
     debug!(target: "4da::autophagy", count = patterns.len(), "Stored anti-patterns");

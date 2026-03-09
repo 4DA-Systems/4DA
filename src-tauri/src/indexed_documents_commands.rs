@@ -4,7 +4,7 @@
 //! Uses `open_db_connection()` for ad-hoc queries against the `indexed_documents`
 //! and `document_chunks` tables created by the ACE extractor pipeline.
 
-use crate::error::Result;
+use crate::error::{Result, ResultExt};
 use crate::open_db_connection;
 use rusqlite::params;
 
@@ -179,7 +179,7 @@ pub async fn get_document_content(document_id: i64) -> Result<serde_json::Value>
                 }))
             },
         )
-        .map_err(|e| format!("Document not found: {e}"))?;
+        .context("Document not found")?;
 
     let mut stmt = conn.prepare(
         "SELECT content, chunk_index FROM document_chunks

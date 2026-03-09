@@ -15,7 +15,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tracing::{debug, info, warn};
 
-use crate::error::Result;
+use crate::error::{Result, ResultExt};
 
 /// File watcher configuration
 #[derive(Debug, Clone)]
@@ -201,7 +201,7 @@ impl FileWatcher {
             },
             Config::default().with_poll_interval(Duration::from_millis(500)),
         )
-        .map_err(|e| format!("Failed to create watcher: {}", e))?;
+        .context("Failed to create watcher")?;
 
         self.watcher = Some(watcher);
         *running.lock() = true;

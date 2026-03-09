@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 use tracing::info;
 use ts_rs::TS;
 
-use crate::error::Result;
+use crate::error::{Result, ResultExt};
 
 // ============================================================================
 // Types
@@ -132,11 +132,11 @@ pub fn compute_delegation_score(conn: &Connection, subject: &str) -> Result<Dele
 pub fn compute_all_delegation_scores(conn: &Connection) -> Result<Vec<DelegationScore>> {
     let mut stmt = conn
         .prepare("SELECT technology FROM tech_stack")
-        .map_err(|e| format!("Failed to query tech_stack: {}", e))?;
+        .context("Failed to query tech_stack")?;
 
     let techs: Vec<String> = stmt
         .query_map([], |row| row.get::<_, String>(0))
-        .map_err(|e| format!("Failed to read tech_stack: {}", e))?
+        .context("Failed to read tech_stack")?
         .filter_map(|r| match r {
             Ok(v) => Some(v),
             Err(e) => {
