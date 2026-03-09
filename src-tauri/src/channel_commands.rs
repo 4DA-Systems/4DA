@@ -65,9 +65,7 @@ pub async fn get_channel_content(channel_id: i64) -> Result<Option<ChannelRender
 #[tauri::command]
 pub async fn render_channel_now(channel_id: i64) -> Result<ChannelRender> {
     info!(target: "4da::channels", channel_id, "Force re-rendering channel");
-    let render = crate::channel_render::render_channel(channel_id)
-        .await
-        ?;
+    let render = crate::channel_render::render_channel(channel_id).await?;
     Ok(render)
 }
 
@@ -110,9 +108,7 @@ pub async fn get_channel_changelog(channel_id: i64) -> Result<Option<ChannelChan
 #[tauri::command]
 pub async fn auto_render_all_channels() -> Result<()> {
     info!(target: "4da::channels", "Auto-rendering all stale channels");
-    crate::channel_render::auto_render_stale_channels()
-        .await
-        ?;
+    crate::channel_render::auto_render_stale_channels().await?;
     Ok(())
 }
 
@@ -144,8 +140,7 @@ pub async fn refresh_channel_sources(channel_id: i64) -> Result<i64> {
 
     info!(target: "4da::channels", channel = %channel.slug, "Refreshing channel sources");
 
-    let items = crate::channel_render::gather_channel_sources(db, &channel)
-        ?;
+    let items = crate::channel_render::gather_channel_sources(db, &channel)?;
 
     let count = db
         .refresh_channel_source_count(channel_id)
@@ -217,8 +212,7 @@ pub async fn create_custom_channel(
 #[tauri::command]
 pub async fn preview_channel_sources(topics: Vec<String>) -> Result<serde_json::Value> {
     let db = get_database()?;
-    let (count, top_titles) = crate::channel_render::preview_channel_sources(db, &topics)
-        ?;
+    let (count, top_titles) = crate::channel_render::preview_channel_sources(db, &topics)?;
     Ok(serde_json::json!({
         "count": count,
         "topTitles": top_titles
