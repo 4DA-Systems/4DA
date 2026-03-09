@@ -6,6 +6,9 @@
  */
 import { describe, it, expect, vi } from 'vitest';
 import { render } from '@testing-library/react';
+import { axe, toHaveNoViolations } from 'jest-axe';
+
+expect.extend(toHaveNoViolations);
 
 // ---------------------------------------------------------------------------
 // Tauri API mocks — must appear before component imports
@@ -573,6 +576,33 @@ describe('Component smoke tests', () => {
         const { unmount } = render(renderComponent());
         unmount();
       }).not.toThrow();
+    });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Accessibility tests — axe-core on a subset of interactive components
+// ---------------------------------------------------------------------------
+describe('Component accessibility tests', () => {
+  const A11Y_COMPONENTS = SMOKE_COMPONENTS.filter(({ name }) =>
+    [
+      'ToastContainer (with toasts)',
+      'KeyboardShortcutsModal',
+      'BriefingCard',
+      'ErrorBoundary (no error)',
+      'LearningIndicator (with data)',
+      'BadgeRow',
+      'AboutPanel',
+      'ActionBar (idle state)',
+      'OllamaStatus (ollama provider)',
+    ].includes(name),
+  );
+
+  A11Y_COMPONENTS.forEach(({ name, render: renderComponent }) => {
+    it(`${name} has no accessibility violations`, async () => {
+      const { container } = render(renderComponent());
+      const results = await axe(container);
+      expect(results).toHaveNoViolations();
     });
   });
 });

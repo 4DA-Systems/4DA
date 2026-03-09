@@ -1,6 +1,9 @@
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { axe, toHaveNoViolations } from 'jest-axe';
 import { ActionBar } from './ActionBar';
+
+expect.extend(toHaveNoViolations);
 import type { Settings, SourceRelevance } from '../types';
 
 // Mock Tauri API
@@ -223,6 +226,46 @@ describe('ActionBar', () => {
   it('does not show error alert when no error', () => {
     render(<ActionBar {...defaultProps} />);
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
+  // --- Accessibility tests ---
+  it('has no accessibility violations in idle state', async () => {
+    const { container } = render(<ActionBar {...defaultProps} />);
+    const results = await axe(container);
+    expect(results).toHaveNoViolations();
+  });
+
+  it('has no accessibility violations when loading', async () => {
+    const props = {
+      ...defaultProps,
+      state: makeState({ loading: true, progress: 0.5, progressStage: 'fetch' }),
+    };
+    const { container } = render(<ActionBar {...props} />);
+    const results = await axe(container);
+    expect(results).toHaveNoViolations();
+  });
+
+  // --- Error-path tests ---
+  it('re-enables button when analysis fails', async () => {
+    const { rerender } = render(
+      <ActionBar {...defaultProps} state={makeState({ loading: true })} />,
+    );
+    const analyzingButtons = screen.getAllByText('action.analyzing');
+    const button = analyzingButtons.find(el => el.closest('button'));
+    expect(button?.closest('button')).toBeDisabled();
+
+    rerender(
+      <ActionBar
+        {...defaultProps}
+        state={makeState({ loading: false, analysisComplete: false })}
+        aiBriefing={{ loading: false, error: 'Analysis failed: network timeout' }}
+      />,
+    );
+    await waitFor(() => {
+      expect(screen.getByText('action.refresh')).toBeInTheDocument();
+      const refreshBtn = screen.getByText('action.refresh').closest('button');
+      expect(refreshBtn).not.toBeDisabled();
+    });
   });
 
   it('shows export options in overflow menu when analysis is complete', () => {

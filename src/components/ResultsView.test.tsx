@@ -6,6 +6,9 @@
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
+import { axe, toHaveNoViolations } from 'jest-axe';
+
+expect.extend(toHaveNoViolations);
 
 // ---------------------------------------------------------------------------
 // Tauri API mocks
@@ -368,5 +371,66 @@ describe('ResultsView', () => {
     const kbd = matches.find((el) => el.tagName === 'KBD');
     expect(kbd).toBeDefined();
     expect(kbd!.tagName).toBe('KBD');
+  });
+
+  // =========================================================================
+  // 18. Accessibility — analysis complete state
+  // =========================================================================
+  it('has no accessibility violations when analysis is complete', async () => {
+    const { container } = render(<ResultsView {...defaultProps} />);
+    const results = await axe(container);
+    expect(results).toHaveNoViolations();
+  });
+
+  // =========================================================================
+  // 19. Accessibility — not-started state
+  // =========================================================================
+  it('has no accessibility violations in not-started state', async () => {
+    currentMockState = makeMockState({
+      appState: { analysisComplete: false, loading: false, status: 'Ready', relevanceResults: [], progress: 0, progressStage: '', progressMessage: '', contextFiles: [] },
+    });
+    const { container } = render(<ResultsView {...defaultProps} />);
+    const results = await axe(container);
+    expect(results).toHaveNoViolations();
+  });
+
+  // =========================================================================
+  // 20. Error path — analysis errors before completing
+  // =========================================================================
+  it('shows not-started state when analysis errors before completing', () => {
+    currentMockState = makeMockState({
+      appState: {
+        analysisComplete: false,
+        loading: false,
+        status: 'Error: Network timeout',
+        relevanceResults: [],
+        progress: 0,
+        progressStage: 'error',
+        progressMessage: '',
+        contextFiles: [],
+      },
+    });
+    render(<ResultsView {...defaultProps} />);
+    expect(screen.getByText('results.noResults')).toBeInTheDocument();
+  });
+
+  // =========================================================================
+  // 21. Error path — filter bar persists after error with prior results
+  // =========================================================================
+  it('renders filter bar after error if prior results exist', () => {
+    currentMockState = makeMockState({
+      appState: {
+        analysisComplete: true,
+        loading: false,
+        status: 'Error: Something went wrong',
+        relevanceResults: [{ id: 1, title: 'Previous Result', top_score: 0.5 }],
+        progress: 0,
+        progressStage: 'error',
+        progressMessage: '',
+        contextFiles: [],
+      },
+    });
+    render(<ResultsView {...defaultProps} />);
+    expect(screen.getByRole('toolbar', { name: 'Filter and sort controls' })).toBeInTheDocument();
   });
 });

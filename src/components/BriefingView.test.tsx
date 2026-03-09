@@ -257,5 +257,37 @@ describe('BriefingView', () => {
       expect(screen.getByText('error.generic')).toBeInTheDocument();
       expect(screen.getByText('action.retry')).toBeInTheDocument();
     });
+
+    it('falls back to warmup state when error occurs with no prior content', () => {
+      setMockState({
+        aiBriefing: { content: null, loading: false, error: 'Network timeout', model: null, lastGenerated: null },
+        appState: { relevanceResults: [], loading: false, analysisComplete: false },
+      });
+      render(<BriefingView />);
+      // Error display is only inside the content section; with null content, warmup shows
+      expect(screen.getByText('briefing.warmup.title')).toBeInTheDocument();
+    });
+
+    it('calls generateBriefing when retry button is clicked on error with existing content', () => {
+      const genFn = vi.fn();
+      setMockState({
+        aiBriefing: { content: '## Stale\n- Old data', loading: false, error: 'LLM rate limited', model: null, lastGenerated: null },
+        appState: { relevanceResults: [] },
+        generateBriefing: genFn,
+      });
+      render(<BriefingView />);
+      fireEvent.click(screen.getByText('action.retry'));
+      expect(genFn).toHaveBeenCalledTimes(1);
+    });
+
+    it('shows error alongside stale content when error occurs with existing briefing', () => {
+      setMockState({
+        aiBriefing: { content: '## Previous\n- Old content', loading: false, error: 'API key expired', model: 'test', lastGenerated: new Date() },
+        appState: { relevanceResults: [] },
+      });
+      render(<BriefingView />);
+      expect(screen.getByText('error.generic')).toBeInTheDocument();
+      expect(screen.getByText('Previous')).toBeInTheDocument();
+    });
   });
 });
