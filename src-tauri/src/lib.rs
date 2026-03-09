@@ -174,6 +174,7 @@ mod intelligence_history;
 mod job_queue;
 mod knowledge_decay;
 mod llm;
+mod llm_judge;
 mod llm_stream;
 mod monitoring;
 mod monitoring_commands;
