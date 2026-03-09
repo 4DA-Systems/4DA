@@ -12,13 +12,7 @@ const DECISION_TYPES = [
   'dependency',
 ] as const;
 
-const TYPE_LABELS: Record<string, string> = {
-  tech_choice: 'Tech Choice',
-  architecture: 'Architecture',
-  workflow: 'Workflow',
-  pattern: 'Pattern',
-  dependency: 'Dependency',
-};
+// Type labels use i18n: decisions.type.tech_choice, decisions.type.architecture, etc.
 
 const STATUS_STYLES: Record<string, { text: string; bg: string; border: string }> = {
   active: {
@@ -166,9 +160,9 @@ export const DecisionMemory = memo(function DecisionMemory() {
               onChange={(e) => setForm({ ...form, decision_type: e.target.value })}
               className="px-3 py-2 text-xs bg-bg-tertiary text-white border border-border rounded-lg focus:outline-none focus:border-white/30"
             >
-              {DECISION_TYPES.map((t) => (
-                <option key={t} value={t}>
-                  {TYPE_LABELS[t]}
+              {DECISION_TYPES.map((dtype) => (
+                <option key={dtype} value={dtype}>
+                  {t(`decisions.type.${dtype}`)}
                 </option>
               ))}
             </select>
@@ -275,7 +269,7 @@ export const DecisionMemory = memo(function DecisionMemory() {
         <div key={type} className="border-b border-border last:border-b-0">
           <div className="px-5 py-2.5 bg-bg-primary/50">
             <span className="text-[10px] font-medium text-text-muted uppercase tracking-wider">
-              {TYPE_LABELS[type] || type}
+              {t(`decisions.type.${type}`)}
             </span>
             <span className="text-[10px] text-text-muted ml-2">{items.length}</span>
           </div>
@@ -378,13 +372,13 @@ export const DecisionMemory = memo(function DecisionMemory() {
 
                       {/* Metadata row */}
                       <div className="flex items-center gap-3 text-[10px] text-text-muted">
-                        <span>Created {new Date(d.created_at).toLocaleDateString()}</span>
+                        <span>{t('decisions.createdDate', { date: new Date(d.created_at).toLocaleDateString() })}</span>
                         {d.updated_at !== d.created_at && (
-                          <span>Updated {new Date(d.updated_at).toLocaleDateString()}</span>
+                          <span>{t('decisions.updatedDate', { date: new Date(d.updated_at).toLocaleDateString() })}</span>
                         )}
                         {d.superseded_by !== null && (
                           <span className="text-amber-400/70">
-                            Superseded by #{d.superseded_by}
+                            {t('decisions.supersededBy', { id: d.superseded_by })}
                           </span>
                         )}
                       </div>

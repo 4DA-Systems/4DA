@@ -22,7 +22,7 @@ export const ChannelCard = memo(function ChannelCard({ channel, active, onClick 
   const freshness = freshnessConfig[channel.freshness];
 
   const timeAgo = channel.last_rendered_at
-    ? formatTimeAgo(channel.last_rendered_at)
+    ? formatTimeAgo(channel.last_rendered_at, t)
     : t('channels.neverRendered');
 
   return (
@@ -63,14 +63,14 @@ export const ChannelCard = memo(function ChannelCard({ channel, active, onClick 
   );
 });
 
-function formatTimeAgo(dateStr: string): string {
+function formatTimeAgo(dateStr: string, t: (key: string, opts?: Record<string, unknown>) => string): string {
   const date = new Date(dateStr + 'Z');
   const now = new Date();
   const diffMs = now.getTime() - date.getTime();
   const diffMins = Math.floor(diffMs / 60000);
-  if (diffMins < 60) return `${diffMins}m ago`;
+  if (diffMins < 60) return t('channels.timeAgo.minutes', { count: diffMins });
   const diffHours = Math.floor(diffMins / 60);
-  if (diffHours < 24) return `${diffHours}h ago`;
+  if (diffHours < 24) return t('channels.timeAgo.hours', { count: diffHours });
   const diffDays = Math.floor(diffHours / 24);
-  return `${diffDays}d ago`;
+  return t('channels.timeAgo.days', { count: diffDays });
 }

@@ -114,9 +114,9 @@ describe('DecisionMemory', () => {
     expect(screen.getByText('Use Tauri')).toBeInTheDocument();
     expect(screen.getByText('Monorepo')).toBeInTheDocument();
 
-    // Type group labels should appear
-    expect(screen.getByText('Tech Choice')).toBeInTheDocument();
-    expect(screen.getByText('Architecture')).toBeInTheDocument();
+    // Type group labels should appear (i18n keys via passthrough mock)
+    expect(screen.getByText('decisions.type.tech_choice')).toBeInTheDocument();
+    expect(screen.getByText('decisions.type.architecture')).toBeInTheDocument();
   });
 
   it('shows record count in header', () => {
