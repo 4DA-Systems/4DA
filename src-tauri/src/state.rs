@@ -25,7 +25,8 @@ use crate::sources::{
     youtube::YouTubeSource, SourceRegistry,
 };
 use crate::AnalysisState;
-n// ============================================================================
+
+// ============================================================================
 // LOCK ORDERING (acquire in this order to prevent deadlocks)
 //
 // 1. SETTINGS_MANAGER   — lightweight reads, released immediately
