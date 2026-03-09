@@ -4,6 +4,7 @@
 /// - DOCX (Word) using docx-rs
 /// - XLSX (Excel) using calamine
 use super::{DocumentExtractor, ExtractedDocument, PageContent};
+use crate::error::Result;
 use calamine::{open_workbook, Reader, Xlsx};
 use docx_rs::read_docx;
 use std::collections::HashMap;
@@ -18,7 +19,7 @@ impl OfficeExtractor {
     }
 
     /// Extract text from a DOCX file
-    fn extract_docx(&self, path: &Path) -> Result<ExtractedDocument, String> {
+    fn extract_docx(&self, path: &Path) -> Result<ExtractedDocument> {
         let bytes = fs::read(path).map_err(|e| format!("Failed to read DOCX file: {}", e))?;
 
         let docx =
@@ -63,7 +64,7 @@ impl OfficeExtractor {
         let full_text = text_parts.join("\n");
 
         if full_text.trim().is_empty() {
-            return Err("No text content found in DOCX document".to_string());
+            return Err("No text content found in DOCX document".into());
         }
 
         // Create single page for DOCX (no natural page breaks available)
@@ -83,7 +84,7 @@ impl OfficeExtractor {
     }
 
     /// Extract text from an XLSX file
-    fn extract_xlsx(&self, path: &Path) -> Result<ExtractedDocument, String> {
+    fn extract_xlsx(&self, path: &Path) -> Result<ExtractedDocument> {
         let mut workbook: Xlsx<_> =
             open_workbook(path).map_err(|e| format!("Failed to open Excel workbook: {}", e))?;
 
@@ -127,7 +128,7 @@ impl OfficeExtractor {
         let full_text = all_text.join("\n\n");
 
         if full_text.trim().is_empty() || pages.is_empty() {
-            return Err("No data found in Excel workbook".to_string());
+            return Err("No data found in Excel workbook".into());
         }
 
         Ok(ExtractedDocument {
@@ -151,9 +152,9 @@ impl DocumentExtractor for OfficeExtractor {
         &["docx", "xlsx"]
     }
 
-    fn extract(&self, path: &Path) -> Result<ExtractedDocument, String> {
+    fn extract(&self, path: &Path) -> Result<ExtractedDocument> {
         if !path.exists() {
-            return Err(format!("File does not exist: {:?}", path));
+            return Err(format!("File does not exist: {:?}", path).into());
         }
 
         let ext = path
@@ -165,7 +166,7 @@ impl DocumentExtractor for OfficeExtractor {
         match ext.as_str() {
             "docx" => self.extract_docx(path),
             "xlsx" => self.extract_xlsx(path),
-            _ => Err(format!("Unsupported Office format: {}", ext)),
+            _ => Err(format!("Unsupported Office format: {}", ext).into()),
         }
     }
 }
@@ -240,7 +241,7 @@ mod tests {
         let extractor = OfficeExtractor::new();
         let result = extractor.extract(Path::new("/nonexistent/file.docx"));
         assert!(result.is_err());
-        assert!(result.unwrap_err().contains("does not exist"));
+        assert!(result.unwrap_err().to_string().contains("does not exist"));
     }
 
     #[test]

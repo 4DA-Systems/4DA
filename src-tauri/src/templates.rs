@@ -9,6 +9,7 @@
 use serde::{Deserialize, Serialize};
 use tracing::debug;
 
+use crate::error::Result;
 use crate::template_data::*;
 
 // ============================================================================
@@ -75,7 +76,7 @@ fn get_all_templates() -> Vec<CoachTemplate> {
 /// Get all available coach templates.
 /// Gate: requires streets_community membership.
 #[tauri::command]
-pub fn get_templates() -> Result<Vec<CoachTemplate>, String> {
+pub fn get_templates() -> Result<Vec<CoachTemplate>> {
     crate::settings::require_streets_feature("streets_community")?;
 
     let templates = get_all_templates();
@@ -91,7 +92,7 @@ pub fn get_templates() -> Result<Vec<CoachTemplate>, String> {
 /// Get a specific template by ID.
 /// Gate: requires streets_community membership.
 #[tauri::command]
-pub fn get_template_content(template_id: String) -> Result<CoachTemplate, String> {
+pub fn get_template_content(template_id: String) -> Result<CoachTemplate> {
     crate::settings::require_streets_feature("streets_community")?;
 
     let templates = get_all_templates();

@@ -1,4 +1,5 @@
 // Query executor - Hybrid keyword + vector search
+use crate::error::Result;
 use parking_lot::Mutex;
 use rusqlite::Connection;
 use serde::{Deserialize, Serialize};
@@ -132,7 +133,7 @@ impl QueryExecutor {
     }
 
     /// Execute a parsed query
-    pub fn execute(&self, query: &ParsedQuery) -> Result<QueryResult, String> {
+    pub fn execute(&self, query: &ParsedQuery) -> Result<QueryResult> {
         let start = std::time::Instant::now();
 
         let result = match query.intent {
@@ -150,7 +151,7 @@ impl QueryExecutor {
 
     /// Execute a Find query - search for matching content
     /// Uses hybrid search: vector similarity + keyword matching
-    fn execute_find(&self, query: &ParsedQuery) -> Result<QueryResult, String> {
+    fn execute_find(&self, query: &ParsedQuery) -> Result<QueryResult> {
         let mut items = Vec::new();
         let mut seen_ids: std::collections::HashSet<i64> = std::collections::HashSet::new();
 
@@ -252,19 +253,17 @@ impl QueryExecutor {
 
         let param_refs: Vec<&dyn rusqlite::types::ToSql> =
             params.iter().map(|p| p.as_ref()).collect();
-        let mut stmt = conn.prepare(&sql).map_err(|e| e.to_string())?;
-        let rows = stmt
-            .query_map(param_refs.as_slice(), |row| {
-                Ok((
-                    row.get::<_, i64>(0)?,
-                    row.get::<_, String>(1)?,
-                    row.get::<_, String>(2)?,
-                    row.get::<_, String>(3)?,
-                    row.get::<_, Option<String>>(4)?,
-                    row.get::<_, String>(5)?,
-                ))
-            })
-            .map_err(|e| e.to_string())?;
+        let mut stmt = conn.prepare(&sql)?;
+        let rows = stmt.query_map(param_refs.as_slice(), |row| {
+            Ok((
+                row.get::<_, i64>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, String>(2)?,
+                row.get::<_, String>(3)?,
+                row.get::<_, Option<String>>(4)?,
+                row.get::<_, String>(5)?,
+            ))
+        })?;
 
         for row in rows.flatten() {
             let (id, file_path, file_name, preview, indexed_at, file_type) = row;
@@ -380,7 +379,7 @@ impl QueryExecutor {
     }
 
     /// Execute a Summarize query - find content and generate summary
-    fn execute_summarize(&self, query: &ParsedQuery) -> Result<QueryResult, String> {
+    fn execute_summarize(&self, query: &ParsedQuery) -> Result<QueryResult> {
         // First, find relevant content
         let find_result = self.execute_find(query)?;
 
@@ -411,7 +410,7 @@ impl QueryExecutor {
     }
 
     /// Execute a Compare query - find multiple items and compare
-    fn execute_compare(&self, query: &ParsedQuery) -> Result<QueryResult, String> {
+    fn execute_compare(&self, query: &ParsedQuery) -> Result<QueryResult> {
         // For compare queries, we search for all entities separately
         // and return them grouped
         let mut all_items = Vec::new();
@@ -443,7 +442,7 @@ impl QueryExecutor {
     }
 
     /// Execute a Timeline query - find content ordered by time
-    fn execute_timeline(&self, query: &ParsedQuery) -> Result<QueryResult, String> {
+    fn execute_timeline(&self, query: &ParsedQuery) -> Result<QueryResult> {
         let mut find_result = self.execute_find(query)?;
 
         // Re-sort by timestamp instead of relevance
@@ -460,7 +459,7 @@ impl QueryExecutor {
     }
 
     /// Execute a Count query - count matching items
-    fn execute_count(&self, query: &ParsedQuery) -> Result<QueryResult, String> {
+    fn execute_count(&self, query: &ParsedQuery) -> Result<QueryResult> {
         let find_result = self.execute_find(query)?;
 
         Ok(QueryResult {

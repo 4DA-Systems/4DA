@@ -8,6 +8,8 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
 
+use crate::error::Result;
+
 /// Email digest configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DigestConfig {
@@ -658,7 +660,7 @@ impl DigestManager {
     }
 
     /// Save digest to local file
-    pub fn save_local(&self, digest: &Digest) -> Result<PathBuf, String> {
+    pub fn save_local(&self, digest: &Digest) -> Result<PathBuf> {
         let output_dir = self.config.output_dir.clone().unwrap_or_else(|| {
             dirs::data_dir()
                 .unwrap_or_else(|| PathBuf::from("."))

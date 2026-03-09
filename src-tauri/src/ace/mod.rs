@@ -32,6 +32,8 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use tracing::{debug, error, info, warn};
 
+use crate::error::Result;
+
 pub use embedding::{EmbeddingConfig, EmbeddingService};
 pub use git::{GitAnalyzer, GitSignal};
 pub use scanner::ProjectScanner;
@@ -114,7 +116,7 @@ pub enum TopicSource {
 
 impl ACE {
     /// Create a new ACE instance
-    pub fn new(conn: Arc<Mutex<Connection>>) -> Result<Self, String> {
+    pub fn new(conn: Arc<Mutex<Connection>>) -> Result<Self> {
         db::migrate(&conn)?;
 
         let scanner = ProjectScanner::new();
@@ -159,7 +161,7 @@ impl ACE {
     }
 
     /// Start file watching for real-time context updates
-    pub fn start_watching(&mut self, paths: &[PathBuf]) -> Result<(), String> {
+    pub fn start_watching(&mut self, paths: &[PathBuf]) -> Result<()> {
         let config = WatcherConfig::default();
         let mut watcher = FileWatcher::new(config);
 
@@ -202,7 +204,7 @@ impl ACE {
     }
 
     /// Analyze git repositories in the given paths
-    pub fn analyze_git_repos(&self, paths: &[PathBuf]) -> Result<Vec<GitSignal>, String> {
+    pub fn analyze_git_repos(&self, paths: &[PathBuf]) -> Result<Vec<GitSignal>> {
         let mut signals = Vec::new();
 
         for path in paths {
@@ -235,7 +237,7 @@ impl ACE {
     }
 
     /// Perform autonomous context detection
-    pub fn detect_context(&self, scan_paths: &[PathBuf]) -> Result<AutonomousContext, String> {
+    pub fn detect_context(&self, scan_paths: &[PathBuf]) -> Result<AutonomousContext> {
         info!(target: "ace::detect", "Starting autonomous context detection");
 
         let mut detected_tech: Vec<DetectedTech> = Vec::new();
@@ -397,81 +399,72 @@ impl ACE {
     }
 
     /// Get all detected technologies
-    pub fn get_detected_tech(&self) -> Result<Vec<DetectedTech>, String> {
+    pub fn get_detected_tech(&self) -> Result<Vec<DetectedTech>> {
         let conn = self.conn.lock();
         let mut stmt = conn
             .prepare(
                 "SELECT name, category, confidence, source, evidence FROM detected_tech ORDER BY confidence DESC",
-            )
-            .map_err(|e| e.to_string())?;
+            )?;
 
-        let rows = stmt
-            .query_map([], |row| {
-                let category_str: String = row.get(1)?;
-                let source_str: String = row.get(3)?;
-                let evidence_str: String = row.get(4)?;
+        let rows = stmt.query_map([], |row| {
+            let category_str: String = row.get(1)?;
+            let source_str: String = row.get(3)?;
+            let evidence_str: String = row.get(4)?;
 
-                Ok(DetectedTech {
-                    name: row.get(0)?,
-                    category: match category_str.as_str() {
-                        "language" => TechCategory::Language,
-                        "framework" => TechCategory::Framework,
-                        "library" => TechCategory::Library,
-                        "tool" => TechCategory::Tool,
-                        "database" => TechCategory::Database,
-                        _ => TechCategory::Platform,
-                    },
-                    confidence: row.get(2)?,
-                    source: match source_str.as_str() {
-                        "manifest" => DetectionSource::Manifest,
-                        "file_extension" => DetectionSource::FileExtension,
-                        "file_content" => DetectionSource::FileContent,
-                        "git_history" => DetectionSource::GitHistory,
-                        _ => DetectionSource::UserExplicit,
-                    },
-                    evidence: evidence_str.split("; ").map(String::from).collect(),
-                })
+            Ok(DetectedTech {
+                name: row.get(0)?,
+                category: match category_str.as_str() {
+                    "language" => TechCategory::Language,
+                    "framework" => TechCategory::Framework,
+                    "library" => TechCategory::Library,
+                    "tool" => TechCategory::Tool,
+                    "database" => TechCategory::Database,
+                    _ => TechCategory::Platform,
+                },
+                confidence: row.get(2)?,
+                source: match source_str.as_str() {
+                    "manifest" => DetectionSource::Manifest,
+                    "file_extension" => DetectionSource::FileExtension,
+                    "file_content" => DetectionSource::FileContent,
+                    "git_history" => DetectionSource::GitHistory,
+                    _ => DetectionSource::UserExplicit,
+                },
+                evidence: evidence_str.split("; ").map(String::from).collect(),
             })
-            .map_err(|e| e.to_string())?;
+        })?;
 
-        rows.collect::<Result<Vec<_>, _>>()
-            .map_err(|e| e.to_string())
+        Ok(rows.collect::<std::result::Result<Vec<_>, _>>()?)
     }
 
     /// Get active topics
-    pub fn get_active_topics(&self) -> Result<Vec<ActiveTopic>, String> {
+    pub fn get_active_topics(&self) -> Result<Vec<ActiveTopic>> {
         let conn = self.conn.lock();
-        let mut stmt = conn
-            .prepare(
-                "SELECT topic, weight, confidence, source, last_seen FROM active_topics
+        let mut stmt = conn.prepare(
+            "SELECT topic, weight, confidence, source, last_seen FROM active_topics
              WHERE last_seen > datetime('now', '-7 days')
              ORDER BY weight DESC",
-            )
-            .map_err(|e| e.to_string())?;
+        )?;
 
-        let rows = stmt
-            .query_map([], |row| {
-                let source_str: String = row.get(3)?;
+        let rows = stmt.query_map([], |row| {
+            let source_str: String = row.get(3)?;
 
-                Ok(ActiveTopic {
-                    topic: row.get(0)?,
-                    weight: row.get(1)?,
-                    confidence: row.get(2)?,
-                    source: match source_str.as_str() {
-                        "file_content" => TopicSource::FileContent,
-                        "git_commit" => TopicSource::GitCommit,
-                        "import" => TopicSource::ImportStatement,
-                        "manifest" => TopicSource::ProjectManifest,
-                        _ => TopicSource::ActivityTracker,
-                    },
-                    last_seen: row.get(4)?,
-                    embedding: None,
-                })
+            Ok(ActiveTopic {
+                topic: row.get(0)?,
+                weight: row.get(1)?,
+                confidence: row.get(2)?,
+                source: match source_str.as_str() {
+                    "file_content" => TopicSource::FileContent,
+                    "git_commit" => TopicSource::GitCommit,
+                    "import" => TopicSource::ImportStatement,
+                    "manifest" => TopicSource::ProjectManifest,
+                    _ => TopicSource::ActivityTracker,
+                },
+                last_seen: row.get(4)?,
+                embedding: None,
             })
-            .map_err(|e| e.to_string())?;
+        })?;
 
-        rows.collect::<Result<Vec<_>, _>>()
-            .map_err(|e| e.to_string())
+        Ok(rows.collect::<std::result::Result<Vec<_>, _>>()?)
     }
 
     // ========================================================================
@@ -553,28 +546,28 @@ impl ACE {
     // ========================================================================
 
     /// Save watcher state
-    pub fn save_watcher_state(&self) -> Result<(), String> {
+    pub fn save_watcher_state(&self) -> Result<()> {
         if let (Some(persistence), Some(watcher)) = (&self.watcher_persistence, &self.watcher) {
             let watcher_guard = watcher.lock();
             persistence.save(&watcher_guard)
         } else {
-            Err("Watcher or persistence not initialized".to_string())
+            Err("Watcher or persistence not initialized".into())
         }
     }
 
     /// Clear watcher state
     // Watcher API: used when filesystem monitoring is active
     #[allow(dead_code)]
-    pub fn clear_watcher_state(&self) -> Result<(), String> {
+    pub fn clear_watcher_state(&self) -> Result<()> {
         if let Some(persistence) = &self.watcher_persistence {
             persistence.clear()
         } else {
-            Err("Watcher persistence not initialized".to_string())
+            Err("Watcher persistence not initialized".into())
         }
     }
 
     /// Get topics from recent file changes for "active work" boosting.
-    pub fn get_recent_work_topics(&self, hours: u64) -> Result<Vec<(String, f32)>, String> {
+    pub fn get_recent_work_topics(&self, hours: u64) -> Result<Vec<(String, f32)>> {
         let conn = self.conn.lock();
 
         let mut stmt = conn

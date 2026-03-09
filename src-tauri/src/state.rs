@@ -11,6 +11,7 @@ use tracing::{info, warn};
 use crate::ace;
 use crate::context_engine::ContextEngine;
 use crate::db::Database;
+use crate::error::Result;
 use crate::job_queue;
 use crate::monitoring;
 use crate::settings::SettingsManager;
@@ -64,7 +65,7 @@ pub fn register_sqlite_vec_extension() {
 /// Open a raw SQLite connection with proper configuration.
 /// Registers sqlite-vec auto-extension and sets busy_timeout.
 /// Use this for ad-hoc connection needs outside the Database struct.
-pub(crate) fn open_db_connection() -> Result<rusqlite::Connection, String> {
+pub(crate) fn open_db_connection() -> Result<rusqlite::Connection> {
     let db_path = get_db_path();
 
     // Ensure parent directory exists
@@ -91,8 +92,8 @@ pub(crate) fn open_db_connection() -> Result<rusqlite::Connection, String> {
 
 static DATABASE: OnceCell<Arc<Database>> = OnceCell::new();
 
-pub(crate) fn get_database() -> Result<&'static Arc<Database>, String> {
-    DATABASE.get_or_try_init(|| {
+pub(crate) fn get_database() -> Result<&'static Arc<Database>> {
+    Ok(DATABASE.get_or_try_init(|| {
         let db_path = get_db_path();
 
         info!(target: "4da::db", path = ?db_path, "Initializing database");
@@ -145,7 +146,7 @@ pub(crate) fn get_database() -> Result<&'static Arc<Database>, String> {
 
         info!(target: "4da::db", "Database ready");
         Ok(Arc::new(db))
-    })
+    })?)
 }
 
 // ============================================================================
@@ -155,7 +156,7 @@ pub(crate) fn get_database() -> Result<&'static Arc<Database>, String> {
 static CONTEXT_ENGINE: Lazy<parking_lot::RwLock<Option<Arc<ContextEngine>>>> =
     Lazy::new(|| parking_lot::RwLock::new(None));
 
-fn init_context_engine() -> Result<Arc<ContextEngine>, String> {
+fn init_context_engine() -> Result<Arc<ContextEngine>> {
     let conn = open_db_connection()?;
     let engine = ContextEngine::new(Arc::new(parking_lot::Mutex::new(conn)))
         .map_err(|e| format!("Failed to initialize context engine: {}", e))?;
@@ -163,7 +164,7 @@ fn init_context_engine() -> Result<Arc<ContextEngine>, String> {
     Ok(Arc::new(engine))
 }
 
-pub(crate) fn get_context_engine() -> Result<Arc<ContextEngine>, String> {
+pub(crate) fn get_context_engine() -> Result<Arc<ContextEngine>> {
     // Fast path: read lock
     {
         let guard = CONTEXT_ENGINE.read();
@@ -197,7 +198,7 @@ pub(crate) fn invalidate_context_engine() {
 
 static ACE_ENGINE: OnceCell<Arc<parking_lot::RwLock<ace::ACE>>> = OnceCell::new();
 
-fn init_ace_engine() -> Result<Arc<parking_lot::RwLock<ace::ACE>>, String> {
+fn init_ace_engine() -> Result<Arc<parking_lot::RwLock<ace::ACE>>> {
     let conn = open_db_connection()?;
 
     let engine = ace::ACE::new(Arc::new(parking_lot::Mutex::new(conn)))
@@ -207,13 +208,12 @@ fn init_ace_engine() -> Result<Arc<parking_lot::RwLock<ace::ACE>>, String> {
     Ok(Arc::new(parking_lot::RwLock::new(engine)))
 }
 
-pub(crate) fn get_ace_engine() -> Result<parking_lot::RwLockReadGuard<'static, ace::ACE>, String> {
+pub(crate) fn get_ace_engine() -> Result<parking_lot::RwLockReadGuard<'static, ace::ACE>> {
     let engine = ACE_ENGINE.get_or_try_init(init_ace_engine)?;
     Ok(engine.read())
 }
 
-pub(crate) fn get_ace_engine_mut(
-) -> Result<parking_lot::RwLockWriteGuard<'static, ace::ACE>, String> {
+pub(crate) fn get_ace_engine_mut() -> Result<parking_lot::RwLockWriteGuard<'static, ace::ACE>> {
     let engine = ACE_ENGINE.get_or_try_init(init_ace_engine)?;
     Ok(engine.write())
 }
@@ -322,7 +322,7 @@ static JOB_QUEUE: OnceCell<Arc<parking_lot::RwLock<job_queue::JobQueue>>> = Once
 
 // Planned: async job queue for background task management
 #[allow(dead_code)]
-fn init_job_queue() -> Result<Arc<parking_lot::RwLock<job_queue::JobQueue>>, String> {
+fn init_job_queue() -> Result<Arc<parking_lot::RwLock<job_queue::JobQueue>>> {
     let conn = open_db_connection()?;
 
     let queue = job_queue::JobQueue::new(Arc::new(parking_lot::Mutex::new(conn)));
@@ -332,8 +332,7 @@ fn init_job_queue() -> Result<Arc<parking_lot::RwLock<job_queue::JobQueue>>, Str
 
 // Planned: async job queue for background task management
 #[allow(dead_code)]
-pub(crate) fn get_job_queue(
-) -> Result<&'static Arc<parking_lot::RwLock<job_queue::JobQueue>>, String> {
+pub(crate) fn get_job_queue() -> Result<&'static Arc<parking_lot::RwLock<job_queue::JobQueue>>> {
     JOB_QUEUE.get_or_try_init(init_job_queue)
 }
 

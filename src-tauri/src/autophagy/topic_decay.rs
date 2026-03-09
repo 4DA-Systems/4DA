@@ -8,6 +8,8 @@ use rusqlite::{params, Connection};
 use std::collections::HashMap;
 use tracing::{debug, info, warn};
 
+use crate::error::Result;
+
 /// Default half-life in hours when insufficient data exists.
 const DEFAULT_HALF_LIFE_HOURS: f32 = 72.0;
 /// Default peak relevance age in hours.
@@ -150,13 +152,12 @@ fn compute_decay_params(young: i64, mid: i64, old: i64) -> (f32, f32) {
 pub(crate) fn store_decay_profiles(
     conn: &Connection,
     profiles: &[super::TopicDecayProfile],
-) -> Result<(), String> {
+) -> Result<()> {
     for profile in profiles {
         let data = serde_json::to_string(&serde_json::json!({
             "half_life_hours": profile.half_life_hours,
             "peak_relevance_age_hours": profile.peak_relevance_age_hours,
-        }))
-        .map_err(|e| e.to_string())?;
+        }))?;
 
         // Supersede previous decay profile for this topic
         conn.execute(

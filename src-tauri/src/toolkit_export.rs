@@ -6,6 +6,8 @@
 use serde::{Deserialize, Serialize};
 use tracing::info;
 
+use crate::error::Result;
+
 // ============================================================================
 // Types
 // ============================================================================
@@ -23,7 +25,7 @@ pub struct ExportPackResult {
 // ============================================================================
 
 #[tauri::command]
-pub async fn toolkit_generate_export_pack() -> Result<ExportPackResult, String> {
+pub async fn toolkit_generate_export_pack() -> Result<ExportPackResult> {
     info!(target: "4da::toolkit", "Generating export pack");
 
     let mut sections = Vec::new();

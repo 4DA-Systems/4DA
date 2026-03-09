@@ -4,6 +4,7 @@
 /// Handles text-based PDFs (embedded fonts). Scanned PDFs
 /// will be handled via OCR in the image extractor.
 use super::{DocumentExtractor, ExtractedDocument, PageContent};
+use crate::error::Result;
 use lopdf::Document;
 use std::collections::HashMap;
 use std::path::Path;
@@ -16,9 +17,9 @@ impl PdfExtractor {
     }
 
     /// Extract text from a PDF file using pdf-extract
-    fn extract_text(&self, path: &Path) -> Result<String, String> {
-        pdf_extract::extract_text(path)
-            .map_err(|e| format!("Failed to extract text from PDF: {}", e))
+    fn extract_text(&self, path: &Path) -> Result<String> {
+        Ok(pdf_extract::extract_text(path)
+            .map_err(|e| format!("Failed to extract text from PDF: {}", e))?)
     }
 
     /// Extract metadata from a PDF using lopdf
@@ -136,10 +137,10 @@ impl DocumentExtractor for PdfExtractor {
         &["pdf"]
     }
 
-    fn extract(&self, path: &Path) -> Result<ExtractedDocument, String> {
+    fn extract(&self, path: &Path) -> Result<ExtractedDocument> {
         // Verify file exists and is readable
         if !path.exists() {
-            return Err(format!("File does not exist: {:?}", path));
+            return Err(format!("File does not exist: {:?}", path).into());
         }
 
         // Extract text content (cap at 5MB to prevent memory exhaustion)
@@ -155,7 +156,8 @@ impl DocumentExtractor for PdfExtractor {
             return Err(format!(
                 "No text content found in PDF (may be scanned/image-only): {:?}",
                 path
-            ));
+            )
+            .into());
         }
 
         // Extract metadata
@@ -205,7 +207,7 @@ mod tests {
         let extractor = PdfExtractor::new();
         let result = extractor.extract(Path::new("/nonexistent/file.pdf"));
         assert!(result.is_err());
-        assert!(result.unwrap_err().contains("does not exist"));
+        assert!(result.unwrap_err().to_string().contains("does not exist"));
     }
 
     #[test]

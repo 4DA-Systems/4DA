@@ -8,6 +8,7 @@ use rusqlite::Connection;
 use std::collections::HashMap;
 use tracing::info;
 
+use crate::error::Result;
 use crate::tech_radar::{RadarEntry, RadarMovement, RadarQuadrant, RadarRing, TechRadar};
 
 // ============================================================================
@@ -167,7 +168,7 @@ impl EntryBuilder {
 // ============================================================================
 
 /// Compute a personal technology radar from all available data.
-pub(crate) fn compute_radar(conn: &Connection) -> Result<TechRadar, String> {
+pub(crate) fn compute_radar(conn: &Connection) -> Result<TechRadar> {
     let profile = crate::domain_profile::build_domain_profile(conn);
     let mut entries: HashMap<String, EntryBuilder> = HashMap::new();
 

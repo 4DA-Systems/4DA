@@ -3,6 +3,7 @@
 //! Extracted from `llm.rs` to keep file sizes within limits.
 //! Supports SSE (Anthropic, OpenAI) and NDJSON (Ollama) streaming formats.
 
+use crate::error::Result;
 use crate::llm::{LLMResponse, Message};
 use crate::settings::LLMProvider;
 use futures::StreamExt;
@@ -75,10 +76,7 @@ pub(crate) fn parse_ollama_ndjson(line: &str) -> (Option<String>, bool, u64, u64
         .get("prompt_eval_count")
         .and_then(|t| t.as_u64())
         .unwrap_or(0);
-    let output_tokens = v
-        .get("eval_count")
-        .and_then(|t| t.as_u64())
-        .unwrap_or(0);
+    let output_tokens = v.get("eval_count").and_then(|t| t.as_u64()).unwrap_or(0);
 
     (token, done, input_tokens, output_tokens)
 }
@@ -94,7 +92,7 @@ pub(crate) async fn stream_anthropic<F>(
     system: &str,
     messages: Vec<Message>,
     on_token: F,
-) -> Result<LLMResponse, String>
+) -> Result<LLMResponse>
 where
     F: Fn(&str) + Send + 'static,
 {
@@ -126,7 +124,7 @@ where
     if !response.status().is_success() {
         let status = response.status();
         let text = response.text().await.unwrap_or_default();
-        return Err(format!("Anthropic API error {}: {}", status, text));
+        return Err(format!("Anthropic API error {}: {}", status, text).into());
     }
 
     let mut stream = response.bytes_stream();
@@ -194,7 +192,7 @@ pub(crate) async fn stream_openai<F>(
     system: &str,
     messages: Vec<Message>,
     on_token: F,
-) -> Result<LLMResponse, String>
+) -> Result<LLMResponse>
 where
     F: Fn(&str) + Send + 'static,
 {
@@ -233,7 +231,7 @@ where
     if !response.status().is_success() {
         let status = response.status();
         let text = response.text().await.unwrap_or_default();
-        return Err(format!("OpenAI API error {}: {}", status, text));
+        return Err(format!("OpenAI API error {}: {}", status, text).into());
     }
 
     let mut stream = response.bytes_stream();
@@ -289,7 +287,7 @@ pub(crate) async fn stream_ollama<F>(
     system: &str,
     messages: Vec<Message>,
     on_token: F,
-) -> Result<LLMResponse, String>
+) -> Result<LLMResponse>
 where
     F: Fn(&str) + Send + 'static,
 {
@@ -337,7 +335,7 @@ where
     if !response.status().is_success() {
         let status = response.status();
         let text = response.text().await.unwrap_or_default();
-        return Err(format!("Ollama error {}: {}", status, text));
+        return Err(format!("Ollama error {}: {}", status, text).into());
     }
 
     let mut stream = response.bytes_stream();
@@ -392,7 +390,7 @@ pub(crate) async fn stream_ollama_fallback<F>(
     system: &str,
     messages: Vec<Message>,
     on_token: F,
-) -> Result<LLMResponse, String>
+) -> Result<LLMResponse>
 where
     F: Fn(&str) + Send + 'static,
 {
@@ -416,7 +414,14 @@ where
         "Falling back to local Ollama for streaming"
     );
 
-    stream_ollama(&fallback_client, &fallback_provider, system, messages, on_token).await
+    stream_ollama(
+        &fallback_client,
+        &fallback_provider,
+        system,
+        messages,
+        on_token,
+    )
+    .await
 }
 
 // ============================================================================
@@ -432,10 +437,7 @@ mod tests {
     #[test]
     fn parse_anthropic_content_block_delta() {
         let data = r#"{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Hello"}}"#;
-        assert_eq!(
-            parse_anthropic_sse_token(data),
-            Some("Hello".to_string())
-        );
+        assert_eq!(parse_anthropic_sse_token(data), Some("Hello".to_string()));
     }
 
     #[test]
@@ -466,7 +468,8 @@ mod tests {
 
     #[test]
     fn parse_anthropic_content_block_start_no_token() {
-        let data = r#"{"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}"#;
+        let data =
+            r#"{"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}"#;
         assert_eq!(parse_anthropic_sse_token(data), None);
     }
 
@@ -489,7 +492,8 @@ mod tests {
 
     #[test]
     fn parse_openai_empty_delta() {
-        let data = r#"{"id":"chatcmpl-1","choices":[{"index":0,"delta":{},"finish_reason":"stop"}]}"#;
+        let data =
+            r#"{"id":"chatcmpl-1","choices":[{"index":0,"delta":{},"finish_reason":"stop"}]}"#;
         assert_eq!(parse_openai_sse_token(data), None);
     }
 
@@ -508,7 +512,8 @@ mod tests {
 
     #[test]
     fn parse_ollama_token_line() {
-        let line = r#"{"model":"llama3","message":{"role":"assistant","content":"Hi"},"done":false}"#;
+        let line =
+            r#"{"model":"llama3","message":{"role":"assistant","content":"Hi"},"done":false}"#;
         let (token, done, in_t, out_t) = parse_ollama_ndjson(line);
         assert_eq!(token, Some("Hi".to_string()));
         assert!(!done);

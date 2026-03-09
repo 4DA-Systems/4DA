@@ -6,6 +6,7 @@
 //! **Under-scored**: source_types where engaged items exist but total surfacing is low.
 //! The system may be filtering out valuable content.
 
+use crate::error::Result;
 use rusqlite::{params, Connection};
 use tracing::{debug, info, warn};
 
@@ -131,7 +132,7 @@ pub(crate) fn detect_anti_patterns(conn: &Connection, _threshold: f32) -> Vec<su
 pub(crate) fn store_anti_patterns(
     conn: &Connection,
     patterns: &[super::AntiPattern],
-) -> Result<(), String> {
+) -> Result<()> {
     for pattern in patterns {
         let data = serde_json::to_string(&serde_json::json!({
             "pattern_type": pattern.pattern_type,
@@ -139,8 +140,7 @@ pub(crate) fn store_anti_patterns(
             "engagement_count": pattern.engagement_count,
             "exposure_count": pattern.exposure_count,
             "suggested_penalty": pattern.suggested_penalty,
-        }))
-        .map_err(|e| e.to_string())?;
+        }))?;
 
         let subject = format!("{}:{}", pattern.pattern_type, pattern.topic);
 

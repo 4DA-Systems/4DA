@@ -9,6 +9,8 @@ use serde::{Deserialize, Serialize};
 use tracing::info;
 use ts_rs::TS;
 
+use crate::error::Result;
+
 // ============================================================================
 // Types
 // ============================================================================
@@ -58,10 +60,7 @@ const W_AI_TRACK_RECORD: f64 = 0.10;
 // ============================================================================
 
 /// Compute a delegation score for a given subject based on existing 4DA data.
-pub fn compute_delegation_score(
-    conn: &Connection,
-    subject: &str,
-) -> Result<DelegationScore, String> {
+pub fn compute_delegation_score(conn: &Connection, subject: &str) -> Result<DelegationScore> {
     let subject_lower = subject.to_lowercase();
 
     let pattern_stability = compute_pattern_stability(conn, &subject_lower);
@@ -130,7 +129,7 @@ pub fn compute_delegation_score(
 }
 
 /// Compute delegation scores for all entries in tech_stack, sorted by score DESC.
-pub fn compute_all_delegation_scores(conn: &Connection) -> Result<Vec<DelegationScore>, String> {
+pub fn compute_all_delegation_scores(conn: &Connection) -> Result<Vec<DelegationScore>> {
     let mut stmt = conn
         .prepare("SELECT technology FROM tech_stack")
         .map_err(|e| format!("Failed to query tech_stack: {}", e))?;
@@ -346,13 +345,13 @@ fn compute_ai_track_record(conn: &Connection, subject: &str) -> f64 {
 // ============================================================================
 
 #[tauri::command]
-pub async fn get_delegation_score(subject: String) -> Result<DelegationScore, String> {
+pub async fn get_delegation_score(subject: String) -> Result<DelegationScore> {
     let conn = crate::open_db_connection()?;
     compute_delegation_score(&conn, &subject)
 }
 
 #[tauri::command]
-pub async fn get_all_delegation_scores() -> Result<Vec<DelegationScore>, String> {
+pub async fn get_all_delegation_scores() -> Result<Vec<DelegationScore>> {
     let conn = crate::open_db_connection()?;
     compute_all_delegation_scores(&conn)
 }

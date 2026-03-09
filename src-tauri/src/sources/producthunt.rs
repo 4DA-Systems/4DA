@@ -6,6 +6,7 @@ use async_trait::async_trait;
 use tracing::info;
 
 use super::{Source, SourceConfig, SourceError, SourceItem, SourceResult};
+use crate::error::Result;
 
 // ============================================================================
 // Product Hunt RSS Feed Entry
@@ -57,7 +58,7 @@ impl ProductHuntSource {
     }
 
     /// Parse Product Hunt RSS feed (XML)
-    fn parse_feed(&self, xml: &str) -> Result<Vec<ProductHuntItem>, String> {
+    fn parse_feed(&self, xml: &str) -> Result<Vec<ProductHuntItem>> {
         let mut items = Vec::new();
 
         // Find all <item> tags
@@ -189,7 +190,9 @@ impl Source for ProductHuntSource {
             .await
             .map_err(|e| SourceError::Network(e.to_string()))?;
 
-        let ph_items = self.parse_feed(&xml).map_err(SourceError::Parse)?;
+        let ph_items = self
+            .parse_feed(&xml)
+            .map_err(|e| SourceError::Parse(e.to_string()))?;
 
         info!(
             total = ph_items.len(),

@@ -7,6 +7,7 @@ use async_trait::async_trait;
 use tracing::{debug, info, warn};
 
 use super::{Source, SourceConfig, SourceError, SourceItem, SourceResult};
+use crate::error::Result;
 
 // ============================================================================
 // YouTube Source
@@ -68,10 +69,7 @@ impl YouTubeSource {
     }
 
     /// Fetch the Atom feed for a single channel
-    async fn fetch_channel_feed(
-        &self,
-        channel: &YouTubeChannel,
-    ) -> Result<Vec<VideoEntry>, String> {
+    async fn fetch_channel_feed(&self, channel: &YouTubeChannel) -> Result<Vec<VideoEntry>> {
         let url = format!(
             "https://www.youtube.com/feeds/videos.xml?channel_id={}",
             channel.channel_id
@@ -91,7 +89,8 @@ impl YouTubeSource {
                 "YouTube feed error for {}: HTTP {}",
                 channel.name,
                 resp.status()
-            ));
+            )
+            .into());
         }
 
         let xml = resp
@@ -103,7 +102,7 @@ impl YouTubeSource {
     }
 
     /// Parse YouTube Atom feed XML
-    fn parse_atom_feed(&self, xml: &str, channel_name: &str) -> Result<Vec<VideoEntry>, String> {
+    fn parse_atom_feed(&self, xml: &str, channel_name: &str) -> Result<Vec<VideoEntry>> {
         let mut entries = Vec::new();
 
         // Extract feed title (channel name) - fallback to provided name

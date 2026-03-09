@@ -9,6 +9,8 @@
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
+use crate::error::Result;
+
 // Re-export compute engine for crate-level use
 pub(crate) use crate::tech_radar_compute::compute_radar;
 
@@ -74,13 +76,13 @@ pub struct TechRadar {
 // ============================================================================
 
 #[tauri::command]
-pub async fn get_tech_radar() -> Result<TechRadar, String> {
+pub async fn get_tech_radar() -> Result<TechRadar> {
     let conn = crate::open_db_connection()?;
     compute_radar(&conn)
 }
 
 #[tauri::command]
-pub async fn get_radar_entry(name: String) -> Result<Option<RadarEntry>, String> {
+pub async fn get_radar_entry(name: String) -> Result<Option<RadarEntry>> {
     let conn = crate::open_db_connection()?;
     let radar = compute_radar(&conn)?;
     Ok(radar

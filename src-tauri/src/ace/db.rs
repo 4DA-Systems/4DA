@@ -7,8 +7,10 @@ use rusqlite::Connection;
 use std::sync::Arc;
 use tracing::info;
 
+use crate::error::Result;
+
 /// Run all ACE database migrations
-pub fn migrate(conn: &Arc<Mutex<Connection>>) -> Result<(), String> {
+pub fn migrate(conn: &Arc<Mutex<Connection>>) -> Result<()> {
     let conn = conn.lock();
 
     conn.execute_batch(
@@ -392,18 +394,15 @@ pub fn migrate(conn: &Arc<Mutex<Connection>>) -> Result<(), String> {
 
 /// Get bootstrap paths for initial scan
 #[allow(dead_code)] // Future: ACE autonomous scanning
-pub fn get_bootstrap_paths(conn: &Arc<Mutex<Connection>>) -> Result<Vec<String>, String> {
+pub fn get_bootstrap_paths(conn: &Arc<Mutex<Connection>>) -> Result<Vec<String>> {
     let conn = conn.lock();
-    let mut stmt = conn
-        .prepare("SELECT path FROM bootstrap_paths WHERE scanned = 0 ORDER BY priority DESC")
-        .map_err(|e| e.to_string())?;
+    let mut stmt =
+        conn.prepare("SELECT path FROM bootstrap_paths WHERE scanned = 0 ORDER BY priority DESC")?;
 
-    let rows = stmt
-        .query_map([], |row| row.get(0))
-        .map_err(|e| e.to_string())?;
+    let rows = stmt.query_map([], |row| row.get(0))?;
 
-    let paths: Result<Vec<String>, _> = rows.collect();
-    paths.map_err(|e| e.to_string())
+    let paths: std::result::Result<Vec<String>, _> = rows.collect();
+    Ok(paths?)
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -439,7 +438,7 @@ mod tests {
             .unwrap()
             .query_map([], |row| row.get(0))
             .unwrap()
-            .collect::<Result<_, _>>()
+            .collect::<std::result::Result<_, _>>()
             .unwrap();
 
         assert!(tables.contains(&"detected_projects".to_string()));

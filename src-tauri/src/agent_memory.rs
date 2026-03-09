@@ -8,6 +8,8 @@ use serde::{Deserialize, Serialize};
 use tracing::info;
 use ts_rs::TS;
 
+use crate::error::Result;
+
 // ============================================================================
 // Types
 // ============================================================================
@@ -76,7 +78,7 @@ pub fn store_memory(
     content: &str,
     context_tags: &[String],
     expires_at: Option<&str>,
-) -> Result<i64, String> {
+) -> Result<i64> {
     let tags_json = serde_json::to_string(context_tags).unwrap_or_else(|_| "[]".to_string());
 
     conn.execute(
@@ -105,7 +107,7 @@ pub fn recall_memories(
     subject: &str,
     agent_type: Option<&str>,
     limit: usize,
-) -> Result<Vec<AgentMemoryEntry>, String> {
+) -> Result<Vec<AgentMemoryEntry>> {
     let pattern = format!("%{}%", subject.to_lowercase());
     let mut sql = String::from(
         "SELECT id, session_id, agent_type, memory_type, subject, content, context_tags, created_at, expires_at, promoted_to_decision_id
@@ -147,7 +149,7 @@ pub fn get_memories_since(
     since: &str,
     agent_type: Option<&str>,
     limit: usize,
-) -> Result<Vec<AgentMemoryEntry>, String> {
+) -> Result<Vec<AgentMemoryEntry>> {
     let mut sql = String::from(
         "SELECT id, session_id, agent_type, memory_type, subject, content, context_tags, created_at, expires_at, promoted_to_decision_id
          FROM agent_memory WHERE created_at > ?1",
@@ -181,7 +183,7 @@ pub fn get_memories_since(
 }
 
 /// Promote an agent memory to a developer decision.
-pub fn promote_to_decision(conn: &Connection, memory_id: i64) -> Result<i64, String> {
+pub fn promote_to_decision(conn: &Connection, memory_id: i64) -> Result<i64> {
     // Get the memory
     let memory = conn
         .query_row(
@@ -228,7 +230,7 @@ pub fn promote_to_decision(conn: &Connection, memory_id: i64) -> Result<i64, Str
 }
 
 /// Clean up expired memories.
-pub fn cleanup_expired(conn: &Connection) -> Result<usize, String> {
+pub fn cleanup_expired(conn: &Connection) -> Result<usize> {
     let deleted = conn
         .execute(
             "DELETE FROM agent_memory WHERE expires_at IS NOT NULL AND expires_at <= datetime('now')",
@@ -276,7 +278,7 @@ pub async fn store_agent_memory(
     content: String,
     context_tags: Option<Vec<String>>,
     expires_at: Option<String>,
-) -> Result<i64, String> {
+) -> Result<i64> {
     let conn = crate::open_db_connection()?;
     store_memory(
         &conn,
@@ -295,13 +297,13 @@ pub async fn recall_agent_memories(
     subject: String,
     agent_type: Option<String>,
     limit: Option<usize>,
-) -> Result<Vec<AgentMemoryEntry>, String> {
+) -> Result<Vec<AgentMemoryEntry>> {
     let conn = crate::open_db_connection()?;
     recall_memories(&conn, &subject, agent_type.as_deref(), limit.unwrap_or(20))
 }
 
 #[tauri::command]
-pub async fn promote_memory_to_decision(memory_id: i64) -> Result<i64, String> {
+pub async fn promote_memory_to_decision(memory_id: i64) -> Result<i64> {
     let conn = crate::open_db_connection()?;
     promote_to_decision(&conn, memory_id)
 }

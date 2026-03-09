@@ -60,7 +60,7 @@ const ALL_CATEGORIES: &[&str] = &[
 
 #[tauri::command]
 pub async fn get_sovereign_profile() -> Result<SovereignProfileData> {
-    let conn = crate::open_db_connection().map_err(FourDaError::Internal)?;
+    let conn = crate::open_db_connection()?;
 
     let mut stmt = conn
         .prepare(
@@ -109,7 +109,7 @@ pub async fn get_sovereign_profile() -> Result<SovereignProfileData> {
 
 #[tauri::command]
 pub async fn get_sovereign_profile_completeness() -> Result<ProfileCompleteness> {
-    let conn = crate::open_db_connection().map_err(FourDaError::Internal)?;
+    let conn = crate::open_db_connection()?;
 
     let mut stmt = conn
         .prepare("SELECT DISTINCT category FROM sovereign_profile")
@@ -216,7 +216,7 @@ pub async fn save_sovereign_fact(category: String, key: String, value: String) -
         ));
     }
 
-    let conn = crate::open_db_connection().map_err(FourDaError::Internal)?;
+    let conn = crate::open_db_connection()?;
 
     conn.execute(
         "INSERT INTO sovereign_profile (category, key, value, source_command, source_lesson, confidence)
@@ -239,7 +239,7 @@ pub async fn get_execution_log(
     module_id: String,
     lesson_idx: Option<usize>,
 ) -> Result<Vec<serde_json::Value>> {
-    let conn = crate::open_db_connection().map_err(FourDaError::Internal)?;
+    let conn = crate::open_db_connection()?;
 
     let rows: Vec<serde_json::Value> = if let Some(idx) = lesson_idx {
         let mut stmt = conn

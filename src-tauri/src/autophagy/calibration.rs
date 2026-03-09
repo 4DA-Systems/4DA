@@ -7,6 +7,8 @@ use rusqlite::{params, Connection};
 use std::collections::HashMap;
 use tracing::{debug, info, warn};
 
+use crate::error::Result;
+
 /// Analyze calibration: compare scored items vs actual user engagement.
 ///
 /// Examines items in the "pruning window" (between max_age_days-7 and max_age_days old)
@@ -115,15 +117,14 @@ pub(crate) fn analyze_calibration(
 pub(crate) fn store_calibrations(
     conn: &Connection,
     deltas: &[super::CalibrationDelta],
-) -> Result<(), String> {
+) -> Result<()> {
     for delta in deltas {
         let data = serde_json::to_string(&serde_json::json!({
             "scored_avg": delta.scored_avg,
             "engaged_avg": delta.engaged_avg,
             "delta": delta.delta,
             "sample_size": delta.sample_size,
-        }))
-        .map_err(|e| e.to_string())?;
+        }))?;
 
         // Supersede previous calibration for the same topic
         conn.execute(

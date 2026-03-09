@@ -14,6 +14,8 @@ use tauri::{
 };
 use tracing::{info, warn};
 
+use crate::error::Result;
+
 // Re-export notification types and functions so existing `monitoring::X` paths still work
 pub use crate::monitoring_notifications::{
     complete_scheduled_check, drain_batched_notifications, send_notification, SignalSummary,
@@ -103,7 +105,7 @@ impl MonitoringState {
 // ============================================================================
 
 /// Set up the system tray with menu
-pub fn setup_tray<R: Runtime>(app: &AppHandle<R>) -> Result<TrayIcon<R>, String> {
+pub fn setup_tray<R: Runtime>(app: &AppHandle<R>) -> Result<TrayIcon<R>> {
     // Create menu items
     let show_item = MenuItem::with_id(app, "show", "Show 4DA Home", true, None::<&str>)
         .map_err(|e| e.to_string())?;
@@ -470,7 +472,7 @@ pub fn update_tray_menu<R: Runtime>(
     tray: &TrayIcon<R>,
     app: &AppHandle<R>,
     monitoring_enabled: bool,
-) -> Result<(), String> {
+) -> Result<()> {
     let show_item = MenuItem::with_id(app, "show", "Show 4DA Home", true, None::<&str>)
         .map_err(|e| e.to_string())?;
     let analyze_item = MenuItem::with_id(app, "analyze", "Analyze Now", true, None::<&str>)

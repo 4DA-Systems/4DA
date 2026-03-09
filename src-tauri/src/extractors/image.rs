@@ -9,6 +9,7 @@
 /// https://ocrs-models.s3-accelerate.amazonaws.com/text-detection.rten
 /// https://ocrs-models.s3-accelerate.amazonaws.com/text-recognition.rten
 use super::{DocumentExtractor, ExtractedDocument, PageContent};
+use crate::error::Result;
 use image::ImageReader;
 use ocrs::{ImageSource, OcrEngine, OcrEngineParams};
 use rten::Model;
@@ -17,7 +18,7 @@ use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 
 /// Global OCR engine instance (expensive to create, reuse across calls)
-static OCR_ENGINE: OnceLock<Result<OcrEngine, String>> = OnceLock::new();
+static OCR_ENGINE: OnceLock<std::result::Result<OcrEngine, String>> = OnceLock::new();
 
 /// Find the models directory
 fn find_models_dir() -> Option<PathBuf> {
@@ -42,7 +43,7 @@ fn find_models_dir() -> Option<PathBuf> {
 }
 
 /// Get or initialize the OCR engine (lazy singleton)
-fn get_ocr_engine() -> Result<&'static OcrEngine, String> {
+fn get_ocr_engine() -> std::result::Result<&'static OcrEngine, String> {
     let engine = OCR_ENGINE.get_or_init(|| {
         let models_dir = find_models_dir().ok_or_else(|| {
             "OCR models not found. Please download:\n\
@@ -94,7 +95,7 @@ impl DocumentExtractor for ImageExtractor {
         &["png", "jpg", "jpeg", "tiff", "tif", "bmp", "gif", "webp"]
     }
 
-    fn extract(&self, path: &Path) -> Result<ExtractedDocument, String> {
+    fn extract(&self, path: &Path) -> Result<ExtractedDocument> {
         // Load the image
         let img = ImageReader::open(path)
             .map_err(|e| format!("Failed to open image: {}", e))?

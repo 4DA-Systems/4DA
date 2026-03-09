@@ -12,6 +12,8 @@ use rusqlite::{params, Connection};
 use std::time::Instant;
 use tracing::{info, warn};
 
+use crate::error::Result;
+
 /// Run a full autophagy cycle: analyze content approaching pruning, extract intelligence,
 /// then record cycle metrics.
 ///
@@ -28,7 +30,7 @@ use tracing::{info, warn};
 pub(crate) fn run_autophagy_cycle(
     conn: &Connection,
     max_age_days: i64,
-) -> Result<super::AutophagyCycleResult, String> {
+) -> Result<super::AutophagyCycleResult> {
     run_autophagy_cycle_with_ace(conn, max_age_days, None)
 }
 
@@ -37,7 +39,7 @@ pub(crate) fn run_autophagy_cycle_with_ace(
     conn: &Connection,
     max_age_days: i64,
     ace_conn: Option<&Connection>,
-) -> Result<super::AutophagyCycleResult, String> {
+) -> Result<super::AutophagyCycleResult> {
     let start = Instant::now();
     info!(target: "4da::autophagy", max_age_days, "Starting autophagy cycle");
 

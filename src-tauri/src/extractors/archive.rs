@@ -3,6 +3,7 @@
 /// Recursively extracts and processes files from archive formats.
 /// Prevents zip bombs with depth and size limits.
 use super::{DocumentExtractor, ExtractedDocument, PageContent};
+use crate::error::Result;
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::Read;
@@ -24,7 +25,7 @@ impl ArchiveExtractor {
     }
 
     /// Extract a ZIP archive
-    fn extract_zip(&self, path: &Path) -> Result<ExtractedDocument, String> {
+    fn extract_zip(&self, path: &Path) -> Result<ExtractedDocument> {
         let file = File::open(path).map_err(|e| format!("Failed to open ZIP: {}", e))?;
         let mut archive =
             ZipArchive::new(file).map_err(|e| format!("Failed to read ZIP archive: {}", e))?;
@@ -90,7 +91,7 @@ impl ArchiveExtractor {
         let full_text = all_text.join("\n\n");
 
         if full_text.trim().is_empty() {
-            return Err("No extractable text content found in archive".to_string());
+            return Err("No extractable text content found in archive".into());
         }
 
         Ok(ExtractedDocument {
@@ -107,7 +108,7 @@ impl ArchiveExtractor {
     }
 
     /// Extract a TAR archive (optionally compressed)
-    fn extract_tar(&self, path: &Path) -> Result<ExtractedDocument, String> {
+    fn extract_tar(&self, path: &Path) -> Result<ExtractedDocument> {
         let file = File::open(path).map_err(|e| format!("Failed to open TAR: {}", e))?;
 
         // Detect compression based on extension
@@ -196,7 +197,7 @@ impl ArchiveExtractor {
         let full_text = all_text.join("\n\n");
 
         if full_text.trim().is_empty() {
-            return Err("No extractable text content found in archive".to_string());
+            return Err("No extractable text content found in archive".into());
         }
 
         Ok(ExtractedDocument {
@@ -256,9 +257,9 @@ impl DocumentExtractor for ArchiveExtractor {
         &["zip", "tar", "gz", "tgz"]
     }
 
-    fn extract(&self, path: &Path) -> Result<ExtractedDocument, String> {
+    fn extract(&self, path: &Path) -> Result<ExtractedDocument> {
         if !path.exists() {
-            return Err(format!("File does not exist: {:?}", path));
+            return Err(format!("File does not exist: {:?}", path).into());
         }
 
         let ext = path
@@ -270,7 +271,7 @@ impl DocumentExtractor for ArchiveExtractor {
         match ext.as_str() {
             "zip" => self.extract_zip(path),
             "tar" | "gz" | "tgz" => self.extract_tar(path),
-            _ => Err(format!("Unsupported archive format: {}", ext)),
+            _ => Err(format!("Unsupported archive format: {}", ext).into()),
         }
     }
 }
@@ -306,7 +307,7 @@ mod tests {
         let extractor = ArchiveExtractor::new();
         let result = extractor.extract(Path::new("/nonexistent/file.zip"));
         assert!(result.is_err());
-        assert!(result.unwrap_err().contains("does not exist"));
+        assert!(result.unwrap_err().to_string().contains("does not exist"));
     }
 
     #[test]

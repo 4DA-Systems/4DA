@@ -5,6 +5,8 @@ use rusqlite::Connection;
 use std::sync::Arc;
 use tracing::{debug, info};
 
+use crate::error::Result;
+
 use super::ACE;
 
 // ============================================================================
@@ -32,7 +34,7 @@ pub fn store_topic_embedding(
     conn: &Arc<Mutex<Connection>>,
     topic: &str,
     embedding: &[f32],
-) -> Result<(), String> {
+) -> Result<()> {
     let conn = conn.lock();
     let embedding_blob = embedding_to_blob(embedding);
 
@@ -78,7 +80,7 @@ pub fn store_topic_embedding(
 /// Load all topic embeddings from the database
 pub fn load_topic_embeddings(
     conn: &Arc<Mutex<Connection>>,
-) -> Result<std::collections::HashMap<String, Vec<f32>>, String> {
+) -> Result<std::collections::HashMap<String, Vec<f32>>> {
     let conn = conn.lock();
     let mut result = std::collections::HashMap::new();
 
@@ -115,9 +117,7 @@ pub fn load_topic_embeddings(
 /// Generate embeddings for topics that don't have them
 /// Returns count of topics updated
 #[allow(dead_code)] // Future: batch embedding generation on startup
-pub async fn generate_missing_topic_embeddings(
-    conn: &Arc<Mutex<Connection>>,
-) -> Result<usize, String> {
+pub async fn generate_missing_topic_embeddings(conn: &Arc<Mutex<Connection>>) -> Result<usize> {
     // Find topics without embeddings
     let topics_without_embeddings: Vec<(i64, String)> = {
         let conn_guard = conn.lock();
@@ -134,7 +134,7 @@ pub async fn generate_missing_topic_embeddings(
             .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))
             .map_err(|e| e.to_string())?;
 
-        rows.collect::<Result<Vec<_>, _>>()
+        rows.collect::<std::result::Result<Vec<_>, _>>()
             .map_err(|e| e.to_string())?
     };
 
@@ -192,33 +192,28 @@ pub fn find_similar_topics_knn(
     conn: &Arc<Mutex<Connection>>,
     query_embedding: &[f32],
     limit: usize,
-) -> Result<Vec<(String, f32)>, String> {
+) -> Result<Vec<(String, f32)>> {
     let conn = conn.lock();
     let embedding_blob = embedding_to_blob(query_embedding);
 
-    let mut stmt = conn
-        .prepare(
-            "SELECT at.topic, tv.distance
+    let mut stmt = conn.prepare(
+        "SELECT at.topic, tv.distance
              FROM topic_vec tv
              JOIN active_topics at ON at.id = tv.rowid
              WHERE tv.embedding MATCH ?1
              AND k = ?2
              ORDER BY tv.distance",
-        )
-        .map_err(|e| format!("Failed to prepare KNN query: {}", e))?;
+    )?;
 
-    let rows = stmt
-        .query_map(rusqlite::params![embedding_blob, limit as i32], |row| {
-            let topic: String = row.get(0)?;
-            let distance: f32 = row.get(1)?;
-            // Convert L2 distance to similarity (1 / (1 + distance))
-            let similarity = 1.0 / (1.0 + distance);
-            Ok((topic, similarity))
-        })
-        .map_err(|e| format!("KNN query failed: {}", e))?;
+    let rows = stmt.query_map(rusqlite::params![embedding_blob, limit as i32], |row| {
+        let topic: String = row.get(0)?;
+        let distance: f32 = row.get(1)?;
+        // Convert L2 distance to similarity (1 / (1 + distance))
+        let similarity = 1.0 / (1.0 + distance);
+        Ok((topic, similarity))
+    })?;
 
-    rows.collect::<Result<Vec<_>, _>>()
-        .map_err(|e| e.to_string())
+    Ok(rows.collect::<std::result::Result<Vec<_>, _>>()?)
 }
 
 // ============================================================================
@@ -229,25 +224,21 @@ impl ACE {
     /// Generate embedding for a topic
     // Embedding API: used when Ollama embedding is active
     #[allow(dead_code)]
-    pub fn embed_topic(&self, topic: &str) -> Result<Vec<f32>, String> {
+    pub fn embed_topic(&self, topic: &str) -> Result<Vec<f32>> {
         match &self.embedding_service {
             Some(service) => service.lock().embed(topic),
-            None => Err("Embedding service not initialized".to_string()),
+            None => Err("Embedding service not initialized".into()),
         }
     }
 
     /// Find similar topics
-    pub fn find_similar_topics(
-        &self,
-        query: &str,
-        top_k: usize,
-    ) -> Result<Vec<(String, f32)>, String> {
+    pub fn find_similar_topics(&self, query: &str, top_k: usize) -> Result<Vec<(String, f32)>> {
         let topics = self.get_active_topics()?;
         let topic_strings: Vec<String> = topics.iter().map(|t| t.topic.clone()).collect();
 
         match &self.embedding_service {
             Some(service) => service.lock().find_similar(query, &topic_strings, top_k),
-            None => Err("Embedding service not initialized".to_string()),
+            None => Err("Embedding service not initialized".into()),
         }
     }
 

@@ -12,6 +12,7 @@ use std::panic::AssertUnwindSafe;
 use std::sync::atomic::Ordering;
 
 use crate::analysis_narration::{emit_narration, NarrationEvent};
+use crate::error::Result;
 use crate::scoring;
 use crate::stacks;
 use crate::{
@@ -39,13 +40,13 @@ fn is_aborted() -> bool {
 /// Deep initial scan - comprehensive first-time scan for new users
 /// Fetches 300-500+ items from all sources using multiple endpoints
 #[tauri::command]
-pub(crate) async fn run_deep_initial_scan(app: AppHandle) -> Result<(), String> {
+pub(crate) async fn run_deep_initial_scan(app: AppHandle) -> Result<()> {
     // Check if already running
     {
         let state = get_analysis_state();
         let guard = state.lock();
         if guard.running {
-            return Err("Analysis already running".to_string());
+            return Err("Analysis already running".into());
         }
     }
 
@@ -169,9 +170,10 @@ pub(crate) async fn run_deep_initial_scan(app: AppHandle) -> Result<(), String> 
             }
             Ok(Err(e)) => {
                 error!(target: "4da::analysis", error = %e, "Deep initial scan failed");
-                guard.error = Some(e.clone());
+                let err_str = e.to_string();
+                guard.error = Some(err_str.clone());
                 drop(guard);
-                let _ = app.emit("analysis-error", &e);
+                let _ = app.emit("analysis-error", &err_str);
             }
             Err(_panic) => {
                 let msg = "Deep scan panicked (internal error)".to_string();
@@ -187,9 +189,7 @@ pub(crate) async fn run_deep_initial_scan(app: AppHandle) -> Result<(), String> 
 }
 
 /// Deep initial scan implementation - comprehensive first-time intelligence gathering
-pub(crate) async fn run_deep_initial_scan_impl(
-    app: &AppHandle,
-) -> Result<Vec<SourceRelevance>, String> {
+pub(crate) async fn run_deep_initial_scan_impl(app: &AppHandle) -> Result<Vec<SourceRelevance>> {
     info!(target: "4da::analysis", "=== DEEP INITIAL SCAN STARTED ===");
     info!(target: "4da::analysis", "Fetching 300-500+ items from HN (5 categories), arXiv (16 categories), Reddit (40+ subreddits)...");
 
@@ -287,7 +287,7 @@ pub(crate) async fn run_deep_initial_scan_impl(
     for (idx, (item, item_embedding)) in all_items.iter().enumerate() {
         if is_aborted() {
             info!(target: "4da::analysis", scored = idx, "Deep scan aborted by user");
-            return Err("Analysis cancelled".to_string());
+            return Err("Analysis cancelled".into());
         }
 
         if idx % 50 == 0 {
@@ -422,7 +422,7 @@ pub(crate) async fn run_deep_initial_scan_impl(
 /// Multi-source analysis implementation
 pub(crate) async fn run_multi_source_analysis_impl(
     app: &AppHandle,
-) -> Result<Vec<SourceRelevance>, String> {
+) -> Result<Vec<SourceRelevance>> {
     info!(target: "4da::analysis", "=== MULTI-SOURCE ANALYSIS STARTED ===");
 
     // Narration: analysis start
@@ -517,7 +517,7 @@ pub(crate) async fn run_multi_source_analysis_impl(
     for (idx, (item, item_embedding)) in all_items.iter().enumerate() {
         if is_aborted() {
             info!(target: "4da::analysis", scored = idx, "Multi-source analysis aborted by user");
-            return Err("Analysis cancelled".to_string());
+            return Err("Analysis cancelled".into());
         }
 
         if idx % 10 == 0 {
@@ -678,14 +678,14 @@ pub(crate) async fn run_multi_source_analysis_impl(
 /// Cache-first analysis - analyzes items already in the database
 /// This is INSTANT because it doesn't fetch from APIs, just scores cached items
 #[tauri::command]
-pub(crate) async fn run_cached_analysis(app: AppHandle) -> Result<(), String> {
+pub(crate) async fn run_cached_analysis(app: AppHandle) -> Result<()> {
     // Atomic check-and-set: prevents TOCTOU race from double-clicks
     {
         get_analysis_abort().store(false, Ordering::SeqCst);
         let state = get_analysis_state();
         let mut guard = state.lock();
         if guard.running {
-            return Err("Analysis already running".to_string());
+            return Err("Analysis already running".into());
         }
         guard.running = true;
         guard.completed = false;
@@ -792,9 +792,10 @@ pub(crate) async fn run_cached_analysis(app: AppHandle) -> Result<(), String> {
                 }
             }
             Ok(Err(e)) => {
-                guard.error = Some(e.clone());
+                let err_str = e.to_string();
+                guard.error = Some(err_str.clone());
                 drop(guard);
-                let _ = app.emit("analysis-error", &e);
+                let _ = app.emit("analysis-error", &err_str);
                 void_signal_error(&app);
             }
             Err(_panic) => {
@@ -813,9 +814,7 @@ pub(crate) async fn run_cached_analysis(app: AppHandle) -> Result<(), String> {
 
 /// The actual cache-first analysis implementation
 /// Uses differential analysis when previous results exist (only scores new items)
-pub(crate) async fn analyze_cached_content_impl(
-    app: &AppHandle,
-) -> Result<Vec<SourceRelevance>, String> {
+pub(crate) async fn analyze_cached_content_impl(app: &AppHandle) -> Result<Vec<SourceRelevance>> {
     info!(target: "4da::analysis", "=== CACHE-FIRST ANALYSIS STARTED ===");
 
     emit_progress(app, "init", 0.0, "Loading cached items...", 0, 0);
@@ -945,7 +944,7 @@ pub(crate) async fn analyze_cached_content_impl(
 
         for (idx, item) in new_items.iter().enumerate() {
             if is_aborted() {
-                return Err("Analysis cancelled".to_string());
+                return Err("Analysis cancelled".into());
             }
 
             if idx % 20 == 0 {
@@ -1058,7 +1057,7 @@ pub(crate) async fn analyze_cached_content_impl(
 
 /// Cancel a running analysis
 #[tauri::command]
-pub(crate) async fn cancel_analysis() -> Result<(), String> {
+pub(crate) async fn cancel_analysis() -> Result<()> {
     get_analysis_abort().store(true, Ordering::SeqCst);
     info!(target: "4da::analysis", "Analysis cancellation requested");
     Ok(())
@@ -1070,7 +1069,7 @@ pub(crate) async fn cancel_analysis() -> Result<(), String> {
 /// The gate is enforced here as a defense-in-depth measure on top of the DB-level
 /// filter in `get_items_tiered` / `get_items_since_timestamp_tiered`.
 #[tauri::command]
-pub(crate) async fn get_analysis_status() -> Result<AnalysisState, String> {
+pub(crate) async fn get_analysis_status() -> Result<AnalysisState> {
     let state = get_analysis_state();
     let mut guard = state.lock();
 
@@ -1115,10 +1114,11 @@ pub(crate) async fn get_analysis_status() -> Result<AnalysisState, String> {
 }
 /// Get scoring rejection rate statistics
 #[tauri::command]
-pub(crate) async fn get_scoring_stats() -> Result<crate::db::ScoringStatsAggregate, String> {
+pub(crate) async fn get_scoring_stats() -> Result<crate::db::ScoringStatsAggregate> {
     let db = get_database()?;
-    db.get_scoring_stats()
-        .map_err(|e| format!("Failed to get scoring stats: {}", e))
+    Ok(db
+        .get_scoring_stats()
+        .map_err(|e| format!("Failed to get scoring stats: {}", e))?)
 }
 // Settings and Context Engine commands are in settings_commands.rs
 // ACE commands, PASIFA helpers, and auto-seeding are in ace_commands.rs

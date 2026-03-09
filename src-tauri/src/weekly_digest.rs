@@ -8,6 +8,7 @@ use chrono::{Duration, Utc};
 use serde::{Deserialize, Serialize};
 use tracing::{debug, warn};
 
+use crate::error::Result;
 use crate::settings::require_pro_feature;
 
 // ============================================================================
@@ -216,7 +217,7 @@ pub fn should_generate_digest(conn: &rusqlite::Connection) -> bool {
 /// Get the latest generated digest (for the DigestView component).
 #[allow(dead_code)]
 #[tauri::command]
-pub async fn get_latest_digest() -> Result<WeeklyDigest, String> {
+pub async fn get_latest_digest() -> Result<WeeklyDigest> {
     // Generate a fresh digest from the last 7 days of data
     let conn = crate::open_db_connection()?;
 
@@ -228,7 +229,7 @@ pub async fn get_latest_digest() -> Result<WeeklyDigest, String> {
     let top_topics = collect_topics(&conn);
 
     if highlights.is_empty() && stats.total_items_analyzed == 0 {
-        return Err("No digest data available".to_string());
+        return Err("No digest data available".into());
     }
 
     Ok(WeeklyDigest {
@@ -248,7 +249,7 @@ pub async fn get_latest_digest() -> Result<WeeklyDigest, String> {
 // ============================================================================
 
 #[tauri::command]
-pub async fn generate_weekly_digest() -> Result<WeeklyDigest, String> {
+pub async fn generate_weekly_digest() -> Result<WeeklyDigest> {
     require_pro_feature("generate_weekly_digest")?;
 
     let now = Utc::now();

@@ -4,6 +4,7 @@
 //! Handles async processing of document extraction jobs (OCR, audio transcription).
 //! Uses the extraction_jobs table for persistence and recovery.
 
+use crate::error::Result;
 use crate::extractors::{ExtractedDocument, ExtractorRegistry};
 use parking_lot::Mutex;
 use rusqlite::{Connection, OptionalExtension};
@@ -78,7 +79,7 @@ impl JobQueue {
     }
 
     /// Create a new extraction job
-    pub fn create_job(&self, file_path: &str, file_type: &str) -> Result<i64, String> {
+    pub fn create_job(&self, file_path: &str, file_type: &str) -> Result<i64> {
         let conn = self.conn.lock();
         conn.execute(
             "INSERT INTO extraction_jobs (file_path, file_type, status) VALUES (?1, ?2, 'pending')",
@@ -92,7 +93,7 @@ impl JobQueue {
     }
 
     /// Get a job by ID
-    pub fn get_job(&self, job_id: i64) -> Result<Option<ExtractionJob>, String> {
+    pub fn get_job(&self, job_id: i64) -> Result<Option<ExtractionJob>> {
         let conn = self.conn.lock();
         let mut stmt = conn
             .prepare(
@@ -123,11 +124,7 @@ impl JobQueue {
     }
 
     /// Get all jobs with optional status filter
-    pub fn get_jobs(
-        &self,
-        status: Option<JobStatus>,
-        limit: usize,
-    ) -> Result<Vec<ExtractionJob>, String> {
+    pub fn get_jobs(&self, status: Option<JobStatus>, limit: usize) -> Result<Vec<ExtractionJob>> {
         let conn = self.conn.lock();
 
         let (sql, params): (&str, Vec<String>) = match status {
@@ -174,7 +171,7 @@ impl JobQueue {
     }
 
     /// Get the next pending job
-    fn get_next_pending(&self) -> Result<Option<ExtractionJob>, String> {
+    fn get_next_pending(&self) -> Result<Option<ExtractionJob>> {
         let conn = self.conn.lock();
         let mut stmt = conn
             .prepare(
@@ -211,7 +208,7 @@ impl JobQueue {
         status: JobStatus,
         error: Option<&str>,
         chunks: Option<i32>,
-    ) -> Result<(), String> {
+    ) -> Result<()> {
         let conn = self.conn.lock();
         let now = chrono::Utc::now().to_rfc3339();
 
@@ -251,7 +248,7 @@ impl JobQueue {
     }
 
     /// Cancel a job
-    pub fn cancel_job(&self, job_id: i64) -> Result<(), String> {
+    pub fn cancel_job(&self, job_id: i64) -> Result<()> {
         let conn = self.conn.lock();
         conn.execute(
             "UPDATE extraction_jobs SET status = 'failed', error = 'Cancelled by user' WHERE id = ?1 AND status IN ('pending', 'processing')",
@@ -264,7 +261,7 @@ impl JobQueue {
     }
 
     /// Delete completed/failed jobs older than N days
-    pub fn cleanup_old_jobs(&self, days: u32) -> Result<usize, String> {
+    pub fn cleanup_old_jobs(&self, days: u32) -> Result<usize> {
         let conn = self.conn.lock();
         let deleted = conn
             .execute(
@@ -280,11 +277,11 @@ impl JobQueue {
     }
 
     /// Process a single job
-    fn process_job(&self, job: &ExtractionJob) -> Result<ExtractedDocument, String> {
+    fn process_job(&self, job: &ExtractionJob) -> Result<ExtractedDocument> {
         let path = PathBuf::from(&job.file_path);
 
         if !path.exists() {
-            return Err(format!("File not found: {}", job.file_path));
+            return Err(format!("File not found: {}", job.file_path).into());
         }
 
         let registry = ExtractorRegistry::new();
@@ -292,7 +289,7 @@ impl JobQueue {
     }
 
     /// Start the background worker
-    pub fn start_worker(&mut self) -> Result<(), String> {
+    pub fn start_worker(&mut self) -> Result<()> {
         if self.running.load(Ordering::SeqCst) {
             return Ok(()); // Already running
         }
@@ -340,10 +337,14 @@ impl JobQueue {
                                 info!(target: "job_queue", job_id = job.id, chunks = chunks, "Job completed");
                             }
                             Err(e) => {
-                                warn!(target: "job_queue", job_id = job.id, error = %e, "Job failed");
-                                if let Err(e2) =
-                                    queue.update_status(job.id, JobStatus::Failed, Some(&e), None)
-                                {
+                                let err_msg = e.to_string();
+                                warn!(target: "job_queue", job_id = job.id, error = %err_msg, "Job failed");
+                                if let Err(e2) = queue.update_status(
+                                    job.id,
+                                    JobStatus::Failed,
+                                    Some(&err_msg),
+                                    None,
+                                ) {
                                     error!(target: "job_queue", error = %e2, "Failed to mark job failed");
                                 }
                             }
@@ -382,7 +383,7 @@ impl JobQueue {
     }
 
     /// Get queue statistics
-    pub fn get_stats(&self) -> Result<QueueStats, String> {
+    pub fn get_stats(&self) -> Result<QueueStats> {
         let conn = self.conn.lock();
 
         let pending: i64 = conn

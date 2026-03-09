@@ -5,6 +5,7 @@ use tauri::AppHandle;
 use tracing::{info, warn};
 
 use crate::db::Database;
+use crate::error::Result;
 use crate::sources::arxiv::ArxivSource;
 use crate::sources::devto::DevtoSource;
 use crate::sources::github::GitHubSource;
@@ -28,7 +29,7 @@ use super::{
 /// Fill the cache with items from all sources (background operation)
 /// This is the "write" side of the cache-first architecture
 /// Does NOT emit progress events - runs silently in background
-pub(crate) async fn fill_cache_background(app: &AppHandle) -> Result<usize, String> {
+pub(crate) async fn fill_cache_background(app: &AppHandle) -> Result<usize> {
     use sources::Source;
 
     info!(target: "4da::cache", "=== BACKGROUND CACHE FILL STARTED ===");

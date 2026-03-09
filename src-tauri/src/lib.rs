@@ -86,6 +86,7 @@ mod delegation;
 #[cfg(not(feature = "experimental"))]
 #[allow(dead_code)]
 mod delegation {
+    use crate::error::Result;
     use serde::{Deserialize, Serialize};
     use ts_rs::TS;
 
@@ -120,12 +121,12 @@ mod delegation {
     }
 
     #[tauri::command]
-    pub async fn get_delegation_score(_subject: String) -> Result<DelegationScore, String> {
+    pub async fn get_delegation_score(_subject: String) -> Result<DelegationScore> {
         Err("Delegation scoring is an experimental feature".into())
     }
 
     #[tauri::command]
-    pub async fn get_all_delegation_scores() -> Result<Vec<DelegationScore>, String> {
+    pub async fn get_all_delegation_scores() -> Result<Vec<DelegationScore>> {
         Err("Delegation scoring is an experimental feature".into())
     }
 }
@@ -137,11 +138,11 @@ mod digest_config;
 mod domain_profile;
 mod domain_profile_data;
 pub mod extractors;
-mod http_client;
 mod free_briefing;
 mod game_achievements;
 #[cfg(feature = "experimental")]
 mod game_commands;
+mod http_client;
 #[cfg(not(feature = "experimental"))]
 #[allow(dead_code)]
 mod game_commands {

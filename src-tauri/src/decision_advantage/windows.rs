@@ -8,6 +8,7 @@ use rusqlite::{params, Connection};
 use tracing::{info, warn};
 
 use super::DecisionWindow;
+use crate::error::Result;
 
 const SECURITY_KEYWORDS: &[&str] = &[
     "cve",
@@ -108,9 +109,9 @@ pub(crate) fn transition_window(
     id: i64,
     status: &str,
     outcome: Option<&str>,
-) -> Result<(), String> {
+) -> Result<()> {
     if !matches!(status, "acted" | "expired" | "closed") {
-        return Err(format!("Invalid window status: {status}"));
+        return Err(format!("Invalid window status: {status}").into());
     }
     let lead_time_hours = conn
         .query_row(
@@ -140,7 +141,7 @@ pub(crate) fn transition_window(
         )
         .map_err(|e| format!("Failed to transition window {id}: {e}"))?;
     if affected == 0 {
-        return Err(format!("Window {id} not found"));
+        return Err(format!("Window {id} not found").into());
     }
     info!(target: "4da::decision_advantage", id, status, lead_time_hours = ?lead_time_hours, "Window transitioned");
     Ok(())

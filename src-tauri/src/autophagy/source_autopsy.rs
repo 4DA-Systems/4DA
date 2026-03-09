@@ -7,6 +7,8 @@ use rusqlite::{params, Connection};
 use std::collections::HashMap;
 use tracing::{debug, info, warn};
 
+use crate::error::Result;
+
 /// Analyze sources: compute engagement rates per source_type within the analysis window.
 ///
 /// For each source_type, counts total items surfaced vs items that received positive
@@ -102,7 +104,7 @@ pub(crate) fn analyze_sources(conn: &Connection, max_age_days: i64) -> Vec<super
 pub(crate) fn store_source_autopsies(
     conn: &Connection,
     autopsies: &[super::SourceAutopsy],
-) -> Result<(), String> {
+) -> Result<()> {
     let tx = conn
         .unchecked_transaction()
         .map_err(|e| format!("Failed to begin transaction for source autopsies: {}", e))?;
@@ -113,8 +115,7 @@ pub(crate) fn store_source_autopsies(
             "items_surfaced": autopsy.items_surfaced,
             "items_engaged": autopsy.items_engaged,
             "engagement_rate": autopsy.engagement_rate,
-        }))
-        .map_err(|e| e.to_string())?;
+        }))?;
 
         let subject = format!("{}:{}", autopsy.source_type, autopsy.topic);
 

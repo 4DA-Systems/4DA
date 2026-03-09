@@ -5,17 +5,19 @@
 
 use tracing::{info, warn};
 
+use crate::error::Result;
 use crate::get_settings_manager;
 
 /// Validate string input length
-fn validate_input_length(value: &str, field: &str, max_len: usize) -> Result<(), String> {
+fn validate_input_length(value: &str, field: &str, max_len: usize) -> Result<()> {
     if value.len() > max_len {
         return Err(format!(
             "{} too long ({} chars, max {})",
             field,
             value.len(),
             max_len
-        ));
+        )
+        .into());
     }
     Ok(())
 }
@@ -26,7 +28,7 @@ fn validate_input_length(value: &str, field: &str, max_len: usize) -> Result<(),
 
 /// Get configured RSS feed URLs
 #[tauri::command]
-pub async fn get_rss_feeds() -> Result<serde_json::Value, String> {
+pub async fn get_rss_feeds() -> Result<serde_json::Value> {
     let settings_guard = get_settings_manager().lock();
     let feeds = settings_guard.get_rss_feeds();
 
@@ -37,9 +39,9 @@ pub async fn get_rss_feeds() -> Result<serde_json::Value, String> {
 }
 /// Set all RSS feed URLs (replacing existing)
 #[tauri::command]
-pub async fn set_rss_feeds(feeds: Vec<String>) -> Result<serde_json::Value, String> {
+pub async fn set_rss_feeds(feeds: Vec<String>) -> Result<serde_json::Value> {
     if feeds.len() > 100 {
-        return Err("Too many RSS feeds (max 100)".to_string());
+        return Err("Too many RSS feeds (max 100)".into());
     }
     for url in &feeds {
         validate_input_length(url, "Feed URL", 2000)?;
@@ -47,15 +49,14 @@ pub async fn set_rss_feeds(feeds: Vec<String>) -> Result<serde_json::Value, Stri
     // Validate all URLs
     for url in &feeds {
         if !url.starts_with("http://") && !url.starts_with("https://") {
-            return Err(format!(
-                "Invalid URL: {} must start with http:// or https://",
-                url
-            ));
+            return Err(format!("Invalid URL: {} must start with http:// or https://", url).into());
         }
     }
 
     let mut settings_guard = get_settings_manager().lock();
-    settings_guard.set_rss_feeds(feeds.clone()).map_err(|e| e.to_string())?;
+    settings_guard
+        .set_rss_feeds(feeds.clone())
+        .map_err(|e| e.to_string())?;
 
     info!(target: "4da::rss", count = feeds.len(), "Set RSS feeds");
 
@@ -72,7 +73,7 @@ pub async fn set_rss_feeds(feeds: Vec<String>) -> Result<serde_json::Value, Stri
 
 /// Get configured Twitter handles
 #[tauri::command]
-pub async fn get_twitter_handles() -> Result<serde_json::Value, String> {
+pub async fn get_twitter_handles() -> Result<serde_json::Value> {
     let settings_guard = get_settings_manager().lock();
     let handles = settings_guard.get_twitter_handles();
 
@@ -83,9 +84,9 @@ pub async fn get_twitter_handles() -> Result<serde_json::Value, String> {
 }
 /// Set all Twitter handles (replacing existing)
 #[tauri::command]
-pub async fn set_twitter_handles(handles: Vec<String>) -> Result<serde_json::Value, String> {
+pub async fn set_twitter_handles(handles: Vec<String>) -> Result<serde_json::Value> {
     if handles.len() > 100 {
-        return Err("Too many Twitter handles (max 100)".to_string());
+        return Err("Too many Twitter handles (max 100)".into());
     }
     for handle in &handles {
         validate_input_length(handle, "Twitter handle", 50)?;
@@ -97,7 +98,9 @@ pub async fn set_twitter_handles(handles: Vec<String>) -> Result<serde_json::Val
         .collect();
 
     let mut settings_guard = get_settings_manager().lock();
-    settings_guard.set_twitter_handles(clean_handles.clone()).map_err(|e| e.to_string())?;
+    settings_guard
+        .set_twitter_handles(clean_handles.clone())
+        .map_err(|e| e.to_string())?;
 
     info!(target: "4da::twitter", count = clean_handles.len(), "Set Twitter handles");
 
@@ -136,19 +139,21 @@ fn sanitize_x_api_key(raw: &str) -> String {
 
 /// Get X API Bearer Token
 #[tauri::command]
-pub async fn get_x_api_key() -> Result<String, String> {
+pub async fn get_x_api_key() -> Result<String> {
     let settings_guard = get_settings_manager().lock();
     Ok(settings_guard.get_x_api_key())
 }
 
 /// Set X API Bearer Token
 #[tauri::command]
-pub async fn set_x_api_key(key: String) -> Result<serde_json::Value, String> {
+pub async fn set_x_api_key(key: String) -> Result<serde_json::Value> {
     let cleaned = sanitize_x_api_key(&key);
 
     if cleaned.is_empty() {
         let mut settings_guard = get_settings_manager().lock();
-        settings_guard.set_x_api_key(String::new()).map_err(|e| e.to_string())?;
+        settings_guard
+            .set_x_api_key(String::new())
+            .map_err(|e| e.to_string())?;
         return Ok(serde_json::json!({
             "success": true,
             "has_key": false,
@@ -170,7 +175,9 @@ pub async fn set_x_api_key(key: String) -> Result<serde_json::Value, String> {
         Ok(r) if r.status().is_success() => {
             info!(target: "4da::twitter", "X API key validated successfully");
             let mut settings_guard = get_settings_manager().lock();
-            settings_guard.set_x_api_key(cleaned).map_err(|e| e.to_string())?;
+            settings_guard
+                .set_x_api_key(cleaned)
+                .map_err(|e| e.to_string())?;
             Ok(serde_json::json!({
                 "success": true,
                 "has_key": true,
@@ -179,13 +186,15 @@ pub async fn set_x_api_key(key: String) -> Result<serde_json::Value, String> {
         }
         Ok(r) if r.status().as_u16() == 401 => {
             warn!(target: "4da::twitter", "X API key validation failed: 401 Unauthorized");
-            Err("Invalid X API Bearer Token. Make sure you're using the Bearer Token from your X Developer Portal (not the API Key/Secret). It should start with 'AAAA...'.".to_string())
+            Err("Invalid X API Bearer Token. Make sure you're using the Bearer Token from your X Developer Portal (not the API Key/Secret). It should start with 'AAAA...'.".into())
         }
         Ok(r) if r.status().as_u16() == 429 => {
             // Rate limited - token format looks valid if we got this far, save it
             info!(target: "4da::twitter", "X API rate limited during validation - saving token anyway");
             let mut settings_guard = get_settings_manager().lock();
-            settings_guard.set_x_api_key(cleaned).map_err(|e| e.to_string())?;
+            settings_guard
+                .set_x_api_key(cleaned)
+                .map_err(|e| e.to_string())?;
             Ok(serde_json::json!({
                 "success": true,
                 "has_key": true,
@@ -197,7 +206,9 @@ pub async fn set_x_api_key(key: String) -> Result<serde_json::Value, String> {
             // 403 can mean the token works but doesn't have the right access level
             warn!(target: "4da::twitter", status = %r.status(), "X API key may lack permissions");
             let mut settings_guard = get_settings_manager().lock();
-            settings_guard.set_x_api_key(cleaned).map_err(|e| e.to_string())?;
+            settings_guard
+                .set_x_api_key(cleaned)
+                .map_err(|e| e.to_string())?;
             Ok(serde_json::json!({
                 "success": true,
                 "has_key": true,
@@ -210,13 +221,16 @@ pub async fn set_x_api_key(key: String) -> Result<serde_json::Value, String> {
             Err(format!(
                 "X API returned HTTP {}. Check your Bearer Token.",
                 r.status()
-            ))
+            )
+            .into())
         }
         Err(e) => {
             warn!(target: "4da::twitter", error = %e, "Could not reach X API for validation");
             // Save anyway - might be a network issue, not a bad token
             let mut settings_guard = get_settings_manager().lock();
-            settings_guard.set_x_api_key(cleaned).map_err(|e| e.to_string())?;
+            settings_guard
+                .set_x_api_key(cleaned)
+                .map_err(|e| e.to_string())?;
             Ok(serde_json::json!({
                 "success": true,
                 "has_key": true,
@@ -233,7 +247,7 @@ pub async fn set_x_api_key(key: String) -> Result<serde_json::Value, String> {
 
 /// Get configured YouTube channel IDs
 #[tauri::command]
-pub async fn get_youtube_channels() -> Result<serde_json::Value, String> {
+pub async fn get_youtube_channels() -> Result<serde_json::Value> {
     let settings_guard = get_settings_manager().lock();
     let channels = settings_guard.get_youtube_channels();
 
@@ -244,15 +258,17 @@ pub async fn get_youtube_channels() -> Result<serde_json::Value, String> {
 }
 /// Set all YouTube channel IDs (replacing existing)
 #[tauri::command]
-pub async fn set_youtube_channels(channels: Vec<String>) -> Result<serde_json::Value, String> {
+pub async fn set_youtube_channels(channels: Vec<String>) -> Result<serde_json::Value> {
     if channels.len() > 100 {
-        return Err("Too many YouTube channels (max 100)".to_string());
+        return Err("Too many YouTube channels (max 100)".into());
     }
     for channel in &channels {
         validate_input_length(channel, "YouTube channel ID", 100)?;
     }
     let mut settings_guard = get_settings_manager().lock();
-    settings_guard.set_youtube_channels(channels.clone()).map_err(|e| e.to_string())?;
+    settings_guard
+        .set_youtube_channels(channels.clone())
+        .map_err(|e| e.to_string())?;
 
     info!(target: "4da::youtube", count = channels.len(), "Set YouTube channels");
 
@@ -269,7 +285,7 @@ pub async fn set_youtube_channels(channels: Vec<String>) -> Result<serde_json::V
 
 /// Get configured GitHub languages (default: rust, typescript, python)
 #[tauri::command]
-pub async fn get_github_languages() -> Result<serde_json::Value, String> {
+pub async fn get_github_languages() -> Result<serde_json::Value> {
     let settings_guard = get_settings_manager().lock();
     let languages = settings_guard.get_github_languages();
 
@@ -292,15 +308,17 @@ pub async fn get_github_languages() -> Result<serde_json::Value, String> {
 
 /// Set GitHub languages to monitor
 #[tauri::command]
-pub async fn set_github_languages(languages: Vec<String>) -> Result<serde_json::Value, String> {
+pub async fn set_github_languages(languages: Vec<String>) -> Result<serde_json::Value> {
     if languages.len() > 50 {
-        return Err("Too many languages (max 50)".to_string());
+        return Err("Too many languages (max 50)".into());
     }
     for lang in &languages {
         validate_input_length(lang, "Language", 50)?;
     }
     let mut settings_guard = get_settings_manager().lock();
-    settings_guard.set_github_languages(languages.clone()).map_err(|e| e.to_string())?;
+    settings_guard
+        .set_github_languages(languages.clone())
+        .map_err(|e| e.to_string())?;
 
     info!(target: "4da::github", count = languages.len(), "Set GitHub languages");
 

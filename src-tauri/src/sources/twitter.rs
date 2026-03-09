@@ -165,10 +165,15 @@ impl TwitterSource {
             .bearer_auth(&self.api_key)
             .send()
             .await
-            .map_err(|e| FourDaError::Internal(format!("Network error looking up @{}: {}", username, e)))?;
+            .map_err(|e| {
+                FourDaError::Internal(format!("Network error looking up @{}: {}", username, e))
+            })?;
 
         if resp.status() == 429 {
-            return Err(FourDaError::Internal(format!("Rate limited looking up @{}", username)));
+            return Err(FourDaError::Internal(format!(
+                "Rate limited looking up @{}",
+                username
+            )));
         }
 
         if !resp.status().is_success() {
@@ -190,11 +195,7 @@ impl TwitterSource {
     }
 
     /// Fetch recent tweets for a user by their ID
-    async fn fetch_user_tweets(
-        &self,
-        user_id: &str,
-        username: &str,
-    ) -> Result<Vec<SourceItem>> {
+    async fn fetch_user_tweets(&self, user_id: &str, username: &str) -> Result<Vec<SourceItem>> {
         let url = format!(
             "https://api.x.com/2/users/{}/tweets?max_results=10&tweet.fields=created_at,public_metrics,author_id&expansions=author_id&user.fields=username,name",
             user_id
@@ -208,10 +209,18 @@ impl TwitterSource {
             .bearer_auth(&self.api_key)
             .send()
             .await
-            .map_err(|e| FourDaError::Internal(format!("Network error fetching tweets for @{}: {}", username, e)))?;
+            .map_err(|e| {
+                FourDaError::Internal(format!(
+                    "Network error fetching tweets for @{}: {}",
+                    username, e
+                ))
+            })?;
 
         if resp.status() == 429 {
-            return Err(FourDaError::Internal(format!("Rate limited fetching tweets for @{}", username)));
+            return Err(FourDaError::Internal(format!(
+                "Rate limited fetching tweets for @{}",
+                username
+            )));
         }
 
         if !resp.status().is_success() {
@@ -279,11 +288,7 @@ impl TwitterSource {
     }
 
     /// Search recent tweets by query
-    async fn search_recent(
-        &self,
-        query: &str,
-        max_results: u32,
-    ) -> Result<Vec<SourceItem>> {
+    async fn search_recent(&self, query: &str, max_results: u32) -> Result<Vec<SourceItem>> {
         let url = format!(
             "https://api.x.com/2/tweets/search/recent?query={}&max_results={}&tweet.fields=created_at,public_metrics,author_id&expansions=author_id&user.fields=username,name",
             urlencoding::encode(query),
@@ -301,11 +306,16 @@ impl TwitterSource {
             .map_err(|e| FourDaError::Internal(format!("Network error searching tweets: {}", e)))?;
 
         if resp.status() == 429 {
-            return Err(FourDaError::Internal("Rate limited on tweet search".to_string()));
+            return Err(FourDaError::Internal(
+                "Rate limited on tweet search".to_string(),
+            ));
         }
 
         if !resp.status().is_success() {
-            return Err(FourDaError::Internal(format!("X API search error: HTTP {}", resp.status())));
+            return Err(FourDaError::Internal(format!(
+                "X API search error: HTTP {}",
+                resp.status()
+            )));
         }
 
         let body: XApiResponse = resp

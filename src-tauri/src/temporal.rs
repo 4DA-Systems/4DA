@@ -8,6 +8,8 @@ use rusqlite::params;
 use serde::{Deserialize, Serialize};
 use tracing::debug;
 
+use crate::error::Result;
+
 // ============================================================================
 // Types
 // ============================================================================
@@ -48,7 +50,7 @@ pub fn upsert_dependency(
     version: Option<&str>,
     is_dev: bool,
     language: &str,
-) -> Result<(), String> {
+) -> Result<()> {
     conn.execute(
         "INSERT INTO project_dependencies (project_path, manifest_type, package_name, version, is_dev, language, last_scanned)
          VALUES (?1, ?2, ?3, ?4, ?5, ?6, datetime('now'))
@@ -64,7 +66,7 @@ pub fn upsert_dependency(
 pub fn get_project_dependencies(
     conn: &rusqlite::Connection,
     project_path: &str,
-) -> Result<Vec<ProjectDependency>, String> {
+) -> Result<Vec<ProjectDependency>> {
     let mut stmt = conn
         .prepare(
             "SELECT id, project_path, manifest_type, package_name, version, is_dev, language, last_scanned
@@ -97,7 +99,7 @@ pub fn get_project_dependencies(
 /// Get all tracked dependencies, scoped to projects with recent git activity.
 /// Only includes deps from project trees that have commits in the last 60 days.
 /// Falls back to all deps if no git signals exist (first run).
-pub fn get_all_dependencies(conn: &rusqlite::Connection) -> Result<Vec<ProjectDependency>, String> {
+pub fn get_all_dependencies(conn: &rusqlite::Connection) -> Result<Vec<ProjectDependency>> {
     // Get active repo roots from git_signals (repos with recent commits)
     let active_roots: Vec<String> = conn
         .prepare(
@@ -194,7 +196,7 @@ pub fn record_event(
     data: &serde_json::Value,
     source_item_id: Option<i64>,
     expires_at: Option<&str>,
-) -> Result<i64, String> {
+) -> Result<i64> {
     let data_str = serde_json::to_string(data).map_err(|e| e.to_string())?;
     conn.execute(
         "INSERT INTO temporal_events (event_type, subject, data, source_item_id, expires_at)
@@ -211,7 +213,7 @@ pub fn query_events(
     event_type: &str,
     since: Option<&str>,
     limit: usize,
-) -> Result<Vec<TemporalEvent>, String> {
+) -> Result<Vec<TemporalEvent>> {
     let query = if since.is_some() {
         "SELECT id, event_type, subject, data, source_item_id, created_at, expires_at
          FROM temporal_events
@@ -244,7 +246,7 @@ pub fn query_events_by_subject(
     conn: &rusqlite::Connection,
     subject: &str,
     limit: usize,
-) -> Result<Vec<TemporalEvent>, String> {
+) -> Result<Vec<TemporalEvent>> {
     let mut stmt = conn
         .prepare(
             "SELECT id, event_type, subject, data, source_item_id, created_at, expires_at
@@ -265,7 +267,7 @@ pub fn query_events_by_subject(
 
 /// Clean up expired temporal events
 #[allow(dead_code)] // Used by cleanup_temporal_events (reserved for scheduled maintenance)
-pub fn cleanup_expired(conn: &rusqlite::Connection) -> Result<usize, String> {
+pub fn cleanup_expired(conn: &rusqlite::Connection) -> Result<usize> {
     let deleted = conn
         .execute(
             "DELETE FROM temporal_events WHERE expires_at IS NOT NULL AND expires_at < datetime('now')",
@@ -301,13 +303,13 @@ pub fn get_temporal_events(
     event_type: String,
     since: Option<String>,
     limit: Option<usize>,
-) -> Result<Vec<TemporalEvent>, String> {
+) -> Result<Vec<TemporalEvent>> {
     let conn = crate::open_db_connection()?;
     query_events(&conn, &event_type, since.as_deref(), limit.unwrap_or(50))
 }
 
 #[allow(dead_code)] // Reserved for MCP integration
-pub fn get_temporal_event_count(event_type: String) -> Result<usize, String> {
+pub fn get_temporal_event_count(event_type: String) -> Result<usize> {
     let conn = crate::open_db_connection()?;
     let count: i64 = conn
         .query_row(
@@ -320,7 +322,7 @@ pub fn get_temporal_event_count(event_type: String) -> Result<usize, String> {
 }
 
 #[allow(dead_code)] // Reserved for MCP integration
-pub fn get_dependencies(project_path: Option<String>) -> Result<Vec<ProjectDependency>, String> {
+pub fn get_dependencies(project_path: Option<String>) -> Result<Vec<ProjectDependency>> {
     let conn = crate::open_db_connection()?;
     if let Some(path) = project_path {
         get_project_dependencies(&conn, &path)
@@ -330,7 +332,7 @@ pub fn get_dependencies(project_path: Option<String>) -> Result<Vec<ProjectDepen
 }
 
 #[allow(dead_code)] // Reserved for scheduled maintenance task
-pub fn cleanup_temporal_events() -> Result<usize, String> {
+pub fn cleanup_temporal_events() -> Result<usize> {
     let conn = crate::open_db_connection()?;
     cleanup_expired(&conn)
 }

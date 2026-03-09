@@ -3,6 +3,7 @@
 use rusqlite::{params, OptionalExtension, Result as SqliteResult};
 
 use super::{blob_to_embedding, parse_datetime, Database, StoredSourceItem};
+use crate::error::Result;
 
 // ============================================================================
 // Types
@@ -26,19 +27,13 @@ pub struct DigestSourceItem {
 
 impl Database {
     /// Get first N chars of content for an item (for LLM judging)
-    pub fn get_item_content_snippet(
-        &self,
-        item_id: i64,
-        max_chars: usize,
-    ) -> Result<String, String> {
+    pub fn get_item_content_snippet(&self, item_id: i64, max_chars: usize) -> Result<String> {
         let conn = self.conn.lock();
-        let content: String = conn
-            .query_row(
-                "SELECT COALESCE(content, '') FROM source_items WHERE id = ?1",
-                params![item_id],
-                |row| row.get(0),
-            )
-            .map_err(|e| format!("Failed to get content for item {}: {}", item_id, e))?;
+        let content: String = conn.query_row(
+            "SELECT COALESCE(content, '') FROM source_items WHERE id = ?1",
+            params![item_id],
+            |row| row.get(0),
+        )?;
 
         if content.len() <= max_chars {
             Ok(content)
@@ -49,59 +44,55 @@ impl Database {
     }
 
     /// Get full content + source_type for an item. Returns (content, source_type, char_count).
-    pub fn get_item_content(
-        &self,
-        item_id: i64,
-    ) -> Result<Option<(String, String, usize)>, String> {
+    pub fn get_item_content(&self, item_id: i64) -> Result<Option<(String, String, usize)>> {
         let conn = self.conn.lock();
-        conn.query_row(
-            "SELECT COALESCE(content, ''), source_type FROM source_items WHERE id = ?1",
-            params![item_id],
-            |row| {
-                let content: String = row.get(0)?;
-                let source_type: String = row.get(1)?;
-                let char_count = content.len();
-                Ok((content, source_type, char_count))
-            },
-        )
-        .optional()
-        .map_err(|e| format!("Failed to get item content: {}", e))
+        Ok(conn
+            .query_row(
+                "SELECT COALESCE(content, ''), source_type FROM source_items WHERE id = ?1",
+                params![item_id],
+                |row| {
+                    let content: String = row.get(0)?;
+                    let source_type: String = row.get(1)?;
+                    let char_count = content.len();
+                    Ok((content, source_type, char_count))
+                },
+            )
+            .optional()?)
     }
 
     /// Get cached AI summary for an item.
-    pub fn get_item_summary(&self, item_id: i64) -> Result<Option<String>, String> {
+    pub fn get_item_summary(&self, item_id: i64) -> Result<Option<String>> {
         let conn = self.conn.lock();
-        conn.query_row(
-            "SELECT summary FROM source_items WHERE id = ?1",
-            params![item_id],
-            |row| row.get::<_, Option<String>>(0),
-        )
-        .optional()
-        .map(|opt| opt.flatten())
-        .map_err(|e| format!("Failed to get item summary: {}", e))
+        Ok(conn
+            .query_row(
+                "SELECT summary FROM source_items WHERE id = ?1",
+                params![item_id],
+                |row| row.get::<_, Option<String>>(0),
+            )
+            .optional()
+            .map(|opt| opt.flatten())?)
     }
 
     /// Cache an AI summary for an item.
-    pub fn set_item_summary(&self, item_id: i64, summary: &str) -> Result<(), String> {
+    pub fn set_item_summary(&self, item_id: i64, summary: &str) -> Result<()> {
         let conn = self.conn.lock();
         conn.execute(
             "UPDATE source_items SET summary = ?1 WHERE id = ?2",
             params![summary, item_id],
-        )
-        .map_err(|e| format!("Failed to set item summary: {}", e))?;
+        )?;
         Ok(())
     }
 
     /// Get title for a source item.
-    pub fn get_item_title(&self, item_id: i64) -> Result<Option<String>, String> {
+    pub fn get_item_title(&self, item_id: i64) -> Result<Option<String>> {
         let conn = self.conn.lock();
-        conn.query_row(
-            "SELECT title FROM source_items WHERE id = ?1",
-            params![item_id],
-            |row| row.get(0),
-        )
-        .optional()
-        .map_err(|e| format!("Failed to get item title: {}", e))
+        Ok(conn
+            .query_row(
+                "SELECT title FROM source_items WHERE id = ?1",
+                params![item_id],
+                |row| row.get(0),
+            )
+            .optional()?)
     }
 
     // ========================================================================

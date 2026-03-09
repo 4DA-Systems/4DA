@@ -3,6 +3,7 @@
 //! Per-project health dashboard combining dependency freshness,
 //! security exposure, ecosystem momentum, and community signals.
 
+use crate::error::Result;
 use crate::project_health_dimensions::{
     compute_community, compute_freshness, compute_momentum, compute_security, generate_alerts,
 };
@@ -46,9 +47,7 @@ pub struct HealthAlert {
 // ============================================================================
 
 /// Compute health for all tracked projects
-pub fn compute_all_project_health(
-    conn: &rusqlite::Connection,
-) -> Result<Vec<ProjectHealth>, String> {
+pub fn compute_all_project_health(conn: &rusqlite::Connection) -> Result<Vec<ProjectHealth>> {
     // Get unique project paths from dependencies
     let mut stmt = conn
         .prepare("SELECT DISTINCT project_path FROM project_dependencies")
@@ -83,7 +82,7 @@ pub fn compute_all_project_health(
 pub fn compute_project_health(
     conn: &rusqlite::Connection,
     project_path: &str,
-) -> Result<ProjectHealth, String> {
+) -> Result<ProjectHealth> {
     let deps = crate::temporal::get_project_dependencies(conn, project_path)?;
     let project_name = std::path::Path::new(project_path)
         .file_name()
@@ -118,7 +117,7 @@ pub fn compute_project_health(
 // ============================================================================
 
 #[tauri::command]
-pub fn get_project_health(project_path: Option<String>) -> Result<Vec<ProjectHealth>, String> {
+pub fn get_project_health(project_path: Option<String>) -> Result<Vec<ProjectHealth>> {
     crate::settings::require_pro_feature("get_project_health")?;
     let conn = crate::open_db_connection()?;
     if let Some(path) = project_path {

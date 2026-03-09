@@ -7,6 +7,8 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use tracing::info;
 
+use crate::error::Result;
+
 // ============================================================================
 // Types
 // ============================================================================
@@ -46,7 +48,7 @@ pub enum ChainResolution {
 // ============================================================================
 
 /// Detect signal chains from recent temporal events
-pub fn detect_chains(conn: &rusqlite::Connection) -> Result<Vec<SignalChain>, String> {
+pub fn detect_chains(conn: &rusqlite::Connection) -> Result<Vec<SignalChain>> {
     // Get recent signal-worthy source items (with signal classification)
     let mut stmt = conn
         .prepare(
@@ -228,7 +230,7 @@ pub fn resolve_chain(
     conn: &rusqlite::Connection,
     chain_id: &str,
     resolution: ChainResolution,
-) -> Result<(), String> {
+) -> Result<()> {
     let data = serde_json::json!({
         "chain_id": chain_id,
         "resolution": resolution,
@@ -245,14 +247,14 @@ pub fn resolve_chain(
 // ============================================================================
 
 #[tauri::command]
-pub fn get_signal_chains() -> Result<Vec<SignalChain>, String> {
+pub fn get_signal_chains() -> Result<Vec<SignalChain>> {
     crate::settings::require_pro_feature("get_signal_chains")?;
     let conn = crate::open_db_connection()?;
     detect_chains(&conn)
 }
 
 #[tauri::command]
-pub fn resolve_signal_chain(chain_id: String, resolution: String) -> Result<(), String> {
+pub fn resolve_signal_chain(chain_id: String, resolution: String) -> Result<()> {
     let conn = crate::open_db_connection()?;
     let res = match resolution.as_str() {
         "resolved" => ChainResolution::Resolved,

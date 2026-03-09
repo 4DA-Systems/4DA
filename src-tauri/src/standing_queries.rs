@@ -7,6 +7,8 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use tracing::{debug, info, warn};
 
+use crate::error::Result;
+
 // ============================================================================
 // Types
 // ============================================================================
@@ -72,7 +74,7 @@ fn extract_keywords(query: &str) -> Vec<String> {
 // DB Migration
 // ============================================================================
 
-pub fn ensure_table(conn: &rusqlite::Connection) -> Result<(), String> {
+pub fn ensure_table(conn: &rusqlite::Connection) -> Result<()> {
     conn.execute_batch(
         "CREATE TABLE IF NOT EXISTS standing_queries (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -99,17 +101,17 @@ pub fn ensure_table(conn: &rusqlite::Connection) -> Result<(), String> {
 /// Extracts keywords and stores them as a JSON array.
 /// Max 10 active queries.
 #[tauri::command]
-pub async fn create_standing_query(query_text: String) -> Result<i64, String> {
+pub async fn create_standing_query(query_text: String) -> Result<i64> {
     crate::settings::require_pro_feature("standing_queries")?;
 
     let query_text = query_text.trim().to_string();
     if query_text.is_empty() {
-        return Err("Query text cannot be empty".to_string());
+        return Err("Query text cannot be empty".into());
     }
 
     let keywords = extract_keywords(&query_text);
     if keywords.is_empty() {
-        return Err("No meaningful keywords found in query".to_string());
+        return Err("No meaningful keywords found in query".into());
     }
 
     let conn = crate::open_db_connection()?;
@@ -126,7 +128,7 @@ pub async fn create_standing_query(query_text: String) -> Result<i64, String> {
 
     if active_count >= 10 {
         return Err(
-            "Maximum of 10 active standing queries reached. Delete one to add another.".to_string(),
+            "Maximum of 10 active standing queries reached. Delete one to add another.".into(),
         );
     }
 
@@ -147,7 +149,7 @@ pub async fn create_standing_query(query_text: String) -> Result<i64, String> {
 
 /// List all active standing queries, most recent first.
 #[tauri::command]
-pub async fn list_standing_queries() -> Result<Vec<StandingQuery>, String> {
+pub async fn list_standing_queries() -> Result<Vec<StandingQuery>> {
     crate::settings::require_pro_feature("standing_queries")?;
 
     let conn = crate::open_db_connection()?;
@@ -216,7 +218,7 @@ pub async fn list_standing_queries() -> Result<Vec<StandingQuery>, String> {
 
 /// Soft-delete a standing query by setting active = 0.
 #[tauri::command]
-pub async fn delete_standing_query(id: i64) -> Result<(), String> {
+pub async fn delete_standing_query(id: i64) -> Result<()> {
     crate::settings::require_pro_feature("standing_queries")?;
 
     let conn = crate::open_db_connection()?;
@@ -230,7 +232,7 @@ pub async fn delete_standing_query(id: i64) -> Result<(), String> {
         .map_err(|e| format!("Failed to delete standing query: {e}"))?;
 
     if affected == 0 {
-        return Err(format!("Standing query with id {id} not found"));
+        return Err(format!("Standing query with id {id} not found").into());
     }
 
     info!(target: "4da::watches", id = id, "Standing query deleted (soft)");
@@ -242,7 +244,7 @@ pub async fn delete_standing_query(id: i64) -> Result<(), String> {
 pub async fn get_standing_query_matches(
     id: i64,
     limit: Option<usize>,
-) -> Result<Vec<StandingQueryMatch>, String> {
+) -> Result<Vec<StandingQueryMatch>> {
     crate::settings::require_pro_feature("standing_queries")?;
 
     let conn = crate::open_db_connection()?;

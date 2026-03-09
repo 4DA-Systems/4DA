@@ -8,6 +8,7 @@ use std::collections::HashMap;
 
 use crate::context_engine::ContextEngine;
 use crate::db::Database;
+use crate::error::Result;
 use tracing::info;
 
 pub const PROJ_DIM: usize = 3;
@@ -220,7 +221,7 @@ pub fn build_universe(
     context_engine: &ContextEngine,
     max_particles: Option<usize>,
     projection_version: i64,
-) -> Result<VoidUniverse, String> {
+) -> Result<VoidUniverse> {
     let cap = max_particles.unwrap_or(MAX_PARTICLES).min(MAX_PARTICLES);
     let start = std::time::Instant::now();
 

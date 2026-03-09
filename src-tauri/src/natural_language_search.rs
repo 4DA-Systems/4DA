@@ -9,6 +9,7 @@ use serde::{Deserialize, Serialize};
 use tracing::{debug, warn};
 
 use crate::db::embedding_to_blob;
+use crate::error::Result;
 
 // ============================================================================
 // Types
@@ -374,7 +375,7 @@ fn execute_text_search(
     conn: &rusqlite::Connection,
     parsed: &ParsedQuery,
     limit: usize,
-) -> Result<Vec<QueryResultItem>, String> {
+) -> Result<Vec<QueryResultItem>> {
     if parsed.keywords.is_empty() {
         return Ok(Vec::new());
     }
@@ -464,10 +465,7 @@ fn execute_text_search(
 // Vector similarity search
 // ============================================================================
 
-async fn execute_vector_search(
-    parsed: &ParsedQuery,
-    limit: usize,
-) -> Result<Vec<QueryResultItem>, String> {
+async fn execute_vector_search(parsed: &ParsedQuery, limit: usize) -> Result<Vec<QueryResultItem>> {
     let search_text = parsed.keywords.join(" ");
     if search_text.is_empty() {
         return Ok(Vec::new());
@@ -583,11 +581,11 @@ fn is_llm_configured() -> bool {
 const FREE_RESULT_LIMIT: usize = 3;
 
 #[tauri::command]
-pub async fn natural_language_query(query_text: String) -> Result<QueryResult, String> {
+pub async fn natural_language_query(query_text: String) -> Result<QueryResult> {
     let start = std::time::Instant::now();
     let query_text = query_text.trim().to_string();
     if query_text.is_empty() {
-        return Err("Query cannot be empty".to_string());
+        return Err("Query cannot be empty".into());
     }
 
     let is_pro = crate::settings::is_pro();

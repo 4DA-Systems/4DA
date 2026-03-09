@@ -8,6 +8,7 @@ use super::{
     PERSONA_NAMES,
 };
 use crate::autophagy::CalibrationDelta;
+use crate::error::Result;
 
 // ============================================================================
 // Schema
@@ -15,7 +16,7 @@ use crate::autophagy::CalibrationDelta;
 
 /// Create taste test tables if they don't exist.
 /// Called lazily on first use (same pattern as coach_nudges).
-pub fn ensure_taste_test_tables(conn: &Connection) -> Result<(), String> {
+pub fn ensure_taste_test_tables(conn: &Connection) -> Result<()> {
     conn.execute_batch(
         "CREATE TABLE IF NOT EXISTS taste_test_results (
             id INTEGER PRIMARY KEY,
@@ -48,7 +49,7 @@ pub fn save_taste_result(
     profile: &TasteProfile,
     responses: &[(usize, TasteResponse)],
     latencies: &[Option<u64>],
-) -> Result<i64, String> {
+) -> Result<i64> {
     ensure_taste_test_tables(conn)?;
 
     let weights_json = serde_json::to_string(&profile.persona_weights.to_vec())
@@ -168,7 +169,7 @@ pub fn is_calibrated(conn: &Connection) -> bool {
 /// - explicit_interests
 /// - exclusions
 /// - digested_intelligence (via store_calibrations)
-pub fn apply_taste_to_context(conn: &Connection, profile: &TasteProfile) -> Result<(), String> {
+pub fn apply_taste_to_context(conn: &Connection, profile: &TasteProfile) -> Result<()> {
     // Add inferred interests
     for (topic, weight) in &profile.inferred_interests {
         conn.execute(

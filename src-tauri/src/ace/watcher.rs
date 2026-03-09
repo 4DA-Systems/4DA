@@ -15,6 +15,8 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tracing::{debug, info, warn};
 
+use crate::error::Result;
+
 /// File watcher configuration
 #[derive(Debug, Clone)]
 pub struct WatcherConfig {
@@ -138,9 +140,9 @@ impl FileWatcher {
     }
 
     /// Start watching a directory
-    pub fn watch(&mut self, path: &Path) -> Result<(), String> {
+    pub fn watch(&mut self, path: &Path) -> Result<()> {
         if !path.exists() {
-            return Err(format!("Path does not exist: {}", path.display()));
+            return Err(format!("Path does not exist: {}", path.display()).into());
         }
 
         // Create watcher if not exists
@@ -163,7 +165,7 @@ impl FileWatcher {
     /// Stop watching a directory
     // Watcher API: used when filesystem monitoring is active
     #[allow(dead_code)]
-    pub fn unwatch(&mut self, path: &Path) -> Result<(), String> {
+    pub fn unwatch(&mut self, path: &Path) -> Result<()> {
         if let Some(ref mut watcher) = self.watcher {
             watcher
                 .unwatch(path)
@@ -177,7 +179,7 @@ impl FileWatcher {
     }
 
     /// Start the internal watcher
-    fn start_watcher(&mut self) -> Result<(), String> {
+    fn start_watcher(&mut self) -> Result<()> {
         let pending_changes = self.pending_changes.clone();
         let config = self.config.clone();
         let callback = self.callback.clone();
@@ -185,7 +187,10 @@ impl FileWatcher {
         let running = self.running.clone();
 
         // Create channel for events
-        let (tx, rx): (Sender<Result<Event, notify::Error>>, Receiver<_>) = channel();
+        let (tx, rx): (
+            Sender<std::result::Result<Event, notify::Error>>,
+            Receiver<_>,
+        ) = channel();
 
         // Create the watcher
         let watcher = RecommendedWatcher::new(
@@ -349,7 +354,7 @@ impl Drop for FileWatcher {
 // ============================================================================
 
 /// Extract topics from a code file's content
-pub fn extract_topics_from_file(path: &Path) -> Result<Vec<String>, String> {
+pub fn extract_topics_from_file(path: &Path) -> Result<Vec<String>> {
     let metadata =
         std::fs::metadata(path).map_err(|e| format!("Failed to stat {}: {}", path.display(), e))?;
     if metadata.len() > 10_000_000 {
@@ -615,7 +620,7 @@ pub struct WatcherStatePersistence {
 }
 
 impl WatcherStatePersistence {
-    pub fn new(conn: Arc<Mutex<Connection>>) -> Result<Self, String> {
+    pub fn new(conn: Arc<Mutex<Connection>>) -> Result<Self> {
         // Initialize state table
         let c = conn.lock();
         c.execute_batch(
@@ -624,30 +629,28 @@ impl WatcherStatePersistence {
                 state_json TEXT NOT NULL,
                 updated_at TEXT DEFAULT (datetime('now'))
             );",
-        )
-        .map_err(|e| format!("Failed to create watcher_state table: {}", e))?;
+        )?;
         drop(c);
 
         Ok(Self { conn })
     }
 
     /// Save watcher state
-    pub fn save(&self, watcher: &FileWatcher) -> Result<(), String> {
+    pub fn save(&self, watcher: &FileWatcher) -> Result<()> {
         let state = WatcherState {
             watched_paths: watcher.watched_paths(),
             last_active: chrono::Utc::now().to_rfc3339(),
             config: WatcherConfigSerializable::from(&watcher.config),
         };
 
-        let json = serde_json::to_string(&state)
-            .map_err(|e| format!("Failed to serialize watcher state: {}", e))?;
+        let json = serde_json::to_string(&state)?;
 
         let conn = self.conn.lock();
         conn.execute(
             "INSERT INTO watcher_state (id, state_json) VALUES (1, ?1)
              ON CONFLICT(id) DO UPDATE SET state_json = excluded.state_json, updated_at = datetime('now')",
             [&json],
-        ).map_err(|e| format!("Failed to save watcher state: {}", e))?;
+        )?;
 
         Ok(())
     }
@@ -655,9 +658,9 @@ impl WatcherStatePersistence {
     /// Load watcher state
     // Watcher API: used when filesystem monitoring is active
     #[allow(dead_code)]
-    pub fn load(&self) -> Result<Option<WatcherState>, String> {
+    pub fn load(&self) -> Result<Option<WatcherState>> {
         let conn = self.conn.lock();
-        let result: Result<String, _> = conn.query_row(
+        let result: std::result::Result<String, _> = conn.query_row(
             "SELECT state_json FROM watcher_state WHERE id = 1",
             [],
             |row| row.get(0),
@@ -665,19 +668,18 @@ impl WatcherStatePersistence {
 
         match result {
             Ok(json) => {
-                let state: WatcherState = serde_json::from_str(&json)
-                    .map_err(|e| format!("Failed to deserialize watcher state: {}", e))?;
+                let state: WatcherState = serde_json::from_str(&json)?;
                 Ok(Some(state))
             }
             Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
-            Err(e) => Err(format!("Failed to load watcher state: {}", e)),
+            Err(e) => Err(format!("Failed to load watcher state: {}", e).into()),
         }
     }
 
     /// Restore watcher from saved state
     // Watcher API: used when filesystem monitoring is active
     #[allow(dead_code)]
-    pub fn restore(&self, watcher: &mut FileWatcher) -> Result<usize, String> {
+    pub fn restore(&self, watcher: &mut FileWatcher) -> Result<usize> {
         let state = self.load()?;
 
         if let Some(state) = state {
@@ -701,10 +703,9 @@ impl WatcherStatePersistence {
     /// Clear saved state
     // Watcher API: used when filesystem monitoring is active
     #[allow(dead_code)]
-    pub fn clear(&self) -> Result<(), String> {
+    pub fn clear(&self) -> Result<()> {
         let conn = self.conn.lock();
-        conn.execute("DELETE FROM watcher_state WHERE id = 1", [])
-            .map_err(|e| format!("Failed to clear watcher state: {}", e))?;
+        conn.execute("DELETE FROM watcher_state WHERE id = 1", [])?;
         Ok(())
     }
 }

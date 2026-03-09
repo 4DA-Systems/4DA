@@ -78,7 +78,7 @@ pub async fn get_intelligence_pulse() -> Result<IntelligencePulse> {
         }
     }
 
-    let conn = crate::open_db_connection().map_err(FourDaError::Internal)?;
+    let conn = crate::open_db_connection()?;
 
     // ── 1. Items analyzed in the last 7 days (rows seen / fetched) ──────────
     let items_analyzed_7d: i64 = conn

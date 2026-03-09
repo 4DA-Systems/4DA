@@ -5,6 +5,7 @@
 //! - OpenAI GPT
 //! - Ollama (local, free)
 
+use crate::error::Result;
 use crate::settings::LLMProvider;
 use crate::state::{is_llm_limit_reached, record_llm_tokens};
 use serde::{Deserialize, Serialize};
@@ -80,11 +81,7 @@ impl LLMClient {
     /// Enforces the daily token limit — returns an error if the budget is exhausted.
     /// When a cloud provider (anthropic/openai) fails with a network or API error,
     /// transparently falls back to local Ollama at localhost:11434.
-    pub async fn complete(
-        &self,
-        system: &str,
-        messages: Vec<Message>,
-    ) -> Result<LLMResponse, String> {
+    pub async fn complete(&self, system: &str, messages: Vec<Message>) -> Result<LLMResponse> {
         // Hard cutoff: refuse to call the LLM if daily limit is already reached
         if is_llm_limit_reached() {
             let (used, limit) = crate::state::get_llm_token_usage();
@@ -97,14 +94,15 @@ impl LLMClient {
             return Err(format!(
                 "Daily LLM token limit reached ({}/{} tokens). Resets at midnight.",
                 used, limit
-            ));
+            )
+            .into());
         }
 
         let result = match self.provider.provider.as_str() {
             "anthropic" => self.complete_anthropic(system, messages.clone()).await,
             "openai" => self.complete_openai(system, messages.clone()).await,
             "ollama" => self.complete_ollama(system, messages.clone()).await,
-            _ => return Err(format!("Unknown provider: {}", self.provider.provider)),
+            _ => return Err(format!("Unknown provider: {}", self.provider.provider).into()),
         };
 
         // If a cloud provider failed, attempt Ollama fallback
@@ -142,18 +140,19 @@ impl LLMClient {
     /// Only falls back when:
     /// - The current provider is NOT already Ollama
     /// - The error looks like a network/API issue (not a token-limit or budget error)
-    fn should_fallback_to_ollama(&self, error: &str) -> bool {
+    fn should_fallback_to_ollama(&self, error: &crate::error::FourDaError) -> bool {
         // Never fallback if already using Ollama
         if self.provider.provider == "ollama" {
             return false;
         }
 
         // Don't fallback for token/budget limit errors (these are intentional caps)
-        let is_limit_error = error.contains("token limit")
-            || error.contains("rate limit")
-            || error.contains("quota")
-            || error.contains("billing")
-            || error.contains("insufficient_quota");
+        let error_str = error.to_string();
+        let is_limit_error = error_str.contains("token limit")
+            || error_str.contains("rate limit")
+            || error_str.contains("quota")
+            || error_str.contains("billing")
+            || error_str.contains("insufficient_quota");
 
         !is_limit_error
     }
@@ -164,7 +163,7 @@ impl LLMClient {
         &self,
         system: &str,
         messages: Vec<Message>,
-    ) -> Result<LLMResponse, String> {
+    ) -> Result<LLMResponse> {
         let fallback_base_url = "http://localhost:11434";
         let fallback_model = "llama3";
         let url = format!("{}/api/chat", fallback_base_url);
@@ -205,7 +204,7 @@ impl LLMClient {
         if !response.status().is_success() {
             let status = response.status();
             let text = response.text().await.unwrap_or_default();
-            return Err(format!("Ollama fallback error {}: {}", status, text));
+            return Err(format!("Ollama fallback error {}: {}", status, text).into());
         }
 
         let data: serde_json::Value = response
@@ -241,7 +240,7 @@ impl LLMClient {
         &self,
         system: &str,
         messages: Vec<Message>,
-    ) -> Result<LLMResponse, String> {
+    ) -> Result<LLMResponse> {
         let url = "https://api.anthropic.com/v1/messages";
 
         let body = serde_json::json!({
@@ -270,7 +269,7 @@ impl LLMClient {
         if !response.status().is_success() {
             let status = response.status();
             let text = response.text().await.unwrap_or_default();
-            return Err(format!("Anthropic API error {}: {}", status, text));
+            return Err(format!("Anthropic API error {}: {}", status, text).into());
         }
 
         let data: serde_json::Value = response
@@ -294,11 +293,7 @@ impl LLMClient {
     }
 
     /// OpenAI API
-    async fn complete_openai(
-        &self,
-        system: &str,
-        messages: Vec<Message>,
-    ) -> Result<LLMResponse, String> {
+    async fn complete_openai(&self, system: &str, messages: Vec<Message>) -> Result<LLMResponse> {
         let url = self
             .provider
             .base_url
@@ -336,7 +331,7 @@ impl LLMClient {
         if !response.status().is_success() {
             let status = response.status();
             let text = response.text().await.unwrap_or_default();
-            return Err(format!("OpenAI API error {}: {}", status, text));
+            return Err(format!("OpenAI API error {}: {}", status, text).into());
         }
 
         let data: serde_json::Value = response
@@ -360,11 +355,7 @@ impl LLMClient {
     }
 
     /// Ollama API (local)
-    async fn complete_ollama(
-        &self,
-        system: &str,
-        messages: Vec<Message>,
-    ) -> Result<LLMResponse, String> {
+    async fn complete_ollama(&self, system: &str, messages: Vec<Message>) -> Result<LLMResponse> {
         let base_url = self
             .provider
             .base_url
@@ -421,15 +412,17 @@ impl LLMClient {
                 return Err(format!(
                     "Model '{}' not found in Ollama. Run: ollama pull {}",
                     self.provider.model, self.provider.model
-                ));
+                )
+                .into());
             }
             if text.contains("out of memory") || text.contains("OOM") || text.contains("CUDA") {
                 return Err(format!(
                     "Not enough GPU memory for '{}'. Try a smaller model.",
                     self.provider.model
-                ));
+                )
+                .into());
             }
-            return Err(format!("Ollama error {}: {}", status, text));
+            return Err(format!("Ollama error {}: {}", status, text).into());
         }
 
         let data: serde_json::Value = response
@@ -462,7 +455,7 @@ impl LLMClient {
         system: &str,
         messages: Vec<Message>,
         on_token: F,
-    ) -> Result<LLMResponse, String>
+    ) -> Result<LLMResponse>
     where
         F: Fn(&str) + Send + 'static,
     {
@@ -478,26 +471,42 @@ impl LLMClient {
             return Err(format!(
                 "Daily LLM token limit reached ({}/{} tokens). Resets at midnight.",
                 used, limit
-            ));
+            )
+            .into());
         }
 
         let result = match self.provider.provider.as_str() {
             "anthropic" => {
                 crate::llm_stream::stream_anthropic(
-                    &self.client, &self.provider, system, messages.clone(), on_token,
-                ).await
+                    &self.client,
+                    &self.provider,
+                    system,
+                    messages.clone(),
+                    on_token,
+                )
+                .await
             }
             "openai" => {
                 crate::llm_stream::stream_openai(
-                    &self.client, &self.provider, system, messages.clone(), on_token,
-                ).await
+                    &self.client,
+                    &self.provider,
+                    system,
+                    messages.clone(),
+                    on_token,
+                )
+                .await
             }
             "ollama" => {
                 crate::llm_stream::stream_ollama(
-                    &self.client, &self.provider, system, messages.clone(), on_token,
-                ).await
+                    &self.client,
+                    &self.provider,
+                    system,
+                    messages.clone(),
+                    on_token,
+                )
+                .await
             }
-            _ => return Err(format!("Unknown provider: {}", self.provider.provider)),
+            _ => return Err(format!("Unknown provider: {}", self.provider.provider).into()),
         };
 
         // If a cloud provider failed, attempt streaming Ollama fallback
@@ -512,9 +521,7 @@ impl LLMClient {
                 );
                 // on_token was consumed by the first attempt; create a no-op for fallback
                 // since partial tokens may have already been emitted
-                crate::llm_stream::stream_ollama_fallback(
-                    system, messages, |_| {},
-                ).await?
+                crate::llm_stream::stream_ollama_fallback(system, messages, |_| {}).await?
             }
             Err(err) => return Err(err),
         };
@@ -575,7 +582,7 @@ impl LLMClient {
 
 /// List available models from Ollama API
 #[allow(dead_code)] // Utility function for future use
-pub async fn list_ollama_models(base_url: &str) -> Result<Vec<String>, String> {
+pub async fn list_ollama_models(base_url: &str) -> Result<Vec<String>> {
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(5))
         .build()
@@ -589,7 +596,7 @@ pub async fn list_ollama_models(base_url: &str) -> Result<Vec<String>, String> {
         .map_err(|e| format!("Failed to connect to Ollama: {}", e))?;
 
     if !response.status().is_success() {
-        return Err(format!("Ollama returned error: {}", response.status()));
+        return Err(format!("Ollama returned error: {}", response.status()).into());
     }
 
     let data: serde_json::Value = response
@@ -631,7 +638,7 @@ impl RelevanceJudge {
         &self,
         context_summary: &str,
         items: Vec<(String, String, String)>, // (id, title, content_snippet)
-    ) -> Result<(Vec<RelevanceJudgment>, u64, u64), String> {
+    ) -> Result<(Vec<RelevanceJudgment>, u64, u64)> {
         if items.is_empty() {
             return Ok((vec![], 0, 0));
         }
@@ -700,7 +707,7 @@ Output JSON array (one per article):
         &self,
         response: &str,
         items: &[(String, String, String)],
-    ) -> Result<Vec<RelevanceJudgment>, String> {
+    ) -> Result<Vec<RelevanceJudgment>> {
         // Try to extract JSON from the response
         let json_str = if let Some(start) = response.find('[') {
             if let Some(end) = response.rfind(']') {
@@ -981,6 +988,7 @@ mod tests {
         assert!(result.is_err());
         assert!(result
             .unwrap_err()
+            .to_string()
             .contains("Failed to parse LLM response as JSON"));
     }
 

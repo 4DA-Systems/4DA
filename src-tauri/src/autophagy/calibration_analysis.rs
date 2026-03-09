@@ -9,6 +9,7 @@ use std::collections::HashMap;
 use tracing::{debug, info, warn};
 
 use super::calibration::store_calibrations;
+use crate::error::Result;
 
 /// Analyze accuracy feedback from ACE behavior data to produce topic-level calibration.
 ///
@@ -242,7 +243,7 @@ pub(crate) fn bridge_accuracy_feedback(
     ace_conn: &Connection,
     main_conn: &Connection,
     lookback_days: i64,
-) -> Result<usize, String> {
+) -> Result<usize> {
     let deltas = analyze_accuracy_feedback(ace_conn, lookback_days);
     if deltas.is_empty() {
         return Ok(0);

@@ -32,7 +32,7 @@ mod tests {
         let long = format!("4DA-{}.{}", "A".repeat(600), "B".repeat(600));
         let result = verify_license_key(&long);
         assert!(result.is_err());
-        assert!(result.unwrap_err().contains("too long"));
+        assert!(result.unwrap_err().to_string().contains("too long"));
     }
 
     #[test]

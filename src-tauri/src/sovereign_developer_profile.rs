@@ -17,6 +17,8 @@ use rusqlite::Connection;
 use serde::{Deserialize, Serialize};
 use tracing::{debug, warn};
 
+use crate::error::Result;
+
 // ============================================================================
 // Types
 // ============================================================================
@@ -1152,23 +1154,23 @@ fn write_map_section(md: &mut String, label: &str, map: &HashMap<String, String>
 // ============================================================================
 
 #[tauri::command]
-pub fn get_sovereign_developer_profile() -> Result<SovereignDeveloperProfile, String> {
+pub fn get_sovereign_developer_profile() -> Result<SovereignDeveloperProfile> {
     let conn = crate::open_db_connection()?;
     Ok(assemble_profile(&conn))
 }
 
 #[tauri::command]
-pub fn export_sovereign_profile_markdown() -> Result<String, String> {
+pub fn export_sovereign_profile_markdown() -> Result<String> {
     let conn = crate::open_db_connection()?;
     let profile = assemble_profile(&conn);
     Ok(export_as_markdown(&profile))
 }
 
 #[tauri::command]
-pub fn export_sovereign_profile_json() -> Result<String, String> {
+pub fn export_sovereign_profile_json() -> Result<String> {
     let conn = crate::open_db_connection()?;
     let profile = assemble_profile(&conn);
-    serde_json::to_string_pretty(&profile).map_err(|e| e.to_string())
+    Ok(serde_json::to_string_pretty(&profile)?)
 }
 
 // ============================================================================

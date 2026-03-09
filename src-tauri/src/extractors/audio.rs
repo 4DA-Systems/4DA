@@ -14,6 +14,7 @@
 /// Alternatively, wait for pure Rust Whisper implementations to mature
 /// (whisper-apr, candle-whisper)
 use super::{DocumentExtractor, ExtractedDocument};
+use crate::error::Result;
 use std::path::Path;
 
 pub struct AudioExtractor;
@@ -35,14 +36,15 @@ impl DocumentExtractor for AudioExtractor {
         &["wav", "mp3", "ogg", "m4a", "flac", "aac"]
     }
 
-    fn extract(&self, path: &Path) -> Result<ExtractedDocument, String> {
+    fn extract(&self, path: &Path) -> Result<ExtractedDocument> {
         Err(format!(
             "Audio transcription not available.\n\
              File: {:?}\n\n\
              To enable, install LLVM and enable whisper-rs in Cargo.toml.\n\
              See src/extractors/audio.rs header for detailed instructions.",
             path
-        ))
+        )
+        .into())
     }
 }
 
@@ -72,6 +74,6 @@ mod tests {
         let extractor = AudioExtractor::new();
         let result = extractor.extract(Path::new("/some/audio.wav"));
         assert!(result.is_err());
-        assert!(result.unwrap_err().contains("not available"));
+        assert!(result.unwrap_err().to_string().contains("not available"));
     }
 }

@@ -6,6 +6,8 @@
 use serde::{Deserialize, Serialize};
 use tracing::info;
 
+use crate::error::Result;
+
 // ============================================================================
 // Types
 // ============================================================================
@@ -55,7 +57,7 @@ pub struct TrendPoint {
 // ============================================================================
 
 /// Generate an attention report for the specified period
-pub fn generate_report(period_days: u32) -> Result<AttentionReport, String> {
+pub fn generate_report(period_days: u32) -> Result<AttentionReport> {
     let conn = crate::open_db_connection()?;
 
     let topic_engagement = compute_topic_engagement(&conn, period_days)?;
@@ -75,7 +77,7 @@ pub fn generate_report(period_days: u32) -> Result<AttentionReport, String> {
 fn compute_topic_engagement(
     conn: &rusqlite::Connection,
     period_days: u32,
-) -> Result<Vec<TopicEngagement>, String> {
+) -> Result<Vec<TopicEngagement>> {
     // Get interactions from feedback table within the period
     let mut stmt = conn
         .prepare(
@@ -134,7 +136,7 @@ fn compute_topic_engagement(
     Ok(engagement)
 }
 
-fn get_codebase_topics() -> Result<Vec<CodebaseTopic>, String> {
+fn get_codebase_topics() -> Result<Vec<CodebaseTopic>> {
     // Get detected tech from ACE
     let ace = match crate::get_ace_engine() {
         Ok(engine) => engine,
@@ -208,7 +210,7 @@ fn identify_blind_spots(
     blind_spots
 }
 
-fn compute_trend(conn: &rusqlite::Connection, period_days: u32) -> Result<Vec<TrendPoint>, String> {
+fn compute_trend(conn: &rusqlite::Connection, period_days: u32) -> Result<Vec<TrendPoint>> {
     let since = format!("-{} days", period_days);
     let mut stmt = conn
         .prepare(
@@ -261,7 +263,7 @@ fn compute_trend(conn: &rusqlite::Connection, period_days: u32) -> Result<Vec<Tr
 // ============================================================================
 
 #[tauri::command]
-pub fn get_attention_report(period_days: Option<u32>) -> Result<AttentionReport, String> {
+pub fn get_attention_report(period_days: Option<u32>) -> Result<AttentionReport> {
     crate::settings::require_pro_feature("get_attention_report")?;
     let days = period_days.unwrap_or(30);
     info!(target: "4da::attention", period_days = days, "Generating attention report");

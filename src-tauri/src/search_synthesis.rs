@@ -9,6 +9,7 @@ use serde::{Deserialize, Serialize};
 use tauri::Emitter;
 use tracing::debug;
 
+use crate::error::Result;
 use crate::llm::{LLMClient, Message};
 use crate::natural_language_search::extract_keywords;
 
@@ -312,12 +313,12 @@ fn count_citations(text: &str, max: usize) -> usize {
 pub async fn synthesize_search(
     app: tauri::AppHandle,
     query_text: String,
-) -> Result<SynthesisResponse, String> {
+) -> Result<SynthesisResponse> {
     crate::settings::require_pro_feature("synthesize_search")?;
 
     let query_text = query_text.trim().to_string();
     if query_text.is_empty() {
-        return Err("Query cannot be empty".to_string());
+        return Err("Query cannot be empty".into());
     }
 
     // Check LLM provider is configured
@@ -330,7 +331,7 @@ pub async fn synthesize_search(
     if provider.provider.is_empty() || provider.provider == "none" {
         return Err(
             "No LLM provider configured. Set up Ollama (free, local) or add an API key in Settings."
-                .to_string(),
+                .into(),
         );
     }
 

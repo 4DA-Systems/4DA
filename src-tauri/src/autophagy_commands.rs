@@ -22,7 +22,7 @@ pub struct AutophagyStatus {
 /// Get current autophagy status: latest cycle result and aggregate stats.
 #[tauri::command]
 pub async fn get_autophagy_status() -> Result<AutophagyStatus> {
-    let conn = crate::open_db_connection().map_err(FourDaError::Internal)?;
+    let conn = crate::open_db_connection()?;
 
     // Get the latest cycle result
     let last_cycle = conn
@@ -84,7 +84,7 @@ pub async fn get_autophagy_status() -> Result<AutophagyStatus> {
 /// Get autophagy cycle history (most recent first).
 #[tauri::command]
 pub async fn get_autophagy_history(limit: Option<i64>) -> Result<Vec<AutophagyCycleResult>> {
-    let conn = crate::open_db_connection().map_err(FourDaError::Internal)?;
+    let conn = crate::open_db_connection()?;
     let limit = limit.unwrap_or(10).min(100);
 
     let mut stmt = conn
@@ -126,10 +126,9 @@ pub async fn trigger_autophagy_cycle() -> Result<AutophagyCycleResult> {
         sm.get().monitoring.cleanup_max_age_days.unwrap_or(30)
     };
 
-    let conn = crate::open_db_connection().map_err(FourDaError::Internal)?;
+    let conn = crate::open_db_connection()?;
 
-    let cycle = crate::autophagy::run_autophagy_cycle(&conn, max_age_days as i64)
-        .map_err(FourDaError::Internal)?;
+    let cycle = crate::autophagy::run_autophagy_cycle(&conn, max_age_days as i64)?;
 
     info!(
         target: "4da::autophagy",

@@ -302,12 +302,14 @@ Rules:
         }
         Err(e) => {
             error!(target: "4da::briefing", error = %e, "Failed to generate briefing");
-            let error_msg = if e.contains("Connection refused") || e.contains("connect") {
+            let e_str = e.to_string();
+            let error_msg = if e_str.contains("Connection refused") || e_str.contains("connect") {
                 "Ollama is not running. Start it with 'ollama serve' or check your LLM settings."
-            } else if e.contains("model") {
-                "The configured model may not be available. Try 'ollama pull llama3.1:8b-instruct-q8_0'."
+                    .to_string()
+            } else if e_str.contains("model") {
+                "The configured model may not be available. Try 'ollama pull llama3.1:8b-instruct-q8_0'.".to_string()
             } else {
-                &e
+                e_str
             };
             Ok(serde_json::json!({
                 "success": false,

@@ -7,6 +7,8 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use tracing::{debug, info, warn};
 
+use crate::error::Result;
+
 use super::{
     ActiveTopic, DetectedTech, DetectionSource, FileChange, FileChangeType, GitSignal,
     TechCategory, TopicSource,
@@ -150,10 +152,7 @@ pub fn merge_detected_tech(tech: Vec<DetectedTech>) -> Vec<DetectedTech> {
 // ============================================================================
 
 /// Process file changes from the watcher
-pub fn process_file_changes(
-    conn: &Arc<Mutex<Connection>>,
-    changes: &[FileChange],
-) -> Result<(), String> {
+pub fn process_file_changes(conn: &Arc<Mutex<Connection>>, changes: &[FileChange]) -> Result<()> {
     use crate::extractors::ExtractorRegistry;
 
     let conn = conn.lock();
@@ -342,7 +341,7 @@ pub fn process_file_changes(
 /// Apply freshness decay to active topics
 // Realtime context: consumed by future live scoring pipeline
 #[allow(dead_code)]
-pub fn apply_freshness_decay(conn: &Arc<Mutex<Connection>>) -> Result<usize, String> {
+pub fn apply_freshness_decay(conn: &Arc<Mutex<Connection>>) -> Result<usize> {
     let conn = conn.lock();
 
     let updated = conn
@@ -370,7 +369,7 @@ pub fn apply_freshness_decay(conn: &Arc<Mutex<Connection>>) -> Result<usize, Str
 /// Get real-time context for relevance scoring
 // Realtime context: consumed by future live scoring pipeline
 #[allow(dead_code)]
-pub fn get_realtime_context(conn: &Arc<Mutex<Connection>>) -> Result<RealtimeContext, String> {
+pub fn get_realtime_context(conn: &Arc<Mutex<Connection>>) -> Result<RealtimeContext> {
     let conn = conn.lock();
 
     let mut stmt = conn
@@ -401,7 +400,7 @@ pub fn get_realtime_context(conn: &Arc<Mutex<Connection>>) -> Result<RealtimeCon
             })
         })
         .map_err(|e| e.to_string())?
-        .collect::<Result<Vec<_>, _>>()
+        .collect::<std::result::Result<Vec<_>, _>>()
         .map_err(|e| e.to_string())?;
 
     let mut stmt = conn
@@ -440,7 +439,7 @@ pub fn get_realtime_context(conn: &Arc<Mutex<Connection>>) -> Result<RealtimeCon
             })
         })
         .map_err(|e| e.to_string())?
-        .collect::<Result<Vec<_>, _>>()
+        .collect::<std::result::Result<Vec<_>, _>>()
         .map_err(|e| e.to_string())?;
 
     let context_confidence = if topics.is_empty() && tech.is_empty() {
@@ -472,10 +471,7 @@ pub fn get_realtime_context(conn: &Arc<Mutex<Connection>>) -> Result<RealtimeCon
 // ============================================================================
 
 /// Store git analysis signals (topics + commit dedup) into ACE tables.
-pub fn store_git_signals(
-    conn: &Arc<Mutex<Connection>>,
-    signals: &[GitSignal],
-) -> Result<(), String> {
+pub fn store_git_signals(conn: &Arc<Mutex<Connection>>, signals: &[GitSignal]) -> Result<()> {
     let conn = conn.lock();
 
     for signal in signals {
@@ -535,7 +531,7 @@ pub fn store_detected_context(
     conn: &Arc<Mutex<Connection>>,
     tech: &[DetectedTech],
     topics: &[ActiveTopic],
-) -> Result<(), String> {
+) -> Result<()> {
     let conn = conn.lock();
 
     for t in tech {

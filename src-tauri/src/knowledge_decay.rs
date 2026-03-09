@@ -7,6 +7,8 @@ use rusqlite::params;
 use serde::{Deserialize, Serialize};
 use tracing::info;
 
+use crate::error::Result;
+
 // ============================================================================
 // Types
 // ============================================================================
@@ -297,7 +299,7 @@ fn normalize_gap_title(title: &str) -> String {
 }
 
 /// Detect knowledge gaps across all tracked dependencies
-pub fn detect_knowledge_gaps(conn: &rusqlite::Connection) -> Result<Vec<KnowledgeGap>, String> {
+pub fn detect_knowledge_gaps(conn: &rusqlite::Connection) -> Result<Vec<KnowledgeGap>> {
     // Get all tracked dependencies
     let deps = crate::temporal::get_all_dependencies(conn)?;
     if deps.is_empty() {
@@ -422,10 +424,7 @@ pub fn detect_knowledge_gaps(conn: &rusqlite::Connection) -> Result<Vec<Knowledg
     Ok(gaps)
 }
 
-fn find_missed_items(
-    conn: &rusqlite::Connection,
-    package_name: &str,
-) -> Result<Vec<MissedItem>, String> {
+fn find_missed_items(conn: &rusqlite::Connection, package_name: &str) -> Result<Vec<MissedItem>> {
     // Title-only matching (content LIKE is too noisy for short dep names)
     let pattern = format!("%{}%", package_name);
 
@@ -496,10 +495,7 @@ fn has_word_boundary_match(text: &str, term: &str) -> bool {
     false
 }
 
-fn days_since_last_engagement(
-    conn: &rusqlite::Connection,
-    package_name: &str,
-) -> Result<u32, String> {
+fn days_since_last_engagement(conn: &rusqlite::Connection, package_name: &str) -> Result<u32> {
     let pattern = format!("%{}%", package_name);
 
     let result: Option<String> = conn
@@ -578,7 +574,7 @@ fn severity_rank(severity: &GapSeverity) -> u8 {
 // ============================================================================
 
 #[tauri::command]
-pub fn get_knowledge_gaps() -> Result<Vec<KnowledgeGap>, String> {
+pub fn get_knowledge_gaps() -> Result<Vec<KnowledgeGap>> {
     crate::settings::require_pro_feature("get_knowledge_gaps")?;
     let conn = crate::open_db_connection()?;
     detect_knowledge_gaps(&conn)

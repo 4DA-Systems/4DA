@@ -1,5 +1,6 @@
 //! License verification, feature gating, and trial management.
 
+use crate::error::Result;
 use serde::{Deserialize, Serialize};
 use tracing::{info, warn};
 
@@ -65,7 +66,7 @@ pub fn is_pro_feature_available(feature: &str, license: &LicenseConfig) -> bool 
 
 /// Gate a Pro feature — returns Ok(()) if allowed, Err if not
 /// Call at the top of any Pro-gated Tauri command
-pub fn require_pro_feature(feature: &str) -> Result<(), String> {
+pub fn require_pro_feature(feature: &str) -> Result<()> {
     let manager = crate::get_settings_manager();
     let guard = manager.lock();
     let license = &guard.get().license;
@@ -75,7 +76,8 @@ pub fn require_pro_feature(feature: &str) -> Result<(), String> {
         Err(format!(
             "{} requires 4DA Pro — upgrade or start a free trial",
             feature
-        ))
+        )
+        .into())
     }
 }
 
@@ -466,7 +468,7 @@ pub fn is_streets_feature_available(feature: &str, license: &LicenseConfig) -> b
 }
 
 /// Gate a STREETS feature — returns Ok(()) if allowed, Err if not
-pub fn require_streets_feature(feature: &str) -> Result<(), String> {
+pub fn require_streets_feature(feature: &str) -> Result<()> {
     let manager = crate::get_settings_manager();
     let guard = manager.lock();
     let license = &guard.get().license;
@@ -481,7 +483,8 @@ pub fn require_streets_feature(feature: &str) -> Result<(), String> {
         Err(format!(
             "{} requires {} membership — upgrade at streets.4da.ai",
             feature, tier_needed
-        ))
+        )
+        .into())
     }
 }
 
@@ -527,12 +530,12 @@ pub struct LicensePayload {
 
 /// Verify and decode a license key.
 /// Format: `4DA-{base64(json_payload)}.{base64(ed25519_signature)}`
-pub fn verify_license_key(key: &str) -> Result<LicensePayload, String> {
+pub fn verify_license_key(key: &str) -> Result<LicensePayload> {
     let key = key.trim();
 
     // Sanity check: license keys are ~300-400 chars; reject obvious junk early
     if key.len() > 1024 {
-        return Err("Invalid license: key too long".to_string());
+        return Err("Invalid license: key too long".into());
     }
 
     // Must start with 4DA- prefix
@@ -543,7 +546,7 @@ pub fn verify_license_key(key: &str) -> Result<LicensePayload, String> {
     // Split payload and signature
     let parts: Vec<&str> = body.splitn(2, '.').collect();
     if parts.len() != 2 {
-        return Err("Invalid license format: missing signature".to_string());
+        return Err("Invalid license format: missing signature".into());
     }
 
     let payload_b64 = parts[0];
@@ -563,11 +566,11 @@ pub fn verify_license_key(key: &str) -> Result<LicensePayload, String> {
         hex::decode(LICENSE_PUBLIC_KEY_HEX).map_err(|e| format!("Invalid public key: {e}"))?;
 
     if pub_key_bytes.len() != 32 {
-        return Err("Invalid public key length".to_string());
+        return Err("Invalid public key length".into());
     }
 
     if sig_bytes.len() != 64 {
-        return Err("Invalid signature length".to_string());
+        return Err("Invalid signature length".into());
     }
 
     // Verify ed25519 signature
@@ -600,7 +603,7 @@ pub fn verify_license_key(key: &str) -> Result<LicensePayload, String> {
     // Check expiration
     if let Ok(expires) = chrono::DateTime::parse_from_rfc3339(&payload.expires_at) {
         if chrono::Utc::now() > expires {
-            return Err("License has expired".to_string());
+            return Err("License has expired".into());
         }
     }
 

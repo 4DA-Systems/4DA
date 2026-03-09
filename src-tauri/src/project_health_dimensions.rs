@@ -4,6 +4,7 @@
 //! momentum, community scores and generates alerts for a project's
 //! dependency health.
 
+use crate::error::Result;
 use crate::project_health::{HealthAlert, HealthDimension};
 use crate::temporal::ProjectDependency;
 use rusqlite::params;
@@ -12,7 +13,7 @@ use rusqlite::params;
 pub(crate) fn compute_freshness(
     deps: &[ProjectDependency],
     _conn: &rusqlite::Connection,
-) -> Result<HealthDimension, String> {
+) -> Result<HealthDimension> {
     if deps.is_empty() {
         return Ok(HealthDimension {
             score: 1.0,
@@ -49,7 +50,7 @@ pub(crate) fn compute_freshness(
 pub(crate) fn compute_security(
     deps: &[ProjectDependency],
     conn: &rusqlite::Connection,
-) -> Result<HealthDimension, String> {
+) -> Result<HealthDimension> {
     // Check source items for security mentions related to our deps
     let mut security_hits = 0;
 
@@ -99,7 +100,7 @@ pub(crate) fn compute_security(
 pub(crate) fn compute_momentum(
     deps: &[ProjectDependency],
     conn: &rusqlite::Connection,
-) -> Result<HealthDimension, String> {
+) -> Result<HealthDimension> {
     // Check how many source items mention key dependencies (activity = momentum)
     let mut total_mentions = 0i64;
 
@@ -146,7 +147,7 @@ pub(crate) fn compute_momentum(
 pub(crate) fn compute_community(
     deps: &[ProjectDependency],
     conn: &rusqlite::Connection,
-) -> Result<HealthDimension, String> {
+) -> Result<HealthDimension> {
     // Simple proxy: count of positive-sentiment source items mentioning deps
     let mut positive_mentions = 0i64;
 

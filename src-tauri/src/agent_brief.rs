@@ -9,6 +9,8 @@ use serde::{Deserialize, Serialize};
 use tracing::info;
 use ts_rs::TS;
 
+use crate::error::Result;
+
 // ============================================================================
 // Types
 // ============================================================================
@@ -81,7 +83,7 @@ pub fn generate_brief(
     conn: &Connection,
     agent_type: Option<&str>,
     since: Option<&str>,
-) -> Result<AgentSessionBrief, String> {
+) -> Result<AgentSessionBrief> {
     let since_ts = since.unwrap_or("(last 24h)");
     let generated_at = chrono::Utc::now().to_rfc3339();
 
@@ -161,7 +163,7 @@ fn query_since<T, F>(
     since: Option<&str>,
     limit: u32,
     map_fn: F,
-) -> Result<Vec<T>, String>
+) -> Result<Vec<T>>
 where
     F: Fn(&rusqlite::Row) -> rusqlite::Result<Option<T>>,
 {
@@ -187,7 +189,7 @@ where
 }
 
 /// Query active developer decisions, sorted by confidence DESC, limit 20.
-fn query_active_decisions(conn: &Connection) -> Result<Vec<DecisionSummary>, String> {
+fn query_active_decisions(conn: &Connection) -> Result<Vec<DecisionSummary>> {
     let mut stmt = conn
         .prepare(
             "SELECT id, subject, decision, decision_type, confidence, status
@@ -273,10 +275,7 @@ fn classify_signal(title: &str, content: &str) -> Option<(String, String)> {
 ///   BreakingChange -> "breaking_change"
 ///   TechTrend      -> "trend_shift"
 ///   ToolDiscovery  -> "new_version"
-fn query_ecosystem_changes(
-    conn: &Connection,
-    since: Option<&str>,
-) -> Result<Vec<EcosystemChange>, String> {
+fn query_ecosystem_changes(conn: &Connection, since: Option<&str>) -> Result<Vec<EcosystemChange>> {
     query_since(
         conn,
         "SELECT title, source_type, content, created_at",
@@ -309,7 +308,7 @@ fn build_active_concerns(
     conn: &Connection,
     decisions: &[DecisionSummary],
     since: Option<&str>,
-) -> Result<Vec<ActiveConcern>, String> {
+) -> Result<Vec<ActiveConcern>> {
     if decisions.is_empty() {
         return Ok(Vec::new());
     }
@@ -389,10 +388,7 @@ fn build_active_concerns(
 }
 
 /// Query recent source items that match signal patterns as open signals.
-fn query_open_signals(
-    conn: &Connection,
-    since: Option<&str>,
-) -> Result<Vec<SignalSummary>, String> {
+fn query_open_signals(conn: &Connection, since: Option<&str>) -> Result<Vec<SignalSummary>> {
     query_since(
         conn,
         "SELECT title, source_type, url, content",
@@ -425,7 +421,7 @@ fn query_open_signals(
 pub async fn generate_agent_brief(
     agent_type: Option<String>,
     since: Option<String>,
-) -> Result<AgentSessionBrief, String> {
+) -> Result<AgentSessionBrief> {
     let conn = crate::open_db_connection()?;
     let brief = generate_brief(&conn, agent_type.as_deref(), since.as_deref())?;
     Ok(brief)

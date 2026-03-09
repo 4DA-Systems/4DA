@@ -7,6 +7,7 @@ use tauri::Emitter;
 use tracing::{info, warn};
 
 use crate::analysis_narration::{emit_narration, NarrationEvent};
+use crate::error::Result;
 use crate::scoring;
 use crate::{emit_progress, get_analysis_state, get_database, monitoring, SourceRelevance};
 
@@ -19,7 +20,7 @@ pub(crate) async fn score_items_full(
     app: &tauri::AppHandle,
     db: &crate::db::Database,
     cached_items: &[crate::db::StoredSourceItem],
-) -> Result<Vec<SourceRelevance>, String> {
+) -> Result<Vec<SourceRelevance>> {
     use std::sync::atomic::Ordering;
 
     // Deduplicate before scoring to avoid wasting compute on duplicates
@@ -61,7 +62,7 @@ pub(crate) async fn score_items_full(
         let item = &cached_items[item_idx];
         if crate::get_analysis_abort().load(Ordering::SeqCst) {
             info!(target: "4da::analysis", scored = idx, "Cached analysis aborted by user");
-            return Err("Analysis cancelled".to_string());
+            return Err("Analysis cancelled".into());
         }
 
         if idx % 50 == 0 {

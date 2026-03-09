@@ -9,6 +9,8 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use tracing::warn;
 
+use crate::error::Result;
+
 /// Project Scanner - detects projects and their tech stacks
 pub struct ProjectScanner {
     /// Maximum depth to recurse into directories
@@ -114,7 +116,7 @@ impl ProjectScanner {
     const MAX_PATH_LEN: usize = 4096;
 
     /// Scan a directory for project manifests
-    pub fn scan_directory(&self, path: &Path) -> Result<Vec<ProjectSignal>, String> {
+    pub fn scan_directory(&self, path: &Path) -> Result<Vec<ProjectSignal>> {
         let mut signals = Vec::new();
         let mut visited = HashSet::new();
         self.scan_recursive(path, 0, &mut signals, &mut visited)?;
@@ -127,7 +129,7 @@ impl ProjectScanner {
         depth: usize,
         signals: &mut Vec<ProjectSignal>,
         visited: &mut HashSet<PathBuf>,
-    ) -> Result<(), String> {
+    ) -> Result<()> {
         // Bounds check: depth and total signals
         if depth > self.max_depth || signals.len() >= Self::MAX_SIGNALS {
             return Ok(());
@@ -178,7 +180,7 @@ impl ProjectScanner {
         Ok(())
     }
 
-    fn check_manifests(&self, dir: &Path, signals: &mut Vec<ProjectSignal>) -> Result<(), String> {
+    fn check_manifests(&self, dir: &Path, signals: &mut Vec<ProjectSignal>) -> Result<()> {
         // Check each manifest type
         let manifest_types = [
             ManifestType::CargoToml,

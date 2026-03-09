@@ -7,6 +7,8 @@ use rusqlite::params;
 use serde::{Deserialize, Serialize};
 use tracing::{debug, warn};
 
+use crate::error::Result;
+
 // ============================================================================
 // Types
 // ============================================================================
@@ -227,7 +229,7 @@ fn count_signals_for_tech(conn: &rusqlite::Connection, tech_name: &str, days: u3
 fn days_since_engagement_for_tech(conn: &rusqlite::Connection, tech_name: &str) -> u32 {
     let pattern = format!("%{}%", tech_name.to_lowercase());
 
-    let result: Result<Option<String>, _> = conn.query_row(
+    let result: std::result::Result<Option<String>, _> = conn.query_row(
         "SELECT MAX(f.created_at)
          FROM feedback f
          JOIN source_items si ON si.id = f.source_item_id
@@ -368,7 +370,7 @@ fn status_rank(status: &str) -> u8 {
 /// Get full stack health report.
 /// NO Pro gate — this is the hook that makes free users want Pro.
 #[tauri::command]
-pub async fn get_stack_health() -> Result<StackHealth, String> {
+pub async fn get_stack_health() -> Result<StackHealth> {
     let conn = crate::open_db_connection()?;
     Ok(compute_stack_health(&conn))
 }
@@ -376,7 +378,7 @@ pub async fn get_stack_health() -> Result<StackHealth, String> {
 /// Get missed intelligence signals for detected stack.
 /// NO Pro gate on counts. The example_titles field shows top 3 always (the teaser).
 #[tauri::command]
-pub async fn get_missed_intelligence(days: Option<u32>) -> Result<MissedIntelligence, String> {
+pub async fn get_missed_intelligence(days: Option<u32>) -> Result<MissedIntelligence> {
     let conn = crate::open_db_connection()?;
     let techs = load_detected_techs(&conn);
     let effective_days = days.unwrap_or(30);

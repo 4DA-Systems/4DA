@@ -11,6 +11,8 @@ use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+use crate::error::Result;
+
 /// Git analyzer configuration
 #[derive(Debug, Clone)]
 pub struct GitConfig {
@@ -127,9 +129,9 @@ impl GitAnalyzer {
     }
 
     /// Analyze a git repository
-    pub fn analyze_repo(&self, repo_path: &Path) -> Result<GitSignal, String> {
+    pub fn analyze_repo(&self, repo_path: &Path) -> Result<GitSignal> {
         if !Self::is_git_repo(repo_path) {
-            return Err(format!("Not a git repository: {}", repo_path.display()));
+            return Err(format!("Not a git repository: {}", repo_path.display()).into());
         }
 
         let repo_name = repo_path
@@ -177,7 +179,7 @@ impl GitAnalyzer {
     }
 
     /// Get recent commits
-    fn get_recent_commits(&self, repo_path: &Path) -> Result<Vec<CommitInfo>, String> {
+    fn get_recent_commits(&self, repo_path: &Path) -> Result<Vec<CommitInfo>> {
         let since_date = format!("--since={} days ago", self.config.history_days);
         let max_count = format!("-{}", self.config.max_commits);
 
@@ -203,7 +205,8 @@ impl GitAnalyzer {
             return Err(format!(
                 "git log failed: {}",
                 String::from_utf8_lossy(&output.stderr)
-            ));
+            )
+            .into());
         }
 
         let stdout = String::from_utf8_lossy(&output.stdout);
@@ -251,7 +254,7 @@ impl GitAnalyzer {
     }
 
     /// Get branch information
-    fn get_branches(&self, repo_path: &Path) -> Result<Vec<BranchInfo>, String> {
+    fn get_branches(&self, repo_path: &Path) -> Result<Vec<BranchInfo>> {
         let output = Command::new("git")
             .args(["branch", "-v", "--no-color"])
             .current_dir(repo_path)
@@ -262,7 +265,8 @@ impl GitAnalyzer {
             return Err(format!(
                 "git branch failed: {}",
                 String::from_utf8_lossy(&output.stderr)
-            ));
+            )
+            .into());
         }
 
         let stdout = String::from_utf8_lossy(&output.stdout);

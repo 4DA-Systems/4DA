@@ -3,6 +3,7 @@
 
 use once_cell::sync::Lazy;
 
+use crate::error::Result;
 use crate::get_settings_manager;
 
 /// Shared HTTP client for embedding API calls (reused across requests)
@@ -22,7 +23,7 @@ static EMBEDDING_CLIENT: Lazy<reqwest::Client> = Lazy::new(|| {
 /// Generate embeddings for a list of texts
 /// Supports OpenAI (text-embedding-3-small) and Ollama (nomic-embed-text)
 /// Provider is determined by settings - uses same provider as LLM when possible
-pub(crate) async fn embed_texts(texts: &[String]) -> Result<Vec<Vec<f32>>, String> {
+pub(crate) async fn embed_texts(texts: &[String]) -> Result<Vec<Vec<f32>>> {
     if texts.is_empty() {
         return Ok(vec![]);
     }
@@ -120,9 +121,9 @@ pub(crate) async fn embed_texts(texts: &[String]) -> Result<Vec<Vec<f32>>, Strin
 }
 
 /// Generate embeddings using OpenAI API
-async fn embed_texts_openai(texts: &[String], api_key: &str) -> Result<Vec<Vec<f32>>, String> {
+async fn embed_texts_openai(texts: &[String], api_key: &str) -> Result<Vec<Vec<f32>>> {
     if api_key.is_empty() {
-        return Err("OpenAI API key not configured".to_string());
+        return Err("OpenAI API key not configured".into());
     }
 
     let body = serde_json::json!({
@@ -155,20 +156,26 @@ async fn embed_texts_openai(texts: &[String], api_key: &str) -> Result<Vec<Vec<f
 
     let data = json["data"]
         .as_array()
-        .ok_or_else(|| "Invalid OpenAI response: missing 'data' array".to_string())?;
+        .ok_or_else(|| -> crate::error::FourDaError {
+            "Invalid OpenAI response: missing 'data' array".into()
+        })?;
 
     data.iter()
         .map(|item| {
             item["embedding"]
                 .as_array()
-                .ok_or_else(|| "Missing embedding in response".to_string())?
+                .ok_or_else(|| -> crate::error::FourDaError {
+                    "Missing embedding in response".into()
+                })?
                 .iter()
                 .map(|v| {
                     v.as_f64()
                         .map(|f| f as f32)
-                        .ok_or_else(|| "Invalid embedding value".to_string())
+                        .ok_or_else(|| -> crate::error::FourDaError {
+                            "Invalid embedding value".into()
+                        })
                 })
-                .collect::<Result<Vec<f32>, String>>()
+                .collect::<Result<Vec<f32>>>()
         })
         .collect()
 }
@@ -193,10 +200,7 @@ fn truncate_and_normalize(mut embedding: Vec<f32>) -> Vec<f32> {
 }
 
 /// Generate embeddings using Ollama API
-async fn embed_texts_ollama(
-    texts: &[String],
-    base_url: &Option<String>,
-) -> Result<Vec<Vec<f32>>, String> {
+async fn embed_texts_ollama(texts: &[String], base_url: &Option<String>) -> Result<Vec<Vec<f32>>> {
     let base = base_url.as_deref().unwrap_or("http://localhost:11434");
 
     if texts.is_empty() {
@@ -223,23 +227,30 @@ async fn embed_texts_ollama(
                 .await
                 .map_err(|e| format!("Failed to parse Ollama batch response: {}", e))?;
 
-            let embeddings_array = json["embeddings"].as_array().ok_or_else(|| {
-                "Invalid Ollama batch response: missing 'embeddings' array".to_string()
-            })?;
+            let embeddings_array =
+                json["embeddings"]
+                    .as_array()
+                    .ok_or_else(|| -> crate::error::FourDaError {
+                        "Invalid Ollama batch response: missing 'embeddings' array".into()
+                    })?;
 
             embeddings_array
                 .iter()
                 .map(|emb_val| {
                     let raw = emb_val
                         .as_array()
-                        .ok_or_else(|| "Invalid embedding in batch response".to_string())?
+                        .ok_or_else(|| -> crate::error::FourDaError {
+                            "Invalid embedding in batch response".into()
+                        })?
                         .iter()
                         .map(|v| {
-                            v.as_f64()
-                                .map(|f| f as f32)
-                                .ok_or_else(|| "Invalid embedding value".to_string())
+                            v.as_f64().map(|f| f as f32).ok_or_else(
+                                || -> crate::error::FourDaError {
+                                    "Invalid embedding value".into()
+                                },
+                            )
                         })
-                        .collect::<Result<Vec<f32>, String>>()?;
+                        .collect::<Result<Vec<f32>>>()?;
                     Ok(truncate_and_normalize(raw))
                 })
                 .collect()
@@ -249,7 +260,7 @@ async fn embed_texts_ollama(
             let status = response.status();
             let body = response.text().await.unwrap_or_default();
             if status.as_u16() == 404 || body.contains("not found") {
-                return Err("Embedding model 'nomic-embed-text' not found in Ollama. Run: ollama pull nomic-embed-text".to_string());
+                return Err("Embedding model 'nomic-embed-text' not found in Ollama. Run: ollama pull nomic-embed-text".into());
             }
             // Fall through to single-item fallback for other errors (old Ollama version)
             embed_texts_ollama_single(texts, base).await
@@ -260,10 +271,11 @@ async fn embed_texts_ollama(
                 return Err(format!(
                     "Cannot connect to Ollama at {}. Make sure Ollama is running (ollama serve).",
                     base
-                ));
+                )
+                .into());
             }
             if msg.contains("timed out") || msg.contains("timeout") {
-                return Err("Ollama embedding request timed out. The model may still be loading — try again shortly.".to_string());
+                return Err("Ollama embedding request timed out. The model may still be loading — try again shortly.".into());
             }
             // Fall through to single-item fallback
             embed_texts_ollama_single(texts, base).await
@@ -272,7 +284,7 @@ async fn embed_texts_ollama(
 }
 
 /// Fallback: embed one text at a time using the older /api/embeddings endpoint
-async fn embed_texts_ollama_single(texts: &[String], base: &str) -> Result<Vec<Vec<f32>>, String> {
+async fn embed_texts_ollama_single(texts: &[String], base: &str) -> Result<Vec<Vec<f32>>> {
     let mut all_embeddings = Vec::with_capacity(texts.len());
 
     for text in texts {
@@ -308,10 +320,10 @@ async fn embed_texts_ollama_single(texts: &[String], base: &str) -> Result<Vec<V
             let body = response.text().await.unwrap_or_default();
             if status.as_u16() == 404 || body.contains("not found") {
                 return Err(
-                    "Embedding model 'nomic-embed-text' not found. Run: ollama pull nomic-embed-text".to_string()
+                    "Embedding model 'nomic-embed-text' not found. Run: ollama pull nomic-embed-text".into()
                 );
             }
-            return Err(format!("Ollama embedding error ({}): {}", status, body));
+            return Err(format!("Ollama embedding error ({}): {}", status, body).into());
         }
 
         let json: serde_json::Value = response
@@ -321,17 +333,19 @@ async fn embed_texts_ollama_single(texts: &[String], base: &str) -> Result<Vec<V
 
         let raw = json["embedding"]
             .as_array()
-            .ok_or_else(|| {
+            .ok_or_else(|| -> crate::error::FourDaError {
                 "Invalid Ollama response: missing 'embedding' array. Is nomic-embed-text installed?"
-                    .to_string()
+                    .into()
             })?
             .iter()
             .map(|v| {
                 v.as_f64()
                     .map(|f| f as f32)
-                    .ok_or_else(|| "Invalid embedding value".to_string())
+                    .ok_or_else(|| -> crate::error::FourDaError {
+                        "Invalid embedding value".into()
+                    })
             })
-            .collect::<Result<Vec<f32>, String>>()?;
+            .collect::<Result<Vec<f32>>>()?;
 
         all_embeddings.push(truncate_and_normalize(raw));
     }
@@ -341,21 +355,17 @@ async fn embed_texts_ollama_single(texts: &[String], base: &str) -> Result<Vec<V
 
 /// Retry an async operation with exponential backoff.
 /// Returns the first successful result, or the last error after max_retries.
-async fn retry_with_backoff<F, Fut, T>(
-    operation_name: &str,
-    max_retries: u32,
-    f: F,
-) -> Result<T, String>
+async fn retry_with_backoff<F, Fut, T>(operation_name: &str, max_retries: u32, f: F) -> Result<T>
 where
     F: Fn() -> Fut,
-    Fut: std::future::Future<Output = Result<T, String>>,
+    Fut: std::future::Future<Output = Result<T>>,
 {
     let mut last_error = String::new();
     for attempt in 0..=max_retries {
         match f().await {
             Ok(result) => return Ok(result),
             Err(e) => {
-                last_error = e.clone();
+                last_error = e.to_string();
                 if attempt < max_retries {
                     let delay_secs = 3u64.pow(attempt); // 1s, 3s, 9s
                     tracing::warn!(
@@ -364,7 +374,7 @@ where
                         max = max_retries + 1,
                         delay_secs,
                         operation = operation_name,
-                        error = %e,
+                        error = %last_error,
                         "Retrying after error"
                     );
                     tokio::time::sleep(std::time::Duration::from_secs(delay_secs)).await;
@@ -372,7 +382,7 @@ where
             }
         }
     }
-    Err(last_error)
+    Err(last_error.into())
 }
 
 #[cfg(test)]

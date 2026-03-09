@@ -14,6 +14,7 @@ use tracing::{error, info, warn};
 use crate::channel_provenance::extract_provenance;
 use crate::channels::{Channel, ChannelRender};
 use crate::db::{Database, StoredSourceItem};
+use crate::error::Result;
 use crate::extract_topics;
 use crate::scoring::{compute_affinity_multiplier, get_ace_context};
 
@@ -26,7 +27,7 @@ use crate::scoring::{compute_affinity_multiplier, get_ace_context};
 pub(crate) fn gather_channel_sources(
     db: &Database,
     channel: &Channel,
-) -> Result<Vec<(StoredSourceItem, f64)>, String> {
+) -> Result<Vec<(StoredSourceItem, f64)>> {
     let channel_topics: Vec<String> = channel
         .topic_query
         .iter()
@@ -86,7 +87,7 @@ pub(crate) fn gather_channel_sources(
 pub(crate) fn preview_channel_sources(
     db: &Database,
     topics: &[String],
-) -> Result<(usize, Vec<String>), String> {
+) -> Result<(usize, Vec<String>)> {
     let topics_lower: Vec<String> = topics.iter().map(|t| t.to_lowercase()).collect();
     if topics_lower.is_empty() {
         return Ok((0, vec![]));
@@ -254,7 +255,7 @@ pub(crate) fn generate_fallback_content(
 ///
 /// Flow: load channel -> gather sources -> check LLM -> build prompt -> call LLM
 ///       -> extract provenance -> save render -> compute changelog
-pub(crate) async fn render_channel(channel_id: i64) -> Result<ChannelRender, String> {
+pub(crate) async fn render_channel(channel_id: i64) -> Result<ChannelRender> {
     let db = crate::get_database().map_err(|e| e.to_string())?;
 
     // Load channel
@@ -464,7 +465,7 @@ pub(crate) async fn render_channel(channel_id: i64) -> Result<ChannelRender, Str
 /// Render all channels that are stale or never rendered.
 /// Iterates through every active channel, checks freshness, and renders
 /// any that need updating. Logs each attempt and continues on failure.
-pub(crate) async fn auto_render_stale_channels() -> Result<(), String> {
+pub(crate) async fn auto_render_stale_channels() -> Result<()> {
     let db = crate::get_database().map_err(|e| e.to_string())?;
     let channels = db.list_channels().map_err(|e| e.to_string())?;
 

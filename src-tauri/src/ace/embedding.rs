@@ -11,6 +11,8 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use tracing::warn;
 
+use crate::error::Result;
+
 // ============================================================================
 // Embedding Provider Configuration
 // ============================================================================
@@ -87,7 +89,7 @@ impl EmbeddingService {
     }
 
     /// Initialize the embedding cache table
-    fn init_cache_table(conn: &Arc<Mutex<Connection>>) -> Result<(), String> {
+    fn init_cache_table(conn: &Arc<Mutex<Connection>>) -> Result<()> {
         let conn = conn.lock();
         conn.execute_batch(
             "CREATE TABLE IF NOT EXISTS embedding_cache (
@@ -108,7 +110,7 @@ impl EmbeddingService {
     const MAX_CACHE_ENTRIES: usize = 10_000;
 
     /// Get or generate embedding for a single text
-    pub fn embed(&self, text: &str) -> Result<Vec<f32>, String> {
+    pub fn embed(&self, text: &str) -> Result<Vec<f32>> {
         // Check in-memory cache first
         if let Some(cached) = self.cache.lock().get(text) {
             return Ok(cached.clone());
@@ -144,7 +146,7 @@ impl EmbeddingService {
     }
 
     /// Batch embed multiple texts
-    pub fn embed_batch(&self, texts: &[String]) -> Result<Vec<Vec<f32>>, String> {
+    pub fn embed_batch(&self, texts: &[String]) -> Result<Vec<Vec<f32>>> {
         let mut results = Vec::with_capacity(texts.len());
         let mut to_generate: Vec<(usize, String)> = Vec::new();
 
@@ -185,7 +187,7 @@ impl EmbeddingService {
 
     /// Generate embedding using the configured provider.
     /// For non-Mock providers, delegates to `crate::embed_texts` via block_in_place bridge.
-    fn generate_embedding(&self, text: &str) -> Result<Vec<f32>, String> {
+    fn generate_embedding(&self, text: &str) -> Result<Vec<f32>> {
         if self.config.provider == EmbeddingProvider::Mock {
             return self.embed_mock(text);
         }
@@ -198,7 +200,7 @@ impl EmbeddingService {
             Ok(embeddings) if !embeddings.is_empty() => embeddings
                 .into_iter()
                 .next()
-                .ok_or_else(|| "Embedding vec reported non-empty but yielded no items".to_string()),
+                .ok_or_else(|| "Embedding vec reported non-empty but yielded no items".into()),
             Ok(_) => {
                 warn!(target: "ace::embedding", "embed_texts returned empty, falling back to mock");
                 self.embed_mock(text)
@@ -212,7 +214,7 @@ impl EmbeddingService {
 
     /// Generate batch embeddings.
     /// For non-Mock providers, delegates to `crate::embed_texts` via block_in_place bridge.
-    fn generate_batch_embedding(&self, texts: &[&str]) -> Result<Vec<Vec<f32>>, String> {
+    fn generate_batch_embedding(&self, texts: &[&str]) -> Result<Vec<Vec<f32>>> {
         if self.config.provider == EmbeddingProvider::Mock {
             return texts.iter().map(|t| self.embed_mock(t)).collect();
         }
@@ -235,7 +237,7 @@ impl EmbeddingService {
     }
 
     /// Generate mock embedding for testing
-    fn embed_mock(&self, text: &str) -> Result<Vec<f32>, String> {
+    fn embed_mock(&self, text: &str) -> Result<Vec<f32>> {
         use std::collections::hash_map::DefaultHasher;
         use std::hash::{Hash, Hasher};
 
@@ -264,9 +266,9 @@ impl EmbeddingService {
     }
 
     /// Get cached embedding from database
-    fn get_cached_embedding(&self, text: &str) -> Result<Option<Vec<f32>>, String> {
+    fn get_cached_embedding(&self, text: &str) -> Result<Option<Vec<f32>>> {
         let conn = self.conn.lock();
-        let result: Result<Vec<u8>, _> = conn.query_row(
+        let result: std::result::Result<Vec<u8>, _> = conn.query_row(
             "SELECT embedding FROM embedding_cache WHERE text = ?1",
             [text],
             |row| row.get(0),
@@ -279,12 +281,12 @@ impl EmbeddingService {
                 Ok(Some(embedding))
             }
             Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
-            Err(e) => Err(format!("Cache lookup failed: {}", e)),
+            Err(e) => Err(format!("Cache lookup failed: {}", e).into()),
         }
     }
 
     /// Cache embedding in database
-    fn cache_embedding(&self, text: &str, embedding: &[f32]) -> Result<(), String> {
+    fn cache_embedding(&self, text: &str, embedding: &[f32]) -> Result<()> {
         let conn = self.conn.lock();
         let bytes = f32_vec_to_bytes(embedding);
 
@@ -320,7 +322,7 @@ impl EmbeddingService {
         query: &str,
         candidates: &[String],
         top_k: usize,
-    ) -> Result<Vec<(String, f32)>, String> {
+    ) -> Result<Vec<(String, f32)>> {
         let query_embedding = self.embed(query)?;
         let candidate_embeddings = self.embed_batch(candidates)?;
 

@@ -3,6 +3,8 @@
 use super::SunResult;
 use tracing::debug;
 
+use crate::error::Result;
+
 pub fn execute() -> SunResult {
     let mut facts_found = 0;
 
@@ -60,7 +62,7 @@ pub fn execute() -> SunResult {
 }
 
 /// Run a shell command and capture stdout.
-pub(super) fn run_cmd(cmd: &str) -> Result<String, String> {
+pub(super) fn run_cmd(cmd: &str) -> Result<String> {
     debug!(target: "4da::suns", cmd, "Running system command");
 
     #[cfg(target_os = "windows")]
@@ -71,8 +73,8 @@ pub(super) fn run_cmd(cmd: &str) -> Result<String, String> {
 
     match output {
         Ok(out) if out.status.success() => Ok(String::from_utf8_lossy(&out.stdout).to_string()),
-        Ok(out) => Err(String::from_utf8_lossy(&out.stderr).to_string()),
-        Err(e) => Err(e.to_string()),
+        Ok(out) => Err(String::from_utf8_lossy(&out.stderr).to_string().into()),
+        Err(e) => Err(e.to_string().into()),
     }
 }
 

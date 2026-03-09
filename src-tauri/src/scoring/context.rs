@@ -4,6 +4,7 @@ use std::time::Instant;
 use tracing::info;
 
 use crate::db::Database;
+use crate::error::Result;
 use crate::taste_test::continuous;
 
 use super::{compute_taste_embedding, get_ace_context, get_topic_embeddings, ScoringContext};
@@ -14,7 +15,7 @@ const SCORING_CONTEXT_TTL_SECS: u64 = 300;
 
 /// Build a ScoringContext by loading all needed state. Call once per analysis run.
 /// Results are cached with a 5-minute TTL to avoid redundant DB queries.
-pub(crate) async fn build_scoring_context(db: &Database) -> Result<ScoringContext, String> {
+pub(crate) async fn build_scoring_context(db: &Database) -> Result<ScoringContext> {
     // Check cache first (block scope ensures MutexGuard is dropped before any .await)
     {
         let cache = SCORING_CONTEXT_CACHE
@@ -26,7 +27,7 @@ pub(crate) async fn build_scoring_context(db: &Database) -> Result<ScoringContex
             }
         }
     }
-    let cached_context_count = db.context_count().map_err(|e| e.to_string())?;
+    let cached_context_count = db.context_count()?;
     let feedback_interaction_count: i64 = db.query_feedback_count().unwrap_or(0);
 
     let context_engine = crate::get_context_engine()?;

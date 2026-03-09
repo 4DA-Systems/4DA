@@ -6,6 +6,8 @@ use std::collections::HashMap;
 /// audio files (transcription), and archives.
 use std::path::Path;
 
+use crate::error::Result;
+
 // Re-export sub-modules
 #[cfg(feature = "archive")]
 pub mod archive;
@@ -24,7 +26,7 @@ pub trait DocumentExtractor: Send + Sync {
     fn supported_extensions(&self) -> &[&str];
 
     /// Extract text and metadata from a file
-    fn extract(&self, path: &Path) -> Result<ExtractedDocument, String>;
+    fn extract(&self, path: &Path) -> Result<ExtractedDocument>;
 
     /// Check if this extractor can handle a given file
     fn can_handle(&self, path: &Path) -> bool {
@@ -133,7 +135,7 @@ impl ExtractorRegistry {
     }
 
     /// Extract content from a file using the appropriate extractor
-    pub fn extract(&self, path: &Path) -> Result<ExtractedDocument, String> {
+    pub fn extract(&self, path: &Path) -> Result<ExtractedDocument> {
         let extractor = self
             .find_extractor(path)
             .ok_or_else(|| format!("No extractor found for file: {:?}", path))?;
