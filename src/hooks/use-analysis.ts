@@ -67,7 +67,7 @@ export function useAnalysis(
           const NEAR_MISS_LIMIT = 5;
           const nearMisses = relevantCount < 3
             ? results
-                .filter((r) => !r.relevant && !r.excluded && r.top_score >= NEAR_MISS_FLOOR)
+                .filter((r) => !r.relevant && r.top_score >= NEAR_MISS_FLOOR)
                 .sort((a, b) => b.top_score - a.top_score)
                 .slice(0, NEAR_MISS_LIMIT)
             : null;
