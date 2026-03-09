@@ -12,7 +12,9 @@ pub struct NoveltyScore {
     pub is_introductory: bool,
     /// Whether this appears to be a release/update announcement
     pub is_release: bool,
-    /// Final novelty multiplier (0.6 to 1.15)
+    /// Whether this is a security advisory (CVE, vulnerability, patch)
+    pub is_security: bool,
+    /// Final novelty multiplier (0.5 to 1.30)
     pub multiplier: f32,
 }
 
@@ -30,19 +32,30 @@ pub fn compute_novelty(
 ) -> NoveltyScore {
     let is_introductory = detect_introductory(title, content);
     let is_release = detect_release(title, content);
+    let is_security = detect_security(title, content);
 
     // Check if the article is about tech the user already knows
     let about_known_tech = topics.iter().any(|t| user_tech.contains(&t.to_lowercase()));
 
-    let multiplier = if is_release {
-        // Release notes and updates are always high novelty
-        1.15
+    // Dependency-aware novelty: releases/security about YOUR tech get stronger boosts
+    let multiplier = if is_security && about_known_tech {
+        // CVE/vulnerability in YOUR dependency = urgent, must-see
+        1.30
+    } else if is_security {
+        // Security news about unrelated tech = informational
+        1.10
+    } else if is_release && about_known_tech {
+        // Release of YOUR dependency = high value
+        1.25
+    } else if is_release {
+        // Release of unrelated tech = mild interest
+        1.05
     } else if is_introductory && about_known_tech {
-        // "Getting Started with Rust" for a Rust developer = low novelty
-        0.6
+        // "Getting Started with Rust" for a Rust developer = noise
+        0.50
     } else if is_introductory {
-        // Introductory content about unknown tech = mildly penalized
-        0.85
+        // Introductory content about unknown tech = mild penalty
+        0.80
     } else {
         1.0
     };
@@ -50,6 +63,7 @@ pub fn compute_novelty(
     NoveltyScore {
         is_introductory,
         is_release,
+        is_security,
         multiplier,
     }
 }
@@ -180,6 +194,55 @@ fn detect_release(title: &str, content: &str) -> bool {
     false
 }
 
+/// Detect security advisories, CVEs, and vulnerability disclosures.
+/// These get the strongest novelty boost when about the user's dependencies.
+fn detect_security(title: &str, content: &str) -> bool {
+    let lower = title.to_lowercase();
+
+    const SECURITY_PATTERNS: &[&str] = &[
+        "cve-",
+        "security advisory",
+        "security update",
+        "vulnerability",
+        "vulnerabilities",
+        "security patch",
+        "security fix",
+        "supply chain attack",
+        "malicious package",
+        "backdoor",
+        "rce ",
+        "remote code execution",
+        "privilege escalation",
+        "security bulletin",
+    ];
+
+    if SECURITY_PATTERNS.iter().any(|p| lower.contains(p)) {
+        return true;
+    }
+
+    // Content-based security detection
+    if !content.is_empty() {
+        let content_lower = content.to_lowercase();
+        let security_signals = [
+            "cve-",
+            "cvss score",
+            "affected versions",
+            "patch immediately",
+            "security advisory",
+        ];
+        if security_signals
+            .iter()
+            .filter(|p| content_lower.contains(*p))
+            .count()
+            >= 2
+        {
+            return true;
+        }
+    }
+
+    false
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -216,6 +279,24 @@ mod tests {
     }
 
     #[test]
+    fn test_security_detection() {
+        assert!(detect_security(
+            "CVE-2024-1234: Buffer overflow in OpenSSL",
+            ""
+        ));
+        assert!(detect_security(
+            "Security Advisory: Critical vulnerability in tokio",
+            ""
+        ));
+        assert!(detect_security(
+            "Malicious package found in npm registry",
+            ""
+        ));
+        assert!(!detect_security("How to structure Rust projects", ""));
+        assert!(!detect_security("Rust 1.80 Released", ""));
+    }
+
+    #[test]
     fn test_novelty_intro_known_tech() {
         let user_tech = HashSet::from(["rust".to_string(), "tauri".to_string()]);
         let topics = vec!["rust".to_string()];
@@ -223,17 +304,57 @@ mod tests {
         let result = compute_novelty("Getting Started with Rust", "", &topics, &user_tech);
         assert!(result.is_introductory);
         assert!(!result.is_release);
-        assert_eq!(result.multiplier, 0.6);
+        assert_eq!(result.multiplier, 0.50); // Stronger penalty: noise for experts
     }
 
     #[test]
-    fn test_novelty_release_boost() {
+    fn test_novelty_release_known_tech() {
         let user_tech = HashSet::from(["rust".to_string()]);
         let topics = vec!["rust".to_string()];
 
         let result = compute_novelty("Rust 1.80 Released", "", &topics, &user_tech);
         assert!(result.is_release);
-        assert_eq!(result.multiplier, 1.15);
+        assert_eq!(result.multiplier, 1.25); // Stronger boost: YOUR dependency
+    }
+
+    #[test]
+    fn test_novelty_release_unknown_tech() {
+        let user_tech = HashSet::from(["rust".to_string()]);
+        let topics = vec!["python".to_string()];
+
+        let result = compute_novelty("Python 3.14 Released", "", &topics, &user_tech);
+        assert!(result.is_release);
+        assert_eq!(result.multiplier, 1.05); // Mild: informational only
+    }
+
+    #[test]
+    fn test_novelty_security_known_tech() {
+        let user_tech = HashSet::from(["rust".to_string(), "tokio".to_string()]);
+        let topics = vec!["tokio".to_string()];
+
+        let result = compute_novelty(
+            "CVE-2024-9999: Remote code execution in Tokio",
+            "",
+            &topics,
+            &user_tech,
+        );
+        assert!(result.is_security);
+        assert_eq!(result.multiplier, 1.30); // Urgent: YOUR dependency has a CVE
+    }
+
+    #[test]
+    fn test_novelty_security_unknown_tech() {
+        let user_tech = HashSet::from(["rust".to_string()]);
+        let topics = vec!["django".to_string()];
+
+        let result = compute_novelty(
+            "Security Advisory: Django SQL injection",
+            "",
+            &topics,
+            &user_tech,
+        );
+        assert!(result.is_security);
+        assert_eq!(result.multiplier, 1.10); // Informational: not your stack
     }
 
     #[test]
@@ -244,6 +365,7 @@ mod tests {
         let result = compute_novelty("Advanced async patterns in Tokio", "", &topics, &user_tech);
         assert!(!result.is_introductory);
         assert!(!result.is_release);
+        assert!(!result.is_security);
         assert_eq!(result.multiplier, 1.0);
     }
 
@@ -254,6 +376,6 @@ mod tests {
 
         let result = compute_novelty("Getting Started with Python", "", &topics, &user_tech);
         assert!(result.is_introductory);
-        assert_eq!(result.multiplier, 0.85); // Mild penalty for unknown tech intro
+        assert_eq!(result.multiplier, 0.80); // Mild penalty for unknown tech intro
     }
 }

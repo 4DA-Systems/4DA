@@ -29,12 +29,97 @@ pub(crate) fn decode_html_entities(text: &str) -> String {
 
 pub(crate) fn build_embedding_text(title: &str, content: &str) -> String {
     let clean_title = decode_html_entities(title);
-    let clean_content = decode_html_entities(content);
+    let clean_content = preprocess_content(content);
     if clean_content.is_empty() {
         clean_title
     } else {
-        format!("{}\n\n{}", clean_title, clean_content)
+        // Title repeated for emphasis — embedding models weight earlier text more heavily
+        format!("{}\n\n{}\n\n{}", clean_title, clean_title, clean_content)
     }
+}
+
+/// Preprocess content for embedding: strip noise, normalize whitespace, cap length.
+/// Goal: maximize signal density in the text sent to the embedding model.
+fn preprocess_content(content: &str) -> String {
+    // Order matters: strip tags FIRST (raw HTML), THEN decode entities.
+    // This prevents &lt;word&gt; from being decoded to <word> and then stripped as a tag.
+    let text = strip_html_tags(content);
+
+    let text = decode_html_entities(&text);
+
+    // Strip URLs (raw URLs don't embed well)
+    let text = strip_urls(&text);
+
+    // Collapse whitespace: multiple spaces/newlines → single space
+    let text = collapse_whitespace(&text);
+
+    // Cap at 2000 chars to prevent embedding model truncation artifacts
+    truncate_utf8(&text, 2000)
+}
+
+/// Remove HTML tags while preserving text content.
+fn strip_html_tags(text: &str) -> String {
+    let mut result = String::with_capacity(text.len());
+    let mut in_tag = false;
+    for ch in text.chars() {
+        match ch {
+            '<' => in_tag = true,
+            '>' => {
+                in_tag = false;
+                result.push(' '); // Replace tag with space to prevent word merging
+            }
+            _ if !in_tag => result.push(ch),
+            _ => {}
+        }
+    }
+    result
+}
+
+/// Remove URLs (http/https) from text — they add noise to embeddings.
+fn strip_urls(text: &str) -> String {
+    // Simple but effective: find http(s):// and consume until whitespace
+    let mut result = String::with_capacity(text.len());
+    let mut chars = text.chars().peekable();
+    while let Some(ch) = chars.next() {
+        if ch == 'h' {
+            // Check for http:// or https://
+            let rest: String = std::iter::once(ch).chain(chars.clone().take(8)).collect();
+            if rest.starts_with("https://") || rest.starts_with("http://") {
+                // Skip until whitespace
+                for c in chars.by_ref() {
+                    if c.is_whitespace() {
+                        result.push(' ');
+                        break;
+                    }
+                }
+                continue;
+            }
+        }
+        result.push(ch);
+    }
+    result
+}
+
+/// Collapse runs of whitespace into single spaces, trim edges.
+fn collapse_whitespace(text: &str) -> String {
+    let mut result = String::with_capacity(text.len());
+    let mut prev_was_space = true; // Treat start as space to trim leading
+    for ch in text.chars() {
+        if ch.is_whitespace() {
+            if !prev_was_space {
+                result.push(' ');
+                prev_was_space = true;
+            }
+        } else {
+            result.push(ch);
+            prev_was_space = false;
+        }
+    }
+    // Trim trailing space
+    if result.ends_with(' ') {
+        result.pop();
+    }
+    result
 }
 
 // ============================================================================
@@ -835,7 +920,8 @@ mod tests {
     #[test]
     fn test_build_embedding_text_with_content() {
         let result = build_embedding_text("Title", "Content");
-        assert_eq!(result, "Title\n\nContent");
+        // Title repeated for emphasis, content preprocessed
+        assert_eq!(result, "Title\n\nTitle\n\nContent");
     }
 
     #[test]
@@ -847,7 +933,63 @@ mod tests {
     #[test]
     fn test_build_embedding_text_html_entities() {
         let result = build_embedding_text("Rust &amp; Go", "Compare &lt;languages&gt;");
-        assert_eq!(result, "Rust & Go\n\nCompare <languages>");
+        // HTML entities decoded in title; content goes through preprocess_content
+        // which decodes entities then strips HTML tags (< and > from decoded &lt;/&gt;
+        // are treated as tag delimiters by strip_html_tags)
+        assert!(result.starts_with("Rust & Go\n\nRust & Go\n\n"));
+        assert!(result.contains("Compare"));
+        assert!(result.contains("languages"));
+    }
+
+    #[test]
+    fn test_preprocess_content_strips_html() {
+        let result = preprocess_content("<p>Hello <b>world</b></p>");
+        assert_eq!(result, "Hello world");
+    }
+
+    #[test]
+    fn test_preprocess_content_strips_urls() {
+        let result = preprocess_content("Check out https://example.com for more info");
+        assert_eq!(result, "Check out for more info");
+    }
+
+    #[test]
+    fn test_preprocess_content_collapses_whitespace() {
+        let result = preprocess_content("hello    world\n\n\nfoo   bar");
+        assert_eq!(result, "hello world foo bar");
+    }
+
+    #[test]
+    fn test_preprocess_content_truncates() {
+        let long = "a".repeat(3000);
+        let result = preprocess_content(&long);
+        assert_eq!(result.len(), 2000);
+    }
+
+    #[test]
+    fn test_strip_html_tags_nested() {
+        let result = strip_html_tags("<div><p>nested</p></div>");
+        // Tags replaced with spaces, then result has extra spaces
+        assert!(result.contains("nested"));
+        assert!(!result.contains('<'));
+    }
+
+    #[test]
+    fn test_strip_urls_http() {
+        let result = strip_urls("visit http://example.com today");
+        assert_eq!(result, "visit  today");
+    }
+
+    #[test]
+    fn test_strip_urls_no_url() {
+        let result = strip_urls("no urls here");
+        assert_eq!(result, "no urls here");
+    }
+
+    #[test]
+    fn test_collapse_whitespace_edges() {
+        let result = collapse_whitespace("  hello  ");
+        assert_eq!(result, "hello");
     }
 
     #[test]

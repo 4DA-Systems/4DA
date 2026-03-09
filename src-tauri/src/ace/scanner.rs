@@ -308,10 +308,10 @@ impl ProjectScanner {
             ("tonic", "grpc/tonic"),
         ];
 
+        let dep_lower = dep.to_lowercase();
         for (pattern, framework) in frameworks {
-            if dep.to_lowercase().contains(pattern)
-                && !signal.frameworks.contains(&framework.to_string())
-            {
+            let matches = dep_lower == pattern || dep_lower.starts_with(&format!("{}-", pattern));
+            if matches && !signal.frameworks.contains(&framework.to_string()) {
                 signal.frameworks.push(framework.to_string());
             }
         }
@@ -365,10 +365,12 @@ impl ProjectScanner {
             ("electron", "electron"),
         ];
 
+        let dep_lower = dep.to_lowercase();
         for (pattern, framework) in frameworks {
-            if dep.to_lowercase().contains(pattern)
-                && !signal.frameworks.contains(&framework.to_string())
-            {
+            let matches = dep_lower == pattern
+                || dep_lower.starts_with(&format!("{}-", pattern))
+                || dep_lower.ends_with(&format!("/{}", pattern));
+            if matches && !signal.frameworks.contains(&framework.to_string()) {
                 signal.frameworks.push(framework.to_string());
             }
         }
