@@ -345,12 +345,10 @@ pub(crate) async fn fetch_all_sources(
                             "reason": "No embedding provider available"
                         }),
                     );
-                } else {
-                    if let Err(e) =
-                        app.emit("embedding-mode", serde_json::json!({ "mode": "semantic" }))
-                    {
-                        tracing::warn!("Failed to emit 'embedding-mode': {e}");
-                    }
+                } else if let Err(e) =
+                    app.emit("embedding-mode", serde_json::json!({ "mode": "semantic" }))
+                {
+                    tracing::warn!("Failed to emit 'embedding-mode': {e}");
                 }
                 emb
             }

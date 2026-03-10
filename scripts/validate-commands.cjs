@@ -246,7 +246,9 @@ function main() {
   } else {
     console.log(`Found ${issues} cross-reference issue(s) and ${rawInvokes.length} raw invoke(s).`);
   }
+
+  return issues > 0 ? 1 : 0;
 }
 
-main();
-process.exit(0);
+const exitCode = main();
+process.exit(exitCode);

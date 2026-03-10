@@ -18,7 +18,7 @@ impl PdfExtractor {
 
     /// Extract text from a PDF file using pdf-extract
     fn extract_text(&self, path: &Path) -> Result<String> {
-        Ok(pdf_extract::extract_text(path).context("Failed to extract text from PDF")?)
+        pdf_extract::extract_text(path).context("Failed to extract text from PDF")
     }
 
     /// Extract metadata from a PDF using lopdf
