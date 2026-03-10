@@ -38,6 +38,22 @@ export interface ChainLink {
   description: string;
 }
 
+// Chain Prediction
+export type ChainPhase = 'nascent' | 'active' | 'escalating' | 'peak' | 'resolving';
+
+export interface ChainPrediction {
+  phase: ChainPhase;
+  intervals_hours: number[];
+  acceleration: number;
+  predicted_next_hours: number | null;
+  confidence: number;
+  forecast: string;
+}
+
+export interface SignalChainWithPrediction extends SignalChain {
+  prediction: ChainPrediction;
+}
+
 // Semantic Diff
 export interface SemanticShift {
   topic: string;

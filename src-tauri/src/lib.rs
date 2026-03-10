@@ -135,6 +135,7 @@ mod diagnostics;
 mod digest;
 mod digest_commands;
 mod digest_config;
+mod digest_email;
 mod domain_profile;
 mod domain_profile_data;
 pub mod extractors;
@@ -258,6 +259,7 @@ mod source_config;
 mod source_fetching;
 pub mod sources;
 mod standing_queries;
+mod startup_health;
 mod suns;
 mod suns_commands;
 mod tech_radar;
@@ -358,6 +360,8 @@ mod privacy_tests;
 #[cfg(test)]
 mod privacy_tests_exports;
 #[cfg(test)]
+mod startup_health_tests;
+#[cfg(test)]
 mod utils_edge_tests;
 
 // ============================================================================
@@ -441,6 +445,9 @@ pub fn run() {
         (count, names)
     };
     info!(target: "4da::startup", count = source_count, sources = %source_names.join(", "), "Sources registered");
+
+    // Run startup health self-check (fast, offline, infallible)
+    let _startup_issues = startup_health::run_startup_health_check();
 
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
@@ -539,6 +546,8 @@ pub fn run() {
             digest_config::set_digest_config,
             digest_commands::generate_ai_briefing,
             digest_commands::get_latest_briefing,
+            digest_email::test_digest_email,
+            digest_email::set_digest_email_config,
             free_briefing::generate_free_briefing,
             // Content
             commands::get_sources,
@@ -550,12 +559,14 @@ pub fn run() {
             attention::get_attention_report,
             knowledge_decay::get_knowledge_gaps,
             signal_chains::get_signal_chains,
+            signal_chains::get_signal_chains_predicted,
             signal_chains::resolve_signal_chain,
             semantic_diff::get_semantic_shifts,
             project_health::get_project_health,
             developer_dna::get_developer_dna,
             developer_dna::export_developer_dna_markdown,
             developer_dna::export_developer_dna_svg,
+            developer_dna::export_developer_dna_card,
             // Content (article reader, AI summaries, saved items)
             content_commands::get_item_content,
             content_commands::get_item_summary,
@@ -644,6 +655,7 @@ pub fn run() {
             templates::get_template_content,
             // Diagnostics
             commands::get_diagnostics,
+            startup_health::get_startup_health,
             // Autophagy (intelligent content metabolism)
             autophagy_commands::get_autophagy_status,
             autophagy_commands::get_autophagy_history,

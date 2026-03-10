@@ -495,6 +495,216 @@ pub async fn export_developer_dna_svg() -> Result<String> {
     Ok(export_as_svg(&dna))
 }
 
+/// Export Developer DNA as a professional 800×420 card (premium shareable format)
+#[tauri::command]
+pub async fn export_developer_dna_card() -> Result<String> {
+    crate::settings::require_pro_feature("export_developer_dna_card")?;
+    let dna = generate_dna()?;
+    Ok(export_as_card_svg(&dna))
+}
+
+/// Professional 800×420 Developer DNA card — designed for social sharing, portfolios, READMEs.
+/// Dark theme with gold accent, structured layout, elegant typography.
+pub fn export_as_card_svg(dna: &DeveloperDna) -> String {
+    let date = if dna.generated_at.len() >= 10 {
+        &dna.generated_at[..10]
+    } else {
+        &dna.generated_at
+    };
+    let identity = xml_escape(&dna.identity_summary);
+    let stats = &dna.stats;
+
+    // --- Header section ---
+    let header = format!(
+        r##"  <!-- Header -->
+  <rect x="0" y="0" width="800" height="60" fill="#0D0D0D"/>
+  <text x="32" y="36" fill="#D4AF37" font-family="'JetBrains Mono', 'SF Mono', monospace" font-size="11" font-weight="500" letter-spacing="0.15em">DEVELOPER DNA</text>
+  <text x="768" y="36" fill="#444" font-family="'Inter', -apple-system, sans-serif" font-size="11" text-anchor="end">{date}</text>
+  <line x1="32" y1="56" x2="768" y2="56" stroke="#222" stroke-width="1"/>"##,
+        date = date,
+    );
+
+    // --- Identity section ---
+    let identity_section = format!(
+        r##"  <!-- Identity -->
+  <text x="32" y="92" fill="#FFF" font-family="'Inter', -apple-system, sans-serif" font-size="22" font-weight="600">{identity}</text>"##,
+        identity = identity,
+    );
+
+    // --- Tech stack pills ---
+    let pills = build_card_pills(&dna.primary_stack, 32.0, 112.0);
+
+    // --- Stats grid (4 columns) ---
+    let stats_section = format!(
+        r##"  <!-- Stats -->
+  <g transform="translate(32,160)">
+    <rect x="0" y="0" width="170" height="64" rx="6" fill="#141414" stroke="#1F1F1F"/>
+    <text x="16" y="28" fill="#FFF" font-family="'JetBrains Mono', monospace" font-size="20" font-weight="600">{days}</text>
+    <text x="16" y="48" fill="#666" font-family="'Inter', sans-serif" font-size="11">days active</text>
+
+    <rect x="186" y="0" width="170" height="64" rx="6" fill="#141414" stroke="#1F1F1F"/>
+    <text x="202" y="28" fill="#FFF" font-family="'JetBrains Mono', monospace" font-size="20" font-weight="600">{projects}</text>
+    <text x="202" y="48" fill="#666" font-family="'Inter', sans-serif" font-size="11">projects scanned</text>
+
+    <rect x="372" y="0" width="170" height="64" rx="6" fill="#141414" stroke="#1F1F1F"/>
+    <text x="388" y="28" fill="#D4AF37" font-family="'JetBrains Mono', monospace" font-size="20" font-weight="600">{rejection}%</text>
+    <text x="388" y="48" fill="#666" font-family="'Inter', sans-serif" font-size="11">noise rejected</text>
+
+    <rect x="558" y="0" width="178" height="64" rx="6" fill="#141414" stroke="#1F1F1F"/>
+    <text x="574" y="28" fill="#FFF" font-family="'JetBrains Mono', monospace" font-size="20" font-weight="600">{deps}</text>
+    <text x="574" y="48" fill="#666" font-family="'Inter', sans-serif" font-size="11">dependencies</text>
+  </g>"##,
+        days = stats.days_active,
+        projects = stats.project_count,
+        rejection = format!("{:.1}", stats.rejection_rate),
+        deps = stats.dependency_count,
+    );
+
+    // --- Topic engagement bars ---
+    let topics_section = build_card_topics(&dna.top_engaged_topics);
+
+    // --- Source engagement row ---
+    let sources_section = build_card_sources(&dna.source_engagement);
+
+    // --- Footer ---
+    let footer = r##"  <!-- Footer -->
+  <line x1="32" y1="390" x2="768" y2="390" stroke="#1F1F1F" stroke-width="1"/>
+  <text x="32" y="410" fill="#444" font-family="'Inter', sans-serif" font-size="11">4da.ai</text>
+  <text x="768" y="410" fill="#333" font-family="'Inter', sans-serif" font-size="11" text-anchor="end">All signal. No feed.</text>"##;
+
+    format!(
+        r##"<svg xmlns="http://www.w3.org/2000/svg" width="800" height="420" viewBox="0 0 800 420">
+  <defs>
+    <linearGradient id="cardBg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#0A0A0A"/>
+      <stop offset="100%" stop-color="#080808"/>
+    </linearGradient>
+  </defs>
+  <rect width="800" height="420" rx="12" fill="url(#cardBg)" stroke="#1A1A1A"/>
+{header}
+{identity}
+{pills}
+{stats}
+{topics}
+{sources}
+{footer}
+</svg>"##,
+        header = header,
+        identity = identity_section,
+        pills = pills,
+        stats = stats_section,
+        topics = topics_section,
+        sources = sources_section,
+        footer = footer,
+    )
+}
+
+/// Build professional tech stack pills for the card
+fn build_card_pills(stack: &[String], start_x: f64, y: f64) -> String {
+    if stack.is_empty() {
+        return String::new();
+    }
+
+    let mut svg = format!(
+        r#"  <g transform="translate({},{})">
+"#,
+        start_x, y
+    );
+
+    let mut x: f64 = 0.0;
+    for tech in stack.iter().take(8) {
+        let label = capitalize(tech);
+        let escaped = xml_escape(&label);
+        let text_width = label.len() as f64 * 7.2;
+        let pill_width = text_width + 18.0;
+
+        svg.push_str(&format!(
+            r##"    <rect x="{x}" y="0" width="{w}" height="24" rx="12" fill="#1A1A1A" stroke="#2A2A2A"/>
+    <text x="{tx}" y="16" fill="#A0A0A0" font-family="'JetBrains Mono', monospace" font-size="11">{label}</text>
+"##,
+            x = x, w = pill_width, tx = x + 9.0, label = escaped,
+        ));
+        x += pill_width + 8.0;
+    }
+
+    svg.push_str("  </g>");
+    svg
+}
+
+/// Build horizontal topic engagement bars for the card
+fn build_card_topics(topics: &[EngagedTopic]) -> String {
+    if topics.is_empty() {
+        return String::new();
+    }
+
+    let top = topics.iter().take(4).collect::<Vec<_>>();
+    let max_pct = top
+        .iter()
+        .map(|t| t.percent_of_total)
+        .fold(0.0_f32, f32::max);
+
+    let mut svg = String::from("  <!-- Topics -->\n  <g transform=\"translate(32,244)\">\n");
+    svg.push_str("    <text x=\"0\" y=\"-6\" fill=\"#555\" font-family=\"'Inter', sans-serif\" font-size=\"10\" letter-spacing=\"0.05em\">ATTENTION DISTRIBUTION</text>\n");
+
+    for (i, topic) in top.iter().enumerate() {
+        let y_offset = i as f64 * 28.0;
+        let bar_width = if max_pct > 0.0 {
+            (topic.percent_of_total / max_pct) * 500.0
+        } else {
+            100.0
+        };
+        let label = capitalize(&topic.topic);
+        let escaped = xml_escape(&label);
+
+        svg.push_str(&format!(
+            r##"    <text x="0" y="{ty}" fill="#888" font-family="'Inter', sans-serif" font-size="11" dominant-baseline="middle">{label}</text>
+    <rect x="120" y="{ry}" width="{bw}" height="14" rx="3" fill="#1F1F1F"/>
+    <rect x="120" y="{ry}" width="{fw}" height="14" rx="3" fill="{color}" opacity="0.7"/>
+    <text x="{px}" y="{ty}" fill="#666" font-family="'JetBrains Mono', monospace" font-size="10" dominant-baseline="middle">{pct}%</text>
+"##,
+            ty = y_offset + 14.0,
+            ry = y_offset + 7.0,
+            label = escaped,
+            bw = 500.0,
+            fw = bar_width,
+            color = ["#D4AF37", "#F97316", "#22C55E", "#3B82F6"][i % 4],
+            px = 630.0,
+            pct = format!("{:.0}", topic.percent_of_total),
+        ));
+    }
+
+    svg.push_str("  </g>");
+    svg
+}
+
+/// Build source engagement chips for the card
+fn build_card_sources(sources: &[SourceEngagement]) -> String {
+    if sources.is_empty() {
+        return String::new();
+    }
+
+    let mut svg = String::from("  <!-- Sources -->\n  <g transform=\"translate(32,370)\">\n");
+
+    let mut x = 0.0_f64;
+    for src in sources.iter().take(6) {
+        let label = format!("{} ({})", src.source_type.to_uppercase(), src.items_seen);
+        let escaped = xml_escape(&label);
+        let text_width = label.len() as f64 * 5.8;
+        let chip_width = text_width + 16.0;
+
+        svg.push_str(&format!(
+            r##"    <rect x="{x}" y="0" width="{w}" height="18" rx="4" fill="#141414" stroke="#1F1F1F"/>
+    <text x="{tx}" y="13" fill="#555" font-family="'JetBrains Mono', monospace" font-size="9">{label}</text>
+"##,
+            x = x, w = chip_width, tx = x + 8.0, label = escaped,
+        ));
+        x += chip_width + 6.0;
+    }
+
+    svg.push_str("  </g>");
+    svg
+}
+
 /// Export Developer DNA as a shareable SVG badge (GitHub stats card style)
 pub fn export_as_svg(dna: &DeveloperDna) -> String {
     let date = if dna.generated_at.len() >= 10 {
@@ -788,5 +998,102 @@ mod tests {
         assert!(svg.contains("4da.dev"));
         assert!(svg.contains("2026-02-17"));
         assert!(svg.ends_with("</svg>"));
+    }
+
+    #[test]
+    fn test_export_card_svg_structure() {
+        let dna = DeveloperDna {
+            generated_at: "2026-03-10T00:00:00Z".to_string(),
+            primary_stack: vec!["rust".to_string(), "typescript".to_string()],
+            adjacent_tech: vec!["cargo".to_string()],
+            top_dependencies: vec![DependencyEntry {
+                name: "tauri".to_string(),
+                project_path: "/test".to_string(),
+            }],
+            interests: vec!["systems programming".to_string()],
+            top_engaged_topics: vec![
+                EngagedTopic {
+                    topic: "rust".to_string(),
+                    interactions: 50,
+                    percent_of_total: 45.0,
+                },
+                EngagedTopic {
+                    topic: "typescript".to_string(),
+                    interactions: 30,
+                    percent_of_total: 27.0,
+                },
+                EngagedTopic {
+                    topic: "webassembly".to_string(),
+                    interactions: 10,
+                    percent_of_total: 9.0,
+                },
+            ],
+            blind_spots: vec![],
+            source_engagement: vec![
+                SourceEngagement {
+                    source_type: "hn".to_string(),
+                    items_seen: 500,
+                    items_saved: 25,
+                    engagement_rate: 5.0,
+                },
+                SourceEngagement {
+                    source_type: "github".to_string(),
+                    items_seen: 200,
+                    items_saved: 40,
+                    engagement_rate: 20.0,
+                },
+            ],
+            stats: DnaStats {
+                total_items_processed: 8000,
+                total_relevant: 80,
+                rejection_rate: 99.0,
+                project_count: 5,
+                dependency_count: 180,
+                days_active: 45,
+            },
+            identity_summary: "Rust/Typescript desktop developer".to_string(),
+        };
+
+        let svg = export_as_card_svg(&dna);
+        assert!(svg.starts_with("<svg"));
+        assert!(svg.contains("width=\"800\""));
+        assert!(svg.contains("height=\"420\""));
+        assert!(svg.contains("DEVELOPER DNA"));
+        assert!(svg.contains("Rust/Typescript desktop developer"));
+        assert!(svg.contains("45")); // days active
+        assert!(svg.contains("99.0%")); // rejection rate
+        assert!(svg.contains("ATTENTION DISTRIBUTION"));
+        assert!(svg.contains("4da.ai"));
+        assert!(svg.contains("All signal. No feed."));
+        assert!(svg.ends_with("</svg>"));
+    }
+
+    #[test]
+    fn test_card_svg_empty_data() {
+        let dna = DeveloperDna {
+            generated_at: "2026-03-10T00:00:00Z".to_string(),
+            primary_stack: vec![],
+            adjacent_tech: vec![],
+            top_dependencies: vec![],
+            interests: vec![],
+            top_engaged_topics: vec![],
+            blind_spots: vec![],
+            source_engagement: vec![],
+            stats: DnaStats {
+                total_items_processed: 0,
+                total_relevant: 0,
+                rejection_rate: 0.0,
+                project_count: 0,
+                dependency_count: 0,
+                days_active: 0,
+            },
+            identity_summary: "Developer (no stack configured yet)".to_string(),
+        };
+
+        let svg = export_as_card_svg(&dna);
+        assert!(svg.starts_with("<svg"));
+        assert!(svg.ends_with("</svg>"));
+        // Should still render without crashing on empty data
+        assert!(svg.contains("DEVELOPER DNA"));
     }
 }

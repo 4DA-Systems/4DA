@@ -13,7 +13,6 @@ export const DeveloperDnaPanel = memo(function DeveloperDnaPanel() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
-  const [badgeCopied, setBadgeCopied] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const loaded = useRef(false);
 
@@ -42,28 +41,45 @@ export const DeveloperDnaPanel = memo(function DeveloperDnaPanel() {
     }
   };
 
-  const copyBadge = async () => {
+  const downloadCard = async (format: 'svg' | 'png') => {
     try {
-      const svg = await cmd('export_developer_dna_svg');
-      await window.navigator.clipboard.writeText(svg);
-      setBadgeCopied(true);
-      setTimeout(() => setBadgeCopied(false), 2000);
+      const svg = await cmd('export_developer_dna_card');
+      if (format === 'svg') {
+        const blob = new Blob([svg], { type: 'image/svg+xml' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'developer-dna-card.svg';
+        a.click();
+        URL.revokeObjectURL(url);
+      } else {
+        // Rasterize SVG to PNG via canvas
+        const canvas = document.createElement('canvas');
+        canvas.width = 1600; // 2x for retina
+        canvas.height = 840;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return;
+        const img = document.createElement('img');
+        const svgBlob = new Blob([svg], { type: 'image/svg+xml;charset=utf-8' });
+        const svgUrl = URL.createObjectURL(svgBlob);
+        img.onload = () => {
+          ctx.drawImage(img, 0, 0, 1600, 840);
+          URL.revokeObjectURL(svgUrl);
+          canvas.toBlob((blob) => {
+            if (!blob) return;
+            const pngUrl = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = pngUrl;
+            a.download = 'developer-dna-card.png';
+            a.click();
+            URL.revokeObjectURL(pngUrl);
+          }, 'image/png');
+        };
+        img.src = svgUrl;
+      }
+      addToast('success', t('dna.cardDownloaded'));
     } catch {
-      // Clipboard may not be available
-    }
-  };
-
-  const downloadBadge = async () => {
-    try {
-      const svg = await cmd('export_developer_dna_svg');
-      const blob = new Blob([svg], { type: 'image/svg+xml' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.click();
-      URL.revokeObjectURL(url);
-    } catch {
-      // Download may fail in some contexts
+      addToast('error', t('dna.cardDownloadFailed'));
     }
   };
 
@@ -136,22 +152,22 @@ export const DeveloperDnaPanel = memo(function DeveloperDnaPanel() {
                 </div>
                 <div className="flex gap-2">
                   <button
+                    onClick={() => downloadCard('png')}
+                    className="px-3 py-1.5 text-xs bg-[#D4AF37]/10 hover:bg-[#D4AF37]/20 border border-[#D4AF37]/30 rounded-lg text-[#D4AF37] transition-colors font-medium"
+                  >
+                    {t('dna.downloadPng')}
+                  </button>
+                  <button
+                    onClick={() => downloadCard('svg')}
+                    className="px-3 py-1.5 text-xs bg-white/10 hover:bg-white/15 text-white border border-white/20 rounded-lg transition-colors"
+                  >
+                    {t('dna.downloadSvg')}
+                  </button>
+                  <button
                     onClick={handleCopyCard}
-                    className="px-3 py-1.5 text-xs bg-white/10 hover:bg-white/15 text-white border border-white/20 rounded-lg transition-colors font-medium"
-                  >
-                    {t('dna.copyDna')}
-                  </button>
-                  <button
-                    onClick={copyBadge}
-                    className="px-3 py-1.5 text-xs bg-orange-500/10 hover:bg-orange-500/20 border border-orange-500/30 rounded-lg text-orange-400 transition-colors"
-                  >
-                    {badgeCopied ? t('action.copied') : t('dna.copySvgBadge')}
-                  </button>
-                  <button
-                    onClick={downloadBadge}
                     className="px-3 py-1.5 text-xs bg-bg-tertiary hover:bg-border border border-border rounded-lg text-text-secondary transition-colors"
                   >
-                    {t('dna.downloadBadge')}
+                    {t('dna.copyDna')}
                   </button>
                   <button
                     onClick={copyAsMarkdown}

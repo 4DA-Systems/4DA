@@ -382,3 +382,193 @@ fn resolve_chain_records_temporal_event() {
     assert_eq!(parsed["chain_id"], "chain_test_123");
     assert_eq!(parsed["resolution"], "resolved");
 }
+
+// ---- Chain prediction tests ----
+
+#[test]
+fn predict_nascent_chain() {
+    let chain = SignalChain {
+        id: "test".to_string(),
+        chain_name: "test chain".to_string(),
+        links: vec![ChainLink {
+            signal_type: "learning".to_string(),
+            source_item_id: 1,
+            title: "Single event".to_string(),
+            timestamp: "2026-03-01T10:00:00Z".to_string(),
+            description: "desc".to_string(),
+        }],
+        overall_priority: "low".to_string(),
+        resolution: ChainResolution::Open,
+        suggested_action: "watch".to_string(),
+        created_at: "2026-03-01T10:00:00Z".to_string(),
+        updated_at: "2026-03-01T10:00:00Z".to_string(),
+    };
+
+    let pred = predict_chain_lifecycle(&chain);
+    assert_eq!(pred.phase, ChainPhase::Nascent);
+    assert!(pred.confidence < 0.2);
+    assert!(pred.intervals_hours.is_empty());
+}
+
+#[test]
+fn predict_active_chain() {
+    let chain = SignalChain {
+        id: "test".to_string(),
+        chain_name: "rust chain".to_string(),
+        links: vec![
+            ChainLink {
+                signal_type: "learning".to_string(),
+                source_item_id: 1,
+                title: "Event 1".to_string(),
+                timestamp: "2026-03-01T10:00:00Z".to_string(),
+                description: "desc".to_string(),
+            },
+            ChainLink {
+                signal_type: "learning".to_string(),
+                source_item_id: 2,
+                title: "Event 2".to_string(),
+                timestamp: "2026-03-02T10:00:00Z".to_string(),
+                description: "desc".to_string(),
+            },
+            ChainLink {
+                signal_type: "learning".to_string(),
+                source_item_id: 3,
+                title: "Event 3".to_string(),
+                timestamp: "2026-03-03T10:00:00Z".to_string(),
+                description: "desc".to_string(),
+            },
+        ],
+        overall_priority: "low".to_string(),
+        resolution: ChainResolution::Open,
+        suggested_action: "watch".to_string(),
+        created_at: "2026-03-01T10:00:00Z".to_string(),
+        updated_at: "2026-03-03T10:00:00Z".to_string(),
+    };
+
+    let pred = predict_chain_lifecycle(&chain);
+    assert_eq!(pred.phase, ChainPhase::Active);
+    assert_eq!(pred.intervals_hours.len(), 2);
+    // Each interval should be ~24 hours
+    for interval in &pred.intervals_hours {
+        assert!(
+            *interval > 23.0 && *interval < 25.0,
+            "Expected ~24h interval, got {}",
+            interval
+        );
+    }
+    assert!(
+        pred.acceleration.abs() < 1.0,
+        "Uniform intervals should have near-zero acceleration"
+    );
+    assert!(pred.predicted_next_hours.is_some());
+}
+
+#[test]
+fn predict_escalating_chain() {
+    // Intervals shrinking: 48h, 24h, 12h, 6h — clearly accelerating
+    let chain = SignalChain {
+        id: "test".to_string(),
+        chain_name: "security chain".to_string(),
+        links: vec![
+            ChainLink {
+                signal_type: "security_alert".to_string(),
+                source_item_id: 1,
+                title: "CVE reported".to_string(),
+                timestamp: "2026-03-01T00:00:00Z".to_string(),
+                description: "desc".to_string(),
+            },
+            ChainLink {
+                signal_type: "security_alert".to_string(),
+                source_item_id: 2,
+                title: "Patch discussion".to_string(),
+                timestamp: "2026-03-03T00:00:00Z".to_string(),
+                description: "desc".to_string(),
+            },
+            ChainLink {
+                signal_type: "tool_discovery".to_string(),
+                source_item_id: 3,
+                title: "Patch released".to_string(),
+                timestamp: "2026-03-04T00:00:00Z".to_string(),
+                description: "desc".to_string(),
+            },
+            ChainLink {
+                signal_type: "learning".to_string(),
+                source_item_id: 4,
+                title: "Migration guide".to_string(),
+                timestamp: "2026-03-04T12:00:00Z".to_string(),
+                description: "desc".to_string(),
+            },
+            ChainLink {
+                signal_type: "learning".to_string(),
+                source_item_id: 5,
+                title: "Teams adopting fix".to_string(),
+                timestamp: "2026-03-04T18:00:00Z".to_string(),
+                description: "desc".to_string(),
+            },
+        ],
+        overall_priority: "critical".to_string(),
+        resolution: ChainResolution::Open,
+        suggested_action: "act now".to_string(),
+        created_at: "2026-03-01T00:00:00Z".to_string(),
+        updated_at: "2026-03-04T18:00:00Z".to_string(),
+    };
+
+    let pred = predict_chain_lifecycle(&chain);
+    // Should be escalating or peak (intervals are shrinking rapidly)
+    assert!(
+        pred.phase == ChainPhase::Escalating || pred.phase == ChainPhase::Peak,
+        "Expected Escalating or Peak, got {:?}",
+        pred.phase
+    );
+    assert!(
+        pred.acceleration < 0.0,
+        "Shrinking intervals should give negative acceleration"
+    );
+    assert!(pred.forecast.contains("security chain"));
+}
+
+#[test]
+fn compute_acceleration_uniform() {
+    let intervals = vec![24.0, 24.0, 24.0];
+    let acc = compute_acceleration(&intervals);
+    assert!(
+        acc.abs() < 0.01,
+        "Uniform intervals should have ~0 acceleration, got {}",
+        acc
+    );
+}
+
+#[test]
+fn compute_acceleration_speeding_up() {
+    let intervals = vec![48.0, 24.0, 12.0, 6.0];
+    let acc = compute_acceleration(&intervals);
+    assert!(
+        acc < -5.0,
+        "Shrinking intervals should have strong negative acceleration, got {}",
+        acc
+    );
+}
+
+#[test]
+fn compute_confidence_more_data() {
+    let low = compute_confidence(2, &[24.0]);
+    let high = compute_confidence(6, &[24.0, 24.0, 24.0, 24.0, 24.0]);
+    assert!(high > low, "More data should give higher confidence");
+}
+
+#[test]
+fn chain_phase_serde_roundtrip() {
+    let phases = vec![
+        (ChainPhase::Nascent, "\"nascent\""),
+        (ChainPhase::Active, "\"active\""),
+        (ChainPhase::Escalating, "\"escalating\""),
+        (ChainPhase::Peak, "\"peak\""),
+        (ChainPhase::Resolving, "\"resolving\""),
+    ];
+    for (phase, expected_json) in phases {
+        let json = serde_json::to_string(&phase).unwrap();
+        assert_eq!(json, expected_json);
+        let deserialized: ChainPhase = serde_json::from_str(&json).unwrap();
+        assert_eq!(deserialized, phase);
+    }
+}
