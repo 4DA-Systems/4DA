@@ -61,7 +61,7 @@ export function ProInsightRow({ item }: ProInsightRowProps) {
         <InlineTrialStart score={item.top_score} />
       ) : (
         <a
-          href="https://4da.ai/streets"
+          href="https://4da.ai/pricing"
           target="_blank"
           rel="noopener noreferrer"
           className="inline-flex items-center gap-0.5 text-[10px] text-[#D4AF37]/50 hover:text-[#D4AF37] transition-colors ml-auto"

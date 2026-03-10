@@ -26,9 +26,9 @@
   "streets.lessonCount": "{{count}} lesson",
   "streets.lessonCount_plural": "{{count}} lessons",
   "streets.freeForever": "All 7 modules. Free forever.",
-  "streets.wantCoaching": "Want AI coaching?",
-  "streets.coachingDescription": "Get personalized engine analysis, strategy generation, and launch reviews.",
-  "streets.upgrade": "Upgrade -- $29/mo",
+  "streets.wantCoaching": "Want more from 4DA?",
+  "streets.coachingDescription": "Unlock advanced scoring, priority sources, and team features.",
+  "streets.upgrade": "Upgrade to Signal — $12/mo",
   "streets.selectModule": "Select a module from the sidebar to begin.",
   "streets.selectModuleDescription": "Seven modules to build independent developer income.",
   "streets.startWith": "Start with Sovereign Setup",
@@ -37,6 +37,7 @@
   "streets.currentTier": "Current tier:",
   "streets.enterLicenseKey": "Enter STREETS license key",
   "streets.tierPlaybook": "Playbook (Free)",
-  "streets.tierCommunity": "Community",
-  "streets.tierCohort": "Cohort"
+  "streets.tierSignal": "Signal",
+  "streets.tierTeam": "Team",
+  "streets.tierEnterprise": "Enterprise"
 }

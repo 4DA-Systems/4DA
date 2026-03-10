@@ -117,7 +117,7 @@ export const PlaybookSidebar = memo(function PlaybookSidebar({
               {t('streets:streets.coachingDescription')}
             </p>
             <a
-              href="https://4da.ai/streets"
+              href="https://4da.ai/pricing"
               target="_blank"
               rel="noopener noreferrer"
               className="block text-center px-3 py-1.5 text-[10px] font-medium text-black bg-[#D4AF37] rounded hover:bg-[#C4A030] transition-colors"
