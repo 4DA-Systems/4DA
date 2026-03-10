@@ -73,8 +73,9 @@ pub async fn activate_license(license_key: String) -> Result<serde_json::Value> 
         // Self-signed ed25519 key
         let payload = crate::settings::verify_license_key(&license_key)?;
         effective_tier = match payload.tier.as_str() {
-            "pro" | "team" => payload.tier.clone(),
-            "community" | "cohort" => "pro".to_string(),
+            "signal" | "team" | "enterprise" => payload.tier.clone(),
+            // Legacy: "pro", "community", "cohort" all map to "signal"
+            "pro" | "community" | "cohort" => "signal".to_string(),
             _ => payload.tier.clone(),
         };
         email = Some(payload.email);
@@ -492,95 +493,7 @@ pub async fn get_context_stats() -> Result<serde_json::Value> {
     }))
 }
 
-// ============================================================================
-// STREETS Membership Commands
-// ============================================================================
-
-/// Get the user's current STREETS tier and activation info
-#[tauri::command]
-pub async fn get_streets_tier() -> Result<serde_json::Value> {
-    let manager = get_settings_manager();
-    let guard = manager.lock();
-    let license = &guard.get().license;
-
-    // Check expiry — if key exists but is expired, downgrade to playbook
-    let expired = if !license.license_key.is_empty() {
-        match crate::settings::verify_license_key(&license.license_key) {
-            Ok(payload) => {
-                if let Ok(exp) = chrono::DateTime::parse_from_rfc3339(&payload.expires_at) {
-                    let now: chrono::DateTime<chrono::Utc> = chrono::Utc::now();
-                    (exp.with_timezone(&chrono::Utc) - now).num_days() < 0
-                } else {
-                    false
-                }
-            }
-            Err(_) => true,
-        }
-    } else {
-        false
-    };
-
-    let tier = if expired {
-        "playbook"
-    } else {
-        crate::settings::get_streets_tier(license)
-    };
-
-    Ok(serde_json::json!({
-        "tier": tier,
-        "activated_at": license.activated_at,
-        "expired": expired,
-    }))
-}
-
-/// Activate a STREETS license key (Community or Cohort)
-#[tauri::command]
-pub async fn activate_streets_license(license_key: String) -> Result<serde_json::Value> {
-    if license_key.trim().is_empty() {
-        return Err("License key cannot be empty".into());
-    }
-
-    let payload = crate::settings::verify_license_key(&license_key)?;
-
-    // Determine STREETS tier from features
-    let streets_tier = if payload.features.contains(&"streets_cohort".to_string()) {
-        "cohort"
-    } else if payload.features.contains(&"streets_community".to_string()) {
-        "community"
-    } else {
-        // Regular 4DA license — apply as normal
-        "playbook"
-    };
-
-    let manager = get_settings_manager();
-    let mut guard = manager.lock();
-    let settings = guard.get_mut();
-    settings.license.license_key = license_key;
-    // Any paid STREETS license (community/cohort) also grants Pro features.
-    // Explicit pro/team tiers in the payload take precedence.
-    let effective_tier = if payload.tier == "pro" || payload.tier == "team" {
-        payload.tier.clone()
-    } else if streets_tier == "community" || streets_tier == "cohort" {
-        "pro".to_string()
-    } else {
-        settings.license.tier.clone() // keep existing
-    };
-    settings.license.tier = effective_tier.clone();
-    settings.license.activated_at = Some(chrono::Utc::now().to_rfc3339());
-    guard.save()?;
-
-    info!(target: "4da::streets", streets_tier, "STREETS license activated");
-
-    Ok(serde_json::json!({
-        "success": true,
-        "streets_tier": streets_tier,
-        "tier": effective_tier,
-        "email": payload.email,
-        "expires_at": payload.expires_at,
-    }))
-}
-
-/// Get a Pro value report summarizing pipeline impact.
+/// Get a Signal value report summarizing pipeline impact.
 /// TODO: aggregate real data from analysis history once Pro analytics are built.
 #[tauri::command]
 pub async fn get_pro_value_report() -> Result<serde_json::Value> {

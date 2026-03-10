@@ -221,7 +221,7 @@ assert(true, 'Test card attached (4242...4242)');
 const subscription = await stripe.subscriptions.create({
   customer: customer.id,
   items: [{ price: process.env.STREETS_PRICE_COMMUNITY }],
-  metadata: { streets_tier: 'community', test: 'true' },
+  metadata: { streets_tier: 'signal', test: 'true' },
   default_payment_method: pm.id,
 });
 assert(subscription.status === 'active', `Subscription active: ${subscription.id}`);
@@ -232,11 +232,11 @@ const expiresAt = new Date(now);
 expiresAt.setFullYear(expiresAt.getFullYear() + 1);
 
 const licensePayload = {
-  tier: 'community',
+  tier: 'signal',
   email: TEST_EMAIL,
   expires_at: expiresAt.toISOString(),
   issued_at: now.toISOString(),
-  features: ['streets_community'],
+  features: ['signal'],
 };
 
 const licenseKey = generateLicenseKey(licensePayload);
@@ -248,7 +248,7 @@ assert(licenseKey.includes('.'), 'License key has payload.signature format');
 await stripe.customers.update(customer.id, {
   metadata: {
     streets_license: licenseKey,
-    streets_tier: 'community',
+    streets_tier: 'signal',
     streets_issued_at: now.toISOString(),
     streets_expires_at: expiresAt.toISOString(),
     streets_status: 'active',
@@ -266,7 +266,7 @@ try {
   const data = await resp.json();
   assert(resp.ok, `GET /api/streets/activate returns 200`);
   assert(data.license_key === licenseKey, 'Retrieved license matches generated key');
-  assert(data.tier === 'community', 'Tier is community');
+  assert(data.tier === 'signal', 'Tier is signal');
   assert(data.status === 'active' || !data.status, `Status is active (got: ${data.status || 'undefined'})`);
   assert(!!data.expires_at, 'Has expiry date');
 } catch (err) {
@@ -296,9 +296,9 @@ console.log('\n--- Test 4: License Crypto Verification (Node.js) ---');
 
 try {
   const decoded = verifyLicenseKey(licenseKey);
-  assert(decoded.tier === 'community', 'Decoded tier matches');
+  assert(decoded.tier === 'signal', 'Decoded tier matches');
   assert(decoded.email === TEST_EMAIL, 'Decoded email matches');
-  assert(decoded.features.includes('streets_community'), 'Has streets_community feature');
+  assert(decoded.features.includes('signal'), 'Has signal feature');
   assert(!!decoded.expires_at, 'Has expires_at');
   assert(!!decoded.issued_at, 'Has issued_at');
 } catch (err) {
@@ -359,25 +359,25 @@ try {
 // =============================================================================
 console.log('\n--- Test 6: Cohort License Generation ---');
 
+// Legacy cohort keys should still verify (backwards compat)
 const cohortPayload = {
-  tier: 'cohort',
+  tier: 'signal',
   email: TEST_EMAIL,
   expires_at: expiresAt.toISOString(),
   issued_at: now.toISOString(),
-  features: ['streets_community', 'streets_cohort'],
+  features: ['signal'],
 };
 
 const cohortKey = generateLicenseKey(cohortPayload);
-assert(cohortKey.startsWith('4DA-'), 'Cohort key has prefix');
-assert(cohortKey.length < 500, `Cohort key within limit (${cohortKey.length} chars)`);
+assert(cohortKey.startsWith('4DA-'), 'Signal key has prefix');
+assert(cohortKey.length < 500, `Signal key within limit (${cohortKey.length} chars)`);
 
 try {
   const decoded = verifyLicenseKey(cohortKey);
-  assert(decoded.tier === 'cohort', 'Cohort tier decoded');
-  assert(decoded.features.includes('streets_cohort'), 'Has streets_cohort feature');
-  assert(decoded.features.includes('streets_community'), 'Cohort includes community features');
+  assert(decoded.tier === 'signal', 'Signal tier decoded');
+  assert(decoded.features.includes('signal'), 'Has signal feature');
 } catch (err) {
-  assert(false, `Cohort verification: ${err.message}`);
+  assert(false, `Signal verification: ${err.message}`);
 }
 
 // =============================================================================

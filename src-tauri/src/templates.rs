@@ -1,7 +1,7 @@
 // Copyright (c) 2025-2026 4DA Systems. All rights reserved.
 // Licensed under the Functional Source License 1.1 (FSL-1.1-Apache-2.0). See LICENSE file.
 
-//! Pre-built markdown templates for STREETS Community and Cohort members.
+//! Pre-built markdown templates for STREETS playbook (free for all users).
 //!
 //! Provides actionable templates for launch planning, revenue tracking,
 //! automation blueprints, competitive analysis, and pricing strategy.
@@ -74,11 +74,9 @@ fn get_all_templates() -> Vec<CoachTemplate> {
 // ============================================================================
 
 /// Get all available coach templates.
-/// Gate: requires streets_community membership.
+/// Free for all users — part of the STREETS playbook.
 #[tauri::command]
 pub fn get_templates() -> Result<Vec<CoachTemplate>> {
-    crate::settings::require_streets_feature("streets_community")?;
-
     let templates = get_all_templates();
     debug!(
         target: "4da::coach",
@@ -90,11 +88,9 @@ pub fn get_templates() -> Result<Vec<CoachTemplate>> {
 }
 
 /// Get a specific template by ID.
-/// Gate: requires streets_community membership.
+/// Free for all users — part of the STREETS playbook.
 #[tauri::command]
 pub fn get_template_content(template_id: String) -> Result<CoachTemplate> {
-    crate::settings::require_streets_feature("streets_community")?;
-
     let templates = get_all_templates();
     let template = templates
         .into_iter()

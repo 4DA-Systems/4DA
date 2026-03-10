@@ -4,7 +4,7 @@
 //   - checkout.session.completed  → initial license generation
 //   - invoice.paid                → subscription renewal (fresh license + extended expiry)
 //   - customer.subscription.deleted → cancellation (mark metadata)
-//   - checkout.session.completed with upgrade → cohort upgrade from community
+//   - checkout.session.completed with upgrade → tier upgrade
 // GET:  Retrieve license by checkout session_id (secure) or email (fallback)
 //
 // Environment variables required:
@@ -90,16 +90,16 @@ function setCors(req, res) {
 // ---------------------------------------------------------------------------
 
 async function generateAndStoreLicense(stripe, customerId, email, tier) {
-  const features = tier === 'cohort'
-    ? ['streets_community', 'streets_cohort']
-    : ['streets_community'];
+  // Map legacy tiers to new naming
+  const effectiveTier = (tier === 'community' || tier === 'cohort') ? 'signal' : tier;
+  const features = [effectiveTier];
 
   const now = new Date();
   const expiresAt = new Date(now);
   expiresAt.setFullYear(expiresAt.getFullYear() + 1);
 
   const payload = {
-    tier,
+    tier: effectiveTier,
     email,
     expires_at: expiresAt.toISOString(),
     issued_at: now.toISOString(),
@@ -116,7 +116,7 @@ async function generateAndStoreLicense(stripe, customerId, email, tier) {
   await stripe.customers.update(customerId, {
     metadata: {
       streets_license: licenseKey,
-      streets_tier: tier,
+      streets_tier: effectiveTier,
       streets_issued_at: now.toISOString(),
       streets_expires_at: expiresAt.toISOString(),
       streets_status: 'active',
@@ -153,19 +153,14 @@ const HANDLED_EVENTS = [
 async function handleCheckoutCompleted(stripe, session) {
   const email = session.customer_email || session.customer_details?.email;
   const customerId = await resolveCustomerId(stripe, session.customer, email);
-  const tier = session.metadata?.streets_tier || 'community';
+  const tier = session.metadata?.streets_tier || 'signal';
 
   if (!email) {
     throw new Error(`No customer email in session ${session.id}`);
   }
 
-  // Check if this is an upgrade: existing customer with community → buying cohort
-  const customer = await stripe.customers.retrieve(customerId);
-  const existingTier = customer.metadata?.streets_tier;
-  const effectiveTier = (existingTier === 'community' && tier === 'cohort') ? 'cohort' : tier;
-
-  const { licenseKey } = await generateAndStoreLicense(stripe, customerId, email, effectiveTier);
-  console.log('License generated:', email, 'tier:', effectiveTier, 'customer:', customerId, 'len:', licenseKey.length);
+  const { licenseKey } = await generateAndStoreLicense(stripe, customerId, email, tier);
+  console.log('License generated:', email, 'tier:', tier, 'customer:', customerId, 'len:', licenseKey.length);
   return { license_generated: true };
 }
 
@@ -187,7 +182,7 @@ async function handleInvoicePaid(stripe, invoice) {
 
   const customer = await stripe.customers.retrieve(customerId);
   const email = customer.email;
-  const existingTier = customer.metadata?.streets_tier || 'community';
+  const existingTier = customer.metadata?.streets_tier || 'signal';
 
   if (!email) {
     throw new Error(`No email for customer ${customerId}`);

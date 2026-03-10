@@ -203,8 +203,20 @@ describe('license-slice', () => {
   // isPro
   // ---------------------------------------------------------------------------
   describe('isPro', () => {
-    it('returns true for pro tier', () => {
+    it('returns true for signal tier', () => {
+      useAppStore.setState({ tier: 'signal', expired: false });
+
+      expect(useAppStore.getState().isPro()).toBe(true);
+    });
+
+    it('returns true for legacy pro tier', () => {
       useAppStore.setState({ tier: 'pro', expired: false });
+
+      expect(useAppStore.getState().isPro()).toBe(true);
+    });
+
+    it('returns true for enterprise tier', () => {
+      useAppStore.setState({ tier: 'enterprise', expired: false });
 
       expect(useAppStore.getState().isPro()).toBe(true);
     });

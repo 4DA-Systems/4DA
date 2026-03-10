@@ -42,26 +42,30 @@ pub const PRO_FEATURES: &[&str] = &[
     "synthesize_search",
 ];
 
-/// Check if the current user has Pro (or Team) tier access.
-/// Returns true for "pro", "team", or an active trial.
+/// Check if the current user has Signal (or Team/Enterprise) tier access.
+/// Returns true for "signal", "team", "enterprise", legacy "pro", or an active trial.
 pub fn is_pro() -> bool {
     let manager = crate::get_settings_manager();
     let guard = manager.lock();
     let license = &guard.get().license;
-    matches!(license.tier.as_str(), "pro" | "team") || is_trial_active(license)
+    is_paid_tier(license.tier.as_str()) || is_trial_active(license)
+}
+
+/// Check if a tier string represents a paid tier.
+/// Accepts legacy "pro" for backwards compatibility with existing settings.json files.
+fn is_paid_tier(tier: &str) -> bool {
+    matches!(tier, "signal" | "team" | "enterprise" | "pro")
 }
 
 /// Check if a feature is available for the given tier, including trial period
 pub fn is_pro_feature_available(feature: &str, license: &LicenseConfig) -> bool {
-    match license.tier.as_str() {
-        "pro" | "team" => true,
-        _ => {
-            if is_trial_active(license) {
-                return true;
-            }
-            !PRO_FEATURES.contains(&feature)
-        }
+    if is_paid_tier(license.tier.as_str()) {
+        return true;
     }
+    if is_trial_active(license) {
+        return true;
+    }
+    !PRO_FEATURES.contains(&feature)
 }
 
 /// Gate a Pro feature — returns Ok(()) if allowed, Err if not
@@ -74,7 +78,7 @@ pub fn require_pro_feature(feature: &str) -> Result<()> {
         Ok(())
     } else {
         Err(format!(
-            "{} requires 4DA Pro — upgrade or start a free trial",
+            "{} requires 4DA Signal — upgrade or start a free trial",
             feature
         )
         .into())
@@ -83,7 +87,7 @@ pub fn require_pro_feature(feature: &str) -> Result<()> {
 
 /// Check if the free trial is still active (30 days from trial_started_at)
 pub fn is_trial_active(license: &LicenseConfig) -> bool {
-    if license.tier == "pro" || license.tier == "team" {
+    if is_paid_tier(license.tier.as_str()) {
         return false; // Not on trial, has a real license
     }
     match &license.trial_started_at {
@@ -101,7 +105,7 @@ pub fn is_trial_active(license: &LicenseConfig) -> bool {
 
 /// Get trial status info
 pub fn get_trial_status(license: &LicenseConfig) -> TrialStatus {
-    if license.tier == "pro" || license.tier == "team" {
+    if is_paid_tier(license.tier.as_str()) {
         return TrialStatus {
             active: false,
             days_remaining: 0,
@@ -415,95 +419,6 @@ fn parse_keygen_response(status: u16, body: &str, license_key: &str) -> KeygenVa
             cached: false,
             detail: format!("Invalid key ({})", validation_code),
             code: validation_code,
-        }
-    }
-}
-
-// ============================================================================
-// STREETS Feature Gating
-// ============================================================================
-
-/// STREETS Community-gated features
-pub const STREETS_COMMUNITY_FEATURES: &[&str] = &[
-    "streets_community",
-    "coach_create_session",
-    "coach_send_message",
-    "coach_recommend_engines",
-    "coach_generate_strategy",
-    "coach_launch_review",
-    "coach_progress_check_in",
-    "streets_premium_templates",
-];
-
-/// STREETS Cohort-gated features (includes Community features)
-pub const STREETS_COHORT_FEATURES: &[&str] = &[
-    "streets_cohort",
-    "video_curriculum_access",
-    "strategy_deep_dive",
-];
-
-/// Check if a STREETS feature is available
-pub fn is_streets_feature_available(feature: &str, license: &LicenseConfig) -> bool {
-    // Pro/team tiers get everything
-    match license.tier.as_str() {
-        "pro" | "team" => return true,
-        _ => {}
-    }
-    // Check license key features
-    if !license.license_key.is_empty() {
-        if let Ok(payload) = verify_license_key(&license.license_key) {
-            // Cohort includes community features
-            if payload.features.contains(&"streets_cohort".to_string()) {
-                return STREETS_COMMUNITY_FEATURES.contains(&feature)
-                    || STREETS_COHORT_FEATURES.contains(&feature);
-            }
-            if payload.features.contains(&"streets_community".to_string()) {
-                return STREETS_COMMUNITY_FEATURES.contains(&feature);
-            }
-            // Direct feature check
-            return payload.features.contains(&feature.to_string());
-        }
-    }
-    false
-}
-
-/// Gate a STREETS feature — returns Ok(()) if allowed, Err if not
-pub fn require_streets_feature(feature: &str) -> Result<()> {
-    let manager = crate::get_settings_manager();
-    let guard = manager.lock();
-    let license = &guard.get().license;
-    if is_streets_feature_available(feature, license) {
-        Ok(())
-    } else {
-        let tier_needed = if STREETS_COHORT_FEATURES.contains(&feature) {
-            "STREETS Cohort"
-        } else {
-            "STREETS Community"
-        };
-        Err(format!(
-            "{} requires {} membership — upgrade at streets.4da.ai",
-            feature, tier_needed
-        )
-        .into())
-    }
-}
-
-/// Get the user's current STREETS tier
-pub fn get_streets_tier(license: &LicenseConfig) -> &'static str {
-    match license.tier.as_str() {
-        "pro" | "team" => "cohort", // Pro/team get everything
-        _ => {
-            if !license.license_key.is_empty() {
-                if let Ok(payload) = verify_license_key(&license.license_key) {
-                    if payload.features.contains(&"streets_cohort".to_string()) {
-                        return "cohort";
-                    }
-                    if payload.features.contains(&"streets_community".to_string()) {
-                        return "community";
-                    }
-                }
-            }
-            "playbook" // Free tier — all modules, no coaching
         }
     }
 }

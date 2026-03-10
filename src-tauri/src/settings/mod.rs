@@ -250,7 +250,7 @@ impl Default for AttentionConfig {
 /// License tier configuration
 #[derive(Clone, Serialize, Deserialize)]
 pub struct LicenseConfig {
-    /// Tier: "free", "pro", or "team"
+    /// Tier: "free", "signal", "team", or "enterprise" (legacy "pro" also accepted)
     pub tier: String,
     /// License key (empty for free tier)
     pub license_key: String,
