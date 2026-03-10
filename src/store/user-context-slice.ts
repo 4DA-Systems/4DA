@@ -1,5 +1,4 @@
 import type { StateCreator } from 'zustand';
-import type { UserContext, SuggestedInterest } from '../types';
 import type { AppStore, UserContextSlice } from './types';
 import { cmd } from '../lib/commands';
 

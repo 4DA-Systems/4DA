@@ -19,7 +19,6 @@ import { useAppStore } from '../store';
 import { useUpdateCheck } from './use-update-check';
 import { trackEvent } from './use-telemetry';
 import { useDirection } from '../i18n/rtl';
-import type { SourceRelevance } from '../types';
 import { cmd } from '../lib/commands';
 
 /**

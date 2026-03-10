@@ -50,8 +50,6 @@ import { cmd } from './lib/commands';
 import { useUpdateCheck } from './hooks/use-update-check';
 import { trackEvent } from './hooks/use-telemetry';
 import { useDirection } from './i18n/rtl';
-import type { SourceRelevance } from './types';
-
 function App() {
   const { t } = useTranslation();
   // Local UI state
