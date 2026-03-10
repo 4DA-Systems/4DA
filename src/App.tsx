@@ -190,7 +190,7 @@ function App() {
     // Compute progressive disclosure tier from persisted state
     computeViewTier();
     // Prune stale personalization cache (non-blocking)
-    cmd('prune_personalization_cache', {}).catch(e => console.debug('Prune cache skipped:', e));
+    cmd('prune_personalization_cache').catch(e => console.debug('Prune cache skipped:', e));
   }, [loadPersistedBriefing, loadSourceHealth, loadLicense, loadTrialStatus, loadProValueReport, computeViewTier]);
 
   // Deep-link handler: 4da://activate?key=...
@@ -227,7 +227,7 @@ function App() {
     const loadOrAnalyze = async () => {
       try {
         // First, try to load cached results from AnalysisState
-        const analysisState = await cmd('get_analysis_status', {});
+        const analysisState = await cmd('get_analysis_status');
 
         if (cancelled) return;
 

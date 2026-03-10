@@ -17,7 +17,7 @@ export const createUserContextSlice: StateCreator<AppStore, [], [], UserContextS
 
   loadUserContext: async () => {
     try {
-      const ctx = await cmd('get_user_context', {});
+      const ctx = await cmd('get_user_context');
       set({ userContext: ctx });
       if (ctx.role) set({ newRole: ctx.role });
     } catch (error) {
@@ -27,7 +27,7 @@ export const createUserContextSlice: StateCreator<AppStore, [], [], UserContextS
 
   loadSuggestedInterests: async () => {
     try {
-      const suggestions = await cmd('ace_get_suggested_interests', {});
+      const suggestions = await cmd('ace_get_suggested_interests');
       set({ suggestedInterests: suggestions });
     } catch (error) {
       console.debug('Suggested interests not available:', error);
