@@ -38,7 +38,7 @@ const LessonContent = memo(function LessonContent({ content, moduleId, lessonIdx
   return <>{renderMarkdown(content, { moduleId, lessonIdx })}</>;
 });
 
-export function PlaybookView() {
+export const PlaybookView = memo(function PlaybookView() {
   const { t } = useTranslation();
   const {
     playbookModules,
@@ -378,4 +378,4 @@ export function PlaybookView() {
       </main>
     </div>
   );
-}
+});
