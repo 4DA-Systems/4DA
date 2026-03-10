@@ -236,7 +236,8 @@ describe('SettingsModal', () => {
   // --- Error-path tests (Phase 3.2) ---
 
   it('shows error alert when settingsStatus contains "Error"', () => {
-    vi.mocked(useAppStore).mockImplementation((selector: (s: Record<string, unknown>) => unknown) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    vi.mocked(useAppStore).mockImplementation(((selector: any) => {
       const mockState: Record<string, unknown> = {
         settings: { llm: { provider: 'anthropic', model: 'claude-3-5-haiku-20241022', has_api_key: false, base_url: null }, rerank: { enabled: false, max_items_per_batch: 10, min_embedding_score: 0.1, daily_token_limit: 100000, daily_cost_limit_cents: 50 }, usage: { tokens_today: 0, cost_today_cents: 0, tokens_total: 0, items_reranked: 0 }, embedding_threshold: 0.25 },
         settingsForm: { provider: 'anthropic', apiKey: '', model: 'claude-3-5-haiku-20241022', baseUrl: '', openaiApiKey: '', embeddingThreshold: 0.25, rerankEnabled: false, maxItemsPerBatch: 10, minEmbeddingScore: 0.1, dailyTokenLimit: 100000, dailyCostLimitCents: 50 },
@@ -265,7 +266,7 @@ describe('SettingsModal', () => {
         loadLicense: vi.fn(), loadTrialStatus: vi.fn(), license: null, trialStatus: null,
       };
       return selector(mockState);
-    });
+    }) as any);
     render(<SettingsModal onClose={vi.fn()} />);
     // Use getByText to find status strip, then check its role attribute
     // (PanelErrorBoundary may also render role="alert" for unmocked child errors)
@@ -275,7 +276,8 @@ describe('SettingsModal', () => {
   });
 
   it('shows error alert when settingsStatus contains "failed"', () => {
-    vi.mocked(useAppStore).mockImplementation((selector: (s: Record<string, unknown>) => unknown) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    vi.mocked(useAppStore).mockImplementation(((selector: any) => {
       const mockState: Record<string, unknown> = {
         settings: { llm: { provider: 'anthropic', model: 'claude-3-5-haiku-20241022', has_api_key: false, base_url: null }, rerank: { enabled: false, max_items_per_batch: 10, min_embedding_score: 0.1, daily_token_limit: 100000, daily_cost_limit_cents: 50 }, usage: { tokens_today: 0, cost_today_cents: 0, tokens_total: 0, items_reranked: 0 }, embedding_threshold: 0.25 },
         settingsForm: { provider: 'anthropic', apiKey: '', model: 'claude-3-5-haiku-20241022', baseUrl: '', openaiApiKey: '', embeddingThreshold: 0.25, rerankEnabled: false, maxItemsPerBatch: 10, minEmbeddingScore: 0.1, dailyTokenLimit: 100000, dailyCostLimitCents: 50 },
@@ -304,7 +306,7 @@ describe('SettingsModal', () => {
         loadLicense: vi.fn(), loadTrialStatus: vi.fn(), license: null, trialStatus: null,
       };
       return selector(mockState);
-    });
+    }) as any);
     render(<SettingsModal onClose={vi.fn()} />);
     const statusEl = screen.getByText('Connection failed: timeout');
     expect(statusEl.closest('[role="alert"]')).toBeInTheDocument();
@@ -312,7 +314,8 @@ describe('SettingsModal', () => {
   });
 
   it('shows success status with role="status" (not alert)', () => {
-    vi.mocked(useAppStore).mockImplementation((selector: (s: Record<string, unknown>) => unknown) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    vi.mocked(useAppStore).mockImplementation(((selector: any) => {
       const mockState: Record<string, unknown> = {
         settings: { llm: { provider: 'anthropic', model: 'claude-3-5-haiku-20241022', has_api_key: false, base_url: null }, rerank: { enabled: false, max_items_per_batch: 10, min_embedding_score: 0.1, daily_token_limit: 100000, daily_cost_limit_cents: 50 }, usage: { tokens_today: 0, cost_today_cents: 0, tokens_total: 0, items_reranked: 0 }, embedding_threshold: 0.25 },
         settingsForm: { provider: 'anthropic', apiKey: '', model: 'claude-3-5-haiku-20241022', baseUrl: '', openaiApiKey: '', embeddingThreshold: 0.25, rerankEnabled: false, maxItemsPerBatch: 10, minEmbeddingScore: 0.1, dailyTokenLimit: 100000, dailyCostLimitCents: 50 },
@@ -341,7 +344,7 @@ describe('SettingsModal', () => {
         loadLicense: vi.fn(), loadTrialStatus: vi.fn(), license: null, trialStatus: null,
       };
       return selector(mockState);
-    });
+    }) as any);
     render(<SettingsModal onClose={vi.fn()} />);
     const statusEl = screen.getByText('Settings saved!');
     expect(statusEl.closest('[role="status"]')).toBeInTheDocument();
@@ -350,7 +353,8 @@ describe('SettingsModal', () => {
   });
 
   it('shows error alert when settingsStatus contains "Connection failed:"', () => {
-    vi.mocked(useAppStore).mockImplementation((selector: (s: Record<string, unknown>) => unknown) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    vi.mocked(useAppStore).mockImplementation(((selector: any) => {
       const mockState: Record<string, unknown> = {
         settings: { llm: { provider: 'anthropic', model: 'claude-3-5-haiku-20241022', has_api_key: false, base_url: null }, rerank: { enabled: false, max_items_per_batch: 10, min_embedding_score: 0.1, daily_token_limit: 100000, daily_cost_limit_cents: 50 }, usage: { tokens_today: 0, cost_today_cents: 0, tokens_total: 0, items_reranked: 0 }, embedding_threshold: 0.25 },
         settingsForm: { provider: 'anthropic', apiKey: '', model: 'claude-3-5-haiku-20241022', baseUrl: '', openaiApiKey: '', embeddingThreshold: 0.25, rerankEnabled: false, maxItemsPerBatch: 10, minEmbeddingScore: 0.1, dailyTokenLimit: 100000, dailyCostLimitCents: 50 },
@@ -379,7 +383,7 @@ describe('SettingsModal', () => {
         loadLicense: vi.fn(), loadTrialStatus: vi.fn(), license: null, trialStatus: null,
       };
       return selector(mockState);
-    });
+    }) as any);
     render(<SettingsModal onClose={vi.fn()} />);
     const statusEl = screen.getByText('Connection failed: ECONNREFUSED');
     expect(statusEl.closest('[role="alert"]')).toBeInTheDocument();
@@ -388,7 +392,8 @@ describe('SettingsModal', () => {
 
   it('does not show settings status strip when settingsStatus is empty', () => {
     // Restore the default mock (previous tests override it with mockImplementation)
-    vi.mocked(useAppStore).mockImplementation((selector: (s: Record<string, unknown>) => unknown) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    vi.mocked(useAppStore).mockImplementation(((selector: any) => {
       const mockState: Record<string, unknown> = {
         settings: { llm: { provider: 'anthropic', model: 'claude-3-5-haiku-20241022', has_api_key: false, base_url: null }, rerank: { enabled: false, max_items_per_batch: 10, min_embedding_score: 0.1, daily_token_limit: 100000, daily_cost_limit_cents: 50 }, usage: { tokens_today: 0, cost_today_cents: 0, tokens_total: 0, items_reranked: 0 }, embedding_threshold: 0.25 },
         settingsForm: { provider: 'anthropic', apiKey: '', model: 'claude-3-5-haiku-20241022', baseUrl: '', openaiApiKey: '', embeddingThreshold: 0.25, rerankEnabled: false, maxItemsPerBatch: 10, minEmbeddingScore: 0.1, dailyTokenLimit: 100000, dailyCostLimitCents: 50 },
@@ -417,7 +422,7 @@ describe('SettingsModal', () => {
         loadLicense: vi.fn(), loadTrialStatus: vi.fn(), license: null, trialStatus: null,
       };
       return selector(mockState);
-    });
+    }) as any);
     const { container } = render(<SettingsModal onClose={vi.fn()} />);
     // The status strip has class "mx-6 mt-4" and renders inside the dialog
     // When settingsStatus is empty, the conditional {settingsStatus && ...} prevents rendering
