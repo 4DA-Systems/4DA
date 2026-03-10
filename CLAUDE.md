@@ -74,7 +74,7 @@ mcp-4da-server/         # MCP server exposing 4DA tools (Claude Code)
 /* Background */
 --bg-primary: #0A0A0A;    --bg-secondary: #141414;   --bg-tertiary: #1F1F1F;
 /* Text */
---text-primary: #FFFFFF;   --text-secondary: #A0A0A0; --text-muted: #666666;
+--text-primary: #FFFFFF;   --text-secondary: #A0A0A0; --text-muted: #787878;
 /* Accent */
 --accent-primary: #FFFFFF; --accent-gold: #D4AF37;    --border: #2A2A2A;
 /* Status */

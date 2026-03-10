@@ -433,4 +433,56 @@ describe('ResultsView', () => {
     render(<ResultsView {...defaultProps} />);
     expect(screen.getByRole('toolbar', { name: 'Filter and sort controls' })).toBeInTheDocument();
   });
+
+  // =========================================================================
+  // 22. Error path — error status with prior results keeps results count visible
+  // =========================================================================
+  it('shows results count alongside error status when prior results exist', () => {
+    currentMockState = makeMockState({
+      appState: {
+        analysisComplete: true,
+        loading: false,
+        status: 'Error: Network timeout',
+        relevanceResults: [
+          { id: 1, title: 'Result A', top_score: 0.7 },
+          { id: 2, title: 'Result B', top_score: 0.4 },
+        ],
+        progress: 0,
+        progressStage: 'error',
+        progressMessage: '',
+        contextFiles: [],
+      },
+    });
+    render(<ResultsView {...defaultProps} />);
+    // Results count is still shown (not the not-started state)
+    expect(screen.getByText('results.itemsRelevant')).toBeInTheDocument();
+    // Filter bar is still accessible
+    expect(screen.getByRole('toolbar', { name: 'Filter and sort controls' })).toBeInTheDocument();
+    // The "no results" empty state should NOT be shown
+    expect(screen.queryByText('results.noResults')).not.toBeInTheDocument();
+  });
+
+  // =========================================================================
+  // 23. Error path — error before completion falls back to not-started
+  // =========================================================================
+  it('shows analyze button when error occurs before any results', () => {
+    currentMockState = makeMockState({
+      appState: {
+        analysisComplete: false,
+        loading: false,
+        status: 'Error: API key missing',
+        relevanceResults: [],
+        progress: 0,
+        progressStage: 'error',
+        progressMessage: '',
+        contextFiles: [],
+      },
+    });
+    render(<ResultsView {...defaultProps} />);
+    // Should show the not-started state with analyze button
+    expect(screen.getByText('results.analyzeNow')).toBeInTheDocument();
+    expect(screen.getByText('results.noResults')).toBeInTheDocument();
+    // Filter bar should NOT be shown
+    expect(screen.queryByRole('toolbar', { name: 'Filter and sort controls' })).not.toBeInTheDocument();
+  });
 });

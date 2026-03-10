@@ -285,4 +285,44 @@ describe('ActionBar', () => {
     expect(screen.queryByText('action.exportMarkdown')).not.toBeInTheDocument();
     expect(screen.queryByText('action.exportDigest')).not.toBeInTheDocument();
   });
+
+  // --- Error-path tests (Phase 3.2) ---
+
+  it('shows error message AND re-enables refresh button after analysis failure', async () => {
+    const { rerender } = render(
+      <ActionBar {...defaultProps} state={makeState({ loading: true })} />,
+    );
+    // Button is disabled while loading
+    const analyzingButtons = screen.getAllByText('action.analyzing');
+    const button = analyzingButtons.find(el => el.closest('button'));
+    expect(button?.closest('button')).toBeDisabled();
+
+    // Rerender with error state
+    rerender(
+      <ActionBar
+        {...defaultProps}
+        state={makeState({ loading: false, analysisComplete: false })}
+        aiBriefing={{ loading: false, error: 'Analysis failed: network timeout' }}
+      />,
+    );
+    await waitFor(() => {
+      // Error message is visible
+      const alert = screen.getByRole('alert');
+      expect(alert).toBeInTheDocument();
+      expect(alert).toHaveTextContent('Analysis failed: network timeout');
+      // Refresh button is re-enabled
+      const refreshBtn = screen.getByText('action.refresh').closest('button');
+      expect(refreshBtn).not.toBeDisabled();
+    });
+  });
+
+  it('shows error alert with specific error text for rate limit failures', () => {
+    const props = {
+      ...defaultProps,
+      aiBriefing: { loading: false, error: 'Rate limit exceeded. Try again in 60s.' },
+    };
+    render(<ActionBar {...props} />);
+    const alert = screen.getByRole('alert');
+    expect(alert).toHaveTextContent('Rate limit exceeded. Try again in 60s.');
+  });
 });

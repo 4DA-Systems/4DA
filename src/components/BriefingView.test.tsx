@@ -289,5 +289,49 @@ describe('BriefingView', () => {
       expect(screen.getByText('error.generic')).toBeInTheDocument();
       expect(screen.getByText('Previous')).toBeInTheDocument();
     });
+
+    it('calls generateBriefing on retry and transitions to loading state', () => {
+      const genFn = vi.fn();
+      setMockState({
+        aiBriefing: { content: '## Stale\n- Data', loading: false, error: 'LLM service unavailable', model: null, lastGenerated: null },
+        appState: { relevanceResults: [] },
+        generateBriefing: genFn,
+      });
+      const { unmount } = render(<BriefingView />);
+
+      // Error is visible with retry button
+      expect(screen.getByText('error.generic')).toBeInTheDocument();
+      expect(screen.getByText('action.retry')).toBeInTheDocument();
+
+      // Click retry
+      fireEvent.click(screen.getByText('action.retry'));
+      expect(genFn).toHaveBeenCalledTimes(1);
+
+      unmount();
+
+      // Re-render with loading state (simulating store update after retry)
+      setMockState({
+        aiBriefing: { content: null, loading: true, error: null, model: null, lastGenerated: null },
+        appState: { relevanceResults: [] },
+        generateBriefing: genFn,
+      });
+      const { container } = render(<BriefingView />);
+
+      // Error should be gone, loading skeleton should show
+      expect(screen.queryByText('error.generic')).not.toBeInTheDocument();
+      expect(screen.queryByText('action.retry')).not.toBeInTheDocument();
+      const pulseElements = container.querySelectorAll('.animate-pulse');
+      expect(pulseElements.length).toBeGreaterThan(0);
+    });
+
+    it('error alert has role="alert" for screen reader announcement', () => {
+      setMockState({
+        aiBriefing: { content: '## Test\nContent', loading: false, error: 'Timeout after 30s', model: null, lastGenerated: null },
+        appState: { relevanceResults: [] },
+      });
+      render(<BriefingView />);
+      const alert = screen.getByRole('alert');
+      expect(alert).toBeInTheDocument();
+    });
   });
 });
