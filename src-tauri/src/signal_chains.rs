@@ -228,6 +228,238 @@ fn priority_rank(priority: &str) -> u8 {
     }
 }
 
+// ============================================================================
+// Chain Lifecycle Prediction
+// ============================================================================
+
+/// Lifecycle phase of a signal chain
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum ChainPhase {
+    /// Just detected, 1-2 signals — may fizzle
+    Nascent,
+    /// Multiple signals confirmed, pattern emerging
+    Active,
+    /// Signal frequency increasing (acceleration detected)
+    Escalating,
+    /// Highest signal density, maximum relevance
+    Peak,
+    /// Signals slowing, topic fading
+    Resolving,
+}
+
+/// Prediction attached to a signal chain
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ChainPrediction {
+    /// Current lifecycle phase
+    pub phase: ChainPhase,
+    /// Inter-event intervals in hours (newest first)
+    pub intervals_hours: Vec<f64>,
+    /// Acceleration: negative = speeding up, positive = slowing down
+    pub acceleration: f64,
+    /// Estimated hours until next signal (based on trend)
+    pub predicted_next_hours: Option<f64>,
+    /// Confidence in prediction (0.0 - 1.0)
+    pub confidence: f64,
+    /// Human-readable forecast
+    pub forecast: String,
+}
+
+/// Analyze a chain's lifecycle and generate predictions
+pub fn predict_chain_lifecycle(chain: &SignalChain) -> ChainPrediction {
+    let links = &chain.links;
+
+    if links.len() < 2 {
+        return ChainPrediction {
+            phase: ChainPhase::Nascent,
+            intervals_hours: vec![],
+            acceleration: 0.0,
+            predicted_next_hours: None,
+            confidence: 0.1,
+            forecast: "Too early to predict — watching for more signals".to_string(),
+        };
+    }
+
+    // Calculate inter-event intervals in hours
+    let intervals = compute_intervals(links);
+    let acceleration = compute_acceleration(&intervals);
+
+    // Determine phase
+    let phase = classify_phase(links.len(), acceleration, &intervals);
+
+    // Predict next event timing
+    let predicted_next = predict_next_interval(&intervals, acceleration);
+    let confidence = compute_confidence(links.len(), &intervals);
+
+    let forecast = build_forecast(&phase, &chain.chain_name, predicted_next, acceleration);
+
+    ChainPrediction {
+        phase,
+        intervals_hours: intervals,
+        acceleration,
+        predicted_next_hours: predicted_next,
+        confidence,
+        forecast,
+    }
+}
+
+/// Compute time intervals between consecutive chain links (in hours)
+fn compute_intervals(links: &[ChainLink]) -> Vec<f64> {
+    if links.len() < 2 {
+        return vec![];
+    }
+
+    let timestamps: Vec<chrono::DateTime<chrono::Utc>> = links
+        .iter()
+        .filter_map(|l| chrono::DateTime::parse_from_rfc3339(&l.timestamp).ok())
+        .map(|dt| dt.with_timezone(&chrono::Utc))
+        .collect();
+
+    if timestamps.len() < 2 {
+        return vec![];
+    }
+
+    timestamps
+        .windows(2)
+        .map(|w| {
+            let diff = w[1] - w[0];
+            diff.num_minutes() as f64 / 60.0
+        })
+        .collect()
+}
+
+/// Compute acceleration: slope of interval changes (negative = speeding up)
+fn compute_acceleration(intervals: &[f64]) -> f64 {
+    if intervals.len() < 2 {
+        return 0.0;
+    }
+
+    // Simple linear regression on interval sequence
+    let n = intervals.len() as f64;
+    let sum_x: f64 = (0..intervals.len()).map(|i| i as f64).sum();
+    let sum_y: f64 = intervals.iter().sum();
+    let sum_xy: f64 = intervals
+        .iter()
+        .enumerate()
+        .map(|(i, y)| i as f64 * y)
+        .sum();
+    let sum_x2: f64 = (0..intervals.len()).map(|i| (i as f64).powi(2)).sum();
+
+    let denom = n * sum_x2 - sum_x.powi(2);
+    if denom.abs() < 1e-10 {
+        return 0.0;
+    }
+
+    (n * sum_xy - sum_x * sum_y) / denom
+}
+
+/// Classify chain lifecycle phase
+fn classify_phase(link_count: usize, acceleration: f64, intervals: &[f64]) -> ChainPhase {
+    if link_count <= 2 {
+        return ChainPhase::Nascent;
+    }
+
+    let avg_interval = if intervals.is_empty() {
+        f64::MAX
+    } else {
+        intervals.iter().sum::<f64>() / intervals.len() as f64
+    };
+
+    // Escalating: intervals shrinking significantly (acceleration < -2 hours/step)
+    if acceleration < -2.0 && link_count >= 3 {
+        return ChainPhase::Escalating;
+    }
+
+    // Peak: many signals with small intervals
+    if link_count >= 4 && avg_interval < 24.0 {
+        return ChainPhase::Peak;
+    }
+
+    // Resolving: intervals growing (acceleration > 4 hours/step) or very old last signal
+    if acceleration > 4.0 && link_count >= 3 {
+        return ChainPhase::Resolving;
+    }
+
+    ChainPhase::Active
+}
+
+/// Predict the next interval based on trend
+fn predict_next_interval(intervals: &[f64], acceleration: f64) -> Option<f64> {
+    if intervals.is_empty() {
+        return None;
+    }
+
+    let last = *intervals.last().unwrap();
+    let predicted = last + acceleration;
+
+    // Clamp to reasonable range (1 hour to 7 days)
+    Some(predicted.max(1.0).min(168.0))
+}
+
+/// Compute prediction confidence based on data quality
+fn compute_confidence(link_count: usize, intervals: &[f64]) -> f64 {
+    // Base: more data = more confidence
+    let data_confidence = (link_count as f64 / 6.0).min(1.0);
+
+    // Regularity: consistent intervals = more predictable
+    let regularity = if intervals.len() >= 2 {
+        let mean = intervals.iter().sum::<f64>() / intervals.len() as f64;
+        let variance =
+            intervals.iter().map(|i| (i - mean).powi(2)).sum::<f64>() / intervals.len() as f64;
+        let cv = if mean > 0.0 {
+            variance.sqrt() / mean
+        } else {
+            1.0
+        };
+        (1.0 - cv.min(1.0)).max(0.0)
+    } else {
+        0.3
+    };
+
+    (data_confidence * 0.6 + regularity * 0.4).min(0.95)
+}
+
+/// Build a human-readable forecast
+fn build_forecast(
+    phase: &ChainPhase,
+    chain_name: &str,
+    predicted_hours: Option<f64>,
+    acceleration: f64,
+) -> String {
+    let timing = predicted_hours
+        .map(|h| {
+            if h < 2.0 {
+                "within hours".to_string()
+            } else if h < 24.0 {
+                format!("within ~{:.0}h", h)
+            } else {
+                format!("within ~{:.0} days", h / 24.0)
+            }
+        })
+        .unwrap_or_else(|| "timing uncertain".to_string());
+
+    match phase {
+        ChainPhase::Nascent => format!("Early signal for {} — monitoring", chain_name),
+        ChainPhase::Active => format!(
+            "{} is developing — next signal expected {}",
+            chain_name, timing
+        ),
+        ChainPhase::Escalating => {
+            let rate = if acceleration < -5.0 {
+                "rapidly"
+            } else {
+                "steadily"
+            };
+            format!("{} is {} accelerating — act {}", chain_name, rate, timing)
+        }
+        ChainPhase::Peak => format!(
+            "{} at peak intensity — high activity expected {}",
+            chain_name, timing
+        ),
+        ChainPhase::Resolving => format!("{} is cooling down — signals slowing", chain_name),
+    }
+}
+
 /// Resolve a signal chain
 pub fn resolve_chain(
     conn: &rusqlite::Connection,
@@ -249,11 +481,37 @@ pub fn resolve_chain(
 // Tauri Commands
 // ============================================================================
 
+/// Signal chain with prediction attached
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SignalChainWithPrediction {
+    #[serde(flatten)]
+    pub chain: SignalChain,
+    pub prediction: ChainPrediction,
+}
+
 #[tauri::command]
 pub fn get_signal_chains() -> Result<Vec<SignalChain>> {
     crate::settings::require_pro_feature("get_signal_chains")?;
     let conn = crate::open_db_connection()?;
     detect_chains(&conn)
+}
+
+/// Get signal chains with lifecycle predictions (Pro)
+#[tauri::command]
+pub fn get_signal_chains_predicted() -> Result<Vec<SignalChainWithPrediction>> {
+    crate::settings::require_pro_feature("get_signal_chains_predicted")?;
+    let conn = crate::open_db_connection()?;
+    let chains = detect_chains(&conn)?;
+    Ok(chains
+        .into_iter()
+        .map(|c| {
+            let prediction = predict_chain_lifecycle(&c);
+            SignalChainWithPrediction {
+                chain: c,
+                prediction,
+            }
+        })
+        .collect())
 }
 
 #[tauri::command]

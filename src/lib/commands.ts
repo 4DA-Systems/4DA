@@ -44,6 +44,7 @@ import type {
 import type {
   KnowledgeGap,
   SignalChain,
+  SignalChainWithPrediction,
   ProjectHealth,
   AttentionReport,
   DeveloperDna,
@@ -246,6 +247,7 @@ interface CommandMap {
 
   // -- Signal Chains --
   get_signal_chains: { params: Record<string, never>; result: SignalChain[] };
+  get_signal_chains_predicted: { params: Record<string, never>; result: SignalChainWithPrediction[] };
   resolve_signal_chain: { params: { chainId: string; resolution: string }; result: void };
 
   // -- Score Autopsy --
@@ -259,6 +261,7 @@ interface CommandMap {
   get_developer_dna: { params: Record<string, never>; result: DeveloperDna };
   export_developer_dna_markdown: { params: Record<string, never>; result: string };
   export_developer_dna_svg: { params: Record<string, never>; result: string };
+  export_developer_dna_card: { params: Record<string, never>; result: string };
 
   // -- Tech Radar --
   get_tech_radar: { params: Record<string, never>; result: TechRadarData };
@@ -307,6 +310,16 @@ interface CommandMap {
   // -- Digest --
   get_digest_config: { params: Record<string, never>; result: DigestConfig };
   set_digest_config: { params: { enabled: boolean }; result: void };
+  test_digest_email: { params: Record<string, never>; result: string };
+  set_digest_email_config: { params: {
+    email?: string;
+    smtp_host?: string;
+    smtp_port?: number;
+    smtp_username?: string;
+    smtp_password?: string;
+    smtp_from?: string;
+    smtp_use_tls?: boolean;
+  }; result: string };
 
   // -- Toolkit --
   toolkit_list_ports: { params: Record<string, never>; result: ListeningPort[] };
