@@ -391,3 +391,86 @@ pub fn maybe_save_mini_digest(state: &crate::monitoring::MonitoringState) {
         }
     }
 }
+
+// ============================================================================
+// Proactive Chain Prediction Notifications (Phase B)
+// ============================================================================
+
+/// Check signal chains for escalating/peak phases and send OS notifications.
+/// Called hourly alongside anomaly detection and decision window checks.
+pub fn maybe_notify_escalating_chains<R: Runtime>(app: &AppHandle<R>) {
+    // Only for Pro users (signal chains are a Pro feature)
+    if !crate::settings::is_pro() {
+        return;
+    }
+
+    // Check notification threshold — respect user's preference
+    let threshold = {
+        let settings = crate::get_settings_manager().lock();
+        settings.get().monitoring.notification_threshold.clone()
+    };
+
+    // critical_only threshold means don't send chain predictions unless critical
+    let require_critical = threshold == "critical_only";
+
+    let conn = match crate::open_db_connection() {
+        Ok(c) => c,
+        Err(_) => return,
+    };
+
+    let chains = match crate::signal_chains::detect_chains(&conn) {
+        Ok(c) => c,
+        Err(e) => {
+            warn!(target: "4da::jobs", error = %e, "Chain detection failed for notifications");
+            return;
+        }
+    };
+
+    let mut notified = 0;
+    for chain in &chains {
+        let prediction = crate::signal_chains::predict_chain_lifecycle(chain);
+
+        let dominated = matches!(
+            prediction.phase,
+            crate::signal_chains::ChainPhase::Escalating | crate::signal_chains::ChainPhase::Peak
+        );
+
+        if !dominated || prediction.confidence < 0.3 {
+            continue;
+        }
+
+        // For critical_only, only send if chain has security signals
+        if require_critical {
+            let has_security = chain
+                .links
+                .iter()
+                .any(|l| l.signal_type == "security_alert");
+            if !has_security {
+                continue;
+            }
+        }
+
+        let phase_str = match prediction.phase {
+            crate::signal_chains::ChainPhase::Escalating => "escalating",
+            crate::signal_chains::ChainPhase::Peak => "peak",
+            _ => continue,
+        };
+
+        crate::monitoring_notifications::send_chain_prediction_notification(
+            app,
+            &chain.chain_name,
+            phase_str,
+            &prediction.forecast,
+        );
+        notified += 1;
+
+        // Cap notifications per check to avoid flooding
+        if notified >= 3 {
+            break;
+        }
+    }
+
+    if notified > 0 {
+        info!(target: "4da::jobs", notified, "Chain prediction notifications sent");
+    }
+}

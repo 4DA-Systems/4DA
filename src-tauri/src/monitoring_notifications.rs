@@ -217,3 +217,36 @@ pub fn send_signal_notification<R: Runtime>(
         info!(target: "4da::notify", priority = priority, body = %body, "Sent signal notification");
     }
 }
+
+/// Send a notification about an escalating or peak signal chain prediction
+pub fn send_chain_prediction_notification<R: Runtime>(
+    app: &AppHandle<R>,
+    chain_name: &str,
+    phase: &str,
+    forecast: &str,
+) {
+    let title = match phase {
+        "escalating" => format!("4DA — {} Escalating", chain_name),
+        "peak" => format!("4DA — {} at Peak", chain_name),
+        _ => format!("4DA — {} Signal Chain", chain_name),
+    };
+
+    // Truncate forecast for notification body (OS limits ~200 chars)
+    let body = if forecast.len() > 180 {
+        format!("{}...", &forecast[..177])
+    } else {
+        forecast.to_string()
+    };
+
+    if let Err(e) = app
+        .notification()
+        .builder()
+        .title(&title)
+        .body(&body)
+        .show()
+    {
+        warn!(target: "4da::notify", error = %e, "Failed to send chain prediction notification");
+    } else {
+        info!(target: "4da::notify", chain = %chain_name, phase, "Sent chain prediction notification");
+    }
+}

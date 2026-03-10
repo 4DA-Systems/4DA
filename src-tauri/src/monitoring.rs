@@ -274,6 +274,10 @@ pub fn start_scheduler<R: Runtime>(app: AppHandle<R>, state: Arc<MonitoringState
                 }
             }
 
+            // Proactive chain prediction notifications — hourly
+            // Sends OS notifications for chains in Escalating or Peak phase.
+            crate::monitoring_jobs::maybe_notify_escalating_chains(&app);
+
             // Behavior decay - daily
             let last_decay = state.last_decay.load(Ordering::Relaxed);
             if now - last_decay >= BEHAVIOR_DECAY_INTERVAL {
