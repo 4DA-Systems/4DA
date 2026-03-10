@@ -321,7 +321,7 @@ export interface TrialStatus {
 }
 
 export interface LicenseSlice {
-  tier: 'free' | 'pro' | 'team';
+  tier: 'free' | 'pro' | 'signal' | 'team' | 'enterprise';
   licenseKey: string;
   licenseLoading: boolean;
   trialStatus: TrialStatus | null;
