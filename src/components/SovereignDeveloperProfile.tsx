@@ -131,7 +131,7 @@ export const SovereignDeveloperProfile = memo(function SovereignDeveloperProfile
     switch (action) {
       case 'scan_infra':
       case 'scan_stack':
-        cmd('ace_auto_discover', {}).catch((e) => console.warn('SovereignProfile: auto-discover failed', e));
+        cmd('ace_auto_discover').catch((e) => console.warn('SovereignProfile: auto-discover failed', e));
         break;
       case 'open_playbook':
         setActiveView('playbook');
