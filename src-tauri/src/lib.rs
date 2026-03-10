@@ -352,6 +352,8 @@ pub mod test_utils;
 #[cfg(test)]
 mod error_tests;
 #[cfg(test)]
+mod hardening_error_path_tests;
+#[cfg(test)]
 mod privacy_tests;
 #[cfg(test)]
 mod privacy_tests_exports;

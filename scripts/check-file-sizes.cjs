@@ -55,6 +55,11 @@ const EXCEPTIONS = {
   'src-tauri/src/bin/cli.rs':              'CLI binary — command parsing + output formatting',
   'src-tauri/src/delegation.rs':           'Delegation scoring — multi-axis trust assessment',
   'src-tauri/src/stacks/profiles.rs':      'Stack Intelligence — 8 technology profile definitions',
+  'src-tauri/src/stacks/profile_data_b.rs':  'Stack profile data — static technology catalog (pure data)',
+  'src-tauri/src/scoring/pipeline_tests.rs': 'Scoring pipeline tests — comprehensive test suite',
+  'src-tauri/src/analysis_deep_scan.rs':     'Deep scan analysis — multi-source orchestration',
+  'src-tauri/src/sovereign_developer_profile_intelligence.rs': 'Developer intelligence — dimension scoring',
+  'src-tauri/src/hardening_error_path_tests.rs': 'Hardening error-path tests — cross-module error handling validation',
   'src-tauri/src/scoring/benchmark.rs':    'Scoring benchmarks — comprehensive test assertions',
   'src-tauri/src/scoring/pipeline_v2.rs':  'V2 scoring pipeline — experimental alternate scorer',
   'src-tauri/src/scoring/simulation/corpus.rs': 'Scoring simulation corpus — 215 labeled test fixtures for pipeline validation',
@@ -94,6 +99,7 @@ const EXCEPTIONS = {
   'src/components/NaturalLanguageSearch.tsx':               'NLS UI — search interface + results + ghost preview',
   'src/components/NaturalLanguageSearch.test.tsx':          'NLS tests — 14 tests for search UI states and interactions',
   'src/components/playbook/PlaybookView.test.tsx':         'Playbook tests — 15 tests for module navigation and progress',
+  'src/components/SettingsModal.test.tsx':                  'Settings tests — comprehensive modal and tab interaction tests',
 };
 
 const SCAN_DIRS = ['src', 'src-tauri/src'];
