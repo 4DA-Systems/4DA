@@ -176,6 +176,7 @@ interface CommandMap {
   act_on_decision_window: { params: { windowId: number; outcome: string | null }; result: void };
   close_decision_window: { params: { windowId: number }; result: void };
   get_compound_advantage: { params: Record<string, never>; result: CompoundAdvantageScore };
+  get_advantage_history: { params: { period?: string; limit?: number }; result: number[] };
 
   // -- Autophagy --
   get_autophagy_status: { params: Record<string, never>; result: AutophagyStatus };

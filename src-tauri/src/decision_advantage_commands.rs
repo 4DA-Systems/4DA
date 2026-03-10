@@ -48,6 +48,30 @@ pub async fn get_compound_advantage(period: Option<String>) -> Result<CompoundAd
     Ok(crate::decision_advantage::compute_compound_score(&conn, p))
 }
 
+/// Get historical advantage scores for sparkline rendering.
+/// Returns the last N scores for the given period, oldest first.
+#[tauri::command]
+pub async fn get_advantage_history(period: Option<String>, limit: Option<i64>) -> Result<Vec<f32>> {
+    let conn = open_db_connection()?;
+    let p = period.as_deref().unwrap_or("weekly");
+    let n = limit.unwrap_or(8).min(30);
+
+    let mut stmt = conn.prepare(
+        "SELECT score FROM advantage_score WHERE period = ?1
+         ORDER BY computed_at DESC LIMIT ?2",
+    )?;
+
+    let scores: Vec<f32> = stmt
+        .query_map(rusqlite::params![p, n], |row| row.get(0))?
+        .filter_map(|r| r.ok())
+        .collect();
+
+    // Reverse so oldest is first (for sparkline left-to-right)
+    let mut result = scores;
+    result.reverse();
+    Ok(result)
+}
+
 // ============================================================================
 // Tests
 // ============================================================================

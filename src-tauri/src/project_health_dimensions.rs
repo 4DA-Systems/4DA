@@ -70,9 +70,33 @@ pub(crate) fn compute_security(
         security_hits += count;
     }
 
-    let score = if security_hits == 0 {
+    // Factor in signal chain predictions — escalating security chains lower the score
+    let chain_penalty: i64 = if let Ok(chains) = crate::signal_chains::detect_chains(conn) {
+        chains
+            .iter()
+            .filter(|c| {
+                let has_security = c.links.iter().any(|l| l.signal_type == "security_alert");
+                if !has_security {
+                    return false;
+                }
+                let prediction = crate::signal_chains::predict_chain_lifecycle(c);
+                matches!(
+                    prediction.phase,
+                    crate::signal_chains::ChainPhase::Escalating
+                        | crate::signal_chains::ChainPhase::Peak
+                )
+            })
+            .count() as i64
+    } else {
+        0
+    };
+
+    // Combine direct hits with chain-detected threats
+    let total_threats = security_hits + chain_penalty * 2; // chains are weighted 2x since they represent escalating patterns
+
+    let score = if total_threats == 0 {
         0.95
-    } else if security_hits <= 2 {
+    } else if total_threats <= 2 {
         0.6
     } else {
         0.3
@@ -89,10 +113,17 @@ pub(crate) fn compute_security(
     Ok(HealthDimension {
         score,
         label: label.to_string(),
-        details: format!(
-            "{} security-related items found for your dependencies",
-            security_hits
-        ),
+        details: if chain_penalty > 0 {
+            format!(
+                "{} security items + {} escalating signal chains for your dependencies",
+                security_hits, chain_penalty
+            )
+        } else {
+            format!(
+                "{} security-related items found for your dependencies",
+                security_hits
+            )
+        },
     })
 }
 

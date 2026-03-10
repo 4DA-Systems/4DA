@@ -53,6 +53,7 @@ pub(crate) fn detect_decision_windows(conn: &Connection) -> Vec<DecisionWindow> 
     detect_migration_windows(conn, &mut windows);
     detect_adoption_windows(conn, &mut windows);
     detect_knowledge_windows(conn, &mut windows);
+    detect_chain_security_windows(conn, &mut windows);
     deduplicate_and_store(conn, &mut windows);
     if !windows.is_empty() {
         info!(target: "4da::decision_advantage", count = windows.len(), "Decision windows detected");
@@ -376,6 +377,74 @@ fn detect_knowledge_windows(conn: &Connection, windows: &mut Vec<DecisionWindow>
             *confidence,
             None,
         ));
+    }
+}
+
+/// Detect security decision windows from signal chains that match user dependencies.
+/// This correlates chain predictions (escalating security chains) with ACE-scanned deps.
+fn detect_chain_security_windows(conn: &Connection, windows: &mut Vec<DecisionWindow>) {
+    let deps = get_user_dependencies(conn);
+    if deps.is_empty() {
+        return;
+    }
+
+    let chains = match crate::signal_chains::detect_chains(conn) {
+        Ok(c) => c,
+        Err(_) => return,
+    };
+
+    for chain in &chains {
+        // Only care about chains with security signals
+        let has_security = chain
+            .links
+            .iter()
+            .any(|l| l.signal_type == "security_alert");
+        if !has_security {
+            continue;
+        }
+
+        // Check if any chain link title mentions a user dependency
+        let matched_dep = chain.links.iter().find_map(|link| {
+            let lower_title = link.title.to_lowercase();
+            deps.iter()
+                .find(|d| lower_title.contains(d.as_str()))
+                .cloned()
+        });
+
+        if let Some(dep) = matched_dep {
+            let prediction = crate::signal_chains::predict_chain_lifecycle(chain);
+
+            // Boost urgency based on chain phase
+            let phase_boost: f32 = match prediction.phase {
+                crate::signal_chains::ChainPhase::Peak => 0.15,
+                crate::signal_chains::ChainPhase::Escalating => 0.10,
+                crate::signal_chains::ChainPhase::Active => 0.05,
+                _ => 0.0,
+            };
+
+            let urgency = (0.85_f32 + phase_boost).min(1.0);
+            let phase_label = match prediction.phase {
+                crate::signal_chains::ChainPhase::Peak => "peak",
+                crate::signal_chains::ChainPhase::Escalating => "escalating",
+                crate::signal_chains::ChainPhase::Active => "active",
+                crate::signal_chains::ChainPhase::Nascent => "emerging",
+                crate::signal_chains::ChainPhase::Resolving => "resolving",
+            };
+
+            windows.push(make_window(
+                "security_patch",
+                Some(dep.clone()),
+                &format!(
+                    "Chain Alert: {} \u{2014} {} signal chain ({})",
+                    dep,
+                    chain.links.len(),
+                    phase_label
+                ),
+                urgency,
+                0.90,
+                Some("+3 days"),
+            ));
+        }
     }
 }
 

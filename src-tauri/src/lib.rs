@@ -586,6 +586,7 @@ pub fn run() {
             decision_advantage_commands::act_on_decision_window,
             decision_advantage_commands::close_decision_window,
             decision_advantage_commands::get_compound_advantage,
+            decision_advantage_commands::get_advantage_history,
             // Agent Memory
             // Tech Radar
             tech_radar::get_tech_radar,

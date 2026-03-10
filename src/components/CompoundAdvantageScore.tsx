@@ -1,5 +1,6 @@
-import { useEffect, memo } from 'react';
+import { useEffect, useState, memo } from 'react';
 import { useTranslation } from 'react-i18next';
+import { cmd } from '../lib/commands';
 import { useAppStore } from '../store';
 
 function TrendArrow({ trend }: { trend: number }) {
@@ -38,9 +39,13 @@ export const CompoundAdvantageScore = memo(function CompoundAdvantageScore() {
   const { t } = useTranslation();
   const advantage = useAppStore(s => s.compoundAdvantage);
   const loadAdvantage = useAppStore(s => s.loadCompoundAdvantage);
+  const [history, setHistory] = useState<number[]>([]);
 
   useEffect(() => {
     loadAdvantage();
+    cmd('get_advantage_history', { period: 'weekly', limit: 8 })
+      .then(setHistory)
+      .catch(() => {/* silent */});
   }, [loadAdvantage]);
 
   if (!advantage) return null;
@@ -49,6 +54,11 @@ export const CompoundAdvantageScore = memo(function CompoundAdvantageScore() {
   const scoreColor = displayScore >= 60 ? 'text-green-400'
     : displayScore >= 30 ? 'text-[#D4AF37]'
     : 'text-text-secondary';
+
+  // Use real history if available, otherwise synthesize from current score
+  const sparkData = history.length >= 2
+    ? history
+    : [Math.max(advantage.score - 8, 0), advantage.score - 3, advantage.score];
 
   return (
     <div className="flex items-center gap-4 px-4 py-2.5 bg-bg-secondary rounded-lg border border-border">
@@ -69,12 +79,7 @@ export const CompoundAdvantageScore = memo(function CompoundAdvantageScore() {
           )}
         </div>
       </div>
-      <MiniSparkline data={[
-        Math.max(advantage.score - 10, 0),
-        advantage.score - 5,
-        advantage.score - 2,
-        advantage.score,
-      ]} />
+      <MiniSparkline data={sparkData} />
     </div>
   );
 });
