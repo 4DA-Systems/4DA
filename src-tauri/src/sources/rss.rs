@@ -93,7 +93,7 @@ impl RssSource {
     }
 
     /// Parse RSS 2.0 feed
-    fn parse_rss_feed(&self, xml: &str, feed_url: &str) -> Vec<FeedEntry> {
+    pub(crate) fn parse_rss_feed(&self, xml: &str, feed_url: &str) -> Vec<FeedEntry> {
         let mut entries = Vec::new();
 
         // Extract feed title
@@ -153,7 +153,7 @@ impl RssSource {
     }
 
     /// Parse Atom feed
-    fn parse_atom_feed(&self, xml: &str, feed_url: &str) -> Vec<FeedEntry> {
+    pub(crate) fn parse_atom_feed(&self, xml: &str, feed_url: &str) -> Vec<FeedEntry> {
         let mut entries = Vec::new();
 
         // Extract feed title
@@ -211,7 +211,7 @@ impl RssSource {
     }
 
     /// Extract content from XML tag
-    fn extract_tag(xml: &str, tag: &str) -> Option<String> {
+    pub(crate) fn extract_tag(xml: &str, tag: &str) -> Option<String> {
         let open_tag = format!("<{}", tag);
         let close_tag = format!("</{}>", tag);
 
@@ -260,7 +260,7 @@ impl RssSource {
     }
 
     /// Decode common HTML entities
-    fn decode_html_entities(text: &str) -> String {
+    pub(crate) fn decode_html_entities(text: &str) -> String {
         text.replace("&amp;", "&")
             .replace("&lt;", "<")
             .replace("&gt;", ">")
@@ -271,7 +271,7 @@ impl RssSource {
     }
 
     /// Strip HTML tags from content
-    fn strip_html(html: &str) -> String {
+    pub(crate) fn strip_html(html: &str) -> String {
         // Remove HTML tags
         let mut result = String::new();
         let mut in_tag = false;
@@ -291,7 +291,7 @@ impl RssSource {
     }
 
     /// Generate a stable ID from a string
-    fn generate_id(input: &str) -> String {
+    pub(crate) fn generate_id(input: &str) -> String {
         use std::collections::hash_map::DefaultHasher;
         use std::hash::{Hash, Hasher};
 
