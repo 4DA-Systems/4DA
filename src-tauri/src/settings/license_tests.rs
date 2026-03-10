@@ -82,11 +82,21 @@ mod tests {
         assert!(!is_pro_feature_available("generate_ai_briefing", &free));
         assert!(is_pro_feature_available("some_free_feature", &free));
 
-        let pro = LicenseConfig {
+        let signal = LicenseConfig {
+            tier: "signal".to_string(),
+            ..free.clone()
+        };
+        assert!(is_pro_feature_available("generate_ai_briefing", &signal));
+
+        // Legacy "pro" tier should still work
+        let legacy_pro = LicenseConfig {
             tier: "pro".to_string(),
             ..free.clone()
         };
-        assert!(is_pro_feature_available("generate_ai_briefing", &pro));
+        assert!(is_pro_feature_available(
+            "generate_ai_briefing",
+            &legacy_pro
+        ));
     }
 
     /// Verify LicenseConfig survives a JSON serialization roundtrip.

@@ -87,7 +87,7 @@ export const createLicenseSlice: StateCreator<AppStore, [], [], LicenseSlice> = 
   isPro: () => {
     const { tier, trialStatus, expired } = get();
     if (expired) return false;
-    return tier === 'pro' || tier === 'team' || (trialStatus?.active === true);
+    return tier === 'signal' || tier === 'team' || tier === 'enterprise' || tier === 'pro' || (trialStatus?.active === true);
   },
 
   loadProValueReport: async () => {

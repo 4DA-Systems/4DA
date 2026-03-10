@@ -26,7 +26,7 @@ export function ProGate({ children, feature }: ProGateProps) {
         <div className="mb-2 px-3 py-1.5 rounded-lg bg-[#D4AF37]/10 border border-[#D4AF37]/20 text-center">
           <p className="text-[10px] text-[#D4AF37]">
             {t('pro.licenseExpiresSoon', { count: daysRemaining })}{' '}
-            <a href="https://4da.ai/streets" target="_blank" rel="noopener noreferrer" className="underline font-medium">{t('pro.renew')}</a>
+            <a href="https://4da.ai/signal" target="_blank" rel="noopener noreferrer" className="underline font-medium">{t('pro.renew')}</a>
           </p>
         </div>
         {children}
@@ -70,7 +70,7 @@ export function ProGate({ children, feature }: ProGateProps) {
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none" className="text-[#D4AF37]">
               <path d="M8 1L10 6H15L11 9.5L12.5 15L8 11.5L3.5 15L5 9.5L1 6H6L8 1Z" fill="currentColor"/>
             </svg>
-            <span className="text-sm font-semibold text-[#D4AF37] tracking-wide uppercase">{t('tier.pro')}</span>
+            <span className="text-sm font-semibold text-[#D4AF37] tracking-wide uppercase">{t('tier.signal')}</span>
           </div>
           <p className="text-sm text-text-secondary mb-1">
             {feature ? t('pro.featureGated', { feature }) : t('pro.genericGated')}
@@ -84,7 +84,7 @@ export function ProGate({ children, feature }: ProGateProps) {
           </p>
           <div className="flex flex-col gap-2">
             <a
-              href="https://4da.ai/streets"
+              href="https://4da.ai/signal"
               target="_blank"
               rel="noopener noreferrer"
               className="inline-block px-5 py-2 text-sm font-medium text-black bg-[#D4AF37] rounded-lg hover:bg-[#C4A030] transition-colors"

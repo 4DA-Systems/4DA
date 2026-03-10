@@ -398,7 +398,10 @@
   "time.daysAgo": "{{count}}d ago",
 
   "tier.free": "Free",
-  "tier.pro": "Pro",
+  "tier.pro": "Signal",
+  "tier.signal": "Signal",
+  "tier.team": "Team",
+  "tier.enterprise": "Enterprise",
 
   "update.available": "Update available: v{{version}}",
   "update.install": "Install & Restart",
@@ -646,13 +649,13 @@
   "engagement.streak": "streak",
   "engagement.activity": "7-day activity",
 
-  "pro.hint": "Pro: {{feature}}",
-  "pro.upgrade": "Upgrade to Pro",
+  "pro.hint": "Signal: {{feature}}",
+  "pro.upgrade": "Upgrade to Signal",
   "pro.renew": "Renew",
   "pro.licenseExpiresSoon": "License expires in {{count}} day.",
   "pro.licenseExpiresSoon_other": "License expires in {{count}} days.",
-  "pro.featureGated": "{{feature}} is a Pro feature",
-  "pro.genericGated": "This is a Pro feature",
+  "pro.featureGated": "{{feature}} is a Signal feature",
+  "pro.genericGated": "This is a Signal feature",
   "pro.licenseExpired": "Your license has expired. Renew to restore access.",
   "pro.trialEnded": "Your free trial has ended. Upgrade to continue.",
   "pro.upgradeDescription": "Upgrade to unlock AI briefings, intelligence panels, and more.",
@@ -1325,7 +1328,7 @@
   "pro.gaps": "{{count}} gap",
   "pro.gaps_other": "{{count}} gaps",
   "pro.hoursSaved": "~{{hours}}h saved",
-  "pro.intelligenceSummary": "Pro Intelligence: {{summary}} (last {{days}} days)",
+  "pro.intelligenceSummary": "Signal Intelligence: {{summary}} (last {{days}} days)",
 
   "search.nlqFeature": "Natural Language Query",
   "search.nlqTitle": "Natural Language Query",

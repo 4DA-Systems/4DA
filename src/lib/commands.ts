@@ -190,10 +190,6 @@ interface CommandMap {
   start_trial: { params: Record<string, never>; result: { success: boolean; days_remaining?: number } };
   get_pro_value_report: { params: Record<string, never>; result: ProValueReport };
 
-  // -- STREETS Licensing --
-  get_streets_tier: { params: Record<string, never>; result: { tier: string; expired?: boolean } };
-  activate_streets_license: { params: { licenseKey: string }; result: { success: boolean; streets_tier: string; tier: string } };
-
   // -- Templates --
   get_templates: { params: Record<string, never>; result: Array<{ id: string; title: string; description: string; category: string; content: string }> };
   get_template_content: { params: { templateId: string }; result: { id: string; title: string; description: string; category: string; content: string } };

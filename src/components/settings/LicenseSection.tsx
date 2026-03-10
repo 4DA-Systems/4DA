@@ -24,7 +24,7 @@ export function LicenseSection({ onStatus }: { onStatus: (s: string) => void }) 
     loadTrialStatus();
   }, [loadLicense, loadTrialStatus]);
 
-  const isPro = !expired && (tier === 'pro' || tier === 'team');
+  const isPro = !expired && (tier === 'signal' || tier === 'team' || tier === 'enterprise' || tier === 'pro');
   const trialActive = trialStatus?.active === true;
   const trialExpired = trialStatus != null && !trialStatus.active && trialStatus.started_at != null;
   const canStartTrial = !isPro && !trialStatus?.started_at;
@@ -58,8 +58,10 @@ export function LicenseSection({ onStatus }: { onStatus: (s: string) => void }) 
 
   const tierConfig: Record<string, { label: string; color: string }> = {
     free: { label: t('tier.free'), color: 'text-text-secondary' },
-    pro: { label: t('tier.pro'), color: 'text-[#D4AF37]' },
+    signal: { label: t('tier.signal'), color: 'text-[#D4AF37]' },
+    pro: { label: t('tier.signal'), color: 'text-[#D4AF37]' }, // legacy compat
     team: { label: t('settings.license.tierTeam'), color: 'text-[#22C55E]' },
+    enterprise: { label: t('tier.enterprise'), color: 'text-[#22C55E]' },
   };
   const { label: tierLabel, color: tierColor } = tierConfig[tier] ?? tierConfig.free;
 
@@ -93,7 +95,7 @@ export function LicenseSection({ onStatus }: { onStatus: (s: string) => void }) 
               : t('settings.license.expiredGeneric')}
           </p>
           <a
-            href="https://4da.ai/streets"
+            href="https://4da.ai/signal"
             target="_blank"
             rel="noopener noreferrer"
             className="inline-block mt-2 px-3 py-1.5 text-[10px] font-semibold text-black bg-[#D4AF37] rounded hover:bg-[#C4A030] transition-colors"
@@ -108,7 +110,7 @@ export function LicenseSection({ onStatus }: { onStatus: (s: string) => void }) 
         <div className="mb-3 p-2.5 rounded-lg bg-[#D4AF37]/10 border border-[#D4AF37]/30">
           <p className="text-[10px] text-[#D4AF37]">
             {t('settings.license.expiresIn', { count: daysRemaining })}{' '}
-            <a href="https://4da.ai/streets" target="_blank" rel="noopener noreferrer" className="underline font-medium">
+            <a href="https://4da.ai/signal" target="_blank" rel="noopener noreferrer" className="underline font-medium">
               {t('settings.license.renewNow')}
             </a>
           </p>
@@ -165,7 +167,7 @@ export function LicenseSection({ onStatus }: { onStatus: (s: string) => void }) 
 
           {/* Upgrade link */}
           <a
-            href="https://4da.ai/streets"
+            href="https://4da.ai/signal"
             target="_blank"
             rel="noopener noreferrer"
             className="block text-center text-xs text-[#D4AF37] hover:underline"

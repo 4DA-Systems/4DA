@@ -4,7 +4,7 @@ import type { AppStore } from './types';
 import type { PlaybookModule, PlaybookContent, PlaybookProgress } from '../types/playbook';
 import type { PersonalizedLesson } from '../types/personalization';
 
-export type StreetsTier = 'playbook' | 'community' | 'cohort';
+export type StreetsTier = 'playbook';
 
 export interface PlaybookSlice {
   playbookModules: PlaybookModule[];
@@ -122,24 +122,12 @@ export const createPlaybookSlice: StateCreator<AppStore, [], [], PlaybookSlice> 
   },
 
   loadStreetsTier: async () => {
-    try {
-      const result = await cmd('get_streets_tier');
-      set({ streetsTier: (result.expired ? 'playbook' : result.tier) as StreetsTier });
-    } catch {
-      set({ streetsTier: 'playbook' });
-    }
+    // Everyone gets the free playbook tier
+    set({ streetsTier: 'playbook' });
   },
 
-  activateStreetsLicense: async (key: string) => {
-    try {
-      const result = await cmd('activate_streets_license', { licenseKey: key });
-      if (result.success) {
-        set({ streetsTier: result.streets_tier as StreetsTier });
-        return true;
-      }
-      return false;
-    } catch {
-      return false;
-    }
+  activateStreetsLicense: async (_key: string) => {
+    // No-op: community/cohort tiers removed. Kept for UI compat.
+    return false;
   },
 });

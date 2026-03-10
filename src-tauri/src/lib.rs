@@ -482,8 +482,6 @@ pub fn run() {
             settings_commands::validate_license,
             settings_commands::get_locale,
             settings_commands::set_locale,
-            settings_commands::get_streets_tier,
-            settings_commands::activate_streets_license,
             settings_commands::get_pro_value_report,
             settings_commands::get_user_context,
             settings_commands::set_user_role,
