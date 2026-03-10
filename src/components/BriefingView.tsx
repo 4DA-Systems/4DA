@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState, useEffect, memo } from 'react';
+import { useCallback, useState, useEffect, memo } from 'react';
 import { listen } from '@tauri-apps/api/event';
 import { useTranslation } from 'react-i18next';
 import { useShallow } from 'zustand/react/shallow';
@@ -12,7 +12,6 @@ import { CommunityInsights } from './CommunityInsights';
 import { ProGate } from './ProGate';
 import { useAppStore } from '../store';
 import {
-  parseBriefingContent,
   SectionAccent,
   sectionTitleColor,
   renderLine,
@@ -24,6 +23,7 @@ import { DecisionWindowsPanel } from './DecisionWindowsPanel';
 import { CompoundAdvantageScore } from './CompoundAdvantageScore';
 import { IntelligenceProfileCard } from './IntelligenceProfileCard';
 import { useLicense } from '../hooks/use-license';
+import { useBriefingDerived } from '../hooks/use-briefing-derived';
 import type { SourceRelevance } from '../types';
 
 export const BriefingView = memo(function BriefingView() {
@@ -90,39 +90,9 @@ export const BriefingView = memo(function BriefingView() {
     return () => { unlisten.then(fn => fn()); };
   }, [addToast, t]);
 
-  // Intelligence gaps — non-healthy sources
-  const gaps = useMemo(
-    () => sourceHealth.filter(s => s.status !== 'healthy' && s.gap_message),
-    [sourceHealth],
-  );
-
-  // Source quality analysis — flag sources with < 5% relevance ratio
-  const lowQualitySources = useMemo(() => {
-    if (results.length < 10) return [];
-    const bySource: Record<string, { total: number; relevant: number }> = {};
-    for (const r of results) {
-      const src = r.source_type ?? 'unknown';
-      if (!bySource[src]) bySource[src] = { total: 0, relevant: 0 };
-      bySource[src].total++;
-      if (r.relevant) bySource[src].relevant++;
-    }
-    return Object.entries(bySource)
-      .filter(([, stats]) => stats.total >= 5 && (stats.relevant / stats.total) < 0.05)
-      .map(([source, stats]) => ({
-        source,
-        total: stats.total,
-        relevant: stats.relevant,
-        ratio: Math.round((stats.relevant / stats.total) * 100),
-      }));
-  }, [results]);
-
-  // Source health summary for header badge
-  const healthSummary = useMemo(() => {
-    if (sourceHealth.length === 0) return null;
-    const healthy = sourceHealth.filter(s => s.status === 'healthy').length;
-    const total = sourceHealth.length;
-    return { healthy, total, allHealthy: healthy === total };
-  }, [sourceHealth]);
+  // Derived computations (gaps, quality, health, signals, top picks)
+  const { gaps, lowQualitySources, healthSummary, sections, isStale, signalItems, topItems } =
+    useBriefingDerived(results, sourceHealth, briefing, lastBackgroundResultsAt);
 
   // Copy raw briefing markdown
   const copyBriefing = useCallback(async () => {
@@ -130,12 +100,6 @@ export const BriefingView = memo(function BriefingView() {
     await window.navigator.clipboard.writeText(briefing.content);
     addToast('success', t('briefing.copiedToClipboard'));
   }, [briefing.content, addToast, t]);
-
-  // 2e. Memoized sections — reused by both render and shareBriefing
-  const sections = useMemo(() => {
-    if (!briefing.content) return [];
-    return parseBriefingContent(briefing.content);
-  }, [briefing.content]);
 
   // Share condensed briefing — reuses memoized sections
   const shareBriefing = useCallback(async () => {
@@ -153,33 +117,12 @@ export const BriefingView = memo(function BriefingView() {
     addToast('success', t('briefing.condensedCopied'));
   }, [briefing.content, sections, addToast, t]);
 
-  // Detect stale briefing with new items available
-  const isStale = useMemo(() => {
-    if (!briefing.lastGenerated || !lastBackgroundResultsAt) return false;
-    return lastBackgroundResultsAt.getTime() > briefing.lastGenerated.getTime();
-  }, [briefing.lastGenerated, lastBackgroundResultsAt]);
-
   // Auto-generate free briefing for all users when analysis completes
   useEffect(() => {
     if (analysisComplete && results.length > 0 && !freeBriefing && !freeBriefingLoading) {
       generateFreeBriefing();
     }
   }, [analysisComplete, results.length, freeBriefing, freeBriefingLoading, generateFreeBriefing]);
-
-  // Critical/high signal items for action cards
-  const signalItems = useMemo(() => {
-    return results
-      .filter(r => r.signal_priority === 'critical' || r.signal_priority === 'high')
-      .slice(0, 3);
-  }, [results]);
-
-  // Top picks from results for the briefing cards (exclude signal items to avoid duplicates)
-  const topItems = useMemo(() => {
-    const signalIds = new Set(signalItems.map(s => s.id));
-    return results
-      .filter(r => r.relevant && r.top_score >= 0.5 && !signalIds.has(r.id))
-      .slice(0, 8);
-  }, [results, signalItems]);
 
   // 2b. Loading skeleton with stable widths
   if (briefing.loading) {

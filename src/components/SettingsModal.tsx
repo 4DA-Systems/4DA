@@ -18,109 +18,13 @@ import { CommunityIntelligenceSection } from './settings/CommunityIntelligenceSe
 import { DeveloperDnaPanel } from './DeveloperDna';
 import { AttentionDashboard } from './settings/AttentionDashboard';
 import { ProjectHealthRadar } from './settings/ProjectHealthRadar';
+import { StreetsMembershipSection } from './settings/StreetsMembershipSection';
+import { ShowAllViewsToggle } from './settings/ShowAllViewsToggle';
 import { NaturalLanguageQueryPanel } from './NaturalLanguageQuery';
 import { ProValuePanel } from './ProValuePanel';
 import { AboutPanel } from './AboutPanel';
 import { useAppStore } from '../store';
 import { translateError } from '../utils/error-messages';
-import type { StreetsTier } from '../store/playbook-slice';
-
-// ============================================================================
-// STREETS Membership Section
-// ============================================================================
-
-function StreetsMembershipSection({ onStatus }: { onStatus: (s: string) => void }) {
-  const { t } = useTranslation();
-  const streetsTier = useAppStore(s => s.streetsTier);
-  const activateStreetsLicense = useAppStore(s => s.activateStreetsLicense);
-  const loadStreetsTier = useAppStore(s => s.loadStreetsTier);
-  const [key, setKey] = useState('');
-  const [activating, setActivating] = useState(false);
-
-  useEffect(() => { loadStreetsTier(); }, [loadStreetsTier]);
-
-  const tierLabels: Record<StreetsTier, { label: string; color: string }> = {
-    playbook: { label: t('settings.streets.tierPlaybook'), color: 'text-text-secondary' },
-    community: { label: t('settings.streets.tierCommunity'), color: 'text-[#D4AF37]' },
-    cohort: { label: t('settings.streets.tierCohort'), color: 'text-[#22C55E]' },
-  };
-
-  const { label, color } = tierLabels[streetsTier] || tierLabels.playbook;
-
-  const handleActivate = async () => {
-    if (!key.trim()) return;
-    setActivating(true);
-    const ok = await activateStreetsLicense(key.trim());
-    setActivating(false);
-    if (ok) {
-      onStatus(t('settings.streets.activated'));
-      setKey('');
-      setTimeout(() => onStatus(''), 3000);
-    } else {
-      onStatus(t('settings.streets.invalidKey'));
-      setTimeout(() => onStatus(''), 3000);
-    }
-  };
-
-  return (
-    <div className="bg-bg-tertiary rounded-lg p-4 border border-border">
-      <h3 className="text-sm font-medium text-white mb-3">{t('settings.streets.title')}</h3>
-      <div className="flex items-center gap-2 mb-3">
-        <span className="text-xs text-text-muted">{t('settings.streets.currentTier')}</span>
-        <span className={`text-xs font-semibold ${color}`}>{label}</span>
-      </div>
-      {streetsTier === 'playbook' && (
-        <div className="flex gap-2">
-          <input
-            type="text"
-            value={key}
-            onChange={e => setKey(e.target.value)}
-            placeholder={t('settings.streets.placeholder')}
-            className="flex-1 px-3 py-2 bg-bg-primary border border-border rounded-lg text-sm text-white placeholder-gray-600 focus:outline-none focus:border-[#D4AF37]/50"
-          />
-          <button
-            onClick={handleActivate}
-            disabled={activating || !key.trim()}
-            className="px-4 py-2 text-sm font-medium text-black bg-[#D4AF37] rounded-lg hover:bg-[#C4A030] transition-colors disabled:opacity-50"
-          >
-            {activating ? '...' : t('action.activate')}
-          </button>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ============================================================================
-// Show All Views Toggle
-// ============================================================================
-
-function ShowAllViewsToggle() {
-  const showAllViews = useAppStore(s => s.showAllViews);
-  const setShowAllViews = useAppStore(s => s.setShowAllViews);
-
-  return (
-    <div className="flex items-center justify-between py-3">
-      <div>
-        <span className="text-white text-sm">Show all views</span>
-        <p className="text-text-muted text-xs">Display all 9 navigation tabs regardless of usage</p>
-      </div>
-      <button
-        onClick={() => setShowAllViews(!showAllViews)}
-        role="switch"
-        aria-checked={showAllViews}
-        aria-label="Show all views"
-        className={`relative w-10 h-5 rounded-full transition-colors ${
-          showAllViews ? 'bg-green-500/40' : 'bg-gray-600'
-        }`}
-      >
-        <span className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white transition-transform ${
-          showAllViews ? 'translate-x-5' : 'translate-x-0'
-        }`} />
-      </button>
-    </div>
-  );
-}
 
 // ============================================================================
 // Types

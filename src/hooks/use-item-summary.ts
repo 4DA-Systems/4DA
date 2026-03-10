@@ -19,7 +19,7 @@ export function useItemSummary(itemId: number, isExpanded: boolean): ItemSummary
     let cancelled = false;
     cmd('get_item_summary', { itemId })
       .then(result => { if (!cancelled) setSummary(result.summary); })
-      .catch(() => {}); // No cached summary — that's fine
+      .catch(e => console.debug('No cached summary:', e));
     return () => { cancelled = true; };
   }, [isExpanded, itemId]);
 

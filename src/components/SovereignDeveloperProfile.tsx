@@ -1,7 +1,7 @@
 import { useEffect, useState, memo, useCallback, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
-import { invoke } from '@tauri-apps/api/core';
 import { useAppStore } from '../store';
+import { cmd } from '../lib/commands';
 import type { DimensionCompleteness } from '../types/profile';
 import { DeveloperDnaSection } from './DeveloperDnaSection';
 
@@ -131,7 +131,7 @@ export const SovereignDeveloperProfile = memo(function SovereignDeveloperProfile
     switch (action) {
       case 'scan_infra':
       case 'scan_stack':
-        invoke('ace_auto_discover').catch((e) => console.warn('SovereignProfile: auto-discover failed', e));
+        cmd('ace_auto_discover', {}).catch((e) => console.warn('SovereignProfile: auto-discover failed', e));
         break;
       case 'open_playbook':
         setActiveView('playbook');

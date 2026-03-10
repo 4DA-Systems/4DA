@@ -1,5 +1,4 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { useTranslation } from 'react-i18next';
 import { useShallow } from 'zustand/react/shallow';
@@ -21,6 +20,7 @@ import { useUpdateCheck } from './use-update-check';
 import { trackEvent } from './use-telemetry';
 import { useDirection } from '../i18n/rtl';
 import type { SourceRelevance } from '../types';
+import { cmd } from '../lib/commands';
 
 /**
  * Encapsulates all bootstrap logic for the App component:
@@ -157,7 +157,7 @@ export function useAppBootstrap() {
     loadTrialStatus();
     loadProValueReport();
     computeViewTier();
-    invoke('prune_personalization_cache').catch(() => {});
+    cmd('prune_personalization_cache', {}).catch(e => console.debug('Prune cache skipped:', e));
   }, [loadPersistedBriefing, loadSourceHealth, loadLicense, loadTrialStatus, loadProValueReport, computeViewTier]);
 
   // Deep-link handler: 4da://activate?key=...
@@ -192,12 +192,7 @@ export function useAppBootstrap() {
     let autoTimer: ReturnType<typeof setTimeout>;
     const loadOrAnalyze = async () => {
       try {
-        const analysisState = await invoke<{
-          running: boolean;
-          completed: boolean;
-          results: SourceRelevance[] | null;
-          near_misses: SourceRelevance[] | null;
-        }>('get_analysis_status');
+        const analysisState = await cmd('get_analysis_status', {});
 
         if (cancelled) return;
 

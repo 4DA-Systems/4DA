@@ -83,6 +83,15 @@ export default [
       'react-hooks/rules-of-hooks': 'error',
       'react-hooks/exhaustive-deps': 'warn',
 
+      // Prevent raw invoke() — use cmd() from lib/commands.ts
+      'no-restricted-imports': ['error', {
+        paths: [{
+          name: '@tauri-apps/api/core',
+          importNames: ['invoke'],
+          message: 'Use cmd() from lib/commands.ts instead of raw invoke().',
+        }],
+      }],
+
       // General rules
       'no-console': 'off', // Allow console for debugging
       'no-unused-vars': 'off', // TypeScript handles this
@@ -103,6 +112,9 @@ export default [
   // Test files configuration with Vitest globals
   {
     files: ['src/**/*.test.{ts,tsx}', 'src/**/*.spec.{ts,tsx}', 'src/test/**/*.{ts,tsx}'],
+    rules: {
+      'no-restricted-imports': 'off', // Tests mock invoke() directly
+    },
     languageOptions: {
       globals: {
         // Vitest globals
@@ -116,6 +128,13 @@ export default [
         beforeAll: 'readonly',
         afterAll: 'readonly',
       },
+    },
+  },
+  // Allow lib/commands.ts to import invoke (it's the single source of truth)
+  {
+    files: ['src/lib/commands.ts'],
+    rules: {
+      'no-restricted-imports': 'off',
     },
   },
   {

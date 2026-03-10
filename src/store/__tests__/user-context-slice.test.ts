@@ -78,7 +78,7 @@ describe('user-context-slice', () => {
 
       await useAppStore.getState().loadUserContext();
 
-      expect(invoke).toHaveBeenCalledWith('get_user_context');
+      expect(invoke).toHaveBeenCalledWith('get_user_context', {});
       expect(useAppStore.getState().userContext).toEqual(mockCtx);
       expect(useAppStore.getState().newRole).toBe('senior engineer');
     });
@@ -121,7 +121,7 @@ describe('user-context-slice', () => {
 
       await useAppStore.getState().loadSuggestedInterests();
 
-      expect(invoke).toHaveBeenCalledWith('ace_get_suggested_interests');
+      expect(invoke).toHaveBeenCalledWith('ace_get_suggested_interests', {});
       expect(useAppStore.getState().suggestedInterests).toEqual(mockSuggestions);
     });
 

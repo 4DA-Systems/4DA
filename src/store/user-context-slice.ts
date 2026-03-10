@@ -1,7 +1,7 @@
 import type { StateCreator } from 'zustand';
-import { invoke } from '@tauri-apps/api/core';
 import type { UserContext, SuggestedInterest } from '../types';
 import type { AppStore, UserContextSlice } from './types';
+import { cmd } from '../lib/commands';
 
 export const createUserContextSlice: StateCreator<AppStore, [], [], UserContextSlice> = (set, get) => ({
   userContext: null,
@@ -18,7 +18,7 @@ export const createUserContextSlice: StateCreator<AppStore, [], [], UserContextS
 
   loadUserContext: async () => {
     try {
-      const ctx = await invoke<UserContext>('get_user_context');
+      const ctx = await cmd('get_user_context', {});
       set({ userContext: ctx });
       if (ctx.role) set({ newRole: ctx.role });
     } catch (error) {
@@ -28,7 +28,7 @@ export const createUserContextSlice: StateCreator<AppStore, [], [], UserContextS
 
   loadSuggestedInterests: async () => {
     try {
-      const suggestions = await invoke<SuggestedInterest[]>('ace_get_suggested_interests');
+      const suggestions = await cmd('ace_get_suggested_interests', {});
       set({ suggestedInterests: suggestions });
     } catch (error) {
       console.debug('Suggested interests not available:', error);
@@ -39,7 +39,7 @@ export const createUserContextSlice: StateCreator<AppStore, [], [], UserContextS
     const { newInterest, loadUserContext, setSettingsStatus } = get();
     if (!newInterest.trim()) return;
     try {
-      await invoke('add_interest', { topic: newInterest.trim() });
+      await cmd('add_interest', { topic: newInterest.trim() });
       set({ newInterest: '' });
       await loadUserContext();
       setSettingsStatus('Interest added');
@@ -52,7 +52,7 @@ export const createUserContextSlice: StateCreator<AppStore, [], [], UserContextS
   removeInterest: async (topic) => {
     const { loadUserContext, setSettingsStatus } = get();
     try {
-      await invoke('remove_interest', { topic });
+      await cmd('remove_interest', { topic });
       await loadUserContext();
       setSettingsStatus('Interest removed');
       setTimeout(() => set({ settingsStatus: '' }), 2000);
@@ -65,7 +65,7 @@ export const createUserContextSlice: StateCreator<AppStore, [], [], UserContextS
     const { newExclusion, loadUserContext, setSettingsStatus } = get();
     if (!newExclusion.trim()) return;
     try {
-      await invoke('add_exclusion', { topic: newExclusion.trim() });
+      await cmd('add_exclusion', { topic: newExclusion.trim() });
       set({ newExclusion: '' });
       await loadUserContext();
       setSettingsStatus('Exclusion added');
@@ -78,7 +78,7 @@ export const createUserContextSlice: StateCreator<AppStore, [], [], UserContextS
   removeExclusion: async (topic) => {
     const { loadUserContext, setSettingsStatus } = get();
     try {
-      await invoke('remove_exclusion', { topic });
+      await cmd('remove_exclusion', { topic });
       await loadUserContext();
       setSettingsStatus('Exclusion removed');
       setTimeout(() => set({ settingsStatus: '' }), 2000);
@@ -91,7 +91,7 @@ export const createUserContextSlice: StateCreator<AppStore, [], [], UserContextS
     const { newTechStack, loadUserContext, setSettingsStatus } = get();
     if (!newTechStack.trim()) return;
     try {
-      await invoke('add_tech_stack', { technology: newTechStack.trim() });
+      await cmd('add_tech_stack', { technology: newTechStack.trim() });
       set({ newTechStack: '' });
       await loadUserContext();
       setSettingsStatus('Technology added');
@@ -104,7 +104,7 @@ export const createUserContextSlice: StateCreator<AppStore, [], [], UserContextS
   removeTechStack: async (technology) => {
     const { loadUserContext, setSettingsStatus } = get();
     try {
-      await invoke('remove_tech_stack', { technology });
+      await cmd('remove_tech_stack', { technology });
       await loadUserContext();
       setSettingsStatus('Technology removed');
       setTimeout(() => set({ settingsStatus: '' }), 2000);
@@ -116,7 +116,7 @@ export const createUserContextSlice: StateCreator<AppStore, [], [], UserContextS
   updateRole: async () => {
     const { newRole, loadUserContext, setSettingsStatus } = get();
     try {
-      await invoke('set_user_role', { role: newRole.trim() || null });
+      await cmd('set_user_role', { role: newRole.trim() || null });
       await loadUserContext();
       setSettingsStatus('Role updated');
       setTimeout(() => set({ settingsStatus: '' }), 2000);

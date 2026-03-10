@@ -51,7 +51,7 @@ export function useExpandTracking(
             action_data: JSON.stringify({ type: 'click', dwell_time_seconds: dwellSeconds }),
             item_topics: itemTopics,
             item_source: sourceType,
-          }).catch(() => {});
+          }).catch(e => console.debug('Expand tracking skipped:', e));
         }
       }
     };

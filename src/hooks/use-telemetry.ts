@@ -14,7 +14,7 @@ export function trackEvent(
     eventType,
     viewId,
     metadata: metadata ? JSON.stringify(metadata) : undefined,
-  }).catch(() => {}); // silently ignore failures
+  }).catch(e => console.debug('Telemetry skipped:', e));
 }
 
 /**

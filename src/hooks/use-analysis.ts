@@ -93,7 +93,7 @@ export function useAnalysis(
           if (monitoring && !monitoring.enabled && relevantCount > 0) {
             cmd('set_monitoring_enabled', { enabled: true }).then(() => {
               useAppStore.getState().loadMonitoringStatus();
-            }).catch(() => {});
+            }).catch(e => console.debug('Auto-enable monitoring skipped:', e));
           }
         }),
 

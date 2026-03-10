@@ -4,7 +4,6 @@
 import './i18n';
 
 import { useState, useEffect, useCallback, useMemo, lazy, Suspense } from 'react';
-import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { useTranslation } from 'react-i18next';
 import './App.css';
@@ -47,6 +46,7 @@ import {
 import { useShallow } from 'zustand/react/shallow';
 
 import { useAppStore } from './store';
+import { cmd } from './lib/commands';
 import { useUpdateCheck } from './hooks/use-update-check';
 import { trackEvent } from './hooks/use-telemetry';
 import { useDirection } from './i18n/rtl';
@@ -192,7 +192,7 @@ function App() {
     // Compute progressive disclosure tier from persisted state
     computeViewTier();
     // Prune stale personalization cache (non-blocking)
-    invoke('prune_personalization_cache').catch(() => {});
+    cmd('prune_personalization_cache', {}).catch(e => console.debug('Prune cache skipped:', e));
   }, [loadPersistedBriefing, loadSourceHealth, loadLicense, loadTrialStatus, loadProValueReport, computeViewTier]);
 
   // Deep-link handler: 4da://activate?key=...
@@ -229,12 +229,7 @@ function App() {
     const loadOrAnalyze = async () => {
       try {
         // First, try to load cached results from AnalysisState
-        const analysisState = await invoke<{
-          running: boolean;
-          completed: boolean;
-          results: SourceRelevance[] | null;
-          near_misses: SourceRelevance[] | null;
-        }>('get_analysis_status');
+        const analysisState = await cmd('get_analysis_status', {});
 
         if (cancelled) return;
 
