@@ -350,9 +350,13 @@ use source_fetching::fill_cache_background;
 pub mod test_utils;
 
 #[cfg(test)]
+mod error_tests;
+#[cfg(test)]
 mod privacy_tests;
 #[cfg(test)]
 mod privacy_tests_exports;
+#[cfg(test)]
+mod utils_edge_tests;
 
 // ============================================================================
 // App Entry
