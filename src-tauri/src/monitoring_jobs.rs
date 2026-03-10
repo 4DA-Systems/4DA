@@ -126,6 +126,9 @@ pub async fn maybe_generate_digest<R: Runtime>(app: &AppHandle<R>) {
                             tracing::warn!("Failed to emit 'digest-ready': {e}");
                         }
 
+                        // Send digest email (if configured — opt-in only)
+                        maybe_send_digest_email(app).await;
+
                         // Send system tray notification
                         if let Err(e) = app
                             .notification()
@@ -177,6 +180,9 @@ pub async fn maybe_generate_digest<R: Runtime>(app: &AppHandle<R>) {
                         "generated_at": now.to_rfc3339(),
                     }),
                 );
+
+                // Send digest email (if configured — opt-in only)
+                maybe_send_digest_email(app).await;
 
                 // Send system tray notification for the digest
                 let notif_body = if frequency == "weekly" {
@@ -262,6 +268,80 @@ pub async fn process_anomalies<R: Runtime>(
 // ============================================================================
 // Smart Notification Batching (Improvement E)
 // ============================================================================
+
+// ============================================================================
+// Digest Email Delivery (opt-in only)
+// ============================================================================
+
+/// Send digest email if the user has configured email delivery.
+/// Does nothing if email is not set or SMTP is not configured.
+/// Failures are logged but never block the digest pipeline.
+async fn maybe_send_digest_email<R: Runtime>(_app: &AppHandle<R>) {
+    let (email, smtp) = {
+        let settings = crate::get_settings_manager().lock();
+        let digest = &settings.get().digest;
+        (digest.email.clone(), digest.smtp.clone())
+    };
+
+    let email = match email {
+        Some(e) if !e.is_empty() => e,
+        _ => return, // No email configured — silent return
+    };
+    let smtp = match smtp {
+        Some(s) => s,
+        None => return, // No SMTP configured — silent return
+    };
+
+    // Build a digest from recent items for the email body
+    if let Ok(db) = crate::get_database() {
+        let now = chrono::Utc::now();
+        let (frequency, _) = {
+            let settings = crate::get_settings_manager().lock();
+            let d = &settings.get().digest;
+            (d.frequency.clone(), d.min_score)
+        };
+
+        let period_start = match frequency.as_str() {
+            "weekly" => now - chrono::Duration::days(7),
+            _ => now - chrono::Duration::hours(24),
+        };
+
+        match db.get_relevant_items_since(period_start, 0.3, 20) {
+            Ok(items) if !items.is_empty() => {
+                let digest_items: Vec<crate::digest::DigestItem> = items
+                    .iter()
+                    .map(|item| crate::digest::DigestItem {
+                        id: item.id,
+                        title: item.title.clone(),
+                        url: item.url.clone(),
+                        source: item.source_type.clone(),
+                        relevance_score: item.relevance_score.unwrap_or(0.0),
+                        matched_topics: item.topics.clone(),
+                        discovered_at: item.created_at,
+                        summary: None,
+                        signal_type: None,
+                        signal_priority: None,
+                        signal_action: None,
+                    })
+                    .collect();
+
+                let digest = crate::digest::Digest::new(digest_items, period_start, now);
+
+                match crate::digest_email::send_digest_email(&email, &smtp, &digest).await {
+                    Ok(()) => {
+                        info!(target: "4da::jobs", to = %email, "Digest email delivered");
+                    }
+                    Err(e) => {
+                        warn!(target: "4da::jobs", error = %e, "Digest email delivery failed");
+                    }
+                }
+            }
+            _ => {
+                info!(target: "4da::jobs", "No items for email digest, skipping email");
+            }
+        }
+    }
+}
 
 /// When enough items accumulate in the batch, save a mini-digest locally.
 pub fn maybe_save_mini_digest(state: &crate::monitoring::MonitoringState) {
