@@ -5,6 +5,8 @@
 
 mod cache;
 mod channels;
+#[cfg(test)]
+mod concurrency_tests;
 mod history;
 mod migrations;
 mod sources;
