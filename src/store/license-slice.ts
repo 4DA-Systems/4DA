@@ -17,7 +17,7 @@ export const createLicenseSlice: StateCreator<AppStore, [], [], LicenseSlice> = 
     try {
       const result = await cmd('get_license_tier');
       set({
-        tier: result.expired ? 'free' : result.tier as 'free' | 'pro' | 'team',
+        tier: result.expired ? 'free' : result.tier as 'free' | 'pro' | 'signal' | 'team' | 'enterprise',
         expiresAt: result.expires_at,
         daysRemaining: result.days_remaining,
         expired: result.expired,
@@ -35,7 +35,7 @@ export const createLicenseSlice: StateCreator<AppStore, [], [], LicenseSlice> = 
       });
       if (result.success) {
         set({
-          tier: result.tier as 'free' | 'pro' | 'team',
+          tier: result.tier as 'free' | 'pro' | 'signal' | 'team' | 'enterprise',
           licenseKey: key,
           licenseLoading: false,
           expired: false,

@@ -1,7 +1,7 @@
 // Settings and monitoring types
 
 export interface LicenseConfig {
-  tier: 'free' | 'pro' | 'team';
+  tier: 'free' | 'pro' | 'signal' | 'team' | 'enterprise';
   has_key: boolean;
   activated_at: string | null;
 }
