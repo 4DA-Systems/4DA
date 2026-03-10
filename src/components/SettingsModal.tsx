@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, memo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useShallow } from 'zustand/react/shallow';
 import { PanelErrorBoundary } from './PanelErrorBoundary';
@@ -46,7 +46,7 @@ interface SettingsModalProps {
 // SettingsModal Component
 // ============================================================================
 
-export function SettingsModal({ onClose }: SettingsModalProps) {
+export const SettingsModal = memo(function SettingsModal({ onClose }: SettingsModalProps) {
   const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState<SettingsTab>('general');
   const [initialized, setInitialized] = useState<Set<SettingsTab>>(new Set(['general']));
@@ -462,4 +462,4 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
       </div>
     </div>
   );
-}
+});
