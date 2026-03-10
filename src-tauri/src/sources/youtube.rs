@@ -102,7 +102,7 @@ impl YouTubeSource {
     }
 
     /// Parse YouTube Atom feed XML
-    fn parse_atom_feed(&self, xml: &str, channel_name: &str) -> Result<Vec<VideoEntry>> {
+    pub(crate) fn parse_atom_feed(&self, xml: &str, channel_name: &str) -> Result<Vec<VideoEntry>> {
         let mut entries = Vec::new();
 
         // Extract feed title (channel name) - fallback to provided name
@@ -154,19 +154,19 @@ impl YouTubeSource {
 
 /// Internal video entry from the feed
 #[derive(Debug)]
-struct VideoEntry {
-    video_id: String,
-    title: String,
-    author: String,
-    description: String,
-    published: String,
-    updated: String,
-    views: u64,
-    star_rating: f64,
+pub(crate) struct VideoEntry {
+    pub(crate) video_id: String,
+    pub(crate) title: String,
+    pub(crate) author: String,
+    pub(crate) description: String,
+    pub(crate) published: String,
+    pub(crate) updated: String,
+    pub(crate) views: u64,
+    pub(crate) star_rating: f64,
 }
 
 /// Extract content between XML tags: <tag>content</tag>
-fn extract_tag(xml: &str, tag: &str) -> Option<String> {
+pub(crate) fn extract_tag(xml: &str, tag: &str) -> Option<String> {
     let open_tag = format!("<{}", tag);
     let close_tag = format!("</{}>", tag);
 
@@ -185,7 +185,7 @@ fn extract_tag(xml: &str, tag: &str) -> Option<String> {
 }
 
 /// Extract an attribute value from a self-closing tag: <tag attr="value" />
-fn extract_attr(xml: &str, tag: &str, attr: &str) -> Option<String> {
+pub(crate) fn extract_attr(xml: &str, tag: &str, attr: &str) -> Option<String> {
     let tag_start = format!("<{}", tag);
     let start_pos = xml.find(&tag_start)?;
     let tag_end = xml[start_pos..].find('>')? + start_pos;

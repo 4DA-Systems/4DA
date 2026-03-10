@@ -734,6 +734,19 @@ impl SettingsManager {
         // Validate settings, clamping any out-of-range values
         settings.validate();
 
+        // Migrate legacy tier names: "pro" → "signal"
+        if settings.license.tier == "pro" {
+            info!(target: "4da::settings", "Migrated legacy tier 'pro' → 'signal'");
+            settings.license.tier = "signal".to_string();
+            // Persist the migration so it only logs once
+            if let Some(parent) = settings_path.parent() {
+                let _ = fs::create_dir_all(parent);
+            }
+            if let Ok(json) = serde_json::to_string_pretty(&settings) {
+                let _ = fs::write(&settings_path, json);
+            }
+        }
+
         Self {
             settings,
             usage,
@@ -1372,5 +1385,69 @@ mod tests {
             deserialized.base_url,
             Some("https://custom.openai.com".to_string())
         );
+    }
+
+    // ========================================================================
+    // Legacy tier migration: "pro" → "signal"
+    // ========================================================================
+
+    #[test]
+    fn test_legacy_pro_tier_migrated_to_signal() {
+        let tmp = std::env::temp_dir().join("4da_test_pro_to_signal");
+        let _ = std::fs::remove_dir_all(&tmp);
+        std::fs::create_dir_all(&tmp).expect("create temp dir");
+
+        // Write settings with legacy "pro" tier
+        let mut settings = Settings::default();
+        settings.license.tier = "pro".to_string();
+        let json = serde_json::to_string_pretty(&settings).expect("serialize");
+        std::fs::write(tmp.join("settings.json"), json).expect("write settings");
+
+        // Load — migration should fire
+        let manager = SettingsManager::new(&tmp);
+        assert_eq!(manager.get().license.tier, "signal");
+
+        // Verify persisted to disk
+        let on_disk: Settings = serde_json::from_str(
+            &std::fs::read_to_string(tmp.join("settings.json")).expect("read"),
+        )
+        .expect("parse");
+        assert_eq!(on_disk.license.tier, "signal");
+
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn test_signal_tier_not_modified() {
+        let tmp = std::env::temp_dir().join("4da_test_signal_unchanged");
+        let _ = std::fs::remove_dir_all(&tmp);
+        std::fs::create_dir_all(&tmp).expect("create temp dir");
+
+        let mut settings = Settings::default();
+        settings.license.tier = "signal".to_string();
+        let json = serde_json::to_string_pretty(&settings).expect("serialize");
+        std::fs::write(tmp.join("settings.json"), json).expect("write settings");
+
+        let manager = SettingsManager::new(&tmp);
+        assert_eq!(manager.get().license.tier, "signal");
+
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn test_free_tier_not_modified() {
+        let tmp = std::env::temp_dir().join("4da_test_free_unchanged");
+        let _ = std::fs::remove_dir_all(&tmp);
+        std::fs::create_dir_all(&tmp).expect("create temp dir");
+
+        let mut settings = Settings::default();
+        settings.license.tier = "free".to_string();
+        let json = serde_json::to_string_pretty(&settings).expect("serialize");
+        std::fs::write(tmp.join("settings.json"), json).expect("write settings");
+
+        let manager = SettingsManager::new(&tmp);
+        assert_eq!(manager.get().license.tier, "free");
+
+        let _ = std::fs::remove_dir_all(&tmp);
     }
 }

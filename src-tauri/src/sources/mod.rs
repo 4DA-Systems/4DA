@@ -280,6 +280,9 @@ impl Default for SourceRegistry {
 // ============================================================================
 
 #[cfg(test)]
+mod adapter_resilience_tests;
+
+#[cfg(test)]
 mod tests {
     use super::*;
 

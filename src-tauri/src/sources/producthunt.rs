@@ -13,13 +13,13 @@ use crate::error::Result;
 // ============================================================================
 
 #[derive(Debug)]
-struct ProductHuntItem {
-    title: String,
-    link: String,
-    description: String,
-    pub_date: String,
-    upvotes: Option<i32>,
-    comments: Option<i32>,
+pub(crate) struct ProductHuntItem {
+    pub(crate) title: String,
+    pub(crate) link: String,
+    pub(crate) description: String,
+    pub(crate) pub_date: String,
+    pub(crate) upvotes: Option<i32>,
+    pub(crate) comments: Option<i32>,
 }
 
 // ============================================================================
@@ -58,7 +58,7 @@ impl ProductHuntSource {
     }
 
     /// Parse Product Hunt RSS feed (XML)
-    fn parse_feed(&self, xml: &str) -> Result<Vec<ProductHuntItem>> {
+    pub(crate) fn parse_feed(&self, xml: &str) -> Result<Vec<ProductHuntItem>> {
         let mut items = Vec::new();
 
         // Find all <item> tags
@@ -105,7 +105,7 @@ impl ProductHuntSource {
 // ============================================================================
 
 /// Extract content from XML tag
-fn extract_tag(xml: &str, tag: &str) -> Option<String> {
+pub(crate) fn extract_tag(xml: &str, tag: &str) -> Option<String> {
     let start_tag = format!("<{}>", tag);
     let end_tag = format!("</{}>", tag);
 
@@ -123,7 +123,7 @@ fn extract_tag(xml: &str, tag: &str) -> Option<String> {
 }
 
 /// Extract upvotes from description text
-fn extract_upvotes(description: &str) -> Option<i32> {
+pub(crate) fn extract_upvotes(description: &str) -> Option<i32> {
     // Product Hunt descriptions often include "👍 123 upvotes"
     if let Some(idx) = description.find("upvote") {
         let before = &description[..idx];
@@ -136,7 +136,7 @@ fn extract_upvotes(description: &str) -> Option<i32> {
 }
 
 /// Extract comments from description text
-fn extract_comments(description: &str) -> Option<i32> {
+pub(crate) fn extract_comments(description: &str) -> Option<i32> {
     // Similar pattern for comments
     if let Some(idx) = description.find("comment") {
         let before = &description[..idx];

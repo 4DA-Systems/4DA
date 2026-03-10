@@ -16,14 +16,14 @@ const MAX_ENTRIES_PER_QUERY: usize = 200;
 // ============================================================================
 
 #[derive(Debug, Deserialize)]
-struct ArxivEntry {
-    id: String,
-    title: String,
-    summary: String,
-    authors: Vec<String>,
-    categories: Vec<String>,
-    published: String,
-    link: String,
+pub(crate) struct ArxivEntry {
+    pub(crate) id: String,
+    pub(crate) title: String,
+    pub(crate) summary: String,
+    pub(crate) authors: Vec<String>,
+    pub(crate) categories: Vec<String>,
+    pub(crate) published: String,
+    pub(crate) link: String,
 }
 
 // ============================================================================
@@ -68,7 +68,7 @@ impl ArxivSource {
     }
 
     /// Parse arXiv Atom feed response into entries
-    fn parse_atom_feed(&self, xml: &str) -> Vec<ArxivEntry> {
+    pub(crate) fn parse_atom_feed(&self, xml: &str) -> Vec<ArxivEntry> {
         let mut entries = Vec::new();
 
         // Simple XML parsing - find <entry> blocks
@@ -151,7 +151,7 @@ impl ArxivSource {
     }
 
     /// Extract arXiv ID from full URL
-    fn extract_arxiv_id(url: &str) -> String {
+    pub(crate) fn extract_arxiv_id(url: &str) -> String {
         // URL format: http://arxiv.org/abs/2401.12345v1
         let id = url.rsplit('/').next().unwrap_or(url);
 
