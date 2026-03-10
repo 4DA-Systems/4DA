@@ -139,7 +139,20 @@ mod domain_profile;
 mod domain_profile_data;
 pub mod extractors;
 mod free_briefing;
+#[cfg(feature = "experimental")]
 mod game_achievements;
+#[cfg(not(feature = "experimental"))]
+mod game_achievements {
+    use serde::{Deserialize, Serialize};
+
+    #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+    #[serde(rename_all = "lowercase")]
+    pub enum AchievementTier {
+        Bronze,
+        Silver,
+        Gold,
+    }
+}
 #[cfg(feature = "experimental")]
 mod game_commands;
 mod http_client;
@@ -166,7 +179,52 @@ mod game_commands {
         Ok(serde_json::json!([]))
     }
 }
+#[cfg(feature = "experimental")]
 mod game_engine;
+#[cfg(not(feature = "experimental"))]
+mod game_engine {
+    use crate::db::Database;
+    use crate::game_achievements::AchievementTier;
+    use serde::{Deserialize, Serialize};
+
+    #[derive(Debug, Clone, Serialize, Deserialize)]
+    pub struct AchievementUnlocked {
+        pub id: String,
+        pub name: String,
+        pub description: String,
+        pub icon: String,
+        pub tier: AchievementTier,
+        pub celebration_intensity: f64,
+        pub unlocked_at: String,
+    }
+
+    pub fn create_tables(_conn: &rusqlite::Connection) -> rusqlite::Result<()> {
+        Ok(())
+    }
+
+    pub fn increment_counter(
+        _db: &Database,
+        _counter_type: &str,
+        _amount: u64,
+    ) -> Vec<AchievementUnlocked> {
+        Vec::new()
+    }
+
+    #[allow(dead_code)]
+    pub fn check_daily_streak(_db: &Database) -> Vec<AchievementUnlocked> {
+        Vec::new()
+    }
+
+    #[allow(dead_code)]
+    pub fn get_game_state(_db: &Database) -> serde_json::Value {
+        serde_json::json!({"counters": [], "achievements": [], "streak": 0, "last_active": null})
+    }
+
+    #[allow(dead_code)]
+    pub fn get_achievements(_db: &Database) -> Vec<AchievementUnlocked> {
+        Vec::new()
+    }
+}
 mod health;
 mod health_commands;
 mod indexed_documents_commands;
