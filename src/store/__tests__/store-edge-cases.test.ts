@@ -7,6 +7,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { useAppStore } from '../index';
 import { invoke } from '@tauri-apps/api/core';
+import type { FeedbackAction } from '../../types';
 
 vi.mock('@tauri-apps/api/core', () => ({
   invoke: vi.fn(),
@@ -206,7 +207,7 @@ describe('store edge cases', () => {
   // ---------------------------------------------------------------------------
   describe('feedback edge cases', () => {
     it('handles large number of feedback entries', () => {
-      const largeFeedback: Record<number, string> = {};
+      const largeFeedback: Record<number, FeedbackAction> = {};
       for (let i = 0; i < 1000; i++) {
         largeFeedback[i] = i % 2 === 0 ? 'save' : 'dismiss';
       }

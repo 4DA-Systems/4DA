@@ -38,7 +38,7 @@ describe('useBriefingDerived', () => {
   describe('gaps', () => {
     it('returns empty gaps when all sources are healthy', () => {
       const health: SourceHealthStatus[] = [
-        { source: 'hackernews', status: 'healthy', last_fetch: '2024-01-01', item_count: 10 } as SourceHealthStatus,
+        { source_type: 'hackernews', status: 'healthy', last_success_relative: '2024-01-01', items_fetched: 10, gap_message: null },
       ];
       const { result } = renderHook(() =>
         useBriefingDerived([], health, makeBriefingState(), null),
@@ -47,8 +47,8 @@ describe('useBriefingDerived', () => {
     });
 
     it('returns gaps for non-healthy sources with gap_message', () => {
-      const health = [
-        { source: 'reddit', status: 'error', gap_message: 'Rate limited', last_fetch: null, item_count: 0 } as SourceHealthStatus,
+      const health: SourceHealthStatus[] = [
+        { source_type: 'reddit', status: 'error', gap_message: 'Rate limited', last_success_relative: null, items_fetched: 0 },
       ];
       const { result } = renderHook(() =>
         useBriefingDerived([], health, makeBriefingState(), null),
@@ -99,9 +99,9 @@ describe('useBriefingDerived', () => {
     });
 
     it('computes healthy/total counts correctly', () => {
-      const health = [
-        { source: 'hackernews', status: 'healthy', last_fetch: '2024-01-01', item_count: 10 } as SourceHealthStatus,
-        { source: 'reddit', status: 'error', last_fetch: null, item_count: 0 } as SourceHealthStatus,
+      const health: SourceHealthStatus[] = [
+        { source_type: 'hackernews', status: 'healthy', last_success_relative: '2024-01-01', items_fetched: 10, gap_message: null },
+        { source_type: 'reddit', status: 'error', last_success_relative: null, items_fetched: 0, gap_message: null },
       ];
       const { result } = renderHook(() =>
         useBriefingDerived([], health, makeBriefingState(), null),
@@ -110,9 +110,9 @@ describe('useBriefingDerived', () => {
     });
 
     it('reports allHealthy when all sources are healthy', () => {
-      const health = [
-        { source: 'hackernews', status: 'healthy', last_fetch: '2024-01-01', item_count: 10 } as SourceHealthStatus,
-        { source: 'reddit', status: 'healthy', last_fetch: '2024-01-01', item_count: 5 } as SourceHealthStatus,
+      const health: SourceHealthStatus[] = [
+        { source_type: 'hackernews', status: 'healthy', last_success_relative: '2024-01-01', items_fetched: 10, gap_message: null },
+        { source_type: 'reddit', status: 'healthy', last_success_relative: '2024-01-01', items_fetched: 5, gap_message: null },
       ];
       const { result } = renderHook(() =>
         useBriefingDerived([], health, makeBriefingState(), null),

@@ -62,6 +62,16 @@ import type {
 } from '../types/playbook';
 import type { ParsedCommand, CommandExecutionResult } from '../types/streets';
 import type { StackProfileSummary, StackDetection } from '../types/stacks';
+import type {
+  InfrastructureDimension,
+  StackDimension,
+  SkillsDimension,
+  PreferencesDimension,
+  ContextDimension,
+  IntelligenceReport,
+  CompletenessReport,
+} from '../types';
+import type { PersonalizedLesson as PersonalizedLessonType } from '../types/personalization';
 
 
 // ============================================================================
@@ -98,7 +108,7 @@ interface CommandMap {
   validate_api_key: { params: { provider: string; key: string }; result: { valid: boolean; format_ok: boolean; connection_ok: boolean; error: string | null; model_access: string[] } };
   run_calibration: { params: Record<string, never>; result: CalibrationResult };
   set_close_to_tray: { params: { enabled: boolean }; result: void };
-  record_interaction: { params: { sourceItemId: number; action: string }; result: unknown };
+  record_interaction: { params: { sourceItemId: number; action: string }; result: { success: boolean } };
 
   // -- Taste Test Calibration --
   taste_test_start: { params: Record<string, never>; result: TasteTestStepResult };
@@ -191,7 +201,7 @@ interface CommandMap {
   // -- License & Trial --
   get_license_tier: { params: Record<string, never>; result: { tier: string; has_key: boolean; activated_at: string | null; expires_at: string | null; days_remaining: number; expired: boolean } };
   activate_license: { params: { licenseKey: string }; result: { success: boolean; tier: string; expires_at?: string } };
-  validate_license: { params: Record<string, never>; result: unknown };
+  validate_license: { params: Record<string, never>; result: { validated: boolean; tier: string; cached?: boolean; detail: string } };
   get_trial_status: { params: Record<string, never>; result: { active: boolean; days_remaining: number; started_at: string | null } };
   start_trial: { params: Record<string, never>; result: { success: boolean; days_remaining?: number } };
   get_pro_value_report: { params: Record<string, never>; result: ProValueReport };
@@ -210,9 +220,9 @@ interface CommandMap {
   execute_lesson_commands: { params: { moduleId: string; lessonIdx: number; maxRisk: string }; result: CommandExecutionResult[] };
   get_personalized_lesson: { params: { moduleId: string; lessonIdx: number }; result: PersonalizedLesson };
   get_personalized_lessons_batch: { params: { requests: Array<[string, number]> }; result: PersonalizedLesson[] };
-  get_personalization_context_summary: { params: Record<string, never>; result: unknown };
-  prune_personalization_cache: { params: Record<string, never>; result: unknown };
-  hydrate_lesson_with_llm: { params: { moduleId: string; lessonIdx: number }; result: unknown };
+  get_personalization_context_summary: { params: Record<string, never>; result: PersonalizationContextSummary };
+  prune_personalization_cache: { params: Record<string, never>; result: { deleted: number; remaining: number; read_states: number; cache_size_bytes: number } };
+  hydrate_lesson_with_llm: { params: { moduleId: string; lessonIdx: number }; result: { upgraded: number; total_blocks?: number; reason?: string } };
 
   // -- STREETS Health --
   get_street_health: { params: Record<string, never>; result: StreetHealthScore };
@@ -222,7 +232,7 @@ interface CommandMap {
   get_sovereign_profile_completeness: { params: Record<string, never>; result: ProfileCompleteness };
   save_sovereign_fact: { params: { category: string; key: string; value: string }; result: void };
   generate_sovereign_stack_document: { params: Record<string, never>; result: string };
-  get_execution_log: { params: { moduleId: string; lessonIdx?: number }; result: unknown[] };
+  get_execution_log: { params: { moduleId: string; lessonIdx?: number }; result: ExecutionLogEntry[] };
 
   // -- Sovereign Developer Profile (Unified) --
   get_sovereign_developer_profile: { params: Record<string, never>; result: SovereignDeveloperProfileData };
@@ -295,7 +305,7 @@ interface CommandMap {
   set_x_api_key: { params: { key: string }; result: void };
   get_github_languages: { params: Record<string, never>; result: { languages: string[]; count: number } };
   set_github_languages: { params: { languages: string[] }; result: void };
-  get_sources: { params: Record<string, never>; result: unknown };
+  get_sources: { params: Record<string, never>; result: SourceInfo[] };
 
   // -- Locale & i18n --
   get_locale: { params: Record<string, never>; result: { country: string; language: string; currency: string } };
@@ -310,7 +320,7 @@ interface CommandMap {
 
   // -- STREETS Localization --
   get_regional_data: { params: Record<string, never>; result: RegionalData };
-  calculate_electricity_cost: { params: { watts: number; hoursPerDay: number }; result: unknown };
+  calculate_electricity_cost: { params: { watts: number; hoursPerDay: number }; result: ElectricityCostResult };
 
   // -- Digest --
   get_digest_config: { params: Record<string, never>; result: DigestConfig };
@@ -350,8 +360,11 @@ interface CommandMap {
   preview_channel_sources: { params: { topics: string[] }; result: { count: number; topTitles: string[] } };
   delete_channel: { params: { channelId: number }; result: void };
 
+  // -- Startup Health --
+  get_startup_health: { params: Record<string, never>; result: StartupHealthIssue[] };
+
   // -- Splash Probes --
-  get_context_stats: { params: Record<string, never>; result: unknown };
+  get_context_stats: { params: Record<string, never>; result: ContextStats };
 
   // -- Natural Language Search (Pro) --
   synthesize_search: { params: { queryText: string }; result: SynthesisResponse };
@@ -387,9 +400,9 @@ interface CommandMap {
   clear_telemetry: { params: Record<string, never>; result: void };
 
   // -- GAME Engine --
-  get_game_state: { params: Record<string, never>; result: unknown };
-  get_achievements: { params: Record<string, never>; result: unknown };
-  check_daily_streak: { params: Record<string, never>; result: unknown };
+  get_game_state: { params: Record<string, never>; result: GameState };
+  get_achievements: { params: Record<string, never>; result: AchievementUnlocked[] };
+  check_daily_streak: { params: Record<string, never>; result: AchievementUnlocked[] };
 
   // -- Team Sync (AD-023) --
   get_team_sync_status: { params: Record<string, never>; result: TeamSyncStatus };
@@ -443,6 +456,102 @@ interface CommandMap {
 // Types referenced above but not yet in shared type files
 // (These can be moved to src/types/ as they get formalized)
 // ============================================================================
+
+/** Personalization context summary (mirrors Rust get_personalization_context_summary JSON) */
+interface PersonalizationContextSummary {
+  profile_completeness: number;
+  has_llm: boolean;
+  llm_tier: string;
+  gpu_tier: string;
+  os_family: string;
+  stack_count: number;
+  interest_count: number;
+  completed_modules: string[];
+  completed_lessons: number;
+  regional_country: string;
+  dna_available: boolean;
+  context_hash: string;
+}
+
+/** Execution log entry (mirrors Rust row_to_json in sovereign_profile.rs) */
+interface ExecutionLogEntry {
+  id: number;
+  module_id: string;
+  lesson_idx: number;
+  command_id: string;
+  command_text: string;
+  success: boolean;
+  exit_code: number | null;
+  stdout: string | null;
+  stderr: string | null;
+  duration_ms: number | null;
+  executed_at: string | null;
+}
+
+/** Registered source info (mirrors Rust get_sources JSON) */
+interface SourceInfo {
+  type: string;
+  name: string;
+  enabled: boolean;
+  max_items: number;
+  fetch_interval_secs: number;
+}
+
+/** Electricity cost calculation result (mirrors Rust calculate_electricity_cost JSON) */
+interface ElectricityCostResult {
+  kwh_per_day: string;
+  daily_cost: string;
+  monthly_cost: string;
+  yearly_cost: string;
+  rate_per_kwh: string;
+  currency: string;
+}
+
+/** Context engine statistics (mirrors Rust get_context_stats JSON) */
+interface ContextStats {
+  interests: number;
+  exclusions: number;
+  tech_stack: number;
+  domains: number;
+  has_role: boolean;
+}
+
+/** Game engine state (mirrors Rust GameState) */
+interface GameState {
+  counters: Array<{ counter_type: string; value: number }>;
+  achievements: Array<{
+    id: string;
+    name: string;
+    description: string;
+    icon: string;
+    counter_type: string;
+    threshold: number;
+    tier: 'bronze' | 'silver' | 'gold';
+    current: number;
+    unlocked: boolean;
+    unlocked_at: string | null;
+  }>;
+  streak: number;
+  last_active: string | null;
+}
+
+/** Achievement unlock event (mirrors Rust AchievementUnlocked) */
+interface AchievementUnlocked {
+  id: string;
+  name: string;
+  description: string;
+  icon: string;
+  tier: 'bronze' | 'silver' | 'gold';
+  celebration_intensity: number;
+  unlocked_at: string;
+}
+
+/** Startup health issue (mirrors Rust HealthIssue) */
+interface StartupHealthIssue {
+  component: string;
+  severity: 'warning' | 'error';
+  message: string;
+}
 
 /** Team sync status (mirrors Rust TeamSyncStatus) */
 interface TeamSyncStatus {
@@ -562,7 +671,7 @@ interface AuditEntry {
   action: string;
   resource_type: string;
   resource_id: string | null;
-  details: unknown | null;
+  details: Record<string, unknown> | null;
   created_at: string;
 }
 
@@ -910,30 +1019,26 @@ interface IntelligencePulseData {
   items_surfaced_7d: number;
   rejection_rate: number;
   calibration_accuracy: number;
-  top_calibrations: Array<{ topic: string; delta: number; direction: string }>;
-  source_quality: Array<{ source_type: string; avg_score: number; item_count: number }>;
+  top_calibrations: Array<{ topic: string; delta: number; sample_size: number; confidence: number }>;
+  source_quality: Array<{ source_type: string; items_surfaced: number; items_engaged: number; engagement_rate: number }>;
   anti_patterns_detected: number;
-  total_autophagy_cycles: number;
+  total_cycles: number;
+  learning_narratives: string[];
 }
 
-interface PersonalizedLesson {
-  content: string;
-  insight_blocks: Array<{ block_type: string; title: string; content: string }>;
-  mirror_blocks: Array<{ block_type: string; title: string; content: string }>;
-  temporal_blocks: Array<{ block_type: string; title: string; content: string }>;
-  depth: string;
-}
+/** @deprecated Use PersonalizedLesson from types/personalization.ts instead */
+type PersonalizedLesson = PersonalizedLessonType;
 
 interface SovereignDeveloperProfileData {
   generated_at: string;
   identity_summary: string;
-  infrastructure: unknown;
-  stack: unknown;
-  skills: unknown;
-  preferences: unknown;
-  context: unknown;
-  intelligence: unknown;
-  completeness: unknown;
+  infrastructure: InfrastructureDimension;
+  stack: StackDimension;
+  skills: SkillsDimension;
+  preferences: PreferencesDimension;
+  context: ContextDimension;
+  intelligence: IntelligenceReport;
+  completeness: CompletenessReport;
 }
 
 interface RadarEntry {
@@ -1260,4 +1365,13 @@ export type {
   // Enterprise: Analytics
   OrgAnalytics,
   TeamActivity,
+  // IPC type safety additions
+  PersonalizationContextSummary,
+  ExecutionLogEntry,
+  SourceInfo,
+  ElectricityCostResult,
+  ContextStats,
+  GameState,
+  AchievementUnlocked,
+  StartupHealthIssue,
 };
