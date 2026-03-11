@@ -58,7 +58,7 @@ export function AIProviderSection({
     message: string;
     models: string[];
   }>({ status: 'idle', message: '', models: [] });
-  const debounceRef = useRef<ReturnType<typeof setTimeout>>();
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   // Detect env keys on mount
   useEffect(() => {
