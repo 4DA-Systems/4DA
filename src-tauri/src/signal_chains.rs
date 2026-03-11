@@ -389,7 +389,7 @@ fn predict_next_interval(intervals: &[f64], acceleration: f64) -> Option<f64> {
         return None;
     }
 
-    let last = *intervals.last().unwrap();
+    let last = *intervals.last()?;
     let predicted = last + acceleration;
 
     // Clamp to reasonable range (1 hour to 7 days)
