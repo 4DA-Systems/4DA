@@ -12,7 +12,7 @@
 
 ## 1. Introduction & Scope
 
-This Privacy Policy describes how **4DA Systems** (ABN pending; "we", "us", "our") handles information in connection with:
+This Privacy Policy describes how **4DA Systems Pty Ltd** (ACN 696 078 841; "we", "us", "our") handles information in connection with:
 
 - **The 4DA Desktop Application** ("the App") -- a Tauri 2.0 desktop application that runs locally on your device
 - **The 4DA Website** (4da.ai) -- our informational website
@@ -282,7 +282,7 @@ If you have questions about this Privacy Policy, want to exercise your rights, o
 - Privacy-specific requests: [privacy@4da.ai](mailto:privacy@4da.ai)
 
 **Entity:**
-4DA Systems
+4DA Systems Pty Ltd (ACN 696 078 841)
 Queensland, Australia
 
 **Response times:**

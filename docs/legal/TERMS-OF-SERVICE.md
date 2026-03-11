@@ -12,7 +12,7 @@
 
 By downloading, installing, or using the 4DA desktop application ("the App"), or by subscribing to any paid tier, you agree to be bound by these Terms. If you do not agree to these Terms, do not use the App.
 
-These Terms constitute a legally binding agreement between you ("User", "you") and **4DA Systems** (to be registered as **4DA Systems Pty Ltd**), a business registered in Queensland, Australia ("4DA", "we", "us", "our").
+These Terms constitute a legally binding agreement between you ("User", "you") and **4DA Systems Pty Ltd** (ACN 696 078 841), a company registered in Queensland, Australia ("4DA", "we", "us", "our").
 
 We may update these Terms from time to time (see [Section 13](#13-changes-to-terms)). Your continued use of the App after changes are posted constitutes acceptance of the updated Terms.
 
@@ -157,7 +157,7 @@ The 4DA source code is released under the **Functional Source License, Version 1
 
 ### 8.2 Trademarks
 
-"4DA", the 4DA logo, and "4 Dimensional Autonomy" are trademarks of 4DA Systems. You may not use these trademarks without prior written permission, except as necessary to refer to 4DA or its products in a factual, non-misleading manner (fair use).
+"4DA", the 4DA logo, and "4 Dimensional Autonomy" are trademarks of 4DA Systems Pty Ltd (ACN 696 078 841). You may not use these trademarks without prior written permission, except as necessary to refer to 4DA or its products in a factual, non-misleading manner (fair use).
 
 ### 8.3 Open Source Contributions
 
@@ -276,9 +276,9 @@ If you have questions about these Terms, contact us:
 - **Legal inquiries:** [legal@4da.ai](mailto:legal@4da.ai)
 - **Website:** [https://4da.ai](https://4da.ai)
 
-**4DA Systems**
+**4DA Systems Pty Ltd** (ACN 696 078 841)
 Queensland, Australia
 
 ---
 
-Copyright 2026 4DA Systems. All rights reserved.
+Copyright 2026 4DA Systems Pty Ltd (ACN 696 078 841). All rights reserved.

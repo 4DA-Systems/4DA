@@ -304,7 +304,7 @@ All signal. No feed.
 
 ---
 
-"4DA" and the 4DA logo are trademarks of 4DA Systems.
+"4DA" and the 4DA logo are trademarks of 4DA Systems Pty Ltd (ACN 696 078 841).
 The [FSL-1.1-Apache-2.0](LICENSE) license does not grant rights to use these trademarks.
 
 </div>
