@@ -61,8 +61,8 @@ export function useKeyboardShortcuts(actions: KeyboardShortcutActions) {
         return;
       }
 
-      // j/k: navigate results
-      if (e.key === 'j' && maxIndex >= 0) {
+      // j/k/ArrowDown/ArrowUp: navigate results
+      if ((e.key === 'j' || e.key === 'ArrowDown') && maxIndex >= 0) {
         e.preventDefault();
         setFocusedIndex(prev => {
           const next = Math.min(prev + 1, maxIndex);
@@ -72,7 +72,7 @@ export function useKeyboardShortcuts(actions: KeyboardShortcutActions) {
         return;
       }
 
-      if (e.key === 'k' && maxIndex >= 0) {
+      if ((e.key === 'k' || e.key === 'ArrowUp') && maxIndex >= 0) {
         e.preventDefault();
         setFocusedIndex(prev => {
           const next = Math.max(prev - 1, 0);
@@ -82,8 +82,8 @@ export function useKeyboardShortcuts(actions: KeyboardShortcutActions) {
         return;
       }
 
-      // Enter: toggle expand on focused item
-      if (e.key === 'Enter' && focusedIndex >= 0) {
+      // Enter/Space: toggle expand on focused item
+      if ((e.key === 'Enter' || e.key === ' ') && focusedIndex >= 0) {
         e.preventDefault();
         current.onToggleExpandResult?.(focusedIndex);
         return;

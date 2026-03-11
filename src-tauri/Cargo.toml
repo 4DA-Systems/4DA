@@ -137,7 +137,7 @@ name = "db_scale"
 harness = false
 
 [features]
-default = ["ocr", "archive"]
+default = []
 ocr = ["dep:ocrs", "dep:rten", "dep:image"]
 archive = ["dep:zip", "dep:tar", "dep:flate2"]
 void-universe = []

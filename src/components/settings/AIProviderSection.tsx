@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 
-import { commands } from '../../lib/commands';
+import { cmd } from '../../lib/commands';
 import type { Settings } from '../../types';
 import type { OllamaStatus } from '../../hooks/use-settings';
 
@@ -62,7 +62,7 @@ export function AIProviderSection({
 
   // Detect env keys on mount
   useEffect(() => {
-    commands.detect_environment({}).then(setEnvDetection).catch(() => {});
+    cmd('detect_environment').then(setEnvDetection).catch(() => {});
   }, []);
 
   // Debounced key validation
@@ -75,7 +75,7 @@ export function AIProviderSection({
     debounceRef.current = setTimeout(async () => {
       setValidation({ status: 'checking', message: 'Verifying...', models: [] });
       try {
-        const result = await commands.validate_api_key({ provider, key });
+        const result = await cmd('validate_api_key', { provider, key });
         if (result.valid) {
           setValidation({
             status: 'valid',
@@ -106,7 +106,7 @@ export function AIProviderSection({
   const handleImportEnv = async (provider: 'anthropic' | 'openai') => {
     setImporting(true);
     try {
-      await commands.import_env_key({ provider });
+      await cmd('import_env_key', { provider });
       setSettingsForm((f) => ({ ...f, provider, apiKey: '(imported from environment)' }));
     } catch { /* user can still enter manually */ }
     finally { setImporting(false); }
