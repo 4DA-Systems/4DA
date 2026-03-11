@@ -4,6 +4,7 @@
   "version": "1.0.0",
   "author": "4DA Systems",
   "license": "FSL-1.1-Apache-2.0",
+  "homepage": "https://4da.ai",
   "type": "module",
   "scripts": {
     "dev": "vite",

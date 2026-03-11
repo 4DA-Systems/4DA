@@ -48,8 +48,8 @@ jobs:
           fi
           COUNT=$(echo "$OUTPUT" | sed -n 's/.*[^0-9]\([0-9][0-9]*\) passed.*/\1/p' | tail -1)
           echo "Frontend tests passed: $COUNT"
-          if [ -z "$COUNT" ] || [ "$COUNT" -lt 700 ]; then
-            echo "::error::Frontend test count dropped below 700 (got ${COUNT:-0})"
+          if [ -z "$COUNT" ] || [ "$COUNT" -lt 1000 ]; then
+            echo "::error::Frontend test count dropped below 1000 (got ${COUNT:-0})"
             exit 1
           fi
 
@@ -84,7 +84,7 @@ jobs:
         include:
           - label: default
             cargo-features: ''
-            test-floor: 1400
+            test-floor: 2000
           - label: experimental
             cargo-features: '--features experimental'
             test-floor: 0
