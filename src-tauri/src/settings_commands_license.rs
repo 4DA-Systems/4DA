@@ -101,6 +101,10 @@ pub async fn activate_license(license_key: String) -> Result<serde_json::Value> 
     let mut guard = manager.lock();
 
     let settings = guard.get_mut();
+    // Store license key in platform keychain
+    if !license_key.is_empty() {
+        let _ = crate::settings::keystore::store_secret("license_key", &license_key);
+    }
     settings.license.license_key = license_key;
     settings.license.tier = effective_tier.clone();
     settings.license.activated_at = Some(chrono::Utc::now().to_rfc3339());
@@ -494,7 +498,7 @@ pub async fn get_context_stats() -> Result<serde_json::Value> {
 }
 
 /// Get a Signal value report summarizing pipeline impact.
-/// TODO: aggregate real data from analysis history once Pro analytics are built.
+/// FUTURE: aggregate real data from analysis history once Signal analytics are built.
 #[tauri::command]
 pub async fn get_pro_value_report() -> Result<serde_json::Value> {
     Ok(serde_json::json!({
