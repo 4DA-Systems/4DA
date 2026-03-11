@@ -226,7 +226,7 @@ impl Database {
             .query_row("SELECT version FROM schema_version", [], |row| row.get(0))
             .unwrap_or(1);
 
-        const TARGET_VERSION: i64 = 26;
+        const TARGET_VERSION: i64 = 27;
         if current_version < TARGET_VERSION {
             // Drop the conn lock briefly to allow backup (needs filesystem access)
             drop(conn);
@@ -955,6 +955,17 @@ impl Database {
                 )?;
             }
 
+            // Phase 27: Team sync infrastructure (AD-023)
+            if current_version < 27 {
+                Self::run_versioned_migration(
+                    &conn,
+                    26,
+                    27,
+                    "Phase 27: team sync infrastructure",
+                    Self::migrate_to_phase_27,
+                )?;
+            }
+
             info!(target: "4da::db", "Database schema initialized with sqlite-vec");
             return Ok(());
         }
@@ -1229,6 +1240,69 @@ impl Database {
 
         Ok(())
     }
+
+    /// Phase 27 migration: Team sync infrastructure (AD-023)
+    fn migrate_to_phase_27(conn: &Connection) -> SqliteResult<()> {
+        conn.execute_batch(
+            "-- Team sync queue (outbound entries not yet acknowledged by relay)
+            CREATE TABLE IF NOT EXISTS team_sync_queue (
+                entry_id    TEXT PRIMARY KEY,
+                team_id     TEXT NOT NULL,
+                client_id   TEXT NOT NULL,
+                operation   TEXT NOT NULL,
+                hlc_ts      INTEGER NOT NULL,
+                encrypted   BLOB,
+                relay_seq   INTEGER,
+                created_at  INTEGER NOT NULL DEFAULT (unixepoch()),
+                acked_at    INTEGER
+            );
+            CREATE INDEX IF NOT EXISTS idx_tsq_pending
+                ON team_sync_queue(acked_at) WHERE acked_at IS NULL;
+
+            -- Team sync log (inbound entries received from relay)
+            CREATE TABLE IF NOT EXISTS team_sync_log (
+                relay_seq   INTEGER NOT NULL,
+                team_id     TEXT NOT NULL,
+                client_id   TEXT NOT NULL,
+                encrypted   BLOB NOT NULL,
+                received_at INTEGER NOT NULL DEFAULT (unixepoch()),
+                applied     INTEGER NOT NULL DEFAULT 0,
+                PRIMARY KEY (relay_seq, team_id)
+            );
+            CREATE INDEX IF NOT EXISTS idx_tsl_unapplied
+                ON team_sync_log(applied) WHERE applied = 0;
+
+            -- Team sync state (track highest processed sequence per team)
+            CREATE TABLE IF NOT EXISTS team_sync_state (
+                team_id         TEXT PRIMARY KEY,
+                last_relay_seq  INTEGER NOT NULL DEFAULT 0,
+                last_sync_at    INTEGER
+            );
+
+            -- Team crypto keys (keypair + team symmetric key)
+            CREATE TABLE IF NOT EXISTS team_crypto (
+                team_id             TEXT PRIMARY KEY,
+                our_public_key      BLOB NOT NULL,
+                our_private_key_enc BLOB NOT NULL,
+                team_symmetric_key_enc BLOB,
+                created_at          INTEGER NOT NULL DEFAULT (unixepoch())
+            );
+
+            -- Team members cache (synced from relay)
+            CREATE TABLE IF NOT EXISTS team_members_cache (
+                team_id      TEXT NOT NULL,
+                client_id    TEXT NOT NULL,
+                display_name TEXT NOT NULL,
+                role         TEXT NOT NULL DEFAULT 'member',
+                public_key   BLOB,
+                last_seen    TEXT,
+                PRIMARY KEY (team_id, client_id)
+            );",
+        )?;
+
+        info!(target: "4da::db", "Created team sync tables (queue, log, state, crypto, members)");
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -1263,6 +1337,11 @@ mod tests {
             "source_health",
             "briefings",
             "void_positions",
+            "team_sync_queue",
+            "team_sync_log",
+            "team_sync_state",
+            "team_crypto",
+            "team_members_cache",
         ];
         for table in &expected {
             assert!(

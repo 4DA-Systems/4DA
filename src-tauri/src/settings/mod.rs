@@ -546,6 +546,9 @@ pub struct Settings {
     /// Community intelligence configuration (opt-in anonymous pattern sharing)
     #[serde(default)]
     pub community_intelligence: Option<CommunityIntelligenceConfig>,
+    /// Team relay configuration (encrypted metadata sync between team members)
+    #[serde(default)]
+    pub team_relay: Option<crate::team_sync_types::TeamRelayConfig>,
 }
 
 impl std::fmt::Debug for Settings {
@@ -582,6 +585,7 @@ impl std::fmt::Debug for Settings {
                 "community_intelligence",
                 &self.community_intelligence.is_some(),
             )
+            .field("team_relay", &self.team_relay.is_some())
             .finish_non_exhaustive()
     }
 }
@@ -659,6 +663,7 @@ impl Default for Settings {
             rate_budgets: default_rate_budgets(),
             locale: LocaleConfig::default(),
             community_intelligence: None,
+            team_relay: None,
         }
     }
 }

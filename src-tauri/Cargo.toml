@@ -97,6 +97,15 @@ fourda-macros = { path = "fourda-macros" }
 ed25519-dalek = { version = "2.2.0", features = ["rand_core"] }
 tauri-plugin-deep-link = "2.4.7"
 
+# Team sync — E2E encrypted metadata relay (AD-023)
+chacha20poly1305 = "0.10"
+x25519-dalek = { version = "2", features = ["static_secrets"] }
+hkdf = "0.12"
+uhlc = "0.7"
+tokio-tungstenite = { version = "0.24", features = ["rustls-tls-webpki-roots"] }
+uuid = { version = "1", features = ["v4", "serde"] }
+rand = "0.8"
+
 [[bin]]
 name = "4da"
 path = "src/bin/cli.rs"

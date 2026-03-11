@@ -22,8 +22,8 @@ use crate::{
 
 use super::processor::process_source_items;
 use super::{
-    load_github_languages_from_settings, load_rss_feeds_from_settings, load_twitter_settings,
-    load_youtube_channels_from_settings,
+    fetch_with_retry, load_github_languages_from_settings, load_rss_feeds_from_settings,
+    load_twitter_settings, load_youtube_channels_from_settings, AdapterFailureTracker,
 };
 
 /// Fetch items from all sources (HN, arXiv, Reddit) directly
@@ -107,6 +107,7 @@ pub(crate) async fn fetch_all_sources(
 
     let mut all_items: Vec<(GenericSourceItem, Vec<f32>)> = Vec::new();
     let mut new_items_to_embed: Vec<(GenericSourceItem, String)> = Vec::new();
+    let tracker = AdapterFailureTracker::new();
 
     for source in &sources {
         let source_type = source.source_type();
@@ -150,7 +151,7 @@ pub(crate) async fn fetch_all_sources(
         // Centralized rate limiting: wait if we fetched this source too recently
         rate_limiter().wait_for_rate_limit(source_type).await;
 
-        // Fetch items from this source with exponential backoff retry
+        // Fetch items from this source with self-healing retry
         let fetch_start = std::time::Instant::now();
 
         // Circuit breaker: skip sources with 5+ consecutive failures
@@ -162,23 +163,7 @@ pub(crate) async fn fetch_all_sources(
             continue;
         }
 
-        let fetch_result = {
-            let mut attempts = 0;
-            let max_attempts = 3;
-            let backoff_ms = [500u64, 1000, 2000];
-            loop {
-                attempts += 1;
-                match source.fetch_items().await {
-                    Ok(items) => break Ok(items),
-                    Err(e) if attempts < max_attempts => {
-                        let delay = backoff_ms.get(attempts - 1).copied().unwrap_or(2000);
-                        warn!(target: "4da::sources", source = source_name, attempt = attempts, error = ?e, delay_ms = delay, "Fetch failed, retrying...");
-                        tokio::time::sleep(std::time::Duration::from_millis(delay)).await;
-                    }
-                    Err(e) => break Err(e),
-                }
-            }
-        };
+        let fetch_result = fetch_with_retry(source_name, &tracker, || source.fetch_items()).await;
 
         let elapsed_ms = fetch_start.elapsed().as_millis() as i64;
 
@@ -282,14 +267,24 @@ pub(crate) async fn fetch_all_sources(
                     }
                 }
             }
-            Err(e) => {
-                error!(target: "4da::sources", source = source_name, error = ?e, "Source fetch failed after retries - continuing with other sources");
-                db.record_source_health(source_type, false, 0, elapsed_ms, Some(&format!("{}", e)))
-                    .ok();
+            Err(retry_err) => {
+                let failure_count = tracker.failure_count(source_name);
+                error!(target: "4da::sources", source = source_name, error = %retry_err, session_failures = failure_count, "Source fetch failed after retries - continuing with other sources");
+                db.record_source_health(
+                    source_type,
+                    false,
+                    0,
+                    elapsed_ms,
+                    Some(&format!("{}", retry_err)),
+                )
+                .ok();
                 let _ = app.emit(
                     "source-error",
                     serde_json::json!({
-                        "source": source_type, "error": format!("{}", e), "retry_count": 3
+                        "source": source_type,
+                        "error": format!("{}", retry_err),
+                        "retry_count": retry_err.attempts,
+                        "session_failures": failure_count
                     }),
                 );
             }
@@ -482,7 +477,9 @@ pub(crate) async fn fetch_all_sources_deep(
     );
 
     // Rate limit each source before parallel fetch (protects against rapid re-invocation)
+    // Each fetch is wrapped with fetch_with_retry for self-healing retry with backoff
     let rl = rate_limiter();
+    let deep_tracker = AdapterFailureTracker::new();
     let (
         hn_result,
         arxiv_result,
@@ -496,44 +493,67 @@ pub(crate) async fn fetch_all_sources_deep(
     ) = tokio::join!(
         async {
             rl.wait_for_rate_limit("hackernews").await;
-            hn_source.fetch_items_deep(items_per_category).await
+            fetch_with_retry("Hacker News", &deep_tracker, || {
+                hn_source.fetch_items_deep(items_per_category)
+            })
+            .await
         },
         async {
             rl.wait_for_rate_limit("arxiv").await;
-            arxiv_source.fetch_items_deep(items_per_category).await
+            fetch_with_retry("arXiv", &deep_tracker, || {
+                arxiv_source.fetch_items_deep(items_per_category)
+            })
+            .await
         },
         async {
             rl.wait_for_rate_limit("reddit").await;
-            reddit_source.fetch_items_deep(items_per_category).await
+            fetch_with_retry("Reddit", &deep_tracker, || {
+                reddit_source.fetch_items_deep(items_per_category)
+            })
+            .await
         },
         async {
             rl.wait_for_rate_limit("github").await;
-            github_source.fetch_items().await
+            fetch_with_retry("GitHub", &deep_tracker, || github_source.fetch_items()).await
         },
         async {
             rl.wait_for_rate_limit("rss").await;
-            rss_source.fetch_items().await
+            fetch_with_retry("RSS", &deep_tracker, || rss_source.fetch_items()).await
         },
         async {
             rl.wait_for_rate_limit("twitter").await;
-            twitter_source.fetch_items_deep(items_per_category).await
+            fetch_with_retry("Twitter", &deep_tracker, || {
+                twitter_source.fetch_items_deep(items_per_category)
+            })
+            .await
         },
         async {
             rl.wait_for_rate_limit("youtube").await;
-            youtube_source.fetch_items().await
+            fetch_with_retry("YouTube", &deep_tracker, || youtube_source.fetch_items()).await
         },
         async {
             rl.wait_for_rate_limit("lobsters").await;
-            lobsters_source.fetch_items_deep(items_per_category).await
+            fetch_with_retry("Lobsters", &deep_tracker, || {
+                lobsters_source.fetch_items_deep(items_per_category)
+            })
+            .await
         },
         async {
             rl.wait_for_rate_limit("devto").await;
-            devto_source.fetch_items_deep(items_per_category).await
+            fetch_with_retry("Dev.to", &deep_tracker, || {
+                devto_source.fetch_items_deep(items_per_category)
+            })
+            .await
         },
     );
 
     // Helper to emit per-source narration during deep fetch
     let mut deep_source_count: usize = 0;
+
+    // Log any persistent failures from the deep tracker
+    for (name, count) in deep_tracker.persistent_failures() {
+        warn!(target: "4da::retry", adapter = %name, consecutive_failures = count, "Persistent failure detected during deep scan");
+    }
 
     // Process HN results
     match hn_result {
@@ -559,7 +579,7 @@ pub(crate) async fn fetch_all_sources_deep(
             );
         }
         Err(e) => {
-            warn!(target: "4da::sources", source = "hackernews", error = ?e, "Deep fetch failed");
+            warn!(target: "4da::sources", source = "hackernews", error = %e, "Deep fetch failed after retries");
         }
     }
 
@@ -581,7 +601,7 @@ pub(crate) async fn fetch_all_sources_deep(
             );
         }
         Err(e) => {
-            warn!(target: "4da::sources", source = "arxiv", error = ?e, "Deep fetch failed");
+            warn!(target: "4da::sources", source = "arxiv", error = %e, "Deep fetch failed after retries");
         }
     }
 
@@ -603,7 +623,7 @@ pub(crate) async fn fetch_all_sources_deep(
             );
         }
         Err(e) => {
-            warn!(target: "4da::sources", source = "reddit", error = ?e, "Deep fetch failed");
+            warn!(target: "4da::sources", source = "reddit", error = %e, "Deep fetch failed after retries");
         }
     }
 
@@ -625,7 +645,7 @@ pub(crate) async fn fetch_all_sources_deep(
             );
         }
         Err(e) => {
-            warn!(target: "4da::sources", source = "github", error = ?e, "Fetch failed");
+            warn!(target: "4da::sources", source = "github", error = %e, "Fetch failed after retries");
         }
     }
 
@@ -647,7 +667,7 @@ pub(crate) async fn fetch_all_sources_deep(
             );
         }
         Err(e) => {
-            warn!(target: "4da::sources", source = "rss", error = ?e, "Fetch failed");
+            warn!(target: "4da::sources", source = "rss", error = %e, "Fetch failed after retries");
         }
     }
 
@@ -675,7 +695,7 @@ pub(crate) async fn fetch_all_sources_deep(
             );
         }
         Err(e) => {
-            warn!(target: "4da::sources", source = "twitter", error = ?e, "Fetch failed");
+            warn!(target: "4da::sources", source = "twitter", error = %e, "Fetch failed after retries");
         }
     }
 
@@ -703,7 +723,7 @@ pub(crate) async fn fetch_all_sources_deep(
             );
         }
         Err(e) => {
-            warn!(target: "4da::sources", source = "youtube", error = ?e, "Fetch failed");
+            warn!(target: "4da::sources", source = "youtube", error = %e, "Fetch failed after retries");
         }
     }
 
@@ -731,7 +751,7 @@ pub(crate) async fn fetch_all_sources_deep(
             );
         }
         Err(e) => {
-            warn!(target: "4da::sources", source = "lobsters", error = ?e, "Deep fetch failed");
+            warn!(target: "4da::sources", source = "lobsters", error = %e, "Deep fetch failed after retries");
         }
     }
 
@@ -753,7 +773,7 @@ pub(crate) async fn fetch_all_sources_deep(
             );
         }
         Err(e) => {
-            warn!(target: "4da::sources", source = "devto", error = ?e, "Deep fetch failed");
+            warn!(target: "4da::sources", source = "devto", error = %e, "Deep fetch failed after retries");
         }
     }
 
@@ -932,24 +952,25 @@ mod tests {
     }
 
     // ========================================================================
-    // Retry backoff pattern (mirrors fetch_all_sources retry logic)
+    // Retry backoff pattern (mirrors fetch_with_retry constants)
     // ========================================================================
 
     #[test]
     fn test_fetch_retry_backoff_pattern() {
-        let backoff_ms = [500u64, 1000, 2000];
-        let max_attempts = 3;
+        use super::super::{MAX_RETRY_ATTEMPTS, RETRY_BACKOFF_SECS};
 
-        // Attempt 1 (attempts=1, index 0) -> 500ms
-        let mut attempts = 1;
-        assert_eq!(backoff_ms.get(attempts - 1).copied().unwrap_or(2000), 500);
+        // Backoff should be 1s, 2s, 4s (exponential)
+        assert_eq!(RETRY_BACKOFF_SECS, [1, 2, 4]);
+        assert_eq!(MAX_RETRY_ATTEMPTS, 3);
 
-        // Attempt 2 -> 1000ms
-        attempts = 2;
-        assert_eq!(backoff_ms.get(attempts - 1).copied().unwrap_or(2000), 1000);
+        // Attempt 1 (index 0) -> 1s backoff before retry
+        assert_eq!(RETRY_BACKOFF_SECS[0], 1);
 
-        // The loop breaks at max_attempts, so attempt 3 never indexes into backoff
-        assert_eq!(max_attempts, 3);
+        // Attempt 2 (index 1) -> 2s backoff before retry
+        assert_eq!(RETRY_BACKOFF_SECS[1], 2);
+
+        // Attempt 3 (index 2) -> 4s (but this is the final attempt, no more retries)
+        assert_eq!(RETRY_BACKOFF_SECS[2], 4);
     }
 
     // ========================================================================

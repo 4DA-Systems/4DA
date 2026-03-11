@@ -22,8 +22,8 @@ use crate::{
 };
 
 use super::{
-    load_github_languages_from_settings, load_rss_feeds_from_settings, load_twitter_settings,
-    load_youtube_channels_from_settings,
+    fetch_with_retry, load_github_languages_from_settings, load_rss_feeds_from_settings,
+    load_twitter_settings, load_youtube_channels_from_settings, AdapterFailureTracker,
 };
 
 /// Fill the cache with items from all sources (background operation)
@@ -54,8 +54,9 @@ pub(crate) async fn fill_cache_background(app: &AppHandle) -> Result<usize> {
     let mut total_cached = 0;
     let mut new_items_to_embed: Vec<(String, String, Option<String>, String, String)> = Vec::new();
 
-    // Fetch from all sources in parallel (with per-source rate limiting)
+    // Fetch from all sources in parallel (with per-source rate limiting + retry)
     let rl = rate_limiter();
+    let cache_tracker = AdapterFailureTracker::new();
     let (
         hn_result,
         arxiv_result,
@@ -69,41 +70,64 @@ pub(crate) async fn fill_cache_background(app: &AppHandle) -> Result<usize> {
     ) = tokio::join!(
         async {
             rl.wait_for_rate_limit("hackernews").await;
-            hn_source.fetch_items_deep(50).await
+            fetch_with_retry("Hacker News", &cache_tracker, || {
+                hn_source.fetch_items_deep(50)
+            })
+            .await
         },
         async {
             rl.wait_for_rate_limit("arxiv").await;
-            arxiv_source.fetch_items_deep(50).await
+            fetch_with_retry("arXiv", &cache_tracker, || {
+                arxiv_source.fetch_items_deep(50)
+            })
+            .await
         },
         async {
             rl.wait_for_rate_limit("reddit").await;
-            reddit_source.fetch_items_deep(50).await
+            fetch_with_retry("Reddit", &cache_tracker, || {
+                reddit_source.fetch_items_deep(50)
+            })
+            .await
         },
         async {
             rl.wait_for_rate_limit("github").await;
-            github_source.fetch_items().await
+            fetch_with_retry("GitHub", &cache_tracker, || github_source.fetch_items()).await
         },
         async {
             rl.wait_for_rate_limit("rss").await;
-            rss_source.fetch_items().await
+            fetch_with_retry("RSS", &cache_tracker, || rss_source.fetch_items()).await
         },
         async {
             rl.wait_for_rate_limit("twitter").await;
-            twitter_source.fetch_items_deep(50).await
+            fetch_with_retry("Twitter", &cache_tracker, || {
+                twitter_source.fetch_items_deep(50)
+            })
+            .await
         },
         async {
             rl.wait_for_rate_limit("youtube").await;
-            youtube_source.fetch_items().await
+            fetch_with_retry("YouTube", &cache_tracker, || youtube_source.fetch_items()).await
         },
         async {
             rl.wait_for_rate_limit("lobsters").await;
-            lobsters_source.fetch_items_deep(50).await
+            fetch_with_retry("Lobsters", &cache_tracker, || {
+                lobsters_source.fetch_items_deep(50)
+            })
+            .await
         },
         async {
             rl.wait_for_rate_limit("devto").await;
-            devto_source.fetch_items_deep(50).await
+            fetch_with_retry("Dev.to", &cache_tracker, || {
+                devto_source.fetch_items_deep(50)
+            })
+            .await
         },
     );
+
+    // Log persistent failures from cache fill
+    for (name, count) in cache_tracker.persistent_failures() {
+        warn!(target: "4da::cache", adapter = %name, consecutive_failures = count, "Persistent failure during cache fill");
+    }
 
     // Process HN results
     match hn_result {
@@ -129,7 +153,9 @@ pub(crate) async fn fill_cache_background(app: &AppHandle) -> Result<usize> {
                 }
             }
         }
-        Err(e) => warn!(target: "4da::cache", source = "hackernews", error = ?e, "Fetch failed"),
+        Err(e) => {
+            warn!(target: "4da::cache", source = "hackernews", error = %e, "Fetch failed after retries")
+        }
     }
     void_signal_fetch_progress(app, 1, 9);
 
@@ -157,7 +183,9 @@ pub(crate) async fn fill_cache_background(app: &AppHandle) -> Result<usize> {
                 }
             }
         }
-        Err(e) => warn!(target: "4da::cache", source = "arxiv", error = ?e, "Fetch failed"),
+        Err(e) => {
+            warn!(target: "4da::cache", source = "arxiv", error = %e, "Fetch failed after retries")
+        }
     }
     void_signal_fetch_progress(app, 2, 9);
 
@@ -185,7 +213,9 @@ pub(crate) async fn fill_cache_background(app: &AppHandle) -> Result<usize> {
                 }
             }
         }
-        Err(e) => warn!(target: "4da::cache", source = "reddit", error = ?e, "Fetch failed"),
+        Err(e) => {
+            warn!(target: "4da::cache", source = "reddit", error = %e, "Fetch failed after retries")
+        }
     }
     void_signal_fetch_progress(app, 3, 9);
 
@@ -213,7 +243,9 @@ pub(crate) async fn fill_cache_background(app: &AppHandle) -> Result<usize> {
                 }
             }
         }
-        Err(e) => warn!(target: "4da::cache", source = "github", error = ?e, "Fetch failed"),
+        Err(e) => {
+            warn!(target: "4da::cache", source = "github", error = %e, "Fetch failed after retries")
+        }
     }
     void_signal_fetch_progress(app, 4, 9);
 
@@ -241,7 +273,9 @@ pub(crate) async fn fill_cache_background(app: &AppHandle) -> Result<usize> {
                 }
             }
         }
-        Err(e) => warn!(target: "4da::cache", source = "rss", error = ?e, "Fetch failed"),
+        Err(e) => {
+            warn!(target: "4da::cache", source = "rss", error = %e, "Fetch failed after retries")
+        }
     }
     void_signal_fetch_progress(app, 5, 9);
 
@@ -269,7 +303,9 @@ pub(crate) async fn fill_cache_background(app: &AppHandle) -> Result<usize> {
                 }
             }
         }
-        Err(e) => warn!(target: "4da::cache", source = "twitter", error = ?e, "Fetch failed"),
+        Err(e) => {
+            warn!(target: "4da::cache", source = "twitter", error = %e, "Fetch failed after retries")
+        }
     }
     void_signal_fetch_progress(app, 6, 9);
 
@@ -297,7 +333,9 @@ pub(crate) async fn fill_cache_background(app: &AppHandle) -> Result<usize> {
                 }
             }
         }
-        Err(e) => warn!(target: "4da::cache", source = "youtube", error = ?e, "Fetch failed"),
+        Err(e) => {
+            warn!(target: "4da::cache", source = "youtube", error = %e, "Fetch failed after retries")
+        }
     }
     void_signal_fetch_progress(app, 7, 9);
 
@@ -325,7 +363,9 @@ pub(crate) async fn fill_cache_background(app: &AppHandle) -> Result<usize> {
                 }
             }
         }
-        Err(e) => warn!(target: "4da::cache", source = "lobsters", error = ?e, "Fetch failed"),
+        Err(e) => {
+            warn!(target: "4da::cache", source = "lobsters", error = %e, "Fetch failed after retries")
+        }
     }
     void_signal_fetch_progress(app, 8, 9);
 
@@ -353,7 +393,9 @@ pub(crate) async fn fill_cache_background(app: &AppHandle) -> Result<usize> {
                 }
             }
         }
-        Err(e) => warn!(target: "4da::cache", source = "devto", error = ?e, "Fetch failed"),
+        Err(e) => {
+            warn!(target: "4da::cache", source = "devto", error = %e, "Fetch failed after retries")
+        }
     }
     void_signal_fetch_progress(app, 9, 9);
 
@@ -626,34 +668,23 @@ mod tests {
         );
     }
 
-    // ---------- Test 5: Retry backoff array indexing ----------
+    // ---------- Test 5: Retry backoff constants from fetch_with_retry ----------
 
     #[test]
     fn test_retry_backoff_delays() {
-        // Mirrors the backoff logic in fetch_all_sources
-        let backoff_ms = [500u64, 1000, 2000];
+        use crate::source_fetching::{MAX_RETRY_ATTEMPTS, RETRY_BACKOFF_SECS};
 
-        // attempts is 1-indexed; index into backoff with attempts-1
+        // fetch_with_retry uses exponential backoff: 1s, 2s, 4s
+        assert_eq!(RETRY_BACKOFF_SECS[0], 1, "First retry: 1s");
+        assert_eq!(RETRY_BACKOFF_SECS[1], 2, "Second retry: 2s");
+        assert_eq!(RETRY_BACKOFF_SECS[2], 4, "Third retry: 4s");
+        assert_eq!(MAX_RETRY_ATTEMPTS, 3, "Maximum 3 attempts");
+
+        // Beyond array bounds should fallback to 4
         assert_eq!(
-            backoff_ms.first().copied().unwrap_or(2000),
-            500,
-            "First retry: 500ms"
-        );
-        assert_eq!(
-            backoff_ms.get(1).copied().unwrap_or(2000),
-            1000,
-            "Second retry: 1000ms"
-        );
-        assert_eq!(
-            backoff_ms.get(2).copied().unwrap_or(2000),
-            2000,
-            "Third retry: 2000ms"
-        );
-        // Beyond array bounds should fallback to 2000
-        assert_eq!(
-            backoff_ms.get(3).copied().unwrap_or(2000),
-            2000,
-            "Out-of-bounds: fallback 2000ms"
+            RETRY_BACKOFF_SECS.get(3).copied().unwrap_or(4),
+            4,
+            "Out-of-bounds: fallback 4s"
         );
     }
 }

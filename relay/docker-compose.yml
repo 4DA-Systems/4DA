@@ -1,0 +1,23 @@
+services:
+  relay:
+    build: .
+    container_name: 4da-relay
+    restart: unless-stopped
+    ports:
+      - "${PORT:-8443}:8443"
+    volumes:
+      - relay-data:/app/data
+    environment:
+      DATABASE_URL: "sqlite:/app/data/relay.db?mode=rwc"
+      JWT_SECRET: "${JWT_SECRET:?Set JWT_SECRET in .env or environment}"
+      PORT: "8443"
+      RUST_LOG: "${RUST_LOG:-relay=info,tower_http=info}"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8443/health"]
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
+
+volumes:
+  relay-data:
