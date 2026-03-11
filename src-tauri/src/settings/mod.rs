@@ -4,9 +4,12 @@
 //! and usage limits. Settings are stored in the app data directory.
 
 mod discovery;
+pub mod env_detection;
+pub mod keystore;
 mod license;
 #[cfg(test)]
 mod license_tests;
+pub mod validation;
 
 pub use discovery::*;
 pub use license::*;
@@ -760,6 +763,68 @@ impl SettingsManager {
             }
         }
 
+        // --- Keychain migration: move plaintext keys to platform keychain ---
+        let has_plaintext_keys = !settings.llm.api_key.is_empty()
+            || !settings.llm.openai_api_key.is_empty()
+            || !settings.x_api_key.is_empty()
+            || !settings.license.license_key.is_empty();
+
+        if has_plaintext_keys {
+            match keystore::migrate_from_plaintext(&settings) {
+                Ok(report) => {
+                    if !report.migrated.is_empty() {
+                        // Clear plaintext keys from the JSON file (keep in-memory copy)
+                        let mut clean_settings = settings.clone();
+                        clean_settings.llm.api_key = String::new();
+                        clean_settings.llm.openai_api_key = String::new();
+                        clean_settings.x_api_key = String::new();
+                        clean_settings.license.license_key = String::new();
+
+                        if let Some(parent) = settings_path.parent() {
+                            let _ = fs::create_dir_all(parent);
+                        }
+                        if let Ok(json) = serde_json::to_string_pretty(&clean_settings) {
+                            let _ = fs::write(&settings_path, json);
+                        }
+                        info!(
+                            target: "4da::keystore",
+                            count = report.migrated.len(),
+                            "Cleared plaintext keys from settings.json after keychain migration"
+                        );
+                    }
+                }
+                Err(e) => {
+                    warn!(
+                        target: "4da::keystore",
+                        error = %e,
+                        "Keychain migration failed — keys remain in plaintext"
+                    );
+                }
+            }
+        }
+
+        // --- Hydrate keys from keychain into in-memory settings ---
+        if let Ok(Some(key)) = keystore::get_secret("llm_api_key") {
+            if !key.is_empty() {
+                settings.llm.api_key = key;
+            }
+        }
+        if let Ok(Some(key)) = keystore::get_secret("openai_api_key") {
+            if !key.is_empty() {
+                settings.llm.openai_api_key = key;
+            }
+        }
+        if let Ok(Some(key)) = keystore::get_secret("x_api_key") {
+            if !key.is_empty() {
+                settings.x_api_key = key;
+            }
+        }
+        if let Ok(Some(key)) = keystore::get_secret("license_key") {
+            if !key.is_empty() {
+                settings.license.license_key = key;
+            }
+        }
+
         Self {
             settings,
             usage,
@@ -768,16 +833,36 @@ impl SettingsManager {
         }
     }
 
-    /// Save settings to disk (excludes usage — that's saved separately)
+    /// Save settings to disk (excludes usage — that's saved separately).
+    ///
+    /// API keys are stripped from the on-disk copy — they live in the
+    /// platform keychain. The in-memory `self.settings` remains intact.
     pub fn save(&self) -> Result<()> {
         if let Some(parent) = self.settings_path.parent() {
             fs::create_dir_all(parent)?;
         }
 
-        let json = serde_json::to_string_pretty(&self.settings)?;
+        // Clone settings and clear secret fields that are safely in the keychain.
+        // Only strip a key from disk if it's verified in the keychain — otherwise
+        // keep the plaintext version so the app still works without a keychain.
+        let mut disk_settings = self.settings.clone();
+        if keystore::has_secret("llm_api_key") {
+            disk_settings.llm.api_key = String::new();
+        }
+        if keystore::has_secret("openai_api_key") {
+            disk_settings.llm.openai_api_key = String::new();
+        }
+        if keystore::has_secret("x_api_key") {
+            disk_settings.x_api_key = String::new();
+        }
+        if keystore::has_secret("license_key") {
+            disk_settings.license.license_key = String::new();
+        }
+
+        let json = serde_json::to_string_pretty(&disk_settings)?;
         fs::write(&self.settings_path, json)?;
 
-        // Restrict file permissions to owner-only (contains API keys)
+        // Restrict file permissions to owner-only
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
@@ -808,8 +893,22 @@ impl SettingsManager {
         &mut self.settings
     }
 
-    /// Update LLM provider settings
+    /// Get the path to the settings file (for tests / diagnostics)
+    pub fn get_settings_path(&self) -> &std::path::Path {
+        &self.settings_path
+    }
+
+    /// Update LLM provider settings.
+    ///
+    /// Keys are persisted to the platform keychain (if available) and stripped
+    /// from the on-disk JSON. The in-memory `settings.llm` retains the keys.
     pub fn set_llm_provider(&mut self, provider: LLMProvider) -> Result<()> {
+        if !provider.api_key.is_empty() {
+            let _ = keystore::store_secret("llm_api_key", &provider.api_key);
+        }
+        if !provider.openai_api_key.is_empty() {
+            let _ = keystore::store_secret("openai_api_key", &provider.openai_api_key);
+        }
         self.settings.llm = provider;
         self.save()
     }
@@ -983,6 +1082,9 @@ impl SettingsManager {
 
     /// Set X API Bearer Token
     pub fn set_x_api_key(&mut self, key: String) -> Result<()> {
+        if !key.is_empty() {
+            let _ = keystore::store_secret("x_api_key", &key);
+        }
         self.settings.x_api_key = key;
         self.save()
     }

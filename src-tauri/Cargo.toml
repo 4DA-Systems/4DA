@@ -61,6 +61,7 @@ zerocopy = { version = "0.8", features = ["derive"] }
 
 # Hashing for deduplication
 sha2 = "0.10"
+hmac = "0.12"
 hex = "0.4"
 
 # Timestamps
@@ -106,6 +107,7 @@ tokio-tungstenite = { version = "0.24", features = ["rustls-tls-webpki-roots"] }
 uuid = { version = "1", features = ["v4", "serde"] }
 rand = "0.8"
 zeroize = "1"
+keyring = "3"
 
 [[bin]]
 name = "4da"

@@ -118,6 +118,15 @@ export const agentMemoryTool = {
 };
 
 // ============================================================================
+// Size Limits
+// ============================================================================
+
+/** Maximum content size per entry: 10KB */
+const MAX_CONTENT_BYTES = 10 * 1024;
+/** Maximum entries per agent */
+const MAX_ENTRIES_PER_AGENT = 1000;
+
+// ============================================================================
 // Helpers
 // ============================================================================
 
@@ -153,6 +162,34 @@ export function executeAgentMemory(
     case "store": {
       if (!params.subject || !params.content) {
         return { error: "subject and content are required for store action" };
+      }
+
+      // --- Size limit: max 10KB per entry ---
+      const contentBytes = new TextEncoder().encode(params.content).length;
+      if (contentBytes > MAX_CONTENT_BYTES) {
+        return {
+          error: `Content too large: ${contentBytes} bytes exceeds ${MAX_CONTENT_BYTES} byte limit (10KB)`,
+        };
+      }
+
+      // --- Storage quota: max 1000 entries per agent ---
+      const agentType = params.agent_type || "unknown";
+      try {
+        const countRow = rawDb
+          .prepare(
+            `SELECT COUNT(*) as cnt FROM agent_memory WHERE agent_type = ?`,
+          )
+          .get(agentType) as { cnt: number } | undefined;
+        const currentCount = countRow?.cnt ?? 0;
+        if (currentCount >= MAX_ENTRIES_PER_AGENT) {
+          return {
+            error: `Storage quota exceeded: agent "${agentType}" has ${currentCount} entries (max ${MAX_ENTRIES_PER_AGENT}). Delete old entries before storing new ones.`,
+          };
+        }
+      } catch (quotaErr) {
+        return {
+          error: `Failed to check storage quota: ${quotaErr instanceof Error ? quotaErr.message : String(quotaErr)}`,
+        };
       }
 
       try {

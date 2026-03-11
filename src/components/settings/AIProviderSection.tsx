@@ -1,4 +1,7 @@
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
+
+import { commands } from '../../lib/commands';
 import type { Settings } from '../../types';
 import type { OllamaStatus } from '../../hooks/use-settings';
 
@@ -39,6 +42,76 @@ export function AIProviderSection({
   checkOllamaStatus,
 }: AIProviderSectionProps) {
   const { t } = useTranslation();
+
+  // Environment detection state
+  const [envDetection, setEnvDetection] = useState<{
+    has_anthropic_env: boolean;
+    anthropic_env_preview: string;
+    has_openai_env: boolean;
+    openai_env_preview: string;
+  } | null>(null);
+  const [importing, setImporting] = useState(false);
+
+  // Key validation state
+  const [validation, setValidation] = useState<{
+    status: 'idle' | 'checking' | 'valid' | 'invalid' | 'format_error';
+    message: string;
+    models: string[];
+  }>({ status: 'idle', message: '', models: [] });
+  const debounceRef = useRef<ReturnType<typeof setTimeout>>();
+
+  // Detect env keys on mount
+  useEffect(() => {
+    commands.detect_environment({}).then(setEnvDetection).catch(() => {});
+  }, []);
+
+  // Debounced key validation
+  const validateKey = useCallback((provider: string, key: string) => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    if (!key.trim() || key === '(imported from environment)') {
+      setValidation({ status: 'idle', message: '', models: [] });
+      return;
+    }
+    debounceRef.current = setTimeout(async () => {
+      setValidation({ status: 'checking', message: 'Verifying...', models: [] });
+      try {
+        const result = await commands.validate_api_key({ provider, key });
+        if (result.valid) {
+          setValidation({
+            status: 'valid',
+            message: result.model_access.length > 0
+              ? `Key verified \u2014 access to ${result.model_access.join(', ')}`
+              : 'Key verified',
+            models: result.model_access,
+          });
+        } else if (!result.format_ok) {
+          setValidation({
+            status: 'format_error',
+            message: result.error || 'Invalid key format',
+            models: [],
+          });
+        } else {
+          setValidation({
+            status: 'invalid',
+            message: result.error || 'Connection failed',
+            models: [],
+          });
+        }
+      } catch {
+        setValidation({ status: 'idle', message: '', models: [] });
+      }
+    }, 500);
+  }, []);
+
+  const handleImportEnv = async (provider: 'anthropic' | 'openai') => {
+    setImporting(true);
+    try {
+      await commands.import_env_key({ provider });
+      setSettingsForm((f) => ({ ...f, provider, apiKey: '(imported from environment)' }));
+    } catch { /* user can still enter manually */ }
+    finally { setImporting(false); }
+  };
+
   return (
     <>
       {/* LLM Provider Section */}
@@ -54,6 +127,31 @@ export function AIProviderSection({
         </div>
 
         <div className="space-y-4">
+          {/* Environment key import banner */}
+          {envDetection && (envDetection.has_anthropic_env || envDetection.has_openai_env) && (
+            <div className="p-3 bg-blue-900/20 border border-blue-500/30 rounded-lg space-y-2">
+              <p className="text-xs text-blue-300 font-medium">Import from environment</p>
+              {envDetection.has_anthropic_env && (
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-text-secondary font-mono">{envDetection.anthropic_env_preview}</span>
+                  <button onClick={() => handleImportEnv('anthropic')} disabled={importing}
+                    className="text-xs px-2 py-0.5 bg-blue-500/20 text-blue-300 rounded hover:bg-blue-500/30 transition-colors disabled:opacity-50">
+                    {importing ? '...' : 'Use'}
+                  </button>
+                </div>
+              )}
+              {envDetection.has_openai_env && (
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-text-secondary font-mono">{envDetection.openai_env_preview}</span>
+                  <button onClick={() => handleImportEnv('openai')} disabled={importing}
+                    className="text-xs px-2 py-0.5 bg-blue-500/20 text-blue-300 rounded hover:bg-blue-500/30 transition-colors disabled:opacity-50">
+                    {importing ? '...' : 'Use'}
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+
           <div>
             <label className="text-xs text-text-muted block mb-2">{t('settings.ai.provider')}</label>
             <select
@@ -96,10 +194,30 @@ export function AIProviderSection({
               <input
                 type="password"
                 value={settingsForm.apiKey}
-                onChange={(e) => setSettingsForm((f) => ({ ...f, apiKey: e.target.value }))}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setSettingsForm((f) => ({ ...f, apiKey: val }));
+                  validateKey(settingsForm.provider, val);
+                }}
                 placeholder={settings?.llm.has_api_key ? t('settings.ai.keySaved') : t('settings.ai.enterKey')}
                 className="w-full px-4 py-3 bg-bg-secondary border border-border rounded-lg text-sm text-white placeholder:text-text-muted focus:border-orange-500 focus:outline-none font-mono"
               />
+              {/* Real-time validation feedback */}
+              {validation.status === 'checking' && (
+                <div className="flex items-center gap-2 mt-1.5 text-xs text-text-muted">
+                  <div className="w-3 h-3 border border-orange-500 border-t-transparent rounded-full animate-spin" />
+                  {validation.message}
+                </div>
+              )}
+              {validation.status === 'valid' && (
+                <p className="mt-1.5 text-xs text-green-400">&#x2713; {validation.message}</p>
+              )}
+              {validation.status === 'format_error' && (
+                <p className="mt-1.5 text-xs text-red-400">{validation.message}</p>
+              )}
+              {validation.status === 'invalid' && (
+                <p className="mt-1.5 text-xs text-amber-400">{validation.message}</p>
+              )}
             </div>
           )}
 

@@ -1,8 +1,19 @@
+import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 
+import { commands } from '../../lib/commands';
 import type { OllamaStatus, PullProgress } from './types';
 
 type ProviderType = 'anthropic' | 'openai' | 'ollama';
+
+interface EnvDetection {
+  has_anthropic_env: boolean;
+  anthropic_env_preview: string;
+  has_openai_env: boolean;
+  openai_env_preview: string;
+  ollama_running: boolean;
+  ollama_url: string | null;
+}
 
 interface SetupAIProviderProps {
   ollamaStatus: OllamaStatus | null;
@@ -24,9 +35,63 @@ export function SetupAIProvider({
   onApiKeyChange,
 }: SetupAIProviderProps) {
   const { t } = useTranslation();
+  const [envDetection, setEnvDetection] = useState<EnvDetection | null>(null);
+  const [importing, setImporting] = useState(false);
+
+  useEffect(() => {
+    commands.detect_environment({}).then(setEnvDetection).catch(() => {});
+  }, []);
+
+  const handleImportEnvKey = async (envProvider: 'anthropic' | 'openai') => {
+    setImporting(true);
+    try {
+      await commands.import_env_key({ provider: envProvider });
+      onProviderChange(envProvider);
+      onApiKeyChange('(imported from environment)');
+    } catch {
+      // Silently fail — user can still enter manually
+    } finally {
+      setImporting(false);
+    }
+  };
 
   return (
     <div className="mt-2 p-4 bg-bg-secondary rounded-lg border border-border space-y-3">
+      {/* Environment key detection banner */}
+      {envDetection && (envDetection.has_anthropic_env || envDetection.has_openai_env) && (
+        <div className="p-3 bg-blue-900/20 border border-blue-500/30 rounded-lg space-y-2">
+          <p className="text-sm text-blue-300 font-medium">API keys detected in your environment</p>
+          {envDetection.has_anthropic_env && (
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-text-secondary font-mono">
+                Anthropic: {envDetection.anthropic_env_preview}
+              </span>
+              <button
+                onClick={() => handleImportEnvKey('anthropic')}
+                disabled={importing}
+                className="text-xs px-3 py-1 bg-blue-500/20 text-blue-300 rounded hover:bg-blue-500/30 transition-colors disabled:opacity-50"
+              >
+                {importing ? 'Importing...' : 'Use This Key'}
+              </button>
+            </div>
+          )}
+          {envDetection.has_openai_env && (
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-text-secondary font-mono">
+                OpenAI: {envDetection.openai_env_preview}
+              </span>
+              <button
+                onClick={() => handleImportEnvKey('openai')}
+                disabled={importing}
+                className="text-xs px-3 py-1 bg-blue-500/20 text-blue-300 rounded hover:bg-blue-500/30 transition-colors disabled:opacity-50"
+              >
+                {importing ? 'Importing...' : 'Use This Key'}
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Ollama detected and ready */}
       {ollamaStatus?.running && ollamaStatus.has_embedding_model && ollamaStatus.has_llm_model && provider === 'ollama' && (
         <div className="p-3 bg-green-900/20 border border-green-500/30 rounded-lg text-sm text-green-300 flex items-center gap-2">
