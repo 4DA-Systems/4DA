@@ -50,6 +50,17 @@ async fn run_migrations(pool: &SqlitePool) -> Result<(), sqlx::Error> {
     .await?;
 
     sqlx::query(
+        "CREATE TABLE IF NOT EXISTS teams (
+            team_id          TEXT PRIMARY KEY,
+            created_by       TEXT NOT NULL,
+            created_at       TEXT DEFAULT (datetime('now')),
+            license_key_hash TEXT
+        )",
+    )
+    .execute(pool)
+    .await?;
+
+    sqlx::query(
         "CREATE TABLE IF NOT EXISTS team_invites (
             code        TEXT PRIMARY KEY,
             team_id     TEXT NOT NULL,

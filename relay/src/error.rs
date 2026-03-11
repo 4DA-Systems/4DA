@@ -9,6 +9,7 @@ pub enum RelayError {
     NotFound(String),
     Database(String),
     BadRequest(String),
+    #[allow(dead_code)]
     Internal(String),
 }
 

@@ -72,6 +72,17 @@ pub async fn create_team(
     State(pool): State<SqlitePool>,
     Json(body): Json<CreateTeamRequest>,
 ) -> Result<Json<CreateTeamResponse>, RelayError> {
+    // Insert into teams table
+    sqlx::query(
+        "INSERT INTO teams (team_id, created_by, license_key_hash)
+         VALUES ($1, $2, $3)",
+    )
+    .bind(&body.team_id)
+    .bind(&body.client_id)
+    .bind(&body.license_key_hash)
+    .execute(&pool)
+    .await?;
+
     // Register the admin as the first client
     sqlx::query(
         "INSERT INTO team_clients (team_id, client_id, public_key, display_name, role)
@@ -203,6 +214,179 @@ pub async fn create_invite(
     tracing::info!(target: "relay::clients", team_id = %team_id, "Invite created");
 
     Ok(Json(InviteResponse { code, expires_at }))
+}
+
+#[derive(Deserialize)]
+pub struct UpdateRoleRequest {
+    pub role: String,
+}
+
+#[derive(Serialize)]
+pub struct TeamInfo {
+    pub team_id: String,
+    pub created_by: String,
+    pub created_at: Option<String>,
+    pub member_count: i64,
+}
+
+/// GET /teams/{team_id} -- get team info (members only).
+pub async fn get_team_info(
+    AuthTeam(claims): AuthTeam,
+    Path(team_id): Path<String>,
+    State(pool): State<SqlitePool>,
+) -> Result<Json<TeamInfo>, RelayError> {
+    if claims.team_id != team_id {
+        return Err(RelayError::Auth("Team ID mismatch".to_string()));
+    }
+
+    let team = sqlx::query_as::<_, (String, String, Option<String>)>(
+        "SELECT team_id, created_by, created_at FROM teams WHERE team_id = $1",
+    )
+    .bind(&team_id)
+    .fetch_optional(&pool)
+    .await?
+    .ok_or_else(|| RelayError::NotFound("Team not found".to_string()))?;
+
+    let member_count =
+        sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM team_clients WHERE team_id = $1")
+            .bind(&team_id)
+            .fetch_one(&pool)
+            .await?;
+
+    Ok(Json(TeamInfo {
+        team_id: team.0,
+        created_by: team.1,
+        created_at: team.2,
+        member_count,
+    }))
+}
+
+/// DELETE /teams/{team_id}/clients/{client_id} -- remove a member (admin only).
+pub async fn remove_member(
+    AuthTeam(claims): AuthTeam,
+    Path((team_id, client_id)): Path<(String, String)>,
+    State(pool): State<SqlitePool>,
+) -> Result<Json<serde_json::Value>, RelayError> {
+    if claims.team_id != team_id {
+        return Err(RelayError::Auth("Team ID mismatch".to_string()));
+    }
+
+    if claims.role != "admin" {
+        return Err(RelayError::Auth(
+            "Only admins can remove members".to_string(),
+        ));
+    }
+
+    if claims.client_id == client_id {
+        return Err(RelayError::BadRequest(
+            "Cannot remove yourself; use leave instead".to_string(),
+        ));
+    }
+
+    let result = sqlx::query(
+        "DELETE FROM team_clients WHERE team_id = $1 AND client_id = $2",
+    )
+    .bind(&team_id)
+    .bind(&client_id)
+    .execute(&pool)
+    .await?;
+
+    if result.rows_affected() == 0 {
+        return Err(RelayError::NotFound("Client not found".to_string()));
+    }
+
+    tracing::info!(target: "relay::clients", team_id = %team_id, client_id = %client_id, "Member removed");
+
+    Ok(Json(serde_json::json!({ "ok": true })))
+}
+
+/// PATCH /teams/{team_id}/clients/{client_id} -- change member role (admin only).
+pub async fn update_role(
+    AuthTeam(claims): AuthTeam,
+    Path((team_id, client_id)): Path<(String, String)>,
+    State(pool): State<SqlitePool>,
+    Json(body): Json<UpdateRoleRequest>,
+) -> Result<Json<serde_json::Value>, RelayError> {
+    if claims.team_id != team_id {
+        return Err(RelayError::Auth("Team ID mismatch".to_string()));
+    }
+
+    if claims.role != "admin" {
+        return Err(RelayError::Auth(
+            "Only admins can change roles".to_string(),
+        ));
+    }
+
+    if body.role != "admin" && body.role != "member" {
+        return Err(RelayError::BadRequest(
+            "Role must be 'admin' or 'member'".to_string(),
+        ));
+    }
+
+    let result = sqlx::query(
+        "UPDATE team_clients SET role = $1 WHERE team_id = $2 AND client_id = $3",
+    )
+    .bind(&body.role)
+    .bind(&team_id)
+    .bind(&client_id)
+    .execute(&pool)
+    .await?;
+
+    if result.rows_affected() == 0 {
+        return Err(RelayError::NotFound("Client not found".to_string()));
+    }
+
+    tracing::info!(
+        target: "relay::clients",
+        team_id = %team_id,
+        client_id = %client_id,
+        new_role = %body.role,
+        "Role updated"
+    );
+
+    Ok(Json(serde_json::json!({ "ok": true, "role": body.role })))
+}
+
+/// POST /teams/{team_id}/leave -- leave a team (self-removal).
+pub async fn leave_team(
+    AuthTeam(claims): AuthTeam,
+    Path(team_id): Path<String>,
+    State(pool): State<SqlitePool>,
+) -> Result<Json<serde_json::Value>, RelayError> {
+    if claims.team_id != team_id {
+        return Err(RelayError::Auth("Team ID mismatch".to_string()));
+    }
+
+    // Check if this is the last admin
+    if claims.role == "admin" {
+        let admin_count = sqlx::query_scalar::<_, i64>(
+            "SELECT COUNT(*) FROM team_clients WHERE team_id = $1 AND role = 'admin'",
+        )
+        .bind(&team_id)
+        .fetch_one(&pool)
+        .await?;
+
+        if admin_count <= 1 {
+            return Err(RelayError::BadRequest(
+                "Cannot leave: you are the last admin. Transfer admin role first.".to_string(),
+            ));
+        }
+    }
+
+    sqlx::query("DELETE FROM team_clients WHERE team_id = $1 AND client_id = $2")
+        .bind(&team_id)
+        .bind(&claims.client_id)
+        .execute(&pool)
+        .await?;
+
+    tracing::info!(
+        target: "relay::clients",
+        team_id = %team_id,
+        client_id = %claims.client_id,
+        "Member left team"
+    );
+
+    Ok(Json(serde_json::json!({ "ok": true })))
 }
 
 /// POST /auth/invite -- join a team via invite code.
