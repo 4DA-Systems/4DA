@@ -120,9 +120,23 @@ impl LLMClient {
                     error = %err,
                     "Cloud LLM failed, falling back to local Ollama"
                 );
+                // Record the cloud failure to error telemetry (fallback may still succeed)
+                crate::telemetry::record_error_async(
+                    "llm",
+                    &format!("{}", err),
+                    Some(&self.provider.provider),
+                );
                 self.complete_ollama_fallback(system, messages).await?
             }
-            Err(err) => return Err(err),
+            Err(err) => {
+                // Record hard LLM failure to error telemetry
+                crate::telemetry::record_error_async(
+                    "llm",
+                    &format!("{}", err),
+                    Some(&self.provider.provider),
+                );
+                return Err(err);
+            }
         };
 
         // Record token usage (atomic, lock-free for the counter itself)

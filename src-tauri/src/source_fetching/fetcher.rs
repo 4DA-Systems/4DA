@@ -287,6 +287,13 @@ pub(crate) async fn fetch_all_sources(
                         "session_failures": failure_count
                     }),
                 );
+
+                // Record to local error telemetry for developer diagnostics
+                crate::telemetry::record_error_async(
+                    "source_fetch",
+                    &format!("{}", retry_err),
+                    Some(source_type),
+                );
             }
         }
     }
@@ -354,6 +361,8 @@ pub(crate) async fn fetch_all_sources(
                     "embedding-mode",
                     serde_json::json!({ "mode": "keyword-only", "reason": e.to_string() }),
                 );
+                // Record embedding failure to local error telemetry
+                crate::telemetry::record_error_async("embedding", &format!("{}", e), None);
                 // Create zero vectors as fallback - items will score via keyword matching only
                 vec![vec![0.0f32; 384]; texts.len()]
             }

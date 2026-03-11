@@ -75,9 +75,19 @@ jobs:
         run: cd mcp-4da-server && pnpm run test
 
   rust:
-    name: Rust
+    name: Rust (${{ matrix.label }})
     needs: mcp-server
     runs-on: [self-hosted, windows, 4da]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: default
+            cargo-features: ''
+            test-floor: 1400
+          - label: experimental
+            cargo-features: '--features experimental'
+            test-floor: 0
     defaults:
       run:
         shell: bash
@@ -87,12 +97,14 @@ jobs:
           clean: false
 
       - name: Check formatting
+        if: matrix.label == 'default'
         run: cd src-tauri && cargo fmt --check
 
       - name: Clippy lints
-        run: cd src-tauri && cargo clippy -- -D warnings
+        run: cd src-tauri && cargo clippy ${{ matrix.cargo-features }} -- -D warnings
 
       - name: Security audit
+        if: matrix.label == 'default'
         run: |
           if command -v cargo-audit &> /dev/null; then
             cd src-tauri && cargo audit
@@ -104,7 +116,7 @@ jobs:
         run: |
           cd src-tauri
           set +e
-          OUTPUT=$(cargo test --lib 2>&1)
+          OUTPUT=$(cargo test --lib ${{ matrix.cargo-features }} 2>&1)
           EXIT_CODE=$?
           set -e
           echo "$OUTPUT" | tail -10
@@ -114,7 +126,8 @@ jobs:
           fi
           COUNT=$(echo "$OUTPUT" | sed -n 's/.*ok\. \([0-9]*\) passed.*/\1/p' | tail -1)
           echo "Rust tests passed: $COUNT"
-          if [ -z "$COUNT" ] || [ "$COUNT" -lt 1400 ]; then
-            echo "::error::Rust test count dropped below 1400 (got ${COUNT:-0})"
+          FLOOR=${{ matrix.test-floor }}
+          if [ "$FLOOR" -gt 0 ] && { [ -z "$COUNT" ] || [ "$COUNT" -lt "$FLOOR" ]; }; then
+            echo "::error::Rust test count dropped below $FLOOR (got ${COUNT:-0})"
             exit 1
           fi
