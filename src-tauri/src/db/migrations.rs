@@ -226,7 +226,7 @@ impl Database {
             .query_row("SELECT version FROM schema_version", [], |row| row.get(0))
             .unwrap_or(1);
 
-        const TARGET_VERSION: i64 = 27;
+        const TARGET_VERSION: i64 = 32;
         if current_version < TARGET_VERSION {
             // Drop the conn lock briefly to allow backup (needs filesystem access)
             drop(conn);
@@ -966,6 +966,61 @@ impl Database {
                 )?;
             }
 
+            // Phase 28: Team intelligence + shared resources
+            if current_version < 28 {
+                Self::run_versioned_migration(
+                    &conn,
+                    27,
+                    28,
+                    "Phase 28: team intelligence + shared resources",
+                    Self::migrate_to_phase_28,
+                )?;
+            }
+
+            // Phase 29: Team monitoring + signals
+            if current_version < 29 {
+                Self::run_versioned_migration(
+                    &conn,
+                    28,
+                    29,
+                    "Phase 29: team monitoring + signals",
+                    Self::migrate_to_phase_29,
+                )?;
+            }
+
+            // Phase 30: Enterprise audit log
+            if current_version < 30 {
+                Self::run_versioned_migration(
+                    &conn,
+                    29,
+                    30,
+                    "Phase 30: enterprise audit log",
+                    Self::migrate_to_phase_30,
+                )?;
+            }
+
+            // Phase 31: Enterprise webhooks
+            if current_version < 31 {
+                Self::run_versioned_migration(
+                    &conn,
+                    30,
+                    31,
+                    "Phase 31: enterprise webhooks",
+                    Self::migrate_to_phase_31,
+                )?;
+            }
+
+            // Phase 32: Enterprise organization + retention
+            if current_version < 32 {
+                Self::run_versioned_migration(
+                    &conn,
+                    31,
+                    32,
+                    "Phase 32: enterprise organization + retention",
+                    Self::migrate_to_phase_32,
+                )?;
+            }
+
             info!(target: "4da::db", "Database schema initialized with sqlite-vec");
             return Ok(());
         }
@@ -1303,6 +1358,194 @@ impl Database {
         info!(target: "4da::db", "Created team sync tables (queue, log, state, crypto, members)");
         Ok(())
     }
+
+    /// Phase 28: Team intelligence + shared resources
+    fn migrate_to_phase_28(conn: &Connection) -> SqliteResult<()> {
+        conn.execute_batch(
+            "-- Shared resources (DNA, decisions, signals shared between team members)
+            CREATE TABLE IF NOT EXISTS shared_resources (
+                id TEXT PRIMARY KEY,
+                team_id TEXT NOT NULL,
+                resource_type TEXT NOT NULL,
+                resource_data TEXT NOT NULL,
+                shared_by TEXT NOT NULL,
+                visibility TEXT DEFAULT 'team',
+                visible_to TEXT,
+                created_at TEXT DEFAULT (datetime('now')),
+                expires_at TEXT
+            );
+            CREATE INDEX IF NOT EXISTS idx_shared_team_type
+                ON shared_resources(team_id, resource_type);
+            CREATE INDEX IF NOT EXISTS idx_shared_expires
+                ON shared_resources(expires_at) WHERE expires_at IS NOT NULL;
+
+            -- Team decisions (proposals + votes)
+            CREATE TABLE IF NOT EXISTS team_decisions (
+                id TEXT PRIMARY KEY,
+                team_id TEXT NOT NULL,
+                title TEXT NOT NULL,
+                decision_type TEXT NOT NULL,
+                rationale TEXT NOT NULL,
+                proposed_by TEXT NOT NULL,
+                status TEXT DEFAULT 'proposed',
+                created_at TEXT DEFAULT (datetime('now')),
+                resolved_at TEXT
+            );
+            CREATE INDEX IF NOT EXISTS idx_team_decisions_team
+                ON team_decisions(team_id, status);
+
+            -- Decision votes
+            CREATE TABLE IF NOT EXISTS decision_votes (
+                decision_id TEXT NOT NULL,
+                voter_id TEXT NOT NULL,
+                stance TEXT NOT NULL,
+                rationale TEXT,
+                voted_at TEXT DEFAULT (datetime('now')),
+                PRIMARY KEY (decision_id, voter_id)
+            );",
+        )?;
+        info!(target: "4da::db", "Created shared resources + team decisions tables");
+        Ok(())
+    }
+
+    /// Phase 29: Team monitoring + signals
+    fn migrate_to_phase_29(conn: &Connection) -> SqliteResult<()> {
+        conn.execute_batch(
+            "-- Team signals (aggregated across seats)
+            CREATE TABLE IF NOT EXISTS team_signals (
+                id TEXT PRIMARY KEY,
+                team_id TEXT NOT NULL,
+                signal_type TEXT NOT NULL,
+                title TEXT NOT NULL,
+                severity TEXT NOT NULL,
+                tech_topics TEXT,
+                detected_by_count INTEGER DEFAULT 1,
+                first_detected TEXT DEFAULT (datetime('now')),
+                last_detected TEXT DEFAULT (datetime('now')),
+                resolved INTEGER DEFAULT 0,
+                resolved_by TEXT,
+                resolved_at TEXT,
+                resolution_notes TEXT
+            );
+            CREATE INDEX IF NOT EXISTS idx_team_signals_team
+                ON team_signals(team_id, resolved);
+
+            -- Team alert policies
+            CREATE TABLE IF NOT EXISTS team_alert_policies (
+                team_id TEXT PRIMARY KEY,
+                min_seats_to_alert INTEGER DEFAULT 2,
+                aggregation_window_minutes INTEGER DEFAULT 60,
+                notification_channels TEXT DEFAULT '[\"in_app\"]',
+                updated_at TEXT DEFAULT (datetime('now'))
+            );",
+        )?;
+        info!(target: "4da::db", "Created team signals + alert policies tables");
+        Ok(())
+    }
+
+    /// Phase 30: Enterprise audit log
+    fn migrate_to_phase_30(conn: &Connection) -> SqliteResult<()> {
+        conn.execute_batch(
+            "CREATE TABLE IF NOT EXISTS audit_log (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                event_id TEXT NOT NULL UNIQUE,
+                team_id TEXT NOT NULL,
+                actor_id TEXT NOT NULL,
+                actor_display_name TEXT NOT NULL,
+                action TEXT NOT NULL,
+                resource_type TEXT NOT NULL,
+                resource_id TEXT,
+                details TEXT,
+                created_at TEXT DEFAULT (datetime('now'))
+            );
+            CREATE INDEX IF NOT EXISTS idx_audit_team_time
+                ON audit_log(team_id, created_at DESC);
+            CREATE INDEX IF NOT EXISTS idx_audit_actor
+                ON audit_log(actor_id, created_at DESC);
+            CREATE INDEX IF NOT EXISTS idx_audit_action
+                ON audit_log(action);",
+        )?;
+        info!(target: "4da::db", "Created enterprise audit log table");
+        Ok(())
+    }
+
+    /// Phase 31: Enterprise webhooks
+    fn migrate_to_phase_31(conn: &Connection) -> SqliteResult<()> {
+        conn.execute_batch(
+            "CREATE TABLE IF NOT EXISTS webhooks (
+                id TEXT PRIMARY KEY,
+                team_id TEXT NOT NULL,
+                name TEXT NOT NULL,
+                url TEXT NOT NULL,
+                events TEXT NOT NULL,
+                secret TEXT NOT NULL,
+                active INTEGER DEFAULT 1,
+                failure_count INTEGER DEFAULT 0,
+                last_fired_at TEXT,
+                last_status_code INTEGER,
+                created_at TEXT DEFAULT (datetime('now')),
+                created_by TEXT
+            );
+            CREATE INDEX IF NOT EXISTS idx_webhooks_team
+                ON webhooks(team_id, active);
+
+            CREATE TABLE IF NOT EXISTS webhook_deliveries (
+                id TEXT PRIMARY KEY,
+                webhook_id TEXT NOT NULL,
+                event_type TEXT NOT NULL,
+                payload TEXT NOT NULL,
+                status TEXT DEFAULT 'pending',
+                http_status INTEGER,
+                attempt_count INTEGER DEFAULT 0,
+                next_retry_at TEXT,
+                created_at TEXT DEFAULT (datetime('now')),
+                delivered_at TEXT,
+                FOREIGN KEY (webhook_id) REFERENCES webhooks(id)
+            );
+            CREATE INDEX IF NOT EXISTS idx_deliveries_pending
+                ON webhook_deliveries(status, next_retry_at)
+                WHERE status IN ('pending', 'failed');",
+        )?;
+        info!(target: "4da::db", "Created enterprise webhook tables");
+        Ok(())
+    }
+
+    /// Phase 32: Enterprise organization + retention policies
+    fn migrate_to_phase_32(conn: &Connection) -> SqliteResult<()> {
+        conn.execute_batch(
+            "CREATE TABLE IF NOT EXISTS organizations (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                license_key_hash TEXT,
+                settings TEXT,
+                created_at TEXT DEFAULT (datetime('now'))
+            );
+
+            CREATE TABLE IF NOT EXISTS org_teams (
+                org_id TEXT NOT NULL,
+                team_id TEXT NOT NULL,
+                PRIMARY KEY (org_id, team_id)
+            );
+
+            CREATE TABLE IF NOT EXISTS org_admins (
+                org_id TEXT NOT NULL,
+                member_id TEXT NOT NULL,
+                role TEXT NOT NULL DEFAULT 'org_admin',
+                PRIMARY KEY (org_id, member_id)
+            );
+
+            CREATE TABLE IF NOT EXISTS retention_policies (
+                id TEXT PRIMARY KEY,
+                team_id TEXT NOT NULL,
+                resource_type TEXT NOT NULL,
+                retention_days INTEGER NOT NULL,
+                updated_at TEXT DEFAULT (datetime('now')),
+                UNIQUE(team_id, resource_type)
+            );",
+        )?;
+        info!(target: "4da::db", "Created enterprise organization + retention tables");
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -1342,6 +1585,23 @@ mod tests {
             "team_sync_state",
             "team_crypto",
             "team_members_cache",
+            // Phase 28: Team intelligence
+            "shared_resources",
+            "team_decisions",
+            "decision_votes",
+            // Phase 29: Team monitoring
+            "team_signals",
+            "team_alert_policies",
+            // Phase 30: Enterprise audit
+            "audit_log",
+            // Phase 31: Enterprise webhooks
+            "webhooks",
+            "webhook_deliveries",
+            // Phase 32: Enterprise organization
+            "organizations",
+            "org_teams",
+            "org_admins",
+            "retention_policies",
         ];
         for table in &expected {
             assert!(

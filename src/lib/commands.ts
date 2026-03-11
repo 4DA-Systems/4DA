@@ -386,6 +386,52 @@ interface CommandMap {
   get_game_state: { params: Record<string, never>; result: unknown };
   get_achievements: { params: Record<string, never>; result: unknown };
   check_daily_streak: { params: Record<string, never>; result: unknown };
+
+  // -- Team Sync (AD-023) --
+  get_team_sync_status: { params: Record<string, never>; result: TeamSyncStatus };
+  get_team_members: { params: Record<string, never>; result: TeamMember[] };
+  share_dna_with_team: { params: { primaryStack: string[]; interests: string[]; blindSpots: string[]; identitySummary: string }; result: string };
+  share_signal_with_team: { params: { signalId: string; chainName: string; priority: string; techTopics: string[]; suggestedAction: string }; result: string };
+  propose_team_decision: { params: { decisionId: string; title: string; decisionType: string; rationale: string }; result: string };
+  create_team: { params: { relayUrl: string; displayName: string }; result: { team_id: string; client_id: string; role: string } };
+  create_team_invite: { params: { role?: string; email?: string }; result: { code: string; expires_at: string } };
+  join_team_via_invite: { params: { relayUrl: string; inviteCode: string; displayName: string }; result: { team_id: string; client_id: string; role: string; awaiting_team_key: boolean } };
+
+  // -- Team Intelligence --
+  get_team_profile_cmd: { params: Record<string, never>; result: TeamProfile };
+  get_team_blind_spots_cmd: { params: Record<string, never>; result: TeamBlindSpot[] };
+  get_bus_factor_report_cmd: { params: Record<string, never>; result: UniqueStrength[] };
+  get_team_signal_summary_cmd: { params: Record<string, never>; result: TeamSignalSummary[] };
+
+  // -- Team Monitoring --
+  get_team_signals_cmd: { params: { includeResolved?: boolean }; result: TeamSignal[] };
+  resolve_team_signal_cmd: { params: { signalId: string; notes: string }; result: void };
+  get_alert_policy_cmd: { params: Record<string, never>; result: AlertPolicy };
+  set_alert_policy_cmd: { params: { minSeats?: number; autoResolveHours?: number; notifyOnCorroboration?: boolean }; result: void };
+  get_monitoring_summary_cmd: { params: Record<string, never>; result: TeamMonitoringSummary };
+
+  // -- Enterprise: Audit Log --
+  get_audit_log: { params: { actionFilter?: string; resourceTypeFilter?: string; limit?: number; offset?: number }; result: AuditEntry[] };
+  get_audit_summary_cmd: { params: { days?: number }; result: AuditSummary };
+  export_audit_csv_cmd: { params: { from: string; to: string }; result: string };
+
+  // -- Enterprise: Webhooks --
+  register_webhook_cmd: { params: { name: string; url: string; events: string[] }; result: Webhook };
+  list_webhooks_cmd: { params: Record<string, never>; result: Webhook[] };
+  delete_webhook_cmd: { params: { webhookId: string }; result: void };
+  test_webhook_cmd: { params: { webhookId: string }; result: boolean };
+  get_webhook_deliveries_cmd: { params: { webhookId: string; limit?: number }; result: WebhookDelivery[] };
+
+  // -- Enterprise: Organizations --
+  get_organization_cmd: { params: Record<string, never>; result: Organization | null };
+  get_org_teams_cmd: { params: Record<string, never>; result: OrgTeamSummary[] };
+  get_retention_policies_cmd: { params: Record<string, never>; result: RetentionPolicy[] };
+  set_retention_policy_cmd: { params: { resourceType: string; days: number }; result: void };
+  get_cross_team_signals_cmd: { params: Record<string, never>; result: CrossTeamCorrelation[] };
+
+  // -- Enterprise: Analytics --
+  get_org_analytics_cmd: { params: { days?: number }; result: OrgAnalytics };
+  export_org_analytics_cmd: { params: { days?: number }; result: string };
 }
 
 
@@ -393,6 +439,213 @@ interface CommandMap {
 // Types referenced above but not yet in shared type files
 // (These can be moved to src/types/ as they get formalized)
 // ============================================================================
+
+/** Team sync status (mirrors Rust TeamSyncStatus) */
+interface TeamSyncStatus {
+  enabled: boolean;
+  connected: boolean;
+  team_id: string | null;
+  client_id: string | null;
+  display_name: string | null;
+  role: string | null;
+  member_count: number;
+  pending_outbound: number;
+  last_sync_at: string | null;
+  last_relay_seq: number;
+}
+
+/** A registered team member (mirrors Rust TeamMember) */
+interface TeamMember {
+  client_id: string;
+  display_name: string;
+  role: string;
+  last_seen: string | null;
+}
+
+// -- Team Intelligence Types --
+
+interface TeamProfile {
+  team_id: string;
+  member_count: number;
+  collective_stack: TeamTechEntry[];
+  stack_coverage: number;
+  blind_spots: TeamBlindSpot[];
+  overlap_zones: OverlapZone[];
+  unique_strengths: UniqueStrength[];
+  generated_at: string;
+}
+
+interface TeamTechEntry {
+  tech: string;
+  members: string[];
+  team_confidence: number;
+}
+
+interface TeamBlindSpot {
+  topic: string;
+  related_to: string[];
+  severity: string;
+}
+
+interface OverlapZone {
+  topic: string;
+  members: string[];
+  member_count: number;
+}
+
+interface UniqueStrength {
+  tech: string;
+  sole_expert: string;
+  risk_level: string;
+}
+
+interface TeamSignalSummary {
+  signal_id: string;
+  chain_name: string;
+  priority: string;
+  tech_topics: string[];
+  detected_by: MemberDetection[];
+  team_confidence: number;
+  first_detected_at: string;
+  suggested_action: string;
+  resolved: boolean;
+}
+
+interface MemberDetection {
+  client_id: string;
+  display_name: string;
+  detected_at: string;
+}
+
+// -- Team Monitoring Types --
+
+interface TeamSignal {
+  id: string;
+  team_id: string;
+  signal_type: string;
+  title: string;
+  severity: string;
+  tech_topics: string[];
+  detected_by_count: number;
+  first_detected: string;
+  last_detected: string;
+  resolved: boolean;
+  resolved_by: string | null;
+  resolved_at: string | null;
+}
+
+interface AlertPolicy {
+  min_seats_for_alert: number;
+  auto_resolve_hours: number;
+  notify_on_corroboration: boolean;
+}
+
+interface TeamMonitoringSummary {
+  active_signals: number;
+  resolved_signals: number;
+  avg_detection_count: number;
+  top_signal_types: [string, number][];
+}
+
+// -- Enterprise: Audit Types --
+
+interface AuditEntry {
+  id: number;
+  event_id: string;
+  team_id: string;
+  actor_id: string;
+  actor_display_name: string;
+  action: string;
+  resource_type: string;
+  resource_id: string | null;
+  details: unknown | null;
+  created_at: string;
+}
+
+interface AuditSummary {
+  total_events: number;
+  events_by_action: [string, number][];
+  events_by_actor: [string, number][];
+  events_by_day: [string, number][];
+}
+
+// -- Enterprise: Webhook Types --
+
+interface Webhook {
+  id: string;
+  team_id: string;
+  name: string;
+  url: string;
+  events: string[];
+  active: boolean;
+  failure_count: number;
+  last_fired_at: string | null;
+  last_status_code: number | null;
+  created_at: string;
+}
+
+interface WebhookDelivery {
+  id: string;
+  webhook_id: string;
+  event_type: string;
+  status: string;
+  http_status: number | null;
+  attempt_count: number;
+  created_at: string;
+  delivered_at: string | null;
+}
+
+// -- Enterprise: Organization Types --
+
+interface Organization {
+  id: string;
+  name: string;
+  team_count: number;
+  total_seats: number;
+  created_at: string;
+}
+
+interface OrgTeamSummary {
+  team_id: string;
+  member_count: number;
+  last_active: string | null;
+}
+
+interface RetentionPolicy {
+  resource_type: string;
+  retention_days: number;
+}
+
+interface CrossTeamCorrelation {
+  correlation_id: string;
+  signal_type: string;
+  teams_affected: [string, number][];
+  org_severity: string;
+  first_detected: string;
+  recommendation: string;
+}
+
+// -- Enterprise: Analytics Types --
+
+interface OrgAnalytics {
+  period: string;
+  active_seats: number;
+  total_seats: number;
+  signals_detected: number;
+  signals_resolved: number;
+  decisions_tracked: number;
+  briefings_generated: number;
+  top_signal_categories: [string, number][];
+  team_activity: TeamActivity[];
+}
+
+interface TeamActivity {
+  team_id: string;
+  active_members: number;
+  signals_this_period: number;
+  decisions_this_period: number;
+  engagement_score: number;
+}
 
 /** Developer decision (mirrors Rust DeveloperDecision) */
 interface DeveloperDecision {
@@ -975,4 +1228,32 @@ export type {
   StackHealthData,
   MissedIntelligence,
   UsageReport,
+  TeamSyncStatus,
+  TeamMember,
+  // Team Intelligence
+  TeamProfile,
+  TeamTechEntry,
+  TeamBlindSpot,
+  OverlapZone,
+  UniqueStrength,
+  TeamSignalSummary,
+  MemberDetection,
+  // Team Monitoring
+  TeamSignal,
+  AlertPolicy,
+  TeamMonitoringSummary,
+  // Enterprise: Audit
+  AuditEntry,
+  AuditSummary,
+  // Enterprise: Webhooks
+  Webhook,
+  WebhookDelivery,
+  // Enterprise: Organizations
+  Organization,
+  OrgTeamSummary,
+  RetentionPolicy,
+  CrossTeamCorrelation,
+  // Enterprise: Analytics
+  OrgAnalytics,
+  TeamActivity,
 };
