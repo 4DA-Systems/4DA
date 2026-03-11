@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 
-import { commands } from '../../lib/commands';
+import { cmd } from '../../lib/commands';
 import type { OllamaStatus, PullProgress } from './types';
 
 type ProviderType = 'anthropic' | 'openai' | 'ollama';
@@ -39,13 +39,13 @@ export function SetupAIProvider({
   const [importing, setImporting] = useState(false);
 
   useEffect(() => {
-    commands.detect_environment({}).then(setEnvDetection).catch(() => {});
+    cmd('detect_environment').then(setEnvDetection).catch(() => {});
   }, []);
 
   const handleImportEnvKey = async (envProvider: 'anthropic' | 'openai') => {
     setImporting(true);
     try {
-      await commands.import_env_key({ provider: envProvider });
+      await cmd('import_env_key', { provider: envProvider });
       onProviderChange(envProvider);
       onApiKeyChange('(imported from environment)');
     } catch {

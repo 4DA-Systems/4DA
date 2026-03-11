@@ -91,6 +91,9 @@ export const ResultItem = memo(function ResultItem({
     <div
       ref={viewRef}
       id={`result-item-${item.id}`}
+      role="option"
+      aria-selected={isFocused}
+      tabIndex={isFocused ? 0 : -1}
       className={`rounded border transition-colors ${
         isFocused
           ? 'ring-1 ring-orange-500/50'
