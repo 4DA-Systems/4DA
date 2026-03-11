@@ -344,6 +344,15 @@ mod team_sync_commands;
 mod team_sync_crypto;
 mod team_sync_scheduler;
 mod team_sync_types;
+// Team intelligence — aggregated team analytics
+mod team_intelligence;
+// Team monitoring — signal aggregation + alert policies
+mod team_monitoring;
+// Enterprise: audit log, webhooks, organizations, analytics
+mod audit;
+mod enterprise_analytics;
+mod organization;
+mod webhooks;
 
 mod telemetry;
 mod toolkit_intelligence;
@@ -362,6 +371,8 @@ pub mod test_utils;
 mod error_tests;
 #[cfg(test)]
 mod hardening_error_path_tests;
+#[cfg(test)]
+mod organization_tests;
 #[cfg(test)]
 mod privacy_tests;
 #[cfg(test)]
@@ -732,7 +743,37 @@ pub fn run() {
             team_sync_commands::propose_team_decision,
             team_sync_commands::join_team_via_invite,
             team_sync_commands::create_team,
-            team_sync_commands::create_team_invite
+            team_sync_commands::create_team_invite,
+            // Team Intelligence (AD-023)
+            team_intelligence::get_team_profile_cmd,
+            team_intelligence::get_team_blind_spots_cmd,
+            team_intelligence::get_bus_factor_report_cmd,
+            team_intelligence::get_team_signal_summary_cmd,
+            // Team Monitoring
+            team_monitoring::get_team_signals_cmd,
+            team_monitoring::resolve_team_signal_cmd,
+            team_monitoring::get_alert_policy_cmd,
+            team_monitoring::set_alert_policy_cmd,
+            team_monitoring::get_monitoring_summary_cmd,
+            // Enterprise: Audit Log
+            audit::get_audit_log,
+            audit::get_audit_summary_cmd,
+            audit::export_audit_csv_cmd,
+            // Enterprise: Webhooks
+            webhooks::register_webhook_cmd,
+            webhooks::list_webhooks_cmd,
+            webhooks::delete_webhook_cmd,
+            webhooks::test_webhook_cmd,
+            webhooks::get_webhook_deliveries_cmd,
+            // Enterprise: Organizations
+            organization::get_organization_cmd,
+            organization::get_org_teams_cmd,
+            organization::get_retention_policies_cmd,
+            organization::set_retention_policy_cmd,
+            organization::get_cross_team_signals_cmd,
+            // Enterprise: Analytics
+            enterprise_analytics::get_org_analytics_cmd,
+            enterprise_analytics::export_org_analytics_cmd,
         ])
         .setup(|app| {
             // Record app start time for diagnostics uptime tracking
