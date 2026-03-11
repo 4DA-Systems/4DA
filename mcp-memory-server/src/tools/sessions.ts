@@ -3,7 +3,7 @@
  */
 
 import { existsSync, readdirSync } from "fs";
-import { join } from "path";
+import { join, resolve } from "path";
 import { indexSession } from "../sessions.js";
 import type { ToolEntry, ToolContext, ToolResponse } from "../types.js";
 
@@ -99,6 +99,38 @@ function handleGetSessionMessages(
     offset?: number;
     limit?: number;
   };
+
+  // Validate session_file to prevent path traversal
+  if (
+    session_file.includes("..") ||
+    session_file.includes("/") ||
+    session_file.includes("\\") ||
+    /^[A-Za-z]:/.test(session_file) ||
+    session_file.startsWith("/")
+  ) {
+    return {
+      content: [
+        {
+          type: "text",
+          text: "Invalid session file name: path traversal not allowed",
+        },
+      ],
+    };
+  }
+
+  // Double-check: resolved path must be inside sessions directory
+  const resolvedSessionsDir = resolve(ctx.sessionsDir);
+  const resolvedFilePath = resolve(ctx.sessionsDir, session_file);
+  if (!resolvedFilePath.startsWith(resolvedSessionsDir)) {
+    return {
+      content: [
+        {
+          type: "text",
+          text: "Invalid session file name: path traversal not allowed",
+        },
+      ],
+    };
+  }
 
   const getMessages = ctx.db.prepare(
     `SELECT * FROM session_messages

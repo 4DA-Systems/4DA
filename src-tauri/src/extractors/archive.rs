@@ -4,6 +4,7 @@
 /// Prevents zip bombs with depth and size limits.
 use super::{DocumentExtractor, ExtractedDocument, PageContent};
 use crate::error::{Result, ResultExt};
+use crate::utils::sanitize_path;
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::Read;
@@ -254,7 +255,11 @@ impl DocumentExtractor for ArchiveExtractor {
 
     fn extract(&self, path: &Path) -> Result<ExtractedDocument> {
         if !path.exists() {
-            return Err(format!("File does not exist: {:?}", path).into());
+            return Err(format!(
+                "File does not exist: {}",
+                sanitize_path(&path.to_string_lossy())
+            )
+            .into());
         }
 
         let ext = path

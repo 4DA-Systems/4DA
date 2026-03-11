@@ -99,6 +99,22 @@ impl ProjectScanner {
         skip_dirs.insert("vendor".to_string());
         skip_dirs.insert(".cargo".to_string());
         skip_dirs.insert("pkg".to_string());
+        // Sensitive directories — prevent scanning credentials, keys, secrets
+        skip_dirs.insert(".ssh".to_string());
+        skip_dirs.insert(".aws".to_string());
+        skip_dirs.insert(".gnupg".to_string());
+        skip_dirs.insert(".gpg".to_string());
+        skip_dirs.insert(".docker".to_string());
+        skip_dirs.insert(".kube".to_string());
+        skip_dirs.insert(".terraform".to_string());
+        skip_dirs.insert(".vault".to_string());
+        skip_dirs.insert(".password-store".to_string());
+        skip_dirs.insert(".env".to_string());
+        // Note: .config/gcloud and .local/share/keyrings are multi-segment paths
+        // handled by the component check below (skip_dirs matches single dir names).
+        // We add the leaf segments so they're caught when traversed into:
+        skip_dirs.insert("gcloud".to_string());
+        skip_dirs.insert("keyrings".to_string());
 
         Self {
             max_depth: 5,

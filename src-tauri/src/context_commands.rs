@@ -9,6 +9,7 @@ use std::path::{Path, PathBuf};
 use tracing::{debug, info, warn};
 
 use crate::error::{Result, ResultExt};
+use crate::utils::sanitize_path;
 use crate::{
     ace_commands, chunk_text, embed_texts, get_context_dir, get_database, get_settings_manager,
     ContextFile, SUPPORTED_EXTENSIONS,
@@ -264,10 +265,10 @@ pub async fn set_context_dirs(dirs: Vec<String>) -> Result<String> {
 
         let path = PathBuf::from(&converted);
         if !path.exists() {
-            return Err(format!("Directory does not exist: {} (tried: {})", dir, converted).into());
+            return Err(format!("Directory does not exist: {}", sanitize_path(&converted)).into());
         }
         if !path.is_dir() {
-            return Err(format!("Path is not a directory: {}", converted).into());
+            return Err(format!("Path is not a directory: {}", sanitize_path(&converted)).into());
         }
         converted_dirs.push(converted);
     }

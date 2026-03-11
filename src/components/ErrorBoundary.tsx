@@ -39,8 +39,9 @@ export class ErrorBoundary extends Component<{ children: ReactNode }, ErrorBound
             color: 'var(--color-text-secondary)',
           }}>
             {this.state.error?.message}
-            {'\n\n'}
-            {this.state.error?.stack}
+            {import.meta.env.DEV && this.state.error?.stack && (
+              <>{'\n\n'}{this.state.error.stack}</>
+            )}
           </pre>
           <div style={{ display: 'flex', gap: '0.5rem', marginTop: '1rem' }}>
             <button
