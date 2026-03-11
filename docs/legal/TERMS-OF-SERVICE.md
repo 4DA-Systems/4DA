@@ -38,7 +38,7 @@ The App does **not**:
 
 ### 3.1 License Keys
 
-Pro tier users receive a license key validated through Keygen.sh. Your license key is personal to you and must not be shared, redistributed, or used on more devices than your subscription permits.
+Signal tier users receive a license key validated through Keygen.sh. Your license key is personal to you and must not be shared, redistributed, or used on more devices than your subscription permits.
 
 ### 3.2 BYOK (Bring Your Own Key)
 
@@ -67,18 +67,18 @@ The Free tier includes:
 
 The Free tier is provided at no cost and may be used indefinitely. We reserve the right to modify Free tier features with reasonable notice, but we will not retroactively remove core scoring functionality from existing Free tier users without a compelling reason.
 
-## 5. Pro Tier
+## 5. Signal Tier
 
 ### 5.1 Features
 
-The Pro tier includes everything in the Free tier, plus:
+The Signal tier includes everything in the Free tier, plus:
 
 - AI-powered daily briefings
 - Intelligence panels and advanced analytics
 - Developer DNA profiling
 - Audio briefings
 - Semantic analysis and trend detection
-- Additional Pro features as released
+- Additional Signal features as released
 
 ### 5.2 Pricing
 
@@ -89,15 +89,15 @@ Prices are in US Dollars and are exclusive of any applicable taxes. We will disp
 
 ### 5.3 Billing and Payment
 
-Payment is processed through our designated payment processor. By subscribing to the Pro tier, you authorise recurring charges at the applicable billing interval until you cancel.
+Payment is processed through our designated payment processor. By subscribing to the Signal tier, you authorise recurring charges at the applicable billing interval until you cancel.
 
 Your subscription begins on the date of your first payment and renews automatically unless cancelled before the next billing date.
 
 ### 5.4 Cancellation
 
-You may cancel your Pro subscription at any time. Upon cancellation:
+You may cancel your Signal subscription at any time. Upon cancellation:
 
-- You retain access to Pro features until the end of your current billing period
+- You retain access to Signal features until the end of your current billing period
 - No further charges will be made
 - Your account reverts to the Free tier at the end of the paid period
 - Your local data remains intact and accessible
@@ -106,9 +106,9 @@ You may cancel your Pro subscription at any time. Upon cancellation:
 
 ### 6.1 30-Day Money-Back Guarantee
 
-If you are not satisfied with the Pro tier, you may request a full refund within 30 days of your initial purchase. To request a refund, contact us at [support@4da.ai](mailto:support@4da.ai).
+If you are not satisfied with the Signal tier, you may request a full refund within 30 days of your initial purchase. To request a refund, contact us at [support@4da.ai](mailto:support@4da.ai).
 
-This guarantee applies to first-time Pro subscriptions only. Subsequent re-subscriptions are not eligible for the 30-day guarantee, though they remain subject to your statutory rights.
+This guarantee applies to first-time Signal subscriptions only. Subsequent re-subscriptions are not eligible for the 30-day guarantee, though they remain subject to your statutory rights.
 
 ### 6.2 Australian Consumer Law
 
@@ -139,8 +139,8 @@ You agree **not** to:
 
 - Reverse-engineer, decompile, or disassemble the App beyond what is permitted by the source-available license (see [Section 8](#8-intellectual-property))
 - Use the App to build a competing product or service during the FSL restriction period
-- Share, sell, or redistribute Pro license keys
-- Attempt to circumvent license validation or access Pro features without a valid subscription
+- Share, sell, or redistribute Signal license keys
+- Attempt to circumvent license validation or access Signal features without a valid subscription
 - Use the App to scrape, harvest, or collect data in violation of any third-party terms of service
 - Misrepresent your use of the App or its outputs as professional advice
 
@@ -185,7 +185,7 @@ Content surfaced by the App originates from third-party sources. 4DA does not en
 
 ### 9.4 AI-Generated Content
 
-Pro tier features include AI-generated briefings and analysis. These are produced by large language models and may contain errors, omissions, or inaccuracies. AI-generated content should not be relied upon as a sole source of information for any decision.
+Signal tier features include AI-generated briefings and analysis. These are produced by large language models and may contain errors, omissions, or inaccuracies. AI-generated content should not be relied upon as a sole source of information for any decision.
 
 ## 10. Limitation of Liability
 
@@ -212,11 +212,11 @@ This indemnification obligation does not apply to the extent that a claim arises
 
 ### 12.1 By You
 
-You may stop using the App and uninstall it at any time. If you have a Pro subscription, you should cancel it before uninstalling to avoid further charges.
+You may stop using the App and uninstall it at any time. If you have a Signal subscription, you should cancel it before uninstalling to avoid further charges.
 
 ### 12.2 By 4DA
 
-We may suspend or terminate your license key or access to Pro features if:
+We may suspend or terminate your license key or access to Signal features if:
 
 - You breach these Terms
 - You engage in fraudulent activity or abuse of the licensing system
@@ -226,9 +226,9 @@ Where practicable, we will provide notice before termination and an opportunity 
 
 ### 12.3 Effect of Termination
 
-Upon termination of your Pro subscription or license:
+Upon termination of your Signal subscription or license:
 
-- Your access to Pro features will cease
+- Your access to Signal features will cease
 - Your local data remains on your device and is not affected
 - You may continue using the Free tier
 - Provisions of these Terms that by their nature should survive termination will survive (including Sections 8, 9, 10, 11, and 14)
