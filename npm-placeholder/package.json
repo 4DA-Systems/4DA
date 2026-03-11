@@ -1,0 +1,20 @@
+{
+  "name": "4da",
+  "version": "0.0.1",
+  "description": "4DA — 4 Dimensional Autonomy. Developer intelligence, locally.",
+  "homepage": "https://4da.ai",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/runyourempire/4DA"
+  },
+  "author": "4DA Systems Pty Ltd",
+  "license": "FSL-1.1-Apache-2.0",
+  "keywords": [
+    "4da",
+    "developer-tools",
+    "intelligence",
+    "privacy",
+    "local-first"
+  ],
+  "main": "index.js"
+}

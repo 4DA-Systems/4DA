@@ -1,0 +1,15 @@
+[package]
+name = "4da"
+version = "0.0.1"
+edition = "2021"
+description = "4DA — 4 Dimensional Autonomy. Developer intelligence, locally."
+license = "FSL-1.1-Apache-2.0"
+homepage = "https://4da.ai"
+repository = "https://github.com/runyourempire/4DA"
+readme = "README.md"
+keywords = ["developer-tools", "intelligence", "privacy", "local-first"]
+categories = ["command-line-utilities"]
+
+[lib]
+name = "fourda"
+path = "src/lib.rs"
