@@ -27,9 +27,10 @@
 //! ```
 
 use anyhow::{Context, Result};
+use hmac::{Hmac, Mac};
 use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
-use sha2::{Digest, Sha256};
+use sha2::Sha256;
 use tracing::{info, warn};
 use ts_rs::TS;
 use uuid::Uuid;
@@ -111,17 +112,16 @@ pub fn ensure_webhook_tables(conn: &Connection) -> Result<()> {
 // Signing
 // ============================================================================
 
-/// Sign a payload using SHA256(secret + "." + body).
+/// Sign a payload using HMAC-SHA256 (RFC 2104).
 ///
-/// NOTE: Simplified signature, not RFC 2104 HMAC. For production-grade
-/// HMAC-SHA256, add the `hmac` crate. Current approach is sufficient for
-/// webhook verification where both sides share the secret.
+/// Returns the hex-encoded MAC. Used to populate the `X-4DA-Signature-256`
+/// header in format `sha256=<hex>`.
 pub fn sign_payload(secret: &str, body: &str) -> String {
-    let mut hasher = Sha256::new();
-    hasher.update(secret.as_bytes());
-    hasher.update(b".");
-    hasher.update(body.as_bytes());
-    hex::encode(hasher.finalize())
+    type HmacSha256 = Hmac<Sha256>;
+    let mut mac =
+        HmacSha256::new_from_slice(secret.as_bytes()).expect("HMAC accepts any key length");
+    mac.update(body.as_bytes());
+    hex::encode(mac.finalize().into_bytes())
 }
 
 // ============================================================================
@@ -374,7 +374,7 @@ async fn dispatch_delivery_http(
     let response = client
         .post(url)
         .header("Content-Type", "application/json")
-        .header("X-4DA-Signature", &signature)
+        .header("X-4DA-Signature-256", format!("sha256={signature}"))
         .header("X-4DA-Delivery", delivery_id)
         .header("User-Agent", "4DA-Webhooks/1.0")
         .body(payload.to_string())

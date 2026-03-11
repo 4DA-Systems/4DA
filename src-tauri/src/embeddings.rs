@@ -37,7 +37,30 @@ pub(crate) async fn embed_texts(texts: &[String]) -> Result<Vec<Vec<f32>>> {
         settings.get().llm.clone()
     };
 
-    match llm_settings.provider.as_str() {
+    // Fast-path: if a cloud provider is configured but has no API key, skip it entirely
+    // and fall through to the zero-config Ollama/zero-vector path. This avoids wasting
+    // ~4-13 seconds on deterministic retry failures during cold start with no keys.
+    let effective_provider = match llm_settings.provider.as_str() {
+        "openai" if llm_settings.api_key.is_empty() => {
+            tracing::debug!(
+                target: "4da::embeddings",
+                "OpenAI provider configured but no API key — falling through to zero-config path"
+            );
+            "none"
+        }
+        "anthropic"
+            if llm_settings.openai_api_key.is_empty() && llm_settings.api_key.is_empty() =>
+        {
+            tracing::debug!(
+                target: "4da::embeddings",
+                "Anthropic provider configured but no embedding key — falling through to zero-config path"
+            );
+            "none"
+        }
+        other => other,
+    };
+
+    match effective_provider {
         "openai" => {
             let api_key = llm_settings.api_key.clone();
             let texts = texts.to_vec();
