@@ -287,7 +287,7 @@ interface CommandMap {
   set_youtube_channels: { params: { channels: string[] }; result: void };
   get_twitter_handles: { params: Record<string, never>; result: { handles: string[]; count: number } };
   set_twitter_handles: { params: { handles: string[] }; result: void };
-  get_x_api_key: { params: Record<string, never>; result: string };
+  has_x_api_key: { params: Record<string, never>; result: boolean };
   set_x_api_key: { params: { key: string }; result: void };
   get_github_languages: { params: Record<string, never>; result: { languages: string[]; count: number } };
   set_github_languages: { params: { languages: string[] }; result: void };

@@ -4,7 +4,7 @@
 //! Supports SSE (Anthropic, OpenAI) and NDJSON (Ollama) streaming formats.
 
 use crate::error::{Result, ResultExt};
-use crate::llm::{LLMResponse, Message};
+use crate::llm::{sanitize_api_error, LLMResponse, Message};
 use crate::settings::LLMProvider;
 use futures::StreamExt;
 use tracing::{debug, warn};
@@ -124,7 +124,12 @@ where
     if !response.status().is_success() {
         let status = response.status();
         let text = response.text().await.unwrap_or_default();
-        return Err(format!("Anthropic API error {}: {}", status, text).into());
+        return Err(format!(
+            "Anthropic API error {}: {}",
+            status,
+            sanitize_api_error(&text)
+        )
+        .into());
     }
 
     let mut stream = response.bytes_stream();
@@ -231,7 +236,7 @@ where
     if !response.status().is_success() {
         let status = response.status();
         let text = response.text().await.unwrap_or_default();
-        return Err(format!("OpenAI API error {}: {}", status, text).into());
+        return Err(format!("OpenAI API error {}: {}", status, sanitize_api_error(&text)).into());
     }
 
     let mut stream = response.bytes_stream();
@@ -335,7 +340,7 @@ where
     if !response.status().is_success() {
         let status = response.status();
         let text = response.text().await.unwrap_or_default();
-        return Err(format!("Ollama error {}: {}", status, text).into());
+        return Err(format!("Ollama error {}: {}", status, sanitize_api_error(&text)).into());
     }
 
     let mut stream = response.bytes_stream();

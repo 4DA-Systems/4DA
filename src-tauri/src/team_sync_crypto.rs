@@ -19,6 +19,7 @@ use serde::{Deserialize, Serialize};
 use sha2::Sha256;
 use tracing::info;
 use x25519_dalek::{PublicKey, StaticSecret};
+use zeroize::Zeroize;
 
 /// Size of XChaCha20Poly1305 nonce (24 bytes).
 const NONCE_SIZE: usize = 24;
@@ -35,6 +36,14 @@ pub struct TeamCrypto {
     /// Team-wide symmetric encryption key (32 bytes).
     /// None until team key is received from admin.
     team_key: Option<[u8; 32]>,
+}
+
+impl Drop for TeamCrypto {
+    fn drop(&mut self) {
+        if let Some(ref mut key) = self.team_key {
+            key.zeroize();
+        }
+    }
 }
 
 impl std::fmt::Debug for TeamCrypto {

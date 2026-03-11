@@ -51,6 +51,8 @@ pub async fn set_rss_feeds(feeds: Vec<String>) -> Result<serde_json::Value> {
         if !url.starts_with("http://") && !url.starts_with("https://") {
             return Err(format!("Invalid URL: {} must start with http:// or https://", url).into());
         }
+        // Block internal/private network addresses (SSRF prevention)
+        crate::url_validation::validate_not_internal(url)?;
     }
 
     let mut settings_guard = get_settings_manager().lock();
@@ -133,11 +135,11 @@ fn sanitize_x_api_key(raw: &str) -> String {
     key
 }
 
-/// Get X API Bearer Token
+/// Check whether an X API Bearer Token is configured (never returns the key itself)
 #[tauri::command]
-pub async fn get_x_api_key() -> Result<String> {
+pub async fn has_x_api_key() -> Result<bool> {
     let settings_guard = get_settings_manager().lock();
-    Ok(settings_guard.get_x_api_key())
+    Ok(!settings_guard.get_x_api_key().is_empty())
 }
 
 /// Set X API Bearer Token
@@ -370,5 +372,18 @@ mod tests {
         assert_eq!(clean_twitter_handle("@elonmusk"), "elonmusk");
         assert_eq!(clean_twitter_handle("elonmusk"), "elonmusk");
         assert_eq!(clean_twitter_handle("@@double"), "double");
+    }
+
+    #[test]
+    fn test_ssrf_internal_urls_blocked() {
+        use crate::url_validation::validate_not_internal;
+        // Internal addresses should be rejected
+        assert!(validate_not_internal("http://127.0.0.1/feed").is_err());
+        assert!(validate_not_internal("http://localhost/feed").is_err());
+        assert!(validate_not_internal("http://10.0.0.1/feed").is_err());
+        assert!(validate_not_internal("http://192.168.1.1/feed").is_err());
+        assert!(validate_not_internal("http://169.254.169.254/latest/meta-data/").is_err());
+        // Public addresses should pass
+        assert!(validate_not_internal("https://example.com/feed.xml").is_ok());
     }
 }

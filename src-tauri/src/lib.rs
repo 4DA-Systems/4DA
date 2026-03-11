@@ -266,6 +266,7 @@ mod tech_radar;
 mod tech_radar_commands;
 mod tech_radar_compute;
 mod temporal;
+mod url_validation;
 mod void_commands;
 mod void_engine;
 mod weekly_digest;
@@ -554,7 +555,7 @@ pub fn run() {
             source_config::get_twitter_handles,
             source_config::set_twitter_handles,
             source_config::set_x_api_key,
-            source_config::get_x_api_key,
+            source_config::has_x_api_key,
             source_config::get_youtube_channels,
             source_config::set_youtube_channels,
             source_config::get_github_languages,

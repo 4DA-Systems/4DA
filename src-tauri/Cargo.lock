@@ -1772,6 +1772,7 @@ dependencies = [
  "uuid",
  "x25519-dalek",
  "zerocopy",
+ "zeroize",
  "zip 0.6.6",
 ]
 
