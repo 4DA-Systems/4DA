@@ -105,6 +105,16 @@ pub async fn set_llm_provider(
     let manager = get_settings_manager();
     let mut guard = manager.lock();
 
+    // Store keys in platform keychain before creating the provider struct
+    if !api_key.is_empty() {
+        let _ = crate::settings::keystore::store_secret("llm_api_key", &api_key);
+    }
+    if let Some(ref oai_key) = openai_api_key {
+        if !oai_key.is_empty() {
+            let _ = crate::settings::keystore::store_secret("openai_api_key", oai_key);
+        }
+    }
+
     let llm_provider = LLMProvider {
         provider,
         api_key,
@@ -116,6 +126,23 @@ pub async fn set_llm_provider(
     guard.set_llm_provider(llm_provider)?;
     info!(target: "4da::settings", "LLM provider updated");
     Ok(())
+}
+
+/// Get LLM configuration including the actual API key (for MCP server use).
+///
+/// This returns the in-memory key (hydrated from keychain) so MCP servers
+/// can authenticate without accessing the keychain directly.
+#[tauri::command]
+pub async fn get_llm_key_for_mcp() -> Result<serde_json::Value> {
+    let manager = get_settings_manager();
+    let guard = manager.lock();
+    let settings = guard.get();
+    Ok(serde_json::json!({
+        "provider": settings.llm.provider,
+        "api_key": settings.llm.api_key,
+        "model": settings.llm.model,
+        "base_url": settings.llm.base_url,
+    }))
 }
 
 /// Mark onboarding wizard as complete
@@ -151,6 +178,45 @@ pub async fn set_rerank_config(
     guard.set_rerank_config(config)?;
     info!(target: "4da::settings", enabled = enabled, "Re-rank config updated");
     Ok(())
+}
+
+// ============================================================================
+// Environment Detection (Phase 2)
+// ============================================================================
+
+/// Detect API keys available in environment variables.
+///
+/// Returns masked previews only — full keys never cross IPC.
+#[tauri::command]
+pub async fn detect_environment() -> Result<serde_json::Value> {
+    let detected = crate::settings::env_detection::detect_api_keys();
+    Ok(serde_json::to_value(detected).unwrap_or_default())
+}
+
+/// Import an API key from an environment variable into the keychain.
+///
+/// The full key is read server-side, stored in the keychain, and never
+/// returned to the frontend.
+#[tauri::command]
+pub async fn import_env_key(provider: String) -> Result<String> {
+    validate_input_length(&provider, "provider", 20)?;
+    crate::settings::env_detection::import_env_key(&provider)
+}
+
+// ============================================================================
+// Key Validation (Phase 3)
+// ============================================================================
+
+/// Validate an API key with format check and connection test.
+///
+/// The key is consumed server-side — on success it's stored in the keychain.
+/// Never returned to the frontend.
+#[tauri::command]
+pub async fn validate_api_key(provider: String, key: String) -> Result<serde_json::Value> {
+    validate_input_length(&provider, "provider", 20)?;
+    validate_input_length(&key, "api_key", 500)?;
+    let result = crate::settings::validation::validate_and_store_key(&provider, &key).await?;
+    Ok(serde_json::to_value(result).unwrap_or_default())
 }
 
 // --- Sibling modules ---

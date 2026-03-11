@@ -30,7 +30,7 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self' https://api.anthropic.com https://api.openai.com http://localhost:11434 https://hacker-news.firebaseio.com https://export.arxiv.org https://www.reddit.com https://api.github.com https://www.googleapis.com; font-src 'self' data:; frame-src 'none'; object-src 'none'; base-uri 'self'"
+      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' https://api.anthropic.com https://api.openai.com http://localhost:11434 https://hacker-news.firebaseio.com https://export.arxiv.org https://www.reddit.com https://api.github.com https://www.googleapis.com; font-src 'self' data:; frame-src 'none'; object-src 'none'; base-uri 'self'"
     }
   },
   "plugins": {
