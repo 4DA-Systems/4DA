@@ -13,6 +13,39 @@ use tracing::{debug, warn};
 
 pub use crate::llm_judge::RelevanceJudge;
 
+/// Sanitize API error response text to prevent leaking secrets.
+/// - Truncates to 200 characters
+/// - Redacts strings that look like API keys (sk-, pk_, or long alphanumeric runs)
+pub(crate) fn sanitize_api_error(text: &str) -> String {
+    let truncated = if text.len() > 200 {
+        format!("{}...", &text[..text.floor_char_boundary(200)])
+    } else {
+        text.to_string()
+    };
+
+    // Redact potential API key patterns
+    let mut result = String::with_capacity(truncated.len());
+    for word in truncated.split_whitespace() {
+        if !result.is_empty() {
+            result.push(' ');
+        }
+        // Check for API key patterns: sk-*, pk_*, or long alphanumeric tokens
+        let trimmed = word.trim_matches(|c: char| c == '"' || c == '\'' || c == ',' || c == ':');
+        if trimmed.starts_with("sk-")
+            || trimmed.starts_with("pk_")
+            || (trimmed.len() > 32
+                && trimmed
+                    .chars()
+                    .all(|c| c.is_alphanumeric() || c == '-' || c == '_'))
+        {
+            result.push_str("[REDACTED]");
+        } else {
+            result.push_str(word);
+        }
+    }
+    result
+}
+
 // ============================================================================
 // Types
 // ============================================================================
@@ -223,7 +256,12 @@ impl LLMClient {
         if !response.status().is_success() {
             let status = response.status();
             let text = response.text().await.unwrap_or_default();
-            return Err(format!("Ollama fallback error {}: {}", status, text).into());
+            return Err(format!(
+                "Ollama fallback error {}: {}",
+                status,
+                sanitize_api_error(&text)
+            )
+            .into());
         }
 
         let data: serde_json::Value = response
@@ -288,7 +326,12 @@ impl LLMClient {
         if !response.status().is_success() {
             let status = response.status();
             let text = response.text().await.unwrap_or_default();
-            return Err(format!("Anthropic API error {}: {}", status, text).into());
+            return Err(format!(
+                "Anthropic API error {}: {}",
+                status,
+                sanitize_api_error(&text)
+            )
+            .into());
         }
 
         let data: serde_json::Value = response
@@ -350,7 +393,9 @@ impl LLMClient {
         if !response.status().is_success() {
             let status = response.status();
             let text = response.text().await.unwrap_or_default();
-            return Err(format!("OpenAI API error {}: {}", status, text).into());
+            return Err(
+                format!("OpenAI API error {}: {}", status, sanitize_api_error(&text)).into(),
+            );
         }
 
         let data: serde_json::Value = response
@@ -441,7 +486,7 @@ impl LLMClient {
                 )
                 .into());
             }
-            return Err(format!("Ollama error {}: {}", status, text).into());
+            return Err(format!("Ollama error {}: {}", status, sanitize_api_error(&text)).into());
         }
 
         let data: serde_json::Value = response
@@ -802,5 +847,48 @@ mod tests {
         // gpt-4o-mini is the cheapest OpenAI model
         let cost = client.estimate_cost_cents(10_000, 1_000);
         assert!(cost < 1, "gpt-4o-mini should be very cheap for small usage");
+    }
+
+    // ========================================================================
+    // sanitize_api_error
+    // ========================================================================
+
+    #[test]
+    fn test_sanitize_api_error_truncates_long_text() {
+        let long = "a".repeat(500);
+        let result = sanitize_api_error(&long);
+        assert!(result.len() <= 210, "Should truncate to ~200 chars + ...");
+    }
+
+    #[test]
+    fn test_sanitize_api_error_redacts_sk_key() {
+        let text = r#"{"error": "Invalid API key: sk-ant-api03-abcdef1234567890"}"#;
+        let result = sanitize_api_error(text);
+        assert!(
+            result.contains("[REDACTED]"),
+            "Should redact sk- prefixed key"
+        );
+        assert!(!result.contains("sk-ant"), "Should not contain the key");
+    }
+
+    #[test]
+    fn test_sanitize_api_error_redacts_pk_key() {
+        let text = "Error with key pk_live_abcdefghijklmnopqrstuvwxyz1234567890";
+        let result = sanitize_api_error(text);
+        assert!(result.contains("[REDACTED]"));
+        assert!(!result.contains("pk_live_"));
+    }
+
+    #[test]
+    fn test_sanitize_api_error_redacts_long_alphanumeric() {
+        let text = "token: AAAAAAAAABBBBBBBBBBCCCCCCCCCCDDDDDDDDDD is invalid";
+        let result = sanitize_api_error(text);
+        assert!(result.contains("[REDACTED]"));
+    }
+
+    #[test]
+    fn test_sanitize_api_error_preserves_short_text() {
+        let text = "rate limit exceeded";
+        assert_eq!(sanitize_api_error(text), text);
     }
 }

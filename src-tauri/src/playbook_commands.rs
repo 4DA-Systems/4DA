@@ -3,6 +3,7 @@ use std::fs;
 use std::path::PathBuf;
 
 use crate::error::Result;
+use crate::utils::sanitize_path;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PlaybookModule {
@@ -210,7 +211,11 @@ pub fn get_playbook_content(module_id: String, lang: Option<String>) -> Result<P
     let path = content_dir.join(filename);
 
     if !path.exists() {
-        return Err(format!("Module file not found: {}", path.display()).into());
+        return Err(format!(
+            "Module file not found: {}",
+            sanitize_path(&path.to_string_lossy())
+        )
+        .into());
     }
 
     let raw = fs::read_to_string(&path)?;

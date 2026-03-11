@@ -18,6 +18,7 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
 use tracing::{info, warn};
+use zeroize::Zeroize;
 
 // ============================================================================
 // Settings Types
@@ -62,6 +63,13 @@ impl std::fmt::Debug for LLMProvider {
                 },
             )
             .finish()
+    }
+}
+
+impl Drop for LLMProvider {
+    fn drop(&mut self) {
+        self.api_key.zeroize();
+        self.openai_api_key.zeroize();
     }
 }
 

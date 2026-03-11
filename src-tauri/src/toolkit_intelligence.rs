@@ -230,11 +230,13 @@ pub(crate) fn detect_feed_format(xml: &str) -> &'static str {
     }
 }
 
-/// Validate a feed URL (must start with http:// or https://).
+/// Validate a feed URL (must start with http:// or https://, must not target internal networks).
 pub(crate) fn validate_feed_url(url: &str) -> Result<()> {
     if !url.starts_with("http://") && !url.starts_with("https://") {
         return Err("URL must start with http:// or https://".into());
     }
+    // Block internal/private network addresses (SSRF prevention)
+    crate::url_validation::validate_not_internal(url)?;
     Ok(())
 }
 

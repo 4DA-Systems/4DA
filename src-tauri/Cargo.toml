@@ -105,6 +105,7 @@ uhlc = "0.7"
 tokio-tungstenite = { version = "0.24", features = ["rustls-tls-webpki-roots"] }
 uuid = { version = "1", features = ["v4", "serde"] }
 rand = "0.8"
+zeroize = "1"
 
 [[bin]]
 name = "4da"

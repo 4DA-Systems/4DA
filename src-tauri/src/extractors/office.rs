@@ -5,6 +5,7 @@
 /// - XLSX (Excel) using calamine
 use super::{DocumentExtractor, ExtractedDocument, PageContent};
 use crate::error::{Result, ResultExt};
+use crate::utils::sanitize_path;
 use calamine::{open_workbook, Reader, Xlsx};
 use docx_rs::read_docx;
 use std::collections::HashMap;
@@ -152,7 +153,11 @@ impl DocumentExtractor for OfficeExtractor {
 
     fn extract(&self, path: &Path) -> Result<ExtractedDocument> {
         if !path.exists() {
-            return Err(format!("File does not exist: {:?}", path).into());
+            return Err(format!(
+                "File does not exist: {}",
+                sanitize_path(&path.to_string_lossy())
+            )
+            .into());
         }
 
         let ext = path

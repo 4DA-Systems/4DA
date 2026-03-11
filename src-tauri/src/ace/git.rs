@@ -12,6 +12,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use crate::error::{Result, ResultExt};
+use crate::utils::sanitize_path;
 
 /// Git analyzer configuration
 #[derive(Debug, Clone)]
@@ -131,7 +132,11 @@ impl GitAnalyzer {
     /// Analyze a git repository
     pub fn analyze_repo(&self, repo_path: &Path) -> Result<GitSignal> {
         if !Self::is_git_repo(repo_path) {
-            return Err(format!("Not a git repository: {}", repo_path.display()).into());
+            return Err(format!(
+                "Not a git repository: {}",
+                sanitize_path(&repo_path.to_string_lossy())
+            )
+            .into());
         }
 
         let repo_name = repo_path

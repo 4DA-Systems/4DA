@@ -5,6 +5,7 @@
 /// will be handled via OCR in the image extractor.
 use super::{DocumentExtractor, ExtractedDocument, PageContent};
 use crate::error::{Result, ResultExt};
+use crate::utils::sanitize_path;
 use lopdf::Document;
 use std::collections::HashMap;
 use std::path::Path;
@@ -139,7 +140,11 @@ impl DocumentExtractor for PdfExtractor {
     fn extract(&self, path: &Path) -> Result<ExtractedDocument> {
         // Verify file exists and is readable
         if !path.exists() {
-            return Err(format!("File does not exist: {:?}", path).into());
+            return Err(format!(
+                "File does not exist: {}",
+                sanitize_path(&path.to_string_lossy())
+            )
+            .into());
         }
 
         // Extract text content (cap at 5MB to prevent memory exhaustion)
@@ -153,8 +158,8 @@ impl DocumentExtractor for PdfExtractor {
         // If no text extracted, this might be a scanned PDF
         if text.trim().is_empty() {
             return Err(format!(
-                "No text content found in PDF (may be scanned/image-only): {:?}",
-                path
+                "No text content found in PDF (may be scanned/image-only): {}",
+                sanitize_path(&path.to_string_lossy())
             )
             .into());
         }
