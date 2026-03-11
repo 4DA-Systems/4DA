@@ -369,7 +369,12 @@ export function ResultsView({
               )}
             </div>
           ) : (
-            <div style={{ height: `${virtualizer.getTotalSize()}px`, width: '100%', position: 'relative' }}>
+            <div
+              role="listbox"
+              aria-label={t('results.title')}
+              aria-activedescendant={focusedIndex >= 0 && filteredResults[focusedIndex] ? `result-item-${filteredResults[focusedIndex].id}` : undefined}
+              style={{ height: `${virtualizer.getTotalSize()}px`, width: '100%', position: 'relative' }}
+            >
               {virtualizer.getVirtualItems().map((virtualRow) => {
                 const item = filteredResults[virtualRow.index];
                 const idx = virtualRow.index;

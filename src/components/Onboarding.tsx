@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { cmd } from '../lib/commands';
 
@@ -34,6 +34,7 @@ export function Onboarding({ onComplete }: OnboardingProps) {
   };
   const [step, setStep] = useState<Step>(getPersistedStep);
   const [isAnimating, setIsAnimating] = useState(true);
+  const modalRef = useRef<HTMLDivElement>(null);
 
   const currentIndex = steps.indexOf(step);
 
@@ -47,6 +48,41 @@ export function Onboarding({ onComplete }: OnboardingProps) {
     setIsAnimating(true);
     const timer = setTimeout(() => setIsAnimating(false), 300);
     return () => clearTimeout(timer);
+  }, [step]);
+
+  // Focus trap: keep Tab cycling within the onboarding wizard
+  useEffect(() => {
+    const modal = modalRef.current;
+    if (!modal) return;
+
+    // Auto-focus first focusable element on step change
+    const focusable = modal.querySelectorAll<HTMLElement>(
+      'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
+    );
+    focusable[0]?.focus();
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== 'Tab') return;
+      const els = modal.querySelectorAll<HTMLElement>(
+        'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
+      );
+      const first = els[0];
+      const last = els[els.length - 1];
+      if (e.shiftKey) {
+        if (document.activeElement === first) {
+          e.preventDefault();
+          last?.focus();
+        }
+      } else {
+        if (document.activeElement === last) {
+          e.preventDefault();
+          first?.focus();
+        }
+      }
+    };
+
+    modal.addEventListener('keydown', handleKeyDown);
+    return () => modal.removeEventListener('keydown', handleKeyDown);
   }, [step]);
 
   const nextStep = () => {
@@ -70,7 +106,7 @@ export function Onboarding({ onComplete }: OnboardingProps) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-bg-primary p-8" role="dialog" aria-modal="true" aria-label="Setup wizard">
+    <div ref={modalRef} className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-bg-primary p-8" role="dialog" aria-modal="true" aria-label="Setup wizard">
       {/* Progress indicator */}
       <div className="absolute top-8 flex flex-col items-center gap-2">
         {/* Step X of Y text */}

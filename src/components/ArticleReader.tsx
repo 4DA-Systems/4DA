@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { cmd } from '../lib/commands';
 import type { ItemContent } from '../types';
@@ -35,6 +35,19 @@ export function ArticleReader({ itemId, url, contentType }: ArticleReaderProps) 
       setLoading(false);
     }
   }, [itemId, t]);
+
+  // Close on Escape key when reader is open
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.stopPropagation();
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen]);
 
   const readTime = content ? Math.max(1, Math.ceil(content.word_count / 200)) : 0;
   const badge = getContentTypeBadge(contentType);

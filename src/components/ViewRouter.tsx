@@ -1,7 +1,7 @@
 // Copyright (c) 2025-2026 Antony Lawrence Kiddie Pasifa. All rights reserved.
 // Licensed under the Functional Source License 1.1 (FSL-1.1-Apache-2.0). See LICENSE file.
 
-import { lazy, Suspense } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../store';
 import { useShallow } from 'zustand/react/shallow';
@@ -26,6 +26,18 @@ interface ViewRouterProps {
   focusedIndex: number;
 }
 
+const VIEW_LABEL_KEYS: Record<string, string> = {
+  briefing: 'nav.briefing.label',
+  results: 'nav.results',
+  channels: 'nav.channels',
+  profile: 'nav.profile',
+  insights: 'nav.insights',
+  saved: 'nav.saved',
+  toolkit: 'nav.toolkit',
+  playbook: 'nav.playbook',
+  calibrate: 'nav.calibrate',
+};
+
 export function ViewRouter({ newItemIds, focusedIndex }: ViewRouterProps) {
   const { t } = useTranslation();
   const { activeView, analysisComplete, relevanceResults } = useAppStore(
@@ -36,7 +48,21 @@ export function ViewRouter({ newItemIds, focusedIndex }: ViewRouterProps) {
     })),
   );
 
+  // Screen reader announcement for view changes
+  const [viewAnnouncement, setViewAnnouncement] = useState('');
+  useEffect(() => {
+    const labelKey = VIEW_LABEL_KEYS[activeView];
+    if (labelKey) {
+      setViewAnnouncement(t('app.viewChanged', { view: t(labelKey), defaultValue: 'Navigated to {{view}}' }));
+    }
+  }, [activeView, t]);
+
   return (
+    <>
+    {/* Screen reader announcement for view changes */}
+    <div className="sr-only" aria-live="polite" aria-atomic="true" role="status">
+      {viewAnnouncement}
+    </div>
     <Suspense fallback={<div className="flex items-center justify-center py-20 text-text-secondary text-sm">{t('action.loading')}</div>}>
       {activeView === 'briefing' ? (
         <ViewErrorBoundary viewName="Briefing">
@@ -88,5 +114,6 @@ export function ViewRouter({ newItemIds, focusedIndex }: ViewRouterProps) {
         </ViewErrorBoundary>
       )}
     </Suspense>
+    </>
   );
 }
