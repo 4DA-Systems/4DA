@@ -101,7 +101,7 @@ describe('getScoreFactorKeys', () => {
   });
 
   it('includes decisionWindow when decision_window_match is true', () => {
-    const item = makeMinimalItem({ decision_window_match: true });
+    const item = makeMinimalItem({ decision_window_match: 'Adopt Rust for backend' });
     expect(getScoreFactorKeys(item)).toContain('scoreTooltip.decisionWindow');
   });
 
