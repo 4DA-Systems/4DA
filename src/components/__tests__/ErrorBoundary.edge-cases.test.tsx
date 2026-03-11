@@ -4,6 +4,7 @@
  * Covers multiple children throwing, nested error boundaries,
  * different error types, and recovery after multiple errors.
  */
+import React from 'react';
 import { describe, it, expect, vi, beforeAll, afterAll } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { ErrorBoundary } from '../ErrorBoundary';
@@ -22,11 +23,7 @@ function ThrowingChild({ error }: { error: Error | string }): never {
   throw typeof error === 'string' ? new Error(error) : error;
 }
 
-// A component that may throw
-function _ConditionalThrow({ shouldThrow, message }: { shouldThrow: boolean; message?: string }) {
-  if (shouldThrow) throw new Error(message || 'Conditional error');
-  return <div>Safe content</div>;
-}
+// _ConditionalThrow removed — was unused
 
 describe('ErrorBoundary edge cases', () => {
   const originalConsoleError = console.error;
@@ -137,7 +134,7 @@ describe('ErrorBoundary edge cases', () => {
   });
 
   it('error state persists if child keeps throwing after recovery attempt', () => {
-    function AlwaysThrow() {
+    function AlwaysThrow(): React.ReactNode {
       throw new Error('Persistent error');
     }
 
