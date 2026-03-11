@@ -338,6 +338,13 @@ mod toolkit_http {
         Ok(vec![])
     }
 }
+// Team sync — encrypted metadata relay (AD-023)
+mod team_sync;
+mod team_sync_commands;
+mod team_sync_crypto;
+mod team_sync_scheduler;
+mod team_sync_types;
+
 mod telemetry;
 mod toolkit_intelligence;
 mod translation_commands;
@@ -716,7 +723,16 @@ pub fn run() {
             // Local Telemetry (privacy-first, never leaves machine)
             telemetry::track_event,
             telemetry::get_usage_analytics,
-            telemetry::clear_telemetry
+            telemetry::clear_telemetry,
+            // Team Sync (AD-023)
+            team_sync_commands::get_team_sync_status,
+            team_sync_commands::get_team_members,
+            team_sync_commands::share_dna_with_team,
+            team_sync_commands::share_signal_with_team,
+            team_sync_commands::propose_team_decision,
+            team_sync_commands::join_team_via_invite,
+            team_sync_commands::create_team,
+            team_sync_commands::create_team_invite
         ])
         .setup(|app| {
             // Record app start time for diagnostics uptime tracking
@@ -747,6 +763,34 @@ pub fn run() {
             // Start background scheduler
             let app_handle = app.handle().clone();
             monitoring::start_scheduler(app_handle.clone(), monitoring_state.clone());
+
+            // Start team sync scheduler (if configured)
+            {
+                let team_state = std::sync::Arc::new(team_sync_scheduler::TeamSyncState::default());
+                let settings = get_settings_manager().lock();
+                if let Some(ref relay_cfg) = settings.get().team_relay {
+                    team_state.configure(relay_cfg);
+                    // Load team key from DB if available
+                    if let Ok(conn) = crate::state::open_db_connection() {
+                        if let Some(ref tid) = relay_cfg.team_id {
+                            if let Ok(key_bytes) = conn.query_row(
+                                "SELECT team_symmetric_key_enc FROM team_crypto WHERE team_id = ?1",
+                                rusqlite::params![tid],
+                                |row| row.get::<_, Vec<u8>>(0),
+                            ) {
+                                if key_bytes.len() == 32 {
+                                    let mut key = [0u8; 32];
+                                    key.copy_from_slice(&key_bytes);
+                                    *team_state.team_key.lock() = Some(key);
+                                }
+                            }
+                        }
+                    }
+                    info!(target: "4da::team_sync", enabled = relay_cfg.enabled, "Team sync config loaded");
+                }
+                drop(settings);
+                team_sync_scheduler::start_sync_scheduler(app_handle.clone(), team_state);
+            }
 
             // Listen for tray events
             let app_handle_analyze = app_handle.clone();

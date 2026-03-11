@@ -127,6 +127,10 @@ vi.mock('./settings/PersonalizationSection', () => ({
   PersonalizationSection: () => <div data-testid="personalization-section" />,
 }));
 
+vi.mock('./settings/CommunityIntelligenceSection', () => ({
+  CommunityIntelligenceSection: () => <div data-testid="community-intelligence-section" />,
+}));
+
 vi.mock('./settings/LocaleSection', () => ({
   LocaleSection: () => <div data-testid="locale-section" />,
 }));
