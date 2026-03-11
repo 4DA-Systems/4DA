@@ -313,19 +313,19 @@ mod tests {
     }
 
     // ========================================================================
-    // 10. Privacy contract: source_config::get_x_api_key returns raw key
-    //     (documents a known exposure point for audit)
+    // 10. Privacy contract: has_x_api_key returns bool (never the raw key)
+    //     Previously get_x_api_key returned the raw bearer token — fixed in H1.
     // ========================================================================
 
     #[test]
-    fn test_x_api_key_command_returns_raw_key_documented() {
+    fn test_x_api_key_command_returns_presence_only() {
         let s = settings_with_keys();
-        let returned_key = s.x_api_key.clone();
+        let has_key = !s.x_api_key.is_empty();
 
-        // Document that the raw key IS returned
-        assert_eq!(
-            returned_key, FAKE_X_BEARER,
-            "get_x_api_key returns the raw Bearer Token (documented behavior)"
+        // has_x_api_key only returns a boolean, never the raw key
+        assert!(
+            has_key,
+            "has_x_api_key returns true when a key is configured"
         );
     }
 

@@ -69,6 +69,35 @@ interface ConfigValidationResult {
   config_score: number;
 }
 
+/** Patterns that indicate a field contains sensitive data (API keys, tokens, etc.) */
+const SENSITIVE_FIELD_PATTERNS = /key|token|password|secret|credential|bearer|api_key/i;
+
+/**
+ * Redact a value if the field name suggests it contains sensitive data.
+ * Returns "[REDACTED]" for sensitive fields, the original value otherwise.
+ */
+function redactSensitiveValue(fieldName: string, value: unknown): unknown {
+  if (SENSITIVE_FIELD_PATTERNS.test(fieldName)) {
+    return "[REDACTED]";
+  }
+  // Also check string values that look like API keys (long alphanumeric strings)
+  if (typeof value === "string" && value.length > 20 && /^[A-Za-z0-9_\-./+=]+$/.test(value)) {
+    // Heuristic: long opaque strings are likely secrets even if the field name doesn't match
+    return "[REDACTED]";
+  }
+  return value;
+}
+
+/**
+ * Scrub all `current_value` fields in validation issues to prevent API key leakage.
+ */
+function redactIssues(issues: ValidationIssue[]): ValidationIssue[] {
+  return issues.map(issue => ({
+    ...issue,
+    current_value: redactSensitiveValue(issue.field, issue.current_value),
+  }));
+}
+
 export function executeConfigValidator(
   db: FourDADatabase,
   params: ConfigValidatorParams
@@ -111,6 +140,11 @@ export function executeConfigValidator(
   }
   if (section === "all" || section === "ui") {
     sections.push(validateUI(settings, fix_suggestions));
+  }
+
+  // Redact sensitive values from all issue current_value fields before output
+  for (const sec of sections) {
+    sec.issues = redactIssues(sec.issues);
   }
 
   // Calculate summary

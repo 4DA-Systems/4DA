@@ -6,6 +6,7 @@
 
 use crate::error::{Result, ResultExt};
 use crate::extractors::{ExtractedDocument, ExtractorRegistry};
+use crate::utils::sanitize_path;
 use parking_lot::Mutex;
 use rusqlite::{Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
@@ -285,7 +286,7 @@ impl JobQueue {
         let path = PathBuf::from(&job.file_path);
 
         if !path.exists() {
-            return Err(format!("File not found: {}", job.file_path).into());
+            return Err(format!("File not found: {}", sanitize_path(&job.file_path)).into());
         }
 
         let registry = ExtractorRegistry::new();

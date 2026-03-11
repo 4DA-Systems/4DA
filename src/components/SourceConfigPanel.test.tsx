@@ -41,8 +41,8 @@ describe('SourceConfigPanel', () => {
           return Promise.resolve({ channels: [], count: 0 });
         case 'get_twitter_handles':
           return Promise.resolve({ handles: [], count: 0 });
-        case 'get_x_api_key':
-          return Promise.resolve('');
+        case 'has_x_api_key':
+          return Promise.resolve(false);
         case 'get_github_languages':
           return Promise.resolve({ languages: [], count: 0 });
         default:
@@ -112,8 +112,8 @@ describe('SourceConfigPanel', () => {
         return Promise.resolve({ channels: [], count: 0 });
       if (cmd === 'get_twitter_handles')
         return Promise.resolve({ handles: [], count: 0 });
-      if (cmd === 'get_x_api_key')
-        return Promise.resolve('');
+      if (cmd === 'has_x_api_key')
+        return Promise.resolve(false);
       if (cmd === 'get_github_languages')
         return Promise.resolve({ languages: [], count: 0 });
       return Promise.resolve({});
@@ -150,8 +150,8 @@ describe('SourceConfigPanel', () => {
         return Promise.resolve({ channels: [], count: 0 });
       if (cmd === 'get_twitter_handles')
         return Promise.resolve({ handles: [], count: 0 });
-      if (cmd === 'get_x_api_key')
-        return Promise.resolve('some-key-value');
+      if (cmd === 'has_x_api_key')
+        return Promise.resolve(true);
       if (cmd === 'get_github_languages')
         return Promise.resolve({ languages: [], count: 0 });
       return Promise.resolve({});
@@ -190,8 +190,8 @@ describe('SourceConfigPanel', () => {
         return Promise.resolve({ channels: [], count: 0 });
       if (cmd === 'get_twitter_handles')
         return Promise.resolve({ handles: [], count: 0 });
-      if (cmd === 'get_x_api_key')
-        return Promise.resolve('');
+      if (cmd === 'has_x_api_key')
+        return Promise.resolve(false);
       if (cmd === 'get_github_languages')
         return Promise.resolve({ languages: ['rust', 'typescript'], count: 2 });
       return Promise.resolve({});

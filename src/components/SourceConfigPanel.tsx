@@ -25,17 +25,17 @@ export function SourceConfigPanel({ onStatusChange }: SourceConfigPanelProps) {
 
   const loadSources = useCallback(async () => {
     try {
-      const [rss, youtube, twitter, xKey, github] = await Promise.all([
+      const [rss, youtube, twitter, xKeyExists, github] = await Promise.all([
         cmd('get_rss_feeds'),
         cmd('get_youtube_channels'),
         cmd('get_twitter_handles'),
-        cmd('get_x_api_key'),
+        cmd('has_x_api_key'),
         cmd('get_github_languages'),
       ]);
       setRssFeeds(rss.feeds);
       setYoutubeChannels(youtube.channels);
       setTwitterHandles(twitter.handles);
-      setHasXApiKey(xKey.length > 0);
+      setHasXApiKey(xKeyExists);
       setGithubLanguages(github.languages);
     } catch (error) {
       console.error('Failed to load source config:', error);

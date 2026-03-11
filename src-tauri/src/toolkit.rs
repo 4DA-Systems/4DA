@@ -6,8 +6,41 @@
 
 use crate::error::{FourDaError, Result};
 use serde::{Deserialize, Serialize};
+use std::collections::HashSet;
 use std::process::Command;
+use std::sync::Mutex;
 use tracing::debug;
+
+// ============================================================================
+// Spawned PID Tracker — only PIDs registered here can be killed
+// ============================================================================
+
+static SPAWNED_PIDS: once_cell::sync::Lazy<Mutex<HashSet<u32>>> =
+    once_cell::sync::Lazy::new(|| Mutex::new(HashSet::new()));
+
+/// Register a PID that the application has spawned.
+/// Other modules should call this when creating child processes.
+pub fn register_spawned_pid(pid: u32) {
+    if let Ok(mut pids) = SPAWNED_PIDS.lock() {
+        pids.insert(pid);
+        debug!(target: "4da::toolkit", pid, "Registered spawned PID");
+    }
+}
+
+/// Remove a PID from the spawned tracker (e.g., after process exits naturally).
+pub fn unregister_spawned_pid(pid: u32) {
+    if let Ok(mut pids) = SPAWNED_PIDS.lock() {
+        pids.remove(&pid);
+    }
+}
+
+/// Check if a PID was spawned by the application.
+fn is_spawned_pid(pid: u32) -> bool {
+    SPAWNED_PIDS
+        .lock()
+        .map(|pids| pids.contains(&pid))
+        .unwrap_or(false)
+}
 
 // ============================================================================
 // Types
@@ -153,16 +186,25 @@ fn extract_pid_unix(info: &str) -> u32 {
 
 #[tauri::command]
 pub async fn toolkit_kill_process(pid: u32) -> Result<String> {
+    // Block system-critical PIDs
     if pid == 0 || pid == 4 {
         return Err(FourDaError::Config(
             "Cannot kill system processes".to_string(),
         ));
     }
 
+    // Only allow killing processes that 4DA itself spawned
+    if !is_spawned_pid(pid) {
+        return Err(FourDaError::Config(format!(
+            "Cannot kill process {pid}: not spawned by 4DA. \
+             Only processes started by the application can be terminated."
+        )));
+    }
+
     tokio::task::spawn_blocking(move || {
         #[cfg(target_os = "windows")]
-        let result = Command::new("cmd")
-            .args(["/C", &format!("taskkill /F /PID {pid}")])
+        let result = Command::new("taskkill")
+            .args(["/F", "/PID", &pid.to_string()])
             .output();
 
         #[cfg(not(target_os = "windows"))]
@@ -170,6 +212,8 @@ pub async fn toolkit_kill_process(pid: u32) -> Result<String> {
 
         match result {
             Ok(out) if out.status.success() => {
+                // Remove from tracked PIDs after successful kill
+                unregister_spawned_pid(pid);
                 debug!(target: "4da::toolkit", pid, "Process killed");
                 Ok(format!("Process {pid} terminated"))
             }
@@ -354,6 +398,29 @@ mod tests {
         assert!(result.is_err());
         let err = result.unwrap_err().to_string();
         assert!(err.contains("Cannot kill system processes"));
+    }
+
+    #[tokio::test]
+    async fn kill_process_rejects_untracked_pid() {
+        // An arbitrary PID not registered via register_spawned_pid should be rejected
+        let result = toolkit_kill_process(99999).await;
+        assert!(result.is_err());
+        let err = result.unwrap_err().to_string();
+        assert!(
+            err.contains("not spawned by 4DA"),
+            "Expected spawned-PID guard, got: {}",
+            err
+        );
+    }
+
+    #[test]
+    fn register_and_check_spawned_pid() {
+        let test_pid = 777_777;
+        assert!(!is_spawned_pid(test_pid));
+        register_spawned_pid(test_pid);
+        assert!(is_spawned_pid(test_pid));
+        unregister_spawned_pid(test_pid);
+        assert!(!is_spawned_pid(test_pid));
     }
 
     // -- Port sort & dedup logic ----------------------------------------------
