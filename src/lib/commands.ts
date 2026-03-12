@@ -226,6 +226,7 @@ interface CommandMap {
 
   // -- STREETS Health --
   get_street_health: { params: Record<string, never>; result: StreetHealthScore };
+  get_streets_suggestion: { params: Record<string, never>; result: { module_id: string; module_title: string; reason: string; match_strength: number } | null };
 
   // -- Sovereign Profile --
   get_sovereign_profile: { params: Record<string, never>; result: SovereignProfileData };

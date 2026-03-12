@@ -135,6 +135,7 @@ interface LoadingStateProps {
   scanSummary: ScanSummary | null;
   narrationEvents?: NarrationFeedEvent[];
   estimatedSeconds?: number;
+  onSkipAhead?: () => void;
 }
 
 export function LoadingState({
@@ -148,6 +149,7 @@ export function LoadingState({
   scanSummary,
   narrationEvents,
   estimatedSeconds: estimatedSecondsProp,
+  onSkipAhead,
 }: LoadingStateProps) {
   const { t } = useTranslation();
 
@@ -158,6 +160,14 @@ export function LoadingState({
   const initialSeconds = estimatedSecondsProp ?? 240;
   const [estimatedSeconds, setEstimatedSeconds] = useState(initialSeconds);
   const counterRef = useRef(initialSeconds);
+
+  // Show "Skip ahead" button after 5 seconds in fetching/analyzing phases
+  const [showSkip, setShowSkip] = useState(false);
+  useEffect(() => {
+    if (phase !== 'fetching' && phase !== 'analyzing') return;
+    const timer = setTimeout(() => setShowSkip(true), 5000);
+    return () => clearTimeout(timer);
+  }, [phase]);
 
   useEffect(() => {
     if (phase === 'intelligence' || phase === 'celebrating' || phase === 'fading') return;
@@ -271,6 +281,16 @@ export function LoadingState({
         <p className="text-xs text-text-muted mt-4">
           {t('firstRun.keywordMatching')}
         </p>
+      )}
+
+      {/* Skip ahead button — appears after 5 seconds */}
+      {showSkip && onSkipAhead && (
+        <button
+          onClick={onSkipAhead}
+          className="mt-6 text-xs text-text-muted hover:text-white transition-colors"
+        >
+          {t('firstRun.skipAhead', 'Skip ahead')} &rarr;
+        </button>
       )}
     </div>
   );

@@ -105,6 +105,16 @@ export function Onboarding({ onComplete }: OnboardingProps) {
     onComplete();
   };
 
+  const handleSkipToContent = async () => {
+    try {
+      await cmd('mark_onboarding_complete');
+    } catch {
+      // Non-critical — continue anyway
+    }
+    try { localStorage.removeItem(WIZARD_STEP_KEY); } catch { /* noop */ }
+    onComplete();
+  };
+
   return (
     <div ref={modalRef} className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-bg-primary p-8" role="dialog" aria-modal="true" aria-label="Setup wizard">
       {/* Progress indicator */}
@@ -157,7 +167,7 @@ export function Onboarding({ onComplete }: OnboardingProps) {
       {/* Step content */}
       <div className="max-w-2xl w-full">
         {step === 'welcome' && (
-          <WelcomeStep isAnimating={isAnimating} onNext={nextStep} />
+          <WelcomeStep isAnimating={isAnimating} onNext={nextStep} onSkip={handleSkipToContent} />
         )}
 
         {step === 'taste' && (
