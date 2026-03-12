@@ -42,6 +42,7 @@ pub async fn get_autophagy_status() -> Result<AutophagyStatus> {
                     topic_decay_rates_updated: row.get(3)?,
                     source_autopsies_produced: row.get(4)?,
                     anti_patterns_detected: row.get(5)?,
+                    decision_outcomes_analyzed: 0, // Not stored in autophagy_cycles table
                     duration_ms: row.get(6)?,
                 })
             },
@@ -107,6 +108,7 @@ pub async fn get_autophagy_history(limit: Option<i64>) -> Result<Vec<AutophagyCy
                 topic_decay_rates_updated: row.get(3)?,
                 source_autopsies_produced: row.get(4)?,
                 anti_patterns_detected: row.get(5)?,
+                decision_outcomes_analyzed: 0, // Not stored in autophagy_cycles table
                 duration_ms: row.get(6)?,
             })
         })
@@ -193,6 +195,7 @@ mod tests {
             topic_decay_rates_updated: 5,
             source_autopsies_produced: 2,
             anti_patterns_detected: 1,
+            decision_outcomes_analyzed: 0,
             duration_ms: 450,
         };
         let status = AutophagyStatus {
@@ -222,6 +225,7 @@ mod tests {
                 topic_decay_rates_updated: 2,
                 source_autopsies_produced: 0,
                 anti_patterns_detected: 0,
+                decision_outcomes_analyzed: 0,
                 duration_ms: 200,
             }),
             total_cycles: 3,
