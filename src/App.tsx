@@ -223,7 +223,6 @@ function App() {
   // On mount: load cached results from previous session, or auto-analyze
   useEffect(() => {
     let cancelled = false;
-    let autoTimer: ReturnType<typeof setTimeout>;
     const loadOrAnalyze = async () => {
       try {
         // First, try to load cached results from AnalysisState
@@ -246,20 +245,20 @@ function App() {
           return;
         }
 
-        // No cached results — auto-trigger full analysis after splash settles
+        // No cached results — auto-trigger analysis immediately
         // (Skip if first-run or onboarding — FirstRunTransition handles analysis trigger)
         if (cancelled || useAppStore.getState().isFirstRun) return;
-        autoTimer = setTimeout(() => {
-          const s = useAppStore.getState();
-          if (!cancelled && !s.isFirstRun && !s.showOnboarding) startAnalysis();
-        }, 2000);
+        const s = useAppStore.getState();
+        if (!s.isFirstRun && !s.showOnboarding) {
+          startAnalysis();
+        }
       } catch {
         // Silently ignore failures
       }
     };
     loadOrAnalyze();
 
-    return () => { cancelled = true; clearTimeout(autoTimer); };
+    return () => { cancelled = true; };
   // eslint-disable-next-line react-hooks/exhaustive-deps -- mount-only
   }, []);
 
