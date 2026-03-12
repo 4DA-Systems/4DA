@@ -7,7 +7,42 @@
   "business_registration_cost": 500,
   "business_entity_type": "LLC",
   "tax_note": "State-dependent tax rates; consider S-Corp election above $40K profit",
+  "vat_gst": {
+    "name": "Sales Tax",
+    "rate_percent": "0-10.25% (varies by state and locality)",
+    "registration_threshold": "Varies by state — economic nexus thresholds typically $100K in sales or 200 transactions",
+    "registration_threshold_note": "No federal sales tax. Each state has its own rules. Many states exempt digital products entirely.",
+    "digital_products": "Digital product taxability varies by state. Some states (e.g., Texas, New York) tax digital goods. Others (e.g., California, as of 2026) do not. Use TaxJar or Avalara to automate compliance."
+  },
+  "digital_product_tax": "No federal sales tax on digital products. State-level taxation is inconsistent — approximately 30 states tax digital goods in some form. Services like TaxJar, Avalara, or Stripe Tax handle multi-state compliance automatically for $50-500/month depending on volume.",
+  "entity_comparison": [
+    {
+      "type": "Sole Proprietorship",
+      "setup_cost": "$0-50 (DBA filing varies by state)",
+      "annual_cost": "$0-50",
+      "liability": "Unlimited personal liability",
+      "tax_treatment": "All income taxed on personal return (Schedule C). Self-employment tax 15.3% on top of income tax.",
+      "best_for": "Testing a business idea; revenue under $20K/year"
+    },
+    {
+      "type": "LLC (Limited Liability Company)",
+      "setup_cost": "$50-500 (state filing fee varies; Wyoming $100, California $70, Delaware $90)",
+      "annual_cost": "$0-800 (California charges $800/year minimum franchise tax)",
+      "liability": "Limited to company assets (if properly maintained)",
+      "tax_treatment": "Default: pass-through (same as sole prop). Can elect S-Corp taxation to reduce self-employment tax above ~$40K profit.",
+      "best_for": "Most indie developers; provides liability protection with pass-through taxation"
+    },
+    {
+      "type": "S-Corp (LLC with S-Corp election)",
+      "setup_cost": "$50-500 (LLC filing) + $0 (IRS Form 2553 is free)",
+      "annual_cost": "$1,000-3,000 (payroll service + additional tax filing costs)",
+      "liability": "Limited to company assets",
+      "tax_treatment": "Pay yourself a 'reasonable salary' (subject to payroll tax). Remaining profit distributed as dividends (no self-employment tax). Saves money above ~$40K/year profit.",
+      "best_for": "Established businesses with $50K+ annual profit"
+    }
+  ],
   "payment_processors": ["Stripe", "Square", "PayPal"],
   "bank_recommendation": "Mercury (startup-friendly), Relay (small business)",
-  "isp_note": "Fiber available in major metros; Starlink for rural areas"
+  "isp_note": "Fiber available in major metros; Starlink for rural areas",
+  "disclaimer": "This is general information only and does not constitute tax, legal, or financial advice. Tax law varies significantly by state. Consult a CPA or tax attorney licensed in your state for advice specific to your situation."
 }

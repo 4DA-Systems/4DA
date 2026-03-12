@@ -613,6 +613,24 @@ You don't have to pick exactly one path. These are archetypes, not prescriptions
 > **Based on your stack ({= stack.primary | fallback("your primary stack") =}):** Consider which path best leverages your existing skills. Developers with backend/systems experience tend to thrive on Path 4 (Automation-Heavy). Frontend and full-stack developers often find Path 2 (Product-Heavy) the fastest to traction. Strong communicators with deep domain knowledge do well on Path 3 (Content-Heavy).
 {? endif ?}
 
+{? if computed.experience_years < 3 ?}
+> **For developers with under 3 years of experience:** Path 2 (Product-Heavy) or Path 3 (Content-Heavy) are your best starting points. You likely don't have the network for high-rate consulting yet, and that's fine. Products and content build your reputation while generating income. Start with digital products (templates, starter kits, guides) — they require the least upfront credibility and give you the fastest market feedback.
+{? elif computed.experience_years < 8 ?}
+> **For developers with 3-8 years of experience:** You're in the sweet spot for Path 1 (Consulting-Heavy) as your quick-cash engine while building products on the side. Your experience is deep enough to charge $150-250/hr but you may not yet have the reputation for Path 3 at premium rates. Use consulting to fund product development, then gradually shift the ratio as products grow.
+{? else ?}
+> **For senior developers (8+ years):** All four paths are open to you, but Path 3 (Content-Heavy) and Path 4 (Automation-Heavy) offer the highest long-term leverage. Your experience gives you opinions worth paying for (content), patterns worth automating (data products), and credibility that reduces sales friction (consulting at $300+/hr). The key decision: do you want to trade on your reputation (consulting/content) or your systems thinking (products/automation)?
+{? endif ?}
+
+{? if stack.contains("react") ?}
+> **React stack recommendation:** The most common successful React developer income portfolio combines a UI component library or template set (Product) with technical content (Blog/YouTube) and occasional consulting. The React ecosystem rewards developers who publish reusable, well-documented components.
+{? endif ?}
+{? if stack.contains("python") ?}
+> **Python stack recommendation:** Python developers often find the highest ROI in automation services and data products. Your language's strength in data processing, ML, and scripting translates directly to Path 4 (Automation-Heavy). Data pipeline consulting is particularly lucrative — companies have more data than they know how to process.
+{? endif ?}
+{? if stack.contains("rust") ?}
+> **Rust stack recommendation:** The Rust talent market is severely supply-constrained. Path 1 (Consulting-Heavy) at premium rates ($250-400/hr) is immediately viable if you can demonstrate production Rust experience. Pair with Path 2 (Open Source + Premium) for long-term compounding — well-maintained Rust crates build reputation that feeds consulting demand.
+{? endif ?}
+
 {@ temporal market_timing @}
 
 ### Your Turn

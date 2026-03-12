@@ -1,13 +1,48 @@
 {
   "country": "IN",
   "currency": "INR",
-  "currency_symbol": "₹",
+  "currency_symbol": "\u20b9",
   "electricity_kwh": 0.08,
   "internet_typical_monthly": 500,
   "business_registration_cost": 7000,
   "business_entity_type": "Private Limited / LLP",
-  "tax_note": "GST registration required above ₹20L turnover; presumptive taxation for small businesses under ₹50L",
+  "tax_note": "GST registration required above \u20b920L turnover; presumptive taxation for small businesses under \u20b950L",
+  "vat_gst": {
+    "name": "GST",
+    "rate_percent": 18,
+    "registration_threshold": "\u20b920 lakh annual turnover (\u20b910 lakh for special category states)",
+    "registration_threshold_note": "Mandatory above threshold. Below threshold, voluntary registration available. Composition scheme available for businesses under \u20b91.5 crore (lower rate, simplified filing, but cannot sell interstate or on e-commerce platforms).",
+    "digital_products": "Digital products and SaaS are classified as OIDAR (Online Information and Database Access or Retrieval) services, taxed at 18% GST. Non-resident sellers providing OIDAR services to Indian consumers must register for GST regardless of threshold."
+  },
+  "digital_product_tax": "SaaS products, templates, courses, and digital downloads are taxed at 18% GST under OIDAR services. If selling to overseas customers, exports of services are zero-rated (0% GST) provided payment is received in convertible foreign exchange. This makes export-focused digital businesses tax-efficient.",
+  "entity_comparison": [
+    {
+      "type": "Sole Proprietorship",
+      "setup_cost": "\u20b90 (GST registration is free; shop license varies by state)",
+      "annual_cost": "\u20b91,000-5,000 (nominal compliance costs)",
+      "liability": "Unlimited personal liability",
+      "tax_treatment": "Income taxed at personal slab rates (5-30%). Presumptive taxation under Section 44ADA: pay tax on 50% of gross receipts if total receipts under \u20b950L.",
+      "best_for": "Freelancers; revenue under \u20b950L; simplest structure"
+    },
+    {
+      "type": "LLP (Limited Liability Partnership)",
+      "setup_cost": "\u20b97,000-15,000 (MCA filing + professional fees)",
+      "annual_cost": "\u20b910,000-25,000 (annual compliance, audit if turnover > \u20b940L)",
+      "liability": "Limited to agreed contribution",
+      "tax_treatment": "Flat 30% tax on profits + 4% health and education cess. No DDT on distributions.",
+      "best_for": "Professional services; two or more partners; simpler compliance than Pvt Ltd"
+    },
+    {
+      "type": "Private Limited Company",
+      "setup_cost": "\u20b910,000-25,000 (incorporation via MCA + professional fees)",
+      "annual_cost": "\u20b925,000-50,000 (statutory audit, annual filings, compliance)",
+      "liability": "Limited to share capital",
+      "tax_treatment": "25% corporate tax (for companies with turnover under \u20b9400 crore) + 4% cess. Dividend taxed in hands of shareholders at slab rates.",
+      "best_for": "Seeking investors; revenue above \u20b950L; international clients prefer dealing with a company"
+    }
+  ],
   "payment_processors": ["Razorpay", "Cashfree", "PayU"],
   "bank_recommendation": "Jupiter (digital), HDFC (business current account)",
-  "isp_note": "Jio Fiber / Airtel Xstream widely available; 4G fallback everywhere"
+  "isp_note": "Jio Fiber / Airtel Xstream widely available; 4G fallback everywhere",
+  "disclaimer": "This is general information only and does not constitute tax, legal, or financial advice. Consult a qualified Indian Chartered Accountant (CA) for advice specific to your situation."
 }

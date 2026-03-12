@@ -1,13 +1,40 @@
 {
   "country": "GB",
   "currency": "GBP",
-  "currency_symbol": "£",
+  "currency_symbol": "\u00a3",
   "electricity_kwh": 0.34,
   "internet_typical_monthly": 35,
   "business_registration_cost": 12,
   "business_entity_type": "Ltd",
-  "tax_note": "Corporation Tax 25%; VAT registration required above £85K revenue",
+  "tax_note": "Corporation Tax 25%; VAT registration required above \u00a390K revenue",
+  "vat_gst": {
+    "name": "VAT",
+    "rate_percent": 20,
+    "registration_threshold": "\u00a390,000 taxable turnover (2025/26 threshold)",
+    "registration_threshold_note": "Mandatory above threshold. Voluntary registration available below — can be beneficial to reclaim VAT on business purchases.",
+    "digital_products": "VAT applies at 20% on digital products sold to UK consumers. B2B sales to VAT-registered businesses use reverse charge. Post-Brexit, EU sales follow destination country rules."
+  },
+  "digital_product_tax": "Digital products (software, ebooks, SaaS, templates) are subject to VAT at 20%. If selling to EU consumers post-Brexit, you must register for OSS (One Stop Shop) in an EU member state or register individually in each country where you sell.",
+  "entity_comparison": [
+    {
+      "type": "Sole Trader",
+      "setup_cost": "\u00a30 (HMRC registration is free)",
+      "annual_cost": "\u00a30 (no Companies House fees)",
+      "liability": "Unlimited personal liability",
+      "tax_treatment": "Income taxed at personal rates (20-45%). Class 2 and 4 National Insurance on profits.",
+      "best_for": "Starting out; revenue under \u00a340K/year; minimal paperwork"
+    },
+    {
+      "type": "Ltd (Private Limited Company)",
+      "setup_cost": "\u00a312 (Companies House online registration)",
+      "annual_cost": "\u00a313 (confirmation statement) + accountant fees (\u00a3500-2,000/year)",
+      "liability": "Limited to company assets",
+      "tax_treatment": "Corporation Tax 25% (19% for profits under \u00a350K via small profits rate). Director salary + dividends is the standard tax-efficient extraction strategy.",
+      "best_for": "Revenue above \u00a340K/year; seeking contracts with larger companies; liability protection"
+    }
+  ],
   "payment_processors": ["Stripe", "GoCardless", "PayPal"],
   "bank_recommendation": "Starling (digital-first), Tide (small business)",
-  "isp_note": "Full fibre widely available via BT/Virgin Media"
+  "isp_note": "Full fibre widely available via BT/Virgin Media",
+  "disclaimer": "This is general information only and does not constitute tax, legal, or financial advice. Consult a UK-qualified chartered accountant for advice specific to your situation."
 }
