@@ -112,6 +112,17 @@ pub async fn activate_license(license_key: String) -> Result<serde_json::Value> 
 
     info!(target: "4da::license", "License activated — tier: {}", effective_tier);
 
+    // Audit: license activated (fire-and-forget, only logs if team relay is configured)
+    if let Ok(conn) = crate::state::open_db_connection() {
+        crate::audit::log_team_audit(
+            &conn,
+            "license.activated",
+            "license",
+            None,
+            Some(&serde_json::json!({ "tier": effective_tier })),
+        );
+    }
+
     Ok(serde_json::json!({
         "success": true,
         "tier": effective_tier,

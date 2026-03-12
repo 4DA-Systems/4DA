@@ -314,28 +314,70 @@ pub fn get_retention_policies(conn: &Connection, team_id: &str) -> Result<Vec<Re
 }
 
 /// Enforce retention policies by purging expired records. Returns total records purged.
-/// Supported: `source_items`, `team_sync_log`, `temporal_events`.
+///
+/// Supported resource types:
+/// - `source_items` — ingested content items
+/// - `team_sync_log` — inbound relay entries
+/// - `temporal_events` — time-series events
+/// - `audit_log` — enterprise audit trail
+/// - `signals` — team-shared signals
+/// - `briefings` — generated briefings
+/// - `shared_resources` — shared team resources
+///
+/// A 7-day grace period is applied: items are deleted only after `retention_days + 7`.
 pub fn enforce_retention(conn: &Connection, team_id: &str) -> Result<usize> {
     let policies = get_retention_policies(conn, team_id)?;
     let mut total_purged = 0usize;
+
     for policy in &policies {
+        if policy.retention_days == 0 {
+            continue; // 0 = unlimited, no cleanup
+        }
+        // Add 7-day grace period
+        let effective_days = policy.retention_days + 7;
+        let cutoff_modifier = format!("-{effective_days} days");
+
         let purged = match policy.resource_type.as_str() {
             "source_items" => conn
                 .execute(
                     "DELETE FROM source_items WHERE created_at < datetime('now', ?1)",
-                    params![format!("-{} days", policy.retention_days)],
+                    params![cutoff_modifier],
                 )
                 .unwrap_or(0),
             "team_sync_log" => conn
                 .execute(
                     "DELETE FROM team_sync_log WHERE received_at < unixepoch() - (?1 * 86400)",
-                    params![policy.retention_days],
+                    params![effective_days],
                 )
                 .unwrap_or(0),
             "temporal_events" => conn
                 .execute(
                     "DELETE FROM temporal_events WHERE created_at < datetime('now', ?1)",
-                    params![format!("-{} days", policy.retention_days)],
+                    params![cutoff_modifier],
+                )
+                .unwrap_or(0),
+            "audit_log" => conn
+                .execute(
+                    "DELETE FROM audit_log WHERE team_id = ?1 AND created_at < datetime('now', ?2)",
+                    params![team_id, cutoff_modifier],
+                )
+                .unwrap_or(0),
+            "signals" => conn
+                .execute(
+                    "DELETE FROM team_signals WHERE team_id = ?1 AND first_detected_at < datetime('now', ?2)",
+                    params![team_id, cutoff_modifier],
+                )
+                .unwrap_or(0),
+            "briefings" => conn
+                .execute(
+                    "DELETE FROM briefings WHERE created_at < datetime('now', ?1)",
+                    params![cutoff_modifier],
+                )
+                .unwrap_or(0),
+            "shared_resources" => conn
+                .execute(
+                    "DELETE FROM shared_resources WHERE team_id = ?1 AND created_at < datetime('now', ?2)",
+                    params![team_id, cutoff_modifier],
                 )
                 .unwrap_or(0),
             other => {
@@ -343,6 +385,28 @@ pub fn enforce_retention(conn: &Connection, team_id: &str) -> Result<usize> {
                 0
             }
         };
+        if purged > 0 {
+            info!(
+                target: "4da::org",
+                team_id = %team_id,
+                resource_type = %policy.resource_type,
+                purged = purged,
+                retention_days = policy.retention_days,
+                "Retention enforcement: purged expired records"
+            );
+            // Audit the cleanup (fire-and-forget)
+            crate::audit::log_team_audit(
+                conn,
+                "admin.retention_cleanup",
+                &policy.resource_type,
+                None,
+                Some(&serde_json::json!({
+                    "purged_count": purged,
+                    "retention_days": policy.retention_days,
+                    "effective_days": effective_days,
+                })),
+            );
+        }
         total_purged += purged;
     }
     if total_purged > 0 {
@@ -557,13 +621,27 @@ pub async fn set_retention_policy_cmd(
 ) -> crate::error::Result<()> {
     let team_id = get_current_team_id()
         .ok_or_else(|| crate::error::FourDaError::Internal("No team configured".into()))?;
-    if days < 1 {
+    if days < 0 {
         return Err(crate::error::FourDaError::Internal(
-            "Retention days must be at least 1".into(),
+            "Retention days must be 0 (unlimited) or a positive number".into(),
         ));
     }
     let conn = crate::state::open_db_connection()?;
-    set_retention_policy(&conn, &team_id, &resource_type, days)
+    set_retention_policy(&conn, &team_id, &resource_type, days)?;
+
+    // Audit: retention policy changed
+    crate::audit::log_team_audit(
+        &conn,
+        "admin.policy_changed",
+        "retention_policy",
+        None,
+        Some(&serde_json::json!({
+            "resource_type": resource_type,
+            "days": days,
+        })),
+    );
+
+    Ok(())
 }
 
 #[tauri::command]
@@ -574,4 +652,54 @@ pub async fn get_cross_team_signals_cmd() -> crate::error::Result<Vec<CrossTeamC
     };
     let conn = crate::state::open_db_connection()?;
     detect_cross_team_signals(&conn, &org_id)
+}
+
+// ============================================================================
+// Background Retention Scheduler
+// ============================================================================
+
+/// Start a background task that enforces retention policies once per day.
+///
+/// Runs at startup, then every 24 hours. Skips execution if no team is configured.
+/// All errors are caught and logged — never panics.
+pub fn start_retention_scheduler() {
+    info!(target: "4da::org", "Starting retention enforcement scheduler");
+
+    tauri::async_runtime::spawn(async {
+        use std::time::Duration;
+
+        // Wait 60 seconds after startup before first enforcement check
+        tokio::time::sleep(Duration::from_secs(60)).await;
+
+        loop {
+            // Run retention enforcement if a team is configured
+            let team_id = get_current_team_id();
+            if let Some(ref team_id) = team_id {
+                match crate::state::open_db_connection() {
+                    Ok(conn) => match enforce_retention(&conn, team_id) {
+                        Ok(purged) if purged > 0 => {
+                            info!(
+                                target: "4da::org",
+                                team_id = %team_id,
+                                purged = purged,
+                                "Daily retention enforcement complete"
+                            );
+                        }
+                        Ok(_) => {
+                            info!(target: "4da::org", "Retention check: nothing to purge");
+                        }
+                        Err(e) => {
+                            warn!(target: "4da::org", error = %e, "Retention enforcement failed");
+                        }
+                    },
+                    Err(e) => {
+                        warn!(target: "4da::org", error = %e, "Failed to open DB for retention enforcement");
+                    }
+                }
+            }
+
+            // Sleep 24 hours before next check
+            tokio::time::sleep(Duration::from_secs(86400)).await;
+        }
+    });
 }

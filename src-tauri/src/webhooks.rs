@@ -35,6 +35,8 @@ use tracing::{info, warn};
 use ts_rs::TS;
 use uuid::Uuid;
 
+use crate::audit::log_team_audit;
+
 /// Maximum retries before a delivery is marked 'exhausted'.
 const MAX_RETRY_ATTEMPTS: i32 = 5;
 /// Backoff schedule in seconds: 1min, 5min, 30min, 2hr, 12hr.
@@ -386,6 +388,257 @@ async fn dispatch_delivery_http(
 }
 
 // ============================================================================
+// Fire-and-Forget Dispatch (sync entry point)
+// ============================================================================
+
+/// Dispatch a webhook event to all matching, active webhooks for the current team.
+///
+/// This is **fire-and-forget** — errors are logged but never propagated to the caller.
+/// Call this from any module after a significant event occurs.
+///
+/// The function is synchronous: it reads webhooks from the database on the current
+/// thread, then spawns a tokio task per matching webhook for the actual HTTP delivery.
+/// Callers do not need to `.await` anything.
+///
+/// # Example
+///
+/// ```rust,no_run
+/// crate::webhooks::dispatch_webhook_event("signal.detected", &serde_json::json!({
+///     "signal_id": "abc",
+///     "severity": "high",
+///     "topic": "security"
+/// }));
+/// ```
+pub fn dispatch_webhook_event(event_type: &str, data: &serde_json::Value) {
+    // 1. Read team_id from settings — return early if no team configured
+    let team_id = match get_webhook_team_id() {
+        Ok(id) => id,
+        Err(_) => return, // No team configured — nothing to dispatch
+    };
+
+    // 2. Open DB connection
+    let conn = match crate::state::open_db_connection() {
+        Ok(c) => c,
+        Err(e) => {
+            warn!(target: "4da::webhooks", "dispatch_webhook_event: DB connection failed: {e}");
+            return;
+        }
+    };
+
+    // Ensure tables exist (idempotent)
+    if let Err(e) = ensure_webhook_tables(&conn) {
+        warn!(target: "4da::webhooks", "dispatch_webhook_event: table init failed: {e}");
+        return;
+    }
+
+    // 3. Query active webhooks for this team that match the event
+    let webhooks = match list_webhooks(&conn, &team_id) {
+        Ok(w) => w,
+        Err(e) => {
+            warn!(target: "4da::webhooks", "dispatch_webhook_event: list_webhooks failed: {e}");
+            return;
+        }
+    };
+
+    let matching: Vec<&Webhook> = webhooks
+        .iter()
+        .filter(|w| w.active && event_matches(&w.events, event_type))
+        .collect();
+
+    if matching.is_empty() {
+        return;
+    }
+
+    // Build the event envelope
+    let timestamp = chrono::Utc::now().format("%Y-%m-%dT%H:%M:%SZ").to_string();
+    let envelope = WebhookPayload {
+        event: event_type.to_string(),
+        timestamp,
+        data: data.clone(),
+    };
+    let payload_json = match serde_json::to_string(&envelope) {
+        Ok(s) => s,
+        Err(e) => {
+            warn!(target: "4da::webhooks", "dispatch_webhook_event: payload serialization failed: {e}");
+            return;
+        }
+    };
+
+    // 4. For each matching webhook: sign, record, and spawn async delivery
+    for webhook in &matching {
+        // Check circuit breaker
+        match check_circuit_breaker(&conn, &webhook.id) {
+            Ok(true) => {
+                warn!(target: "4da::webhooks", webhook_id = %webhook.id, "dispatch: circuit breaker open — skipping");
+                continue;
+            }
+            Err(e) => {
+                warn!(target: "4da::webhooks", webhook_id = %webhook.id, "dispatch: circuit breaker check failed: {e}");
+                continue;
+            }
+            Ok(false) => {} // Circuit closed, proceed
+        }
+
+        // Read the secret for signing
+        let secret: String = match conn.query_row(
+            "SELECT secret FROM webhooks WHERE id = ?1",
+            params![webhook.id],
+            |row| row.get(0),
+        ) {
+            Ok(s) => s,
+            Err(e) => {
+                warn!(target: "4da::webhooks", webhook_id = %webhook.id, "dispatch: failed to read secret: {e}");
+                continue;
+            }
+        };
+
+        let signature = sign_payload(&secret, &payload_json);
+
+        // Create a pending delivery record
+        let delivery_id = match record_delivery(
+            &conn,
+            &webhook.id,
+            event_type,
+            &payload_json,
+            "pending",
+            None,
+        ) {
+            Ok(id) => id,
+            Err(e) => {
+                warn!(target: "4da::webhooks", webhook_id = %webhook.id, "dispatch: failed to record delivery: {e}");
+                continue;
+            }
+        };
+
+        // Clone values for the spawned task
+        let wh_id = webhook.id.clone();
+        let wh_url = webhook.url.clone();
+        let del_id = delivery_id.clone();
+        let payload = payload_json.clone();
+        let sig = signature.clone();
+        let evt = event_type.to_string();
+
+        // Spawn async delivery — fire and forget
+        tokio::spawn(async move {
+            let result = deliver_webhook(&del_id, &wh_url, &payload, &sig, &evt).await;
+
+            // Open a fresh connection in the async context for status updates
+            let conn = match crate::state::open_db_connection() {
+                Ok(c) => c,
+                Err(e) => {
+                    warn!(target: "4da::webhooks", delivery_id = %del_id, "async delivery: DB reconnect failed: {e}");
+                    return;
+                }
+            };
+
+            match result {
+                Ok(status) if (200..300).contains(&status) => {
+                    // Success: mark delivered, reset failure count
+                    if let Err(e) = mark_delivered(&conn, &del_id) {
+                        warn!(target: "4da::webhooks", delivery_id = %del_id, "failed to mark delivered: {e}");
+                    }
+                    if let Err(e) = record_success(&conn, &wh_id) {
+                        warn!(target: "4da::webhooks", webhook_id = %wh_id, "failed to record success: {e}");
+                    }
+                    info!(target: "4da::webhooks", webhook_id = %wh_id, delivery_id = %del_id, status, "Webhook delivered");
+                }
+                Ok(status) => {
+                    // Non-2xx response: mark failed, increment failure count
+                    if let Err(e) = mark_failed(&conn, &del_id, 1, Some(status as i32)) {
+                        warn!(target: "4da::webhooks", delivery_id = %del_id, "failed to mark failed: {e}");
+                    }
+                    if let Err(e) = record_failure(&conn, &wh_id, Some(status as i32)) {
+                        warn!(target: "4da::webhooks", webhook_id = %wh_id, "failed to record failure: {e}");
+                    }
+                    warn!(target: "4da::webhooks", webhook_id = %wh_id, delivery_id = %del_id, status, "Webhook delivery got non-2xx");
+
+                    // Check if we should trip the circuit breaker
+                    if let Err(e) = check_circuit_breaker(&conn, &wh_id) {
+                        warn!(target: "4da::webhooks", webhook_id = %wh_id, "circuit breaker check failed: {e}");
+                    }
+                }
+                Err(e) => {
+                    // Network/timeout error: mark failed, increment failure count
+                    if let Err(e2) = mark_failed(&conn, &del_id, 1, None) {
+                        warn!(target: "4da::webhooks", delivery_id = %del_id, "failed to mark failed: {e2}");
+                    }
+                    if let Err(e2) = record_failure(&conn, &wh_id, None) {
+                        warn!(target: "4da::webhooks", webhook_id = %wh_id, "failed to record failure: {e2}");
+                    }
+                    warn!(target: "4da::webhooks", webhook_id = %wh_id, delivery_id = %del_id, error = %e, "Webhook delivery failed");
+
+                    // Check if we should trip the circuit breaker
+                    if let Err(e2) = check_circuit_breaker(&conn, &wh_id) {
+                        warn!(target: "4da::webhooks", webhook_id = %wh_id, "circuit breaker check failed: {e2}");
+                    }
+                }
+            }
+        });
+    }
+
+    info!(
+        target: "4da::webhooks",
+        event_type,
+        team_id = %team_id,
+        count = matching.len(),
+        "Webhook event dispatched"
+    );
+}
+
+/// Deliver a webhook payload via HTTP POST.
+///
+/// Returns the HTTP status code on success, or an error on network/timeout failure.
+/// Timeout is 10 seconds to prevent blocking the async pool for too long.
+async fn deliver_webhook(
+    delivery_id: &str,
+    url: &str,
+    payload: &str,
+    signature: &str,
+    event_type: &str,
+) -> Result<u16> {
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(10))
+        .build()
+        .context("Build HTTP client")?;
+
+    let response = client
+        .post(url)
+        .header("Content-Type", "application/json")
+        .header("X-4DA-Signature-256", format!("sha256={signature}"))
+        .header("X-4DA-Event", event_type)
+        .header("X-4DA-Delivery", delivery_id)
+        .header("User-Agent", "4DA-Webhook/1.0")
+        .body(payload.to_string())
+        .send()
+        .await
+        .context("Webhook HTTP POST failed")?;
+
+    Ok(response.status().as_u16())
+}
+
+/// Record a webhook delivery attempt in the database.
+///
+/// Creates a row in `webhook_deliveries` and returns the generated delivery ID.
+/// The `status` should be one of: `"pending"`, `"delivered"`, `"failed"`, `"exhausted"`.
+fn record_delivery(
+    conn: &Connection,
+    webhook_id: &str,
+    event_type: &str,
+    payload: &str,
+    status: &str,
+    http_status: Option<i32>,
+) -> Result<String> {
+    let id = Uuid::new_v4().to_string();
+    conn.execute(
+        "INSERT INTO webhook_deliveries (id, webhook_id, event_type, payload, status, http_status, attempt_count)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, 0)",
+        params![id, webhook_id, event_type, payload, status, http_status],
+    )
+    .context("Record webhook delivery")?;
+    Ok(id)
+}
+
+// ============================================================================
 // Retry Engine
 // ============================================================================
 
@@ -576,8 +829,13 @@ pub async fn register_webhook_cmd(
     let team_id = get_webhook_team_id()?;
     let conn = crate::state::open_db_connection()?;
     ensure_webhook_tables(&conn).map_err(|e| format!("Schema init failed: {e}"))?;
-    register_webhook(&conn, &team_id, &name, &url, &events, None)
-        .map_err(|e| format!("Failed to register webhook: {e}").into())
+    let webhook = register_webhook(&conn, &team_id, &name, &url, &events, None)
+        .map_err(|e| format!("Failed to register webhook: {e}"))?;
+
+    // Audit: webhook created
+    log_team_audit(&conn, "webhook.created", "webhook", Some(&webhook.id), None);
+
+    Ok(webhook)
 }
 
 #[tauri::command]
@@ -592,7 +850,12 @@ pub async fn list_webhooks_cmd() -> crate::error::Result<Vec<Webhook>> {
 pub async fn delete_webhook_cmd(webhook_id: String) -> crate::error::Result<()> {
     let _team_id = get_webhook_team_id()?;
     let conn = crate::state::open_db_connection()?;
-    delete_webhook(&conn, &webhook_id).map_err(|e| format!("Failed to delete webhook: {e}").into())
+    delete_webhook(&conn, &webhook_id).map_err(|e| format!("Failed to delete webhook: {e}"))?;
+
+    // Audit: webhook deleted
+    log_team_audit(&conn, "webhook.deleted", "webhook", Some(&webhook_id), None);
+
+    Ok(())
 }
 
 #[tauri::command]
@@ -617,9 +880,14 @@ pub async fn test_webhook_cmd(webhook_id: String) -> crate::error::Result<bool> 
     let payload_str =
         serde_json::to_string(&test_payload).map_err(|e| format!("Serialization failed: {e}"))?;
     let delivery_id = Uuid::new_v4().to_string();
-    dispatch_delivery_http(&url, &secret, &delivery_id, &payload_str)
+    let result = dispatch_delivery_http(&url, &secret, &delivery_id, &payload_str)
         .await
-        .map_err(|e| format!("Test delivery failed: {e}").into())
+        .map_err(|e| format!("Test delivery failed: {e}"))?;
+
+    // Audit: webhook tested
+    log_team_audit(&conn, "webhook.tested", "webhook", Some(&webhook_id), None);
+
+    Ok(result)
 }
 
 #[tauri::command]

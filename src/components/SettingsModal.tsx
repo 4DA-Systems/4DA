@@ -25,6 +25,7 @@ import { ProValuePanel } from './ProValuePanel';
 import { AboutPanel } from './AboutPanel';
 import { TeamSection } from './settings/TeamSection';
 import { TeamInviteDialog } from './settings/TeamInviteDialog';
+import { TeamSharedSources } from './team/TeamSharedSources';
 import { AuditLogViewer } from './enterprise/AuditLogViewer';
 import { WebhookManager } from './enterprise/WebhookManager';
 import { OrgDashboard } from './enterprise/OrgDashboard';
@@ -459,6 +460,10 @@ export const SettingsModal = memo(function SettingsModal({ onClose }: SettingsMo
               <div className="space-y-6">
                 <PanelErrorBoundary name="Team Sync">
                   <TeamSection onStatus={setSettingsStatus} />
+                </PanelErrorBoundary>
+
+                <PanelErrorBoundary name="Shared Sources">
+                  <TeamSharedSources />
                 </PanelErrorBoundary>
 
                 {tier === 'enterprise' && (

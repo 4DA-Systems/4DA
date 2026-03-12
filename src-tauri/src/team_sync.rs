@@ -139,6 +139,22 @@ pub fn apply_entry(
                 params![new_role, team_id, target_member_id],
             )?;
         }
+        TeamOp::VoteOnDecision {
+            decision_id,
+            stance,
+            rationale,
+        } => {
+            conn.execute(
+                "INSERT OR REPLACE INTO decision_votes (decision_id, voter_id, stance, rationale, voted_at)
+                 VALUES (?1, ?2, ?3, ?4, datetime('now'))",
+                params![decision_id, &entry.client_id, stance, rationale],
+            )?;
+            info!(target: "4da::team_sync",
+                decision_id = %decision_id,
+                voter = %entry.client_id,
+                stance = %stance,
+                "Applied decision vote from team sync");
+        }
         _ => {
             // DNA, signals, decisions — stored but aggregation logic built in Team tier
             info!(target: "4da::team_sync",

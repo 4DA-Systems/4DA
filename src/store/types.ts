@@ -365,4 +365,5 @@ export type AppStore =
   & import('./unified-profile-slice').UnifiedProfileSlice
   & import('./intelligence-pulse-slice').IntelligencePulseSlice
   & import('./team-slice').TeamSlice
-  & import('./enterprise-slice').EnterpriseSlice;
+  & import('./enterprise-slice').EnterpriseSlice
+  & import('./team-intelligence-slice').TeamIntelligenceSlice;
