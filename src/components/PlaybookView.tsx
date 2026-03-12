@@ -70,6 +70,7 @@ export const PlaybookView = memo(function PlaybookView() {
   const loadStreetsTier = useAppStore((s) => s.loadStreetsTier);
 
   const [showTemplates, setShowTemplates] = useState(false);
+  const [personalizeBannerOpen, setPersonalizeBannerOpen] = useState(true);
 
   // Load modules, progress, and streets tier on mount
   useEffect(() => {
@@ -267,6 +268,29 @@ export const PlaybookView = memo(function PlaybookView() {
               <h2 className="text-xl font-semibold text-white">{playbookContent.title}</h2>
               <p className="text-sm text-text-secondary mt-1">{playbookContent.description}</p>
             </div>
+
+            {/* Personalization banner — visible when any lesson has personalized content */}
+            {Object.keys(personalizedLessons).some((k) => k.startsWith(playbookContent.module_id + ':')) && (
+              <div className="border border-[#D4AF37]/15 rounded-xl bg-[#D4AF37]/5 overflow-hidden">
+                <button
+                  onClick={() => setPersonalizeBannerOpen((p) => !p)}
+                  className="w-full flex items-center gap-2 px-4 py-2.5 text-left"
+                  aria-expanded={personalizeBannerOpen}
+                >
+                  <span className="text-[10px] text-[#D4AF37] uppercase tracking-wider font-semibold">
+                    {t('playbook.personalizedBanner')}
+                  </span>
+                  <span className={`ml-auto text-[10px] text-[#D4AF37]/60 transition-transform duration-200 ${personalizeBannerOpen ? 'rotate-90' : ''}`} aria-hidden="true">{'\u25B8'}</span>
+                </button>
+                {personalizeBannerOpen && (
+                  <div className="px-4 pb-3">
+                    <p className="text-[11px] text-[#A0A0A0] leading-relaxed">
+                      {t('playbook.personalizedBannerDesc')}
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Lessons */}
             {playbookContent.lessons.map((lesson, idx) => {

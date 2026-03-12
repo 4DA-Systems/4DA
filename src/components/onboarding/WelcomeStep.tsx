@@ -5,9 +5,10 @@ import sunLogo from '../../assets/sun-logo.webp';
 interface WelcomeStepProps {
   isAnimating: boolean;
   onNext: () => void;
+  onSkip?: () => void;
 }
 
-export function WelcomeStep({ isAnimating, onNext }: WelcomeStepProps) {
+export function WelcomeStep({ isAnimating, onNext, onSkip }: WelcomeStepProps) {
   const { t } = useTranslation();
 
   return (
@@ -58,6 +59,17 @@ export function WelcomeStep({ isAnimating, onNext }: WelcomeStepProps) {
         {t('onboarding.welcome.getStarted')} &rarr;
       </button>
       <p className="text-xs text-text-muted mt-4">{t('onboarding.welcome.quickSetupHint')}</p>
+      {onSkip && (
+        <div className="mt-6">
+          <button
+            onClick={onSkip}
+            className="text-sm text-text-muted hover:text-white transition-colors"
+          >
+            {t('onboarding.welcome.skipToContent')}
+          </button>
+          <p className="text-xs text-text-muted mt-2">{t('onboarding.welcome.skipHint')}</p>
+        </div>
+      )}
     </div>
   );
 }
