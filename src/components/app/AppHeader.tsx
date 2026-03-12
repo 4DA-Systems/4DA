@@ -2,6 +2,7 @@ import { memo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { VoidEngine } from '../void-engine/VoidEngine';
 import { OllamaStatus } from '../OllamaStatus';
+import { TeamNotificationBell } from '../team/TeamNotificationBell';
 
 interface AppHeaderProps {
   monitoring: { enabled: boolean } | null;
@@ -49,6 +50,7 @@ export const AppHeader = memo(function AppHeader({
         }`}>
           {tier}
         </span>
+        <TeamNotificationBell />
         <button
           data-settings-trigger
           onClick={onOpenSettings}

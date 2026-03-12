@@ -3,6 +3,17 @@ import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../../store';
 import { TeamMemberList } from './TeamMemberList';
 import { TeamSignalFeed } from './TeamSignalFeed';
+import { TeamDecisionTracker } from './TeamDecisionTracker';
+import { TeamSharedSources } from './TeamSharedSources';
+
+type DashboardTab = 'signals' | 'decisions' | 'sources' | 'members';
+
+const TABS: { key: DashboardTab; labelKey: string; fallback: string }[] = [
+  { key: 'signals', labelKey: 'team.dashboard.signals', fallback: 'Signals' },
+  { key: 'decisions', labelKey: 'team.dashboard.decisions', fallback: 'Decisions' },
+  { key: 'sources', labelKey: 'team.dashboard.sources', fallback: 'Sources' },
+  { key: 'members', labelKey: 'team.dashboard.memberList', fallback: 'Members' },
+];
 
 export function TeamDashboard() {
   const { t } = useTranslation();
@@ -13,7 +24,7 @@ export function TeamDashboard() {
   const tier = useAppStore(s => s.tier);
 
   const [collapsed, setCollapsed] = useState(false);
-  const [activeTab, setActiveTab] = useState<'members' | 'signals'>('signals');
+  const [activeTab, setActiveTab] = useState<DashboardTab>('signals');
 
   useEffect(() => {
     if (tier === 'team' || tier === 'enterprise') {
@@ -65,33 +76,35 @@ export function TeamDashboard() {
         <div id="team-dashboard-content" className="border-t border-border">
           {/* Tab Bar */}
           <div className="flex border-b border-border/50" role="tablist">
-            {(['signals', 'members'] as const).map(tab => (
+            {TABS.map(tab => (
               <button
-                key={tab}
+                key={tab.key}
                 role="tab"
-                aria-selected={activeTab === tab}
-                onClick={() => setActiveTab(tab)}
+                aria-selected={activeTab === tab.key}
+                onClick={() => setActiveTab(tab.key)}
                 className={`flex-1 px-3 py-2 text-[10px] font-medium transition-all ${
-                  activeTab === tab
+                  activeTab === tab.key
                     ? 'text-[#22C55E] border-b border-[#22C55E]'
                     : 'text-text-muted hover:text-text-secondary'
                 }`}
               >
-                {tab === 'signals'
-                  ? t('team.dashboard.signals', 'Shared Signals')
-                  : t('team.dashboard.memberList', 'Members')}
+                {t(tab.labelKey, tab.fallback)}
               </button>
             ))}
           </div>
 
           {/* Tab Content */}
-          <div className="p-3 max-h-64 overflow-y-auto">
+          <div className="p-3 max-h-80 overflow-y-auto">
             {teamLoading ? (
               <div className="flex items-center justify-center py-6">
                 <span className="text-xs text-text-muted">{t('action.loading', 'Loading...')}</span>
               </div>
             ) : activeTab === 'signals' ? (
               <TeamSignalFeed />
+            ) : activeTab === 'decisions' ? (
+              <TeamDecisionTracker />
+            ) : activeTab === 'sources' ? (
+              <TeamSharedSources />
             ) : (
               <TeamMemberList />
             )}

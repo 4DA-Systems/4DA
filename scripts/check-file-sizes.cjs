@@ -78,6 +78,7 @@ const EXCEPTIONS = {
   'src-tauri/src/natural_language_search.rs':   'NLS query engine — tiered search + stack boosting + ghost preview',
   'src-tauri/src/sources/adapter_resilience_tests.rs': 'Resilience tests — 146 edge-case tests across all 10 source adapters',
   'src-tauri/src/streets_commands.rs':               'STREETS engine commands — 7 engines + security hardening + tests',
+  'src-tauri/src/team_sync_commands.rs':              'Team sync commands — Tauri IPC boundary for team intelligence',
 
   // TypeScript — type registries and complex UI
   'src/lib/commands.ts':                             'IPC command registry — all 107 typed Tauri commands',

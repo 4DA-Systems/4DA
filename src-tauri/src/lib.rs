@@ -373,6 +373,8 @@ mod team_sync_types {
 mod team_intelligence;
 #[cfg(feature = "team-sync")]
 mod team_monitoring;
+#[cfg(feature = "team-sync")]
+mod team_notifications;
 
 // Stubs when team-sync is disabled (commands register but return errors)
 #[cfg(not(feature = "team-sync"))]
@@ -400,6 +402,22 @@ mod team_sync_commands {
         Err("Team sync requires --features team-sync".into())
     }
     #[tauri::command]
+    pub async fn vote_on_decision() -> Result<serde_json::Value> {
+        Err("Team sync requires --features team-sync".into())
+    }
+    #[tauri::command]
+    pub async fn get_team_decisions() -> Result<serde_json::Value> {
+        Err("Team sync requires --features team-sync".into())
+    }
+    #[tauri::command]
+    pub async fn get_decision_detail() -> Result<serde_json::Value> {
+        Err("Team sync requires --features team-sync".into())
+    }
+    #[tauri::command]
+    pub async fn resolve_decision() -> Result<()> {
+        Err("Team sync requires --features team-sync".into())
+    }
+    #[tauri::command]
     pub async fn join_team_via_invite() -> Result<serde_json::Value> {
         Err("Team sync requires --features team-sync".into())
     }
@@ -409,6 +427,22 @@ mod team_sync_commands {
     }
     #[tauri::command]
     pub async fn create_team_invite() -> Result<serde_json::Value> {
+        Err("Team sync requires --features team-sync".into())
+    }
+    #[tauri::command]
+    pub async fn share_source_with_team() -> Result<serde_json::Value> {
+        Err("Team sync requires --features team-sync".into())
+    }
+    #[tauri::command]
+    pub async fn get_team_sources() -> Result<serde_json::Value> {
+        Err("Team sync requires --features team-sync".into())
+    }
+    #[tauri::command]
+    pub async fn upvote_team_source() -> Result<()> {
+        Err("Team sync requires --features team-sync".into())
+    }
+    #[tauri::command]
+    pub async fn remove_team_source() -> Result<()> {
         Err("Team sync requires --features team-sync".into())
     }
 }
@@ -458,6 +492,31 @@ mod team_monitoring {
         Err("Team sync requires --features team-sync".into())
     }
 }
+#[cfg(not(feature = "team-sync"))]
+mod team_notifications {
+    use crate::error::Result;
+
+    #[tauri::command]
+    pub async fn get_team_notifications() -> Result<serde_json::Value> {
+        Err("Team sync requires --features team-sync".into())
+    }
+    #[tauri::command]
+    pub async fn get_notification_summary() -> Result<serde_json::Value> {
+        Err("Team sync requires --features team-sync".into())
+    }
+    #[tauri::command]
+    pub async fn mark_notification_read() -> Result<()> {
+        Err("Team sync requires --features team-sync".into())
+    }
+    #[tauri::command]
+    pub async fn mark_all_notifications_read() -> Result<()> {
+        Err("Team sync requires --features team-sync".into())
+    }
+    #[tauri::command]
+    pub async fn dismiss_notification() -> Result<()> {
+        Err("Team sync requires --features team-sync".into())
+    }
+}
 
 // Enterprise: audit log, webhooks, organizations, analytics
 // Gated: 15 commands with zero frontend callers. Enable with --features enterprise.
@@ -474,6 +533,33 @@ mod webhooks;
 #[cfg(not(feature = "enterprise"))]
 mod audit {
     use crate::error::Result;
+
+    /// No-op audit logging when enterprise feature is disabled.
+    #[allow(unused_variables)]
+    pub fn log_team_audit(
+        conn: &rusqlite::Connection,
+        action: &str,
+        resource_type: &str,
+        resource_id: Option<&str>,
+        details: Option<&serde_json::Value>,
+    ) {
+        // Enterprise audit logging disabled — no-op
+    }
+
+    /// No-op direct audit logging when enterprise feature is disabled.
+    #[allow(unused_variables)]
+    pub fn log_audit(
+        conn: &rusqlite::Connection,
+        team_id: &str,
+        actor_id: &str,
+        actor_display_name: &str,
+        action: &str,
+        resource_type: &str,
+        resource_id: Option<&str>,
+        details: Option<&serde_json::Value>,
+    ) {
+        // Enterprise audit logging disabled — no-op
+    }
 
     #[tauri::command]
     pub async fn get_audit_log() -> Result<serde_json::Value> {
@@ -954,9 +1040,18 @@ pub fn run() {
             team_sync_commands::share_dna_with_team,
             team_sync_commands::share_signal_with_team,
             team_sync_commands::propose_team_decision,
+            team_sync_commands::vote_on_decision,
+            team_sync_commands::get_team_decisions,
+            team_sync_commands::get_decision_detail,
+            team_sync_commands::resolve_decision,
             team_sync_commands::join_team_via_invite,
             team_sync_commands::create_team,
             team_sync_commands::create_team_invite,
+            // Team Shared Sources (AD-023)
+            team_sync_commands::share_source_with_team,
+            team_sync_commands::get_team_sources,
+            team_sync_commands::upvote_team_source,
+            team_sync_commands::remove_team_source,
             // Team Intelligence (AD-023)
             team_intelligence::get_team_profile_cmd,
             team_intelligence::get_team_blind_spots_cmd,
@@ -968,6 +1063,12 @@ pub fn run() {
             team_monitoring::get_alert_policy_cmd,
             team_monitoring::set_alert_policy_cmd,
             team_monitoring::get_monitoring_summary_cmd,
+            // Team Notifications
+            team_notifications::get_team_notifications,
+            team_notifications::get_notification_summary,
+            team_notifications::mark_notification_read,
+            team_notifications::mark_all_notifications_read,
+            team_notifications::dismiss_notification,
             // Enterprise: Audit Log
             audit::get_audit_log,
             audit::get_audit_summary_cmd,
@@ -1046,6 +1147,10 @@ pub fn run() {
                 drop(settings);
                 team_sync_scheduler::start_sync_scheduler(app_handle.clone(), team_state);
             }
+
+            // Start enterprise retention enforcement scheduler (daily, fire-and-forget)
+            #[cfg(feature = "enterprise")]
+            organization::start_retention_scheduler();
 
             // Listen for tray events
             let app_handle_analyze = app_handle.clone();

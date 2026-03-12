@@ -75,6 +75,13 @@ pub enum TeamOp {
         encrypted_team_key: Vec<u8>,
     },
 
+    // --- Source sharing ---
+    ShareSource {
+        source_type: String,
+        config_summary: String,
+        recommendation: String,
+    },
+
     // --- Team membership ---
     MemberJoined {
         display_name: String,
@@ -134,4 +141,61 @@ pub struct TeamMember {
     pub display_name: String,
     pub role: String,
     pub last_seen: Option<String>,
+}
+
+/// A source shared by a team member for others to discover and adopt.
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct SharedSource {
+    pub id: String,
+    pub team_id: String,
+    pub source_type: String,
+    /// JSON string of non-sensitive source configuration
+    pub config_summary: String,
+    pub recommendation: String,
+    pub shared_by: String,
+    pub upvotes: u32,
+    pub created_at: String,
+}
+
+/// A team decision with vote count for list views.
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct TeamDecision {
+    pub id: String,
+    pub team_id: String,
+    pub title: String,
+    pub decision_type: String,
+    pub rationale: String,
+    pub proposed_by: String,
+    pub status: String,
+    pub created_at: String,
+    pub resolved_at: Option<String>,
+    pub vote_count: i64,
+}
+
+/// Detailed view of a team decision including all votes.
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct DecisionDetail {
+    pub id: String,
+    pub team_id: String,
+    pub title: String,
+    pub decision_type: String,
+    pub rationale: String,
+    pub proposed_by: String,
+    pub status: String,
+    pub created_at: String,
+    pub resolved_at: Option<String>,
+    pub votes: Vec<DecisionVote>,
+}
+
+/// A single vote on a team decision.
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct DecisionVote {
+    pub voter_id: String,
+    pub stance: String,
+    pub rationale: String,
+    pub voted_at: String,
 }

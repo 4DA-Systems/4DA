@@ -428,6 +428,25 @@ interface CommandMap {
   set_alert_policy_cmd: { params: { minSeats?: number; autoResolveHours?: number; notifyOnCorroboration?: boolean }; result: void };
   get_monitoring_summary_cmd: { params: Record<string, never>; result: TeamMonitoringSummary };
 
+  // -- Team Decisions --
+  vote_on_decision: { params: { decisionId: string; stance: string; rationale: string }; result: string };
+  get_team_decisions: { params: { statusFilter: string | null }; result: TeamDecision[] };
+  get_decision_detail: { params: { decisionId: string }; result: DecisionDetail };
+  resolve_decision: { params: { decisionId: string; newStatus: string }; result: void };
+
+  // -- Team Notifications --
+  get_team_notifications: { params: { limit?: number; unreadOnly?: boolean }; result: TeamNotification[] };
+  get_notification_summary: { params: Record<string, never>; result: NotificationSummary };
+  mark_notification_read: { params: { notificationId: string }; result: void };
+  mark_all_notifications_read: { params: Record<string, never>; result: void };
+  dismiss_notification: { params: { notificationId: string }; result: void };
+
+  // -- Team Shared Sources --
+  share_source_with_team: { params: { sourceType: string; configSummary: string; recommendation: string }; result: string };
+  get_team_sources: { params: Record<string, never>; result: SharedSource[] };
+  upvote_team_source: { params: { sourceId: string }; result: void };
+  remove_team_source: { params: { sourceId: string }; result: void };
+
   // -- Enterprise: Audit Log --
   get_audit_log: { params: { actionFilter?: string; resourceTypeFilter?: string; limit?: number; offset?: number }; result: AuditEntry[] };
   get_audit_summary_cmd: { params: { days?: number }; result: AuditSummary };
@@ -759,6 +778,74 @@ interface TeamActivity {
   signals_this_period: number;
   decisions_this_period: number;
   engagement_score: number;
+}
+
+// -- Team Decision Types --
+
+interface TeamDecision {
+  id: string;
+  team_id: string;
+  title: string;
+  decision_type: string;
+  rationale: string;
+  proposed_by: string;
+  status: string;
+  vote_count: number;
+  created_at: string;
+  resolved_at: string | null;
+}
+
+interface DecisionVote {
+  voter_id: string;
+  stance: string;
+  rationale: string;
+  voted_at: string;
+}
+
+interface DecisionDetail {
+  id: string;
+  team_id: string;
+  title: string;
+  decision_type: string;
+  rationale: string;
+  proposed_by: string;
+  status: string;
+  vote_count: number;
+  votes: DecisionVote[];
+  created_at: string;
+  resolved_at: string | null;
+}
+
+// -- Team Notification Types --
+
+interface TeamNotification {
+  id: string;
+  team_id: string;
+  notification_type: string;
+  title: string;
+  body: string | null;
+  severity: string;
+  read: boolean;
+  created_at: string;
+  metadata: Record<string, unknown> | null;
+}
+
+interface NotificationSummary {
+  total_unread: number;
+  by_type: { notification_type: string; count: number }[];
+}
+
+// -- Shared Source Types --
+
+interface SharedSource {
+  id: string;
+  team_id: string;
+  source_type: string;
+  config_summary: Record<string, unknown>;
+  recommendation: string;
+  shared_by: string;
+  upvotes: number;
+  created_at: string;
 }
 
 /** Developer decision (mirrors Rust DeveloperDecision) */
