@@ -18,6 +18,8 @@ mod semantic;
 mod simulation;
 mod temporal_cluster;
 mod utils;
+#[allow(dead_code, unused_imports)]
+pub(crate) mod validation;
 
 // Public API — external callers use crate::scoring::function_name unchanged
 pub(crate) use ace_context::{check_ace_exclusions, get_ace_context, ACEContext};
