@@ -145,6 +145,11 @@ sql-check = []
 calibrated-sim = []
 generate-sim-fixtures = []
 experimental = []
+# Feature-gated command groups (ghost commands with zero frontend callers)
+team-sync = []       # Team Sync, Intelligence, Monitoring (AD-023) — 17 commands
+enterprise = []      # Audit, Webhooks, Organizations, Analytics — 15 commands
+game-engine = []     # GAME Engine state/achievements/streaks — 3 commands
+streets-execution = [] # STREETS command execution (not content) — 3 commands
 
 [[test]]
 name = "sql_checker"

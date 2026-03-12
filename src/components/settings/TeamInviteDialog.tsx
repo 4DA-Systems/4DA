@@ -1,0 +1,184 @@
+import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import { useAppStore } from '../../store';
+
+interface TeamInviteDialogProps {
+  onClose: () => void;
+}
+
+export function TeamInviteDialog({ onClose }: TeamInviteDialogProps) {
+  const { t } = useTranslation();
+  const createInvite = useAppStore(s => s.createInvite);
+
+  const [role, setRole] = useState<'member' | 'admin'>('member');
+  const [loading, setLoading] = useState(false);
+  const [inviteCode, setInviteCode] = useState<string | null>(null);
+  const [expiresAt, setExpiresAt] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+
+  const handleCreate = async () => {
+    setLoading(true);
+    setError(null);
+    const result = await createInvite(role);
+    setLoading(false);
+
+    if (result.ok && result.code) {
+      setInviteCode(result.code);
+      setExpiresAt(result.expiresAt ?? null);
+    } else {
+      setError(result.error ?? t('enterprise.invite.createFailed', 'Failed to create invite'));
+    }
+  };
+
+  const handleCopy = async () => {
+    if (!inviteCode) return;
+    try {
+      await navigator.clipboard.writeText(inviteCode);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // Fallback: select the text
+      const el = document.querySelector<HTMLInputElement>('[data-invite-code]');
+      el?.select();
+    }
+  };
+
+  return (
+    <div
+      className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[60] p-4"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="invite-dialog-title"
+      onClick={e => { if (e.target === e.currentTarget) onClose(); }}
+      onKeyDown={e => { if (e.key === 'Escape') onClose(); }}
+    >
+      <div className="bg-bg-secondary border border-border rounded-xl w-full max-w-md shadow-2xl">
+        {/* Header */}
+        <div className="px-5 py-4 border-b border-border flex items-center justify-between">
+          <h3 id="invite-dialog-title" className="text-sm font-medium text-white">
+            {t('settings.team.inviteMember', 'Invite Team Member')}
+          </h3>
+          <button
+            onClick={onClose}
+            aria-label="Close"
+            className="w-7 h-7 rounded-lg bg-bg-tertiary text-text-muted hover:text-white hover:bg-border flex items-center justify-center transition-all"
+          >
+            &times;
+          </button>
+        </div>
+
+        <div className="p-5 space-y-4">
+          {!inviteCode ? (
+            <>
+              {/* Role Selection */}
+              <div>
+                <label className="text-xs text-text-muted block mb-2">
+                  {t('settings.team.inviteRole', 'Role')}
+                </label>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setRole('member')}
+                    className={`flex-1 px-3 py-2 text-xs rounded-lg border transition-all ${
+                      role === 'member'
+                        ? 'border-[#22C55E]/50 bg-[#22C55E]/10 text-[#22C55E]'
+                        : 'border-border bg-bg-tertiary text-text-secondary hover:border-border/80'
+                    }`}
+                  >
+                    {t('settings.team.roleMember', 'Member')}
+                  </button>
+                  <button
+                    onClick={() => setRole('admin')}
+                    className={`flex-1 px-3 py-2 text-xs rounded-lg border transition-all ${
+                      role === 'admin'
+                        ? 'border-[#22C55E]/50 bg-[#22C55E]/10 text-[#22C55E]'
+                        : 'border-border bg-bg-tertiary text-text-secondary hover:border-border/80'
+                    }`}
+                  >
+                    {t('settings.team.roleAdmin', 'Admin')}
+                  </button>
+                </div>
+                <p className="text-[10px] text-text-muted mt-1.5">
+                  {role === 'admin'
+                    ? t('settings.team.adminDesc', 'Admins can invite members, manage settings, and configure sharing.')
+                    : t('settings.team.memberDesc', 'Members can view shared signals, participate in decisions, and share their DNA.')}
+                </p>
+              </div>
+
+              {/* Error */}
+              {error && (
+                <div className="text-xs p-2.5 rounded-lg bg-[#EF4444]/10 text-[#EF4444] border border-[#EF4444]/30">
+                  {error}
+                </div>
+              )}
+
+              {/* Create Button */}
+              <button
+                onClick={handleCreate}
+                disabled={loading}
+                className="w-full px-4 py-2.5 text-sm font-medium text-white bg-[#22C55E] rounded-lg hover:bg-[#1DA34D] transition-colors disabled:opacity-50"
+              >
+                {loading
+                  ? t('settings.team.generating', 'Generating...')
+                  : t('settings.team.generateInvite', 'Generate Invite Code')}
+              </button>
+
+              <p className="text-[10px] text-text-muted text-center">
+                {t('settings.team.inviteExpiry', 'Invite codes expire after 72 hours and can only be used once.')}
+              </p>
+            </>
+          ) : (
+            <>
+              {/* Invite Code Display */}
+              <div className="text-center space-y-3">
+                <div className="w-12 h-12 mx-auto rounded-full bg-[#22C55E]/15 flex items-center justify-center">
+                  <span className="text-[#22C55E] text-lg">&#10003;</span>
+                </div>
+                <p className="text-xs text-text-secondary">
+                  {t('settings.team.inviteReady', 'Share this code with your team member:')}
+                </p>
+
+                <div className="relative">
+                  <input
+                    data-invite-code
+                    readOnly
+                    value={inviteCode}
+                    className="w-full px-4 py-3 bg-bg-primary border border-[#22C55E]/30 rounded-lg text-center text-lg font-mono text-white tracking-[0.3em] select-all focus:outline-none"
+                    onClick={e => (e.target as HTMLInputElement).select()}
+                  />
+                </div>
+
+                <button
+                  onClick={handleCopy}
+                  className="w-full px-4 py-2 text-xs font-medium text-[#22C55E] border border-[#22C55E]/30 rounded-lg hover:bg-[#22C55E]/10 transition-colors"
+                >
+                  {copied
+                    ? t('settings.team.copied', 'Copied!')
+                    : t('settings.team.copyCode', 'Copy to Clipboard')}
+                </button>
+
+                {expiresAt && (
+                  <p className="text-[10px] text-text-muted">
+                    {t('settings.team.expiresAt', 'Expires')}: {new Date(expiresAt).toLocaleString()}
+                  </p>
+                )}
+
+                <p className="text-[10px] text-text-muted">
+                  {t('settings.team.inviteInstructions', 'The recipient should go to Settings > Team Sync > Join Team and enter this code.')}
+                </p>
+              </div>
+
+              {/* Generate Another */}
+              <button
+                onClick={() => { setInviteCode(null); setExpiresAt(null); setError(null); }}
+                className="w-full px-4 py-2 text-xs text-text-secondary hover:text-white transition-colors"
+              >
+                {t('settings.team.generateAnother', 'Generate Another Invite')}
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
