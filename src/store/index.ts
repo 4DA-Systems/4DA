@@ -24,6 +24,7 @@ import { createUnifiedProfileSlice } from './unified-profile-slice';
 import { createIntelligencePulseSlice } from './intelligence-pulse-slice';
 import { createTeamSlice } from './team-slice';
 import { createEnterpriseSlice } from './enterprise-slice';
+import { createTeamIntelligenceSlice } from './team-intelligence-slice';
 
 // Re-export all types
 export type {
@@ -68,4 +69,5 @@ export const useAppStore = create<AppStore>()((...a) => ({
   ...createIntelligencePulseSlice(...a),
   ...createTeamSlice(...a),
   ...createEnterpriseSlice(...a),
+  ...createTeamIntelligenceSlice(...a),
 }));
