@@ -1,13 +1,48 @@
 {
   "country": "JP",
   "currency": "JPY",
-  "currency_symbol": "¥",
+  "currency_symbol": "\u00a5",
   "electricity_kwh": 0.27,
   "internet_typical_monthly": 5000,
   "business_registration_cost": 60000,
-  "business_entity_type": "合同会社 (GK) / 株式会社 (KK)",
+  "business_entity_type": "\u5408\u540c\u4f1a\u793e (GK) / \u682a\u5f0f\u4f1a\u793e (KK)",
   "tax_note": "Consumption tax 10%; corporate tax ~23%; simplified filing for small businesses",
+  "vat_gst": {
+    "name": "Consumption Tax (\u6d88\u8cbb\u7a0e)",
+    "rate_percent": 10,
+    "registration_threshold": "\u00a510,000,000 taxable sales in base period (two fiscal years prior)",
+    "registration_threshold_note": "Businesses with taxable sales under \u00a510M in the base period are exempt. New businesses are exempt for first two fiscal years (with exceptions for large-capital companies). Invoice system (Tekikaku Invoice) mandatory for tax-registered businesses since October 2023.",
+    "digital_products": "Digital services provided by non-resident businesses to Japanese consumers are subject to 10% consumption tax. Non-resident sellers of digital services must register if they have a PE in Japan or qualify under the reverse charge mechanism for B2B."
+  },
+  "digital_product_tax": "Digital products are subject to 10% consumption tax. The 2015 reform extended consumption tax to digital services from overseas providers. For B2C digital services, the overseas provider must register and collect tax. For B2B, the reverse charge mechanism applies.",
+  "entity_comparison": [
+    {
+      "type": "Kojin Jigyo (\u500b\u4eba\u4e8b\u696d / Sole Proprietorship)",
+      "setup_cost": "\u00a50 (file notification with tax office)",
+      "annual_cost": "Minimal (blue return application recommended for tax benefits)",
+      "liability": "Unlimited personal liability",
+      "tax_treatment": "Progressive income tax 5-45% + residence tax ~10%. Blue return filers get \u00a5650,000 special deduction.",
+      "best_for": "Starting out; freelancers; revenue under \u00a58M; simplest option"
+    },
+    {
+      "type": "GK (\u5408\u540c\u4f1a\u793e / Godo Kaisha — similar to LLC)",
+      "setup_cost": "\u00a560,000-100,000 (registration tax + professional fees)",
+      "annual_cost": "\u00a570,000+ (minimum local tax + accountant fees)",
+      "liability": "Limited to company assets",
+      "tax_treatment": "Corporate tax ~23% effective (national + local). Director compensation is a deductible expense.",
+      "best_for": "Small businesses wanting liability protection at lower cost than KK; no minimum capital"
+    },
+    {
+      "type": "KK (\u682a\u5f0f\u4f1a\u793e / Kabushiki Kaisha — Corporation)",
+      "setup_cost": "\u00a5200,000-300,000 (registration tax + articles of incorporation notarization)",
+      "annual_cost": "\u00a5100,000+ (minimum local tax + accountant + annual filing)",
+      "liability": "Limited to company assets",
+      "tax_treatment": "Same as GK. More prestige and flexibility for equity investors.",
+      "best_for": "Seeking external investment; enterprise clients; highest credibility structure"
+    }
+  ],
   "payment_processors": ["Stripe", "PAY.JP", "Square"],
   "bank_recommendation": "PayPay Bank (digital), Shinsei Bank (English-friendly)",
-  "isp_note": "NTT/KDDI fiber widely available; 1Gbps standard in urban areas"
+  "isp_note": "NTT/KDDI fiber widely available; 1Gbps standard in urban areas",
+  "disclaimer": "\u3053\u308c\u306f\u4e00\u822c\u7684\u306a\u60c5\u5831\u3067\u3042\u308a\u3001\u7a0e\u52d9\u307e\u305f\u306f\u6cd5\u7684\u52a9\u8a00\u3067\u306f\u3042\u308a\u307e\u305b\u3093\u3002\u5177\u4f53\u7684\u306a\u52a9\u8a00\u306b\u3064\u3044\u3066\u306f\u7a0e\u7406\u58eb\u306b\u3054\u76f8\u8ac7\u304f\u3060\u3055\u3044\u3002 / This is general information only, not tax or legal advice. Consult a Japanese tax accountant (zeirishi) for advice specific to your situation."
 }

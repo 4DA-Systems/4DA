@@ -7,7 +7,34 @@
   "business_registration_cost": 500,
   "business_entity_type": "LLC",
   "tax_note": "Consult a local tax professional for your region",
+  "vat_gst": {
+    "name": "VAT/GST/Sales Tax",
+    "rate_percent": "Varies by country",
+    "registration_threshold": "Varies by country — check your local tax authority",
+    "registration_threshold_note": "Most countries have a revenue threshold below which VAT/GST registration is optional. Check your local tax authority's website for current thresholds.",
+    "digital_products": "Most countries tax digital products (software, templates, courses, ebooks). The rate and rules vary significantly. If you sell internationally, consider using a merchant of record service (Paddle, Lemon Squeezy) that handles tax compliance for you."
+  },
+  "digital_product_tax": "Digital product taxation varies significantly by country. Key principle: you generally owe tax based on where your CUSTOMER is located, not where you are located. For international sales, merchant of record services (Paddle, Lemon Squeezy, FastSpring) handle tax calculation, collection, and remittance automatically.",
+  "entity_comparison": [
+    {
+      "type": "Sole Proprietorship / Sole Trader",
+      "setup_cost": "Varies ($0-500 in most countries)",
+      "annual_cost": "Minimal",
+      "liability": "Unlimited personal liability",
+      "tax_treatment": "Income taxed at personal rates. Simplest structure.",
+      "best_for": "Starting out; testing a business idea; minimal overhead"
+    },
+    {
+      "type": "Limited Liability Company (LLC / Ltd / Pty Ltd / GmbH / BV / etc.)",
+      "setup_cost": "Varies ($12-25,000+ depending on country)",
+      "annual_cost": "Varies ($0-5,000+ depending on country)",
+      "liability": "Limited to company assets",
+      "tax_treatment": "Corporate tax rates vary (15-30% in most countries). Usually more tax-efficient above a certain income level.",
+      "best_for": "Established businesses; liability protection; typically worthwhile above $50K-100K annual revenue"
+    }
+  ],
   "payment_processors": ["Stripe", "PayPal"],
   "bank_recommendation": "Check local business banking options",
-  "isp_note": "Check local ISP availability"
+  "isp_note": "Check local ISP availability",
+  "disclaimer": "This is general information only and does not constitute tax, legal, or financial advice. Tax laws vary significantly between countries and change frequently. Always consult a qualified local tax professional before making business structure or tax decisions."
 }

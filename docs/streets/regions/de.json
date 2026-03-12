@@ -1,13 +1,48 @@
 {
   "country": "DE",
   "currency": "EUR",
-  "currency_symbol": "€",
+  "currency_symbol": "\u20ac",
   "electricity_kwh": 0.35,
   "internet_typical_monthly": 40,
   "business_registration_cost": 800,
-  "business_entity_type": "UG (haftungsbeschränkt)",
-  "tax_note": "Gewerbesteuer + Körperschaftsteuer; Kleinunternehmerregelung under €22K",
+  "business_entity_type": "UG (haftungsbeschr\u00e4nkt)",
+  "tax_note": "Gewerbesteuer + K\u00f6rperschaftsteuer; Kleinunternehmerregelung under \u20ac22K",
+  "vat_gst": {
+    "name": "USt (Umsatzsteuer / VAT)",
+    "rate_percent": 19,
+    "registration_threshold": "\u20ac22,000 annual revenue (Kleinunternehmerregelung exemption)",
+    "registration_threshold_note": "Below \u20ac22K, you can opt for Kleinunternehmerregelung (small business exemption) and skip VAT. Above \u20ac22K, VAT registration is mandatory. You can voluntarily register earlier to reclaim input VAT.",
+    "digital_products": "Digital products sold to German/EU consumers are subject to 19% VAT. Use the EU OSS (One Stop Shop) to handle cross-border EU sales from a single registration."
+  },
+  "digital_product_tax": "Digital products (software, templates, SaaS, ebooks) are standard-rated at 19% USt. For EU cross-border B2C sales, use OSS to report VAT in a single return. B2B sales within the EU use the reverse charge mechanism. Non-EU sales are generally VAT-exempt.",
+  "entity_comparison": [
+    {
+      "type": "Freiberufler (Freelancer)",
+      "setup_cost": "\u20ac0 (register with Finanzamt)",
+      "annual_cost": "\u20ac0 (no Gewerbesteuer for qualifying professions)",
+      "liability": "Unlimited personal liability",
+      "tax_treatment": "Income tax at personal rates (14-45%). No Gewerbesteuer if activity qualifies as 'freiberuflich' (software development usually qualifies).",
+      "best_for": "Solo software developers and consultants; simplest setup; no trade tax"
+    },
+    {
+      "type": "UG (haftungsbeschr\u00e4nkt) — Mini-GmbH",
+      "setup_cost": "\u20ac300-800 (notary + registration)",
+      "annual_cost": "\u20ac200-500 (IHK fees + filing costs)",
+      "liability": "Limited to company assets (minimum \u20ac1 share capital, but must retain 25% of profits until reaching \u20ac25K)",
+      "tax_treatment": "K\u00f6rperschaftsteuer 15% + Solidarit\u00e4tszuschlag 5.5% of that + Gewerbesteuer ~14-17% (varies by municipality). Effective rate ~30%.",
+      "best_for": "Low startup capital; stepping stone to GmbH; liability protection on a budget"
+    },
+    {
+      "type": "GmbH",
+      "setup_cost": "\u20ac25,000 minimum share capital + \u20ac1,000-2,000 notary/registration",
+      "annual_cost": "\u20ac500-1,500 (IHK fees, filing, accountant)",
+      "liability": "Limited to company assets",
+      "tax_treatment": "Same as UG. Effective rate ~30%. More credibility with enterprise clients.",
+      "best_for": "Established businesses; revenue above \u20ac100K/year; seeking enterprise contracts"
+    }
+  ],
   "payment_processors": ["Stripe", "Mollie", "PayPal"],
   "bank_recommendation": "N26 (digital), Qonto (business)",
-  "isp_note": "Deutsche Glasfaser expanding; DSL still common in rural areas"
+  "isp_note": "Deutsche Glasfaser expanding; DSL still common in rural areas",
+  "disclaimer": "Dies sind allgemeine Informationen und stellen keine steuerliche oder rechtliche Beratung dar. Konsultieren Sie einen Steuerberater f\u00fcr eine auf Ihre Situation zugeschnittene Beratung. / This is general information only, not tax or legal advice. Consult a German Steuerberater for advice specific to your situation."
 }

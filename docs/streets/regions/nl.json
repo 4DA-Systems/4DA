@@ -1,13 +1,40 @@
 {
   "country": "NL",
   "currency": "EUR",
-  "currency_symbol": "€",
+  "currency_symbol": "\u20ac",
   "electricity_kwh": 0.28,
   "internet_typical_monthly": 45,
   "business_registration_cost": 75,
   "business_entity_type": "Eenmanszaak (sole prop) / BV",
-  "tax_note": "BTW (VAT) registration required; KOR scheme exempts VAT under €20K revenue; Box 1 progressive tax",
+  "tax_note": "BTW (VAT) registration required; KOR scheme exempts VAT under \u20ac20K revenue; Box 1 progressive tax",
+  "vat_gst": {
+    "name": "BTW (Belasting over de Toegevoegde Waarde / VAT)",
+    "rate_percent": 21,
+    "registration_threshold": "\u20ac20,000 annual turnover (KOR — Kleineondernemersregeling)",
+    "registration_threshold_note": "The KOR scheme exempts small businesses under \u20ac20K from collecting and remitting BTW. Above \u20ac20K, BTW registration is mandatory. KOR participants cannot reclaim input BTW. Voluntary BTW registration is available at any level.",
+    "digital_products": "Digital products sold to Dutch/EU consumers are subject to 21% BTW. Cross-border EU B2C sales use OSS. B2B sales within the EU use reverse charge (0% BTW on invoice, customer accounts for BTW)."
+  },
+  "digital_product_tax": "Digital products are standard-rated at 21% BTW. The KOR exemption applies to digital product revenue. If selling across the EU, register for OSS to simplify cross-border VAT compliance. Ebooks are taxed at the reduced 9% rate.",
+  "entity_comparison": [
+    {
+      "type": "Eenmanszaak (Sole Proprietorship)",
+      "setup_cost": "\u20ac75 (KVK registration)",
+      "annual_cost": "\u20ac0 (no annual KVK fees)",
+      "liability": "Unlimited personal liability",
+      "tax_treatment": "Box 1 progressive tax (36.97-49.5%). Zelfstandigenaftrek (\u20ac3,750 deduction, being phased down) + MKB-winstvrijstelling (14% profit exemption). Effective rate can be quite low for modest profits.",
+      "best_for": "Starting out; freelancers; revenue under \u20ac100K; tax benefits via zelfstandigenaftrek"
+    },
+    {
+      "type": "BV (Besloten Vennootschap — Private Limited Company)",
+      "setup_cost": "\u20ac500-2,000 (notary deed + KVK registration)",
+      "annual_cost": "\u20ac1,500-4,000 (accountant + annual filing)",
+      "liability": "Limited to company assets (\u20ac0.01 minimum capital)",
+      "tax_treatment": "Vennootschapsbelasting: 19% on first \u20ac200K profit, 25.8% above. Director salary (DGA) subject to income tax. Dividends taxed at 26.9% (Box 2).",
+      "best_for": "Profit above \u20ac100K; liability protection; more tax-efficient at higher income levels; professional credibility"
+    }
+  ],
   "payment_processors": ["Stripe", "Mollie", "Adyen"],
   "bank_recommendation": "Bunq (digital), Knab (business)",
-  "isp_note": "Near-universal fiber coverage; KPN/Ziggo dominant"
+  "isp_note": "Near-universal fiber coverage; KPN/Ziggo dominant",
+  "disclaimer": "Dit is uitsluitend algemene informatie en vormt geen fiscaal of juridisch advies. Raadpleeg een belastingadviseur voor op uw situatie toegesneden advies. / This is general information only, not tax or legal advice. Consult a Dutch belastingadviseur for advice specific to your situation."
 }
