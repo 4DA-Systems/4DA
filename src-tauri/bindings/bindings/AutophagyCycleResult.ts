@@ -3,4 +3,4 @@
 /**
  * Result of a complete autophagy cycle, surfaced to the frontend.
  */
-export type AutophagyCycleResult = { items_analyzed: bigint, items_pruned: bigint, calibrations_produced: bigint, topic_decay_rates_updated: bigint, source_autopsies_produced: bigint, anti_patterns_detected: bigint, duration_ms: bigint, };
+export type AutophagyCycleResult = { items_analyzed: bigint, items_pruned: bigint, calibrations_produced: bigint, topic_decay_rates_updated: bigint, source_autopsies_produced: bigint, anti_patterns_detected: bigint, decision_outcomes_analyzed: bigint, duration_ms: bigint, };
