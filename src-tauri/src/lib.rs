@@ -287,6 +287,7 @@ mod sovereign_profile;
 mod streets_commands;
 mod streets_engine;
 mod streets_localization;
+mod streets_suggestion;
 mod template_data;
 mod templates;
 mod toolkit;
@@ -340,20 +341,223 @@ mod toolkit_http {
     }
 }
 // Team sync — encrypted metadata relay (AD-023)
+// Gated: 17 commands with zero frontend callers. Enable with --features team-sync.
+#[cfg(feature = "team-sync")]
 mod team_sync;
+#[cfg(feature = "team-sync")]
 mod team_sync_commands;
+#[cfg(feature = "team-sync")]
 mod team_sync_crypto;
+#[cfg(feature = "team-sync")]
 mod team_sync_scheduler;
+#[cfg(feature = "team-sync")]
 mod team_sync_types;
-// Team intelligence — aggregated team analytics
+#[cfg(not(feature = "team-sync"))]
+mod team_sync_types {
+    //! Minimal stub — only TeamRelayConfig is needed by settings deserialization.
+    use serde::{Deserialize, Serialize};
+
+    #[derive(Debug, Clone, Serialize, Deserialize, Default)]
+    pub struct TeamRelayConfig {
+        pub enabled: bool,
+        pub relay_url: Option<String>,
+        pub auth_token: Option<String>,
+        pub team_id: Option<String>,
+        pub client_id: Option<String>,
+        pub display_name: Option<String>,
+        pub role: Option<String>,
+        pub sync_interval_secs: Option<u64>,
+    }
+}
+#[cfg(feature = "team-sync")]
 mod team_intelligence;
-// Team monitoring — signal aggregation + alert policies
+#[cfg(feature = "team-sync")]
 mod team_monitoring;
+
+// Stubs when team-sync is disabled (commands register but return errors)
+#[cfg(not(feature = "team-sync"))]
+mod team_sync_commands {
+    use crate::error::Result;
+
+    #[tauri::command]
+    pub async fn get_team_sync_status() -> Result<serde_json::Value> {
+        Err("Team sync requires --features team-sync".into())
+    }
+    #[tauri::command]
+    pub async fn get_team_members() -> Result<serde_json::Value> {
+        Err("Team sync requires --features team-sync".into())
+    }
+    #[tauri::command]
+    pub async fn share_dna_with_team() -> Result<serde_json::Value> {
+        Err("Team sync requires --features team-sync".into())
+    }
+    #[tauri::command]
+    pub async fn share_signal_with_team() -> Result<serde_json::Value> {
+        Err("Team sync requires --features team-sync".into())
+    }
+    #[tauri::command]
+    pub async fn propose_team_decision() -> Result<serde_json::Value> {
+        Err("Team sync requires --features team-sync".into())
+    }
+    #[tauri::command]
+    pub async fn join_team_via_invite() -> Result<serde_json::Value> {
+        Err("Team sync requires --features team-sync".into())
+    }
+    #[tauri::command]
+    pub async fn create_team() -> Result<serde_json::Value> {
+        Err("Team sync requires --features team-sync".into())
+    }
+    #[tauri::command]
+    pub async fn create_team_invite() -> Result<serde_json::Value> {
+        Err("Team sync requires --features team-sync".into())
+    }
+}
+#[cfg(not(feature = "team-sync"))]
+mod team_intelligence {
+    use crate::error::Result;
+
+    #[tauri::command]
+    pub async fn get_team_profile_cmd() -> Result<serde_json::Value> {
+        Err("Team sync requires --features team-sync".into())
+    }
+    #[tauri::command]
+    pub async fn get_team_blind_spots_cmd() -> Result<serde_json::Value> {
+        Err("Team sync requires --features team-sync".into())
+    }
+    #[tauri::command]
+    pub async fn get_bus_factor_report_cmd() -> Result<serde_json::Value> {
+        Err("Team sync requires --features team-sync".into())
+    }
+    #[tauri::command]
+    pub async fn get_team_signal_summary_cmd() -> Result<serde_json::Value> {
+        Err("Team sync requires --features team-sync".into())
+    }
+}
+#[cfg(not(feature = "team-sync"))]
+mod team_monitoring {
+    use crate::error::Result;
+
+    #[tauri::command]
+    pub async fn get_team_signals_cmd() -> Result<serde_json::Value> {
+        Err("Team sync requires --features team-sync".into())
+    }
+    #[tauri::command]
+    pub async fn resolve_team_signal_cmd() -> Result<()> {
+        Err("Team sync requires --features team-sync".into())
+    }
+    #[tauri::command]
+    pub async fn get_alert_policy_cmd() -> Result<serde_json::Value> {
+        Err("Team sync requires --features team-sync".into())
+    }
+    #[tauri::command]
+    pub async fn set_alert_policy_cmd() -> Result<()> {
+        Err("Team sync requires --features team-sync".into())
+    }
+    #[tauri::command]
+    pub async fn get_monitoring_summary_cmd() -> Result<serde_json::Value> {
+        Err("Team sync requires --features team-sync".into())
+    }
+}
+
 // Enterprise: audit log, webhooks, organizations, analytics
+// Gated: 15 commands with zero frontend callers. Enable with --features enterprise.
+#[cfg(feature = "enterprise")]
 mod audit;
+#[cfg(feature = "enterprise")]
 mod enterprise_analytics;
+#[cfg(feature = "enterprise")]
 mod organization;
+#[cfg(feature = "enterprise")]
 mod webhooks;
+
+// Stubs when enterprise is disabled
+#[cfg(not(feature = "enterprise"))]
+mod audit {
+    use crate::error::Result;
+
+    #[tauri::command]
+    pub async fn get_audit_log() -> Result<serde_json::Value> {
+        Err("Enterprise features require --features enterprise".into())
+    }
+    #[tauri::command]
+    pub async fn get_audit_summary_cmd() -> Result<serde_json::Value> {
+        Err("Enterprise features require --features enterprise".into())
+    }
+    #[tauri::command]
+    pub async fn export_audit_csv_cmd() -> Result<String> {
+        Err("Enterprise features require --features enterprise".into())
+    }
+}
+#[cfg(not(feature = "enterprise"))]
+mod webhooks {
+    use crate::error::Result;
+
+    #[tauri::command]
+    pub async fn register_webhook_cmd() -> Result<serde_json::Value> {
+        Err("Enterprise features require --features enterprise".into())
+    }
+    #[tauri::command]
+    pub async fn list_webhooks_cmd() -> Result<serde_json::Value> {
+        Err("Enterprise features require --features enterprise".into())
+    }
+    #[tauri::command]
+    pub async fn delete_webhook_cmd() -> Result<()> {
+        Err("Enterprise features require --features enterprise".into())
+    }
+    #[tauri::command]
+    pub async fn test_webhook_cmd() -> Result<bool> {
+        Err("Enterprise features require --features enterprise".into())
+    }
+    #[tauri::command]
+    pub async fn get_webhook_deliveries_cmd() -> Result<serde_json::Value> {
+        Err("Enterprise features require --features enterprise".into())
+    }
+}
+#[cfg(not(feature = "enterprise"))]
+mod organization {
+    use crate::error::Result;
+
+    #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+    pub struct OrgPolicies {
+        pub max_team_size: usize,
+        pub retention_days: i64,
+        pub require_encryption: bool,
+    }
+
+    #[tauri::command]
+    pub async fn get_organization_cmd() -> Result<serde_json::Value> {
+        Err("Enterprise features require --features enterprise".into())
+    }
+    #[tauri::command]
+    pub async fn get_org_teams_cmd() -> Result<serde_json::Value> {
+        Err("Enterprise features require --features enterprise".into())
+    }
+    #[tauri::command]
+    pub async fn get_retention_policies_cmd() -> Result<serde_json::Value> {
+        Err("Enterprise features require --features enterprise".into())
+    }
+    #[tauri::command]
+    pub async fn set_retention_policy_cmd() -> Result<()> {
+        Err("Enterprise features require --features enterprise".into())
+    }
+    #[tauri::command]
+    pub async fn get_cross_team_signals_cmd() -> Result<serde_json::Value> {
+        Err("Enterprise features require --features enterprise".into())
+    }
+}
+#[cfg(not(feature = "enterprise"))]
+mod enterprise_analytics {
+    use crate::error::Result;
+
+    #[tauri::command]
+    pub async fn get_org_analytics_cmd() -> Result<serde_json::Value> {
+        Err("Enterprise features require --features enterprise".into())
+    }
+    #[tauri::command]
+    pub async fn export_org_analytics_cmd() -> Result<String> {
+        Err("Enterprise features require --features enterprise".into())
+    }
+}
 
 mod telemetry;
 mod toolkit_intelligence;
@@ -372,7 +576,7 @@ pub mod test_utils;
 mod error_tests;
 #[cfg(test)]
 mod hardening_error_path_tests;
-#[cfg(test)]
+#[cfg(all(test, feature = "enterprise"))]
 mod organization_tests;
 #[cfg(test)]
 mod privacy_tests;
@@ -656,6 +860,8 @@ pub fn run() {
             streets_commands::parse_lesson_commands,
             streets_commands::execute_streets_command,
             streets_commands::execute_lesson_commands,
+            // STREETS Contextual Suggestion
+            streets_suggestion::get_streets_suggestion,
             // Sovereign Developer Profile (unified view)
             sovereign_developer_profile::get_sovereign_developer_profile,
             sovereign_developer_profile::export_sovereign_profile_markdown,
@@ -680,6 +886,8 @@ pub fn run() {
             // Diagnostics
             commands::get_diagnostics,
             startup_health::get_startup_health,
+            // Scoring Validation (persona-based precision testing)
+            scoring::validation::validation::run_scoring_validation,
             // Autophagy (intelligent content metabolism)
             autophagy_commands::get_autophagy_status,
             autophagy_commands::get_autophagy_history,
@@ -811,6 +1019,7 @@ pub fn run() {
             monitoring::start_scheduler(app_handle.clone(), monitoring_state.clone());
 
             // Start team sync scheduler (if configured)
+            #[cfg(feature = "team-sync")]
             {
                 let team_state = std::sync::Arc::new(team_sync_scheduler::TeamSyncState::default());
                 let settings = get_settings_manager().lock();

@@ -23,6 +23,12 @@ import { ShowAllViewsToggle } from './settings/ShowAllViewsToggle';
 import { NaturalLanguageQueryPanel } from './NaturalLanguageQuery';
 import { ProValuePanel } from './ProValuePanel';
 import { AboutPanel } from './AboutPanel';
+import { TeamSection } from './settings/TeamSection';
+import { TeamInviteDialog } from './settings/TeamInviteDialog';
+import { AuditLogViewer } from './enterprise/AuditLogViewer';
+import { WebhookManager } from './enterprise/WebhookManager';
+import { OrgDashboard } from './enterprise/OrgDashboard';
+import { PolicyEditor } from './enterprise/PolicyEditor';
 import { useAppStore } from '../store';
 import { translateError } from '../utils/error-messages';
 
@@ -30,9 +36,10 @@ import { translateError } from '../utils/error-messages';
 // Types
 // ============================================================================
 
-type SettingsTab = 'general' | 'sources' | 'profile' | 'projects' | 'advanced' | 'about';
+type SettingsTab = 'general' | 'sources' | 'profile' | 'projects' | 'advanced' | 'team' | 'about';
 
-const TAB_IDS: SettingsTab[] = ['general', 'sources', 'profile', 'projects', 'advanced', 'about'];
+const BASE_TAB_IDS: SettingsTab[] = ['general', 'sources', 'profile', 'projects', 'advanced', 'about'];
+const TEAM_TAB_IDS: SettingsTab[] = ['general', 'sources', 'profile', 'projects', 'team', 'advanced', 'about'];
 
 // ============================================================================
 // Props
@@ -48,6 +55,11 @@ interface SettingsModalProps {
 
 export const SettingsModal = memo(function SettingsModal({ onClose }: SettingsModalProps) {
   const { t } = useTranslation();
+  const tier = useAppStore(s => s.tier);
+  const showTeamInviteDialog = useAppStore(s => s.showTeamInviteDialog);
+  const setShowTeamInviteDialog = useAppStore(s => s.setShowTeamInviteDialog);
+  const isTeamOrEnterprise = tier === 'team' || tier === 'enterprise';
+  const TAB_IDS = isTeamOrEnterprise ? TEAM_TAB_IDS : BASE_TAB_IDS;
   const [activeTab, setActiveTab] = useState<SettingsTab>('general');
   const [initialized, setInitialized] = useState<Set<SettingsTab>>(new Set(['general']));
 
@@ -129,6 +141,9 @@ export const SettingsModal = memo(function SettingsModal({ onClose }: SettingsMo
         break;
       case 'projects':
         loadDiscoveredContext();
+        break;
+      case 'team':
+        // Team/enterprise data loads on-demand inside components
         break;
       case 'advanced':
         loadSystemHealth();
@@ -438,6 +453,37 @@ export const SettingsModal = memo(function SettingsModal({ onClose }: SettingsMo
             </div>
           )}
 
+          {/* Team & Enterprise Tab */}
+          {activeTab === 'team' && (
+            <div id="tabpanel-team" role="tabpanel">
+              <div className="space-y-6">
+                <PanelErrorBoundary name="Team Sync">
+                  <TeamSection onStatus={setSettingsStatus} />
+                </PanelErrorBoundary>
+
+                {tier === 'enterprise' && (
+                  <>
+                    <PanelErrorBoundary name="Organization">
+                      <OrgDashboard />
+                    </PanelErrorBoundary>
+
+                    <PanelErrorBoundary name="Audit Log">
+                      <AuditLogViewer />
+                    </PanelErrorBoundary>
+
+                    <PanelErrorBoundary name="Webhooks">
+                      <WebhookManager />
+                    </PanelErrorBoundary>
+
+                    <PanelErrorBoundary name="Retention Policies">
+                      <PolicyEditor />
+                    </PanelErrorBoundary>
+                  </>
+                )}
+              </div>
+            </div>
+          )}
+
           {/* About Tab */}
           {activeTab === 'about' && (
             <div id="tabpanel-about" role="tabpanel">
@@ -460,6 +506,11 @@ export const SettingsModal = memo(function SettingsModal({ onClose }: SettingsMo
           </div>
         </div>
       </div>
+
+      {/* Team Invite Dialog (portal-style overlay) */}
+      {showTeamInviteDialog && (
+        <TeamInviteDialog onClose={() => setShowTeamInviteDialog(false)} />
+      )}
     </div>
   );
 });
