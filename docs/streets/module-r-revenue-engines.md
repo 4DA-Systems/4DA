@@ -1829,6 +1829,27 @@ Engine                    Skill  Time  Speed  Scale  TOTAL
 Based on your developer profile — {= dna.identity_summary | fallback("your unique combination of skills and interests") =} — consider which engines align most naturally with what you already do.
 {? endif ?}
 
+{? if computed.experience_years < 3 ?}
+> **With your experience level:** Start with **Digital Products** (Engine 1) or **Content Monetization** (Engine 2) — lowest risk, fastest feedback loop. You learn what the market wants while building your portfolio. Avoid Consulting and API Products until you have more shipped work to point to. Your advantage right now is energy and speed, not depth.
+{? elif computed.experience_years < 8 ?}
+> **With your experience level:** Your 3-8 years of experience unlocks **Consulting** and **API Products** — higher-margin engines that reward depth. Clients pay for judgment, not just output. Consider pairing Consulting (fast cash) with Micro-SaaS or API Products (scalable). Your experience is the moat — you've seen enough production systems to know what actually works.
+{? else ?}
+> **With your experience level:** At 8+ years, focus on engines that compound over time: **Open Source + Premium**, **Data Products**, or **Consulting at premium rates** ($250-500/hr). You have the credibility and network to command premium prices. Your advantage is trust and reputation — leverage it. Consider building a content brand (blog, newsletter, YouTube) as an amplifier for whatever engines you choose.
+{? endif ?}
+
+{? if stack.contains("react") ?}
+> **React developers** have strong demand for: UI component libraries, Next.js templates and starter kits, design system tooling, and Tauri desktop app templates. The React ecosystem is large enough that niche products find audiences. Consider Engines 1 (Digital Products) and 3 (Micro-SaaS) as natural fits for your stack.
+{? endif ?}
+{? if stack.contains("python") ?}
+> **Python developers** have strong demand for: data pipeline tools, ML/AI utilities, automation scripts and packages, FastAPI templates, and CLI tools. Python's reach into data science and ML creates premium consulting opportunities. Consider Engines 4 (Automation-as-a-Service) and 5 (API Products) alongside Consulting.
+{? endif ?}
+{? if stack.contains("rust") ?}
+> **Rust developers** command premium rates due to supply constraints. Strong demand for: CLI tools, WebAssembly modules, systems programming consulting, and performance-critical libraries. The Rust ecosystem is still young enough that well-built crates attract significant attention. Consider Engines 6 (Consulting at $250-400/hr) and 7 (Open Source + Premium).
+{? endif ?}
+{? if stack.contains("typescript") ?}
+> **TypeScript developers** have the broadest market reach: npm packages, VS Code extensions, full-stack SaaS products, and developer tooling. Competition is higher than Rust or Python-ML, so differentiation matters more. Focus on a specific niche rather than general-purpose tools. Consider Engines 1 (Digital Products) and 3 (Micro-SaaS) in a focused vertical.
+{? endif ?}
+
 **Engine 1: Your FAST engine** — Pick the engine with the highest Speed score (tiebreaker: highest Total). This is what you build in Weeks 5-6. The goal is revenue within 14 days.
 
 **Engine 2: Your SCALE engine** — Pick the engine with the highest Scale score (tiebreaker: highest Total). This is what you plan in Weeks 7-8 and build through Module E. The goal is compounding growth over 6-12 months.
@@ -1891,6 +1912,69 @@ COMBINED PROJECTION:
 
 > **Real Talk:** These projections will be wrong. That's fine. The point isn't accuracy — it's forcing you to think through the math before you start building. A revenue engine that requires 30 hours/week of your time but generates $200/month is a bad deal. You need to see that on paper before you invest the time.
 
+### Platform Risk & Diversification
+
+Every revenue engine sits on top of platforms you don't control. Gumroad can change its fee structure. YouTube can demonetize your channel. Vercel can sunset its affiliate program. Stripe can freeze your account during a review. This is not hypothetical — it happens regularly.
+
+**The 40% Rule:** Never allow more than 40% of your income to depend on a single platform. If Gumroad generates 60% of your revenue and they raise fees from 5% to 15% overnight (as they did in early 2023 before reverting), your margins collapse. If YouTube is 70% of your income and an algorithm change halves your views, you're in trouble.
+
+**Real examples of platform risk:**
+
+| Year | Platform | What Happened | Impact on Developers |
+|------|----------|---------------|---------------------|
+| 2022 | Heroku | Free tier eliminated | Thousands of hobby projects and small businesses forced to migrate or pay |
+| 2023 | Gumroad | Announced 10% flat fee (later reversed) | Creators scrambled to evaluate alternatives; those with Lemon Squeezy or Stripe fallbacks were unaffected |
+| 2023 | Twitter/X API | Free tier killed, paid tiers repriced | Bot developers, content automation tools, and data products disrupted overnight |
+| 2024 | Unity | Retroactive per-install fee announced (later modified) | Game developers with years of Unity investment faced sudden cost increases |
+| 2025 | Reddit | API pricing changes | Third-party app developers lost their businesses entirely |
+
+**The pattern:** Platforms optimize for their own growth, not yours. Early in a platform's lifecycle, they subsidize creators to attract supply. Once they have enough supply, they extract value. This is not malice — it's business. Your job is to never be surprised by it.
+
+**Platform Dependency Audit:**
+
+Run this audit quarterly. For each revenue stream, answer:
+
+```
+PLATFORM DEPENDENCY AUDIT
+
+Stream: _______________
+Platform(s) it depends on: _______________
+
+1. What percentage of this stream's revenue flows through this platform?
+   [ ] <25% (low risk)  [ ] 25-40% (moderate)  [ ] >40% (high — diversify)
+
+2. Can you move to an alternative platform within 30 days?
+   [ ] Yes, alternatives exist and migration is straightforward
+   [ ] Partially — some lock-in (audience, reputation, integrations)
+   [ ] No — deeply locked in (proprietary format, no data export)
+
+3. Does this platform have a history of adverse changes?
+   [ ] No history of harmful changes  [ ] Minor changes  [ ] Major adverse changes
+
+4. Do you own the customer relationship?
+   [ ] Yes — I have email addresses and can contact customers directly
+   [ ] Partially — some customers are discoverable, some aren't
+   [ ] No — platform controls all customer access
+
+Action items:
+- If >40% dependency: identify and test an alternative this month
+- If no data export: export everything you can NOW, set a monthly reminder
+- If you don't own the customer relationship: start collecting emails immediately
+```
+
+**Diversification strategies by engine:**
+
+| Engine | Primary Platform Risk | Mitigation |
+|--------|----------------------|------------|
+| Digital Products | Gumroad/Lemon Squeezy fee changes | Maintain your own Stripe checkout as fallback. Own your customer email list. |
+| Content Monetization | YouTube demonetization, algorithm shifts | Build an email list. Cross-post to multiple platforms. Own your blog on your domain. |
+| Micro-SaaS | Payment processor holds, hosting costs | Multi-provider payment setup. Keep infrastructure costs under 10% of revenue. |
+| API Products | Cloud hosting price changes | Design for portability. Use containers. Document your migration runbook. |
+| Consulting | LinkedIn algorithm, job board changes | Build direct referral network. Maintain personal website with portfolio. |
+| Open Source | GitHub policy changes, npm registry rules | Mirror releases. Own your project website and documentation domain. |
+
+> **The golden rule of platform diversification:** If you can't email your customers directly, you don't have customers — you have a platform's customers. Build your email list from day one, regardless of which engine you're running.
+
 ### The Anti-Patterns
 
 {? if dna.blind_spots ?}
@@ -1908,6 +1992,8 @@ Don't do these:
 4. **Don't skip the math.** "I'll figure out pricing later" is how you end up with a product that costs more to run than it earns.
 
 5. **Don't optimize for the most impressive engine.** Consulting isn't glamorous. Digital products aren't "innovative." But they make money. Pick what works for your situation, not what looks good on Twitter.
+
+6. **Don't ignore platform concentration.** Run the Platform Dependency Audit above. If any single platform controls more than 40% of your revenue, diversifying should be your next priority — before adding a new engine.
 
 ---
 

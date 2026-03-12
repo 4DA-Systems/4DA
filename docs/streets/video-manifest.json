@@ -6,112 +6,144 @@
       "title": "Module S: The Sovereign Setup — Why Infrastructure Independence Matters",
       "duration_seconds": 900,
       "drip_day": 1,
-      "week": 1
+      "week": 1,
+      "status": "planned",
+      "placeholder_text": "Covers the philosophy behind owning your infrastructure: why running local compute gives you a business advantage, what 'sovereign' means in practice, and how to think about your workstation as a revenue-generating asset rather than a consumer device."
     },
     {
       "video_id": "streets-w1-2",
       "title": "Module S: Running Your First Sovereign Audit",
       "duration_seconds": 720,
       "drip_day": 3,
-      "week": 1
+      "week": 1,
+      "status": "planned",
+      "placeholder_text": "Walkthrough of the rig audit process: hardware inventory, software stack assessment, local LLM setup with Ollama, and creating your Sovereign Stack Document. Includes live demonstration of benchmarking local model performance on real workloads."
     },
     {
       "video_id": "streets-w2-1",
       "title": "Module T: The Revenue Truth — Mapping Your Stack to Revenue Engines",
       "duration_seconds": 840,
       "drip_day": 8,
-      "week": 2
+      "week": 2,
+      "status": "planned",
+      "placeholder_text": "How to identify your T-shaped skill profile and map it to specific revenue engines. Covers competitive positioning, the intersection of skill depth and market demand, and real examples of developers who found their unique market angle."
     },
     {
       "video_id": "streets-w2-2",
       "title": "Module T: 48-Hour Validation Framework — Ship or Kill Fast",
       "duration_seconds": 660,
       "drip_day": 10,
-      "week": 2
+      "week": 2,
+      "status": "planned",
+      "placeholder_text": "The practical framework for validating a revenue idea in 48 hours. Covers building an MVP scaffold, setting up payment infrastructure, creating a landing page, and getting your first real market feedback. Includes live build of a minimal product from zero to deployed."
     },
     {
       "video_id": "streets-w3-1",
       "title": "Module R: Revenue Engine Deep Dive — Engines 1-4",
       "duration_seconds": 1080,
       "drip_day": 15,
-      "week": 3
+      "week": 3,
+      "status": "planned",
+      "placeholder_text": "Deep dive into Digital Products, Content Monetization, Micro-SaaS, and Automation-as-a-Service. For each engine: real revenue math, platform setup walkthrough, pricing strategy, and code examples you can adapt. Includes analysis of what makes successful products in each category."
     },
     {
       "video_id": "streets-w3-2",
       "title": "Module R: Revenue Engine Deep Dive — Engines 5-8",
       "duration_seconds": 1080,
       "drip_day": 17,
-      "week": 3
+      "week": 3,
+      "status": "planned",
+      "placeholder_text": "Deep dive into API Products, Consulting/Fractional CTO, Open Source + Premium, and Data Products. Covers pricing at premium rates, license strategy for open source monetization, building data pipelines for intelligence products, and the platform risk diversification framework."
     },
     {
       "video_id": "streets-w4-1",
       "title": "Module E1: Execution — The 30-Day Launch Plan",
       "duration_seconds": 780,
       "drip_day": 22,
-      "week": 4
+      "week": 4,
+      "status": "planned",
+      "placeholder_text": "The week-by-week launch plan: Week 1 (build), Week 2 (polish and deploy), Week 3 (launch and distribute), Week 4 (iterate based on feedback). Covers launch channels, pricing psychology, finding your first 10 customers, and the metrics that matter in the first 30 days."
     },
     {
       "video_id": "streets-w4-2",
       "title": "Module E1: Execution — Automation Blueprint Walkthrough",
       "duration_seconds": 660,
       "drip_day": 24,
-      "week": 4
+      "week": 4,
+      "status": "planned",
+      "placeholder_text": "Live walkthrough of automating the operational overhead of a revenue engine: automated onboarding emails, payment processing with Stripe/Lemon Squeezy, content scheduling pipelines, and monitoring dashboards. Goal: reduce manual work to under 4 hours per week."
     },
     {
       "video_id": "streets-w5-1",
       "title": "Module E2: Evolution — When to Pivot, Scale, or Stack",
       "duration_seconds": 720,
       "drip_day": 29,
-      "week": 5
+      "week": 5,
+      "status": "planned",
+      "placeholder_text": "The 2026 opportunity landscape: what changed from 2025, the seven hottest opportunities with real market data, and the timing framework for entering and exiting markets. Covers the kill decision framework, scaling from $500/month to $10K/month, and when to hire your first contractor."
     },
     {
       "video_id": "streets-w5-2",
       "title": "Module E2: Evolution — Pricing Strategy and Iteration",
       "duration_seconds": 600,
       "drip_day": 31,
-      "week": 5
+      "week": 5,
+      "status": "planned",
+      "placeholder_text": "How to raise prices without losing customers, the psychology behind developer product pricing, when to grandfather vs. migrate existing customers, and building your intelligence system for spotting opportunities. Includes the 60/30/10 skill investment framework for future-proofing income."
     },
     {
       "video_id": "streets-w6-1",
       "title": "Module T2: Traction — Building Sustainable Growth Loops",
       "duration_seconds": 840,
       "drip_day": 36,
-      "week": 6
+      "week": 6,
+      "status": "planned",
+      "placeholder_text": "Growth loops that compound without proportional time investment: content flywheels, referral mechanics, community-driven distribution, and strategic partnerships. Covers the difference between growth tactics (temporary) and growth loops (permanent), with real examples from successful developer businesses."
     },
     {
       "video_id": "streets-w6-2",
       "title": "Module T2: Traction — SEO and Content Engine for Developers",
       "duration_seconds": 720,
       "drip_day": 38,
-      "week": 6
+      "week": 6,
+      "status": "planned",
+      "placeholder_text": "Developer-specific SEO strategy: targeting long-tail technical keywords, writing content that ranks and converts, building a content pipeline with local LLM assistance, and measuring what actually drives revenue (not just traffic). Includes live keyword research and content planning session."
     },
     {
       "video_id": "streets-w7-1",
       "title": "Module S2: Stacking Streams — The $10K/Month Architecture",
       "duration_seconds": 900,
       "drip_day": 43,
-      "week": 7
+      "week": 7,
+      "status": "planned",
+      "placeholder_text": "Four concrete paths to $10K/month: Consulting-Heavy, Product-Heavy, Content-Heavy, and Automation-Heavy. For each path: exact revenue math, time allocation, realistic timelines, and risk analysis. Covers how streams interact (the flywheel effect) and why 2-3 streams outperform a single stream at every income level."
     },
     {
       "video_id": "streets-w7-2",
       "title": "Module S2: Stacking Streams — Risk Diversification and Compounding",
       "duration_seconds": 660,
       "drip_day": 45,
-      "week": 7
+      "week": 7,
+      "status": "planned",
+      "placeholder_text": "When to kill a stream (the four kill rules), reinvestment strategy at each income level ($500, $2K, $5K, $10K), and building resilience into your income portfolio. Covers the sunk cost trap for developers, how to shut down a stream professionally, and the portfolio rebalancing framework."
     },
     {
       "video_id": "streets-w8-1",
       "title": "Graduation: Building Your Personal Revenue Dashboard",
       "duration_seconds": 780,
       "drip_day": 50,
-      "week": 8
+      "week": 8,
+      "status": "planned",
+      "placeholder_text": "Live build of a personal revenue tracking dashboard: connecting payment providers, tracking time per stream, calculating per-stream ROI, and setting up automated alerts for anomalies. The goal is a single-page view of your entire income portfolio that updates automatically."
     },
     {
       "video_id": "streets-w8-2",
       "title": "Graduation: From Playbook to Portfolio — Your Next 90 Days",
       "duration_seconds": 600,
       "drip_day": 52,
-      "week": 8
+      "week": 8,
+      "status": "planned",
+      "placeholder_text": "Completing your 2026 Opportunity Radar, setting up the quarterly review cadence, and planning your next 90 days with weekly milestones. Covers the transition from 'following the course' to 'running the system' — how to maintain momentum, when to revisit modules, and how 4DA's intelligence tools feed into your ongoing opportunity detection."
     }
   ]
 }

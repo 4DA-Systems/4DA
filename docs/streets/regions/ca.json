@@ -7,7 +7,34 @@
   "business_registration_cost": 200,
   "business_entity_type": "Sole Proprietorship / Corporation",
   "tax_note": "Federal + Provincial tax; GST/HST registration required above $30K revenue",
+  "vat_gst": {
+    "name": "GST/HST",
+    "rate_percent": "5% GST federal; 13-15% HST in harmonized provinces (ON, NB, NL, NS, PE)",
+    "registration_threshold": "$30,000 in revenue over four consecutive calendar quarters",
+    "registration_threshold_note": "Below $30K, GST/HST registration is optional. Voluntary registration lets you claim input tax credits on business purchases.",
+    "digital_products": "Digital products sold to Canadian consumers are subject to GST/HST. Non-resident digital businesses must register if Canadian sales exceed $30K. Quebec has its own QST registration requirement."
+  },
+  "digital_product_tax": "Digital products are subject to GST/HST. If you sell to customers in Quebec, separate QST (9.975%) registration is also required above $30K in Quebec sales. Saskatchewan charges PST on digital products. Use a tax automation service if selling across provinces.",
+  "entity_comparison": [
+    {
+      "type": "Sole Proprietorship",
+      "setup_cost": "$0-60 (provincial business name registration)",
+      "annual_cost": "$0-60 (renewal varies by province)",
+      "liability": "Unlimited personal liability",
+      "tax_treatment": "Business income added to personal return. Federal + provincial rates combined (20-53%). CPP contributions on self-employment income.",
+      "best_for": "Starting out; testing a business idea; revenue under $40K"
+    },
+    {
+      "type": "Corporation (Federal or Provincial)",
+      "setup_cost": "$200 (federal) or $300-400 (Ontario/BC)",
+      "annual_cost": "$20-40 (annual return filing) + accountant fees ($1,500-3,000)",
+      "liability": "Limited to company assets",
+      "tax_treatment": "Small business deduction: 9% federal on first $500K of active business income. Combined federal+provincial rate ~12-15% for small businesses. Salary or dividends for personal income extraction.",
+      "best_for": "Revenue above $50K/year; the 9% small business rate makes incorporation very attractive in Canada"
+    }
+  ],
   "payment_processors": ["Stripe", "Square", "Moneris"],
   "bank_recommendation": "Wealthsimple Cash (digital), RBC (business)",
-  "isp_note": "Rogers/Bell fibre in urban areas; limited rural options"
+  "isp_note": "Rogers/Bell fibre in urban areas; limited rural options",
+  "disclaimer": "This is general information only and does not constitute tax, legal, or financial advice. Tax law varies by province. Consult a Canadian CPA for advice specific to your situation."
 }

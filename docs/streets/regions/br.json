@@ -7,7 +7,42 @@
   "business_registration_cost": 1500,
   "business_entity_type": "MEI (Microempreendedor Individual)",
   "tax_note": "Simples Nacional for small businesses (up to R$4.8M); MEI tax ~R$67/month for income up to R$81K/year",
+  "vat_gst": {
+    "name": "Multiple taxes (ICMS, ISS, PIS, COFINS — being unified into IBS/CBS under 2023 reform)",
+    "rate_percent": "Varies: ISS 2-5% on services; ICMS 7-18% on goods; PIS/COFINS 3.65-9.25%. Simples Nacional consolidates into one simplified rate.",
+    "registration_threshold": "R$81,000/year for MEI; R$4.8M/year for Simples Nacional",
+    "registration_threshold_note": "MEI is the simplest regime with a fixed monthly tax of ~R$67-72. Above R$81K, transition to Microempresa under Simples Nacional. Simples Nacional consolidates federal, state, and municipal taxes into one payment with progressive rates.",
+    "digital_products": "Digital services are subject to ISS (municipal service tax, 2-5%) in the municipality where the provider is established. For international sales, services exported are generally ISS-exempt if payment is received in foreign currency. The 2023 tax reform (IBS/CBS) will simplify this when fully implemented (expected 2026-2033 transition)."
+  },
+  "digital_product_tax": "Software licensing and SaaS are classified as services (ISS). Digital product sales may also trigger ICMS in some states (ongoing legal debate). Under MEI or Simples Nacional, all taxes are consolidated into a single simplified payment. Export of services is generally tax-exempt. The tax reform transition will clarify digital product treatment over the next several years.",
+  "entity_comparison": [
+    {
+      "type": "MEI (Microempreendedor Individual)",
+      "setup_cost": "R$0 (free registration via gov.br portal)",
+      "annual_cost": "~R$67-72/month (DAS — consolidated tax payment)",
+      "liability": "Unlimited personal liability (though separation of assets is possible)",
+      "tax_treatment": "Fixed monthly tax (~R$67-72) covers INSS + ISS or ICMS. Revenue cap R$81K/year. Cannot have partners or more than 1 employee.",
+      "best_for": "Starting out; solo freelancers; revenue under R$81K/year; extremely simple"
+    },
+    {
+      "type": "ME/EPP (Microempresa / Empresa de Pequeno Porte) under Simples Nacional",
+      "setup_cost": "R$1,000-3,000 (junta comercial registration + professional fees)",
+      "annual_cost": "R$2,000-6,000 (accountant + compliance)",
+      "liability": "Limited (if structured as Ltda or SLU)",
+      "tax_treatment": "Simples Nacional: consolidated tax starting at 6% for services (Anexo III) or 15.5% (Anexo V), progressive based on revenue. Up to R$4.8M/year.",
+      "best_for": "Revenue R$81K-4.8M; need employees or partners; still relatively simple compliance"
+    },
+    {
+      "type": "SLU (Sociedade Limitada Unipessoal)",
+      "setup_cost": "R$1,500-3,000",
+      "annual_cost": "R$3,000-8,000 (accountant + compliance)",
+      "liability": "Limited to company assets (no minimum capital requirement)",
+      "tax_treatment": "Can use Simples Nacional (if eligible) or Lucro Presumido (presumed profit method — effective rate ~13-16% for services).",
+      "best_for": "Solo founders wanting limited liability; revenue above R$81K; more professional than MEI"
+    }
+  ],
   "payment_processors": ["Stripe", "PagSeguro", "Mercado Pago"],
   "bank_recommendation": "Nubank (digital-first), Inter (business)",
-  "isp_note": "Fiber expanding rapidly; Vivo/Claro/TIM in most urban centers"
+  "isp_note": "Fiber expanding rapidly; Vivo/Claro/TIM in most urban centers",
+  "disclaimer": "Esta \u00e9 apenas informa\u00e7\u00e3o geral e n\u00e3o constitui aconselhamento fiscal ou jur\u00eddico. Consulte um contador para orienta\u00e7\u00e3o espec\u00edfica \u00e0 sua situa\u00e7\u00e3o. / This is general information only, not tax or legal advice. Consult a Brazilian contador for advice specific to your situation."
 }

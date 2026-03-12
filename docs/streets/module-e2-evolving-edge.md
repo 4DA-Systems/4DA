@@ -335,6 +335,24 @@ For each opportunity below, you get: what it is, the current market, competition
 As a {= stack.primary | fallback("developer") =} developer, some of these opportunities will feel more natural than others. That's fine. The best opportunity is the one you can actually execute on, not the one with the highest theoretical ceiling.
 {? endif ?}
 
+{? if computed.experience_years < 3 ?}
+> **For early-career developers (under 3 years):** Focus on Opportunities 1 (MCP Servers), 2 (AI-Native Developer Tools), and 5 (AI-Assisted Non-Developer Tools). These have the lowest entry barriers and don't require deep domain expertise to start. Your advantage is speed and willingness to experiment — ship fast, learn from the market, iterate. Avoid Opportunities 4 and 6 until you've built a track record.
+{? elif computed.experience_years < 8 ?}
+> **For mid-career developers (3-8 years):** All seven opportunities are viable for you, but Opportunities 3 (Local AI Deployment Services), 4 (Fine-Tuning-as-a-Service), and 6 (Compliance Automation) particularly reward your accumulated judgment and production experience. Clients in these areas pay for someone who's seen things go wrong and knows how to prevent it. Your experience is the differentiator.
+{? else ?}
+> **For senior developers (8+ years):** Opportunities 3 (Local AI Deployment Services), 4 (Fine-Tuning-as-a-Service), and 6 (Compliance Automation) are your highest-leverage plays. These are markets where expertise commands premium rates and clients specifically seek experienced practitioners. Consider combining one of these with Opportunity 7 (Developer Education) — your experience is the content. A senior developer teaching what they've learned over a decade is worth far more than a junior developer synthesizing blog posts.
+{? endif ?}
+
+{? if stack.contains("react") ?}
+> **React developers:** Opportunities 1 (MCP Servers — build the dashboards and UIs for MCP server management), 2 (AI-Native Developer Tools — React-based developer experiences), and 5 (AI-Assisted Non-Developer Tools — React frontend for non-technical users) play directly to your strengths.
+{? endif ?}
+{? if stack.contains("rust") ?}
+> **Rust developers:** Opportunities 1 (MCP Servers — high-performance servers), 3 (Local AI Deployment — systems-level optimization), and building Tauri-based desktop tools all leverage Rust's performance and safety guarantees. The Rust ecosystem's maturity in systems programming gives you access to markets that web-only developers can't reach.
+{? endif ?}
+{? if stack.contains("python") ?}
+> **Python developers:** Opportunities 3 (Local AI Deployment), 4 (Fine-Tuning-as-a-Service), and 7 (Developer Education) are natural fits. The ML/AI ecosystem is Python-native, and your existing knowledge of data pipelines, model training, and deployment translates directly into revenue.
+{? endif ?}
+
 ### Opportunity 1: MCP Server Marketplace
 
 **The App Store moment for AI tools.**
@@ -1011,7 +1029,7 @@ sources:
     signal: "Frontend and tooling trends"
 
   - name: "Ollama Blog + Releases"
-    url: "https://ollama.ai/blog"
+    url: "https://ollama.com/blog"
     frequency: twice_weekly
     signal: "Model and infrastructure updates"
 
@@ -1379,6 +1397,145 @@ That's how you convert learning time into future income.
 2. **Pick one 12 MONTHS skill** and spend 2 hours this week on it. Not reading about it — building something with it, even if it's trivial.
 3. **Audit your current learning habits.** How much of your learning time in the last month resulted in a published artifact? If the answer is "none," that's the thing to fix.
 4. **Set a calendar reminder** for 6 months from now: "Review skill predictions. Were the 12-month bets accurate? Adjust allocation."
+
+---
+
+### Scaling From $500/Month to $10K/Month
+
+Most developer income streams stall between $500/month and $2,000/month. You've proven the concept, customers exist, revenue is real — but growth plateaus. This section is the practical playbook for breaking through that plateau.
+
+**Why streams stall at $500-2,000/month:**
+
+1. **You hit your personal throughput ceiling.** There are only so many support tickets, consulting hours, or content pieces one person can produce.
+2. **You're doing everything yourself.** Marketing, development, support, accounting, content — context-switching is killing your effective output.
+3. **Your pricing is too low.** You set launch prices to attract early customers and never raised them.
+4. **You're not saying no.** Feature requests, custom work, "quick calls" — small distractions compound into major time drains.
+
+**The $500 to $2K Phase: Fix Your Pricing**
+
+If you're making $500/month, your first move is almost always a price increase, not more customers. Most developers underprice by 30-50%.
+
+```
+Current: 100 customers x $5/month = $500/month
+Option A: Get 100 MORE customers (double the support, marketing, infrastructure) = $1,000/month
+Option B: Raise price to $9/month, lose 20% of customers = 80 x $9 = $720/month
+
+Option B gives you 44% more revenue with FEWER customers and LESS support load.
+At $15/month with the same 20% churn: 80 x $15 = $1,200/month — 140% increase.
+```
+
+**The evidence:** Patrick McKenzie's analysis of thousands of SaaS products shows that indie developers almost universally underprice. The customers you lose to a price increase are typically the ones who generate the most support tickets and the least goodwill. Your best customers barely notice a 50% price increase because the value you provide far exceeds the cost.
+
+**How to raise prices without losing your nerve:**
+
+1. **Grandfather existing customers** at their current rate (optional but reduces friction)
+2. **Announce 30 days in advance** via email: "Starting [date], new pricing is [X]. Your current rate is locked for [6 months / forever]."
+3. **Add one small improvement** alongside the increase — a new feature, faster performance, better docs. The improvement doesn't need to justify the price increase, but it gives customers something positive to associate with the change.
+4. **Track churn for 60 days.** If churn stays under 10%, the price increase was correct. If churn exceeds 20%, you may have jumped too far — consider an intermediate tier.
+
+**The $2K to $5K Phase: Automate or Delegate**
+
+At $2K/month, you can afford to start removing yourself from low-value tasks. The math works:
+
+```
+Your effective hourly rate at $2K/month, 20 hrs/week = $25/hr
+A virtual assistant costs $10-20/hr
+A contract developer costs $30-60/hr
+
+Tasks to delegate FIRST (highest leverage):
+1. Customer support (VA, $10-15/hr) — frees 3-5 hrs/week
+2. Content formatting/scheduling (VA, $10-15/hr) — frees 2-3 hrs/week
+3. Bookkeeping (specialized VA, $15-25/hr) — frees 1-2 hrs/week
+
+Total cost: ~$400-600/month
+Time freed: 6-10 hrs/week
+Those 6-10 hours go to product development, marketing, or a second stream.
+```
+
+**Hiring your first contractor:**
+
+- **Start with a single, defined task.** Not "help me with my business." More like "respond to support tickets using this playbook document, escalate anything that requires code changes."
+- **Where to find them:** Upwork (filter for 90%+ job success, 100+ hours), OnlineJobs.ph (for VAs), or personal referrals from other indie developers.
+- **Pay fairly.** The contractor who costs $8/hr and needs constant supervision is more expensive than the one who costs $15/hr and works independently.
+- **Create a runbook first.** Document every repeatable task before handing it off. If you can't write the process down, you can't delegate it.
+- **Trial period:** 2 weeks, paid, with a specific deliverable. End the trial if quality isn't there. Don't invest months "training" someone who isn't a fit.
+
+**The $5K to $10K Phase: Systems, Not Effort**
+
+At $5K/month, you're past the "side project" phase. This is a real business. The jump to $10K requires systems thinking, not just more effort.
+
+**Three levers at this stage:**
+
+1. **Expand your product line.** Your existing customers are your warmest audience. What adjacent product can you sell them?
+   - SaaS customers want templates, guides, or consulting
+   - Template buyers want a SaaS that automates what the template does manually
+   - Consulting clients want productized services (fixed scope, fixed price)
+
+2. **Build distribution channels that compound.**
+   - SEO: Every blog post is a permanent lead source. Invest in 2-4 high-quality posts per month targeting long-tail keywords in your niche.
+   - Email list: This is your most valuable asset. Nurture it. One focused email per week to your list outperforms daily social media posting.
+   - Partnerships: Find complementary (not competing) products and cross-promote. A design system tool partnering with a component library is natural.
+
+3. **Raise prices again.** If you raised prices at $500/month and haven't since, it's time. Your product is better now. Your reputation is stronger. Your support infrastructure is more reliable. The value has increased — the price should reflect that.
+
+**Automating fulfillment:**
+
+At $5K+/month, manual fulfillment becomes a bottleneck. Automate these first:
+
+| Process | Manual Cost | Automation Approach |
+|---------|-------------|-------------------|
+| New customer onboarding | 15-30 min/customer | Automated welcome email sequence + self-serve docs |
+| License key delivery | 5 min/sale | Keygen, Gumroad, or Lemon Squeezy handles this automatically |
+| Invoice generation | 10 min/invoice | Stripe auto-invoicing or QuickBooks integration |
+| Content publishing | 1-2 hrs/post | Scheduled publishing + automated cross-posting |
+| Metrics reporting | 30 min/week | Dashboard (Plausible, PostHog, custom) with automated weekly email |
+
+**The mindset shift at $10K/month:**
+
+Below $10K, you're optimizing for revenue growth. At $10K, you start optimizing for time efficiency. The question changes from "how do I make more money?" to "how do I make the same money in fewer hours?" — because that freed time is what you invest in the next phase of growth.
+
+### When to Kill a Stream: The Decision Framework
+
+Module S2 covers the four kill rules in depth (The $100 Rule, The ROI Rule, The Energy Rule, The Opportunity Cost Rule). Here's the complementary framework for the Evolving Edge context — where market timing determines whether a struggling stream is a patience problem or a market problem.
+
+**The Market Timing Kill Criteria:**
+
+Not every underperforming stream deserves more effort. Some are genuinely early (patience pays). Others are late (the window closed while you were building). Distinguishing between the two is the difference between persistence and stubbornness.
+
+```
+STREAM HEALTH ASSESSMENT
+
+Stream name: _______________
+Age: _____ months
+Monthly revenue: $_____
+Monthly hours invested: _____
+Revenue trend (last 3 months): [ ] Growing  [ ] Flat  [ ] Declining
+
+MARKET SIGNALS:
+1. Is search volume for your keywords growing or declining?
+   [ ] Growing → market is expanding (patience may pay)
+   [ ] Flat → market is mature (differentiate or exit)
+   [ ] Declining → market is contracting (exit unless you dominate a niche)
+
+2. Are competitors entering or leaving?
+   [ ] New competitors arriving → market is validated but getting crowded
+   [ ] Competitors leaving → either market is dying or you'll inherit their customers
+   [ ] No change → stable market, growth depends on your execution
+
+3. Has the platform/technology you depend on changed direction?
+   [ ] No changes → stable foundation
+   [ ] Minor changes (pricing, features) → adapt and continue
+   [ ] Major changes (deprecation, acquisition, pivot) → seriously evaluate exit
+
+DECISION:
+- If revenue is growing AND market signals are positive → KEEP (invest more)
+- If revenue is flat AND market signals are positive → ITERATE (change approach, not product)
+- If revenue is flat AND market signals are neutral → SET DEADLINE (90 days to show growth or kill)
+- If revenue is declining AND market signals are negative → KILL (the market has spoken)
+- If revenue is declining AND market signals are positive → your execution is the problem, not the market — fix or find someone who can
+```
+
+> **The hardest kill:** When you're emotionally attached to a stream that the market doesn't want. You built it beautifully. The code is clean. The UX is thoughtful. And nobody is buying it. The market doesn't owe you revenue because you worked hard. Kill it, extract the lessons, and redirect the energy. The skills transfer. The code doesn't have to.
 
 ---
 

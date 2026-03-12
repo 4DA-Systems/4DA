@@ -319,20 +319,20 @@ Ollama is the foundation. It turns your machine into a local inference server wi
 
 ```bash
 # Linux
-curl -fsSL https://ollama.ai/install.sh | sh
+curl -fsSL https://ollama.com/install.sh | sh
 
 # macOS
-# Download from https://ollama.ai or:
+# Download from https://ollama.com or:
 brew install ollama
 
 # Windows
-# Download installer from https://ollama.ai
+# Download installer from https://ollama.com
 # Or use winget:
 winget install Ollama.Ollama
 ```
 
 {? if computed.os_family == "windows" ?}
-> **Windows:** Use the installer from ollama.ai or `winget install Ollama.Ollama`. Ollama runs as a background service automatically after installation.
+> **Windows:** Use the installer from ollama.com or `winget install Ollama.Ollama`. Ollama runs as a background service automatically after installation.
 {? elif computed.os_family == "macos" ?}
 > **macOS:** `brew install ollama` is the quickest path. Ollama leverages Apple Silicon's unified memory — your {= profile.ram.total | fallback("system") =} RAM is shared between CPU and GPU workloads.
 {? elif computed.os_family == "linux" ?}
@@ -343,7 +343,7 @@ Verify the installation:
 
 ```bash
 ollama --version
-# Should show version 0.3.x or higher
+# Should show version 0.5.x or higher (check https://ollama.com/download for latest)
 
 # Start the server (if not auto-started)
 ollama serve
@@ -351,6 +351,8 @@ ollama serve
 # In another terminal, test it:
 ollama run llama3.1:8b "Say hello in exactly 5 words"
 ```
+
+> **Version note:** Ollama releases frequently. The model commands and flags in this module were verified against Ollama v0.5.x (early 2026). If you're reading this later, check [ollama.com/download](https://ollama.com/download) for the latest version and [ollama.com/library](https://ollama.com/library) for current model names. The core concepts don't change, but specific model tags (e.g., `llama3.1:8b`) may be superseded by newer releases.
 
 ### Model Selection Guide
 

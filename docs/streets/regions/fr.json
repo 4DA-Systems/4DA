@@ -1,13 +1,48 @@
 {
   "country": "FR",
   "currency": "EUR",
-  "currency_symbol": "€",
+  "currency_symbol": "\u20ac",
   "electricity_kwh": 0.21,
   "internet_typical_monthly": 30,
   "business_registration_cost": 0,
   "business_entity_type": "Micro-entreprise / SASU",
-  "tax_note": "Micro-entreprise: flat rate ~22% social charges; TVA exemption under €36.8K for services",
+  "tax_note": "Micro-entreprise: flat rate ~22% social charges; TVA exemption under \u20ac36.8K for services",
+  "vat_gst": {
+    "name": "TVA (Taxe sur la Valeur Ajout\u00e9e / VAT)",
+    "rate_percent": 20,
+    "registration_threshold": "\u20ac36,800 for services; \u20ac91,900 for goods (2025 thresholds, adjusted annually)",
+    "registration_threshold_note": "Micro-entreprise regime provides TVA franchise (exemption) below threshold. Above threshold, TVA registration is mandatory. Voluntary registration available at any level.",
+    "digital_products": "Digital products sold to French/EU consumers are subject to 20% TVA. Cross-border EU B2C sales can use OSS (One Stop Shop). The micro-entreprise TVA exemption applies to digital products as long as total revenue stays below the threshold."
+  },
+  "digital_product_tax": "Digital products are standard-rated at 20% TVA. Under micro-entreprise regime, you can benefit from TVA franchise (no TVA charged or collected) below the threshold. This simplifies pricing but means you cannot reclaim TVA on business purchases.",
+  "entity_comparison": [
+    {
+      "type": "Micro-entreprise (Auto-entrepreneur)",
+      "setup_cost": "\u20ac0 (free registration via autoentrepreneur.urssaf.fr)",
+      "annual_cost": "\u20ac0 (no fixed fees; social charges are percentage-based on revenue)",
+      "liability": "Unlimited personal liability (patrimoine personnel at risk)",
+      "tax_treatment": "Flat social charges ~22% on revenue (not profit). Optional versement lib\u00e9ratoire for income tax (~2.2% on revenue). Revenue cap: \u20ac77.7K for services.",
+      "best_for": "Starting out; simplest possible structure; ideal for freelancing and digital products under \u20ac77K"
+    },
+    {
+      "type": "SASU (Soci\u00e9t\u00e9 par Actions Simplifi\u00e9e Unipersonnelle)",
+      "setup_cost": "\u20ac300-1,500 (statuts + registration)",
+      "annual_cost": "\u20ac1,000-3,000 (accountant + social charges on salary)",
+      "liability": "Limited to company assets (\u20ac1 minimum capital)",
+      "tax_treatment": "IS (Imp\u00f4t sur les Soci\u00e9t\u00e9s) 15% on first \u20ac42.5K profit, 25% above. President salary subject to social charges ~45%. Dividends subject to flat tax 30% (PFU).",
+      "best_for": "Revenue above \u20ac77K; seeking liability protection; planning for growth"
+    },
+    {
+      "type": "EURL (Entreprise Unipersonnelle \u00e0 Responsabilit\u00e9 Limit\u00e9e)",
+      "setup_cost": "\u20ac200-1,000 (statuts + registration)",
+      "annual_cost": "\u20ac1,000-2,500 (accountant + social charges)",
+      "liability": "Limited to company assets",
+      "tax_treatment": "Default: IR (income tax, profits taxed personally). Can opt for IS (corporate tax). Social charges ~45% on manager remuneration.",
+      "best_for": "Alternative to SASU with different social charge structure; popular with consultants"
+    }
+  ],
   "payment_processors": ["Stripe", "Mollie", "PayPal"],
   "bank_recommendation": "Qonto (business), Shine (micro-entreprise)",
-  "isp_note": "Fibre FTTH widely available; Free/Orange/SFR competitive pricing"
+  "isp_note": "Fibre FTTH widely available; Free/Orange/SFR competitive pricing",
+  "disclaimer": "Ceci est une information g\u00e9n\u00e9rale et ne constitue pas un conseil fiscal ou juridique. Consultez un expert-comptable pour un conseil adapt\u00e9 \u00e0 votre situation. / This is general information only, not tax or legal advice. Consult a French expert-comptable for advice specific to your situation."
 }
