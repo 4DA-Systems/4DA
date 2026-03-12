@@ -1,8 +1,9 @@
-//! Autophagy cycle orchestrator — runs all four analyzers and records metrics.
+//! Autophagy cycle orchestrator — runs all six analyzers and records metrics.
 //!
 //! This is the main entry point for an autophagy cycle. It:
 //! 1. Counts items approaching pruning
-//! 2. Runs calibration, topic decay, source autopsy, and anti-pattern detection
+//! 2. Runs calibration, topic decay, source autopsy, anti-pattern detection,
+//!    and decision window outcome analysis
 //! 3. Stores all intelligence to `digested_intelligence`
 //! 4. Records the cycle in `autophagy_cycles`
 //!
@@ -70,13 +71,14 @@ pub(crate) fn run_autophagy_cycle_with_ace(
         "Autophagy pre-analysis stats"
     );
 
-    // Run all 5 analyzers (each returns empty vec on failure, never panics)
+    // Run all 6 analyzers (each returns empty vec on failure, never panics)
     let calibrations = super::calibration::analyze_calibration(conn, max_age_days);
     let topic_calibrations =
         super::calibration_analysis::analyze_topic_calibration(conn, max_age_days);
     let decay_profiles = super::topic_decay::analyze_topic_decay(conn);
     let source_autopsies = super::source_autopsy::analyze_sources(conn, max_age_days);
     let anti_patterns = super::anti_patterns::detect_anti_patterns(conn, 0.35);
+    let decision_outcomes = super::decision_outcomes::analyze_decision_window_outcomes(conn);
 
     // Store source-level calibration results
     let calibrations_produced = (calibrations.len() + topic_calibrations.len()) as i64;
@@ -113,6 +115,17 @@ pub(crate) fn run_autophagy_cycle_with_ace(
     if !anti_patterns.is_empty() {
         if let Err(e) = super::anti_patterns::store_anti_patterns(conn, &anti_patterns) {
             warn!(target: "4da::autophagy", error = %e, "Failed to store anti-patterns");
+        }
+    }
+
+    // Store decision window outcomes
+    let decision_outcomes_analyzed = decision_outcomes.len() as i64;
+    if !decision_outcomes.is_empty() {
+        if let Err(e) = super::decision_outcomes::store_decision_outcomes(conn, &decision_outcomes)
+        {
+            warn!(target: "4da::autophagy", error = %e, "Failed to store decision outcomes");
+        } else {
+            info!(target: "4da::autophagy", count = decision_outcomes_analyzed, "Analyzed decision window outcomes");
         }
     }
 
@@ -181,6 +194,7 @@ pub(crate) fn run_autophagy_cycle_with_ace(
         topic_decay_rates_updated,
         source_autopsies_produced,
         anti_patterns_detected,
+        decision_outcomes_analyzed,
         duration_ms,
         "Autophagy cycle complete"
     );
@@ -192,6 +206,7 @@ pub(crate) fn run_autophagy_cycle_with_ace(
         topic_decay_rates_updated,
         source_autopsies_produced,
         anti_patterns_detected,
+        decision_outcomes_analyzed,
         duration_ms,
     })
 }
@@ -252,6 +267,25 @@ mod tests {
                 db_size_after_bytes INTEGER NOT NULL DEFAULT 0,
                 duration_ms INTEGER NOT NULL DEFAULT 0,
                 created_at TEXT NOT NULL DEFAULT (datetime('now'))
+            );
+            CREATE TABLE decision_windows (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                window_type TEXT NOT NULL,
+                title TEXT NOT NULL,
+                description TEXT DEFAULT '',
+                urgency REAL DEFAULT 0.5,
+                relevance REAL DEFAULT 0.5,
+                source_item_ids TEXT DEFAULT '[]',
+                signal_chain_id INTEGER,
+                dependency TEXT,
+                status TEXT DEFAULT 'open',
+                opened_at TEXT DEFAULT (datetime('now')),
+                expires_at TEXT,
+                acted_at TEXT,
+                closed_at TEXT,
+                outcome TEXT,
+                lead_time_hours REAL,
+                streets_engine TEXT
             );",
         )
         .expect("create tables");

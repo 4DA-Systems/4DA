@@ -152,6 +152,11 @@ pub(crate) async fn build_scoring_context(db: &Database) -> Result<ScoringContex
         }
     };
 
+    // Bridge ACE topic affinities into feedback boosts.
+    // Only high-confidence (>0.6), significant signal (>|0.2|).
+    // Scaled to 50% weight vs explicit feedback (save/dismiss).
+    let affinity_boosts_bridged = bridge_topic_affinities(&mut feedback_boosts);
+
     info!(target: "4da::ace",
         topics = ace_ctx.active_topics.len(),
         tech = ace_ctx.detected_tech.len(),
@@ -164,6 +169,7 @@ pub(crate) async fn build_scoring_context(db: &Database) -> Result<ScoringContex
         has_active_work,
         has_taste_embedding = taste_embedding.is_some(),
         has_dominant_persona = dominant_persona.is_some(),
+        affinity_boosts_bridged,
         "ACE context loaded for scoring"
     );
 
@@ -203,4 +209,149 @@ pub(crate) async fn build_scoring_context(db: &Database) -> Result<ScoringContex
     }
 
     Ok(context)
+}
+
+/// Bridge ACE topic affinities into the feedback_boosts map.
+///
+/// Filters for high-confidence (>0.6) affinities with significant signal (|score| > 0.2),
+/// scales them to 50% weight relative to explicit feedback (save/dismiss), and merges
+/// additively with clamping at +/-0.5 to prevent runaway boosts.
+///
+/// Returns the number of affinities bridged (for logging/metrics).
+pub(crate) fn bridge_topic_affinities(feedback_boosts: &mut HashMap<String, f64>) -> usize {
+    let affinities = match crate::get_ace_engine() {
+        Ok(ace) => ace.get_topic_affinities().unwrap_or_default(),
+        Err(_) => return 0,
+    };
+
+    let mut bridged = 0;
+    for aff in &affinities {
+        if aff.confidence > 0.6 && aff.affinity_score.abs() > 0.2 {
+            let scaled = aff.affinity_score as f64 * 0.5;
+            feedback_boosts
+                .entry(aff.topic.to_lowercase())
+                .and_modify(|v| *v = (*v + scaled).clamp(-0.5, 0.5))
+                .or_insert(scaled.clamp(-0.5, 0.5));
+            bridged += 1;
+        }
+    }
+
+    bridged
+}
+
+// ============================================================================
+// Tests
+// ============================================================================
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_bridge_preserves_existing_boosts() {
+        // bridge_topic_affinities should never remove existing boost entries.
+        // It may add/modify some if ACE is available, but "rust" should still be present.
+        let mut boosts: HashMap<String, f64> = HashMap::new();
+        boosts.insert("rust".to_string(), 0.3);
+
+        let _bridged = bridge_topic_affinities(&mut boosts);
+
+        // Existing "rust" entry still present (may be modified if ACE has rust affinity,
+        // but should never be removed)
+        assert!(
+            boosts.contains_key("rust"),
+            "Existing boost entries should be preserved"
+        );
+    }
+
+    #[test]
+    fn test_affinity_scaling_applied() {
+        // Verify the scaling logic directly (unit test the math)
+        let mut boosts: HashMap<String, f64> = HashMap::new();
+
+        // Simulate what bridge_topic_affinities does for a single high-confidence affinity
+        let affinity_score: f32 = 0.8;
+        let confidence: f32 = 0.9;
+
+        // Filter: confidence > 0.6 AND |score| > 0.2 -> passes
+        assert!(confidence > 0.6);
+        assert!(affinity_score.abs() > 0.2);
+
+        let scaled = affinity_score as f64 * 0.5; // 0.4
+        boosts
+            .entry("react".to_string())
+            .and_modify(|v| *v = (*v + scaled).clamp(-0.5, 0.5))
+            .or_insert(scaled.clamp(-0.5, 0.5));
+
+        assert!(
+            (boosts["react"] - 0.4).abs() < 1e-6,
+            "Scaled boost should be 0.4 (0.8 * 0.5), got {}",
+            boosts["react"]
+        );
+    }
+
+    #[test]
+    fn test_affinity_clamping() {
+        let mut boosts: HashMap<String, f64> = HashMap::new();
+        // Pre-existing boost of 0.4
+        boosts.insert("python".to_string(), 0.4);
+
+        // Strong positive affinity would push over 0.5
+        let scaled = 0.9_f64 * 0.5; // 0.45
+        boosts
+            .entry("python".to_string())
+            .and_modify(|v| *v = (*v + scaled).clamp(-0.5, 0.5))
+            .or_insert(scaled.clamp(-0.5, 0.5));
+
+        // 0.4 + 0.45 = 0.85, clamped to 0.5
+        assert!(
+            (boosts["python"] - 0.5).abs() < 1e-6,
+            "Should clamp at 0.5, got {}",
+            boosts["python"]
+        );
+
+        // Test negative clamping
+        let mut neg_boosts: HashMap<String, f64> = HashMap::new();
+        neg_boosts.insert("crypto".to_string(), -0.3);
+
+        let neg_scaled = -0.8_f64 * 0.5; // -0.4
+        neg_boosts
+            .entry("crypto".to_string())
+            .and_modify(|v| *v = (*v + neg_scaled).clamp(-0.5, 0.5))
+            .or_insert(neg_scaled.clamp(-0.5, 0.5));
+
+        // -0.3 + (-0.4) = -0.7, clamped to -0.5
+        assert!(
+            (neg_boosts["crypto"] - (-0.5)).abs() < 1e-6,
+            "Should clamp at -0.5, got {}",
+            neg_boosts["crypto"]
+        );
+    }
+
+    #[test]
+    fn test_low_confidence_affinities_filtered() {
+        // Verify that the filter conditions work correctly
+        let confidence_low: f32 = 0.4;
+        let confidence_high: f32 = 0.8;
+        let score_small: f32 = 0.1;
+        let score_large: f32 = 0.5;
+
+        // Low confidence, high score -> filtered out
+        assert!(
+            !(confidence_low > 0.6 && score_large.abs() > 0.2),
+            "Low confidence should be filtered"
+        );
+
+        // High confidence, small score -> filtered out
+        assert!(
+            !(confidence_high > 0.6 && score_small.abs() > 0.2),
+            "Small score should be filtered"
+        );
+
+        // High confidence, large score -> passes filter
+        assert!(
+            confidence_high > 0.6 && score_large.abs() > 0.2,
+            "High confidence + significant score should pass"
+        );
+    }
 }

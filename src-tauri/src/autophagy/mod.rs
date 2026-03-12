@@ -5,6 +5,7 @@
 //! - **Topic decay profiles**: per-topic engagement half-lives
 //! - **Source autopsies**: per-source engagement quality
 //! - **Anti-patterns**: systematic over/under-scoring detection
+//! - **Decision outcomes**: decision window response rate learning
 //!
 //! All intelligence is stored in `digested_intelligence` and consumed by the
 //! scoring pipeline for continuous self-improvement.
@@ -15,6 +16,7 @@ use ts_rs::TS;
 mod anti_patterns;
 pub(crate) mod calibration;
 mod calibration_analysis;
+pub(crate) mod decision_outcomes;
 mod digest;
 mod source_autopsy;
 mod topic_decay;
@@ -44,6 +46,7 @@ pub struct AutophagyCycleResult {
     pub topic_decay_rates_updated: i64,
     pub source_autopsies_produced: i64,
     pub anti_patterns_detected: i64,
+    pub decision_outcomes_analyzed: i64,
     pub duration_ms: i64,
 }
 
@@ -105,6 +108,7 @@ mod tests {
             topic_decay_rates_updated: 3,
             source_autopsies_produced: 4,
             anti_patterns_detected: 1,
+            decision_outcomes_analyzed: 2,
             duration_ms: 42,
         };
         let json = serde_json::to_string(&result).expect("serialize");
