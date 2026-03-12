@@ -218,6 +218,7 @@ export function FirstRunTransition({ onComplete }: FirstRunTransitionProps) {
         scanSummary={scanSummary}
         narrationEvents={narrationEvents}
         estimatedSeconds={estimatedSeconds}
+        onSkipAhead={() => handleDismiss('results')}
       />
     );
   };

@@ -1,7 +1,9 @@
 import { useCallback, useState, useEffect, memo } from 'react';
 import { listen } from '@tauri-apps/api/event';
 import { useTranslation } from 'react-i18next';
+import { cmd } from '../lib/commands';
 import { useShallow } from 'zustand/react/shallow';
+import { useAppStore } from '../store';
 import { BriefingCard } from './BriefingCard';
 import { SignalActionCard } from './briefing/SignalActionCard';
 import { BriefingAtmosphere, RelativeTimestamp, SKELETON_WIDTHS } from './briefing/BriefingHelpers';
@@ -10,7 +12,6 @@ import { BriefingWarmupState } from './BriefingWarmupState';
 import { DigestView } from './DigestView';
 import { CommunityInsights } from './CommunityInsights';
 import { ProGate } from './ProGate';
-import { useAppStore } from '../store';
 import {
   SectionAccent,
   sectionTitleColor,
@@ -22,9 +23,17 @@ import { ScoringDelta } from './ScoringDelta';
 import { DecisionWindowsPanel } from './DecisionWindowsPanel';
 import { CompoundAdvantageScore } from './CompoundAdvantageScore';
 import { IntelligenceProfileCard } from './IntelligenceProfileCard';
+import { StreetsContextCard } from './StreetsContextCard';
 import { useLicense } from '../hooks/use-license';
 import { useBriefingDerived } from '../hooks/use-briefing-derived';
 import type { SourceRelevance } from '../types';
+
+interface StreetsSuggestionData {
+  module_id: string;
+  module_title: string;
+  reason: string;
+  match_strength: number;
+}
 
 export const BriefingView = memo(function BriefingView() {
   const { t } = useTranslation();
@@ -57,8 +66,20 @@ export const BriefingView = memo(function BriefingView() {
   const generateFreeBriefing = useAppStore(s => s.generateFreeBriefing);
   const loadPulse = useAppStore(s => s.loadIntelligencePulse);
   const startAnalysis = useAppStore(s => s.startAnalysis);
+  const setShowSettings = useAppStore(s => s.setShowSettings);
+
+  // First-run personalization nudge
+  const isFirstRun = useAppStore(s => s.isFirstRun);
+  const userContext = useAppStore(s => s.userContext);
+  const [personalizeCardDismissed, setPersonalizeCardDismissed] = useState(false);
+  const showPersonalizeNudge = isFirstRun
+    && !personalizeCardDismissed
+    && (!userContext?.interests || userContext.interests.length === 0);
 
   const { isPro } = useLicense();
+
+  // STREETS contextual suggestion
+  const [streetsSuggestion, setStreetsSuggestion] = useState<StreetsSuggestionData | null>(null);
 
   const [gapExpanded, setGapExpanded] = useState(false);
   const [metricsExpanded, setMetricsExpanded] = useState(false);
@@ -89,6 +110,44 @@ export const BriefingView = memo(function BriefingView() {
     );
     return () => { unlisten.then(fn => fn()); };
   }, [addToast, t]);
+
+  // Fetch STREETS contextual suggestion on mount
+  useEffect(() => {
+    cmd('get_streets_suggestion')
+      .then((suggestion) => {
+        if (!suggestion) {
+          setStreetsSuggestion(null);
+          return;
+        }
+        // Check localStorage for 7-day dismiss
+        const dismissKey = `streets_dismiss_${suggestion.module_id}`;
+        const dismissedAt = localStorage.getItem(dismissKey);
+        if (dismissedAt) {
+          const elapsed = Date.now() - parseInt(dismissedAt, 10);
+          if (elapsed < 7 * 24 * 60 * 60 * 1000) {
+            setStreetsSuggestion(null);
+            return;
+          }
+          localStorage.removeItem(dismissKey);
+        }
+        setStreetsSuggestion(suggestion);
+      })
+      .catch(() => setStreetsSuggestion(null));
+  }, [analysisComplete]);
+
+  const handleStreetsDismiss = useCallback((moduleId: string) => {
+    localStorage.setItem(`streets_dismiss_${moduleId}`, Date.now().toString());
+    setStreetsSuggestion(null);
+  }, []);
+
+  const handleStreetsOpen = useCallback((moduleId: string) => {
+    setActiveView('playbook');
+    // Small delay to let the view switch, then trigger module load
+    setTimeout(() => {
+      const store = useAppStore.getState();
+      store.loadPlaybookContent?.(moduleId);
+    }, 100);
+  }, [setActiveView]);
 
   // Derived computations (gaps, quality, health, signals, top picks)
   const { gaps, lowQualitySources, healthSummary, sections, isStale, signalItems, topItems } =
@@ -174,6 +233,27 @@ export const BriefingView = memo(function BriefingView() {
     if (!isPro && freeBriefing && !freeBriefing.empty) {
       return (
         <section aria-label={t('briefing.dailyOverview')} className="bg-bg-primary rounded-lg space-y-4">
+          {showPersonalizeNudge && (
+            <div className="bg-blue-500/10 border border-blue-500/20 rounded-lg p-4 flex items-start justify-between gap-3">
+              <div>
+                <h3 className="text-sm font-medium text-white mb-1">{t('briefing.personalizeTitle')}</h3>
+                <p className="text-xs text-text-secondary mb-3">{t('briefing.personalizeBody')}</p>
+                <button
+                  onClick={() => setShowSettings(true)}
+                  className="px-3 py-1.5 text-xs bg-blue-500/20 text-blue-400 border border-blue-500/30 rounded-lg hover:bg-blue-500/30 transition-all font-medium"
+                >
+                  {t('header.settings')}
+                </button>
+              </div>
+              <button
+                onClick={() => setPersonalizeCardDismissed(true)}
+                className="text-text-muted hover:text-white transition-colors flex-shrink-0 p-1"
+                aria-label={t('action.dismiss')}
+              >
+                &#x2715;
+              </button>
+            </div>
+          )}
           <div className="bg-bg-secondary rounded-lg border border-border p-5">
             <h2 className="font-medium text-white mb-3">{t('briefing.dailyOverview')}</h2>
             <div className="space-y-3">
@@ -225,9 +305,33 @@ export const BriefingView = memo(function BriefingView() {
     return <BriefingWarmupState onAnalyze={startAnalysis} />;
   }
 
+  // Personalization nudge card (inline, non-blocking)
+  const personalizeNudge = showPersonalizeNudge ? (
+    <div className="bg-blue-500/10 border border-blue-500/20 rounded-lg p-4 mb-4 flex items-start justify-between gap-3">
+      <div>
+        <h3 className="text-sm font-medium text-white mb-1">{t('briefing.personalizeTitle')}</h3>
+        <p className="text-xs text-text-secondary mb-3">{t('briefing.personalizeBody')}</p>
+        <button
+          onClick={() => setShowSettings(true)}
+          className="px-3 py-1.5 text-xs bg-blue-500/20 text-blue-400 border border-blue-500/30 rounded-lg hover:bg-blue-500/30 transition-all font-medium"
+        >
+          {t('header.settings')}
+        </button>
+      </div>
+      <button
+        onClick={() => setPersonalizeCardDismissed(true)}
+        className="text-text-muted hover:text-white transition-colors flex-shrink-0 p-1"
+        aria-label={t('action.dismiss')}
+      >
+        &#x2715;
+      </button>
+    </div>
+  ) : null;
+
   // Briefing content view
   return (
     <section aria-label={t('briefing.intelligenceBriefing')} className="bg-bg-primary rounded-lg space-y-6">
+      {personalizeNudge}
       <BriefingAtmosphere
         signalCount={signalItems.length}
         topCount={topItems.length}
@@ -457,6 +561,15 @@ export const BriefingView = memo(function BriefingView() {
 
       {/* 6. Your Intelligence Profile — learning visibility */}
       <IntelligenceProfileCard />
+
+      {/* 6b. STREETS Contextual Suggestion — surfaces relevant playbook modules */}
+      {streetsSuggestion && (
+        <StreetsContextCard
+          suggestion={streetsSuggestion}
+          onOpen={handleStreetsOpen}
+          onDismiss={handleStreetsDismiss}
+        />
+      )}
 
       {/* 7. Intelligence Metrics — 2c. conditionally mounted when expanded */}
       <div>

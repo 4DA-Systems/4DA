@@ -249,6 +249,7 @@
   "settings.tabs.profile": "Profile",
   "settings.tabs.projects": "Projects",
   "settings.tabs.advanced": "Advanced",
+  "settings.tabs.team": "Team",
   "settings.tabs.about": "About",
   "settings.saveSettings": "Save Settings",
   "settings.testConnection": "Test Connection",
@@ -425,6 +426,8 @@
   "onboarding.welcome.byokDesc": "Your API keys, you control costs",
   "onboarding.welcome.getStarted": "Get Started",
   "onboarding.welcome.quickSetupHint": "Quick setup — most steps are automatic",
+  "onboarding.welcome.skipToContent": "Skip to Content",
+  "onboarding.welcome.skipHint": "You can configure later in Settings",
 
   "onboarding.nav.back": "Back",
   "onboarding.nav.next": "Next",
@@ -743,6 +746,7 @@
   "firstRun.estimatedTimeLessThanMinute": "< 1 minute remaining",
   "firstRun.estimatedTimeAlmost": "Almost there...",
   "firstRun.estimatedTimeFinishing": "Finishing up...",
+  "firstRun.skipAhead": "Skip ahead",
 
   "shortcuts.title": "Keyboard Shortcuts",
   "shortcuts.close": "Close keyboard shortcuts",
@@ -835,6 +839,8 @@
   "briefing.noIntelligence": "No Intelligence Yet",
   "briefing.runAnalysis": "Run an analysis to gather content from your sources, then generate a briefing.",
   "briefing.orPress": "or press",
+  "briefing.personalizeTitle": "Personalize your feed",
+  "briefing.personalizeBody": "Add your interests and tech stack in Settings for better results.",
 
   "coach.chat.title": "STREETS Coach",
   "coach.chat.emptyDescription": "Ask anything about building independent developer income. Your sovereign profile and playbook progress inform every answer.",
@@ -1659,5 +1665,15 @@
   "scoreDrawer.factor.confirmation": "Signal confirmation",
 
   "briefing.profile.feedbackImpact": "Your feedback has shaped {{count}} future signal",
-  "briefing.profile.feedbackImpact_other": "Your feedback has shaped {{count}} future signals"
+  "briefing.profile.feedbackImpact_other": "Your feedback has shaped {{count}} future signals",
+
+  "briefing.streetsMatchStrength": "{{pct}}% match",
+  "briefing.streetsOpenModule": "Open Module {{id}}",
+  "briefing.streetsNotNow": "Not now",
+
+  "playbook.personalizedBanner": "Personalized for your setup",
+  "playbook.personalizedBannerDesc": "Content adapted using your sovereign profile and intelligence feed",
+  "playbook.feedEchoSave": "Save",
+  "playbook.feedEchoSaved": "Saved",
+  "playbook.feedEchoNewItems": "{{count}} new since last visit"
 }
