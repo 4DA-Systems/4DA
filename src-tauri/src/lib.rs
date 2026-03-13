@@ -76,6 +76,7 @@ mod content_dna;
 mod content_quality;
 mod context_commands;
 mod context_engine;
+mod data_export;
 pub mod db;
 mod decision_advantage;
 mod decision_advantage_commands;
@@ -527,6 +528,8 @@ mod enterprise_analytics;
 #[cfg(feature = "enterprise")]
 mod organization;
 #[cfg(feature = "enterprise")]
+mod sso;
+#[cfg(feature = "enterprise")]
 mod webhooks;
 
 // Stubs when enterprise is disabled
@@ -641,6 +644,35 @@ mod enterprise_analytics {
     }
     #[tauri::command]
     pub async fn export_org_analytics_cmd() -> Result<String> {
+        Err("Enterprise features require --features enterprise".into())
+    }
+}
+#[cfg(not(feature = "enterprise"))]
+mod sso {
+    use crate::error::Result;
+
+    #[tauri::command]
+    pub async fn get_sso_config() -> Result<serde_json::Value> {
+        Err("Enterprise features require --features enterprise".into())
+    }
+    #[tauri::command]
+    pub async fn set_sso_config() -> Result<()> {
+        Err("Enterprise features require --features enterprise".into())
+    }
+    #[tauri::command]
+    pub async fn initiate_sso_login() -> Result<String> {
+        Err("Enterprise features require --features enterprise".into())
+    }
+    #[tauri::command]
+    pub async fn get_sso_session() -> Result<serde_json::Value> {
+        Err("Enterprise features require --features enterprise".into())
+    }
+    #[tauri::command]
+    pub async fn validate_sso_callback() -> Result<serde_json::Value> {
+        Err("Enterprise features require --features enterprise".into())
+    }
+    #[tauri::command]
+    pub async fn logout_sso() -> Result<()> {
         Err("Enterprise features require --features enterprise".into())
     }
 }
@@ -1069,6 +1101,11 @@ pub fn run() {
             team_notifications::mark_notification_read,
             team_notifications::mark_all_notifications_read,
             team_notifications::dismiss_notification,
+            // Data Export (GDPR compliance — all tiers)
+            data_export::export_all_data,
+            data_export::export_section,
+            data_export::list_exports,
+            data_export::delete_export,
             // Enterprise: Audit Log
             audit::get_audit_log,
             audit::get_audit_summary_cmd,
@@ -1088,6 +1125,13 @@ pub fn run() {
             // Enterprise: Analytics
             enterprise_analytics::get_org_analytics_cmd,
             enterprise_analytics::export_org_analytics_cmd,
+            // Enterprise: SSO/SAML/OIDC
+            sso::get_sso_config,
+            sso::set_sso_config,
+            sso::initiate_sso_login,
+            sso::get_sso_session,
+            sso::validate_sso_callback,
+            sso::logout_sso,
         ])
         .setup(|app| {
             // Record app start time for diagnostics uptime tracking

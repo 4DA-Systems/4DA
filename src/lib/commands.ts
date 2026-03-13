@@ -469,6 +469,20 @@ interface CommandMap {
   // -- Enterprise: Analytics --
   get_org_analytics_cmd: { params: { days?: number }; result: OrgAnalytics };
   export_org_analytics_cmd: { params: { days?: number }; result: string };
+
+  // -- Enterprise: SSO --
+  get_sso_config: { params: Record<string, never>; result: SsoConfig | null };
+  set_sso_config: { params: { config: SsoConfig }; result: void };
+  initiate_sso_login: { params: Record<string, never>; result: string };
+  get_sso_session: { params: Record<string, never>; result: SsoSession | null };
+  validate_sso_callback: { params: { assertion: string }; result: SsoSession };
+  logout_sso: { params: Record<string, never>; result: void };
+
+  // -- Data Export --
+  export_all_data: { params: { format: string }; result: ExportManifest };
+  export_section: { params: { section: string; format: string }; result: string };
+  list_exports: { params: Record<string, never>; result: ExportManifest[] };
+  delete_export: { params: { exportId: string }; result: void };
 }
 
 
@@ -846,6 +860,37 @@ interface SharedSource {
   shared_by: string;
   upvotes: number;
   created_at: string;
+}
+
+// -- SSO Types --
+
+interface SsoConfig {
+  provider_type: string;
+  idp_url: string;
+  entity_id: string;
+  certificate: string | null;
+  client_id: string | null;
+  issuer: string | null;
+  enabled: boolean;
+}
+
+interface SsoSession {
+  email: string;
+  display_name: string;
+  groups: string[];
+  authenticated_at: string;
+  expires_at: string | null;
+  provider_type: string;
+}
+
+// -- Data Export Types --
+
+interface ExportManifest {
+  export_id: string;
+  created_at: string;
+  format: string;
+  sections: string[];
+  total_records: number;
 }
 
 /** Developer decision (mirrors Rust DeveloperDecision) */
