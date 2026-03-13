@@ -134,3 +134,6 @@ src/lib/game-components/*.frag
 4DA-WORLD-PLAN.md
 4da-world/
 relay/target/
+
+# Crate placeholder (name reservation only)
+crates-placeholder/
