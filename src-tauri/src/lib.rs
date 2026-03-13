@@ -1066,6 +1066,9 @@ pub fn run() {
             telemetry::track_event,
             telemetry::get_usage_analytics,
             telemetry::clear_telemetry,
+            telemetry::get_error_telemetry,
+            telemetry::get_error_summary_cmd,
+            telemetry::clear_error_telemetry,
             // Team Sync (AD-023)
             team_sync_commands::get_team_sync_status,
             team_sync_commands::get_team_members,
