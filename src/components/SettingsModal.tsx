@@ -30,6 +30,12 @@ import { AuditLogViewer } from './enterprise/AuditLogViewer';
 import { WebhookManager } from './enterprise/WebhookManager';
 import { OrgDashboard } from './enterprise/OrgDashboard';
 import { PolicyEditor } from './enterprise/PolicyEditor';
+import { AdminHealthDashboard } from './enterprise/AdminHealthDashboard';
+import { TeamOnboardingWizard } from './enterprise/TeamOnboardingWizard';
+import { SsoConfigPanel } from './enterprise/SsoConfigPanel';
+import { DataExportPanel } from './enterprise/DataExportPanel';
+import { ConfigDiagnostics } from './enterprise/ConfigDiagnostics';
+import { WebhookDocsPanel } from './enterprise/WebhookDocsPanel';
 import { useAppStore } from '../store';
 import { translateError } from '../utils/error-messages';
 
@@ -458,6 +464,10 @@ export const SettingsModal = memo(function SettingsModal({ onClose }: SettingsMo
           {activeTab === 'team' && (
             <div id="tabpanel-team" role="tabpanel">
               <div className="space-y-6">
+                <PanelErrorBoundary name="Team Setup Wizard">
+                  <TeamOnboardingWizard />
+                </PanelErrorBoundary>
+
                 <PanelErrorBoundary name="Team Sync">
                   <TeamSection onStatus={setSettingsStatus} />
                 </PanelErrorBoundary>
@@ -483,8 +493,29 @@ export const SettingsModal = memo(function SettingsModal({ onClose }: SettingsMo
                     <PanelErrorBoundary name="Retention Policies">
                       <PolicyEditor />
                     </PanelErrorBoundary>
+
+                    <PanelErrorBoundary name="SSO">
+                      <SsoConfigPanel />
+                    </PanelErrorBoundary>
+
+                    <PanelErrorBoundary name="Admin Health">
+                      <AdminHealthDashboard />
+                    </PanelErrorBoundary>
+
+                    <PanelErrorBoundary name="Webhook Docs">
+                      <WebhookDocsPanel />
+                    </PanelErrorBoundary>
                   </>
                 )}
+
+                {/* Available on all team+ tiers */}
+                <PanelErrorBoundary name="Data Export">
+                  <DataExportPanel />
+                </PanelErrorBoundary>
+
+                <PanelErrorBoundary name="Diagnostics">
+                  <ConfigDiagnostics />
+                </PanelErrorBoundary>
               </div>
             </div>
           )}

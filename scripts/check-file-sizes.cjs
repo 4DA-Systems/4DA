@@ -79,6 +79,8 @@ const EXCEPTIONS = {
   'src-tauri/src/sources/adapter_resilience_tests.rs': 'Resilience tests — 146 edge-case tests across all 10 source adapters',
   'src-tauri/src/streets_commands.rs':               'STREETS engine commands — 7 engines + security hardening + tests',
   'src-tauri/src/team_sync_commands.rs':              'Team sync commands — Tauri IPC boundary for team intelligence',
+  'src-tauri/src/sso.rs':                            'SSO/SAML/OIDC — enterprise authentication flow + tests',
+  'src-tauri/src/data_export.rs':                    'Data export/portability — GDPR-compliant export + privacy stripping + tests',
 
   // TypeScript — type registries and complex UI
   'src/lib/commands.ts':                             'IPC command registry — all 107 typed Tauri commands',
