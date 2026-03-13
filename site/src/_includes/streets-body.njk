@@ -334,11 +334,11 @@ Revenue compounds. Intelligence sharpens.</pre>
       <div class="section-label">Access</div>
       <h2>For the streets. All of it.</h2>
       <p class="subtitle" style="margin: 0 auto 48px; text-align: center;">Every module. Every engine playbook. Every framework. Free inside 4DA. No gating. No trials. No paywalls on the knowledge.</p>
-      <div class="pricing-grid" style="grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); max-width: 900px;">
+      <div class="pricing-grid" style="max-width: 480px;">
         <div class="pricing-card" style="border-color: var(--accent);">
           <h3>STREETS Playbook</h3>
           <div class="pricing-price">$0 <span>forever</span></div>
-          <div class="pricing-note">Free inside 4DA. No email. No account.</div>
+          <div class="pricing-note">Free inside 4DA. No email. No account. No catch.</div>
           <ul class="pricing-features">
             <li>All 7 STREETS modules</li>
             <li>All 8 revenue engine playbooks</li>
@@ -349,63 +349,10 @@ Revenue compounds. Intelligence sharpens.</pre>
             <li>The First $100 Challenge</li>
             <li>Updated with every 4DA release</li>
           </ul>
-          <a href="https://4da.ai" class="pricing-cta primary">Download 4DA -- Free</a>
-        </div>
-        <div class="pricing-card">
-          <h3>Community</h3>
-          <div class="pricing-price">$29 <span>/month</span></div>
-          <div class="pricing-note">Or $249/year (save $99).</div>
-          <ul class="pricing-features">
-            {% if variant == "updated" %}
-            <li>AI-powered coaching (available 24/7)</li>
-            <li>Personalized engine recommendations</li>
-            <li>AI strategy document generation</li>
-            <li>AI launch review pipeline</li>
-            <li>Auto-generated progress reviews</li>
-            <li>AI accountability nudges</li>
-            <li>Premium template library</li>
-            {% else %}
-            <li>Private community (Discord)</li>
-            <li>Monthly office hours (live Q&amp;A)</li>
-            <li>Case study library (quarterly)</li>
-            <li>Revenue tracking templates</li>
-            <li>Accountability partner matching</li>
-            <li>Priority support</li>
-            {% endif %}
-          </ul>
-          <a href="#" class="pricing-cta secondary" onclick="streetsCheckout('community'); return false;">Join Community — $29/mo</a>
-          <a href="#" class="pricing-cta-alt" onclick="streetsCheckout('annual'); return false;" style="display:block;text-align:center;margin-top:8px;font-size:12px;color:var(--text-muted);text-decoration:underline;cursor:pointer;">Or save $99 with annual ($249/yr)</a>
-        </div>
-        <div class="pricing-card" style="border-color: var(--gold);">
-          <h3>Cohort</h3>
-          <div class="pricing-price">$499</div>
-          {% if variant == "updated" %}
-          <div class="pricing-note">8-week self-paced program.</div>
-          <ul class="pricing-features">
-            <li>Community membership included</li>
-            <li>8-week AI video curriculum (self-paced)</li>
-            <li>AI strategy deep-dive (personalized document)</li>
-            <li>AI launch review pipeline</li>
-            <li>Quarterly progress narratives</li>
-          </ul>
-          {% else %}
-          <div class="pricing-note">8-week program. Limited seats.</div>
-          <ul class="pricing-features">
-            <li>Community membership included</li>
-            <li>8-week live cohort (2x/week)</li>
-            <li>1-on-1 strategy session (60 min)</li>
-            <li>Live engine launch reviews</li>
-            <li>Direct access to the team</li>
-          </ul>
-          {% endif %}
-          <a href="#" class="pricing-cta secondary" onclick="streetsCheckout('cohort'); return false;">Join Next Cohort — $499</a>
+          <a href="https://4da.ai" class="pricing-cta primary">Download 4DA -- STREETS Included Free</a>
         </div>
       </div>
-      {% if variant == "updated" %}
-      <p style="margin-top: 24px; font-size: 13px; color: var(--text-muted); font-style: italic;">The playbook is free. Community and Cohort unlock AI coaching that uses your own LLM provider -- your data never leaves your machine.</p>
-      {% else %}
-      <p style="margin-top: 24px; font-size: 13px; color: var(--text-muted); font-style: italic;">The playbook is free. Community and cohorts exist for people who want accountability, live feedback, and a network of builders.</p>
-      {% endif %}
+      <p style="margin-top: 24px; font-size: 13px; color: var(--text-muted); font-style: italic;">For the streets means for the streets. The entire playbook is free. No tiers. No upsells. No paywalls on the knowledge.</p>
     </div>
   </section>
 
@@ -533,7 +480,7 @@ Revenue compounds. Intelligence sharpens.</pre>
         {% endif %}
         <details>
           <summary>Can I get a refund?</summary>
-          <div class="faq-answer">The playbook is free -- there's nothing to refund. Community and Cohort memberships have a 30-day money-back guarantee. No questions, no hoops.</div>
+          <div class="faq-answer">The playbook is free -- there's nothing to refund. All 7 modules, all 8 engine playbooks, everything. Free inside 4DA.</div>
         </details>
       </div>
     </div>
@@ -548,7 +495,6 @@ Revenue compounds. Intelligence sharpens.</pre>
       <p>STREETS gives you the playbook. 4DA gives you the radar. Both are free. The only cost is the hours you're already spending on side projects that don't generate revenue.</p>
       <div style="display: flex; flex-direction: column; gap: 16px; align-items: center;">
         <a href="https://4da.ai" class="btn btn-primary" style="font-size: 16px; padding: 16px 32px;">Download 4DA -- STREETS Included Free</a>
-        <a href="#" style="font-size: 14px; color: var(--text-muted);" onclick="streetsCheckout('cohort'); return false;">Join the next cohort — March 2026 — 24 seats</a>
       </div>
       <div class="trust-line">All 7 modules free &middot; No email required &middot; No paywalls on knowledge &middot; For the streets</div>
     </div>
@@ -557,7 +503,7 @@ Revenue compounds. Intelligence sharpens.</pre>
   <!-- P.S. -->
   <div class="ps-section">
     <p><strong>P.S.</strong> -- I built 4DA because developers deserve better intelligence. I built STREETS because intelligence without action is just interesting reading. Every module is free because this knowledge shouldn't be gated. The developers who used early drafts didn't have different skills than you. They had different frameworks. Download 4DA. Run the audit in Module S. If the number surprises you, the other 6 modules will too.</p>
-    <p><strong>P.P.S.</strong> -- "For the streets" isn't marketing. It's the philosophy. The playbook is free. The knowledge is free. The community and cohorts exist for people who want accountability and a network. But the playbook? That's yours.</p>
+    <p><strong>P.P.S.</strong> -- "For the streets" isn't marketing. It's the philosophy. The playbook is free. The knowledge is free. Every module, every engine, every framework. No tiers, no upsells. That's yours.</p>
   </div>
 
   <!-- Footer -->
