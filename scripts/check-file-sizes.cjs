@@ -83,7 +83,7 @@ const EXCEPTIONS = {
   'src-tauri/src/data_export.rs':                    'Data export/portability — GDPR-compliant export + privacy stripping + tests',
 
   // TypeScript — type registries and complex UI
-  'src/lib/commands.ts':                             'IPC command registry — all 107 typed Tauri commands',
+  'src/lib/commands.ts':                             'IPC command registry — all typed Tauri commands (280 with feature-gated variants)',
   'src/components/ResultsView.tsx':                  'Results list + filters — primary view',
   'src/components/void-engine/VoidHeartbeat.tsx':    'Void visualizer — canvas + animation',
   'src/App.tsx':                                     'App shell + routing — single entry point',

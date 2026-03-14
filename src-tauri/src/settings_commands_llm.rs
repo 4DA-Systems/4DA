@@ -70,6 +70,20 @@ async fn test_ollama_connection_impl(llm: &LLMProvider) -> Result<serde_json::Va
     let base_url = llm.base_url.as_deref().unwrap_or("http://localhost:11434");
     let model = &llm.model;
 
+    // Security: warn if non-localhost Ollama URL uses HTTP (keys/data sent in cleartext)
+    if base_url.starts_with("http://") {
+        let is_localhost = base_url.contains("://localhost")
+            || base_url.contains("://127.0.0.1")
+            || base_url.contains("://[::1]");
+        if !is_localhost {
+            warn!(
+                target: "4da::ollama",
+                base_url,
+                "Remote Ollama URL uses HTTP — data will be sent unencrypted. Use HTTPS for remote connections."
+            );
+        }
+    }
+
     let client = reqwest::Client::builder()
         .connect_timeout(std::time::Duration::from_secs(5))
         .timeout(std::time::Duration::from_secs(120)) // generous for cold model load

@@ -113,27 +113,54 @@ pub async fn toolkit_list_ports() -> Result<Vec<ListeningPort>> {
 
         #[cfg(not(target_os = "windows"))]
         {
-            let output = Command::new("ss")
-                .args(["-tlnp"])
+            // macOS uses lsof, Linux uses ss
+            let (cmd, args): (&str, &[&str]) = if cfg!(target_os = "macos") {
+                ("lsof", &["-iTCP", "-sTCP:LISTEN", "-n", "-P"])
+            } else {
+                ("ss", &["-tlnp"])
+            };
+
+            let output = Command::new(cmd)
+                .args(args)
                 .output()
-                .map_err(|e| FourDaError::Internal(format!("ss failed: {e}")))?;
+                .map_err(|e| FourDaError::Internal(format!("{cmd} failed: {e}")))?;
 
             let stdout = String::from_utf8_lossy(&output.stdout);
             for line in stdout.lines().skip(1) {
                 let parts: Vec<&str> = line.split_whitespace().collect();
-                if parts.len() >= 5 {
-                    if let Some(addr) = parts.get(3) {
-                        if let Some(port_str) = addr.rsplit(':').next() {
+                if cfg!(target_os = "macos") {
+                    // lsof format: COMMAND PID USER FD TYPE DEVICE SIZE/OFF NODE NAME
+                    if parts.len() >= 9 {
+                        let name = parts[8]; // e.g., "*:4444" or "127.0.0.1:8080"
+                        if let Some(port_str) = name.rsplit(':').next() {
                             if let Ok(port) = port_str.parse::<u16>() {
-                                let pid_info = parts.get(5).unwrap_or(&"");
-                                let pid = extract_pid_unix(pid_info);
+                                let pid = parts.get(1).and_then(|p| p.parse().ok());
                                 ports.push(ListeningPort {
                                     port,
                                     protocol: "TCP".into(),
                                     pid,
-                                    process_name: pid_info.to_string(),
-                                    address: addr.to_string(),
+                                    process_name: parts.first().unwrap_or(&"").to_string(),
+                                    address: name.to_string(),
                                 });
+                            }
+                        }
+                    }
+                } else {
+                    // ss format: State Recv-Q Send-Q Local Address:Port Peer Address:Port Process
+                    if parts.len() >= 5 {
+                        if let Some(addr) = parts.get(3) {
+                            if let Some(port_str) = addr.rsplit(':').next() {
+                                if let Ok(port) = port_str.parse::<u16>() {
+                                    let pid_info = parts.get(5).unwrap_or(&"");
+                                    let pid = extract_pid_unix(pid_info);
+                                    ports.push(ListeningPort {
+                                        port,
+                                        protocol: "TCP".into(),
+                                        pid,
+                                        process_name: pid_info.to_string(),
+                                        address: addr.to_string(),
+                                    });
+                                }
                             }
                         }
                     }
