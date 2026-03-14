@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { listen } from '@tauri-apps/api/event';
 import { cmd } from '../lib/commands';
@@ -89,8 +89,22 @@ export function OllamaStatus({ provider }: OllamaStatusProps) {
   const { t } = useTranslation();
   const [status, setStatus] = useState<OllamaConnectionStatus>('offline');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [showHint, setShowHint] = useState(false);
+  const hintRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => { registerGameComponent('game-status-orb'); }, []);
+
+  // Close hint on outside click
+  useEffect(() => {
+    if (!showHint) return;
+    const handler = (e: MouseEvent) => {
+      if (hintRef.current && !hintRef.current.contains(e.target as globalThis.Node)) {
+        setShowHint(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [showHint]);
 
   useEffect(() => {
     if (provider !== 'ollama') return;
@@ -125,35 +139,59 @@ export function OllamaStatus({ provider }: OllamaStatusProps) {
   };
 
   return (
-    <button
-      type="button"
-      onClick={isClickable ? handleRetry : undefined}
-      disabled={!isClickable}
-      aria-label={`${t('ollama.status')}: ${label}${isClickable ? `. ${t('ollama.clickRetry')}` : ''}`}
-      className={`
-        inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border
-        bg-bg-secondary border-border
-        text-xs select-none transition-colors
-        ${isClickable ? 'cursor-pointer hover:border-[#3A3A3A]' : 'cursor-default'}
-      `}
-      title={errorMsg ?? label}
-    >
-      {config.animate ? (
-        <game-status-orb
-          style={{ width: '10px', height: '10px', flexShrink: 0 }}
-          aria-hidden="true"
-          ref={(el: HTMLElement | null) => {
-            if (el && 'health' in el) (el as HTMLElement & { health: number }).health = 1.0;
-          }}
-        />
-      ) : (
-        <span
-          className={`w-2 h-2 rounded-full flex-shrink-0 ${config.dotClass}`}
-        />
+    <div className="relative inline-flex items-center gap-1" ref={hintRef}>
+      <button
+        type="button"
+        onClick={isClickable ? handleRetry : undefined}
+        disabled={!isClickable}
+        aria-label={`${t('ollama.status')}: ${label}${isClickable ? `. ${t('ollama.clickRetry')}` : ''}`}
+        className={`
+          inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border
+          bg-bg-secondary border-border
+          text-xs select-none transition-colors
+          ${isClickable ? 'cursor-pointer hover:border-[#3A3A3A]' : 'cursor-default'}
+        `}
+        title={errorMsg ?? label}
+      >
+        {config.animate ? (
+          <game-status-orb
+            style={{ width: '10px', height: '10px', flexShrink: 0 }}
+            aria-hidden="true"
+            ref={(el: HTMLElement | null) => {
+              if (el && 'health' in el) (el as HTMLElement & { health: number }).health = 1.0;
+            }}
+          />
+        ) : (
+          <span
+            className={`w-2 h-2 rounded-full flex-shrink-0 ${config.dotClass}`}
+          />
+        )}
+        <span className={config.textClass}>
+          {label}
+        </span>
+      </button>
+      {(status === 'offline' || status === 'error') && (
+        <button
+          type="button"
+          onClick={() => setShowHint(!showHint)}
+          className="w-4 h-4 rounded-full bg-bg-tertiary text-text-muted text-[10px] flex items-center justify-center hover:text-text-secondary transition-colors"
+          aria-label={t('ollama.setupHelp')}
+        >
+          ?
+        </button>
       )}
-      <span className={config.textClass}>
-        {label}
-      </span>
-    </button>
+      {showHint && (
+        <div className="absolute top-full mt-2 left-0 w-64 bg-bg-secondary border border-border rounded-lg p-3 shadow-lg z-50">
+          <p className="text-[11px] text-text-secondary mb-2">
+            {t('ollama.hintFreeLocal')}
+          </p>
+          <div className="space-y-1.5 text-[10px] text-text-muted">
+            <p>1. {t('ollama.hintInstall')}</p>
+            <p>2. {t('ollama.hintServe')}</p>
+            <p>3. {t('ollama.hintRetry')}</p>
+          </div>
+        </div>
+      )}
+    </div>
   );
 }

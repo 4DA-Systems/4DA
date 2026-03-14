@@ -1,4 +1,4 @@
-// Copyright (c) 2025-2026 4DA Systems. All rights reserved.
+// Copyright (c) 2025-2026 4DA Systems Pty Ltd (ACN 696 078 841). All rights reserved.
 // Licensed under the Functional Source License 1.1 (FSL-1.1-Apache-2.0). See LICENSE file.
 
 use tauri::{Emitter, Listener, Manager};
@@ -1466,9 +1466,9 @@ pub fn run() {
                 // Disable monitoring to stop scheduler
                 let state = get_monitoring_state();
                 state.set_enabled(false);
-                // Clean up temp extraction directory
-                if let Ok(data_dir) = std::env::var("APPDATA") {
-                    let temp_dir = std::path::PathBuf::from(data_dir).join("4da").join("temp");
+                // Clean up temp extraction directory (cross-platform)
+                if let Some(data_dir) = dirs::data_local_dir() {
+                    let temp_dir = data_dir.join("4da").join("temp");
                     if temp_dir.exists() {
                         let _ = std::fs::remove_dir_all(&temp_dir);
                         info!(target: "4da::shutdown", "Cleaned up temp directory");
