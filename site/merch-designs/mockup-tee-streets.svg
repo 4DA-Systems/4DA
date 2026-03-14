@@ -15,9 +15,10 @@
 
   <!-- DESIGN: STREETS Wordmark -->
   <g transform="translate(10,185) scale(0.40)">
-    <text x="300" y="110" text-anchor="middle" font-family="Inter, -apple-system, sans-serif" font-size="96" font-weight="600" letter-spacing="12" fill="#FFFFFF">STREETS</text>
+    <text x="300" y="80" text-anchor="middle" font-family="'JetBrains Mono', monospace" font-size="14" letter-spacing="8" fill="#D4AF37" opacity="0.7">4DA</text>
+    <text x="300" y="110" text-anchor="middle" font-family="'Arial Black', 'Helvetica Neue', Arial, sans-serif" font-size="96" font-weight="900" letter-spacing="12" fill="#FFFFFF">STREETS</text>
     <text x="300" y="150" text-anchor="middle" font-family="'JetBrains Mono', monospace" font-size="13" letter-spacing="5" fill="#F97316">THE DEVELOPER INCOME PLAYBOOK</text>
-    <line x1="100" y1="165" x2="500" y2="165" stroke="#2A2A2A" stroke-width="1"/>
-    <text x="300" y="185" text-anchor="middle" font-family="'JetBrains Mono', monospace" font-size="10" letter-spacing="3" fill="#666666">BY 4DA</text>
+    <rect x="70" y="125" width="460" height="3" fill="#D4AF37" opacity="0.8"/>
+    <text x="300" y="185" text-anchor="middle" font-family="'JetBrains Mono', monospace" font-size="10" letter-spacing="3" fill="#666666" opacity="0.4">EST. 2026</text>
   </g>
 </svg>
