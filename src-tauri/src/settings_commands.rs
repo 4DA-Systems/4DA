@@ -212,10 +212,16 @@ pub async fn import_env_key(provider: String) -> Result<String> {
 /// The key is consumed server-side — on success it's stored in the keychain.
 /// Never returned to the frontend.
 #[tauri::command]
-pub async fn validate_api_key(provider: String, key: String) -> Result<serde_json::Value> {
-    validate_input_length(&provider, "provider", 20)?;
+pub async fn validate_api_key(
+    provider: String,
+    key: String,
+    base_url: Option<String>,
+) -> Result<serde_json::Value> {
+    validate_input_length(&provider, "provider", 30)?;
     validate_input_length(&key, "api_key", 500)?;
-    let result = crate::settings::validation::validate_and_store_key(&provider, &key).await?;
+    let result =
+        crate::settings::validation::validate_and_store_key(&provider, &key, base_url.as_deref())
+            .await?;
     Ok(serde_json::to_value(result).unwrap_or_default())
 }
 

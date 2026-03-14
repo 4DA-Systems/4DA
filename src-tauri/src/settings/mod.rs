@@ -30,11 +30,11 @@ use zeroize::Zeroize;
 /// LLM Provider configuration
 #[derive(Clone, Serialize, Deserialize)]
 pub struct LLMProvider {
-    /// Provider type: "anthropic", "openai", "ollama"
+    /// Provider type: "anthropic", "openai", "ollama", "openai-compatible"
     pub provider: String,
     /// API key for the selected provider (empty for Ollama)
     pub api_key: String,
-    /// Model to use (e.g., "claude-3-haiku-20240307", "gpt-4o-mini")
+    /// Model to use (e.g., "claude-haiku-4-5-20251001", "gpt-4o-mini")
     pub model: String,
     /// Base URL (for Ollama or custom endpoints)
     pub base_url: Option<String>,
@@ -1232,7 +1232,7 @@ mod tests {
                 "llm": {
                     "provider": "anthropic",
                     "api_key": "sk-test-key",
-                    "model": "claude-3-haiku-20240307",
+                    "model": "claude-haiku-4-5-20251001",
                     "base_url": null,
                     "openai_api_key": ""
                 },
@@ -1429,7 +1429,7 @@ mod tests {
             .set_llm_provider(LLMProvider {
                 provider: "anthropic".to_string(),
                 api_key: "test-key-123".to_string(),
-                model: "claude-3-haiku-20240307".to_string(),
+                model: "claude-haiku-4-5-20251001".to_string(),
                 base_url: None,
                 openai_api_key: String::new(),
             })

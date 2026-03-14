@@ -137,7 +137,7 @@ mod tests {
             let provider = LLMProvider {
                 provider: "anthropic".to_string(),
                 api_key: String::new(),
-                model: "claude-3-haiku-20240307".to_string(),
+                model: "claude-haiku-4-5-20251001".to_string(),
                 base_url: None,
                 openai_api_key: String::new(),
             };

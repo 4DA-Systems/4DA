@@ -6,7 +6,7 @@ import { translateError } from '../utils/error-messages';
 const defaultSettingsForm: SettingsForm = {
   provider: 'anthropic',
   apiKey: '',
-  model: 'claude-3-haiku-20240307',
+  model: 'claude-haiku-4-5-20251001',
   baseUrl: '',
   rerankEnabled: false,
   maxItems: 15,
@@ -50,7 +50,7 @@ export const createSettingsSlice: StateCreator<AppStore, [], [], SettingsSlice> 
         settingsForm: {
           ...state.settingsForm,
           provider: s.llm.provider !== 'none' ? s.llm.provider : 'anthropic',
-          model: s.llm.model || 'claude-3-haiku-20240307',
+          model: s.llm.model || 'claude-haiku-4-5-20251001',
           baseUrl: s.llm.base_url || '',
           rerankEnabled: s.rerank.enabled,
           maxItems: s.rerank.max_items_per_batch,
