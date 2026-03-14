@@ -201,10 +201,24 @@ pub(crate) async fn stream_openai<F>(
 where
     F: Fn(&str) + Send + 'static,
 {
-    let url = provider
-        .base_url
-        .as_deref()
-        .unwrap_or("https://api.openai.com/v1/chat/completions");
+    let url = if provider.provider == "openai-compatible" {
+        let base = provider
+            .base_url
+            .as_deref()
+            .unwrap_or("https://api.openai.com/v1");
+        let base = base.trim_end_matches('/');
+        if base.ends_with("/chat/completions") {
+            base.to_string()
+        } else {
+            format!("{}/chat/completions", base)
+        }
+    } else {
+        provider
+            .base_url
+            .as_deref()
+            .unwrap_or("https://api.openai.com/v1/chat/completions")
+            .to_string()
+    };
 
     let mut all_messages = vec![serde_json::json!({
         "role": "system",

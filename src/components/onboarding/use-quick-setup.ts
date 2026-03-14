@@ -28,7 +28,7 @@ export function useQuickSetup({ onComplete }: UseQuickSetupProps) {
 
   // AI Provider state
   const [ollamaStatus, setOllamaStatus] = useState<OllamaStatus | null>(null);
-  const [provider, setProvider] = useState<'anthropic' | 'openai' | 'ollama'>('ollama');
+  const [provider, setProvider] = useState<'anthropic' | 'openai' | 'ollama' | 'openai-compatible'>('ollama');
   const [apiKey, setApiKey] = useState('');
   const [pullingModels, setPullingModels] = useState(false);
   const [pullProgress, setPullProgress] = useState<Record<string, PullProgress>>({});
@@ -238,7 +238,7 @@ export function useQuickSetup({ onComplete }: UseQuickSetupProps) {
     }
   };
 
-  const handleProviderChange = (p: 'anthropic' | 'openai' | 'ollama') => {
+  const handleProviderChange = (p: 'anthropic' | 'openai' | 'ollama' | 'openai-compatible') => {
     setProvider(p);
     setAiConfigured(p === 'ollama' && !!ollamaStatus?.running && !!ollamaStatus.has_embedding_model && !!ollamaStatus.has_llm_model);
     if (p !== 'ollama') {
@@ -259,6 +259,8 @@ export function useQuickSetup({ onComplete }: UseQuickSetupProps) {
       valid = key.startsWith('sk-ant-') && key.length > 20;
     } else if (provider === 'openai') {
       valid = key.startsWith('sk-') && key.length > 20;
+    } else if (provider === 'openai-compatible') {
+      valid = key.trim().length > 10; // Unknown format — just check non-empty
     } else {
       valid = key.trim().length > 10;
     }
@@ -278,8 +280,14 @@ export function useQuickSetup({ onComplete }: UseQuickSetupProps) {
       } else {
         await cmd('set_llm_provider', noProvider);
       }
+    } else if (provider === 'openai-compatible' && apiKey.trim()) {
+      // OpenAI-compatible: save key now, user configures base_url + model in Settings
+      await cmd('set_llm_provider', {
+        provider: 'openai-compatible', apiKey, model: '',
+        baseUrl: null, openaiApiKey: null,
+      });
     } else if (apiKey.trim()) {
-      const model = provider === 'anthropic' ? 'claude-3-haiku-20240307' : 'gpt-4o-mini';
+      const model = provider === 'anthropic' ? 'claude-haiku-4-5-20251001' : 'gpt-4o-mini';
       await cmd('set_llm_provider', {
         provider, apiKey, model, baseUrl: null,
         openaiApiKey: provider === 'openai' ? apiKey : null,

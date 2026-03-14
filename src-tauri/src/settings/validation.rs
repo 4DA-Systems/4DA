@@ -64,6 +64,7 @@ pub fn validate_key_format(provider: &str, key: &str) -> FormatResult {
             }
             FormatResult::Valid
         }
+        "openai-compatible" => FormatResult::PossiblyValid, // Skip format check — key formats vary
         _ => FormatResult::PossiblyValid,
     }
 }
@@ -75,7 +76,11 @@ pub fn validate_key_format(provider: &str, key: &str) -> FormatResult {
 /// 2. Lightweight API call to verify the key works
 ///
 /// On success, stores the key in the keychain and updates in-memory settings.
-pub async fn validate_and_store_key(provider: &str, key: &str) -> Result<KeyValidationResult> {
+pub async fn validate_and_store_key(
+    provider: &str,
+    key: &str,
+    base_url: Option<&str>,
+) -> Result<KeyValidationResult> {
     // Step 1: Format check
     let format = validate_key_format(provider, key);
     let format_ok = matches!(format, FormatResult::Valid | FormatResult::PossiblyValid);
@@ -99,6 +104,9 @@ pub async fn validate_and_store_key(provider: &str, key: &str) -> Result<KeyVali
     let (connection_ok, error, model_access) = match provider {
         "anthropic" => test_anthropic_key(&client, key).await,
         "openai" => test_openai_key(&client, key).await,
+        "openai-compatible" => {
+            test_openai_compatible_key(&client, key, base_url.unwrap_or("")).await
+        }
         _ => (true, None, vec![]), // Unknown provider — skip connection test
     };
 
@@ -150,7 +158,7 @@ async fn test_anthropic_key(
     key: &str,
 ) -> (bool, Option<String>, Vec<String>) {
     let body = serde_json::json!({
-        "model": "claude-3-haiku-20240307",
+        "model": "claude-haiku-4-5-20251001",
         "max_tokens": 1,
         "messages": [{"role": "user", "content": "hi"}]
     });
@@ -171,7 +179,7 @@ async fn test_anthropic_key(
                     true,
                     None,
                     vec![
-                        "claude-3-haiku-20240307".to_string(),
+                        "claude-haiku-4-5-20251001".to_string(),
                         "claude-sonnet-4-20250514".to_string(),
                         "claude-opus-4-20250514".to_string(),
                     ],
@@ -188,7 +196,7 @@ async fn test_anthropic_key(
                 (
                     true,
                     Some(format!("API returned status {} — key may be valid", status)),
-                    vec!["claude-3-haiku-20240307".to_string()],
+                    vec!["claude-haiku-4-5-20251001".to_string()],
                 )
             }
         }
@@ -249,6 +257,76 @@ async fn test_openai_key(
                 (false, Some("Connection timed out".to_string()), vec![])
             } else {
                 (false, Some(format!("Connection failed: {}", e)), vec![])
+            }
+        }
+    }
+}
+
+/// Test an OpenAI-compatible API key by making a minimal chat completion request.
+/// We skip format validation since key formats vary across providers.
+async fn test_openai_compatible_key(
+    client: &reqwest::Client,
+    key: &str,
+    base_url: &str,
+) -> (bool, Option<String>, Vec<String>) {
+    if base_url.is_empty() {
+        return (
+            false,
+            Some("Base URL is required for OpenAI-compatible providers".to_string()),
+            vec![],
+        );
+    }
+
+    let base = base_url.trim_end_matches('/');
+    let url = if base.ends_with("/chat/completions") {
+        base.to_string()
+    } else {
+        format!("{}/chat/completions", base)
+    };
+
+    let body = serde_json::json!({
+        "model": "test",
+        "max_tokens": 1,
+        "messages": [{"role": "user", "content": "hi"}]
+    });
+
+    match client
+        .post(&url)
+        .header("Authorization", format!("Bearer {key}"))
+        .header("content-type", "application/json")
+        .json(&body)
+        .send()
+        .await
+    {
+        Ok(resp) => {
+            let status = resp.status();
+            if status.is_success() {
+                // Connection works and key is valid
+                (true, None, vec![])
+            } else if status.as_u16() == 401 || status.as_u16() == 403 {
+                (false, Some("Invalid API key".to_string()), vec![])
+            } else {
+                // Non-auth errors (model not found, rate limit, etc.) — key is probably valid
+                warn!(
+                    target: "4da::validation",
+                    status = status.as_u16(),
+                    "OpenAI-compatible API returned non-200 but key may be valid"
+                );
+                (
+                    true,
+                    Some(format!(
+                        "API returned status {} — key appears valid",
+                        status
+                    )),
+                    vec![],
+                )
+            }
+        }
+        Err(e) => {
+            if e.is_timeout() {
+                (false, Some("Connection timed out".to_string()), vec![])
+            } else {
+                (false, Some(format!("Endpoint unreachable: {}", e)), vec![])
             }
         }
     }

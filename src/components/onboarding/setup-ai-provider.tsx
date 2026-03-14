@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { cmd } from '../../lib/commands';
 import type { OllamaStatus, PullProgress } from './types';
 
-type ProviderType = 'anthropic' | 'openai' | 'ollama';
+type ProviderType = 'anthropic' | 'openai' | 'ollama' | 'openai-compatible';
 
 interface EnvDetection {
   has_anthropic_env: boolean;
@@ -13,6 +13,13 @@ interface EnvDetection {
   openai_env_preview: string;
   ollama_running: boolean;
   ollama_url: string | null;
+}
+
+interface LocalServer {
+  name: string;
+  base_url: string;
+  model_count: number;
+  running: boolean;
 }
 
 interface SetupAIProviderProps {
@@ -37,9 +44,11 @@ export function SetupAIProvider({
   const { t } = useTranslation();
   const [envDetection, setEnvDetection] = useState<EnvDetection | null>(null);
   const [importing, setImporting] = useState(false);
+  const [localServers, setLocalServers] = useState<LocalServer[]>([]);
 
   useEffect(() => {
     cmd('detect_environment').then(setEnvDetection).catch(() => {});
+    cmd('detect_local_servers').then((r) => setLocalServers(r.servers)).catch(() => {});
   }, []);
 
   const handleImportEnvKey = async (envProvider: 'anthropic' | 'openai') => {
@@ -55,12 +64,14 @@ export function SetupAIProvider({
     }
   };
 
+  const ollamaReady = ollamaStatus?.running && ollamaStatus.has_embedding_model && ollamaStatus.has_llm_model;
+
   return (
     <div className="mt-2 p-4 bg-bg-secondary rounded-lg border border-border space-y-3">
       {/* Environment key detection banner */}
       {envDetection && (envDetection.has_anthropic_env || envDetection.has_openai_env) && (
         <div className="p-3 bg-blue-900/20 border border-blue-500/30 rounded-lg space-y-2">
-          <p className="text-sm text-blue-300 font-medium">API keys detected in your environment</p>
+          <p className="text-sm text-blue-300 font-medium">{t('onboarding.setupAi.envKeysDetected')}</p>
           {envDetection.has_anthropic_env && (
             <div className="flex items-center justify-between">
               <span className="text-xs text-text-secondary font-mono">
@@ -71,7 +82,7 @@ export function SetupAIProvider({
                 disabled={importing}
                 className="text-xs px-3 py-1 bg-blue-500/20 text-blue-300 rounded hover:bg-blue-500/30 transition-colors disabled:opacity-50"
               >
-                {importing ? 'Importing...' : 'Use This Key'}
+                {importing ? 'Importing...' : t('onboarding.setupAi.useThisKey')}
               </button>
             </div>
           )}
@@ -85,15 +96,15 @@ export function SetupAIProvider({
                 disabled={importing}
                 className="text-xs px-3 py-1 bg-blue-500/20 text-blue-300 rounded hover:bg-blue-500/30 transition-colors disabled:opacity-50"
               >
-                {importing ? 'Importing...' : 'Use This Key'}
+                {importing ? 'Importing...' : t('onboarding.setupAi.useThisKey')}
               </button>
             </div>
           )}
         </div>
       )}
 
-      {/* Ollama detected and ready */}
-      {ollamaStatus?.running && ollamaStatus.has_embedding_model && ollamaStatus.has_llm_model && provider === 'ollama' && (
+      {/* Ollama fully ready */}
+      {ollamaReady && provider === 'ollama' && (
         <div className="p-3 bg-green-900/20 border border-green-500/30 rounded-lg text-sm text-green-300 flex items-center gap-2">
           <span className="text-green-500">&#x2713;</span>
           {t('onboarding.setupAi.localAiReady')}
@@ -131,28 +142,75 @@ export function SetupAIProvider({
         </div>
       )}
 
-      {/* Provider selector (shown when Ollama not ready) */}
-      {!(ollamaStatus?.running && ollamaStatus.has_embedding_model && ollamaStatus.has_llm_model) && !pullingModels && (
+      {/* Provider selector */}
+      {!ollamaReady && !pullingModels && (
         <>
-          <div className="grid grid-cols-3 gap-2">
-            {(['ollama', 'anthropic', 'openai'] as const).map((p) => (
+          {/* LOCAL section — recommended */}
+          <div>
+            <div className="flex items-center gap-2 mb-2">
+              <span className="text-xs font-medium text-text-secondary uppercase tracking-wider">{t('onboarding.setupAi.localLabel')}</span>
+              <span className="text-[9px] px-1.5 py-0.5 bg-green-500/20 text-green-400 rounded font-medium">{t('onboarding.setupAi.recommended')}</span>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
               <button
-                key={p}
-                onClick={() => onProviderChange(p)}
-                className={`p-3 rounded-lg text-center transition-all ${
-                  provider === p
-                    ? 'bg-orange-500/20 border-2 border-orange-500'
+                onClick={() => onProviderChange('ollama')}
+                className={`p-3 rounded-lg text-left transition-all ${
+                  provider === 'ollama'
+                    ? 'bg-green-500/15 border-2 border-green-500/50'
                     : 'bg-bg-tertiary border-2 border-transparent hover:border-border'
                 }`}
               >
-                <div className="text-sm font-medium text-white">
-                  {p === 'ollama' ? 'Ollama' : p === 'anthropic' ? 'Anthropic' : 'OpenAI'}
-                </div>
-                <div className="text-xs text-text-muted mt-1">
-                  {p === 'ollama' ? t('onboarding.setupAi.local') : p === 'anthropic' ? 'Claude' : 'GPT-4o'}
-                </div>
+                <div className="text-sm font-medium text-white">Ollama</div>
+                <div className="text-[10px] text-text-muted mt-0.5">{t('onboarding.setupAi.ollamaDesc')}</div>
               </button>
-            ))}
+              {/* Auto-detected local servers */}
+              {localServers.filter(s => s.name !== 'Ollama').map((server) => (
+                <button
+                  key={server.name}
+                  onClick={() => {
+                    onProviderChange('openai-compatible');
+                    // Signal the parent that base_url should be set
+                    onApiKeyChange('');
+                  }}
+                  className="p-3 rounded-lg text-left bg-bg-tertiary border-2 border-transparent hover:border-border transition-all"
+                >
+                  <div className="text-sm font-medium text-white flex items-center gap-1.5">
+                    {server.name}
+                    <span className="w-1.5 h-1.5 rounded-full bg-green-500" />
+                  </div>
+                  <div className="text-[10px] text-text-muted mt-0.5">
+                    {server.model_count} {server.model_count === 1 ? 'model' : 'models'} &middot; {server.base_url}
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* CLOUD section */}
+          <div>
+            <div className="flex items-center gap-2 mb-2 mt-1">
+              <span className="text-xs font-medium text-text-secondary uppercase tracking-wider">{t('onboarding.setupAi.cloudLabel')}</span>
+            </div>
+            <div className="grid grid-cols-3 gap-2">
+              {(['anthropic', 'openai', 'openai-compatible'] as const).map((p) => (
+                <button
+                  key={p}
+                  onClick={() => onProviderChange(p)}
+                  className={`p-3 rounded-lg text-center transition-all ${
+                    provider === p
+                      ? 'bg-orange-500/20 border-2 border-orange-500'
+                      : 'bg-bg-tertiary border-2 border-transparent hover:border-border'
+                  }`}
+                >
+                  <div className="text-sm font-medium text-white">
+                    {p === 'anthropic' ? 'Anthropic' : p === 'openai' ? 'OpenAI' : t('onboarding.setupAi.otherLabel')}
+                  </div>
+                  <div className="text-[10px] text-text-muted mt-0.5">
+                    {p === 'anthropic' ? 'Claude' : p === 'openai' ? 'GPT' : t('onboarding.setupAi.otherDesc')}
+                  </div>
+                </button>
+              ))}
+            </div>
           </div>
 
           {/* API key input for cloud providers */}
@@ -183,12 +241,27 @@ export function SetupAIProvider({
             </div>
           )}
 
+          {/* OpenAI-compatible provider input */}
+          {provider === 'openai-compatible' && (
+            <div className="space-y-2">
+              <label className="text-xs text-text-muted">{t('onboarding.setupAi.otherProviderHint')}</label>
+              <input
+                type="password"
+                value={apiKey}
+                onChange={(e) => onApiKeyChange(e.target.value)}
+                placeholder={t('settings.llm.apiKey')}
+                className="w-full px-4 py-3 bg-bg-tertiary border border-border rounded-lg text-white placeholder-gray-600 focus:border-orange-500 focus:outline-none font-mono text-sm"
+              />
+              <p className="text-[10px] text-text-muted">{t('onboarding.setupAi.configureInSettings')}</p>
+            </div>
+          )}
+
           {/* Ollama not running hint */}
           {provider === 'ollama' && !ollamaStatus?.running && (
             <div className="text-text-secondary text-sm p-3 bg-bg-tertiary rounded-lg border border-border">
               <p className="mb-1.5">
                 {t('onboarding.setupAi.ollamaNotDetected')}{' '}
-                <a href="https://ollama.ai" target="_blank" rel="noopener noreferrer" className="text-orange-500 hover:underline">
+                <a href="https://ollama.com" target="_blank" rel="noopener noreferrer" className="text-orange-500 hover:underline">
                   {t('onboarding.apiKeys.installOllama')}
                 </a>
                 {' '}{t('onboarding.setupAi.orChooseCloud')}

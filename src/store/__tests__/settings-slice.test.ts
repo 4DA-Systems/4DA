@@ -24,7 +24,7 @@ describe('settings-slice', () => {
       const form = useAppStore.getState().settingsForm;
       expect(form.provider).toBe('anthropic');
       expect(form.apiKey).toBe('');
-      expect(form.model).toBe('claude-3-haiku-20240307');
+      expect(form.model).toBe('claude-haiku-4-5-20251001');
       expect(form.baseUrl).toBe('');
       expect(form.rerankEnabled).toBe(false);
       expect(form.maxItems).toBe(15);

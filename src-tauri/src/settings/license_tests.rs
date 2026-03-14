@@ -131,7 +131,7 @@ mod tests {
         // Set non-default values across key subsystems
         original.llm.provider = "anthropic".to_string();
         original.llm.api_key = "sk-test-key".to_string();
-        original.llm.model = "claude-3-haiku-20240307".to_string();
+        original.llm.model = "claude-haiku-4-5-20251001".to_string();
         original.embedding_threshold = 0.42;
         original.monitoring.enabled = false;
         original.monitoring.interval_minutes = 30;
@@ -151,7 +151,7 @@ mod tests {
         // LLM provider
         assert_eq!(restored.llm.provider, "anthropic");
         assert_eq!(restored.llm.api_key, "sk-test-key");
-        assert_eq!(restored.llm.model, "claude-3-haiku-20240307");
+        assert_eq!(restored.llm.model, "claude-haiku-4-5-20251001");
 
         // Scoring threshold
         assert!((restored.embedding_threshold - 0.42).abs() < f32::EPSILON);

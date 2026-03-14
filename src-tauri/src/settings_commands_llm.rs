@@ -397,3 +397,123 @@ pub async fn pull_ollama_model(
         "model": model
     }))
 }
+
+/// List available models from a provider (dynamic discovery)
+#[tauri::command]
+pub async fn list_provider_models(
+    provider: String,
+    base_url: Option<String>,
+    api_key: Option<String>,
+) -> Result<serde_json::Value> {
+    let client = reqwest::Client::builder()
+        .connect_timeout(std::time::Duration::from_secs(5))
+        .timeout(std::time::Duration::from_secs(15))
+        .build()
+        .map_err(|e| format!("Failed to create HTTP client: {e}"))?;
+
+    match provider.as_str() {
+        "ollama" => {
+            // Ollama uses /api/tags
+            let url = base_url.unwrap_or_else(|| "http://localhost:11434".to_string());
+            let resp = client
+                .get(format!("{url}/api/tags"))
+                .send()
+                .await
+                .map_err(|e| format!("Cannot reach Ollama: {e}"))?;
+            let data: serde_json::Value = resp.json().await.unwrap_or_default();
+            let models: Vec<String> = data["models"]
+                .as_array()
+                .map(|arr| {
+                    arr.iter()
+                        .filter_map(|m| m["name"].as_str().map(|s| s.to_string()))
+                        .collect()
+                })
+                .unwrap_or_default();
+            Ok(serde_json::json!({ "models": models }))
+        }
+        "openai" | "openai-compatible" => {
+            // OpenAI-compatible /v1/models endpoint
+            let url = base_url.unwrap_or_else(|| "https://api.openai.com".to_string());
+            let key = api_key.unwrap_or_default();
+            let models_url = format!("{}/models", url.trim_end_matches('/'));
+            let resp = client
+                .get(&models_url)
+                .header("Authorization", format!("Bearer {key}"))
+                .send()
+                .await
+                .map_err(|e| format!("Cannot reach API: {e}"))?;
+            if !resp.status().is_success() {
+                return Ok(
+                    serde_json::json!({ "models": [], "error": format!("HTTP {}", resp.status()) }),
+                );
+            }
+            let data: serde_json::Value = resp.json().await.unwrap_or_default();
+            let mut models: Vec<String> = data["data"]
+                .as_array()
+                .map(|arr| {
+                    arr.iter()
+                        .filter_map(|m| m["id"].as_str().map(|s| s.to_string()))
+                        .collect()
+                })
+                .unwrap_or_default();
+            models.sort();
+            // Cap at 50 models to prevent UI overflow
+            models.truncate(50);
+            Ok(serde_json::json!({ "models": models }))
+        }
+        "anthropic" => {
+            // Anthropic has no model listing API — return curated list
+            Ok(serde_json::json!({
+                "models": [
+                    "claude-haiku-4-5-20251001",
+                    "claude-sonnet-4-6",
+                    "claude-opus-4-6"
+                ]
+            }))
+        }
+        _ => Ok(serde_json::json!({ "models": [] })),
+    }
+}
+
+/// Detect running local LLM servers by probing common ports
+#[tauri::command]
+pub async fn detect_local_servers() -> Result<serde_json::Value> {
+    let client = reqwest::Client::builder()
+        .connect_timeout(std::time::Duration::from_secs(2))
+        .timeout(std::time::Duration::from_secs(3))
+        .build()
+        .map_err(|e| format!("Failed to create HTTP client: {e}"))?;
+
+    let servers = [
+        ("Ollama", "http://localhost:11434", "/api/version"),
+        ("LM Studio", "http://localhost:1234", "/v1/models"),
+        ("llama.cpp", "http://localhost:8080", "/v1/models"),
+        ("Jan", "http://localhost:1337", "/v1/models"),
+    ];
+
+    let mut detected = Vec::new();
+
+    for (name, base_url, probe_path) in servers {
+        let probe_url = format!("{base_url}{probe_path}");
+        match client.get(&probe_url).send().await {
+            Ok(resp) if resp.status().is_success() => {
+                let data: serde_json::Value = resp.json().await.unwrap_or_default();
+                let model_count = if name == "Ollama" {
+                    data["models"].as_array().map(|a| a.len()).unwrap_or(0)
+                } else {
+                    data["data"].as_array().map(|a| a.len()).unwrap_or(0)
+                };
+                detected.push(serde_json::json!({
+                    "name": name,
+                    "base_url": base_url,
+                    "model_count": model_count,
+                    "running": true
+                }));
+                info!(target: "4da::llm", server = name, models = model_count, "Detected local LLM server");
+            }
+            _ => {} // Not running — skip silently
+        }
+    }
+
+    Ok(serde_json::json!({ "servers": detected }))
+}

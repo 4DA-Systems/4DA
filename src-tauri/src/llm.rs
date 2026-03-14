@@ -109,7 +109,7 @@ impl LLMClient {
     #[allow(dead_code)] // Future: settings validation
     pub fn is_configured(&self) -> bool {
         match self.provider.provider.as_str() {
-            "anthropic" | "openai" => !self.provider.api_key.is_empty(),
+            "anthropic" | "openai" | "openai-compatible" => !self.provider.api_key.is_empty(),
             "ollama" => true, // Ollama doesn't need an API key
             _ => false,
         }
@@ -138,7 +138,7 @@ impl LLMClient {
 
         let result = match self.provider.provider.as_str() {
             "anthropic" => self.complete_anthropic(system, messages.clone()).await,
-            "openai" => self.complete_openai(system, messages.clone()).await,
+            "openai" | "openai-compatible" => self.complete_openai(system, messages.clone()).await,
             "ollama" => self.complete_ollama(system, messages.clone()).await,
             _ => return Err(format!("Unknown provider: {}", self.provider.provider).into()),
         };
@@ -217,7 +217,7 @@ impl LLMClient {
         messages: Vec<Message>,
     ) -> Result<LLMResponse> {
         let fallback_base_url = "http://localhost:11434";
-        let fallback_model = "llama3";
+        let fallback_model = "llama3.2";
         let url = format!("{}/api/chat", fallback_base_url);
 
         let mut all_messages = vec![serde_json::json!({
@@ -354,13 +354,28 @@ impl LLMClient {
         })
     }
 
-    /// OpenAI API
+    /// OpenAI API (also used for openai-compatible providers)
     async fn complete_openai(&self, system: &str, messages: Vec<Message>) -> Result<LLMResponse> {
-        let url = self
-            .provider
-            .base_url
-            .as_deref()
-            .unwrap_or("https://api.openai.com/v1/chat/completions");
+        let url = if self.provider.provider == "openai-compatible" {
+            // OpenAI-compatible: base_url is the API base (e.g. https://api.groq.com/openai/v1)
+            let base = self
+                .provider
+                .base_url
+                .as_deref()
+                .unwrap_or("https://api.openai.com/v1");
+            let base = base.trim_end_matches('/');
+            if base.ends_with("/chat/completions") {
+                base.to_string()
+            } else {
+                format!("{}/chat/completions", base)
+            }
+        } else {
+            self.provider
+                .base_url
+                .as_deref()
+                .unwrap_or("https://api.openai.com/v1/chat/completions")
+                .to_string()
+        };
 
         let mut all_messages = vec![serde_json::json!({
             "role": "system",
@@ -550,7 +565,7 @@ impl LLMClient {
                 )
                 .await
             }
-            "openai" => {
+            "openai" | "openai-compatible" => {
                 crate::llm_stream::stream_openai(
                     &self.client,
                     &self.provider,
@@ -610,24 +625,26 @@ impl LLMClient {
     pub fn estimate_cost_cents(&self, input_tokens: u64, output_tokens: u64) -> u64 {
         match self.provider.provider.as_str() {
             "anthropic" => {
-                // Prices per 1M tokens (as of 2024)
+                // Prices per 1M tokens (as of 2026)
                 let (input_price, output_price) = match self.provider.model.as_str() {
                     m if m.contains("opus") => (15.0, 75.0),
                     m if m.contains("sonnet") => (3.0, 15.0),
-                    m if m.contains("haiku") => (0.25, 1.25),
+                    m if m.contains("haiku") => (0.80, 4.00),
                     _ => (3.0, 15.0), // Default to Sonnet pricing
                 };
                 let input_cost = (input_tokens as f64 / 1_000_000.0) * input_price * 100.0;
                 let output_cost = (output_tokens as f64 / 1_000_000.0) * output_price * 100.0;
                 (input_cost + output_cost) as u64
             }
+            "openai-compatible" => 0, // Unknown provider — can't estimate cost
             "openai" => {
-                // GPT-4o-mini pricing
+                // OpenAI pricing per 1M tokens (as of 2026)
                 let (input_price, output_price) = match self.provider.model.as_str() {
                     m if m.contains("gpt-4o-mini") => (0.15, 0.60),
                     m if m.contains("gpt-4o") => (2.5, 10.0),
-                    m if m.contains("gpt-4") => (30.0, 60.0),
-                    m if m.contains("gpt-3.5") => (0.5, 1.5),
+                    m if m.contains("gpt-4.1-nano") => (0.10, 0.40),
+                    m if m.contains("gpt-4.1-mini") => (0.40, 1.60),
+                    m if m.contains("gpt-4.1") => (2.0, 8.0),
                     _ => (0.15, 0.60), // Default to gpt-4o-mini
                 };
                 let input_cost = (input_tokens as f64 / 1_000_000.0) * input_price * 100.0;
@@ -690,7 +707,7 @@ mod tests {
         let provider = LLMProvider {
             provider: "anthropic".to_string(),
             api_key: "test".to_string(),
-            model: "claude-3-haiku-20240307".to_string(),
+            model: "claude-haiku-4-5-20251001".to_string(),
             base_url: None,
             openai_api_key: String::new(),
         };
@@ -698,9 +715,9 @@ mod tests {
 
         // 10k input, 1k output
         let cost = client.estimate_cost_cents(10_000, 1_000);
-        // Haiku: $0.25/1M input, $1.25/1M output
-        // 10k input = $0.0025, 1k output = $0.00125 = ~0.4 cents
-        assert!(cost < 1); // Should be less than 1 cent
+        // Haiku: $0.80/1M input, $4.00/1M output
+        // 10k input = $0.008, 1k output = $0.004 = ~1.2 cents
+        assert!(cost < 2); // Should be less than 2 cents
     }
 
     #[test]
@@ -727,7 +744,7 @@ mod tests {
         let provider = LLMProvider {
             provider: "anthropic".to_string(),
             api_key: String::new(),
-            model: "claude-3-haiku-20240307".to_string(),
+            model: "claude-haiku-4-5-20251001".to_string(),
             base_url: None,
             openai_api_key: String::new(),
         };
@@ -775,7 +792,7 @@ mod tests {
         let provider = LLMProvider {
             provider: "anthropic".to_string(),
             api_key: "sk-ant-test-key-12345".to_string(),
-            model: "claude-3-haiku-20240307".to_string(),
+            model: "claude-haiku-4-5-20251001".to_string(),
             base_url: None,
             openai_api_key: String::new(),
         };
@@ -825,7 +842,7 @@ mod tests {
         let provider = LLMProvider {
             provider: "anthropic".to_string(),
             api_key: "test".to_string(),
-            model: "claude-3-sonnet-20240229".to_string(),
+            model: "claude-sonnet-4-6".to_string(),
             base_url: None,
             openai_api_key: String::new(),
         };
