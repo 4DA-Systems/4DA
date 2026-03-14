@@ -89,7 +89,7 @@ function FeedEchoRow({ item }: { item: FeedEchoItem }) {
         className={`flex-shrink-0 px-2 py-0.5 text-[10px] rounded transition-all ${
           saved
             ? 'bg-[#22C55E]/15 text-[#22C55E] cursor-default'
-            : 'bg-[#1F1F1F] text-[#787878] hover:text-[#D4AF37] hover:bg-[#D4AF37]/10 opacity-0 group-hover:opacity-100'
+            : 'bg-[#1F1F1F] text-[#8A8A8A] hover:text-[#D4AF37] hover:bg-[#D4AF37]/10 opacity-0 group-hover:opacity-100'
         }`}
         aria-label={saved ? t('playbook.feedEchoSaved') : t('playbook.feedEchoSave')}
       >

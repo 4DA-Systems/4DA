@@ -30,16 +30,17 @@ pnpm run validate:sizes    # Check file size limits
 
 ```
 src/                    # React frontend (TypeScript)
-  components/           # UI components (38 files)
+  components/           # UI components (200+ files)
   types/                # Shared TypeScript types
 src-tauri/              # Rust backend
-  src/                  # Core logic (54 modules)
+  src/                  # Core logic (300+ modules)
     ace/                # Autonomous Context Engine (project scanner)
+    db/                 # SQLite + sqlite-vec database layer
     extractors/         # File format extractors (PDF, Office, etc.)
+    scoring/            # PASIFA scoring algorithm (multi-module)
+    settings/           # Settings management + keychain + validation
     sources/            # Content source adapters (HN, Reddit, RSS, GitHub)
-  src/db.rs             # SQLite + sqlite-vec database layer
   src/embeddings.rs     # Local embedding via Ollama
-  src/relevance.rs      # PASIFA scoring algorithm
 data/                   # Runtime data (gitignored)
   settings.json         # User config (use settings.example.json as template)
   4da.db                # SQLite database
@@ -74,7 +75,7 @@ mcp-4da-server/         # MCP server exposing 4DA tools (Claude Code)
 /* Background */
 --bg-primary: #0A0A0A;    --bg-secondary: #141414;   --bg-tertiary: #1F1F1F;
 /* Text */
---text-primary: #FFFFFF;   --text-secondary: #A0A0A0; --text-muted: #787878;
+--text-primary: #FFFFFF;   --text-secondary: #A0A0A0; --text-muted: #8A8A8A;
 /* Accent */
 --accent-primary: #FFFFFF; --accent-gold: #D4AF37;    --border: #2A2A2A;
 /* Status */
@@ -110,5 +111,5 @@ Before modifying architecture or invariants, read the relevant `.ai/` file:
 
 - Agent definitions: `.claude/agents/` (4DA-specific agents for source debugging, trend analysis, etc.)
 - Slash commands: `.claude/commands/` (project-specific commands)
-- MCP servers: memory (persistent decisions/learnings) and 4da (30 intelligence tools)
+- MCP servers: memory (persistent decisions/learnings) and 4da (31 intelligence tools)
 - Hooks: wisdom gates (PreToolUse), consequence processing (UserPromptSubmit), session capture (Stop), prompt analyzer

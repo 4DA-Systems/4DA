@@ -17,7 +17,7 @@ export const PlaybookSidebar = memo(function PlaybookSidebar({
   playbookModules,
   playbookProgress,
   activeModuleId,
-  streetsTier,
+  streetsTier: _streetsTier,
   showTemplates,
   onModuleClick,
   onShowTemplates,
@@ -103,29 +103,11 @@ export const PlaybookSidebar = memo(function PlaybookSidebar({
         </div>
       </button>
 
-      {/* Upgrade nudge */}
-      <div className="mt-4 pt-4 border-t border-border space-y-3">
+      {/* Free tier notice */}
+      <div className="mt-4 pt-4 border-t border-border">
         <p className="text-[10px] text-[#666] text-center">
           {t('streets:streets.freeForever')}
         </p>
-        {streetsTier === 'playbook' && (
-          <div className="bg-[#D4AF37]/5 border border-[#D4AF37]/20 rounded-lg p-3">
-            <p className="text-[10px] font-medium text-[#D4AF37] mb-1.5">
-              {t('streets:streets.wantCoaching')}
-            </p>
-            <p className="text-[10px] text-[#666] mb-2 leading-relaxed">
-              {t('streets:streets.coachingDescription')}
-            </p>
-            <a
-              href="https://4da.ai/pricing"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="block text-center px-3 py-1.5 text-[10px] font-medium text-black bg-[#D4AF37] rounded hover:bg-[#C4A030] transition-colors"
-            >
-              {t('streets:streets.upgrade')}
-            </a>
-          </div>
-        )}
       </div>
     </aside>
   );

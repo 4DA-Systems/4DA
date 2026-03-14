@@ -1,6 +1,6 @@
 # License
 
-Copyright (c) 2025-2026 4DA Systems. All rights reserved.
+Copyright (c) 2025-2026 4DA Systems Pty Ltd (ACN 696 078 841). All rights reserved.
 
 ## Personal Use License
 

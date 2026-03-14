@@ -695,6 +695,11 @@
   "ollama.basicMode": "Basic mode",
   "ollama.status": "Ollama status",
   "ollama.clickRetry": "Click to retry",
+  "ollama.setupHelp": "Ollama setup help",
+  "ollama.hintFreeLocal": "Ollama provides free, local AI processing — no API key or account needed.",
+  "ollama.hintInstall": "Install from ollama.com",
+  "ollama.hintServe": "Run: ollama serve",
+  "ollama.hintRetry": "Click the status indicator to reconnect",
 
   "splash.starting": "Starting up...",
   "splash.database": "Initializing database...",

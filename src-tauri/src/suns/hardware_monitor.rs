@@ -36,7 +36,7 @@ pub fn execute() -> SunResult {
         }
     }
 
-    #[cfg(not(target_os = "windows"))]
+    #[cfg(target_os = "linux")]
     {
         if let Ok(output) = run_cmd("nproc") {
             crate::sovereign_profile::store_facts_from_execution("nproc", &output, "sun:hardware");
@@ -45,6 +45,26 @@ pub fn execute() -> SunResult {
         if let Ok(output) = run_cmd("free -h") {
             crate::sovereign_profile::store_facts_from_execution(
                 "free -h",
+                &output,
+                "sun:hardware",
+            );
+            facts_found += 1;
+        }
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        if let Ok(output) = run_cmd("sysctl -n hw.ncpu") {
+            crate::sovereign_profile::store_facts_from_execution(
+                "sysctl -n hw.ncpu",
+                &output,
+                "sun:hardware",
+            );
+            facts_found += 1;
+        }
+        if let Ok(output) = run_cmd("sysctl -n hw.memsize") {
+            crate::sovereign_profile::store_facts_from_execution(
+                "sysctl -n hw.memsize",
                 &output,
                 "sun:hardware",
             );

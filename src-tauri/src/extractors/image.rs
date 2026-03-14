@@ -49,7 +49,7 @@ fn get_ocr_engine() -> crate::error::Result<&'static OcrEngine> {
             "OCR models not found. Please download:\n\
              - https://ocrs-models.s3-accelerate.amazonaws.com/text-detection.rten\n\
              - https://ocrs-models.s3-accelerate.amazonaws.com/text-recognition.rten\n\
-             Place them in src-tauri/models/ or %LOCALAPPDATA%\\4da\\models\\"
+             Place them in src-tauri/models/ or your local data directory under 4da/models/"
                 .to_string()
         })?;
 

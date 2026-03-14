@@ -39,7 +39,7 @@ export function StreetsContextCard({ suggestion, onOpen, onDismiss }: Props) {
             style={{ width: `${Math.round(suggestion.match_strength * 100)}%` }}
           />
         </div>
-        <span className="text-[10px] text-[#787878]">
+        <span className="text-[10px] text-[#8A8A8A]">
           {t('briefing.streetsMatchStrength', { pct: Math.round(suggestion.match_strength * 100) })}
         </span>
       </div>
@@ -53,7 +53,7 @@ export function StreetsContextCard({ suggestion, onOpen, onDismiss }: Props) {
         </button>
         <button
           onClick={() => onDismiss(suggestion.module_id)}
-          className="text-xs text-[#787878] hover:text-[#A0A0A0] transition-colors"
+          className="text-xs text-[#8A8A8A] hover:text-[#A0A0A0] transition-colors"
         >
           {t('briefing.streetsNotNow')}
         </button>

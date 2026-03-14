@@ -2,7 +2,7 @@
 name = "fourda"
 version = "1.0.0"
 description = "4DA - All signal. No feed."
-authors = ["4DA Systems"]
+authors = ["4DA Systems Pty Ltd"]
 license = "FSL-1.1-Apache-2.0"
 edition = "2021"
 default-run = "fourda"

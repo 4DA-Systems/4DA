@@ -220,10 +220,10 @@ describe('PlaybookView', () => {
     expect(screen.getByTestId('sovereign-profile')).toBeInTheDocument();
   });
 
-  it('shows coaching upgrade nudge for playbook tier', () => {
+  it('shows free forever notice for playbook tier', () => {
     setStore({ streetsTier: 'playbook' });
     render(<PlaybookView />);
-    expect(screen.getByText('streets:streets.wantCoaching')).toBeInTheDocument();
+    expect(screen.getByText('streets:streets.freeForever')).toBeInTheDocument();
   });
 
   // -------------------------------------------------------------------------
