@@ -92,7 +92,7 @@ pub async fn set_llm_provider(
     openai_api_key: Option<String>,
 ) -> Result<()> {
     // Validate provider
-    let valid_providers = ["anthropic", "openai", "ollama", "none"];
+    let valid_providers = ["anthropic", "openai", "openai-compatible", "ollama", "none"];
     if !valid_providers.contains(&provider.as_str()) {
         return Err(format!(
             "Invalid provider '{}'. Must be one of: {}",
