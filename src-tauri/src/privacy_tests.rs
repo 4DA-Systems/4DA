@@ -27,7 +27,7 @@ mod tests {
         s.llm = LLMProvider {
             provider: "anthropic".to_string(),
             api_key: FAKE_ANTHROPIC_KEY.to_string(),
-            model: "claude-3-haiku-20240307".to_string(),
+            model: "claude-haiku-4-5-20251001".to_string(),
             base_url: None,
             openai_api_key: FAKE_OPENAI_EMBED_KEY.to_string(),
         };

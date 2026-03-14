@@ -7,10 +7,21 @@ import type { OllamaStatus } from '../../hooks/use-settings';
 
 // Provider model options
 const providerModels: Record<string, string[]> = {
-  anthropic: ['claude-3-haiku-20240307', 'claude-3-sonnet-20240229', 'claude-3-opus-20240229'],
-  openai: ['gpt-4o-mini', 'gpt-4o', 'gpt-4-turbo', 'gpt-3.5-turbo'],
-  ollama: ['llama3', 'mistral', 'mixtral', 'phi3'],
+  anthropic: ['claude-haiku-4-5-20251001', 'claude-sonnet-4-6', 'claude-opus-4-6'],
+  openai: ['gpt-4.1-nano', 'gpt-4.1-mini', 'gpt-4.1', 'gpt-4o-mini', 'gpt-4o'],
+  ollama: ['llama3.2', 'gemma3', 'qwen2.5', 'deepseek-r1', 'mistral', 'phi4'],
 };
+
+// Popular OpenAI-compatible endpoints
+const popularEndpoints: { name: string; url: string }[] = [
+  { name: 'Groq', url: 'https://api.groq.com/openai/v1' },
+  { name: 'Together', url: 'https://api.together.xyz/v1' },
+  { name: 'DeepSeek', url: 'https://api.deepseek.com/v1' },
+  { name: 'Mistral', url: 'https://api.mistral.ai/v1' },
+  { name: 'OpenRouter', url: 'https://openrouter.ai/api/v1' },
+  { name: 'LM Studio', url: 'http://localhost:1234/v1' },
+  { name: 'llama.cpp', url: 'http://localhost:8080/v1' },
+];
 
 interface SettingsForm {
   provider: string;
@@ -66,7 +77,7 @@ export function AIProviderSection({
   }, []);
 
   // Debounced key validation
-  const validateKey = useCallback((provider: string, key: string) => {
+  const validateKey = useCallback((provider: string, key: string, baseUrl?: string) => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
     if (!key.trim() || key === '(imported from environment)') {
       setValidation({ status: 'idle', message: '', models: [] });
@@ -75,7 +86,11 @@ export function AIProviderSection({
     debounceRef.current = setTimeout(async () => {
       setValidation({ status: 'checking', message: 'Verifying...', models: [] });
       try {
-        const result = await cmd('validate_api_key', { provider, key });
+        const result = await cmd('validate_api_key', {
+          provider,
+          key,
+          baseUrl: baseUrl || null,
+        });
         if (result.valid) {
           setValidation({
             status: 'valid',
@@ -160,21 +175,29 @@ export function AIProviderSection({
                 const newProvider = e.target.value;
                 const defaultModel = newProvider === 'local'
                   ? 'all-MiniLM-L6-v2'
-                  : newProvider === 'ollama' && ollamaModels.length > 0
-                    ? ollamaModels[0]
-                    : providerModels[newProvider]?.[0] || '';
+                  : newProvider === 'openai-compatible'
+                    ? ''
+                    : newProvider === 'ollama' && ollamaModels.length > 0
+                      ? ollamaModels[0]
+                      : providerModels[newProvider]?.[0] || '';
                 setSettingsForm((f) => ({
                   ...f,
                   provider: newProvider,
                   model: defaultModel,
-                  baseUrl: newProvider === 'ollama' ? 'http://localhost:11434' : '',
+                  baseUrl: newProvider === 'ollama'
+                    ? 'http://localhost:11434'
+                    : newProvider === 'openai-compatible'
+                      ? ''
+                      : '',
                 }));
+                setValidation({ status: 'idle', message: '', models: [] });
               }}
               className="w-full px-4 py-3 bg-bg-secondary border border-border rounded-lg text-sm text-white focus:border-orange-500 focus:outline-none"
             >
               <option value="local">{t('settings.ai.builtInLocal')}</option>
               <option value="anthropic">{t('settings.ai.providerAnthropic')}</option>
               <option value="openai">{t('settings.ai.providerOpenAI')}</option>
+              <option value="openai-compatible">{t('settings.ai.providerOpenAICompatible')}</option>
               <option value="ollama">{t('settings.ai.providerOllama')}</option>
             </select>
           </div>
@@ -197,7 +220,11 @@ export function AIProviderSection({
                 onChange={(e) => {
                   const val = e.target.value;
                   setSettingsForm((f) => ({ ...f, apiKey: val }));
-                  validateKey(settingsForm.provider, val);
+                  validateKey(
+                    settingsForm.provider,
+                    val,
+                    settingsForm.provider === 'openai-compatible' ? settingsForm.baseUrl : undefined,
+                  );
                 }}
                 placeholder={settings?.llm.has_api_key ? t('settings.ai.keySaved') : t('settings.ai.enterKey')}
                 className="w-full px-4 py-3 bg-bg-secondary border border-border rounded-lg text-sm text-white placeholder:text-text-muted focus:border-orange-500 focus:outline-none font-mono"
@@ -221,7 +248,7 @@ export function AIProviderSection({
             </div>
           )}
 
-          {settingsForm.provider !== 'local' && (
+          {settingsForm.provider !== 'local' && settingsForm.provider !== 'openai-compatible' && (
             <div>
               <label className="text-xs text-text-muted block mb-2">{t('settings.ai.model')}</label>
               <select
@@ -254,6 +281,19 @@ export function AIProviderSection({
             </div>
           )}
 
+          {settingsForm.provider === 'openai-compatible' && (
+            <div>
+              <label className="text-xs text-text-muted block mb-2">{t('settings.ai.modelName')}</label>
+              <input
+                type="text"
+                value={settingsForm.model}
+                onChange={(e) => setSettingsForm((f) => ({ ...f, model: e.target.value }))}
+                placeholder={t('settings.ai.modelNamePlaceholder')}
+                className="w-full px-4 py-3 bg-bg-secondary border border-border rounded-lg text-sm text-white placeholder:text-text-muted focus:border-orange-500 focus:outline-none font-mono"
+              />
+            </div>
+          )}
+
           {settingsForm.provider === 'ollama' && (
             <div>
               <label className="text-xs text-text-muted block mb-2">{t('settings.ai.baseUrl')}</label>
@@ -264,6 +304,34 @@ export function AIProviderSection({
                 placeholder="http://localhost:11434"
                 className="w-full px-4 py-3 bg-bg-secondary border border-border rounded-lg text-sm text-white placeholder:text-text-muted focus:border-orange-500 focus:outline-none font-mono"
               />
+            </div>
+          )}
+
+          {settingsForm.provider === 'openai-compatible' && (
+            <div>
+              <label className="text-xs text-text-muted block mb-2">{t('settings.ai.baseUrl')}</label>
+              <input
+                type="text"
+                value={settingsForm.baseUrl}
+                onChange={(e) => setSettingsForm((f) => ({ ...f, baseUrl: e.target.value }))}
+                placeholder="https://api.groq.com/openai/v1"
+                className="w-full px-4 py-3 bg-bg-secondary border border-border rounded-lg text-sm text-white placeholder:text-text-muted focus:border-orange-500 focus:outline-none font-mono"
+              />
+              <div className="mt-2">
+                <p className="text-[10px] text-text-muted mb-1.5">{t('settings.ai.popularEndpoints')}</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {popularEndpoints.map((ep) => (
+                    <button
+                      key={ep.name}
+                      type="button"
+                      onClick={() => setSettingsForm((f) => ({ ...f, baseUrl: ep.url }))}
+                      className="text-[10px] px-2 py-0.5 text-text-secondary hover:text-orange-400 bg-bg-secondary border border-border rounded hover:border-orange-500/30 transition-colors"
+                    >
+                      {ep.name}
+                    </button>
+                  ))}
+                </div>
+              </div>
             </div>
           )}
         </div>

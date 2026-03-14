@@ -14,3 +14,21 @@
 - **Files**: list of files being modified
 -->
 
+
+### T1 — LLM Services Modernization
+- **Status**: working
+- **Files**:
+  - src/components/settings/AIProviderSection.tsx
+  - src/components/onboarding/setup-ai-provider.tsx
+  - src/components/onboarding/use-quick-setup.ts
+  - src/store/settings-slice.ts
+  - src/locales/en/ui.json
+  - src-tauri/src/llm.rs
+  - src-tauri/src/llm_judge.rs
+  - src-tauri/src/settings/mod.rs
+  - src-tauri/src/settings/validation.rs
+  - src-tauri/src/settings/env_detection.rs
+  - src-tauri/src/settings_commands_llm.rs
+  - mcp-4da-server/src/llm.ts
+  - src/components/ScoreAutopsy.test.tsx
+

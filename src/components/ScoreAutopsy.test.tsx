@@ -58,7 +58,7 @@ const mockAutopsyResult = {
     score_assessment: 'accurate' as const,
     reasoning: 'Strong alignment with declared interests',
     suggested_action: 'No specific action needed',
-    model_used: 'claude-3-5-sonnet-20241022',
+    model_used: 'claude-sonnet-4-6',
   },
 };
 

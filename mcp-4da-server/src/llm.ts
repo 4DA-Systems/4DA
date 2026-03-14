@@ -210,7 +210,7 @@ export function canSynthesize(config: LLMConfig): boolean {
 function getModelForComplexity(config: LLMConfig, complexity: TaskComplexity): string {
   if (config.provider !== "ollama") {
     // Cloud providers use the configured model
-    return config.model || (config.provider === "anthropic" ? "claude-3-5-sonnet-20241022" : "gpt-4o");
+    return config.model || (config.provider === "anthropic" ? "claude-sonnet-4-6" : "gpt-4o");
   }
 
   // Ollama: use tiered models
@@ -305,7 +305,7 @@ async function synthesizeAnthropic(
   request: SynthesisRequest,
   signal?: AbortSignal
 ): Promise<SynthesisResult> {
-  const model = config.model || "claude-3-5-sonnet-20241022";
+  const model = config.model || "claude-sonnet-4-6";
   const maxTokens = request.max_tokens || 1024;
 
   const response = await fetch("https://api.anthropic.com/v1/messages", {
