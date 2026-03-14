@@ -2,7 +2,7 @@
   "name": "4da",
   "private": true,
   "version": "1.0.0",
-  "author": "Antony Lawrence Kiddie Pasifa",
+  "author": "4DA Systems Pty Ltd",
   "license": "FSL-1.1-Apache-2.0",
   "homepage": "https://4da.ai",
   "type": "module",
@@ -29,6 +29,8 @@
     "prepare": "husky"
   },
   "dependencies": {
+    "@fontsource-variable/inter": "^5.2.8",
+    "@fontsource-variable/jetbrains-mono": "^5.2.8",
     "@tanstack/react-virtual": "^3.13.18",
     "@tauri-apps/api": "^2.10.1",
     "@tauri-apps/plugin-opener": "^2",

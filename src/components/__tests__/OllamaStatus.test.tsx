@@ -36,6 +36,14 @@ import { invoke } from '@tauri-apps/api/core';
 
 const mockInvoke = vi.mocked(invoke);
 
+/** Get the main status button (has aria-label with "ollama.status") */
+function getStatusButton(): HTMLElement {
+  const buttons = screen.getAllByRole('button');
+  const main = buttons.find((b) => b.getAttribute('aria-label')?.includes('ollama.status'));
+  if (!main) throw new Error('Could not find main OllamaStatus button');
+  return main;
+}
+
 describe('OllamaStatus', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -49,7 +57,7 @@ describe('OllamaStatus', () => {
 
   it('renders a button when provider is ollama', () => {
     render(<OllamaStatus provider="ollama" />);
-    const button = screen.getByRole('button');
+    const button = getStatusButton();
     expect(button).toBeInTheDocument();
   });
 
@@ -60,14 +68,14 @@ describe('OllamaStatus', () => {
 
   it('has accessible aria-label including status', () => {
     render(<OllamaStatus provider="ollama" />);
-    const button = screen.getByRole('button');
+    const button = getStatusButton();
     expect(button.getAttribute('aria-label')).toContain('ollama.status');
     expect(button.getAttribute('aria-label')).toContain('ollama.basicMode');
   });
 
   it('button is clickable when in offline state', () => {
     render(<OllamaStatus provider="ollama" />);
-    const button = screen.getByRole('button');
+    const button = getStatusButton();
     expect(button).not.toBeDisabled();
   });
 
@@ -129,7 +137,7 @@ describe('OllamaStatus', () => {
       );
     });
 
-    const button = screen.getByRole('button');
+    const button = getStatusButton();
     expect(button).toBeDisabled();
   });
 
@@ -142,7 +150,7 @@ describe('OllamaStatus', () => {
       );
     });
 
-    const button = screen.getByRole('button');
+    const button = getStatusButton();
     expect(button).not.toBeDisabled();
   });
 
@@ -157,7 +165,7 @@ describe('OllamaStatus', () => {
     });
 
     // Click retry
-    fireEvent.click(screen.getByRole('button'));
+    fireEvent.click(getStatusButton());
 
     await waitFor(() => {
       expect(mockInvoke).toHaveBeenCalledWith('check_ollama_status', { baseUrl: null });
@@ -171,7 +179,7 @@ describe('OllamaStatus', () => {
     render(<OllamaStatus provider="ollama" />);
 
     // Click when in default offline state
-    fireEvent.click(screen.getByRole('button'));
+    fireEvent.click(getStatusButton());
 
     await waitFor(() => {
       expect(mockInvoke).toHaveBeenCalledWith('check_ollama_status', { baseUrl: null });
@@ -187,14 +195,14 @@ describe('OllamaStatus', () => {
       );
     });
 
-    const button = screen.getByRole('button');
+    const button = getStatusButton();
     expect(button).toHaveAttribute('title', 'ECONNREFUSED');
   });
 
   it('includes click-retry hint in aria-label for clickable states', () => {
     render(<OllamaStatus provider="ollama" />);
 
-    const button = screen.getByRole('button');
+    const button = getStatusButton();
     expect(button.getAttribute('aria-label')).toContain('ollama.clickRetry');
   });
 
@@ -207,7 +215,20 @@ describe('OllamaStatus', () => {
       );
     });
 
-    const button = screen.getByRole('button');
+    const button = getStatusButton();
     expect(button.getAttribute('aria-label')).not.toContain('ollama.clickRetry');
+  });
+
+  it('shows help hint button when offline', () => {
+    render(<OllamaStatus provider="ollama" />);
+    const hintBtn = screen.getByLabelText('ollama.setupHelp');
+    expect(hintBtn).toBeInTheDocument();
+  });
+
+  it('shows setup instructions when hint button is clicked', () => {
+    render(<OllamaStatus provider="ollama" />);
+    fireEvent.click(screen.getByLabelText('ollama.setupHelp'));
+    expect(screen.getByText('ollama.hintFreeLocal')).toBeInTheDocument();
+    expect(screen.getByText(/ollama.hintInstall/)).toBeInTheDocument();
   });
 });

@@ -137,3 +137,6 @@ relay/target/
 
 # Crate placeholder (name reservation only)
 crates-placeholder/
+
+# Legal deed files (contain personal ABN and address — private)
+docs/legal/DEED-*
