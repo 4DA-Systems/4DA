@@ -1226,6 +1226,7 @@ impl Database {
                 ALTER TABLE source_items ADD COLUMN embedding_status TEXT DEFAULT 'complete';
                 ALTER TABLE source_items ADD COLUMN embed_text TEXT DEFAULT NULL;
                 CREATE INDEX IF NOT EXISTS idx_source_embedding_status ON source_items(embedding_status);
+                CREATE INDEX IF NOT EXISTS idx_source_items_embedding_status ON source_items(embedding_status);
                 ",
             )?;
             info!("Added embedding_status and embed_text columns to source_items");

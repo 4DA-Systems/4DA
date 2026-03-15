@@ -133,6 +133,7 @@ pub fn migrate(conn: &Arc<Mutex<Connection>>) -> Result<()> {
         CREATE INDEX IF NOT EXISTS idx_interactions_timestamp ON interactions(timestamp);
         CREATE INDEX IF NOT EXISTS idx_interactions_item ON interactions(item_id);
         CREATE INDEX IF NOT EXISTS idx_interactions_source ON interactions(item_source);
+        CREATE INDEX IF NOT EXISTS idx_interactions_item_action ON interactions(item_id, action_type);
 
         -- Topic affinities (learned preferences)
         CREATE TABLE IF NOT EXISTS topic_affinities (
@@ -151,6 +152,7 @@ pub fn migrate(conn: &Arc<Mutex<Connection>>) -> Result<()> {
         );
         CREATE INDEX IF NOT EXISTS idx_topic_affinities_topic ON topic_affinities(topic);
         CREATE INDEX IF NOT EXISTS idx_topic_affinities_score ON topic_affinities(affinity_score);
+        CREATE INDEX IF NOT EXISTS idx_topic_affinities_last_interaction ON topic_affinities(last_interaction);
 
         -- Source preferences (learned from behavior)
         CREATE TABLE IF NOT EXISTS source_preferences (
