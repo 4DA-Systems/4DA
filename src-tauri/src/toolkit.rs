@@ -134,7 +134,7 @@ pub async fn toolkit_list_ports() -> Result<Vec<ListeningPort>> {
                         let name = parts[8]; // e.g., "*:4444" or "127.0.0.1:8080"
                         if let Some(port_str) = name.rsplit(':').next() {
                             if let Ok(port) = port_str.parse::<u16>() {
-                                let pid = parts.get(1).and_then(|p| p.parse().ok());
+                                let pid = parts.get(1).and_then(|p| p.parse().ok()).unwrap_or(0);
                                 ports.push(ListeningPort {
                                     port,
                                     protocol: "TCP".into(),
