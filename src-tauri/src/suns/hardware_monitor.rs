@@ -135,8 +135,28 @@ fn check_disk_space() -> Option<String> {
         }
     }
 
-    #[cfg(not(target_os = "windows"))]
+    #[cfg(target_os = "macos")]
     {
+        // BSD df: -g flag displays sizes in gigabyte blocks
+        if let Ok(output) = run_cmd("df -g / | tail -1") {
+            // df output: Filesystem 1G-blocks Used Available Capacity Mounted
+            let parts: Vec<&str> = output.split_whitespace().collect();
+            if parts.len() >= 4 {
+                if let Ok(avail_gb) = parts[3].parse::<u64>() {
+                    if avail_gb < 50 {
+                        return Some(format!(
+                            "Low disk space: {}GB free on root partition",
+                            avail_gb
+                        ));
+                    }
+                }
+            }
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        // GNU df: -BG flag displays sizes in gigabyte blocks
         if let Ok(output) = run_cmd("df -BG / | tail -1") {
             // df output: Filesystem 1G-blocks Used Available Use% Mounted
             let parts: Vec<&str> = output.split_whitespace().collect();
