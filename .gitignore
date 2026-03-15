@@ -168,3 +168,4 @@ Sdf
 end
 target.property
 [outputs...]
+.apple-cert-temp/
