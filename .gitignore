@@ -57,6 +57,9 @@ data/settings.json
 # License validation cache (runtime state)
 data/license_cache.json
 
+# Model registry cache (auto-refreshed from LiteLLM)
+data/model_registry.json
+
 # Environment files (may contain secrets from `vercel env pull`)
 .env*
 !.env.example
@@ -140,3 +143,28 @@ crates-placeholder/
 
 # Legal deed files (contain personal ABN and address — private)
 docs/legal/DEED-*
+
+# Private key / certificate files (never commit)
+*.key
+*.pem
+*.p12
+*.pfx
+*.jks
+*.keystore
+credentials.json
+service-account*.json
+
+# MCP 4DA server build artifacts
+mcp-4da-server/dist/
+mcp-4da-server/node_modules/
+
+# AWE wisdom database (lives at %APPDATA%/awe/, not in repo)
+# Listed for defense-in-depth
+wisdom.db
+
+# Zero-byte junk files (editor/tool artifacts)
+Color
+Sdf
+end
+target.property
+[outputs...]
