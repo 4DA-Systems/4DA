@@ -4,9 +4,10 @@ import { useTranslation } from 'react-i18next';
 import { cmd } from '../../lib/commands';
 import type { Settings } from '../../types';
 import type { OllamaStatus } from '../../hooks/use-settings';
+import type { ModelRegistryData } from '../../store/types';
 
-// Provider model options
-const providerModels: Record<string, string[]> = {
+// Fallback provider model options (used while registry loads)
+const fallbackModels: Record<string, string[]> = {
   anthropic: ['claude-haiku-4-5-20251001', 'claude-sonnet-4-6', 'claude-opus-4-6'],
   openai: ['gpt-4.1-nano', 'gpt-4.1-mini', 'gpt-4.1', 'gpt-4o-mini', 'gpt-4o'],
   ollama: ['llama3.2', 'gemma3', 'qwen2.5', 'deepseek-r1', 'mistral', 'phi4'],
@@ -42,6 +43,27 @@ interface AIProviderSectionProps {
   ollamaStatus: OllamaStatus | null;
   ollamaModels: string[];
   checkOllamaStatus: (baseUrl?: string) => void;
+  modelRegistry?: ModelRegistryData | null;
+  onRefreshRegistry?: () => void;
+}
+
+/** Get models for a provider from registry, falling back to hardcoded defaults. */
+function getProviderModels(provider: string, registry: ModelRegistryData | null | undefined): string[] {
+  if (registry && registry.providers[provider]?.length > 0) {
+    return registry.providers[provider].map(m => m.id);
+  }
+  return fallbackModels[provider] || [];
+}
+
+/** Format registry freshness as human-readable string. */
+function formatFreshness(fetchedAt: number): string {
+  if (fetchedAt === 0) return 'bundled defaults';
+  const now = Math.floor(Date.now() / 1000);
+  const diffSecs = now - fetchedAt;
+  if (diffSecs < 60) return 'just now';
+  if (diffSecs < 3600) return `${Math.floor(diffSecs / 60)}m ago`;
+  if (diffSecs < 86400) return `${Math.floor(diffSecs / 3600)}h ago`;
+  return `${Math.floor(diffSecs / 86400)}d ago`;
 }
 
 export function AIProviderSection({
@@ -51,6 +73,8 @@ export function AIProviderSection({
   ollamaStatus,
   ollamaModels,
   checkOllamaStatus,
+  modelRegistry,
+  onRefreshRegistry,
 }: AIProviderSectionProps) {
   const { t } = useTranslation();
 
@@ -173,13 +197,14 @@ export function AIProviderSection({
               value={settingsForm.provider}
               onChange={(e) => {
                 const newProvider = e.target.value;
+                const registryModels = getProviderModels(newProvider, modelRegistry);
                 const defaultModel = newProvider === 'local'
                   ? 'all-MiniLM-L6-v2'
                   : newProvider === 'openai-compatible'
                     ? ''
                     : newProvider === 'ollama' && ollamaModels.length > 0
                       ? ollamaModels[0]
-                      : providerModels[newProvider]?.[0] || '';
+                      : registryModels[0] || '';
                 setSettingsForm((f) => ({
                   ...f,
                   provider: newProvider,
@@ -258,7 +283,7 @@ export function AIProviderSection({
               >
                 {(settingsForm.provider === 'ollama' && ollamaModels.length > 0
                   ? ollamaModels
-                  : providerModels[settingsForm.provider] || []
+                  : getProviderModels(settingsForm.provider, modelRegistry)
                 ).map((m) => (
                   <option key={m} value={m}>{m}</option>
                 ))}
@@ -276,6 +301,22 @@ export function AIProviderSection({
                   >
                     {t('settings.ai.recheck')}
                   </button>
+                </div>
+              )}
+              {/* Registry freshness + refresh */}
+              {settingsForm.provider !== 'ollama' && modelRegistry && (
+                <div className="flex items-center gap-2 mt-2">
+                  <p className="text-[10px] text-text-muted">
+                    {t('settings.ai.registryLastUpdated', { time: formatFreshness(modelRegistry.fetched_at) })}
+                  </p>
+                  {onRefreshRegistry && (
+                    <button
+                      onClick={onRefreshRegistry}
+                      className="text-[10px] px-2 py-0.5 text-text-muted hover:text-orange-400 bg-bg-tertiary rounded transition-colors"
+                    >
+                      {t('settings.ai.refreshModels')}
+                    </button>
+                  )}
                 </div>
               )}
             </div>
@@ -426,8 +467,17 @@ export function AIProviderSection({
               <p className="text-xs text-text-muted">{t('settings.ai.tokens')}</p>
             </div>
             <div className="bg-bg-secondary rounded-lg p-3 text-center">
-              <p className="text-xl font-semibold text-green-400">${(settings.usage.cost_today_cents / 100).toFixed(2)}</p>
-              <p className="text-xs text-text-muted">{t('settings.ai.cost')}</p>
+              {settingsForm.provider === 'openai-compatible' ? (
+                <>
+                  <p className="text-xl font-semibold text-text-muted">{t('settings.ai.costUnavailable')}</p>
+                  <p className="text-xs text-text-muted">{t('settings.ai.cost')}</p>
+                </>
+              ) : (
+                <>
+                  <p className="text-xl font-semibold text-green-400">${(settings.usage.cost_today_cents / 100).toFixed(2)}</p>
+                  <p className="text-xs text-text-muted">{t('settings.ai.cost')}</p>
+                </>
+              )}
             </div>
             <div className="bg-bg-secondary rounded-lg p-3 text-center">
               <p className="text-xl font-semibold text-orange-400">{settings.usage.items_reranked}</p>

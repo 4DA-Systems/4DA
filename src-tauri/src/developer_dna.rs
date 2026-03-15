@@ -547,7 +547,7 @@ pub fn export_as_card_svg(dna: &DeveloperDna) -> String {
     <text x="202" y="48" fill="#666" font-family="'Inter', sans-serif" font-size="11">projects scanned</text>
 
     <rect x="372" y="0" width="170" height="64" rx="6" fill="#141414" stroke="#1F1F1F"/>
-    <text x="388" y="28" fill="#D4AF37" font-family="'JetBrains Mono', monospace" font-size="20" font-weight="600">{rejection}%</text>
+    <text x="388" y="28" fill="#D4AF37" font-family="'JetBrains Mono', monospace" font-size="20" font-weight="600">{rejection:.1}%</text>
     <text x="388" y="48" fill="#666" font-family="'Inter', sans-serif" font-size="11">noise rejected</text>
 
     <rect x="558" y="0" width="178" height="64" rx="6" fill="#141414" stroke="#1F1F1F"/>
@@ -556,7 +556,7 @@ pub fn export_as_card_svg(dna: &DeveloperDna) -> String {
   </g>"##,
         days = stats.days_active,
         projects = stats.project_count,
-        rejection = format!("{:.1}", stats.rejection_rate),
+        rejection = stats.rejection_rate,
         deps = stats.dependency_count,
     );
 
@@ -660,7 +660,7 @@ fn build_card_topics(topics: &[EngagedTopic]) -> String {
             r##"    <text x="0" y="{ty}" fill="#888" font-family="'Inter', sans-serif" font-size="11" dominant-baseline="middle">{label}</text>
     <rect x="120" y="{ry}" width="{bw}" height="14" rx="3" fill="#1F1F1F"/>
     <rect x="120" y="{ry}" width="{fw}" height="14" rx="3" fill="{color}" opacity="0.7"/>
-    <text x="{px}" y="{ty}" fill="#666" font-family="'JetBrains Mono', monospace" font-size="10" dominant-baseline="middle">{pct}%</text>
+    <text x="{px}" y="{ty}" fill="#666" font-family="'JetBrains Mono', monospace" font-size="10" dominant-baseline="middle">{pct:.0}%</text>
 "##,
             ty = y_offset + 14.0,
             ry = y_offset + 7.0,
@@ -669,7 +669,7 @@ fn build_card_topics(topics: &[EngagedTopic]) -> String {
             fw = bar_width,
             color = ["#D4AF37", "#F97316", "#22C55E", "#3B82F6"][i % 4],
             px = 630.0,
-            pct = format!("{:.0}", topic.percent_of_total),
+            pct = topic.percent_of_total,
         ));
     }
 

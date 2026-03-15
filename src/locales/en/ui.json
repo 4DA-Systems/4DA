@@ -227,6 +227,9 @@
   "settings.ai.builtInLocal": "Built-in (Local)",
   "settings.ai.builtInModel": "all-MiniLM-L6-v2 (384 dimensions)",
   "settings.ai.builtInDescription": "Zero-config local embeddings. No API key required. The model is downloaded automatically on first use (~90MB).",
+  "settings.ai.refreshModels": "Refresh models",
+  "settings.ai.registryLastUpdated": "Models updated: {{time}}",
+  "settings.ai.costUnavailable": "N/A",
 
   "settings.attention.title": "Attention Dashboard",
   "settings.attention.description": "Where your focus goes vs. where your code needs it",
@@ -618,6 +621,8 @@
   "onboarding.setupAi.orChooseCloud": "for free local AI, or choose a cloud provider.",
   "onboarding.setupAi.keywordHint": "Keyword matching works out of the box. AI adds deeper semantic matching.",
   "onboarding.setupAi.basicModeHint": "No worries — 4DA works without AI using keyword matching. You can set up Ollama or add an API key later in Settings.",
+  "onboarding.setupAi.privacyMessage": "Your data never leaves your machine. No API keys, no cloud accounts, no usage tracking.",
+  "onboarding.setupAi.ollamaExplainer": "Ollama runs AI models directly on your computer \u2014 completely private, completely free.",
   "onboarding.setupAi.noKeyHint": "No API key? No problem. 4DA uses keyword matching by default. Add a key anytime in Settings for enhanced results.",
 
   "settings.translations.title": "Translation Editor",

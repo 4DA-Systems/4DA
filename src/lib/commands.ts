@@ -200,6 +200,10 @@ interface CommandMap {
   trigger_autophagy_cycle: { params: Record<string, never>; result: AutophagyCycleResult };
   get_intelligence_pulse: { params: Record<string, never>; result: IntelligencePulseData };
 
+  // -- Model Registry --
+  get_model_registry: { params: Record<string, never>; result: { fetched_at: number; source: string; model_count: number; providers: Record<string, Array<{ id: string; provider: string; display_name: string; input_cost_per_token: number | null; output_cost_per_token: number | null; max_input_tokens: number | null; max_output_tokens: number | null }>> } };
+  refresh_model_registry: { params: Record<string, never>; result: { success: boolean; model_count: number; source: string } };
+
   // -- License & Trial --
   get_license_tier: { params: Record<string, never>; result: { tier: string; has_key: boolean; activated_at: string | null; expires_at: string | null; days_remaining: number; expired: boolean } };
   activate_license: { params: { licenseKey: string }; result: { success: boolean; tier: string; expires_at?: string } };

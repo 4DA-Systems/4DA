@@ -24,6 +24,7 @@ export const createSettingsSlice: StateCreator<AppStore, [], [], SettingsSlice> 
   showOnboarding: false,
   ollamaStatus: null,
   ollamaModels: [],
+  modelRegistry: null,
 
   setSettingsForm: (partial) => {
     set(state => ({
@@ -66,6 +67,11 @@ export const createSettingsSlice: StateCreator<AppStore, [], [], SettingsSlice> 
           set({ showOnboarding: true });
         }
       }
+
+      // Load model registry (non-blocking)
+      cmd('get_model_registry').then((registry) => {
+        set({ modelRegistry: registry });
+      }).catch(() => {});
     } catch (error) {
       console.debug('Settings not available:', error);
     }
@@ -150,6 +156,16 @@ export const createSettingsSlice: StateCreator<AppStore, [], [], SettingsSlice> 
       };
       set({ ollamaStatus: errorStatus });
       return errorStatus;
+    }
+  },
+
+  refreshModelRegistry: async () => {
+    try {
+      await cmd('refresh_model_registry');
+      const registry = await cmd('get_model_registry');
+      set({ modelRegistry: registry });
+    } catch (error) {
+      console.error('Failed to refresh model registry:', error);
     }
   },
 });

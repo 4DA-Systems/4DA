@@ -80,7 +80,7 @@ pub fn persona_to_context(persona: &SimulatedPersona) -> ScoringContext {
         }
     }
 
-    let primary: Vec<&str> = persona.tech_stack.iter().copied().collect();
+    let primary: Vec<&str> = persona.tech_stack.to_vec();
     let adjacent: Vec<&str> = persona
         .expected_topics
         .iter()

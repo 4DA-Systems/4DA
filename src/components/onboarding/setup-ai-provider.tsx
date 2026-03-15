@@ -151,6 +151,7 @@ export function SetupAIProvider({
               <span className="text-xs font-medium text-text-secondary uppercase tracking-wider">{t('onboarding.setupAi.localLabel')}</span>
               <span className="text-[9px] px-1.5 py-0.5 bg-green-500/20 text-green-400 rounded font-medium">{t('onboarding.setupAi.recommended')}</span>
             </div>
+            <p className="text-[10px] text-green-400/80 mb-2">{t('onboarding.setupAi.privacyMessage')}</p>
             <div className="grid grid-cols-2 gap-2">
               <button
                 onClick={() => onProviderChange('ollama')}
@@ -265,6 +266,9 @@ export function SetupAIProvider({
                   {t('onboarding.apiKeys.installOllama')}
                 </a>
                 {' '}{t('onboarding.setupAi.orChooseCloud')}
+              </p>
+              <p className="text-xs text-text-muted mb-1">
+                {t('onboarding.setupAi.ollamaExplainer')}
               </p>
               <p className="text-xs text-text-muted">
                 {t('onboarding.setupAi.basicModeHint')}

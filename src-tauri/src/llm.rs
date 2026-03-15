@@ -621,39 +621,15 @@ impl LLMClient {
         Ok(response)
     }
 
-    /// Estimate cost in cents based on provider and tokens
+    /// Estimate cost in cents based on provider and tokens.
+    /// Returns 0 for unknown models (backward compat).
     pub fn estimate_cost_cents(&self, input_tokens: u64, output_tokens: u64) -> u64 {
-        match self.provider.provider.as_str() {
-            "anthropic" => {
-                // Prices per 1M tokens (as of 2026)
-                let (input_price, output_price) = match self.provider.model.as_str() {
-                    m if m.contains("opus") => (15.0, 75.0),
-                    m if m.contains("sonnet") => (3.0, 15.0),
-                    m if m.contains("haiku") => (0.80, 4.00),
-                    _ => (3.0, 15.0), // Default to Sonnet pricing
-                };
-                let input_cost = (input_tokens as f64 / 1_000_000.0) * input_price * 100.0;
-                let output_cost = (output_tokens as f64 / 1_000_000.0) * output_price * 100.0;
-                (input_cost + output_cost) as u64
-            }
-            "openai-compatible" => 0, // Unknown provider — can't estimate cost
-            "openai" => {
-                // OpenAI pricing per 1M tokens (as of 2026)
-                let (input_price, output_price) = match self.provider.model.as_str() {
-                    m if m.contains("gpt-4o-mini") => (0.15, 0.60),
-                    m if m.contains("gpt-4o") => (2.5, 10.0),
-                    m if m.contains("gpt-4.1-nano") => (0.10, 0.40),
-                    m if m.contains("gpt-4.1-mini") => (0.40, 1.60),
-                    m if m.contains("gpt-4.1") => (2.0, 8.0),
-                    _ => (0.15, 0.60), // Default to gpt-4o-mini
-                };
-                let input_cost = (input_tokens as f64 / 1_000_000.0) * input_price * 100.0;
-                let output_cost = (output_tokens as f64 / 1_000_000.0) * output_price * 100.0;
-                (input_cost + output_cost) as u64
-            }
-            "ollama" => 0, // Free!
-            _ => 0,
-        }
+        crate::model_registry::estimate_cost_or_zero(
+            &self.provider.provider,
+            &self.provider.model,
+            input_tokens,
+            output_tokens,
+        )
     }
 }
 
