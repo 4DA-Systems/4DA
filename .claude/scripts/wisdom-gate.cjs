@@ -82,6 +82,7 @@ process.stdin.on('end', () => {
             `Command: ${cmd.substring(0, 80)}\n` +
             `• Was this confirmed with the human? (W-5)\n` +
             `• Is there a rollback path?\n` +
+            `• Consider: awe_consequence_scan before proceeding\n` +
             `This gate advises, never blocks.`
         });
       }

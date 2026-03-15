@@ -211,10 +211,8 @@ pub async fn get_streets_suggestion() -> Result<Option<StreetsSuggestion>> {
             })
             .count();
 
-        if match_count >= 3 {
-            if best_module.is_none() || match_count > best_module.unwrap().2 {
-                best_module = Some((module_id, module_title, match_count));
-            }
+        if match_count >= 3 && (best_module.is_none() || match_count > best_module.unwrap().2) {
+            best_module = Some((module_id, module_title, match_count));
         }
     }
 

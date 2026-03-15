@@ -16,6 +16,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const { execSync } = require('child_process');
 
 const CLAUDE_DIR = path.dirname(__dirname);
 const WISDOM_DIR = path.join(CLAUDE_DIR, 'wisdom');
@@ -45,6 +46,16 @@ process.stdin.on('end', () => {
       // 2. Check if crystallization is due
       const crystalMsg = checkCrystallization();
       if (crystalMsg) messages.push(crystalMsg);
+
+      // 3. Inject accumulated AWE wisdom (principles, anti-patterns)
+      const aweWisdom = getAweWisdom();
+      if (aweWisdom) {
+        messages.push('AWE WISDOM LAYER — Accumulated Engineering Wisdom\n' + aweWisdom);
+      }
+
+      // 4. Prompt for AWE feedback on previous session's decisions
+      const aweFeedback = getAweFeedbackPrompt();
+      if (aweFeedback) messages.push(aweFeedback);
     }
 
     if (messages.length > 0) {
@@ -162,6 +173,71 @@ function checkCrystallization() {
   }
 
   return null;
+}
+
+/**
+ * Get accumulated wisdom from AWE (principles, anti-patterns).
+ * Returns the wisdom text or null if unavailable.
+ */
+function getAweWisdom() {
+  const AWE_BIN = 'D:\\runyourempire\\awe\\target\\release\\awe.exe';
+  try {
+    if (!fs.existsSync(AWE_BIN)) return null;
+    const output = execSync(`"${AWE_BIN}" wisdom --domain software-engineering`, {
+      encoding: 'utf8',
+      timeout: 5000,
+      env: { ...process.env },
+      stdio: ['pipe', 'pipe', 'pipe'],
+    }).trim();
+    // Only inject if there's actual extracted wisdom (principles or anti-patterns)
+    // Only inject if there are actual validated principles or confirmed anti-patterns
+    if (output.includes('No wisdom') || output.includes('needs at least') || output.includes('More feedback needed') || output.includes('Patterns are forming')) return null;
+    // Must contain actual VALIDATED PRINCIPLES or CONFIRMED ANTI-PATTERNS sections
+    if (!output.includes('VALIDATED PRINCIPLES') && !output.includes('CONFIRMED ANTI-PATTERNS')) return null;
+    // Strip extraction status metadata — only inject the wisdom sections
+    const lines = output.split('\n');
+    const filtered = [];
+    let inWisdomSection = false;
+    for (const line of lines) {
+      if (line.includes('VALIDATED PRINCIPLES') || line.includes('CONFIRMED ANTI-PATTERNS')) {
+        inWisdomSection = true;
+      }
+      if (line.includes('EXTRACTION STATUS')) {
+        inWisdomSection = false;
+      }
+      if (inWisdomSection) {
+        filtered.push(line);
+      }
+    }
+    return filtered.length > 0 ? filtered.join('\n').trim() : null;
+  } catch (e) { return null; }
+}
+
+/**
+ * Check if AWE decisions from the previous session need outcome feedback.
+ * Returns a feedback prompt message or null.
+ */
+function getAweFeedbackPrompt() {
+  if (!fs.existsSync(PENDING_FILE)) return null;
+  let pending;
+  try { pending = JSON.parse(fs.readFileSync(PENDING_FILE, 'utf8')); } catch (e) { return null; }
+  if (!pending.aweDecisionIds || pending.aweDecisionIds.length === 0) return null;
+  if (pending.aweFeedbackProcessed) return null;
+
+  const ids = pending.aweDecisionIds;
+  let msg = 'AWE FEEDBACK — Close the learning loop';
+  msg += `\n${ids.length} decision(s) from last session need outcome feedback:`;
+  for (const entry of ids) {
+    msg += `\n  ${entry.id}: "${entry.query}"`;
+  }
+  msg += '\n\nFor each decision, call awe_feedback with the decision_id and outcome (confirmed/refuted/partial/unknown).';
+  msg += '\nIf outcome is unknown yet, skip — but revisit later.';
+
+  // Mark as processed
+  pending.aweFeedbackProcessed = true;
+  try { fs.writeFileSync(PENDING_FILE, JSON.stringify(pending, null, 2)); } catch (e) {}
+
+  return msg;
 }
 
 function ensureDir(dir) {
