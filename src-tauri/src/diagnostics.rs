@@ -100,76 +100,152 @@ pub fn collect_diagnostics(db: &Database, db_path: &std::path::Path) -> Diagnost
 
 /// Get approximate process RSS memory in bytes
 fn get_process_memory() -> u64 {
-    // On Windows, use the Win32 API via std
     #[cfg(target_os = "windows")]
     {
-        // Use GetProcessMemoryInfo via raw FFI
-        use std::mem::MaybeUninit;
-        #[repr(C)]
-        struct ProcessMemoryCounters {
-            cb: u32,
-            page_fault_count: u32,
-            peak_working_set_size: usize,
-            working_set_size: usize,
-            quota_peak_paged_pool_usage: usize,
-            quota_paged_pool_usage: usize,
-            quota_peak_non_paged_pool_usage: usize,
-            quota_non_paged_pool_usage: usize,
-            pagefile_usage: usize,
-            peak_pagefile_usage: usize,
-        }
+        get_process_memory_windows()
+    }
 
-        extern "system" {
-            fn GetCurrentProcess() -> isize;
-            fn K32GetProcessMemoryInfo(
-                process: isize,
-                ppsmemcounters: *mut ProcessMemoryCounters,
-                cb: u32,
-            ) -> i32;
-        }
+    #[cfg(target_os = "macos")]
+    {
+        get_process_memory_macos()
+    }
 
-        unsafe {
-            let mut pmc = MaybeUninit::<ProcessMemoryCounters>::zeroed();
-            let size = std::mem::size_of::<ProcessMemoryCounters>() as u32;
-            (*pmc.as_mut_ptr()).cb = size;
-            if K32GetProcessMemoryInfo(GetCurrentProcess(), pmc.as_mut_ptr(), size) != 0 {
-                return (*pmc.as_ptr()).working_set_size as u64;
-            }
-        }
+    #[cfg(target_os = "linux")]
+    {
+        get_process_memory_linux()
+    }
+
+    #[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "linux")))]
+    {
         0
     }
+}
 
-    #[cfg(not(target_os = "windows"))]
-    {
-        // Linux: read /proc/self/status for VmRSS
-        if let Some(mem) = std::fs::read_to_string("/proc/self/status")
-            .ok()
-            .and_then(|s| {
-                s.lines().find(|l| l.starts_with("VmRSS:")).and_then(|l| {
-                    l.split_whitespace()
-                        .nth(1)
-                        .and_then(|v| v.parse::<u64>().ok())
-                        .map(|kb| kb * 1024)
-                })
-            })
-        {
-            return mem;
+/// Windows: use GetProcessMemoryInfo via Win32 FFI
+#[cfg(target_os = "windows")]
+fn get_process_memory_windows() -> u64 {
+    use std::mem::MaybeUninit;
+    #[repr(C)]
+    struct ProcessMemoryCounters {
+        cb: u32,
+        page_fault_count: u32,
+        peak_working_set_size: usize,
+        working_set_size: usize,
+        quota_peak_paged_pool_usage: usize,
+        quota_paged_pool_usage: usize,
+        quota_peak_non_paged_pool_usage: usize,
+        quota_non_paged_pool_usage: usize,
+        pagefile_usage: usize,
+        peak_pagefile_usage: usize,
+    }
+
+    extern "system" {
+        fn GetCurrentProcess() -> isize;
+        fn K32GetProcessMemoryInfo(
+            process: isize,
+            ppsmemcounters: *mut ProcessMemoryCounters,
+            cb: u32,
+        ) -> i32;
+    }
+
+    unsafe {
+        let mut pmc = MaybeUninit::<ProcessMemoryCounters>::zeroed();
+        let size = std::mem::size_of::<ProcessMemoryCounters>() as u32;
+        (*pmc.as_mut_ptr()).cb = size;
+        if K32GetProcessMemoryInfo(GetCurrentProcess(), pmc.as_mut_ptr(), size) != 0 {
+            return (*pmc.as_ptr()).working_set_size as u64;
         }
+    }
+    0
+}
 
-        // macOS fallback: /proc doesn't exist, use ps command for RSS
-        std::process::Command::new("ps")
-            .args(["-o", "rss=", "-p", &std::process::id().to_string()])
-            .output()
-            .ok()
-            .and_then(|o| {
-                String::from_utf8_lossy(&o.stdout)
-                    .trim()
-                    .parse::<u64>()
-                    .ok()
+/// macOS: use mach kernel task_info API for resident memory size
+#[cfg(target_os = "macos")]
+fn get_process_memory_macos() -> u64 {
+    use std::mem::{size_of, MaybeUninit};
+
+    // Mach kernel types and constants
+    type MachPortT = u32;
+    type KernReturnT = i32;
+    type TaskFlavorT = u32;
+    type MachMsgTypeNumberT = u32;
+
+    const KERN_SUCCESS: KernReturnT = 0;
+    const MACH_TASK_BASIC_INFO: TaskFlavorT = 20;
+
+    // mach_task_basic_info struct layout (matching XNU headers)
+    // Fields: virtual_size (u64), resident_size (u64), resident_size_max (u64),
+    //         user_time (time_value_t = 2xi32), system_time (time_value_t = 2xi32),
+    //         policy (i32), suspend_count (i32)
+    #[repr(C)]
+    struct MachTaskBasicInfo {
+        virtual_size: u64,
+        resident_size: u64,
+        resident_size_max: u64,
+        user_time_secs: i32,
+        user_time_usecs: i32,
+        system_time_secs: i32,
+        system_time_usecs: i32,
+        policy: i32,
+        suspend_count: i32,
+    }
+
+    extern "C" {
+        fn mach_task_self() -> MachPortT;
+        fn task_info(
+            target_task: MachPortT,
+            flavor: TaskFlavorT,
+            task_info_out: *mut MachTaskBasicInfo,
+            task_info_out_cnt: *mut MachMsgTypeNumberT,
+        ) -> KernReturnT;
+    }
+
+    unsafe {
+        let mut info = MaybeUninit::<MachTaskBasicInfo>::zeroed();
+        // Count is in units of natural_t (u32), i.e. struct size / 4
+        let mut count = (size_of::<MachTaskBasicInfo>() / size_of::<u32>()) as MachMsgTypeNumberT;
+
+        let kr = task_info(
+            mach_task_self(),
+            MACH_TASK_BASIC_INFO,
+            info.as_mut_ptr(),
+            &mut count,
+        );
+
+        if kr == KERN_SUCCESS {
+            return (*info.as_ptr()).resident_size;
+        }
+    }
+
+    // Fallback: shell out to ps if mach API fails
+    std::process::Command::new("ps")
+        .args(["-o", "rss=", "-p", &std::process::id().to_string()])
+        .output()
+        .ok()
+        .and_then(|o| {
+            String::from_utf8_lossy(&o.stdout)
+                .trim()
+                .parse::<u64>()
+                .ok()
+                .map(|kb| kb * 1024)
+        })
+        .unwrap_or(0)
+}
+
+/// Linux: read /proc/self/status for VmRSS
+#[cfg(target_os = "linux")]
+fn get_process_memory_linux() -> u64 {
+    std::fs::read_to_string("/proc/self/status")
+        .ok()
+        .and_then(|s| {
+            s.lines().find(|l| l.starts_with("VmRSS:")).and_then(|l| {
+                l.split_whitespace()
+                    .nth(1)
+                    .and_then(|v| v.parse::<u64>().ok())
                     .map(|kb| kb * 1024)
             })
-            .unwrap_or(0)
-    }
+        })
+        .unwrap_or(0)
 }
 
 #[cfg(test)]
