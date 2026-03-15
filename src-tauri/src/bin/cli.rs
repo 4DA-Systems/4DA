@@ -80,15 +80,16 @@ fn resolve_db_path() -> Option<PathBuf> {
 
     #[cfg(target_os = "linux")]
     {
-        if let Some(home) = dirs::home_dir() {
-            let p = home
-                .join(".local")
-                .join("share")
-                .join("com.4da.app")
-                .join("data")
-                .join("4da.db");
+        // XDG-compliant: check $XDG_DATA_HOME/4da/data/ (default ~/.local/share/4da/data/)
+        if let Some(data_dir) = dirs::data_dir() {
+            let p = data_dir.join("4da").join("data").join("4da.db");
             if p.exists() {
                 return Some(p);
+            }
+            // Fallback: check legacy com.4da.app path for migration
+            let legacy = data_dir.join("com.4da.app").join("data").join("4da.db");
+            if legacy.exists() {
+                return Some(legacy);
             }
         }
     }
