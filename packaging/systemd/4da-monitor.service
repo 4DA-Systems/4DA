@@ -1,0 +1,42 @@
+# Copyright (c) 2025-2026 4DA Systems Pty Ltd (ACN 696 078 841). All rights reserved.
+# Licensed under the Functional Source License 1.1 (FSL-1.1-Apache-2.0). See LICENSE file.
+#
+# 4DA Intelligence Monitor — systemd user service
+#
+# This service runs the 4DA background analysis engine without the GUI.
+# It periodically fetches and scores content from configured sources,
+# keeping your local intelligence feed up to date.
+#
+# NOTE: The `4da monitor` command is COMING SOON. This service file is
+# forward-looking — it will work once the CLI gains a `monitor` subcommand
+# that runs headless background analysis.
+#
+# Install:
+#   mkdir -p ~/.config/systemd/user/
+#   cp 4da-monitor.service ~/.config/systemd/user/
+#   systemctl --user daemon-reload
+#   systemctl --user enable --now 4da-monitor
+#
+# Check status:
+#   systemctl --user status 4da-monitor
+#   journalctl --user -u 4da-monitor -f
+#
+# Environment:
+#   FOURDA_DB_PATH — override default database location
+#   WEBKIT_DISABLE_DMABUF_RENDERER — set to 1 to work around GPU issues
+
+[Unit]
+Description=4DA Intelligence Monitor
+Documentation=https://4da.ai
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/4da monitor
+Restart=on-failure
+RestartSec=30
+Environment=WEBKIT_DISABLE_DMABUF_RENDERER=1
+
+[Install]
+WantedBy=default.target

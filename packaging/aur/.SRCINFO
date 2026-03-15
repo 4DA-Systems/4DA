@@ -1,0 +1,22 @@
+pkgbase = 4da-home-bin
+	pkgdesc = 4DA — All signal. No feed. Privacy-first developer intelligence.
+	pkgver = 1.0.0
+	pkgrel = 1
+	url = https://4da.ai
+	arch = x86_64
+	license = custom:FSL-1.1-Apache-2.0
+	depends = webkit2gtk-4.1
+	depends = gtk3
+	depends = libappindicator-gtk3
+	optdepends = ollama: Local LLM and embedding support
+	optdepends = sqlite: CLI status bar integration
+	provides = 4da
+	conflicts = 4da
+	conflicts = 4da-git
+	options = !strip
+	source = 4da-home-bin-1.0.0.AppImage::https://github.com/4dasystems/4da/releases/download/v1.0.0/4da_1.0.0_amd64.AppImage
+	source = LICENSE::https://raw.githubusercontent.com/4dasystems/4da/main/LICENSE
+	sha256sums = SKIP
+	sha256sums = SKIP
+
+pkgname = 4da-home-bin

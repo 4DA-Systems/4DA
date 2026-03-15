@@ -1,0 +1,11 @@
+{
+    "custom/4da": {
+        "exec": "/usr/share/4da/4da-status.sh",
+        "return-type": "json",
+        "interval": 300,
+        "format": "{}",
+        "tooltip": true,
+        "on-click": "4da briefing | less",
+        "on-click-right": "4da signals | less"
+    }
+}
