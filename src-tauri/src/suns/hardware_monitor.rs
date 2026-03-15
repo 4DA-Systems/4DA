@@ -47,13 +47,42 @@ pub fn execute() -> SunResult {
 
     #[cfg(target_os = "linux")]
     {
-        if let Ok(output) = run_cmd("nproc") {
-            crate::sovereign_profile::store_facts_from_execution("nproc", &output, "sun:hardware");
+        // CPU model name (e.g. "AMD Ryzen 9 7950X")
+        let cpu_output = run_cmd("lscpu | grep 'Model name'")
+            .or_else(|_| run_cmd("nproc").map(|n| format!("CPU cores: {}", n.trim())));
+        if let Ok(output) = cpu_output {
+            crate::sovereign_profile::store_facts_from_execution(
+                "cpu info",
+                &output,
+                "sun:hardware",
+            );
             facts_found += 1;
         }
+
+        // Memory info
         if let Ok(output) = run_cmd("free -h") {
             crate::sovereign_profile::store_facts_from_execution(
-                "free -h",
+                "memory info",
+                &output,
+                "sun:hardware",
+            );
+            facts_found += 1;
+        }
+
+        // Disk info (physical drives with size and model)
+        if let Ok(output) = run_cmd("lsblk -d -o NAME,SIZE,MODEL --noheadings") {
+            crate::sovereign_profile::store_facts_from_execution(
+                "disk info",
+                &output,
+                "sun:hardware",
+            );
+            facts_found += 1;
+        }
+
+        // GPU info (VGA/3D/display controllers)
+        if let Ok(output) = run_cmd("lspci | grep -iE 'vga|3d|display'") {
+            crate::sovereign_profile::store_facts_from_execution(
+                "gpu info",
                 &output,
                 "sun:hardware",
             );
@@ -156,8 +185,12 @@ fn check_disk_space() -> Option<String> {
 
     #[cfg(target_os = "linux")]
     {
-        // GNU df: -BG flag displays sizes in gigabyte blocks
-        if let Ok(output) = run_cmd("df -BG / | tail -1") {
+        // Check the partition containing 4DA's data directory
+        let data_dir = dirs::data_dir()
+            .map(|d| d.join("4da"))
+            .unwrap_or_else(|| std::path::PathBuf::from("/"));
+        let path = data_dir.to_string_lossy();
+        if let Ok(output) = run_cmd(&format!("df -BG {} | tail -1", path)) {
             // df output: Filesystem 1G-blocks Used Available Use% Mounted
             let parts: Vec<&str> = output.split_whitespace().collect();
             if parts.len() >= 4 {
@@ -165,7 +198,7 @@ fn check_disk_space() -> Option<String> {
                 if let Ok(avail_gb) = avail_str.parse::<u64>() {
                     if avail_gb < 50 {
                         return Some(format!(
-                            "Low disk space: {}GB free on root partition",
+                            "Low disk space: {}GB free on data partition",
                             avail_gb
                         ));
                     }

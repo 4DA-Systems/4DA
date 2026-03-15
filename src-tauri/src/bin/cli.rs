@@ -122,7 +122,7 @@ fn open_db(path: &PathBuf) -> Result<rusqlite::Connection, String> {
 // ============================================================================
 
 #[allow(clippy::type_complexity)]
-fn cmd_briefing(conn: &rusqlite::Connection) {
+fn cmd_briefing(conn: &rusqlite::Connection, json_mode: bool) {
     let result: Result<Option<(String, Option<String>, i64, String)>, _> = conn
         .query_row(
             "SELECT content, model, item_count, created_at
@@ -142,20 +142,38 @@ fn cmd_briefing(conn: &rusqlite::Connection) {
     match result {
         Ok(Some((content, model, item_count, created_at))) => {
             let model_str = model.as_deref().unwrap_or("unknown");
-            println!("--- 4DA Briefing ({created_at}) ---");
-            println!("Items analyzed: {item_count} | Model: {model_str}\n");
-            println!("{content}");
+            if json_mode {
+                let escaped_content = content
+                    .replace('\\', "\\\\")
+                    .replace('"', "\\\"")
+                    .replace('\n', "\\n");
+                println!(
+                    "{{\"created_at\":\"{created_at}\",\"model\":\"{model_str}\",\"item_count\":{item_count},\"content\":\"{escaped_content}\"}}"
+                );
+            } else {
+                println!("--- 4DA Briefing ({created_at}) ---");
+                println!("Items analyzed: {item_count} | Model: {model_str}\n");
+                println!("{content}");
+            }
         }
         Ok(None) => {
-            println!("No briefing available. Run an analysis from the 4DA desktop app first.");
+            if json_mode {
+                println!("{{\"error\":\"No briefing available\"}}");
+            } else {
+                println!("No briefing available. Run an analysis from the 4DA desktop app first.");
+            }
         }
         Err(e) => {
-            eprintln!("Error reading briefing: {e}");
+            if json_mode {
+                println!("{{\"error\":\"Error reading briefing: {e}\"}}");
+            } else {
+                eprintln!("Error reading briefing: {e}");
+            }
         }
     }
 }
 
-fn cmd_signals(conn: &rusqlite::Connection, critical_only: bool) {
+fn cmd_signals(conn: &rusqlite::Connection, critical_only: bool, json_mode: bool) {
     // Get recent source items and check for signal patterns
     let query = "SELECT id, source_type, title, url, created_at
                  FROM source_items
@@ -217,6 +235,7 @@ fn cmd_signals(conn: &rusqlite::Connection, critical_only: bool) {
     };
 
     let mut signal_count = 0;
+    let mut json_entries: Vec<String> = Vec::new();
 
     for row in rows.flatten() {
         let (_id, source_type, title, url, created_at) = row;
@@ -240,28 +259,44 @@ fn cmd_signals(conn: &rusqlite::Connection, critical_only: bool) {
             continue;
         }
 
-        let icon = match pri {
-            "critical" => "!!",
-            "high" => " !",
-            "medium" => " -",
-            _ => "  ",
-        };
+        if json_mode {
+            let sig = signal_type.unwrap_or("signal");
+            let url_str = url.as_deref().unwrap_or("");
+            let action_str = action.as_deref().unwrap_or("");
+            let escaped_title = title.replace('\\', "\\\\").replace('"', "\\\"");
+            json_entries.push(format!(
+                "{{\"priority\":\"{pri}\",\"signal_type\":\"{sig}\",\"source\":\"{source_type}\",\"date\":\"{}\",\"title\":\"{escaped_title}\",\"url\":\"{url_str}\",\"action\":\"{action_str}\"}}",
+                &created_at[..10]
+            ));
+        } else {
+            let icon = match pri {
+                "critical" => "!!",
+                "high" => " !",
+                "medium" => " -",
+                _ => "  ",
+            };
 
-        let sig = signal_type.unwrap_or("signal");
-        let date = &created_at[..10]; // Just the date part
+            let sig = signal_type.unwrap_or("signal");
+            let date = &created_at[..10]; // Just the date part
 
-        println!("[{icon}] [{pri:<8}] [{sig:<18}] [{source_type:<12}] {date}  {title}");
-        if let Some(act) = action {
-            println!("    Action: {act}");
+            println!("[{icon}] [{pri:<8}] [{sig:<18}] [{source_type:<12}] {date}  {title}");
+            if let Some(act) = action {
+                println!("    Action: {act}");
+            }
+            if let Some(ref u) = url {
+                println!("    {u}");
+            }
+            println!();
         }
-        if let Some(ref u) = url {
-            println!("    {u}");
-        }
-        println!();
         signal_count += 1;
     }
 
-    if signal_count == 0 {
+    if json_mode {
+        println!(
+            "{{\"count\":{signal_count},\"signals\":[{}]}}",
+            json_entries.join(",")
+        );
+    } else if signal_count == 0 {
         if critical_only {
             println!("No critical/high signals found. Your stack is clean.");
         } else {
@@ -369,7 +404,7 @@ fn classify_signal<'a>(
     (None, None, None)
 }
 
-fn cmd_gaps(conn: &rusqlite::Connection) {
+fn cmd_gaps(conn: &rusqlite::Connection, json_mode: bool) {
     // Get dependencies that have no matching content coverage
     let deps: Vec<(String, String, String)> = conn
         .prepare(
@@ -391,7 +426,11 @@ fn cmd_gaps(conn: &rusqlite::Connection) {
         .unwrap_or_default();
 
     if deps.is_empty() {
-        println!("No project dependencies found. Run an ACE scan from the desktop app first.");
+        if json_mode {
+            println!("{{\"error\":\"No project dependencies found\"}}");
+        } else {
+            println!("No project dependencies found. Run an ACE scan from the desktop app first.");
+        }
         return;
     }
 
@@ -430,27 +469,43 @@ fn cmd_gaps(conn: &rusqlite::Connection) {
         0
     };
 
-    println!("--- Knowledge Gap Analysis ---");
-    println!(
-        "Dependencies: {total} | Covered: {covered} | Gaps: {} | Coverage: {coverage}%\n",
-        gaps.len()
-    );
-
-    if gaps.is_empty() {
-        println!("No knowledge gaps detected. All dependencies have recent content coverage.");
-    } else {
-        println!("Blind spots (dependencies with zero content coverage):\n");
-        for (name, lang, version) in &gaps {
-            println!("  {name} ({lang}) v{version}");
-        }
+    if json_mode {
+        let gap_entries: Vec<String> = gaps
+            .iter()
+            .map(|(name, lang, version)| {
+                format!(
+                    "{{\"package\":\"{name}\",\"language\":\"{lang}\",\"version\":\"{version}\"}}"
+                )
+            })
+            .collect();
         println!(
-            "\nThese packages are in your dependency tree but 4DA has found zero\n\
-             articles, discussions, or advisories about them."
+            "{{\"total\":{total},\"covered\":{covered},\"gap_count\":{},\"coverage_pct\":{coverage},\"gaps\":[{}]}}",
+            gaps.len(),
+            gap_entries.join(",")
         );
+    } else {
+        println!("--- Knowledge Gap Analysis ---");
+        println!(
+            "Dependencies: {total} | Covered: {covered} | Gaps: {} | Coverage: {coverage}%\n",
+            gaps.len()
+        );
+
+        if gaps.is_empty() {
+            println!("No knowledge gaps detected. All dependencies have recent content coverage.");
+        } else {
+            println!("Blind spots (dependencies with zero content coverage):\n");
+            for (name, lang, version) in &gaps {
+                println!("  {name} ({lang}) v{version}");
+            }
+            println!(
+                "\nThese packages are in your dependency tree but 4DA has found zero\n\
+                 articles, discussions, or advisories about them."
+            );
+        }
     }
 }
 
-fn cmd_health(conn: &rusqlite::Connection) {
+fn cmd_health(conn: &rusqlite::Connection, json_mode: bool) {
     // Get all projects and their dependency counts
     let projects: Vec<(String, i64)> = conn
         .prepare(
@@ -468,11 +523,19 @@ fn cmd_health(conn: &rusqlite::Connection) {
         .unwrap_or_default();
 
     if projects.is_empty() {
-        println!("No projects found. Run an ACE scan from the desktop app first.");
+        if json_mode {
+            println!("{{\"error\":\"No projects found\"}}");
+        } else {
+            println!("No projects found. Run an ACE scan from the desktop app first.");
+        }
         return;
     }
 
-    println!("--- Project Health ---\n");
+    let mut json_projects: Vec<String> = Vec::new();
+
+    if !json_mode {
+        println!("--- Project Health ---\n");
+    }
 
     for (path, dep_count) in &projects {
         // Get the project name from path
@@ -507,15 +570,26 @@ fn cmd_health(conn: &rusqlite::Connection) {
 
         let langs = languages.join(", ");
 
-        println!("  {name}");
-        println!("    Path: {path}");
-        println!("    Dependencies: {prod_count} prod + {dev_count} dev = {dep_count} total");
-        println!("    Languages: {langs}");
-        println!();
+        if json_mode {
+            let escaped_path = path.replace('\\', "\\\\").replace('"', "\\\"");
+            json_projects.push(format!(
+                "{{\"name\":\"{name}\",\"path\":\"{escaped_path}\",\"prod_deps\":{prod_count},\"dev_deps\":{dev_count},\"total_deps\":{dep_count},\"languages\":\"{langs}\"}}"
+            ));
+        } else {
+            println!("  {name}");
+            println!("    Path: {path}");
+            println!("    Dependencies: {prod_count} prod + {dev_count} dev = {dep_count} total");
+            println!("    Languages: {langs}");
+            println!();
+        }
+    }
+
+    if json_mode {
+        println!("{{\"projects\":[{}]}}", json_projects.join(","));
     }
 }
 
-fn cmd_status(conn: &rusqlite::Connection) {
+fn cmd_status(conn: &rusqlite::Connection, json_mode: bool) {
     let item_count: i64 = conn
         .query_row("SELECT COUNT(*) FROM source_items", [], |row| row.get(0))
         .unwrap_or(0);
@@ -560,18 +634,29 @@ fn cmd_status(conn: &rusqlite::Connection) {
         })
         .unwrap_or_default();
 
-    println!("--- 4DA Status ---\n");
-    println!("  Source items:   {item_count}");
-    println!("  Context chunks: {context_count}");
-    println!("  Dependencies:   {dep_count}");
-    println!("  Interests:      {interest_count}");
-    println!("  Briefings:      {briefing_count}");
-    println!("  Last fetch:     {last_item}\n");
+    if json_mode {
+        let source_entries: Vec<String> = sources
+            .iter()
+            .map(|(src, count)| format!("\"{src}\":{count}"))
+            .collect();
+        println!(
+            "{{\"source_items\":{item_count},\"context_chunks\":{context_count},\"dependencies\":{dep_count},\"interests\":{interest_count},\"briefings\":{briefing_count},\"last_fetch\":\"{last_item}\",\"sources\":{{{}}}}}",
+            source_entries.join(",")
+        );
+    } else {
+        println!("--- 4DA Status ---\n");
+        println!("  Source items:   {item_count}");
+        println!("  Context chunks: {context_count}");
+        println!("  Dependencies:   {dep_count}");
+        println!("  Interests:      {interest_count}");
+        println!("  Briefings:      {briefing_count}");
+        println!("  Last fetch:     {last_item}\n");
 
-    if !sources.is_empty() {
-        println!("  Sources:");
-        for (src, count) in &sources {
-            println!("    {src:<14} {count}");
+        if !sources.is_empty() {
+            println!("  Sources:");
+            for (src, count) in &sources {
+                println!("    {src:<14} {count}");
+            }
         }
     }
 }
@@ -591,9 +676,15 @@ fn main() {
     }
 
     let command = args[1].as_str();
+    let json_mode = args.iter().any(|a| a == "--json");
 
     if command == "--help" || command == "-h" || command == "help" {
         print_usage();
+        process::exit(0);
+    }
+
+    if command == "--version" || command == "-V" {
+        println!("4da {}", env!("CARGO_PKG_VERSION"));
         process::exit(0);
     }
 
@@ -601,9 +692,13 @@ fn main() {
     let db_path = match resolve_db_path() {
         Some(p) => p,
         None => {
-            eprintln!("4DA database not found.");
-            eprintln!("Make sure the 4DA desktop app has been run at least once,");
-            eprintln!("or set FOURDA_DB_PATH to point to your 4da.db file.");
+            if json_mode {
+                println!("{{\"error\": \"4DA database not found\"}}");
+            } else {
+                eprintln!("4DA database not found.");
+                eprintln!("Make sure the 4DA desktop app has been run at least once,");
+                eprintln!("or set FOURDA_DB_PATH to point to your 4da.db file.");
+            }
             process::exit(1);
         }
     };
@@ -611,23 +706,31 @@ fn main() {
     let conn = match open_db(&db_path) {
         Ok(c) => c,
         Err(e) => {
-            eprintln!("Failed to open database: {e}");
+            if json_mode {
+                println!("{{\"error\": \"Failed to open database: {e}\"}}");
+            } else {
+                eprintln!("Failed to open database: {e}");
+            }
             process::exit(1);
         }
     };
 
     match command {
-        "briefing" | "brief" | "b" => cmd_briefing(&conn),
+        "briefing" | "brief" | "b" => cmd_briefing(&conn, json_mode),
         "signals" | "signal" | "s" => {
             let critical = args.iter().any(|a| a == "--critical" || a == "-c");
-            cmd_signals(&conn, critical);
+            cmd_signals(&conn, critical, json_mode);
         }
-        "gaps" | "gap" | "g" => cmd_gaps(&conn),
-        "health" | "h" => cmd_health(&conn),
-        "status" | "st" => cmd_status(&conn),
+        "gaps" | "gap" | "g" => cmd_gaps(&conn, json_mode),
+        "health" | "h" => cmd_health(&conn, json_mode),
+        "status" | "st" => cmd_status(&conn, json_mode),
         other => {
-            eprintln!("Unknown command: {other}\n");
-            print_usage();
+            if json_mode {
+                println!("{{\"error\": \"Unknown command: {other}\"}}");
+            } else {
+                eprintln!("Unknown command: {other}\n");
+                print_usage();
+            }
             process::exit(1);
         }
     }
@@ -647,6 +750,12 @@ fn print_usage() {
            gaps, g           Show knowledge gaps in your dependencies\n\
            health, h         Show project dependency health\n\
            status, st        Show database stats\n\
+         \n\
+         Flags:\n\
+         \n\
+           --help, -h        Show this help message\n\
+           --version, -V     Print version and exit\n\
+           --json            Machine-readable JSON output\n\
          \n\
          Environment:\n\
          \n\

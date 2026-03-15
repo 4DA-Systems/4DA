@@ -710,6 +710,21 @@ mod utils_edge_tests;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // Must be set BEFORE any WebKitGTK initialization
+    #[cfg(target_os = "linux")]
+    {
+        // Detect NVIDIA GPU and apply WebKitGTK workaround for blank screen
+        // This is the #1 reported Tauri Linux issue (tauri-apps/tauri#9304)
+        if std::env::var("WEBKIT_DISABLE_DMABUF_RENDERER").is_err() {
+            if let Ok(output) = std::process::Command::new("lspci").output() {
+                let lspci = String::from_utf8_lossy(&output.stdout);
+                if lspci.contains("NVIDIA") {
+                    std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
+                }
+            }
+        }
+    }
+
     // Initialize logging
     tracing_subscriber::fmt()
         .with_env_filter(
@@ -790,6 +805,13 @@ pub fn run() {
     let _startup_issues = startup_health::run_startup_health_check();
 
     tauri::Builder::default()
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            // Focus the existing window when a second instance is launched
+            if let Some(window) = app.get_webview_window("main") {
+                let _ = window.show();
+                let _ = window.set_focus();
+            }
+        }))
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
