@@ -236,6 +236,7 @@ mod knowledge_decay;
 mod llm;
 mod llm_judge;
 mod llm_stream;
+pub mod model_registry;
 mod monitoring;
 mod monitoring_commands;
 mod monitoring_jobs;
@@ -537,6 +538,19 @@ mod webhooks;
 mod audit {
     use crate::error::Result;
 
+    /// Bundled audit logging parameters (used by team-sync without enterprise).
+    #[cfg(feature = "team-sync")]
+    pub struct AuditLogParams<'a> {
+        pub conn: &'a rusqlite::Connection,
+        pub team_id: &'a str,
+        pub actor_id: &'a str,
+        pub actor_display_name: &'a str,
+        pub action: &'a str,
+        pub resource_type: &'a str,
+        pub resource_id: Option<&'a str>,
+        pub details: Option<&'a serde_json::Value>,
+    }
+
     /// No-op audit logging when enterprise feature is disabled.
     #[allow(unused_variables)]
     pub fn log_team_audit(
@@ -550,17 +564,9 @@ mod audit {
     }
 
     /// No-op direct audit logging when enterprise feature is disabled.
+    #[cfg(feature = "team-sync")]
     #[allow(unused_variables)]
-    pub fn log_audit(
-        conn: &rusqlite::Connection,
-        team_id: &str,
-        actor_id: &str,
-        actor_display_name: &str,
-        action: &str,
-        resource_type: &str,
-        resource_id: Option<&str>,
-        details: Option<&serde_json::Value>,
-    ) {
+    pub fn log_audit(_params: &AuditLogParams<'_>) {
         // Enterprise audit logging disabled — no-op
     }
 
@@ -605,13 +611,6 @@ mod webhooks {
 #[cfg(not(feature = "enterprise"))]
 mod organization {
     use crate::error::Result;
-
-    #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-    pub struct OrgPolicies {
-        pub max_team_size: usize,
-        pub retention_days: i64,
-        pub require_encryption: bool,
-    }
 
     #[tauri::command]
     pub async fn get_organization_cmd() -> Result<serde_json::Value> {
@@ -1007,7 +1006,7 @@ pub fn run() {
             commands::get_diagnostics,
             startup_health::get_startup_health,
             // Scoring Validation (persona-based precision testing)
-            scoring::validation::validation::run_scoring_validation,
+            scoring::validation::runner::run_scoring_validation,
             // Autophagy (intelligent content metabolism)
             autophagy_commands::get_autophagy_status,
             autophagy_commands::get_autophagy_history,
@@ -1137,6 +1136,9 @@ pub fn run() {
             sso::get_sso_session,
             sso::validate_sso_callback,
             sso::logout_sso,
+            // Model Registry
+            model_registry::get_model_registry,
+            model_registry::refresh_model_registry,
         ])
         .setup(|app| {
             // Record app start time for diagnostics uptime tracking
@@ -1418,6 +1420,13 @@ pub fn run() {
                     });
                 }
             }
+
+            // Refresh model registry (fire-and-forget, ≤1x/24h)
+            tauri::async_runtime::spawn(async {
+                if let Err(e) = model_registry::refresh_registry().await {
+                    debug!(target: "4da::registry", error = %e, "Model registry refresh failed (using cached/bundled)");
+                }
+            });
 
             // Emit initial void signal (shows current state to heartbeat)
             if let Ok(db) = get_database() {
