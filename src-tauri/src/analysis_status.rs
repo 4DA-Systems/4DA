@@ -56,14 +56,16 @@ pub(crate) async fn run_cached_analysis(app: AppHandle) -> Result<()> {
 
         match result {
             Ok(Ok(results)) => {
+                // Compute near_misses while we have the guard, then release it
+                // so downstream operations can acquire other locks freely.
+                let near_misses = crate::types::extract_near_misses(&results);
                 guard.completed = true;
-                guard.near_misses = crate::types::extract_near_misses(&results);
-                guard.results = Some(results.clone());
+                guard.near_misses = near_misses;
                 guard.last_completed_at =
                     Some(chrono::Utc::now().format("%Y-%m-%d %H:%M:%S").to_string());
                 drop(guard);
 
-                // Use original results for downstream operations
+                // Downstream operations all take &[SourceRelevance] — use references
                 if let Err(e) = app.emit("analysis-complete", &results) {
                     tracing::warn!("Failed to emit 'analysis-complete': {e}");
                 }
@@ -146,6 +148,14 @@ pub(crate) async fn run_cached_analysis(app: AppHandle) -> Result<()> {
                         }
                     }
                 }
+
+                // Move results into shared state — no clone needed.
+                // Done last so downstream ops (which hold &results) complete first.
+                {
+                    let state = get_analysis_state();
+                    let mut guard = state.lock();
+                    guard.results = Some(results);
+                }
             }
             Ok(Err(e)) => {
                 let err_str = e.to_string();
@@ -225,10 +235,12 @@ pub(crate) async fn analyze_cached_content_impl(app: &AppHandle) -> Result<Vec<S
     }
 
     // Check if we can do differential analysis (have previous results + timestamp)
+    // Use .take() to move results out of the guard instead of cloning the entire Vec.
+    // This is safe: analysis is running, so old results will be replaced when it completes.
     let (last_completed_at, previous_results) = {
         let state = get_analysis_state();
-        let guard = state.lock();
-        (guard.last_completed_at.clone(), guard.results.clone())
+        let mut guard = state.lock();
+        (guard.last_completed_at.clone(), guard.results.take())
     };
 
     let is_differential = last_completed_at.is_some() && previous_results.is_some();

@@ -212,6 +212,7 @@ fn save_to_disk(registry: &ModelRegistry) {
 // ============================================================================
 
 /// Look up a model by ID. Uses fuzzy matching: exact > starts-with > contains.
+/// When multiple models match in fuzzy tiers, returns the shortest key (most specific).
 pub fn get_model_info(model_id: &str) -> Option<ModelInfo> {
     let registry = REGISTRY.read().ok()?;
     let id_lower = model_id.to_lowercase();
@@ -229,17 +230,31 @@ pub fn get_model_info(model_id: &str) -> Option<ModelInfo> {
     }
 
     // Starts-with (e.g., "claude-sonnet-4" matches "claude-sonnet-4-20250514")
+    // Pick shortest key to avoid non-deterministic HashMap ordering
+    let mut best: Option<(&str, &ModelInfo)> = None;
     for (key, info) in &registry.models {
         if key.to_lowercase().starts_with(&id_lower) {
-            return Some(info.clone());
+            if best.is_none() || key.len() < best.unwrap().0.len() {
+                best = Some((key.as_str(), info));
+            }
         }
+    }
+    if let Some((_, info)) = best {
+        return Some(info.clone());
     }
 
     // Contains (e.g., "sonnet" matches "claude-sonnet-4-20250514")
+    // Pick shortest key for determinism
+    let mut best: Option<(&str, &ModelInfo)> = None;
     for (key, info) in &registry.models {
         if key.to_lowercase().contains(&id_lower) {
-            return Some(info.clone());
+            if best.is_none() || key.len() < best.unwrap().0.len() {
+                best = Some((key.as_str(), info));
+            }
         }
+    }
+    if let Some((_, info)) = best {
+        return Some(info.clone());
     }
 
     None
@@ -281,14 +296,20 @@ pub fn estimate_cost(
     }
 
     let info = get_model_info(model)?;
+
+    // Validate provider matches to prevent cross-provider pricing
+    if info.provider != provider {
+        return None;
+    }
+
     let input_cost_per_token = info.input_cost_per_token?;
     let output_cost_per_token = info.output_cost_per_token?;
 
-    // Convert USD to cents
+    // Convert USD to cents, clamp to non-negative
     let input_cost = input_tokens as f64 * input_cost_per_token * 100.0;
     let output_cost = output_tokens as f64 * output_cost_per_token * 100.0;
 
-    Some((input_cost + output_cost) as u64)
+    Some((input_cost + output_cost).max(0.0).round() as u64)
 }
 
 /// Estimate cost in cents, returning 0 for unknown (backward compat).
@@ -383,10 +404,24 @@ pub async fn refresh_registry() -> Result<()> {
         return Err(format!("LiteLLM fetch failed with status {}", response.status()).into());
     }
 
-    let raw: HashMap<String, serde_json::Value> = response
-        .json()
+    // Read body with size cap to prevent memory exhaustion from malformed upstream
+    let bytes = response
+        .bytes()
         .await
-        .context("Failed to parse LiteLLM JSON")?;
+        .context("Failed to read LiteLLM response body")?;
+
+    const MAX_REGISTRY_SIZE: usize = 10 * 1024 * 1024; // 10 MB
+    if bytes.len() > MAX_REGISTRY_SIZE {
+        return Err(format!(
+            "LiteLLM registry too large ({} bytes, max {})",
+            bytes.len(),
+            MAX_REGISTRY_SIZE
+        )
+        .into());
+    }
+
+    let raw: HashMap<String, serde_json::Value> =
+        serde_json::from_slice(&bytes).context("Failed to parse LiteLLM JSON")?;
 
     let mut models = HashMap::new();
 
