@@ -233,7 +233,9 @@ pub async fn index_project_readmes() -> Result<String> {
         Ok("No README files found in configured directories".to_string())
     }
 }
-/// Convert Windows path to WSL path if needed (e.g., D:\projects -> /mnt/d/projects)
+/// Convert Windows path to WSL path if needed (e.g., D:\projects -> /mnt/d/projects).
+/// Only called at runtime on Linux (WSL); on other platforms it's used only in tests.
+#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
 fn convert_windows_to_wsl_path(path: &str) -> String {
     // Check if it looks like a Windows path (e.g., "D:\something" or "D:/something")
     if path.len() >= 2 && path.chars().nth(1) == Some(':') {
@@ -255,10 +257,14 @@ fn convert_windows_to_wsl_path(path: &str) -> String {
 pub async fn set_context_dirs(dirs: Vec<String>) -> Result<String> {
     info!(target: "4da::context", dirs = ?dirs, "Setting context directories");
 
-    // Convert Windows paths to WSL paths and validate
+    // Convert Windows paths to WSL paths on Linux (WSL) only; skip on native Windows
     let mut converted_dirs: Vec<String> = Vec::new();
     for dir in &dirs {
+        #[cfg(target_os = "linux")]
         let converted = convert_windows_to_wsl_path(dir);
+        #[cfg(not(target_os = "linux"))]
+        let converted = dir.to_string();
+
         if converted != *dir {
             debug!(target: "4da::context", from = dir, to = %converted, "Converted Windows path");
         }
