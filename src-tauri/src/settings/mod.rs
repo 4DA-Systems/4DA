@@ -438,7 +438,35 @@ impl Default for LocaleConfig {
 
 /// Detect system locale from OS environment
 pub fn detect_system_locale() -> LocaleConfig {
-    // Try LANG/LC_ALL env vars on Unix, or system locale on Windows
+    // On Windows, LANG/LC_ALL env vars typically don't exist.
+    // Use PowerShell to query the system culture (e.g., "en-US", "de-DE").
+    #[cfg(target_os = "windows")]
+    {
+        if let Ok(output) = std::process::Command::new("powershell")
+            .args([
+                "-NoProfile",
+                "-NonInteractive",
+                "-Command",
+                "(Get-Culture).Name",
+            ])
+            .output()
+        {
+            let culture = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            // culture is like "en-US", "de-DE", "ja-JP"
+            if let Some((lang, country_raw)) = culture.split_once('-') {
+                let country = country_raw.to_uppercase();
+                let language = lang.to_lowercase();
+                let currency = country_to_currency(&country);
+                return LocaleConfig {
+                    country,
+                    language,
+                    currency,
+                };
+            }
+        }
+    }
+
+    // Unix: try LANG/LC_ALL env vars (e.g., "en_US.UTF-8")
     let lang = std::env::var("LANG")
         .or_else(|_| std::env::var("LC_ALL"))
         .unwrap_or_default();
@@ -754,12 +782,15 @@ impl SettingsManager {
         if settings.license.tier == "pro" {
             info!(target: "4da::settings", "Migrated legacy tier 'pro' → 'signal'");
             settings.license.tier = "signal".to_string();
-            // Persist the migration so it only logs once
+            // Persist the migration so it only logs once (atomic write)
             if let Some(parent) = settings_path.parent() {
                 let _ = fs::create_dir_all(parent);
             }
             if let Ok(json) = serde_json::to_string_pretty(&settings) {
-                let _ = fs::write(&settings_path, json);
+                let tmp_path = settings_path.with_extension("json.tmp");
+                if fs::write(&tmp_path, &json).is_ok() {
+                    let _ = fs::rename(&tmp_path, &settings_path);
+                }
             }
         }
 
@@ -784,7 +815,10 @@ impl SettingsManager {
                             let _ = fs::create_dir_all(parent);
                         }
                         if let Ok(json) = serde_json::to_string_pretty(&clean_settings) {
-                            let _ = fs::write(&settings_path, json);
+                            let tmp_path = settings_path.with_extension("json.tmp");
+                            if fs::write(&tmp_path, &json).is_ok() {
+                                let _ = fs::rename(&tmp_path, &settings_path);
+                            }
                         }
                         info!(
                             target: "4da::keystore",
@@ -860,7 +894,13 @@ impl SettingsManager {
         }
 
         let json = serde_json::to_string_pretty(&disk_settings)?;
-        fs::write(&self.settings_path, json)?;
+
+        // Atomic write: write to temp file then rename, so a crash mid-write
+        // won't corrupt the original settings.json. fs::rename is atomic on
+        // the same volume.
+        let tmp_path = self.settings_path.with_extension("json.tmp");
+        fs::write(&tmp_path, &json)?;
+        fs::rename(&tmp_path, &self.settings_path)?;
 
         // Restrict file permissions to owner-only
         #[cfg(unix)]
