@@ -59,16 +59,18 @@ fn insert_test_entry(
 fn test_log_audit_writes_entry() {
     let conn = setup_test_db();
 
-    log_audit(
-        &conn,
-        "team-1",
-        "actor-1",
-        "Alice",
-        "settings.update",
-        "settings",
-        Some("settings-main"),
-        Some(&serde_json::json!({"field": "llm_provider", "old": "none", "new": "anthropic"})),
-    );
+    log_audit(&AuditLogParams {
+        conn: &conn,
+        team_id: "team-1",
+        actor_id: "actor-1",
+        actor_display_name: "Alice",
+        action: "settings.update",
+        resource_type: "settings",
+        resource_id: Some("settings-main"),
+        details: Some(
+            &serde_json::json!({"field": "llm_provider", "old": "none", "new": "anthropic"}),
+        ),
+    });
 
     let count: i64 = conn
         .query_row("SELECT COUNT(*) FROM audit_log", [], |row| row.get(0))
@@ -98,16 +100,16 @@ fn test_log_audit_writes_entry() {
 fn test_log_audit_without_optional_fields() {
     let conn = setup_test_db();
 
-    log_audit(
-        &conn,
-        "team-2",
-        "actor-2",
-        "Bob",
-        "analysis.run",
-        "analysis",
-        None,
-        None,
-    );
+    log_audit(&AuditLogParams {
+        conn: &conn,
+        team_id: "team-2",
+        actor_id: "actor-2",
+        actor_display_name: "Bob",
+        action: "analysis.run",
+        resource_type: "analysis",
+        resource_id: None,
+        details: None,
+    });
 
     let count: i64 = conn
         .query_row("SELECT COUNT(*) FROM audit_log", [], |row| row.get(0))
@@ -132,16 +134,16 @@ fn test_log_audit_failure_does_not_panic() {
     let conn = rusqlite::Connection::open_in_memory().expect("open in-memory db");
 
     // This should not panic — it should silently log a warning.
-    log_audit(
-        &conn,
-        "team-bad",
-        "actor-bad",
-        "Bad Actor",
-        "test.fail",
-        "test",
-        None,
-        None,
-    );
+    log_audit(&AuditLogParams {
+        conn: &conn,
+        team_id: "team-bad",
+        actor_id: "actor-bad",
+        actor_display_name: "Bad Actor",
+        action: "test.fail",
+        resource_type: "test",
+        resource_id: None,
+        details: None,
+    });
 
     // If we get here, the test passes — no panic occurred.
 }
@@ -151,16 +153,16 @@ fn test_log_audit_generates_unique_event_ids() {
     let conn = setup_test_db();
 
     for _ in 0..10 {
-        log_audit(
-            &conn,
-            "team-uniq",
-            "actor-1",
-            "Alice",
-            "item.view",
-            "item",
-            None,
-            None,
-        );
+        log_audit(&AuditLogParams {
+            conn: &conn,
+            team_id: "team-uniq",
+            actor_id: "actor-1",
+            actor_display_name: "Alice",
+            action: "item.view",
+            resource_type: "item",
+            resource_id: None,
+            details: None,
+        });
     }
 
     let count: i64 = conn
@@ -183,16 +185,18 @@ fn test_get_audit_entries_no_filters() {
 
     // Insert 3 entries
     for i in 0..3 {
-        log_audit(
-            &conn,
-            "team-q",
-            &format!("actor-{i}"),
-            &format!("User {i}"),
-            "item.view",
-            "item",
-            None,
-            None,
-        );
+        let actor = format!("actor-{i}");
+        let display = format!("User {i}");
+        log_audit(&AuditLogParams {
+            conn: &conn,
+            team_id: "team-q",
+            actor_id: &actor,
+            actor_display_name: &display,
+            action: "item.view",
+            resource_type: "item",
+            resource_id: None,
+            details: None,
+        });
     }
 
     let entries = get_audit_entries(&conn, "team-q", &AuditFilter::default()).expect("get entries");
@@ -208,36 +212,36 @@ fn test_get_audit_entries_no_filters() {
 fn test_get_audit_entries_filter_by_action() {
     let conn = setup_test_db();
 
-    log_audit(
-        &conn,
-        "team-f",
-        "a1",
-        "Alice",
-        "settings.update",
-        "settings",
-        None,
-        None,
-    );
-    log_audit(
-        &conn,
-        "team-f",
-        "a2",
-        "Bob",
-        "item.view",
-        "item",
-        None,
-        None,
-    );
-    log_audit(
-        &conn,
-        "team-f",
-        "a1",
-        "Alice",
-        "settings.update",
-        "settings",
-        None,
-        None,
-    );
+    log_audit(&AuditLogParams {
+        conn: &conn,
+        team_id: "team-f",
+        actor_id: "a1",
+        actor_display_name: "Alice",
+        action: "settings.update",
+        resource_type: "settings",
+        resource_id: None,
+        details: None,
+    });
+    log_audit(&AuditLogParams {
+        conn: &conn,
+        team_id: "team-f",
+        actor_id: "a2",
+        actor_display_name: "Bob",
+        action: "item.view",
+        resource_type: "item",
+        resource_id: None,
+        details: None,
+    });
+    log_audit(&AuditLogParams {
+        conn: &conn,
+        team_id: "team-f",
+        actor_id: "a1",
+        actor_display_name: "Alice",
+        action: "settings.update",
+        resource_type: "settings",
+        resource_id: None,
+        details: None,
+    });
 
     let filters = AuditFilter {
         action: Some("settings.update".to_string()),
@@ -253,36 +257,36 @@ fn test_get_audit_entries_filter_by_action() {
 fn test_get_audit_entries_filter_by_actor() {
     let conn = setup_test_db();
 
-    log_audit(
-        &conn,
-        "team-a",
-        "alice",
-        "Alice",
-        "item.view",
-        "item",
-        None,
-        None,
-    );
-    log_audit(
-        &conn,
-        "team-a",
-        "bob",
-        "Bob",
-        "item.view",
-        "item",
-        None,
-        None,
-    );
-    log_audit(
-        &conn,
-        "team-a",
-        "alice",
-        "Alice",
-        "analysis.run",
-        "analysis",
-        None,
-        None,
-    );
+    log_audit(&AuditLogParams {
+        conn: &conn,
+        team_id: "team-a",
+        actor_id: "alice",
+        actor_display_name: "Alice",
+        action: "item.view",
+        resource_type: "item",
+        resource_id: None,
+        details: None,
+    });
+    log_audit(&AuditLogParams {
+        conn: &conn,
+        team_id: "team-a",
+        actor_id: "bob",
+        actor_display_name: "Bob",
+        action: "item.view",
+        resource_type: "item",
+        resource_id: None,
+        details: None,
+    });
+    log_audit(&AuditLogParams {
+        conn: &conn,
+        team_id: "team-a",
+        actor_id: "alice",
+        actor_display_name: "Alice",
+        action: "analysis.run",
+        resource_type: "analysis",
+        resource_id: None,
+        details: None,
+    });
 
     let filters = AuditFilter {
         actor_id: Some("alice".to_string()),
@@ -298,26 +302,26 @@ fn test_get_audit_entries_filter_by_actor() {
 fn test_get_audit_entries_filter_by_resource_type() {
     let conn = setup_test_db();
 
-    log_audit(
-        &conn,
-        "team-r",
-        "a1",
-        "Alice",
-        "settings.update",
-        "settings",
-        None,
-        None,
-    );
-    log_audit(
-        &conn,
-        "team-r",
-        "a1",
-        "Alice",
-        "item.view",
-        "item",
-        None,
-        None,
-    );
+    log_audit(&AuditLogParams {
+        conn: &conn,
+        team_id: "team-r",
+        actor_id: "a1",
+        actor_display_name: "Alice",
+        action: "settings.update",
+        resource_type: "settings",
+        resource_id: None,
+        details: None,
+    });
+    log_audit(&AuditLogParams {
+        conn: &conn,
+        team_id: "team-r",
+        actor_id: "a1",
+        actor_display_name: "Alice",
+        action: "item.view",
+        resource_type: "item",
+        resource_id: None,
+        details: None,
+    });
 
     let filters = AuditFilter {
         resource_type: Some("item".to_string()),
@@ -372,16 +376,16 @@ fn test_get_audit_entries_respects_limit_and_offset() {
 fn test_get_audit_entries_wrong_team_returns_empty() {
     let conn = setup_test_db();
 
-    log_audit(
-        &conn,
-        "team-x",
-        "a1",
-        "Alice",
-        "item.view",
-        "item",
-        None,
-        None,
-    );
+    log_audit(&AuditLogParams {
+        conn: &conn,
+        team_id: "team-x",
+        actor_id: "a1",
+        actor_display_name: "Alice",
+        action: "item.view",
+        resource_type: "item",
+        resource_id: None,
+        details: None,
+    });
 
     let entries = get_audit_entries(&conn, "team-y", &AuditFilter::default()).expect("get entries");
     assert!(entries.is_empty());
@@ -396,36 +400,36 @@ fn test_get_audit_summary_counts() {
     let conn = setup_test_db();
 
     // Insert entries with recent timestamps
-    log_audit(
-        &conn,
-        "team-s",
-        "alice",
-        "Alice",
-        "settings.update",
-        "settings",
-        None,
-        None,
-    );
-    log_audit(
-        &conn,
-        "team-s",
-        "alice",
-        "Alice",
-        "settings.update",
-        "settings",
-        None,
-        None,
-    );
-    log_audit(
-        &conn,
-        "team-s",
-        "bob",
-        "Bob",
-        "item.view",
-        "item",
-        None,
-        None,
-    );
+    log_audit(&AuditLogParams {
+        conn: &conn,
+        team_id: "team-s",
+        actor_id: "alice",
+        actor_display_name: "Alice",
+        action: "settings.update",
+        resource_type: "settings",
+        resource_id: None,
+        details: None,
+    });
+    log_audit(&AuditLogParams {
+        conn: &conn,
+        team_id: "team-s",
+        actor_id: "alice",
+        actor_display_name: "Alice",
+        action: "settings.update",
+        resource_type: "settings",
+        resource_id: None,
+        details: None,
+    });
+    log_audit(&AuditLogParams {
+        conn: &conn,
+        team_id: "team-s",
+        actor_id: "bob",
+        actor_display_name: "Bob",
+        action: "item.view",
+        resource_type: "item",
+        resource_id: None,
+        details: None,
+    });
 
     let summary = get_audit_summary(&conn, "team-s", 30).expect("get summary");
 
@@ -670,16 +674,16 @@ fn test_cleanup_expired_audit_zero_retention() {
     let conn = setup_test_db();
 
     // Even a very recent entry should be deleted with 0 retention days
-    log_audit(
-        &conn,
-        "team-zero",
-        "a1",
-        "Alice",
-        "test.action",
-        "test",
-        None,
-        None,
-    );
+    log_audit(&AuditLogParams {
+        conn: &conn,
+        team_id: "team-zero",
+        actor_id: "a1",
+        actor_display_name: "Alice",
+        action: "test.action",
+        resource_type: "test",
+        resource_id: None,
+        details: None,
+    });
 
     let deleted = cleanup_expired_audit(&conn, "team-zero", 0).expect("cleanup");
     // With 0 days retention, datetime('now', '-0 days') = now, so nothing created
