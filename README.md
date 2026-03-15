@@ -26,7 +26,7 @@ Privacy-first. Runs locally. Zero telemetry. BYOK. ~15MB download.
 
 | Platform | Download | Auto-updates |
 |----------|----------|:------------:|
-| **Windows** | [`.msi` installer](https://github.com/runyourempire/4DA/releases/latest) | Yes |
+| **Windows** | [`.exe` installer](https://github.com/runyourempire/4DA/releases/latest) | Yes |
 | **macOS** | [`.dmg` (Apple Silicon & Intel)](https://github.com/runyourempire/4DA/releases/latest) | Yes |
 | **Linux** | [`.AppImage` / `.deb`](https://github.com/runyourempire/4DA/releases/latest) | Yes |
 
@@ -150,7 +150,7 @@ The app opens, walks you through onboarding (pick your stack, add an API key, po
 pnpm tauri build
 ```
 
-Creates platform-specific installers (`.msi` / `.dmg` / `.AppImage`) in `src-tauri/target/release/bundle/`.
+Creates platform-specific installers (`.exe` / `.dmg` / `.AppImage`) in `src-tauri/target/release/bundle/`.
 
 ## How It Works
 
