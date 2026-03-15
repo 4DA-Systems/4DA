@@ -1,0 +1,102 @@
+# Maintainer: 4DA Systems <packages@4da.ai>
+# https://4da.ai
+
+pkgname=4da-home-bin
+pkgver=1.0.0
+pkgrel=1
+pkgdesc="4DA — All signal. No feed. Privacy-first developer intelligence."
+arch=('x86_64')
+url="https://4da.ai"
+license=('custom:FSL-1.1-Apache-2.0')
+depends=(
+    'webkit2gtk-4.1'
+    'gtk3'
+    'libappindicator-gtk3'
+)
+optdepends=(
+    'ollama: Local LLM and embedding support'
+    'sqlite: CLI status bar integration'
+)
+provides=('4da')
+conflicts=('4da' '4da-git')
+options=('!strip')
+
+source=("${pkgname}-${pkgver}.AppImage::https://github.com/4dasystems/4da/releases/download/v${pkgver}/4da_${pkgver}_amd64.AppImage"
+        "LICENSE::https://raw.githubusercontent.com/4dasystems/4da/main/LICENSE")
+sha256sums=('SKIP'
+            'SKIP')
+
+prepare() {
+    chmod +x "${srcdir}/${pkgname}-${pkgver}.AppImage"
+
+    # Extract the AppImage
+    cd "${srcdir}"
+    "./${pkgname}-${pkgver}.AppImage" --appimage-extract
+}
+
+package() {
+    # Install application files to /opt/4da/
+    install -dm755 "${pkgdir}/opt/4da"
+    cp -r "${srcdir}/squashfs-root/usr/." "${pkgdir}/opt/4da/"
+
+    # Install the main binary
+    install -Dm755 "${srcdir}/squashfs-root/AppRun" "${pkgdir}/opt/4da/4da"
+
+    # Create symlink in /usr/bin/
+    install -dm755 "${pkgdir}/usr/bin"
+    ln -sf /opt/4da/4da "${pkgdir}/usr/bin/4da"
+
+    # Install desktop file
+    install -Dm644 "${srcdir}/squashfs-root/4da.desktop" \
+        "${pkgdir}/usr/share/applications/4da.desktop"
+
+    # Fix desktop file paths
+    sed -i 's|Exec=.*|Exec=/usr/bin/4da %U|' \
+        "${pkgdir}/usr/share/applications/4da.desktop"
+    sed -i 's|Icon=.*|Icon=4da|' \
+        "${pkgdir}/usr/share/applications/4da.desktop"
+
+    # Install icons (extract all available sizes)
+    for size in 32 64 128 256 512; do
+        icon="${srcdir}/squashfs-root/usr/share/icons/hicolor/${size}x${size}/apps/4da.png"
+        if [ -f "${icon}" ]; then
+            install -Dm644 "${icon}" \
+                "${pkgdir}/usr/share/icons/hicolor/${size}x${size}/apps/4da.png"
+        fi
+    done
+
+    # Fallback: install any .png found as scalable icon
+    if [ -f "${srcdir}/squashfs-root/4da.png" ]; then
+        install -Dm644 "${srcdir}/squashfs-root/4da.png" \
+            "${pkgdir}/usr/share/icons/hicolor/256x256/apps/4da.png"
+    fi
+
+    # Install license
+    install -Dm644 "${srcdir}/LICENSE" "${pkgdir}/usr/share/licenses/${pkgname}/LICENSE"
+
+    # Install shell completions if present
+    if [ -d "${srcdir}/squashfs-root/usr/share/bash-completion" ]; then
+        cp -r "${srcdir}/squashfs-root/usr/share/bash-completion" \
+            "${pkgdir}/usr/share/"
+    fi
+
+    # Install systemd user service
+    install -dm755 "${pkgdir}/usr/lib/systemd/user"
+    cat > "${pkgdir}/usr/lib/systemd/user/4da-monitor.service" << 'EOF'
+[Unit]
+Description=4DA Intelligence Monitor
+Documentation=https://4da.ai
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/4da monitor
+Restart=on-failure
+RestartSec=30
+Environment=WEBKIT_DISABLE_DMABUF_RENDERER=1
+
+[Install]
+WantedBy=default.target
+EOF
+}

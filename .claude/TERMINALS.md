@@ -13,3 +13,11 @@
 - **Status**: working | committing | done
 - **Files**: list of files being modified
 -->
+
+### T1 — P1 Linux improvements
+- **Status**: done
+- **Files**: src-tauri/src/suns/hardware_monitor.rs, src-tauri/src/bin/cli.rs, LINUX.md
+
+### T2 — P0 Linux fixes (NVIDIA, single-instance, desktop, CI)
+- **Status**: done
+- **Files**: src-tauri/src/lib.rs, src-tauri/Cargo.toml, src-tauri/tauri.conf.json, src-tauri/desktop-template.desktop, .github/workflows/release.yml
