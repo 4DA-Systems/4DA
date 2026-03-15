@@ -1462,7 +1462,18 @@ pub fn run() {
             if let tauri::RunEvent::WindowEvent { event: tauri::WindowEvent::CloseRequested { api, .. }, .. } = &event {
                 let close_to_tray = {
                     let settings = get_settings_manager().lock();
-                    settings.get().monitoring.close_to_tray.unwrap_or(true)
+                    let user_pref = settings.get().monitoring.close_to_tray;
+                    // On Linux with GNOME/Pantheon/Unity (no system tray support),
+                    // default to false to prevent the window from becoming unreachable.
+                    // Users who install a tray extension can explicitly enable this.
+                    #[cfg(target_os = "linux")]
+                    let default_value = {
+                        let desktop = std::env::var("XDG_CURRENT_DESKTOP").unwrap_or_default().to_uppercase();
+                        !desktop.contains("GNOME") && !desktop.contains("PANTHEON") && !desktop.contains("UNITY")
+                    };
+                    #[cfg(not(target_os = "linux"))]
+                    let default_value = true;
+                    user_pref.unwrap_or(default_value)
                 };
                 if close_to_tray {
                     api.prevent_close();
