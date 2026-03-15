@@ -57,12 +57,69 @@ pub(crate) fn get_analysis_abort() -> &'static Arc<AtomicBool> {
 
 /// Get the canonical path to the 4da.db database file.
 /// Single source of truth — all connection opens should use this.
+///
+/// Resolution order:
+/// 1. FOURDA_DB_PATH env var (explicit override)
+/// 2. data/4da.db relative to CARGO_MANIFEST_DIR (development builds)
+/// 3. Platform-specific app data directory (deployed builds)
 pub(crate) fn get_db_path() -> PathBuf {
-    let mut base = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    base.pop();
-    base.push("data");
-    base.push("4da.db");
-    base
+    // 1. Explicit override via environment variable
+    if let Ok(path) = std::env::var("FOURDA_DB_PATH") {
+        return PathBuf::from(path);
+    }
+
+    // 2. Development: relative to project root (CARGO_MANIFEST_DIR = src-tauri/)
+    let dev_path = {
+        let mut base = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        base.pop(); // up from src-tauri/ to project root
+        base.push("data");
+        base.push("4da.db");
+        base
+    };
+    if dev_path.parent().map_or(false, |p| p.exists()) {
+        return dev_path;
+    }
+
+    // 3. Deployed: platform-specific app data directory
+    let app_data = get_platform_data_dir();
+    app_data.join("4da.db")
+}
+
+/// Get the platform-specific data directory for 4DA.
+/// Mirrors Tauri's app_data_dir resolution for com.4da.app.
+fn get_platform_data_dir() -> PathBuf {
+    #[cfg(target_os = "windows")]
+    {
+        if let Ok(appdata) = std::env::var("APPDATA") {
+            return PathBuf::from(appdata).join("com.4da.app").join("data");
+        }
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        if let Some(home) = dirs::home_dir() {
+            return home
+                .join("Library")
+                .join("Application Support")
+                .join("com.4da.app")
+                .join("data");
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        if let Some(home) = dirs::home_dir() {
+            return home
+                .join(".local")
+                .join("share")
+                .join("com.4da.app")
+                .join("data");
+        }
+    }
+
+    // Ultimate fallback: current directory
+    warn!(target: "4da::state", "Could not determine platform data directory, using ./data");
+    PathBuf::from("data")
 }
 
 /// Register the sqlite-vec extension globally (idempotent).

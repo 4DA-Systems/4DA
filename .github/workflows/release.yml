@@ -100,25 +100,6 @@ jobs:
       - name: Install frontend dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Import Apple certificate (macOS)
-        if: runner.os == 'macOS'
-        env:
-          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
-          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-        run: |
-          CERTIFICATE_PATH=$RUNNER_TEMP/certificate.p12
-          KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
-          KEYCHAIN_PASSWORD=$(openssl rand -base64 24)
-
-          echo -n "$APPLE_CERTIFICATE" | base64 --decode -o $CERTIFICATE_PATH
-
-          security create-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
-          security set-keychain-settings -lut 21600 $KEYCHAIN_PATH
-          security unlock-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
-          security import $CERTIFICATE_PATH -P "$APPLE_CERTIFICATE_PASSWORD" -A -t cert -f pkcs12 -k $KEYCHAIN_PATH
-          security set-key-partition-list -S apple-tool:,apple: -k "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
-          security list-keychain -d user -s $KEYCHAIN_PATH
-
       - name: Build and release
         uses: tauri-apps/tauri-action@v0
         env:
@@ -142,12 +123,10 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "| File | Size |" >> $GITHUB_STEP_SUMMARY
           echo "|------|------|" >> $GITHUB_STEP_SUMMARY
-          for f in src-tauri/target/${{ matrix.target }}/release/bundle/**/*; do
-            if [ -f "$f" ]; then
-              SIZE=$(du -h "$f" | cut -f1)
-              NAME=$(basename "$f")
-              echo "| $NAME | $SIZE |" >> $GITHUB_STEP_SUMMARY
-            fi
+          find src-tauri/target/${{ matrix.target }}/release/bundle -type f | while read f; do
+            SIZE=$(du -h "$f" | cut -f1)
+            NAME=$(basename "$f")
+            echo "| $NAME | $SIZE |" >> $GITHUB_STEP_SUMMARY
           done
 
       - name: Build CLI binary
