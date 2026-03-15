@@ -115,6 +115,12 @@ impl ProjectScanner {
         // We add the leaf segments so they're caught when traversed into:
         skip_dirs.insert("gcloud".to_string());
         skip_dirs.insert("keyrings".to_string());
+        // macOS system metadata directories — waste I/O if scanned
+        skip_dirs.insert(".Spotlight-V100".to_string());
+        skip_dirs.insert(".fseventsd".to_string());
+        skip_dirs.insert(".Trash".to_string());
+        skip_dirs.insert(".TemporaryItems".to_string());
+        skip_dirs.insert(".DocumentRevisions-V100".to_string());
 
         Self {
             max_depth: 5,
