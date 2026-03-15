@@ -1,0 +1,546 @@
+---
+title: "Privacy Policy — 4DA"
+description: "Privacy Policy for 4DA desktop application, website, and store. Your data stays on your device."
+permalink: "/privacy.html"
+---
+{% extends "base.njk" %}
+
+{% block head %}
+  <link rel="canonical" href="https://4da.ai/privacy">
+  <meta property="og:title" content="Privacy Policy — 4DA">
+  <meta property="og:description" content="Privacy Policy for 4DA desktop application, website, and store. Your data stays on your device.">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://4da.ai/privacy">
+  <meta property="og:image" content="https://4da.ai/og-image.png">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Privacy Policy — 4DA">
+  <meta name="twitter:description" content="Privacy Policy for 4DA. Your data stays on your device.">
+  <meta name="twitter:image" content="https://4da.ai/og-image.png">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: #0A0A0A;
+      color: #FFFFFF;
+      min-height: 100vh;
+      line-height: 1.7;
+    }
+    .legal-nav {
+      padding: 20px 0;
+      border-bottom: 1px solid #2A2A2A;
+    }
+    .legal-nav .container {
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 0 24px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .legal-nav a {
+      color: #A0A0A0;
+      text-decoration: none;
+      font-size: 14px;
+    }
+    .legal-nav a:hover { color: #FFFFFF; }
+    .legal-nav .brand {
+      font-weight: 600;
+      color: #FFFFFF;
+      font-size: 15px;
+    }
+    .legal-container {
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 48px 24px 80px;
+    }
+    h1 {
+      font-size: 32px;
+      font-weight: 600;
+      margin-bottom: 8px;
+      letter-spacing: -0.02em;
+    }
+    .effective-date {
+      font-size: 14px;
+      color: #A0A0A0;
+      margin-bottom: 40px;
+      padding-bottom: 24px;
+      border-bottom: 1px solid #2A2A2A;
+    }
+    .short-version {
+      background: #141414;
+      border: 1px solid #2A2A2A;
+      border-radius: 12px;
+      padding: 24px;
+      margin-bottom: 40px;
+      font-size: 15px;
+      line-height: 1.7;
+      color: #A0A0A0;
+    }
+    h2 {
+      font-size: 22px;
+      font-weight: 600;
+      margin-top: 48px;
+      margin-bottom: 16px;
+      padding-top: 24px;
+      border-top: 1px solid #1F1F1F;
+      letter-spacing: -0.01em;
+    }
+    h2:first-of-type { border-top: none; padding-top: 0; }
+    h3 {
+      font-size: 16px;
+      font-weight: 600;
+      margin-top: 32px;
+      margin-bottom: 12px;
+      color: #E0E0E0;
+    }
+    p {
+      margin-bottom: 16px;
+      color: #C0C0C0;
+      font-size: 15px;
+    }
+    ul, ol {
+      margin-bottom: 16px;
+      padding-left: 24px;
+    }
+    li {
+      margin-bottom: 8px;
+      color: #C0C0C0;
+      font-size: 15px;
+    }
+    a { color: #D4AF37; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    strong { color: #FFFFFF; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 16px 0 24px;
+      font-size: 13px;
+    }
+    th, td {
+      padding: 10px 12px;
+      border: 1px solid #2A2A2A;
+      text-align: left;
+    }
+    th {
+      background: #141414;
+      font-weight: 600;
+      color: #FFFFFF;
+    }
+    td { color: #C0C0C0; }
+    hr {
+      border: none;
+      border-top: 1px solid #1F1F1F;
+      margin: 32px 0;
+    }
+    .legal-footer {
+      padding: 24px 0;
+      border-top: 1px solid #2A2A2A;
+      text-align: center;
+    }
+    .legal-footer .container {
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 0 24px;
+    }
+    .legal-footer-links {
+      display: flex;
+      justify-content: center;
+      gap: 24px;
+      flex-wrap: wrap;
+      font-size: 13px;
+    }
+    .legal-footer-links a { color: #A0A0A0; }
+    .legal-footer-links a:hover { color: #FFFFFF; }
+    @media (max-width: 600px) {
+      h1 { font-size: 24px; }
+      h2 { font-size: 18px; }
+      .legal-container { padding: 32px 16px 60px; }
+      table { font-size: 11px; }
+      th, td { padding: 6px 8px; }
+    }
+  </style>
+{% endblock %}
+
+{% block body %}
+  <nav class="legal-nav">
+    <div class="container">
+      <a href="/" class="brand">4DA</a>
+      <a href="/terms">Terms of Service</a>
+    </div>
+  </nav>
+
+  <div class="legal-container">
+    <h1>Privacy Policy</h1>
+    <p class="effective-date"><strong>4DA Systems Pty Ltd</strong> &middot; Effective Date: 15 March 2026 &middot; Last Updated: 15 March 2026</p>
+
+    <div class="short-version">
+      4DA is a desktop application that runs on your computer. Your data stays on your computer. We do not collect it, we do not transmit it, we do not store it on our servers, and we do not sell it. This privacy policy exists because the law requires one, but also because we believe you deserve to know exactly how your software works.
+    </div>
+
+    <h2>1. Introduction and Scope</h2>
+    <p>This Privacy Policy describes how <strong>4DA Systems Pty Ltd</strong> (ACN 696 078 841, ABN 51 696 078 841; "we", "us", "our") handles information in connection with:</p>
+    <ul>
+      <li><strong>The 4DA Desktop Application</strong> ("the App") -- a local-first desktop application built with Tauri 2.0 (Rust backend, React frontend) that runs entirely on your device</li>
+      <li><strong>The 4DA Website</strong> (4da.ai) -- our informational website</li>
+      <li><strong>The 4DA Store</strong> (shop.4da.ai) -- our merchandise store hosted on Shopify</li>
+    </ul>
+    <p>These three products have fundamentally different privacy characteristics, and this policy addresses each separately. The App is local-first software with no server-side data collection. The Website and Store are standard web properties with typical web privacy considerations.</p>
+    <p><strong>Our registered business address is in Queensland, Australia.</strong> We comply with the Australian Privacy Act 1988 (Cth), the EU General Data Protection Regulation (GDPR), and the California Consumer Privacy Act (CCPA), along with other applicable privacy laws.</p>
+    <p>For GDPR purposes, 4DA Systems Pty Ltd is the data controller for any personal data processed through the Website and Store. For the App, you are the sole controller of your own data -- we never have access to it.</p>
+
+    <h2>2. The 4DA Desktop Application</h2>
+
+    <h3>2.1 Privacy by Architecture</h3>
+    <p>4DA is designed so that privacy is not a policy choice but a technical fact. The App has no server-side component that collects user data. There is no 4DA cloud service, no user database on our end, and no mechanism for us to receive your data even if we wanted to. Your data lives in a local SQLite database on your machine and nowhere else.</p>
+    <p>No cloud account is required. No sign-up. No registration. You download the App and use it.</p>
+
+    <h3>2.2 What Data the App Processes Locally</h3>
+    <p>The App processes the following data <strong>entirely on your local machine</strong>:</p>
+    <ul>
+      <li><strong>Content from public APIs:</strong> The App fetches publicly available content from sources including Hacker News, GitHub, arXiv, Reddit, and RSS feeds. These requests go directly from your machine to the public APIs. No personal data is included in these requests beyond your device's IP address, which is inherent to any network request.</li>
+      <li><strong>Your project files:</strong> The Autonomous Context Engine (ACE) can scan local project directories you configure to understand your development context and improve content relevance. This data is processed locally and never leaves your machine.</li>
+      <li><strong>Your preferences and settings:</strong> Configuration data stored in a local JSON file on your device. This file contains non-sensitive preferences such as theme, source configuration, and display options. Sensitive credentials are stored separately in your operating system's keychain (see Section 2.4).</li>
+      <li><strong>Local database:</strong> A SQLite database (with sqlite-vec for vector search) stored on your device containing aggregated content, embeddings, and relevance scores. This database is never synced to, uploaded to, or transmitted to any external service.</li>
+      <li><strong>Local telemetry:</strong> Usage analytics are stored locally for your own reference. This telemetry data is never sent to 4DA Systems or any third party.</li>
+      <li><strong>Content scoring and analysis:</strong> The PASIFA scoring algorithm runs entirely on your machine. When configured, local embeddings are generated via Ollama (also on your machine). When you opt to use a cloud LLM provider, only the specific content being analysed is sent (see Section 2.4).</li>
+    </ul>
+
+    <h3>2.3 What Data We Collect from the App</h3>
+    <p><strong>None.</strong></p>
+    <ul>
+      <li>No telemetry is sent externally</li>
+      <li>No usage analytics leave your device</li>
+      <li>No crash reports are transmitted</li>
+      <li>No error logs are sent to external services</li>
+      <li>No tracking pixels, fingerprinting, or behavioural profiling</li>
+      <li>No user accounts, logins, or registrations</li>
+      <li>No cookies (the App is a desktop application, not a website)</li>
+      <li>No third-party SDKs that phone home</li>
+      <li>No device identifiers sent anywhere</li>
+    </ul>
+    <p>We have made a deliberate architectural decision to build <strong>zero data collection infrastructure</strong> for the App. We cannot collect your data because we have built no mechanism to do so.</p>
+
+    <h3>2.4 API Key Storage and the BYOK Model</h3>
+    <p>4DA operates on a <strong>Bring Your Own Key (BYOK)</strong> model. You provide your own API keys for any external services you choose to use. We do not supply, manage, or have access to your API keys.</p>
+    <p><strong>How your API keys are stored:</strong></p>
+    <p>Your API keys are stored in your <strong>operating system's native credential manager</strong> -- the most secure local storage available on your platform:</p>
+    <ul>
+      <li><strong>Windows:</strong> Windows Credential Manager</li>
+      <li><strong>macOS:</strong> macOS Keychain</li>
+      <li><strong>Linux:</strong> Secret Service API (GNOME Keyring or KWallet)</li>
+    </ul>
+    <p>API keys are never stored in plaintext configuration files. If you previously used a version of 4DA that stored keys in the settings file, the App automatically migrates them to the OS keychain and removes them from the plaintext file.</p>
+    <p>If the OS keychain is unavailable (e.g., headless Linux environments or CI systems), the App falls back to in-memory storage for the duration of the session, and keys are not persisted to disk.</p>
+    <p><strong>Your API keys are never transmitted to 4DA Systems or any party other than the specific provider you configured.</strong></p>
+
+    <h3>2.5 LLM API Calls</h3>
+    <p>The App supports integration with large language model (LLM) providers. Here is exactly how this works:</p>
+    <ul>
+      <li><strong>Supported providers:</strong> Anthropic (Claude), OpenAI, OpenAI-compatible endpoints (including providers such as Groq, DeepSeek, and others you configure), and Ollama (local).</li>
+      <li><strong>API calls go directly from your machine to the provider.</strong> The App makes HTTPS requests directly to the provider's API endpoints (e.g., api.anthropic.com, api.openai.com, or any custom base URL you configure for OpenAI-compatible providers). 4DA Systems does not proxy, intercept, log, or route these calls through any 4DA infrastructure. We never see the content of these requests or responses.</li>
+      <li><strong>What is sent:</strong> The content being analysed (e.g., article text, search queries) and a system prompt. Your API key is included in the request headers for authentication with the provider.</li>
+      <li><strong>Ollama runs entirely locally.</strong> If you use Ollama as your LLM provider (the default configuration), all AI processing happens on your machine at <code>localhost:11434</code> with zero external API calls. This is a fully offline option. If you point Ollama to a remote instance, data flows to that remote address -- this is your configuration choice.</li>
+    </ul>
+    <p>When you use a third-party LLM provider, you are subject to that provider's privacy policy. We encourage you to review:</p>
+    <ul>
+      <li><a href="https://www.anthropic.com/privacy">Anthropic Privacy Policy</a></li>
+      <li><a href="https://openai.com/policies/privacy-policy">OpenAI Privacy Policy</a></li>
+      <li>The privacy policy of any OpenAI-compatible provider you choose to configure</li>
+    </ul>
+
+    <h3>2.6 Content Source Fetching</h3>
+    <p>The App fetches publicly available content from sources you configure:</p>
+    <ul>
+      <li><strong>Hacker News:</strong> Public API requests to <code>hacker-news.firebaseio.com</code>. No authentication required.</li>
+      <li><strong>Reddit:</strong> Public API requests to <code>www.reddit.com</code>. No authentication tokens sent.</li>
+      <li><strong>RSS/Atom feeds:</strong> Standard HTTP GET requests to the feed URLs you configure.</li>
+      <li><strong>GitHub:</strong> Public API requests to <code>api.github.com</code>. If you configure a GitHub Personal Access Token (PAT) for higher rate limits or private repository access, your PAT is sent to GitHub's API in the request headers. Your PAT is stored in the OS keychain (see Section 2.4) and is never sent to 4DA Systems.</li>
+      <li><strong>arXiv:</strong> Public API requests to <code>export.arxiv.org</code>.</li>
+    </ul>
+    <p>All of these requests go directly from your machine to the respective service. Your device's IP address is visible to each service as part of the standard HTTPS connection.</p>
+
+    <h3>2.7 Digest Email (Optional)</h3>
+    <p>The App can optionally send you a periodic email digest of relevant content. This feature is <strong>off by default</strong> and requires you to configure your own SMTP server credentials. When enabled:</p>
+    <ul>
+      <li>Emails are sent <strong>directly from your machine</strong> to your SMTP provider. 4DA Systems never sees your email address, SMTP credentials, or digest contents.</li>
+      <li>Your SMTP credentials are stored locally on your device.</li>
+      <li>This feature is entirely opt-in and can be disabled at any time.</li>
+    </ul>
+
+    <h3>2.8 License Validation (Signal Tier)</h3>
+    <p>If you purchase a Signal subscription, the App validates your license key using the <a href="https://keygen.sh">Keygen</a> license management service. This is the <strong>only external call that 4DA Systems controls</strong>. This validation:</p>
+    <ul>
+      <li>Sends your <strong>license key</strong> to Keygen's validation API</li>
+      <li>Does <strong>not</strong> send your name, email address, device identifiers, or any other personal data</li>
+      <li>Occurs at activation and periodically thereafter (cached for 24 hours to minimise network calls)</li>
+      <li>Results are cached locally to allow offline usage between validations</li>
+    </ul>
+    <p>The App also supports <strong>offline license verification</strong> using Ed25519 digital signatures embedded in the license key itself. This verification requires no network access whatsoever.</p>
+    <p>Keygen may log the IP address of the request as part of standard server operations. See <a href="https://keygen.sh/privacy/">Keygen's Privacy Policy</a> for details.</p>
+    <p>The free tier of 4DA does not perform any license validation and makes no calls to Keygen.</p>
+
+    <h3>2.9 Auto-Updates</h3>
+    <p>The App checks for updates using the standard Tauri updater, which queries GitHub Releases. This check:</p>
+    <ul>
+      <li>Sends a standard HTTPS request to GitHub's API to check for new versions</li>
+      <li>Does <strong>not</strong> include any personal data, device identifiers, or telemetry</li>
+      <li>Your IP address is visible to GitHub as part of the standard HTTPS connection</li>
+    </ul>
+    <p>See <a href="https://docs.github.com/en/site-policy/privacy-policies/github-general-privacy-statement">GitHub's Privacy Statement</a> for how GitHub handles server logs.</p>
+
+    <h3>2.10 Team Relay (Optional, Paid Feature)</h3>
+    <p>4DA offers a Team Relay feature for teams to sync relevant content metadata across devices. This feature is designed with the same privacy-first principles as the rest of the App:</p>
+    <ul>
+      <li><strong>End-to-end encryption:</strong> All data synced through the relay is encrypted on the client using XChaCha20Poly1305 with X25519 key exchange and HKDF key derivation. Encryption and decryption happen exclusively on your device.</li>
+      <li><strong>Zero-knowledge relay:</strong> The relay server handles only encrypted blobs. It cannot read, decrypt, or access the plaintext content of any synced data. It is architecturally a "dumb pipe" -- it routes encrypted payloads without any ability to inspect them.</li>
+      <li><strong>Key management is local:</strong> Each team member's X25519 private key is generated on their device and never leaves it. Team-wide symmetric keys are distributed encrypted per-member. Private keys are zeroized from memory when no longer needed.</li>
+      <li><strong>No content visibility:</strong> 4DA Systems operates the relay infrastructure but has no ability to view the content being synced between team members.</li>
+    </ul>
+
+    <h3>2.11 Source Code Transparency</h3>
+    <p>The 4DA source code is publicly available under the FSL-1.1-Apache-2.0 license. You can audit exactly what the App does, what network requests it makes, and verify that it behaves as described in this policy. We believe source-available code is the strongest privacy guarantee we can offer.</p>
+
+    <h2>3. The 4DA Website (4da.ai)</h2>
+    <p>Unlike the App, our website is a standard web property. When you visit 4da.ai:</p>
+
+    <h3>3.1 Data We May Collect</h3>
+    <ul>
+      <li><strong>Server logs:</strong> Our hosting provider (Vercel) may collect standard server log data including IP addresses, browser type, referring pages, and pages visited. See <a href="https://vercel.com/legal/privacy-policy">Vercel's Privacy Policy</a>.</li>
+      <li><strong>Analytics:</strong> We may use privacy-respecting analytics to understand aggregate traffic patterns. If used, this data is anonymised and does not track individual users across sessions.</li>
+      <li><strong>Cookies:</strong> The website may use essential cookies for basic functionality. We do not use third-party advertising cookies or cross-site tracking cookies.</li>
+    </ul>
+
+    <h3>3.2 Data We Do Not Collect via the Website</h3>
+    <ul>
+      <li>We do not require account creation on the website</li>
+      <li>We do not collect personal information through the website unless you voluntarily provide it (e.g., by emailing us)</li>
+    </ul>
+
+    <h2>4. The 4DA Store (shop.4da.ai)</h2>
+    <p>Our merchandise store is hosted on Shopify. When you make a purchase:</p>
+
+    <h3>4.1 Data Shopify Collects</h3>
+    <p>Shopify processes your purchase information including name, email, shipping address, and payment details. This data is handled by Shopify in accordance with their privacy practices. See <a href="https://www.shopify.com/legal/privacy">Shopify's Privacy Policy</a>.</p>
+
+    <h3>4.2 Our Use of Store Data</h3>
+    <p>We use information from store purchases solely to:</p>
+    <ul>
+      <li>Fulfil and ship your order</li>
+      <li>Respond to customer service inquiries</li>
+      <li>Comply with legal obligations (e.g., tax reporting)</li>
+    </ul>
+    <p>We do not use purchase data for marketing, profiling, or any purpose unrelated to fulfilling your order unless you explicitly opt in to communications.</p>
+
+    <h2>5. What We Do Not Do</h2>
+    <p>To be unambiguous:</p>
+    <ul>
+      <li><strong>We do not sell your data.</strong> Not now, not ever, not to anyone.</li>
+      <li><strong>We do not share your data</strong> with third parties for their marketing or advertising purposes.</li>
+      <li><strong>We do not build profiles</strong> about you based on your use of the App.</li>
+      <li><strong>We do not serve advertisements</strong> in the App, on the Website, or through the Store.</li>
+      <li><strong>We do not engage in cross-service tracking</strong> between the App, Website, and Store.</li>
+      <li><strong>We do not use third-party SDKs</strong> that collect data in the App.</li>
+      <li><strong>We do not collect device fingerprints</strong> or hardware identifiers.</li>
+    </ul>
+
+    <h2>6. Third-Party Services Summary</h2>
+    <table>
+      <thead>
+        <tr><th>Service</th><th>Used By</th><th>Data Shared</th><th>Purpose</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>LLM Providers (Anthropic, OpenAI, OpenAI-compatible)</td><td>App (BYOK, user-initiated)</td><td>Content being analysed + your API key (direct from your machine to provider)</td><td>AI-powered content analysis</td></tr>
+        <tr><td>Ollama</td><td>App (default)</td><td>Nothing (fully local at localhost:11434)</td><td>Local AI processing and embeddings</td></tr>
+        <tr><td>Hacker News API</td><td>App</td><td>Standard HTTP requests (your IP visible)</td><td>Content aggregation</td></tr>
+        <tr><td>GitHub API</td><td>App</td><td>Standard HTTP requests + optional PAT (your IP visible)</td><td>Content aggregation, update checks</td></tr>
+        <tr><td>Reddit</td><td>App</td><td>Standard HTTP requests (your IP visible)</td><td>Content aggregation</td></tr>
+        <tr><td>arXiv</td><td>App</td><td>Standard HTTP requests (your IP visible)</td><td>Content aggregation</td></tr>
+        <tr><td>RSS/Atom feeds</td><td>App</td><td>Standard HTTP requests (your IP visible)</td><td>Content aggregation</td></tr>
+        <tr><td>Keygen</td><td>App (Signal tier only)</td><td>License key</td><td>License validation</td></tr>
+        <tr><td>User's SMTP provider</td><td>App (optional, user-configured)</td><td>Digest email contents</td><td>Email delivery</td></tr>
+        <tr><td>Vercel</td><td>Website</td><td>Server logs, analytics</td><td>Website hosting</td></tr>
+        <tr><td>Shopify</td><td>Store</td><td>Purchase and shipping information</td><td>Merchandise sales</td></tr>
+      </tbody>
+    </table>
+
+    <h2>7. Data Retention and Deletion</h2>
+
+    <h3>7.1 App Data</h3>
+    <p>All App data resides on your device. You have complete control:</p>
+    <ul>
+      <li><strong>Delete the database:</strong> Remove the local SQLite database file to erase all aggregated content, embeddings, and relevance scores</li>
+      <li><strong>Delete settings:</strong> Remove the settings file to erase all non-sensitive configuration</li>
+      <li><strong>Delete keychain entries:</strong> Remove the "com.4da.app" entries from your OS credential manager (Windows Credential Manager, macOS Keychain, or Linux Secret Service) to erase stored API keys and license keys</li>
+      <li><strong>Uninstall the App:</strong> Removes the application binary. Deleting the data directory and keychain entries removes all associated data</li>
+      <li><strong>We cannot delete your App data</strong> because we never had access to it</li>
+    </ul>
+    <p>No action from us is required for you to fully erase all traces of the App from your system.</p>
+
+    <h3>7.2 Website Data</h3>
+    <p>Server logs retained by Vercel are subject to Vercel's data retention policies. We do not independently retain website visitor data.</p>
+
+    <h3>7.3 Store Data</h3>
+    <p>Purchase records are retained as required by Australian tax law (generally 5 years). You may request deletion of non-legally-required data by contacting <a href="mailto:privacy@4da.ai">privacy@4da.ai</a>.</p>
+
+    <h2>8. Children's Privacy</h2>
+    <p>The 4DA App, Website, and Store are not designed for, marketed to, or intended for use by children under the age of 13 (or under 16 in jurisdictions where GDPR applies). We do not knowingly collect personal information from children.</p>
+    <p>If you believe a child has provided us with personal information (e.g., via email or the Store), please contact us at <a href="mailto:privacy@4da.ai">privacy@4da.ai</a> and we will promptly delete it.</p>
+
+    <h2>9. Your Rights</h2>
+    <p>Because the App collects no personal data, most privacy rights are automatically satisfied for App usage. For data held in connection with the Website or Store, the following rights apply:</p>
+
+    <h3>9.1 Australian Privacy Act</h3>
+    <p>Under the Australian Privacy Principles (APPs), you have the right to:</p>
+    <ul>
+      <li>Access personal information we hold about you</li>
+      <li>Request correction of inaccurate information</li>
+      <li>Lodge a complaint with us or the Office of the Australian Information Commissioner (OAIC) if you believe your privacy has been breached</li>
+    </ul>
+    <p><strong>Small business exemption:</strong> Under the Australian Privacy Act 1988, businesses with annual turnover under AUD 3 million are generally exempt from the APPs. While this exemption may currently apply to 4DA Systems, we voluntarily comply with the APPs because privacy is foundational to our product. We commit to maintaining this standard regardless of whether the Act legally requires it.</p>
+    <p>To make a request, contact <a href="mailto:privacy@4da.ai">privacy@4da.ai</a>. We will respond within 30 days.</p>
+
+    <h3>9.2 GDPR (European Economic Area, United Kingdom, Switzerland)</h3>
+    <p>If you are in the EEA, UK, or Switzerland, you have the right to:</p>
+    <ul>
+      <li><strong>Access</strong> your personal data</li>
+      <li><strong>Rectification</strong> of inaccurate data</li>
+      <li><strong>Erasure</strong> ("right to be forgotten")</li>
+      <li><strong>Restriction</strong> of processing</li>
+      <li><strong>Data portability</strong> -- receive your data in a structured, machine-readable format</li>
+      <li><strong>Object</strong> to processing based on legitimate interests</li>
+      <li><strong>Withdraw consent</strong> at any time where processing is based on consent</li>
+      <li><strong>Lodge a complaint</strong> with your local data protection supervisory authority</li>
+    </ul>
+    <p><strong>Legal basis for processing:</strong> Where we process personal data (Website analytics, Store transactions), our legal bases are:</p>
+    <ul>
+      <li><strong>Contractual necessity</strong> -- to fulfil merchandise orders</li>
+      <li><strong>Legitimate interests</strong> -- to operate and improve the Website, provided these interests are not overridden by your rights</li>
+      <li><strong>Legal obligation</strong> -- to comply with tax and business record-keeping laws</li>
+    </ul>
+    <p><strong>Note on the App:</strong> For the App, GDPR obligations are inherently satisfied because we process no personal data. All data processing occurs locally on your device under your sole control.</p>
+    <p>To exercise your rights, contact <a href="mailto:privacy@4da.ai">privacy@4da.ai</a>. We will respond within 30 days (extendable by 60 days for complex requests, with prior notice).</p>
+
+    <h3>9.3 CCPA (California)</h3>
+    <p>If you are a California resident, you have the right to:</p>
+    <ul>
+      <li><strong>Know</strong> what personal information we collect, use, and disclose</li>
+      <li><strong>Delete</strong> personal information we hold about you</li>
+      <li><strong>Opt out of sale</strong> of personal information -- <strong>we do not sell personal information</strong></li>
+      <li><strong>Non-discrimination</strong> -- we will not treat you differently for exercising your rights</li>
+    </ul>
+    <p><strong>Categories of personal information collected in the past 12 months:</strong></p>
+    <table>
+      <thead>
+        <tr><th>Category</th><th>Collected?</th><th>Source</th><th>Purpose</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Identifiers (name, email, address)</td><td>Only via Store purchases</td><td>You (directly)</td><td>Order fulfilment</td></tr>
+        <tr><td>Internet activity (browsing, search)</td><td>Aggregate analytics only (Website)</td><td>Automatic</td><td>Website improvement</td></tr>
+        <tr><td>Commercial information (purchase history)</td><td>Only via Store</td><td>You (directly)</td><td>Order fulfilment, legal compliance</td></tr>
+      </tbody>
+    </table>
+    <p>We do not collect biometric data, geolocation data, professional or employment information, education information, or inferences drawn about you from any of the above.</p>
+    <p>To make a CCPA request, contact <a href="mailto:privacy@4da.ai">privacy@4da.ai</a> or write to us at the address in Section 14. We will verify your identity and respond within 45 days.</p>
+
+    <h2>10. International Data Transfers</h2>
+
+    <h3>10.1 The App</h3>
+    <p>The App does not transfer your data internationally -- or at all -- because your data stays on your device. When you choose to use LLM provider APIs, data flows directly from your device to the provider's servers. The location of those servers depends on the provider you choose:</p>
+    <ul>
+      <li><strong>Anthropic:</strong> Servers primarily in the United States</li>
+      <li><strong>OpenAI:</strong> Servers primarily in the United States</li>
+      <li><strong>OpenAI-compatible providers:</strong> Server locations depend on the specific provider you configure</li>
+      <li><strong>Ollama:</strong> Your own device (no transfer)</li>
+    </ul>
+    <p>These transfers are initiated by you, using your own API keys, and are governed by the respective provider's privacy policy. 4DA Systems has no role in these transfers.</p>
+
+    <h3>10.2 Website and Store</h3>
+    <p>Our website is hosted on Vercel, which operates globally. Shopify also operates globally. Data processed by these services may be transferred to and stored in countries outside your jurisdiction, including the United States. These providers maintain appropriate safeguards for international transfers, including Standard Contractual Clauses where required by GDPR.</p>
+
+    <h2>11. Security</h2>
+
+    <h3>11.1 The App</h3>
+    <p>The App's security model is straightforward: your data is on your device, protected by your operating system's security controls.</p>
+    <p><strong>API key protection:</strong> API keys are stored in your operating system's native credential manager (Windows Credential Manager, macOS Keychain, or Linux Secret Service), which provides hardware-backed or OS-level encryption depending on your platform. Keys are never written to plaintext files.</p>
+    <p><strong>Team Relay encryption:</strong> The Team Relay feature uses XChaCha20Poly1305 authenticated encryption with X25519 key exchange and HKDF key derivation (SHA-256). Private keys are zeroized from memory when no longer needed. This ensures that data in transit and at rest on the relay server is cryptographically protected against unauthorised access, including by 4DA Systems.</p>
+    <p><strong>Recommendations:</strong></p>
+    <ul>
+      <li>Keep your operating system and the App updated</li>
+      <li>Use full-disk encryption on your device</li>
+      <li>Protect your API keys as you would any credential</li>
+      <li>Use a strong OS login password (this protects your keychain entries)</li>
+    </ul>
+
+    <h3>11.2 Website and Store</h3>
+    <p>We rely on industry-standard security measures provided by Vercel and Shopify, including TLS encryption for all data in transit and secure payment processing (Shopify is PCI-DSS compliant).</p>
+
+    <h2>12. Changes to This Policy</h2>
+    <p>We may update this Privacy Policy from time to time. When we make changes:</p>
+    <ul>
+      <li>We will update the "Last Updated" date at the top of this policy</li>
+      <li>For material changes, we will provide notice through the App's release notes or on our website</li>
+      <li>The current version of this policy is always available in the App's source repository and at <a href="https://4da.ai/privacy">4da.ai/privacy</a></li>
+    </ul>
+    <p>We encourage you to review this policy periodically. Your continued use of the App, Website, or Store after changes are posted constitutes acceptance of the updated policy.</p>
+
+    <h2>13. Governing Law</h2>
+    <p>This Privacy Policy is governed by and construed in accordance with the laws of Queensland, Australia, without regard to conflict of law principles. Any disputes arising under this policy shall be subject to the exclusive jurisdiction of the courts of Queensland, Australia.</p>
+
+    <h2>14. Contact Us</h2>
+    <p>If you have questions about this Privacy Policy, want to exercise your privacy rights, or have a concern:</p>
+    <p><strong>Email (preferred):</strong></p>
+    <ul>
+      <li>General inquiries: <a href="mailto:support@4da.ai">support@4da.ai</a></li>
+      <li>Privacy-specific requests: <a href="mailto:privacy@4da.ai">privacy@4da.ai</a></li>
+    </ul>
+    <p><strong>Entity:</strong><br>
+    4DA Systems Pty Ltd<br>
+    ACN 696 078 841 | ABN 51 696 078 841<br>
+    Queensland, Australia</p>
+    <p><strong>Response times:</strong></p>
+    <ul>
+      <li>General inquiries: within 5 business days</li>
+      <li>Privacy rights requests: within 30 days (as required by applicable law)</li>
+    </ul>
+    <p><strong>Complaints:</strong><br>
+    If you are unsatisfied with our response, you may lodge a complaint with:</p>
+    <ul>
+      <li><strong>Australia:</strong> Office of the Australian Information Commissioner (OAIC) -- <a href="https://www.oaic.gov.au">oaic.gov.au</a></li>
+      <li><strong>EU/EEA:</strong> Your local data protection supervisory authority</li>
+      <li><strong>UK:</strong> Information Commissioner's Office (ICO) -- <a href="https://ico.org.uk">ico.org.uk</a></li>
+    </ul>
+
+    <h2>15. Summary Table</h2>
+    <table>
+      <thead>
+        <tr><th>Question</th><th>App</th><th>Website</th><th>Store</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Do we collect personal data?</td><td>No</td><td>Minimal (server logs)</td><td>Yes (for orders)</td></tr>
+        <tr><td>Do we store data on our servers?</td><td>No</td><td>Vercel handles logs</td><td>Shopify handles data</td></tr>
+        <tr><td>Do we sell data?</td><td>No</td><td>No</td><td>No</td></tr>
+        <tr><td>Do we use cookies?</td><td>N/A (desktop app)</td><td>Essential only</td><td>Shopify standard</td></tr>
+        <tr><td>Do we track you?</td><td>No</td><td>No</td><td>No</td></tr>
+        <tr><td>Can you delete your data?</td><td>Yes (it is on your device)</td><td>Contact us</td><td>Contact us</td></tr>
+        <tr><td>Do we require an account?</td><td>No</td><td>No</td><td>For purchases (via Shopify)</td></tr>
+        <tr><td>Do we use advertising?</td><td>No</td><td>No</td><td>No</td></tr>
+        <tr><td>Where are API keys stored?</td><td>OS keychain (your device)</td><td>N/A</td><td>N/A</td></tr>
+        <tr><td>Can we read your content?</td><td>No</td><td>N/A</td><td>N/A</td></tr>
+      </tbody>
+    </table>
+
+    <hr>
+    <p><em>This Privacy Policy is written in plain language because we believe privacy policies should be understood, not endured. If anything is unclear, contact us -- we are happy to explain.</em></p>
+  </div>
+
+  <div class="legal-footer">
+    <div class="container">
+      <div class="legal-footer-links">
+        <a href="/">Home</a>
+        <a href="/terms">Terms of Service</a>
+        <a href="/privacy">Privacy Policy</a>
+        <a href="mailto:privacy@4da.ai">privacy@4da.ai</a>
+      </div>
+    </div>
+  </div>
+{% endblock %}
