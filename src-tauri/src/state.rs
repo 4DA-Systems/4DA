@@ -108,12 +108,9 @@ fn get_platform_data_dir() -> PathBuf {
 
     #[cfg(target_os = "linux")]
     {
-        if let Some(home) = dirs::home_dir() {
-            return home
-                .join(".local")
-                .join("share")
-                .join("com.4da.app")
-                .join("data");
+        // Respect XDG Base Directory Specification: $XDG_DATA_HOME (default ~/.local/share)
+        if let Some(data_dir) = dirs::data_dir() {
+            return data_dir.join("4da").join("data");
         }
     }
 

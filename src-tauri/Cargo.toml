@@ -107,7 +107,7 @@ tokio-tungstenite = { version = "0.24", features = ["rustls-tls-webpki-roots"] }
 uuid = { version = "1", features = ["v4", "serde"] }
 rand = "0.8"
 zeroize = "1"
-keyring = "3"
+keyring = { version = "3", features = ["sync-secret-service", "linux-native"] }
 
 [[bin]]
 name = "4da"

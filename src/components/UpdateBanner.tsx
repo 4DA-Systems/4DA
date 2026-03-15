@@ -6,6 +6,7 @@ import { useTranslation } from 'react-i18next';
 interface UpdateInfo {
   version: string;
   body?: string | null;
+  canAutoUpdate?: boolean;
 }
 
 interface UpdateBannerProps {
@@ -30,14 +31,25 @@ export function UpdateBanner({ update, installing, onInstall, onDismiss }: Updat
         <button onClick={onDismiss} aria-label="Dismiss update notification" className="text-text-muted hover:text-white text-lg leading-none">&times;</button>
       </div>
       <div className="flex gap-2 mt-3">
-        <button
-          onClick={onInstall}
-          disabled={installing}
-          aria-label={installing ? t('update.installing') : t('update.install')}
-          className="px-4 py-1.5 text-xs font-medium text-black bg-[#D4AF37] rounded-lg hover:bg-[#C4A030] transition-colors disabled:opacity-50"
-        >
-          {installing ? t('update.installing') : t('update.install')}
-        </button>
+        {update.canAutoUpdate !== false ? (
+          <button
+            onClick={onInstall}
+            disabled={installing}
+            aria-label={installing ? t('update.installing') : t('update.install')}
+            className="px-4 py-1.5 text-xs font-medium text-black bg-[#D4AF37] rounded-lg hover:bg-[#C4A030] transition-colors disabled:opacity-50"
+          >
+            {installing ? t('update.installing') : t('update.install')}
+          </button>
+        ) : (
+          <a
+            href={`https://github.com/runyourempire/4DA/releases/latest`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="px-4 py-1.5 text-xs font-medium text-black bg-[#D4AF37] rounded-lg hover:bg-[#C4A030] transition-colors inline-block"
+          >
+            {t('update.download', 'Download Update')}
+          </a>
+        )}
         <button
           onClick={onDismiss}
           aria-label={t('update.later')}
