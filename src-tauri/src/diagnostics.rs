@@ -141,9 +141,8 @@ fn get_process_memory() -> u64 {
 
     #[cfg(not(target_os = "windows"))]
     {
-        // On Linux/macOS, read /proc/self/status or use sysctl
-        // Fallback: return 0 (diagnostics still useful without memory)
-        std::fs::read_to_string("/proc/self/status")
+        // Linux: read /proc/self/status for VmRSS
+        if let Some(mem) = std::fs::read_to_string("/proc/self/status")
             .ok()
             .and_then(|s| {
                 s.lines().find(|l| l.starts_with("VmRSS:")).and_then(|l| {
@@ -152,6 +151,22 @@ fn get_process_memory() -> u64 {
                         .and_then(|v| v.parse::<u64>().ok())
                         .map(|kb| kb * 1024)
                 })
+            })
+        {
+            return mem;
+        }
+
+        // macOS fallback: /proc doesn't exist, use ps command for RSS
+        std::process::Command::new("ps")
+            .args(["-o", "rss=", "-p", &std::process::id().to_string()])
+            .output()
+            .ok()
+            .and_then(|o| {
+                String::from_utf8_lossy(&o.stdout)
+                    .trim()
+                    .parse::<u64>()
+                    .ok()
+                    .map(|kb| kb * 1024)
             })
             .unwrap_or(0)
     }

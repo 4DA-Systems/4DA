@@ -10,25 +10,34 @@ pub fn execute() -> SunResult {
 
     #[cfg(target_os = "windows")]
     {
-        if let Ok(output) = run_cmd("wmic cpu get name,numberofcores /format:list") {
+        // Try PowerShell first (Windows 11+), fall back to wmic (Windows 10)
+        let cpu_output = run_cmd("powershell -NoProfile -Command \"Get-CimInstance Win32_Processor | Select-Object -ExpandProperty Name\"")
+            .or_else(|_| run_cmd("wmic cpu get name,numberofcores /format:list"));
+        if let Ok(output) = cpu_output {
             crate::sovereign_profile::store_facts_from_execution(
-                "wmic cpu",
+                "cpu info",
                 &output,
                 "sun:hardware",
             );
             facts_found += 1;
         }
-        if let Ok(output) = run_cmd("wmic memorychip get capacity /format:list") {
+
+        let mem_output = run_cmd("powershell -NoProfile -Command \"(Get-CimInstance Win32_PhysicalMemory | Measure-Object -Property Capacity -Sum).Sum\"")
+            .or_else(|_| run_cmd("wmic memorychip get capacity /format:list"));
+        if let Ok(output) = mem_output {
             crate::sovereign_profile::store_facts_from_execution(
-                "wmic memorychip",
+                "memory info",
                 &output,
                 "sun:hardware",
             );
             facts_found += 1;
         }
-        if let Ok(output) = run_cmd("wmic diskdrive get size,model /format:list") {
+
+        let disk_output = run_cmd("powershell -NoProfile -Command \"Get-CimInstance Win32_DiskDrive | Select-Object -Property Size,Model | Format-List\"")
+            .or_else(|_| run_cmd("wmic diskdrive get size,model /format:list"));
+        if let Ok(output) = disk_output {
             crate::sovereign_profile::store_facts_from_execution(
-                "wmic diskdrive",
+                "disk info",
                 &output,
                 "sun:hardware",
             );
@@ -101,11 +110,17 @@ pub(super) fn run_cmd(cmd: &str) -> Result<String> {
 fn check_disk_space() -> Option<String> {
     #[cfg(target_os = "windows")]
     {
-        if let Ok(output) = run_cmd("wmic logicaldisk get freespace,size /format:list") {
-            // Parse free space lines: FreeSpace=<bytes>
+        // Try PowerShell first (Windows 11+), fall back to wmic (Windows 10)
+        let disk_output = run_cmd("powershell -NoProfile -Command \"Get-CimInstance Win32_LogicalDisk | Select-Object -Property FreeSpace | Format-List\"")
+            .or_else(|_| run_cmd("wmic logicaldisk get freespace,size /format:list"));
+        if let Ok(output) = disk_output {
+            // Parse free space lines: FreeSpace=<bytes> or FreeSpace : <bytes>
             for line in output.lines() {
                 let trimmed = line.trim();
-                if let Some(val) = trimmed.strip_prefix("FreeSpace=") {
+                let val = trimmed
+                    .strip_prefix("FreeSpace=")
+                    .or_else(|| trimmed.strip_prefix("FreeSpace :").map(|s| s.trim()));
+                if let Some(val) = val {
                     if let Ok(free_bytes) = val.trim().parse::<u64>() {
                         let free_gb = free_bytes / (1024 * 1024 * 1024);
                         if free_gb < 50 {
