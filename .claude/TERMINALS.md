@@ -14,5 +14,14 @@
 - **Files**: list of files being modified
 -->
 
+### T1 — Delete stale streets/index.njk
+- **Status**: done
+- **Files**: site/src/streets/index.njk (deleted)
+
+### T2 — Cross-platform fixes
+- **Status**: done
+- **Files**: .github/workflows/release.yml, src-tauri/tauri.conf.json, src-tauri/src/diagnostics.rs, src-tauri/src/streets_commands.rs, src-tauri/src/suns/hardware_monitor.rs, src-tauri/src/suns/uptime_monitor.rs
+
+
 
 
