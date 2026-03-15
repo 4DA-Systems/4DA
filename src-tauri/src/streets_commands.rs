@@ -130,7 +130,7 @@ const ALLOWED_PROGRAMS: &[&str] = &[
     "hostname",
     "whoami",
     "systeminfo",
-    "wmic",
+    "wmic", // deprecated on Windows 11+ — prefer PowerShell Get-CimInstance
     // --- GPU diagnostics ---
     "nvidia-smi",
     "rocm-smi",
@@ -208,7 +208,7 @@ const SAFE_COMMANDS: &[&str] = &[
     "whoami",
     "hostname",
     "uname",
-    "wmic",
+    "wmic", // deprecated on Windows 11+ — Get-CimInstance preferred (routed via is_powershell_cmdlet)
     "systeminfo",
     "lsblk",
     "ip addr",
