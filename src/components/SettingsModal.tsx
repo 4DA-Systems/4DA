@@ -72,7 +72,7 @@ export const SettingsModal = memo(function SettingsModal({ onClose }: SettingsMo
 
   // Data selectors (may change — useShallow prevents unnecessary re-renders)
   const {
-    settings, settingsForm, settingsStatus, ollamaStatus, ollamaModels,
+    settings, settingsForm, settingsStatus, ollamaStatus, ollamaModels, modelRegistry,
     monitoring, monitoringInterval, notificationThreshold,
     scanDirectories, newScanDir, isScanning, discoveredContext,
     learnedAffinities, antiTopics, systemHealth,
@@ -84,6 +84,7 @@ export const SettingsModal = memo(function SettingsModal({ onClose }: SettingsMo
       settingsStatus: s.settingsStatus,
       ollamaStatus: s.ollamaStatus,
       ollamaModels: s.ollamaModels,
+      modelRegistry: s.modelRegistry,
       monitoring: s.monitoring,
       monitoringInterval: s.monitoringInterval,
       notificationThreshold: s.notificationThreshold,
@@ -105,6 +106,7 @@ export const SettingsModal = memo(function SettingsModal({ onClose }: SettingsMo
   const saveSettings = useAppStore(s => s.saveSettings);
   const testConnection = useAppStore(s => s.testConnection);
   const checkOllamaStatus = useAppStore(s => s.checkOllamaStatus);
+  const refreshModelRegistry = useAppStore(s => s.refreshModelRegistry);
   const setMonitoringInterval = useAppStore(s => s.setMonitoringInterval);
   const setNotificationThreshold = useAppStore(s => s.setNotificationThreshold);
   const toggleMonitoring = useAppStore(s => s.toggleMonitoring);
@@ -309,6 +311,8 @@ export const SettingsModal = memo(function SettingsModal({ onClose }: SettingsMo
                     ollamaStatus={ollamaStatus}
                     ollamaModels={ollamaModels}
                     checkOllamaStatus={checkOllamaStatus}
+                    modelRegistry={modelRegistry}
+                    onRefreshRegistry={refreshModelRegistry}
                   />
                 </PanelErrorBoundary>
 

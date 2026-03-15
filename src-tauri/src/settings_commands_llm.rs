@@ -462,14 +462,16 @@ pub async fn list_provider_models(
             Ok(serde_json::json!({ "models": models }))
         }
         "anthropic" => {
-            // Anthropic has no model listing API — return curated list
-            Ok(serde_json::json!({
-                "models": [
-                    "claude-haiku-4-5-20251001",
-                    "claude-sonnet-4-6",
-                    "claude-opus-4-6"
-                ]
-            }))
+            // Use the model registry for Anthropic (no listing API)
+            let models = crate::model_registry::get_provider_models("anthropic");
+            if models.is_empty() {
+                // Fallback if registry isn't initialized
+                Ok(serde_json::json!({
+                    "models": ["claude-haiku-4-5-20251001", "claude-sonnet-4-6", "claude-opus-4-6"]
+                }))
+            } else {
+                Ok(serde_json::json!({ "models": models }))
+            }
         }
         _ => Ok(serde_json::json!({ "models": [] })),
     }

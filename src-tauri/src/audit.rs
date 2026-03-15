@@ -78,31 +78,34 @@ pub struct AuditSummary {
 // Core Logging (non-blocking, never fails the caller)
 // ============================================================================
 
+/// Bundled audit logging parameters.
+pub struct AuditLogParams<'a> {
+    pub conn: &'a rusqlite::Connection,
+    pub team_id: &'a str,
+    pub actor_id: &'a str,
+    pub actor_display_name: &'a str,
+    pub action: &'a str,
+    pub resource_type: &'a str,
+    pub resource_id: Option<&'a str>,
+    pub details: Option<&'a serde_json::Value>,
+}
+
 /// Write a single audit entry to the database.
 ///
 /// **Contract:** This function NEVER returns an error and NEVER panics.
 /// On any failure (DB error, serialization error, etc.) it logs a warning
 /// via `tracing::warn` and returns `()`.
-pub fn log_audit(
-    conn: &rusqlite::Connection,
-    team_id: &str,
-    actor_id: &str,
-    actor_display_name: &str,
-    action: &str,
-    resource_type: &str,
-    resource_id: Option<&str>,
-    details: Option<&serde_json::Value>,
-) {
+pub fn log_audit(params: &AuditLogParams<'_>) {
     let event_id = uuid::Uuid::new_v4().to_string();
 
-    let details_json = match details {
+    let details_json = match params.details {
         Some(v) => match serde_json::to_string(v) {
             Ok(s) => Some(s),
             Err(e) => {
                 warn!(
                     target: "4da::audit",
                     error = %e,
-                    action = action,
+                    action = params.action,
                     "Failed to serialize audit details, recording without details"
                 );
                 None
@@ -111,17 +114,17 @@ pub fn log_audit(
         None => None,
     };
 
-    let result = conn.execute(
+    let result = params.conn.execute(
         "INSERT INTO audit_log (event_id, team_id, actor_id, actor_display_name, action, resource_type, resource_id, details)
          VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
         rusqlite::params![
             event_id,
-            team_id,
-            actor_id,
-            actor_display_name,
-            action,
-            resource_type,
-            resource_id,
+            params.team_id,
+            params.actor_id,
+            params.actor_display_name,
+            params.action,
+            params.resource_type,
+            params.resource_id,
             details_json,
         ],
     );
@@ -130,8 +133,8 @@ pub fn log_audit(
         warn!(
             target: "4da::audit",
             error = %e,
-            action = action,
-            team_id = team_id,
+            action = params.action,
+            team_id = params.team_id,
             "Failed to write audit log entry"
         );
     }
@@ -175,16 +178,16 @@ pub fn log_team_audit(
         .unwrap_or("Unknown User")
         .to_string();
 
-    log_audit(
+    log_audit(&AuditLogParams {
         conn,
-        &team_id,
-        &actor_id,
-        &actor_display_name,
+        team_id: &team_id,
+        actor_id: &actor_id,
+        actor_display_name: &actor_display_name,
         action,
         resource_type,
         resource_id,
         details,
-    );
+    });
 }
 
 // ============================================================================

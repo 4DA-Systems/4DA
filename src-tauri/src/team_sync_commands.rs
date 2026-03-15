@@ -3,7 +3,7 @@
 //! Phase 4: Status, members, sharing commands.
 //! Phase 5: Team creation, invite flow, key exchange.
 
-use crate::audit::{log_audit, log_team_audit};
+use crate::audit::{log_audit, log_team_audit, AuditLogParams};
 use crate::error::Result;
 use crate::team_sync;
 use crate::team_sync_crypto::TeamCrypto;
@@ -526,16 +526,16 @@ pub async fn create_team(relay_url: String, display_name: String) -> Result<serd
     .map_err(|e| format!("Failed to cache member: {e}"))?;
 
     // Audit: team created (use log_audit directly — settings weren't configured yet during creation)
-    log_audit(
-        &conn,
-        &relay_resp.team_id,
-        &client_id,
-        &display_name,
-        "team.created",
-        "team",
-        Some(&relay_resp.team_id),
-        None,
-    );
+    log_audit(&AuditLogParams {
+        conn: &conn,
+        team_id: &relay_resp.team_id,
+        actor_id: &client_id,
+        actor_display_name: &display_name,
+        action: "team.created",
+        resource_type: "team",
+        resource_id: Some(&relay_resp.team_id),
+        details: None,
+    });
 
     info!(target: "4da::team_sync", team_id = %relay_resp.team_id, "Team created successfully");
 

@@ -393,7 +393,7 @@ fn predict_next_interval(intervals: &[f64], acceleration: f64) -> Option<f64> {
     let predicted = last + acceleration;
 
     // Clamp to reasonable range (1 hour to 7 days)
-    Some(predicted.max(1.0).min(168.0))
+    Some(predicted.clamp(1.0, 168.0))
 }
 
 /// Compute prediction confidence based on data quality

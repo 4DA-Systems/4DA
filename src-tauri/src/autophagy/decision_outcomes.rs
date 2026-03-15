@@ -10,6 +10,9 @@ use tracing::{debug, info, warn};
 
 use crate::error::{Result, ResultExt};
 
+/// (acted, expired, lead_time_sum, lead_time_count)
+type OutcomeStats = (i64, i64, f64, i64);
+
 // ============================================================================
 // Types
 // ============================================================================
@@ -66,7 +69,7 @@ pub(crate) fn analyze_decision_window_outcomes(conn: &Connection) -> Vec<Decisio
     };
 
     // Key: (window_type, dependency) -> (acted, expired, lead_time_sum, lead_time_count)
-    let mut stats: std::collections::HashMap<(String, Option<String>), (i64, i64, f64, i64)> =
+    let mut stats: std::collections::HashMap<(String, Option<String>), OutcomeStats> =
         std::collections::HashMap::new();
 
     for row in rows.flatten() {
