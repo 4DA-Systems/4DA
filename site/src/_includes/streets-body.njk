@@ -558,27 +558,5 @@ Revenue compounds. Intelligence sharpens.</pre>
       });
     })();
 
-    // Stripe Checkout
-    async function streetsCheckout(tier) {
-      var btn = event && event.target;
-      if (btn) { btn.style.opacity = '0.5'; btn.style.pointerEvents = 'none'; }
-      try {
-        var res = await fetch('/api/streets/checkout', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ tier: tier }),
-        });
-        var data = await res.json();
-        if (data.url) {
-          window.location.href = data.url;
-        } else {
-          alert('Unable to start checkout. Please try again.');
-        }
-      } catch (err) {
-        alert('Connection error. Please try again.');
-      } finally {
-        if (btn) { btn.style.opacity = '1'; btn.style.pointerEvents = 'auto'; }
-      }
-    }
   </script>
 
