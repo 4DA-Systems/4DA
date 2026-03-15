@@ -132,7 +132,7 @@ export function TeamNotificationBell() {
                   }`}
                   role="button"
                   tabIndex={0}
-                  onKeyDown={e => e.key === 'Enter' && handleClick(notif)}
+                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleClick(notif); } }}
                 >
                   <div className="flex items-start gap-2">
                     {/* Unread dot */}

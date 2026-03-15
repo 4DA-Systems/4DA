@@ -3,6 +3,7 @@ export default function(eleventyConfig) {
   eleventyConfig.addPassthroughCopy({ "hero-bg.mp4": "hero-bg.mp4" });
   eleventyConfig.addPassthroughCopy({ "hero-sun.jpg": "hero-sun.jpg" });
   eleventyConfig.addPassthroughCopy({ "og-image.png": "og-image.png" });
+  eleventyConfig.addPassthroughCopy({ "robots.txt": "robots.txt" });
   eleventyConfig.addPassthroughCopy({ "screenshots": "screenshots" });
   eleventyConfig.addPassthroughCopy({ "media": "media" });
   eleventyConfig.addPassthroughCopy({ "merch-designs": "merch-designs" });
