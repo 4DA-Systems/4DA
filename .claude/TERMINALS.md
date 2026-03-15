@@ -13,3 +13,7 @@
 - **Status**: working | committing | done
 - **Files**: list of files being modified
 -->
+
+### T1 — Privacy & Terms pages
+- **Status**: done
+- **Files**: site/src/privacy.njk, site/src/terms.njk, site/vercel.json, site/src/index.njk, site/src/_includes/streets-body.njk, site/src/merch.njk

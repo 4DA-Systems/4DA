@@ -1,0 +1,584 @@
+---
+title: "Terms of Service — 4DA"
+description: "Terms of Service for the 4DA desktop application. Clear terms, plain language, fair expectations."
+permalink: "/terms.html"
+---
+{% extends "base.njk" %}
+
+{% block head %}
+  <link rel="canonical" href="https://4da.ai/terms">
+  <meta property="og:title" content="Terms of Service — 4DA">
+  <meta property="og:description" content="Terms of Service for the 4DA desktop application. Clear terms, plain language, fair expectations.">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://4da.ai/terms">
+  <meta property="og:image" content="https://4da.ai/og-image.png">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Terms of Service — 4DA">
+  <meta name="twitter:description" content="Terms of Service for 4DA. Clear terms, plain language, fair expectations.">
+  <meta name="twitter:image" content="https://4da.ai/og-image.png">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: #0A0A0A;
+      color: #FFFFFF;
+      min-height: 100vh;
+      line-height: 1.7;
+    }
+    .legal-nav {
+      padding: 20px 0;
+      border-bottom: 1px solid #2A2A2A;
+    }
+    .legal-nav .container {
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 0 24px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .legal-nav a {
+      color: #A0A0A0;
+      text-decoration: none;
+      font-size: 14px;
+    }
+    .legal-nav a:hover { color: #FFFFFF; }
+    .legal-nav .brand {
+      font-weight: 600;
+      color: #FFFFFF;
+      font-size: 15px;
+    }
+    .legal-container {
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 48px 24px 80px;
+    }
+    h1 {
+      font-size: 32px;
+      font-weight: 600;
+      margin-bottom: 8px;
+      letter-spacing: -0.02em;
+    }
+    .effective-date {
+      font-size: 14px;
+      color: #A0A0A0;
+      margin-bottom: 40px;
+      padding-bottom: 24px;
+      border-bottom: 1px solid #2A2A2A;
+    }
+    .preamble {
+      background: #141414;
+      border: 1px solid #2A2A2A;
+      border-radius: 12px;
+      padding: 24px;
+      margin-bottom: 40px;
+      font-size: 15px;
+      line-height: 1.7;
+      color: #A0A0A0;
+    }
+    .notice {
+      background: #141414;
+      border: 1px solid #2A2A2A;
+      border-left: 3px solid #D4AF37;
+      border-radius: 8px;
+      padding: 16px 20px;
+      margin-bottom: 32px;
+      font-size: 14px;
+      color: #A0A0A0;
+    }
+    h2 {
+      font-size: 22px;
+      font-weight: 600;
+      margin-top: 48px;
+      margin-bottom: 16px;
+      padding-top: 24px;
+      border-top: 1px solid #1F1F1F;
+      letter-spacing: -0.01em;
+    }
+    h2:first-of-type { border-top: none; padding-top: 0; }
+    h3 {
+      font-size: 16px;
+      font-weight: 600;
+      margin-top: 32px;
+      margin-bottom: 12px;
+      color: #E0E0E0;
+    }
+    p {
+      margin-bottom: 16px;
+      color: #C0C0C0;
+      font-size: 15px;
+    }
+    ul, ol {
+      margin-bottom: 16px;
+      padding-left: 24px;
+    }
+    li {
+      margin-bottom: 8px;
+      color: #C0C0C0;
+      font-size: 15px;
+    }
+    a { color: #D4AF37; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    strong { color: #FFFFFF; }
+    code {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 13px;
+      background: #1F1F1F;
+      padding: 2px 6px;
+      border-radius: 4px;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 16px 0 24px;
+      font-size: 13px;
+    }
+    th, td {
+      padding: 10px 12px;
+      border: 1px solid #2A2A2A;
+      text-align: left;
+    }
+    th {
+      background: #141414;
+      font-weight: 600;
+      color: #FFFFFF;
+    }
+    td { color: #C0C0C0; }
+    hr {
+      border: none;
+      border-top: 1px solid #1F1F1F;
+      margin: 32px 0;
+    }
+    .legal-footer {
+      padding: 24px 0;
+      border-top: 1px solid #2A2A2A;
+      text-align: center;
+    }
+    .legal-footer .container {
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 0 24px;
+    }
+    .legal-footer-links {
+      display: flex;
+      justify-content: center;
+      gap: 24px;
+      flex-wrap: wrap;
+      font-size: 13px;
+    }
+    .legal-footer-links a { color: #A0A0A0; }
+    .legal-footer-links a:hover { color: #FFFFFF; }
+    .copyright {
+      margin-top: 48px;
+      padding-top: 24px;
+      border-top: 1px solid #1F1F1F;
+      font-size: 13px;
+      color: #666;
+      text-align: center;
+    }
+    @media (max-width: 600px) {
+      h1 { font-size: 24px; }
+      h2 { font-size: 18px; }
+      .legal-container { padding: 32px 16px 60px; }
+      table { font-size: 11px; }
+      th, td { padding: 6px 8px; }
+    }
+  </style>
+{% endblock %}
+
+{% block body %}
+  <nav class="legal-nav">
+    <div class="container">
+      <a href="/" class="brand">4DA</a>
+      <a href="/privacy">Privacy Policy</a>
+    </div>
+  </nav>
+
+  <div class="legal-container">
+    <h1>Terms of Service</h1>
+    <p class="effective-date"><strong>4DA Systems Pty Ltd</strong> &middot; Effective Date: 15 March 2026 &middot; Last Updated: 15 March 2026</p>
+
+    <div class="preamble">
+      <p style="margin-bottom:12px;">4DA Systems is an independent software company based in Queensland, Australia. We build tools for developers who value their privacy and their time.</p>
+      <p style="margin-bottom:12px;">These Terms of Service exist to set clear expectations for both parties. We have written them in plain English where possible and with legal precision where necessary. If something is unclear, contact us and we will explain it.</p>
+      <p style="margin-bottom:0;">We respect the people who use our software. We expect the same respect in return. These terms protect both of us.</p>
+    </div>
+
+    <div class="notice">
+      <strong>Important:</strong> These Terms of Service ("Terms") are provided for informational purposes and do not constitute legal advice. You should consult a qualified legal professional for advice specific to your situation. 4DA Systems is not a law firm and does not provide legal services.
+    </div>
+
+    <h2>1. Acceptance of Terms</h2>
+    <p>By downloading, installing, or using the 4DA desktop application ("the App"), or by subscribing to any paid tier, you agree to be bound by these Terms. If you do not agree to these Terms, do not use the App.</p>
+    <p>These Terms constitute a legally binding agreement between you ("User", "you") and <strong>4DA Systems Pty Ltd</strong> (ACN 696 078 841, ABN 51 696 078 841), a company registered in Queensland, Australia ("4DA Systems", "we", "us", "our").</p>
+    <p>We may update these Terms from time to time (see <a href="#section-15">Section 15</a>). Your continued use of the App after changes take effect constitutes acceptance of the updated Terms.</p>
+
+    <h2>2. Description of Service</h2>
+    <p>4DA is a local-first desktop application that surfaces developer-relevant content from the internet -- privately, locally, and with minimal configuration.</p>
+    <p>The App:</p>
+    <ul>
+      <li>Runs locally on your machine (Windows, macOS, Linux)</li>
+      <li>Scores and surfaces content from public sources (e.g., Hacker News, Reddit, RSS feeds, GitHub) based on algorithmic relevance to your development context</li>
+      <li>Uses keyword matching, semantic embeddings, and (optionally) LLM-powered re-ranking to filter and prioritise content</li>
+      <li>Stores all data locally in a SQLite database on your device</li>
+      <li>Uses your own API keys ("BYOK" -- Bring Your Own Key) for any LLM or third-party AI service integrations</li>
+      <li>Is distributed as a downloadable installer from <a href="https://4da.ai">4da.ai</a> and/or authorised distribution channels</li>
+    </ul>
+    <p>The App does <strong>not</strong>:</p>
+    <ul>
+      <li>Transmit your personal data, project files, or content to 4DA Systems servers</li>
+      <li>Store your API keys or credentials on any remote server</li>
+      <li>Require an internet connection for core local functionality (though content fetching and LLM features require connectivity)</li>
+    </ul>
+
+    <h2>3. Service Tiers</h2>
+
+    <h3>3.1 Free Tier</h3>
+    <p>The Free tier includes:</p>
+    <ul>
+      <li>Full PASIFA scoring engine (algorithmic content scoring and filtering)</li>
+      <li>All content sources (Hacker News, Reddit, RSS, GitHub, and others as added)</li>
+      <li>Keyword matching and local embedding-based semantic matching</li>
+      <li>Feedback-driven score personalisation</li>
+      <li>Local Ollama integration for embeddings</li>
+      <li>The complete STREETS playbook (all 7 modules)</li>
+    </ul>
+    <p>The Free tier is provided at no cost and may be used indefinitely. We reserve the right to modify Free tier features with reasonable notice, but we will not retroactively remove core scoring functionality from existing Free tier users without a compelling reason.</p>
+
+    <h3>3.2 Signal Tier</h3>
+    <p>The Signal tier includes everything in the Free tier, plus:</p>
+    <ul>
+      <li>LLM-powered content re-ranking and analysis</li>
+      <li>Natural language search across all content</li>
+      <li>AI-powered daily briefings and intelligence summaries</li>
+      <li>Weekly digest emails (where an email address is provided)</li>
+      <li>Standing queries (persistent, automated searches)</li>
+      <li>Channels (curated content streams)</li>
+      <li>Semantic analysis and trend detection</li>
+      <li>Developer DNA profiling</li>
+      <li>Audio briefings</li>
+      <li>Additional Signal features as released</li>
+    </ul>
+
+    <h3>3.3 Additional Tiers</h3>
+    <p>We may introduce additional subscription tiers (such as Team or Enterprise) in the future. Any new tiers will be subject to these Terms and any additional terms specific to those tiers, which will be presented at the time of purchase.</p>
+
+    <h2>4. Pricing, Payment, and Billing</h2>
+
+    <h3>4.1 Signal Tier Pricing</h3>
+    <ul>
+      <li><strong>Monthly:</strong> $12 USD per month</li>
+      <li><strong>Annual:</strong> $99 USD per year</li>
+    </ul>
+    <p>Prices are in US Dollars and are exclusive of any applicable taxes. We will display applicable taxes at checkout where required by law. We reserve the right to change pricing with at least 30 days' notice. Price changes will not affect your current billing period.</p>
+
+    <h3>4.2 Payment Processing</h3>
+    <p>Payment is processed through our payment provider (currently <strong>Stripe</strong>). By subscribing to the Signal tier, you authorise recurring charges at the applicable billing interval until you cancel.</p>
+    <p><strong>4DA Systems does not store your payment card details.</strong> All payment information is handled directly by our payment processor in accordance with PCI-DSS standards. See <a href="https://stripe.com/privacy">Stripe's Privacy Policy</a> for details on how Stripe handles your payment data.</p>
+    <p>Your subscription begins on the date of your first payment and renews automatically unless cancelled before the next billing date.</p>
+
+    <h3>4.3 License Validation</h3>
+    <p>Signal tier users receive a license key validated through Keygen. Your license key is personal to you and must not be shared, redistributed, or used on more devices than your subscription permits. License validation sends only your license key and a machine fingerprint (a hardware-derived hash) to the Keygen API -- no personal data, device fingerprints beyond this hash, or other identifying information is transmitted.</p>
+
+    <h3>4.4 Cancellation</h3>
+    <p>You may cancel your Signal subscription at any time. Upon cancellation:</p>
+    <ul>
+      <li>You retain access to Signal features until the end of your current billing period</li>
+      <li>No further charges will be made</li>
+      <li>Your account reverts to the Free tier at the end of the paid period</li>
+      <li>Your local data remains intact and accessible</li>
+    </ul>
+
+    <h3>4.5 Subscription Lapse</h3>
+    <p>If your subscription lapses due to cancellation, non-payment, or expiry:</p>
+    <ul>
+      <li>All Signal tier features (LLM re-ranking, natural language search, AI briefings, standing queries, channels, and other Signal capabilities) will become unavailable</li>
+      <li>Your local data, including all previously scored and saved content, remains on your device and is not deleted</li>
+      <li>Free tier functionality continues to operate as normal</li>
+      <li>You may re-subscribe at any time to restore Signal features</li>
+      <li>No data is lost or removed as a result of a subscription lapse</li>
+    </ul>
+
+    <h2>5. Refund Policy</h2>
+
+    <h3>5.1 Annual Plans -- 14-Day Money-Back Guarantee</h3>
+    <p>If you purchase an annual Signal subscription and are not satisfied, you may request a full refund within <strong>14 days</strong> of your initial purchase. No reason is required. To request a refund, contact us at <a href="mailto:support@4da.ai">support@4da.ai</a>.</p>
+    <p>This guarantee applies to first-time annual Signal subscriptions only. Subsequent annual re-subscriptions are not eligible for the 14-day guarantee, though they remain subject to your statutory rights.</p>
+
+    <h3>5.2 Monthly Plans -- Prorated Refund Within 30 Days</h3>
+    <p>If you purchase a monthly Signal subscription and are not satisfied, you may request a prorated refund within <strong>30 days</strong> of your initial purchase. The refund amount will be calculated based on the unused portion of your current billing period. To request a refund, contact us at <a href="mailto:support@4da.ai">support@4da.ai</a>.</p>
+    <p>This prorated refund applies to first-time monthly Signal subscriptions only. Subsequent monthly charges after the initial 30-day period are not eligible for prorated refunds, though they remain subject to your statutory rights.</p>
+
+    <h3>5.3 Refund for Faulty Service</h3>
+    <p>If the Signal tier does not work as described -- for example, if Signal features fail to activate after a valid purchase, or if a defect prevents you from using features you have paid for -- you are entitled to a full refund regardless of the refund periods stated above. Contact us at <a href="mailto:support@4da.ai">support@4da.ai</a> and describe the issue.</p>
+
+    <h3>5.4 Australian Consumer Law</h3>
+    <p>Our goods and services come with guarantees that cannot be excluded under the Australian Consumer Law ("ACL"). For major failures with the service, you are entitled to:</p>
+    <ul>
+      <li>Cancel your subscription; and</li>
+      <li>Receive a refund for any unused portion of the service</li>
+    </ul>
+    <p>You are also entitled to choose a refund or replacement for major failures with goods. If a failure with goods or services does not amount to a major failure, you are entitled to have the failure rectified in a reasonable time. If this is not done, you are entitled to a refund for the goods or service.</p>
+    <p><strong>Nothing in these Terms limits or excludes any rights you have under the Australian Consumer Law or any other applicable consumer protection legislation.</strong></p>
+
+    <h3>5.5 Refund Process</h3>
+    <p>Refund requests should be sent to <a href="mailto:support@4da.ai">support@4da.ai</a>. We aim to process approved refunds within 10 business days. Refunds are issued to the original payment method via our payment processor.</p>
+
+    <h2>6. Software License</h2>
+
+    <h3>6.1 Source-Available License (FSL-1.1-Apache-2.0)</h3>
+    <p>The 4DA source code is released under the <strong>Functional Source License, Version 1.1, Apache 2.0 Future License</strong> (FSL-1.1-Apache-2.0). This is a source-available license. It is <strong>not</strong> an "open source" license in the Open Source Initiative (OSI) sense. Under this license:</p>
+    <ul>
+      <li>You may view, fork, modify, and redistribute the source code for any purpose that does not constitute a Competing Use</li>
+      <li><strong>Competing Use is prohibited.</strong> You may <strong>not</strong> use the source code, in whole or in part, to provide a product or service that competes with the 4DA application or any other product or service provided by 4DA Systems, as defined in the FSL. This restriction applies during the Change Date period specified in the license.</li>
+      <li>After <strong>two (2) years</strong> from the date of each release, the code for that release automatically converts to the <strong>Apache License 2.0</strong>, granting full open-source freedoms</li>
+      <li>The full FSL license text is included with the source code and governs your use of the source code</li>
+    </ul>
+    <p>If there is any conflict between these Terms and the FSL-1.1-Apache-2.0 license regarding use of the source code, the FSL license governs.</p>
+
+    <h3>6.2 License Grant for the Application</h3>
+    <p>Subject to your compliance with these Terms and the FSL-1.1-Apache-2.0 license, 4DA Systems grants you a limited, non-exclusive, non-transferable, revocable license to download, install, and use the compiled 4DA application on your personal or business devices for your own internal use.</p>
+    <p>This license does not grant you the right to:</p>
+    <ul>
+      <li>Sublicense, sell, resell, or redistribute the compiled application as a standalone product</li>
+      <li>Use the application or its source code to create a competing product or service</li>
+      <li>Remove, alter, or obscure any copyright, trademark, or other proprietary notices</li>
+    </ul>
+
+    <h3>6.3 Trademarks</h3>
+    <p>"4DA", "4 Dimensional Autonomy", and the 4DA logo are trademarks of 4DA Systems Pty Ltd (ACN 696 078 841, ABN 51 696 078 841). Australian trademark applications: TM 2629468, TM 2631247, TM 2631246.</p>
+    <p>The FSL-1.1-Apache-2.0 license does <strong>not</strong> grant any rights to use 4DA Systems' trademarks. You may not use the 4DA name, logo, or any confusingly similar marks without prior written permission, except as necessary to refer to 4DA or its products in a factual, non-misleading manner consistent with fair use principles.</p>
+
+    <h3>6.4 Contributions</h3>
+    <p>Contributions to the 4DA codebase are welcome and are subject to the FSL-1.1-Apache-2.0 license. We may implement a Contributor License Agreement (CLA) in the future to ensure we can maintain and distribute the software effectively. If a CLA is introduced, contributors will be notified and asked to sign it before new contributions are accepted.</p>
+
+    <h3>6.5 Third-Party Components</h3>
+    <p>The App incorporates third-party open-source components, each governed by their respective licenses. A list of these components and their licenses is included with the App distribution.</p>
+
+    <h2>7. BYOK (Bring Your Own Key)</h2>
+    <p>The App allows you to provide your own API keys for third-party LLM providers (e.g., OpenAI, Anthropic, Google) and other AI services, as well as local providers such as Ollama. You are solely responsible for:</p>
+    <ul>
+      <li>Obtaining and maintaining valid API keys from those providers</li>
+      <li>Complying with the terms of service of those third-party providers</li>
+      <li><strong>Any and all costs incurred through your use of those API keys</strong>, including usage charges, overage fees, and any other charges levied by the third-party provider</li>
+      <li>Keeping your API keys secure</li>
+    </ul>
+    <p>4DA Systems does not store, transmit, or have access to your API keys. They are held locally on your device. <strong>4DA Systems is not responsible for, and has no liability for, any costs you incur with third-party AI service providers through your use of the App.</strong></p>
+    <p>We recommend that you set usage limits and billing alerts with your API providers to avoid unexpected charges.</p>
+    <p>When using Ollama as your LLM provider, all AI processing occurs locally on your machine. No external API calls are made and no API key is required.</p>
+
+    <h2>8. User Responsibilities and Acceptable Use</h2>
+
+    <h3>8.1 Your Responsibilities</h3>
+    <p>You are responsible for:</p>
+    <ul>
+      <li><strong>Your API keys:</strong> Securing, managing, and paying for any third-party API keys you use with the App.</li>
+      <li><strong>Your data:</strong> All data generated and stored by the App resides locally on your device. You are solely responsible for backing up your data. 4DA Systems does not have access to your local data and cannot recover it if lost.</li>
+      <li><strong>Your device:</strong> Ensuring your device meets the minimum system requirements and maintaining adequate storage space and security.</li>
+      <li><strong>Compliance:</strong> Using the App in compliance with all applicable laws and regulations in your jurisdiction.</li>
+    </ul>
+
+    <h3>8.2 Prohibited Conduct</h3>
+    <p>You agree <strong>not</strong> to:</p>
+    <ul>
+      <li><strong>Build competing products:</strong> Use the App's source code, in whole or in part, to build, operate, or provide a product or service that competes with 4DA or any other product or service provided by 4DA Systems, during the FSL restriction period (see <a href="#section-6">Section 6</a>)</li>
+      <li><strong>Resell or redistribute the service:</strong> Resell, sublicense, or redistribute the App, its output, or access to Signal tier features to third parties as a commercial service</li>
+      <li><strong>Scrape or harvest:</strong> Use the App as a tool for systematic data scraping, harvesting, or collection of content in violation of any third-party terms of service, or to build datasets for resale</li>
+      <li><strong>Tamper with license validation:</strong> Reverse-engineer, bypass, disable, or circumvent the license key validation system, or access Signal tier features without a valid subscription</li>
+      <li><strong>Redistribute license keys:</strong> Share, sell, sublicense, or redistribute Signal license keys</li>
+      <li><strong>Reverse-engineer beyond license rights:</strong> Decompile or disassemble the App beyond what is permitted by the source-available license and applicable law</li>
+      <li><strong>Illegal activity:</strong> Use the App for any purpose that is unlawful, fraudulent, or harmful</li>
+      <li><strong>Misrepresentation:</strong> Misrepresent the App's outputs as professional advice (financial, legal, medical, or otherwise), or represent that content scored or surfaced by 4DA has been verified, endorsed, or guaranteed by 4DA Systems</li>
+      <li><strong>Circumvent restrictions:</strong> Attempt to circumvent, disable, or interfere with any security, licensing, or access-control features of the App</li>
+    </ul>
+
+    <h2>9. Content Disclaimers</h2>
+
+    <h3>9.1 Algorithmic Content Scoring</h3>
+    <p>4DA scores and ranks content using algorithms (including the PASIFA scoring engine, embedding-based semantic matching, and optional LLM-powered re-ranking). These scores represent algorithmic assessments of relevance based on your development context.</p>
+    <p><strong>4DA Systems does not guarantee the accuracy, completeness, reliability, relevance, or timeliness of any content scores, rankings, or analysis produced by the App.</strong> Content is sourced from public internet sources and scored algorithmically. Scores and rankings may contain errors, may not reflect the true relevance of content to your needs, and should be treated as supplementary signals -- not authoritative assessments.</p>
+    <p>You should not rely solely on 4DA scores or analysis for critical business, technical, or professional decisions.</p>
+
+    <h3>9.2 Third-Party Content Sources</h3>
+    <p>The App aggregates content from public, third-party sources including (but not limited to) Hacker News, Reddit, GitHub, arXiv, and RSS feeds. 4DA Systems:</p>
+    <ul>
+      <li>Does not control, create, or endorse any third-party content surfaced by the App</li>
+      <li>Does not guarantee the availability, accuracy, or continuity of any third-party content source</li>
+      <li>Cannot guarantee that any particular content source will remain available, as sources may change their APIs, terms, or availability at any time</li>
+      <li>Is not responsible for any content that is inaccurate, offensive, misleading, or otherwise objectionable</li>
+    </ul>
+    <p>Your use of or reliance on any third-party content is at your own risk.</p>
+
+    <h3>9.3 AI-Generated Content</h3>
+    <p>Signal tier features include AI-generated briefings, analysis, summaries, and natural language search results. These are produced by large language models and may contain errors, omissions, hallucinations, or inaccuracies. AI-generated content is not verified by 4DA Systems and should not be relied upon as a sole source of information for any decision.</p>
+
+    <h3>9.4 No Professional Advice</h3>
+    <p>The App does not provide financial, legal, investment, medical, or any other form of professional advice. All content surfaced and analysis produced by the App is for informational purposes only.</p>
+
+    <h2>10. Disclaimer of Warranties</h2>
+    <p>To the maximum extent permitted by applicable law (including the Australian Consumer Law):</p>
+    <p><strong>The App is provided "as is" and "as available" without warranties of any kind, either express or implied.</strong> 4DA Systems expressly disclaims all implied warranties, including but not limited to implied warranties of merchantability, fitness for a particular purpose, title, and non-infringement.</p>
+    <p>Without limiting the foregoing, 4DA Systems does not warrant that:</p>
+    <ul>
+      <li>The App will meet your specific requirements</li>
+      <li>The App will be uninterrupted, timely, secure, or error-free</li>
+      <li>The results obtained from the use of the App will be accurate or reliable</li>
+      <li>Any errors in the App will be corrected</li>
+      <li>Content from third-party sources will be available, accurate, or complete</li>
+    </ul>
+    <p><strong>Nothing in these Terms excludes, restricts, or modifies any statutory guarantee, right, or remedy conferred on you by the Australian Consumer Law or any other applicable legislation that cannot be excluded, restricted, or modified by agreement.</strong></p>
+
+    <h2>11. Limitation of Liability</h2>
+    <p>To the maximum extent permitted by applicable law (including the Australian Consumer Law):</p>
+    <ul>
+      <li><strong>No consequential damages.</strong> 4DA Systems shall not be liable for any indirect, incidental, special, consequential, or punitive damages, including but not limited to loss of profits, data, business opportunity, or goodwill, arising out of or in connection with your use of or inability to use the App.</li>
+      <li><strong>Liability cap.</strong> 4DA Systems' total aggregate liability to you for any and all claims arising out of or in connection with these Terms or your use of the App shall not exceed the total amount you have paid to 4DA Systems in the <strong>twelve (12) months</strong> immediately preceding the event giving rise to the claim, or <strong>AUD $100</strong>, whichever is greater.</li>
+      <li><strong>Third-party costs.</strong> 4DA Systems is not liable for any costs, charges, or fees incurred through your use of third-party services accessed via the App, including LLM API providers.</li>
+      <li><strong>Data loss.</strong> 4DA Systems is not liable for any loss of data stored locally on your device, including but not limited to database corruption, accidental deletion, hardware failure, or software issues.</li>
+    </ul>
+    <p><strong>Nothing in these Terms excludes, restricts, or modifies any guarantee, right, or remedy conferred on you by the Australian Consumer Law or any other applicable legislation that cannot be excluded, restricted, or modified by agreement.</strong></p>
+
+    <h2>12. Indemnification</h2>
+    <p>You agree to indemnify, defend, and hold harmless 4DA Systems, its officers, directors, employees, and agents from and against any claims, liabilities, damages, losses, and expenses (including reasonable legal fees) arising out of or in connection with:</p>
+    <ul>
+      <li>Your use of the App in violation of these Terms</li>
+      <li>Your use of third-party API keys through the App</li>
+      <li>Your violation of any applicable law or regulation</li>
+      <li>Any content you generate, store, or transmit using the App</li>
+      <li>Your breach of the FSL-1.1-Apache-2.0 license terms</li>
+    </ul>
+    <p>This indemnification obligation does not apply to the extent that a claim arises from 4DA Systems' own negligence, wilful misconduct, or breach of these Terms.</p>
+
+    <h2>13. Local Data and Backups</h2>
+    <p>All data generated and used by the App -- including your database, settings, API keys, and preferences -- is stored locally on your device. 4DA Systems does not have access to, does not back up, and cannot recover your local data.</p>
+    <p><strong>You are solely responsible for maintaining backups of your local data.</strong> 4DA Systems is not liable for any loss of data resulting from hardware failure, software issues, accidental deletion, or any other cause.</p>
+    <p>Upon termination or uninstallation of the App, your local data remains on your device. Because 4DA Systems never has possession of your data, there is nothing for us to delete on our end. You may delete your local data at any time by removing the App's data directory from your device.</p>
+    <p>For information about how data is processed and what minimal data is transmitted during license validation and content fetching, please refer to our <a href="/privacy">Privacy Policy</a>.</p>
+
+    <h2>14. Privacy and Data Protection</h2>
+
+    <h3>14.1 Privacy Policy</h3>
+    <p>Our collection and use of personal information is governed by our <a href="/privacy">Privacy Policy</a>, which is incorporated into these Terms by reference. By using the App, you acknowledge that you have read and understood our Privacy Policy.</p>
+
+    <h3>14.2 GDPR Rights</h3>
+    <p>If you are located in the European Economic Area (EEA), United Kingdom, or Switzerland, you have rights under the General Data Protection Regulation (GDPR) including the rights of access, rectification, erasure, restriction, portability, and objection. Because the App processes data locally on your device, most of these rights are automatically satisfied. For any personal data we process (such as through license validation or payment), please refer to our <a href="/privacy">Privacy Policy</a> for full details on how to exercise your rights.</p>
+
+    <h3>14.3 CCPA Rights</h3>
+    <p>If you are a California resident, you have rights under the California Consumer Privacy Act (CCPA) including the rights to know, delete, and opt out of the sale of personal information. We do not sell personal information. For full details, please refer to our <a href="/privacy">Privacy Policy</a>.</p>
+
+    <h3>14.4 Australian Privacy Act</h3>
+    <p>We comply with the Australian Privacy Act 1988 (Cth) and the Australian Privacy Principles. For details on how we handle personal information and how to make a privacy request, refer to our <a href="/privacy">Privacy Policy</a>.</p>
+
+    <h2 id="section-15">15. Changes to Terms</h2>
+    <p>We may update these Terms from time to time. When we make material changes:</p>
+    <ul>
+      <li>We will update the "Last Updated" date at the top of this document</li>
+      <li>We will provide at least <strong>30 days' notice</strong> before the changes take effect, via the 4DA website (<a href="https://4da.ai">4da.ai</a>), in-app notification, and/or email (if you have provided an email address to us)</li>
+      <li>If you do not agree with the updated Terms, you may stop using the App and cancel any subscription before the changes take effect</li>
+    </ul>
+    <p>Continued use of the App after the effective date of updated Terms constitutes your acceptance of those changes.</p>
+    <p>Non-material changes (such as formatting corrections or clarifications that do not affect your rights) may be made without advance notice.</p>
+
+    <h2>16. Termination</h2>
+
+    <h3>16.1 Termination by You</h3>
+    <p>You may stop using the App and uninstall it at any time. If you have a Signal subscription, you should cancel it before uninstalling to avoid further charges.</p>
+
+    <h3>16.2 Termination by 4DA Systems</h3>
+    <p>We may suspend or terminate your license key or access to Signal features if:</p>
+    <ul>
+      <li>You breach these Terms and fail to remedy the breach within a reasonable time after notice</li>
+      <li>You engage in fraudulent activity or abuse of the licensing system</li>
+      <li>You use the App's source code to build a competing product or service in violation of the FSL license</li>
+      <li>You circumvent or tamper with the license validation system</li>
+      <li>You use the App in a manner that violates applicable law</li>
+    </ul>
+    <p>Where practicable, we will provide notice before termination and an opportunity to remedy the breach. Immediate termination without notice may occur in cases of fraud, serious misconduct, or where continued access poses a risk to the integrity of our systems.</p>
+
+    <h3>16.3 Effect of Termination</h3>
+    <p>Upon termination of your Signal subscription or license:</p>
+    <ul>
+      <li>Your access to Signal features will cease</li>
+      <li>Your local data remains on your device and is not affected -- 4DA Systems has no ability to access, modify, or delete your local data</li>
+      <li>You may continue using the Free tier (unless terminated for fraud or serious misconduct)</li>
+      <li>Any refund entitlements at the time of termination are governed by <a href="#section-5">Section 5</a></li>
+      <li>Provisions of these Terms that by their nature should survive termination will survive, including Sections 6 (Software License), 9 (Content Disclaimers), 10 (Disclaimer of Warranties), 11 (Limitation of Liability), 12 (Indemnification), 13 (Local Data), and 17 (Governing Law)</li>
+    </ul>
+
+    <h2>17. Governing Law and Dispute Resolution</h2>
+
+    <h3>17.1 Governing Law</h3>
+    <p>These Terms are governed by and construed in accordance with the laws of the State of Queensland, Australia, without regard to conflict of law principles.</p>
+
+    <h3>17.2 Dispute Resolution Process</h3>
+    <p>Before initiating any formal legal proceedings, both parties agree to follow this dispute resolution process:</p>
+    <ol>
+      <li><strong>Good faith negotiation.</strong> The party raising the dispute will first contact the other party in writing (via <a href="mailto:legal@4da.ai">legal@4da.ai</a> for disputes raised against 4DA Systems) and the parties will attempt to resolve the dispute through good faith negotiation for a period of at least 30 days.</li>
+      <li><strong>Mediation.</strong> If the dispute is not resolved through negotiation, either party may refer the dispute to mediation administered by a mutually agreed mediator in Queensland, Australia. The costs of mediation will be shared equally between the parties unless the mediator determines otherwise.</li>
+      <li><strong>Courts of Queensland.</strong> If the dispute is not resolved through mediation within 60 days of the mediation referral, either party may commence proceedings in the courts of Queensland, Australia. You agree to submit to the non-exclusive jurisdiction of the courts of Queensland for the resolution of any disputes arising out of or in connection with these Terms.</li>
+    </ol>
+
+    <h3>17.3 Consumer Rights Preserved</h3>
+    <p>Nothing in this section limits your right to bring proceedings in any court or tribunal where you are entitled to do so under applicable consumer protection legislation, including the Australian Consumer Law. Nothing in this section prevents either party from seeking urgent injunctive or equitable relief from a court of competent jurisdiction.</p>
+
+    <h2>18. Export Compliance</h2>
+    <p>The App is available for download globally. You are responsible for ensuring that your download, installation, and use of the App complies with all applicable export control laws, sanctions, and regulations in your jurisdiction, including (without limitation):</p>
+    <ul>
+      <li>United States Export Administration Regulations (EAR)</li>
+      <li>Australian sanctions and export controls administered by the Department of Foreign Affairs and Trade (DFAT)</li>
+      <li>European Union export control regulations</li>
+      <li>Any other applicable local, national, or international trade restrictions</li>
+    </ul>
+    <p>You represent and warrant that:</p>
+    <ul>
+      <li>You are not located in, or a national or resident of, any country that is subject to comprehensive trade sanctions</li>
+      <li>You are not listed on any applicable restricted or denied party list</li>
+      <li>You will not use the App in connection with the development, production, or use of weapons of mass destruction, or for any other purpose prohibited by applicable export control laws</li>
+    </ul>
+    <p>4DA Systems makes no representation that the App is appropriate or available for use in all jurisdictions. If you access or use the App from outside Australia, you do so at your own initiative and are responsible for compliance with local laws.</p>
+
+    <h2>19. Eligibility</h2>
+    <p>You must be at least <strong>16 years of age</strong> to use the App. By using the App, you represent and warrant that you meet this requirement.</p>
+    <p>If you are between 16 and 18 years of age (or the age of legal majority in your jurisdiction), you represent that you have the consent of a parent or legal guardian to use the App and that your parent or legal guardian has read and agrees to these Terms on your behalf.</p>
+    <p>We do not knowingly collect personal information from children under the age of 13 (or under 16 in jurisdictions where GDPR applies). If you believe a child under the applicable age has used the App or provided personal information to us, please contact us at <a href="mailto:privacy@4da.ai">privacy@4da.ai</a>.</p>
+
+    <h2>20. Miscellaneous</h2>
+    <ul>
+      <li><strong>Entire agreement.</strong> These Terms, together with the FSL-1.1-Apache-2.0 license and our <a href="/privacy">Privacy Policy</a>, constitute the entire agreement between you and 4DA Systems regarding the App. They supersede all prior agreements, representations, and understandings, whether oral or written.</li>
+      <li><strong>Severability.</strong> If any provision of these Terms is found to be invalid, illegal, or unenforceable by a court of competent jurisdiction, the remaining provisions will continue in full force and effect. The invalid provision will be modified to the minimum extent necessary to make it valid and enforceable while preserving its original intent.</li>
+      <li><strong>Waiver.</strong> Our failure to enforce any right or provision of these Terms does not constitute a waiver of that right or provision. Any waiver must be in writing and signed by an authorised representative of 4DA Systems.</li>
+      <li><strong>Assignment.</strong> You may not assign or transfer your rights or obligations under these Terms without our prior written consent. We may assign our rights and obligations under these Terms in connection with a merger, acquisition, reorganisation, or sale of all or substantially all of our assets, with notice to you. Any attempted assignment in violation of this provision is void.</li>
+      <li><strong>Force majeure.</strong> 4DA Systems shall not be liable for any failure or delay in performance of its obligations under these Terms caused by circumstances beyond its reasonable control, including but not limited to natural disasters, acts of government, internet outages, pandemics, or third-party service failures.</li>
+      <li><strong>Notices.</strong> Notices from 4DA Systems to you may be provided via the 4DA website, in-app notifications, or email (if you have provided an email address). Notices from you to 4DA Systems should be sent to the contact addresses in <a href="#section-21">Section 21</a>.</li>
+      <li><strong>Headings.</strong> Section headings are for convenience only and do not affect the interpretation of these Terms.</li>
+      <li><strong>Relationship of the parties.</strong> Nothing in these Terms creates a partnership, joint venture, employment, or agency relationship between you and 4DA Systems.</li>
+      <li><strong>Third-party beneficiaries.</strong> These Terms do not confer any rights on any third party. No person other than you and 4DA Systems has any right to enforce any provision of these Terms.</li>
+      <li><strong>Survival.</strong> Any provision of these Terms that, by its nature, should survive termination or expiration will survive, including but not limited to provisions relating to intellectual property, limitation of liability, indemnification, and dispute resolution.</li>
+    </ul>
+
+    <h2 id="section-21">21. Contact Information</h2>
+    <p>If you have questions about these Terms, contact us:</p>
+    <ul>
+      <li><strong>General support:</strong> <a href="mailto:support@4da.ai">support@4da.ai</a></li>
+      <li><strong>Legal inquiries:</strong> <a href="mailto:legal@4da.ai">legal@4da.ai</a></li>
+      <li><strong>Privacy requests:</strong> <a href="mailto:privacy@4da.ai">privacy@4da.ai</a></li>
+      <li><strong>Website:</strong> <a href="https://4da.ai">https://4da.ai</a></li>
+    </ul>
+    <p><strong>4DA Systems Pty Ltd</strong><br>
+    ACN 696 078 841 | ABN 51 696 078 841<br>
+    Queensland, Australia</p>
+
+    <p class="copyright">Copyright 2025-2026 4DA Systems Pty Ltd. All rights reserved.</p>
+  </div>
+
+  <div class="legal-footer">
+    <div class="container">
+      <div class="legal-footer-links">
+        <a href="/">Home</a>
+        <a href="/terms">Terms of Service</a>
+        <a href="/privacy">Privacy Policy</a>
+        <a href="mailto:legal@4da.ai">legal@4da.ai</a>
+      </div>
+    </div>
+  </div>
+{% endblock %}
