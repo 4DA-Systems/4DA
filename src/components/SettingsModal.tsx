@@ -172,13 +172,12 @@ export const SettingsModal = memo(function SettingsModal({ onClose }: SettingsMo
     const modal = document.querySelector('[role="dialog"]') as HTMLElement;
     if (!modal) return;
 
-    const focusable = modal.querySelectorAll<HTMLElement>(
+    const getFocusable = () => modal.querySelectorAll<HTMLElement>(
       'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
     );
-    const first = focusable[0];
-    const last = focusable[focusable.length - 1];
 
-    first?.focus();
+    const initialFocusable = getFocusable();
+    initialFocusable[0]?.focus();
 
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
@@ -187,6 +186,9 @@ export const SettingsModal = memo(function SettingsModal({ onClose }: SettingsMo
         return;
       }
       if (e.key !== 'Tab') return;
+      const focusable = getFocusable();
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
       if (e.shiftKey) {
         if (document.activeElement === first) {
           e.preventDefault();
