@@ -36,7 +36,24 @@ pub fn execute() -> SunResult {
 fn get_system_uptime() -> u64 {
     #[cfg(target_os = "windows")]
     {
-        // Parse wmic os get lastbootuptime output
+        // Try PowerShell first (Windows 11+), fall back to wmic (Windows 10)
+        // PowerShell returns LastBootUpTime as a DateTime string
+        if let Ok(output) = super::hardware_monitor::run_cmd(
+            "powershell -NoProfile -Command \"(Get-CimInstance Win32_OperatingSystem).LastBootUpTime.ToString('yyyyMMddHHmmss')\"",
+        ) {
+            let ts = output.trim();
+            if ts.len() >= 14 {
+                if let Ok(boot_time) =
+                    chrono::NaiveDateTime::parse_from_str(&ts[..14], "%Y%m%d%H%M%S")
+                {
+                    let now = chrono::Utc::now().naive_utc();
+                    let duration = now.signed_duration_since(boot_time);
+                    return duration.num_seconds().max(0) as u64;
+                }
+            }
+        }
+
+        // Fallback: wmic (deprecated on Windows 11+)
         if let Ok(output) =
             super::hardware_monitor::run_cmd("wmic os get lastbootuptime /format:list")
         {

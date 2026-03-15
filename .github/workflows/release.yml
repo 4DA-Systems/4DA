@@ -33,7 +33,7 @@ jobs:
               repo: context.repo.repo,
               tag_name: `v${{ steps.version.outputs.version }}`,
               name: `4DA Home v${{ steps.version.outputs.version }}`,
-              body: `## Download\n\nPick the installer for your platform below.\n\n| Platform | File |\n|----------|------|\n| Windows | \`.msi\` or \`.nsis\` |\n| macOS | \`.dmg\` |\n| Linux | \`.AppImage\` or \`.deb\` |\n\n---\n\nSee [CHANGELOG](https://github.com/${context.repo.owner}/${context.repo.repo}/blob/main/CHANGELOG.md) for details.`,
+              body: `## Download\n\nPick the installer for your platform below.\n\n| Platform | File |\n|----------|------|\n| Windows | \`.exe\` (NSIS installer) |\n| macOS | \`.dmg\` |\n| Linux | \`.AppImage\` or \`.deb\` |\n\n---\n\nSee [CHANGELOG](https://github.com/${context.repo.owner}/${context.repo.repo}/blob/main/CHANGELOG.md) for details.`,
               draft: true,
               prerelease: false,
             })
@@ -55,7 +55,7 @@ jobs:
             runner: macos-latest
             target: aarch64-apple-darwin
           - label: macOS (Intel)
-            runner: macos-latest
+            runner: macos-13
             target: x86_64-apple-darwin
           - label: Linux
             runner: ubuntu-22.04
