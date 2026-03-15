@@ -119,7 +119,7 @@ pub fn delete_secret(key_name: &str) -> Result<()> {
 /// Returns `false` if the keychain is unavailable.
 pub fn has_secret(key_name: &str) -> bool {
     match keyring::Entry::new(SERVICE_NAME, key_name) {
-        Ok(entry) => matches!(entry.get_password(), Ok(_)),
+        Ok(entry) => entry.get_password().is_ok(),
         Err(_) => false,
     }
 }

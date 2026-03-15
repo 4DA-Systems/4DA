@@ -10,6 +10,6 @@
 //! by the Tauri command layer.
 
 pub mod personas;
-pub mod validation;
+pub mod runner;
 
-pub use validation::{run_scoring_validation, ValidationReport, ValidationResult};
+pub use runner::{run_scoring_validation, ValidationReport, ValidationResult};

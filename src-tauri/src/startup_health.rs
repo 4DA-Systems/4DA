@@ -7,7 +7,7 @@
 //! All checks are fast (< 100ms total), offline, and never panic.
 
 use serde::Serialize;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use tracing::{info, warn};
 
 // ============================================================================
@@ -86,7 +86,7 @@ fn get_data_dir() -> PathBuf {
 }
 
 /// Check 1: Database file exists and is readable.
-pub(crate) fn check_database(data_dir: &PathBuf, issues: &mut Vec<HealthIssue>) {
+pub(crate) fn check_database(data_dir: &Path, issues: &mut Vec<HealthIssue>) {
     let db_path = data_dir.join("4da.db");
     if !db_path.exists() {
         // Not an error on first run — the DB will be created.
@@ -121,7 +121,7 @@ pub(crate) fn check_database(data_dir: &PathBuf, issues: &mut Vec<HealthIssue>) 
 }
 
 /// Check 2: Settings file parses without error.
-pub(crate) fn check_settings(data_dir: &PathBuf, issues: &mut Vec<HealthIssue>) {
+pub(crate) fn check_settings(data_dir: &Path, issues: &mut Vec<HealthIssue>) {
     let settings_path = data_dir.join("settings.json");
     if !settings_path.exists() {
         // Not an error — first run uses defaults.
@@ -154,7 +154,7 @@ pub(crate) fn check_settings(data_dir: &PathBuf, issues: &mut Vec<HealthIssue>) 
 
 /// Check 3: If an LLM provider is configured, verify the API key is non-empty.
 /// No network calls — just validates the config looks plausible.
-pub(crate) fn check_embedding_provider(data_dir: &PathBuf, issues: &mut Vec<HealthIssue>) {
+pub(crate) fn check_embedding_provider(data_dir: &Path, issues: &mut Vec<HealthIssue>) {
     let settings_path = data_dir.join("settings.json");
     if !settings_path.exists() {
         return; // No settings means no provider configured — that's fine.

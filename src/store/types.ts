@@ -137,6 +137,13 @@ export interface ToolkitSlice {
   togglePinnedTool: (toolId: string) => void;
 }
 
+export interface ModelRegistryData {
+  fetched_at: number;
+  source: string;
+  model_count: number;
+  providers: Record<string, Array<{ id: string; provider: string; display_name: string; input_cost_per_token: number | null; output_cost_per_token: number | null; max_input_tokens: number | null; max_output_tokens: number | null }>>;
+}
+
 export interface SettingsSlice {
   settings: Settings | null;
   settingsForm: SettingsForm;
@@ -144,6 +151,7 @@ export interface SettingsSlice {
   showOnboarding: boolean;
   ollamaStatus: OllamaStatus | null;
   ollamaModels: string[];
+  modelRegistry: ModelRegistryData | null;
   setSettingsForm: (partial: Partial<SettingsForm>) => void;
   setSettingsFormFull: (updaterOrValue: SettingsForm | ((prev: SettingsForm) => SettingsForm)) => void;
   setSettingsStatus: (status: string) => void;
@@ -152,6 +160,7 @@ export interface SettingsSlice {
   saveSettings: () => Promise<void>;
   testConnection: () => Promise<void>;
   checkOllamaStatus: (baseUrl?: string) => Promise<OllamaStatus>;
+  refreshModelRegistry: () => Promise<void>;
 }
 
 export interface AnalysisSlice {

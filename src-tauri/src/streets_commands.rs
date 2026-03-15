@@ -542,6 +542,7 @@ fn set_session_env(key: String, value: String) {
 
 /// Parse a command string into tokens. Wraps `tokenize` and applies
 /// the export/source builtin checks for backward compatibility.
+#[cfg(test)]
 fn parse_command_tokens(command: &str) -> Result<Vec<String>> {
     let trimmed = command.trim();
     // Shell builtins handled at a higher level now, but keep check for direct callers
@@ -553,11 +554,6 @@ fn parse_command_tokens(command: &str) -> Result<Vec<String>> {
         )));
     }
     tokenize(trimmed)
-}
-
-/// Validate a program name (alias for tests).
-fn validate_program(program: &str) -> Result<()> {
-    validate_command_program(program)
 }
 
 // ============================================================================
@@ -939,9 +935,9 @@ fn dispatch_command(command: &str) -> Result<CommandExecutionResult> {
     }
 
     // 3. Strip `sudo` prefix — run directly, permission errors are informative
-    let effective = if trimmed.starts_with("sudo ") {
+    let effective = if let Some(stripped) = trimmed.strip_prefix("sudo ") {
         debug!(target: "4da::streets_cmd", "Stripping sudo prefix");
-        &trimmed[5..]
+        stripped
     } else {
         trimmed
     };
