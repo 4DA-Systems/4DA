@@ -1,11 +1,14 @@
 import { useEffect, useState } from 'react';
 import { check } from '@tauri-apps/plugin-updater';
-import { platform } from '@tauri-apps/plugin-os';
 
 interface UpdateInfo {
   version: string;
   body: string | null;
   canAutoUpdate: boolean;
+}
+
+function isLinux(): boolean {
+  return navigator.platform.toLowerCase().includes('linux');
 }
 
 export function useUpdateCheck() {
@@ -19,10 +22,12 @@ export function useUpdateCheck() {
       try {
         const result = await check();
         if (result && !cancelled) {
-          // On Linux, auto-update only works for AppImage (not .deb/.rpm)
-          // The APPIMAGE env var is set when running from an AppImage
-          const os = platform();
-          const canAutoUpdate = os !== 'linux' || !!import.meta.env.VITE_APPIMAGE;
+          // On Linux .deb/.rpm, auto-update can't replace system packages.
+          // AppImage auto-update works because it's a self-contained file.
+          // We can't reliably detect AppImage vs .deb from the frontend,
+          // so on Linux we default to showing a download link. The updater
+          // will still attempt auto-update and succeed for AppImage users.
+          const canAutoUpdate = !isLinux();
 
           setUpdate({
             version: result.version,
