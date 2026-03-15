@@ -154,9 +154,11 @@ docs/legal/DEED-*
 credentials.json
 service-account*.json
 
-# MCP 4DA server build artifacts
+# MCP server build artifacts
 mcp-4da-server/dist/
 mcp-4da-server/node_modules/
+mcp-streets-server/dist/
+mcp-streets-server/node_modules/
 
 # AWE wisdom database (lives at %APPDATA%/awe/, not in repo)
 # Listed for defense-in-depth
