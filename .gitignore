@@ -171,3 +171,20 @@ end
 target.property
 [outputs...]
 .apple-cert-temp/
+
+# Sensitive data defense-in-depth
+*.secret
+*.secrets
+*.credential*
+**/secrets/
+**/credentials/
+*.gpg
+*.asc
+id_rsa*
+id_ed25519*
+id_ecdsa*
+known_hosts
+.netrc
+.npmrc
+!.npmrc.example
+.pypirc
