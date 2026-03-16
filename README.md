@@ -10,7 +10,7 @@
 
 **All signal. No feed.**
 
-4DA scores content from 11 sources against your actual codebase using 5-axis relevance scoring. An item needs 2+ independent signals to survive. Everything else is rejected. Typical rejection rate: **99%+**.
+4DA scores content from 10 sources against your actual codebase using 5-axis relevance scoring. An item needs 2+ independent signals to survive. Everything else is rejected. Typical rejection rate: **99%+**.
 
 Privacy-first. Runs locally. Zero telemetry. BYOK. ~15MB download.
 
@@ -101,7 +101,7 @@ What survives is scored with content quality analysis (kills clickbait), novelty
 - Intent scoring: recent Git/file activity influences what surfaces
 - Knowledge gap detection: finds blind spots in your dependency understanding
 
-**Sources** — 11 adapters, all running locally
+**Sources** — 10 adapters, all running locally
 - GitHub, YouTube, Hacker News, Reddit, arXiv
 - Product Hunt, Twitter/X, Dev.to, Lobsters
 - Custom RSS feeds
@@ -202,7 +202,7 @@ cd mcp-4da-server
 pnpm install && pnpm build
 ```
 
-**30 tools across 8 categories:**
+**31 tools across 8 categories:**
 - **Core** — `get_relevant_content`, `get_context`, `explain_relevance`, `record_feedback`
 - **Intelligence** — `daily_briefing`, `get_actionable_signals`, `score_autopsy`, `trend_analysis`, `context_analysis`, `topic_connections`, `signal_chains`, `semantic_shifts`, `attention_report`
 - **Diagnostic** — `source_health`, `config_validator`, `llm_status`
@@ -285,7 +285,7 @@ pnpm validate:all           # Full validation (lint + types + tests + build)
 ## Pricing
 
 **Free** — $0 forever. No credit card. No account. No expiration.
-- All 11 sources, full 5-axis scoring engine, confirmation gate, feedback-driven scoring, STREETS Playbook (all 7 modules), MCP server (30 tools), CLI
+- All 10 sources, full 5-axis scoring engine, confirmation gate, feedback-driven scoring, STREETS Playbook (all 7 modules), MCP server (31 tools), CLI
 
 **Pro** — $12/month or $99/year. BYOK — you bring your own API key.
 - Everything in Free, plus: AI daily briefings, Developer DNA profiling, Score Autopsy, intelligence panels, signal chain analysis, knowledge gap detection
