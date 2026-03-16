@@ -174,11 +174,13 @@ describe('PlaybookView', () => {
     expect(pulseElements.length).toBeGreaterThan(0);
   });
 
-  it('shows error with retry button when playbookError is set', () => {
+  it('shows error with browser-mode message when playbookError is set (no Tauri)', () => {
     setStore({ playbookError: 'Failed to load modules' });
     render(<PlaybookView />);
-    expect(screen.getByText('error.generic')).toBeInTheDocument();
-    expect(screen.getByText('action.retry')).toBeInTheDocument();
+    // In test environment (no __TAURI_INTERNALS__), shows browser-mode message
+    expect(screen.getByText('error.playbookBrowser')).toBeInTheDocument();
+    // Retry button is hidden in browser mode
+    expect(screen.queryByText('action.retry')).not.toBeInTheDocument();
   });
 
   it('renders module content when playbookContent is available', () => {

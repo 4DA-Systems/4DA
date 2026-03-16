@@ -147,7 +147,7 @@ export function NaturalLanguageSearch({ onStatusChange, defaultExpanded = true }
             <span className="text-cyan-400 text-sm font-bold">{'\u2756'}</span>
           </div>
           <div>
-            <h3 className="text-white font-medium">{t('search.title')}</h3>
+            <h2 className="text-white font-medium text-base">{t('search.title')}</h2>
             <p className="text-text-muted text-sm">{t('search.subtitle')}</p>
           </div>
         </div>
