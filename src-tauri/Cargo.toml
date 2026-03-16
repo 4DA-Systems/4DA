@@ -114,19 +114,21 @@ keyring = { version = "3", features = ["sync-secret-service", "linux-native"] }
 name = "4da"
 path = "src/bin/cli.rs"
 
-[[bin]]
+# OCR test utilities live in examples/ to prevent Tauri from bundling them
+# Run with: cargo run --example test_ocr_full --features ocr
+[[example]]
 name = "test_ocr_full"
-path = "src/bin/test_ocr_full.rs"
+path = "examples/test_ocr_full.rs"
 required-features = ["ocr"]
 
-[[bin]]
+[[example]]
 name = "test_ocr"
-path = "src/bin/test_ocr.rs"
+path = "examples/test_ocr.rs"
 required-features = ["ocr"]
 
-[[bin]]
+[[example]]
 name = "test_ocr_text"
-path = "src/bin/test_ocr_text.rs"
+path = "examples/test_ocr_text.rs"
 required-features = ["ocr"]
 
 [dev-dependencies]
