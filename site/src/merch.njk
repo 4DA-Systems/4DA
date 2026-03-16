@@ -290,7 +290,7 @@ permalink: "/merch.html"
   <footer>
     <div class="container">
       <div class="footer-inner">
-        <a href="/" class="footer-brand"><img src="hero-sun.jpg" alt="4DA">4DA <span>Merch</span></a>
+        <div class="footer-brand" style="flex-direction:column;align-items:flex-start;gap:4px;"><a href="/" style="display:flex;align-items:center;gap:8px;color:inherit;text-decoration:none;"><img src="hero-sun.jpg" alt="4DA">4DA <span>Merch</span></a><span style="font-size:11px;color:var(--text-muted);font-weight:400;">"4DA" and the 4DA logo are trademarks of 4DA Systems Pty Ltd.</span></div>
         <div class="footer-links">
           <a href="/">Home</a>
           <a href="streets.html">STREETS</a>
@@ -310,6 +310,12 @@ permalink: "/merch.html"
        Shopify Storefront API — Headless Integration
        ═══════════════════════════════════════════════ */
     var STORE = '4da-2.myshopify.com';
+    /* Shopify Storefront API token — intentionally public.
+       This is a READ-ONLY storefront token (not an Admin API key).
+       Shopify documents this as safe for client-side use:
+       it can only read published products and create carts.
+       It cannot access customer data, orders, or admin functions.
+       Scope: unauthenticated_read_product_listings, unauthenticated_write_checkouts */
     var TOKEN = '4a2d2f8581b0855706a978a384ae65f8';
     var API_VER = '2024-01';
 

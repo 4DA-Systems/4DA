@@ -6,7 +6,7 @@ Version 1.1 | Effective: 2025-01-01 | License: FSL-1.1-Apache-2.0
 
 This agreement clarifies the intellectual property rights granted with
 contributions to 4DA from any person or entity. It protects you as a
-contributor and 4DA Systems ("the Project Owner") as
+contributor and 4DA Systems Pty Ltd (ACN 696 078 841) ("the Project Owner") as
 the maintainer and copyright holder.
 
 By submitting a contribution (pull request, patch, code, documentation,
