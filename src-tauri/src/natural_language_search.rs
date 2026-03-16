@@ -573,7 +573,7 @@ fn is_llm_configured() -> bool {
 }
 
 // ============================================================================
-// Tauri Command — tiered response (no hard Pro gate)
+// Tauri Command — Pro-gated
 // ============================================================================
 
 const FREE_RESULT_LIMIT: usize = 3;
@@ -586,6 +586,7 @@ pub async fn natural_language_query(query_text: String) -> Result<QueryResult> {
         return Err("Query cannot be empty".into());
     }
 
+    crate::settings::require_pro_feature("natural_language_query")?;
     let is_pro = crate::settings::is_pro();
 
     // 1. Parse intent locally

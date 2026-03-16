@@ -1188,6 +1188,9 @@ pub fn run() {
                 info!(target: "4da::monitor", enabled = config.enabled, interval_mins = config.interval_minutes, "Loaded monitoring settings");
             }
 
+            // Validate license integrity (reset tier if no key present)
+            crate::settings::validate_license_on_startup();
+
             // Start background scheduler
             let app_handle = app.handle().clone();
             monitoring::start_scheduler(app_handle.clone(), monitoring_state.clone());
