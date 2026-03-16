@@ -380,73 +380,84 @@ fn execute_text_search(
         return Ok(Vec::new());
     }
 
+    let mut params: Vec<Box<dyn rusqlite::types::ToSql>> = Vec::new();
+
     let conditions: Vec<String> = parsed
         .keywords
         .iter()
         .map(|k| {
-            format!(
-                "(LOWER(s.title) LIKE '%{kw}%' OR LOWER(s.content) LIKE '%{kw}%')",
-                kw = k.replace('\'', "''")
-            )
+            let like_val = format!("%{}%", k);
+            params.push(Box::new(like_val.clone()));
+            params.push(Box::new(like_val));
+            "(LOWER(s.title) LIKE LOWER(?) OR LOWER(s.content) LIKE LOWER(?))".to_string()
         })
         .collect();
 
     let where_clause = conditions.join(" AND ");
 
     let type_filter = if !parsed.file_types.is_empty() {
-        let types: Vec<String> = parsed
+        let placeholders: Vec<&str> = parsed
             .file_types
             .iter()
-            .map(|t| format!("'{}'", t.replace('\'', "''")))
+            .map(|t| {
+                params.push(Box::new(t.clone()));
+                "?"
+            })
             .collect();
-        format!(" AND s.source_type IN ({})", types.join(","))
+        format!(" AND s.source_type IN ({})", placeholders.join(","))
     } else {
         String::new()
     };
 
     let time_filter = if let Some(ref tr) = parsed.time_range {
-        format!(" AND s.created_at >= '{}'", tr.start)
+        params.push(Box::new(tr.start.clone()));
+        " AND s.created_at >= ?".to_string()
     } else {
         String::new()
     };
+
+    params.push(Box::new(limit as i64));
 
     let sql = format!(
         "SELECT s.id, s.source_type, s.url, s.title, s.content, s.created_at
          FROM source_items s
          WHERE ({where_clause}){type_filter}{time_filter}
          ORDER BY s.last_seen DESC
-         LIMIT {limit}"
+         LIMIT ?"
     );
 
     debug!(target: "4da::search", sql = %sql, "Executing text search");
 
     let mut stmt = conn.prepare(&sql).context("Query error")?;
     let rows = stmt
-        .query_map([], |row| {
-            let id: i64 = row.get(0)?;
-            let source_type: String = row.get(1)?;
-            let url: Option<String> = row.get(2)?;
-            let title: String = row.get(3)?;
-            let content: String = row.get(4)?;
-            let created_at: Option<String> = row.get(5)?;
+        .query_map(
+            rusqlite::params_from_iter(params.iter().map(|p| p.as_ref())),
+            |row| {
+                let id: i64 = row.get(0)?;
+                let source_type: String = row.get(1)?;
+                let url: Option<String> = row.get(2)?;
+                let title: String = row.get(3)?;
+                let content: String = row.get(4)?;
+                let created_at: Option<String> = row.get(5)?;
 
-            let preview = if content.len() > 200 {
-                format!("{}...", &content[..200])
-            } else {
-                content
-            };
+                let preview = if content.len() > 200 {
+                    format!("{}...", &content[..200])
+                } else {
+                    content
+                };
 
-            Ok(QueryResultItem {
-                id,
-                file_path: url.clone(),
-                file_name: Some(title),
-                preview,
-                relevance: 0.5,
-                source_type,
-                timestamp: created_at,
-                match_reason: "keyword match".to_string(),
-            })
-        })
+                Ok(QueryResultItem {
+                    id,
+                    file_path: url.clone(),
+                    file_name: Some(title),
+                    preview,
+                    relevance: 0.5,
+                    source_type,
+                    timestamp: created_at,
+                    match_reason: "keyword match".to_string(),
+                })
+            },
+        )
         .context("Query error")?;
 
     let mut items = Vec::new();
