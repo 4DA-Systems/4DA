@@ -12,8 +12,10 @@ interface SourceInfo {
 export function BriefingWarmupState({ onAnalyze }: { onAnalyze: () => void }) {
   const { t } = useTranslation();
   const userContext = useAppStore(s => s.userContext);
+  const isBrowserMode = useAppStore(s => s.isBrowserMode);
   const fired = useRef(false);
   const [enabledSources, setEnabledSources] = useState<string[]>([]);
+  const [autoStartPending, setAutoStartPending] = useState(!isBrowserMode);
 
   // Load actual configured sources from the backend
   useEffect(() => {
@@ -31,15 +33,19 @@ export function BriefingWarmupState({ onAnalyze }: { onAnalyze: () => void }) {
       });
   }, []);
 
-  // Auto-start analysis after 3 seconds so new users aren't stuck
+  // Auto-start analysis after 3 seconds so new users aren't stuck (skip in browser mode)
   useEffect(() => {
-    if (fired.current) return;
+    if (fired.current || isBrowserMode) {
+      setAutoStartPending(false);
+      return;
+    }
     const timer = setTimeout(() => {
       fired.current = true;
+      setAutoStartPending(false);
       onAnalyze();
     }, 3000);
     return () => clearTimeout(timer);
-  }, [onAnalyze]);
+  }, [onAnalyze, isBrowserMode]);
 
   // Gather detected info
   const stack = userContext?.tech_stack || [];
@@ -90,9 +96,11 @@ export function BriefingWarmupState({ onAnalyze }: { onAnalyze: () => void }) {
           {t('briefing.warmup.activate', 'Start Intelligence')}
         </button>
 
-        <p className="text-xs text-text-muted mt-3 animate-pulse">
-          {t('briefing.warmup.autoStart', 'Starting automatically...')}
-        </p>
+        {autoStartPending && (
+          <p className="text-xs text-text-muted mt-3 animate-pulse">
+            {t('briefing.warmup.autoStart', 'Starting automatically...')}
+          </p>
+        )}
       </div>
     </div>
   );

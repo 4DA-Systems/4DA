@@ -191,7 +191,7 @@ export const IntelligenceProfileCard = memo(function IntelligenceProfileCard() {
             <span className="text-[10px] text-text-muted uppercase tracking-wider">{t('briefing.profile.learningVelocity')}</span>
             <p className="text-lg font-semibold text-white mt-1">
               {learnedAffinities.length}
-              <span className="text-xs font-normal text-text-muted ml-1">{t('briefing.profile.topicsLearned')}</span>
+              <span className="text-xs font-normal text-text-muted ml-1">{t('briefing.profile.topicsLearned', { count: learnedAffinities.length })}</span>
             </p>
           </div>
           {/* System Activity */}

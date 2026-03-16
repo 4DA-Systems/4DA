@@ -419,7 +419,7 @@ impl ContextEngine {
         };
 
         conn.execute(
-            "INSERT INTO interactions (source_item_id, action) VALUES (?1, ?2)",
+            "INSERT INTO interactions (source_item_id, item_id, action, action_type, signal_strength) VALUES (?1, ?1, ?2, ?2, 0.5)",
             params![source_item_id, action_str],
         )?;
         Ok(())

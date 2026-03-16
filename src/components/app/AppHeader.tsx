@@ -43,10 +43,10 @@ export const AppHeader = memo(function AppHeader({
         )}
         <OllamaStatus provider={settingsFormProvider} />
         {proValueBadge}
-        <span className={`px-2 py-1 text-[10px] font-bold uppercase tracking-wider rounded ${
+        <span className={`px-2 py-1 text-[11px] font-bold uppercase tracking-wider rounded ${
           isPro
             ? 'bg-[#D4AF37]/20 text-[#D4AF37] border border-[#D4AF37]/30'
-            : 'bg-bg-tertiary text-gray-500 border border-border'
+            : 'bg-bg-tertiary text-gray-400 border border-border'
         }`}>
           {tier}
         </span>

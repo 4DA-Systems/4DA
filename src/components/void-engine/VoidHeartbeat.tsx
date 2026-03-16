@@ -17,14 +17,12 @@ interface VoidHeartbeatProps {
 export function VoidHeartbeat({ signal, size = 200 }: VoidHeartbeatProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const elementRef = useRef<HTMLElement | null>(null);
-  const registered = useRef(false);
 
   // Register the GAME component on mount
   useEffect(() => {
-    if (registered.current) return;
-    registered.current = true;
+    let cancelled = false;
     registerGameComponent('game-ambient-intelligence').then(() => {
-      if (!containerRef.current) return;
+      if (cancelled || !containerRef.current) return;
       const el = document.createElement('game-ambient-intelligence');
       el.style.width = '100%';
       el.style.height = '100%';
@@ -36,11 +34,11 @@ export function VoidHeartbeat({ signal, size = 200 }: VoidHeartbeatProps) {
     });
     const container = containerRef.current;
     return () => {
+      cancelled = true;
       if (elementRef.current && container?.contains(elementRef.current)) {
         container.removeChild(elementRef.current);
       }
       elementRef.current = null;
-      registered.current = false;
     };
   }, []);
 
