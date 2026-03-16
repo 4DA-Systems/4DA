@@ -62,21 +62,134 @@ if [ -n "$STAGED_TS" ]; then
     }
 fi
 
-# Secret scanning — block commits containing real API keys/tokens
+# Secret scanning — comprehensive, nukeproof detection
+# Blocks commits containing real API keys, tokens, private keys, PII, and credentials
 echo "Scanning for secrets..."
-STAGED_FILES=$(git diff --cached --name-only --diff-filter=ACM)
+STAGED_FILES=$(git diff --cached --name-only --diff-filter=ACM | \
+    grep -v 'node_modules/' | \
+    grep -v 'target/' | \
+    grep -v 'dist/' | \
+    grep -v '\.gitignore$' | \
+    grep -v 'SECURITY\.md$' | \
+    grep -v '\.example' | \
+    grep -v '\.test\.' | \
+    grep -v '\.spec\.' || true)
+
 if [ -n "$STAGED_FILES" ]; then
-    # Patterns that indicate real secrets (not format references like "starts with sk-ant-")
-    SECRETS_FOUND=$(echo "$STAGED_FILES" | xargs grep -nE \
-        'sk-ant-api[0-9]{2}-[A-Za-z0-9]{20,}|sk-proj-[A-Za-z0-9]{20,}|ghp_[A-Za-z0-9]{36}|ghu_[A-Za-z0-9]{36}|vck_[A-Za-z0-9]{20,}|vca_[A-Za-z0-9]{20,}|npm_[A-Za-z0-9]{36}|AKIA[0-9A-Z]{16}' \
-        2>/dev/null || true)
-    if [ -n "$SECRETS_FOUND" ]; then
+    SECRETS_FOUND=""
+    FAIL=0
+
+    # Helper: scan staged file contents (not working tree) for a pattern
+    scan_pattern() {
+        local LABEL="$1"
+        local PATTERN="$2"
+        local EXCLUDE_PATTERN="${3:-}"
+        for FILE in $STAGED_FILES; do
+            # Skip binary files
+            if file "$FILE" 2>/dev/null | grep -qE 'binary|executable|image|archive'; then
+                continue
+            fi
+            local MATCHES
+            if [ -n "$EXCLUDE_PATTERN" ]; then
+                MATCHES=$(git show ":$FILE" 2>/dev/null | grep -nE "$PATTERN" 2>/dev/null | grep -vE "$EXCLUDE_PATTERN" || true)
+            else
+                MATCHES=$(git show ":$FILE" 2>/dev/null | grep -nE "$PATTERN" 2>/dev/null || true)
+            fi
+            if [ -n "$MATCHES" ]; then
+                while IFS= read -r LINE; do
+                    SECRETS_FOUND="${SECRETS_FOUND}  [$LABEL] $FILE:$LINE\n"
+                    FAIL=1
+                done <<EOF
+$MATCHES
+EOF
+            fi
+        done
+    }
+
+    # --- API Keys & Tokens ---
+    # OpenAI
+    scan_pattern "OpenAI" 'sk-proj-[A-Za-z0-9_-]{20,}'
+    scan_pattern "OpenAI" 'sk-[a-zA-Z0-9]{20,}' 'sk-ant-|sk-proj-|sk_live|sk_test'
+    # Anthropic
+    scan_pattern "Anthropic" 'sk-ant-[A-Za-z0-9_-]{20,}'
+    # GitHub tokens (all prefixes)
+    scan_pattern "GitHub" 'gh[pousr]_[A-Za-z0-9]{36,}'
+    # AWS access keys
+    scan_pattern "AWS Key" '(AKIA|ASIA)[0-9A-Z]{16}'
+    # AWS secret keys (40-char base64 near aws_secret)
+    scan_pattern "AWS Secret" 'aws_secret[_a-zA-Z]*\s*[:=]\s*['\''"][A-Za-z0-9/+=]{40}'
+    # Google API keys
+    scan_pattern "Google API" 'AIza[0-9A-Za-z_-]{35}'
+    # Stripe keys (live only — test keys are safe)
+    scan_pattern "Stripe" '[spr]k_live_[A-Za-z0-9]{20,}'
+    # Keygen tokens
+    scan_pattern "Keygen" 'key_[A-Za-z0-9]{20,}'
+    scan_pattern "Keygen" 'prod_[A-Za-z0-9]{20,}'
+    # Shopify tokens
+    scan_pattern "Shopify" 'shp(at|ca|pa|ss)_[a-fA-F0-9]{32,}'
+    # npm tokens
+    scan_pattern "npm" 'npm_[A-Za-z0-9]{36,}'
+    # Discord tokens
+    scan_pattern "Discord" '[MN][A-Za-z0-9]{23,}\.[A-Za-z0-9_-]{6}\.[A-Za-z0-9_-]{27,}'
+    # Vercel tokens
+    scan_pattern "Vercel" 'vck_[A-Za-z0-9]{20,}'
+    scan_pattern "Vercel" 'vca_[A-Za-z0-9]{20,}'
+    # Slack tokens
+    scan_pattern "Slack" 'xox[baprs]-[0-9]{10,}-[A-Za-z0-9-]+'
+    # Twilio
+    scan_pattern "Twilio" 'SK[a-f0-9]{32}'
+    # SendGrid
+    scan_pattern "SendGrid" 'SG\.[A-Za-z0-9_-]{22}\.[A-Za-z0-9_-]{43}'
+    # Mailgun
+    scan_pattern "Mailgun" 'key-[a-f0-9]{32}'
+
+    # --- Private Keys ---
+    scan_pattern "Private Key" '-----BEGIN (RSA |EC |DSA |OPENSSH )?PRIVATE KEY-----'
+
+    # --- Connection Strings with credentials ---
+    scan_pattern "DB Connection" '(mongodb|postgres|mysql|postgresql|redis|amqp)://[^:]+:[^@]+@'
+
+    # --- Generic credential patterns ---
+    scan_pattern "Password" 'password\s*[:=]\s*['\''"][^'\''"]{8,}' 'example|placeholder|changeme|your_|test|fake|dummy|TODO|FIXME|xxx|REPLACE'
+    scan_pattern "Secret" 'secret\s*[:=]\s*['\''"][^'\''"]{8,}' 'example|placeholder|changeme|your_|test|fake|dummy|TODO|FIXME|xxx|REPLACE'
+    scan_pattern "API Key" 'api[_-]?key\s*[:=]\s*['\''"][A-Za-z0-9_-]{16,}' 'example|placeholder|your_|test|fake|dummy|TODO|FIXME|xxx|REPLACE'
+
+    # --- Personal Identifiable Information ---
+    # Australian phone numbers
+    scan_pattern "AU Phone" '\+614[0-9]{8}'
+    # ABN (11 digits) near keyword
+    scan_pattern "ABN/TFN" '(ABN|TFN|abn|tfn)\s*[:=]?\s*[0-9]{2}\s?[0-9]{3}\s?[0-9]{3}\s?[0-9]{3}'
+
+    # --- Personal emails in code files ---
+    # Only flag in .ts/.tsx/.rs/.js/.jsx source files (not docs, config, legal)
+    for FILE in $STAGED_FILES; do
+        if echo "$FILE" | grep -qE '\.(ts|tsx|rs|js|jsx)$'; then
+            EMAIL_MATCHES=$(git show ":$FILE" 2>/dev/null | grep -nE '[a-zA-Z0-9._%+-]+@(gmail|yahoo|hotmail|outlook|protonmail|icloud)\.(com|net|org)' 2>/dev/null | grep -vE 'example|test|fake|dummy|noreply|placeholder' || true)
+            if [ -n "$EMAIL_MATCHES" ]; then
+                while IFS= read -r LINE; do
+                    SECRETS_FOUND="${SECRETS_FOUND}  [Personal Email] $FILE:$LINE\n"
+                    FAIL=1
+                done <<EOF
+$EMAIL_MATCHES
+EOF
+            fi
+        fi
+    done
+
+    if [ "$FAIL" -eq 1 ]; then
         echo ""
-        echo "BLOCKED — Possible secrets detected in staged files:"
-        echo "$SECRETS_FOUND"
+        echo "============================================================"
+        echo "  COMMIT BLOCKED — Secrets/sensitive data detected!"
+        echo "============================================================"
+        printf "$SECRETS_FOUND"
         echo ""
-        echo "If these are test/example values, use a clearly fake pattern."
-        echo "To bypass (DANGEROUS): git commit --no-verify"
+        echo "Fix: remove the secret, use environment variables, or add"
+        echo "     the value to data/settings.json (gitignored)."
+        echo ""
+        echo "False positive? Add the file to the exclusion list in"
+        echo "     .husky/pre-commit or use a clearly fake value."
+        echo ""
+        echo "DANGEROUS bypass: git commit --no-verify"
         exit 1
     fi
 fi
