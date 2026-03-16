@@ -71,7 +71,7 @@ export function SplashScreen({ onComplete, minimumDisplayTime = 1500 }: SplashSc
       } catch (e) {
         console.error('[SplashScreen] Backend check failed:', e);
         // Detect browser mode: if Tauri internals are missing, show specific message
-        const isBrowser = !(window as Record<string, unknown>).__TAURI_INTERNALS__;
+        const isBrowser = !('__TAURI_INTERNALS__' in window);
         if (isBrowser) {
           setError('Desktop app required \u2014 open through Tauri window');
         } else {

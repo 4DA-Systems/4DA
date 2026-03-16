@@ -62,6 +62,7 @@ export const PlaybookView = memo(function PlaybookView() {
     })),
   );
 
+  const isBrowserMode = useAppStore((s) => s.isBrowserMode);
   const loadModules = useAppStore((s) => s.loadPlaybookModules);
   const loadContent = useAppStore((s) => s.loadPlaybookContent);
   const loadProgress = useAppStore((s) => s.loadPlaybookProgress);
@@ -192,11 +193,11 @@ export const PlaybookView = memo(function PlaybookView() {
         {playbookError && (
           <div className="flex flex-col items-center justify-center gap-3 py-8 text-center">
             <p className="text-text-secondary text-sm">
-              {!(window as Record<string, unknown>).__TAURI_INTERNALS__
+              {isBrowserMode
                 ? t('error.playbookBrowser', { defaultValue: 'Playbook requires the desktop app. Open 4DA through the Tauri window.' })
                 : t('error.playbookFailed', { defaultValue: 'Failed to load playbook content. Check your connection and try again.' })}
             </p>
-            {!!(window as Record<string, unknown>).__TAURI_INTERNALS__ && (
+            {!isBrowserMode && (
               <button
                 onClick={() => {
                   loadModules();
