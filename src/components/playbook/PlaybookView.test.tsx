@@ -51,6 +51,8 @@ function makeDefaultStore(): Record<string, unknown> {
     // Toast
     addToast: vi.fn(),
 
+    // Browser mode (true in test env — no Tauri)
+    isBrowserMode: true,
   };
 }
 
