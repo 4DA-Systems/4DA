@@ -144,15 +144,8 @@ pub(crate) fn store_anti_patterns(
 
         let subject = format!("{}:{}", pattern.pattern_type, pattern.topic);
 
-        // Supersede previous anti-pattern for this type+topic
-        conn.execute(
-            "UPDATE digested_intelligence
-             SET superseded_by = (SELECT COALESCE(MAX(id), 0) + 1 FROM digested_intelligence)
-             WHERE digest_type = 'anti_pattern' AND subject = ?1 AND superseded_by IS NULL",
-            params![subject],
-        )
-        .with_context(|| format!("Failed to supersede anti-pattern for{}", subject))?;
-
+        // Insert new anti-pattern first, then point old rows at it.
+        // This order satisfies the FK constraint on superseded_by -> digested_intelligence(id).
         conn.execute(
             "INSERT INTO digested_intelligence (digest_type, subject, data, confidence, sample_size)
              VALUES ('anti_pattern', ?1, ?2, ?3, ?4)",
@@ -163,7 +156,18 @@ pub(crate) fn store_anti_patterns(
                 pattern.exposure_count,
             ],
         )
-        .with_context(|| format!("Failed to insert anti-pattern for{}", subject))?;
+        .with_context(|| format!("Failed to insert anti-pattern for {}", subject))?;
+
+        let new_id = conn.last_insert_rowid();
+
+        // Supersede previous anti-patterns for this type+topic (excluding the one just inserted)
+        conn.execute(
+            "UPDATE digested_intelligence
+             SET superseded_by = ?1
+             WHERE digest_type = 'anti_pattern' AND subject = ?2 AND superseded_by IS NULL AND id != ?1",
+            params![new_id, subject],
+        )
+        .with_context(|| format!("Failed to supersede anti-pattern for {}", subject))?;
     }
 
     debug!(target: "4da::autophagy", count = patterns.len(), "Stored anti-patterns");

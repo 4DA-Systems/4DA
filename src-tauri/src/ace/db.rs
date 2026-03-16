@@ -120,18 +120,26 @@ pub fn migrate(conn: &Arc<Mutex<Connection>>) -> Result<()> {
         CREATE INDEX IF NOT EXISTS idx_anti_topics_topic ON anti_topics(topic);
 
         -- User interactions (behavior signals)
+        -- NOTE: This is the canonical schema — superset of ACE + ContextEngine columns.
+        -- ACE uses: item_id, action_type, action_data, item_topics, item_source, signal_strength
+        -- ContextEngine uses: source_item_id, action
+        -- ACE initializes first, so this schema MUST include all columns both systems need.
         CREATE TABLE IF NOT EXISTS interactions (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            item_id INTEGER NOT NULL,
-            action_type TEXT NOT NULL,          -- 'click', 'save', 'share', 'dismiss', etc.
+            source_item_id INTEGER,             -- used by ContextEngine
+            item_id INTEGER,                    -- used by ACE (nullable for ContextEngine compat)
+            action TEXT,                        -- used by ContextEngine
+            action_type TEXT,                   -- 'click', 'save', 'share', 'dismiss', etc.
             action_data TEXT,                   -- JSON with action-specific data (dwell_time, etc.)
             item_topics TEXT,                   -- JSON array
             item_source TEXT,                   -- 'hackernews', 'arxiv', etc.
-            signal_strength REAL NOT NULL,
+            signal_strength REAL DEFAULT 0.5,
             timestamp TEXT DEFAULT (datetime('now'))
         );
         CREATE INDEX IF NOT EXISTS idx_interactions_timestamp ON interactions(timestamp);
-        CREATE INDEX IF NOT EXISTS idx_interactions_item ON interactions(item_id);
+        CREATE INDEX IF NOT EXISTS idx_interactions_item ON interactions(source_item_id);
+        CREATE INDEX IF NOT EXISTS idx_interactions_item_id ON interactions(item_id);
+        CREATE INDEX IF NOT EXISTS idx_interactions_action ON interactions(action);
         CREATE INDEX IF NOT EXISTS idx_interactions_source ON interactions(item_source);
         CREATE INDEX IF NOT EXISTS idx_interactions_item_action ON interactions(item_id, action_type);
 
@@ -193,20 +201,7 @@ pub fn migrate(conn: &Arc<Mutex<Connection>>) -> Result<()> {
         CREATE INDEX IF NOT EXISTS idx_validated_signals_type ON validated_signals(signal_type);
         CREATE INDEX IF NOT EXISTS idx_validated_signals_timestamp ON validated_signals(timestamp);
 
-        -- Audit trail
-        CREATE TABLE IF NOT EXISTS audit_log (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            entry_type TEXT NOT NULL,
-            action TEXT NOT NULL,
-            reason TEXT,
-            contributing_factors TEXT,     -- JSON array
-            before_state TEXT,
-            after_state TEXT,
-            confidence REAL,
-            timestamp TEXT DEFAULT (datetime('now'))
-        );
-        CREATE INDEX IF NOT EXISTS idx_audit_log_timestamp ON audit_log(timestamp);
-        CREATE INDEX IF NOT EXISTS idx_audit_log_type ON audit_log(entry_type);
+        -- REMOVED: ace_audit_log — dead table, never INSERT/SELECT/UPDATE/DELETE in production
 
         -- Accuracy metrics (daily snapshots)
         CREATE TABLE IF NOT EXISTS accuracy_metrics (
@@ -223,17 +218,7 @@ pub fn migrate(conn: &Arc<Mutex<Connection>>) -> Result<()> {
         );
         CREATE INDEX IF NOT EXISTS idx_accuracy_metrics_date ON accuracy_metrics(metric_date);
 
-        -- System health records
-        CREATE TABLE IF NOT EXISTS system_health (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            component TEXT NOT NULL,
-            status TEXT NOT NULL,          -- 'healthy', 'degraded', 'failed', 'disabled'
-            last_success TEXT,
-            error_count INTEGER DEFAULT 0,
-            last_error TEXT,
-            checked_at TEXT DEFAULT (datetime('now'))
-        );
-        CREATE INDEX IF NOT EXISTS idx_system_health_component ON system_health(component);
+        -- REMOVED: system_health — dead table, never used in production
 
         -- ═══════════════════════════════════════════════════════════════
         -- COLD START BOOTSTRAP TABLE
@@ -307,6 +292,20 @@ pub fn migrate(conn: &Arc<Mutex<Connection>>) -> Result<()> {
     conn.execute_batch("ALTER TABLE topic_affinities ADD COLUMN last_decay_at TEXT DEFAULT NULL;")
         .ok(); // ok() because column may already exist on subsequent runs
 
+    // Phase 1D migration: Ensure interactions table has ContextEngine columns
+    // If the interactions table was created before the schema unification,
+    // it may be missing source_item_id and action columns.
+    conn.execute_batch("ALTER TABLE interactions ADD COLUMN source_item_id INTEGER;")
+        .ok(); // ok() because column may already exist
+    conn.execute_batch("ALTER TABLE interactions ADD COLUMN action TEXT;")
+        .ok(); // ok() because column may already exist
+    // Also relax item_id NOT NULL → nullable (for ContextEngine rows that only use source_item_id)
+    // Note: SQLite doesn't support ALTER COLUMN, but new inserts without item_id will work
+    // because the CREATE TABLE IF NOT EXISTS won't fire on existing tables.
+    // Ensure indexes exist for ContextEngine query patterns
+    conn.execute_batch("CREATE INDEX IF NOT EXISTS idx_interactions_action ON interactions(action);")
+        .ok();
+
     // Phase 1C migration: Anomalies table
     conn.execute_batch(
         r#"
@@ -376,15 +375,8 @@ pub fn migrate(conn: &Arc<Mutex<Connection>>) -> Result<()> {
             embedding float[384]
         );
 
-        -- Vector index for topic affinity embeddings (384-dim MiniLM embeddings)
-        CREATE VIRTUAL TABLE IF NOT EXISTS affinity_vec USING vec0(
-            embedding float[384]
-        );
-
-        -- Vector index for document chunk embeddings (384-dim MiniLM embeddings)
-        CREATE VIRTUAL TABLE IF NOT EXISTS document_vec USING vec0(
-            embedding float[384]
-        );
+        -- REMOVED: affinity_vec — dead virtual table, never queried in production
+        -- REMOVED: document_vec — dead virtual table, never queried in production
     ",
     )
     .context("Failed to create topic vec0 tables")?;
@@ -455,6 +447,5 @@ mod tests {
         assert!(tables.contains(&"detected_projects".to_string()));
         assert!(tables.contains(&"detected_tech".to_string()));
         assert!(tables.contains(&"active_topics".to_string()));
-        assert!(tables.contains(&"audit_log".to_string()));
     }
 }

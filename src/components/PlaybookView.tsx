@@ -191,18 +191,24 @@ export const PlaybookView = memo(function PlaybookView() {
 
         {playbookError && (
           <div className="flex flex-col items-center justify-center gap-3 py-8 text-center">
-            <p className="text-text-secondary text-sm">{t('error.generic')}</p>
-            <button
-              onClick={() => {
-                loadModules();
-                loadProgress();
-                loadStreetsTier();
-              }}
-              aria-label={t('action.retry')}
-              className="px-3 py-1.5 text-xs bg-bg-tertiary hover:bg-white/10 rounded transition-colors text-text-secondary"
-            >
-              {t('action.retry')}
-            </button>
+            <p className="text-text-secondary text-sm">
+              {!(window as Record<string, unknown>).__TAURI_INTERNALS__
+                ? t('error.playbookBrowser', { defaultValue: 'Playbook requires the desktop app. Open 4DA through the Tauri window.' })
+                : t('error.playbookFailed', { defaultValue: 'Failed to load playbook content. Check your connection and try again.' })}
+            </p>
+            {!!(window as Record<string, unknown>).__TAURI_INTERNALS__ && (
+              <button
+                onClick={() => {
+                  loadModules();
+                  loadProgress();
+                  loadStreetsTier();
+                }}
+                aria-label={t('action.retry')}
+                className="px-3 py-1.5 text-xs bg-bg-tertiary hover:bg-white/10 rounded transition-colors text-text-secondary"
+              >
+                {t('action.retry')}
+              </button>
+            )}
           </div>
         )}
 

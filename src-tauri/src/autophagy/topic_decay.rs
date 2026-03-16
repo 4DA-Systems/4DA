@@ -159,26 +159,25 @@ pub(crate) fn store_decay_profiles(
             "peak_relevance_age_hours": profile.peak_relevance_age_hours,
         }))?;
 
-        // Supersede previous decay profile for this topic
-        conn.execute(
-            "UPDATE digested_intelligence
-             SET superseded_by = (SELECT COALESCE(MAX(id), 0) + 1 FROM digested_intelligence)
-             WHERE digest_type = 'topic_decay' AND subject = ?1 AND superseded_by IS NULL",
-            params![profile.topic],
-        )
-        .map_err(|e| {
-            format!(
-                "Failed to supersede decay profile for {}: {}",
-                profile.topic, e
-            )
-        })?;
-
+        // Insert new decay profile first, then point old rows at it.
+        // This order satisfies the FK constraint on superseded_by -> digested_intelligence(id).
         conn.execute(
             "INSERT INTO digested_intelligence (digest_type, subject, data, confidence, sample_size)
              VALUES ('topic_decay', ?1, ?2, 0.8, 0)",
             params![profile.topic, data],
         )
-        .with_context(|| format!("Failed to insert decay profile for{}", profile.topic))?;
+        .with_context(|| format!("Failed to insert decay profile for {}", profile.topic))?;
+
+        let new_id = conn.last_insert_rowid();
+
+        // Supersede previous decay profiles for this topic (excluding the one just inserted)
+        conn.execute(
+            "UPDATE digested_intelligence
+             SET superseded_by = ?1
+             WHERE digest_type = 'topic_decay' AND subject = ?2 AND superseded_by IS NULL AND id != ?1",
+            params![new_id, profile.topic],
+        )
+        .with_context(|| format!("Failed to supersede decay profile for {}", profile.topic))?;
     }
 
     debug!(target: "4da::autophagy", count = profiles.len(), "Stored topic decay profiles");

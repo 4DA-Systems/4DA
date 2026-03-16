@@ -53,7 +53,9 @@ export function DigestView() {
         </div>
         <div className="text-center">
           <div className="text-lg font-semibold text-accent-gold">
-            {Math.round(digest.stats.avg_relevance_score * 100)}%
+            {digest.stats.total_items_analyzed === 0 || !Number.isFinite(digest.stats.avg_relevance_score)
+              ? '\u2014'
+              : `${Math.round(digest.stats.avg_relevance_score * 100)}%`}
           </div>
           <div className="text-[10px] text-text-muted">{t('digest.avgScore', 'avg score')}</div>
         </div>

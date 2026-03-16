@@ -126,21 +126,25 @@ pub(crate) fn store_calibrations(
             "sample_size": delta.sample_size,
         }))?;
 
-        // Supersede previous calibration for the same topic
-        conn.execute(
-            "UPDATE digested_intelligence
-             SET superseded_by = (SELECT COALESCE(MAX(id), 0) + 1 FROM digested_intelligence)
-             WHERE digest_type = 'calibration' AND subject = ?1 AND superseded_by IS NULL",
-            params![delta.topic],
-        )
-        .with_context(|| format!("Failed to supersede calibration for{}", delta.topic))?;
-
+        // Insert new calibration first, then point old rows at it.
+        // This order satisfies the FK constraint on superseded_by -> digested_intelligence(id).
         conn.execute(
             "INSERT INTO digested_intelligence (digest_type, subject, data, confidence, sample_size)
              VALUES ('calibration', ?1, ?2, ?3, ?4)",
             params![delta.topic, data, delta.confidence, delta.sample_size],
         )
-        .with_context(|| format!("Failed to insert calibration for{}", delta.topic))?;
+        .with_context(|| format!("Failed to insert calibration for {}", delta.topic))?;
+
+        let new_id = conn.last_insert_rowid();
+
+        // Supersede previous calibrations for the same topic (excluding the one just inserted)
+        conn.execute(
+            "UPDATE digested_intelligence
+             SET superseded_by = ?1
+             WHERE digest_type = 'calibration' AND subject = ?2 AND superseded_by IS NULL AND id != ?1",
+            params![new_id, delta.topic],
+        )
+        .with_context(|| format!("Failed to supersede calibration for {}", delta.topic))?;
     }
 
     debug!(target: "4da::autophagy", count = deltas.len(), "Stored calibration deltas");

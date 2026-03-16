@@ -560,6 +560,7 @@ impl Database {
                             CREATE INDEX IF NOT EXISTS idx_coach_sessions_updated
                                 ON coach_sessions(updated_at);
 
+                            -- DEAD TABLE: coach_messages — deprecated coach system, never used in production
                             CREATE TABLE IF NOT EXISTS coach_messages (
                                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                                 session_id TEXT NOT NULL REFERENCES coach_sessions(id) ON DELETE CASCADE,
@@ -572,6 +573,7 @@ impl Database {
                             CREATE INDEX IF NOT EXISTS idx_coach_messages_session
                                 ON coach_messages(session_id);
 
+                            -- DEAD TABLE: coach_documents — deprecated coach system, never used in production
                             CREATE TABLE IF NOT EXISTS coach_documents (
                                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                                 doc_type TEXT NOT NULL,
@@ -579,6 +581,7 @@ impl Database {
                                 created_at TEXT NOT NULL DEFAULT (datetime('now'))
                             );
 
+                            -- DEAD TABLE: coach_nudges — deprecated coach system, never used in production
                             CREATE TABLE IF NOT EXISTS coach_nudges (
                                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                                 nudge_type TEXT NOT NULL,
@@ -589,6 +592,7 @@ impl Database {
                             CREATE INDEX IF NOT EXISTS idx_coach_nudges_dismissed
                                 ON coach_nudges(dismissed);
 
+                            -- DEAD TABLE: video_curriculum — deprecated coach system, never used in production
                             CREATE TABLE IF NOT EXISTS video_curriculum (
                                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                                 video_id TEXT NOT NULL UNIQUE,
@@ -1119,7 +1123,7 @@ impl Database {
         )?;
         info!("Created extraction_jobs table");
 
-        // Create file_metadata_cache table to avoid reprocessing
+        // DEAD TABLE: file_metadata_cache — never used, dropped in Phase 26
         conn.execute_batch(
             "
             CREATE TABLE IF NOT EXISTS file_metadata_cache (
@@ -1142,6 +1146,7 @@ impl Database {
 
     /// Phase 2 migration: Natural Language Query System
     fn migrate_to_phase_2(conn: &Connection) -> SqliteResult<()> {
+        // DEAD TABLE: query_cache — never used, dropped in Phase 26
         conn.execute_batch(
             "
             CREATE TABLE IF NOT EXISTS query_cache (
@@ -1157,6 +1162,7 @@ impl Database {
         )?;
         info!("Created query_cache table");
 
+        // DEAD TABLE: query_history — never used, dropped in Phase 26
         conn.execute_batch(
             "
             CREATE TABLE IF NOT EXISTS query_history (
@@ -1175,6 +1181,7 @@ impl Database {
         )?;
         info!("Created query_history table");
 
+        // DEAD TABLE: chunk_sentiment — never populated, dropped in Phase 26
         conn.execute_batch(
             "
             CREATE TABLE IF NOT EXISTS chunk_sentiment (
@@ -1275,6 +1282,7 @@ impl Database {
         )?;
         info!(target: "4da::db", "Created project_dependencies table");
 
+        // DEAD TABLE: item_relationships — never used, dropped in Phase 26
         conn.execute_batch(
             "
             CREATE TABLE IF NOT EXISTS item_relationships (
@@ -1447,7 +1455,8 @@ impl Database {
     /// Phase 30: Enterprise audit log
     fn migrate_to_phase_30(conn: &Connection) -> SqliteResult<()> {
         conn.execute_batch(
-            "CREATE TABLE IF NOT EXISTS audit_log (
+            "DROP TABLE IF EXISTS audit_log;
+            CREATE TABLE audit_log (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 event_id TEXT NOT NULL UNIQUE,
                 team_id TEXT NOT NULL,

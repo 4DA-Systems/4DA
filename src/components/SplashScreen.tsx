@@ -70,7 +70,13 @@ export function SplashScreen({ onComplete, minimumDisplayTime = 1500 }: SplashSc
 
       } catch (e) {
         console.error('[SplashScreen] Backend check failed:', e);
-        setError(translateError(e));
+        // Detect browser mode: if Tauri internals are missing, show specific message
+        const isBrowser = !(window as Record<string, unknown>).__TAURI_INTERNALS__;
+        if (isBrowser) {
+          setError('Desktop app required \u2014 open through Tauri window');
+        } else {
+          setError(translateError(e));
+        }
         // Do NOT mark as ready — block the app on database failure.
         // The user can use the refresh button to retry.
       }
@@ -112,6 +118,9 @@ export function SplashScreen({ onComplete, minimumDisplayTime = 1500 }: SplashSc
         opacity: fadeOut ? 0 : 1,
       }}
     >
+      {/* Content cluster wrapper — ensures the visual block is truly centered
+          even with absolutely-positioned elements (version, refresh) outside it */}
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
       {/* Sun Logo with pulse animation */}
       <div style={{ position: 'relative', marginBottom: '2rem' }}>
         <div style={{
@@ -268,6 +277,7 @@ export function SplashScreen({ onComplete, minimumDisplayTime = 1500 }: SplashSc
             }}
           />
         ))}
+      </div>
       </div>
 
       {/* Version */}
