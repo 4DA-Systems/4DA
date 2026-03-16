@@ -20,6 +20,34 @@ const KEYGEN_VALIDATE_URL: &str = "https://api.keygen.sh/v1/licenses/actions/val
 /// Hours before a cached validation result is considered stale
 const VALIDATION_CACHE_HOURS: u64 = 24;
 
+/// Maximum license activation attempts per minute
+const MAX_ACTIVATION_ATTEMPTS_PER_MINUTE: u32 = 5;
+
+/// Track activation attempts for rate limiting
+static ACTIVATION_ATTEMPTS: std::sync::LazyLock<std::sync::Mutex<Vec<std::time::Instant>>> =
+    std::sync::LazyLock::new(|| std::sync::Mutex::new(Vec::new()));
+
+/// Check and enforce rate limiting on license activation
+pub fn check_activation_rate_limit() -> Result<()> {
+    let mut attempts = ACTIVATION_ATTEMPTS
+        .lock()
+        .map_err(|_| "Rate limiter lock poisoned")?;
+    let now = std::time::Instant::now();
+    let one_minute_ago = now - std::time::Duration::from_secs(60);
+
+    // Remove attempts older than 1 minute
+    attempts.retain(|t| *t > one_minute_ago);
+
+    if attempts.len() >= MAX_ACTIVATION_ATTEMPTS_PER_MINUTE as usize {
+        return Err(
+            "Too many activation attempts. Please wait a minute before trying again.".into(),
+        );
+    }
+
+    attempts.push(now);
+    Ok(())
+}
+
 // ============================================================================
 // Feature Tier Gating
 // ============================================================================
@@ -49,6 +77,30 @@ pub fn is_pro() -> bool {
     let guard = manager.lock();
     let license = &guard.get().license;
     is_paid_tier(license.tier.as_str()) || is_trial_active(license)
+}
+
+/// Validate license integrity on startup.
+/// If tier claims "signal"/"team"/"enterprise" but no valid license key exists,
+/// reset tier to "free" to prevent settings.json manipulation.
+pub fn validate_license_on_startup() {
+    let manager = crate::get_settings_manager();
+    let mut guard = manager.lock();
+    let settings = guard.get().clone();
+    let license = &settings.license;
+
+    // If tier is paid but no license key is set, reset to free
+    if is_paid_tier(license.tier.as_str()) && !is_trial_active(license) {
+        if license.license_key.is_empty() {
+            warn!(
+                "License tier is '{}' but no license key found — resetting to free",
+                license.tier
+            );
+            guard.get_mut().license.tier = "free".to_string();
+            if let Err(e) = guard.save() {
+                warn!("Failed to reset license tier: {}", e);
+            }
+        }
+    }
 }
 
 /// Check if a tier string represents a paid tier.
