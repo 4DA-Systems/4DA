@@ -19,7 +19,12 @@ NODE_OPTIONS="--max-old-space-size=4096" pnpm run test -- --run 2>/dev/null || {
 }
 
 # Secret scan — defense-in-depth (catches secrets added via --no-verify)
+# Uses the same comprehensive patterns as pre-commit
 echo "Scanning for secrets in push range..."
+
+# All secret patterns consolidated — must match pre-commit coverage
+SECRET_PATTERNS='sk-ant-[A-Za-z0-9_-]{20,}|sk-proj-[A-Za-z0-9_-]{20,}|sk-[a-zA-Z0-9]{20,}|gh[pousr]_[A-Za-z0-9]{36,}|(AKIA|ASIA)[0-9A-Z]{16}|AIza[0-9A-Za-z_-]{35}|[spr]k_live_[A-Za-z0-9]{20,}|key_[A-Za-z0-9]{20,}|prod_[A-Za-z0-9]{20,}|shp(at|ca|pa|ss)_[a-fA-F0-9]{32,}|npm_[A-Za-z0-9]{36,}|vck_[A-Za-z0-9]{20,}|vca_[A-Za-z0-9]{20,}|xox[baprs]-[0-9]{10,}-[A-Za-z0-9-]+|SK[a-f0-9]{32}|SG\.[A-Za-z0-9_-]{22}\.[A-Za-z0-9_-]{43}|key-[a-f0-9]{32}|-----BEGIN (RSA |EC |DSA |OPENSSH )?PRIVATE KEY-----|[MN][A-Za-z0-9]{23,}\.[A-Za-z0-9_-]{6}\.[A-Za-z0-9_-]{27,}|(mongodb|postgres|mysql|postgresql|redis|amqp)://[^:]+:[^@]+@|\+614[0-9]{8}'
+
 REMOTE="$1"
 URL="$2"
 while read LOCAL_REF LOCAL_SHA REMOTE_REF REMOTE_SHA; do
@@ -31,13 +36,17 @@ while read LOCAL_REF LOCAL_SHA REMOTE_REF REMOTE_SHA; do
             RANGE="$REMOTE_SHA..$LOCAL_SHA"
         fi
         SECRETS=$(git diff "$RANGE" 2>/dev/null | grep -E '^\+' | grep -oE \
-            'sk-ant-api[0-9]{2}-[A-Za-z0-9]{20,}|sk-proj-[A-Za-z0-9]{20,}|ghp_[A-Za-z0-9]{36}|vck_[A-Za-z0-9]{20,}|vca_[A-Za-z0-9]{20,}|AKIA[0-9A-Z]{16}' \
+            "$SECRET_PATTERNS" \
             2>/dev/null || true)
         if [ -n "$SECRETS" ]; then
             echo ""
-            echo "BLOCKED — Secrets detected in commits being pushed:"
-            echo "$SECRETS"
-            echo "Remove secrets and force-push a clean history."
+            echo "============================================================"
+            echo "  PUSH BLOCKED — Secrets detected in commits!"
+            echo "============================================================"
+            echo "$SECRETS" | sort -u
+            echo ""
+            echo "Remove secrets, amend/rebase commits, and force-push clean history."
+            echo "Run: node scripts/scan-secrets.cjs  (for full repo audit)"
             exit 1
         fi
     fi
