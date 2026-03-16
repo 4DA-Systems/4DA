@@ -1,6 +1,6 @@
 ---
 title: "4DA -- All signal. No feed. Developer intelligence scored against your codebase."
-description: "4DA scores content from 11 sources against your actual codebase using 5-axis relevance scoring. Privacy-first. Runs locally. BYOK. 99%+ noise rejected."
+description: "4DA scores content from 11 sources against your actual codebase using 5-axis relevance scoring. Privacy-first. Runs locally. BYOK. Most content is rejected."
 permalink: "/index.html"
 ---
 {% extends "base.njk" %}
@@ -20,7 +20,7 @@ permalink: "/index.html"
   <!-- Twitter Card -->
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="4DA -- All signal. No feed.">
-  <meta name="twitter:description" content="5-axis relevance scoring against your codebase. 11 sources. 99%+ noise rejected. Privacy-first. Free.">
+  <meta name="twitter:description" content="5-axis relevance scoring against your codebase. 11 sources. Aggressive noise rejection. Privacy-first. Free.">
   <meta name="twitter:image" content="https://4da.ai/og-image.png">
 
   <!-- Structured Data -->
@@ -917,7 +917,7 @@ permalink: "/index.html"
         </div>
         <div class="traction-principle">
           <h4>Multi-Signal Confirmation Gate</h4>
-          <p>Every item is scored across 5 independent axes. An item needs 2+ confirming signals to pass the gate. Typical rejection rate: 99%+ of incoming content.</p>
+          <p>Every item is scored across 5 independent axes. An item needs 2+ confirming signals to pass the gate. Typical rejection rate: 95%+ of incoming content.</p>
         </div>
         <div class="traction-principle">
           <h4>Privacy by Architecture</h4>
@@ -1116,7 +1116,7 @@ permalink: "/index.html"
         <div class="feature-card">
           <div class="feature-tag">scoring</div>
           <h3>5-Axis Scoring</h3>
-          <p>Context, Interest, ACE, Dependency, and Learned axes independently evaluate every item. Multi-signal confirmation gate rejects 99%+ of incoming content.</p>
+          <p>Context, Interest, ACE, Dependency, and Learned axes independently evaluate every item. Multi-signal confirmation gate rejects 95%+ of incoming content.</p>
         </div>
         <div class="feature-card">
           <div class="feature-tag">privacy</div>
@@ -1284,7 +1284,7 @@ npx <span class="string">@4da/mcp-server</span>
         </details>
         <details>
           <summary>What's the confirmation gate?</summary>
-          <div class="faq-answer">The confirmation gate requires 2+ independent scoring axes to agree before an item enters your feed. A single keyword match isn't enough. A single interest match isn't enough. Independent confirmation from multiple relevance dimensions is required. This is what makes the 99%+ rejection rate possible.</div>
+          <div class="faq-answer">The confirmation gate requires 2+ independent scoring axes to agree before an item enters your feed. A single keyword match isn't enough. A single interest match isn't enough. Independent confirmation from multiple relevance dimensions is required. This is what makes the high rejection rate possible.</div>
         </details>
         <details>
           <summary>How big is the download?</summary>
@@ -1385,7 +1385,7 @@ npx <span class="string">@4da/mcp-server</span>
   <footer>
     <div class="container">
       <div class="footer-inner">
-        <div class="footer-brand">4DA <span>-- 4 Dimensional Autonomy</span></div>
+        <div class="footer-brand">4DA <span>-- 4 Dimensional Autonomy</span><br><span style="font-size:11px;color:var(--text-muted);font-weight:400;">"4DA" and the 4DA logo are trademarks of 4DA Systems Pty Ltd.</span></div>
         <div class="footer-links">
           <a href="#pricing">Pricing</a>
           <a href="streets.html">STREETS</a>
