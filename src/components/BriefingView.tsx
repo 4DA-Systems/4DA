@@ -24,6 +24,10 @@ import { DecisionWindowsPanel } from './DecisionWindowsPanel';
 import { CompoundAdvantageScore } from './CompoundAdvantageScore';
 import { IntelligenceProfileCard } from './IntelligenceProfileCard';
 import { StreetsContextCard } from './StreetsContextCard';
+import { GuidedMissions } from './GuidedMissions';
+import { WisdomPulse } from './WisdomPulse';
+import { WeeklyIntelligenceSummary } from './WeeklyIntelligenceSummary';
+import { ContextualTip } from './ContextualTip';
 import { useLicense } from '../hooks/use-license';
 import { useBriefingDerived } from '../hooks/use-briefing-derived';
 import type { SourceRelevance } from '../types';
@@ -344,6 +348,9 @@ export const BriefingView = memo(function BriefingView() {
       {/* 0b. Community Intelligence status — self-hides when not enabled */}
       <CommunityInsights />
 
+      {/* 0c. AWE Wisdom Pulse — ambient wisdom layer, self-hides when empty */}
+      <WisdomPulse />
+
       {/* 1. Decision Windows — urgency first */}
       <DecisionWindowsPanel />
 
@@ -570,6 +577,20 @@ export const BriefingView = memo(function BriefingView() {
           onDismiss={handleStreetsDismiss}
         />
       )}
+
+      {/* Weekly intelligence summary — shows once per 7 days */}
+      <WeeklyIntelligenceSummary />
+
+      {/* Guided missions — first 48h onboarding */}
+      <GuidedMissions />
+
+      {/* Contextual tip: teach feedback loop */}
+      <ContextualTip
+        tipId="feedback-loop"
+        message={t('tips.feedbackLoop', 'Save articles you find useful — this teaches the system what matters to you.')}
+        hint={t('tips.feedbackLoopHint', 'Dismissing articles also helps. Every interaction improves your results.')}
+        showWhen={Object.keys(feedbackGiven).length === 0 && results.length > 0}
+      />
 
       {/* 7. Intelligence Metrics — 2c. conditionally mounted when expanded */}
       <div>
