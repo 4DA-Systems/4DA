@@ -299,12 +299,14 @@ pub fn migrate(conn: &Arc<Mutex<Connection>>) -> Result<()> {
         .ok(); // ok() because column may already exist
     conn.execute_batch("ALTER TABLE interactions ADD COLUMN action TEXT;")
         .ok(); // ok() because column may already exist
-    // Also relax item_id NOT NULL → nullable (for ContextEngine rows that only use source_item_id)
-    // Note: SQLite doesn't support ALTER COLUMN, but new inserts without item_id will work
-    // because the CREATE TABLE IF NOT EXISTS won't fire on existing tables.
-    // Ensure indexes exist for ContextEngine query patterns
-    conn.execute_batch("CREATE INDEX IF NOT EXISTS idx_interactions_action ON interactions(action);")
-        .ok();
+               // Also relax item_id NOT NULL → nullable (for ContextEngine rows that only use source_item_id)
+               // Note: SQLite doesn't support ALTER COLUMN, but new inserts without item_id will work
+               // because the CREATE TABLE IF NOT EXISTS won't fire on existing tables.
+               // Ensure indexes exist for ContextEngine query patterns
+    conn.execute_batch(
+        "CREATE INDEX IF NOT EXISTS idx_interactions_action ON interactions(action);",
+    )
+    .ok();
 
     // Phase 1C migration: Anomalies table
     conn.execute_batch(

@@ -18,6 +18,10 @@
       "command": "node",
       "args": ["D:\\runyourempire\\awe\\mcp-server\\dist\\index.js"],
       "env": {}
+    },
+    "playwright": {
+      "command": "npx",
+      "args": ["@playwright/mcp@latest"]
     }
   }
 }

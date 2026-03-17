@@ -725,6 +725,18 @@ pub fn run() {
         }
     }
 
+    // Enable WebView2 remote debugging in dev mode (port 9222)
+    // Allows Playwright to connect via CDP for functional testing
+    #[cfg(all(debug_assertions, target_os = "windows"))]
+    {
+        if std::env::var("WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS").is_err() {
+            std::env::set_var(
+                "WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS",
+                "--remote-debugging-port=9222",
+            );
+        }
+    }
+
     // Initialize logging
     tracing_subscriber::fmt()
         .with_env_filter(
@@ -822,6 +834,7 @@ pub fn run() {
             context_commands::clear_context,
             context_commands::index_context,
             context_commands::index_project_readmes,
+            context_commands::sync_awe_wisdom,
             context_commands::set_context_dirs,
             context_commands::get_context_dirs,
             // Analysis
