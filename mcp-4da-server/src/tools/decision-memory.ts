@@ -219,6 +219,28 @@ export function executeDecisionMemory(
         params.confidence ?? 0.8
       );
 
+      // Bridge to AWE Wisdom Graph: forward decision for wisdom tracking.
+      // Non-blocking — AWE sync is best-effort, doesn't affect 4DA recording.
+      try {
+        const { execFile } = await import("node:child_process");
+        const { promisify } = await import("node:util");
+        const execFileAsync = promisify(execFile);
+        const aweBin = findAweBinary();
+        if (aweBin) {
+          const query = `${params.subject}: ${params.decision}`;
+          const domain = mapDecisionTypeToDomain(params.decision_type || "tech_choice");
+          execFileAsync(aweBin, [
+            "transmute", query,
+            "--domain", domain,
+            "--json", "--no-persist",
+          ], { timeout: 30_000 }).catch(() => {
+            // AWE not available — silent fallback
+          });
+        }
+      } catch {
+        // AWE bridge is optional
+      }
+
       return {
         success: true,
         id: result.lastInsertRowid,
@@ -383,4 +405,38 @@ export function executeDecisionMemory(
     default:
       return { error: `Unknown action: ${params.action}` };
   }
+}
+
+// ============================================================================
+// AWE Bridge Helpers
+// ============================================================================
+
+/** Map 4DA decision types to AWE domains. */
+function mapDecisionTypeToDomain(type: string): string {
+  switch (type) {
+    case "architecture":
+    case "pattern":
+      return "software-engineering";
+    case "dependency":
+      return "software-engineering";
+    case "workflow":
+      return "workflow";
+    default:
+      return "software-engineering";
+  }
+}
+
+/** Find AWE binary (same logic as 4DA context_commands.rs). */
+function findAweBinary(): string | null {
+  const { existsSync } = require("node:fs");
+  const candidates = [
+    "D:\\runyourempire\\awe\\target\\release\\awe.exe",
+    "/d/runyourempire/awe/target/release/awe",
+  ];
+  for (const p of candidates) {
+    if (existsSync(p)) return p;
+  }
+  return process.env.AWE_BIN && existsSync(process.env.AWE_BIN)
+    ? process.env.AWE_BIN
+    : null;
 }

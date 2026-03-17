@@ -4,7 +4,7 @@ import { cmd } from '../lib/commands';
 import type { DeveloperDna } from '../types';
 import { getSourceFullName } from '../config/sources';
 import { useAppStore } from '../store';
-import { ProGate } from './ProGate';
+
 
 export const DeveloperDnaPanel = memo(function DeveloperDnaPanel() {
   const { t } = useTranslation();
@@ -99,7 +99,7 @@ export const DeveloperDnaPanel = memo(function DeveloperDnaPanel() {
   };
 
   return (
-    <ProGate feature="Developer DNA">
+    <>
     <div className="bg-bg-secondary rounded-lg border border-border overflow-hidden">
       <button
         onClick={() => {
@@ -303,7 +303,7 @@ export const DeveloperDnaPanel = memo(function DeveloperDnaPanel() {
         </div>
       )}
     </div>
-    </ProGate>
+    </>
   );
 });
 
