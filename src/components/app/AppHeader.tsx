@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { VoidEngine } from '../void-engine/VoidEngine';
 import { OllamaStatus } from '../OllamaStatus';
 import { TeamNotificationBell } from '../team/TeamNotificationBell';
+import { LearningBadge } from '../LearningBadge';
 
 interface AppHeaderProps {
   monitoring: { enabled: boolean } | null;
@@ -35,6 +36,7 @@ export const AppHeader = memo(function AppHeader({
         </div>
       </div>
       <div className="flex items-center gap-3">
+        <LearningBadge />
         {monitoring?.enabled && (
           <div className="flex items-center gap-2 px-3 py-2 bg-green-500/10 border border-green-500/30 rounded-lg">
             <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />

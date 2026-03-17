@@ -27,6 +27,7 @@ export function FirstRunTransition({ onComplete }: FirstRunTransitionProps) {
   const appState = useAppStore(s => s.appState);
   const embeddingMode = useAppStore(s => s.embeddingMode);
   const userContext = useAppStore(s => s.userContext);
+  const detectedTech = useAppStore(s => s.discoveredContext?.tech);
   const startAnalysis = useAppStore(s => s.startAnalysis);
 
   // Derived values from completed analysis — memoized to avoid recomputing on every progress tick
@@ -201,6 +202,7 @@ export function FirstRunTransition({ onComplete }: FirstRunTransitionProps) {
           topSignal={topSignal ?? null}
           stackInsights={stackInsights}
           embeddingMode={embeddingMode}
+          detectedTech={detectedTech}
           onDismiss={handleDismiss}
         />
       );
