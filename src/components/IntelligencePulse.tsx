@@ -1,6 +1,6 @@
 import { useState, useEffect, memo } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ProGate } from './ProGate';
+
 import { useAppStore } from '../store';
 
 function formatSourceLabel(source: string): string {
@@ -31,7 +31,7 @@ export const IntelligencePulse = memo(function IntelligencePulse() {
   const hasSourceQuality = data.source_quality.length > 0;
 
   return (
-    <ProGate feature={t('intelligence.feature', 'Intelligence Pulse')}>
+    <>
       <div className="mb-4 bg-bg-secondary rounded-lg border border-border overflow-hidden">
         {/* Header row — always visible */}
         <button
@@ -166,6 +166,6 @@ export const IntelligencePulse = memo(function IntelligencePulse() {
           </div>
         )}
       </div>
-    </ProGate>
+    </>
   );
 });
