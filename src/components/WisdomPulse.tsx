@@ -1,106 +1,124 @@
-import { useState, useEffect, memo } from 'react';
+import { useState, useEffect, memo, useCallback } from 'react';
 import { cmd } from '../lib/commands';
 
 interface WisdomState {
-  decisions: number;
-  feedback: number;
-  principles: number;
-  confirmationRate: number;
   topPrinciple: string | null;
-  pendingCount: number;
+  principleCount: number;
+  decisionCount: number;
+  pendingFeedback: number;
   loaded: boolean;
 }
 
 /**
- * WisdomPulse — ambient AWE presence in the briefing.
+ * WisdomPulse — your patterns, surfaced naturally.
  *
- * Shows the user's wisdom health at a glance: decisions tracked,
- * principles validated, calibration quality. Appears only when
- * the Wisdom Graph has data (self-hides when empty).
+ * Shows validated patterns from your decision history.
+ * Self-hides when the Wisdom Graph is empty (new users see nothing).
+ * Gradually reveals as decisions accumulate.
  *
- * Design principle: feel natural, not intrusive. One glanceable card
- * that tells you your wisdom engine is learning.
+ * Language: "Your pattern" not "AWE detected."
+ * Feel: memory, not surveillance.
  */
 export const WisdomPulse = memo(function WisdomPulse() {
   const [state, setState] = useState<WisdomState>({
-    decisions: 0,
-    feedback: 0,
-    principles: 0,
-    confirmationRate: 0,
     topPrinciple: null,
-    pendingCount: 0,
+    principleCount: 0,
+    decisionCount: 0,
+    pendingFeedback: 0,
     loaded: false,
   });
+  const [expanded, setExpanded] = useState(false);
 
-  useEffect(() => {
-    loadWisdomState();
-  }, []);
-
-  async function loadWisdomState() {
+  const loadState = useCallback(async () => {
     try {
-      // Call AWE status + health via the Tauri command
-      const healthOutput = await cmd('sync_awe_wisdom').catch(() => null);
+      // Sync wisdom (non-blocking, populates context chunks)
+      const syncResult = await cmd('sync_awe_wisdom').catch(() => '');
+      const statusText = typeof syncResult === 'string' ? syncResult : '';
 
-      // Parse the AWE CLI health output for metrics
-      // This calls awe health internally — we parse the status
-      const statusText: string = typeof healthOutput === 'string' ? healthOutput : '';
-
-      // Extract metrics from the sync result
+      // Parse metrics
       const wisdomMatch = statusText.match(/(\d+) wisdom chunks/);
       const decisionsMatch = statusText.match(/(\d+) decisions/);
+      const principleCount = wisdomMatch ? parseInt(wisdomMatch[1], 10) : 0;
+      const decisionCount = decisionsMatch ? parseInt(decisionsMatch[1], 10) : 0;
 
-      // Also try to get more detailed stats by looking at what was synced
-      // For now, use the sync result as indicator of AWE health
-      const wisdomChunks = wisdomMatch ? parseInt(wisdomMatch[1], 10) : 0;
-      const detectedDecisions = decisionsMatch ? parseInt(decisionsMatch[1], 10) : 0;
+      // Extract the top principle text from the sync
+      // The sync command outputs principle text — extract the first one
+      let topPrinciple: string | null = null;
+      if (principleCount > 0) {
+        // The principle content is embedded in context chunks
+        // For display, we generate a natural-language summary
+        if (decisionCount >= 5) {
+          topPrinciple = `${decisionCount} decisions tracked, ${principleCount} patterns validated`;
+        } else if (decisionCount > 0) {
+          topPrinciple = `${decisionCount} decisions tracked — patterns emerging`;
+        }
+      }
 
       setState({
-        decisions: detectedDecisions,
-        feedback: 0,
-        principles: wisdomChunks,
-        confirmationRate: 0,
-        topPrinciple: wisdomChunks > 0 ? 'Wisdom synced to context' : null,
-        pendingCount: 0,
+        topPrinciple,
+        principleCount,
+        decisionCount,
+        pendingFeedback: 0,
         loaded: true,
       });
     } catch {
       setState(prev => ({ ...prev, loaded: true }));
     }
-  }
+  }, []);
 
-  // Don't show if AWE has no data or hasn't loaded
-  if (!state.loaded || (state.principles === 0 && state.decisions === 0)) {
+  useEffect(() => {
+    loadState();
+  }, [loadState]);
+
+  // Don't show until the user has at least 1 decision
+  if (!state.loaded || state.decisionCount === 0) {
     return null;
   }
 
+  // Progressive disclosure based on decision count
+  const hasPatterns = state.principleCount > 0;
+
   return (
-    <div className="bg-bg-secondary rounded-lg border border-border p-4 mb-4">
-      <div className="flex items-center justify-between mb-2">
+    <button
+      type="button"
+      onClick={() => setExpanded(!expanded)}
+      className="w-full text-left bg-bg-secondary rounded-lg border border-border/50 px-4 py-3 mb-4 hover:border-border transition-colors"
+    >
+      {/* Minimal header — feels like a quiet status line */}
+      <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <div className="w-2 h-2 rounded-full bg-accent-gold animate-pulse" />
-          <span className="text-xs font-medium text-accent-gold tracking-wider uppercase">
-            AWE
+          {hasPatterns ? (
+            <div className="w-1.5 h-1.5 rounded-full bg-success" />
+          ) : (
+            <div className="w-1.5 h-1.5 rounded-full bg-text-muted/40" />
+          )}
+          <span className="text-xs text-text-secondary">
+            {hasPatterns
+              ? `Your pattern: ${state.principleCount} validated`
+              : `${state.decisionCount} decisions — patterns forming`
+            }
           </span>
         </div>
-        <span className="text-xs text-text-muted">
-          Wisdom Engine
-        </span>
-      </div>
-
-      <div className="flex items-center gap-4 text-xs text-text-secondary">
-        {state.principles > 0 && (
-          <span>{state.principles} principles active</span>
-        )}
-        {state.decisions > 0 && (
-          <span>{state.decisions} decisions detected</span>
+        {state.pendingFeedback > 0 && (
+          <span className="text-xs text-accent-gold">
+            {state.pendingFeedback} outcomes pending
+          </span>
         )}
       </div>
 
-      {state.topPrinciple && (
-        <p className="text-xs text-text-muted mt-2 italic">
-          {state.topPrinciple}
-        </p>
+      {/* Expanded detail — only when clicked */}
+      {expanded && (
+        <div className="mt-3 pt-3 border-t border-border/30 space-y-2">
+          {state.topPrinciple && (
+            <p className="text-xs text-text-secondary">
+              {state.topPrinciple}
+            </p>
+          )}
+          <p className="text-xs text-text-muted">
+            Decisions compound into wisdom. Each outcome you record makes future recommendations more accurate.
+          </p>
+        </div>
       )}
-    </div>
+    </button>
   );
 });
