@@ -138,6 +138,7 @@ interface CommandMap {
   // -- ACE (Autonomous Context Engine) --
   ace_record_interaction: { params: { item_id: number; action_type: string; action_data: string | null; item_topics: string[]; item_source: string }; result: void };
   ace_record_accuracy_feedback: { params: { item_id: number; predicted_score: number; feedback_type: string }; result: void };
+  record_item_feedback: { params: { item_id: number; relevant: boolean }; result: void };
   ace_get_topic_affinities: { params: Record<string, never>; result: { affinities: Array<{ topic: string; positive_signals: number; negative_signals: number; affinity_score: number }>; count: number } };
   ace_get_anti_topics: { params: { min_rejections: number }; result: { anti_topics: Array<{ topic: string; rejection_count: number; last_rejected: string }>; count: number } };
   ace_get_single_affinity: { params: { topic: string }; result: { affinity: { topic: string; positive_signals: number; negative_signals: number; affinity_score: number } | null } };
