@@ -2,7 +2,7 @@ import { useEffect, useMemo, memo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useShallow } from 'zustand/react/shallow';
 import { useAppStore } from '../store';
-import { ProGate } from './ProGate';
+
 import type { AutophagyStatus, AutophagyCycleResult } from '../types/autophagy';
 
 function CalibrationHeatmap({ status, t }: { status: AutophagyStatus; t: (key: string) => string }) {
@@ -141,9 +141,9 @@ export const AutophagyInsights = memo(function AutophagyInsights() {
         </div>
         <h3 className="text-sm font-medium text-white">{t('autophagy.title')}</h3>
       </div>
-      <ProGate feature={t('autophagy.feature')}>
+      <>
         <InsightsContent />
-      </ProGate>
+      </>
     </div>
   );
 });
