@@ -63,7 +63,7 @@ export const WeeklyIntelligenceSummary = memo(function WeeklyIntelligenceSummary
           totalCycles: pulse.total_cycles,
           itemsAnalyzed: pulse.items_analyzed_7d || 0,
           calibrationAccuracy: Math.round((pulse.calibration_accuracy || 0) * 100),
-          accuracyTrend: pulse.accuracy_trend_delta ?? null,
+          accuracyTrend: null,
           newTopics: newTopics.slice(0, 5),
           suggestions: suggestionsFormatted,
         });
@@ -83,7 +83,7 @@ export const WeeklyIntelligenceSummary = memo(function WeeklyIntelligenceSummary
 
   const addInterest = async (topic: string) => {
     try {
-      await cmd('add_interest', { topic, weight: 0.7 });
+      await cmd('add_interest', { topic });
       addToast('success', t('weekly.interestAdded', { topic, defaultValue: `Added '${topic}' to interests` }));
       setData(prev => prev ? { ...prev, suggestions: prev.suggestions.filter(s => s.topic !== topic) } : null);
     } catch {
