@@ -278,6 +278,43 @@ pub fn start_scheduler<R: Runtime>(app: AppHandle<R>, state: Arc<MonitoringState
             // Sends OS notifications for chains in Escalating or Peak phase.
             crate::monitoring_jobs::maybe_notify_escalating_chains(&app);
 
+            // Mini-autophagy: trigger early cycle when sufficient feedback accumulated
+            // but no autophagy has run yet. Shortens time-to-first-calibration from days to hours.
+            {
+                if let Ok(db_conn) = crate::open_db_connection() {
+                    let feedback_count: i64 = db_conn
+                        .query_row("SELECT COUNT(*) FROM feedback", [], |r| r.get(0))
+                        .unwrap_or(0);
+                    let cycle_count: i64 = db_conn
+                        .query_row("SELECT COUNT(*) FROM autophagy_cycles", [], |r| r.get(0))
+                        .unwrap_or(0);
+
+                    if feedback_count >= 20 && cycle_count == 0 {
+                        info!(target: "4da::monitor", feedback_count, "Mini-autophagy: enough feedback for first cycle");
+                        let max_age_days = {
+                            let sm = crate::get_settings_manager().lock();
+                            sm.get().monitoring.cleanup_max_age_days.unwrap_or(30)
+                        };
+                        match crate::autophagy::run_autophagy_cycle(&db_conn, max_age_days as i64) {
+                            Ok(cycle) => {
+                                info!(
+                                    target: "4da::monitor",
+                                    items_analyzed = cycle.items_analyzed,
+                                    calibrations = cycle.calibrations_produced,
+                                    "Mini-autophagy cycle completed (first-time)"
+                                );
+                                if let Err(e) = app.emit("autophagy-cycle-complete", &cycle) {
+                                    tracing::warn!("Failed to emit 'autophagy-cycle-complete': {e}");
+                                }
+                            }
+                            Err(e) => {
+                                warn!(target: "4da::monitor", error = %e, "Mini-autophagy cycle failed");
+                            }
+                        }
+                    }
+                }
+            }
+
             // Behavior decay - daily
             let last_decay = state.last_decay.load(Ordering::Relaxed);
             if now - last_decay >= BEHAVIOR_DECAY_INTERVAL {

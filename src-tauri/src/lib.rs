@@ -531,6 +531,10 @@ mod organization;
 #[cfg(feature = "enterprise")]
 mod sso;
 #[cfg(feature = "enterprise")]
+mod sso_crypto;
+#[cfg(feature = "enterprise")]
+mod sso_xml;
+#[cfg(feature = "enterprise")]
 mod webhooks;
 
 // Stubs when enterprise is disabled
@@ -667,7 +671,7 @@ mod sso {
         Err("Enterprise features require --features enterprise".into())
     }
     #[tauri::command]
-    pub async fn validate_sso_callback() -> Result<serde_json::Value> {
+    pub async fn validate_sso_callback(_assertion: String, _state: Option<String>) -> Result<serde_json::Value> {
         Err("Enterprise features require --features enterprise".into())
     }
     #[tauri::command]
@@ -693,6 +697,8 @@ pub mod test_utils;
 mod error_tests;
 #[cfg(test)]
 mod hardening_error_path_tests;
+#[cfg(all(test, feature = "enterprise"))]
+mod enterprise_analytics_tests;
 #[cfg(all(test, feature = "enterprise"))]
 mod organization_tests;
 #[cfg(test)]
@@ -1042,6 +1048,8 @@ pub fn run() {
             startup_health::get_startup_health,
             // Scoring Validation (persona-based precision testing)
             scoring::validation::runner::run_scoring_validation,
+            // Feedback → Autophagy bridge
+            ace_commands::record_item_feedback,
             // Autophagy (intelligent content metabolism)
             autophagy_commands::get_autophagy_status,
             autophagy_commands::get_autophagy_history,

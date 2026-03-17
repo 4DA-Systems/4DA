@@ -18,8 +18,17 @@ pub(crate) fn analyze_calibration(
     conn: &Connection,
     max_age_days: i64,
 ) -> Vec<super::CalibrationDelta> {
-    let window_start_days = max_age_days;
-    let window_end_days = max_age_days.saturating_sub(7);
+    let cycle_count: i64 = conn
+        .query_row("SELECT COUNT(*) FROM autophagy_cycles", [], |r| r.get(0))
+        .unwrap_or(0);
+
+    // Early users (< 3 cycles): analyze ALL recent items instead of narrow pruning window
+    let (window_start_days, window_end_days) = if cycle_count < 3 {
+        debug!(target: "4da::autophagy", cycle_count, "Early user: widening calibration window to all items");
+        (max_age_days, 0_i64)
+    } else {
+        (max_age_days, max_age_days.saturating_sub(7))
+    };
 
     let window_start = format!("-{} days", window_start_days);
     let window_end = format!("-{} days", window_end_days);
