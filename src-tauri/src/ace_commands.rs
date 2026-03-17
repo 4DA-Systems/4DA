@@ -308,6 +308,17 @@ pub async fn ace_get_scan_summary() -> Result<serde_json::Value> {
     }))
 }
 
+/// Record user feedback in the main database — feeds autophagy calibration analysis.
+/// This bridges user interactions (save/dismiss) into the `feedback` table that all
+/// autophagy analyzers depend on. Without this, autophagy produces zero output.
+#[tauri::command]
+pub async fn record_item_feedback(item_id: i64, relevant: bool) -> Result<()> {
+    let db = crate::get_database()?;
+    db.record_feedback(item_id, relevant)
+        .context("Failed to record feedback")?;
+    Ok(())
+}
+
 /// Record a user interaction for behavior learning
 #[tauri::command]
 pub async fn ace_record_interaction(

@@ -95,6 +95,11 @@ export const createFeedbackSlice: StateCreator<AppStore, [], [], FeedbackSlice> 
           predicted_score: item.top_score,
           feedback_type: feedbackTypeMap[actionType],
         }),
+        // Feed the main DB feedback table — powers autophagy calibration analysis
+        cmd('record_item_feedback', {
+          item_id: itemId,
+          relevant: actionType === 'save' || actionType === 'click',
+        }),
       ]);
 
       // Update feedback state
@@ -138,10 +143,10 @@ export const createFeedbackSlice: StateCreator<AppStore, [], [], FeedbackSlice> 
         const topicLabel = primaryTopic || 'this type';
         const scoreNote = affinityScore !== null ? ` (${affinityScore > 0 ? '+' : ''}${affinityScore}%)` : '';
         const learnMessage = actionType === 'save'
-          ? `Saved — boosting '${topicLabel}' in future results${scoreNote}`
+          ? `Saved — boosting '${topicLabel}'${scoreNote}. Similar content will rank higher next analysis.`
           : actionType === 'mark_irrelevant'
-          ? `Got it — filtering out '${topicLabel}'${scoreNote}`
-          : `Noted — deprioritizing '${topicLabel}'${scoreNote}`;
+          ? `Got it — '${topicLabel}' added to anti-topics${scoreNote}. Matching content will be suppressed.`
+          : `Noted — deprioritizing '${topicLabel}'${scoreNote}. 3 dismissals creates an auto-filter.`;
 
         addToast('success', learnMessage, {
           label: 'Undo',

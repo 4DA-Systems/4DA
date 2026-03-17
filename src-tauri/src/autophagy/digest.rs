@@ -53,16 +53,23 @@ pub(crate) fn run_autophagy_cycle_with_ace(
         )
         .unwrap_or(0);
 
-    // Count items in the pruning analysis window
-    let window_end_days = max_age_days.saturating_sub(7);
-    let items_analyzed: i64 = conn
-        .query_row(
-            "SELECT COUNT(*) FROM source_items
-             WHERE last_seen < datetime('now', ?1)",
+    // Early user bypass: count all items, not just pruning window
+    let cycle_count: i64 = conn
+        .query_row("SELECT COUNT(*) FROM autophagy_cycles", [], |r| r.get(0))
+        .unwrap_or(0);
+    let items_analyzed: i64 = if cycle_count < 3 {
+        // Early users: count all items with feedback (matches calibration early-user bypass)
+        conn.query_row("SELECT COUNT(*) FROM source_items WHERE EXISTS (SELECT 1 FROM feedback f WHERE f.source_item_id = source_items.id)", [], |r| r.get(0))
+            .unwrap_or(0)
+    } else {
+        let window_end_days = max_age_days.saturating_sub(7);
+        conn.query_row(
+            "SELECT COUNT(*) FROM source_items WHERE last_seen < datetime('now', ?1)",
             params![format!("-{} days", window_end_days)],
             |r| r.get(0),
         )
-        .unwrap_or(0);
+        .unwrap_or(0)
+    };
 
     info!(
         target: "4da::autophagy",
@@ -358,8 +365,9 @@ mod tests {
         let result =
             run_autophagy_cycle_with_ace(&conn, 30, Some(&ace)).expect("cycle should succeed");
 
-        // Items are only 2 days old, so nothing in the pruning window (23-30 days)
-        assert_eq!(result.items_analyzed, 0);
+        // Early-user bypass (< 3 cycles): counts items WITH feedback, not just pruning window
+        // 3 items have feedback, so items_analyzed = 3
+        assert_eq!(result.items_analyzed, 3);
         // But source autopsy should find 1 source type (hackernews)
         assert_eq!(result.source_autopsies_produced, 1);
         assert!(result.duration_ms >= 0);
