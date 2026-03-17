@@ -3,9 +3,20 @@ import type { AppStore, ToolkitSlice } from './types';
 
 const MAX_RECENT = 8;
 
+function safeParseArray(key: string): string[] {
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
 export const createToolkitSlice: StateCreator<AppStore, [], [], ToolkitSlice> = (set, get) => ({
-  recentTools: JSON.parse(localStorage.getItem('toolkit_recent') || '[]') as string[],
-  pinnedTools: JSON.parse(localStorage.getItem('toolkit_pinned') || '[]') as string[],
+  recentTools: safeParseArray('toolkit_recent'),
+  pinnedTools: safeParseArray('toolkit_pinned'),
 
   addRecentTool: (toolId) => {
     const current = get().recentTools.filter((id) => id !== toolId);
