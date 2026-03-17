@@ -25,6 +25,7 @@ interface CelebrationStateProps {
   topSignal: TopSignal | null;
   stackInsights: string[];
   embeddingMode: string | null;
+  detectedTech?: Array<{ name: string; category: string; confidence: number }>;
   onDismiss: (view: 'briefing' | 'results' | 'playbook') => void;
 }
 
@@ -54,6 +55,7 @@ export function CelebrationState({
   topSignal,
   stackInsights,
   embeddingMode,
+  detectedTech,
   onDismiss,
 }: CelebrationStateProps) {
   const { t } = useTranslation();
@@ -96,6 +98,37 @@ export function CelebrationState({
           </div>
         )}
       </div>
+
+      {/* Developer DNA Preview — first "it knows me" moment */}
+      {detectedTech && detectedTech.length > 0 && (
+        <div className="mb-6 max-w-sm mx-auto">
+          <p className="text-[10px] text-text-muted uppercase tracking-wider mb-2 text-left">
+            {t('firstRun.yourDna', 'Your Developer DNA')}
+          </p>
+          <div className="flex flex-wrap gap-1.5 justify-center">
+            {detectedTech
+              .filter(tech => tech.confidence >= 0.5)
+              .slice(0, 12)
+              .map(tech => (
+                <span
+                  key={tech.name}
+                  className={`px-2 py-1 text-xs rounded-lg border ${
+                    tech.category === 'Language'
+                      ? 'bg-blue-500/10 text-blue-400 border-blue-500/20'
+                      : tech.category === 'Framework'
+                      ? 'bg-purple-500/10 text-purple-400 border-purple-500/20'
+                      : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                  }`}
+                >
+                  {tech.name}
+                </span>
+              ))}
+          </div>
+          <p className="text-[10px] text-text-muted mt-2 italic">
+            {t('firstRun.dnaHint', "We're now watching for relevant content about your stack")}
+          </p>
+        </div>
+      )}
 
       {/* Celebration message */}
       <p className="text-sm text-text-secondary mb-6">
