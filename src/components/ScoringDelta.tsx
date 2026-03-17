@@ -1,7 +1,7 @@
 import { useState, useEffect, memo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { cmd } from '../lib/commands';
-import { ProGate } from './ProGate';
+
 
 interface TopicAffinity {
   topic: string;
@@ -60,7 +60,7 @@ export const ScoringDelta = memo(function ScoringDelta() {
   const losing = deltas.filter(d => d.direction === 'down');
 
   return (
-    <ProGate feature={t('scoringDelta.feature', 'Scoring Delta')}>
+    <>
       <div className="mb-4 bg-bg-secondary rounded-lg border border-border overflow-hidden">
         <div className="px-4 py-3 flex items-center gap-3 border-b border-border/50">
           <div className="w-8 h-8 bg-bg-tertiary rounded-lg flex items-center justify-center flex-shrink-0">
@@ -124,6 +124,6 @@ export const ScoringDelta = memo(function ScoringDelta() {
           )}
         </div>
       </div>
-    </ProGate>
+    </>
   );
 });
