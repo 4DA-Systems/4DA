@@ -146,12 +146,21 @@ export const createAnalysisSlice: StateCreator<AppStore, [], [], AnalysisSlice> 
       }));
 
       const result = await cmd('index_context');
+
+      // Sync AWE wisdom into context (non-blocking, best-effort)
+      let aweStatus = '';
+      try {
+        aweStatus = await cmd('sync_awe_wisdom');
+      } catch {
+        // AWE sync is optional — don't fail the index
+      }
+
       const files = await cmd('get_context_files');
       set(state => ({
         appState: {
           ...state.appState,
           contextFiles: files,
-          status: `${readmeResult}. ${result}`,
+          status: `${readmeResult}. ${result}${aweStatus ? `. ${aweStatus}` : ''}`,
           loading: false,
         },
       }));
