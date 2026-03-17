@@ -233,6 +233,127 @@ pub async fn index_project_readmes() -> Result<String> {
         Ok("No README files found in configured directories".to_string())
     }
 }
+/// Sync AWE wisdom into context — injects validated principles and anti-patterns
+/// as high-weight context chunks so PASIFA scoring is informed by decision history.
+///
+/// Also scans configured context directories for decision-shaped git commits.
+#[tauri::command]
+pub async fn sync_awe_wisdom() -> Result<String> {
+    info!(target: "4da::awe", "Syncing AWE wisdom into context system");
+
+    let awe_bin = find_awe_binary();
+    let Some(awe_path) = awe_bin else {
+        return Ok("AWE binary not found. Wisdom sync skipped.".into());
+    };
+
+    let db = get_database()?;
+    let mut wisdom_chunks = 0;
+    let mut decisions_detected = 0;
+
+    // 1. Get validated principles from AWE
+    if let Ok(output) = std::process::Command::new(&awe_path)
+        .args(["wisdom", "--domain", "software-engineering"])
+        .output()
+    {
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        // Parse principles and anti-patterns from output
+        let mut current_section = "";
+        for line in stdout.lines() {
+            let trimmed = line.trim();
+            if trimmed.contains("VALIDATED PRINCIPLES") {
+                current_section = "principle";
+            } else if trimmed.contains("ANTI-PATTERNS") {
+                current_section = "anti-pattern";
+            } else if trimmed.starts_with('[') && !trimmed.is_empty() {
+                // Extract the text after confidence bracket: "[85%] statement"
+                if let Some(text) = trimmed.split(']').nth(1) {
+                    let text = text.trim();
+                    if !text.is_empty() {
+                        let source = format!("awe://wisdom/{}", current_section);
+                        let chunk_text = match current_section {
+                            "principle" => {
+                                format!("Validated principle from decision history: {}", text)
+                            }
+                            "anti-pattern" => {
+                                format!("Known anti-pattern from decision history: {}", text)
+                            }
+                            _ => text.to_string(),
+                        };
+
+                        // Embed and store as high-weight context
+                        if let Ok(embeddings) = embed_texts(&[chunk_text.clone()]).await {
+                            if let Some(embedding) = embeddings.first() {
+                                // Weight 1.5 = wisdom is more valuable than regular context
+                                if db
+                                    .upsert_context_weighted(&source, &chunk_text, embedding, 1.5)
+                                    .is_ok()
+                                {
+                                    wisdom_chunks += 1;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // 2. Scan git repos for new decisions
+    let context_dirs = crate::get_context_dirs();
+    for dir in &context_dirs {
+        let dir_str = dir.to_string_lossy();
+        if let Ok(output) = std::process::Command::new(&awe_path)
+            .args([
+                "scan",
+                "--repo",
+                &dir_str,
+                "--domain",
+                "software-engineering",
+                "--limit",
+                "50",
+                "--json",
+            ])
+            .output()
+        {
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            if let Ok(result) = serde_json::from_str::<serde_json::Value>(&stdout) {
+                if let Some(found) = result.get("decisions_detected").and_then(|v| v.as_u64()) {
+                    decisions_detected += found;
+                }
+            }
+        }
+    }
+
+    info!(
+        target: "4da::awe",
+        wisdom_chunks = wisdom_chunks,
+        decisions_detected = decisions_detected,
+        "AWE wisdom sync complete"
+    );
+
+    Ok(format!(
+        "AWE: {} wisdom chunks indexed, {} decisions detected",
+        wisdom_chunks, decisions_detected
+    ))
+}
+
+/// Find the AWE binary (release build).
+fn find_awe_binary() -> Option<String> {
+    let candidates = [
+        "D:\\runyourempire\\awe\\target\\release\\awe.exe",
+        "/d/runyourempire/awe/target/release/awe",
+    ];
+    for path in &candidates {
+        if std::path::Path::new(path).exists() {
+            return Some(path.to_string());
+        }
+    }
+    // Check AWE_BIN env var
+    std::env::var("AWE_BIN")
+        .ok()
+        .filter(|p| std::path::Path::new(p).exists())
+}
+
 /// Convert Windows path to WSL path if needed (e.g., D:\projects -> /mnt/d/projects).
 /// Only called at runtime on Linux (WSL); on other platforms it's used only in tests.
 #[cfg_attr(not(target_os = "linux"), allow(dead_code))]
