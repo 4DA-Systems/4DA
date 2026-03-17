@@ -90,6 +90,7 @@ interface CommandMap {
   clear_context: { params: Record<string, never>; result: string };
   index_context: { params: Record<string, never>; result: string };
   index_project_readmes: { params: Record<string, never>; result: string };
+  sync_awe_wisdom: { params: Record<string, never>; result: string };
   export_results: { params: { format: string }; result: string };
   get_diagnostics: { params: Record<string, never>; result: DiagnosticsSnapshot };
 

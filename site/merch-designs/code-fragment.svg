@@ -5,8 +5,8 @@
   <!-- Placement: full front, 12x15 inches -->
   <!-- Product: Bella+Canvas 3001 Black -->
 
-  <!-- Terminal window frame — stroke only, transparent background for clean mockups -->
-  <rect x="100" y="100" width="3400" height="4000" rx="36" fill="none" stroke="#333333" stroke-width="4"/>
+  <!-- Terminal window frame — no fill, frame-only for clean rendering on dark backgrounds -->
+  <rect x="100" y="100" width="3400" height="4000" rx="36" fill="none" stroke="#666666" stroke-width="4"/>
 
   <!-- Window dots -->
   <circle cx="260" cy="240" r="28" fill="#EF4444" opacity="0.9"/>
@@ -14,16 +14,16 @@
   <circle cx="440" cy="240" r="28" fill="#22C55E" opacity="0.9"/>
 
   <!-- Title bar -->
-  <text x="1800" y="255" text-anchor="middle" font-family="'JetBrains Mono', 'SF Mono', 'Fira Code', 'Courier New', monospace" font-size="60" fill="#666666">relevance.rs</text>
+  <text x="1800" y="255" text-anchor="middle" font-family="'JetBrains Mono', 'SF Mono', 'Fira Code', 'Courier New', monospace" font-size="60" fill="#888888">relevance.rs</text>
 
   <!-- Separator -->
-  <line x1="100" y1="320" x2="3500" y2="320" stroke="#2A2A2A" stroke-width="2"/>
+  <line x1="100" y1="320" x2="3500" y2="320" stroke="#555555" stroke-width="2"/>
 
   <!-- Code content — JetBrains Mono, tighter line height -->
   <!-- xml:space="preserve" prevents tspan whitespace collapse during PNG rendering -->
   <g font-family="'JetBrains Mono', 'SF Mono', 'Fira Code', 'Courier New', monospace" font-size="76" xml:space="preserve">
     <!-- Line numbers — dimmer, aligned -->
-    <g fill="#3A3A3A">
+    <g fill="#666666">
       <text x="210" y="480" text-anchor="end">1</text>
       <text x="210" y="630" text-anchor="end">2</text>
       <text x="210" y="780" text-anchor="end">3</text>
@@ -46,11 +46,11 @@
     </g>
 
     <!-- Gutter line -->
-    <line x1="240" y1="380" x2="240" y2="3250" stroke="#1F1F1F" stroke-width="2"/>
+    <line x1="240" y1="380" x2="240" y2="3250" stroke="#444444" stroke-width="2"/>
 
     <!-- Code: doc comments -->
-    <text x="300" y="480" fill="#6A737D">/// Score what matters.</text>
-    <text x="300" y="630" fill="#6A737D">/// Ignore the noise.</text>
+    <text x="300" y="480" fill="#7B8894">/// Score what matters.</text>
+    <text x="300" y="630" fill="#7B8894">/// Ignore the noise.</text>
 
     <!-- Code: function signature -->
     <text x="300" y="780"><tspan fill="#C678DD">pub fn </tspan><tspan fill="#61AFEF">score_relevance</tspan><tspan fill="#ABB2BF">(</tspan></text>
@@ -68,7 +68,7 @@
     <!-- Blank line (empty — no placeholder needed) -->
 
     <!-- Code: the killer line -->
-    <text x="300" y="2280"><tspan fill="#6A737D">    // Privacy first. Always.</tspan></text>
+    <text x="300" y="2280"><tspan fill="#7B8894">    // Privacy first. Always.</tspan></text>
     <text x="300" y="2430"><tspan fill="#ABB2BF">    </tspan><tspan fill="#61AFEF">assert!</tspan><tspan fill="#ABB2BF">(data.</tspan><tspan fill="#E06C75">stays_local</tspan><tspan fill="#ABB2BF">());</tspan></text>
 
     <!-- Blank line (empty — no placeholder needed) -->
@@ -79,6 +79,6 @@
   </g>
 
   <!-- Footer: brand mark — visible but not loud -->
-  <line x1="200" y1="3920" x2="3400" y2="3920" stroke="#1F1F1F" stroke-width="2"/>
-  <text x="1800" y="3990" text-anchor="middle" font-family="'JetBrains Mono', 'SF Mono', monospace" font-size="52" fill="#333333" letter-spacing="16">4DA  //  ALL SIGNAL. NO FEED.</text>
+  <line x1="200" y1="3920" x2="3400" y2="3920" stroke="#444444" stroke-width="2"/>
+  <text x="1800" y="3990" text-anchor="middle" font-family="'JetBrains Mono', 'SF Mono', monospace" font-size="52" fill="#777777" letter-spacing="16">4DA  //  ALL SIGNAL. NO FEED.</text>
 </svg>
