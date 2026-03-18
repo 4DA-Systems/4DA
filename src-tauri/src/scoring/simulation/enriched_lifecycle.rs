@@ -6,6 +6,8 @@
 
 use std::collections::HashMap;
 
+use tracing::debug;
+
 use super::super::score_item;
 use super::enrichment::EnrichmentConfig;
 use super::feedback_sim::{apply_feedback, lifecycle_corpus, simulate_session_with_embeddings};
@@ -166,7 +168,7 @@ fn enriched_lifecycle_rust_does_not_degrade() {
     let first = f1s[0];
     let last = f1s[f1s.len() - 1];
 
-    println!("[enriched_lifecycle_rust] first_f1={first:.3} last_f1={last:.3}");
+    debug!("[enriched_lifecycle_rust] first_f1={first:.3} last_f1={last:.3}");
 
     // Last session F1 must be at least 85% of first session F1
     let min_acceptable = first * 0.85;

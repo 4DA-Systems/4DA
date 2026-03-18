@@ -5,6 +5,8 @@
 //!
 //! Run: `cargo test scoring::benchmark -- --nocapture`
 
+use tracing::{info, warn};
+
 use super::*;
 use std::collections::HashSet;
 use std::path::Path;
@@ -412,7 +414,7 @@ fn run_bench(name: &'static str, ctx: &ScoringContext, corpus: &[Labeled]) -> Be
             (true, false) => {
                 fp += 1;
                 let bd = result.score_breakdown.as_ref();
-                eprintln!(
+                warn!(
                     "  FP [{name}]: \"{}\" score={:.3} signals={:?}",
                     item.title,
                     result.top_score,
@@ -423,7 +425,7 @@ fn run_bench(name: &'static str, ctx: &ScoringContext, corpus: &[Labeled]) -> Be
             (false, true) => {
                 r#fn += 1;
                 let bd = result.score_breakdown.as_ref();
-                eprintln!(
+                warn!(
                     "  FN [{name}]: \"{}\" score={:.3} signals={:?}",
                     item.title,
                     result.top_score,
@@ -451,9 +453,9 @@ fn bench_rust_dev_precision_recall() {
     let ctx = rust_dev_ctx();
     let r = run_bench("rust_dev", &ctx, &rust_corpus());
 
-    eprintln!("\n=== Rust Developer ===");
-    eprintln!("  TP={} FP={} TN={} FN={}", r.tp, r.fp, r.tn, r.r#fn);
-    eprintln!(
+    info!("\n=== Rust Developer ===");
+    info!("  TP={} FP={} TN={} FN={}", r.tp, r.fp, r.tn, r.r#fn);
+    info!(
         "  Precision={:.0}% Recall={:.0}% Rejection={:.0}%",
         r.precision() * 100.0,
         r.recall() * 100.0,
@@ -477,9 +479,9 @@ fn bench_python_ml_precision_recall() {
     let ctx = python_ml_ctx();
     let r = run_bench("python_ml", &ctx, &python_corpus());
 
-    eprintln!("\n=== Python ML Developer ===");
-    eprintln!("  TP={} FP={} TN={} FN={}", r.tp, r.fp, r.tn, r.r#fn);
-    eprintln!(
+    info!("\n=== Python ML Developer ===");
+    info!("  TP={} FP={} TN={} FN={}", r.tp, r.fp, r.tn, r.r#fn);
+    info!(
         "  Precision={:.0}% Recall={:.0}% Rejection={:.0}%",
         r.precision() * 100.0,
         r.recall() * 100.0,
@@ -1303,11 +1305,11 @@ fn bench_aggregate_summary() {
         run_bench("python_ml", &python_ml_ctx(), &python_corpus()),
     ];
 
-    eprintln!("\n{}", "=".repeat(62));
-    eprintln!("  PASIFA SCORING BENCHMARK BASELINE");
-    eprintln!("{}", "=".repeat(62));
+    info!("\n{}", "=".repeat(62));
+    info!("  PASIFA SCORING BENCHMARK BASELINE");
+    info!("{}", "=".repeat(62));
     for r in &results {
-        eprintln!(
+        info!(
             "  {:12} | P:{:5.1}% R:{:5.1}% Rej:{:5.1}% | TP:{} FP:{} TN:{} FN:{}",
             r.profile,
             r.precision() * 100.0,
@@ -1319,7 +1321,7 @@ fn bench_aggregate_summary() {
             r.r#fn,
         );
     }
-    eprintln!("{}", "=".repeat(62));
+    info!("{}", "=".repeat(62));
 
     let avg_p: f64 = results.iter().map(|r| r.precision()).sum::<f64>() / results.len() as f64;
     let avg_r: f64 = results.iter().map(|r| r.rejection()).sum::<f64>() / results.len() as f64;
