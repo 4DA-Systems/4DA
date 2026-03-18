@@ -207,6 +207,111 @@ pub(crate) fn find_cross_project_deps(
 }
 
 // ============================================================================
+// Tauri Commands
+// ============================================================================
+
+#[tauri::command]
+pub fn get_tech_convergence() -> crate::error::Result<serde_json::Value> {
+    // Build project->tech map from ACE-detected tech across all context dirs
+    let conn = crate::open_db_connection()?;
+
+    let mut stmt = conn.prepare(
+        "SELECT DISTINCT project_root, tech_name, tech_category \
+         FROM ace_detected_tech WHERE project_root IS NOT NULL",
+    )?;
+
+    let mut projects: HashMap<String, Vec<(String, String)>> = HashMap::new();
+    let rows = stmt.query_map([], |row| {
+        Ok((
+            row.get::<_, String>(0)?,
+            row.get::<_, String>(1)?,
+            row.get::<_, String>(2)?,
+        ))
+    })?;
+
+    for row in rows {
+        if let Ok((project, name, category)) = row {
+            projects.entry(project).or_default().push((name, category));
+        }
+    }
+
+    let report = analyze_convergence(&projects);
+    Ok(serde_json::to_value(report)?)
+}
+
+#[tauri::command]
+pub fn get_project_health_comparison() -> crate::error::Result<serde_json::Value> {
+    let conn = crate::open_db_connection()?;
+
+    let mut stmt = conn.prepare(
+        "SELECT project_root, \
+                COUNT(*) as dep_count, \
+                SUM(CASE WHEN is_dev = 1 THEN 1 ELSE 0 END) as dev_deps \
+         FROM ace_detected_tech \
+         WHERE project_root IS NOT NULL \
+         GROUP BY project_root",
+    )?;
+
+    let mut project_data: Vec<(String, usize, usize, f32, usize, Vec<String>)> = Vec::new();
+    let rows = stmt.query_map([], |row| {
+        Ok((
+            row.get::<_, String>(0)?,
+            row.get::<_, usize>(1)?,
+            row.get::<_, usize>(2)?,
+        ))
+    })?;
+
+    for row in rows {
+        if let Ok((path, deps, dev_deps)) = row {
+            project_data.push((path, deps, dev_deps, 0.8, 0, vec![]));
+        }
+    }
+
+    let comparison = compare_project_health(project_data);
+    Ok(serde_json::to_value(comparison)?)
+}
+
+#[tauri::command]
+pub fn get_cross_project_dependencies() -> crate::error::Result<serde_json::Value> {
+    let conn = crate::open_db_connection()?;
+
+    let mut stmt = conn.prepare(
+        "SELECT DISTINCT project_root, tech_name, tech_category \
+         FROM ace_detected_tech WHERE project_root IS NOT NULL",
+    )?;
+
+    let mut project_deps: HashMap<String, Vec<(String, String)>> = HashMap::new();
+    let rows = stmt.query_map([], |row| {
+        Ok((
+            row.get::<_, String>(0)?,
+            row.get::<_, String>(1)?,
+            row.get::<_, String>(2)?,
+        ))
+    })?;
+
+    for row in rows {
+        if let Ok((project, name, eco)) = row {
+            project_deps.entry(project).or_default().push((name, eco));
+        }
+    }
+
+    let cross_deps = find_cross_project_deps(&project_deps);
+    let result: Vec<serde_json::Value> = cross_deps
+        .into_iter()
+        .map(|(name, eco, projects)| {
+            serde_json::json!({
+                "name": name,
+                "ecosystem": eco,
+                "projects": projects,
+                "project_count": projects.len(),
+            })
+        })
+        .collect();
+
+    Ok(serde_json::to_value(result)?)
+}
+
+// ============================================================================
 // Tests
 // ============================================================================
 
@@ -250,14 +355,8 @@ mod tests {
     #[test]
     fn test_convergence_all_unique() {
         let mut projects = HashMap::new();
-        projects.insert(
-            "a".into(),
-            vec![("Rust".into(), "language".into())],
-        );
-        projects.insert(
-            "b".into(),
-            vec![("Python".into(), "language".into())],
-        );
+        projects.insert("a".into(), vec![("Rust".into(), "language".into())]);
+        projects.insert("b".into(), vec![("Python".into(), "language".into())]);
 
         let report = analyze_convergence(&projects);
         assert_eq!(report.shared_technologies.len(), 0);
@@ -279,14 +378,20 @@ mod tests {
     #[test]
     fn test_cross_project_deps() {
         let mut deps = HashMap::new();
-        deps.insert("a".into(), vec![
-            ("lodash".into(), "npm".into()),
-            ("react".into(), "npm".into()),
-        ]);
-        deps.insert("b".into(), vec![
-            ("lodash".into(), "npm".into()),
-            ("express".into(), "npm".into()),
-        ]);
+        deps.insert(
+            "a".into(),
+            vec![
+                ("lodash".into(), "npm".into()),
+                ("react".into(), "npm".into()),
+            ],
+        );
+        deps.insert(
+            "b".into(),
+            vec![
+                ("lodash".into(), "npm".into()),
+                ("express".into(), "npm".into()),
+            ],
+        );
 
         let cross = find_cross_project_deps(&deps);
         assert_eq!(cross.len(), 1);

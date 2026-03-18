@@ -84,7 +84,11 @@ CREATE INDEX IF NOT EXISTS idx_timeline_period ON developer_timeline(period);
 
 /// Determine adoption stage based on weeks of engagement and confidence.
 pub(crate) fn adoption_stage(weeks_active: u32, current_confidence: f32) -> &'static str {
-    match (weeks_active, current_confidence >= 0.7, current_confidence >= 0.85) {
+    match (
+        weeks_active,
+        current_confidence >= 0.7,
+        current_confidence >= 0.85,
+    ) {
         (0..=2, _, _) => "exploring",
         (3..=8, _, _) => "learning",
         (9..=20, true, _) => "productive",
@@ -168,17 +172,21 @@ pub(crate) fn build_adoption_curves(snapshots: &[TimelineSnapshot]) -> Vec<TechA
 
     for snapshot in snapshots {
         for tech in &snapshot.tech_snapshot {
-            tech_history
-                .entry(tech.name.clone())
-                .or_default()
-                .push((snapshot.period.clone(), tech.confidence, tech.engagement_score));
+            tech_history.entry(tech.name.clone()).or_default().push((
+                snapshot.period.clone(),
+                tech.confidence,
+                tech.engagement_score,
+            ));
         }
     }
 
     tech_history
         .into_iter()
         .map(|(name, history)| {
-            let first_seen = history.first().map(|(p, _, _)| p.clone()).unwrap_or_default();
+            let first_seen = history
+                .first()
+                .map(|(p, _, _)| p.clone())
+                .unwrap_or_default();
             let weeks_active = history.len() as u32;
             let current_confidence = history.last().map(|(_, c, _)| *c).unwrap_or(0.0);
             let engagement_history: Vec<f32> = history.iter().map(|(_, _, e)| *e).collect();
@@ -194,6 +202,125 @@ pub(crate) fn build_adoption_curves(snapshots: &[TimelineSnapshot]) -> Vec<TechA
             }
         })
         .collect()
+}
+
+// ============================================================================
+// Tauri Commands
+// ============================================================================
+
+#[tauri::command]
+pub fn get_temporal_snapshot(period: Option<String>) -> crate::error::Result<serde_json::Value> {
+    let p = period.unwrap_or_else(|| {
+        let now = chrono::Utc::now();
+        format!("{}-W{:02}", now.format("%Y"), now.format("%W"))
+    });
+    let conn = crate::open_db_connection()?;
+
+    let snapshot_opt: Option<(String, String, u32, u32, String)> = conn
+        .query_row(
+            "SELECT tech_snapshot, interest_snapshot, decision_count, feedback_count, created_at \
+             FROM developer_timeline WHERE period = ?1",
+            rusqlite::params![p],
+            |row| {
+                Ok((
+                    row.get(0)?,
+                    row.get(1)?,
+                    row.get(2)?,
+                    row.get(3)?,
+                    row.get(4)?,
+                ))
+            },
+        )
+        .ok();
+
+    match snapshot_opt {
+        Some((tech_json, interest_json, dec_count, fb_count, created_at)) => {
+            let tech: Vec<TechEntry> = serde_json::from_str(&tech_json).unwrap_or_default();
+            let interests: Vec<InterestEntry> =
+                serde_json::from_str(&interest_json).unwrap_or_default();
+            Ok(serde_json::json!({
+                "period": p,
+                "tech_snapshot": tech,
+                "interest_snapshot": interests,
+                "decision_count": dec_count,
+                "feedback_count": fb_count,
+                "created_at": created_at,
+            }))
+        }
+        None => Ok(serde_json::json!({
+            "period": p,
+            "tech_snapshot": [],
+            "interest_snapshot": [],
+            "message": "No snapshot for this period"
+        })),
+    }
+}
+
+#[tauri::command]
+pub fn get_adoption_curves() -> crate::error::Result<serde_json::Value> {
+    let conn = crate::open_db_connection()?;
+
+    let mut stmt = conn.prepare(
+        "SELECT id, period, tech_snapshot, interest_snapshot, decision_count, feedback_count, created_at \
+         FROM developer_timeline ORDER BY period ASC",
+    )?;
+    let snapshots: Vec<TimelineSnapshot> = stmt
+        .query_map([], |row| {
+            let tech_json: String = row.get(2)?;
+            let interest_json: String = row.get(3)?;
+            Ok(TimelineSnapshot {
+                id: row.get(0)?,
+                period: row.get(1)?,
+                tech_snapshot: serde_json::from_str(&tech_json).unwrap_or_default(),
+                interest_snapshot: serde_json::from_str(&interest_json).unwrap_or_default(),
+                decision_count: row.get(4)?,
+                feedback_count: row.get(5)?,
+                created_at: row.get(6)?,
+            })
+        })?
+        .filter_map(|r| r.ok())
+        .collect();
+
+    let curves = build_adoption_curves(&snapshots);
+    Ok(serde_json::to_value(curves)?)
+}
+
+#[tauri::command]
+pub fn get_knowledge_decay_report() -> crate::error::Result<serde_json::Value> {
+    let conn = crate::open_db_connection()?;
+
+    // Get the most recent snapshot
+    let latest_opt: Option<String> = conn
+        .query_row(
+            "SELECT tech_snapshot FROM developer_timeline ORDER BY period DESC LIMIT 1",
+            [],
+            |row| row.get(0),
+        )
+        .ok();
+
+    let tech: Vec<TechEntry> = match latest_opt {
+        Some(json) => serde_json::from_str(&json).unwrap_or_default(),
+        None => return Ok(serde_json::json!([])),
+    };
+
+    // For each tech, find how many weeks since last seen with engagement > 0
+    let mut decays: Vec<KnowledgeDecay> = Vec::new();
+    for entry in &tech {
+        // Count weeks since last significant engagement
+        let weeks_ago: u32 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM developer_timeline WHERE period < (SELECT MAX(period) FROM developer_timeline)",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap_or(0);
+
+        if entry.engagement_score < 0.1 {
+            decays.push(detect_decay(&entry.name, weeks_ago.min(52)));
+        }
+    }
+
+    Ok(serde_json::to_value(decays)?)
 }
 
 // ============================================================================
@@ -224,21 +351,39 @@ mod tests {
     #[test]
     fn test_interest_trends() {
         let current = vec![
-            InterestEntry { topic: "Rust".into(), score: 0.8 },
-            InterestEntry { topic: "React".into(), score: 0.5 },
-            InterestEntry { topic: "Go".into(), score: 0.6 },
+            InterestEntry {
+                topic: "Rust".into(),
+                score: 0.8,
+            },
+            InterestEntry {
+                topic: "React".into(),
+                score: 0.5,
+            },
+            InterestEntry {
+                topic: "Go".into(),
+                score: 0.6,
+            },
         ];
         let previous = vec![
-            InterestEntry { topic: "Rust".into(), score: 0.5 },
-            InterestEntry { topic: "React".into(), score: 0.7 },
-            InterestEntry { topic: "Go".into(), score: 0.58 },
+            InterestEntry {
+                topic: "Rust".into(),
+                score: 0.5,
+            },
+            InterestEntry {
+                topic: "React".into(),
+                score: 0.7,
+            },
+            InterestEntry {
+                topic: "Go".into(),
+                score: 0.58,
+            },
         ];
 
         let trends = compute_interest_trends(&current, &previous);
         assert_eq!(trends.len(), 3);
         assert_eq!(trends[0].direction, "increasing"); // Rust 0.5 -> 0.8
         assert_eq!(trends[1].direction, "decreasing"); // React 0.7 -> 0.5
-        assert_eq!(trends[2].direction, "stable");     // Go 0.58 -> 0.6
+        assert_eq!(trends[2].direction, "stable"); // Go 0.58 -> 0.6
     }
 
     #[test]
@@ -252,9 +397,11 @@ mod tests {
         let snapshots = vec![TimelineSnapshot {
             id: 1,
             period: "2026-W10".into(),
-            tech_snapshot: vec![
-                TechEntry { name: "Rust".into(), confidence: 0.7, engagement_score: 0.8 },
-            ],
+            tech_snapshot: vec![TechEntry {
+                name: "Rust".into(),
+                confidence: 0.7,
+                engagement_score: 0.8,
+            }],
             interest_snapshot: vec![],
             decision_count: 3,
             feedback_count: 15,
