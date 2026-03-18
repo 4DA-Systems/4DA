@@ -337,6 +337,174 @@ pub async fn sync_awe_wisdom() -> Result<String> {
     ))
 }
 
+/// Get AWE wisdom summary — lightweight read-only query.
+/// Returns structured data about the Wisdom Graph state without syncing.
+#[tauri::command]
+pub async fn get_awe_summary() -> Result<String> {
+    let awe_bin = find_awe_binary();
+    let Some(awe_path) = awe_bin else {
+        return Ok(serde_json::json!({
+            "available": false,
+            "decisions": 0,
+            "principles": 0,
+            "pending": 0,
+            "top_principle": null,
+            "health": null,
+        })
+        .to_string());
+    };
+
+    let mut summary = serde_json::json!({
+        "available": true,
+        "decisions": 0,
+        "principles": 0,
+        "pending": 0,
+        "top_principle": null,
+        "health": null,
+    });
+
+    // Get health data
+    if let Ok(output) = std::process::Command::new(&awe_path)
+        .args(["health"])
+        .output()
+    {
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        // Parse "Decisions tracked: N"
+        if let Some(cap) = stdout
+            .lines()
+            .find(|l| l.contains("Decisions tracked"))
+        {
+            if let Some(num) = cap.split_whitespace().last() {
+                if let Ok(n) = num.parse::<u64>() {
+                    summary["decisions"] = serde_json::json!(n);
+                }
+            }
+        }
+        // Parse "Principles extracted: N"
+        if let Some(cap) = stdout
+            .lines()
+            .find(|l| l.contains("Principles extracted"))
+        {
+            if let Some(num) = cap.split_whitespace().last() {
+                if let Ok(n) = num.parse::<u64>() {
+                    summary["principles"] = serde_json::json!(n);
+                }
+            }
+        }
+        // Parse "Confirmed: N (X%)"
+        if let Some(cap) = stdout.lines().find(|l| l.contains("Confirmed:")) {
+            let parts: Vec<&str> = cap.split_whitespace().collect();
+            if parts.len() >= 2 {
+                summary["health"] = serde_json::json!(cap.trim());
+            }
+        }
+    }
+
+    // Get top principle from wisdom command
+    if let Ok(output) = std::process::Command::new(&awe_path)
+        .args(["wisdom", "-d", "software-engineering"])
+        .output()
+    {
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        // Find first principle line: "[85%] statement"
+        for line in stdout.lines() {
+            let trimmed = line.trim();
+            if trimmed.starts_with('[') && trimmed.contains(']') {
+                if let Some(text) = trimmed.split(']').nth(1) {
+                    let text = text.trim();
+                    if !text.is_empty() && !text.starts_with("Evidence") && !text.starts_with("Status") {
+                        summary["top_principle"] = serde_json::json!(text);
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
+    // Get pending count
+    if let Ok(output) = std::process::Command::new(&awe_path)
+        .args(["pending", "--limit", "100"])
+        .output()
+    {
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        if let Some(cap) = stdout.lines().find(|l| l.contains("decision(s) need")) {
+            if let Some(num) = cap.split_whitespace().next() {
+                if let Ok(n) = num.parse::<u64>() {
+                    summary["pending"] = serde_json::json!(n);
+                }
+            }
+        }
+    }
+
+    Ok(summary.to_string())
+}
+
+/// Run AWE transmute and return the result as structured output.
+#[tauri::command]
+pub async fn run_awe_transmute(query: String, mode: String) -> Result<String> {
+    let awe_bin = find_awe_binary();
+    let Some(awe_path) = awe_bin else {
+        return Err("AWE binary not found. Build with: cargo build --release -p awe-cli".into());
+    };
+
+    let mut args = vec!["transmute", &query, "--json", "-d", "software-engineering"];
+
+    match mode.as_str() {
+        "voice" => args.push("--voice"),
+        "challenge" => args.push("--challenge"),
+        _ => {} // structured is default
+    }
+
+    let output = std::process::Command::new(&awe_path)
+        .args(&args)
+        .output()
+        .map_err(|e| format!("Failed to run AWE: {e}"))?;
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+
+    // Parse the JSON output and extract wisdom
+    if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&stdout) {
+        // Find the Articulated stage for wisdom text
+        if let Some(stages) = parsed.get("stages").and_then(|s| s.as_array()) {
+            for stage in stages {
+                if let Some(arr) = stage.as_array() {
+                    if arr.len() >= 2 {
+                        if let Some(articulated) = arr[1].get("Articulated") {
+                            if let Some(wisdom) = articulated.get("wisdom").and_then(|w| w.as_str())
+                            {
+                                let confidence = articulated
+                                    .get("confidence")
+                                    .and_then(|c| c.as_f64())
+                                    .unwrap_or(0.5);
+                                let watch_for: Vec<String> = articulated
+                                    .get("watch_for")
+                                    .and_then(|w| w.as_array())
+                                    .map(|arr| {
+                                        arr.iter()
+                                            .filter_map(|v| v.as_str().map(String::from))
+                                            .collect()
+                                    })
+                                    .unwrap_or_default();
+
+                                return Ok(serde_json::json!({
+                                    "wisdom": wisdom,
+                                    "confidence": confidence,
+                                    "watch_for": watch_for,
+                                    "mode": mode,
+                                })
+                                .to_string());
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Fallback: return raw output
+    Ok(stdout.to_string())
+}
+
 /// Find the AWE binary (release build).
 fn find_awe_binary() -> Option<String> {
     let candidates = [

@@ -2093,5 +2093,7 @@
   "weekly.interestFailed": "Failed to add interest",
 
   "tips.feedbackLoop": "Save articles you find useful — this teaches the system what matters to you.",
-  "tips.feedbackLoopHint": "Dismissing articles also helps. Every interaction improves your results."
+  "tips.feedbackLoopHint": "Dismissing articles also helps. Every interaction improves your results.",
+  "tips.ollamaNudge": "Your results use keyword matching. Ollama (free, local) unlocks semantic matching for more relevant results.",
+  "tips.ollamaNudgeHint": "Install Ollama, then enable it in Settings > AI Provider. Runs entirely on your machine."
 }
