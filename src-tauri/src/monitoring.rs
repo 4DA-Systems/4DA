@@ -55,8 +55,12 @@ pub struct MonitoringState {
     pub last_anomaly_check: AtomicU64,
     /// Last behavior decay timestamp (unix seconds)
     pub last_decay: AtomicU64,
+    /// Last accuracy recording timestamp (unix seconds)
+    pub last_accuracy_check: AtomicU64,
     /// Items below notification threshold, batched for next briefing
     pub batched_items: parking_lot::Mutex<Vec<BatchedNotification>>,
+    /// Last morning briefing date (YYYY-MM-DD) to avoid firing twice in one day
+    pub last_morning_briefing_date: parking_lot::Mutex<Option<String>>,
 }
 
 impl Default for MonitoringState {
@@ -71,7 +75,9 @@ impl Default for MonitoringState {
             last_health_check: AtomicU64::new(0),
             last_anomaly_check: AtomicU64::new(0),
             last_decay: AtomicU64::new(0),
+            last_accuracy_check: AtomicU64::new(0),
             batched_items: parking_lot::Mutex::new(Vec::new()),
+            last_morning_briefing_date: parking_lot::Mutex::new(None),
         }
     }
 }
@@ -196,6 +202,7 @@ pub fn setup_tray<R: Runtime>(app: &AppHandle<R>) -> Result<TrayIcon<R>> {
 const HEALTH_CHECK_INTERVAL: u64 = 300; // 5 minutes
 const ANOMALY_CHECK_INTERVAL: u64 = 3600; // 1 hour
 const BEHAVIOR_DECAY_INTERVAL: u64 = 86400; // 24 hours (daily)
+const ACCURACY_RECORD_INTERVAL: u64 = 604800; // 7 days
 
 /// Start the background monitoring scheduler
 pub fn start_scheduler<R: Runtime>(app: AppHandle<R>, state: Arc<MonitoringState>) {
@@ -454,11 +461,51 @@ pub fn start_scheduler<R: Runtime>(app: AppHandle<R>, state: Arc<MonitoringState
                 }
             }
 
+            // Weekly accuracy recording
+            let last_accuracy = state.last_accuracy_check.load(Ordering::Relaxed);
+            if now - last_accuracy >= ACCURACY_RECORD_INTERVAL {
+                state.last_accuracy_check.store(now, Ordering::Relaxed);
+                if let Ok(db) = crate::get_database() {
+                    let conn = db.conn.lock();
+                    match crate::accuracy::record_weekly_accuracy(&conn) {
+                        Ok(()) => info!(target: "4da::monitoring", "Weekly accuracy recorded"),
+                        Err(e) => {
+                            warn!(target: "4da::monitoring", error = %e, "Failed to record weekly accuracy")
+                        }
+                    }
+                }
+            }
+
             // Digest scheduler (Fix 2) -- check on every tick
             crate::monitoring_jobs::maybe_generate_digest(&app).await;
 
             // Smart batching (Improvement E) -- save mini-digest when threshold reached
             crate::monitoring_jobs::maybe_save_mini_digest(&state);
+
+            // Morning briefing notification — fires once per day at the configured time
+            if let Some(briefing) = crate::monitoring_notifications::check_morning_briefing(&state)
+            {
+                info!(target: "4da::monitor", items = briefing.total_relevant, "Morning briefing triggered");
+                crate::monitoring_notifications::send_morning_briefing_notification(
+                    &app, &briefing,
+                );
+                // Emit event to frontend so it can show an in-app briefing card
+                if let Err(e) = app.emit(
+                    "morning-briefing-ready",
+                    serde_json::json!({
+                        "title": briefing.title,
+                        "total_relevant": briefing.total_relevant,
+                        "items": briefing.items.iter().map(|i| serde_json::json!({
+                            "title": i.title,
+                            "source_type": i.source_type,
+                            "score": i.score,
+                            "signal_type": i.signal_type,
+                        })).collect::<Vec<_>>(),
+                    }),
+                ) {
+                    tracing::warn!("Failed to emit 'morning-briefing-ready': {e}");
+                }
+            }
 
             // Suns: tick all enabled suns
             {

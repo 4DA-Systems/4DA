@@ -248,6 +248,8 @@ mod monitoring_notifications;
 mod natural_language_search;
 mod novelty;
 mod ollama;
+mod plugin_commands;
+pub mod plugins;
 mod probes_corpus;
 mod probes_engine;
 mod project_health;
@@ -828,6 +830,9 @@ pub fn run() {
     };
     info!(target: "4da::startup", count = source_count, sources = %source_names.join(", "), "Sources registered");
 
+    // Ensure plugins directory exists for Source Plugin API
+    plugins::loader::ensure_plugins_dir();
+
     // Run startup health self-check (fast, offline, infallible)
     let _startup_issues = startup_health::run_startup_health_check();
 
@@ -859,6 +864,7 @@ pub fn run() {
             context_commands::run_awe_calibration,
             context_commands::set_context_dirs,
             context_commands::get_context_dirs,
+            context_commands::generate_cli_briefing,
             // Analysis
             analysis::run_deep_initial_scan,
             analysis::run_cached_analysis,
@@ -1218,6 +1224,10 @@ pub fn run() {
             ai_costs::get_ai_usage_summary,
             ai_costs::get_ai_cost_estimate,
             ai_costs::get_ai_cost_recommendation,
+            // Source Plugin API (Phase 7)
+            plugin_commands::list_plugins,
+            plugin_commands::fetch_plugin_items,
+            plugin_commands::fetch_all_plugins,
         ])
         .setup(|app| {
             // Record app start time for diagnostics uptime tracking

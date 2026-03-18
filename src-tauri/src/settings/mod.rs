@@ -161,6 +161,12 @@ pub struct MonitoringConfig {
     /// When true, auto-generate briefing when critical signals are detected
     #[serde(default)]
     pub auto_briefing_on_critical: Option<bool>,
+    /// Whether morning briefing notifications are enabled (default: true)
+    #[serde(default)]
+    pub morning_briefing: Option<bool>,
+    /// Time for morning briefing in HH:MM format (default: "08:00")
+    #[serde(default)]
+    pub briefing_time: Option<String>,
 }
 
 fn default_notification_threshold() -> String {
@@ -176,6 +182,8 @@ impl Default for MonitoringConfig {
             cleanup_max_age_days: None, // Uses 30 days default in monitoring.rs
             close_to_tray: None,        // Defaults to true via unwrap_or(true)
             auto_briefing_on_critical: None,
+            morning_briefing: None, // Defaults to true via unwrap_or(true)
+            briefing_time: None,    // Defaults to "08:00"
         }
     }
 }
