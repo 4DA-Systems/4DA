@@ -25,6 +25,7 @@ const COMPONENTS = {
   'game-briefing-atmosphere': () => import('./game-components/briefing-atmosphere.js'),
   'game-playbook-pathway': () => import('./game-components/playbook-pathway.js'),
   'game-radar-field': () => import('./game-components/radar-field.js'),
+  'game-turing-fire': () => import('./game-components/turing-fire.js'),
 } as const;
 
 export type GameComponentTag = keyof typeof COMPONENTS;

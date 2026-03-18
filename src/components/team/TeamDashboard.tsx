@@ -5,10 +5,12 @@ import { TeamMemberList } from './TeamMemberList';
 import { TeamSignalFeed } from './TeamSignalFeed';
 import { TeamDecisionTracker } from './TeamDecisionTracker';
 import { TeamSharedSources } from './TeamSharedSources';
+import { TeamIntelligenceDashboard } from './TeamIntelligenceDashboard';
 
-type DashboardTab = 'signals' | 'decisions' | 'sources' | 'members';
+type DashboardTab = 'intelligence' | 'signals' | 'decisions' | 'sources' | 'members';
 
 const TABS: { key: DashboardTab; labelKey: string; fallback: string }[] = [
+  { key: 'intelligence', labelKey: 'team.dashboard.intelligence', fallback: 'Intelligence' },
   { key: 'signals', labelKey: 'team.dashboard.signals', fallback: 'Signals' },
   { key: 'decisions', labelKey: 'team.dashboard.decisions', fallback: 'Decisions' },
   { key: 'sources', labelKey: 'team.dashboard.sources', fallback: 'Sources' },
@@ -24,7 +26,7 @@ export function TeamDashboard() {
   const tier = useAppStore(s => s.tier);
 
   const [collapsed, setCollapsed] = useState(false);
-  const [activeTab, setActiveTab] = useState<DashboardTab>('signals');
+  const [activeTab, setActiveTab] = useState<DashboardTab>('intelligence');
 
   useEffect(() => {
     if (tier === 'team' || tier === 'enterprise') {
@@ -99,6 +101,8 @@ export function TeamDashboard() {
               <div className="flex items-center justify-center py-6">
                 <span className="text-xs text-text-muted">{t('action.loading', 'Loading...')}</span>
               </div>
+            ) : activeTab === 'intelligence' ? (
+              <TeamIntelligenceDashboard />
             ) : activeTab === 'signals' ? (
               <TeamSignalFeed />
             ) : activeTab === 'decisions' ? (

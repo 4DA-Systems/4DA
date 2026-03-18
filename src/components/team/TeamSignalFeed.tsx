@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../../store';
 
@@ -8,6 +8,8 @@ export function TeamSignalFeed() {
   const teamSignalsLoading = useAppStore(s => s.teamSignalsLoading);
   const loadTeamSignals = useAppStore(s => s.loadTeamSignals);
   const resolveTeamSignal = useAppStore(s => s.resolveTeamSignal);
+  const teamSignalSummary = useAppStore(s => s.teamSignalSummary);
+  const loadTeamSignalSummary = useAppStore(s => s.loadTeamSignalSummary);
 
   const [showResolved, setShowResolved] = useState(false);
   const [resolvingId, setResolvingId] = useState<string | null>(null);
@@ -15,8 +17,17 @@ export function TeamSignalFeed() {
 
   useEffect(() => {
     loadTeamSignals(showResolved);
+    loadTeamSignalSummary();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showResolved]);
+
+  const summaryMap = useMemo(() => {
+    const map = new Map<string, typeof teamSignalSummary[0]>();
+    for (const s of teamSignalSummary) {
+      map.set(s.signal_id, s);
+    }
+    return map;
+  }, [teamSignalSummary]);
 
   const activeSignals = teamSignals.filter(s => !s.resolved);
   const resolvedSignals = teamSignals.filter(s => s.resolved);
@@ -102,6 +113,52 @@ export function TeamSignalFeed() {
               </>
             )}
           </div>
+
+          {/* Signal Summary Enhancement */}
+          {(() => {
+            const summary = summaryMap.get(signal.id);
+            if (!summary) return null;
+            return (
+              <div className="mt-1 space-y-1">
+                {/* Confidence bar */}
+                <div className="flex items-center gap-1.5">
+                  <div className="flex-1 h-1 bg-bg-tertiary rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-[#22C55E] rounded-full transition-all"
+                      style={{ width: `${Math.round(summary.team_confidence * 100)}%` }}
+                    />
+                  </div>
+                  <span className="text-[10px] text-text-muted">
+                    {Math.round(summary.team_confidence * 100)}% {t('team.signals.confidence', 'confidence')}
+                  </span>
+                </div>
+                {/* Member avatars */}
+                {summary.detected_by.length > 0 && (
+                  <div className="flex items-center gap-1">
+                    <span className="text-[10px] text-text-muted">{t('team.signals.memberDetections', 'Detected by')}:</span>
+                    {summary.detected_by.slice(0, 5).map(member => (
+                      <span
+                        key={member.client_id}
+                        className="w-4 h-4 rounded-full bg-bg-tertiary border border-border/50 flex items-center justify-center text-[8px] text-text-secondary"
+                        title={member.display_name}
+                      >
+                        {member.display_name.charAt(0).toUpperCase()}
+                      </span>
+                    ))}
+                    {summary.detected_by.length > 5 && (
+                      <span className="text-[10px] text-text-muted">+{summary.detected_by.length - 5}</span>
+                    )}
+                  </div>
+                )}
+                {/* Suggested action */}
+                {summary.suggested_action && (
+                  <p className="text-[10px] text-text-secondary">
+                    {t('team.signals.suggestedAction', 'Suggested')}: {summary.suggested_action}
+                  </p>
+                )}
+              </div>
+            );
+          })()}
 
           {signal.resolved ? (
             <p className="text-[10px] text-[#22C55E] mt-1">

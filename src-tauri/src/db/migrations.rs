@@ -226,7 +226,7 @@ impl Database {
             .query_row("SELECT version FROM schema_version", [], |row| row.get(0))
             .unwrap_or(1);
 
-        const TARGET_VERSION: i64 = 32;
+        const TARGET_VERSION: i64 = 33;
         if current_version < TARGET_VERSION {
             // Drop the conn lock briefly to allow backup (needs filesystem access)
             drop(conn);
@@ -1025,6 +1025,16 @@ impl Database {
                 )?;
             }
 
+            if current_version < 33 {
+                Self::run_versioned_migration(
+                    &conn,
+                    32,
+                    33,
+                    "Phase 33: SSO pending auth for OIDC state/nonce",
+                    Self::migrate_to_phase_33,
+                )?;
+            }
+
             info!(target: "4da::db", "Database schema initialized with sqlite-vec");
             return Ok(());
         }
@@ -1556,6 +1566,24 @@ impl Database {
         info!(target: "4da::db", "Created enterprise organization + retention tables");
         Ok(())
     }
+
+    /// Phase 33: SSO pending auth table for OIDC state/nonce validation.
+    fn migrate_to_phase_33(conn: &Connection) -> SqliteResult<()> {
+        conn.execute_batch(
+            "CREATE TABLE IF NOT EXISTS sso_pending_auth (
+                id TEXT PRIMARY KEY,
+                state TEXT NOT NULL UNIQUE,
+                nonce TEXT NOT NULL,
+                provider_type TEXT NOT NULL,
+                created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                expires_at TEXT NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_sso_pending_state ON sso_pending_auth(state);
+            CREATE INDEX IF NOT EXISTS idx_sso_pending_expires ON sso_pending_auth(expires_at);",
+        )?;
+        info!(target: "4da::db", "Created SSO pending auth table");
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -1612,6 +1640,8 @@ mod tests {
             "org_teams",
             "org_admins",
             "retention_policies",
+            // Phase 33: SSO pending auth
+            "sso_pending_auth",
         ];
         for table in &expected {
             assert!(
