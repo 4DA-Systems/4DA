@@ -51,6 +51,8 @@ import type {
   FeedbackResult,
 } from "./types.js";
 
+import type { ProjectScanResult } from "./project-scanner.js";
+
 /**
  * Resolve the database path by checking multiple locations in priority order:
  * 1. FOURDA_DB_PATH env var
@@ -122,6 +124,8 @@ export interface DatabaseValidationResult {
   valid: boolean;
   error?: string;
   tables?: string[];
+  /** True when no existing DB was found — standalone mode will create one */
+  standalone?: boolean;
 }
 
 /**
@@ -129,6 +133,7 @@ export interface DatabaseValidationResult {
  */
 export class FourDADatabase {
   private db: BetterSqlite3.Database;
+  private _isStandalone: boolean = false;
 
   constructor(dbPath?: string) {
     const resolvedPath = dbPath || getDefaultDbPath();
@@ -138,6 +143,16 @@ export class FourDADatabase {
       ? resolvedPath
       : path.resolve(process.cwd(), resolvedPath);
 
+    const isNew = !fs.existsSync(absolutePath);
+
+    // Ensure parent directory exists (standalone mode may need to create it)
+    if (isNew) {
+      const dir = path.dirname(absolutePath);
+      if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
+      }
+    }
+
     try {
       this.db = new Database(absolutePath, { readonly: false }); // Need write for feedback
       this.db.pragma("journal_mode = WAL");
@@ -146,6 +161,20 @@ export class FourDADatabase {
         `Failed to open 4DA database at ${absolutePath}: ${error instanceof Error ? error.message : String(error)}`
       );
     }
+
+    // Standalone mode: create schema for a brand-new database
+    if (isNew) {
+      this.createMinimalSchema();
+      this._isStandalone = true;
+    }
+  }
+
+  /**
+   * Whether this database was freshly created in standalone mode
+   * (no pre-existing 4DA desktop app database found).
+   */
+  get isStandalone(): boolean {
+    return this._isStandalone;
   }
 
   /**
@@ -162,13 +191,12 @@ export class FourDADatabase {
       ? resolvedPath
       : path.resolve(process.cwd(), resolvedPath);
 
-    // Check if file exists and is readable
+    // Check if file exists — if not, standalone mode will create it
     if (!fs.existsSync(absolutePath)) {
       return {
         valid: false,
-        error: `Database file not found at ${absolutePath}. `
-          + "Run 4DA at least once to create the database, or set FOURDA_DB_PATH "
-          + "to the correct location.",
+        standalone: true,
+        error: `No existing database at ${absolutePath}. Standalone mode will create one on startup.`,
       };
     }
 
@@ -225,6 +253,334 @@ export class FourDADatabase {
    */
   close(): void {
     this.db.close();
+  }
+
+  // ===========================================================================
+  // Standalone Mode — Schema & Population
+  // ===========================================================================
+
+  /**
+   * Create the minimal schema required for MCP tools to function.
+   * Mirrors the desktop app's tables but only the subset that MCP tools query.
+   * Called once when creating a brand-new standalone database.
+   */
+  private createMinimalSchema(): void {
+    this.db.exec(`
+      -- Schema version tracking
+      CREATE TABLE IF NOT EXISTS schema_version (
+        version INTEGER PRIMARY KEY
+      );
+      INSERT INTO schema_version (version) VALUES (1);
+
+      -- Source items (content feed) — queried by get_relevant_content, source_health, daily_briefing, etc.
+      CREATE TABLE IF NOT EXISTS source_items (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        source_type TEXT NOT NULL,
+        source_id TEXT NOT NULL,
+        url TEXT,
+        title TEXT NOT NULL,
+        content TEXT NOT NULL DEFAULT '',
+        content_hash TEXT NOT NULL DEFAULT '',
+        embedding BLOB NOT NULL DEFAULT x'00',
+        signal_type TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        last_seen TEXT NOT NULL DEFAULT (datetime('now')),
+        UNIQUE(source_type, source_id)
+      );
+      CREATE INDEX IF NOT EXISTS idx_source_type ON source_items(source_type);
+      CREATE INDEX IF NOT EXISTS idx_source_type_created ON source_items(source_type, created_at);
+
+      -- User identity — queried by get_context
+      CREATE TABLE IF NOT EXISTS user_identity (
+        id INTEGER PRIMARY KEY CHECK (id = 1),
+        role TEXT,
+        created_at TEXT DEFAULT (datetime('now')),
+        updated_at TEXT DEFAULT (datetime('now'))
+      );
+
+      -- Tech stack (user-declared) — queried by get_context, tech_radar, developer_dna
+      CREATE TABLE IF NOT EXISTS tech_stack (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        technology TEXT NOT NULL UNIQUE,
+        created_at TEXT DEFAULT (datetime('now'))
+      );
+
+      -- Domains of interest — queried by get_context
+      CREATE TABLE IF NOT EXISTS domains (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        domain TEXT NOT NULL UNIQUE,
+        created_at TEXT DEFAULT (datetime('now'))
+      );
+
+      -- Explicit interests — queried by get_context, developer_dna
+      CREATE TABLE IF NOT EXISTS explicit_interests (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        topic TEXT NOT NULL UNIQUE,
+        weight REAL DEFAULT 1.0,
+        embedding BLOB,
+        source TEXT DEFAULT 'explicit',
+        created_at TEXT DEFAULT (datetime('now'))
+      );
+      CREATE INDEX IF NOT EXISTS idx_interests_topic ON explicit_interests(topic);
+
+      -- Exclusions — queried by get_context
+      CREATE TABLE IF NOT EXISTS exclusions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        topic TEXT NOT NULL UNIQUE,
+        created_at TEXT DEFAULT (datetime('now'))
+      );
+
+      -- ACE detected tech — queried by get_context, tech_radar, developer_dna
+      CREATE TABLE IF NOT EXISTS detected_tech (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL UNIQUE,
+        category TEXT NOT NULL,
+        confidence REAL DEFAULT 0.5,
+        source TEXT NOT NULL DEFAULT 'project_scan',
+        evidence TEXT,
+        created_at TEXT DEFAULT (datetime('now')),
+        updated_at TEXT DEFAULT (datetime('now'))
+      );
+      CREATE INDEX IF NOT EXISTS idx_detected_tech_name ON detected_tech(name);
+      CREATE INDEX IF NOT EXISTS idx_detected_tech_confidence ON detected_tech(confidence);
+
+      -- Active topics — queried by get_context
+      CREATE TABLE IF NOT EXISTS active_topics (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        topic TEXT NOT NULL UNIQUE,
+        weight REAL DEFAULT 0.5,
+        confidence REAL DEFAULT 0.5,
+        embedding BLOB,
+        source TEXT NOT NULL DEFAULT 'project_scan',
+        last_seen TEXT DEFAULT (datetime('now')),
+        decay_applied INTEGER DEFAULT 0,
+        created_at TEXT DEFAULT (datetime('now'))
+      );
+      CREATE INDEX IF NOT EXISTS idx_active_topics_topic ON active_topics(topic);
+
+      -- Topic affinities (learned) — queried by get_context, developer_dna, attention_report
+      CREATE TABLE IF NOT EXISTS topic_affinities (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        topic TEXT NOT NULL UNIQUE,
+        embedding BLOB,
+        positive_signals INTEGER DEFAULT 0,
+        negative_signals INTEGER DEFAULT 0,
+        total_exposures INTEGER DEFAULT 0,
+        affinity_score REAL DEFAULT 0.0,
+        confidence REAL DEFAULT 0.0,
+        last_interaction TEXT DEFAULT (datetime('now')),
+        decay_applied INTEGER DEFAULT 0,
+        created_at TEXT DEFAULT (datetime('now')),
+        updated_at TEXT DEFAULT (datetime('now'))
+      );
+
+      -- Anti-topics (learned exclusions) — queried by get_context
+      CREATE TABLE IF NOT EXISTS anti_topics (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        topic TEXT NOT NULL UNIQUE,
+        rejection_count INTEGER DEFAULT 0,
+        confidence REAL DEFAULT 0.0,
+        auto_detected INTEGER DEFAULT 1,
+        user_confirmed INTEGER DEFAULT 0,
+        first_rejection TEXT DEFAULT (datetime('now')),
+        last_rejection TEXT DEFAULT (datetime('now')),
+        created_at TEXT DEFAULT (datetime('now')),
+        updated_at TEXT DEFAULT (datetime('now'))
+      );
+
+      -- Interactions — queried by record_feedback, developer_dna, knowledge_gaps
+      CREATE TABLE IF NOT EXISTS interactions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        source_item_id INTEGER,
+        item_id INTEGER,
+        action TEXT,
+        action_type TEXT,
+        action_data TEXT,
+        item_topics TEXT,
+        item_source TEXT,
+        signal_strength REAL DEFAULT 0.5,
+        timestamp TEXT DEFAULT (datetime('now'))
+      );
+      CREATE INDEX IF NOT EXISTS idx_interactions_timestamp ON interactions(timestamp);
+      CREATE INDEX IF NOT EXISTS idx_interactions_item ON interactions(source_item_id);
+
+      -- Project dependencies — queried by project_health, tech_radar, developer_dna, knowledge_gaps
+      CREATE TABLE IF NOT EXISTS project_dependencies (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        project_path TEXT NOT NULL,
+        manifest_type TEXT NOT NULL,
+        package_name TEXT NOT NULL,
+        version TEXT,
+        is_dev INTEGER DEFAULT 0,
+        language TEXT NOT NULL,
+        last_scanned TEXT NOT NULL DEFAULT (datetime('now')),
+        UNIQUE(project_path, package_name)
+      );
+      CREATE INDEX IF NOT EXISTS idx_deps_package ON project_dependencies(package_name);
+      CREATE INDEX IF NOT EXISTS idx_deps_project ON project_dependencies(project_path);
+
+      -- Developer decisions — queried by tech_radar, decision_memory
+      CREATE TABLE IF NOT EXISTS developer_decisions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        decision_type TEXT NOT NULL,
+        subject TEXT NOT NULL,
+        decision TEXT NOT NULL,
+        rationale TEXT,
+        alternatives_rejected TEXT DEFAULT '[]',
+        context_tags TEXT DEFAULT '[]',
+        confidence REAL NOT NULL DEFAULT 0.8,
+        status TEXT NOT NULL DEFAULT 'active',
+        superseded_by INTEGER,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+      CREATE INDEX IF NOT EXISTS idx_decisions_type ON developer_decisions(decision_type);
+      CREATE INDEX IF NOT EXISTS idx_decisions_subject ON developer_decisions(subject);
+
+      -- Temporal events — queried by signal_chains, semantic_shifts, trend_analysis
+      CREATE TABLE IF NOT EXISTS temporal_events (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        event_type TEXT NOT NULL,
+        subject TEXT NOT NULL,
+        data JSON NOT NULL,
+        embedding BLOB,
+        source_item_id INTEGER,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        expires_at TEXT
+      );
+      CREATE INDEX IF NOT EXISTS idx_temporal_type_time ON temporal_events(event_type, created_at);
+
+      -- Item relationships — queried by reverse_mentions, topic_connections
+      CREATE TABLE IF NOT EXISTS item_relationships (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        source_item_id INTEGER NOT NULL,
+        related_item_id INTEGER NOT NULL,
+        relationship_type TEXT NOT NULL,
+        strength REAL DEFAULT 1.0,
+        metadata JSON,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        UNIQUE(source_item_id, related_item_id, relationship_type)
+      );
+
+      -- Agent memory — queried by agent_memory, agent_session_brief
+      CREATE TABLE IF NOT EXISTS agent_memory (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        session_id TEXT NOT NULL,
+        agent_type TEXT NOT NULL,
+        memory_type TEXT NOT NULL,
+        subject TEXT NOT NULL,
+        content TEXT NOT NULL,
+        context_tags TEXT DEFAULT '[]',
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        expires_at TEXT,
+        promoted_to_decision_id INTEGER
+      );
+      CREATE INDEX IF NOT EXISTS idx_agent_memory_type ON agent_memory(memory_type);
+      CREATE INDEX IF NOT EXISTS idx_agent_memory_session ON agent_memory(session_id);
+
+      -- Source health — queried by source_health diagnostic
+      CREATE TABLE IF NOT EXISTS source_health (
+        source_type TEXT PRIMARY KEY,
+        status TEXT NOT NULL DEFAULT 'unknown',
+        last_success TEXT,
+        last_error TEXT,
+        error_count INTEGER NOT NULL DEFAULT 0,
+        consecutive_failures INTEGER NOT NULL DEFAULT 0,
+        items_fetched INTEGER NOT NULL DEFAULT 0,
+        response_time_ms INTEGER NOT NULL DEFAULT 0,
+        checked_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+
+      -- Sources registry
+      CREATE TABLE IF NOT EXISTS sources (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        source_type TEXT NOT NULL UNIQUE,
+        name TEXT NOT NULL,
+        enabled INTEGER NOT NULL DEFAULT 1,
+        config TEXT,
+        last_fetch TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+    `);
+  }
+
+  /**
+   * Populate the standalone database from a project scan result.
+   * Inserts detected tech, dependencies, and topics so MCP tools return useful data.
+   */
+  populateFromScan(scan: ProjectScanResult): void {
+    const insertTech = this.db.prepare(
+      "INSERT OR IGNORE INTO detected_tech (name, category, confidence, source) VALUES (?, ?, ?, ?)",
+    );
+    const insertTopic = this.db.prepare(
+      "INSERT OR IGNORE INTO active_topics (topic, weight, confidence, source) VALUES (?, ?, ?, ?)",
+    );
+    const insertDep = this.db.prepare(
+      "INSERT OR IGNORE INTO project_dependencies (project_path, manifest_type, package_name, version, is_dev, language) VALUES (?, ?, ?, ?, ?, ?)",
+    );
+    const insertInterest = this.db.prepare(
+      "INSERT OR IGNORE INTO explicit_interests (topic, weight, source) VALUES (?, ?, ?)",
+    );
+    const insertTechStack = this.db.prepare(
+      "INSERT OR IGNORE INTO tech_stack (technology) VALUES (?)",
+    );
+
+    // Run all inserts in a single transaction for speed
+    const populate = this.db.transaction(() => {
+      // Languages -> detected_tech + tech_stack + active_topics
+      for (const lang of scan.languages) {
+        insertTech.run(lang, "language", 0.95, "project_scan");
+        insertTechStack.run(lang);
+        insertTopic.run(lang, 0.8, 0.9, "project_scan");
+      }
+
+      // Frameworks -> detected_tech + tech_stack + active_topics
+      for (const fw of scan.frameworks) {
+        insertTech.run(fw, "framework", 0.85, "project_scan");
+        insertTechStack.run(fw);
+        insertTopic.run(fw, 0.7, 0.85, "project_scan");
+      }
+
+      // Determine primary ecosystem for dependency labeling.
+      // For multi-language projects, we use the primary ecosystem;
+      // this is a simplification — the desktop app's ACE engine handles
+      // per-manifest tracking more precisely.
+      const ecosystem = scan.languages.includes("typescript") || scan.languages.includes("javascript")
+        ? "npm"
+        : scan.languages.includes("rust")
+          ? "rust"
+          : scan.languages.includes("python")
+            ? "python"
+            : scan.languages.includes("go")
+              ? "go"
+              : "unknown";
+
+      const manifestType = ecosystem === "rust"
+        ? "Cargo.toml"
+        : ecosystem === "python"
+          ? "pyproject.toml"
+          : ecosystem === "go"
+            ? "go.mod"
+            : "package.json";
+
+      // Production dependencies
+      for (const dep of scan.dependencies) {
+        insertDep.run(scan.projectPath, manifestType, dep, null, 0, ecosystem);
+      }
+
+      // Dev dependencies
+      for (const dep of scan.devDependencies) {
+        insertDep.run(scan.projectPath, manifestType, dep, null, 1, ecosystem);
+      }
+
+      // Topics -> active_topics + explicit_interests (so get_context returns them)
+      for (const topic of scan.topics) {
+        insertTopic.run(topic, 0.7, 0.8, "project_scan");
+        insertInterest.run(topic, 0.8, "project_scan");
+      }
+    });
+
+    populate();
   }
 
   /**

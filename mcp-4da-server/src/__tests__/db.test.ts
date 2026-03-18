@@ -117,15 +117,15 @@ function createTestDatabase(): FourDADatabase {
 // =============================================================================
 
 describe("FourDADatabase.validateDatabase", () => {
-  it("returns invalid with clear error for a missing file", () => {
+  it("returns standalone flag with message for a missing file", () => {
     const result = FourDADatabase.validateDatabase(
       "/tmp/nonexistent-4da-test-db-" + Date.now() + ".db",
     );
 
     expect(result.valid).toBe(false);
+    expect(result.standalone).toBe(true);
     expect(result.error).toBeDefined();
-    expect(result.error).toContain("not found");
-    expect(result.error).toContain("FOURDA_DB_PATH");
+    expect(result.error).toContain("Standalone mode");
     expect(result.tables).toBeUndefined();
   });
 
