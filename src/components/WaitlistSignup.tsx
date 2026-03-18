@@ -6,56 +6,68 @@ interface WaitlistSignupProps {
   inline?: boolean;
 }
 
-const TIER_INFO = {
+const TIER_CONFIG = {
   team: {
     name: 'Team',
     price: '$29/seat/mo',
-    tagline: 'Collective developer intelligence — your team sees what no individual can.',
+    annual: '$249/seat/yr',
+    tagline: 'Your team already tracks the same ecosystems. 4DA Team turns that overlap into a multiplier.',
+    value: 'Shared signal detection, collective blind spot elimination, coordinated response to critical events.',
+    icon: (
+      <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+        <circle cx="7" cy="7" r="3" stroke="currentColor" strokeWidth="1.5"/>
+        <circle cx="13" cy="7" r="3" stroke="currentColor" strokeWidth="1.5"/>
+        <circle cx="10" cy="13" r="3" stroke="currentColor" strokeWidth="1.5"/>
+      </svg>
+    ),
     features: [
-      'Shared signal detection across seats',
-      'Team blind spot analysis',
-      'Bus factor warnings',
-      'Collective tech radar',
-      'Shared decision journal',
-      'Encrypted metadata relay',
+      { text: 'Shared signal detection across all seats', detail: 'When 2+ developers detect the same CVE, confidence multiplies' },
+      { text: 'Team blind spot analysis', detail: 'Topics no one on the team monitors — but should' },
+      { text: 'Bus factor warnings', detail: 'Tech known by only one person flagged as risk' },
+      { text: 'Collective tech radar', detail: 'Aggregated adoption signals from every seat' },
+      { text: 'Shared decision journal', detail: 'Architecture decisions tracked with evidence' },
+      { text: 'Encrypted metadata relay', detail: 'E2E encrypted — relay cannot read your data' },
     ],
   },
   enterprise: {
     name: 'Enterprise',
-    price: 'Custom',
-    tagline: 'Organizational intelligence with the compliance your security team requires.',
+    price: 'From $22/seat/mo',
+    annual: '25+ seats, annual',
+    tagline: 'Same app your developers already love. Now with the trust your security team requires.',
+    value: 'No server to audit. No data to breach. No cloud to secure. Privacy by architecture.',
+    icon: (
+      <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+        <rect x="3" y="3" width="14" height="14" rx="2" stroke="currentColor" strokeWidth="1.5"/>
+        <path d="M3 8h14M8 8v9" stroke="currentColor" strokeWidth="1.5"/>
+      </svg>
+    ),
     features: [
-      'Everything in Team',
-      'SSO / SAML license activation',
-      'SCIM directory sync',
-      'Audit logging (exportable)',
-      'Multi-team organization view',
-      'Cross-team signal correlation',
-      'Webhook integrations (Slack, Teams, PagerDuty)',
-      'Priority support SLA',
+      { text: 'Everything in Team', detail: null },
+      { text: 'SSO license activation', detail: 'Okta, Azure AD, Google Workspace via SAML/OIDC' },
+      { text: 'SCIM directory sync', detail: 'Auto-provision seats when employees join, revoke when they leave' },
+      { text: 'Audit logging', detail: 'Structured actions, exportable CSV/JSON, configurable retention' },
+      { text: 'Multi-team organizations', detail: 'Cross-team signal correlation — org-wide intelligence' },
+      { text: 'Webhook integrations', detail: 'Slack, Teams, PagerDuty with HMAC-signed payloads' },
+      { text: 'Procurement documentation', detail: 'Security whitepaper, DPA, vendor risk assessment — pre-filled' },
+      { text: 'Priority support SLA', detail: '1-business-day response, dedicated channel' },
     ],
   },
 };
 
-/**
- * WaitlistSignup — captures interest for Team and Enterprise tiers.
- *
- * Stores signups locally (privacy-first — no external service needed at launch).
- * When Team/Enterprise tiers activate, these contacts are the first to know.
- *
- * Can be rendered inline (in settings) or as a modal overlay.
- */
 const WaitlistSignup = memo(function WaitlistSignup({
   tier,
   onClose,
   inline = false,
 }: WaitlistSignupProps) {
-  const info = TIER_INFO[tier];
+  const config = TIER_CONFIG[tier];
   const [email, setEmail] = useState('');
+  const [name, setName] = useState('');
   const [teamSize, setTeamSize] = useState('');
   const [company, setCompany] = useState('');
+  const [role, setRole] = useState('');
   const [submitted, setSubmitted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [expandedFeature, setExpandedFeature] = useState<number | null>(null);
 
   const handleSubmit = useCallback(
     async (e: React.FormEvent) => {
@@ -64,179 +76,231 @@ const WaitlistSignup = memo(function WaitlistSignup({
 
       setSubmitting(true);
       try {
-        // Store locally — privacy-first, no external API
         const entry = {
           tier,
           email: email.trim(),
+          name: name.trim() || null,
           team_size: teamSize.trim() || null,
           company: company.trim() || null,
+          role: role.trim() || null,
           signed_up_at: new Date().toISOString(),
+          source: 'in-app',
         };
 
-        // Persist to localStorage for now — will migrate to DB when tiers activate
-        const existing = JSON.parse(
-          localStorage.getItem('4da_waitlist') || '[]',
+        const existing = JSON.parse(localStorage.getItem('4da_waitlist') || '[]');
+        // Prevent duplicate entries for same email + tier
+        const isDuplicate = existing.some(
+          (e: { email: string; tier: string }) => e.email === entry.email && e.tier === entry.tier,
         );
-        existing.push(entry);
-        localStorage.setItem('4da_waitlist', JSON.stringify(existing));
-
+        if (!isDuplicate) {
+          existing.push(entry);
+          localStorage.setItem('4da_waitlist', JSON.stringify(existing));
+        }
         setSubmitted(true);
       } finally {
         setSubmitting(false);
       }
     },
-    [email, teamSize, company, tier],
+    [email, name, teamSize, company, role, tier],
   );
 
-  const containerClass = inline
-    ? ''
-    : 'fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm';
-
-  const cardClass = inline
-    ? 'rounded-lg border border-[#2A2A2A] bg-[#141414] overflow-hidden'
-    : 'w-full max-w-md rounded-lg border border-[#2A2A2A] bg-[#141414] shadow-2xl overflow-hidden';
-
+  // ---- Success State ----
   if (submitted) {
     return (
-      <div className={containerClass}>
-        <div className={cardClass}>
-          <div className="p-8 text-center">
-            <div className="w-12 h-12 mx-auto mb-4 rounded-full bg-[#22C55E]/10 flex items-center justify-center">
-              <svg
-                className="w-6 h-6 text-[#22C55E]"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M5 13l4 4L19 7"
-                />
+      <WaitlistContainer inline={inline}>
+        <div className="max-w-md w-full rounded-xl border border-[#2A2A2A] bg-[#141414] shadow-2xl overflow-hidden">
+          <div className="px-8 py-10 text-center">
+            <div className="w-14 h-14 mx-auto mb-5 rounded-full bg-[#22C55E]/10 flex items-center justify-center">
+              <svg className="w-7 h-7 text-[#22C55E]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
               </svg>
             </div>
-            <h3 className="text-lg font-semibold text-white mb-2">
+            <h3 className="text-xl font-semibold text-white mb-2">
               You&apos;re on the list
             </h3>
-            <p className="text-sm text-[#A0A0A0] mb-4">
-              We&apos;ll notify you when {info.name} is available. You&apos;ll
-              be among the first to access it.
+            <p className="text-sm text-[#A0A0A0] leading-relaxed mb-6">
+              We&apos;ll reach out when 4DA {config.name} is ready.
+              <br />
+              You&apos;ll be among the first to experience it.
             </p>
+            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-[#1F1F1F] border border-[#2A2A2A]">
+              <div className="w-2 h-2 rounded-full bg-[#22C55E] animate-pulse" />
+              <span className="text-xs text-[#A0A0A0]">
+                Position secured for {config.name} early access
+              </span>
+            </div>
             {onClose && (
               <button
                 onClick={onClose}
-                className="text-sm text-[#8A8A8A] hover:text-white transition-colors"
+                className="block mx-auto mt-6 text-sm text-[#8A8A8A] hover:text-white transition-colors"
               >
-                Close
+                Continue using 4DA
               </button>
             )}
           </div>
         </div>
-      </div>
+      </WaitlistContainer>
     );
   }
 
+  // ---- Main Form ----
   return (
-    <div className={containerClass}>
-      <div className={cardClass}>
+    <WaitlistContainer inline={inline}>
+      <div className="max-w-lg w-full rounded-xl border border-[#2A2A2A] bg-[#141414] shadow-2xl overflow-hidden">
         {/* Header */}
-        <div className="px-6 py-5 border-b border-[#2A2A2A]">
-          <div className="flex items-center justify-between">
-            <div>
-              <div className="flex items-center gap-2">
-                <h3 className="text-base font-semibold text-white">
-                  4DA {info.name}
-                </h3>
-                <span className="text-xs px-2 py-0.5 rounded-full bg-[#D4AF37]/10 text-[#D4AF37] font-medium">
+        <div className="relative px-6 pt-6 pb-5">
+          {onClose && (
+            <button
+              onClick={onClose}
+              className="absolute top-4 right-4 p-1 text-[#8A8A8A] hover:text-white transition-colors rounded-lg hover:bg-white/5"
+              aria-label="Close"
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          )}
+
+          <div className="flex items-start gap-3">
+            <div className="w-10 h-10 rounded-lg bg-[#D4AF37]/10 flex items-center justify-center text-[#D4AF37] shrink-0 mt-0.5">
+              {config.icon}
+            </div>
+            <div className="pr-6">
+              <div className="flex items-center gap-2.5">
+                <h2 className="text-lg font-semibold text-white">4DA {config.name}</h2>
+                <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#D4AF37]/10 text-[#D4AF37] font-semibold uppercase tracking-wider">
                   Coming Soon
                 </span>
               </div>
-              <p className="text-xs text-[#8A8A8A] mt-1">{info.price}</p>
+              <p className="text-xs text-[#8A8A8A] mt-0.5">
+                {config.price} &middot; {config.annual}
+              </p>
             </div>
-            {onClose && (
-              <button
-                onClick={onClose}
-                className="text-[#8A8A8A] hover:text-white transition-colors"
-                aria-label="Close"
-              >
-                <svg
-                  className="w-5 h-5"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M6 18L18 6M6 6l12 12"
-                  />
-                </svg>
-              </button>
-            )}
           </div>
-          <p className="text-sm text-[#A0A0A0] mt-3">{info.tagline}</p>
+
+          <p className="text-[13px] text-[#A0A0A0] mt-4 leading-relaxed">
+            {config.tagline}
+          </p>
+          <p className="text-xs text-[#8A8A8A] mt-2 italic">
+            {config.value}
+          </p>
         </div>
 
         {/* Features */}
-        <div className="px-6 py-4 border-b border-[#2A2A2A]">
-          <ul className="space-y-2">
-            {info.features.map((feature) => (
-              <li
-                key={feature}
-                className="flex items-start gap-2 text-sm text-[#A0A0A0]"
-              >
-                <span className="text-[#22C55E] mt-0.5 shrink-0">+</span>
-                {feature}
+        <div className="px-6 py-4 border-t border-[#1F1F1F] bg-[#0F0F0F]">
+          <p className="text-[10px] text-[#8A8A8A] uppercase tracking-wider font-medium mb-3">
+            What&apos;s included
+          </p>
+          <ul className="space-y-1">
+            {config.features.map((feature, i) => (
+              <li key={i}>
+                <button
+                  type="button"
+                  onClick={() => setExpandedFeature(expandedFeature === i ? null : i)}
+                  className="w-full flex items-start gap-2.5 py-1.5 text-left group"
+                >
+                  <span className="text-[#22C55E] text-xs mt-0.5 shrink-0 font-mono">+</span>
+                  <span className="text-[13px] text-[#C0C0C0] group-hover:text-white transition-colors">
+                    {feature.text}
+                  </span>
+                </button>
+                {expandedFeature === i && feature.detail && (
+                  <p className="ml-5 pb-2 text-xs text-[#8A8A8A] leading-relaxed">
+                    {feature.detail}
+                  </p>
+                )}
               </li>
             ))}
           </ul>
         </div>
 
         {/* Form */}
-        <form onSubmit={handleSubmit} className="px-6 py-5 space-y-3">
-          <div>
+        <form onSubmit={handleSubmit} className="px-6 py-5 border-t border-[#1F1F1F]">
+          <p className="text-[10px] text-[#8A8A8A] uppercase tracking-wider font-medium mb-3">
+            Get early access
+          </p>
+
+          <div className="space-y-2.5">
             <input
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              placeholder="Work email"
+              placeholder="Work email *"
               required
-              className="w-full text-sm px-3 py-2 rounded bg-[#1F1F1F] border border-[#2A2A2A] text-white placeholder:text-[#8A8A8A]/50 focus:outline-none focus:border-[#8A8A8A] transition-colors"
+              autoComplete="email"
+              className="w-full text-sm px-3.5 py-2.5 rounded-lg bg-[#1F1F1F] border border-[#2A2A2A] text-white placeholder:text-[#666] focus:outline-none focus:border-[#D4AF37]/40 focus:ring-1 focus:ring-[#D4AF37]/20 transition-all"
             />
+            <div className="flex gap-2.5">
+              <input
+                type="text"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="Your name"
+                autoComplete="name"
+                className="w-1/2 text-sm px-3.5 py-2.5 rounded-lg bg-[#1F1F1F] border border-[#2A2A2A] text-white placeholder:text-[#666] focus:outline-none focus:border-[#D4AF37]/40 focus:ring-1 focus:ring-[#D4AF37]/20 transition-all"
+              />
+              <input
+                type="text"
+                value={teamSize}
+                onChange={(e) => setTeamSize(e.target.value)}
+                placeholder="Team size"
+                className="w-1/2 text-sm px-3.5 py-2.5 rounded-lg bg-[#1F1F1F] border border-[#2A2A2A] text-white placeholder:text-[#666] focus:outline-none focus:border-[#D4AF37]/40 focus:ring-1 focus:ring-[#D4AF37]/20 transition-all"
+              />
+            </div>
+            <div className="flex gap-2.5">
+              <input
+                type="text"
+                value={company}
+                onChange={(e) => setCompany(e.target.value)}
+                placeholder="Company"
+                autoComplete="organization"
+                className="w-1/2 text-sm px-3.5 py-2.5 rounded-lg bg-[#1F1F1F] border border-[#2A2A2A] text-white placeholder:text-[#666] focus:outline-none focus:border-[#D4AF37]/40 focus:ring-1 focus:ring-[#D4AF37]/20 transition-all"
+              />
+              <input
+                type="text"
+                value={role}
+                onChange={(e) => setRole(e.target.value)}
+                placeholder="Role (e.g. Eng Manager)"
+                className="w-1/2 text-sm px-3.5 py-2.5 rounded-lg bg-[#1F1F1F] border border-[#2A2A2A] text-white placeholder:text-[#666] focus:outline-none focus:border-[#D4AF37]/40 focus:ring-1 focus:ring-[#D4AF37]/20 transition-all"
+              />
+            </div>
           </div>
-          <div className="flex gap-3">
-            <input
-              type="text"
-              value={teamSize}
-              onChange={(e) => setTeamSize(e.target.value)}
-              placeholder="Team size"
-              className="w-1/2 text-sm px-3 py-2 rounded bg-[#1F1F1F] border border-[#2A2A2A] text-white placeholder:text-[#8A8A8A]/50 focus:outline-none focus:border-[#8A8A8A] transition-colors"
-            />
-            <input
-              type="text"
-              value={company}
-              onChange={(e) => setCompany(e.target.value)}
-              placeholder="Company (optional)"
-              className="w-1/2 text-sm px-3 py-2 rounded bg-[#1F1F1F] border border-[#2A2A2A] text-white placeholder:text-[#8A8A8A]/50 focus:outline-none focus:border-[#8A8A8A] transition-colors"
-            />
-          </div>
+
           <button
             type="submit"
             disabled={submitting || !email.trim()}
-            className="w-full text-sm font-medium px-4 py-2.5 rounded bg-white text-[#0A0A0A] hover:bg-white/90 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            className="w-full mt-4 text-sm font-semibold px-4 py-3 rounded-lg bg-white text-[#0A0A0A] hover:bg-[#F0F0F0] active:bg-[#E0E0E0] transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
           >
-            {submitting ? 'Joining...' : `Join ${info.name} Waitlist`}
+            {submitting ? 'Joining...' : `Join the ${config.name} Waitlist`}
           </button>
-          <p className="text-[10px] text-[#8A8A8A] text-center">
-            Stored locally. We&apos;ll only contact you when {info.name}{' '}
-            launches.
+
+          <p className="mt-3 text-[10px] text-[#666] text-center leading-relaxed">
+            Stored on your device only. No data sent externally.
+            <br />
+            We&apos;ll reach out when {config.name} launches.
           </p>
         </form>
       </div>
-    </div>
+    </WaitlistContainer>
   );
 });
+
+/** Container handles modal vs inline rendering */
+function WaitlistContainer({
+  inline,
+  children,
+}: {
+  inline: boolean;
+  children: React.ReactNode;
+}) {
+  if (inline) {
+    return <div className="flex justify-center">{children}</div>;
+  }
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm animate-in fade-in duration-200">
+      {children}
+    </div>
+  );
+}
 
 export default WaitlistSignup;
