@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Turing Pattern — Visual Test</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #050505; overflow: hidden; }
+  canvas { display: block; width: 100vw; height: 100vh; }
+  #status {
+    position: fixed; top: 16px; left: 16px; z-index: 10;
+    color: #D4AF37; font: 13px 'JetBrains Mono', monospace;
+    background: rgba(0,0,0,0.7); padding: 8px 14px; border-radius: 6px;
+    border: 1px solid rgba(212,175,55,0.2);
+  }
+  #error { color: #EF4444; position: fixed; top: 50%; left: 50%; transform: translate(-50%,-50%);
+    font: 16px sans-serif; text-align: center; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="status">Initializing WebGPU...</div>
+<div id="error"></div>
+<script>
+(async () => {
+  const status = document.getElementById('status');
+  const error = document.getElementById('error');
+  const canvas = document.getElementById('c');
+
+  if (!navigator.gpu) {
+    error.textContent = 'WebGPU not available in this browser.';
+    status.textContent = 'FAILED';
+    return;
+  }
+
+  const adapter = await navigator.gpu.requestAdapter();
+  if (!adapter) { error.textContent = 'No GPU adapter found.'; return; }
+
+  const device = await adapter.requestDevice();
+  const context = canvas.getContext('webgpu');
+  const format = navigator.gpu.getPreferredCanvasFormat();
+  context.configure({ device, format, alphaMode: 'opaque' });
+
+  const dpr = Math.min(devicePixelRatio, 2);
+  canvas.width = Math.round(innerWidth * dpr);
+  canvas.height = Math.round(innerHeight * dpr);
+
+  status.textContent = 'WebGPU OK — compiling shaders...';
+
+  const W = 384, H = 384;
+  const UNIFORM = 0x0040, STORAGE = 0x0080, COPY_DST = 0x0008;
+
+  const COMPUTE = `
+struct Params { feed:f32, kill:f32, da:f32, db:f32, w:u32, h:u32, };
+@group(0) @binding(0) var<uniform> p: Params;
+@group(0) @binding(1) var<storage, read> src: array<vec2<f32>>;
+@group(0) @binding(2) var<storage, read_write> dst: array<vec2<f32>>;
+fn idx(x:i32, y:i32) -> u32 {
+  return u32(((y+i32(p.h))%i32(p.h))) * p.w + u32(((x+i32(p.w))%i32(p.w)));
+}
+@compute @workgroup_size(8,8)
+fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
+  if (gid.x>=p.w||gid.y>=p.h){return;}
+  let x=i32(gid.x); let y=i32(gid.y);
+  let i=idx(x,y); let ab=src[i]; let a=ab.x; let b=ab.y;
+  let lap = src[idx(x-1,y-1)]*0.05+src[idx(x,y-1)]*0.2+src[idx(x+1,y-1)]*0.05
+    +src[idx(x-1,y)]*0.2+src[idx(x,y)]*-1.0+src[idx(x+1,y)]*0.2
+    +src[idx(x-1,y+1)]*0.05+src[idx(x,y+1)]*0.2+src[idx(x+1,y+1)]*0.05;
+  let abb=a*b*b;
+  dst[i]=clamp(vec2<f32>(a+p.da*lap.x-abb+p.feed*(1.0-a), b+p.db*lap.y+abb-(p.feed+p.kill)*b),vec2<f32>(0.0),vec2<f32>(1.0));
+}`;
+
+  const RENDER = `
+struct Params { w:u32, h:u32, frame:f32, _p:f32, res:vec2<f32>, };
+@group(0) @binding(0) var<uniform> p: Params;
+@group(0) @binding(1) var<storage, read> field: array<vec2<f32>>;
+struct V { @builtin(position) pos:vec4<f32>, @location(0) uv:vec2<f32>, };
+@vertex fn vs(@builtin(vertex_index) vid:u32)->V {
+  var ps=array<vec2<f32>,3>(vec2(-1.0,-1.0),vec2(3.0,-1.0),vec2(-1.0,3.0));
+  var o:V; o.pos=vec4(ps[vid],0.0,1.0); o.uv=ps[vid]*0.5+0.5; return o;
+}
+fn sample_b(uv:vec2<f32>)->f32 {
+  let fx=uv.x*f32(p.w)-0.5; let fy=uv.y*f32(p.h)-0.5;
+  let x0=i32(floor(fx)); let y0=i32(floor(fy));
+  let sx=fx-floor(fx); let sy=fy-floor(fy);
+  let w=i32(p.w); let h=i32(p.h);
+  let ix0=((x0%w)+w)%w; let iy0=((y0%h)+h)%h;
+  let ix1=(((x0+1)%w)+w)%w; let iy1=(((y0+1)%h)+h)%h;
+  return mix(mix(field[u32(iy0*w+ix0)].y,field[u32(iy0*w+ix1)].y,sx),
+             mix(field[u32(iy1*w+ix0)].y,field[u32(iy1*w+ix1)].y,sx),sy);
+}
+@fragment fn fs(input:V)->@location(0) vec4<f32> {
+  let ac=p.res.x/p.res.y;
+  var uv=input.uv;
+  if(ac>1.0){uv.x=0.5+(uv.x-0.5)/ac;}else{uv.y=0.5+(uv.y-0.5)*ac;}
+  if(uv.x<0.0||uv.x>1.0||uv.y<0.0||uv.y>1.0){return vec4(0.02,0.012,0.008,1.0);}
+  let b=sample_b(vec2(uv.x,1.0-uv.y));
+  let t=smoothstep(0.05,0.5,b);
+  let cd=vec3(0.02,0.012,0.008); let cm=vec3(0.45,0.25,0.05);
+  let cg=vec3(0.85,0.7,0.22); let ch=vec3(1.0,0.92,0.6);
+  var col=cd;
+  col=mix(col,cm,smoothstep(0.0,0.25,t));
+  col=mix(col,cg,smoothstep(0.2,0.6,t));
+  col=mix(col,ch,smoothstep(0.7,1.0,t));
+  let glow=smoothstep(0.4,0.8,t)*0.15;
+  col+=vec3(glow,glow*0.7,glow*0.15);
+  let center=(input.uv-0.5)*2.0;
+  col*=1.0-smoothstep(0.3,1.4,length(center));
+  col*=clamp(p.frame/120.0,0.0,1.0);
+  return vec4(col,1.0);
+}`;
+
+  const computePipeline = device.createComputePipeline({
+    layout: 'auto', compute: { module: device.createShaderModule({ code: COMPUTE }), entryPoint: 'main' },
+  });
+  const renderPipeline = device.createRenderPipeline({
+    layout: 'auto',
+    vertex: { module: device.createShaderModule({ code: RENDER }), entryPoint: 'vs' },
+    fragment: { module: device.createShaderModule({ code: RENDER }), entryPoint: 'fs', targets: [{ format }] },
+    primitive: { topology: 'triangle-list' },
+  });
+
+  const paramBuf = device.createBuffer({ size: 24, usage: UNIFORM|COPY_DST });
+  const renderParamBuf = device.createBuffer({ size: 24, usage: UNIFORM|COPY_DST });
+  const cellCount = W * H;
+  const bufA = device.createBuffer({ size: cellCount*8, usage: STORAGE|COPY_DST });
+  const bufB = device.createBuffer({ size: cellCount*8, usage: STORAGE });
+
+  // Init field
+  const init = new Float32Array(cellCount * 2);
+  for (let i = 0; i < cellCount; i++) init[i*2] = 1.0;
+  const cx = W/2, cy = H/2;
+  const seed = (sx,sy,r) => {
+    for (let dy=-r;dy<=r;dy++) for (let dx=-r;dx<=r;dx++) {
+      if (dx*dx+dy*dy>r*r) continue;
+      const px=((sx+dx)%W+W)%W, py=((sy+dy)%H+H)%H;
+      init[(py*W+px)*2+1]=1.0;
+    }
+  };
+  for (let s=0;s<30;s++) {
+    const a=(s/30)*Math.PI*2+Math.random()*0.2;
+    const r=W*0.18+Math.random()*W*0.12;
+    seed(Math.floor(cx+Math.cos(a)*r),Math.floor(cy+Math.sin(a)*r),3);
+  }
+  seed(Math.floor(cx),Math.floor(cy),5);
+  for (let s=0;s<8;s++) seed(Math.floor(Math.random()*W),Math.floor(Math.random()*H),2);
+  device.queue.writeBuffer(bufA, 0, init);
+
+  status.textContent = 'Running — feed=0.037, kill=0.06, grid=384';
+
+  let curA = bufA, curB = bufB, fc = 0;
+  const feed = 0.037, kill = 0.06, steps = 8;
+
+  function frame() {
+    const p = new ArrayBuffer(24);
+    const f = new Float32Array(p), u = new Uint32Array(p);
+    f[0]=feed; f[1]=kill; f[2]=1.0; f[3]=0.5; u[4]=W; u[5]=H;
+    device.queue.writeBuffer(paramBuf, 0, p);
+    const rp = new ArrayBuffer(24);
+    new Uint32Array(rp).set([W,H]);
+    new Float32Array(rp,8).set([fc,0,canvas.width,canvas.height]);
+    device.queue.writeBuffer(renderParamBuf, 0, rp);
+
+    const enc = device.createCommandEncoder();
+    for (let s=0;s<steps;s++) {
+      const bg = device.createBindGroup({
+        layout: computePipeline.getBindGroupLayout(0),
+        entries:[{binding:0,resource:{buffer:paramBuf}},{binding:1,resource:{buffer:curA}},{binding:2,resource:{buffer:curB}}],
+      });
+      const pass = enc.beginComputePass();
+      pass.setPipeline(computePipeline); pass.setBindGroup(0,bg);
+      pass.dispatchWorkgroups(Math.ceil(W/8),Math.ceil(H/8)); pass.end();
+      [curA,curB]=[curB,curA];
+    }
+    const rbg = device.createBindGroup({
+      layout: renderPipeline.getBindGroupLayout(0),
+      entries:[{binding:0,resource:{buffer:renderParamBuf}},{binding:1,resource:{buffer:curA}}],
+    });
+    const rpass = enc.beginRenderPass({
+      colorAttachments:[{view:context.getCurrentTexture().createView(),loadOp:'clear',storeOp:'store',clearValue:{r:0.02,g:0.012,b:0.008,a:1}}],
+    });
+    rpass.setPipeline(renderPipeline); rpass.setBindGroup(0,rbg); rpass.draw(3); rpass.end();
+    device.queue.submit([enc.finish()]);
+    fc++;
+    if (fc % 60 === 0) status.textContent = `Frame ${fc} — ${(fc*steps)} iterations`;
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>

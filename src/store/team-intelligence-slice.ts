@@ -2,6 +2,38 @@ import type { StateCreator } from 'zustand';
 import { cmd } from '../lib/commands';
 import type { AppStore } from './types';
 
+// -- Team Intelligence Profile Types --
+
+export interface TeamProfile {
+  team_id: string;
+  member_count: number;
+  collective_stack: TeamTechEntry[];
+  stack_coverage: number;
+  blind_spots: TeamBlindSpot[];
+  overlap_zones: OverlapZone[];
+  unique_strengths: UniqueStrength[];
+  generated_at: string;
+}
+
+export interface TeamTechEntry { tech: string; members: string[]; team_confidence: number; }
+export interface TeamBlindSpot { topic: string; related_to: string[]; severity: string; }
+export interface OverlapZone { topic: string; members: string[]; member_count: number; }
+export interface UniqueStrength { tech: string; sole_expert: string; risk_level: string; }
+
+export interface TeamSignalSummary {
+  signal_id: string;
+  chain_name: string;
+  priority: string;
+  tech_topics: string[];
+  detected_by: MemberDetection[];
+  team_confidence: number;
+  first_detected_at: string;
+  suggested_action: string;
+  resolved: boolean;
+}
+
+export interface MemberDetection { client_id: string; display_name: string; detected_at: string; }
+
 // -- Team Decision Types --
 
 export interface TeamDecision {
@@ -113,6 +145,20 @@ export interface TeamIntelligenceSlice {
   shareSource: (sourceType: string, configSummary: string, recommendation: string) => Promise<void>;
   upvoteSource: (sourceId: string) => Promise<void>;
   removeSharedSource: (sourceId: string) => Promise<void>;
+
+  // Team Intelligence Profile
+  teamProfile: TeamProfile | null;
+  teamProfileLoading: boolean;
+
+  // Team Signal Summary
+  teamSignalSummary: TeamSignalSummary[];
+  teamSignalSummaryLoading: boolean;
+
+  // Actions: Intelligence
+  loadTeamProfile: () => Promise<void>;
+  loadTeamSignalSummary: () => Promise<void>;
+  refreshBlindSpots: () => Promise<void>;
+  refreshBusFactorReport: () => Promise<void>;
 }
 
 // Mirror the TeamSignal type from commands.ts
@@ -142,6 +188,10 @@ export const createTeamIntelligenceSlice: StateCreator<AppStore, [], [], TeamInt
   notificationsLoading: false,
   sharedSources: [],
   sharedSourcesLoading: false,
+  teamProfile: null,
+  teamProfileLoading: false,
+  teamSignalSummary: [],
+  teamSignalSummaryLoading: false,
 
   // ---- Signals ----
   loadTeamSignals: async (includeResolved = false) => {
@@ -296,6 +346,49 @@ export const createTeamIntelligenceSlice: StateCreator<AppStore, [], [], TeamInt
       await cmd('remove_team_source', { sourceId });
       set(state => ({
         sharedSources: state.sharedSources.filter(s => s.id !== sourceId),
+      }));
+    } catch { /* silent */ }
+  },
+
+  // ---- Intelligence ----
+  loadTeamProfile: async () => {
+    set({ teamProfileLoading: true });
+    try {
+      const profile = await cmd('get_team_profile_cmd');
+      set({ teamProfile: profile, teamProfileLoading: false });
+    } catch {
+      set({ teamProfileLoading: false });
+    }
+  },
+
+  loadTeamSignalSummary: async () => {
+    set({ teamSignalSummaryLoading: true });
+    try {
+      const summary = await cmd('get_team_signal_summary_cmd');
+      set({ teamSignalSummary: summary, teamSignalSummaryLoading: false });
+    } catch {
+      set({ teamSignalSummaryLoading: false });
+    }
+  },
+
+  refreshBlindSpots: async () => {
+    try {
+      const blindSpots = await cmd('get_team_blind_spots_cmd');
+      set(state => ({
+        teamProfile: state.teamProfile
+          ? { ...state.teamProfile, blind_spots: blindSpots }
+          : null,
+      }));
+    } catch { /* silent */ }
+  },
+
+  refreshBusFactorReport: async () => {
+    try {
+      const strengths = await cmd('get_bus_factor_report_cmd');
+      set(state => ({
+        teamProfile: state.teamProfile
+          ? { ...state.teamProfile, unique_strengths: strengths }
+          : null,
       }));
     } catch { /* silent */ }
   },

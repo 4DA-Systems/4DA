@@ -23,6 +23,8 @@ use serde::{Deserialize, Serialize};
 use tracing::{info, warn};
 use ts_rs::TS;
 
+use crate::sso_xml;
+
 // ============================================================================
 // Schema
 // ============================================================================
@@ -159,6 +161,7 @@ fn build_saml_login_url(config: &SsoConfig) -> crate::error::Result<String> {
 ///
 /// Constructs a standard OAuth 2.0 / OIDC authorization request with
 /// openid, email, and profile scopes. The state parameter provides CSRF protection.
+/// Returns `(auth_url, state, nonce)` so the caller can persist state/nonce.
 fn build_oidc_login_url(config: &SsoConfig) -> crate::error::Result<String> {
     let client_id = config
         .client_id
@@ -182,35 +185,76 @@ fn build_oidc_login_url(config: &SsoConfig) -> crate::error::Result<String> {
     Ok(auth_url)
 }
 
+/// Persist OIDC state/nonce for callback validation.
+///
+/// Called from `initiate_sso_login` after building the URL. Stores the state
+/// and nonce in `sso_pending_auth` with a 10-minute TTL.
+fn persist_oidc_state(conn: &rusqlite::Connection, auth_url: &str) -> crate::error::Result<()> {
+    // Extract state from the URL
+    let state = auth_url
+        .split("state=")
+        .nth(1)
+        .and_then(|s| s.split('&').next())
+        .ok_or("Failed to extract state from OIDC URL")?;
+    let nonce = auth_url
+        .split("nonce=")
+        .nth(1)
+        .and_then(|s| s.split('&').next())
+        .ok_or("Failed to extract nonce from OIDC URL")?;
+
+    let pending_id = uuid::Uuid::new_v4().to_string();
+    let expires = (chrono::Utc::now() + chrono::Duration::minutes(10))
+        .format("%Y-%m-%dT%H:%M:%SZ")
+        .to_string();
+
+    conn.execute(
+        "INSERT INTO sso_pending_auth (id, state, nonce, provider_type, expires_at)
+         VALUES (?1, ?2, ?3, 'oidc', ?4)",
+        params![pending_id, state, nonce, expires],
+    )?;
+    // Clean expired entries
+    let _ = conn.execute(
+        "DELETE FROM sso_pending_auth WHERE expires_at < datetime('now')",
+        [],
+    );
+
+    Ok(())
+}
+
 /// Parse a SAML Response assertion and extract identity claims.
 ///
 /// Extracts NameID (email), display name, and group attributes from
-/// the base64-encoded SAML Response XML.
-///
-/// NOTE: This performs structural validation only. Cryptographic signature
-/// verification of the SAML assertion requires an XML-DSig library and is
-/// marked with TODO below.
-fn parse_saml_assertion(assertion_b64: &str) -> crate::error::Result<SsoSession> {
+/// the base64-encoded SAML Response XML. Verifies XML digital signature
+/// if an IdP certificate is configured.
+fn parse_saml_assertion(
+    assertion_b64: &str,
+    config: &SsoConfig,
+) -> crate::error::Result<SsoSession> {
     let decoded_bytes = base64::engine::general_purpose::STANDARD
         .decode(assertion_b64)
         .map_err(|e| format!("Invalid base64 in SAML assertion: {e}"))?;
     let xml = String::from_utf8(decoded_bytes)
         .map_err(|e| format!("SAML assertion is not valid UTF-8: {e}"))?;
 
-    // TODO: Verify XML digital signature against the IdP certificate.
-    // This requires an XML-DSig verification library (e.g., xmlsec1 bindings
-    // or a pure-Rust implementation). For now, we extract claims structurally.
-    // Production deployments MUST enable signature verification.
+    // Verify XML digital signature if certificate is configured
+    if let Some(ref cert_pem) = config.certificate {
+        crate::sso_crypto::verify_saml_signature(&xml, cert_pem)?;
+        info!(target: "4da::sso", "SAML assertion signature verified");
+    } else {
+        warn!(target: "4da::sso",
+            "No IdP certificate configured — SAML assertion accepted without signature verification. \
+             Configure a certificate for production use.");
+    }
 
     // Extract NameID (email)
-    let email =
-        extract_xml_element(&xml, "NameID").ok_or("SAML assertion missing NameID element")?;
+    let email = sso_xml::extract_xml_element(&xml, "NameID")
+        .ok_or("SAML assertion missing NameID element")?;
 
     // Extract display name from Attribute elements
-    let display_name = extract_saml_attribute(&xml, "displayName")
-        .or_else(|| extract_saml_attribute(&xml, "cn"))
+    let display_name = sso_xml::extract_saml_attribute(&xml, "displayName")
+        .or_else(|| sso_xml::extract_saml_attribute(&xml, "cn"))
         .or_else(|| {
-            extract_saml_attribute(
+            sso_xml::extract_saml_attribute(
                 &xml,
                 "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/name",
             )
@@ -218,13 +262,16 @@ fn parse_saml_assertion(assertion_b64: &str) -> crate::error::Result<SsoSession>
         .unwrap_or_else(|| email.clone());
 
     // Extract group memberships
-    let groups = extract_saml_attribute_values(&xml, "memberOf")
-        .or_else(|| extract_saml_attribute_values(&xml, "groups"))
-        .or_else(|| extract_saml_attribute_values(&xml, "http://schemas.xmlsoap.org/claims/Group"))
+    let groups = sso_xml::extract_saml_attribute_values(&xml, "memberOf")
+        .or_else(|| sso_xml::extract_saml_attribute_values(&xml, "groups"))
+        .or_else(|| {
+            sso_xml::extract_saml_attribute_values(&xml, "http://schemas.xmlsoap.org/claims/Group")
+        })
         .unwrap_or_default();
 
     // Check NotOnOrAfter for session expiry
-    let expires_at = extract_xml_attribute_value(&xml, "SubjectConfirmationData", "NotOnOrAfter");
+    let expires_at =
+        sso_xml::extract_xml_attribute_value(&xml, "SubjectConfirmationData", "NotOnOrAfter");
 
     // Validate NotOnOrAfter hasn't passed
     if let Some(ref expiry) = expires_at {
@@ -249,12 +296,13 @@ fn parse_saml_assertion(assertion_b64: &str) -> crate::error::Result<SsoSession>
 
 /// Parse an OIDC token response and extract identity claims.
 ///
-/// Decodes the JWT ID token (without signature verification — see TODO)
-/// and extracts standard OIDC claims: sub/email, name, groups.
-///
-/// NOTE: Full JWT signature verification requires the IdP's JWKS endpoint.
-/// Marked with TODO below for production hardening.
-fn parse_oidc_token(token_json: &str) -> crate::error::Result<SsoSession> {
+/// Verifies the JWT ID token signature against the IdP's JWKS keys,
+/// then extracts standard OIDC claims: sub/email, name, groups.
+async fn parse_oidc_token(
+    token_json: &str,
+    expected_nonce: Option<&str>,
+    config: &SsoConfig,
+) -> crate::error::Result<SsoSession> {
     let token_data: serde_json::Value = serde_json::from_str(token_json)
         .map_err(|e| format!("Invalid OIDC token response: {e}"))?;
 
@@ -262,22 +310,15 @@ fn parse_oidc_token(token_json: &str) -> crate::error::Result<SsoSession> {
         .as_str()
         .ok_or("OIDC response missing id_token")?;
 
-    // Decode JWT payload (middle segment)
-    let parts: Vec<&str> = id_token.split('.').collect();
-    if parts.len() != 3 {
-        return Err("Invalid JWT format: expected 3 dot-separated segments".into());
-    }
+    // Verify JWT signature and extract validated claims
+    let issuer = config.issuer.as_deref().ok_or("OIDC requires issuer URL")?;
+    let client_id = config
+        .client_id
+        .as_deref()
+        .ok_or("OIDC requires client_id")?;
 
-    // TODO: Verify JWT signature against IdP's JWKS keys.
-    // This requires fetching {issuer}/.well-known/openid-configuration,
-    // extracting the jwks_uri, and verifying the RS256/ES256 signature.
-    // Production deployments MUST enable signature verification.
-
-    let payload_bytes = base64::engine::general_purpose::URL_SAFE_NO_PAD
-        .decode(parts[1])
-        .map_err(|e| format!("Invalid base64 in JWT payload: {e}"))?;
-    let claims: serde_json::Value = serde_json::from_slice(&payload_bytes)
-        .map_err(|e| format!("Invalid JSON in JWT payload: {e}"))?;
+    let claims =
+        crate::sso_crypto::verify_oidc_token(id_token, issuer, client_id, expected_nonce).await?;
 
     let email = claims["email"]
         .as_str()
@@ -307,14 +348,6 @@ fn parse_oidc_token(token_json: &str) -> crate::error::Result<SsoSession> {
             .unwrap_or_default()
     });
 
-    // Validate expiry
-    if let Some(exp) = claims["exp"].as_i64() {
-        let now = chrono::Utc::now().timestamp();
-        if exp < now {
-            return Err("OIDC token has expired".into());
-        }
-    }
-
     let now = chrono::Utc::now().format("%Y-%m-%dT%H:%M:%SZ").to_string();
 
     Ok(SsoSession {
@@ -325,133 +358,6 @@ fn parse_oidc_token(token_json: &str) -> crate::error::Result<SsoSession> {
         expires_at,
         provider_type: "oidc".to_string(),
     })
-}
-
-// ============================================================================
-// XML parsing helpers (lightweight, no external XML crate dependency)
-// ============================================================================
-
-/// Extract the text content of the first occurrence of an XML element.
-///
-/// Simple regex-free parser for well-formed XML. Finds `<tag...>content</tag>`
-/// or `<ns:tag...>content</ns:tag>` patterns.
-fn extract_xml_element(xml: &str, local_name: &str) -> Option<String> {
-    // Match both <localName> and <ns:localName>
-    let patterns = [format!("<{local_name}"), format!(":{local_name}")];
-
-    for pattern in &patterns {
-        if let Some(start_pos) = xml.find(pattern.as_str()) {
-            // Find the end of the opening tag
-            let after_tag = &xml[start_pos..];
-            let close_bracket = after_tag.find('>')?;
-            let content_start = start_pos + close_bracket + 1;
-
-            // Find the next closing tag that contains our element name.
-            // We search for "</" first, then check if the tag name matches.
-            let remaining = &xml[content_start..];
-            let mut search_offset = 0;
-            while let Some(close_pos) = remaining[search_offset..].find("</") {
-                let abs_close = search_offset + close_pos;
-                let tag_rest = &remaining[abs_close + 2..]; // after "</"
-                                                            // Check if this closing tag ends with our local_name
-                                                            // e.g. "saml:NameID>" or "NameID>"
-                if let Some(gt_pos) = tag_rest.find('>') {
-                    let tag_name = &tag_rest[..gt_pos];
-                    if tag_name == local_name || tag_name.ends_with(&format!(":{local_name}")) {
-                        let content = &remaining[..abs_close];
-                        return Some(content.trim().to_string());
-                    }
-                }
-                search_offset = abs_close + 2;
-            }
-        }
-    }
-
-    None
-}
-
-/// Extract a SAML Attribute value by its Name attribute.
-fn extract_saml_attribute(xml: &str, attr_name: &str) -> Option<String> {
-    // Look for: <saml:Attribute Name="attr_name"...><saml:AttributeValue>value</...>
-    let name_pattern = format!("Name=\"{attr_name}\"");
-    let pos = xml.find(&name_pattern)?;
-    let after = &xml[pos..];
-
-    // Find the AttributeValue within this Attribute element
-    let av_start = after.find("AttributeValue")?;
-    let av_content_start = after[av_start..].find('>')? + av_start + 1;
-    let av_content_end = after[av_content_start..].find("</")? + av_content_start;
-
-    let value = &after[av_content_start..av_content_end];
-    Some(value.trim().to_string())
-}
-
-/// Extract multiple SAML Attribute values (for group memberships).
-fn extract_saml_attribute_values(xml: &str, attr_name: &str) -> Option<Vec<String>> {
-    let name_pattern = format!("Name=\"{attr_name}\"");
-    let pos = xml.find(&name_pattern)?;
-
-    // Find the closing </saml:Attribute> or </Attribute>
-    let after = &xml[pos..];
-    let attr_end = after.find("</").and_then(|p| {
-        after[p..]
-            .find("Attribute>")
-            .map(|q| p + q + "Attribute>".len())
-    })?;
-
-    let attr_block = &after[..attr_end];
-    let mut values = Vec::new();
-    let mut search_from = 0;
-
-    while let Some(av_start) = attr_block[search_from..].find("AttributeValue") {
-        let abs_start = search_from + av_start;
-        if let Some(content_start) = attr_block[abs_start..].find('>') {
-            let cs = abs_start + content_start + 1;
-            if let Some(content_end) = attr_block[cs..].find("</") {
-                let value = attr_block[cs..cs + content_end].trim();
-                if !value.is_empty() {
-                    values.push(value.to_string());
-                }
-                search_from = cs + content_end;
-            } else {
-                break;
-            }
-        } else {
-            break;
-        }
-    }
-
-    if values.is_empty() {
-        None
-    } else {
-        Some(values)
-    }
-}
-
-/// Extract a named XML attribute from a specific element.
-///
-/// Finds `<element_name ... attr_name="value" ...>` and returns the value.
-fn extract_xml_attribute_value(xml: &str, element_name: &str, attr_name: &str) -> Option<String> {
-    let elem_pattern = format!("<{element_name}");
-    // Also check namespaced variant
-    let patterns = [elem_pattern.clone(), format!(":{element_name}")];
-
-    for pattern in &patterns {
-        if let Some(pos) = xml.find(pattern.as_str()) {
-            let after = &xml[pos..];
-            let tag_end = after.find('>')?;
-            let tag = &after[..tag_end];
-
-            let attr_pattern = format!("{attr_name}=\"");
-            if let Some(attr_pos) = tag.find(&attr_pattern) {
-                let value_start = attr_pos + attr_pattern.len();
-                let value_end = tag[value_start..].find('"')? + value_start;
-                return Some(tag[value_start..value_end].to_string());
-            }
-        }
-    }
-
-    None
 }
 
 // ============================================================================
@@ -584,7 +490,12 @@ pub async fn initiate_sso_login() -> crate::error::Result<String> {
 
     let login_url = match config.provider_type.as_str() {
         "saml" => build_saml_login_url(&config)?,
-        "oidc" => build_oidc_login_url(&config)?,
+        "oidc" => {
+            let url = build_oidc_login_url(&config)?;
+            // Persist state/nonce for callback validation
+            persist_oidc_state(&conn, &url)?;
+            url
+        }
         other => return Err(format!("Unsupported SSO provider type: {other}").into()),
     };
 
@@ -651,24 +562,61 @@ pub async fn get_sso_session() -> crate::error::Result<Option<SsoSession>> {
 /// - For SAML: the base64-encoded SAMLResponse from the IdP POST
 /// - For OIDC: the JSON token response from the token exchange
 ///
+/// The `state` parameter is required for OIDC flows (CSRF protection).
+///
 /// Returns the created session on success.
 #[tauri::command]
-pub async fn validate_sso_callback(assertion: String) -> crate::error::Result<SsoSession> {
+pub async fn validate_sso_callback(
+    assertion: String,
+    state: Option<String>,
+) -> crate::error::Result<SsoSession> {
     let conn = crate::state::open_db_connection()?;
     ensure_sso_tables(&conn)?;
 
-    // Determine provider type from config
-    let provider_type: String = conn
+    // Read full config for crypto verification
+    let config: SsoConfig = conn
         .query_row(
-            "SELECT provider_type FROM sso_config WHERE id = 1",
+            "SELECT provider_type, idp_url, entity_id, certificate, client_id, issuer, enabled
+             FROM sso_config WHERE id = 1",
             [],
-            |row| row.get(0),
+            |row| {
+                Ok(SsoConfig {
+                    provider_type: row.get(0)?,
+                    idp_url: row.get(1)?,
+                    entity_id: row.get(2)?,
+                    certificate: row.get(3)?,
+                    client_id: row.get(4)?,
+                    issuer: row.get(5)?,
+                    enabled: row.get::<_, i32>(6)? != 0,
+                })
+            },
         )
         .map_err(|_| "SSO not configured")?;
 
-    let session = match provider_type.as_str() {
-        "saml" => parse_saml_assertion(&assertion)?,
-        "oidc" => parse_oidc_token(&assertion)?,
+    let session = match config.provider_type.as_str() {
+        "saml" => parse_saml_assertion(&assertion, &config)?,
+        "oidc" => {
+            // Validate state and retrieve nonce
+            let state_val = state.ok_or("OIDC callback missing state parameter")?;
+            let (nonce, pending_id) = conn
+                .query_row(
+                    "SELECT nonce, id FROM sso_pending_auth
+                     WHERE state = ?1 AND expires_at > datetime('now')",
+                    params![state_val],
+                    |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)),
+                )
+                .map_err(|_| {
+                    "SSO session expired or invalid state. Please try signing in again."
+                })?;
+
+            // Delete used entry (single-use)
+            conn.execute(
+                "DELETE FROM sso_pending_auth WHERE id = ?1",
+                params![pending_id],
+            )?;
+
+            parse_oidc_token(&assertion, Some(&nonce), &config).await?
+        }
         other => return Err(format!("Unsupported provider type: {other}").into()),
     };
 
@@ -981,44 +929,6 @@ mod tests {
     }
 
     #[test]
-    fn test_extract_xml_element() {
-        let xml = r#"<saml:NameID Format="email">alice@example.com</saml:NameID>"#;
-        let result = extract_xml_element(xml, "NameID");
-        assert_eq!(result, Some("alice@example.com".to_string()));
-    }
-
-    #[test]
-    fn test_extract_xml_element_no_namespace() {
-        let xml = r#"<NameID>bob@example.com</NameID>"#;
-        let result = extract_xml_element(xml, "NameID");
-        assert_eq!(result, Some("bob@example.com".to_string()));
-    }
-
-    #[test]
-    fn test_extract_xml_element_missing() {
-        let xml = r#"<Issuer>com.4da.app</Issuer>"#;
-        let result = extract_xml_element(xml, "NameID");
-        assert_eq!(result, None);
-    }
-
-    #[test]
-    fn test_extract_saml_attribute() {
-        let xml = r#"
-        <saml:Attribute Name="displayName">
-            <saml:AttributeValue>Alice Smith</saml:AttributeValue>
-        </saml:Attribute>"#;
-        let result = extract_saml_attribute(xml, "displayName");
-        assert_eq!(result, Some("Alice Smith".to_string()));
-    }
-
-    #[test]
-    fn test_extract_xml_attribute_value() {
-        let xml = r#"<samlp:SubjectConfirmationData NotOnOrAfter="2026-03-14T00:00:00Z" Recipient="http://localhost:4445"/>"#;
-        let result = extract_xml_attribute_value(xml, "SubjectConfirmationData", "NotOnOrAfter");
-        assert_eq!(result, Some("2026-03-14T00:00:00Z".to_string()));
-    }
-
-    #[test]
     fn test_parse_saml_assertion_basic() {
         let saml_response = r#"<samlp:Response>
             <saml:Assertion>
@@ -1039,8 +949,19 @@ mod tests {
             </saml:Assertion>
         </samlp:Response>"#;
 
+        // Config without certificate — skips signature verification
+        let config = SsoConfig {
+            provider_type: "saml".to_string(),
+            idp_url: "https://idp.example.com/sso".to_string(),
+            entity_id: "com.4da.app".to_string(),
+            certificate: None,
+            client_id: None,
+            issuer: None,
+            enabled: true,
+        };
+
         let encoded = base64::engine::general_purpose::STANDARD.encode(saml_response.as_bytes());
-        let session = parse_saml_assertion(&encoded).unwrap();
+        let session = parse_saml_assertion(&encoded, &config).unwrap();
 
         assert_eq!(session.email, "alice@corp.com");
         assert_eq!(session.display_name, "Alice Engineer");
@@ -1062,91 +983,101 @@ mod tests {
             </saml:Assertion>
         </samlp:Response>"#;
 
+        let config = SsoConfig {
+            provider_type: "saml".to_string(),
+            idp_url: "https://idp.example.com/sso".to_string(),
+            entity_id: "com.4da.app".to_string(),
+            certificate: None,
+            client_id: None,
+            issuer: None,
+            enabled: true,
+        };
+
         let encoded = base64::engine::general_purpose::STANDARD.encode(saml_response.as_bytes());
-        let result = parse_saml_assertion(&encoded);
+        let result = parse_saml_assertion(&encoded, &config);
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("expired"));
     }
 
     #[test]
-    fn test_parse_oidc_token() {
-        // Build a minimal JWT: header.payload.signature
-        let header = base64::engine::general_purpose::URL_SAFE_NO_PAD
-            .encode(r#"{"alg":"RS256","typ":"JWT"}"#.as_bytes());
-        let payload = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(
-            serde_json::json!({
-                "sub": "user-123",
-                "email": "bob@corp.com",
-                "name": "Bob Developer",
-                "groups": ["engineering", "team-leads"],
-                "exp": 4102444800_i64  // 2099-12-31
-            })
-            .to_string()
-            .as_bytes(),
+    fn test_pending_auth_roundtrip() {
+        let conn = setup_db();
+        // Create sso_pending_auth table
+        conn.execute_batch(
+            "CREATE TABLE IF NOT EXISTS sso_pending_auth (
+                id TEXT PRIMARY KEY,
+                state TEXT NOT NULL UNIQUE,
+                nonce TEXT NOT NULL,
+                provider_type TEXT NOT NULL,
+                created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                expires_at TEXT NOT NULL
+            );",
+        )
+        .unwrap();
+
+        let state = "test-state-123";
+        let nonce = "test-nonce-456";
+        let expires = "2099-12-31T23:59:59Z";
+
+        conn.execute(
+            "INSERT INTO sso_pending_auth (id, state, nonce, provider_type, expires_at)
+             VALUES ('pending-1', ?1, ?2, 'oidc', ?3)",
+            params![state, nonce, expires],
+        )
+        .unwrap();
+
+        // Look up by state
+        let found_nonce: String = conn.query_row(
+            "SELECT nonce FROM sso_pending_auth WHERE state = ?1 AND expires_at > datetime('now')",
+            params![state],
+            |row| row.get(0),
+        ).unwrap();
+        assert_eq!(found_nonce, nonce);
+
+        // Delete (single-use)
+        conn.execute(
+            "DELETE FROM sso_pending_auth WHERE state = ?1",
+            params![state],
+        )
+        .unwrap();
+
+        // Should not find it again
+        let result = conn.query_row(
+            "SELECT nonce FROM sso_pending_auth WHERE state = ?1",
+            params![state],
+            |row| row.get::<_, String>(0),
         );
-        let fake_sig = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(b"fake-signature");
-        let jwt = format!("{header}.{payload}.{fake_sig}");
-
-        let token_response = serde_json::json!({
-            "id_token": jwt,
-            "access_token": "at-xxx",
-            "token_type": "Bearer",
-        })
-        .to_string();
-
-        let session = parse_oidc_token(&token_response).unwrap();
-        assert_eq!(session.email, "bob@corp.com");
-        assert_eq!(session.display_name, "Bob Developer");
-        assert_eq!(session.groups, vec!["engineering", "team-leads"]);
-        assert_eq!(session.provider_type, "oidc");
-        assert!(session.expires_at.is_some());
+        assert!(result.is_err());
     }
 
     #[test]
-    fn test_parse_oidc_token_expired() {
-        let header = base64::engine::general_purpose::URL_SAFE_NO_PAD
-            .encode(r#"{"alg":"RS256"}"#.as_bytes());
-        let payload = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(
-            serde_json::json!({
-                "sub": "user-123",
-                "email": "alice@corp.com",
-                "exp": 946684800_i64  // 2000-01-01 (expired)
-            })
-            .to_string()
-            .as_bytes(),
+    fn test_pending_auth_expired_rejected() {
+        let conn = setup_db();
+        conn.execute_batch(
+            "CREATE TABLE IF NOT EXISTS sso_pending_auth (
+                id TEXT PRIMARY KEY,
+                state TEXT NOT NULL UNIQUE,
+                nonce TEXT NOT NULL,
+                provider_type TEXT NOT NULL,
+                created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                expires_at TEXT NOT NULL
+            );",
+        )
+        .unwrap();
+
+        // Insert with past expiry
+        conn.execute(
+            "INSERT INTO sso_pending_auth (id, state, nonce, provider_type, expires_at)
+             VALUES ('pending-2', 'expired-state', 'old-nonce', 'oidc', '2020-01-01T00:00:00Z')",
+            [],
+        )
+        .unwrap();
+
+        let result = conn.query_row(
+            "SELECT nonce FROM sso_pending_auth WHERE state = 'expired-state' AND expires_at > datetime('now')",
+            [],
+            |row| row.get::<_, String>(0),
         );
-        let fake_sig = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(b"sig");
-        let jwt = format!("{header}.{payload}.{fake_sig}");
-
-        let token_response = serde_json::json!({
-            "id_token": jwt,
-        })
-        .to_string();
-
-        let result = parse_oidc_token(&token_response);
-        assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("expired"));
-    }
-
-    #[test]
-    fn test_parse_oidc_token_invalid_jwt() {
-        let token_response = serde_json::json!({
-            "id_token": "not.a.valid-jwt.too-many-parts",
-        })
-        .to_string();
-
-        let result = parse_oidc_token(&token_response);
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn test_parse_oidc_token_missing_id_token() {
-        let token_response = serde_json::json!({
-            "access_token": "at-xxx",
-        })
-        .to_string();
-
-        let result = parse_oidc_token(&token_response);
-        assert!(result.is_err());
+        assert!(result.is_err(), "Should not find expired pending auth");
     }
 }
