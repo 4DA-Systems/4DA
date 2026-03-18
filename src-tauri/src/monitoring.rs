@@ -304,7 +304,9 @@ pub fn start_scheduler<R: Runtime>(app: AppHandle<R>, state: Arc<MonitoringState
                                     "Mini-autophagy cycle completed (first-time)"
                                 );
                                 if let Err(e) = app.emit("autophagy-cycle-complete", &cycle) {
-                                    tracing::warn!("Failed to emit 'autophagy-cycle-complete': {e}");
+                                    tracing::warn!(
+                                        "Failed to emit 'autophagy-cycle-complete': {e}"
+                                    );
                                 }
                             }
                             Err(e) => {

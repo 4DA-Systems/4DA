@@ -99,6 +99,12 @@ fourda-macros = { path = "fourda-macros" }
 ed25519-dalek = { version = "2.2.0", features = ["rand_core"] }
 tauri-plugin-deep-link = "2.4.7"
 
+# SSO cryptographic verification (enterprise feature)
+jsonwebtoken = { version = "9", optional = true }
+rsa = { version = "0.9", features = ["sha2"], optional = true }
+pkcs8 = { version = "0.10", features = ["pem"], optional = true }
+x509-cert = { version = "0.2", optional = true }
+
 # Team sync — E2E encrypted metadata relay (AD-023)
 chacha20poly1305 = "0.10"
 x25519-dalek = { version = "2", features = ["static_secrets"] }
@@ -150,7 +156,7 @@ generate-sim-fixtures = []
 experimental = []
 # Feature-gated command groups (ghost commands with zero frontend callers)
 team-sync = []       # Team Sync, Intelligence, Monitoring (AD-023) — 17 commands
-enterprise = []      # Audit, Webhooks, Organizations, Analytics — 15 commands
+enterprise = ["dep:jsonwebtoken", "dep:rsa", "dep:pkcs8", "dep:x509-cert"]      # Audit, Webhooks, Organizations, Analytics, SSO crypto — 15 commands
 game-engine = []     # GAME Engine state/achievements/streaks — 3 commands
 streets-execution = [] # STREETS command execution (not content) — 3 commands
 
