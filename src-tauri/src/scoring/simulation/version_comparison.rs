@@ -6,6 +6,8 @@
 //!   c. Enriched reality tests (full-fidelity per-persona)
 //!   d. Cross-version score stability
 
+use tracing::{debug, info};
+
 use super::corpus::corpus;
 use super::enrichment::{EnrichmentConfig, EnrichmentField};
 use super::metrics::SimMetrics;
@@ -58,8 +60,8 @@ fn run_persona_simulation(persona_idx: usize, ctx: &super::super::ScoringContext
 fn version_comparison_all_personas() {
     let personas = all_personas();
 
-    println!("\n=== V1 vs V2 COMPARISON (base personas) ===");
-    println!(
+    info!("\n=== V1 vs V2 COMPARISON (base personas) ===");
+    info!(
         "{:<20} {:>8} {:>8} {:>8} {:>8} {:>8} {:>8}",
         "Persona", "V1_P", "V1_R", "V1_F1", "V2_P", "V2_R", "V2_F1"
     );
@@ -71,7 +73,7 @@ fn version_comparison_all_personas() {
         let v1 = run_persona_versioned(pi, persona, PipelineVersion::V1);
         let v2 = run_persona_versioned(pi, persona, PipelineVersion::V2);
 
-        println!(
+        info!(
             "{:<20} {:>8.3} {:>8.3} {:>8.3} {:>8.3} {:>8.3} {:>8.3}",
             PERSONA_NAMES[pi],
             v1.precision(),
@@ -88,7 +90,7 @@ fn version_comparison_all_personas() {
 
     let v1_avg = v1_f1_sum / 9.0;
     let v2_avg = v2_f1_sum / 9.0;
-    println!("\nAverage F1: V1={v1_avg:.3} V2={v2_avg:.3}");
+    info!("\nAverage F1: V1={v1_avg:.3} V2={v2_avg:.3}");
 
     // V2 must not regress more than 5% vs V1 on average
     assert!(
@@ -112,13 +114,13 @@ fn enrichment_impact_per_signal() {
     let base_metrics = run_persona_simulation(persona_idx, base_ctx);
     let base_f1 = base_metrics.f1();
 
-    println!("\n=== ENRICHMENT IMPACT (rust_systems persona) ===");
-    println!(
+    info!("\n=== ENRICHMENT IMPACT (rust_systems persona) ===");
+    info!(
         "Base F1: {base_f1:.3} (P={:.3} R={:.3})",
         base_metrics.precision(),
         base_metrics.recall()
     );
-    println!(
+    info!(
         "{:<25} {:>8} {:>8} {:>8} {:>10}",
         "Signal", "P", "R", "F1", "Delta_F1"
     );
@@ -130,7 +132,7 @@ fn enrichment_impact_per_signal() {
         let enriched = super::enrichment::enrich_persona(fresh_base, &enrichments[0], &config);
         let m = run_persona_simulation(persona_idx, &enriched);
         let delta = m.f1() - base_f1;
-        println!(
+        info!(
             "{:<25} {:>8.3} {:>8.3} {:>8.3} {:>+10.3}",
             field.name(),
             m.precision(),
@@ -149,7 +151,7 @@ fn enrichment_impact_per_signal() {
 fn enriched_reality_rust_systems() {
     let personas = all_personas_enriched();
     let m = run_persona_simulation(0, &personas[0]);
-    println!("{}", m.format_report("enriched_rust_systems"));
+    info!("{}", m.format_report("enriched_rust_systems"));
     // Enriched thresholds: same or better than base (enrichment should not hurt)
     m.assert_quality("enriched_rust_systems", 0.45, 0.25, 0.35);
 }
@@ -158,7 +160,7 @@ fn enriched_reality_rust_systems() {
 fn enriched_reality_python_ml() {
     let personas = all_personas_enriched();
     let m = run_persona_simulation(1, &personas[1]);
-    println!("{}", m.format_report("enriched_python_ml"));
+    info!("{}", m.format_report("enriched_python_ml"));
     m.assert_quality("enriched_python_ml", 0.30, 0.15, 0.20);
 }
 
@@ -166,7 +168,7 @@ fn enriched_reality_python_ml() {
 fn enriched_reality_fullstack_ts() {
     let personas = all_personas_enriched();
     let m = run_persona_simulation(2, &personas[2]);
-    println!("{}", m.format_report("enriched_fullstack_ts"));
+    info!("{}", m.format_report("enriched_fullstack_ts"));
     m.assert_quality("enriched_fullstack_ts", 0.35, 0.30, 0.30);
 }
 
@@ -174,7 +176,7 @@ fn enriched_reality_fullstack_ts() {
 fn enriched_reality_devops_sre() {
     let personas = all_personas_enriched();
     let m = run_persona_simulation(3, &personas[3]);
-    println!("{}", m.format_report("enriched_devops_sre"));
+    info!("{}", m.format_report("enriched_devops_sre"));
     m.assert_quality("enriched_devops_sre", 0.55, 0.25, 0.35);
 }
 
@@ -182,7 +184,7 @@ fn enriched_reality_devops_sre() {
 fn enriched_reality_mobile_dev() {
     let personas = all_personas_enriched();
     let m = run_persona_simulation(4, &personas[4]);
-    println!("{}", m.format_report("enriched_mobile_dev"));
+    info!("{}", m.format_report("enriched_mobile_dev"));
     m.assert_quality("enriched_mobile_dev", 0.30, 0.20, 0.25);
 }
 
@@ -190,7 +192,7 @@ fn enriched_reality_mobile_dev() {
 fn enriched_reality_bootstrap() {
     let personas = all_personas_enriched();
     let m = run_persona_simulation(5, &personas[5]);
-    println!("{}", m.format_report("enriched_bootstrap"));
+    info!("{}", m.format_report("enriched_bootstrap"));
     // Bootstrap with minimal enrichment — expect similar to base
     m.assert_quality("enriched_bootstrap", 0.08, 0.10, 0.10);
 }
@@ -199,7 +201,7 @@ fn enriched_reality_bootstrap() {
 fn enriched_reality_power_user() {
     let personas = all_personas_enriched();
     let m = run_persona_simulation(6, &personas[6]);
-    println!("{}", m.format_report("enriched_power_user"));
+    info!("{}", m.format_report("enriched_power_user"));
     m.assert_quality("enriched_power_user", 0.50, 0.20, 0.30);
 }
 
@@ -207,7 +209,7 @@ fn enriched_reality_power_user() {
 fn enriched_reality_context_switcher() {
     let personas = all_personas_enriched();
     let m = run_persona_simulation(7, &personas[7]);
-    println!("{}", m.format_report("enriched_context_switcher"));
+    info!("{}", m.format_report("enriched_context_switcher"));
     m.assert_quality("enriched_context_switcher", 0.50, 0.20, 0.30);
 }
 
@@ -215,7 +217,7 @@ fn enriched_reality_context_switcher() {
 fn enriched_reality_niche_specialist() {
     let personas = all_personas_enriched();
     let m = run_persona_simulation(8, &personas[8]);
-    println!("{}", m.format_report("enriched_niche_specialist"));
+    info!("{}", m.format_report("enriched_niche_specialist"));
     // Enriched niche has aggressive anti-topics (javascript, python, java) and
     // exclusions (javascript, web development, career) that broadly match many
     // corpus items. This causes higher FP rate in the exclusion-counting logic.
@@ -228,17 +230,17 @@ fn enriched_reality_aggregate() {
     let personas = all_personas_enriched();
     let mut aggregate = SimMetrics::new();
 
-    println!("\n=== ENRICHED REALITY AGGREGATE ===");
+    info!("\n=== ENRICHED REALITY AGGREGATE ===");
     for (pi, persona) in personas.iter().enumerate() {
         let m = run_persona_simulation(pi, persona);
-        println!(
+        info!(
             "{}",
             m.format_report(&format!("enriched_{}", PERSONA_NAMES[pi]))
         );
         aggregate.merge(&m);
     }
 
-    println!("{}", aggregate.format_report("ENRICHED_AGGREGATE"));
+    info!("{}", aggregate.format_report("ENRICHED_AGGREGATE"));
     // Aggregate quality should stay reasonable with enrichment
     assert!(
         aggregate.f1() >= 0.30,
@@ -286,7 +288,7 @@ fn version_score_stability() {
         }
     }
 
-    println!("[version_stability] checked={total_checked} large_divergences={large_divergences}");
+    info!("[version_stability] checked={total_checked} large_divergences={large_divergences}");
 
     // Allow some divergence but not catastrophic
     let divergence_rate = if total_checked > 0 {

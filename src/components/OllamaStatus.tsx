@@ -133,8 +133,8 @@ export function OllamaStatus({ provider }: OllamaStatusProps) {
       await cmd('check_ollama_status', { baseUrl: null });
       // The backend ensure_models_available will handle pulling + warming
       // via ollama-status events, so we just need to trigger a re-check
-    } catch (err) {
-      console.debug('Ollama retry failed:', err);
+    } catch {
+      /* retry failed — status events will update UI */
     }
   };
 

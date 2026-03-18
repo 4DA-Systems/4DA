@@ -88,7 +88,7 @@ const SENSITIVE_KEYS: &[&str] = &[
 ];
 
 /// Recursively strip sensitive fields from a JSON value.
-fn strip_sensitive_fields(value: &mut JsonValue) {
+pub(crate) fn strip_sensitive_fields(value: &mut JsonValue) {
     match value {
         JsonValue::Object(map) => {
             let keys_to_remove: Vec<String> = map

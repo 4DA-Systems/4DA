@@ -105,15 +105,15 @@ impl TeamCrypto {
 
     /// Derive a shared secret with a peer using X25519 Diffie-Hellman,
     /// then expand it via HKDF into a usable encryption key.
-    pub fn derive_shared_key(&self, peer_public: &PublicKey) -> [u8; 32] {
+    pub fn derive_shared_key(&self, peer_public: &PublicKey) -> Result<[u8; 32]> {
         let shared_secret = self.our_private_key.diffie_hellman(peer_public);
 
         // Expand raw DH output via HKDF-SHA256
         let hk = Hkdf::<Sha256>::new(None, shared_secret.as_bytes());
         let mut okm = [0u8; 32];
         hk.expand(b"4da-team-sync-v1", &mut okm)
-            .expect("HKDF expand should not fail with 32-byte output");
-        okm
+            .map_err(|_| anyhow::anyhow!("HKDF expand failed for 32-byte output"))?;
+        Ok(okm)
     }
 
     /// Set the team-wide symmetric key (received from admin during join).
@@ -147,7 +147,7 @@ impl TeamCrypto {
         team_key: &[u8; 32],
         member_public: &PublicKey,
     ) -> Result<Vec<u8>> {
-        let shared = self.derive_shared_key(member_public);
+        let shared = self.derive_shared_key(member_public)?;
         encrypt_bytes(&shared, team_key)
     }
 
@@ -158,7 +158,7 @@ impl TeamCrypto {
         encrypted_team_key: &[u8],
         admin_public: &PublicKey,
     ) -> Result<()> {
-        let shared = self.derive_shared_key(admin_public);
+        let shared = self.derive_shared_key(admin_public)?;
         let decrypted = decrypt_bytes(&shared, encrypted_team_key)?;
 
         if decrypted.len() != 32 {
@@ -290,8 +290,8 @@ mod tests {
         let alice = TeamCrypto::generate();
         let bob = TeamCrypto::generate();
 
-        let alice_shared = alice.derive_shared_key(&bob.our_public_key);
-        let bob_shared = bob.derive_shared_key(&alice.our_public_key);
+        let alice_shared = alice.derive_shared_key(&bob.our_public_key).unwrap();
+        let bob_shared = bob.derive_shared_key(&alice.our_public_key).unwrap();
 
         assert_eq!(
             alice_shared, bob_shared,

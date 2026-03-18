@@ -234,7 +234,7 @@ pub fn get_model_info(model_id: &str) -> Option<ModelInfo> {
     let mut best: Option<(&str, &ModelInfo)> = None;
     for (key, info) in &registry.models {
         if key.to_lowercase().starts_with(&id_lower) {
-            if best.is_none() || key.len() < best.unwrap().0.len() {
+            if best.map_or(true, |b| key.len() < b.0.len()) {
                 best = Some((key.as_str(), info));
             }
         }
@@ -248,7 +248,7 @@ pub fn get_model_info(model_id: &str) -> Option<ModelInfo> {
     let mut best: Option<(&str, &ModelInfo)> = None;
     for (key, info) in &registry.models {
         if key.to_lowercase().contains(&id_lower) {
-            if best.is_none() || key.len() < best.unwrap().0.len() {
+            if best.map_or(true, |b| key.len() < b.0.len()) {
                 best = Some((key.as_str(), info));
             }
         }

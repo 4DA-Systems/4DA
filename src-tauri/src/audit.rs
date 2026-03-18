@@ -98,7 +98,14 @@ pub struct AuditLogParams<'a> {
 pub fn log_audit(params: &AuditLogParams<'_>) {
     let event_id = uuid::Uuid::new_v4().to_string();
 
-    let details_json = match params.details {
+    // Sanitize details before storing — strip API keys, tokens, secrets
+    let sanitized_details = params.details.map(|v| {
+        let mut clone = v.clone();
+        crate::data_export::strip_sensitive_fields(&mut clone);
+        clone
+    });
+
+    let details_json = match sanitized_details.as_ref() {
         Some(v) => match serde_json::to_string(v) {
             Ok(s) => Some(s),
             Err(e) => {

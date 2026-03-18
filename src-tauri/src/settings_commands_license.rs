@@ -1,6 +1,6 @@
 //! License, trial, context engine, and STREETS membership commands.
 
-use tracing::{debug, info};
+use tracing::{debug, info, warn};
 
 use crate::context_engine::{InteractionType, InterestSource};
 use crate::error::Result;
@@ -212,7 +212,9 @@ pub async fn validate_license() -> Result<serde_json::Value> {
         let settings = guard.get_mut();
         info!(target: "4da::license", old_tier = %current_tier, new_tier = %result.tier, "Tier updated after Keygen validation");
         settings.license.tier = result.tier.clone();
-        let _ = guard.save();
+        if let Err(e) = guard.save() {
+            warn!("Failed to save settings after license update: {e}");
+        }
     }
 
     Ok(serde_json::json!({
