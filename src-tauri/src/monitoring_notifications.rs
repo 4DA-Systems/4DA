@@ -11,6 +11,23 @@ use tracing::{info, warn};
 use crate::monitoring::{BatchedNotification, MonitoringState};
 
 // ============================================================================
+// Helpers
+// ============================================================================
+
+/// Truncate a string to at most `max_bytes` bytes without splitting a
+/// multi-byte UTF-8 character (which would panic on slice).
+fn truncate_safe(s: &str, max_bytes: usize) -> &str {
+    if s.len() <= max_bytes {
+        return s;
+    }
+    let mut end = max_bytes;
+    while end > 0 && !s.is_char_boundary(end) {
+        end -= 1;
+    }
+    &s[..end]
+}
+
+// ============================================================================
 // Signal Summary
 // ============================================================================
 
@@ -264,7 +281,7 @@ pub fn send_chain_prediction_notification<R: Runtime>(
 
     // Truncate forecast for notification body (OS limits ~200 chars)
     let body = if forecast.len() > 180 {
-        format!("{}...", &forecast[..177])
+        format!("{}...", truncate_safe(forecast, 177))
     } else {
         forecast.to_string()
     };
@@ -462,7 +479,7 @@ pub fn send_morning_briefing_notification<R: Runtime>(
 
     // Truncate for OS notification limits (~200 chars)
     let body = if body.len() > 200 {
-        format!("{}...", &body[..197])
+        format!("{}...", truncate_safe(&body, 197))
     } else {
         body
     };
