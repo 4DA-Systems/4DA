@@ -28,6 +28,7 @@ import { GuidedMissions } from './GuidedMissions';
 import { WisdomPulse } from './WisdomPulse';
 import { WeeklyIntelligenceSummary } from './WeeklyIntelligenceSummary';
 import { ContextualTip } from './ContextualTip';
+import IntelligenceReportCard from './IntelligenceReport';
 import { useLicense } from '../hooks/use-license';
 import { useBriefingDerived } from '../hooks/use-briefing-derived';
 import type { SourceRelevance } from '../types';
@@ -634,6 +635,9 @@ export const BriefingView = memo(function BriefingView() {
           {t('briefing.viewAllResults', { count: results.length })}
         </button>
       </div>
+
+      {/* Intelligence Report — project security & dependency overview */}
+      <IntelligenceReportCard />
 
       {/* Error display */}
       {briefing.error && (

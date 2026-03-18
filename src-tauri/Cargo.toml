@@ -94,6 +94,9 @@ zip = { version = "0.6", optional = true }        # ZIP archive extraction
 tar = { version = "0.4", optional = true }        # TAR archive extraction
 flate2 = { version = "1.0", optional = true }     # Gzip compression/decompression
 
+# Semantic version parsing (CVE version range matching)
+semver = "1"
+
 # Compile-time scoring macros
 fourda-macros = { path = "fourda-macros" }
 ed25519-dalek = { version = "2.2.0", features = ["rand_core"] }

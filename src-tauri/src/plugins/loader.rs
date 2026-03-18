@@ -153,7 +153,24 @@ pub fn execute_plugin(manifest: &PluginManifest, config: &PluginConfig) -> Resul
 
     debug!(target: "4da::plugins", name = %manifest.name, binary = %binary_path.display(), "Executing plugin");
 
-    let mut child = Command::new(&binary_path)
+    // Detect script extensions and prepend the appropriate interpreter.
+    // This lets plugins be written as .js (Node.js) or .py (Python) scripts
+    // without requiring platform-specific wrapper scripts.
+    let mut cmd = match binary_path.extension().and_then(|e| e.to_str()) {
+        Some("js" | "mjs") => {
+            let mut c = Command::new("node");
+            c.arg(&binary_path);
+            c
+        }
+        Some("py") => {
+            let mut c = Command::new("python");
+            c.arg(&binary_path);
+            c
+        }
+        _ => Command::new(&binary_path),
+    };
+
+    let mut child = cmd
         .stdin(std::process::Stdio::piped())
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped())
