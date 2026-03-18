@@ -1,4 +1,5 @@
-import { useState, useMemo, useCallback, memo } from 'react';
+import { useState, useMemo, useCallback, useEffect, memo } from 'react';
+import { cmd } from '../lib/commands';
 
 // ============================================================================
 // Types
@@ -15,58 +16,6 @@ interface SecurityAlert {
   description: string;
   resolvedAt?: string;
 }
-
-// ============================================================================
-// Mock Data
-// ============================================================================
-
-const INITIAL_ALERTS: SecurityAlert[] = [
-  {
-    id: 'sa-1',
-    cveId: 'CVE-2026-10421',
-    packageName: 'lodash',
-    severity: 'critical',
-    affectedProjects: 3,
-    description: 'Prototype pollution via crafted object in lodash.merge',
-  },
-  {
-    id: 'sa-2',
-    cveId: 'CVE-2026-08855',
-    packageName: 'xml2js',
-    severity: 'high',
-    affectedProjects: 1,
-    description: 'XML external entity injection when parsing untrusted input',
-  },
-  {
-    id: 'sa-3',
-    cveId: 'CVE-2026-07233',
-    packageName: 'semver',
-    severity: 'medium',
-    affectedProjects: 2,
-    description: 'ReDoS in semver range parsing with crafted version strings',
-  },
-];
-
-const INITIAL_RESOLVED: SecurityAlert[] = [
-  {
-    id: 'sa-r1',
-    cveId: 'CVE-2025-44102',
-    packageName: 'tar',
-    severity: 'high',
-    affectedProjects: 1,
-    description: 'Arbitrary file overwrite via symlink following',
-    resolvedAt: '2026-03-12',
-  },
-  {
-    id: 'sa-r2',
-    cveId: 'CVE-2025-38901',
-    packageName: 'node-fetch',
-    severity: 'medium',
-    affectedProjects: 2,
-    description: 'Header injection via carriage return in URL',
-    resolvedAt: '2026-03-05',
-  },
-];
 
 // ============================================================================
 // Color mapping
@@ -108,13 +57,98 @@ function SeverityCount({ severity, count }: { severity: Severity; count: number 
   );
 }
 
+function LoadingSkeleton() {
+  return (
+    <div className="bg-bg-secondary rounded-lg border border-border overflow-hidden">
+      <div className="px-5 py-4 border-b border-border">
+        <div className="h-4 bg-bg-tertiary rounded w-32 animate-pulse" />
+        <div className="h-3 bg-bg-tertiary rounded w-64 mt-2 animate-pulse" />
+      </div>
+      <div className="p-5 space-y-4">
+        <div className="grid grid-cols-4 gap-3">
+          {[1, 2, 3, 4].map(i => (
+            <div key={i} className="h-16 bg-bg-tertiary rounded-lg animate-pulse" />
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================================
+// Data fetching — attempts to load from decision windows (security_patch type)
+// Falls back to empty state when no dependency scanning is configured
+// ============================================================================
+
+function mapDecisionWindowsToAlerts(
+  windows: Array<{
+    id: number;
+    window_type: string;
+    title: string;
+    description: string;
+    urgency: number;
+    dependency: string | null;
+    status: string;
+    opened_at: string;
+  }>,
+): { active: SecurityAlert[]; resolved: SecurityAlert[] } {
+  const active: SecurityAlert[] = [];
+  const resolved: SecurityAlert[] = [];
+
+  const securityWindows = windows.filter(w => w.window_type === 'security_patch');
+
+  for (const w of securityWindows) {
+    const severity: Severity =
+      w.urgency >= 0.9 ? 'critical' :
+      w.urgency >= 0.7 ? 'high' :
+      w.urgency >= 0.4 ? 'medium' : 'low';
+
+    const alert: SecurityAlert = {
+      id: `dw-${w.id}`,
+      cveId: w.title.match(/CVE-\d{4}-\d+/)?.[0] ?? `SW-${w.id}`,
+      packageName: w.dependency ?? 'unknown',
+      severity,
+      affectedProjects: 1,
+      description: w.description,
+    };
+
+    if (w.status === 'acted' || w.status === 'closed') {
+      alert.resolvedAt = w.opened_at.slice(0, 10);
+      resolved.push(alert);
+    } else if (w.status === 'open') {
+      active.push(alert);
+    }
+  }
+
+  return { active, resolved };
+}
+
 // ============================================================================
 // SecurityDashboard
 // ============================================================================
 
 const SecurityDashboard = memo(function SecurityDashboard() {
-  const [activeAlerts, setActiveAlerts] = useState<SecurityAlert[]>(INITIAL_ALERTS);
-  const [resolvedAlerts, setResolvedAlerts] = useState<SecurityAlert[]>(INITIAL_RESOLVED);
+  const [activeAlerts, setActiveAlerts] = useState<SecurityAlert[]>([]);
+  const [resolvedAlerts, setResolvedAlerts] = useState<SecurityAlert[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [configured, setConfigured] = useState(true);
+
+  useEffect(() => {
+    setLoading(true);
+    cmd('get_decision_windows')
+      .then(windows => {
+        const { active, resolved } = mapDecisionWindowsToAlerts(windows);
+        setActiveAlerts(active);
+        setResolvedAlerts(resolved);
+        setConfigured(true);
+      })
+      .catch(() => {
+        setActiveAlerts([]);
+        setResolvedAlerts([]);
+        setConfigured(false);
+      })
+      .finally(() => setLoading(false));
+  }, []);
 
   const severityCounts = useMemo(() => {
     const counts: Record<Severity, number> = { critical: 0, high: 0, medium: 0, low: 0 };
@@ -125,6 +159,14 @@ const SecurityDashboard = memo(function SecurityDashboard() {
   }, [activeAlerts]);
 
   const handleResolve = useCallback((alertId: string) => {
+    // Extract the decision window id and close it on the backend
+    const windowId = parseInt(alertId.replace('dw-', ''), 10);
+    if (!isNaN(windowId)) {
+      cmd('act_on_decision_window', { windowId, outcome: 'resolved' }).catch(() => {
+        // Best-effort — still remove from UI
+      });
+    }
+
     setActiveAlerts(prev => {
       const alert = prev.find(a => a.id === alertId);
       if (alert) {
@@ -137,6 +179,8 @@ const SecurityDashboard = memo(function SecurityDashboard() {
     });
   }, []);
 
+  if (loading) return <LoadingSkeleton />;
+
   const isEmpty = activeAlerts.length === 0;
 
   return (
@@ -145,7 +189,9 @@ const SecurityDashboard = memo(function SecurityDashboard() {
       <div className="px-5 py-4 border-b border-border">
         <h3 className="text-sm font-medium text-white">Security Alerts</h3>
         <p className="text-xs text-text-muted mt-1">
-          Real-time vulnerability monitoring from the Developer Immune System.
+          {configured
+            ? 'Real-time vulnerability monitoring from the Developer Immune System.'
+            : 'No dependency scanning configured yet.'}
         </p>
       </div>
 
@@ -165,7 +211,9 @@ const SecurityDashboard = memo(function SecurityDashboard() {
               <span className="text-[#22C55E] text-lg">&#x2713;</span>
             </div>
             <p className="text-sm text-[#22C55E]">
-              No vulnerabilities detected. Your dependencies are secure.
+              {configured
+                ? 'No vulnerabilities detected. Your dependencies are secure.'
+                : 'Security monitoring will appear here when dependency scanning is active.'}
             </p>
           </div>
         ) : (

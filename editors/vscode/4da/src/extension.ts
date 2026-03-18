@@ -13,6 +13,15 @@ let refreshInterval: ReturnType<typeof setInterval> | undefined;
 export async function activate(context: vscode.ExtensionContext) {
     mcpClient = new MCPClient();
 
+    // Connect to MCP server in the background (non-blocking)
+    mcpClient.connect().then(connected => {
+        if (connected) {
+            console.log('[4DA] MCP server connected');
+        } else {
+            console.log('[4DA] MCP server not available — running in degraded mode');
+        }
+    });
+
     // Status bar — signal count in bottom bar
     statusBar = new StatusBarManager(mcpClient);
     context.subscriptions.push(statusBar);
@@ -70,5 +79,9 @@ export async function activate(context: vscode.ExtensionContext) {
 export function deactivate() {
     if (refreshInterval) {
         clearInterval(refreshInterval);
+    }
+    // Clean up MCP server subprocess
+    if (mcpClient) {
+        mcpClient.disconnect();
     }
 }

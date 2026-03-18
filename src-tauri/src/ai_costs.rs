@@ -153,7 +153,11 @@ pub(crate) fn summarize_usage(records: &[AiUsageRecord], period: &str) -> AiUsag
             task_type,
             cost_usd: cost,
             request_count: count,
-            avg_tokens: if count > 0 { tokens as f32 / count as f32 } else { 0.0 },
+            avg_tokens: if count > 0 {
+                tokens as f32 / count as f32
+            } else {
+                0.0
+            },
         })
         .collect();
 
@@ -174,7 +178,9 @@ pub(crate) fn summarize_usage(records: &[AiUsageRecord], period: &str) -> AiUsag
 pub(crate) fn generate_recommendation(usage: &[AiUsageRecord]) -> Option<ModelRecommendation> {
     let mut costs: HashMap<(String, String), (f64, u32)> = HashMap::new();
     for r in usage {
-        let e = costs.entry((r.provider.clone(), r.model.clone())).or_default();
+        let e = costs
+            .entry((r.provider.clone(), r.model.clone()))
+            .or_default();
         e.0 += r.estimated_cost_usd;
         e.1 += 1;
     }

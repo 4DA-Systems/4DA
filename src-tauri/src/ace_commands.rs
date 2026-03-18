@@ -125,6 +125,34 @@ pub async fn ace_full_scan(paths: Vec<String>) -> Result<serde_json::Value> {
         (manifest_context, git_signals)
     }; // ACE lock is dropped here
 
+    // Phase 1a: Store discovered dependencies in user_dependencies table
+    if let Ok(db) = crate::get_database() {
+        if let Ok(ace) = get_ace_engine() {
+            if let Ok(tech) = ace.get_detected_tech() {
+                // Get project signals from the ACE database (project_dependencies table)
+                if let Ok(conn) = crate::open_db_connection() {
+                    if let Ok(deps) = crate::temporal::get_all_dependencies(&conn) {
+                        for dep in &deps {
+                            let ecosystem = &dep.language;
+                            db.store_dependency(
+                                &dep.project_path,
+                                &dep.package_name,
+                                dep.version.as_deref(),
+                                ecosystem,
+                                dep.is_dev,
+                            )
+                            .ok();
+                        }
+                        if !deps.is_empty() {
+                            info!(target: "4da::ace", count = deps.len(), "Stored dependencies in user_dependencies table");
+                        }
+                    }
+                }
+                drop(tech);
+            }
+        }
+    }
+
     // Phase 1b: Learning trajectory detection
     let mut learning_topics: Vec<String> = Vec::new();
     for path in &scan_paths {

@@ -226,7 +226,7 @@ impl Database {
             .query_row("SELECT version FROM schema_version", [], |row| row.get(0))
             .unwrap_or(1);
 
-        const TARGET_VERSION: i64 = 33;
+        const TARGET_VERSION: i64 = 34;
         if current_version < TARGET_VERSION {
             // Drop the conn lock briefly to allow backup (needs filesystem access)
             drop(conn);
@@ -1035,6 +1035,16 @@ impl Database {
                 )?;
             }
 
+            if current_version < 34 {
+                Self::run_versioned_migration(
+                    &conn,
+                    33,
+                    34,
+                    "Phase 34: Dependency Intelligence tables",
+                    Self::migrate_to_phase_34,
+                )?;
+            }
+
             info!(target: "4da::db", "Database schema initialized with sqlite-vec");
             return Ok(());
         }
@@ -1584,6 +1594,45 @@ impl Database {
         info!(target: "4da::db", "Created SSO pending auth table");
         Ok(())
     }
+
+    fn migrate_to_phase_34(conn: &Connection) -> SqliteResult<()> {
+        conn.execute_batch(
+            "CREATE TABLE IF NOT EXISTS user_dependencies (
+                id INTEGER PRIMARY KEY,
+                project_path TEXT NOT NULL,
+                package_name TEXT NOT NULL,
+                version TEXT,
+                ecosystem TEXT NOT NULL,
+                is_dev INTEGER DEFAULT 0,
+                is_direct INTEGER DEFAULT 1,
+                detected_at TEXT NOT NULL DEFAULT (datetime('now')),
+                last_seen_at TEXT NOT NULL DEFAULT (datetime('now')),
+                UNIQUE(project_path, package_name, ecosystem)
+            );
+            CREATE INDEX IF NOT EXISTS idx_user_deps_package ON user_dependencies(package_name);
+            CREATE INDEX IF NOT EXISTS idx_user_deps_ecosystem ON user_dependencies(ecosystem);
+
+            CREATE TABLE IF NOT EXISTS dependency_alerts (
+                id INTEGER PRIMARY KEY,
+                package_name TEXT NOT NULL,
+                ecosystem TEXT NOT NULL,
+                alert_type TEXT NOT NULL,
+                severity TEXT NOT NULL,
+                title TEXT NOT NULL,
+                description TEXT,
+                affected_versions TEXT,
+                source_url TEXT,
+                source_item_id INTEGER,
+                detected_at TEXT NOT NULL DEFAULT (datetime('now')),
+                resolved_at TEXT,
+                FOREIGN KEY (source_item_id) REFERENCES source_items(id)
+            );
+            CREATE INDEX IF NOT EXISTS idx_dep_alerts_package ON dependency_alerts(package_name, ecosystem);
+            CREATE INDEX IF NOT EXISTS idx_dep_alerts_severity ON dependency_alerts(severity);",
+        )?;
+        info!(target: "4da::db", "Created Dependency Intelligence tables");
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -1642,6 +1691,9 @@ mod tests {
             "retention_policies",
             // Phase 33: SSO pending auth
             "sso_pending_auth",
+            // Phase 34: Dependency Intelligence
+            "user_dependencies",
+            "dependency_alerts",
         ];
         for table in &expected {
             assert!(
