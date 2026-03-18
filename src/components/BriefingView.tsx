@@ -46,7 +46,7 @@ export const BriefingView = memo(function BriefingView() {
   const {
     briefing, results, isLoading, analysisComplete, feedbackGiven,
     lastBackgroundResultsAt, sourceHealth, pulse,
-    freeBriefing, freeBriefingLoading,
+    freeBriefing, freeBriefingLoading, embeddingMode,
   } = useAppStore(
     useShallow((s) => ({
       briefing: s.aiBriefing,
@@ -59,6 +59,7 @@ export const BriefingView = memo(function BriefingView() {
       pulse: s.intelligencePulse,
       freeBriefing: s.freeBriefing,
       freeBriefingLoading: s.freeBriefingLoading,
+      embeddingMode: s.embeddingMode,
     })),
   );
 
@@ -590,6 +591,14 @@ export const BriefingView = memo(function BriefingView() {
         message={t('tips.feedbackLoop', 'Save articles you find useful — this teaches the system what matters to you.')}
         hint={t('tips.feedbackLoopHint', 'Dismissing articles also helps. Every interaction improves your results.')}
         showWhen={Object.keys(feedbackGiven).length === 0 && results.length > 0}
+      />
+
+      {/* Contextual tip: Ollama nudge for keyword-only users */}
+      <ContextualTip
+        tipId="ollama-nudge"
+        message={t('tips.ollamaNudge', 'Your results use keyword matching. Ollama (free, local) unlocks semantic matching for more relevant results.')}
+        hint={t('tips.ollamaNudgeHint', 'Install Ollama, then enable it in Settings > AI Provider. Runs entirely on your machine.')}
+        showWhen={embeddingMode === 'keyword-only' && results.length > 0}
       />
 
       {/* 7. Intelligence Metrics — 2c. conditionally mounted when expanded */}

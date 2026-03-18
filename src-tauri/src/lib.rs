@@ -671,7 +671,10 @@ mod sso {
         Err("Enterprise features require --features enterprise".into())
     }
     #[tauri::command]
-    pub async fn validate_sso_callback(_assertion: String, _state: Option<String>) -> Result<serde_json::Value> {
+    pub async fn validate_sso_callback(
+        _assertion: String,
+        _state: Option<String>,
+    ) -> Result<serde_json::Value> {
         Err("Enterprise features require --features enterprise".into())
     }
     #[tauri::command]
@@ -693,12 +696,12 @@ use source_fetching::fill_cache_background;
 #[doc(hidden)]
 pub mod test_utils;
 
+#[cfg(all(test, feature = "enterprise"))]
+mod enterprise_analytics_tests;
 #[cfg(test)]
 mod error_tests;
 #[cfg(test)]
 mod hardening_error_path_tests;
-#[cfg(all(test, feature = "enterprise"))]
-mod enterprise_analytics_tests;
 #[cfg(all(test, feature = "enterprise"))]
 mod organization_tests;
 #[cfg(test)]
@@ -841,6 +844,8 @@ pub fn run() {
             context_commands::index_context,
             context_commands::index_project_readmes,
             context_commands::sync_awe_wisdom,
+            context_commands::get_awe_summary,
+            context_commands::run_awe_transmute,
             context_commands::set_context_dirs,
             context_commands::get_context_dirs,
             // Analysis
