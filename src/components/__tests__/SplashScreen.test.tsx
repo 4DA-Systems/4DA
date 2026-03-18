@@ -85,11 +85,10 @@ describe('SplashScreen', () => {
     unmount();
   });
 
-  it('shows the sun logo image', async () => {
+  it('shows the brand logo', async () => {
     const { unmount } = render(<SplashScreen onComplete={vi.fn()} minimumDisplayTime={0} />);
-    const img = screen.getByAltText('4DA');
-    expect(img).toBeInTheDocument();
-    expect(img).toHaveAttribute('src', 'mock-sun-logo.webp');
+    const brand = screen.getByText('4DA');
+    expect(brand).toBeInTheDocument();
     unmount();
   });
 
@@ -155,7 +154,7 @@ describe('SplashScreen', () => {
     const { unmount } = render(<SplashScreen onComplete={vi.fn()} minimumDisplayTime={0} />);
     // 5 stage dots (all stages except 'ready')
     const status = screen.getByRole('status');
-    const container = status.querySelector('div[style*="gap: 0.5rem"]');
+    const container = status.querySelector('div[style*="gap: 6px"]');
     expect(container).toBeInTheDocument();
     expect(container?.children.length).toBe(5);
     unmount();
