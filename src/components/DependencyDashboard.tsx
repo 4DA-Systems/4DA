@@ -1,4 +1,5 @@
-import { useState, useMemo, memo } from 'react';
+import { useState, useMemo, useEffect, memo } from 'react';
+import { cmd } from '../lib/commands';
 
 // ============================================================================
 // Types
@@ -27,45 +28,6 @@ interface Project {
   path: string;
   dependencies: Dependency[];
 }
-
-// ============================================================================
-// Mock Data (backend commands not wired yet)
-// ============================================================================
-
-const MOCK_PROJECTS: Project[] = [
-  {
-    name: '4DA',
-    path: '/projects/4da',
-    dependencies: [
-      { name: 'react', version: '19.1.0', ecosystem: 'npm', freshness: 'fresh', alerts: [] },
-      { name: 'tauri', version: '2.3.1', ecosystem: 'cargo', freshness: 'fresh', alerts: [] },
-      { name: 'serde', version: '1.0.219', ecosystem: 'cargo', freshness: 'fresh', alerts: [] },
-      { name: 'vite', version: '7.3.1', ecosystem: 'npm', freshness: 'fresh', alerts: [] },
-      {
-        name: 'lodash', version: '4.17.20', ecosystem: 'npm', freshness: 'stale',
-        alerts: [{ id: 'a1', severity: 'critical', message: 'Prototype pollution in lodash < 4.17.21', dependency: 'lodash' }],
-      },
-      { name: 'tokio', version: '1.43.0', ecosystem: 'cargo', freshness: 'aging', alerts: [] },
-      {
-        name: 'anyhow', version: '1.0.75', ecosystem: 'cargo', freshness: 'aging',
-        alerts: [{ id: 'a2', severity: 'medium', message: 'Minor performance regression fixed in 1.0.80+', dependency: 'anyhow' }],
-      },
-      { name: 'zustand', version: '5.0.3', ecosystem: 'npm', freshness: 'fresh', alerts: [] },
-    ],
-  },
-  {
-    name: 'game-compiler',
-    path: '/projects/game-compiler',
-    dependencies: [
-      { name: 'logos', version: '0.14.0', ecosystem: 'cargo', freshness: 'fresh', alerts: [] },
-      { name: 'wgpu', version: '24.0.1', ecosystem: 'cargo', freshness: 'fresh', alerts: [] },
-      {
-        name: 'lsp-server', version: '0.7.0', ecosystem: 'cargo', freshness: 'stale',
-        alerts: [{ id: 'a3', severity: 'high', message: 'Outdated lsp-server may miss protocol features', dependency: 'lsp-server' }],
-      },
-    ],
-  },
-];
 
 // ============================================================================
 // Freshness color mapping
@@ -108,27 +70,168 @@ function SeverityBadge({ severity }: { severity: Severity }) {
   );
 }
 
+function LoadingSkeleton() {
+  return (
+    <div className="bg-bg-secondary rounded-lg border border-border overflow-hidden">
+      <div className="px-5 py-4 border-b border-border">
+        <div className="h-4 bg-bg-tertiary rounded w-36 animate-pulse" />
+        <div className="h-3 bg-bg-tertiary rounded w-64 mt-2 animate-pulse" />
+      </div>
+      <div className="p-5 space-y-4">
+        <div className="grid grid-cols-4 gap-3">
+          {[1, 2, 3, 4].map(i => (
+            <div key={i} className="h-16 bg-bg-tertiary rounded-lg animate-pulse" />
+          ))}
+        </div>
+        <div className="h-48 bg-bg-tertiary rounded-lg animate-pulse" />
+      </div>
+    </div>
+  );
+}
+
+// ============================================================================
+// Data mapping — converts stack health + detected tech into dependency format
+// ============================================================================
+
+function healthToFreshness(health: string): Freshness {
+  switch (health) {
+    case 'healthy': return 'fresh';
+    case 'watch': return 'aging';
+    case 'warning': return 'stale';
+    case 'critical': return 'outdated';
+    default: return 'fresh';
+  }
+}
+
+function trendToSeverity(trend: string, health: string): Severity | null {
+  if (health === 'critical' || health === 'warning') {
+    return trend === 'declining' ? 'high' : 'medium';
+  }
+  return null;
+}
+
+async function fetchDependencyData(): Promise<Project[]> {
+  const [stackHealth, detectedTech] = await Promise.all([
+    cmd('get_stack_health'),
+    cmd('ace_get_detected_tech'),
+  ]);
+
+  // Build a map of detected tech with categories
+  const techMap = new Map<string, { category: string; confidence: number }>();
+  for (const tech of detectedTech.detected_tech) {
+    techMap.set(tech.name.toLowerCase(), { category: tech.category, confidence: tech.confidence });
+  }
+
+  // Map stack health technologies to dependencies
+  const dependencies: Dependency[] = stackHealth.technologies.map(tech => {
+    const detected = techMap.get(tech.name.toLowerCase());
+    const freshness = healthToFreshness(tech.health);
+    const severity = trendToSeverity(tech.trend, tech.health);
+
+    const alerts: DependencyAlert[] = [];
+    if (severity) {
+      alerts.push({
+        id: `sh-${tech.name}`,
+        severity,
+        message: `${tech.name} is ${tech.health} with ${tech.trend} trend (${tech.signal_count} signals)`,
+        dependency: tech.name,
+      });
+    }
+
+    return {
+      name: tech.name,
+      version: '',
+      ecosystem: detected?.category ?? 'detected',
+      freshness,
+      alerts,
+    };
+  });
+
+  // Add any detected tech not in stack health
+  for (const tech of detectedTech.detected_tech) {
+    const exists = dependencies.some(d => d.name.toLowerCase() === tech.name.toLowerCase());
+    if (!exists) {
+      dependencies.push({
+        name: tech.name,
+        version: '',
+        ecosystem: tech.category,
+        freshness: tech.confidence >= 0.8 ? 'fresh' : 'aging',
+        alerts: [],
+      });
+    }
+  }
+
+  if (dependencies.length === 0) {
+    return [];
+  }
+
+  return [{
+    name: 'Your Stack',
+    path: 'detected',
+    dependencies,
+  }];
+}
+
 // ============================================================================
 // DependencyDashboard
 // ============================================================================
 
 const DependencyDashboard = memo(function DependencyDashboard() {
+  const [projects, setProjects] = useState<Project[]>([]);
   const [selectedProject, setSelectedProject] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
 
-  const project = MOCK_PROJECTS[selectedProject];
+  useEffect(() => {
+    setLoading(true);
+    fetchDependencyData()
+      .then(data => {
+        setProjects(data);
+        setSelectedProject(0);
+        setError(false);
+      })
+      .catch(() => {
+        setProjects([]);
+        setError(true);
+      })
+      .finally(() => setLoading(false));
+  }, []);
+
+  if (loading) return <LoadingSkeleton />;
+
+  if (error || projects.length === 0) {
+    return (
+      <div className="bg-bg-secondary rounded-lg border border-border overflow-hidden">
+        <div className="px-5 py-4 border-b border-border">
+          <h3 className="text-sm font-medium text-white">Dependency Health</h3>
+          <p className="text-xs text-text-muted mt-1">
+            Monitor freshness and vulnerabilities across your projects.
+          </p>
+        </div>
+        <div className="p-5">
+          <div className="bg-bg-primary rounded-lg border border-border/50 p-6 text-center">
+            <p className="text-sm text-text-muted mb-2">No dependency data available</p>
+            <p className="text-xs text-text-muted/60 leading-relaxed">
+              Run a context scan to detect your tech stack and dependencies.
+              4DA will track their health automatically.
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  const project = projects[selectedProject] ?? projects[0];
   const deps = project.dependencies;
 
-  const stats = useMemo(() => {
-    const fresh = deps.filter(d => d.freshness === 'fresh').length;
-    const stale = deps.filter(d => d.freshness === 'stale' || d.freshness === 'outdated').length;
-    const vulnerable = deps.filter(d => d.alerts.length > 0).length;
-    return { total: deps.length, fresh, stale, vulnerable };
-  }, [deps]);
+  const stats = {
+    total: deps.length,
+    fresh: deps.filter(d => d.freshness === 'fresh').length,
+    stale: deps.filter(d => d.freshness === 'stale' || d.freshness === 'outdated').length,
+    vulnerable: deps.filter(d => d.alerts.length > 0).length,
+  };
 
-  const allAlerts = useMemo(
-    () => deps.flatMap(d => d.alerts),
-    [deps],
-  );
+  const allAlerts = deps.flatMap(d => d.alerts);
 
   return (
     <div className="bg-bg-secondary rounded-lg border border-border overflow-hidden">
@@ -140,15 +243,17 @@ const DependencyDashboard = memo(function DependencyDashboard() {
             Monitor freshness and vulnerabilities across your projects.
           </p>
         </div>
-        <select
-          value={selectedProject}
-          onChange={e => setSelectedProject(Number(e.target.value))}
-          className="bg-bg-tertiary border border-border rounded-lg px-3 py-1.5 text-sm text-text-primary focus:outline-none focus:border-text-muted/50"
-        >
-          {MOCK_PROJECTS.map((p, i) => (
-            <option key={p.path} value={i}>{p.name}</option>
-          ))}
-        </select>
+        {projects.length > 1 && (
+          <select
+            value={selectedProject}
+            onChange={e => setSelectedProject(Number(e.target.value))}
+            className="bg-bg-tertiary border border-border rounded-lg px-3 py-1.5 text-sm text-text-primary focus:outline-none focus:border-text-muted/50"
+          >
+            {projects.map((p, i) => (
+              <option key={p.path} value={i}>{p.name}</option>
+            ))}
+          </select>
+        )}
       </div>
 
       <div className="p-5 space-y-5">
@@ -176,7 +281,7 @@ const DependencyDashboard = memo(function DependencyDashboard() {
               {deps.map(dep => (
                 <tr key={dep.name} className="hover:bg-[#1A1A1A] transition-colors">
                   <td className="px-4 py-2.5 font-mono text-text-primary">{dep.name}</td>
-                  <td className="px-4 py-2.5 text-text-secondary font-mono">{dep.version}</td>
+                  <td className="px-4 py-2.5 text-text-secondary font-mono">{dep.version || '--'}</td>
                   <td className="px-4 py-2.5 text-text-muted">{dep.ecosystem}</td>
                   <td className="px-4 py-2.5">
                     <div className="flex items-center gap-2">

@@ -7,6 +7,7 @@ mod cache;
 mod channels;
 #[cfg(test)]
 mod concurrency_tests;
+mod dependencies;
 mod history;
 mod migrations;
 mod sources;
@@ -14,6 +15,7 @@ mod sources;
 mod stress_tests;
 
 pub use cache::*;
+pub use dependencies::*;
 pub use history::*;
 pub use sources::*;
 

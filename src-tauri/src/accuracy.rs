@@ -3,7 +3,6 @@
 //! Records weekly accuracy metrics so users can see their 4DA getting smarter over time.
 //! Powers the "Your Intelligence This Month" card in the Briefing view.
 
-use anyhow::Result;
 use serde::{Deserialize, Serialize};
 
 // ============================================================================
@@ -126,6 +125,104 @@ pub(crate) fn generate_report(
 }
 
 // ============================================================================
+// Tauri Commands
+// ============================================================================
+
+#[tauri::command]
+pub fn get_accuracy_report(period: Option<String>) -> crate::error::Result<serde_json::Value> {
+    let p = period.unwrap_or_else(|| chrono::Utc::now().format("%Y-%m").to_string());
+    let conn = crate::open_db_connection()?;
+
+    // Get current period record
+    let current_opt: Option<AccuracyRecord> = conn
+        .query_row(
+            "SELECT id, period, total_scored, total_relevant, user_confirmed, user_rejected, accuracy_pct, created_at \
+             FROM accuracy_history WHERE period = ?1",
+            rusqlite::params![p],
+            |row| {
+                Ok(AccuracyRecord {
+                    id: row.get(0)?,
+                    period: row.get(1)?,
+                    total_scored: row.get(2)?,
+                    total_relevant: row.get(3)?,
+                    user_confirmed: row.get(4)?,
+                    user_rejected: row.get(5)?,
+                    accuracy_pct: row.get(6)?,
+                    created_at: row.get(7)?,
+                })
+            },
+        )
+        .ok();
+
+    match current_opt {
+        Some(current) => Ok(serde_json::to_value(current)?),
+        None => Ok(serde_json::json!({
+            "period": p,
+            "total_scored": 0,
+            "total_relevant": 0,
+            "user_confirmed": 0,
+            "user_rejected": 0,
+            "accuracy_pct": 0.0,
+            "message": "No data for this period yet"
+        })),
+    }
+}
+
+#[tauri::command]
+pub fn get_intelligence_report(period: Option<String>) -> crate::error::Result<serde_json::Value> {
+    let p = period.unwrap_or_else(|| chrono::Utc::now().format("%Y-%m").to_string());
+    let conn = crate::open_db_connection()?;
+
+    // Get current and previous period
+    let mut stmt = conn.prepare(
+        "SELECT id, period, total_scored, total_relevant, user_confirmed, user_rejected, accuracy_pct, created_at \
+         FROM accuracy_history ORDER BY period DESC LIMIT 2",
+    )?;
+    let records: Vec<AccuracyRecord> = stmt
+        .query_map([], |row| {
+            Ok(AccuracyRecord {
+                id: row.get(0)?,
+                period: row.get(1)?,
+                total_scored: row.get(2)?,
+                total_relevant: row.get(3)?,
+                user_confirmed: row.get(4)?,
+                user_rejected: row.get(5)?,
+                accuracy_pct: row.get(6)?,
+                created_at: row.get(7)?,
+            })
+        })?
+        .filter_map(|r| r.ok())
+        .collect();
+
+    if records.is_empty() {
+        return Ok(serde_json::json!({
+            "period": p,
+            "accuracy_current": 0.0,
+            "accuracy_previous": 0.0,
+            "accuracy_delta": 0.0,
+            "message": "No accuracy data yet"
+        }));
+    }
+
+    let current = &records[0];
+    let previous = records.get(1);
+    let report = generate_report(
+        &p,
+        current,
+        previous,
+        0,
+        0, // topics tracked/previous — placeholder
+        current.total_scored.saturating_sub(current.total_relevant),
+        current.total_scored,
+        0,
+        0, // security alerts — placeholder
+        0, // decisions
+        (current.user_confirmed + current.user_rejected) as u32,
+    );
+    Ok(serde_json::to_value(report)?)
+}
+
+// ============================================================================
 // Tests
 // ============================================================================
 
@@ -184,10 +281,14 @@ mod tests {
             "2026-03",
             &current,
             Some(&previous),
-            19, 14,
-            2847, 3000,
-            3, 2,
-            7, 142,
+            19,
+            14,
+            2847,
+            3000,
+            3,
+            2,
+            7,
+            142,
         );
 
         assert_eq!(report.period, "2026-03");
