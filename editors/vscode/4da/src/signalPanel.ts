@@ -1,3 +1,4 @@
+import * as crypto from 'crypto';
 import * as vscode from 'vscode';
 import type { MCPClient, Signal } from './mcpClient';
 
@@ -32,6 +33,8 @@ export class SignalPanelProvider implements vscode.WebviewViewProvider {
     }
 
     private render(signals: Signal[]): string {
+        const nonce = crypto.randomBytes(16).toString('hex');
+
         const items = signals.length > 0
             ? signals.map(s => `
                 <div class="signal ${esc(s.signalType)}" onclick="openUrl('${sanitizeUrl(s.url ?? '')}')">
@@ -44,7 +47,9 @@ export class SignalPanelProvider implements vscode.WebviewViewProvider {
                 </div>`).join('')
             : '<div class="empty">No signals yet. 4DA is watching.</div>';
 
-        return `<!DOCTYPE html><html><head><style>
+        return `<!DOCTYPE html><html><head>
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'nonce-${nonce}';">
+<style>
 body{background:#0A0A0A;color:#FFF;font-family:-apple-system,BlinkMacSystemFont,'Inter',sans-serif;padding:0;margin:0;font-size:13px}
 .header{padding:12px 16px;border-bottom:1px solid #2A2A2A}
 .header h3{margin:0;font-size:13px;font-weight:600;color:#A0A0A0;text-transform:uppercase;letter-spacing:.5px}
@@ -68,7 +73,7 @@ body{background:#0A0A0A;color:#FFF;font-family:-apple-system,BlinkMacSystemFont,
 <div class="header"><h3>Signals</h3></div>
 ${items}
 <div class="footer"><a href="command:4da.openApp">Open in 4DA</a></div>
-<script>const vscode=acquireVsCodeApi();function openUrl(u){if(u)vscode.postMessage({type:'openUrl',url:u})}</script>
+<script nonce="${nonce}">const vscode=acquireVsCodeApi();function openUrl(u){if(u)vscode.postMessage({type:'openUrl',url:u})}</script>
 </body></html>`;
     }
 }
