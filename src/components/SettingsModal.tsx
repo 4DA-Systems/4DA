@@ -24,6 +24,7 @@ import { NaturalLanguageQueryPanel } from './NaturalLanguageQuery';
 import { ProValuePanel } from './ProValuePanel';
 import { AboutPanel } from './AboutPanel';
 import { TeamSection } from './settings/TeamSection';
+import WaitlistSignup from './WaitlistSignup';
 import { TeamInviteDialog } from './settings/TeamInviteDialog';
 import { TeamSharedSources } from './team/TeamSharedSources';
 import { AuditLogViewer } from './enterprise/AuditLogViewer';
@@ -45,7 +46,7 @@ import { translateError } from '../utils/error-messages';
 
 type SettingsTab = 'general' | 'sources' | 'profile' | 'projects' | 'advanced' | 'team' | 'about';
 
-const BASE_TAB_IDS: SettingsTab[] = ['general', 'sources', 'profile', 'projects', 'advanced', 'about'];
+const BASE_TAB_IDS: SettingsTab[] = ['general', 'sources', 'profile', 'projects', 'team', 'advanced', 'about'];
 const TEAM_TAB_IDS: SettingsTab[] = ['general', 'sources', 'profile', 'projects', 'team', 'advanced', 'about'];
 
 // ============================================================================
@@ -469,60 +470,68 @@ export const SettingsModal = memo(function SettingsModal({ onClose }: SettingsMo
           {/* Team & Enterprise Tab */}
           {activeTab === 'team' && (
             <div id="tabpanel-team" role="tabpanel">
-              <div className="space-y-6">
-                <PanelErrorBoundary name="Team Setup Wizard">
-                  <TeamOnboardingWizard />
-                </PanelErrorBoundary>
+              {isTeamOrEnterprise ? (
+                <div className="space-y-6">
+                  <PanelErrorBoundary name="Team Setup Wizard">
+                    <TeamOnboardingWizard />
+                  </PanelErrorBoundary>
 
-                <PanelErrorBoundary name="Team Sync">
-                  <TeamSection onStatus={setSettingsStatus} />
-                </PanelErrorBoundary>
+                  <PanelErrorBoundary name="Team Sync">
+                    <TeamSection onStatus={setSettingsStatus} />
+                  </PanelErrorBoundary>
 
-                <PanelErrorBoundary name="Shared Sources">
-                  <TeamSharedSources />
-                </PanelErrorBoundary>
+                  <PanelErrorBoundary name="Shared Sources">
+                    <TeamSharedSources />
+                  </PanelErrorBoundary>
 
-                {tier === 'enterprise' && (
-                  <>
-                    <PanelErrorBoundary name="Organization">
-                      <OrgDashboard />
-                    </PanelErrorBoundary>
+                  {tier === 'enterprise' && (
+                    <>
+                      <PanelErrorBoundary name="Organization">
+                        <OrgDashboard />
+                      </PanelErrorBoundary>
 
-                    <PanelErrorBoundary name="Audit Log">
-                      <AuditLogViewer />
-                    </PanelErrorBoundary>
+                      <PanelErrorBoundary name="Audit Log">
+                        <AuditLogViewer />
+                      </PanelErrorBoundary>
 
-                    <PanelErrorBoundary name="Webhooks">
-                      <WebhookManager />
-                    </PanelErrorBoundary>
+                      <PanelErrorBoundary name="Webhooks">
+                        <WebhookManager />
+                      </PanelErrorBoundary>
 
-                    <PanelErrorBoundary name="Retention Policies">
-                      <PolicyEditor />
-                    </PanelErrorBoundary>
+                      <PanelErrorBoundary name="Retention Policies">
+                        <PolicyEditor />
+                      </PanelErrorBoundary>
 
-                    <PanelErrorBoundary name="SSO">
-                      <SsoConfigPanel />
-                    </PanelErrorBoundary>
+                      <PanelErrorBoundary name="SSO">
+                        <SsoConfigPanel />
+                      </PanelErrorBoundary>
 
-                    <PanelErrorBoundary name="Admin Health">
-                      <AdminHealthDashboard />
-                    </PanelErrorBoundary>
+                      <PanelErrorBoundary name="Admin Health">
+                        <AdminHealthDashboard />
+                      </PanelErrorBoundary>
 
-                    <PanelErrorBoundary name="Webhook Docs">
-                      <WebhookDocsPanel />
-                    </PanelErrorBoundary>
-                  </>
-                )}
+                      <PanelErrorBoundary name="Webhook Docs">
+                        <WebhookDocsPanel />
+                      </PanelErrorBoundary>
+                    </>
+                  )}
 
-                {/* Available on all team+ tiers */}
-                <PanelErrorBoundary name="Data Export">
-                  <DataExportPanel />
-                </PanelErrorBoundary>
+                  <PanelErrorBoundary name="Data Export">
+                    <DataExportPanel />
+                  </PanelErrorBoundary>
 
-                <PanelErrorBoundary name="Diagnostics">
-                  <ConfigDiagnostics />
-                </PanelErrorBoundary>
-              </div>
+                  <PanelErrorBoundary name="Diagnostics">
+                    <ConfigDiagnostics />
+                  </PanelErrorBoundary>
+                </div>
+              ) : (
+                <div className="space-y-6 py-2">
+                  <WaitlistSignup tier="team" inline />
+                  <div className="border-t border-[#2A2A2A] pt-6">
+                    <WaitlistSignup tier="enterprise" inline />
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
