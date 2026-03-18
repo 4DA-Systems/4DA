@@ -39,12 +39,10 @@ pub(crate) struct AffectedPackage {
 
 /// Fetch recent advisories from GitHub Advisory Database.
 /// This is preferred over NVD because it includes ecosystem-specific package data.
-pub(crate) async fn fetch_github_advisories(
-    ecosystem: Option<&str>,
-) -> Result<Vec<CveAdvisory>> {
+pub(crate) async fn fetch_github_advisories(ecosystem: Option<&str>) -> Result<Vec<CveAdvisory>> {
     let client = shared_client();
-    let mut url = "https://api.github.com/advisories?per_page=30&sort=published&direction=desc"
-        .to_string();
+    let mut url =
+        "https://api.github.com/advisories?per_page=30&sort=published&direction=desc".to_string();
     if let Some(eco) = ecosystem {
         url.push_str(&format!("&ecosystem={eco}"));
     }
@@ -98,20 +96,14 @@ fn parse_github_advisory(item: &serde_json::Value) -> Option<CveAdvisory> {
         .get("published_at")
         .and_then(|v| v.as_str())
         .unwrap_or("");
-    let url = item
-        .get("html_url")
-        .and_then(|v| v.as_str())
-        .unwrap_or("");
+    let url = item.get("html_url").and_then(|v| v.as_str()).unwrap_or("");
 
     let mut affected_packages = Vec::new();
     if let Some(vulns) = item.get("vulnerabilities").and_then(|v| v.as_array()) {
         for vuln in vulns {
             if let Some(pkg) = vuln.get("package") {
                 let name = pkg.get("name").and_then(|v| v.as_str()).unwrap_or("");
-                let ecosystem = pkg
-                    .get("ecosystem")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("");
+                let ecosystem = pkg.get("ecosystem").and_then(|v| v.as_str()).unwrap_or("");
                 let range = vuln
                     .get("vulnerable_version_range")
                     .and_then(|v| v.as_str())

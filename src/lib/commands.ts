@@ -506,6 +506,31 @@ interface CommandMap {
   export_section: { params: { section: string; format: string }; result: string };
   list_exports: { params: Record<string, never>; result: ExportManifest[] };
   delete_export: { params: { exportId: string }; result: void };
+
+  // -- Dependency Intelligence --
+  get_dependency_overview: { params: Record<string, never>; result: DependencyOverview };
+  get_project_deps: { params: { projectPath: string }; result: ProjectDepsResult };
+  get_dependency_alerts: { params: Record<string, never>; result: DependencyAlertsResult };
+  resolve_dependency_alert: { params: { alertId: number }; result: void };
+
+  // -- Accuracy Tracking (Phase 4.1) --
+  get_accuracy_report: { params: { period?: string }; result: AccuracyReport };
+  get_intelligence_report: { params: { period?: string }; result: IntelligenceReportData };
+
+  // -- Temporal Graph (Phase 4.5) --
+  get_temporal_snapshot: { params: { period?: string }; result: TemporalSnapshot };
+  get_adoption_curves: { params: Record<string, never>; result: TechAdoptionCurve[] };
+  get_knowledge_decay_report: { params: Record<string, never>; result: KnowledgeDecayEntry[] };
+
+  // -- Tech Convergence (Phase 6.3) --
+  get_tech_convergence: { params: Record<string, never>; result: TechConvergenceReport };
+  get_project_health_comparison: { params: Record<string, never>; result: ProjectHealthComparison };
+  get_cross_project_dependencies: { params: Record<string, never>; result: CrossProjectDep[] };
+
+  // -- AI Cost Tracking (Phase 8.2) --
+  get_ai_usage_summary: { params: { period?: string }; result: AiUsageSummary };
+  get_ai_cost_estimate: { params: { provider: string; model: string; tokensIn: number; tokensOut: number }; result: AiCostEstimate };
+  get_ai_cost_recommendation: { params: Record<string, never>; result: AiCostRecommendation };
 }
 
 
@@ -609,6 +634,7 @@ interface StartupHealthIssue {
   severity: 'warning' | 'error';
   message: string;
 }
+
 
 /** Team sync status (mirrors Rust TeamSyncStatus) */
 interface TeamSyncStatus {
@@ -1385,6 +1411,167 @@ interface UsageReport {
   avg_session_views: number;
 }
 
+// -- Dependency Intelligence Types --
+
+interface DependencyOverview {
+  total_dependencies: number;
+  total_projects: number;
+  direct_dependencies: number;
+  dev_dependencies: number;
+  ecosystems: Array<{ ecosystem: string; count: number }>;
+  projects: Array<{ name: string; path: string; dependency_count: number; alert_count: number }>;
+  alerts: { total: number; critical: number; high: number; medium: number; low: number };
+  cross_project_packages: number;
+  cross_project_top: Array<{ package_name: string; ecosystem: string; project_count: number }>;
+}
+
+interface ProjectDepsResult {
+  project_name: string;
+  project_path: string;
+  dependencies: Array<{
+    name: string;
+    version: string | null;
+    ecosystem: string;
+    is_dev: boolean;
+    is_direct: boolean;
+    detected_at: string;
+    last_seen_at: string;
+    alerts: Array<{ id: number; severity: string; title: string; alert_type: string }>;
+  }>;
+  total: number;
+}
+
+interface DependencyAlertsResult {
+  alerts: Array<{
+    id: number;
+    package_name: string;
+    ecosystem: string;
+    alert_type: string;
+    severity: string;
+    title: string;
+    description: string | null;
+    affected_versions: string | null;
+    source_url: string | null;
+    detected_at: string;
+  }>;
+  total: number;
+}
+
+// -- Accuracy Tracking Types --
+
+interface AccuracyReport {
+  id: number;
+  period: string;
+  total_scored: number;
+  total_relevant: number;
+  user_confirmed: number;
+  user_rejected: number;
+  accuracy_pct: number;
+  created_at: string;
+}
+
+interface IntelligenceReportData {
+  period: string;
+  accuracy_current: number;
+  accuracy_previous: number;
+  accuracy_delta: number;
+  topics_tracked: number;
+  topics_added: number;
+  noise_rejected: number;
+  noise_rejection_pct: number;
+  time_saved_hours: number;
+  security_alerts: number;
+  security_acted_on: number;
+  decisions_recorded: number;
+  feedback_signals: number;
+}
+
+// -- Temporal Graph Types --
+
+interface TemporalSnapshot {
+  period: string;
+  tech_snapshot: Array<{ name: string; confidence: number; engagement_score: number }>;
+  interest_snapshot: Array<{ topic: string; score: number }>;
+  decision_count: number;
+  feedback_count: number;
+  created_at?: string;
+}
+
+interface TechAdoptionCurve {
+  tech_name: string;
+  first_seen: string;
+  weeks_active: number;
+  current_confidence: number;
+  stage: string;
+  engagement_history: number[];
+}
+
+interface KnowledgeDecayEntry {
+  tech_name: string;
+  last_engagement: string;
+  weeks_since_engagement: number;
+  risk_level: string;
+  recommendation: string;
+}
+
+// -- Tech Convergence Types --
+
+interface TechConvergenceReport {
+  total_projects: number;
+  shared_technologies: Array<{ name: string; category: string; project_count: number; adoption_pct: number }>;
+  unique_technologies: Array<{ name: string; category: string; project_path: string; bus_factor_risk: string }>;
+  convergence_score: number;
+}
+
+interface ProjectHealthComparison {
+  projects: Array<{
+    project_path: string;
+    project_name: string;
+    dependency_count: number;
+    dev_dependency_count: number;
+    freshness_score: number;
+    vulnerability_count: number;
+    ecosystems: string[];
+  }>;
+}
+
+interface CrossProjectDep {
+  name: string;
+  ecosystem: string;
+  projects: string[];
+  project_count: number;
+}
+
+// -- AI Cost Tracking Types --
+
+interface AiUsageSummary {
+  period: string;
+  total_cost_usd: number;
+  total_tokens_in: number;
+  total_tokens_out: number;
+  by_provider: Array<{ provider: string; model: string; cost_usd: number; request_count: number }>;
+  by_task: Array<{ task_type: string; cost_usd: number; request_count: number; avg_tokens: number }>;
+  recommendation: AiCostRecommendation | null;
+}
+
+interface AiCostEstimate {
+  provider: string;
+  model: string;
+  tokens_in: number;
+  tokens_out: number;
+  estimated_cost_usd: number;
+}
+
+interface AiCostRecommendation {
+  current_provider: string;
+  current_model: string;
+  recommended_provider: string;
+  recommended_model: string;
+  estimated_savings_usd: number;
+  quality_match_pct: number;
+  reason: string;
+}
+
 
 // ============================================================================
 // Typed invoke — the core wrapper
@@ -1521,6 +1708,23 @@ export type {
   // Enterprise: Analytics
   OrgAnalytics,
   TeamActivity,
+  // Dependency Intelligence
+  DependencyOverview,
+  ProjectDepsResult,
+  DependencyAlertsResult,
+  // Accuracy & Temporal
+  AccuracyReport,
+  IntelligenceReportData,
+  TemporalSnapshot,
+  TechAdoptionCurve,
+  KnowledgeDecayEntry,
+  // Convergence & AI Costs
+  TechConvergenceReport,
+  ProjectHealthComparison,
+  CrossProjectDep,
+  AiUsageSummary,
+  AiCostEstimate,
+  AiCostRecommendation,
   // IPC type safety additions
   PersonalizationContextSummary,
   ExecutionLogEntry,
