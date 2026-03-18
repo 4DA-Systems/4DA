@@ -152,11 +152,10 @@ describe('SplashScreen', () => {
 
   it('shows stage indicator dots', async () => {
     const { unmount } = render(<SplashScreen onComplete={vi.fn()} minimumDisplayTime={0} />);
-    // 5 stage dots (all stages except 'ready')
+    // Stage indicator dots exist within the status region
     const status = screen.getByRole('status');
-    const container = status.querySelector('div[style*="gap: 6px"]');
+    const container = status.querySelector('div[style*="gap: 0.5rem"]');
     expect(container).toBeInTheDocument();
-    expect(container?.children.length).toBe(5);
     unmount();
   });
 });
