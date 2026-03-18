@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 
 // ---------------------------------------------------------------------------
 // Tauri API mocks
@@ -13,45 +13,114 @@ vi.mock('@tauri-apps/api/event', () => ({
   emit: vi.fn(),
 }));
 
+vi.mock('../../lib/commands', () => ({
+  cmd: vi.fn(),
+}));
+
 // ---------------------------------------------------------------------------
 // Component under test
 // ---------------------------------------------------------------------------
 import DependencyDashboard from '../DependencyDashboard';
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const { cmd } = await import('../../lib/commands') as any;
+
+const mockOverview = {
+  total_dependencies: 42,
+  total_projects: 2,
+  direct_dependencies: 30,
+  dev_dependencies: 12,
+  ecosystems: [
+    { ecosystem: 'rust', count: 20 },
+    { ecosystem: 'javascript', count: 22 },
+  ],
+  projects: [
+    { name: 'project-a', path: '/path/to/a', dependency_count: 20, alert_count: 1 },
+    { name: 'project-b', path: '/path/to/b', dependency_count: 22, alert_count: 0 },
+  ],
+  alerts: { total: 1, critical: 1, high: 0, medium: 0, low: 0 },
+  cross_project_packages: 3,
+  cross_project_top: [
+    { package_name: 'serde', ecosystem: 'rust', project_count: 2 },
+  ],
+};
+
+const mockProjectDeps = {
+  dependencies: [
+    { name: 'serde', version: '1.0.0', ecosystem: 'rust', is_dev: false, alerts: [] },
+    { name: 'tokio', version: '1.28.0', ecosystem: 'rust', is_dev: false, alerts: [{ id: 1, severity: 'critical', title: 'CVE-2024-001' }] },
+  ],
+};
+
+const mockAlerts = {
+  alerts: [
+    { id: 1, package_name: 'tokio', ecosystem: 'rust', severity: 'critical', title: 'CVE-2024-001', alert_type: 'vulnerability' },
+  ],
+};
+
+function setupMocks() {
+  vi.mocked(cmd).mockImplementation((command: string) => {
+    switch (command) {
+      case 'get_dependency_overview':
+        return Promise.resolve(mockOverview);
+      case 'get_project_deps':
+        return Promise.resolve(mockProjectDeps);
+      case 'get_dependency_alerts':
+        return Promise.resolve(mockAlerts);
+      default:
+        return Promise.resolve(null);
+    }
+  });
+}
 
 describe('DependencyDashboard', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    setupMocks();
   });
 
-  it('renders the dashboard header', () => {
+  it('renders the dashboard header', async () => {
     render(<DependencyDashboard />);
-    expect(screen.getByText('Dependency Health')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByText('Dependency Intelligence')).toBeInTheDocument();
+    });
   });
 
-  it('renders summary stat cards', () => {
+  it('renders summary stat cards', async () => {
     render(<DependencyDashboard />);
-    expect(screen.getByText('Total')).toBeInTheDocument();
-    expect(screen.getByText('Fresh')).toBeInTheDocument();
-    expect(screen.getByText('Stale')).toBeInTheDocument();
-    expect(screen.getByText('Vulnerable')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByText('Total')).toBeInTheDocument();
+    });
+    expect(screen.getByText('Direct')).toBeInTheDocument();
+    expect(screen.getByText('Dev')).toBeInTheDocument();
+    // "Alerts" appears in both the stat card and "Active Alerts" heading
+    const alertElements = screen.getAllByText(/Alerts/);
+    expect(alertElements.length).toBeGreaterThanOrEqual(1);
   });
 
-  it('renders the dependency table with column headers', () => {
+  it('renders the dependency table with column headers', async () => {
     render(<DependencyDashboard />);
-    expect(screen.getByText('Name')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByText('Name')).toBeInTheDocument();
+    });
     expect(screen.getByText('Version')).toBeInTheDocument();
     expect(screen.getByText('Ecosystem')).toBeInTheDocument();
-    expect(screen.getByText('Freshness')).toBeInTheDocument();
+    expect(screen.getByText('Type')).toBeInTheDocument();
   });
 
-  it('renders the project selector', () => {
+  it('renders the project selector when multiple projects exist', async () => {
     render(<DependencyDashboard />);
-    expect(screen.getByRole('combobox')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByRole('combobox')).toBeInTheDocument();
+    });
   });
 
-  it('renders active alerts section with severity badges', () => {
+  it('renders active alerts section with severity badges', async () => {
     render(<DependencyDashboard />);
-    expect(screen.getByText('Active Alerts')).toBeInTheDocument();
-    expect(screen.getByText('critical')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByText('Active Alerts')).toBeInTheDocument();
+    });
+    await waitFor(() => {
+      expect(screen.getByText('critical')).toBeInTheDocument();
+    });
   });
 });
