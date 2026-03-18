@@ -87,6 +87,7 @@ mod decision_signals;
 mod decisions;
 #[cfg(feature = "experimental")]
 mod delegation;
+mod dependency_commands;
 #[cfg(not(feature = "experimental"))]
 #[allow(dead_code)]
 mod delegation {
@@ -1197,6 +1198,26 @@ pub fn run() {
             // Model Registry
             model_registry::get_model_registry,
             model_registry::refresh_model_registry,
+            // Dependency Intelligence
+            dependency_commands::get_dependency_overview,
+            dependency_commands::get_project_deps,
+            dependency_commands::get_dependency_alerts,
+            dependency_commands::resolve_dependency_alert,
+            // Accuracy Tracking (Phase 4.1)
+            accuracy::get_accuracy_report,
+            accuracy::get_intelligence_report,
+            // Temporal Graph (Phase 4.5)
+            temporal_graph::get_temporal_snapshot,
+            temporal_graph::get_adoption_curves,
+            temporal_graph::get_knowledge_decay_report,
+            // Tech Convergence (Phase 6.3)
+            tech_convergence::get_tech_convergence,
+            tech_convergence::get_project_health_comparison,
+            tech_convergence::get_cross_project_dependencies,
+            // AI Cost Tracking (Phase 8.2)
+            ai_costs::get_ai_usage_summary,
+            ai_costs::get_ai_cost_estimate,
+            ai_costs::get_ai_cost_recommendation,
         ])
         .setup(|app| {
             // Record app start time for diagnostics uptime tracking

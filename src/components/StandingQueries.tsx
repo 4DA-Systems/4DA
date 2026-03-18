@@ -1,22 +1,23 @@
 import { useState, useEffect, useCallback, memo } from 'react';
+import { cmd } from '../lib/commands';
 
 interface StandingQuery {
   id: number;
-  query: string;
-  query_type: string;
+  query_text: string;
+  keywords: string[];
   created_at: string;
-  last_match_at: string | null;
-  match_count: number;
+  last_run: string | null;
+  total_matches: number;
+  new_matches: number;
   active: boolean;
 }
 
-interface QueryMatch {
-  id: number;
-  query_id: number;
-  source_item_id: number;
-  matched_at: string;
-  title?: string;
-  url?: string;
+interface StandingQueryMatch {
+  item_id: number;
+  title: string;
+  source_type: string;
+  url: string | null;
+  discovered_at: string | null;
 }
 
 const QUERY_TYPES = [
@@ -44,21 +45,24 @@ const QueryItem = memo(function QueryItem({
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2">
           <span className="text-xs px-1.5 py-0.5 rounded bg-bg-tertiary text-text-muted uppercase tracking-wider font-mono">
-            {query.query_type}
+            {query.keywords.length > 0 ? query.keywords[0] : 'keyword'}
           </span>
           <span className="text-sm font-medium text-text-primary truncate">
-            {query.query}
+            {query.query_text}
           </span>
         </div>
         <div className="flex items-center gap-3 mt-1 text-xs text-text-muted">
-          <span>{query.match_count} match{query.match_count !== 1 ? 'es' : ''}</span>
-          {query.last_match_at && (
-            <span>Last: {new Date(query.last_match_at).toLocaleDateString()}</span>
+          <span>{query.total_matches} match{query.total_matches !== 1 ? 'es' : ''}</span>
+          {query.new_matches > 0 && (
+            <span className="text-[#22C55E]">{query.new_matches} new</span>
+          )}
+          {query.last_run && (
+            <span>Last run: {new Date(query.last_run).toLocaleDateString()}</span>
           )}
         </div>
       </div>
       <div className="flex items-center gap-1 ml-2">
-        {query.match_count > 0 && (
+        {query.total_matches > 0 && (
           <button
             onClick={() => onViewMatches(query.id)}
             className="text-xs px-2 py-1 rounded text-text-muted hover:text-text-secondary transition-colors"
@@ -89,52 +93,86 @@ export default function StandingQueries() {
   const [queryType, setQueryType] = useState<string>('keyword');
   const [loading, setLoading] = useState(true);
   const [adding, setAdding] = useState(false);
-  const [selectedMatches, setSelectedMatches] = useState<QueryMatch[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  const [selectedMatches, setSelectedMatches] = useState<StandingQueryMatch[]>([]);
   const [selectedQueryId, setSelectedQueryId] = useState<number | null>(null);
+  const [matchesLoading, setMatchesLoading] = useState(false);
 
-  // Mock data for initial implementation — will be replaced with Tauri commands
-  useEffect(() => {
+  // Load standing queries from backend
+  const loadQueries = useCallback(() => {
     setLoading(true);
-    // Simulated load
-    setTimeout(() => {
-      setQueries([]);
-      setLoading(false);
-    }, 300);
+    setError(null);
+    cmd('list_standing_queries')
+      .then(result => {
+        setQueries(result);
+      })
+      .catch(err => {
+        console.error('Failed to load standing queries:', err);
+        setQueries([]);
+        setError('Failed to load watches');
+      })
+      .finally(() => setLoading(false));
   }, []);
+
+  useEffect(() => { loadQueries(); }, [loadQueries]);
 
   const handleAdd = useCallback(async () => {
     if (!newQuery.trim()) return;
     setAdding(true);
+    setError(null);
     try {
-      const query: StandingQuery = {
-        id: Date.now(),
-        query: newQuery.trim(),
-        query_type: queryType,
-        created_at: new Date().toISOString(),
-        last_match_at: null,
-        match_count: 0,
-        active: true,
-      };
-      setQueries(prev => [query, ...prev]);
+      // Prefix with query type for the backend to parse
+      const queryText = queryType !== 'keyword'
+        ? `${queryType}:${newQuery.trim()}`
+        : newQuery.trim();
+
+      await cmd('create_standing_query', { queryText });
       setNewQuery('');
+      // Reload the full list to get the backend-generated entry
+      loadQueries();
+    } catch (err) {
+      console.error('Failed to create standing query:', err);
+      setError('Failed to create watch');
     } finally {
       setAdding(false);
     }
-  }, [newQuery, queryType]);
+  }, [newQuery, queryType, loadQueries]);
 
-  const handleDelete = useCallback((id: number) => {
-    setQueries(prev => prev.filter(q => q.id !== id));
-  }, []);
+  const handleDelete = useCallback(async (id: number) => {
+    try {
+      await cmd('delete_standing_query', { id });
+      setQueries(prev => prev.filter(q => q.id !== id));
+      // Clear matches panel if viewing this query
+      if (selectedQueryId === id) {
+        setSelectedQueryId(null);
+        setSelectedMatches([]);
+      }
+    } catch (err) {
+      console.error('Failed to delete standing query:', err);
+      setError('Failed to remove watch');
+    }
+  }, [selectedQueryId]);
 
   const handleToggle = useCallback((id: number) => {
+    // Toggle is optimistic in the UI — backend doesn't have a toggle command yet
+    // so we just update local state. This will be reflected on next full reload.
     setQueries(prev =>
       prev.map(q => (q.id === id ? { ...q, active: !q.active } : q)),
     );
   }, []);
 
-  const handleViewMatches = useCallback((id: number) => {
+  const handleViewMatches = useCallback(async (id: number) => {
     setSelectedQueryId(id);
-    setSelectedMatches([]); // Would fetch from backend
+    setMatchesLoading(true);
+    try {
+      const matches = await cmd('get_standing_query_matches', { id, limit: 20 });
+      setSelectedMatches(matches);
+    } catch (err) {
+      console.error('Failed to load matches:', err);
+      setSelectedMatches([]);
+    } finally {
+      setMatchesLoading(false);
+    }
   }, []);
 
   if (loading) {
@@ -147,6 +185,13 @@ export default function StandingQueries() {
 
   return (
     <div className="flex flex-col h-full">
+      {/* Error banner */}
+      {error && (
+        <div className="px-4 py-2 bg-[#EF4444]/10 border-b border-[#EF4444]/20">
+          <p className="text-xs text-[#EF4444]">{error}</p>
+        </div>
+      )}
+
       {/* Add new query */}
       <div className="p-4 border-b border-border/50">
         <div className="flex gap-2">
@@ -174,7 +219,7 @@ export default function StandingQueries() {
             disabled={adding || !newQuery.trim()}
             className="text-xs px-3 py-1.5 rounded bg-white/5 border border-border/50 text-text-secondary hover:bg-white/10 hover:text-text-primary transition-colors disabled:opacity-30"
           >
-            Watch
+            {adding ? 'Adding...' : 'Watch'}
           </button>
         </div>
         <p className="text-xs text-text-muted mt-2">
@@ -213,20 +258,47 @@ export default function StandingQueries() {
               Matches
             </h4>
             <button
-              onClick={() => setSelectedQueryId(null)}
+              onClick={() => { setSelectedQueryId(null); setSelectedMatches([]); }}
               className="text-xs text-text-muted hover:text-text-secondary"
             >
               Close
             </button>
           </div>
-          {selectedMatches.length === 0 ? (
+          {matchesLoading ? (
+            <p className="text-xs text-text-muted">Loading matches...</p>
+          ) : selectedMatches.length === 0 ? (
             <p className="text-xs text-text-muted">No matches recorded yet.</p>
           ) : (
-            selectedMatches.map(m => (
-              <div key={m.id} className="py-1.5 text-xs text-text-secondary">
-                {m.title || `Item #${m.source_item_id}`}
-              </div>
-            ))
+            <div className="space-y-1">
+              {selectedMatches.map(m => (
+                <div key={m.item_id} className="py-1.5 flex items-center justify-between">
+                  <div className="min-w-0 flex-1">
+                    {m.url ? (
+                      <a
+                        href={m.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-xs text-text-secondary hover:text-white transition-colors truncate block"
+                      >
+                        {m.title || `Item #${m.item_id}`}
+                      </a>
+                    ) : (
+                      <span className="text-xs text-text-secondary truncate block">
+                        {m.title || `Item #${m.item_id}`}
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2 ml-2 shrink-0">
+                    <span className="text-xs text-text-muted/60">{m.source_type}</span>
+                    {m.discovered_at && (
+                      <span className="text-xs text-text-muted/40">
+                        {new Date(m.discovered_at).toLocaleDateString()}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
           )}
         </div>
       )}
