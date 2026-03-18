@@ -25,6 +25,10 @@ pub struct SignalSummary {
 // Scheduled Check Completion
 // ============================================================================
 
+/// Maximum security-alert notifications per scan cycle.
+/// If more alerts are found, a single summary notification is sent instead.
+const MAX_SECURITY_NOTIFICATIONS_PER_CYCLE: usize = 5;
+
 /// Called when a scheduled analysis completes
 pub fn complete_scheduled_check<R: Runtime>(
     app: &AppHandle<R>,
@@ -39,6 +43,32 @@ pub fn complete_scheduled_check<R: Runtime>(
     state
         .last_relevant_count
         .store(new_relevant_count as u64, Ordering::Relaxed);
+
+    // Cap security-alert notifications: if too many, send summary instead
+    if let Some(ref summary) = signal_summary {
+        let total_security = summary.critical_count + summary.high_count;
+        if total_security > MAX_SECURITY_NOTIFICATIONS_PER_CYCLE {
+            let title = format!("4DA — {} Security Alerts Detected", total_security);
+            let body = format!(
+                "{} critical, {} high priority alerts found. Open 4DA for details.",
+                summary.critical_count, summary.high_count
+            );
+            if let Err(e) = app
+                .notification()
+                .builder()
+                .title(&title)
+                .body(&body)
+                .show()
+            {
+                warn!(target: "4da::notify", error = %e, "Failed to send summary security notification");
+            } else {
+                info!(target: "4da::notify", total_security, "Sent summary security notification (flood cap)");
+            }
+            // Batch the rest for briefing
+            batch_generic_items(state, new_relevant_count, &signal_summary);
+            return;
+        }
+    }
 
     // Read notification threshold from settings
     let threshold = {

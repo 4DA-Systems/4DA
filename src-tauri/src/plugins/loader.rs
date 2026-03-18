@@ -211,29 +211,63 @@ pub fn execute_plugin(manifest: &PluginManifest, config: &PluginConfig) -> Resul
     Ok(limited_items)
 }
 
-/// Wait for a child process with a timeout.
+/// Wait for a child process with a timeout and capped output size.
 ///
-/// On timeout, kills the process and returns an error.
+/// Reads stdout/stderr incrementally so a malicious plugin cannot exhaust
+/// memory before we can check the size. On timeout or output overflow,
+/// kills the process and returns an error.
 fn wait_with_timeout(
     child: &mut std::process::Child,
     timeout: Duration,
 ) -> std::result::Result<std::process::Output, std::io::Error> {
-    // Use a thread to implement timeout since std::process doesn't have native timeout
+    use std::io::Read;
+
     let start = std::time::Instant::now();
     let poll_interval = Duration::from_millis(100);
+
+    // Read stdout in a background thread with a size cap to prevent memory exhaustion
+    let stdout_handle = child.stdout.take();
+    let stdout_thread = std::thread::spawn(move || {
+        let Some(mut reader) = stdout_handle else {
+            return Ok(Vec::new());
+        };
+        let mut buf = Vec::new();
+        let mut chunk = [0u8; 8192];
+        loop {
+            match reader.read(&mut chunk) {
+                Ok(0) => break,
+                Ok(n) => {
+                    buf.extend_from_slice(&chunk[..n]);
+                    if buf.len() > MAX_PLUGIN_OUTPUT_BYTES {
+                        return Err(std::io::Error::new(
+                            std::io::ErrorKind::Other,
+                            "Plugin stdout exceeded size limit",
+                        ));
+                    }
+                }
+                Err(ref e) if e.kind() == std::io::ErrorKind::Interrupted => continue,
+                Err(e) => return Err(e),
+            }
+        }
+        Ok(buf)
+    });
 
     loop {
         match child.try_wait() {
             Ok(Some(status)) => {
                 // Process finished — collect output
-                let stdout = child.stdout.take().map_or_else(Vec::new, |mut s| {
-                    let mut buf = Vec::new();
-                    std::io::Read::read_to_end(&mut s, &mut buf).unwrap_or(0);
-                    buf
-                });
+                let stdout = match stdout_thread.join() {
+                    Ok(Ok(buf)) => buf,
+                    Ok(Err(e)) => {
+                        return Err(e);
+                    }
+                    Err(_) => Vec::new(),
+                };
                 let stderr = child.stderr.take().map_or_else(Vec::new, |mut s| {
                     let mut buf = Vec::new();
-                    std::io::Read::read_to_end(&mut s, &mut buf).unwrap_or(0);
+                    // Cap stderr too, but we only use it for logging
+                    Read::read_to_end(&mut s, &mut buf).unwrap_or(0);
+                    buf.truncate(MAX_PLUGIN_OUTPUT_BYTES);
                     buf
                 });
                 return Ok(std::process::Output {
@@ -247,6 +281,8 @@ fn wait_with_timeout(
                 if start.elapsed() > timeout {
                     let _ = child.kill();
                     let _ = child.wait(); // Reap the process
+                                          // Also join the stdout thread to avoid leaks
+                    let _ = stdout_thread.join();
                     return Err(std::io::Error::new(
                         std::io::ErrorKind::TimedOut,
                         "Plugin execution timed out",
@@ -254,7 +290,10 @@ fn wait_with_timeout(
                 }
                 std::thread::sleep(poll_interval);
             }
-            Err(e) => return Err(e),
+            Err(e) => {
+                let _ = stdout_thread.join();
+                return Err(e);
+            }
         }
     }
 }

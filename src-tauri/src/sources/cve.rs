@@ -174,8 +174,25 @@ pub(crate) fn advisories_to_source_items(advisories: &[CveAdvisory]) -> Vec<Sour
         .collect()
 }
 
+/// Normalize ecosystem names to canonical forms for consistent cross-referencing.
+/// GitHub Advisory Database, NVD, and user lockfiles may use different names
+/// for the same ecosystem (e.g., "javascript" vs "npm" vs "typescript").
+fn normalize_ecosystem(eco: &str) -> &str {
+    match eco.to_lowercase().as_str() {
+        "javascript" | "typescript" | "npm" => "npm",
+        "rust" | "crates.io" => "crates.io",
+        "python" | "pip" | "pypi" => "pip",
+        "go" | "golang" => "go",
+        "ruby" | "rubygems" => "rubygems",
+        "java" | "maven" => "maven",
+        _ => eco,
+    }
+}
+
 /// Cross-reference CVE advisories against user's installed dependencies.
 /// Returns advisories that affect the user, with the matching packages.
+/// Ecosystem names are normalized before comparison to handle mismatches
+/// between advisory sources and lockfile formats.
 pub(crate) fn cross_reference_advisories(
     advisories: &[CveAdvisory],
     user_deps: &[(String, String)], // (package_name, ecosystem)
@@ -188,7 +205,8 @@ pub(crate) fn cross_reference_advisories(
             .iter()
             .filter(|ap| {
                 user_deps.iter().any(|(name, eco)| {
-                    name.eq_ignore_ascii_case(&ap.name) && eco.eq_ignore_ascii_case(&ap.ecosystem)
+                    name.eq_ignore_ascii_case(&ap.name)
+                        && normalize_ecosystem(eco) == normalize_ecosystem(&ap.ecosystem)
                 })
             })
             .cloned()
