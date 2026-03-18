@@ -306,9 +306,15 @@ pub(crate) async fn analyze_cached_content_impl(app: &AppHandle) -> Result<Vec<S
                 e
             )
         })?;
+        let trend_topics = crate::detect_trend_topics(
+            new_items
+                .iter()
+                .map(|item| (item.title.as_str(), item.content.as_str())),
+        );
         let options = scoring::ScoringOptions {
             apply_freshness: true,
             apply_signals: true,
+            trend_topics,
         };
 
         let mut new_results: Vec<SourceRelevance> = Vec::new();

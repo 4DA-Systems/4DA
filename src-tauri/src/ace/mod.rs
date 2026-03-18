@@ -56,6 +56,9 @@ pub struct ACE {
     pub(crate) watcher_persistence: Option<WatcherStatePersistence>,
     pub(crate) embedding_service: Option<Mutex<EmbeddingService>>,
     pub(crate) rate_limiter: InteractionRateLimiter,
+    /// Aggregate peak commit hours (0-23) across all analyzed repos, sorted by frequency.
+    /// Populated by `analyze_git_repos()` and read by `get_ace_context()` for scoring.
+    pub(crate) peak_hours: Vec<u8>,
 }
 
 /// A detected technology with confidence
@@ -154,6 +157,7 @@ impl ACE {
             watcher_persistence,
             embedding_service: Some(Mutex::new(embedding_service)),
             rate_limiter,
+            peak_hours: Vec::new(),
         })
     }
 
@@ -724,6 +728,7 @@ mod tests {
             watcher_persistence: None,
             embedding_service: None,
             rate_limiter: InteractionRateLimiter::new(1000, 100, 60),
+            peak_hours: Vec::new(),
         }
     }
 

@@ -263,6 +263,7 @@ pub(crate) fn run_probe_calibration(
     let opts = ScoringOptions {
         apply_freshness: false,
         apply_signals: false,
+        trend_topics: vec![],
     };
     let zero_emb = vec![0.0_f32; 384];
 
@@ -378,6 +379,7 @@ pub(crate) fn audit_signal_axes(ctx: &ScoringContext, db: &crate::db::Database) 
     let opts = ScoringOptions {
         apply_freshness: false,
         apply_signals: false,
+        trend_topics: vec![],
     };
 
     // Use a generic dev probe that should score for most contexts

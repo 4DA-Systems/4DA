@@ -1,0 +1,72 @@
+{
+  "name": "4da",
+  "displayName": "4DA — Developer Operating System",
+  "description": "Developer intelligence signals, dependency alerts, and security monitoring — privately, locally.",
+  "version": "0.1.0",
+  "publisher": "4da-systems",
+  "license": "FSL-1.1-Apache-2.0",
+  "icon": "media/icon.png",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/4da-systems/4da"
+  },
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": ["Other"],
+  "keywords": ["developer intelligence", "security", "dependencies", "signals", "privacy", "local-first"],
+  "activationEvents": ["onStartupFinished"],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "commands": [
+      { "command": "4da.showSignals", "title": "4DA: Show Signals" },
+      { "command": "4da.refreshSignals", "title": "4DA: Refresh Signals" },
+      { "command": "4da.openApp", "title": "4DA: Open Desktop App" }
+    ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "4da-signals",
+          "title": "4DA Signals",
+          "icon": "media/icon-sidebar.svg"
+        }
+      ]
+    },
+    "views": {
+      "4da-signals": [
+        {
+          "type": "webview",
+          "id": "4da.signalPanel",
+          "name": "Signals"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "4DA",
+      "properties": {
+        "4da.refreshInterval": {
+          "type": "number",
+          "default": 300,
+          "description": "Signal refresh interval in seconds"
+        },
+        "4da.showStatusBar": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show signal count in status bar"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "package": "vsce package",
+    "lint": "eslint src --ext ts"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.85.0",
+    "@types/node": "^20.0.0",
+    "typescript": "^5.4.0",
+    "@vscode/vsce": "^2.24.0"
+  }
+}

@@ -582,7 +582,7 @@ mod tests {
         // so it WILL match on word boundary. This is actually correct behavior —
         // the word "react" in tech context usually IS about React.
         // The real filter is: does it pass the 2-signal gate without other signals?
-        // With only 1 axis (dependency), it gets capped at 0.32.
+        // With only 1 axis (dependency), it gets capped at 0.28.
         // The test validates the function runs without panic.
         assert!(score <= 1.0, "Score should be capped at 1.0");
     }

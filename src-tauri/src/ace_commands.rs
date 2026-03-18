@@ -125,6 +125,64 @@ pub async fn ace_full_scan(paths: Vec<String>) -> Result<serde_json::Value> {
         (manifest_context, git_signals)
     }; // ACE lock is dropped here
 
+    // Phase 1b: Learning trajectory detection
+    let mut learning_topics: Vec<String> = Vec::new();
+    for path in &scan_paths {
+        let signals = crate::ace::scanner::detect_learning_directories(path);
+        for signal in signals {
+            if !learning_topics.contains(&signal.topic) {
+                learning_topics.push(signal.topic);
+            }
+        }
+    }
+    if !learning_topics.is_empty() {
+        info!(target: "4da::ace", topics = learning_topics.len(), "Detected learning trajectory topics");
+        // Store learning topics as active topics with learning_trajectory source tag
+        if let Ok(ace) = get_ace_engine() {
+            let conn = ace.get_conn().lock();
+            for topic in &learning_topics {
+                if let Err(e) = conn.execute(
+                    "INSERT INTO active_topics (topic, weight, confidence, source, last_seen)
+                     VALUES (?1, 0.65, 0.7, 'learning_trajectory', datetime('now'))
+                     ON CONFLICT(topic) DO UPDATE SET
+                        weight = MAX(excluded.weight, active_topics.weight),
+                        confidence = MAX(excluded.confidence, active_topics.confidence),
+                        last_seen = datetime('now')",
+                    rusqlite::params![topic],
+                ) {
+                    debug!("Failed to store learning topic: {e}");
+                }
+            }
+        }
+    }
+
+    // Phase 1c: Aggregate peak commit hours across all repos for temporal scoring
+    {
+        let mut hour_counts = [0u32; 24];
+        for signal in &git_signals {
+            for &hour in &signal.peak_hours {
+                if (hour as usize) < 24 {
+                    hour_counts[hour as usize] += 1;
+                }
+            }
+        }
+        let mut hour_pairs: Vec<(u8, u32)> = hour_counts
+            .iter()
+            .enumerate()
+            .filter(|(_, &count)| count > 0)
+            .map(|(h, &count)| (h as u8, count))
+            .collect();
+        hour_pairs.sort_by(|a, b| b.1.cmp(&a.1));
+        let aggregate_peak_hours: Vec<u8> =
+            hour_pairs.into_iter().take(5).map(|(h, _)| h).collect();
+        if !aggregate_peak_hours.is_empty() {
+            if let Ok(mut ace) = get_ace_engine_mut() {
+                ace.peak_hours = aggregate_peak_hours.clone();
+                info!(target: "4da::ace", hours = ?aggregate_peak_hours, "Stored aggregate peak commit hours");
+            }
+        }
+    }
+
     // Phase 3: README indexing (PASIFA - semantic context from discovered projects)
     // This makes ACE discovery contribute to semantic matching, not just keyword boost
     debug!(target: "4da::ace", "Indexing README files for semantic search");
@@ -162,6 +220,9 @@ pub async fn ace_full_scan(paths: Vec<String>) -> Result<serde_json::Value> {
         },
         "readme_index": {
             "chunks_indexed": readme_chunks_indexed
+        },
+        "learning_trajectory": {
+            "topics": learning_topics,
         },
         "combined": {
             "total_topics": total_topics.len(),

@@ -205,6 +205,9 @@ impl ProjectScanner {
     }
 
     fn check_manifests(&self, dir: &Path, signals: &mut Vec<ProjectSignal>) -> Result<()> {
+        // Track where new signals start so we can merge imports into all of them
+        let signals_start = signals.len();
+
         // Check each manifest type
         let manifest_types = [
             ManifestType::CargoToml,
@@ -236,6 +239,64 @@ impl ProjectScanner {
                 if path.extension().is_some_and(|e| e == "csproj") {
                     if let Some(signal) = self.parse_manifest(&path, ManifestType::Csproj) {
                         signals.push(signal);
+                    }
+                }
+            }
+        }
+
+        // Supplement manifest deps with import-extracted packages.
+        // Only scan if we found at least one manifest (confirms this is a project dir).
+        if signals.len() > signals_start {
+            let mut import_deps: HashSet<String> = HashSet::new();
+            let mut files_scanned = 0u32;
+            const MAX_SOURCE_FILES: u32 = 50;
+
+            // Scan source files in the manifest directory
+            if let Ok(entries) = fs::read_dir(dir) {
+                for entry in entries.flatten() {
+                    if files_scanned >= MAX_SOURCE_FILES {
+                        break;
+                    }
+                    let path = entry.path();
+                    if path.is_file() {
+                        let extracted = extract_imports_from_source(&path);
+                        if !extracted.is_empty() {
+                            import_deps.extend(extracted);
+                            files_scanned += 1;
+                        }
+                    }
+                }
+            }
+
+            // Also scan src/ subdirectory if it exists (common convention)
+            let src_dir = dir.join("src");
+            if src_dir.is_dir() {
+                if let Ok(entries) = fs::read_dir(&src_dir) {
+                    for entry in entries.flatten() {
+                        if files_scanned >= MAX_SOURCE_FILES {
+                            break;
+                        }
+                        let path = entry.path();
+                        if path.is_file() {
+                            let extracted = extract_imports_from_source(&path);
+                            if !extracted.is_empty() {
+                                import_deps.extend(extracted);
+                                files_scanned += 1;
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Merge unique import deps into ALL signals from this directory
+            if !import_deps.is_empty() {
+                for signal in &mut signals[signals_start..] {
+                    for dep in &import_deps {
+                        if !signal.dependencies.contains(dep)
+                            && !signal.dev_dependencies.contains(dep)
+                        {
+                            signal.dependencies.push(dep.clone());
+                        }
                     }
                 }
             }
@@ -623,6 +684,195 @@ fn extract_json_keys(obj: &str) -> Vec<String> {
     keys
 }
 
+/// Extract import/dependency names from source file imports.
+/// Scans first 100 lines for language-specific import patterns.
+/// Returns unique package/crate names found.
+pub(crate) fn extract_imports_from_source(path: &Path) -> Vec<String> {
+    let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("");
+
+    // Only process known source files
+    if !matches!(ext, "rs" | "ts" | "tsx" | "js" | "jsx" | "py" | "go") {
+        return Vec::new();
+    }
+
+    let content = match fs::read_to_string(path) {
+        Ok(c) => c,
+        Err(_) => return Vec::new(),
+    };
+
+    let mut imports = HashSet::new();
+
+    for line in content.lines().take(100) {
+        let trimmed = line.trim();
+
+        match ext {
+            // Rust: use foo::bar, use foo::{...}
+            "rs" => {
+                if let Some(rest) = trimmed.strip_prefix("use ") {
+                    if let Some(crate_name) = rest.split("::").next() {
+                        let name = crate_name.trim_end_matches(';').trim();
+                        // Skip std, self, super, crate
+                        if !matches!(name, "std" | "self" | "super" | "crate" | "") {
+                            imports.insert(name.to_string());
+                        }
+                    }
+                }
+            }
+            // TypeScript/JavaScript: import ... from 'pkg', import 'pkg'
+            "ts" | "tsx" | "js" | "jsx" => {
+                if trimmed.starts_with("import ") {
+                    // import { x } from 'pkg' or import x from 'pkg'
+                    if let Some(from_part) = trimmed.split(" from ").nth(1) {
+                        let pkg = from_part
+                            .trim()
+                            .trim_matches(|c| c == '\'' || c == '"' || c == ';');
+                        if !pkg.starts_with('.') && !pkg.starts_with('/') && !pkg.is_empty() {
+                            // Extract package name (handle scoped: @scope/pkg)
+                            let name = if pkg.starts_with('@') {
+                                pkg.splitn(3, '/').take(2).collect::<Vec<_>>().join("/")
+                            } else {
+                                pkg.split('/').next().unwrap_or(pkg).to_string()
+                            };
+                            imports.insert(name);
+                        }
+                    }
+                    // import 'pkg' (side-effect import)
+                    else if let Some(start) = trimmed.find('\'').or_else(|| trimmed.find('"')) {
+                        let rest = &trimmed[start + 1..];
+                        if let Some(end) = rest.find('\'').or_else(|| rest.find('"')) {
+                            let pkg = &rest[..end];
+                            if !pkg.starts_with('.') && !pkg.starts_with('/') && !pkg.is_empty() {
+                                let name = if pkg.starts_with('@') {
+                                    pkg.splitn(3, '/').take(2).collect::<Vec<_>>().join("/")
+                                } else {
+                                    pkg.split('/').next().unwrap_or(pkg).to_string()
+                                };
+                                imports.insert(name);
+                            }
+                        }
+                    }
+                }
+            }
+            // Python: from pkg import ..., import pkg
+            "py" => {
+                if let Some(rest) = trimmed.strip_prefix("from ") {
+                    if let Some(pkg) = rest.split_whitespace().next() {
+                        let top = pkg.split('.').next().unwrap_or(pkg);
+                        if !top.is_empty() {
+                            imports.insert(top.to_string());
+                        }
+                    }
+                } else if let Some(rest) = trimmed.strip_prefix("import ") {
+                    for part in rest.split(',') {
+                        let pkg = part.trim().split_whitespace().next().unwrap_or("");
+                        let top = pkg.split('.').next().unwrap_or(pkg);
+                        if !top.is_empty() {
+                            imports.insert(top.to_string());
+                        }
+                    }
+                }
+            }
+            // Go: import "pkg"
+            "go" => {
+                if trimmed.starts_with("import ") || trimmed.starts_with('"') {
+                    if let Some(start) = trimmed.find('"') {
+                        let rest = &trimmed[start + 1..];
+                        if let Some(end) = rest.find('"') {
+                            let pkg = &rest[..end];
+                            // Extract last path segment as package name
+                            if let Some(name) = pkg.rsplit('/').next() {
+                                if !name.is_empty() {
+                                    imports.insert(name.to_string());
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+
+    imports.into_iter().collect()
+}
+
+/// Signal indicating the user is actively learning a topic.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LearningSignal {
+    pub topic: String,
+    pub source_dir: PathBuf,
+}
+
+/// Detect learning trajectory directories and tag their topics.
+/// Directories named "learning", "tutorials", "courses", "study" indicate
+/// the user is actively learning those technologies — boost, don't suppress.
+pub(crate) fn detect_learning_directories(path: &Path) -> Vec<LearningSignal> {
+    let learning_markers = [
+        "learning",
+        "tutorials",
+        "courses",
+        "study",
+        "practice",
+        "labs",
+    ];
+    let mut signals = Vec::new();
+
+    let Ok(entries) = fs::read_dir(path) else {
+        return signals;
+    };
+
+    for entry in entries.flatten() {
+        let entry_path = entry.path();
+        if !entry_path.is_dir() {
+            continue;
+        }
+
+        let dir_name = entry_path
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("")
+            .to_lowercase();
+
+        if learning_markers.iter().any(|m| dir_name.contains(m)) {
+            // Scan subdirectories for technology topics
+            if let Ok(sub_entries) = fs::read_dir(&entry_path) {
+                for sub in sub_entries.flatten() {
+                    if sub.path().is_dir() {
+                        let topic = sub.file_name().to_string_lossy().to_lowercase();
+                        if !topic.starts_with('.') && topic.len() > 1 {
+                            signals.push(LearningSignal {
+                                topic: topic.clone(),
+                                source_dir: entry_path.clone(),
+                            });
+                        }
+                    }
+                }
+            }
+
+            // Also check for manifests to detect what's being learned
+            let scanner = ProjectScanner::new();
+            if let Ok(project_signals) = scanner.scan_directory(&entry_path) {
+                for ps in project_signals {
+                    for lang in &ps.languages {
+                        signals.push(LearningSignal {
+                            topic: lang.clone(),
+                            source_dir: entry_path.clone(),
+                        });
+                    }
+                    for fw in &ps.frameworks {
+                        signals.push(LearningSignal {
+                            topic: fw.clone(),
+                            source_dir: entry_path.clone(),
+                        });
+                    }
+                }
+            }
+        }
+    }
+
+    signals
+}
+
 // ============================================================================
 // Tests
 // ============================================================================
@@ -710,5 +960,149 @@ pretty_assertions = "1.0"
         let keys = extract_json_keys(obj);
         assert!(keys.contains(&"react".to_string()));
         assert!(keys.contains(&"next".to_string()));
+    }
+
+    #[test]
+    fn test_extract_imports_rust() {
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join("main.rs");
+        std::fs::write(
+            &file,
+            "use serde::Serialize;\nuse tokio::runtime;\nuse std::collections::HashMap;\nuse crate::db;\n",
+        )
+        .unwrap();
+        let mut imports = extract_imports_from_source(&file);
+        imports.sort();
+        assert!(imports.contains(&"serde".to_string()));
+        assert!(imports.contains(&"tokio".to_string()));
+        // std, crate should be excluded
+        assert!(!imports.contains(&"std".to_string()));
+        assert!(!imports.contains(&"crate".to_string()));
+    }
+
+    #[test]
+    fn test_extract_imports_typescript() {
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join("index.ts");
+        std::fs::write(
+            &file,
+            "import React from 'react';\nimport { useState } from 'react';\nimport { foo } from './local';\nimport '@tanstack/react-query';\n",
+        )
+        .unwrap();
+        let mut imports = extract_imports_from_source(&file);
+        imports.sort();
+        assert!(imports.contains(&"react".to_string()));
+        assert!(imports.contains(&"@tanstack/react-query".to_string()));
+        // relative imports should be excluded
+        assert!(!imports.iter().any(|i| i.contains("local")));
+    }
+
+    #[test]
+    fn test_extract_imports_python() {
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join("app.py");
+        std::fs::write(
+            &file,
+            "from flask import Flask\nimport numpy as np\nimport os, sys\nfrom pandas.core import frame\n",
+        )
+        .unwrap();
+        let mut imports = extract_imports_from_source(&file);
+        imports.sort();
+        assert!(imports.contains(&"flask".to_string()));
+        assert!(imports.contains(&"numpy".to_string()));
+        assert!(imports.contains(&"os".to_string()));
+        assert!(imports.contains(&"pandas".to_string()));
+    }
+
+    #[test]
+    fn test_extract_imports_unsupported_extension() {
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join("readme.md");
+        std::fs::write(&file, "# Hello\nimport something").unwrap();
+        let imports = extract_imports_from_source(&file);
+        assert!(imports.is_empty());
+    }
+
+    #[test]
+    fn test_detect_learning_directories_empty() {
+        let dir = tempfile::tempdir().unwrap();
+        let signals = detect_learning_directories(dir.path());
+        assert!(signals.is_empty());
+    }
+
+    #[test]
+    fn test_detect_learning_directories_with_topics() {
+        let dir = tempfile::tempdir().unwrap();
+        let learning = dir.path().join("learning");
+        std::fs::create_dir(&learning).unwrap();
+        std::fs::create_dir(learning.join("rust")).unwrap();
+        std::fs::create_dir(learning.join("python")).unwrap();
+        // hidden dirs should be skipped
+        std::fs::create_dir(learning.join(".hidden")).unwrap();
+
+        let signals = detect_learning_directories(dir.path());
+        let topics: Vec<&str> = signals.iter().map(|s| s.topic.as_str()).collect();
+        assert!(topics.contains(&"rust"));
+        assert!(topics.contains(&"python"));
+        assert!(!topics.contains(&".hidden"));
+    }
+
+    #[test]
+    fn test_check_manifests_merges_imports() {
+        let dir = tempfile::tempdir().unwrap();
+
+        // Create a Cargo.toml with one dependency
+        std::fs::write(
+            dir.path().join("Cargo.toml"),
+            r#"[package]
+name = "test-project"
+version = "0.1.0"
+
+[dependencies]
+serde = "1.0"
+"#,
+        )
+        .unwrap();
+
+        // Create a source file that imports something NOT in the manifest
+        std::fs::write(
+            dir.path().join("main.rs"),
+            "use tracing::info;\nuse serde::Serialize;\n",
+        )
+        .unwrap();
+
+        // Also create src/ with another import
+        let src = dir.path().join("src");
+        std::fs::create_dir(&src).unwrap();
+        std::fs::write(
+            src.join("lib.rs"),
+            "use anyhow::Result;\nuse serde::Deserialize;\n",
+        )
+        .unwrap();
+
+        let scanner = ProjectScanner::new();
+        let mut signals = Vec::new();
+        scanner.check_manifests(dir.path(), &mut signals).unwrap();
+
+        assert_eq!(signals.len(), 1);
+        let signal = &signals[0];
+        assert_eq!(signal.project_name, Some("test-project".to_string()));
+        // serde was in manifest — should be present
+        assert!(signal.dependencies.contains(&"serde".to_string()));
+        // tracing and anyhow were imported but not in manifest — should be merged
+        assert!(
+            signal.dependencies.contains(&"tracing".to_string()),
+            "tracing should be merged from main.rs imports"
+        );
+        assert!(
+            signal.dependencies.contains(&"anyhow".to_string()),
+            "anyhow should be merged from src/lib.rs imports"
+        );
+        // serde should NOT be duplicated (already in deps from manifest)
+        assert_eq!(
+            signal.dependencies.iter().filter(|d| *d == "serde").count(),
+            1,
+            "serde should not be duplicated"
+        );
     }
 }

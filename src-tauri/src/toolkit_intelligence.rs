@@ -170,6 +170,7 @@ pub async fn toolkit_score_sandbox(
     let options = crate::scoring::ScoringOptions {
         apply_freshness: false,
         apply_signals: false,
+        trend_topics: vec![],
     };
 
     let result = crate::scoring::score_item(&input, &ctx, db, &options, None);

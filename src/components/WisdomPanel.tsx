@@ -1,6 +1,50 @@
 import { useState, memo, useCallback } from 'react';
 import { cmd } from '../lib/commands';
 
+const FeedbackButtons = memo(function FeedbackButtons({ query }: { query: string }) {
+  const [submitted, setSubmitted] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+
+  const handleFeedback = useCallback(async (outcome: string) => {
+    setSubmitting(true);
+    try {
+      // Use the query as decision reference since we don't have decision_id from transmute
+      await cmd('run_awe_feedback', {
+        decisionId: `inline_${Date.now()}`,
+        outcome,
+        details: query,
+      });
+      setSubmitted(true);
+    } catch {
+      // Silently fail — feedback is best-effort
+    } finally {
+      setSubmitting(false);
+    }
+  }, [query]);
+
+  if (submitted) {
+    return (
+      <p className="text-xs text-text-muted italic">Outcome recorded — improves future analysis.</p>
+    );
+  }
+
+  return (
+    <div className="flex items-center gap-2">
+      <span className="text-xs text-text-muted">How did it turn out?</span>
+      {['confirmed', 'refuted', 'partial', 'too_early'].map(outcome => (
+        <button
+          key={outcome}
+          onClick={() => handleFeedback(outcome)}
+          disabled={submitting}
+          className="text-xs px-2 py-0.5 rounded border border-border/50 text-text-muted hover:text-text-secondary hover:border-border transition-colors disabled:opacity-30"
+        >
+          {outcome === 'too_early' ? 'Too Early' : outcome.charAt(0).toUpperCase() + outcome.slice(1)}
+        </button>
+      ))}
+    </div>
+  );
+});
+
 interface TransmuteResult {
   wisdom: string;
   confidence: number;
@@ -140,6 +184,9 @@ export const WisdomPanel = memo(function WisdomPanel() {
                 ))}
               </div>
             )}
+
+            {/* Feedback — record decision outcomes */}
+            <FeedbackButtons query={query} />
           </div>
         )}
       </div>
