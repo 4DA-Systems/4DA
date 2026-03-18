@@ -47,6 +47,15 @@ pub struct GitSignal {
     pub commit_frequency: f32,
     pub last_commit: Option<String>,
     pub confidence: f32,
+    /// Average commits per day over the analysis period
+    #[serde(default)]
+    pub commits_per_day: f32,
+    /// Peak commit hours (0-23), sorted by frequency (most active first)
+    #[serde(default)]
+    pub peak_hours: Vec<u8>,
+    /// Number of unique authors (>1 indicates team project)
+    #[serde(default)]
+    pub unique_authors: u32,
 }
 
 /// Information about a commit
@@ -164,6 +173,40 @@ impl GitAnalyzer {
             recent_commits.len() as f32 / self.config.history_days as f32
         };
 
+        // Commits per day (same as commit_frequency but named clearly)
+        let commits_per_day = commit_frequency;
+
+        // Peak hours from commit timestamps
+        // git %ai format: "2024-01-15 14:30:00 +0100"
+        let mut hour_counts = [0u32; 24];
+        for commit in &recent_commits {
+            if let Ok(dt) =
+                chrono::DateTime::parse_from_str(&commit.timestamp, "%Y-%m-%d %H:%M:%S %z")
+            {
+                let hour = chrono::Timelike::hour(&dt) as usize;
+                if hour < 24 {
+                    hour_counts[hour] += 1;
+                }
+            }
+        }
+        let mut peak_hour_pairs: Vec<(u8, u32)> = hour_counts
+            .iter()
+            .enumerate()
+            .filter(|(_, &count)| count > 0)
+            .map(|(h, &count)| (h as u8, count))
+            .collect();
+        peak_hour_pairs.sort_by(|a, b| b.1.cmp(&a.1));
+        let peak_hours: Vec<u8> = peak_hour_pairs
+            .into_iter()
+            .take(5)
+            .map(|(h, _)| h)
+            .collect();
+
+        // Unique authors
+        let unique_author_set: HashSet<&str> =
+            recent_commits.iter().map(|c| c.author.as_str()).collect();
+        let unique_authors = unique_author_set.len() as u32;
+
         // Get last commit hash
         let last_commit = recent_commits.first().map(|c| c.hash.clone());
 
@@ -180,6 +223,9 @@ impl GitAnalyzer {
             commit_frequency,
             last_commit,
             confidence,
+            commits_per_day,
+            peak_hours,
+            unique_authors,
         })
     }
 
@@ -473,5 +519,35 @@ mod tests {
         assert_eq!(config.max_commits, 100);
         assert_eq!(config.history_days, 30);
         assert!(!config.include_merges);
+    }
+
+    #[test]
+    fn test_git_signal_new_fields_defaults() {
+        // Verify serde(default) works for backward compatibility
+        let json = r#"{
+            "repo_path": "/tmp/test",
+            "repo_name": "test",
+            "recent_commits": [],
+            "active_branches": [],
+            "file_activity": {},
+            "extracted_topics": [],
+            "commit_frequency": 0.0,
+            "last_commit": null,
+            "confidence": 0.5
+        }"#;
+        let signal: GitSignal = serde_json::from_str(json).unwrap();
+        assert_eq!(signal.commits_per_day, 0.0);
+        assert!(signal.peak_hours.is_empty());
+        assert_eq!(signal.unique_authors, 0);
+    }
+
+    #[test]
+    fn test_peak_hours_parsing() {
+        // Verify chrono can parse git %ai format timestamps
+        let timestamp = "2024-06-15 14:30:00 +1000";
+        let dt = chrono::DateTime::parse_from_str(timestamp, "%Y-%m-%d %H:%M:%S %z");
+        assert!(dt.is_ok());
+        let dt = dt.unwrap();
+        assert_eq!(chrono::Timelike::hour(&dt), 14);
     }
 }

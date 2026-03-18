@@ -32,7 +32,8 @@ pub(crate) use events::{
 // Re-exports from utils (preserves `use crate::fn_name` interface)
 pub(crate) use utils::{
     build_embedding_text, check_exclusions, chunk_text, cosine_similarity_with_norm,
-    decode_html_entities, extract_topics, scrape_article_content, truncate_utf8, vector_norm,
+    decode_html_entities, detect_trend_topics, extract_topics, scrape_article_content,
+    truncate_utf8, vector_norm,
 };
 
 // Re-exports from commands (pub background jobs called by monitoring scheduler)
@@ -846,6 +847,11 @@ pub fn run() {
             context_commands::sync_awe_wisdom,
             context_commands::get_awe_summary,
             context_commands::run_awe_transmute,
+            context_commands::run_awe_quick_check,
+            context_commands::run_awe_consequence_scan,
+            context_commands::run_awe_feedback,
+            context_commands::run_awe_recall,
+            context_commands::run_awe_calibration,
             context_commands::set_context_dirs,
             context_commands::get_context_dirs,
             // Analysis

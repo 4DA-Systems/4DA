@@ -9,7 +9,7 @@
 //! - **Single quality composite** (Phase 5): all multipliers dampened and multiplied in one pass,
 //!   with domain_quality_mult restored as a multiplicative factor (NOT dampened)
 //! - **Single boost cap** (Phase 6): all boosts summed, capped at \[-0.15, 0.35\], then dampened
-//! - **Gate table** matches V1 for 0-1 signals: \[(0.25,0.20), (0.45,0.32), ...\]
+//! - **Gate table** matches V1 for 0-1 signals: \[(0.25,0.20), (0.45,0.28), ...\]
 //! - **Score ceiling applied LAST** in gate phase — after domain gate mult
 
 use std::collections::HashMap;
@@ -31,7 +31,7 @@ use super::*;
 
 const V2_GATE: [(f32, f32); 6] = [
     (0.25, 0.20), // 0 signals — heavy penalty
-    (0.45, 0.32), // 1 signal — ceiling < 0.35 threshold
+    (0.45, 0.28), // 1 signal — safely below 0.35 threshold
     (1.00, 0.65), // 2 signals — tightened ceiling (was 0.80)
     (1.10, 0.85), // 3 signals — tightened ceiling (was 0.92)
     (1.20, 1.00), // 4 signals — strong confirmation
@@ -235,6 +235,7 @@ fn compute_relevance(
         let semantic_mult = if has_real_embedding
             && ctx.interest_count < 3
             && ctx.feedback_interaction_count < 10
+            && ctx.ace_ctx.dependency_names.len() < 5
         {
             scoring_config::INTEREST_ONLY_SEMANTIC_MULT * 0.4
         } else {
@@ -282,7 +283,7 @@ fn compute_quality_composite(
     let freshness = if options.apply_freshness {
         if let Some(created_at) = input.created_at {
             let base_freshness = compute_temporal_freshness(created_at);
-            if !ctx.topic_half_lives.is_empty() && !raw.topics.is_empty() {
+            let topic_adjusted = if !ctx.topic_half_lives.is_empty() && !raw.topics.is_empty() {
                 let matching_half_lives: Vec<f32> = raw
                     .topics
                     .iter()
@@ -300,6 +301,18 @@ fn compute_quality_composite(
                 }
             } else {
                 base_freshness
+            };
+            // Peak hours boost: slight freshness bonus for content published during
+            // the user's active coding hours (from git commit frequency analysis)
+            if !ctx.ace_ctx.peak_hours.is_empty() {
+                let publish_hour = chrono::Timelike::hour(created_at) as u8;
+                if ctx.ace_ctx.peak_hours.contains(&publish_hour) {
+                    (topic_adjusted + 0.03).min(1.0)
+                } else {
+                    topic_adjusted
+                }
+            } else {
+                topic_adjusted
             }
         } else {
             1.0
@@ -815,6 +828,16 @@ pub(crate) fn score_item(
         matched_window_id,
         matched_skill_gaps,
     ) = compute_boosts(quality_score, input, ctx, &raw);
+
+    // Trend topic boost (temporal clustering signal)
+    let trend_boost = if !options.trend_topics.is_empty()
+        && raw.topics.iter().any(|t| options.trend_topics.contains(t))
+    {
+        0.08
+    } else {
+        0.0
+    };
+    let boosted_score = (boosted_score + trend_boost).clamp(0.0, 1.0);
 
     // ── Phase 7: Gate effect ──────────────────────────────────────────
     let conf_idx = (signal_count as usize).min(5);

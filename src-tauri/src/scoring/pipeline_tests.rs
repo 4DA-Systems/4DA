@@ -35,6 +35,7 @@ mod tests {
         let options = ScoringOptions {
             apply_freshness: false,
             apply_signals: false,
+            trend_topics: vec![],
         };
 
         let result = score_item(&input, &ctx, &db, &options, None);
@@ -66,6 +67,7 @@ mod tests {
         let options = ScoringOptions {
             apply_freshness: false,
             apply_signals: false,
+            trend_topics: vec![],
         };
 
         let result = score_item(&input, &ctx, &db, &options, None);
@@ -115,6 +117,7 @@ mod tests {
         let options = ScoringOptions {
             apply_freshness: false,
             apply_signals: false,
+            trend_topics: vec![],
         };
 
         let result = score_item(&input, &ctx, &db, &options, None);
@@ -166,6 +169,7 @@ mod tests {
         let options = ScoringOptions {
             apply_freshness: false,
             apply_signals: false,
+            trend_topics: vec![],
         };
 
         let result = score_item(&input, &ctx, &db, &options, None);
@@ -209,6 +213,7 @@ mod tests {
         let options = ScoringOptions {
             apply_freshness: false,
             apply_signals: false,
+            trend_topics: vec![],
         };
 
         let result = score_item(&input, &ctx, &db, &options, None);
@@ -245,6 +250,7 @@ mod tests {
         let options = ScoringOptions {
             apply_freshness: false,
             apply_signals: false,
+            trend_topics: vec![],
         };
 
         let result = score_item(&input, &ctx, &db, &options, None);
@@ -284,6 +290,7 @@ mod tests {
         let options = ScoringOptions {
             apply_freshness: false,
             apply_signals: false,
+            trend_topics: vec![],
         };
 
         let result = score_item(&input, &ctx, &db, &options, None);
@@ -398,6 +405,7 @@ mod tests {
         let options = ScoringOptions {
             apply_freshness: false,
             apply_signals: false,
+            trend_topics: vec![],
         };
 
         // With stack
@@ -437,6 +445,7 @@ mod tests {
         let options = ScoringOptions {
             apply_freshness: false,
             apply_signals: false,
+            trend_topics: vec![],
         };
 
         let result = score_item(&input, &ctx, &db, &options, None);
@@ -467,6 +476,7 @@ mod tests {
         let options = ScoringOptions {
             apply_freshness: false,
             apply_signals: false,
+            trend_topics: vec![],
         };
 
         let result = score_item(&input, &ctx, &db, &options, None);
@@ -513,6 +523,7 @@ mod tests {
         let options = ScoringOptions {
             apply_freshness: false,
             apply_signals: false,
+            trend_topics: vec![],
         };
 
         let result = score_item(&input, &ctx, &db, &options, None);
@@ -560,6 +571,7 @@ mod tests {
         let options = ScoringOptions {
             apply_freshness: false,
             apply_signals: false,
+            trend_topics: vec![],
         };
 
         let result = score_item(&input, &ctx, &db, &options, None);
@@ -607,6 +619,7 @@ mod tests {
         let options = ScoringOptions {
             apply_freshness: false,
             apply_signals: false,
+            trend_topics: vec![],
         };
 
         let result = score_item(&input, &ctx, &db, &options, None);
@@ -636,6 +649,7 @@ mod tests {
         let options = ScoringOptions {
             apply_freshness: false,
             apply_signals: false,
+            trend_topics: vec![],
         };
 
         let result = score_item(&input, &ctx, &db, &options, None);

@@ -41,9 +41,16 @@ pub(crate) async fn score_items_full(
     );
 
     let scoring_ctx = scoring::build_scoring_context(db).await?;
+    let trend_topics = crate::detect_trend_topics(keep_indices.iter().map(|&i| {
+        (
+            cached_items[i].title.as_str(),
+            cached_items[i].content.as_str(),
+        )
+    }));
     let options = scoring::ScoringOptions {
         apply_freshness: true,
         apply_signals: true,
+        trend_topics,
     };
 
     emit_progress(
@@ -236,9 +243,15 @@ pub(crate) async fn run_background_analysis<R: tauri::Runtime>(
         }
     };
 
+    let trend_topics = crate::detect_trend_topics(
+        items
+            .iter()
+            .map(|item| (item.title.as_str(), item.content.as_str())),
+    );
     let options = scoring::ScoringOptions {
         apply_freshness: true,
         apply_signals: true,
+        trend_topics,
     };
 
     // Use the singleton classifier from analysis module

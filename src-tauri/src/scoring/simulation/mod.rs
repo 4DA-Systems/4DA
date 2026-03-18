@@ -50,6 +50,7 @@ pub(super) fn sim_no_freshness() -> ScoringOptions {
     ScoringOptions {
         apply_freshness: false,
         apply_signals: false,
+        trend_topics: vec![],
     }
 }
 
