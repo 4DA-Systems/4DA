@@ -71,6 +71,18 @@ pub fn discover_plugins() -> Vec<PluginManifest> {
 
         match load_manifest(&manifest_path) {
             Ok(manifest) => {
+                // Validate that manifest.name matches its containing directory
+                // to prevent a manifest from claiming a different plugin's identity
+                let dir_name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
+                if manifest.name != dir_name {
+                    warn!(
+                        target: "4da::plugins",
+                        manifest_name = %manifest.name,
+                        dir_name = %dir_name,
+                        "Plugin manifest name does not match directory name, skipping"
+                    );
+                    continue;
+                }
                 info!(target: "4da::plugins", name = %manifest.name, version = %manifest.version, "Discovered plugin");
                 plugins.push(manifest);
             }
@@ -97,6 +109,17 @@ fn load_manifest(path: &std::path::Path) -> Result<PluginManifest> {
     }
     if manifest.binary.is_empty() {
         return Err(FourDaError::Config("Plugin binary cannot be empty".into()));
+    }
+    // Prevent path traversal in name field
+    if manifest.name.contains("..")
+        || manifest.name.contains('/')
+        || manifest.name.contains('\\')
+        || manifest.name.contains('\0')
+    {
+        return Err(FourDaError::Config(
+            "Plugin name must be a simple identifier, no path separators, '..', or null bytes"
+                .into(),
+        ));
     }
     // Prevent path traversal in binary field
     if manifest.binary.contains("..")
@@ -134,6 +157,11 @@ pub fn execute_plugin(manifest: &PluginManifest, config: &PluginConfig) -> Resul
         .stdin(std::process::Stdio::piped())
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped())
+        .env_clear()
+        .env("PATH", std::env::var("PATH").unwrap_or_default())
+        .env("TEMP", std::env::temp_dir())
+        .env("TMP", std::env::temp_dir())
+        .current_dir(plugins_dir().join(&manifest.name))
         .spawn()
         .with_context(|| format!("Failed to spawn plugin '{}'", manifest.name))?;
 

@@ -16,20 +16,33 @@ export class HoverProvider implements vscode.HoverProvider {
         if (!info) return null;
 
         const md = new vscode.MarkdownString();
-        md.isTrusted = true;
+        // Only allow the specific command URI we use in the hover
+        md.isTrusted = { enabledCommands: ['4da.openApp'] };
 
         const ver = info.version ?? 'unknown';
-        md.appendMarkdown(`**${info.name}**@${ver}`);
+        // Use appendText for data from MCP to prevent markdown injection
+        md.appendMarkdown('**');
+        md.appendText(`${info.name}`);
+        md.appendMarkdown(`**@`);
+        md.appendText(ver);
         if (info.latestVersion && info.latestVersion !== ver) {
-            md.appendMarkdown(` (latest: ${info.latestVersion})`);
+            md.appendMarkdown(' (latest: ');
+            md.appendText(info.latestVersion);
+            md.appendMarkdown(')');
         }
         md.appendMarkdown('\n\n');
 
         if (info.alerts.length > 0) {
             for (const alert of info.alerts) {
                 const icon = ['critical', 'high'].includes(alert.severity) ? '$(warning)' : '$(info)';
-                md.appendMarkdown(`${icon} **${alert.title}**`);
-                if (alert.cveId) md.appendMarkdown(` (${alert.cveId})`);
+                md.appendMarkdown(`${icon} **`);
+                md.appendText(alert.title);
+                md.appendMarkdown('**');
+                if (alert.cveId) {
+                    md.appendMarkdown(' (');
+                    md.appendText(alert.cveId);
+                    md.appendMarkdown(')');
+                }
                 md.appendMarkdown(` — ${alert.severity.toUpperCase()}\n\n`);
             }
         } else {
