@@ -5,7 +5,7 @@ import { useAppStore } from '../store';
 import { trackEvent } from '../hooks/use-telemetry';
 import type { ViewTier } from '../store/types';
 
-type ViewId = 'briefing' | 'channels' | 'results' | 'profile' | 'insights' | 'saved' | 'toolkit' | 'playbook' | 'calibrate';
+type ViewId = 'briefing' | 'channels' | 'results' | 'profile' | 'insights' | 'saved' | 'toolkit' | 'playbook' | 'calibrate' | 'console';
 
 const TABS: Array<{ id: ViewId; labelKey: string; subtitleKey: string; activeColor: string }> = [
   { id: 'briefing', labelKey: 'nav.briefing.label', subtitleKey: 'nav.briefing.subtitle', activeColor: 'bg-orange-500/20 text-orange-400' },
@@ -15,6 +15,7 @@ const TABS: Array<{ id: ViewId; labelKey: string; subtitleKey: string; activeCol
   { id: 'insights', labelKey: 'nav.insights', subtitleKey: 'nav.insights.subtitle', activeColor: 'bg-amber-500/20 text-amber-400' },
   { id: 'saved', labelKey: 'nav.saved', subtitleKey: 'nav.saved.subtitle', activeColor: 'bg-green-500/20 text-green-400' },
   { id: 'profile', labelKey: 'nav.profile', subtitleKey: 'nav.profile.subtitle', activeColor: 'bg-white/10 text-white' },
+  { id: 'console', labelKey: 'nav.console', subtitleKey: 'nav.console.subtitle', activeColor: 'bg-emerald-500/20 text-emerald-400' },
   { id: 'toolkit', labelKey: 'nav.toolkit', subtitleKey: 'nav.toolkit.subtitle', activeColor: 'bg-purple-500/20 text-purple-400' },
   { id: 'calibrate', labelKey: 'nav.calibrate', subtitleKey: 'nav.calibrate.subtitle', activeColor: 'bg-sky-500/20 text-sky-400' },
 ];
@@ -22,8 +23,8 @@ const TABS: Array<{ id: ViewId; labelKey: string; subtitleKey: string; activeCol
 const TIER_VIEWS: Record<ViewTier, ViewId[]> = {
   core: ['briefing', 'results', 'playbook'],
   explorer: ['briefing', 'results', 'playbook', 'channels', 'insights'],
-  invested: ['briefing', 'results', 'playbook', 'channels', 'insights', 'saved', 'profile'],
-  power: ['briefing', 'results', 'playbook', 'channels', 'insights', 'saved', 'profile', 'toolkit', 'calibrate'],
+  invested: ['briefing', 'results', 'playbook', 'channels', 'insights', 'saved', 'profile', 'console'],
+  power: ['briefing', 'results', 'playbook', 'channels', 'insights', 'saved', 'profile', 'console', 'toolkit', 'calibrate'],
 };
 
 const BADGE_COLORS: Partial<Record<ViewId, string>> = {
