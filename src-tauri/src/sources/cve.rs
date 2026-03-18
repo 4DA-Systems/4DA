@@ -325,4 +325,30 @@ mod tests {
         assert_eq!(a.cve_id, "GHSA-minimal");
         assert!(a.affected_packages.is_empty());
     }
+
+    #[test]
+    fn test_normalize_ecosystem() {
+        assert_eq!(normalize_ecosystem("javascript"), "npm");
+        assert_eq!(normalize_ecosystem("typescript"), "npm");
+        assert_eq!(normalize_ecosystem("npm"), "npm");
+        assert_eq!(normalize_ecosystem("rust"), "crates.io");
+        assert_eq!(normalize_ecosystem("crates.io"), "crates.io");
+        assert_eq!(normalize_ecosystem("python"), "pip");
+        assert_eq!(normalize_ecosystem("pypi"), "pip");
+        assert_eq!(normalize_ecosystem("go"), "go");
+        assert_eq!(normalize_ecosystem("golang"), "go");
+        assert_eq!(normalize_ecosystem("ruby"), "rubygems");
+        assert_eq!(normalize_ecosystem("java"), "maven");
+        assert_eq!(normalize_ecosystem("unknown_eco"), "unknown_eco");
+    }
+
+    #[test]
+    fn test_cross_reference_ecosystem_normalization() {
+        let advisories = vec![sample_advisory()]; // ecosystem: "npm"
+                                                  // User has "javascript" ecosystem — should still match via normalization
+        let user_deps = vec![("lodash".to_string(), "javascript".to_string())];
+
+        let matches = cross_reference_advisories(&advisories, &user_deps);
+        assert_eq!(matches.len(), 1, "Should match via ecosystem normalization");
+    }
 }
