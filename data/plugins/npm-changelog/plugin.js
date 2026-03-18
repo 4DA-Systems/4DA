@@ -3,9 +3,7 @@
 // Checks the npm registry for recent releases of packages in the user's tech stack.
 // Protocol: reads PluginConfig JSON from stdin, outputs PluginItem[] JSON to stdout.
 
-"use strict";
-
-const https = require("https");
+import https from "node:https";
 
 // Well-known language/framework names that aren't npm packages themselves.
 // We skip these to avoid false lookups.

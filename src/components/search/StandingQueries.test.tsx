@@ -45,6 +45,34 @@ const sampleWatches = [
   },
 ];
 
+const sampleSuggestions = [
+  {
+    topic: 'WebAssembly',
+    reason: 'You engaged with 5 articles about this topic',
+    engagement_count: 5,
+    query_type: 'topic',
+  },
+  {
+    topic: 'tokio',
+    reason: 'Used in 3 projects (cargo)',
+    engagement_count: 3,
+    query_type: 'dependency',
+  },
+];
+
+/** Helper to set up mock invoke responses per command name. */
+function mockCommands(overrides: Record<string, unknown> = {}) {
+  const defaults: Record<string, unknown> = {
+    list_standing_queries: [],
+    get_standing_query_suggestions: [],
+    ...overrides,
+  };
+  mockInvoke.mockImplementation((cmd: string) => {
+    if (cmd in defaults) return Promise.resolve(defaults[cmd]);
+    return Promise.resolve(undefined);
+  });
+}
+
 describe('StandingQueries', () => {
   beforeEach(() => {
     mockInvoke.mockReset();
@@ -57,13 +85,13 @@ describe('StandingQueries', () => {
   });
 
   it('shows "My Watches" header', async () => {
-    mockInvoke.mockResolvedValue([]);
+    mockCommands();
     render(<StandingQueries isPro={true} />);
     expect(screen.getByText('search.myWatches')).toBeInTheDocument();
   });
 
   it('shows empty state hint when no watches', async () => {
-    mockInvoke.mockResolvedValue([]);
+    mockCommands();
     render(<StandingQueries isPro={true} />);
     await waitFor(() => {
       expect(screen.getByText('search.watchHint')).toBeInTheDocument();
@@ -71,7 +99,7 @@ describe('StandingQueries', () => {
   });
 
   it('renders watch items with query text and match counts', async () => {
-    mockInvoke.mockResolvedValue(sampleWatches);
+    mockCommands({ list_standing_queries: sampleWatches });
     render(<StandingQueries isPro={true} />);
     await waitFor(() => {
       expect(screen.getByText('Rust async patterns')).toBeInTheDocument();
@@ -83,7 +111,7 @@ describe('StandingQueries', () => {
   });
 
   it('shows new matches badge when > 0', async () => {
-    mockInvoke.mockResolvedValue(sampleWatches);
+    mockCommands({ list_standing_queries: sampleWatches });
     render(<StandingQueries isPro={true} />);
     await waitFor(() => {
       expect(screen.getByText('+3')).toBeInTheDocument();
@@ -93,7 +121,7 @@ describe('StandingQueries', () => {
   });
 
   it('calls delete_standing_query on delete click', async () => {
-    mockInvoke.mockResolvedValue(sampleWatches);
+    mockCommands({ list_standing_queries: sampleWatches });
     render(<StandingQueries isPro={true} />);
 
     await waitFor(() => {
@@ -117,10 +145,83 @@ describe('StandingQueries', () => {
   });
 
   it('loads watches on mount via list_standing_queries', async () => {
-    mockInvoke.mockResolvedValue([]);
+    mockCommands();
     render(<StandingQueries isPro={true} />);
     await waitFor(() => {
       expect(mockInvoke).toHaveBeenCalledWith('list_standing_queries', {});
     });
+  });
+
+  // ---- Suggestion Tests ----
+
+  it('loads suggestions on mount via get_standing_query_suggestions', async () => {
+    mockCommands();
+    render(<StandingQueries isPro={true} />);
+    await waitFor(() => {
+      expect(mockInvoke).toHaveBeenCalledWith('get_standing_query_suggestions', {});
+    });
+  });
+
+  it('renders suggestion items with topic and type badge', async () => {
+    mockCommands({ get_standing_query_suggestions: sampleSuggestions });
+    render(<StandingQueries isPro={true} />);
+    await waitFor(() => {
+      expect(screen.getByText('WebAssembly')).toBeInTheDocument();
+      expect(screen.getByText('tokio')).toBeInTheDocument();
+    });
+    // Type badges
+    expect(screen.getByText('topic')).toBeInTheDocument();
+    expect(screen.getByText('dependency')).toBeInTheDocument();
+    // Watch buttons
+    expect(screen.getAllByText('search.watch')).toHaveLength(2);
+  });
+
+  it('does not show suggestions section when no suggestions', async () => {
+    mockCommands();
+    render(<StandingQueries isPro={true} />);
+    await waitFor(() => {
+      expect(screen.queryByText('search.suggestedWatches')).not.toBeInTheDocument();
+    });
+  });
+
+  it('creates standing query when Watch button is clicked', async () => {
+    mockCommands({ get_standing_query_suggestions: sampleSuggestions });
+    render(<StandingQueries isPro={true} />);
+
+    await waitFor(() => {
+      expect(screen.getByText('WebAssembly')).toBeInTheDocument();
+    });
+
+    // Click Watch on first suggestion
+    const watchButtons = screen.getAllByText('search.watch');
+    fireEvent.click(watchButtons[0]);
+
+    await waitFor(() => {
+      expect(mockInvoke).toHaveBeenCalledWith('create_standing_query', { queryText: 'WebAssembly' });
+    });
+
+    // After creating, the suggestion should be removed
+    await waitFor(() => {
+      expect(screen.queryByText('WebAssembly')).not.toBeInTheDocument();
+    });
+  });
+
+  it('dismisses suggestion when dismiss button is clicked', async () => {
+    mockCommands({ get_standing_query_suggestions: [sampleSuggestions[0]] });
+    render(<StandingQueries isPro={true} />);
+
+    await waitFor(() => {
+      expect(screen.getByText('WebAssembly')).toBeInTheDocument();
+    });
+
+    // Click dismiss (the X button on suggestion)
+    const dismissButton = screen.getByLabelText('action.dismiss');
+    fireEvent.click(dismissButton);
+
+    await waitFor(() => {
+      expect(screen.queryByText('WebAssembly')).not.toBeInTheDocument();
+    });
+    // Suggestions header should also be gone since no suggestions left
+    expect(screen.queryByText('search.suggestedWatches')).not.toBeInTheDocument();
   });
 });

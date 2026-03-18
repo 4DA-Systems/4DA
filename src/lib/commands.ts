@@ -406,6 +406,7 @@ interface CommandMap {
   list_standing_queries: { params: Record<string, never>; result: StandingQuery[] };
   delete_standing_query: { params: { id: number }; result: void };
   get_standing_query_matches: { params: { id: number; limit?: number }; result: StandingQueryMatch[] };
+  get_standing_query_suggestions: { params: Record<string, never>; result: StandingQuerySuggestion[] };
 
   // -- Intelligence History --
   get_intelligence_growth: { params: Record<string, never>; result: IntelligenceGrowthData };
@@ -1374,6 +1375,13 @@ interface StandingQueryMatch {
   discovered_at: string | null;
 }
 
+interface StandingQuerySuggestion {
+  topic: string;
+  reason: string;
+  engagement_count: number;
+  query_type: string;
+}
+
 interface IntelligenceGrowthData {
   snapshots: Array<{ recorded_at: string; accuracy: number; topics_learned: number; items_analyzed: number; relevant_found: number }>;
   current_accuracy: number;
@@ -1702,6 +1710,7 @@ export type {
   DecisionSignals,
   StandingQuery,
   StandingQueryMatch,
+  StandingQuerySuggestion,
   IntelligenceGrowthData,
   CommunityStatus,
   StackHealthData,

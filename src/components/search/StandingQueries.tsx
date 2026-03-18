@@ -13,6 +13,13 @@ interface StandingQuery {
   active: boolean;
 }
 
+interface StandingQuerySuggestion {
+  topic: string;
+  reason: string;
+  engagement_count: number;
+  query_type: string;
+}
+
 interface StandingQueriesProps {
   isPro: boolean;
 }
@@ -20,7 +27,9 @@ interface StandingQueriesProps {
 export function StandingQueries({ isPro }: StandingQueriesProps) {
   const { t } = useTranslation();
   const [watches, setWatches] = useState<StandingQuery[]>([]);
+  const [suggestions, setSuggestions] = useState<StandingQuerySuggestion[]>([]);
   const [loading, setLoading] = useState(false);
+  const [creatingSuggestion, setCreatingSuggestion] = useState<string | null>(null);
 
   const loadWatches = useCallback(async () => {
     if (!isPro) return;
@@ -35,9 +44,21 @@ export function StandingQueries({ isPro }: StandingQueriesProps) {
     }
   }, [isPro]);
 
+  const loadSuggestions = useCallback(async () => {
+    if (!isPro) return;
+    try {
+      const result = await cmd('get_standing_query_suggestions') as unknown as StandingQuerySuggestion[];
+      setSuggestions(result);
+    } catch (err) {
+      // Silently fail — suggestions are non-critical
+      console.debug('Failed to load suggestions:', err);
+    }
+  }, [isPro]);
+
   useEffect(() => {
     loadWatches();
-  }, [loadWatches]);
+    loadSuggestions();
+  }, [loadWatches, loadSuggestions]);
 
   const handleDelete = async (id: number) => {
     try {
@@ -48,10 +69,66 @@ export function StandingQueries({ isPro }: StandingQueriesProps) {
     }
   };
 
+  const handleWatchSuggestion = async (suggestion: StandingQuerySuggestion) => {
+    setCreatingSuggestion(suggestion.topic);
+    try {
+      await cmd('create_standing_query', { queryText: suggestion.topic });
+      // Remove the accepted suggestion and reload watches
+      setSuggestions((prev) => prev.filter((s) => s.topic !== suggestion.topic));
+      await loadWatches();
+    } catch (err) {
+      console.error('Failed to create standing query from suggestion:', err);
+    } finally {
+      setCreatingSuggestion(null);
+    }
+  };
+
+  const handleDismissSuggestion = (topic: string) => {
+    setSuggestions((prev) => prev.filter((s) => s.topic !== topic));
+  };
+
   if (!isPro) return null;
 
   return (
     <div className="space-y-2">
+      {suggestions.length > 0 && (
+        <div className="space-y-1.5 mb-3">
+          <h4 className="text-xs text-text-muted uppercase tracking-wider font-medium">
+            {t('search.suggestedWatches', 'Suggested Watches')}
+          </h4>
+          {suggestions.map((suggestion) => (
+            <div
+              key={`${suggestion.query_type}-${suggestion.topic}`}
+              className="flex items-center gap-2 px-3 py-2 bg-bg-tertiary/50 rounded-lg border border-border/50 group"
+            >
+              <span className="text-[10px] px-1.5 py-0.5 rounded bg-accent-gold/10 text-accent-gold font-medium uppercase">
+                {suggestion.query_type}
+              </span>
+              <span className="text-sm text-text-secondary flex-1 truncate">
+                {suggestion.topic}
+              </span>
+              <span className="text-[10px] text-text-muted hidden group-hover:inline truncate max-w-[140px]">
+                {suggestion.reason}
+              </span>
+              <button
+                onClick={() => handleWatchSuggestion(suggestion)}
+                disabled={creatingSuggestion === suggestion.topic}
+                className="px-2 py-0.5 text-[10px] rounded bg-white/5 text-text-secondary hover:bg-white/10 hover:text-text-primary transition-all font-medium disabled:opacity-50"
+              >
+                {creatingSuggestion === suggestion.topic ? '...' : t('search.watch', 'Watch')}
+              </button>
+              <button
+                onClick={() => handleDismissSuggestion(suggestion.topic)}
+                className="text-text-muted hover:text-text-secondary opacity-0 group-hover:opacity-100 transition-all text-xs"
+                aria-label={t('action.dismiss', 'Dismiss')}
+              >
+                {'\u2715'}
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
       <h4 className="text-xs text-text-secondary uppercase tracking-wider font-medium">
         {t('search.myWatches')}
       </h4>

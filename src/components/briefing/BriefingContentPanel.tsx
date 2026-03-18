@@ -18,7 +18,7 @@ import type { SourceRelevance, SourceHealthStatus, FeedbackAction } from '../../
 import type { BriefingState, ToastType } from '../../store/types';
 import type { IntelligencePulseData } from '../../types/autophagy';
 
-type ActiveView = 'briefing' | 'results' | 'saved' | 'insights' | 'toolkit' | 'playbook' | 'channels' | 'profile' | 'calibrate';
+type ActiveView = 'briefing' | 'results' | 'saved' | 'insights' | 'toolkit' | 'playbook' | 'channels' | 'profile' | 'calibrate' | 'console';
 
 interface BriefingContentPanelProps {
   briefing: BriefingState;

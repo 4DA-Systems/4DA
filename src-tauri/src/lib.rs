@@ -1115,6 +1115,7 @@ pub fn run() {
             standing_queries::list_standing_queries,
             standing_queries::delete_standing_query,
             standing_queries::get_standing_query_matches,
+            standing_queries::get_standing_query_suggestions,
             // Indexed Documents
             indexed_documents_commands::get_indexed_documents,
             indexed_documents_commands::get_indexed_stats,

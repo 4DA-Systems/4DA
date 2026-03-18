@@ -293,6 +293,8 @@
   "nav.channels": "Watches",
   "nav.channels.subtitle": "Custom topic feeds",
   "nav.coach.subtitle": "AI coaching for STREETS progress",
+  "nav.console": "Console",
+  "nav.console.subtitle": "Accuracy, projects & AI costs",
   "nav.calibrate": "System",
   "nav.calibrate.subtitle": "Health & calibration",
 
