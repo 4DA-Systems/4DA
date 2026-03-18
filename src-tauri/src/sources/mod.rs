@@ -15,6 +15,7 @@ use tracing::info;
 
 pub mod arxiv;
 pub mod cve;
+pub(crate) mod cve_matching;
 pub mod devto;
 pub mod github;
 pub mod hackernews;
