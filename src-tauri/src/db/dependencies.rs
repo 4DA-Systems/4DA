@@ -159,9 +159,39 @@ impl Database {
             .collect())
     }
 
-    /// Store a new dependency alert.
+    /// Check if an alert already exists for this package/ecosystem/title combination.
+    pub fn alert_exists(
+        &self,
+        package_name: &str,
+        ecosystem: &str,
+        title: &str,
+    ) -> SqliteResult<bool> {
+        let conn = self.conn.lock();
+        let count: i64 = conn.query_row(
+            "SELECT COUNT(*) FROM dependency_alerts WHERE package_name = ?1 AND ecosystem = ?2 AND title = ?3 AND resolved_at IS NULL",
+            params![package_name, ecosystem, title],
+            |row| row.get(0),
+        )?;
+        Ok(count > 0)
+    }
+
+    /// Store a new dependency alert, skipping duplicates.
+    /// Returns the row ID if inserted, or 0 if the alert already exists.
     pub fn store_dependency_alert(&self, alert: &DependencyAlert) -> SqliteResult<i64> {
         let conn = self.conn.lock();
+        // Check for existing unresolved alert with same package/ecosystem/title
+        let exists: bool = conn
+            .query_row(
+                "SELECT COUNT(*) FROM dependency_alerts WHERE package_name = ?1 AND ecosystem = ?2 AND title = ?3 AND resolved_at IS NULL",
+                params![alert.package_name, alert.ecosystem, alert.title],
+                |row| row.get::<_, i64>(0).map(|c| c > 0),
+            )
+            .unwrap_or(false);
+
+        if exists {
+            return Ok(0); // Duplicate — skip insertion
+        }
+
         conn.execute(
             "INSERT INTO dependency_alerts (package_name, ecosystem, alert_type, severity, title, description, affected_versions, source_url, source_item_id)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",

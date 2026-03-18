@@ -34,7 +34,7 @@ export class SignalPanelProvider implements vscode.WebviewViewProvider {
     private render(signals: Signal[]): string {
         const items = signals.length > 0
             ? signals.map(s => `
-                <div class="signal ${esc(s.signalType)}" onclick="openUrl('${esc(s.url ?? '')}')">
+                <div class="signal ${esc(s.signalType)}" onclick="openUrl('${sanitizeUrl(s.url ?? '')}')">
                     <span class="badge">${badge(s.signalType)}</span>
                     <div class="content">
                         <div class="title">${esc(s.title)}</div>
@@ -82,5 +82,19 @@ function badge(type: string): string {
 }
 
 function esc(s: string): string {
-    return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+            .replace(/"/g,'&quot;').replace(/'/g,'&#x27;');
+}
+
+function sanitizeUrl(url: string): string {
+    if (!url) return '';
+    try {
+        const parsed = new URL(url);
+        if (parsed.protocol === 'http:' || parsed.protocol === 'https:') {
+            return esc(url);
+        }
+        return '';
+    } catch {
+        return '';
+    }
 }

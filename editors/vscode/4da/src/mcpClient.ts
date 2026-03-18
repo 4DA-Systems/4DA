@@ -12,6 +12,7 @@ import * as cp from 'child_process';
 import * as path from 'path';
 import * as fs from 'fs';
 import * as os from 'os';
+import * as vscode from 'vscode';
 
 // ============================================================================
 // Public Interfaces (consumed by statusBar, hoverProvider, diagnostics, signalPanel)
@@ -133,9 +134,15 @@ interface McpProjectHealthResponse {
 
 class ReadBuffer {
     private buffer: Buffer | undefined;
+    private static MAX_BUFFER_SIZE = 50 * 1024 * 1024; // 50MB
 
-    append(chunk: Buffer): void {
+    append(chunk: Buffer): boolean {
         this.buffer = this.buffer ? Buffer.concat([this.buffer, chunk]) : chunk;
+        if (this.buffer.length > ReadBuffer.MAX_BUFFER_SIZE) {
+            this.clear();
+            return false; // Signal overflow
+        }
+        return true;
     }
 
     readMessage(): unknown | null {
@@ -244,7 +251,11 @@ export class MCPClient {
 
                 // Handle stdout — parse JSON-RPC messages
                 this.process.stdout?.on('data', (chunk: Buffer) => {
-                    this.readBuffer.append(chunk);
+                    if (!this.readBuffer.append(chunk)) {
+                        // Buffer overflow — disconnect to prevent memory exhaustion
+                        this.disconnect();
+                        return;
+                    }
                     this.processReadBuffer();
                 });
 
@@ -599,6 +610,15 @@ export class MCPClient {
      */
     private findMCPServer(): string | null {
         const candidates: string[] = [];
+
+        // 0. User-configured path (only from USER settings, not workspace — prevents command injection)
+        const config = vscode.workspace.getConfiguration('4da');
+        const inspected = config.inspect<string>('mcpServerPath');
+        // Only trust globalValue (user settings), NOT workspaceValue or workspaceFolderValue
+        const customPath = inspected?.globalValue;
+        if (customPath && customPath.endsWith('.js') && !customPath.includes('..')) {
+            candidates.push(customPath);
+        }
 
         // 1. Environment variable override
         if (process.env['FOURDA_MCP_SERVER']) {

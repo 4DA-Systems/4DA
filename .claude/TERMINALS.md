@@ -23,5 +23,5 @@
 - **Files**: committed and pushed
 
 ### T3 — Final verification + Waitlist + Long-horizon positioning
-- **Status**: working
-- **Files**: src/components/WaitlistSignup.tsx, src-tauri/src/monitoring_jobs.rs, editors/vscode/4da/
+- **Status**: done
+- **Files**: committed and pushed

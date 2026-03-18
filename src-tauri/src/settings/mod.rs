@@ -167,6 +167,10 @@ pub struct MonitoringConfig {
     /// Time for morning briefing in HH:MM format (default: "08:00")
     #[serde(default)]
     pub briefing_time: Option<String>,
+    /// Last morning briefing date (YYYY-MM-DD) to avoid firing twice in one day.
+    /// Persisted so restart doesn't re-trigger today's briefing.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_briefing_date: Option<String>,
 }
 
 fn default_notification_threshold() -> String {
@@ -184,6 +188,7 @@ impl Default for MonitoringConfig {
             auto_briefing_on_critical: None,
             morning_briefing: None, // Defaults to true via unwrap_or(true)
             briefing_time: None,    // Defaults to "08:00"
+            last_briefing_date: None,
         }
     }
 }

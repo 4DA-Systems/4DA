@@ -461,16 +461,24 @@ pub fn start_scheduler<R: Runtime>(app: AppHandle<R>, state: Arc<MonitoringState
                 }
             }
 
-            // Weekly accuracy recording
+            // Weekly accuracy + timeline recording
             let last_accuracy = state.last_accuracy_check.load(Ordering::Relaxed);
             if now - last_accuracy >= ACCURACY_RECORD_INTERVAL {
                 state.last_accuracy_check.store(now, Ordering::Relaxed);
                 if let Ok(db) = crate::get_database() {
                     let conn = db.conn.lock();
                     match crate::accuracy::record_weekly_accuracy(&conn) {
-                        Ok(()) => info!(target: "4da::monitoring", "Weekly accuracy recorded"),
+                        Ok(()) => info!(target: "4da::monitor", "Weekly accuracy recorded"),
                         Err(e) => {
-                            warn!(target: "4da::monitoring", error = %e, "Failed to record weekly accuracy")
+                            warn!(target: "4da::monitor", error = %e, "Failed to record weekly accuracy")
+                        }
+                    }
+                    match crate::temporal_graph::record_weekly_timeline(&conn) {
+                        Ok(()) => {
+                            info!(target: "4da::monitor", "Weekly timeline snapshot recorded")
+                        }
+                        Err(e) => {
+                            warn!(target: "4da::monitor", error = %e, "Failed to record weekly timeline snapshot")
                         }
                     }
                 }
