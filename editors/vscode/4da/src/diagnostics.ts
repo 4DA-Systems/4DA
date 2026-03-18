@@ -4,6 +4,7 @@ import type { MCPClient } from './mcpClient';
 export class DiagnosticsManager implements vscode.Disposable {
     private collection: vscode.DiagnosticCollection;
     private disposables: vscode.Disposable[] = [];
+    private refreshTimer: ReturnType<typeof setTimeout> | undefined;
 
     constructor(private client: MCPClient) {
         this.collection = vscode.languages.createDiagnosticCollection('4da');
@@ -19,6 +20,11 @@ export class DiagnosticsManager implements vscode.Disposable {
     }
 
     async refresh() {
+        clearTimeout(this.refreshTimer);
+        this.refreshTimer = setTimeout(() => this.doRefresh(), 300);
+    }
+
+    private async doRefresh() {
         const editor = vscode.window.activeTextEditor;
         if (!editor) return;
 
@@ -52,6 +58,7 @@ export class DiagnosticsManager implements vscode.Disposable {
     }
 
     dispose() {
+        clearTimeout(this.refreshTimer);
         this.collection.dispose();
         this.disposables.forEach(d => d.dispose());
     }
