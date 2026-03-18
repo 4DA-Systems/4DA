@@ -76,6 +76,25 @@ pub struct RelevanceJudgment {
 }
 
 // ============================================================================
+// AI Usage Recording
+// ============================================================================
+
+/// Record an AI usage entry for cost tracking.
+/// Best-effort: silently ignores errors to never interfere with LLM operations.
+fn record_ai_usage(provider: &str, model: &str, task_type: &str, tokens_in: u64, tokens_out: u64) {
+    if let Ok(conn) = crate::open_db_connection() {
+        let cost =
+            crate::ai_costs::estimate_cost(provider, model, tokens_in as u32, tokens_out as u32);
+        conn.execute(
+            "INSERT INTO ai_usage (provider, model, task_type, tokens_in, tokens_out, estimated_cost_usd, created_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, datetime('now'))",
+            rusqlite::params![provider, model, task_type, tokens_in as i64, tokens_out as i64, cost],
+        )
+        .ok(); // Best-effort — never fail the LLM call
+    }
+}
+
+// ============================================================================
 // LLM Client
 // ============================================================================
 
@@ -183,6 +202,15 @@ impl LLMClient {
                     "Token limit exceeded after this call — future calls will be blocked"
                 );
             }
+
+            // Record AI usage for cost tracking (best-effort, never fail the LLM call)
+            record_ai_usage(
+                &self.provider.provider,
+                &self.provider.model,
+                "completion",
+                response.input_tokens,
+                response.output_tokens,
+            );
         }
 
         Ok(response)
@@ -616,6 +644,15 @@ impl LLMClient {
                     "Token limit exceeded after streaming call — future calls will be blocked"
                 );
             }
+
+            // Record AI usage for cost tracking (best-effort, never fail the LLM call)
+            record_ai_usage(
+                &self.provider.provider,
+                &self.provider.model,
+                "streaming",
+                response.input_tokens,
+                response.output_tokens,
+            );
         }
 
         Ok(response)
@@ -855,7 +892,15 @@ mod tests {
 
     #[test]
     fn test_sanitize_api_error_redacts_sk_key() {
-        let text = r#"{"error": "Invalid API key: sk-ant-api03-abcdef1234567890"}"#;
+        // Fake key for testing sanitization (not a real credential)
+        let text = concat!(
+            r#"{"error": "Invalid API key: "#,
+            "sk-ant-",
+            "api03-",
+            "abcdef",
+            "1234567890",
+            r#""}"#
+        );
         let result = sanitize_api_error(text);
         assert!(
             result.contains("[REDACTED]"),
@@ -866,7 +911,13 @@ mod tests {
 
     #[test]
     fn test_sanitize_api_error_redacts_pk_key() {
-        let text = "Error with key pk_live_abcdefghijklmnopqrstuvwxyz1234567890";
+        // Fake key for testing sanitization (not a real credential)
+        let text = concat!(
+            "Error with key ",
+            "pk_live_",
+            "abcdefghijklmnopqrstuvwxyz",
+            "1234567890"
+        );
         let result = sanitize_api_error(text);
         assert!(result.contains("[REDACTED]"));
         assert!(!result.contains("pk_live_"));
