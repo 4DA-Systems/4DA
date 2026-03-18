@@ -7,7 +7,7 @@ calibration sigmoid {
 
 confirmation_gate {
     0 => (0.25, 0.20)
-    1 => (0.45, 0.32)
+    1 => (0.45, 0.28)
     2 => (1.00, 0.65)
     3 => (1.10, 0.85)
     4 => (1.20, 1.00)
@@ -71,7 +71,7 @@ confidence_bonuses {
 }
 
 specificity_weights {
-    broad: 0.15              # [0.10, 0.50]
+    broad: 0.25              # [0.10, 0.50]
     single_word: 0.60        # [0.30, 0.80]
     multi_word: 1.00         # [0.80, 1.00]
     embedding_broad: 0.40    # [0.20, 0.60]

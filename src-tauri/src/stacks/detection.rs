@@ -107,6 +107,7 @@ mod tests {
             anti_topic_confidence: HashMap::new(),
             topic_affinities: HashMap::new(),
             dependency_info: HashMap::new(),
+            peak_hours: Vec::new(),
         }
     }
 

@@ -20,6 +20,26 @@ interface AweSummary {
  * Language: "Your pattern" not "AWE detected."
  * Feel: memory, not surveillance.
  */
+const CalibrationDetail = memo(function CalibrationDetail() {
+  const [data, setData] = useState<string | null>(null);
+  const [loaded, setLoaded] = useState(false);
+
+  useEffect(() => {
+    cmd('run_awe_calibration', { domain: 'software-engineering' })
+      .then(raw => setData(raw))
+      .catch(() => setData(null))
+      .finally(() => setLoaded(true));
+  }, []);
+
+  if (!loaded || !data) return null;
+
+  return (
+    <div className="text-xs text-text-muted/80 whitespace-pre-wrap font-mono">
+      {data.split('\n').slice(0, 6).join('\n')}
+    </div>
+  );
+});
+
 export const WisdomPulse = memo(function WisdomPulse() {
   const [summary, setSummary] = useState<AweSummary | null>(null);
   const [expanded, setExpanded] = useState(false);
@@ -95,6 +115,7 @@ export const WisdomPulse = memo(function WisdomPulse() {
               {summary.health}
             </div>
           )}
+          <CalibrationDetail />
           {hasPending && (
             <p className="text-xs text-accent-gold/80">
               {summary.pending} decisions need outcome recording to improve accuracy.

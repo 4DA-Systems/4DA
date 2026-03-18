@@ -370,10 +370,7 @@ pub async fn get_awe_summary() -> Result<String> {
     {
         let stdout = String::from_utf8_lossy(&output.stdout);
         // Parse "Decisions tracked: N"
-        if let Some(cap) = stdout
-            .lines()
-            .find(|l| l.contains("Decisions tracked"))
-        {
+        if let Some(cap) = stdout.lines().find(|l| l.contains("Decisions tracked")) {
             if let Some(num) = cap.split_whitespace().last() {
                 if let Ok(n) = num.parse::<u64>() {
                     summary["decisions"] = serde_json::json!(n);
@@ -381,10 +378,7 @@ pub async fn get_awe_summary() -> Result<String> {
             }
         }
         // Parse "Principles extracted: N"
-        if let Some(cap) = stdout
-            .lines()
-            .find(|l| l.contains("Principles extracted"))
-        {
+        if let Some(cap) = stdout.lines().find(|l| l.contains("Principles extracted")) {
             if let Some(num) = cap.split_whitespace().last() {
                 if let Ok(n) = num.parse::<u64>() {
                     summary["principles"] = serde_json::json!(n);
@@ -412,7 +406,10 @@ pub async fn get_awe_summary() -> Result<String> {
             if trimmed.starts_with('[') && trimmed.contains(']') {
                 if let Some(text) = trimmed.split(']').nth(1) {
                     let text = text.trim();
-                    if !text.is_empty() && !text.starts_with("Evidence") && !text.starts_with("Status") {
+                    if !text.is_empty()
+                        && !text.starts_with("Evidence")
+                        && !text.starts_with("Status")
+                    {
                         summary["top_principle"] = serde_json::json!(text);
                         break;
                     }
@@ -447,12 +444,42 @@ pub async fn run_awe_transmute(query: String, mode: String) -> Result<String> {
         return Err("AWE binary not found. Build with: cargo build --release -p awe-cli".into());
     };
 
-    let mut args = vec!["transmute", &query, "--json", "-d", "software-engineering"];
+    let mut args: Vec<String> = vec![
+        "transmute".into(),
+        query.clone(),
+        "--json".into(),
+        "-d".into(),
+        "software-engineering".into(),
+    ];
 
     match mode.as_str() {
-        "voice" => args.push("--voice"),
-        "challenge" => args.push("--challenge"),
+        "voice" => args.push("--voice".into()),
+        "challenge" => args.push("--challenge".into()),
         _ => {} // structured is default
+    }
+
+    // Inject developer profile context for personalized wisdom
+    let ctx_path = std::env::temp_dir().join("awe_dev_ctx.json");
+    if let Ok(conn) = crate::open_db_connection() {
+        let profile = crate::sovereign_developer_profile::assemble_profile(&conn);
+        let dev_ctx = serde_json::json!({
+            "primary_stack": profile.stack.primary_stack,
+            "adjacent_tech": profile.stack.adjacent_tech,
+            "domain_concerns": [],
+            "infrastructure_summary": format!(
+                "{} RAM, GPU: {}, {}",
+                profile.infrastructure.ram.get("total").map(|s| s.as_str()).unwrap_or("unknown"),
+                profile.infrastructure.gpu_tier,
+                profile.infrastructure.os.get("name").map(|s| s.as_str()).unwrap_or("unknown OS"),
+            ),
+            "identity_summary": profile.identity_summary,
+        });
+        if let Ok(json) = serde_json::to_string(&dev_ctx) {
+            if std::fs::write(&ctx_path, &json).is_ok() {
+                args.push("--context-file".into());
+                args.push(ctx_path.to_string_lossy().to_string());
+            }
+        }
     }
 
     let output = std::process::Command::new(&awe_path)
@@ -503,6 +530,113 @@ pub async fn run_awe_transmute(query: String, mode: String) -> Result<String> {
 
     // Fallback: return raw output
     Ok(stdout.to_string())
+}
+
+/// Quick sanity check on a decision.
+#[tauri::command]
+pub async fn run_awe_quick_check(query: String) -> Result<String> {
+    let awe_bin = find_awe_binary();
+    let Some(awe_path) = awe_bin else {
+        return Err("AWE binary not found".into());
+    };
+
+    let output = std::process::Command::new(&awe_path)
+        .args([
+            "transmute",
+            &query,
+            "--json",
+            "-d",
+            "software-engineering",
+            "--stages",
+            "receive,interrogate,articulate",
+        ])
+        .output()
+        .map_err(|e| format!("Failed to run AWE: {e}"))?;
+
+    Ok(String::from_utf8_lossy(&output.stdout).to_string())
+}
+
+/// Model consequences of a decision.
+#[tauri::command]
+pub async fn run_awe_consequence_scan(query: String) -> Result<String> {
+    let awe_bin = find_awe_binary();
+    let Some(awe_path) = awe_bin else {
+        return Err("AWE binary not found".into());
+    };
+
+    let output = std::process::Command::new(&awe_path)
+        .args([
+            "transmute",
+            &query,
+            "--json",
+            "-d",
+            "software-engineering",
+            "--stages",
+            "receive,consequent,articulate",
+        ])
+        .output()
+        .map_err(|e| format!("Failed to run AWE: {e}"))?;
+
+    Ok(String::from_utf8_lossy(&output.stdout).to_string())
+}
+
+/// Record outcome feedback for a previous AWE decision.
+#[tauri::command]
+pub async fn run_awe_feedback(
+    decision_id: String,
+    outcome: String,
+    details: String,
+) -> Result<String> {
+    let awe_bin = find_awe_binary();
+    let Some(awe_path) = awe_bin else {
+        return Err("AWE binary not found".into());
+    };
+
+    let output = std::process::Command::new(&awe_path)
+        .args([
+            "feedback",
+            &decision_id,
+            "--outcome",
+            &outcome,
+            "--details",
+            &details,
+        ])
+        .output()
+        .map_err(|e| format!("Failed to run AWE: {e}"))?;
+
+    Ok(String::from_utf8_lossy(&output.stdout).to_string())
+}
+
+/// Recall accumulated wisdom for a domain.
+#[tauri::command]
+pub async fn run_awe_recall(domain: String) -> Result<String> {
+    let awe_bin = find_awe_binary();
+    let Some(awe_path) = awe_bin else {
+        return Err("AWE binary not found".into());
+    };
+
+    let output = std::process::Command::new(&awe_path)
+        .args(["wisdom", "-d", &domain])
+        .output()
+        .map_err(|e| format!("Failed to run AWE: {e}"))?;
+
+    Ok(String::from_utf8_lossy(&output.stdout).to_string())
+}
+
+/// Get calibration data for a domain.
+#[tauri::command]
+pub async fn run_awe_calibration(domain: String) -> Result<String> {
+    let awe_bin = find_awe_binary();
+    let Some(awe_path) = awe_bin else {
+        return Err("AWE binary not found".into());
+    };
+
+    let output = std::process::Command::new(&awe_path)
+        .args(["calibration", "-d", &domain])
+        .output()
+        .map_err(|e| format!("Failed to run AWE: {e}"))?;
+
+    Ok(String::from_utf8_lossy(&output.stdout).to_string())
 }
 
 /// Find the AWE binary (release build).

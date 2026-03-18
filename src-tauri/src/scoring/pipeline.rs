@@ -25,6 +25,7 @@ pub(crate) struct ScoringInput<'a> {
 pub(crate) struct ScoringOptions {
     pub apply_freshness: bool,
     pub apply_signals: bool,
+    pub trend_topics: Vec<String>,
 }
 
 /// Score a single item through the full PASIFA pipeline.

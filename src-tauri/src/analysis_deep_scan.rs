@@ -254,9 +254,15 @@ pub(crate) async fn run_deep_initial_scan_impl(app: &AppHandle) -> Result<Vec<So
         .await
         .map_err(|e| format!("Failed to build scoring context for deep scan: {}", e))?;
     let interest_count = scoring_ctx.interest_count;
+    let trend_topics = crate::detect_trend_topics(
+        all_items
+            .iter()
+            .map(|(item, _)| (item.title.as_str(), item.content.as_str())),
+    );
     let options = scoring::ScoringOptions {
         apply_freshness: false,
         apply_signals: true,
+        trend_topics,
     };
 
     // Step 5: Score all items through unified pipeline
@@ -488,9 +494,15 @@ pub(crate) async fn run_multi_source_analysis_impl(
     let scoring_ctx = scoring::build_scoring_context(db)
         .await
         .map_err(|e| format!("Failed to build scoring context: {}", e))?;
+    let trend_topics = crate::detect_trend_topics(
+        all_items
+            .iter()
+            .map(|(item, _)| (item.title.as_str(), item.content.as_str())),
+    );
     let options = scoring::ScoringOptions {
         apply_freshness: false,
         apply_signals: true,
+        trend_topics,
     };
 
     // Step 5: Score all items through unified pipeline

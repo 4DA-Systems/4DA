@@ -522,6 +522,26 @@ pub(crate) fn extract_topics(title: &str, content: &str) -> Vec<String> {
     topics
 }
 
+/// Detect trending topics from a batch of items.
+/// A topic is "trending" when 3+ items in the current batch share it,
+/// indicating multiple sources are reporting on it simultaneously.
+pub(crate) fn detect_trend_topics<'a>(
+    items: impl Iterator<Item = (&'a str, &'a str)>,
+) -> Vec<String> {
+    let mut topic_counts: std::collections::HashMap<String, u32> = std::collections::HashMap::new();
+    for (title, content) in items {
+        let topics = extract_topics(title, content);
+        for topic in topics {
+            *topic_counts.entry(topic).or_insert(0) += 1;
+        }
+    }
+    topic_counts
+        .into_iter()
+        .filter(|(_, count)| *count >= 3)
+        .map(|(topic, _)| topic)
+        .collect()
+}
+
 /// Check if an item should be excluded based on user exclusions
 /// Returns Some(exclusion) if blocked, None if allowed
 pub(crate) fn check_exclusions(topics: &[String], exclusions: &[String]) -> Option<String> {

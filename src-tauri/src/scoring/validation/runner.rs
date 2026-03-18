@@ -106,6 +106,7 @@ fn validate_persona(
     let options = ScoringOptions {
         apply_freshness: false,
         apply_signals: false,
+        trend_topics: vec![],
     };
 
     // Score all items

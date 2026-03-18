@@ -93,6 +93,11 @@ interface CommandMap {
   sync_awe_wisdom: { params: Record<string, never>; result: string };
   get_awe_summary: { params: Record<string, never>; result: string };
   run_awe_transmute: { params: { query: string; mode: string }; result: string };
+  run_awe_quick_check: { params: { query: string }; result: string };
+  run_awe_consequence_scan: { params: { query: string }; result: string };
+  run_awe_feedback: { params: { decisionId: string; outcome: string; details: string }; result: string };
+  run_awe_recall: { params: { domain: string }; result: string };
+  run_awe_calibration: { params: { domain: string }; result: string };
   export_results: { params: { format: string }; result: string };
   get_diagnostics: { params: Record<string, never>; result: DiagnosticsSnapshot };
 

@@ -25,6 +25,9 @@ pub(crate) struct ACEContext {
     pub dependency_names: HashSet<String>,
     /// Dependency details: normalized_name -> info (version, language, search terms)
     pub dependency_info: HashMap<String, DepInfo>,
+    /// Peak commit hours (0-23) from git analysis, sorted by frequency (most active first).
+    /// Used to give a slight freshness boost to content published during active coding hours.
+    pub peak_hours: Vec<u8>,
 }
 
 /// Fetch ACE-discovered context for relevance scoring
@@ -123,6 +126,9 @@ pub(crate) fn get_ace_context() -> ACEContext {
     }
     ctx.dependency_names = dep_names;
     ctx.dependency_info = dep_info;
+
+    // Load peak commit hours from ACE engine (populated during full scan)
+    ctx.peak_hours = ace.peak_hours.clone();
 
     ctx
 }

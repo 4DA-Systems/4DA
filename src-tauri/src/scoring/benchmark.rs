@@ -22,6 +22,7 @@ pub(super) fn no_freshness() -> ScoringOptions {
     ScoringOptions {
         apply_freshness: false,
         apply_signals: false,
+        trend_topics: vec![],
     }
 }
 

@@ -222,8 +222,8 @@ mod tests {
         );
         assert_eq!(count, 1);
         assert!(
-            gated <= 0.32,
-            "Single signal should cap at 0.32, got {}",
+            gated <= 0.28,
+            "Single signal should cap at 0.28, got {}",
             gated
         );
         assert!(
