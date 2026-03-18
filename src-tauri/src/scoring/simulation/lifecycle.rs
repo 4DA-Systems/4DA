@@ -336,33 +336,25 @@ fn lifecycle_noise_stays_rejected_across_sessions() {
 
 #[test]
 fn lifecycle_aggregate_report() {
-    println!("\n=== LIFECYCLE AGGREGATE REPORT ===");
+    info!("\n=== LIFECYCLE AGGREGATE REPORT ===");
     let rust_f1s = run_rust_lifecycle_sessions(N_SESSIONS);
     let python_f1s = run_python_lifecycle_sessions(N_SESSIONS);
 
-    println!("Rust F1 trajectory (sessions 1-{N_SESSIONS}):");
+    info!("Rust F1 trajectory (sessions 1-{N_SESSIONS}):");
     for (i, f1) in rust_f1s.iter().enumerate() {
-        print!("  session {}: {f1:.3}", i + 1);
-        if (i + 1) % 5 == 0 {
-            println!();
-        }
+        debug!("  session {}: {f1:.3}", i + 1);
     }
-    println!();
 
-    println!("Python F1 trajectory (sessions 1-{N_SESSIONS}):");
+    info!("Python F1 trajectory (sessions 1-{N_SESSIONS}):");
     for (i, f1) in python_f1s.iter().enumerate() {
-        print!("  session {}: {f1:.3}", i + 1);
-        if (i + 1) % 5 == 0 {
-            println!();
-        }
+        debug!("  session {}: {f1:.3}", i + 1);
     }
-    println!();
 
     let rust_final = rust_f1s.last().copied().unwrap_or(0.0);
     let python_final = python_f1s.last().copied().unwrap_or(0.0);
 
-    println!("Final F1: rust={rust_final:.3} python={python_final:.3}");
-    println!("Personas tested: {}", PERSONA_NAMES.join(", "));
+    info!("Final F1: rust={rust_final:.3} python={python_final:.3}");
+    info!("Personas tested: {}", PERSONA_NAMES.join(", "));
 }
 
 #[test]

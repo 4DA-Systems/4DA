@@ -4,6 +4,8 @@
 //! Thresholds calibrated to current pipeline behavior (regression baseline).
 //! Personas with narrow interests may have low recall — this is expected.
 
+use tracing::info;
+
 use super::super::{score_item, ScoringContext};
 use super::corpus::corpus;
 use super::metrics::SimMetrics;
@@ -47,7 +49,7 @@ fn run_persona_simulation(persona_idx: usize, ctx: &ScoringContext) -> SimMetric
 fn reality_rust_systems_persona() {
     let personas = all_personas();
     let m = run_persona_simulation(0, &personas[0]);
-    println!("{}", m.format_report(PERSONA_NAMES[0]));
+    info!("{}", m.format_report(PERSONA_NAMES[0]));
     m.assert_quality(PERSONA_NAMES[0], 0.55, 0.30, 0.40);
 }
 
@@ -55,7 +57,7 @@ fn reality_rust_systems_persona() {
 fn reality_python_ml_persona() {
     let personas = all_personas();
     let m = run_persona_simulation(1, &personas[1]);
-    println!("{}", m.format_report(PERSONA_NAMES[1]));
+    info!("{}", m.format_report(PERSONA_NAMES[1]));
     m.assert_quality(PERSONA_NAMES[1], 0.35, 0.20, 0.25);
 }
 
@@ -63,7 +65,7 @@ fn reality_python_ml_persona() {
 fn reality_fullstack_ts_persona() {
     let personas = all_personas();
     let m = run_persona_simulation(2, &personas[2]);
-    println!("{}", m.format_report(PERSONA_NAMES[2]));
+    info!("{}", m.format_report(PERSONA_NAMES[2]));
     m.assert_quality(PERSONA_NAMES[2], 0.45, 0.40, 0.40);
 }
 
@@ -71,7 +73,7 @@ fn reality_fullstack_ts_persona() {
 fn reality_devops_sre_persona() {
     let personas = all_personas();
     let m = run_persona_simulation(3, &personas[3]);
-    println!("{}", m.format_report(PERSONA_NAMES[3]));
+    info!("{}", m.format_report(PERSONA_NAMES[3]));
     // Calibrated: P=0.812 R=0.394 F1=0.531 → threshold F1-0.05=0.481
     m.assert_quality(PERSONA_NAMES[3], 0.70, 0.35, 0.48);
 }
@@ -80,7 +82,7 @@ fn reality_devops_sre_persona() {
 fn reality_mobile_dev_persona() {
     let personas = all_personas();
     let m = run_persona_simulation(4, &personas[4]);
-    println!("{}", m.format_report(PERSONA_NAMES[4]));
+    info!("{}", m.format_report(PERSONA_NAMES[4]));
     // Mobile: P=0.417 R=0.833 F1=0.556 — high recall, moderate precision
     // React↔React Native keyword overlap causes some Web FPs
     m.assert_quality(PERSONA_NAMES[4], 0.40, 0.30, 0.35);
@@ -90,7 +92,7 @@ fn reality_mobile_dev_persona() {
 fn reality_bootstrap_persona() {
     let personas = all_personas();
     let m = run_persona_simulation(5, &personas[5]);
-    println!("{}", m.format_report(PERSONA_NAMES[5]));
+    info!("{}", m.format_report(PERSONA_NAMES[5]));
     // Bootstrap: 1 interest, no feedback, thin context — conservative behavior expected.
     // Calibrated observed: P=0.125 R=0.333 F1=0.182 — threshold below observed with buffer.
     m.assert_quality(PERSONA_NAMES[5], 0.10, 0.15, 0.15);
@@ -100,7 +102,7 @@ fn reality_bootstrap_persona() {
 fn reality_power_user_persona() {
     let personas = all_personas();
     let m = run_persona_simulation(6, &personas[6]);
-    println!("{}", m.format_report(PERSONA_NAMES[6]));
+    info!("{}", m.format_report(PERSONA_NAMES[6]));
     // Calibrated: P=0.721 R=0.304 F1=0.428 → threshold F1-0.05=0.378
     m.assert_quality(PERSONA_NAMES[6], 0.65, 0.25, 0.38);
 }
@@ -109,7 +111,7 @@ fn reality_power_user_persona() {
 fn reality_context_switcher_persona() {
     let personas = all_personas();
     let m = run_persona_simulation(7, &personas[7]);
-    println!("{}", m.format_report(PERSONA_NAMES[7]));
+    info!("{}", m.format_report(PERSONA_NAMES[7]));
     // Calibrated: P=0.733 R=0.319 F1=0.444 → threshold F1-0.05=0.394
     m.assert_quality(PERSONA_NAMES[7], 0.65, 0.27, 0.39);
 }
@@ -118,7 +120,7 @@ fn reality_context_switcher_persona() {
 fn reality_niche_specialist_persona() {
     let personas = all_personas();
     let m = run_persona_simulation(8, &personas[8]);
-    println!("{}", m.format_report(PERSONA_NAMES[8]));
+    info!("{}", m.format_report(PERSONA_NAMES[8]));
     // Calibrated: P=1.000 R=0.357 F1=0.526 — tighter gates reduce recall for narrow personas
     m.assert_quality(PERSONA_NAMES[8], 0.85, 0.30, 0.45);
 }
@@ -254,11 +256,11 @@ fn reality_aggregate_summary() {
 
     for (pi, persona) in personas.iter().enumerate() {
         let m = run_persona_simulation(pi, persona);
-        println!("{}", m.format_report(PERSONA_NAMES[pi]));
+        info!("{}", m.format_report(PERSONA_NAMES[pi]));
         aggregate.merge(&m);
     }
 
-    println!("{}", aggregate.format_report("AGGREGATE"));
+    info!("{}", aggregate.format_report("AGGREGATE"));
     // Aggregate quality — calibrated to V2 with tightened gates
     assert!(
         aggregate.f1() >= 0.40,
