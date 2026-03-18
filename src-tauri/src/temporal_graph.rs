@@ -205,6 +205,86 @@ pub(crate) fn build_adoption_curves(snapshots: &[TimelineSnapshot]) -> Vec<TechA
 }
 
 // ============================================================================
+// Weekly Timeline Snapshot (Background Job)
+// ============================================================================
+
+/// Compute and store a developer timeline snapshot for the current week.
+/// Called by the monitoring background job on a weekly cadence.
+/// Pulls tech data from ACE's detected_tech and interest data from active_topics.
+pub(crate) fn record_weekly_timeline(conn: &rusqlite::Connection) -> anyhow::Result<()> {
+    let now = chrono::Utc::now();
+    let period = format!("{}-W{:02}", now.format("%Y"), now.format("%W"));
+
+    // Build tech snapshot from ACE detected technologies
+    let tech_snapshot: Vec<TechEntry> = match crate::state::get_ace_engine() {
+        Ok(ace) => ace
+            .get_detected_tech()
+            .unwrap_or_default()
+            .into_iter()
+            .map(|t| TechEntry {
+                name: t.name,
+                confidence: t.confidence,
+                engagement_score: t.confidence, // Use confidence as engagement proxy
+            })
+            .collect(),
+        Err(_) => vec![],
+    };
+
+    // Build interest snapshot from ACE active topics
+    let interest_snapshot: Vec<InterestEntry> = match crate::state::get_ace_engine() {
+        Ok(ace) => ace
+            .get_active_topics()
+            .unwrap_or_default()
+            .into_iter()
+            .map(|t| InterestEntry {
+                topic: t.topic,
+                score: t.weight,
+            })
+            .collect(),
+        Err(_) => vec![],
+    };
+
+    // Count decisions and feedback from the past week
+    let decision_count: u32 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM developer_decisions WHERE created_at >= datetime('now', '-7 days')",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap_or(0);
+
+    let feedback_count: u32 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM feedback WHERE created_at >= datetime('now', '-7 days')",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap_or(0);
+
+    let tech_json = serde_json::to_string(&tech_snapshot).unwrap_or_else(|_| "[]".to_string());
+    let interest_json =
+        serde_json::to_string(&interest_snapshot).unwrap_or_else(|_| "[]".to_string());
+
+    conn.execute(
+        "INSERT OR REPLACE INTO developer_timeline (period, tech_snapshot, interest_snapshot, decision_count, feedback_count)
+         VALUES (?1, ?2, ?3, ?4, ?5)",
+        rusqlite::params![period, tech_json, interest_json, decision_count, feedback_count],
+    )?;
+
+    tracing::info!(
+        target: "4da::temporal",
+        period = %period,
+        techs = tech_snapshot.len(),
+        interests = interest_snapshot.len(),
+        decisions = decision_count,
+        feedback = feedback_count,
+        "Weekly timeline snapshot recorded"
+    );
+
+    Ok(())
+}
+
+// ============================================================================
 // Tauri Commands
 // ============================================================================
 

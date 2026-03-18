@@ -213,7 +213,9 @@ pub(crate) fn find_cross_project_deps(
 #[tauri::command]
 pub fn get_tech_convergence() -> crate::error::Result<serde_json::Value> {
     // Build project->tech map from ACE-detected projects (languages + frameworks)
-    let conn = crate::get_database()?.conn.lock();
+    // detected_projects lives in the ACE database, not the main database
+    let ace = crate::state::get_ace_engine()?;
+    let conn = ace.get_conn().lock();
 
     let mut stmt = conn.prepare("SELECT path, languages, frameworks FROM detected_projects")?;
 
@@ -255,7 +257,9 @@ pub fn get_tech_convergence() -> crate::error::Result<serde_json::Value> {
 
 #[tauri::command]
 pub fn get_project_health_comparison() -> crate::error::Result<serde_json::Value> {
-    let conn = crate::get_database()?.conn.lock();
+    // detected_projects lives in the ACE database, not the main database
+    let ace = crate::state::get_ace_engine()?;
+    let conn = ace.get_conn().lock();
 
     let mut stmt =
         conn.prepare("SELECT path, name, dependencies, languages FROM detected_projects")?;
@@ -290,7 +294,9 @@ pub fn get_project_health_comparison() -> crate::error::Result<serde_json::Value
 
 #[tauri::command]
 pub fn get_cross_project_dependencies() -> crate::error::Result<serde_json::Value> {
-    let conn = crate::get_database()?.conn.lock();
+    // detected_projects lives in the ACE database, not the main database
+    let ace = crate::state::get_ace_engine()?;
+    let conn = ace.get_conn().lock();
 
     let mut stmt = conn.prepare("SELECT path, dependencies, languages FROM detected_projects")?;
 
