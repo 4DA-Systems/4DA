@@ -317,9 +317,11 @@ fn parse_briefing_time(time_str: &str) -> (u32, u32) {
 
 /// Check if morning briefing should fire and generate notification content.
 /// Returns None if disabled, outside the briefing window, or already fired today.
+/// The last briefing date is persisted to settings.json so a restart doesn't
+/// re-trigger the briefing on the same day.
 pub fn check_morning_briefing(state: &MonitoringState) -> Option<BriefingNotification> {
-    // 1. Check settings for morning_briefing enabled and briefing_time
-    let (enabled, briefing_time_str) = {
+    // 1. Check settings for morning_briefing enabled, briefing_time, and persisted last date
+    let (enabled, briefing_time_str, persisted_date) = {
         let settings = crate::get_settings_manager().lock();
         let monitoring = &settings.get().monitoring;
         let enabled = monitoring.morning_briefing.unwrap_or(true);
@@ -327,7 +329,8 @@ pub fn check_morning_briefing(state: &MonitoringState) -> Option<BriefingNotific
             .briefing_time
             .clone()
             .unwrap_or_else(|| "08:00".to_string());
-        (enabled, time)
+        let last = monitoring.last_briefing_date.clone();
+        (enabled, time, last)
     };
 
     if !enabled {
@@ -344,8 +347,16 @@ pub fn check_morning_briefing(state: &MonitoringState) -> Option<BriefingNotific
         return None;
     }
 
-    // 3. Check if already fired today
+    // 3. Check if already fired today — check both persisted and in-memory state
     let today = now.format("%Y-%m-%d").to_string();
+
+    // Check persisted date first (survives restarts)
+    if let Some(ref last) = persisted_date {
+        if last == &today {
+            return None;
+        }
+    }
+    // Also check in-memory state (covers rapid re-checks within same session)
     {
         let last_date = state.last_morning_briefing_date.lock();
         if let Some(ref last) = *last_date {
@@ -400,10 +411,18 @@ pub fn check_morning_briefing(state: &MonitoringState) -> Option<BriefingNotific
 
     let total_relevant = items.len();
 
-    // 5. Mark as fired today
+    // 5. Mark as fired today — persist to settings AND in-memory state
     {
         let mut last_date = state.last_morning_briefing_date.lock();
-        *last_date = Some(today);
+        *last_date = Some(today.clone());
+    }
+    // Persist to settings.json so restart doesn't re-trigger
+    {
+        let mut settings = crate::get_settings_manager().lock();
+        settings.get_mut().monitoring.last_briefing_date = Some(today);
+        if let Err(e) = settings.save() {
+            warn!(target: "4da::notify", error = %e, "Failed to persist last_briefing_date to settings");
+        }
     }
 
     Some(BriefingNotification {
@@ -418,7 +437,7 @@ pub fn send_morning_briefing_notification<R: Runtime>(
     app: &AppHandle<R>,
     briefing: &BriefingNotification,
 ) {
-    // Build a compact body from the top items
+    // Build a compact body from the top items (sanitized to prevent control char injection)
     let body = if briefing.items.is_empty() {
         "No new signals since last check.".to_string()
     } else {
@@ -429,7 +448,11 @@ pub fn send_morning_briefing_notification<R: Runtime>(
                 .as_deref()
                 .map(|s| format!("[{}] ", s.to_uppercase()))
                 .unwrap_or_default();
-            lines.push(format!("{}{}", signal_tag, item.title));
+            lines.push(format!(
+                "{}{}",
+                signal_tag,
+                strip_control_chars(&item.title)
+            ));
         }
         if briefing.total_relevant > 3 {
             lines.push(format!("...and {} more", briefing.total_relevant - 3));
@@ -465,8 +488,15 @@ pub fn send_morning_briefing_notification<R: Runtime>(
 // CLI Briefing Generator
 // ============================================================================
 
+/// Strip control characters (ANSI escape sequences, etc.) from a string
+/// to prevent injection in CLI output.
+fn strip_control_chars(s: &str) -> String {
+    s.chars().filter(|c| !c.is_control()).collect()
+}
+
 /// Generate a formatted briefing string suitable for CLI output or frontend display.
 /// Uses in-memory analysis state first, falls back to DB query.
+/// All titles and sources are sanitized to prevent ANSI injection.
 pub fn generate_briefing_text() -> String {
     let now = chrono::Local::now();
     let mut output = format!("4DA Morning Briefing — {}\n\n", now.format("%d %b %Y"));
@@ -526,14 +556,16 @@ pub fn generate_briefing_text() -> String {
     }
 
     for (title, source_type, score, signal_type) in items.iter().take(10) {
+        let safe_title = strip_control_chars(title);
+        let safe_source = strip_control_chars(source_type);
         let signal_tag = signal_type
             .as_deref()
-            .map(|s| format!("[{}] ", s.to_uppercase()))
+            .map(|s| format!("[{}] ", strip_control_chars(&s.to_uppercase())))
             .unwrap_or_default();
-        output.push_str(&format!("  {}{}\n", signal_tag, title));
+        output.push_str(&format!("  {}{}\n", signal_tag, safe_title));
         output.push_str(&format!(
             "    Source: {} | Score: {:.0}%\n\n",
-            source_type,
+            safe_source,
             score * 100.0
         ));
     }

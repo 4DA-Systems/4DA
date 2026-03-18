@@ -405,4 +405,45 @@ mod tests {
         let all = db.get_all_user_dependencies().unwrap();
         assert_eq!(all.len(), 2);
     }
+
+    #[test]
+    fn test_alert_deduplication() {
+        use super::DependencyAlert;
+
+        let db = test_db();
+        let alert = DependencyAlert {
+            id: 0,
+            package_name: "lodash".to_string(),
+            ecosystem: "javascript".to_string(),
+            alert_type: "vulnerability".to_string(),
+            severity: "critical".to_string(),
+            title: "Prototype pollution".to_string(),
+            description: None,
+            affected_versions: None,
+            source_url: None,
+            source_item_id: None,
+            detected_at: String::new(),
+            resolved_at: None,
+        };
+
+        // First insert should succeed
+        let id1 = db.store_dependency_alert(&alert).unwrap();
+        assert!(id1 > 0);
+
+        // Second insert of same alert should be skipped (returns 0)
+        let id2 = db.store_dependency_alert(&alert).unwrap();
+        assert_eq!(id2, 0, "Duplicate alert should return 0");
+
+        // Only one alert should exist
+        let active = db.get_active_alerts().unwrap();
+        assert_eq!(active.len(), 1);
+
+        // alert_exists should return true
+        assert!(db
+            .alert_exists("lodash", "javascript", "Prototype pollution")
+            .unwrap());
+        assert!(!db
+            .alert_exists("lodash", "javascript", "Different title")
+            .unwrap());
+    }
 }
