@@ -214,7 +214,7 @@ pub fn get_temporal_snapshot(period: Option<String>) -> crate::error::Result<ser
         let now = chrono::Utc::now();
         format!("{}-W{:02}", now.format("%Y"), now.format("%W"))
     });
-    let conn = crate::open_db_connection()?;
+    let conn = crate::get_database()?.conn.lock();
 
     let snapshot_opt: Option<(String, String, u32, u32, String)> = conn
         .query_row(
@@ -258,7 +258,7 @@ pub fn get_temporal_snapshot(period: Option<String>) -> crate::error::Result<ser
 
 #[tauri::command]
 pub fn get_adoption_curves() -> crate::error::Result<serde_json::Value> {
-    let conn = crate::open_db_connection()?;
+    let conn = crate::get_database()?.conn.lock();
 
     let mut stmt = conn.prepare(
         "SELECT id, period, tech_snapshot, interest_snapshot, decision_count, feedback_count, created_at \
@@ -287,7 +287,7 @@ pub fn get_adoption_curves() -> crate::error::Result<serde_json::Value> {
 
 #[tauri::command]
 pub fn get_knowledge_decay_report() -> crate::error::Result<serde_json::Value> {
-    let conn = crate::open_db_connection()?;
+    let conn = crate::get_database()?.conn.lock();
 
     // Get the most recent snapshot
     let latest_opt: Option<String> = conn
