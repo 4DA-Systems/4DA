@@ -156,6 +156,13 @@ export const ResultItemCollapsed = memo(function ResultItemCollapsed({
               {item.explanation || fallbackReason}
             </div>
           </button>
+          {/* Wisdom annotation — shows when context score is high (AWE wisdom chunks contributed) */}
+          {item.score_breakdown && item.score_breakdown.context_score > 0.3 && item.relevant && (
+            <div className="mt-1 text-[10px] text-text-muted pl-[4.25rem] flex items-center gap-1">
+              <span className="w-1 h-1 rounded-full bg-success/60 inline-block" />
+              Matches your experience
+            </div>
+          )}
           <ProInsightRow item={item} />
         </>
       )}

@@ -18,6 +18,7 @@ const ToolkitView = lazy(() => import('./toolkit/ToolkitView').then(m => ({ defa
 const PlaybookView = lazy(() => import('./PlaybookView').then(m => ({ default: m.PlaybookView })));
 const ChannelsView = lazy(() => import('./channels/ChannelsView').then(m => ({ default: m.ChannelsView })));
 const CalibrationView = lazy(() => import('./CalibrationView').then(m => ({ default: m.CalibrationView })));
+const WisdomPanel = lazy(() => import('./WisdomPanel').then(m => ({ default: m.WisdomPanel })));
 const SignalsPanel = lazy(() => import('./SignalsPanel').then(m => ({ default: m.SignalsPanel })));
 const KnowledgeGapsPanel = lazy(() => import('./KnowledgeGapsPanel').then(m => ({ default: m.KnowledgeGapsPanel })));
 
@@ -80,6 +81,7 @@ export function ViewRouter({ newItemIds, focusedIndex }: ViewRouterProps) {
         <ViewErrorBoundary viewName="Decisions">
           <section aria-label={t('nav.insights', { defaultValue: 'Decisions' })} className="space-y-6">
             <TechRadar />
+            <WisdomPanel />
             <DecisionMemory />
           </section>
         </ViewErrorBoundary>
