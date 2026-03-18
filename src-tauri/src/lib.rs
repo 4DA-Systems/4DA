@@ -51,10 +51,12 @@ pub(crate) use state::{
     SUPPORTED_EXTENSIONS,
 };
 
+mod accuracy;
 mod ace;
 mod ace_commands;
 mod agent_brief;
 mod agent_memory;
+mod ai_costs;
 mod analysis;
 mod analysis_narration;
 mod analysis_rerank;
@@ -265,10 +267,12 @@ mod standing_queries;
 mod startup_health;
 mod suns;
 mod suns_commands;
+mod tech_convergence;
 mod tech_radar;
 mod tech_radar_commands;
 mod tech_radar_compute;
 mod temporal;
+mod temporal_graph;
 mod url_validation;
 mod void_commands;
 mod void_engine;

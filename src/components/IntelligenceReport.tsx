@@ -1,4 +1,5 @@
-import { memo } from 'react';
+import { memo, useState, useEffect, useCallback } from 'react';
+import { cmd } from '../lib/commands';
 
 // ============================================================================
 // Types
@@ -12,25 +13,13 @@ interface MetricData {
   sublabel?: string;
 }
 
-// ============================================================================
-// Mock Data
-// ============================================================================
-
-const ACCURACY = 87.4;
-const ACCURACY_DELTA = 3.2;
-
-const METRICS: MetricData[] = [
-  { label: 'Relevance Accuracy', value: '87.4%', delta: '+3.2%', trend: 'up' },
-  { label: 'Topics Tracked', value: '24', delta: '+3', trend: 'up' },
-  { label: 'Noise Rejected', value: '1,847', delta: '92.3%', trend: 'up', sublabel: 'rejection rate' },
-  { label: 'Time Saved', value: '14.2h', trend: 'up' },
-];
-
-const SECONDARY_METRICS: MetricData[] = [
-  { label: 'Security Alerts', value: '3', sublabel: '2 acted on', trend: 'flat' },
-  { label: 'Decisions Recorded', value: '12', delta: '+4', trend: 'up' },
-  { label: 'Feedback Signals', value: '89', delta: '+22', trend: 'up' },
-];
+interface IntelligenceData {
+  accuracy_pct: number;
+  accuracy_delta: number;
+  metrics: MetricData[];
+  secondary: MetricData[];
+  items_processed: number;
+}
 
 // ============================================================================
 // Sub-components
@@ -68,11 +57,156 @@ function MetricRow({ metric }: { metric: MetricData }) {
   );
 }
 
+function LoadingSkeleton() {
+  return (
+    <div className="bg-bg-secondary rounded-lg border border-border overflow-hidden">
+      <div className="px-5 py-4 border-b border-border">
+        <div className="h-4 bg-bg-tertiary rounded w-48 animate-pulse" />
+        <div className="h-3 bg-bg-tertiary rounded w-64 mt-2 animate-pulse" />
+      </div>
+      <div className="p-5 space-y-4">
+        <div className="h-2 bg-bg-tertiary rounded-full animate-pulse" />
+        {[1, 2, 3, 4].map(i => (
+          <div key={i} className="flex justify-between py-2">
+            <div className="h-3 bg-bg-tertiary rounded w-24 animate-pulse" />
+            <div className="h-3 bg-bg-tertiary rounded w-16 animate-pulse" />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ============================================================================
+// Data fetching
+// ============================================================================
+
+function formatNumber(n: number): string {
+  return n.toLocaleString();
+}
+
+function trendFromDelta(delta: number): 'up' | 'down' | 'flat' {
+  if (delta > 0) return 'up';
+  if (delta < 0) return 'down';
+  return 'flat';
+}
+
+async function fetchIntelligenceData(): Promise<IntelligenceData> {
+  const [accuracy, autophagy, advantage] = await Promise.all([
+    cmd('ace_get_accuracy_metrics'),
+    cmd('get_autophagy_status'),
+    cmd('get_compound_advantage'),
+  ]);
+
+  const accuracyPct = Math.round(accuracy.precision * 1000) / 10;
+  const calError = accuracy.calibration_error;
+  const accuracyDelta = calError > 0 ? -calError : Math.abs(calError);
+
+  const rejectionRate = autophagy.last_cycle
+    ? Math.round((autophagy.last_cycle.items_pruned / Math.max(autophagy.last_cycle.items_analyzed, 1)) * 1000) / 10
+    : 0;
+
+  const metrics: MetricData[] = [
+    {
+      label: 'Relevance Accuracy',
+      value: `${accuracyPct}%`,
+      delta: `${accuracyDelta >= 0 ? '+' : ''}${accuracyDelta.toFixed(1)}%`,
+      trend: trendFromDelta(accuracyDelta),
+    },
+    {
+      label: 'Calibration Accuracy',
+      value: `${Math.round(advantage.calibration_accuracy * 100)}%`,
+      trend: trendFromDelta(advantage.trend),
+    },
+    {
+      label: 'Noise Rejected',
+      value: formatNumber(autophagy.last_cycle?.items_pruned ?? 0),
+      delta: `${rejectionRate}%`,
+      trend: rejectionRate > 50 ? 'up' : 'flat',
+      sublabel: 'rejection rate',
+    },
+    {
+      label: 'Lead Time',
+      value: `${advantage.avg_lead_time_hours.toFixed(1)}h`,
+      trend: advantage.avg_lead_time_hours > 0 ? 'up' : 'flat',
+    },
+  ];
+
+  const secondary: MetricData[] = [
+    {
+      label: 'Autophagy Cycles',
+      value: `${autophagy.total_cycles}`,
+      trend: autophagy.total_cycles > 0 ? 'up' : 'flat',
+    },
+    {
+      label: 'Decision Windows',
+      value: `${advantage.windows_opened}`,
+      delta: `${advantage.windows_acted} acted`,
+      trend: advantage.windows_acted > 0 ? 'up' : 'flat',
+    },
+    {
+      label: 'Anti-patterns',
+      value: `${autophagy.total_anti_patterns}`,
+      trend: autophagy.total_anti_patterns > 0 ? 'up' : 'flat',
+    },
+  ];
+
+  return {
+    accuracy_pct: accuracyPct,
+    accuracy_delta: accuracyDelta,
+    metrics,
+    secondary,
+    items_processed: advantage.items_surfaced,
+  };
+}
+
 // ============================================================================
 // IntelligenceReportCard
 // ============================================================================
 
 const IntelligenceReportCard = memo(function IntelligenceReportCard() {
+  const [data, setData] = useState<IntelligenceData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
+
+  const loadData = useCallback(() => {
+    setLoading(true);
+    setError(false);
+    fetchIntelligenceData()
+      .then(setData)
+      .catch(() => {
+        setData(null);
+        setError(true);
+      })
+      .finally(() => setLoading(false));
+  }, []);
+
+  useEffect(() => { loadData(); }, [loadData]);
+
+  if (loading) return <LoadingSkeleton />;
+
+  if (error || !data) {
+    return (
+      <div className="bg-bg-secondary rounded-lg border border-border overflow-hidden">
+        <div className="px-5 py-4 border-b border-border">
+          <h3 className="text-sm font-medium text-white">Your Intelligence This Month</h3>
+        </div>
+        <div className="p-5 text-center">
+          <p className="text-xs text-text-muted mb-3">Unable to load intelligence data.</p>
+          <button
+            onClick={loadData}
+            className="text-xs px-3 py-1.5 rounded bg-bg-tertiary border border-border text-text-secondary hover:text-white transition-colors"
+          >
+            Retry
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  const now = new Date();
+  const monthName = now.toLocaleString('default', { month: 'long', year: 'numeric' });
+
   return (
     <div className="bg-bg-secondary rounded-lg border border-border overflow-hidden">
       {/* Header */}
@@ -81,12 +215,14 @@ const IntelligenceReportCard = memo(function IntelligenceReportCard() {
           <div>
             <h3 className="text-sm font-medium text-white">Your Intelligence This Month</h3>
             <p className="text-xs text-text-muted mt-1">
-              March 2026 — how 4DA compounded for you.
+              {monthName} — how 4DA compounded for you.
             </p>
           </div>
           <div className="flex items-center gap-2">
-            <TrendArrow trend={ACCURACY_DELTA > 0 ? 'up' : 'down'} />
-            <span className="text-xs text-[#22C55E] font-medium">+{ACCURACY_DELTA}%</span>
+            <TrendArrow trend={data.accuracy_delta > 0 ? 'up' : 'down'} />
+            <span className={`text-xs font-medium ${data.accuracy_delta >= 0 ? 'text-[#22C55E]' : 'text-[#EF4444]'}`}>
+              {data.accuracy_delta >= 0 ? '+' : ''}{data.accuracy_delta.toFixed(1)}%
+            </span>
           </div>
         </div>
       </div>
@@ -96,18 +232,18 @@ const IntelligenceReportCard = memo(function IntelligenceReportCard() {
         <div>
           <div className="flex items-center justify-between mb-2">
             <span className="text-xs text-text-muted">Accuracy Improvement</span>
-            <span className="text-xs text-white font-medium">{ACCURACY}%</span>
+            <span className="text-xs text-white font-medium">{data.accuracy_pct}%</span>
           </div>
           <div
             className="w-full h-2 bg-bg-tertiary rounded-full overflow-hidden"
             role="progressbar"
-            aria-valuenow={ACCURACY}
+            aria-valuenow={data.accuracy_pct}
             aria-valuemin={0}
             aria-valuemax={100}
           >
             <div
               className="h-full rounded-full bg-gradient-to-r from-[#D4AF37]/60 to-[#D4AF37]"
-              style={{ width: `${ACCURACY}%` }}
+              style={{ width: `${Math.min(data.accuracy_pct, 100)}%` }}
             />
           </div>
           <div className="flex justify-between mt-1.5">
@@ -118,14 +254,14 @@ const IntelligenceReportCard = memo(function IntelligenceReportCard() {
 
         {/* Primary Metrics */}
         <div className="bg-bg-primary rounded-lg border border-border/50 px-4 py-1 divide-y divide-border/30">
-          {METRICS.map(metric => (
+          {data.metrics.map(metric => (
             <MetricRow key={metric.label} metric={metric} />
           ))}
         </div>
 
         {/* Secondary Metrics */}
         <div className="grid grid-cols-3 gap-3">
-          {SECONDARY_METRICS.map(metric => (
+          {data.secondary.map(metric => (
             <div
               key={metric.label}
               className="bg-bg-tertiary rounded-lg border border-border px-3 py-3"
@@ -151,7 +287,7 @@ const IntelligenceReportCard = memo(function IntelligenceReportCard() {
         {/* Footer */}
         <div className="pt-3 border-t border-border/30 flex items-center justify-between">
           <span className="text-xs text-text-muted/50">
-            Based on 2,003 items processed this month
+            Based on {formatNumber(data.items_processed)} items surfaced
           </span>
           <span className="text-xs text-text-muted/50">
             Updated today
