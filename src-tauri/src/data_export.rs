@@ -383,12 +383,26 @@ fn get_exports_dir() -> Result<PathBuf> {
 // CSV Conversion
 // ============================================================================
 
-/// Escape a value for CSV output (RFC 4180 compliant).
+/// Escape a value for CSV output (RFC 4180 compliant + injection protection).
+/// Prefixes formula-trigger characters with a single quote to prevent
+/// Excel/Sheets from interpreting cell values as formulas.
 fn csv_escape(value: &str) -> String {
-    if value.contains(',') || value.contains('"') || value.contains('\n') {
-        format!("\"{}\"", value.replace('"', "\"\""))
+    let sanitized = if value.starts_with('=')
+        || value.starts_with('+')
+        || value.starts_with('-')
+        || value.starts_with('@')
+        || value.starts_with('\t')
+        || value.starts_with('\r')
+    {
+        format!("'{value}")
     } else {
         value.to_string()
+    };
+
+    if sanitized.contains(',') || sanitized.contains('"') || sanitized.contains('\n') {
+        format!("\"{}\"", sanitized.replace('"', "\"\""))
+    } else {
+        sanitized
     }
 }
 

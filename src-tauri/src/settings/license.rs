@@ -2,6 +2,7 @@
 
 use crate::error::Result;
 use serde::{Deserialize, Serialize};
+use std::sync::atomic::{AtomicU64, Ordering};
 use tracing::{info, warn};
 
 use super::LicenseConfig;
@@ -49,6 +50,67 @@ pub fn check_activation_rate_limit() -> Result<()> {
 }
 
 // ============================================================================
+// Periodic Runtime Re-validation
+// ============================================================================
+
+/// Epoch-seconds timestamp of the last license integrity check.
+/// Initialized to 0 so the first call always triggers validation.
+static LAST_LICENSE_CHECK: AtomicU64 = AtomicU64::new(0);
+
+/// Re-validate license integrity every 6 hours to prevent settings.json
+/// manipulation granting paid features between restarts.
+const LICENSE_REVALIDATION_INTERVAL_SECS: u64 = 21_600; // 6 hours
+
+/// Reset the re-validation timestamp to force the next check to trigger.
+/// Only available in tests.
+#[cfg(test)]
+pub(crate) fn reset_license_check_timestamp() {
+    LAST_LICENSE_CHECK.store(0, Ordering::Relaxed);
+}
+
+/// Periodically re-run license integrity checks at runtime.
+///
+/// If the tier claims paid access but no license key is present, the tier
+/// is reset to "free" and persisted — identical to `validate_license_on_startup`.
+/// Uses relaxed atomic ordering since a rare double-check is harmless.
+fn maybe_revalidate_license() {
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
+    let last = LAST_LICENSE_CHECK.load(Ordering::Relaxed);
+
+    if now.saturating_sub(last) < LICENSE_REVALIDATION_INTERVAL_SECS {
+        return;
+    }
+
+    // Mark as checked *before* doing the work to avoid redundant checks
+    // from concurrent callers during the same window.
+    LAST_LICENSE_CHECK.store(now, Ordering::Relaxed);
+
+    let manager = crate::get_settings_manager();
+    let mut guard = manager.lock();
+    let license = guard.get().license.clone();
+
+    if is_paid_tier(license.tier.as_str())
+        && !is_trial_active(&license)
+        && license.license_key.is_empty()
+    {
+        warn!(
+            "Runtime re-validation: tier '{}' with no license key — resetting to free",
+            license.tier
+        );
+        guard.get_mut().license.tier = "free".to_string();
+        if let Err(e) = guard.save() {
+            warn!(
+                "Failed to persist license reset during re-validation: {}",
+                e
+            );
+        }
+    }
+}
+
+// ============================================================================
 // Feature Tier Gating
 // ============================================================================
 
@@ -72,7 +134,9 @@ pub const PRO_FEATURES: &[&str] = &[
 
 /// Check if the current user has Signal (or Team/Enterprise) tier access.
 /// Returns true for "signal", "team", "enterprise", legacy "pro", or an active trial.
+/// Triggers periodic re-validation to catch settings.json manipulation.
 pub fn is_pro() -> bool {
+    maybe_revalidate_license();
     let manager = crate::get_settings_manager();
     let guard = manager.lock();
     let license = &guard.get().license;
@@ -82,6 +146,7 @@ pub fn is_pro() -> bool {
 /// Validate license integrity on startup.
 /// If tier claims "signal"/"team"/"enterprise" but no valid license key exists,
 /// reset tier to "free" to prevent settings.json manipulation.
+/// Also initializes the periodic re-validation timestamp.
 pub fn validate_license_on_startup() {
     let manager = crate::get_settings_manager();
     let mut guard = manager.lock();
@@ -101,6 +166,14 @@ pub fn validate_license_on_startup() {
             }
         }
     }
+
+    // Record the startup validation timestamp so periodic re-checks
+    // start counting from now rather than epoch-0.
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
+    LAST_LICENSE_CHECK.store(now, Ordering::Relaxed);
 }
 
 /// Check if a tier string represents a paid tier.
@@ -121,8 +194,10 @@ pub fn is_pro_feature_available(feature: &str, license: &LicenseConfig) -> bool 
 }
 
 /// Gate a Pro feature — returns Ok(()) if allowed, Err if not
-/// Call at the top of any Pro-gated Tauri command
+/// Call at the top of any Pro-gated Tauri command.
+/// Triggers periodic re-validation to catch settings.json manipulation.
 pub fn require_pro_feature(feature: &str) -> Result<()> {
+    maybe_revalidate_license();
     let manager = crate::get_settings_manager();
     let guard = manager.lock();
     let license = &guard.get().license;
