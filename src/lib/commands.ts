@@ -179,6 +179,7 @@ interface CommandMap {
   get_latest_briefing: { params: Record<string, never>; result: { content: string; model: string | null; item_count: number; created_at: string } | null };
   generate_ai_briefing: { params: Record<string, never>; result: { success: boolean; briefing: string | null; error?: string; model?: string; item_count?: number; latency_ms?: number } };
   generate_free_briefing: { params: Record<string, never>; result: { content: string; item_count: number; created_at: string } };
+  generate_cli_briefing: { params: Record<string, never>; result: string };
   get_source_health_status: { params: Record<string, never>; result: SourceHealthStatus[] };
   get_source_quality: { params: Record<string, never>; result: SourceQualityReport[] };
 
@@ -531,6 +532,11 @@ interface CommandMap {
   get_ai_usage_summary: { params: { period?: string }; result: AiUsageSummary };
   get_ai_cost_estimate: { params: { provider: string; model: string; tokensIn: number; tokensOut: number }; result: AiCostEstimate };
   get_ai_cost_recommendation: { params: Record<string, never>; result: AiCostRecommendation };
+
+  // -- Source Plugin API (Phase 7) --
+  list_plugins: { params: Record<string, never>; result: PluginManifest[] };
+  fetch_plugin_items: { params: { plugin_name: string }; result: PluginItem[] };
+  fetch_all_plugins: { params: Record<string, never>; result: PluginItem[] };
 }
 
 
@@ -1572,6 +1578,27 @@ interface AiCostRecommendation {
   reason: string;
 }
 
+/** Plugin manifest — metadata about an installed source plugin (mirrors Rust PluginManifest) */
+interface PluginManifest {
+  name: string;
+  version: string;
+  description: string;
+  author: string | null;
+  binary: string;
+  poll_interval_secs: number;
+  max_items: number;
+}
+
+/** Item returned by a source plugin (mirrors Rust PluginItem) */
+interface PluginItem {
+  title: string;
+  url: string | null;
+  content: string;
+  source_type: string;
+  author: string | null;
+  published_at: string | null;
+}
+
 
 // ============================================================================
 // Typed invoke — the core wrapper
@@ -1734,4 +1761,7 @@ export type {
   GameState,
   AchievementUnlocked,
   StartupHealthIssue,
+  // Source Plugin API (Phase 7)
+  PluginManifest,
+  PluginItem,
 };
