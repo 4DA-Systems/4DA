@@ -156,7 +156,7 @@ export function useAppBootstrap() {
     loadTrialStatus();
     loadProValueReport();
     computeViewTier();
-    cmd('prune_personalization_cache').catch(e => console.debug('Prune cache skipped:', e));
+    cmd('prune_personalization_cache').catch(() => {});
   }, [loadPersistedBriefing, loadSourceHealth, loadLicense, loadTrialStatus, loadProValueReport, computeViewTier]);
 
   // Deep-link handler: 4da://activate?key=...

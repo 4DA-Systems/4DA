@@ -120,8 +120,11 @@ pub fn ensure_webhook_tables(conn: &Connection) -> Result<()> {
 /// header in format `sha256=<hex>`.
 pub fn sign_payload(secret: &str, body: &str) -> String {
     type HmacSha256 = Hmac<Sha256>;
-    let mut mac =
-        HmacSha256::new_from_slice(secret.as_bytes()).expect("HMAC accepts any key length");
+    // HMAC-SHA256 accepts any key length per RFC 2104; this cannot fail in practice.
+    let Ok(mut mac) = HmacSha256::new_from_slice(secret.as_bytes()) else {
+        // Fallback: return empty signature rather than panicking
+        return String::new();
+    };
     mac.update(body.as_bytes());
     hex::encode(mac.finalize().into_bytes())
 }

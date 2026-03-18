@@ -20,8 +20,8 @@ export const createUserContextSlice: StateCreator<AppStore, [], [], UserContextS
       const ctx = await cmd('get_user_context');
       set({ userContext: ctx });
       if (ctx.role) set({ newRole: ctx.role });
-    } catch (error) {
-      console.debug('Context not available:', error);
+    } catch {
+      /* context not available */
     }
   },
 
@@ -29,8 +29,8 @@ export const createUserContextSlice: StateCreator<AppStore, [], [], UserContextS
     try {
       const suggestions = await cmd('ace_get_suggested_interests');
       set({ suggestedInterests: suggestions });
-    } catch (error) {
-      console.debug('Suggested interests not available:', error);
+    } catch {
+      /* suggested interests not available */
     }
   },
 

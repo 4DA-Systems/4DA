@@ -5,6 +5,8 @@
 
 use std::collections::HashMap;
 
+use tracing::{debug, info};
+
 use super::super::score_item;
 use super::feedback_sim::{
     apply_feedback, lifecycle_corpus, python_ctx_with_boosts, rust_ctx_with_boosts,
@@ -104,7 +106,7 @@ fn lifecycle_rust_persona_does_not_degrade() {
     let first = f1s[0];
     let last = f1s[f1s.len() - 1];
 
-    println!("[lifecycle_rust] first_f1={first:.3} last_f1={last:.3}");
+    debug!("[lifecycle_rust] first_f1={first:.3} last_f1={last:.3}");
 
     // Last session F1 must be at least 85% of first session F1
     let min_acceptable = first * 0.85;
@@ -124,7 +126,7 @@ fn lifecycle_rust_convergence_trend() {
     let first_half_avg: f64 = f1s[..half].iter().sum::<f64>() / half as f64;
     let second_half_avg: f64 = f1s[half..].iter().sum::<f64>() / (f1s.len() - half) as f64;
 
-    println!(
+    debug!(
         "[lifecycle_rust_trend] first_half={first_half_avg:.3} second_half={second_half_avg:.3}"
     );
 
@@ -141,7 +143,7 @@ fn lifecycle_python_persona_does_not_degrade() {
     let first = f1s[0];
     let last = f1s[f1s.len() - 1];
 
-    println!("[lifecycle_python] first_f1={first:.3} last_f1={last:.3}");
+    debug!("[lifecycle_python] first_f1={first:.3} last_f1={last:.3}");
 
     let min_acceptable = first * 0.85;
     assert!(last >= min_acceptable,
@@ -284,7 +286,7 @@ fn lifecycle_same_item_stable_score_over_sessions() {
         .fold(f32::NEG_INFINITY, f32::max);
     let range = (max - min) as f64;
 
-    println!("[lifecycle_stable] probe scores: {probe_scores:?} range={range:.3}");
+    debug!("[lifecycle_stable] probe scores: {probe_scores:?} range={range:.3}");
     assert!(range <= 0.4,
         "Probe item score oscillated too much over sessions: min={min:.3} max={max:.3} range={range:.3}");
 }

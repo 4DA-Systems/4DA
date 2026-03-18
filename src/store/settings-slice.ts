@@ -72,8 +72,8 @@ export const createSettingsSlice: StateCreator<AppStore, [], [], SettingsSlice> 
       cmd('get_model_registry').then((registry) => {
         set({ modelRegistry: registry });
       }).catch(() => {});
-    } catch (error) {
-      console.debug('Settings not available:', error);
+    } catch {
+      /* settings not available */
     }
   },
 
