@@ -47,13 +47,25 @@ export function runDoctor(): void {
 
   // 3. Database discovery
   const validation = FourDADatabase.validateDatabase();
-  checks.push({
-    name: "4DA database",
-    status: validation.valid ? "pass" : "warn",
-    detail: validation.valid
-      ? `Found with ${validation.tables?.length ?? 0} tables`
-      : (validation.error ?? "Database not found — run 4DA desktop app first"),
-  });
+  if (validation.valid) {
+    checks.push({
+      name: "4DA database",
+      status: "pass",
+      detail: `Found with ${validation.tables?.length ?? 0} tables`,
+    });
+  } else if (validation.standalone) {
+    checks.push({
+      name: "4DA database",
+      status: "pass",
+      detail: "No existing database — standalone mode will create one (scans your project)",
+    });
+  } else {
+    checks.push({
+      name: "4DA database",
+      status: "warn",
+      detail: validation.error ?? "Database not found",
+    });
+  }
 
   // 4. Environment variables
   const envDb = process.env.FOURDA_DB_PATH;
@@ -103,13 +115,14 @@ export function runDoctor(): void {
 
   console.log("");
 
-  // If database is missing, show actionable next step
+  // If database has issues (not standalone — standalone is fine), show guidance
   const dbCheck = checks.find((c) => c.name === "4DA database");
-  if (dbCheck && dbCheck.status !== "pass") {
-    console.log("  The MCP server reads data from the 4DA desktop app.");
-    console.log("  Install 4DA, open it, and let it scan your projects.");
+  if (dbCheck && dbCheck.status === "warn") {
+    console.log("  The MCP server can work standalone or with the 4DA desktop app.");
+    console.log("  Standalone: scans your project, provides tech radar and context.");
+    console.log("  Full app: adds content scoring, source monitoring, and more.");
     console.log("");
-    console.log("  Download: https://github.com/runyourempire/4DA/releases/latest");
+    console.log("  Desktop app: https://github.com/runyourempire/4DA/releases/latest");
     console.log("  Learn more: https://4da.ai");
     console.log("");
   }

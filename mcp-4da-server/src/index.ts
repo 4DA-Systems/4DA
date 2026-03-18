@@ -44,6 +44,7 @@ import { homedir } from "node:os";
 import { startHttpServer } from "./http-transport.js";
 import { runSetup } from "./setup.js";
 import { runDoctor } from "./doctor.js";
+import { scanCurrentProject } from "./project-scanner.js";
 
 // Schema registry for slim tool listing + category metadata
 import { getSlimToolList, getSchemaResources, hasToolSchema, getSchemaFilename, getCategoryManifest } from "./schema-registry.js";
@@ -77,12 +78,39 @@ const server = new Server(
 let db: FourDADatabase | null = null;
 
 /**
- * Get or create database connection
+ * Get or create database connection.
+ * In standalone mode (no existing 4DA database), creates a minimal database
+ * and populates it from the current working directory's project files.
  */
 function getDatabase(): FourDADatabase {
   if (!db) {
     const dbPath = process.env.FOURDA_DB_PATH;
     db = createDatabase(dbPath);
+
+    // Standalone mode: auto-populate from project scan
+    if (db.isStandalone) {
+      const cwd = process.cwd();
+      const scan = scanCurrentProject(cwd);
+      db.populateFromScan(scan);
+
+      const detected = [
+        ...scan.languages,
+        ...scan.frameworks,
+      ].filter(Boolean);
+
+      console.error(
+        `[4DA] Standalone mode: scanned ${scan.projectPath}`
+      );
+      if (detected.length > 0) {
+        console.error(
+          `[4DA]   Detected: ${detected.join(", ")} | ${scan.dependencies.length} deps, ${scan.devDependencies.length} dev deps`
+        );
+      } else {
+        console.error(
+          `[4DA]   No project manifests found in ${cwd} — tools will return empty results`
+        );
+      }
+    }
   }
   return db;
 }
@@ -265,9 +293,10 @@ async function main() {
   Environment:
     FOURDA_DB_PATH      Path to 4DA's SQLite database (auto-detected if omitted)
 
-  Requires the 4DA desktop app (scans your projects, scores content).
-  Download: https://github.com/runyourempire/4DA/releases/latest
-  Docs:     https://4da.ai
+  Works standalone (scans your project on startup) or with the full
+  4DA desktop app for content scoring, source monitoring, and more.
+  Desktop app: https://github.com/runyourempire/4DA/releases/latest
+  Docs:        https://4da.ai
 `);
     return;
   }
@@ -301,13 +330,15 @@ async function main() {
 
   if (validation.valid) {
     console.error(`[4DA] Database validated — ${validation.tables?.length ?? 0} tables found`);
-  } else {
-    // Log actionable warning — this IS the conversion funnel for MCP-first users
-    console.error(`[4DA] Database not found.`);
-    console.error(`  The MCP server needs the 4DA desktop app to work.`);
-    console.error(`  4DA scans your projects and scores content — this server reads that data.`);
+  } else if (validation.standalone) {
+    // No existing DB — standalone mode will create one on first tool call
+    console.error(`[4DA] No existing database found — standalone mode enabled.`);
+    console.error(`  Will scan your project and create a local database on first tool call.`);
+    console.error(`  For full features, install the 4DA desktop app: https://4da.ai`);
     console.error(``);
-    console.error(`  Get started: https://github.com/runyourempire/4DA/releases/latest`);
+  } else {
+    // Database exists but is corrupt or unreadable
+    console.error(`[4DA] Database issue: ${validation.error}`);
     console.error(`  Or run: npx @4da/mcp-server --doctor  for diagnostics`);
     console.error(``);
   }
