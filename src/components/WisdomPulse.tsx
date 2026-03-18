@@ -1,82 +1,54 @@
 import { useState, useEffect, memo, useCallback } from 'react';
 import { cmd } from '../lib/commands';
 
-interface WisdomState {
-  topPrinciple: string | null;
-  principleCount: number;
-  decisionCount: number;
-  pendingFeedback: number;
-  loaded: boolean;
+interface AweSummary {
+  available: boolean;
+  decisions: number;
+  principles: number;
+  pending: number;
+  top_principle: string | null;
+  health: string | null;
 }
 
 /**
  * WisdomPulse — your patterns, surfaced naturally.
  *
  * Shows validated patterns from your decision history.
- * Self-hides when the Wisdom Graph is empty (new users see nothing).
- * Gradually reveals as decisions accumulate.
+ * Self-hides when the Wisdom Graph is empty.
+ * Uses lightweight get_awe_summary (read-only, no sync).
  *
  * Language: "Your pattern" not "AWE detected."
  * Feel: memory, not surveillance.
  */
 export const WisdomPulse = memo(function WisdomPulse() {
-  const [state, setState] = useState<WisdomState>({
-    topPrinciple: null,
-    principleCount: 0,
-    decisionCount: 0,
-    pendingFeedback: 0,
-    loaded: false,
-  });
+  const [summary, setSummary] = useState<AweSummary | null>(null);
   const [expanded, setExpanded] = useState(false);
+  const [loaded, setLoaded] = useState(false);
 
-  const loadState = useCallback(async () => {
+  const loadSummary = useCallback(async () => {
     try {
-      // Sync wisdom (non-blocking, populates context chunks)
-      const syncResult = await cmd('sync_awe_wisdom').catch(() => '');
-      const statusText = typeof syncResult === 'string' ? syncResult : '';
-
-      // Parse metrics
-      const wisdomMatch = statusText.match(/(\d+) wisdom chunks/);
-      const decisionsMatch = statusText.match(/(\d+) decisions/);
-      const principleCount = wisdomMatch ? parseInt(wisdomMatch[1], 10) : 0;
-      const decisionCount = decisionsMatch ? parseInt(decisionsMatch[1], 10) : 0;
-
-      // Extract the top principle text from the sync
-      // The sync command outputs principle text — extract the first one
-      let topPrinciple: string | null = null;
-      if (principleCount > 0) {
-        // The principle content is embedded in context chunks
-        // For display, we generate a natural-language summary
-        if (decisionCount >= 5) {
-          topPrinciple = `${decisionCount} decisions tracked, ${principleCount} patterns validated`;
-        } else if (decisionCount > 0) {
-          topPrinciple = `${decisionCount} decisions tracked — patterns emerging`;
-        }
-      }
-
-      setState({
-        topPrinciple,
-        principleCount,
-        decisionCount,
-        pendingFeedback: 0,
-        loaded: true,
-      });
+      const raw = await cmd('get_awe_summary');
+      const parsed: AweSummary = JSON.parse(raw);
+      setSummary(parsed);
     } catch {
-      setState(prev => ({ ...prev, loaded: true }));
+      setSummary(null);
+    } finally {
+      setLoaded(true);
     }
   }, []);
 
   useEffect(() => {
-    loadState();
-  }, [loadState]);
+    loadSummary();
+  }, [loadSummary]);
 
-  // Don't show until the user has at least 1 decision
-  if (!state.loaded || state.decisionCount === 0) {
-    return null;
-  }
+  // Don't render until loaded
+  if (!loaded) return null;
 
-  // Progressive disclosure based on decision count
-  const hasPatterns = state.principleCount > 0;
+  // Don't show if AWE unavailable or empty
+  if (!summary?.available || summary.decisions === 0) return null;
+
+  const hasPatterns = summary.principles > 0;
+  const hasPending = summary.pending > 0;
 
   return (
     <button
@@ -84,38 +56,52 @@ export const WisdomPulse = memo(function WisdomPulse() {
       onClick={() => setExpanded(!expanded)}
       className="w-full text-left bg-bg-secondary rounded-lg border border-border/50 px-4 py-3 mb-4 hover:border-border transition-colors"
     >
-      {/* Minimal header — feels like a quiet status line */}
+      {/* Compact header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          {hasPatterns ? (
-            <div className="w-1.5 h-1.5 rounded-full bg-success" />
-          ) : (
-            <div className="w-1.5 h-1.5 rounded-full bg-text-muted/40" />
-          )}
+          <div className={`w-1.5 h-1.5 rounded-full ${hasPatterns ? 'bg-success' : 'bg-text-muted/40'}`} />
           <span className="text-xs text-text-secondary">
             {hasPatterns
-              ? `Your pattern: ${state.principleCount} validated`
-              : `${state.decisionCount} decisions — patterns forming`
+              ? `Your patterns: ${summary.principles} validated from ${summary.decisions} decisions`
+              : `${summary.decisions} decisions tracked — patterns forming`
             }
           </span>
         </div>
-        {state.pendingFeedback > 0 && (
+        {hasPending && (
           <span className="text-xs text-accent-gold">
-            {state.pendingFeedback} outcomes pending
+            {summary.pending} pending
           </span>
         )}
       </div>
 
-      {/* Expanded detail — only when clicked */}
+      {/* Top principle — the most valuable line */}
+      {hasPatterns && summary.top_principle && !expanded && (
+        <p className="mt-1.5 text-xs text-text-muted pl-3.5 italic truncate">
+          {summary.top_principle}
+        </p>
+      )}
+
+      {/* Expanded detail */}
       {expanded && (
         <div className="mt-3 pt-3 border-t border-border/30 space-y-2">
-          {state.topPrinciple && (
-            <p className="text-xs text-text-secondary">
-              {state.topPrinciple}
+          {summary.top_principle && (
+            <div className="text-xs text-text-secondary">
+              <span className="text-text-muted">Top pattern: </span>
+              {summary.top_principle}
+            </div>
+          )}
+          {summary.health && (
+            <div className="text-xs text-text-muted">
+              {summary.health}
+            </div>
+          )}
+          {hasPending && (
+            <p className="text-xs text-accent-gold/80">
+              {summary.pending} decisions need outcome recording to improve accuracy.
             </p>
           )}
-          <p className="text-xs text-text-muted">
-            Decisions compound into wisdom. Each outcome you record makes future recommendations more accurate.
+          <p className="text-xs text-text-muted/60">
+            Each recorded outcome makes future recommendations more precise.
           </p>
         </div>
       )}

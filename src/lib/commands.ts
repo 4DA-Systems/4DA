@@ -91,6 +91,8 @@ interface CommandMap {
   index_context: { params: Record<string, never>; result: string };
   index_project_readmes: { params: Record<string, never>; result: string };
   sync_awe_wisdom: { params: Record<string, never>; result: string };
+  get_awe_summary: { params: Record<string, never>; result: string };
+  run_awe_transmute: { params: { query: string; mode: string }; result: string };
   export_results: { params: { format: string }; result: string };
   get_diagnostics: { params: Record<string, never>; result: DiagnosticsSnapshot };
 
