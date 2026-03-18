@@ -722,6 +722,16 @@ pub async fn get_context_dirs() -> Result<Vec<String>> {
         .collect())
 }
 
+/// Generate a formatted CLI briefing string.
+///
+/// Pulls from in-memory analysis state first, falls back to DB query.
+/// Designed for both CLI output and frontend consumption.
+#[tauri::command]
+pub async fn generate_cli_briefing() -> Result<String> {
+    info!(target: "4da::briefing", "Generating CLI briefing");
+    Ok(crate::monitoring_notifications::generate_briefing_text())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
