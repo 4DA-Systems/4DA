@@ -10,6 +10,7 @@ use tracing::{info, warn};
 use crate::monitoring::{BatchedNotification, MonitoringState};
 
 // Re-export briefing types and functions so existing `monitoring_notifications::X` paths still work
+#[allow(unused_imports)]
 pub use crate::monitoring_briefing::{
     check_morning_briefing, generate_briefing_text, send_morning_briefing_notification,
     BriefingItem, BriefingNotification,

@@ -10,6 +10,7 @@ use serde::{Deserialize, Serialize};
 use super::{shared_client, SourceItem};
 
 // Re-export matching functions so existing `cve::X` paths still work
+#[allow(unused_imports)]
 pub(crate) use super::cve_matching::{cross_reference_advisories, normalize_ecosystem};
 
 // ============================================================================
