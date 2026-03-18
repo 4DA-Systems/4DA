@@ -125,13 +125,72 @@ pub(crate) fn generate_report(
 }
 
 // ============================================================================
+// Weekly Accuracy Computation (Background Job)
+// ============================================================================
+
+/// Compute and store accuracy for the current week.
+/// Called by the monitoring background job on a weekly cadence.
+/// Uses feedback table data: relevant=1 is confirmed, relevant=0 is rejected.
+pub(crate) fn record_weekly_accuracy(conn: &rusqlite::Connection) -> anyhow::Result<()> {
+    let period = chrono::Utc::now().format("%Y-W%W").to_string();
+
+    // Count items scored this week (from source_items created this week)
+    let total_scored: u32 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM source_items WHERE created_at >= datetime('now', '-7 days')",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap_or(0);
+
+    // Count items that passed threshold (approximate: items with embedding that scored > 0)
+    let total_relevant: u32 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM source_items WHERE created_at >= datetime('now', '-7 days') AND embedding IS NOT NULL",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap_or(0);
+
+    // Count explicit user feedback this week
+    let user_confirmed: u32 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM feedback WHERE relevant = 1 AND created_at >= datetime('now', '-7 days')",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap_or(0);
+
+    let user_rejected: u32 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM feedback WHERE relevant = 0 AND created_at >= datetime('now', '-7 days')",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap_or(0);
+
+    let accuracy_pct =
+        calculate_accuracy(total_scored, total_relevant, user_confirmed, user_rejected);
+
+    conn.execute(
+        "INSERT OR REPLACE INTO accuracy_history (period, total_scored, total_relevant, user_confirmed, user_rejected, accuracy_pct)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+        rusqlite::params![period, total_scored, total_relevant, user_confirmed, user_rejected, accuracy_pct],
+    )?;
+
+    tracing::info!(target: "4da::accuracy", period = %period, accuracy = accuracy_pct, confirmed = user_confirmed, rejected = user_rejected, "Weekly accuracy recorded");
+
+    Ok(())
+}
+
+// ============================================================================
 // Tauri Commands
 // ============================================================================
 
 #[tauri::command]
 pub fn get_accuracy_report(period: Option<String>) -> crate::error::Result<serde_json::Value> {
     let p = period.unwrap_or_else(|| chrono::Utc::now().format("%Y-%m").to_string());
-    let conn = crate::open_db_connection()?;
+    let conn = crate::get_database()?.conn.lock();
 
     // Get current period record
     let current_opt: Option<AccuracyRecord> = conn
@@ -171,7 +230,7 @@ pub fn get_accuracy_report(period: Option<String>) -> crate::error::Result<serde
 #[tauri::command]
 pub fn get_intelligence_report(period: Option<String>) -> crate::error::Result<serde_json::Value> {
     let p = period.unwrap_or_else(|| chrono::Utc::now().format("%Y-%m").to_string());
-    let conn = crate::open_db_connection()?;
+    let conn = crate::get_database()?.conn.lock();
 
     // Get current and previous period
     let mut stmt = conn.prepare(

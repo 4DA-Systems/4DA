@@ -322,7 +322,8 @@ mod tests {
     fn test_anthropic_sonnet_cost() {
         let cost = estimate_cost("anthropic", "claude-sonnet-4-6", 1000, 500);
         assert!(cost > 0.0);
-        assert!(cost < 0.01);
+        // 1000 * 3.00/1M + 500 * 15.00/1M = 0.003 + 0.0075 = 0.0105
+        assert!(cost < 0.02);
     }
 
     #[test]
