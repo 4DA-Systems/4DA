@@ -5,6 +5,7 @@
 //! targeted vulnerability alerts.
 
 use anyhow::Result;
+use semver::{Version, VersionReq};
 use serde::{Deserialize, Serialize};
 
 use super::{shared_client, SourceItem};
@@ -189,13 +190,107 @@ fn normalize_ecosystem(eco: &str) -> &str {
     }
 }
 
+/// Normalize a version range string from GitHub Advisory / npm format into
+/// something the `semver` crate's `VersionReq` can parse. GitHub advisories
+/// use ranges like `"< 4.17.21"` or `">= 2.0.0, < 2.1.5"` which mostly
+/// align with Cargo's semver syntax, but a few transformations are needed:
+///
+/// - Strip leading `= ` (exact pin) → bare version for `VersionReq`
+/// - Collapse double-spaces around operators
+/// - Return `None` for empty/unparseable ranges (caller falls back to name match)
+fn parse_version_range(range: &str) -> Option<VersionReq> {
+    let trimmed = range.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+
+    // Try parsing directly first — works for most GitHub Advisory ranges
+    if let Ok(req) = VersionReq::parse(trimmed) {
+        return Some(req);
+    }
+
+    // Normalize: some advisories use `= 1.2.3` (exact pin) which VersionReq
+    // doesn't accept — it wants `=1.2.3` (no space after `=` when alone)
+    let normalized = trimmed
+        .replace("= ", "=")
+        .replace(">  ", "> ")
+        .replace("<  ", "< ");
+
+    VersionReq::parse(&normalized).ok()
+}
+
+/// Try to parse a user-supplied version string as a semver `Version`.
+/// Handles common non-semver formats:
+/// - Two-part versions like `"1.2"` → `"1.2.0"`
+/// - Leading `v` prefix → stripped
+/// - Anything else returns `None` (caller falls back to name match)
+fn parse_user_version(ver: &str) -> Option<Version> {
+    let v = ver.trim().trim_start_matches('v');
+    if v.is_empty() {
+        return None;
+    }
+
+    // Try direct parse
+    if let Ok(version) = Version::parse(v) {
+        return Some(version);
+    }
+
+    // Handle two-part versions (e.g., "1.2" → "1.2.0")
+    let parts: Vec<&str> = v.split('.').collect();
+    if parts.len() == 2 {
+        if let Ok(version) = Version::parse(&format!("{v}.0")) {
+            return Some(version);
+        }
+    }
+
+    None
+}
+
+/// Check whether a user's version falls within an advisory's affected range.
+/// Returns `true` (conservatively match) when:
+/// - User has no version info (`None`)
+/// - Version can't be parsed as semver
+/// - Range can't be parsed as semver
+///
+/// Returns `false` only when both version and range parse successfully and
+/// the version is outside the affected range.
+fn version_is_affected(user_version: Option<&str>, affected_range: &str) -> bool {
+    let user_ver = match user_version {
+        Some(v) => v,
+        // No version info — conservatively assume affected
+        None => return true,
+    };
+
+    let parsed_version = match parse_user_version(user_ver) {
+        Some(v) => v,
+        // Can't parse user version — fall back to name-only match (conservative)
+        None => return true,
+    };
+
+    let req = match parse_version_range(affected_range) {
+        Some(r) => r,
+        // Can't parse range — fall back to name-only match (conservative)
+        None => return true,
+    };
+
+    req.matches(&parsed_version)
+}
+
 /// Cross-reference CVE advisories against user's installed dependencies.
 /// Returns advisories that affect the user, with the matching packages.
+///
+/// Version-aware: if the user provides version info, the advisory's
+/// `affected_versions` range is checked against it. Only dependencies
+/// whose version falls within the affected range are matched.
+///
+/// Conservative fallback: if version info is missing or unparseable,
+/// the dependency is still matched (alert rather than miss).
+///
 /// Ecosystem names are normalized before comparison to handle mismatches
 /// between advisory sources and lockfile formats.
 pub(crate) fn cross_reference_advisories(
     advisories: &[CveAdvisory],
-    user_deps: &[(String, String)], // (package_name, ecosystem)
+    user_deps: &[(String, String, Option<String>)], // (name, ecosystem, version)
 ) -> Vec<(CveAdvisory, Vec<AffectedPackage>)> {
     let mut matches = Vec::new();
 
@@ -204,9 +299,14 @@ pub(crate) fn cross_reference_advisories(
             .affected_packages
             .iter()
             .filter(|ap| {
-                user_deps.iter().any(|(name, eco)| {
-                    name.eq_ignore_ascii_case(&ap.name)
-                        && normalize_ecosystem(eco) == normalize_ecosystem(&ap.ecosystem)
+                user_deps.iter().any(|(name, eco, version)| {
+                    let name_match = name.eq_ignore_ascii_case(&ap.name);
+                    let eco_match =
+                        normalize_ecosystem(eco) == normalize_ecosystem(&ap.ecosystem);
+                    let ver_match =
+                        version_is_affected(version.as_deref(), &ap.affected_versions);
+
+                    name_match && eco_match && ver_match
                 })
             })
             .cloned()
@@ -256,9 +356,9 @@ mod tests {
     }
 
     #[test]
-    fn test_cross_reference_match() {
+    fn test_cross_reference_match_no_version() {
         let advisories = vec![sample_advisory()];
-        let user_deps = vec![("lodash".to_string(), "npm".to_string())];
+        let user_deps = vec![("lodash".to_string(), "npm".to_string(), None)];
 
         let matches = cross_reference_advisories(&advisories, &user_deps);
         assert_eq!(matches.len(), 1);
@@ -268,7 +368,7 @@ mod tests {
     #[test]
     fn test_cross_reference_no_match() {
         let advisories = vec![sample_advisory()];
-        let user_deps = vec![("express".to_string(), "npm".to_string())];
+        let user_deps = vec![("express".to_string(), "npm".to_string(), None)];
 
         let matches = cross_reference_advisories(&advisories, &user_deps);
         assert!(matches.is_empty());
@@ -277,7 +377,7 @@ mod tests {
     #[test]
     fn test_cross_reference_case_insensitive() {
         let advisories = vec![sample_advisory()];
-        let user_deps = vec![("Lodash".to_string(), "NPM".to_string())];
+        let user_deps = vec![("Lodash".to_string(), "NPM".to_string(), None)];
 
         let matches = cross_reference_advisories(&advisories, &user_deps);
         assert_eq!(matches.len(), 1);

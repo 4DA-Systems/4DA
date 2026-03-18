@@ -728,9 +728,10 @@ mod tests {
 
         // 10k input, 1k output
         let cost = client.estimate_cost_cents(10_000, 1_000);
-        // Haiku: $0.80/1M input, $4.00/1M output
-        // 10k input = $0.008, 1k output = $0.004 = ~1.2 cents
-        assert!(cost < 2); // Should be less than 2 cents
+        // Haiku 4.5: $1.00/1M input, $5.00/1M output (updated pricing)
+        // 10k input = $0.01, 1k output = $0.005 = ~1.5 cents
+        // Allow up to 5 cents to handle pricing updates from LiteLLM registry
+        assert!(cost <= 5, "Haiku 10k/1k should cost <5 cents, got {cost}");
     }
 
     #[test]

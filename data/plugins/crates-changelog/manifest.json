@@ -1,0 +1,9 @@
+{
+  "name": "crates-changelog",
+  "version": "1.0.0",
+  "description": "Track Rust crate releases for your dependencies",
+  "author": "4DA Systems",
+  "binary": "plugin.js",
+  "poll_interval_secs": 3600,
+  "max_items": 20
+}
