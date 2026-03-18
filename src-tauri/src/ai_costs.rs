@@ -216,6 +216,89 @@ pub(crate) fn generate_recommendation(usage: &[AiUsageRecord]) -> Option<ModelRe
 }
 
 // ============================================================================
+// Tauri Commands
+// ============================================================================
+
+#[tauri::command]
+pub fn get_ai_usage_summary(period: Option<String>) -> crate::error::Result<serde_json::Value> {
+    let p = period.unwrap_or_else(|| chrono::Utc::now().format("%Y-%m").to_string());
+    let conn = crate::open_db_connection()?;
+
+    let mut stmt = conn.prepare(
+        "SELECT id, provider, model, task_type, tokens_in, tokens_out, estimated_cost_usd, created_at \
+         FROM ai_usage WHERE created_at LIKE ?1 ORDER BY created_at DESC",
+    )?;
+    let pattern = format!("{}%", p);
+    let records: Vec<AiUsageRecord> = stmt
+        .query_map(rusqlite::params![pattern], |row| {
+            Ok(AiUsageRecord {
+                id: row.get(0)?,
+                provider: row.get(1)?,
+                model: row.get(2)?,
+                task_type: row.get(3)?,
+                tokens_in: row.get(4)?,
+                tokens_out: row.get(5)?,
+                estimated_cost_usd: row.get(6)?,
+                created_at: row.get(7)?,
+            })
+        })?
+        .filter_map(|r| r.ok())
+        .collect();
+
+    let summary = summarize_usage(&records, &p);
+    Ok(serde_json::to_value(summary)?)
+}
+
+#[tauri::command]
+pub fn get_ai_cost_estimate(
+    provider: String,
+    model: String,
+    tokens_in: u32,
+    tokens_out: u32,
+) -> crate::error::Result<serde_json::Value> {
+    let cost = estimate_cost(&provider, &model, tokens_in, tokens_out);
+    Ok(serde_json::json!({
+        "provider": provider,
+        "model": model,
+        "tokens_in": tokens_in,
+        "tokens_out": tokens_out,
+        "estimated_cost_usd": cost,
+    }))
+}
+
+#[tauri::command]
+pub fn get_ai_cost_recommendation() -> crate::error::Result<serde_json::Value> {
+    let conn = crate::open_db_connection()?;
+
+    let mut stmt = conn.prepare(
+        "SELECT id, provider, model, task_type, tokens_in, tokens_out, estimated_cost_usd, created_at \
+         FROM ai_usage ORDER BY created_at DESC LIMIT 500",
+    )?;
+    let records: Vec<AiUsageRecord> = stmt
+        .query_map([], |row| {
+            Ok(AiUsageRecord {
+                id: row.get(0)?,
+                provider: row.get(1)?,
+                model: row.get(2)?,
+                task_type: row.get(3)?,
+                tokens_in: row.get(4)?,
+                tokens_out: row.get(5)?,
+                estimated_cost_usd: row.get(6)?,
+                created_at: row.get(7)?,
+            })
+        })?
+        .filter_map(|r| r.ok())
+        .collect();
+
+    match generate_recommendation(&records) {
+        Some(rec) => Ok(serde_json::to_value(rec)?),
+        None => Ok(serde_json::json!({
+            "message": "No cost-saving recommendations at this time"
+        })),
+    }
+}
+
+// ============================================================================
 // Tests
 // ============================================================================
 
