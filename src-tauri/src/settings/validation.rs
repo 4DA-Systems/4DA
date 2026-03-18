@@ -133,7 +133,9 @@ pub async fn validate_and_store_key(
         if settings.llm.model.is_empty() {
             settings.llm.model = model_access.first().cloned().unwrap_or_default();
         }
-        let _ = guard.save();
+        if let Err(e) = guard.save() {
+            warn!("Failed to save settings after validation: {e}");
+        }
 
         info!(
             target: "4da::validation",

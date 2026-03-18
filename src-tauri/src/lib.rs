@@ -1504,7 +1504,9 @@ pub fn run() {
                                 "Tier updated after startup Keygen validation"
                             );
                             settings.license.tier = result.tier;
-                            let _ = guard.save();
+                            if let Err(e) = guard.save() {
+                                warn!("Failed to save settings: {e}");
+                            }
                         } else {
                             info!(target: "4da::license",
                                 tier = %result.tier,

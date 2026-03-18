@@ -49,9 +49,8 @@ export function StandingQueries({ isPro }: StandingQueriesProps) {
     try {
       const result = await cmd('get_standing_query_suggestions') as unknown as StandingQuerySuggestion[];
       setSuggestions(result);
-    } catch (err) {
-      // Silently fail — suggestions are non-critical
-      console.debug('Failed to load suggestions:', err);
+    } catch {
+      /* suggestions are non-critical */
     }
   }, [isPro]);
 

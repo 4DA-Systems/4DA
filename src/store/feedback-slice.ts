@@ -45,8 +45,8 @@ export const createFeedbackSlice: StateCreator<AppStore, [], [], FeedbackSlice> 
           return { feedbackGiven: next };
         });
       }
-    } catch (error) {
-      console.debug('Failed to load persisted saved ids:', error);
+    } catch {
+      /* persisted saved ids not available */
     }
   },
 

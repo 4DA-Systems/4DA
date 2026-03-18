@@ -35,6 +35,9 @@ jobs:
       - name: ESLint
         run: pnpm run lint
 
+      - name: Validate IPC commands
+        run: node scripts/validate-commands.cjs
+
       - name: Run tests and verify count floor
         run: |
           set +e
@@ -103,14 +106,13 @@ jobs:
       - name: Clippy lints
         run: cd src-tauri && cargo clippy ${{ matrix.cargo-features }} -- -D warnings
 
+      - name: Install cargo-audit
+        if: matrix.label == 'default'
+        run: cargo install cargo-audit --locked
+
       - name: Security audit
         if: matrix.label == 'default'
-        run: |
-          if command -v cargo-audit &> /dev/null; then
-            cd src-tauri && cargo audit
-          else
-            echo "::warning::cargo-audit not installed"
-          fi
+        run: cd src-tauri && cargo audit
 
       - name: Run unit tests and verify count floor
         run: |

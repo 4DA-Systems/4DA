@@ -26,8 +26,8 @@ export const createMonitoringSlice: StateCreator<AppStore, [], [], MonitoringSli
       if (raw.notification_threshold) {
         set({ notificationThreshold: raw.notification_threshold as string });
       }
-    } catch (error) {
-      console.debug('Monitoring status not available:', error);
+    } catch {
+      /* monitoring status not available */
     }
   },
 
