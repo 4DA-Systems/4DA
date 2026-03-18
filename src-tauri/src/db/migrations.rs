@@ -1045,6 +1045,16 @@ impl Database {
                 )?;
             }
 
+            if current_version < 35 {
+                Self::run_versioned_migration(
+                    &conn,
+                    34,
+                    35,
+                    "Phase 35: Developer OS Intelligence tables",
+                    Self::migrate_to_phase_35,
+                )?;
+            }
+
             info!(target: "4da::db", "Database schema initialized with sqlite-vec");
             return Ok(());
         }
@@ -1592,6 +1602,51 @@ impl Database {
             CREATE INDEX IF NOT EXISTS idx_sso_pending_expires ON sso_pending_auth(expires_at);",
         )?;
         info!(target: "4da::db", "Created SSO pending auth table");
+        Ok(())
+    }
+
+    fn migrate_to_phase_35(conn: &Connection) -> SqliteResult<()> {
+        conn.execute_batch(
+            "-- Accuracy tracking (Phase 4.1)
+            CREATE TABLE IF NOT EXISTS accuracy_history (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                period TEXT NOT NULL UNIQUE,
+                total_scored INTEGER NOT NULL DEFAULT 0,
+                total_relevant INTEGER NOT NULL DEFAULT 0,
+                user_confirmed INTEGER DEFAULT 0,
+                user_rejected INTEGER DEFAULT 0,
+                accuracy_pct REAL DEFAULT 0.0,
+                created_at TEXT NOT NULL DEFAULT (datetime('now'))
+            );
+
+            -- Developer temporal graph (Phase 4.5)
+            CREATE TABLE IF NOT EXISTS developer_timeline (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                period TEXT NOT NULL UNIQUE,
+                tech_snapshot TEXT NOT NULL,
+                interest_snapshot TEXT NOT NULL,
+                decision_count INTEGER DEFAULT 0,
+                feedback_count INTEGER DEFAULT 0,
+                created_at TEXT NOT NULL DEFAULT (datetime('now'))
+            );
+            CREATE INDEX IF NOT EXISTS idx_timeline_period ON developer_timeline(period);
+
+            -- AI usage tracking (Phase 8.2)
+            CREATE TABLE IF NOT EXISTS ai_usage (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                provider TEXT NOT NULL,
+                model TEXT NOT NULL,
+                task_type TEXT NOT NULL,
+                tokens_in INTEGER DEFAULT 0,
+                tokens_out INTEGER DEFAULT 0,
+                estimated_cost_usd REAL DEFAULT 0.0,
+                created_at TEXT NOT NULL DEFAULT (datetime('now'))
+            );
+            CREATE INDEX IF NOT EXISTS idx_ai_usage_provider ON ai_usage(provider, model);
+            CREATE INDEX IF NOT EXISTS idx_ai_usage_task ON ai_usage(task_type);
+            CREATE INDEX IF NOT EXISTS idx_ai_usage_date ON ai_usage(created_at);",
+        )?;
+        info!(target: "4da::db", "Created Developer OS Intelligence tables (accuracy, timeline, AI usage)");
         Ok(())
     }
 
