@@ -196,11 +196,11 @@ describe('SettingsModal', () => {
     expect(screen.getByText('settings.testConnection')).toBeInTheDocument();
   });
 
-  it('renders 6 tab buttons', () => {
+  it('renders 7 tab buttons (including team)', () => {
     render(<SettingsModal onClose={vi.fn()} />);
     const tabs = screen.getAllByRole('tab');
-    expect(tabs).toHaveLength(6);
-    expect(tabs.map(t => t.textContent)).toEqual(['settings.tabs.general', 'settings.tabs.sources', 'settings.tabs.profile', 'settings.tabs.projects', 'settings.tabs.advanced', 'settings.tabs.about']);
+    expect(tabs).toHaveLength(7);
+    expect(tabs.map(t => t.textContent)).toEqual(['settings.tabs.general', 'settings.tabs.sources', 'settings.tabs.profile', 'settings.tabs.projects', 'settings.tabs.team', 'settings.tabs.advanced', 'settings.tabs.about']);
   });
 
   it('General tab is active by default', () => {
