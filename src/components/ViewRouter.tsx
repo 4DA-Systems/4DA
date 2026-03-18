@@ -23,6 +23,7 @@ const SignalsPanel = lazy(() => import('./SignalsPanel').then(m => ({ default: m
 const KnowledgeGapsPanel = lazy(() => import('./KnowledgeGapsPanel').then(m => ({ default: m.KnowledgeGapsPanel })));
 const SecurityDashboard = lazy(() => import('./SecurityDashboard'));
 const DependencyDashboard = lazy(() => import('./DependencyDashboard'));
+const IntelligenceConsole = lazy(() => import('./IntelligenceConsole'));
 
 interface ViewRouterProps {
   newItemIds: Set<number>;
@@ -39,6 +40,7 @@ const VIEW_LABEL_KEYS: Record<string, string> = {
   toolkit: 'nav.toolkit',
   playbook: 'nav.playbook',
   calibrate: 'nav.calibrate',
+  console: 'nav.console',
 };
 
 export function ViewRouter({ newItemIds, focusedIndex }: ViewRouterProps) {
@@ -100,6 +102,10 @@ export function ViewRouter({ newItemIds, focusedIndex }: ViewRouterProps) {
       ) : activeView === 'playbook' ? (
         <ViewErrorBoundary viewName="Playbook">
           <PlaybookView />
+        </ViewErrorBoundary>
+      ) : activeView === 'console' ? (
+        <ViewErrorBoundary viewName="Console">
+          <IntelligenceConsole />
         </ViewErrorBoundary>
       ) : activeView === 'calibrate' ? (
         <ViewErrorBoundary viewName="System">
