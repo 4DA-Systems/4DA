@@ -1055,6 +1055,16 @@ impl Database {
                 )?;
             }
 
+            if current_version < 36 {
+                Self::run_versioned_migration(
+                    &conn,
+                    35,
+                    36,
+                    "Phase 36: Waitlist + i18n preferences",
+                    Self::migrate_to_phase_36,
+                )?;
+            }
+
             info!(target: "4da::db", "Database schema initialized with sqlite-vec");
             return Ok(());
         }
@@ -1647,6 +1657,26 @@ impl Database {
             CREATE INDEX IF NOT EXISTS idx_ai_usage_date ON ai_usage(created_at);",
         )?;
         info!(target: "4da::db", "Created Developer OS Intelligence tables (accuracy, timeline, AI usage)");
+        Ok(())
+    }
+
+    fn migrate_to_phase_36(conn: &Connection) -> SqliteResult<()> {
+        conn.execute_batch(
+            "CREATE TABLE IF NOT EXISTS waitlist_signups (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                tier TEXT NOT NULL,
+                email TEXT NOT NULL,
+                name TEXT,
+                team_size TEXT,
+                company TEXT,
+                role TEXT,
+                source TEXT DEFAULT 'in-app',
+                signed_up_at TEXT NOT NULL DEFAULT (datetime('now')),
+                UNIQUE(email, tier)
+            );
+            CREATE INDEX IF NOT EXISTS idx_waitlist_tier ON waitlist_signups(tier);",
+        )?;
+        info!(target: "4da::db", "Created waitlist signups table");
         Ok(())
     }
 

@@ -538,6 +538,10 @@ interface CommandMap {
   list_plugins: { params: Record<string, never>; result: PluginManifest[] };
   fetch_plugin_items: { params: { plugin_name: string }; result: PluginItem[] };
   fetch_all_plugins: { params: Record<string, never>; result: PluginItem[] };
+
+  // -- Waitlist --
+  save_waitlist_signup: { params: { tier: string; email: string; name?: string | null; teamSize?: string | null; company?: string | null; role?: string | null }; result: { success: boolean; tier: string; email: string } };
+  get_waitlist_signups: { params: Record<string, never>; result: Array<{ id: number; tier: string; email: string; name: string | null; team_size: string | null; company: string | null; role: string | null; source: string; signed_up_at: string }> };
 }
 
 
