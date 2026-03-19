@@ -3,41 +3,17 @@ import { useTranslation } from 'react-i18next';
 import { useShallow } from 'zustand/react/shallow';
 import { PanelErrorBoundary } from './PanelErrorBoundary';
 import { LearnedBehaviorPanel } from './LearnedBehaviorPanel';
-import { SystemHealthPanel } from './SystemHealthPanel';
 import { IndexedDocumentsPanel } from './IndexedDocumentsPanel';
 import { NaturalLanguageSearch } from './NaturalLanguageSearch';
 import { SourceConfigPanel } from './SourceConfigPanel';
-import { AIProviderSection } from './settings/AIProviderSection';
-import { MonitoringSection } from './settings/MonitoringSection';
-import { DigestSection } from './settings/DigestSection';
-import { LocaleSection } from './settings/LocaleSection';
-import { LicenseSection } from './settings/LicenseSection';
 import { ContextDiscoverySection } from './settings/ContextDiscoverySection';
 import { PersonalizationSection } from './settings/PersonalizationSection';
-import { CommunityIntelligenceSection } from './settings/CommunityIntelligenceSection';
 import { DeveloperDnaPanel } from './DeveloperDna';
-import { AttentionDashboard } from './settings/AttentionDashboard';
-import { ProjectHealthRadar } from './settings/ProjectHealthRadar';
-import { StreetsMembershipSection } from './settings/StreetsMembershipSection';
-import { ShowAllViewsToggle } from './settings/ShowAllViewsToggle';
-import { LanguageSelector } from './settings/LanguageSelector';
-import { NaturalLanguageQueryPanel } from './NaturalLanguageQuery';
-import { ProValuePanel } from './ProValuePanel';
 import { AboutPanel } from './AboutPanel';
-import { TeamSection } from './settings/TeamSection';
-import WaitlistSignup from './WaitlistSignup';
+import { SettingsGeneralTab } from './settings/SettingsGeneralTab';
+import { SettingsAdvancedTab } from './settings/SettingsAdvancedTab';
+import { SettingsTeamTab } from './settings/SettingsTeamTab';
 import { TeamInviteDialog } from './settings/TeamInviteDialog';
-import { TeamSharedSources } from './team/TeamSharedSources';
-import { AuditLogViewer } from './enterprise/AuditLogViewer';
-import { WebhookManager } from './enterprise/WebhookManager';
-import { OrgDashboard } from './enterprise/OrgDashboard';
-import { PolicyEditor } from './enterprise/PolicyEditor';
-import { AdminHealthDashboard } from './enterprise/AdminHealthDashboard';
-import { TeamOnboardingWizard } from './enterprise/TeamOnboardingWizard';
-import { SsoConfigPanel } from './enterprise/SsoConfigPanel';
-import { DataExportPanel } from './enterprise/DataExportPanel';
-import { ConfigDiagnostics } from './enterprise/ConfigDiagnostics';
-import { WebhookDocsPanel } from './enterprise/WebhookDocsPanel';
 import { useAppStore } from '../store';
 import { translateError } from '../utils/error-messages';
 
@@ -72,7 +48,7 @@ export const SettingsModal = memo(function SettingsModal({ onClose }: SettingsMo
   const [activeTab, setActiveTab] = useState<SettingsTab>('general');
   const [initialized, setInitialized] = useState<Set<SettingsTab>>(new Set(['general']));
 
-  // Data selectors (may change — useShallow prevents unnecessary re-renders)
+  // Data selectors
   const {
     settings, settingsForm, settingsStatus, ollamaStatus, ollamaModels, modelRegistry,
     monitoring, monitoringInterval, notificationThreshold,
@@ -102,7 +78,7 @@ export const SettingsModal = memo(function SettingsModal({ onClose }: SettingsMo
     })),
   );
 
-  // Action selectors (stable references — no useShallow needed)
+  // Action selectors
   const setSettingsFormFull = useAppStore(s => s.setSettingsFormFull);
   const setSettingsStatus = useAppStore(s => s.setSettingsStatus);
   const saveSettings = useAppStore(s => s.saveSettings);
@@ -143,103 +119,49 @@ export const SettingsModal = memo(function SettingsModal({ onClose }: SettingsMo
   const initTab = useCallback((tab: SettingsTab) => {
     if (initialized.has(tab)) return;
     setInitialized(prev => new Set(prev).add(tab));
-
     switch (tab) {
-      case 'profile':
-        loadUserContext();
-        loadSuggestedInterests();
-        loadLearnedBehavior();
-        break;
-      case 'projects':
-        loadDiscoveredContext();
-        break;
-      case 'team':
-        // Team/enterprise data loads on-demand inside components
-        break;
-      case 'advanced':
-        loadSystemHealth();
-        break;
+      case 'profile': loadUserContext(); loadSuggestedInterests(); loadLearnedBehavior(); break;
+      case 'projects': loadDiscoveredContext(); break;
+      case 'advanced': loadSystemHealth(); break;
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps -- stable store actions
   }, [initialized]);
 
-  const handleTabChange = (tab: SettingsTab) => {
-    setActiveTab(tab);
-    initTab(tab);
-  };
+  const handleTabChange = (tab: SettingsTab) => { setActiveTab(tab); initTab(tab); };
 
-  // Focus trap: cycle Tab within modal, auto-focus first element, restore on close
+  // Focus trap
   useEffect(() => {
     const previouslyFocused = document.activeElement as HTMLElement | null;
     const modal = document.querySelector('[role="dialog"]') as HTMLElement;
     if (!modal) return;
-
     const getFocusable = () => modal.querySelectorAll<HTMLElement>(
       'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
     );
-
-    const initialFocusable = getFocusable();
-    initialFocusable[0]?.focus();
-
+    getFocusable()[0]?.focus();
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        e.stopPropagation();
-        onClose();
-        return;
-      }
+      if (e.key === 'Escape') { e.stopPropagation(); onClose(); return; }
       if (e.key !== 'Tab') return;
       const focusable = getFocusable();
-      const first = focusable[0];
-      const last = focusable[focusable.length - 1];
-      if (e.shiftKey) {
-        if (document.activeElement === first) {
-          e.preventDefault();
-          last?.focus();
-        }
-      } else {
-        if (document.activeElement === last) {
-          e.preventDefault();
-          first?.focus();
-        }
-      }
+      const first = focusable[0], last = focusable[focusable.length - 1];
+      if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last?.focus(); }
+      else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first?.focus(); }
     };
-
     modal.addEventListener('keydown', handleKeyDown);
-    return () => {
-      modal.removeEventListener('keydown', handleKeyDown);
-      previouslyFocused?.focus();
-    };
+    return () => { modal.removeEventListener('keydown', handleKeyDown); previouslyFocused?.focus(); };
   }, [activeTab, onClose]);
 
-  // Monitoring action wrappers (add status messages)
+  // Monitoring action wrappers
   const handleToggleMonitoring = async () => {
-    try {
-      const msg = await toggleMonitoring();
-      setSettingsStatus(msg);
-      setTimeout(() => setSettingsStatus(''), 2000);
-    } catch (error) {
-      setSettingsStatus(`Error: ${translateError(error)}`);
-    }
+    try { const msg = await toggleMonitoring(); setSettingsStatus(msg); setTimeout(() => setSettingsStatus(''), 2000); }
+    catch (error) { setSettingsStatus(`Error: ${translateError(error)}`); }
   };
-
   const handleUpdateMonitoringInterval = async () => {
-    try {
-      const msg = await updateMonitoringInterval();
-      setSettingsStatus(msg);
-      setTimeout(() => setSettingsStatus(''), 2000);
-    } catch (error) {
-      setSettingsStatus(`Error: ${translateError(error)}`);
-    }
+    try { const msg = await updateMonitoringInterval(); setSettingsStatus(msg); setTimeout(() => setSettingsStatus(''), 2000); }
+    catch (error) { setSettingsStatus(`Error: ${translateError(error)}`); }
   };
-
   const handleTestNotification = async () => {
-    try {
-      const msg = await testNotification();
-      setSettingsStatus(msg);
-      setTimeout(() => setSettingsStatus(''), 2000);
-    } catch (error) {
-      setSettingsStatus(`Notification error: ${translateError(error)}`);
-    }
+    try { const msg = await testNotification(); setSettingsStatus(msg); setTimeout(() => setSettingsStatus(''), 2000); }
+    catch (error) { setSettingsStatus(`Notification error: ${translateError(error)}`); }
   };
 
   return (
@@ -247,7 +169,6 @@ export const SettingsModal = memo(function SettingsModal({ onClose }: SettingsMo
       <div className="bg-bg-secondary border border-border rounded-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-2xl">
         {/* Sticky Header + Tab Bar */}
         <div className="sticky top-0 bg-bg-secondary z-10">
-          {/* Modal Header */}
           <div className="px-6 py-4 border-b border-border flex items-center justify-between">
             <div className="flex items-center gap-3">
               <div className="w-8 h-8 bg-orange-500/20 rounded-lg flex items-center justify-center">
@@ -255,34 +176,16 @@ export const SettingsModal = memo(function SettingsModal({ onClose }: SettingsMo
               </div>
               <h2 id="settings-modal-title" className="text-lg font-medium text-white">{t('settings.title')}</h2>
             </div>
-            <button
-              onClick={onClose}
-              aria-label="Close settings"
-              className="w-8 h-8 rounded-lg bg-bg-tertiary text-text-muted hover:text-white hover:bg-border flex items-center justify-center transition-all"
-            >
+            <button onClick={onClose} aria-label="Close settings" className="w-8 h-8 rounded-lg bg-bg-tertiary text-text-muted hover:text-white hover:bg-border flex items-center justify-center transition-all">
               &times;
             </button>
           </div>
-
-          {/* Tab Bar */}
           <div className="px-6 flex gap-1 border-b border-border" role="tablist" aria-label="Settings navigation">
             {TAB_IDS.map(tabId => (
-              <button
-                key={tabId}
-                role="tab"
-                aria-selected={activeTab === tabId}
-                aria-controls={`tabpanel-${tabId}`}
-                onClick={() => handleTabChange(tabId)}
-                className={`px-4 py-3 text-sm transition-all relative ${
-                  activeTab === tabId
-                    ? 'text-orange-400 font-medium'
-                    : 'text-text-muted hover:text-text-secondary'
-                }`}
-              >
+              <button key={tabId} role="tab" aria-selected={activeTab === tabId} aria-controls={`tabpanel-${tabId}`} onClick={() => handleTabChange(tabId)}
+                className={`px-4 py-3 text-sm transition-all relative ${activeTab === tabId ? 'text-orange-400 font-medium' : 'text-text-muted hover:text-text-secondary'}`}>
                 {t(`settings.tabs.${tabId}`)}
-                {activeTab === tabId && (
-                  <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-orange-500" />
-                )}
+                {activeTab === tabId && <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-orange-500" />}
               </button>
             ))}
           </div>
@@ -297,84 +200,17 @@ export const SettingsModal = memo(function SettingsModal({ onClose }: SettingsMo
 
         {/* Tab Content */}
         <div className="p-6 space-y-6">
-          {/* General Tab */}
           {activeTab === 'general' && (
-            <div id="tabpanel-general" role="tabpanel">
-              <div className="space-y-6">
-                <PanelErrorBoundary name="Language">
-                  <LocaleSection />
-                </PanelErrorBoundary>
-
-                <ShowAllViewsToggle />
-
-                <PanelErrorBoundary name="AI Provider">
-                  <AIProviderSection
-                    settings={settings}
-                    settingsForm={settingsForm}
-                    setSettingsForm={setSettingsFormFull}
-                    ollamaStatus={ollamaStatus}
-                    ollamaModels={ollamaModels}
-                    checkOllamaStatus={checkOllamaStatus}
-                    modelRegistry={modelRegistry}
-                    onRefreshRegistry={refreshModelRegistry}
-                  />
-                </PanelErrorBoundary>
-
-                <PanelErrorBoundary name="Monitoring">
-                  <MonitoringSection
-                    monitoring={monitoring}
-                    monitoringInterval={monitoringInterval}
-                    setMonitoringInterval={setMonitoringInterval}
-                    notificationThreshold={notificationThreshold}
-                    onSetNotificationThreshold={setNotificationThreshold}
-                    onToggle={handleToggleMonitoring}
-                    onUpdateInterval={handleUpdateMonitoringInterval}
-                    onTestNotification={handleTestNotification}
-                  />
-                </PanelErrorBoundary>
-
-                <PanelErrorBoundary name="Digest">
-                  <DigestSection setSettingsStatus={setSettingsStatus} />
-                </PanelErrorBoundary>
-
-                <PanelErrorBoundary name="Community Intelligence">
-                  <CommunityIntelligenceSection />
-                </PanelErrorBoundary>
-
-                <PanelErrorBoundary name="Language">
-                  <LanguageSelector />
-                </PanelErrorBoundary>
-
-                <PanelErrorBoundary name="License">
-                  <LicenseSection onStatus={setSettingsStatus} />
-                </PanelErrorBoundary>
-
-                <PanelErrorBoundary name="STREETS Membership">
-                  <StreetsMembershipSection onStatus={setSettingsStatus} />
-                </PanelErrorBoundary>
-
-                {/* Actions */}
-                <div className="flex gap-3 pt-2">
-                  <button
-                    onClick={saveSettings}
-                    aria-label={t('settings.saveSettings')}
-                    className="flex-1 px-4 py-3 text-sm bg-gradient-to-r from-orange-500 to-orange-600 text-white font-medium rounded-lg hover:from-orange-600 hover:to-orange-700 transition-all shadow-lg shadow-orange-500/20"
-                  >
-                    {t('settings.saveSettings')}
-                  </button>
-                  <button
-                    onClick={testConnection}
-                    aria-label={t('settings.testConnection')}
-                    className="px-6 py-3 text-sm bg-bg-tertiary text-text-secondary border border-border rounded-lg hover:text-white hover:border-orange-500/30 transition-all"
-                  >
-                    {t('settings.testConnection')}
-                  </button>
-                </div>
-              </div>
-            </div>
+            <SettingsGeneralTab settings={settings} settingsForm={settingsForm} setSettingsForm={setSettingsFormFull}
+              ollamaStatus={ollamaStatus} ollamaModels={ollamaModels} checkOllamaStatus={checkOllamaStatus}
+              modelRegistry={modelRegistry} onRefreshRegistry={refreshModelRegistry}
+              monitoring={monitoring} monitoringInterval={monitoringInterval} setMonitoringInterval={setMonitoringInterval}
+              notificationThreshold={notificationThreshold} setNotificationThreshold={setNotificationThreshold}
+              onToggleMonitoring={handleToggleMonitoring} onUpdateInterval={handleUpdateMonitoringInterval}
+              onTestNotification={handleTestNotification} setSettingsStatus={setSettingsStatus}
+              saveSettings={saveSettings} testConnection={testConnection} />
           )}
 
-          {/* Sources Tab */}
           {activeTab === 'sources' && (
             <div id="tabpanel-sources" role="tabpanel">
               <PanelErrorBoundary name="Source Configuration">
@@ -383,190 +219,60 @@ export const SettingsModal = memo(function SettingsModal({ onClose }: SettingsMo
             </div>
           )}
 
-          {/* Profile Tab */}
           {activeTab === 'profile' && (
             <div id="tabpanel-profile" role="tabpanel">
               <div className="space-y-6">
-                <PanelErrorBoundary name="Personalization">
-                  <PersonalizationSection />
-                </PanelErrorBoundary>
-
-                <PanelErrorBoundary name="Developer DNA">
-                  <DeveloperDnaPanel />
-                </PanelErrorBoundary>
-
+                <PanelErrorBoundary name="Personalization"><PersonalizationSection /></PanelErrorBoundary>
+                <PanelErrorBoundary name="Developer DNA"><DeveloperDnaPanel /></PanelErrorBoundary>
                 <PanelErrorBoundary name="Learned Behavior">
-                  <LearnedBehaviorPanel
-                    affinities={learnedAffinities}
-                    antiTopics={antiTopics}
-                    onRefresh={loadLearnedBehavior}
-                  />
+                  <LearnedBehaviorPanel affinities={learnedAffinities} antiTopics={antiTopics} onRefresh={loadLearnedBehavior} />
                 </PanelErrorBoundary>
               </div>
             </div>
           )}
 
-          {/* Projects Tab */}
           {activeTab === 'projects' && (
             <div id="tabpanel-projects" role="tabpanel">
               <div className="space-y-6">
                 <PanelErrorBoundary name="Context Discovery">
-                  <ContextDiscoverySection
-                    scanDirectories={scanDirectories}
-                    newScanDir={newScanDir}
-                    setNewScanDir={setNewScanDir}
-                    isScanning={isScanning}
-                    discoveredContext={discoveredContext}
-                    runAutoDiscovery={runAutoDiscovery}
-                    runFullScan={runFullScan}
-                    addScanDirectory={addScanDirectory}
-                    removeScanDirectory={removeScanDirectory}
-                  />
+                  <ContextDiscoverySection scanDirectories={scanDirectories} newScanDir={newScanDir} setNewScanDir={setNewScanDir}
+                    isScanning={isScanning} discoveredContext={discoveredContext} runAutoDiscovery={runAutoDiscovery}
+                    runFullScan={runFullScan} addScanDirectory={addScanDirectory} removeScanDirectory={removeScanDirectory} />
                 </PanelErrorBoundary>
-
-                <PanelErrorBoundary name="Indexed Documents">
-                  <IndexedDocumentsPanel onStatusChange={setSettingsStatus} />
-                </PanelErrorBoundary>
-
-                <PanelErrorBoundary name="Natural Language Search">
-                  <NaturalLanguageSearch onStatusChange={setSettingsStatus} />
-                </PanelErrorBoundary>
+                <PanelErrorBoundary name="Indexed Documents"><IndexedDocumentsPanel onStatusChange={setSettingsStatus} /></PanelErrorBoundary>
+                <PanelErrorBoundary name="Natural Language Search"><NaturalLanguageSearch onStatusChange={setSettingsStatus} /></PanelErrorBoundary>
               </div>
             </div>
           )}
 
-          {/* Advanced Tab */}
           {activeTab === 'advanced' && (
-            <div id="tabpanel-advanced" role="tabpanel">
-              <div className="space-y-6">
-                <PanelErrorBoundary name="Pro Value">
-                  <ProValuePanel />
-                </PanelErrorBoundary>
-
-                <PanelErrorBoundary name="Attention Dashboard">
-                  <AttentionDashboard />
-                </PanelErrorBoundary>
-
-                <PanelErrorBoundary name="Query Panel">
-                  <NaturalLanguageQueryPanel />
-                </PanelErrorBoundary>
-
-                <PanelErrorBoundary name="Project Health">
-                  <ProjectHealthRadar />
-                </PanelErrorBoundary>
-
-                <PanelErrorBoundary name="System Health">
-                  <SystemHealthPanel
-                    health={systemHealth}
-                    similarTopicQuery={similarTopicQuery}
-                    onSimilarTopicQueryChange={setSimilarTopicQuery}
-                    similarTopicResults={similarTopicResults}
-                    onRunAnomalyDetection={runAnomalyDetection}
-                    onResolveAnomaly={resolveAnomaly}
-                    onFindSimilarTopics={findSimilarTopics}
-                    onSaveWatcherState={saveWatcherState}
-                    onRefresh={loadSystemHealth}
-                  />
-                </PanelErrorBoundary>
-              </div>
-            </div>
+            <SettingsAdvancedTab systemHealth={systemHealth} similarTopicQuery={similarTopicQuery}
+              setSimilarTopicQuery={setSimilarTopicQuery} similarTopicResults={similarTopicResults}
+              runAnomalyDetection={runAnomalyDetection} resolveAnomaly={resolveAnomaly}
+              findSimilarTopics={findSimilarTopics} saveWatcherState={saveWatcherState} loadSystemHealth={loadSystemHealth} />
           )}
 
-          {/* Team & Enterprise Tab */}
           {activeTab === 'team' && (
-            <div id="tabpanel-team" role="tabpanel">
-              {isTeamOrEnterprise ? (
-                <div className="space-y-6">
-                  <PanelErrorBoundary name="Team Setup Wizard">
-                    <TeamOnboardingWizard />
-                  </PanelErrorBoundary>
-
-                  <PanelErrorBoundary name="Team Sync">
-                    <TeamSection onStatus={setSettingsStatus} />
-                  </PanelErrorBoundary>
-
-                  <PanelErrorBoundary name="Shared Sources">
-                    <TeamSharedSources />
-                  </PanelErrorBoundary>
-
-                  {tier === 'enterprise' && (
-                    <>
-                      <PanelErrorBoundary name="Organization">
-                        <OrgDashboard />
-                      </PanelErrorBoundary>
-
-                      <PanelErrorBoundary name="Audit Log">
-                        <AuditLogViewer />
-                      </PanelErrorBoundary>
-
-                      <PanelErrorBoundary name="Webhooks">
-                        <WebhookManager />
-                      </PanelErrorBoundary>
-
-                      <PanelErrorBoundary name="Retention Policies">
-                        <PolicyEditor />
-                      </PanelErrorBoundary>
-
-                      <PanelErrorBoundary name="SSO">
-                        <SsoConfigPanel />
-                      </PanelErrorBoundary>
-
-                      <PanelErrorBoundary name="Admin Health">
-                        <AdminHealthDashboard />
-                      </PanelErrorBoundary>
-
-                      <PanelErrorBoundary name="Webhook Docs">
-                        <WebhookDocsPanel />
-                      </PanelErrorBoundary>
-                    </>
-                  )}
-
-                  <PanelErrorBoundary name="Data Export">
-                    <DataExportPanel />
-                  </PanelErrorBoundary>
-
-                  <PanelErrorBoundary name="Diagnostics">
-                    <ConfigDiagnostics />
-                  </PanelErrorBoundary>
-                </div>
-              ) : (
-                <div className="space-y-6 py-2">
-                  <WaitlistSignup tier="team" inline />
-                  <div className="border-t border-[#2A2A2A] pt-6">
-                    <WaitlistSignup tier="enterprise" inline />
-                  </div>
-                </div>
-              )}
-            </div>
+            <SettingsTeamTab tier={tier} isTeamOrEnterprise={isTeamOrEnterprise} setSettingsStatus={setSettingsStatus} />
           )}
 
-          {/* About Tab */}
           {activeTab === 'about' && (
             <div id="tabpanel-about" role="tabpanel">
-              <PanelErrorBoundary name="About">
-                <AboutPanel />
-              </PanelErrorBoundary>
+              <PanelErrorBoundary name="About"><AboutPanel /></PanelErrorBoundary>
             </div>
           )}
         </div>
 
-        {/* Copyright - outside tab content */}
+        {/* Copyright */}
         <div className="px-6 pb-6">
           <div className="pt-4 border-t border-border text-center">
-            <p className="text-xs text-text-muted">
-              4DA v{__APP_VERSION__} &copy; 2025-2026 4DA Systems. All rights reserved.
-            </p>
-            <p className="text-xs text-text-muted mt-1">
-              Licensed under FSL-1.1-Apache-2.0
-            </p>
+            <p className="text-xs text-text-muted">4DA v{__APP_VERSION__} &copy; 2025-2026 4DA Systems. All rights reserved.</p>
+            <p className="text-xs text-text-muted mt-1">Licensed under FSL-1.1-Apache-2.0</p>
           </div>
         </div>
       </div>
 
-      {/* Team Invite Dialog (portal-style overlay) */}
-      {showTeamInviteDialog && (
-        <TeamInviteDialog onClose={() => setShowTeamInviteDialog(false)} />
-      )}
+      {showTeamInviteDialog && <TeamInviteDialog onClose={() => setShowTeamInviteDialog(false)} />}
     </div>
   );
 });

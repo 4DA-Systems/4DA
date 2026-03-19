@@ -76,7 +76,10 @@ pub fn check_morning_briefing(state: &MonitoringState) -> Option<BriefingNotific
     let now_mins = now.hour() * 60 + now.minute();
     let target_mins = target_hour * 60 + target_min;
 
-    if now_mins < target_mins || now_mins > target_mins + 30 {
+    // Use modular arithmetic to handle midnight rollover correctly.
+    // E.g. briefing_time 23:45 (1425) and now 00:05 (5): diff = (5 - 1425 + 1440) % 1440 = 20
+    let diff = ((now_mins as i32 - target_mins as i32) + 1440) % 1440;
+    if diff > 30 {
         return None;
     }
 
@@ -375,6 +378,50 @@ mod tests {
         assert_eq!(briefing.items.len(), 2);
         assert_eq!(briefing.total_relevant, 2);
         assert!(briefing.title.contains("Morning Briefing"));
+    }
+
+    #[test]
+    fn test_briefing_window_midnight_rollover() {
+        // If briefing_time is 23:45 and current time is 00:05,
+        // diff should be 20 (within 30-min window)
+        let target = 23 * 60 + 45; // 1425
+        let now = 0 * 60 + 5; // 5
+        let diff = ((now as i32 - target as i32) + 1440) % 1440;
+        assert_eq!(diff, 20);
+        assert!(diff <= 30);
+    }
+
+    #[test]
+    fn test_briefing_window_midnight_rollover_outside() {
+        // If briefing_time is 23:45 and current time is 00:30,
+        // diff should be 45 (outside 30-min window)
+        let target = 23 * 60 + 45; // 1425
+        let now = 0 * 60 + 30; // 30
+        let diff = ((now as i32 - target as i32) + 1440) % 1440;
+        assert_eq!(diff, 45);
+        assert!(diff > 30);
+    }
+
+    #[test]
+    fn test_briefing_window_normal_case() {
+        // If briefing_time is 08:00 and current time is 08:15,
+        // diff should be 15 (within 30-min window)
+        let target = 8 * 60; // 480
+        let now = 8 * 60 + 15; // 495
+        let diff = ((now as i32 - target as i32) + 1440) % 1440;
+        assert_eq!(diff, 15);
+        assert!(diff <= 30);
+    }
+
+    #[test]
+    fn test_briefing_window_before_target() {
+        // If briefing_time is 08:00 and current time is 07:50,
+        // diff should be 1430 (well outside 30-min window — not yet time)
+        let target = 8 * 60; // 480
+        let now = 7 * 60 + 50; // 470
+        let diff = ((now as i32 - target as i32) + 1440) % 1440;
+        assert_eq!(diff, 1430);
+        assert!(diff > 30);
     }
 
     #[test]

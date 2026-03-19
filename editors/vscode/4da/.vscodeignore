@@ -4,3 +4,6 @@ node_modules/**
 tsconfig.json
 *.ts
 !dist/**
+.gitignore
+.eslintrc*
+**/*.map
