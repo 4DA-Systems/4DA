@@ -87,12 +87,14 @@ pub async fn ace_full_scan(paths: Vec<String>) -> Result<serde_json::Value> {
         paths
             .iter()
             .map(|p| {
-                if p.starts_with("~") {
+                if let Some(rest) = p.strip_prefix("~/") {
                     if let Some(home) = dirs::home_dir() {
-                        home.join(&p[2..])
+                        home.join(rest)
                     } else {
                         PathBuf::from(p)
                     }
+                } else if p == "~" {
+                    dirs::home_dir().unwrap_or_else(|| PathBuf::from(p))
                 } else {
                     PathBuf::from(p)
                 }
@@ -545,12 +547,14 @@ pub async fn ace_start_watcher(paths: Vec<String>) -> Result<serde_json::Value> 
     let watch_paths: Vec<PathBuf> = paths
         .iter()
         .map(|p| {
-            if p.starts_with("~") {
+            if let Some(rest) = p.strip_prefix("~/") {
                 if let Some(home) = dirs::home_dir() {
-                    home.join(&p[2..])
+                    home.join(rest)
                 } else {
                     PathBuf::from(p)
                 }
+            } else if p == "~" {
+                dirs::home_dir().unwrap_or_else(|| PathBuf::from(p))
             } else {
                 PathBuf::from(p)
             }

@@ -53,12 +53,14 @@ export function executeSignalChains(
     FROM temporal_events
     WHERE event_type = 'signal_chain'`;
 
+  const queryParams: string[] = [];
   if (resolution !== "all") {
-    query += ` AND json_extract(data, '$.resolution') = '${resolution}'`;
+    query += ` AND json_extract(data, '$.resolution') = ?`;
+    queryParams.push(resolution);
   }
   query += " ORDER BY created_at DESC LIMIT 50";
 
-  const rows = rawDb.prepare(query).all() as SignalChainRow[];
+  const rows = rawDb.prepare(query).all(...queryParams) as SignalChainRow[];
 
   const chains = rows.map((row) => {
     const data: ChainData = JSON.parse(row.data);

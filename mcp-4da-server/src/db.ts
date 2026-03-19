@@ -501,6 +501,86 @@ export class FourDADatabase {
         last_fetch TEXT,
         created_at TEXT NOT NULL DEFAULT (datetime('now'))
       );
+
+      -- Briefings — queried by agent_session_brief, daily_briefing
+      CREATE TABLE IF NOT EXISTS briefings (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        content TEXT NOT NULL,
+        model TEXT,
+        item_count INTEGER NOT NULL DEFAULT 0,
+        tokens_used INTEGER,
+        latency_ms INTEGER,
+        created_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+
+      -- Autophagy cycles — queried by autophagy_status
+      CREATE TABLE IF NOT EXISTS autophagy_cycles (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        items_analyzed INTEGER NOT NULL DEFAULT 0,
+        items_pruned INTEGER NOT NULL DEFAULT 0,
+        calibrations_produced INTEGER NOT NULL DEFAULT 0,
+        topic_decay_rates_updated INTEGER NOT NULL DEFAULT 0,
+        source_autopsies_produced INTEGER NOT NULL DEFAULT 0,
+        anti_patterns_detected INTEGER NOT NULL DEFAULT 0,
+        db_size_before_bytes INTEGER NOT NULL DEFAULT 0,
+        db_size_after_bytes INTEGER NOT NULL DEFAULT 0,
+        duration_ms INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+
+      -- Digested intelligence — queried by autophagy_status
+      CREATE TABLE IF NOT EXISTS digested_intelligence (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        digest_type TEXT NOT NULL,
+        subject TEXT NOT NULL,
+        data TEXT NOT NULL,
+        confidence REAL NOT NULL DEFAULT 0.5,
+        sample_size INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        expires_at TEXT,
+        superseded_by INTEGER,
+        FOREIGN KEY (superseded_by) REFERENCES digested_intelligence(id)
+      );
+      CREATE INDEX IF NOT EXISTS idx_digest_type_subject ON digested_intelligence(digest_type, subject);
+
+      -- Decision windows — queried by decision_windows, compound_advantage
+      CREATE TABLE IF NOT EXISTS decision_windows (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        window_type TEXT NOT NULL,
+        title TEXT NOT NULL,
+        description TEXT NOT NULL DEFAULT '',
+        urgency REAL NOT NULL DEFAULT 0.5,
+        relevance REAL NOT NULL DEFAULT 0.5,
+        source_item_ids TEXT NOT NULL DEFAULT '[]',
+        signal_chain_id INTEGER,
+        dependency TEXT,
+        status TEXT NOT NULL DEFAULT 'open',
+        opened_at TEXT NOT NULL DEFAULT (datetime('now')),
+        expires_at TEXT,
+        acted_at TEXT,
+        closed_at TEXT,
+        outcome TEXT,
+        lead_time_hours REAL,
+        streets_engine TEXT
+      );
+      CREATE INDEX IF NOT EXISTS idx_dw_status ON decision_windows(status);
+
+      -- Advantage score — queried by compound_advantage
+      CREATE TABLE IF NOT EXISTS advantage_score (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        period TEXT NOT NULL,
+        score REAL NOT NULL DEFAULT 0.0,
+        items_surfaced INTEGER NOT NULL DEFAULT 0,
+        avg_lead_time_hours REAL NOT NULL DEFAULT 0.0,
+        windows_opened INTEGER NOT NULL DEFAULT 0,
+        windows_acted INTEGER NOT NULL DEFAULT 0,
+        windows_expired INTEGER NOT NULL DEFAULT 0,
+        knowledge_gaps_closed INTEGER NOT NULL DEFAULT 0,
+        calibration_accuracy REAL NOT NULL DEFAULT 0.0,
+        response_rate REAL,
+        computed_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+      CREATE INDEX IF NOT EXISTS idx_advantage_period ON advantage_score(period, computed_at);
     `);
   }
 
