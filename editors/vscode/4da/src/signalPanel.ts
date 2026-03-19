@@ -15,7 +15,12 @@ export class SignalPanelProvider implements vscode.WebviewViewProvider {
         webviewView.webview.options = { enableScripts: true };
         webviewView.webview.onDidReceiveMessage(msg => {
             if (msg.type === 'openUrl' && msg.url) {
-                vscode.env.openExternal(vscode.Uri.parse(msg.url));
+                const uri = vscode.Uri.parse(msg.url);
+                if (uri.scheme === 'https' || uri.scheme === 'http') {
+                    vscode.env.openExternal(uri);
+                }
+            } else if (msg.type === 'openApp') {
+                vscode.commands.executeCommand('4da.openApp');
             }
         });
         this.updateContent();
@@ -72,7 +77,7 @@ body{background:#0A0A0A;color:#FFF;font-family:-apple-system,BlinkMacSystemFont,
 </style></head><body>
 <div class="header"><h3>Signals</h3></div>
 ${items}
-<div class="footer"><a href="command:4da.openApp">Open in 4DA</a></div>
+<div class="footer"><a href="#" onclick="vscode.postMessage({type:'openApp'})">Open in 4DA</a></div>
 <script nonce="${nonce}">const vscode=acquireVsCodeApi();function openUrl(u){if(u)vscode.postMessage({type:'openUrl',url:u})}</script>
 </body></html>`;
     }
