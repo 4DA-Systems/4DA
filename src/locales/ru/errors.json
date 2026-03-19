@@ -1,0 +1,19 @@
+{
+  "error.db.unavailable": "База данных недоступна",
+  "error.db.query": "Ошибка запроса к базе данных",
+  "error.llm.notConfigured": "LLM не настроен — укажите API key в Настройках",
+  "error.llm.requestFailed": "Ошибка запроса к LLM: {{message}}",
+  "error.llm.timeout": "Время запроса к LLM истекло",
+  "error.network.offline": "Нет подключения к сети",
+  "error.network.timeout": "Время запроса истекло",
+  "error.source.fetchFailed": "Не удалось получить данные из {{source}}",
+  "error.analysis.failed": "Анализ не выполнен: {{message}}",
+  "error.analysis.cancelled": "Анализ отменён",
+  "error.settings.saveFailed": "Не удалось сохранить настройки",
+  "error.license.invalid": "Недействительный лицензионный ключ",
+  "error.license.expired": "Срок действия лицензии истёк",
+  "error.module.notFound": "Модуль не найден: {{id}}",
+  "error.file.readFailed": "Не удалось прочитать файл: {{path}}",
+  "error.sun.notFound": "Sun '{{id}}' не найден",
+  "error.sun.executionFailed": "Ошибка выполнения Sun: {{message}}"
+}

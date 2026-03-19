@@ -1,0 +1,19 @@
+{
+  "error.db.unavailable": "데이터베이스를 사용할 수 없습니다",
+  "error.db.query": "데이터베이스 쿼리에 실패했습니다",
+  "error.llm.notConfigured": "LLM이 설정되지 않았습니다 — 설정에서 API key를 설정하세요",
+  "error.llm.requestFailed": "LLM 요청 실패: {{message}}",
+  "error.llm.timeout": "LLM 요청 시간이 초과되었습니다",
+  "error.network.offline": "네트워크 연결이 없습니다",
+  "error.network.timeout": "요청 시간이 초과되었습니다",
+  "error.source.fetchFailed": "{{source}}에서 가져오기 실패",
+  "error.analysis.failed": "분석 실패: {{message}}",
+  "error.analysis.cancelled": "분석이 취소되었습니다",
+  "error.settings.saveFailed": "설정 저장에 실패했습니다",
+  "error.license.invalid": "잘못된 라이선스 키입니다",
+  "error.license.expired": "라이선스가 만료되었습니다",
+  "error.module.notFound": "모듈을 찾을 수 없습니다: {{id}}",
+  "error.file.readFailed": "파일 읽기 실패: {{path}}",
+  "error.sun.notFound": "Sun '{{id}}'을(를) 찾을 수 없습니다",
+  "error.sun.executionFailed": "Sun 실행 실패: {{message}}"
+}

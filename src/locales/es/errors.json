@@ -1,0 +1,19 @@
+{
+  "error.db.unavailable": "Base de datos no disponible",
+  "error.db.query": "Error en la consulta de base de datos",
+  "error.llm.notConfigured": "LLM no configurado — configura tu API key en Ajustes",
+  "error.llm.requestFailed": "Error en la solicitud LLM: {{message}}",
+  "error.llm.timeout": "La solicitud LLM ha expirado",
+  "error.network.offline": "Sin conexión de red",
+  "error.network.timeout": "La solicitud ha expirado",
+  "error.source.fetchFailed": "Error al obtener datos de {{source}}",
+  "error.analysis.failed": "El análisis falló: {{message}}",
+  "error.analysis.cancelled": "El análisis fue cancelado",
+  "error.settings.saveFailed": "Error al guardar los ajustes",
+  "error.license.invalid": "Clave de licencia no válida",
+  "error.license.expired": "La licencia ha expirado",
+  "error.module.notFound": "Módulo no encontrado: {{id}}",
+  "error.file.readFailed": "Error al leer el archivo: {{path}}",
+  "error.sun.notFound": "Sun '{{id}}' no encontrado",
+  "error.sun.executionFailed": "Error en la ejecución de Sun: {{message}}"
+}

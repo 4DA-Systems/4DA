@@ -1,0 +1,19 @@
+{
+  "error.db.unavailable": "Base de données indisponible",
+  "error.db.query": "Échec de la requête à la base de données",
+  "error.llm.notConfigured": "LLM non configuré — configurez votre clé API dans les Paramètres",
+  "error.llm.requestFailed": "Échec de la requête LLM : {{message}}",
+  "error.llm.timeout": "Délai d'attente de la requête LLM dépassé",
+  "error.network.offline": "Aucune connexion réseau",
+  "error.network.timeout": "Délai d'attente de la requête dépassé",
+  "error.source.fetchFailed": "Échec de la récupération depuis {{source}}",
+  "error.analysis.failed": "Échec de l'analyse : {{message}}",
+  "error.analysis.cancelled": "Analyse annulée",
+  "error.settings.saveFailed": "Échec de la sauvegarde des paramètres",
+  "error.license.invalid": "Clé de licence invalide",
+  "error.license.expired": "La licence a expiré",
+  "error.module.notFound": "Module introuvable : {{id}}",
+  "error.file.readFailed": "Échec de la lecture du fichier : {{path}}",
+  "error.sun.notFound": "Sun '{{id}}' introuvable",
+  "error.sun.executionFailed": "Échec de l'exécution de Sun : {{message}}"
+}
