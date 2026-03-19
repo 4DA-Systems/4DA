@@ -79,7 +79,6 @@ impl RssSource {
     }
 
     /// Add a feed URL
-    #[allow(dead_code)] // Future: dynamic feed management
     pub fn add_feed(&mut self, url: String) {
         if !self.feed_urls.contains(&url) {
             self.feed_urls.push(url);
@@ -87,7 +86,6 @@ impl RssSource {
     }
 
     /// Get configured feed URLs
-    #[allow(dead_code)] // Future: dynamic feed inspection
     pub fn feed_urls(&self) -> &[String] {
         &self.feed_urls
     }

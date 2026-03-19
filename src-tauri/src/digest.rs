@@ -60,7 +60,7 @@ pub struct SmtpConfig {
     pub port: u16,
     pub username: String,
     #[serde(skip_serializing)]
-    #[allow(dead_code)] // Deserialized from JSON, used for SMTP auth
+    #[allow(dead_code)] // Reason: deserialized from JSON for SMTP auth
     pub password: String,
     pub from_address: String,
     pub use_tls: bool,
@@ -230,7 +230,6 @@ impl Digest {
 
     /// Format digest as plain text
     // Text rendering: used by email digest delivery
-    #[allow(dead_code)]
     pub fn to_text(&self) -> String {
         let mut output = String::new();
 
@@ -631,7 +630,7 @@ impl DigestManager {
     }
 
     /// Check if it's time to send a new digest
-    #[allow(dead_code)] // Future: scheduled digest delivery
+    #[allow(dead_code)] // Reason: scheduled digest delivery not yet wired
     pub fn should_send(&self) -> bool {
         if !self.config.enabled {
             return false;
@@ -652,7 +651,7 @@ impl DigestManager {
     }
 
     /// Get the time range for the next digest
-    #[allow(dead_code)] // Future: scheduled digest delivery
+    #[allow(dead_code)] // Reason: scheduled digest delivery not yet wired
     pub fn get_digest_period(&self) -> (DateTime<Utc>, DateTime<Utc>) {
         let end = Utc::now();
         let start = self.config.last_sent.unwrap_or(end - Duration::hours(24));

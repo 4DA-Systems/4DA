@@ -60,7 +60,6 @@ impl ArxivSource {
     }
 
     /// Create with custom categories
-    #[allow(dead_code)] // Future: configurable arXiv categories
     pub fn with_categories(categories: Vec<String>) -> Self {
         let mut source = Self::new();
         source.categories = categories;

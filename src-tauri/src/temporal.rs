@@ -270,7 +270,7 @@ pub fn query_events(
 }
 
 /// Query temporal events by subject
-#[allow(dead_code)] // Used by semantic_diff (reserved for MCP integration)
+#[allow(dead_code)] // Reason: called by semantic_diff, reserved for MCP integration
 pub fn query_events_by_subject(
     conn: &rusqlite::Connection,
     subject: &str,
@@ -298,7 +298,7 @@ pub fn query_events_by_subject(
 }
 
 /// Clean up expired temporal events
-#[allow(dead_code)] // Used by cleanup_temporal_events (reserved for scheduled maintenance)
+#[allow(dead_code)] // Reason: called by cleanup_temporal_events, reserved for scheduled maintenance
 pub fn cleanup_expired(conn: &rusqlite::Connection) -> Result<usize> {
     let deleted = conn.execute(
         "DELETE FROM temporal_events WHERE expires_at IS NOT NULL AND expires_at < datetime('now')",
@@ -328,7 +328,7 @@ fn map_event(row: &rusqlite::Row) -> rusqlite::Result<TemporalEvent> {
 // Tauri Commands
 // ============================================================================
 
-#[allow(dead_code)] // Reserved for MCP integration
+#[allow(dead_code)] // Reason: reserved for MCP integration
 pub fn get_temporal_events(
     event_type: String,
     since: Option<String>,
@@ -338,7 +338,7 @@ pub fn get_temporal_events(
     query_events(&conn, &event_type, since.as_deref(), limit.unwrap_or(50))
 }
 
-#[allow(dead_code)] // Reserved for MCP integration
+#[allow(dead_code)] // Reason: reserved for MCP integration
 pub fn get_temporal_event_count(event_type: String) -> Result<usize> {
     let conn = crate::open_db_connection()?;
     let count: i64 = conn.query_row(
@@ -349,7 +349,7 @@ pub fn get_temporal_event_count(event_type: String) -> Result<usize> {
     Ok(count as usize)
 }
 
-#[allow(dead_code)] // Reserved for MCP integration
+#[allow(dead_code)] // Reason: reserved for MCP integration
 pub fn get_dependencies(project_path: Option<String>) -> Result<Vec<ProjectDependency>> {
     let conn = crate::open_db_connection()?;
     if let Some(path) = project_path {
@@ -359,7 +359,7 @@ pub fn get_dependencies(project_path: Option<String>) -> Result<Vec<ProjectDepen
     }
 }
 
-#[allow(dead_code)] // Reserved for scheduled maintenance task
+#[allow(dead_code)] // Reason: reserved for scheduled maintenance task
 pub fn cleanup_temporal_events() -> Result<usize> {
     let conn = crate::open_db_connection()?;
     cleanup_expired(&conn)

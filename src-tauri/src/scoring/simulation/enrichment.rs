@@ -52,7 +52,6 @@ impl EnrichmentConfig {
     }
 
     /// All fields disabled — legacy behavior matching current simulation.
-    #[allow(dead_code)]
     pub fn none() -> Self {
         Self {
             enable_topic_confidence: false,
@@ -72,7 +71,6 @@ impl EnrichmentConfig {
     }
 
     /// Single field enabled — for signal isolation testing.
-    #[allow(dead_code)]
     pub fn only(field: EnrichmentField) -> Self {
         let mut cfg = Self::none();
         match field {
@@ -96,7 +94,6 @@ impl EnrichmentConfig {
 
 /// Enumeration of enrichable fields, for use with `EnrichmentConfig::only()`.
 #[derive(Debug, Clone, Copy)]
-#[allow(dead_code)]
 pub(super) enum EnrichmentField {
     TopicConfidence,
     TopicAffinities,
@@ -115,7 +112,6 @@ pub(super) enum EnrichmentField {
 
 impl EnrichmentField {
     /// All field variants for iteration.
-    #[allow(dead_code)]
     pub fn all_variants() -> &'static [EnrichmentField] {
         &[
             EnrichmentField::TopicConfidence,

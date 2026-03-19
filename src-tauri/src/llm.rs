@@ -125,7 +125,7 @@ impl LLMClient {
     }
 
     /// Check if the client is configured
-    #[allow(dead_code)] // Future: settings validation
+    #[allow(dead_code)] // Reason: used in tests for provider validation
     pub fn is_configured(&self) -> bool {
         match self.provider.provider.as_str() {
             "anthropic" | "openai" | "openai-compatible" => !self.provider.api_key.is_empty(),
@@ -675,7 +675,7 @@ impl LLMClient {
 // ============================================================================
 
 /// List available models from Ollama API
-#[allow(dead_code)] // Utility function for future use
+#[allow(dead_code)] // Reason: utility for future Ollama model discovery; no callers yet
 pub async fn list_ollama_models(base_url: &str) -> Result<Vec<String>> {
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(5))

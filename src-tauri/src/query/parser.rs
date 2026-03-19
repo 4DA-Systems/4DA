@@ -50,10 +50,8 @@ impl Default for ParsedQuery {
 
 /// Query parser (simple keyword-based, no LLM required)
 /// For simple usage, prefer `parse_simple()` function directly
-#[allow(dead_code)]
 pub struct QueryParser;
 
-#[allow(dead_code)]
 impl QueryParser {
     pub fn new() -> Self {
         Self

@@ -91,7 +91,7 @@ pub(crate) fn get_open_windows(conn: &Connection) -> Vec<DecisionWindow> {
 }
 
 /// Get the decision journal: acted and closed windows, most recent first (up to 50).
-#[allow(dead_code)] // used in tests; will be wired to frontend commands
+#[allow(dead_code)] // Reason: reserved for frontend command wiring
 pub(crate) fn get_decision_journal(conn: &Connection) -> Vec<DecisionWindow> {
     let mut stmt = match conn.prepare(
         "SELECT id, window_type, title, description, urgency, relevance,
@@ -122,7 +122,6 @@ pub(crate) fn get_decision_journal(conn: &Connection) -> Vec<DecisionWindow> {
 }
 /// Transition a window to a new status (acted, expired, closed).
 /// Calculates lead_time_hours as elapsed time since opened_at.
-#[allow(dead_code)] // used in tests; will be wired to frontend commands
 pub(crate) fn transition_window(
     conn: &Connection,
     id: i64,

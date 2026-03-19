@@ -32,7 +32,6 @@ use std::sync::Arc;
 
 /// A stored context chunk with its embedding
 #[derive(Debug, Clone)]
-#[allow(dead_code)]
 pub struct StoredContext {
     pub id: i64,
     pub source_file: String,
@@ -44,7 +43,6 @@ pub struct StoredContext {
 
 /// A stored source item (HN story, arXiv paper, RSS item, etc.)
 #[derive(Debug, Clone)]
-#[allow(dead_code)]
 pub struct StoredSourceItem {
     pub id: i64,
     pub source_type: String,
@@ -60,7 +58,6 @@ pub struct StoredSourceItem {
 
 /// Similarity result from vector search
 #[derive(Debug, Clone)]
-#[allow(dead_code)]
 pub struct SimilarityResult {
     pub context_id: i64,
     pub source_file: String,

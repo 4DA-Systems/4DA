@@ -105,7 +105,8 @@ fn discover_projects_recursive(
 struct ReadmeSection {
     heading: String,
     content: String,
-    #[allow(dead_code)] // Kept for future section hierarchy processing
+    #[allow(dead_code)]
+    // Reason: populated during parsing, reserved for future section hierarchy processing
     level: usize,
 }
 

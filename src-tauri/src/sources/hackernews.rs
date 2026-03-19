@@ -50,7 +50,6 @@ impl HackerNewsSource {
     }
 
     /// Create with custom config
-    #[allow(dead_code)] // Future: configurable HN source
     pub fn with_config(config: SourceConfig) -> Self {
         Self {
             config,

@@ -398,7 +398,7 @@ pub fn migrate(conn: &Arc<Mutex<Connection>>) -> Result<()> {
 }
 
 /// Get bootstrap paths for initial scan
-#[allow(dead_code)] // Future: ACE autonomous scanning
+#[allow(dead_code)] // Reason: ACE autonomous scanning feature not yet wired into startup
 pub fn get_bootstrap_paths(conn: &Arc<Mutex<Connection>>) -> Result<Vec<String>> {
     let conn = conn.lock();
     let mut stmt =

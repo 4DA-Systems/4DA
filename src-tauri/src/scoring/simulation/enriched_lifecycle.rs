@@ -186,7 +186,7 @@ fn enriched_lifecycle_python_does_not_degrade() {
     let first = f1s[0];
     let last = f1s[f1s.len() - 1];
 
-    println!("[enriched_lifecycle_python] first_f1={first:.3} last_f1={last:.3}");
+    debug!("[enriched_lifecycle_python] first_f1={first:.3} last_f1={last:.3}");
 
     let min_acceptable = first * 0.85;
     assert!(
@@ -238,7 +238,7 @@ fn enriched_lifecycle_cross_persona_isolation() {
 
     if python_total > 0 {
         let fp_rate = python_false_positives as f64 / python_total as f64;
-        println!(
+        debug!(
             "[enriched_cross_isolation] python_fp={python_false_positives}/{python_total} rate={fp_rate:.2}"
         );
         // Enriched context with anti-topics should maintain or improve isolation
@@ -287,7 +287,7 @@ fn enriched_lifecycle_noise_stays_rejected() {
 
     if noise_total > 0 {
         let noise_fp_rate = noise_relevant as f64 / noise_total as f64;
-        println!(
+        debug!(
             "[enriched_noise_rejection] noise_fp={noise_relevant}/{noise_total} rate={noise_fp_rate:.2}"
         );
         assert!(
