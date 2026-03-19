@@ -474,3 +474,129 @@ pub fn maybe_notify_escalating_chains<R: Runtime>(app: &AppHandle<R>) {
         info!(target: "4da::jobs", notified, "Chain prediction notifications sent");
     }
 }
+
+// ============================================================================
+// CVE Scan — Developer Immune System
+// ============================================================================
+
+/// Background CVE scan: fetch advisories, cross-reference against user deps,
+/// store alerts, emit notifications for Critical/High matches.
+/// Runs every 30 minutes from the monitoring scheduler.
+pub async fn run_cve_scan<R: Runtime>(app: &AppHandle<R>) {
+    let db = match crate::get_database() {
+        Ok(db) => db,
+        Err(e) => {
+            warn!(target: "4da::jobs", "CVE scan: database unavailable: {e}");
+            return;
+        }
+    };
+
+    // 1. Load user dependencies
+    let user_deps = match db.get_all_user_dependencies() {
+        Ok(deps) => deps,
+        Err(e) => {
+            warn!(target: "4da::jobs", "CVE scan: failed to load dependencies: {e}");
+            return;
+        }
+    };
+
+    if user_deps.is_empty() {
+        return; // No deps to check — skip silently
+    }
+
+    // 2. Fetch recent advisories from GitHub Advisory Database
+    let advisories = match crate::sources::cve::fetch_github_advisories(None).await {
+        Ok(a) => a,
+        Err(e) => {
+            warn!(target: "4da::jobs", "CVE scan: failed to fetch advisories: {e}");
+            return;
+        }
+    };
+
+    if advisories.is_empty() {
+        return;
+    }
+
+    // 3. Cross-reference with semver version matching
+    let dep_tuples: Vec<(String, String, Option<String>)> = user_deps
+        .iter()
+        .map(|d| {
+            (
+                d.package_name.clone(),
+                d.ecosystem.clone(),
+                d.version.clone(),
+            )
+        })
+        .collect();
+
+    let matches = crate::sources::cve::cross_reference_advisories(&advisories, &dep_tuples);
+
+    if matches.is_empty() {
+        info!(target: "4da::jobs", advisories = advisories.len(), deps = user_deps.len(), "CVE scan complete: no matches");
+        return;
+    }
+
+    // 4. Store alerts + emit notifications (cap at 5 notifications per scan)
+    let mut alerts_created = 0u32;
+    let mut notifications_sent = 0u32;
+    const MAX_NOTIFICATIONS: u32 = 5;
+
+    for (advisory, matched_pkgs) in &matches {
+        for pkg in matched_pkgs {
+            let alert = crate::db::DependencyAlert {
+                id: 0,
+                package_name: pkg.name.clone(),
+                ecosystem: pkg.ecosystem.clone(),
+                alert_type: "cve".to_string(),
+                severity: advisory.severity.clone(),
+                title: format!("{}: {}", advisory.cve_id, advisory.title),
+                description: Some(advisory.description.clone()),
+                affected_versions: Some(pkg.affected_versions.clone()),
+                source_url: Some(advisory.source_url.clone()),
+                source_item_id: None,
+                detected_at: chrono::Utc::now().to_rfc3339(),
+                resolved_at: None,
+            };
+
+            match db.store_dependency_alert(&alert) {
+                Ok(id) if id > 0 => {
+                    alerts_created += 1;
+
+                    // Emit notification for Critical/High (capped)
+                    let sev = advisory.severity.to_lowercase();
+                    if (sev == "critical" || sev == "high")
+                        && notifications_sent < MAX_NOTIFICATIONS
+                    {
+                        let _ = app.emit(
+                            "security-alert",
+                            serde_json::json!({
+                                "package": pkg.name,
+                                "cve_id": advisory.cve_id,
+                                "severity": advisory.severity,
+                                "title": advisory.title,
+                            }),
+                        );
+                        notifications_sent += 1;
+                    }
+                }
+                _ => {} // Duplicate or error — skip
+            }
+        }
+    }
+
+    if alerts_created > 0 {
+        info!(target: "4da::jobs", alerts = alerts_created, notifications = notifications_sent, "CVE scan: new alerts created");
+
+        // Summary notification if we hit the cap
+        if notifications_sent >= MAX_NOTIFICATIONS && alerts_created > MAX_NOTIFICATIONS {
+            let remaining = alerts_created - MAX_NOTIFICATIONS;
+            let _ = app.emit(
+                "security-alert-summary",
+                serde_json::json!({
+                    "additional_alerts": remaining,
+                    "total_alerts": alerts_created,
+                }),
+            );
+        }
+    }
+}
