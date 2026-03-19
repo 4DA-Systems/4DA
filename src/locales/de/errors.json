@@ -1,0 +1,19 @@
+{
+  "error.db.unavailable": "Datenbank nicht verfügbar",
+  "error.db.query": "Datenbankabfrage fehlgeschlagen",
+  "error.llm.notConfigured": "LLM nicht konfiguriert – richte deinen API Key in den Einstellungen ein",
+  "error.llm.requestFailed": "LLM-Anfrage fehlgeschlagen: {{message}}",
+  "error.llm.timeout": "Zeitüberschreitung bei LLM-Anfrage",
+  "error.network.offline": "Keine Netzwerkverbindung",
+  "error.network.timeout": "Zeitüberschreitung bei Anfrage",
+  "error.source.fetchFailed": "Abruf von {{source}} fehlgeschlagen",
+  "error.analysis.failed": "Analyse fehlgeschlagen: {{message}}",
+  "error.analysis.cancelled": "Analyse wurde abgebrochen",
+  "error.settings.saveFailed": "Einstellungen konnten nicht gespeichert werden",
+  "error.license.invalid": "Ungültiger Lizenzschlüssel",
+  "error.license.expired": "Lizenz ist abgelaufen",
+  "error.module.notFound": "Modul nicht gefunden: {{id}}",
+  "error.file.readFailed": "Datei konnte nicht gelesen werden: {{path}}",
+  "error.sun.notFound": "Sun '{{id}}' nicht gefunden",
+  "error.sun.executionFailed": "Sun-Ausführung fehlgeschlagen: {{message}}"
+}

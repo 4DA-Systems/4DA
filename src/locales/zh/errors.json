@@ -1,0 +1,19 @@
+{
+  "error.db.unavailable": "数据库不可用",
+  "error.db.query": "数据库查询失败",
+  "error.llm.notConfigured": "LLM 未配置 — 请在设置中配置 API key",
+  "error.llm.requestFailed": "LLM 请求失败: {{message}}",
+  "error.llm.timeout": "LLM 请求超时",
+  "error.network.offline": "无网络连接",
+  "error.network.timeout": "请求超时",
+  "error.source.fetchFailed": "从 {{source}} 获取失败",
+  "error.analysis.failed": "分析失败: {{message}}",
+  "error.analysis.cancelled": "分析已取消",
+  "error.settings.saveFailed": "保存设置失败",
+  "error.license.invalid": "无效的许可证密钥",
+  "error.license.expired": "许可证已过期",
+  "error.module.notFound": "未找到模块: {{id}}",
+  "error.file.readFailed": "读取文件失败: {{path}}",
+  "error.sun.notFound": "未找到 Sun '{{id}}'",
+  "error.sun.executionFailed": "Sun 执行失败: {{message}}"
+}

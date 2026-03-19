@@ -17,6 +17,19 @@ interface SecurityAlert {
   resolvedAt?: string;
 }
 
+interface DepAlert {
+  id: number;
+  package_name: string;
+  ecosystem: string;
+  alert_type: string;
+  severity: string;
+  title: string;
+  description: string | null;
+  affected_versions: string | null;
+  source_url: string | null;
+  detected_at: string;
+}
+
 // ============================================================================
 // Color mapping
 // ============================================================================
@@ -76,51 +89,24 @@ function LoadingSkeleton() {
 }
 
 // ============================================================================
-// Data fetching — attempts to load from decision windows (security_patch type)
+// Data fetching — loads from get_dependency_alerts (real dependency scanner)
 // Falls back to empty state when no dependency scanning is configured
 // ============================================================================
 
-function mapDecisionWindowsToAlerts(
-  windows: Array<{
-    id: number;
-    window_type: string;
-    title: string;
-    description: string;
-    urgency: number;
-    dependency: string | null;
-    status: string;
-    opened_at: string;
-  }>,
-): { active: SecurityAlert[]; resolved: SecurityAlert[] } {
-  const active: SecurityAlert[] = [];
-  const resolved: SecurityAlert[] = [];
-
-  const securityWindows = windows.filter(w => w.window_type === 'security_patch');
-
-  for (const w of securityWindows) {
+function mapDepAlertsToSecurityAlerts(depAlerts: DepAlert[]): SecurityAlert[] {
+  return depAlerts.map(a => {
     const severity: Severity =
-      w.urgency >= 0.9 ? 'critical' :
-      w.urgency >= 0.7 ? 'high' :
-      w.urgency >= 0.4 ? 'medium' : 'low';
+      (a.severity as Severity) in SEVERITY_BADGE ? a.severity as Severity : 'low';
 
-    const alert: SecurityAlert = {
-      id: `dw-${w.id}`,
-      cveId: w.title.match(/CVE-\d{4}-\d+/)?.[0] ?? `SW-${w.id}`,
-      packageName: w.dependency ?? 'unknown',
+    return {
+      id: `da-${a.id}`,
+      cveId: a.title.match(/CVE-\d{4}-\d+/)?.[0] ?? `DA-${a.id}`,
+      packageName: a.package_name,
       severity,
       affectedProjects: 1,
-      description: w.description,
+      description: a.description ?? a.title,
     };
-
-    if (w.status === 'acted' || w.status === 'closed') {
-      alert.resolvedAt = w.opened_at.slice(0, 10);
-      resolved.push(alert);
-    } else if (w.status === 'open') {
-      active.push(alert);
-    }
-  }
-
-  return { active, resolved };
+  });
 }
 
 // ============================================================================
@@ -135,11 +121,13 @@ const SecurityDashboard = memo(function SecurityDashboard() {
 
   useEffect(() => {
     setLoading(true);
-    cmd('get_decision_windows')
-      .then(windows => {
-        const { active, resolved } = mapDecisionWindowsToAlerts(windows);
-        setActiveAlerts(active);
-        setResolvedAlerts(resolved);
+    cmd('get_dependency_alerts')
+      .then(result => {
+        const alerts = mapDepAlertsToSecurityAlerts(
+          (result as { alerts: DepAlert[] }).alerts,
+        );
+        setActiveAlerts(alerts);
+        setResolvedAlerts([]);
         setConfigured(true);
       })
       .catch(() => {
@@ -159,10 +147,10 @@ const SecurityDashboard = memo(function SecurityDashboard() {
   }, [activeAlerts]);
 
   const handleResolve = useCallback((alertId: string) => {
-    // Extract the decision window id and close it on the backend
-    const windowId = parseInt(alertId.replace('dw-', ''), 10);
-    if (!isNaN(windowId)) {
-      cmd('act_on_decision_window', { windowId, outcome: 'resolved' }).catch(() => {
+    // Extract the dependency alert id and resolve it on the backend
+    const numericId = parseInt(alertId.replace('da-', ''), 10);
+    if (!isNaN(numericId)) {
+      cmd('resolve_dependency_alert', { alertId: numericId }).catch(() => {
         // Best-effort — still remove from UI
       });
     }

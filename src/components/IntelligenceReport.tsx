@@ -21,6 +21,22 @@ interface IntelligenceData {
   items_processed: number;
 }
 
+interface IntelligenceReportRaw {
+  period: string;
+  accuracy_current: number;
+  accuracy_previous: number;
+  accuracy_delta: number;
+  topics_tracked: number;
+  topics_added: number;
+  noise_rejected: number;
+  noise_rejection_pct: number;
+  time_saved_hours: number;
+  security_alerts: number;
+  security_acted_on: number;
+  decisions_recorded: number;
+  feedback_signals: number;
+}
+
 // ============================================================================
 // Sub-components
 // ============================================================================
@@ -91,20 +107,9 @@ function trendFromDelta(delta: number): 'up' | 'down' | 'flat' {
   return 'flat';
 }
 
-async function fetchIntelligenceData(): Promise<IntelligenceData> {
-  const [accuracy, autophagy, advantage] = await Promise.all([
-    cmd('ace_get_accuracy_metrics'),
-    cmd('get_autophagy_status'),
-    cmd('get_compound_advantage'),
-  ]);
-
-  const accuracyPct = Math.round(accuracy.precision * 1000) / 10;
-  const calError = accuracy.calibration_error;
-  const accuracyDelta = calError > 0 ? -calError : Math.abs(calError);
-
-  const rejectionRate = autophagy.last_cycle
-    ? Math.round((autophagy.last_cycle.items_pruned / Math.max(autophagy.last_cycle.items_analyzed, 1)) * 1000) / 10
-    : 0;
+function mapReportToIntelligenceData(report: IntelligenceReportRaw): IntelligenceData {
+  const accuracyPct = Math.round(report.accuracy_current * 10) / 10;
+  const accuracyDelta = Math.round(report.accuracy_delta * 10) / 10;
 
   const metrics: MetricData[] = [
     {
@@ -114,40 +119,41 @@ async function fetchIntelligenceData(): Promise<IntelligenceData> {
       trend: trendFromDelta(accuracyDelta),
     },
     {
-      label: 'Calibration Accuracy',
-      value: `${Math.round(advantage.calibration_accuracy * 100)}%`,
-      trend: trendFromDelta(advantage.trend),
+      label: 'Topics Tracked',
+      value: formatNumber(report.topics_tracked),
+      delta: report.topics_added > 0 ? `+${report.topics_added} new` : undefined,
+      trend: trendFromDelta(report.topics_added),
     },
     {
       label: 'Noise Rejected',
-      value: formatNumber(autophagy.last_cycle?.items_pruned ?? 0),
-      delta: `${rejectionRate}%`,
-      trend: rejectionRate > 50 ? 'up' : 'flat',
+      value: formatNumber(report.noise_rejected),
+      delta: `${report.noise_rejection_pct.toFixed(1)}%`,
+      trend: report.noise_rejection_pct > 50 ? 'up' : 'flat',
       sublabel: 'rejection rate',
     },
     {
-      label: 'Lead Time',
-      value: `${advantage.avg_lead_time_hours.toFixed(1)}h`,
-      trend: advantage.avg_lead_time_hours > 0 ? 'up' : 'flat',
+      label: 'Time Saved',
+      value: `${report.time_saved_hours.toFixed(1)}h`,
+      trend: report.time_saved_hours > 0 ? 'up' : 'flat',
     },
   ];
 
   const secondary: MetricData[] = [
     {
-      label: 'Autophagy Cycles',
-      value: `${autophagy.total_cycles}`,
-      trend: autophagy.total_cycles > 0 ? 'up' : 'flat',
+      label: 'Security Alerts',
+      value: `${report.security_alerts}`,
+      delta: report.security_acted_on > 0 ? `${report.security_acted_on} acted` : undefined,
+      trend: report.security_acted_on > 0 ? 'up' : 'flat',
     },
     {
-      label: 'Decision Windows',
-      value: `${advantage.windows_opened}`,
-      delta: `${advantage.windows_acted} acted`,
-      trend: advantage.windows_acted > 0 ? 'up' : 'flat',
+      label: 'Decisions',
+      value: `${report.decisions_recorded}`,
+      trend: report.decisions_recorded > 0 ? 'up' : 'flat',
     },
     {
-      label: 'Anti-patterns',
-      value: `${autophagy.total_anti_patterns}`,
-      trend: autophagy.total_anti_patterns > 0 ? 'up' : 'flat',
+      label: 'Feedback Signals',
+      value: `${report.feedback_signals}`,
+      trend: report.feedback_signals > 0 ? 'up' : 'flat',
     },
   ];
 
@@ -156,8 +162,13 @@ async function fetchIntelligenceData(): Promise<IntelligenceData> {
     accuracy_delta: accuracyDelta,
     metrics,
     secondary,
-    items_processed: advantage.items_surfaced,
+    items_processed: report.noise_rejected + report.topics_tracked,
   };
+}
+
+async function fetchIntelligenceData(): Promise<IntelligenceData> {
+  const report = await cmd('get_intelligence_report', { period: undefined }) as IntelligenceReportRaw;
+  return mapReportToIntelligenceData(report);
 }
 
 // ============================================================================

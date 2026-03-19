@@ -1,0 +1,19 @@
+{
+  "error.db.unavailable": "قاعدة البيانات غير متوفرة",
+  "error.db.query": "فشل استعلام قاعدة البيانات",
+  "error.llm.notConfigured": "LLM غير مُهيّأ — قم بإعداد مفتاح API في الإعدادات",
+  "error.llm.requestFailed": "فشل طلب LLM: {{message}}",
+  "error.llm.timeout": "انتهت مهلة طلب LLM",
+  "error.network.offline": "لا يوجد اتصال بالشبكة",
+  "error.network.timeout": "انتهت مهلة الطلب",
+  "error.source.fetchFailed": "فشل الجلب من {{source}}",
+  "error.analysis.failed": "فشل التحليل: {{message}}",
+  "error.analysis.cancelled": "تم إلغاء التحليل",
+  "error.settings.saveFailed": "فشل حفظ الإعدادات",
+  "error.license.invalid": "مفتاح ترخيص غير صالح",
+  "error.license.expired": "انتهت صلاحية الترخيص",
+  "error.module.notFound": "الوحدة غير موجودة: {{id}}",
+  "error.file.readFailed": "فشل قراءة الملف: {{path}}",
+  "error.sun.notFound": "Sun '{{id}}' غير موجود",
+  "error.sun.executionFailed": "فشل تنفيذ Sun: {{message}}"
+}
