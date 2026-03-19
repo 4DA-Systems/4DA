@@ -995,12 +995,12 @@
   "enterprise.policies.title": "Datenaufbewahrungsrichtlinien",
   "enterprise.policies.description": "Steuern Sie, wie lange verschiedene Datentypen aufbewahrt werden. Eine 7-tägige Nachfrist gilt vor der Löschung.",
   "enterprise.policies.default": "Standard",
-  "enterprise.policies.info": "Die Aufbewahrungsdurchsetzung läuft täglich um 03:00 Uhr Ortszeit. Elemente innerhalb der 7-tägigen Nachfrist werden als „bald ablaufend" markiert, aber noch nicht gelöscht. Alle Bereinigungsvorgänge werden im Prüfprotokoll protokolliert.",
+  "enterprise.policies.info": "Die Aufbewahrungsdurchsetzung l\u00E4uft t\u00E4glich um 03:00 Uhr Ortszeit. Elemente innerhalb der 7-t\u00E4gigen Nachfrist werden als \u201Ebald ablaufend\u201C markiert, aber noch nicht gel\u00F6scht. Alle Bereinigungsvorg\u00E4nge werden im Pr\u00FCfprotokoll protokolliert.",
   "enterprise.policies.dataHandling": "Datenverarbeitung",
   "enterprise.policies.noRawContent": "Keine Rohinhalte werden jemals geteilt. Nur Metadaten, Bewertungen und Einbettungen.",
   "enterprise.policies.e2e": "Alle Team-Relay-Daten sind Ende-zu-Ende-verschlüsselt (XChaCha20Poly1305).",
   "enterprise.policies.localFirst": "Primäre Datenspeicherung verbleibt lokal auf jedem Computer.",
-  "enterprise.policies.relayDumb": "Der Relay-Server kann verschlüsselte Daten nicht lesen. „Dumber Relay, schlaue Clients."",
+  "enterprise.policies.relayDumb": "Der Relay-Server kann verschl\u00FCsselte Daten nicht lesen. \u201EDumber Relay, schlaue Clients.\u201C",
 
   "enterprise.org.title": "Organisation",
   "enterprise.org.notConfigured": "Keine Organisation konfiguriert. Organisationsverwaltung ist in der Enterprise-Stufe verfügbar.",
@@ -1040,7 +1040,7 @@
   "enterprise.wizard.finish": "Einrichtung abschließen",
   "enterprise.wizard.allDone": "Team-Einrichtung abgeschlossen!",
   "enterprise.wizard.doneNote": "Ihr verschlüsselter Team-Relay ist aktiv. Mitglieder können mit Einladungscodes beitreten.",
-  "enterprise.wizard.security": "Alle Team-Kommunikation verwendet XChaCha20Poly1305-Verschlüsselung. Der Relay-Server kann Ihre Daten nicht lesen – er speichert und leitet nur verschlüsselte Blobs weiter. „Dumber Relay, schlaue Clients."",
+  "enterprise.wizard.security": "Alle Team-Kommunikation verwendet XChaCha20Poly1305-Verschl\u00FCsselung. Der Relay-Server kann Ihre Daten nicht lesen \u2013 er speichert und leitet nur verschl\u00FCsselte Blobs weiter. \u201EDumber Relay, schlaue Clients.\u201C",
   "enterprise.wizard.teamCreated": "Team erfolgreich erstellt!",
 
   "enterprise.invite.createFailed": "Einladung konnte nicht erstellt werden",
@@ -1253,7 +1253,7 @@
   "coach.engine.prerequisites": "Voraussetzungen",
   "coach.engine.overallAnalysis": "Gesamtanalyse",
   "coach.engine.profileGaps": "Profillücken",
-  "coach.engine.emptyDescription": "Klicken Sie auf „Mein Profil analysieren", um KI-gestützte Einnahmeempfehlungen basierend auf Ihrem Souveränitätsprofil, Ihren Fähigkeiten und Zielen zu erhalten.",
+  "coach.engine.emptyDescription": "Klicken Sie auf \u201EMein Profil analysieren\u201C, um KI-gest\u00FCtzte Einnahmeempfehlungen basierend auf Ihrem Souver\u00E4nit\u00E4tsprofil, Ihren F\u00E4higkeiten und Zielen zu erhalten.",
 
   "coach.launch.title": "Start-Review",
   "coach.launch.subtitle": "Reichen Sie Ihr Projekt für eine KI-gestützte Startbereitschaftsanalyse ein",
@@ -1419,7 +1419,7 @@
   "toolkit.decisionLog.alternativesRejected": "Verworfene Alternativen",
   "toolkit.decisionLog.tags": "Tags",
   "toolkit.decisionLog.empty": "Noch keine Entscheidungen aufgezeichnet",
-  "toolkit.decisionLog.emptyHint": "Klicken Sie auf „Entscheidung hinzufügen", um Ihre technischen Entscheidungen zu verfolgen",
+  "toolkit.decisionLog.emptyHint": "Klicken Sie auf \u201EEntscheidung hinzuf\u00FCgen\u201C, um Ihre technischen Entscheidungen zu verfolgen",
 
   "toolkit.diffViewer.original": "Original",
   "toolkit.diffViewer.originalPlaceholder": "Originaltext einfügen...",
@@ -1443,7 +1443,7 @@
   "toolkit.envSnapshot.capturing": "Wird erfasst...",
   "toolkit.envSnapshot.copyAsMarkdown": "Als Markdown kopieren",
   "toolkit.envSnapshot.empty": "Noch kein Snapshot erfasst",
-  "toolkit.envSnapshot.emptyHint": "Klicken Sie auf „Snapshot erfassen", um Ihre Umgebung zu inspizieren",
+  "toolkit.envSnapshot.emptyHint": "Klicken Sie auf \u201ESnapshot erfassen\u201C, um Ihre Umgebung zu inspizieren",
   "toolkit.envSnapshot.system": "System",
   "toolkit.envSnapshot.runtimeVersions": "Laufzeitversionen",
   "toolkit.envSnapshot.git": "Git",
@@ -1501,7 +1501,7 @@
   "toolkit.portScanner.killConfirm": "Beenden?",
   "toolkit.portScanner.empty": "Noch keine Ports gescannt",
   "toolkit.portScanner.emptyHint": "Klicken Sie auf Ports scannen, um lauschende Dienste zu erkennen",
-  "toolkit.portScanner.noMatch": "Keine Ports entsprechen „{{filter}}"",
+  "toolkit.portScanner.noMatch": "Keine Ports entsprechen \u201E{{filter}}\u201C",
 
   "toolkit.regex.patternPlaceholder": "Regex-Muster eingeben...",
   "toolkit.regex.replaceMode": "Ersetzungsmodus",
@@ -1660,7 +1660,7 @@
   "digest.avgScore": "Durchschnittswert",
   "digest.topItems": "Top-Elemente",
 
-  "standingQueries.singleMatch": "„{{query}}" — {{count}} neuer Treffer gefunden",
+  "standingQueries.singleMatch": "\u201E{{query}}\u201C \u2014 {{count}} neuer Treffer gefunden",
   "standingQueries.multiMatch": "{{count}} Dauersuchen haben neue Treffer",
 
   "learnedBehavior.title": "Feedback & Affinitäten",
@@ -1980,9 +1980,9 @@
   "tasteTest.readThis": "Würde ich lesen",
   "tasteTest.skip": "Überspringen",
   "tasteTest.loveThis": "Großartig",
-  "tasteTest.markInteresting": "„{{title}}" als interessant markieren",
-  "tasteTest.skipTitle": "„{{title}}" überspringen",
-  "tasteTest.loveTitle": "„{{title}}" als großartig markieren",
+  "tasteTest.markInteresting": "\u201E{{title}}\u201C als interessant markieren",
+  "tasteTest.skipTitle": "\u201E{{title}}\u201C \u00FCberspringen",
+  "tasteTest.loveTitle": "\u201E{{title}}\u201C als gro\u00DFartig markieren",
 
   "techRadar.closePanel": "Panel schließen",
   "techRadar.score": "Punktzahl: {{score}}",

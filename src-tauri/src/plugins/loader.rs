@@ -170,15 +170,36 @@ pub fn execute_plugin(manifest: &PluginManifest, config: &PluginConfig) -> Resul
         _ => Command::new(&binary_path),
     };
 
-    let mut child = cmd
-        .stdin(std::process::Stdio::piped())
+    cmd.stdin(std::process::Stdio::piped())
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped())
         .env_clear()
         .env("PATH", std::env::var("PATH").unwrap_or_default())
         .env("TEMP", std::env::temp_dir())
         .env("TMP", std::env::temp_dir())
-        .current_dir(plugins_dir().join(&manifest.name))
+        .current_dir(plugins_dir().join(&manifest.name));
+
+    // Restore essential platform env vars cleared by env_clear()
+    #[cfg(unix)]
+    {
+        if let Ok(home) = std::env::var("HOME") {
+            cmd.env("HOME", home);
+        }
+        if let Ok(tmpdir) = std::env::var("TMPDIR") {
+            cmd.env("TMPDIR", tmpdir);
+        }
+    }
+    #[cfg(windows)]
+    {
+        if let Ok(profile) = std::env::var("USERPROFILE") {
+            cmd.env("USERPROFILE", profile);
+        }
+        if let Ok(root) = std::env::var("SystemRoot") {
+            cmd.env("SystemRoot", root);
+        }
+    }
+
+    let mut child = cmd
         .spawn()
         .with_context(|| format!("Failed to spawn plugin '{}'", manifest.name))?;
 
