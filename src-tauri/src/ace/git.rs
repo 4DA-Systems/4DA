@@ -238,7 +238,7 @@ impl GitAnalyzer {
             "log",
             &max_count,
             &since_date,
-            "--pretty=format:%H|%h|%s|%an|%ai",
+            "--pretty=format:%H%x1f%h%x1f%s%x1f%an%x1f%ai",
             "--shortstat",
         ];
 
@@ -265,13 +265,13 @@ impl GitAnalyzer {
         let mut current_commit: Option<CommitInfo> = None;
 
         for line in stdout.lines() {
-            if line.contains('|') && line.len() > 40 {
+            if line.contains('\x1f') && line.len() > 40 {
                 // This is a commit line
                 if let Some(commit) = current_commit.take() {
                     commits.push(commit);
                 }
 
-                let parts: Vec<&str> = line.splitn(5, '|').collect();
+                let parts: Vec<&str> = line.splitn(5, '\x1f').collect();
                 if parts.len() >= 5 {
                     let message = parts[2].to_string();
                     let topics = extract_topics_from_commit_message(&message);

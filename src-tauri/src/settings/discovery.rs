@@ -40,6 +40,10 @@ pub fn discover_dev_directories() -> Vec<String> {
             "git",
             "workspace",
             "Workspace",
+            "source",
+            "Source",
+            "source/repos",
+            "Source/Repos",
             // Documents & Notes (context!)
             "Documents",
             "documents",
