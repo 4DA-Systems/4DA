@@ -345,7 +345,7 @@ impl ProjectScanner {
         for line in content.lines() {
             let trimmed = line.trim();
 
-            if trimmed == "[dependencies]" {
+            if trimmed == "[dependencies]" || trimmed == "[workspace.dependencies]" {
                 in_deps = true;
                 in_dev_deps = false;
                 continue;
@@ -401,30 +401,39 @@ impl ProjectScanner {
     }
 
     fn parse_package_json(&self, content: &str, signal: &mut ProjectSignal) {
-        // Basic JSON parsing without full serde_json
-        // Extract name
-        if let Some(name) = extract_json_string(content, "name") {
-            signal.project_name = Some(name);
+        let Ok(pkg) = serde_json::from_str::<serde_json::Value>(content) else {
+            return;
+        };
+
+        if let Some(name) = pkg.get("name").and_then(|v| v.as_str()) {
+            signal.project_name = Some(name.to_string());
         }
 
-        // Check for TypeScript
-        if (content.contains("\"typescript\"") || content.contains("\"@types/"))
-            && !signal.languages.contains(&"typescript".to_string())
-        {
-            signal.languages.push("typescript".to_string());
-        }
-
-        // Extract dependencies
-        if let Some(deps_section) = extract_json_object(content, "dependencies") {
-            for dep in extract_json_keys(&deps_section) {
-                signal.dependencies.push(dep.clone());
-                self.detect_js_framework(&dep, signal);
+        if let Some(deps) = pkg.get("dependencies").and_then(|v| v.as_object()) {
+            for key in deps.keys() {
+                signal.dependencies.push(key.to_string());
+                self.detect_js_framework(key, signal);
             }
         }
 
-        if let Some(dev_deps_section) = extract_json_object(content, "devDependencies") {
-            for dep in extract_json_keys(&dev_deps_section) {
-                signal.dev_dependencies.push(dep);
+        if let Some(dev_deps) = pkg.get("devDependencies").and_then(|v| v.as_object()) {
+            for key in dev_deps.keys() {
+                signal.dev_dependencies.push(key.to_string());
+            }
+            // Detect TypeScript from devDependencies
+            if dev_deps.contains_key("typescript")
+                && !signal.languages.contains(&"typescript".to_string())
+            {
+                signal.languages.push("typescript".to_string());
+            }
+        }
+
+        // Also check dependencies for TypeScript / @types
+        if let Some(deps) = pkg.get("dependencies").and_then(|v| v.as_object()) {
+            if (deps.contains_key("typescript") || deps.keys().any(|k| k.starts_with("@types/")))
+                && !signal.languages.contains(&"typescript".to_string())
+            {
+                signal.languages.push("typescript".to_string());
             }
         }
     }
@@ -600,88 +609,6 @@ fn extract_toml_value(content: &str, key: &str) -> Option<String> {
         }
     }
     None
-}
-
-/// Extract a string value from JSON content (basic implementation)
-fn extract_json_string(content: &str, key: &str) -> Option<String> {
-    let pattern = format!("\"{}\"", key);
-    if let Some(key_pos) = content.find(&pattern) {
-        let after_key = &content[key_pos + pattern.len()..];
-        // Find the colon and opening quote
-        if let Some(colon_pos) = after_key.find(':') {
-            let after_colon = &after_key[colon_pos + 1..];
-            // Find opening quote
-            if let Some(quote_start) = after_colon.find('"') {
-                let value_start = quote_start + 1;
-                // Find closing quote
-                if let Some(quote_end) = after_colon[value_start..].find('"') {
-                    return Some(after_colon[value_start..value_start + quote_end].to_string());
-                }
-            }
-        }
-    }
-    None
-}
-
-/// Extract an object section from JSON content (basic implementation)
-fn extract_json_object(content: &str, key: &str) -> Option<String> {
-    let pattern = format!("\"{}\"", key);
-    if let Some(key_pos) = content.find(&pattern) {
-        let after_key = &content[key_pos + pattern.len()..];
-        if let Some(brace_start) = after_key.find('{') {
-            let obj_start = brace_start;
-            let mut depth = 1;
-            let mut obj_end = obj_start + 1;
-
-            for (i, c) in after_key[obj_start + 1..].char_indices() {
-                match c {
-                    '{' => depth += 1,
-                    '}' => {
-                        depth -= 1;
-                        if depth == 0 {
-                            obj_end = obj_start + 1 + i + 1;
-                            break;
-                        }
-                    }
-                    _ => {}
-                }
-            }
-
-            return Some(after_key[obj_start..obj_end].to_string());
-        }
-    }
-    None
-}
-
-/// Extract keys from a JSON object string (basic implementation)
-fn extract_json_keys(obj: &str) -> Vec<String> {
-    let mut keys = Vec::new();
-    let mut in_string = false;
-    let mut key_start = None;
-
-    for (i, c) in obj.char_indices() {
-        match c {
-            '"' if !in_string => {
-                in_string = true;
-                key_start = Some(i + 1);
-            }
-            '"' if in_string => {
-                if let Some(start) = key_start {
-                    let key = &obj[start..i];
-                    // Only add if the next non-whitespace is a colon (it's a key, not a value)
-                    let rest = &obj[i + 1..];
-                    if rest.trim_start().starts_with(':') {
-                        keys.push(key.to_string());
-                    }
-                }
-                in_string = false;
-                key_start = None;
-            }
-            _ => {}
-        }
-    }
-
-    keys
 }
 
 /// Extract import/dependency names from source file imports.
@@ -955,9 +882,15 @@ pretty_assertions = "1.0"
     }
 
     #[test]
-    fn test_extract_json_keys() {
+    fn test_serde_json_parse_keys() {
         let obj = r#"{ "react": "^18.0.0", "next": "^14.0.0" }"#;
-        let keys = extract_json_keys(obj);
+        let parsed: serde_json::Value = serde_json::from_str(obj).unwrap();
+        let keys: Vec<String> = parsed
+            .as_object()
+            .unwrap()
+            .keys()
+            .map(|k| k.to_string())
+            .collect();
         assert!(keys.contains(&"react".to_string()));
         assert!(keys.contains(&"next".to_string()));
     }
@@ -1045,6 +978,46 @@ pretty_assertions = "1.0"
         assert!(topics.contains(&"rust"));
         assert!(topics.contains(&"python"));
         assert!(!topics.contains(&".hidden"));
+    }
+
+    #[test]
+    fn test_parse_cargo_toml_workspace_deps() {
+        let content = r#"
+[workspace]
+members = ["crates/*"]
+
+[workspace.dependencies]
+serde = { version = "1.0", features = ["derive"] }
+tokio = "1"
+anyhow = "1.0"
+
+[dependencies]
+axum = "0.7"
+"#;
+
+        let scanner = ProjectScanner::new();
+        let mut signal = ProjectSignal {
+            manifest_type: ManifestType::CargoToml,
+            manifest_path: PathBuf::from("Cargo.toml"),
+            project_name: None,
+            languages: vec!["rust".to_string()],
+            frameworks: Vec::new(),
+            dependencies: Vec::new(),
+            dev_dependencies: Vec::new(),
+            detected_at: String::new(),
+        };
+
+        scanner.parse_cargo_toml(content, &mut signal);
+
+        // workspace.dependencies should be parsed as regular dependencies
+        assert!(signal.dependencies.contains(&"serde".to_string()));
+        assert!(signal.dependencies.contains(&"tokio".to_string()));
+        assert!(signal.dependencies.contains(&"anyhow".to_string()));
+        // Regular dependencies should also be present
+        assert!(signal.dependencies.contains(&"axum".to_string()));
+        // Frameworks should be detected from workspace deps too
+        assert!(signal.frameworks.contains(&"tokio".to_string()));
+        assert!(signal.frameworks.contains(&"axum".to_string()));
     }
 
     #[test]
