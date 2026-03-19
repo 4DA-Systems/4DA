@@ -1,4 +1,5 @@
 import { useState, memo, useCallback } from 'react';
+import { cmd } from '../lib/commands';
 
 interface WaitlistSignupProps {
   tier: 'team' | 'enterprise';
@@ -76,23 +77,25 @@ const WaitlistSignup = memo(function WaitlistSignup({
 
       setSubmitting(true);
       try {
-        const entry = {
+        // Store in SQLite via Tauri command (privacy-first, persistent)
+        await cmd('save_waitlist_signup', {
           tier,
           email: email.trim(),
           name: name.trim() || null,
-          team_size: teamSize.trim() || null,
+          teamSize: teamSize.trim() || null,
           company: company.trim() || null,
           role: role.trim() || null,
+        });
+        setSubmitted(true);
+      } catch {
+        // Fallback to localStorage if Tauri command not available
+        const entry = {
+          tier,
+          email: email.trim(),
           signed_up_at: new Date().toISOString(),
-          source: 'in-app',
         };
-
         const existing = JSON.parse(localStorage.getItem('4da_waitlist') || '[]');
-        // Prevent duplicate entries for same email + tier
-        const isDuplicate = existing.some(
-          (e: { email: string; tier: string }) => e.email === entry.email && e.tier === entry.tier,
-        );
-        if (!isDuplicate) {
+        if (!existing.some((e: { email: string; tier: string }) => e.email === entry.email && e.tier === entry.tier)) {
           existing.push(entry);
           localStorage.setItem('4da_waitlist', JSON.stringify(existing));
         }
