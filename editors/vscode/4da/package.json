@@ -13,7 +13,7 @@
   "engines": {
     "vscode": "^1.85.0"
   },
-  "categories": ["Other"],
+  "categories": ["Other", "Linters"],
   "keywords": ["developer intelligence", "security", "dependencies", "signals", "privacy", "local-first"],
   "activationEvents": ["onStartupFinished"],
   "main": "./dist/extension.js",
@@ -53,6 +53,12 @@
           "type": "boolean",
           "default": true,
           "description": "Show signal count in status bar"
+        },
+        "4da.mcpServerPath": {
+          "type": "string",
+          "default": "",
+          "description": "Custom path to the 4DA MCP server (auto-detected if empty)",
+          "scope": "application"
         }
       }
     }
