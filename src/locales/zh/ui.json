@@ -548,7 +548,7 @@
   "onboarding.context.faqDataNo": "不会。",
   "onboarding.context.faqDataDesc": "所有扫描均在您的设备上 100% 本地完成。文件内容永远不会离开您的电脑。只有在使用 AI 功能时，小段文本片段才会发送到您选择的 AI 提供商（由您控制）。",
   "onboarding.context.faqUsageTitle": "4DA 用这些信息做什么？",
-  "onboarding.context.faqUsageDesc": "它建立对您兴趣的本地理解（例如"您使用 Rust 和 React"），以过滤互联网内容并仅显示相关内容。此上下文保存在您设备上的本地数据库中。",
+  "onboarding.context.faqUsageDesc": "它建立对您兴趣的本地理解（例如\u201c您使用 Rust 和 React\u201d），以过滤互联网内容并仅显示相关内容。此上下文保存在您设备上的本地数据库中。",
   "onboarding.context.faqControlTitle": "我可以控制扫描内容吗？",
   "onboarding.context.faqControlDesc": "可以！您可以随时在设置中添加或删除目录。4DA 自动忽略敏感位置，如 node_modules、.git 文件夹和隐藏的系统文件。",
   "onboarding.context.faqTimeTitle": "扫描需要多长时间？",
