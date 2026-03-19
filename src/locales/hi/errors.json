@@ -1,0 +1,19 @@
+{
+  "error.db.unavailable": "डेटाबेस उपलब्ध नहीं है",
+  "error.db.query": "डेटाबेस क्वेरी विफल हुई",
+  "error.llm.notConfigured": "LLM कॉन्फ़िगर नहीं है -- सेटिंग्स में अपनी API कुंजी सेट करें",
+  "error.llm.requestFailed": "LLM अनुरोध विफल: {{message}}",
+  "error.llm.timeout": "LLM अनुरोध का समय समाप्त हो गया",
+  "error.network.offline": "कोई नेटवर्क कनेक्शन नहीं",
+  "error.network.timeout": "अनुरोध का समय समाप्त हो गया",
+  "error.source.fetchFailed": "{{source}} से प्राप्त करने में विफल",
+  "error.analysis.failed": "विश्लेषण विफल: {{message}}",
+  "error.analysis.cancelled": "विश्लेषण रद्द कर दिया गया",
+  "error.settings.saveFailed": "सेटिंग्स सहेजने में विफल",
+  "error.license.invalid": "अमान्य लाइसेंस कुंजी",
+  "error.license.expired": "लाइसेंस की अवधि समाप्त हो गई है",
+  "error.module.notFound": "मॉड्यूल नहीं मिला: {{id}}",
+  "error.file.readFailed": "फ़ाइल पढ़ने में विफल: {{path}}",
+  "error.sun.notFound": "Sun '{{id}}' नहीं मिला",
+  "error.sun.executionFailed": "Sun निष्पादन विफल: {{message}}"
+}

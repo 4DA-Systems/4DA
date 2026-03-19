@@ -1,0 +1,19 @@
+{
+  "error.db.unavailable": "Veritabanı kullanılamıyor",
+  "error.db.query": "Veritabanı sorgusu başarısız oldu",
+  "error.llm.notConfigured": "LLM yapılandırılmadı -- Ayarlar'da API anahtarınızı ayarlayın",
+  "error.llm.requestFailed": "LLM isteği başarısız: {{message}}",
+  "error.llm.timeout": "LLM isteği zaman aşımına uğradı",
+  "error.network.offline": "Ağ bağlantısı yok",
+  "error.network.timeout": "İstek zaman aşımına uğradı",
+  "error.source.fetchFailed": "{{source}} kaynağından veri alınamadı",
+  "error.analysis.failed": "Analiz başarısız: {{message}}",
+  "error.analysis.cancelled": "Analiz iptal edildi",
+  "error.settings.saveFailed": "Ayarlar kaydedilemedi",
+  "error.license.invalid": "Geçersiz lisans anahtarı",
+  "error.license.expired": "Lisans süresi doldu",
+  "error.module.notFound": "Modül bulunamadı: {{id}}",
+  "error.file.readFailed": "Dosya okunamadı: {{path}}",
+  "error.sun.notFound": "Sun '{{id}}' bulunamadı",
+  "error.sun.executionFailed": "Sun yürütme başarısız: {{message}}"
+}
