@@ -61,6 +61,8 @@ pub struct MonitoringState {
     pub batched_items: parking_lot::Mutex<Vec<BatchedNotification>>,
     /// Last morning briefing date (YYYY-MM-DD) to avoid firing twice in one day
     pub last_morning_briefing_date: parking_lot::Mutex<Option<String>>,
+    /// Last CVE scan timestamp (unix seconds)
+    pub last_cve_scan: AtomicU64,
 }
 
 impl Default for MonitoringState {
@@ -78,6 +80,7 @@ impl Default for MonitoringState {
             last_accuracy_check: AtomicU64::new(0),
             batched_items: parking_lot::Mutex::new(Vec::new()),
             last_morning_briefing_date: parking_lot::Mutex::new(None),
+            last_cve_scan: AtomicU64::new(0),
         }
     }
 }
@@ -203,6 +206,7 @@ const HEALTH_CHECK_INTERVAL: u64 = 300; // 5 minutes
 const ANOMALY_CHECK_INTERVAL: u64 = 3600; // 1 hour
 const BEHAVIOR_DECAY_INTERVAL: u64 = 86400; // 24 hours (daily)
 const ACCURACY_RECORD_INTERVAL: u64 = 604800; // 7 days
+const CVE_SCAN_INTERVAL: u64 = 1800; // 30 minutes
 
 /// Start the background monitoring scheduler
 pub fn start_scheduler<R: Runtime>(app: AppHandle<R>, state: Arc<MonitoringState>) {
@@ -279,6 +283,16 @@ pub fn start_scheduler<R: Runtime>(app: AppHandle<R>, state: Arc<MonitoringState
                     // Compute compound advantage score (weekly period)
                     let _ = crate::decision_advantage::compute_compound_score(&conn, "weekly");
                 }
+            }
+
+            // CVE scan — Developer Immune System (every 30 minutes)
+            let last_cve = state.last_cve_scan.load(Ordering::Relaxed);
+            if now - last_cve >= CVE_SCAN_INTERVAL {
+                state.last_cve_scan.store(now, Ordering::Relaxed);
+                let cve_app = app.clone();
+                tokio::spawn(async move {
+                    crate::monitoring_jobs::run_cve_scan(&cve_app).await;
+                });
             }
 
             // Proactive chain prediction notifications — hourly
