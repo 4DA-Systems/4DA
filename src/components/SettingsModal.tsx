@@ -20,6 +20,7 @@ import { AttentionDashboard } from './settings/AttentionDashboard';
 import { ProjectHealthRadar } from './settings/ProjectHealthRadar';
 import { StreetsMembershipSection } from './settings/StreetsMembershipSection';
 import { ShowAllViewsToggle } from './settings/ShowAllViewsToggle';
+import { LanguageSelector } from './settings/LanguageSelector';
 import { NaturalLanguageQueryPanel } from './NaturalLanguageQuery';
 import { ProValuePanel } from './ProValuePanel';
 import { AboutPanel } from './AboutPanel';
@@ -338,6 +339,10 @@ export const SettingsModal = memo(function SettingsModal({ onClose }: SettingsMo
 
                 <PanelErrorBoundary name="Community Intelligence">
                   <CommunityIntelligenceSection />
+                </PanelErrorBoundary>
+
+                <PanelErrorBoundary name="Language">
+                  <LanguageSelector />
                 </PanelErrorBoundary>
 
                 <PanelErrorBoundary name="License">

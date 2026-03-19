@@ -2,6 +2,14 @@ import i18n from 'i18next';
 import { initReactI18next } from 'react-i18next';
 import resourcesToBackend from 'i18next-resources-to-backend';
 
+// Detect saved language preference or system locale
+const savedLang = typeof localStorage !== 'undefined'
+  ? localStorage.getItem('4da_language')
+  : null;
+const systemLang = typeof navigator !== 'undefined'
+  ? navigator.language?.split('-')[0]
+  : 'en';
+
 i18n
   .use(
     resourcesToBackend(
@@ -11,7 +19,7 @@ i18n
   )
   .use(initReactI18next)
   .init({
-    lng: 'en',
+    lng: savedLang || systemLang || 'en',
     fallbackLng: 'en',
     defaultNS: 'ui',
     ns: ['ui', 'coach', 'streets', 'errors'],
