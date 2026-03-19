@@ -282,6 +282,8 @@ mod temporal_graph;
 mod url_validation;
 mod void_commands;
 mod void_engine;
+#[allow(dead_code)]
+mod waitlist;
 mod weekly_digest;
 
 mod stack_commands;
@@ -1232,6 +1234,9 @@ pub fn run() {
             plugin_commands::list_plugins,
             plugin_commands::fetch_plugin_items,
             plugin_commands::fetch_all_plugins,
+            // Waitlist
+            waitlist::save_waitlist_signup,
+            waitlist::get_waitlist_signups,
         ])
         .setup(|app| {
             // Record app start time for diagnostics uptime tracking
