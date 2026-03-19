@@ -24,38 +24,27 @@ import IntelligenceReportCard from '../IntelligenceReport';
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const { cmd } = await import('../../lib/commands') as any;
 
-const mockAccuracyMetrics = {
-  precision: 0.872,
-  calibration_error: -0.03,
-};
-
-const mockAutophagyStatus = {
-  total_cycles: 5,
-  total_anti_patterns: 2,
-  last_cycle: {
-    items_analyzed: 100,
-    items_pruned: 35,
-  },
-};
-
-const mockCompoundAdvantage = {
-  calibration_accuracy: 0.88,
-  trend: 1,
-  avg_lead_time_hours: 4.2,
-  windows_opened: 12,
-  windows_acted: 8,
-  items_surfaced: 1500,
+const mockIntelligenceReport = {
+  period: '2026-03',
+  accuracy_current: 0.874,
+  accuracy_previous: 0.842,
+  accuracy_delta: 0.032,
+  topics_tracked: 19,
+  topics_added: 3,
+  noise_rejected: 1847,
+  noise_rejection_pct: 92.3,
+  time_saved_hours: 14.2,
+  security_alerts: 3,
+  security_acted_on: 2,
+  decisions_recorded: 12,
+  feedback_signals: 89,
 };
 
 function setupMocks() {
   vi.mocked(cmd).mockImplementation((command: string) => {
     switch (command) {
-      case 'ace_get_accuracy_metrics':
-        return Promise.resolve(mockAccuracyMetrics);
-      case 'get_autophagy_status':
-        return Promise.resolve(mockAutophagyStatus);
-      case 'get_compound_advantage':
-        return Promise.resolve(mockCompoundAdvantage);
+      case 'get_intelligence_report':
+        return Promise.resolve(mockIntelligenceReport);
       default:
         return Promise.resolve(null);
     }
@@ -80,18 +69,17 @@ describe('IntelligenceReportCard', () => {
     await waitFor(() => {
       expect(screen.getByText('Relevance Accuracy')).toBeInTheDocument();
     });
-    expect(screen.getByText('Calibration Accuracy')).toBeInTheDocument();
+    expect(screen.getByText('Topics Tracked')).toBeInTheDocument();
     expect(screen.getByText('Noise Rejected')).toBeInTheDocument();
-    expect(screen.getByText('Lead Time')).toBeInTheDocument();
+    expect(screen.getByText('Time Saved')).toBeInTheDocument();
   });
 
   it('renders secondary metrics', async () => {
     render(<IntelligenceReportCard />);
     await waitFor(() => {
-      expect(screen.getByText('Autophagy Cycles')).toBeInTheDocument();
+      expect(screen.getByText('Security Alerts')).toBeInTheDocument();
     });
-    expect(screen.getByText('Decision Windows')).toBeInTheDocument();
-    expect(screen.getByText('Anti-patterns')).toBeInTheDocument();
+    expect(screen.getByText('Decisions')).toBeInTheDocument();
   });
 
   it('renders the accuracy progress bar', async () => {
