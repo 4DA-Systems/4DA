@@ -24,45 +24,42 @@ import SecurityDashboard from '../SecurityDashboard';
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const { cmd } = await import('../../lib/commands') as any;
 
-const mockDecisionWindows = [
-  {
-    id: 1,
-    window_type: 'security_patch',
-    title: 'CVE-2024-1234 in tokio',
-    description: 'Remote code execution vulnerability in tokio runtime',
-    urgency: 0.95,
-    dependency: 'tokio',
-    status: 'open',
-    opened_at: '2026-03-10T00:00:00Z',
-  },
-  {
-    id: 2,
-    window_type: 'security_patch',
-    title: 'CVE-2024-5678 in serde',
-    description: 'Denial of service via crafted input',
-    urgency: 0.75,
-    dependency: 'serde',
-    status: 'open',
-    opened_at: '2026-03-12T00:00:00Z',
-  },
-  {
-    id: 3,
-    window_type: 'security_patch',
-    title: 'CVE-2024-9999 in hyper',
-    description: 'HTTP request smuggling vulnerability',
-    urgency: 0.5,
-    dependency: 'hyper',
-    status: 'acted',
-    opened_at: '2026-03-05T00:00:00Z',
-  },
-];
+const mockDepAlerts = {
+  alerts: [
+    {
+      id: 1,
+      package_name: 'tokio',
+      ecosystem: 'cargo',
+      alert_type: 'cve',
+      severity: 'critical',
+      title: 'CVE-2024-1234: Remote code execution in tokio',
+      description: 'Remote code execution vulnerability in tokio runtime',
+      affected_versions: '< 1.36.0',
+      source_url: 'https://github.com/advisories/GHSA-test-1',
+      detected_at: '2026-03-10T00:00:00Z',
+    },
+    {
+      id: 2,
+      package_name: 'serde',
+      ecosystem: 'cargo',
+      alert_type: 'cve',
+      severity: 'high',
+      title: 'CVE-2024-5678: Denial of service in serde',
+      description: 'Denial of service via crafted input',
+      affected_versions: '< 1.0.200',
+      source_url: null,
+      detected_at: '2026-03-12T00:00:00Z',
+    },
+  ],
+  total: 2,
+};
 
 function setupMocks() {
   vi.mocked(cmd).mockImplementation((command: string) => {
     switch (command) {
-      case 'get_decision_windows':
-        return Promise.resolve(mockDecisionWindows);
-      case 'act_on_decision_window':
+      case 'get_dependency_alerts':
+        return Promise.resolve(mockDepAlerts);
+      case 'resolve_dependency_alert':
         return Promise.resolve(null);
       default:
         return Promise.resolve(null);
@@ -102,8 +99,13 @@ describe('SecurityDashboard', () => {
     });
   });
 
-  it('renders resolved timeline section', async () => {
+  it('shows resolved section after resolving an alert', async () => {
     render(<SecurityDashboard />);
+    await waitFor(() => {
+      expect(screen.getAllByText('Resolve').length).toBeGreaterThan(0);
+    });
+    // Resolve first alert
+    fireEvent.click(screen.getAllByText('Resolve')[0]);
     await waitFor(() => {
       expect(screen.getByText('Resolved')).toBeInTheDocument();
     });
