@@ -1,0 +1,19 @@
+{
+  "error.db.unavailable": "データベースが利用できません",
+  "error.db.query": "データベースクエリに失敗しました",
+  "error.llm.notConfigured": "LLMが設定されていません — 設定画面でAPI keyを設定してください",
+  "error.llm.requestFailed": "LLMリクエストに失敗しました: {{message}}",
+  "error.llm.timeout": "LLMリクエストがタイムアウトしました",
+  "error.network.offline": "ネットワーク接続がありません",
+  "error.network.timeout": "リクエストがタイムアウトしました",
+  "error.source.fetchFailed": "{{source}}からの取得に失敗しました",
+  "error.analysis.failed": "分析に失敗しました: {{message}}",
+  "error.analysis.cancelled": "分析がキャンセルされました",
+  "error.settings.saveFailed": "設定の保存に失敗しました",
+  "error.license.invalid": "無効なライセンスキーです",
+  "error.license.expired": "ライセンスの有効期限が切れています",
+  "error.module.notFound": "モジュールが見つかりません: {{id}}",
+  "error.file.readFailed": "ファイルの読み取りに失敗しました: {{path}}",
+  "error.sun.notFound": "Sun '{{id}}' が見つかりません",
+  "error.sun.executionFailed": "Sunの実行に失敗しました: {{message}}"
+}
