@@ -2,18 +2,17 @@
 # Git hygiene monitor — terminal-aware commit discipline enforcement
 # Runs on UserPromptSubmit to catch buildup early
 #
-# Reads TERMINALS.md to understand which files belong to which terminal,
-# so it only warns about YOUR uncommitted files, not other terminals'.
+# Reads TERMINALS.md to understand which files are claimed by terminals.
+# Only warns about UNCLAIMED files — claimed files belong to their terminal.
 
 cd "$(git rev-parse --show-toplevel 2>/dev/null)" || exit 0
 
 TERMINALS_FILE=".claude/TERMINALS.md"
 
-# Get all changed files (modified + untracked, excluding .claude/ internals)
-all_changed=$(git status --porcelain 2>/dev/null | grep -v '^\?\? \.claude/' | sed 's/^...//')
+# Get all changed files (exclude .claude/ internals — those are session artifacts)
+all_changed=$(git status --porcelain 2>/dev/null | grep -v '^\?\? \.claude/' | grep -v ' \.claude/' | sed 's/^...//')
 total_count=$(echo "$all_changed" | grep -c . 2>/dev/null || echo "0")
 
-# If nothing changed, exit silently
 [ "$total_count" -eq 0 ] && exit 0
 
 # Count net lines changed
@@ -22,17 +21,14 @@ insertions=$(echo "$line_stat" | sed -n 's/.*\([0-9][0-9]*\) insertion.*/\1/p')
 deletions=$(echo "$line_stat" | sed -n 's/.*\([0-9][0-9]*\) deletion.*/\1/p')
 total_lines=$(( ${insertions:-0} + ${deletions:-0} ))
 
-# Parse TERMINALS.md to find files claimed by active terminals
-# Only look at lines AFTER "## Active Terminals" and skip HTML comments
+# Parse claimed file patterns from TERMINALS.md (outside HTML comments only)
 claimed_patterns=""
 if [ -f "$TERMINALS_FILE" ]; then
     claimed_patterns=$(awk '
         /^## Active Terminals/,0 {
-            # Skip comment blocks
             if (/^<!--/) { in_comment=1 }
             if (in_comment && /-->/) { in_comment=0; next }
             if (in_comment) next
-            # Extract file lists from "- **Files**:" lines
             if (/^\- \*\*Files\*\*:/) {
                 sub(/.*Files\*\*: */, "")
                 gsub(/, */, "\n")
@@ -42,7 +38,7 @@ if [ -f "$TERMINALS_FILE" ]; then
     ' "$TERMINALS_FILE" 2>/dev/null)
 fi
 
-# Check for active commit lock (outside comments only)
+# Check for active commit lock
 lock_active=false
 if [ -f "$TERMINALS_FILE" ]; then
     lock_count=$(awk '
@@ -50,23 +46,22 @@ if [ -f "$TERMINALS_FILE" ]; then
             if (/^<!--/) { in_comment=1 }
             if (in_comment && /-->/) { in_comment=0; next }
             if (in_comment) next
-            if (/Commit Lock.*HELD/) print
+            if (/Commit Lock.*HELD/) count++
         }
-    ' "$TERMINALS_FILE" 2>/dev/null | wc -l | tr -d ' ')
+        END { print count+0 }
+    ' "$TERMINALS_FILE" 2>/dev/null)
     [ "$lock_count" -gt 0 ] && lock_active=true
 fi
 
-# Categorize changed files as claimed or unclaimed
+# Categorize files
 unclaimed_count=0
 claimed_count=0
 
 for file in $all_changed; do
     is_claimed=false
-
     if [ -n "$claimed_patterns" ]; then
         while IFS= read -r pattern; do
             [ -z "$pattern" ] && continue
-            # Handle glob patterns: src/locales/* matches src/locales/en.json
             case "$file" in
                 $pattern) is_claimed=true; break ;;
             esac
@@ -80,29 +75,26 @@ for file in $all_changed; do
     fi
 done
 
-# --- Build the message ---
+# --- Build message ---
 msg=""
 
-# Commit lock warning
+# Commit lock
 if [ "$lock_active" = true ]; then
-    msg="${msg}COMMIT LOCK ACTIVE — another terminal is committing. Do NOT commit or stage files until the lock is released.\n"
+    msg="${msg}COMMIT LOCK ACTIVE — another terminal is committing. Wait for lock release before committing.\n"
 fi
 
-# Tiered warnings for UNCLAIMED files only
-if [ "$unclaimed_count" -ge 20 ]; then
-    msg="${msg}GIT HYGIENE WARNING: ${unclaimed_count} UNCLAIMED uncommitted files (~${total_lines} lines). These aren't claimed in TERMINALS.md — commit NOW or claim them to prevent cross-terminal contamination."
-elif [ "$unclaimed_count" -ge 10 ]; then
-    msg="${msg}GIT HYGIENE NOTICE: ${unclaimed_count} unclaimed uncommitted files (~${total_lines} lines). Claim in TERMINALS.md or commit to avoid another terminal scooping them up."
-elif [ "$unclaimed_count" -ge 5 ] && [ "$total_lines" -ge 100 ]; then
-    msg="${msg}GIT HYGIENE NOTE: ${unclaimed_count} unclaimed files (~${total_lines} lines) uncommitted. Consider claiming in TERMINALS.md or committing."
+# Unclaimed file warnings (these are the dangerous ones)
+if [ "$unclaimed_count" -ge 15 ]; then
+    msg="${msg}GIT HYGIENE CRITICAL: ${unclaimed_count} UNCLAIMED files uncommitted (~${total_lines} lines). These aren't claimed in TERMINALS.md — any terminal could commit them with a wrong message. Commit NOW or claim them."
+elif [ "$unclaimed_count" -ge 8 ]; then
+    msg="${msg}GIT HYGIENE WARNING: ${unclaimed_count} unclaimed uncommitted files (~${total_lines} lines). Claim in TERMINALS.md or commit to prevent cross-terminal contamination."
+elif [ "$unclaimed_count" -ge 3 ]; then
+    msg="${msg}GIT HYGIENE NOTICE: ${unclaimed_count} unclaimed files uncommitted. Claim in TERMINALS.md or commit when ready."
 fi
 
-# Quiet info when everything is properly claimed
-if [ "$unclaimed_count" -eq 0 ] && [ "$claimed_count" -gt 0 ] && [ "$total_count" -ge 8 ]; then
-    msg="${msg}GIT STATUS: ${claimed_count} uncommitted files, all claimed by terminals in TERMINALS.md. No action needed from this terminal."
+# Quiet status when all files are properly claimed
+if [ "$unclaimed_count" -eq 0 ] && [ "$claimed_count" -gt 0 ] && [ "$total_count" -ge 5 ]; then
+    msg="${msg}GIT STATUS: ${claimed_count} uncommitted files, all claimed by terminals in TERMINALS.md."
 fi
 
-# Output
-if [ -n "$msg" ]; then
-    echo -e "$msg"
-fi
+[ -n "$msg" ] && echo -e "$msg"
