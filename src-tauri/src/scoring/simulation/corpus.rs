@@ -30,7 +30,6 @@ const S: EO = EO::StrongRelevant;
 const W: EO = EO::WeakRelevant;
 const B: EO = EO::MildBorderline;
 const N: EO = EO::NotRelevant;
-#[allow(dead_code)]
 const X: EO = EO::Excluded;
 
 pub(super) fn corpus() -> Vec<LabeledItem> {

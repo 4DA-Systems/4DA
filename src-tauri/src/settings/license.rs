@@ -15,7 +15,7 @@ const KEYGEN_ACCOUNT_ID: &str = "runyourempirehq";
 
 /// Base URL template for Keygen validation.
 /// Full URL: `https://api.keygen.sh/v1/accounts/{ACCOUNT_ID}/licenses/actions/validate-key`
-#[allow(dead_code)]
+#[allow(dead_code)] // Reason: Keygen validation URL reserved for license activation flow
 const KEYGEN_VALIDATE_URL: &str = "https://api.keygen.sh/v1/licenses/actions/validate-key";
 
 /// Hours before a cached validation result is considered stale

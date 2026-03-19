@@ -114,7 +114,6 @@ pub(super) struct LabeledItem {
     pub content: &'static str,
     pub category: ContentCategory,
     pub expected: [ExpectedOutcome; 9],
-    #[allow(dead_code)]
     pub source_type: &'static str,
 }
 
@@ -130,21 +129,12 @@ pub(super) const PERSONA_NAMES: [&str; 9] = [
     "niche_specialist",
 ];
 
-#[allow(dead_code)]
 pub(super) const PI_RUST: usize = 0;
-#[allow(dead_code)]
 pub(super) const PI_PYTHON: usize = 1;
-#[allow(dead_code)]
 pub(super) const PI_TS: usize = 2;
-#[allow(dead_code)]
 pub(super) const PI_DEVOPS: usize = 3;
-#[allow(dead_code)]
 pub(super) const PI_MOBILE: usize = 4;
-#[allow(dead_code)]
 pub(super) const PI_BOOTSTRAP: usize = 5;
-#[allow(dead_code)]
 pub(super) const PI_POWER: usize = 6;
-#[allow(dead_code)]
 pub(super) const PI_SWITCHER: usize = 7;
-#[allow(dead_code)]
 pub(super) const PI_NICHE: usize = 8;

@@ -102,6 +102,6 @@ pub(crate) struct ScoringContext {
     /// Dominant persona from continuous taste inference (persona_index, weight)
     /// Present when dominant weight exceeds uniform threshold (> 0.2)
     // Diagnostic: populated for scoring introspection
-    #[allow(dead_code)]
+    #[allow(dead_code)] // Reason: diagnostic field for scoring introspection
     pub dominant_persona: Option<(usize, f32)>,
 }

@@ -89,7 +89,7 @@ mod decisions;
 mod delegation;
 mod dependency_commands;
 #[cfg(not(feature = "experimental"))]
-#[allow(dead_code)]
+#[allow(dead_code)] // Feature-gated: stub active only when "experimental" is disabled
 mod delegation {
     use crate::error::Result;
     use serde::{Deserialize, Serialize};
@@ -163,7 +163,7 @@ mod game_achievements {
 mod game_commands;
 mod http_client;
 #[cfg(not(feature = "experimental"))]
-#[allow(dead_code)]
+#[allow(dead_code)] // Feature-gated: stub active only when "experimental" is disabled
 mod game_commands {
     use crate::error::Result;
     use tauri::AppHandle;
@@ -216,17 +216,17 @@ mod game_engine {
         Vec::new()
     }
 
-    #[allow(dead_code)]
+    #[allow(dead_code)] // Feature-gated: stub active only when "experimental" is disabled
     pub fn check_daily_streak(_db: &Database) -> Vec<AchievementUnlocked> {
         Vec::new()
     }
 
-    #[allow(dead_code)]
+    #[allow(dead_code)] // Feature-gated: stub active only when "experimental" is disabled
     pub fn get_game_state(_db: &Database) -> serde_json::Value {
         serde_json::json!({"counters": [], "achievements": [], "streak": 0, "last_active": null})
     }
 
-    #[allow(dead_code)]
+    #[allow(dead_code)] // Feature-gated: stub active only when "experimental" is disabled
     pub fn get_achievements(_db: &Database) -> Vec<AchievementUnlocked> {
         Vec::new()
     }
@@ -308,7 +308,7 @@ mod toolkit_export;
 #[cfg(feature = "experimental")]
 mod toolkit_http;
 #[cfg(not(feature = "experimental"))]
-#[allow(dead_code)]
+#[allow(dead_code)] // Feature-gated: stub active only when "experimental" is disabled
 mod toolkit_http {
     use crate::error::Result;
     use serde::{Deserialize, Serialize};

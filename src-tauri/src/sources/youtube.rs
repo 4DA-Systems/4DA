@@ -59,7 +59,6 @@ impl YouTubeSource {
     }
 
     /// Create with named channels
-    #[allow(dead_code)]
     pub fn with_named_channels(channels: Vec<YouTubeChannel>) -> Self {
         let mut source = Self::new();
         if !channels.is_empty() {

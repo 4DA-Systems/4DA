@@ -29,7 +29,6 @@ impl PipelineVersion {
 }
 
 /// Side-by-side comparison result from both pipeline versions.
-#[allow(dead_code)]
 pub(super) struct VersionComparison {
     pub v1: SourceRelevance,
     pub v2: SourceRelevance,

@@ -385,11 +385,11 @@ pub(crate) fn get_monitoring_state() -> &'static Arc<monitoring::MonitoringState
 // ============================================================================
 
 // Planned: async job queue for background task management
-#[allow(dead_code)]
+#[allow(dead_code)] // Reason: job queue infrastructure built but not yet wired into app startup
 static JOB_QUEUE: OnceCell<Arc<parking_lot::RwLock<job_queue::JobQueue>>> = OnceCell::new();
 
 // Planned: async job queue for background task management
-#[allow(dead_code)]
+#[allow(dead_code)] // Reason: job queue infrastructure built but not yet wired into app startup
 fn init_job_queue() -> Result<Arc<parking_lot::RwLock<job_queue::JobQueue>>> {
     let conn = open_db_connection()?;
 
@@ -399,7 +399,7 @@ fn init_job_queue() -> Result<Arc<parking_lot::RwLock<job_queue::JobQueue>>> {
 }
 
 // Planned: async job queue for background task management
-#[allow(dead_code)]
+#[allow(dead_code)] // Reason: job queue infrastructure built but not yet wired into app startup
 pub(crate) fn get_job_queue() -> Result<&'static Arc<parking_lot::RwLock<job_queue::JobQueue>>> {
     JOB_QUEUE.get_or_try_init(init_job_queue)
 }

@@ -91,7 +91,6 @@ impl SourceItem {
     }
 
     /// Build text for embedding (title + content)
-    #[allow(dead_code)] // Future: embedding generation
     pub fn embedding_text(&self) -> String {
         if self.content.is_empty() {
             self.title.clone()
@@ -143,7 +142,6 @@ pub enum SourceError {
     /// Error parsing response
     Parse(String),
     /// Rate limited by source
-    #[allow(dead_code)]
     RateLimited,
     /// Source is disabled
     Disabled,
@@ -178,7 +176,6 @@ pub trait Source: Send + Sync {
     fn config(&self) -> &SourceConfig;
 
     /// Update the configuration
-    #[allow(dead_code)] // Future: dynamic source configuration
     fn set_config(&mut self, config: SourceConfig);
 
     /// Fetch new items from this source
@@ -202,7 +199,6 @@ pub trait Source: Send + Sync {
     async fn scrape_content(&self, item: &SourceItem) -> SourceResult<String>;
 
     /// Check if enough time has passed since last fetch
-    #[allow(dead_code)] // Future: rate limiting
     fn should_fetch(&self, last_fetch: Option<std::time::SystemTime>) -> bool {
         match last_fetch {
             None => true,
@@ -247,7 +243,6 @@ impl SourceRegistry {
     }
 
     /// Get enabled sources only
-    #[allow(dead_code)] // Future: source filtering
     pub fn enabled_sources(&self) -> Vec<&dyn Source> {
         self.sources
             .iter()
@@ -257,7 +252,6 @@ impl SourceRegistry {
     }
 
     /// Get a source by type
-    #[allow(dead_code)] // Future: source lookup
     pub fn get_source(&self, source_type: &str) -> Option<&dyn Source> {
         self.sources
             .iter()

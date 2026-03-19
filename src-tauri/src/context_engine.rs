@@ -276,8 +276,7 @@ impl ContextEngine {
     }
 
     /// Add domain
-    // Domain management: exposed via future settings UI
-    #[allow(dead_code)]
+    #[allow(dead_code)] // Reason: domain management API, not yet exposed via settings UI
     pub fn add_domain(&self, domain: &str) -> SqliteResult<()> {
         let conn = self.conn.lock();
         conn.execute(
@@ -288,8 +287,7 @@ impl ContextEngine {
     }
 
     /// Remove domain
-    // Domain management: exposed via future settings UI
-    #[allow(dead_code)]
+    #[allow(dead_code)] // Reason: domain management API, not yet exposed via settings UI
     pub fn remove_domain(&self, domain: &str) -> SqliteResult<()> {
         let conn = self.conn.lock();
         conn.execute("DELETE FROM domains WHERE domain = ?1", params![domain])?;
@@ -426,7 +424,7 @@ impl ContextEngine {
     }
 
     /// Get interaction counts for an item
-    #[allow(dead_code)] // Future: analytics API
+    #[allow(dead_code)] // Reason: analytics API, not yet exposed via commands
     pub fn get_interaction_counts(
         &self,
         source_item_id: i64,

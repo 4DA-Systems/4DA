@@ -6,7 +6,7 @@
 
 /// Novelty assessment result
 #[derive(Debug, Clone)]
-#[allow(dead_code)] // Fields populated for diagnostic/serde use
+#[allow(dead_code)] // Reason: is_introductory/is_release/is_security fields set but only multiplier read in production
 pub struct NoveltyScore {
     /// Whether this appears to be introductory/tutorial content
     pub is_introductory: bool,

@@ -13,7 +13,6 @@ const SIGNATURE_LEN: usize = 32;
 // ============================================================================
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[allow(dead_code)]
 pub(super) enum DomainBlock {
     Systems,     // Rust, C/C++, OS, kernel, memory management
     Web,         // React, TypeScript, Node.js, CSS, HTML, frontend
@@ -92,7 +91,6 @@ impl DomainBlock {
 // Embedding Spec
 // ============================================================================
 
-#[allow(dead_code)]
 pub(super) struct EmbeddingSpec {
     blocks: &'static [(DomainBlock, f32)],
 }
@@ -442,14 +440,12 @@ fn corpus_item_spec(item_id: u64) -> &'static EmbeddingSpec {
 
 /// Generate a domain-specific embedding for a persona domain index (0-8).
 /// Backward compatible with the band-based approach.
-#[allow(dead_code)]
 pub(super) fn domain_embedding(domain_idx: usize) -> Vec<f32> {
     interest_embedding(domain_idx)
 }
 
 /// Generate a content embedding similar to a given domain.
 /// Adds controlled noise via item_seed so it is close but not identical.
-#[allow(dead_code)]
 pub(super) fn content_embedding_for_domain(domain_idx: usize, item_seed: u64) -> Vec<f32> {
     // Map persona domain index to the primary domain block
     let spec = persona_domain_spec(domain_idx);
@@ -457,7 +453,6 @@ pub(super) fn content_embedding_for_domain(domain_idx: usize, item_seed: u64) ->
 }
 
 /// Generate a blended embedding between two domain indices.
-#[allow(dead_code)]
 pub(super) fn adjacent_content_embedding(
     primary_domain: usize,
     adjacent_domain: usize,
@@ -474,7 +469,6 @@ pub(super) fn adjacent_content_embedding(
 }
 
 /// Generate a noise embedding unrelated to any domain.
-#[allow(dead_code)]
 pub(super) fn noise_embedding(seed: u64) -> Vec<f32> {
     static NOISE_SPEC: EmbeddingSpec = EmbeddingSpec {
         blocks: &[(Meta, 0.1)],
@@ -483,13 +477,11 @@ pub(super) fn noise_embedding(seed: u64) -> Vec<f32> {
 }
 
 /// Zero embedding for bootstrap / no-context scenarios.
-#[allow(dead_code)]
 pub(super) fn zero_embedding() -> Vec<f32> {
     vec![0.0_f32; EMBEDDING_DIM]
 }
 
 /// Wrong-dimension embedding for error handling tests.
-#[allow(dead_code)]
 pub(super) fn wrong_dimension_embedding() -> Vec<f32> {
     vec![0.5_f32; 128]
 }
@@ -543,7 +535,6 @@ fn persona_domain_spec(domain_idx: usize) -> &'static EmbeddingSpec {
 
 /// Generate embeddings for all 215 corpus items.
 /// Each embedding is a 384-dim unit vector with domain-specific signal.
-#[allow(dead_code)]
 pub(super) fn corpus_embeddings() -> Vec<Vec<f32>> {
     (1..=220)
         .map(|id| {
@@ -559,7 +550,6 @@ pub(super) fn corpus_embeddings() -> Vec<Vec<f32>> {
 ///   0=rust_systems, 1=python_ml, 2=fullstack_ts, 3=devops_sre,
 ///   4=mobile_dev, 5=bootstrap, 6=power_user, 7=context_switcher,
 ///   8=niche_specialist
-#[allow(dead_code)]
 pub(super) fn interest_embedding(persona_idx: usize) -> Vec<f32> {
     let spec = persona_domain_spec(persona_idx);
     // Use a distinct seed space (offset by 10000) to avoid correlation with corpus
@@ -568,7 +558,6 @@ pub(super) fn interest_embedding(persona_idx: usize) -> Vec<f32> {
 
 /// Generate a topic embedding from a known topic string.
 /// Falls back to a weak Meta embedding for unrecognized topics.
-#[allow(dead_code)]
 pub(super) fn topic_embedding(topic: &str) -> Vec<f32> {
     let lower = topic.to_lowercase();
     let spec: &EmbeddingSpec = match lower.as_str() {

@@ -94,7 +94,6 @@ mod tests {
             .build()
     }
 
-    #[allow(dead_code)]
     fn semantic_python_ctx() -> ScoringContext {
         let interests = vec![
             sem_interest(1, "Machine Learning", 1.0, PI_PYTHON),

@@ -5,6 +5,8 @@
 //!
 //! Marked `#[ignore]` — run on demand: `cargo test live_reality -- --ignored --nocapture`
 
+use tracing::info;
+
 use super::personas::{fullstack_typescript, python_ml_engineer, rust_systems_dev};
 use super::{sim_db, sim_input, sim_no_freshness};
 use crate::scoring::pipeline::score_item;
@@ -104,10 +106,10 @@ async fn live_reality_check_hn_top_stories() {
         scores.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
 
         // --- Print top 5 for human review (visible with --nocapture) ---
-        println!("\n=== Persona: {persona_name} ===");
+        info!("\n=== Persona: {persona_name} ===");
         for (i, (score, title, relevant)) in scores.iter().take(5).enumerate() {
             let tag = if *relevant { "REL" } else { "---" };
-            println!("  #{}: {:.4} [{tag}] {title}", i + 1, score);
+            info!("  #{}: {:.4} [{tag}] {title}", i + 1, score);
         }
 
         // --- Validation: generous thresholds ---
@@ -129,7 +131,7 @@ async fn live_reality_check_hn_top_stories() {
             "[{persona_name}] All {relevant_count} items marked relevant — noise rejection broken"
         );
 
-        println!(
+        info!(
             "  top={top_score:.4} spread={spread:.4} relevant={relevant_count}/{} -- OK",
             stories.len()
         );

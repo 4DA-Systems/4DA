@@ -201,7 +201,6 @@ fn collect_topics(conn: &rusqlite::Connection) -> Vec<DigestTopic> {
 
 /// Check if a digest should be generated (weekly cadence).
 /// Returns true if no digest has ever been generated or the last one is 6+ days old.
-#[allow(dead_code)]
 pub fn should_generate_digest(conn: &rusqlite::Connection) -> bool {
     // Check settings for last_sent timestamp
     let last: Option<String> = conn
@@ -229,7 +228,6 @@ pub fn should_generate_digest(conn: &rusqlite::Connection) -> bool {
 }
 
 /// Get the latest generated digest (for the DigestView component).
-#[allow(dead_code)]
 #[tauri::command]
 pub async fn get_latest_digest() -> Result<WeeklyDigest> {
     // Generate a fresh digest from the last 7 days of data

@@ -81,7 +81,7 @@ impl TeamSyncState {
 /// Response from relay `POST /teams/{team_id}/entries`.
 #[derive(Deserialize)]
 struct PushResponse {
-    #[allow(dead_code)]
+    #[allow(dead_code)] // Reason: deserialized from relay JSON response
     relay_seq: i64,
 }
 
@@ -89,7 +89,7 @@ struct PushResponse {
 #[derive(Deserialize)]
 struct PullResponse {
     entries: Vec<RelayEntry>,
-    #[allow(dead_code)]
+    #[allow(dead_code)] // Reason: deserialized from relay JSON response
     has_more: bool,
 }
 

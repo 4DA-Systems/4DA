@@ -91,8 +91,7 @@ impl Default for WatcherConfig {
 pub struct FileChange {
     pub path: PathBuf,
     pub change_type: FileChangeType,
-    // Populated by watcher events
-    #[allow(dead_code)]
+    #[allow(dead_code)] // Reason: field populated by watcher events but not yet read
     pub timestamp: Instant,
 }
 
@@ -163,8 +162,7 @@ impl FileWatcher {
     }
 
     /// Stop watching a directory
-    // Watcher API: used when filesystem monitoring is active
-    #[allow(dead_code)]
+    #[allow(dead_code)] // Reason: FileWatcher public API, not yet called from ACE orchestrator
     pub fn unwatch(&mut self, path: &Path) -> Result<()> {
         if let Some(ref mut watcher) = self.watcher {
             watcher
@@ -338,8 +336,7 @@ impl FileWatcher {
     }
 
     /// Check if currently watching any paths
-    // Watcher API: used when filesystem monitoring is active
-    #[allow(dead_code)]
+    #[allow(dead_code)] // Reason: FileWatcher public API, called by ACE::is_watching but ACE method itself is unused
     pub fn is_watching(&self) -> bool {
         !self.watched_paths.lock().is_empty()
     }
@@ -658,8 +655,7 @@ impl WatcherStatePersistence {
     }
 
     /// Load watcher state
-    // Watcher API: used when filesystem monitoring is active
-    #[allow(dead_code)]
+    #[allow(dead_code)] // Reason: WatcherPersistence API, not yet called from main app startup
     pub fn load(&self) -> Result<Option<WatcherState>> {
         let conn = self.conn.lock();
         let result: std::result::Result<String, _> = conn.query_row(
@@ -679,8 +675,7 @@ impl WatcherStatePersistence {
     }
 
     /// Restore watcher from saved state
-    // Watcher API: used when filesystem monitoring is active
-    #[allow(dead_code)]
+    #[allow(dead_code)] // Reason: WatcherPersistence API, not yet called from main app startup
     pub fn restore(&self, watcher: &mut FileWatcher) -> Result<usize> {
         let state = self.load()?;
 
@@ -703,8 +698,7 @@ impl WatcherStatePersistence {
     }
 
     /// Clear saved state
-    // Watcher API: used when filesystem monitoring is active
-    #[allow(dead_code)]
+    #[allow(dead_code)] // Reason: WatcherPersistence API, not yet called from main app
     pub fn clear(&self) -> Result<()> {
         let conn = self.conn.lock();
         conn.execute("DELETE FROM watcher_state WHERE id = 1", [])?;
@@ -754,8 +748,7 @@ impl RateLimiter {
     }
 
     /// Record a request without checking (for manual tracking)
-    // Watcher API: used when filesystem monitoring is active
-    #[allow(dead_code)]
+    #[allow(dead_code)] // Reason: RateLimiter public API, not yet called from main app
     pub fn record(&self) {
         let mut requests = self.requests.lock();
         requests.push(Instant::now());
@@ -776,8 +769,7 @@ impl RateLimiter {
     }
 
     /// Get time until next request is allowed (0 if allowed now)
-    // Watcher API: used when filesystem monitoring is active
-    #[allow(dead_code)]
+    #[allow(dead_code)] // Reason: RateLimiter public API, not yet called from main app
     pub fn time_until_available(&self) -> Duration {
         if self.check() {
             Duration::ZERO
@@ -798,8 +790,7 @@ impl RateLimiter {
     }
 
     /// Reset the rate limiter
-    // Watcher API: used when filesystem monitoring is active
-    #[allow(dead_code)]
+    #[allow(dead_code)] // Reason: RateLimiter public API, not yet called from main app
     pub fn reset(&self) {
         self.requests.lock().clear();
     }

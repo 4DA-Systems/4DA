@@ -82,7 +82,7 @@ pub async fn translate_batch(
 }
 
 /// Translate markdown content preserving structure.
-#[allow(dead_code)] // Public API for STREETS lesson translation
+#[allow(dead_code)] // Reason: public API for STREETS lesson translation; no callers yet
 pub async fn translate_markdown(content: &str, target_lang: &str) -> Result<String> {
     let client = get_llm_client()?;
 
