@@ -77,7 +77,7 @@ function FeedEchoRow({ item }: { item: FeedEchoItem }) {
           <span className="text-xs text-text-secondary line-clamp-1">{item.title}</span>
         )}
         <div className="flex items-center gap-2 mt-0.5">
-          <span className="text-[10px] text-[#666]">{item.source}</span>
+          <span className="text-[10px] text-[#8A8A8A]">{item.source}</span>
           {item.matched_topic && (
             <span className="text-[10px] text-[#D4AF37]">#{item.matched_topic}</span>
           )}

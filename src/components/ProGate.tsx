@@ -118,7 +118,7 @@ export function ProGate({ children, feature }: ProGateProps) {
                     onChange={e => setLicenseKey(e.target.value)}
                     placeholder="4DA-xxxxx.xxxxx"
                     onKeyDown={e => e.key === 'Enter' && handleActivate()}
-                    className="flex-1 bg-bg-primary border border-border rounded-lg px-2.5 py-1.5 text-xs text-white placeholder-[#666] focus:border-[#D4AF37] focus:outline-none font-mono"
+                    className="flex-1 bg-bg-primary border border-border rounded-lg px-2.5 py-1.5 text-xs text-white placeholder-[#8A8A8A] focus:border-[#D4AF37] focus:outline-none font-mono"
                   />
                   <button
                     onClick={handleActivate}

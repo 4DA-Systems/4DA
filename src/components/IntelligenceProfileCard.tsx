@@ -175,7 +175,7 @@ export const IntelligenceProfileCard = memo(function IntelligenceProfileCard() {
                     <span className="text-xs text-white truncate flex-1">{a.topic}</span>
                     <div className="w-12 h-1 bg-bg-tertiary rounded-full overflow-hidden flex-shrink-0">
                       <div
-                        className={`h-full rounded-full ${a.affinity_score > 0 ? 'bg-[#D4AF37]' : 'bg-[#666666]'}`}
+                        className={`h-full rounded-full ${a.affinity_score > 0 ? 'bg-[#D4AF37]' : 'bg-[#8A8A8A]'}`}
                         style={{ width: `${Math.min(Math.abs(a.affinity_score) * 100, 100)}%` }}
                       />
                     </div>

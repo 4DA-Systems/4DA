@@ -104,7 +104,7 @@ export default function SourceDebugger() {
           onKeyDown={handleKeyDown}
           placeholder="https://example.com/feed.xml"
           spellCheck={false}
-          className="flex-1 bg-bg-tertiary border border-border text-white text-sm font-mono rounded-lg px-3 py-2 outline-none focus:border-white/30 placeholder:text-[#666] transition-colors"
+          className="flex-1 bg-bg-tertiary border border-border text-white text-sm font-mono rounded-lg px-3 py-2 outline-none focus:border-white/30 placeholder:text-[#8A8A8A] transition-colors"
         />
         <button
           onClick={testFeed}
@@ -156,7 +156,7 @@ export default function SourceDebugger() {
 
       {/* Empty state */}
       {!result && !error && !loading && (
-        <div className="flex flex-col items-center justify-center py-16 text-[#666]">
+        <div className="flex flex-col items-center justify-center py-16 text-[#8A8A8A]">
           <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="mb-3 opacity-50">
             <path d="M4 11a9 9 0 019-9" />
             <path d="M4 4a16 16 0 0116 16" />
@@ -213,7 +213,7 @@ export default function SourceDebugger() {
                 >
                   {/* Title as link */}
                   <div className="flex items-start gap-2 mb-1">
-                    <span className="text-[10px] text-[#666] font-mono shrink-0 mt-0.5">
+                    <span className="text-[10px] text-[#8A8A8A] font-mono shrink-0 mt-0.5">
                       {i + 1}
                     </span>
                     {item.url ? (
@@ -235,7 +235,7 @@ export default function SourceDebugger() {
 
                   {/* Published date */}
                   {item.published_at && (
-                    <p className="text-[10px] text-[#666] font-mono ml-5 mb-1">
+                    <p className="text-[10px] text-[#8A8A8A] font-mono ml-5 mb-1">
                       {item.published_at}
                     </p>
                   )}
@@ -252,7 +252,7 @@ export default function SourceDebugger() {
           )}
 
           {result.items.length === 0 && result.errors.length === 0 && (
-            <div className="text-center py-8 text-[#666] text-sm">
+            <div className="text-center py-8 text-[#8A8A8A] text-sm">
               {t('toolkit.sourceDebugger.noItems')}
             </div>
           )}
