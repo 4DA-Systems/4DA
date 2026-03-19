@@ -64,7 +64,7 @@ export function StreetHealthBadge() {
                 {trendInfo.symbol} {streetHealth.trend}
               </span>
             </div>
-            <p className="text-xs mt-0.5" style={{ color: '#666666' }}>
+            <p className="text-xs mt-0.5" style={{ color: '#8A8A8A' }}>
               {streetHealth.top_action}
             </p>
           </div>

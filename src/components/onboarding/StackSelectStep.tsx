@@ -91,7 +91,7 @@ export function StackSelectStep({ selected, onSelectionChange, compact }: StackS
         {profiles.map((profile) => {
           const isSelected = selected.includes(profile.id);
           const detection = getDetection(profile.id);
-          const meta = STACK_META[profile.id] || { icon: '?', color: '#666' };
+          const meta = STACK_META[profile.id] || { icon: '?', color: '#8A8A8A' };
 
           return (
             <button

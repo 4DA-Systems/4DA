@@ -28,7 +28,7 @@ export function SovereignConnectionBlock({ block }: Props) {
       {/* Collapsible data sources panel (Sovereign Receipt) */}
       <button
         onClick={() => setExpanded(!expanded)}
-        className="mt-3 text-[10px] text-[#666] hover:text-text-secondary transition-colors"
+        className="mt-3 text-[10px] text-[#8A8A8A] hover:text-text-secondary transition-colors"
       >
         {expanded ? '▾' : '▸'} Data Sources ({block.data_sources.length})
       </button>

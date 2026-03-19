@@ -172,7 +172,7 @@ export function StreetsCodeBlock({ code, language, moduleId, lessonIdx, blockInd
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-1.5">
           {/* Language label */}
-          <span className="text-[10px] text-[#666] mr-2 font-mono">{language}</span>
+          <span className="text-[10px] text-[#8A8A8A] mr-2 font-mono">{language}</span>
           {/* OS tabs */}
           {osTabs.length > 1 && osTabs.map((os) => (
             <button
@@ -182,7 +182,7 @@ export function StreetsCodeBlock({ code, language, moduleId, lessonIdx, blockInd
               className={`px-2 py-0.5 text-[10px] rounded font-medium transition-colors ${
                 activeOs === os
                   ? 'bg-[#D4AF37]/20 text-[#D4AF37] border border-[#D4AF37]/30'
-                  : 'text-[#666] hover:text-text-secondary border border-transparent'
+                  : 'text-[#8A8A8A] hover:text-text-secondary border border-transparent'
               }`}
             >
               {OS_LABELS[os]}
@@ -204,7 +204,7 @@ export function StreetsCodeBlock({ code, language, moduleId, lessonIdx, blockInd
           <button
             onClick={copyBlock}
             aria-label={copied ? t('action.copied') : t('action.copy')}
-            className="px-2 py-1 text-[10px] text-[#666] hover:text-text-secondary border border-border rounded transition-colors"
+            className="px-2 py-1 text-[10px] text-[#8A8A8A] hover:text-text-secondary border border-border rounded transition-colors"
           >
             {copied ? t('action.copied') : t('action.copy')}
           </button>
@@ -239,7 +239,7 @@ export function StreetsCodeBlock({ code, language, moduleId, lessonIdx, blockInd
                 <code
                   className={`flex-1 text-xs font-mono leading-relaxed px-1 ${
                     isComment
-                      ? 'text-[#666] italic'
+                      ? 'text-[#8A8A8A] italic'
                       : isEmpty
                         ? ''
                         : 'text-text-secondary'
@@ -277,7 +277,7 @@ export function StreetsCodeBlock({ code, language, moduleId, lessonIdx, blockInd
                     {!matchedCmd && !parsed && (
                       <button
                         onClick={ensureParsed}
-                        className="flex items-center justify-center w-5 h-5 text-[#666] hover:text-text-secondary hover:bg-bg-tertiary rounded transition-colors"
+                        className="flex items-center justify-center w-5 h-5 text-[#8A8A8A] hover:text-text-secondary hover:bg-bg-tertiary rounded transition-colors"
                         title={t('playbook.code.parseCommands')}
                         aria-label={t('playbook.code.parseCommands')}
                       >
@@ -302,7 +302,7 @@ export function StreetsCodeBlock({ code, language, moduleId, lessonIdx, blockInd
                     <span className={`text-[10px] font-medium ${result.success ? 'text-[#22C55E]' : 'text-[#EF4444]'}`}>
                       {result.success ? t('playbook.code.success') : t('playbook.code.failed', { code: result.exit_code })}
                     </span>
-                    <span className="text-[10px] text-[#666]">{result.duration_ms}ms</span>
+                    <span className="text-[10px] text-[#8A8A8A]">{result.duration_ms}ms</span>
                   </div>
                   {result.stdout && (
                     <pre className="text-text-secondary whitespace-pre-wrap break-all max-h-40 overflow-y-auto">

@@ -341,7 +341,7 @@ export const PlaybookView = memo(function PlaybookView() {
                       className={`w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0 transition-colors ${
                         isCompleted
                           ? 'bg-[#22C55E] border-[#22C55E]'
-                          : 'border-[#666] hover:border-[#D4AF37]'
+                          : 'border-[#8A8A8A] hover:border-[#D4AF37]'
                       }`}
                     >
                       {isCompleted && (

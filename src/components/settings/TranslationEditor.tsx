@@ -29,7 +29,7 @@ interface TranslationEditorProps { language: string }
 // ============================================================================
 
 const BG = { primary: '#0A0A0A', secondary: '#141414', tertiary: '#1F1F1F' };
-const TEXT = { primary: '#FFFFFF', secondary: '#A0A0A0', muted: '#666666' };
+const TEXT = { primary: '#FFFFFF', secondary: '#A0A0A0', muted: '#8A8A8A' };
 const ACCENT = { gold: '#D4AF37', success: '#22C55E', error: '#EF4444' };
 const BORDER = '#2A2A2A';
 const NS_COLORS: Record<string, string> = {

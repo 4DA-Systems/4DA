@@ -94,11 +94,11 @@ const RadarTooltip = memo(function RadarTooltip({ tooltip }: { tooltip: TooltipS
         rx="6" fill="#1F1F1F" stroke="#2A2A2A" strokeWidth="1" />
       <text x={tx + 8} y={ty + 16} fill="#FFFFFF" fontSize="11" fontWeight="600">{tooltip.entry.name}</text>
       <text x={tx + 8} y={ty + 30} fill="#A0A0A0" fontSize="9">{ringLabel} / {quadLabel}</text>
-      <text x={tx + 8} y={ty + 44} fill="#666666" fontSize="9">
+      <text x={tx + 8} y={ty + 44} fill="#8A8A8A" fontSize="9">
         Score: {tooltip.entry.score.toFixed(2)} | Movement: {tooltip.entry.movement}
       </text>
       {tooltip.entry.signals.slice(0, 3).map((signal, i) => (
-        <text key={i} x={tx + 8} y={ty + 58 + i * 14} fill="#666666" fontSize="8">
+        <text key={i} x={tx + 8} y={ty + 58 + i * 14} fill="#8A8A8A" fontSize="8">
           - {signal.length > 28 ? signal.slice(0, 28) + '...' : signal}
         </text>
       ))}
@@ -163,7 +163,7 @@ export const RadarSVG = memo(function RadarSVG({ entries, userStack, onEntryClic
           const prevR = i === 0 ? 0 : RING_RADII[RING_KEYS[i - 1]];
           return (
             <text key={ring} x={CX + (prevR + RING_RADII[ring]) / 2} y={CY - 6}
-              textAnchor="middle" fill="#666666" fontSize="9" fontWeight="500">
+              textAnchor="middle" fill="#8A8A8A" fontSize="9" fontWeight="500">
               {t(RING_LABEL_KEYS[i])}
             </text>
           );
@@ -223,7 +223,7 @@ export const RadarSVG = memo(function RadarSVG({ entries, userStack, onEntryClic
 
       {isZoomed && (
         <button onClick={handleBackClick}
-          className="absolute top-2 left-2 px-2 py-1 text-[10px] rounded bg-bg-tertiary text-text-secondary border border-border hover:text-white hover:border-[#666666] transition-colors">
+          className="absolute top-2 left-2 px-2 py-1 text-[10px] rounded bg-bg-tertiary text-text-secondary border border-border hover:text-white hover:border-[#8A8A8A] transition-colors">
           {t('techRadar.backToFull')}
         </button>
       )}

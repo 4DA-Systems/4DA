@@ -28,7 +28,7 @@ function BarChart({ bars, maxValue, unit }: { bars: { label: string; value: numb
         const pct = maxValue > 0 ? (bar.value / maxValue) * 100 : 0;
         return (
           <div key={bar.label} className="flex items-center gap-3">
-            <span className="text-[10px] text-[#666] w-12 text-right flex-shrink-0">{bar.label}</span>
+            <span className="text-[10px] text-[#8A8A8A] w-12 text-right flex-shrink-0">{bar.label}</span>
             <div className="flex-1 h-4 bg-bg-tertiary rounded-full overflow-hidden relative">
               <div
                 className="h-full rounded-full transition-all duration-500"
@@ -46,7 +46,7 @@ function BarChart({ bars, maxValue, unit }: { bars: { label: string; value: numb
       })}
       {/* Max reference line label */}
       <div className="flex justify-end">
-        <span className="text-[10px] text-[#666]">max: {maxValue} {unit}</span>
+        <span className="text-[10px] text-[#8A8A8A]">max: {maxValue} {unit}</span>
       </div>
     </div>
   );
@@ -57,7 +57,7 @@ function RankList({ items }: { items: { rank: number; name: string; score: numbe
     <div className="space-y-1.5">
       {items.map((item) => (
         <div key={item.rank} className="flex items-center gap-2">
-          <span className="text-[10px] text-[#666] w-5 text-center flex-shrink-0">#{item.rank}</span>
+          <span className="text-[10px] text-[#8A8A8A] w-5 text-center flex-shrink-0">#{item.rank}</span>
           <span className={`text-xs flex-1 ${item.matches_stack ? 'text-white' : 'text-text-secondary'}`}>
             {item.name}
           </span>
@@ -65,10 +65,10 @@ function RankList({ items }: { items: { rank: number; name: string; score: numbe
             {item.matches_stack ? (
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#22C55E" strokeWidth="2"><polyline points="20 6 9 17 4 12" /></svg>
             ) : (
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#666" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#8A8A8A" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
             )}
           </span>
-          <span className="text-[10px] text-[#666] w-10 text-right flex-shrink-0">
+          <span className="text-[10px] text-[#8A8A8A] w-10 text-right flex-shrink-0">
             {Math.round(item.score * 100)}%
           </span>
         </div>
@@ -90,7 +90,7 @@ function TShapeDiagram({ primary, depthLabel, adjacent, breadthLabel }: {
           </span>
         ))}
       </div>
-      <span className="text-[10px] text-[#666]">{breadthLabel}</span>
+      <span className="text-[10px] text-[#8A8A8A]">{breadthLabel}</span>
 
       {/* T-connector */}
       <div className="w-px h-3 bg-[#D4AF37]" />
@@ -100,7 +100,7 @@ function TShapeDiagram({ primary, depthLabel, adjacent, breadthLabel }: {
         <span className="px-3 py-1 bg-[#D4AF37]/20 border border-[#D4AF37]/40 text-xs text-[#D4AF37] font-medium rounded">
           {primary}
         </span>
-        <span className="text-[10px] text-[#666]">{depthLabel}</span>
+        <span className="text-[10px] text-[#8A8A8A]">{depthLabel}</span>
       </div>
     </div>
   );
