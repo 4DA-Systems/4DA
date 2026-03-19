@@ -112,7 +112,7 @@ impl TimeRange {
 
 /// Entity filter for queries (people, places, projects)
 /// Used when NER (Named Entity Recognition) is implemented
-#[allow(dead_code)] // Reserved for future NER integration
+#[allow(dead_code)] // Reason: reserved for NER integration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EntityFilter {
     /// Entity name or pattern
@@ -124,7 +124,7 @@ pub struct EntityFilter {
 }
 
 /// Entity types for filtering (used with NER)
-#[allow(dead_code)] // Reserved for future NER integration
+#[allow(dead_code)] // Reason: reserved for NER integration
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum EntityType {
     Person,
@@ -135,7 +135,7 @@ pub enum EntityType {
     Unknown,
 }
 
-#[allow(dead_code)] // Reserved for future NER integration
+#[allow(dead_code)] // Reason: reserved for NER integration
 impl EntityFilter {
     pub fn person(name: &str) -> Self {
         Self {
@@ -234,7 +234,7 @@ impl SentimentFilter {
 
 /// Combined filter set for a query (builder pattern)
 /// Designed for future advanced query building
-#[allow(dead_code)] // Reserved for future advanced query system
+#[allow(dead_code)] // Reason: reserved for advanced query system
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct QueryFilters {
     pub time_range: Option<TimeRange>,
@@ -244,7 +244,7 @@ pub struct QueryFilters {
     pub min_confidence: Option<f32>,
 }
 
-#[allow(dead_code)] // Reserved for future advanced query system
+#[allow(dead_code)] // Reason: reserved for advanced query system
 impl QueryFilters {
     pub fn new() -> Self {
         Self::default()

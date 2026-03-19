@@ -93,7 +93,6 @@ mod hn_resilience {
 
     /// Mirror of the private HNStory struct for deserialization tests.
     #[derive(Debug, Deserialize)]
-    #[allow(dead_code)] // Fields deserialized from JSON for resilience testing
     struct HNStory {
         id: u64,
         title: Option<String>,
@@ -204,25 +203,21 @@ mod reddit_resilience {
     use serde::Deserialize;
 
     #[derive(Debug, Deserialize)]
-    #[allow(dead_code)]
     struct RedditListing {
         data: RedditListingData,
     }
 
     #[derive(Debug, Deserialize)]
-    #[allow(dead_code)]
     struct RedditListingData {
         children: Vec<RedditChild>,
     }
 
     #[derive(Debug, Deserialize)]
-    #[allow(dead_code)]
     struct RedditChild {
         data: RedditPost,
     }
 
     #[derive(Debug, Deserialize)]
-    #[allow(dead_code)]
     struct RedditPost {
         id: String,
         title: String,
@@ -355,7 +350,6 @@ mod devto_resilience {
     use serde::Deserialize;
 
     #[derive(Debug, Deserialize)]
-    #[allow(dead_code)]
     struct DevtoArticle {
         id: u64,
         title: String,
@@ -373,7 +367,6 @@ mod devto_resilience {
     }
 
     #[derive(Debug, Deserialize)]
-    #[allow(dead_code)]
     struct DevtoUser {
         name: String,
         #[serde(default)]
@@ -460,7 +453,6 @@ mod lobsters_resilience {
     use serde::Deserialize;
 
     #[derive(Debug, Deserialize)]
-    #[allow(dead_code)]
     struct LobstersStory {
         short_id: String,
         title: String,
@@ -477,7 +469,6 @@ mod lobsters_resilience {
     }
 
     #[derive(Debug, Deserialize)]
-    #[allow(dead_code)]
     struct LobstersUser {
         username: String,
     }
@@ -541,7 +532,6 @@ mod github_resilience {
     use serde::Deserialize;
 
     #[derive(Debug, Deserialize)]
-    #[allow(dead_code)]
     struct GitHubRepo {
         id: u64,
         name: String,
@@ -556,7 +546,6 @@ mod github_resilience {
     }
 
     #[derive(Debug, Deserialize)]
-    #[allow(dead_code)]
     struct GitHubSearchResponse {
         total_count: u32,
         items: Vec<GitHubRepo>,
@@ -677,7 +666,6 @@ mod twitter_resilience {
     use serde::Deserialize;
 
     #[derive(Debug, Deserialize)]
-    #[allow(dead_code)]
     struct XApiResponse {
         data: Option<Vec<XTweet>>,
         includes: Option<XIncludes>,
@@ -685,7 +673,6 @@ mod twitter_resilience {
     }
 
     #[derive(Debug, Deserialize)]
-    #[allow(dead_code)]
     struct XTweet {
         id: String,
         text: String,
@@ -695,13 +682,11 @@ mod twitter_resilience {
     }
 
     #[derive(Debug, Deserialize)]
-    #[allow(dead_code)]
     struct XIncludes {
         users: Option<Vec<XUser>>,
     }
 
     #[derive(Debug, Deserialize)]
-    #[allow(dead_code)]
     struct XUser {
         id: String,
         username: String,
@@ -709,7 +694,6 @@ mod twitter_resilience {
     }
 
     #[derive(Debug, Deserialize)]
-    #[allow(dead_code)]
     struct XPublicMetrics {
         retweet_count: u64,
         reply_count: u64,
@@ -719,7 +703,6 @@ mod twitter_resilience {
     }
 
     #[derive(Debug, Deserialize)]
-    #[allow(dead_code)]
     struct XMeta {
         result_count: Option<u32>,
         next_token: Option<String>,

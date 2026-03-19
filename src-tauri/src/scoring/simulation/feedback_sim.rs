@@ -17,10 +17,8 @@ use super::{ContentCategory, ExpectedOutcome, LabeledItem};
 // ============================================================================
 
 pub(super) struct FeedbackEvent {
-    #[allow(dead_code)]
     pub item_id: u64,
     pub topic: String,
-    #[allow(dead_code)]
     pub relevant: bool,
     pub delta: f64,
 }
@@ -354,7 +352,6 @@ pub(super) fn lifecycle_corpus() -> Vec<LabeledItem> {
 }
 
 /// Score all corpus items against a context, return mean score of relevant items
-#[allow(dead_code)]
 pub(super) fn score_corpus_against_ctx(ctx: &ScoringContext, persona_idx: usize) -> f64 {
     let items = lifecycle_corpus();
     let db = sim_db();

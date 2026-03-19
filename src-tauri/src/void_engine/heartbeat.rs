@@ -87,7 +87,6 @@ impl VoidSignal {
 /// Aggregate signal summary from analysis results.
 /// Used to drive the heartbeat's signal-aware color and intensity.
 #[derive(Debug, Clone)]
-#[allow(dead_code)]
 pub struct SignalSummary {
     /// Highest priority level seen (1=low, 2=medium, 3=high, 4=critical)
     pub max_priority: u8,
@@ -96,6 +95,8 @@ pub struct SignalSummary {
     /// Count per signal type slug (e.g. "security_alert" -> 2)
     pub signal_type_counts: HashMap<String, u32>,
     /// The signal type with the most occurrences
+    #[allow(dead_code)]
+    // Reason: populated in extract_signal_summary but not yet consumed by heartbeat rendering
     pub dominant_type: Option<String>,
     /// Weighted urgency score 0.0-1.0
     pub urgency_score: f32,

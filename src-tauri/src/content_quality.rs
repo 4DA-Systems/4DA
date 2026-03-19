@@ -6,7 +6,7 @@
 
 /// Content quality assessment result
 #[derive(Debug, Clone)]
-#[allow(dead_code)] // Fields populated for diagnostic/serde use
+#[allow(dead_code)] // Reason: title_quality and content_depth fields set but only multiplier is read in production
 pub struct ContentQuality {
     /// Title quality score (0.0-1.0)
     pub title_quality: f32,

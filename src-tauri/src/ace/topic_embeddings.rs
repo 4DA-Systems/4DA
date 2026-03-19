@@ -112,7 +112,7 @@ pub fn load_topic_embeddings(
 
 /// Generate embeddings for topics that don't have them
 /// Returns count of topics updated
-#[allow(dead_code)] // Future: batch embedding generation on startup
+#[allow(dead_code)] // Reason: batch embedding generation not yet wired into startup pipeline
 pub async fn generate_missing_topic_embeddings(conn: &Arc<Mutex<Connection>>) -> Result<usize> {
     // Find topics without embeddings
     let topics_without_embeddings: Vec<(i64, String)> = {
@@ -178,7 +178,7 @@ pub async fn generate_missing_topic_embeddings(conn: &Arc<Mutex<Connection>>) ->
 
 /// KNN search for topics similar to a given embedding
 /// Returns (topic, similarity_score) pairs sorted by similarity
-#[allow(dead_code)] // Future: semantic topic matching via KNN
+#[allow(dead_code)] // Reason: semantic topic KNN search not yet wired into scoring pipeline
 pub fn find_similar_topics_knn(
     conn: &Arc<Mutex<Connection>>,
     query_embedding: &[f32],
@@ -213,8 +213,7 @@ pub fn find_similar_topics_knn(
 
 impl ACE {
     /// Generate embedding for a topic
-    // Embedding API: used when Ollama embedding is active
-    #[allow(dead_code)]
+    #[allow(dead_code)] // Reason: ACE embedding API, not yet called from scoring pipeline
     pub fn embed_topic(&self, topic: &str) -> Result<Vec<f32>> {
         match &self.embedding_service {
             Some(service) => service.lock().embed(topic),

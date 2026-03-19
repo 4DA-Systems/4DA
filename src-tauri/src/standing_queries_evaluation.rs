@@ -94,7 +94,7 @@ pub fn evaluate_standing_queries(conn: &rusqlite::Connection) -> Vec<StandingQue
 
         let sql = format!(
             "SELECT s.id, s.title FROM source_items s
-             WHERE ({where_clause}) AND s.created_at >= '{since}'
+             WHERE ({where_clause}) AND s.created_at >= ?1
              ORDER BY s.last_seen DESC
              LIMIT 100"
         );
@@ -104,9 +104,10 @@ pub fn evaluate_standing_queries(conn: &rusqlite::Connection) -> Vec<StandingQue
 
         match conn.prepare(&sql) {
             Ok(mut match_stmt) => {
-                let match_rows: Vec<(i64, String)> = match match_stmt.query_map([], |row| {
-                    Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?))
-                }) {
+                let match_rows: Vec<(i64, String)> = match match_stmt
+                    .query_map(rusqlite::params![&since], |row| {
+                        Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?))
+                    }) {
                     Ok(rows) => rows
                         .filter_map(|r| match r {
                             Ok(v) => Some(v),

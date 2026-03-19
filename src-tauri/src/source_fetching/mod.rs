@@ -184,7 +184,6 @@ impl AdapterFailureTracker {
     }
 
     /// Get all adapters that have persistent failures (2+ consecutive).
-    #[allow(dead_code)]
     pub fn persistent_failures(&self) -> Vec<(String, u32)> {
         let map = self.failures.lock().unwrap_or_else(|e| e.into_inner());
         map.iter()

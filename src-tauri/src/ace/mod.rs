@@ -190,8 +190,7 @@ impl ACE {
     }
 
     /// Stop file watching
-    // Watcher API: used when filesystem monitoring is active
-    #[allow(dead_code)]
+    #[allow(dead_code)] // Reason: ACE watcher API, not yet called from app lifecycle
     pub fn stop_watching(&mut self) {
         if let Some(ref watcher) = self.watcher {
             watcher.lock().stop();
@@ -201,8 +200,7 @@ impl ACE {
     }
 
     /// Check if file watching is active
-    // Watcher API: used when filesystem monitoring is active
-    #[allow(dead_code)]
+    #[allow(dead_code)] // Reason: ACE watcher API, not yet called from app lifecycle
     pub fn is_watching(&self) -> bool {
         self.watcher
             .as_ref()
@@ -580,8 +578,7 @@ impl ACE {
     }
 
     /// Clear watcher state
-    // Watcher API: used when filesystem monitoring is active
-    #[allow(dead_code)]
+    #[allow(dead_code)] // Reason: ACE watcher API, not yet called from app lifecycle
     pub fn clear_watcher_state(&self) -> Result<()> {
         if let Some(persistence) = &self.watcher_persistence {
             persistence.clear()

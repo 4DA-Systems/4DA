@@ -295,13 +295,13 @@ pub async fn get_standing_query_matches(
          FROM source_items s
          WHERE {where_clause}
          ORDER BY s.last_seen DESC
-         LIMIT {limit}"
+         LIMIT ?1"
     );
 
     let mut stmt = conn.prepare(&sql).context("Query error")?;
 
     let rows = stmt
-        .query_map([], |row| {
+        .query_map(rusqlite::params![limit], |row| {
             Ok(StandingQueryMatch {
                 item_id: row.get(0)?,
                 title: row.get(1)?,

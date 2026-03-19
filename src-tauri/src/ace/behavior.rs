@@ -84,7 +84,7 @@ pub struct AntiTopic {
 }
 
 /// Source preference (stub for API compatibility)
-#[allow(dead_code)]
+#[allow(dead_code)] // Reason: serde-deserialized struct; not yet constructed in production code
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SourcePreference {
     pub source: String,
@@ -93,7 +93,7 @@ pub struct SourcePreference {
 }
 
 /// Learned behavior (stub for API compatibility)
-#[allow(dead_code)]
+#[allow(dead_code)] // Reason: serde-deserialized struct; not yet constructed in production code
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct LearnedBehavior {
     pub interests: Vec<String>,
@@ -101,7 +101,7 @@ pub struct LearnedBehavior {
 }
 
 /// Activity patterns (stub for API compatibility)
-#[allow(dead_code)]
+#[allow(dead_code)] // Reason: serde-deserialized struct; not yet constructed in production code
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ActivityPatterns {
     pub hourly_engagement: Vec<f32>,
@@ -109,8 +109,7 @@ pub struct ActivityPatterns {
 }
 
 /// Summary of learned behavior
-// Behavioral learning: consumed by future adaptive scoring
-#[allow(dead_code)]
+#[allow(dead_code)] // Reason: serde-deserialized struct; constructed by get_learned_behavior which is itself unused
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LearnedBehaviorSummary {
     pub total_interactions: u32,
@@ -122,8 +121,7 @@ pub struct LearnedBehaviorSummary {
 }
 
 /// Source preference summary
-// Behavioral learning: consumed by future adaptive scoring
-#[allow(dead_code)]
+#[allow(dead_code)] // Reason: serde-deserialized struct; constructed by get_learned_behavior which is itself unused
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SourcePreferenceSummary {
     pub source: String,
@@ -424,8 +422,7 @@ impl ACE {
     }
 
     /// Get behavior modifier for an item
-    // Behavioral learning: consumed by future adaptive scoring
-    #[allow(dead_code)]
+    #[allow(dead_code)] // Reason: adaptive scoring feature not yet wired into scoring pipeline
     pub fn get_behavior_modifier(&self, topics: &[String], source: &str) -> Result<f32> {
         let conn = self.conn.lock();
         let mut modifier = 0.0;
@@ -461,8 +458,7 @@ impl ACE {
     }
 
     /// Get learned behavior summary
-    // Behavioral learning: consumed by future adaptive scoring
-    #[allow(dead_code)]
+    #[allow(dead_code)] // Reason: adaptive scoring feature not yet wired into UI/commands
     pub fn get_learned_behavior(&self) -> Result<LearnedBehaviorSummary> {
         let affinities = self.get_topic_affinities()?;
         let anti_topics = self.get_anti_topics(5)?;
@@ -522,8 +518,7 @@ impl ACE {
     }
 
     /// Confirm an anti-topic
-    // Behavioral learning: consumed by future adaptive scoring
-    #[allow(dead_code)]
+    #[allow(dead_code)] // Reason: anti-topic confirmation not yet exposed via UI/commands
     pub fn confirm_anti_topic(&self, topic: &str) -> Result<()> {
         let conn = self.conn.lock();
         conn.execute(

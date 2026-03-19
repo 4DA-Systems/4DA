@@ -15,6 +15,7 @@ pub(crate) struct MemberDna {
     pub primary_stack: Vec<String>,
     pub interests: Vec<String>,
     #[allow(dead_code)]
+    // Reason: populated from team DNA but not yet consumed by aggregation logic
     pub blind_spots: Vec<String>,
 }
 

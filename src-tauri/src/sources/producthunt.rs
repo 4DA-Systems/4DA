@@ -30,7 +30,6 @@ pub(crate) struct ProductHuntItem {
 pub struct ProductHuntSource {
     config: SourceConfig,
     client: reqwest::Client,
-    #[allow(dead_code)] // Future: category filtering
     categories: Vec<String>,
 }
 
@@ -50,7 +49,6 @@ impl ProductHuntSource {
     }
 
     /// Create with custom categories
-    #[allow(dead_code)] // Future: category filtering
     pub fn with_categories(categories: Vec<String>) -> Self {
         let mut source = Self::new();
         source.categories = categories;

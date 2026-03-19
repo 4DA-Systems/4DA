@@ -180,7 +180,7 @@ pub(crate) fn cosine_similarity_with_norm(a: &[f32], a_norm: f32, b: &[f32]) -> 
 }
 
 /// Cosine similarity between two vectors (used by tests; hot path uses cosine_similarity_with_norm)
-#[allow(dead_code)]
+#[allow(dead_code)] // Reason: only used by test modules; production code uses cosine_similarity_with_norm
 pub(crate) fn cosine_similarity(a: &[f32], b: &[f32]) -> f32 {
     if a.len() != b.len() || a.is_empty() {
         return 0.0;

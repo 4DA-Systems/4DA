@@ -27,7 +27,7 @@ pub use crate::monitoring_notifications::{
 
 /// A notification that was below the quality threshold and batched for the next briefing
 #[derive(Debug, Clone)]
-#[allow(dead_code)] // Fields populated for diagnostic use
+#[allow(dead_code)] // Reason: signal_priority field only read in tests; other fields used in production
 pub struct BatchedNotification {
     pub title: String,
     pub source_type: String,
@@ -569,7 +569,7 @@ pub fn start_scheduler<R: Runtime>(app: AppHandle<R>, state: Arc<MonitoringState
 // ============================================================================
 
 /// Update the tray menu text based on monitoring state
-#[allow(dead_code)] // Future: dynamic tray menu updates
+#[allow(dead_code)] // Reason: dynamic tray menu updates not yet wired into monitoring loop
 pub fn update_tray_menu<R: Runtime>(
     tray: &TrayIcon<R>,
     app: &AppHandle<R>,
