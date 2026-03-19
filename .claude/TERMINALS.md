@@ -3,25 +3,19 @@
 ## Protocol
 1. **Before editing**: Read this file. If your files are claimed by another terminal, STOP.
 2. **Claim files**: Add your entry below with the files you'll touch.
-3. **After committing**: Remove your entry.
-4. **Conflicts**: If two terminals touch the same file, the one that committed first wins. The other must rebase.
+3. **Commit Lock**: Set `**Commit Lock**: HELD` before committing. Only one terminal commits at a time.
+4. **After committing**: Remove your entry and release the lock.
+5. **Conflicts**: If two terminals touch the same file, the one that committed first wins. The other must rebase.
 
 ## Active Terminals
 
 <!-- Add entries below. Format:
 ### T[N] — [short description]
 - **Status**: working | committing | done
+- **Commit Lock**: HELD | (omit if not held)
 - **Files**: list of files being modified
 -->
 
-### T1 — Privacy & Terms pages
-- **Status**: done
-- **Files**: site/src/privacy.njk, site/src/terms.njk, site/vercel.json, site/src/index.njk, site/src/_includes/streets-body.njk, site/src/merch.njk
-
-### T2 — Developer OS Plan Implementation
-- **Status**: done
-- **Files**: committed and pushed
-
-### T3 — Final verification + Waitlist + Long-horizon positioning
-- **Status**: done
-- **Files**: committed and pushed
+### T1 — Fix all code issues: i18n, dashboard wiring, waitlist migration, VS Code verification
+- **Status**: working
+- **Files**: src/locales/*, src/components/DependencyDashboard.tsx, src/components/SecurityDashboard.tsx, src/components/IntelligenceReport.tsx, src/components/WaitlistSignup.tsx, editors/vscode/4da/

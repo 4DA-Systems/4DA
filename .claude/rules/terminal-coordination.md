@@ -8,9 +8,24 @@ Multiple Claude Code terminals run simultaneously on this repo.
 3. Add your claim with the files you'll modify
 4. Only then start editing
 
+## Commit Lock Protocol
+- Only ONE terminal may commit at a time
+- Before committing: add `**Commit Lock**: HELD` to your terminal entry
+- After committing: remove the lock and your claim
+- If another terminal holds the lock: WAIT — do not stage or commit
+- The lock prevents cross-terminal commit contamination
+
+## Commit-Per-Wave Rule
+- **NEVER accumulate more than one wave of changes before committing**
+- After each logical batch completes and passes verification, commit immediately
+- Pattern: Wave N agents finish → verify → commit → Wave N+1 agents start
+- The git hygiene hook warning at 20+ files means you've already waited too long
+- Each commit gets its own descriptive message matching the actual work done
+
 ## After committing:
 1. Remove your claim from `.claude/TERMINALS.md`
-2. If working tree has changes from OTHER terminals, do NOT revert them — they belong to another session
+2. Release the Commit Lock
+3. If working tree has changes from OTHER terminals, do NOT revert them
 
 ## If you see uncommitted changes you didn't make:
 - Another terminal is actively working. Do NOT `git checkout`, `git stash`, or revert those files.
@@ -21,4 +36,4 @@ Multiple Claude Code terminals run simultaneously on this repo.
 - `git stash` (affects all terminals)
 - `git reset` (affects all terminals)
 - Deleting or moving files not in your claim
-- Creating files not related to your task (especially `llm_judge.rs`)
+- Committing files not in your claim (even if they show up in `git status`)
