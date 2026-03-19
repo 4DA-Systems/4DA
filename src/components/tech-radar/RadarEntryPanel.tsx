@@ -48,7 +48,7 @@ function movementIcon(movement: RadarEntry['movement']): { icon: string; color: 
     case 'up':     return { icon: '\u25B2', color: '#22C55E', labelKey: 'techRadar.movementIn' };
     case 'down':   return { icon: '\u25BC', color: '#EF4444', labelKey: 'techRadar.movementOut' };
     case 'new':    return { icon: '\u25C6', color: '#D4AF37', labelKey: 'techRadar.movementNew' };
-    case 'stable': return { icon: '\u25CF', color: '#666666', labelKey: 'techRadar.movementStable' };
+    case 'stable': return { icon: '\u25CF', color: '#8A8A8A', labelKey: 'techRadar.movementStable' };
   }
 }
 
@@ -58,7 +58,7 @@ function ringColor(ring: string): string {
     case 'trial':  return '#3B82F6';
     case 'assess': return '#D4AF37';
     case 'hold':   return '#EF4444';
-    default:       return '#666666';
+    default:       return '#8A8A8A';
   }
 }
 

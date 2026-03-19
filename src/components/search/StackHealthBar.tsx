@@ -32,7 +32,7 @@ interface StackHealthBarProps {
 const statusColors: Record<string, string> = {
   healthy: '#22C55E',
   attention: '#EAB308',
-  stale: '#666666',
+  stale: '#8A8A8A',
   critical: '#EF4444',
 };
 
@@ -59,7 +59,7 @@ export function StackHealthBar({ health, onSuggestedQuery }: StackHealthBarProps
             title={`${tech.name}: ${tech.status} (${tech.signal_count_7d} signals this week)`}
           >
             <span className="text-text-secondary">{tech.name}</span>
-            <span style={{ color: statusColors[tech.status] || '#666666' }}>
+            <span style={{ color: statusColors[tech.status] || '#8A8A8A' }}>
               {statusIcons[tech.status] || '\u25CF'}
             </span>
           </span>

@@ -131,7 +131,7 @@ export function SovereignProfile({ onGenerateDocument }: SovereignProfileProps) 
       <div className="flex items-center justify-between">
         <div>
           <h3 className="text-sm font-semibold text-white">{t('playbook.sovereign.title')}</h3>
-          <p className="text-xs text-[#666] mt-0.5">
+          <p className="text-xs text-[#8A8A8A] mt-0.5">
             {t('playbook.sovereign.subtitle')}
           </p>
         </div>
@@ -158,19 +158,19 @@ export function SovereignProfile({ onGenerateDocument }: SovereignProfileProps) 
                   className={`w-6 h-6 rounded flex items-center justify-center text-[10px] font-bold flex-shrink-0 ${
                     hasFacts
                       ? 'bg-[#22C55E]/15 text-[#22C55E]'
-                      : 'bg-bg-tertiary text-[#666]'
+                      : 'bg-bg-tertiary text-[#8A8A8A]'
                   }`}
                 >
                   {meta.icon}
                 </span>
-                <span className={`text-xs font-medium flex-1 ${hasFacts ? 'text-white' : 'text-[#666]'}`}>
+                <span className={`text-xs font-medium flex-1 ${hasFacts ? 'text-white' : 'text-[#8A8A8A]'}`}>
                   {meta.label}
                 </span>
                 {hasFacts && (
                   <span className="text-[10px] text-text-secondary">{t('playbook.sovereign.factCount', { count: facts.length })}</span>
                 )}
                 <svg
-                  width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#666" strokeWidth="2"
+                  width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#8A8A8A" strokeWidth="2"
                   className={`transition-transform ${isExpanded ? 'rotate-180' : ''}`}
                 >
                   <polyline points="6 9 12 15 18 9" />
@@ -183,7 +183,7 @@ export function SovereignProfile({ onGenerateDocument }: SovereignProfileProps) 
                     <div className="space-y-1.5">
                       {facts.map((fact, i) => (
                         <div key={i} className="flex items-start gap-2">
-                          <span className="text-[10px] text-[#666] font-mono min-w-[80px] flex-shrink-0 pt-0.5">
+                          <span className="text-[10px] text-[#8A8A8A] font-mono min-w-[80px] flex-shrink-0 pt-0.5">
                             {fact.key}
                           </span>
                           <span className="text-xs text-text-secondary font-mono break-all flex-1">
@@ -203,7 +203,7 @@ export function SovereignProfile({ onGenerateDocument }: SovereignProfileProps) 
                       ))}
                     </div>
                   ) : (
-                    <p className="text-[10px] text-[#666] italic">{meta.hint}</p>
+                    <p className="text-[10px] text-[#8A8A8A] italic">{meta.hint}</p>
                   )}
                 </div>
               )}
@@ -214,7 +214,7 @@ export function SovereignProfile({ onGenerateDocument }: SovereignProfileProps) 
 
       {/* Manual Entry Form */}
       <div className="border-t border-border pt-4">
-        <p className="text-[10px] text-[#666] mb-2 uppercase tracking-wide font-medium">{t('playbook.sovereign.manualEntry')}</p>
+        <p className="text-[10px] text-[#8A8A8A] mb-2 uppercase tracking-wide font-medium">{t('playbook.sovereign.manualEntry')}</p>
         <div className="flex items-end gap-2">
           <div className="flex-shrink-0">
             <select
@@ -261,7 +261,7 @@ export function SovereignProfile({ onGenerateDocument }: SovereignProfileProps) 
           {t('playbook.sovereign.generateStackDoc')}
         </button>
         {profileCompleteness && profileCompleteness.missing.length > 0 && (
-          <span className="text-[10px] text-[#666]">
+          <span className="text-[10px] text-[#8A8A8A]">
             {t('playbook.sovereign.missing', { fields: profileCompleteness.missing.join(', ') })}
           </span>
         )}
@@ -275,13 +275,13 @@ export function SovereignProfile({ onGenerateDocument }: SovereignProfileProps) 
             <div className="flex items-center gap-2">
               <button
                 onClick={() => navigator.clipboard.writeText(generatedDocument)}
-                className="text-[10px] text-[#666] hover:text-text-secondary transition-colors"
+                className="text-[10px] text-[#8A8A8A] hover:text-text-secondary transition-colors"
               >
                 {t('action.copy')}
               </button>
               <button
                 onClick={() => setShowDocument(false)}
-                className="text-[10px] text-[#666] hover:text-text-secondary transition-colors"
+                className="text-[10px] text-[#8A8A8A] hover:text-text-secondary transition-colors"
               >
                 {t('action.close')}
               </button>

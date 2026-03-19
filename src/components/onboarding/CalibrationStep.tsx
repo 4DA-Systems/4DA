@@ -131,7 +131,7 @@ export function CalibrationStep({ isAnimating, onComplete, onBack }: Calibration
         <div style={{ textAlign: 'center', padding: '40px 0' }}>
           <div style={{ width: 24, height: 24, border: '2px solid #2A2A2A', borderTopColor: '#D4AF37', borderRadius: '50%', animation: 'spin 0.8s linear infinite', margin: '0 auto 12px' }} />
           <div style={{ color: '#A0A0A0', fontSize: 13 }}>{t('calibration.onboarding.analyzing')}</div>
-          <div style={{ color: '#666666', fontSize: 11, marginTop: 4 }}>{t('calibration.onboarding.analyzingDetail')}</div>
+          <div style={{ color: '#8A8A8A', fontSize: 11, marginTop: 4 }}>{t('calibration.onboarding.analyzingDetail')}</div>
         </div>
       )}
 
@@ -143,7 +143,7 @@ export function CalibrationStep({ isAnimating, onComplete, onBack }: Calibration
               <div style={{ fontSize: 36, fontWeight: 700, color: gradeColor(result.grade), fontFamily: 'JetBrains Mono, monospace' }}>
                 {result.grade}
               </div>
-              <div style={{ fontSize: 11, color: '#666666' }}>{result.grade_score}/100</div>
+              <div style={{ fontSize: 11, color: '#8A8A8A' }}>{result.grade_score}/100</div>
             </div>
             <div style={{ flex: 1, background: '#141414', border: '1px solid #2A2A2A', borderRadius: 8, padding: 12 }}>
               {[
@@ -191,7 +191,7 @@ export function CalibrationStep({ isAnimating, onComplete, onBack }: Calibration
                       disabled={!!actionInProgress}
                       style={{
                         padding: '3px 10px', background: actionInProgress === rec.action_type ? '#2A2A2A' : '#D4AF37',
-                        color: actionInProgress === rec.action_type ? '#666' : '#0A0A0A',
+                        color: actionInProgress === rec.action_type ? '#8A8A8A' : '#0A0A0A',
                         border: 'none', borderRadius: 4, fontSize: 10, fontWeight: 600, cursor: actionInProgress ? 'not-allowed' : 'pointer',
                       }}
                     >
@@ -209,7 +209,7 @@ export function CalibrationStep({ isAnimating, onComplete, onBack }: Calibration
       {!loading && !result && !error && (
         <div style={{ textAlign: 'center', padding: '24px 0', color: '#A0A0A0', fontSize: 13 }}>
           <p>{t('calibration.onboarding.noContent')}</p>
-          <p style={{ fontSize: 11, color: '#666666', marginTop: 4 }}>{t('calibration.onboarding.noContentHint')}</p>
+          <p style={{ fontSize: 11, color: '#8A8A8A', marginTop: 4 }}>{t('calibration.onboarding.noContentHint')}</p>
         </div>
       )}
 

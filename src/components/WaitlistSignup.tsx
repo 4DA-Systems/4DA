@@ -231,7 +231,7 @@ const WaitlistSignup = memo(function WaitlistSignup({
               placeholder="Work email *"
               required
               autoComplete="email"
-              className="w-full text-sm px-3.5 py-2.5 rounded-lg bg-[#1F1F1F] border border-[#2A2A2A] text-white placeholder:text-[#666] focus:outline-none focus:border-[#D4AF37]/40 focus:ring-1 focus:ring-[#D4AF37]/20 transition-all"
+              className="w-full text-sm px-3.5 py-2.5 rounded-lg bg-[#1F1F1F] border border-[#2A2A2A] text-white placeholder:text-[#8A8A8A] focus:outline-none focus:border-[#D4AF37]/40 focus:ring-1 focus:ring-[#D4AF37]/20 transition-all"
             />
             <div className="flex gap-2.5">
               <input
@@ -240,14 +240,14 @@ const WaitlistSignup = memo(function WaitlistSignup({
                 onChange={(e) => setName(e.target.value)}
                 placeholder="Your name"
                 autoComplete="name"
-                className="w-1/2 text-sm px-3.5 py-2.5 rounded-lg bg-[#1F1F1F] border border-[#2A2A2A] text-white placeholder:text-[#666] focus:outline-none focus:border-[#D4AF37]/40 focus:ring-1 focus:ring-[#D4AF37]/20 transition-all"
+                className="w-1/2 text-sm px-3.5 py-2.5 rounded-lg bg-[#1F1F1F] border border-[#2A2A2A] text-white placeholder:text-[#8A8A8A] focus:outline-none focus:border-[#D4AF37]/40 focus:ring-1 focus:ring-[#D4AF37]/20 transition-all"
               />
               <input
                 type="text"
                 value={teamSize}
                 onChange={(e) => setTeamSize(e.target.value)}
                 placeholder="Team size"
-                className="w-1/2 text-sm px-3.5 py-2.5 rounded-lg bg-[#1F1F1F] border border-[#2A2A2A] text-white placeholder:text-[#666] focus:outline-none focus:border-[#D4AF37]/40 focus:ring-1 focus:ring-[#D4AF37]/20 transition-all"
+                className="w-1/2 text-sm px-3.5 py-2.5 rounded-lg bg-[#1F1F1F] border border-[#2A2A2A] text-white placeholder:text-[#8A8A8A] focus:outline-none focus:border-[#D4AF37]/40 focus:ring-1 focus:ring-[#D4AF37]/20 transition-all"
               />
             </div>
             <div className="flex gap-2.5">
@@ -257,14 +257,14 @@ const WaitlistSignup = memo(function WaitlistSignup({
                 onChange={(e) => setCompany(e.target.value)}
                 placeholder="Company"
                 autoComplete="organization"
-                className="w-1/2 text-sm px-3.5 py-2.5 rounded-lg bg-[#1F1F1F] border border-[#2A2A2A] text-white placeholder:text-[#666] focus:outline-none focus:border-[#D4AF37]/40 focus:ring-1 focus:ring-[#D4AF37]/20 transition-all"
+                className="w-1/2 text-sm px-3.5 py-2.5 rounded-lg bg-[#1F1F1F] border border-[#2A2A2A] text-white placeholder:text-[#8A8A8A] focus:outline-none focus:border-[#D4AF37]/40 focus:ring-1 focus:ring-[#D4AF37]/20 transition-all"
               />
               <input
                 type="text"
                 value={role}
                 onChange={(e) => setRole(e.target.value)}
                 placeholder="Role (e.g. Eng Manager)"
-                className="w-1/2 text-sm px-3.5 py-2.5 rounded-lg bg-[#1F1F1F] border border-[#2A2A2A] text-white placeholder:text-[#666] focus:outline-none focus:border-[#D4AF37]/40 focus:ring-1 focus:ring-[#D4AF37]/20 transition-all"
+                className="w-1/2 text-sm px-3.5 py-2.5 rounded-lg bg-[#1F1F1F] border border-[#2A2A2A] text-white placeholder:text-[#8A8A8A] focus:outline-none focus:border-[#D4AF37]/40 focus:ring-1 focus:ring-[#D4AF37]/20 transition-all"
               />
             </div>
           </div>
@@ -277,7 +277,7 @@ const WaitlistSignup = memo(function WaitlistSignup({
             {submitting ? 'Joining...' : `Join the ${config.name} Waitlist`}
           </button>
 
-          <p className="mt-3 text-[10px] text-[#666] text-center leading-relaxed">
+          <p className="mt-3 text-[10px] text-[#8A8A8A] text-center leading-relaxed">
             Stored on your device only. No data sent externally.
             <br />
             We&apos;ll reach out when {config.name} launches.

@@ -138,7 +138,7 @@ export function CreateChannelModal({ open, onClose }: CreateChannelModalProps) {
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               placeholder={t('channels.titlePlaceholder')}
-              className="w-full px-3 py-2 bg-bg-primary border border-border rounded-lg text-sm text-white placeholder-[#666] focus:outline-none focus:border-white/30"
+              className="w-full px-3 py-2 bg-bg-primary border border-border rounded-lg text-sm text-white placeholder-[#8A8A8A] focus:outline-none focus:border-white/30"
             />
             {slug && (
               <p className="mt-1 text-xs text-text-muted font-mono">/{slug}</p>
@@ -154,7 +154,7 @@ export function CreateChannelModal({ open, onClose }: CreateChannelModalProps) {
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               rows={2}
-              className="w-full px-3 py-2 bg-bg-primary border border-border rounded-lg text-sm text-white placeholder-[#666] focus:outline-none focus:border-white/30 resize-none"
+              className="w-full px-3 py-2 bg-bg-primary border border-border rounded-lg text-sm text-white placeholder-[#8A8A8A] focus:outline-none focus:border-white/30 resize-none"
             />
           </div>
 
@@ -169,7 +169,7 @@ export function CreateChannelModal({ open, onClose }: CreateChannelModalProps) {
               onChange={(e) => setTopicInput(e.target.value)}
               onKeyDown={handleTopicKeyDown}
               placeholder={t('channels.topicsPlaceholder')}
-              className="w-full px-3 py-2 bg-bg-primary border border-border rounded-lg text-sm text-white placeholder-[#666] focus:outline-none focus:border-white/30"
+              className="w-full px-3 py-2 bg-bg-primary border border-border rounded-lg text-sm text-white placeholder-[#8A8A8A] focus:outline-none focus:border-white/30"
             />
             {topics.length > 0 && (
               <div className="flex flex-wrap gap-1.5 mt-2">

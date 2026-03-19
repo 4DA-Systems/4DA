@@ -134,7 +134,7 @@ function TemplateViewer({
             </button>
             <button
               onClick={onClose}
-              className="w-7 h-7 flex items-center justify-center rounded-lg text-[#666] hover:text-white hover:bg-bg-tertiary transition-colors"
+              className="w-7 h-7 flex items-center justify-center rounded-lg text-[#8A8A8A] hover:text-white hover:bg-bg-tertiary transition-colors"
               aria-label={t('action.close')}
             >
               <svg
@@ -196,7 +196,7 @@ export function TemplateLibrary() {
       {/* Header */}
       <div>
         <h3 className="text-sm font-semibold text-white">Templates</h3>
-        <p className="text-xs text-[#666] mt-0.5">
+        <p className="text-xs text-[#8A8A8A] mt-0.5">
           Actionable templates for launching and growing your revenue engines
         </p>
       </div>

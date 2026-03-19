@@ -36,7 +36,7 @@ export function DiffRibbon({ block }: Props) {
             <span className="text-[#D4AF37] font-mono font-bold">~</span>
             <span className="text-text-secondary">{ch.field}:</span>
             <span className="text-[#EF4444] line-through text-[10px]">{ch.old_value}</span>
-            <span className="text-[#666]">→</span>
+            <span className="text-[#8A8A8A]">→</span>
             <span className="text-[#22C55E]">{ch.new_value}</span>
           </div>
         ))}

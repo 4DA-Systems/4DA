@@ -64,7 +64,7 @@ export const PlaybookSidebar = memo(function PlaybookSidebar({
               <p className={`text-sm truncate ${isActive ? 'text-white font-medium' : 'text-text-secondary'}`}>
                 {t(`streets:streets.module.${modId}`)}
               </p>
-              <p className="text-[10px] text-[#666]">
+              <p className="text-[10px] text-[#8A8A8A]">
                 {lessonCount} {lessonCount !== 1 ? t('streets:streets.lessons').toLowerCase() : t('streets:streets.lesson').toLowerCase()}
                 {pct > 0 && pct < 100 && ` - ${Math.round(pct)}%`}
               </p>
@@ -99,13 +99,13 @@ export const PlaybookSidebar = memo(function PlaybookSidebar({
           <p className={`text-sm truncate ${showTemplates ? 'text-white font-medium' : 'text-text-secondary'}`}>
             {t('playbook.templates')}
           </p>
-          <p className="text-[10px] text-[#666]">{t('playbook.templatesSubtitle')}</p>
+          <p className="text-[10px] text-[#8A8A8A]">{t('playbook.templatesSubtitle')}</p>
         </div>
       </button>
 
       {/* Free tier notice */}
       <div className="mt-4 pt-4 border-t border-border">
-        <p className="text-[10px] text-[#666] text-center">
+        <p className="text-[10px] text-[#8A8A8A] text-center">
           {t('streets:streets.freeForever')}
         </p>
       </div>
