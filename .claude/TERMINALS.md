@@ -16,6 +16,6 @@
 - **Files**: list of files being modified
 -->
 
-### T1 — Fix all code issues: i18n, dashboard wiring, waitlist migration, VS Code verification
+### T1 — Execute all phases: hygiene gates + screenshot moments + first-run excellence
 - **Status**: working
-- **Files**: src/locales/*, src/components/DependencyDashboard.tsx, src/components/SecurityDashboard.tsx, src/components/IntelligenceReport.tsx, src/components/WaitlistSignup.tsx, editors/vscode/4da/
+- **Files**: scripts/check-file-sizes.cjs, src/store/feedback-slice.ts, src/components/app/AppHeader.tsx, src/components/BriefingView.tsx, src/components/Onboarding.tsx, src/components/ResultsView.tsx, src/components/FeedbackMilestone.tsx, src/components/WeeklyProgressCard.tsx, src/components/AccuracySparkline.tsx, src/components/DepHealthShield.tsx, src/components/FirstCveCard.tsx, src/components/GuidedHighlights.tsx

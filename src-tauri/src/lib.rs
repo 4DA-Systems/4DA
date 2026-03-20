@@ -715,6 +715,9 @@ mod enterprise_analytics_tests;
 mod error_tests;
 #[cfg(test)]
 mod hardening_error_path_tests;
+#[cfg(test)]
+#[path = "lib_tests.rs"]
+mod lib_tests;
 #[cfg(all(test, feature = "enterprise"))]
 mod organization_tests;
 #[cfg(test)]

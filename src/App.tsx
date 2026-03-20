@@ -14,6 +14,7 @@ const Onboarding = lazy(() => import('./components/Onboarding').then(m => ({ def
 import { VoidEngine } from './components/void-engine/VoidEngine';
 import { OllamaStatus } from './components/OllamaStatus';
 import { ToastContainer } from './components/Toast';
+import { FeedbackMilestone } from './components/FeedbackMilestone';
 import { ActionBar } from './components/ActionBar';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { ViewErrorBoundary } from './components/ViewErrorBoundary';
@@ -85,6 +86,7 @@ function App() {
   const setIsFirstRun = useAppStore(s => s.setIsFirstRun);
   const setFirstRunDismissed = useAppStore(s => s.setFirstRunDismissed);
 
+  const feedbackCount = useAppStore(s => Object.keys(s.feedbackGiven).length);
   const { tier, isPro } = useLicense();
 
   // i18n direction (sets dir/lang on <html>)
@@ -448,6 +450,7 @@ function App() {
 
         {/* Toast Notifications */}
         <ToastContainer toasts={toasts} onDismiss={removeToast} />
+        <FeedbackMilestone count={feedbackCount} />
 
         {/* Keyboard Shortcuts Help Modal */}
         {showKeyboardHelp && (
