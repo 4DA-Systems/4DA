@@ -2097,5 +2097,22 @@
   "tips.feedbackLoop": "Guarda artículos que te resulten útiles — esto enseña al sistema lo que te importa.",
   "tips.feedbackLoopHint": "Descartar artículos también ayuda. Cada interacción mejora tus resultados.",
   "tips.ollamaNudge": "Tus resultados usan coincidencia por palabras clave. Ollama (gratis, local) desbloquea coincidencia semántica para resultados más relevantes.",
-  "tips.ollamaNudgeHint": "Instala Ollama, luego actívalo en Ajustes > Proveedor de IA. Se ejecuta completamente en tu máquina."
+  "tips.ollamaNudgeHint": "Instala Ollama, luego actívalo en Ajustes > Proveedor de IA. Se ejecuta completamente en tu máquina.",
+
+  "guided.feed": "Tu feed de contenido personalizado",
+  "guided.score": "Toca para ver por qué obtuvo una puntuación alta",
+  "guided.save": "Guarda elementos en tu Biblioteca",
+  "guided.dna": "Tu perfil de identidad de desarrollador",
+  "guided.settings": "Configura fuentes e IA",
+
+  "emptyState.header": "Mientras se ejecuta tu primer análisis, esto es lo que los desarrolladores de {{stack}} vieron esta semana",
+  "emptyState.headerDefault": "Mientras se ejecuta tu primer análisis, esto es lo que los desarrolladores vieron esta semana",
+  "emptyState.footer": "Señales reales llegando en ~2 minutos...",
+  "emptyState.badge": "Ejemplo",
+
+  "firstCve.title": "4DA te protegió",
+  "firstCve.detected": "Detectado {{minutes}} minutos después de la publicación",
+  "firstCve.affects": "afecta a {{package}} en {{count}} de tus proyectos",
+  "firstCve.viewDetails": "Ver detalles",
+  "firstCve.dismiss": "Entendido"
 }

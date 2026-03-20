@@ -1937,5 +1937,22 @@
   "tips.feedbackLoop": "有用な記事を保存しましょう — これがシステムにあなたにとって重要なことを教えます。",
   "tips.feedbackLoopHint": "記事の非表示も役立ちます。すべてのインタラクションが結果を改善します。",
   "tips.ollamaNudge": "結果はキーワードマッチングを使用中。Ollama（無料、ローカル）でセマンティックマッチングをアンロックして、より関連性の高い結果を得ましょう。",
-  "tips.ollamaNudgeHint": "Ollamaをインストールし、設定 > AIプロバイダーで有効化。すべてあなたのマシン上で実行されます。"
+  "tips.ollamaNudgeHint": "Ollamaをインストールし、設定 > AIプロバイダーで有効化。すべてあなたのマシン上で実行されます。",
+
+  "guided.feed": "あなた専用のコンテンツフィード",
+  "guided.score": "タップしてスコアが高い理由を確認",
+  "guided.save": "アイテムをライブラリに保存",
+  "guided.dna": "あなたの開発者アイデンティティプロフィール",
+  "guided.settings": "ソースとAIを設定",
+
+  "emptyState.header": "最初の分析の実行中、今週{{stack}}開発者が注目した内容をご覧ください",
+  "emptyState.headerDefault": "最初の分析の実行中、今週開発者が注目した内容をご覧ください",
+  "emptyState.footer": "本物のシグナルが約2分で到着します...",
+  "emptyState.badge": "例",
+
+  "firstCve.title": "4DAがあなたを守りました",
+  "firstCve.detected": "公開から{{minutes}}分後に検出",
+  "firstCve.affects": "あなたのプロジェクト{{count}}件で{{package}}に影響",
+  "firstCve.viewDetails": "詳細を見る",
+  "firstCve.dismiss": "了解"
 }

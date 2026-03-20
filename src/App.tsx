@@ -27,6 +27,7 @@ const FirstRunTransition = lazy(() => import('./components/FirstRunTransition').
 const NaturalLanguageSearch = lazy(() => import('./components/NaturalLanguageSearch').then(m => ({ default: m.NaturalLanguageSearch })));
 const LearningIndicator = lazy(() => import('./components/LearningIndicator').then(m => ({ default: m.LearningIndicator })));
 const ProValueBadge = lazy(() => import('./components/ProValueBadge').then(m => ({ default: m.ProValueBadge })));
+const GuidedHighlights = lazy(() => import('./components/GuidedHighlights').then(m => ({ default: m.GuidedHighlights })));
 
 // Lazy-loaded non-critical views and overlays
 const SettingsModal = lazy(() => import('./components/SettingsModal').then(m => ({ default: m.SettingsModal })));
@@ -451,6 +452,9 @@ function App() {
         {/* Toast Notifications */}
         <ToastContainer toasts={toasts} onDismiss={removeToast} />
         <FeedbackMilestone count={feedbackCount} />
+
+        {/* Guided Highlights — one-time feature discovery overlay (self-dismisses via localStorage) */}
+        <Suspense fallback={null}><GuidedHighlights /></Suspense>
 
         {/* Keyboard Shortcuts Help Modal */}
         {showKeyboardHelp && (

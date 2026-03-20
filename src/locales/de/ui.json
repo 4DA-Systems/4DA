@@ -2097,5 +2097,22 @@
   "tips.feedbackLoop": "Speichern Sie Artikel, die Sie nützlich finden — das lehrt das System, was Ihnen wichtig ist.",
   "tips.feedbackLoopHint": "Das Verwerfen von Artikeln hilft ebenfalls. Jede Interaktion verbessert Ihre Ergebnisse.",
   "tips.ollamaNudge": "Ihre Ergebnisse verwenden Stichwortabgleich. Ollama (kostenlos, lokal) schaltet semantischen Abgleich für relevantere Ergebnisse frei.",
-  "tips.ollamaNudgeHint": "Installieren Sie Ollama und aktivieren Sie es unter Einstellungen > KI-Anbieter. Läuft komplett auf Ihrem Computer."
+  "tips.ollamaNudgeHint": "Installieren Sie Ollama und aktivieren Sie es unter Einstellungen > KI-Anbieter. Läuft komplett auf Ihrem Computer.",
+
+  "guided.feed": "Ihr personalisierter Inhalts-Feed",
+  "guided.score": "Tippen Sie, um zu sehen, warum dies hoch bewertet wurde",
+  "guided.save": "Elemente in Ihrer Bibliothek speichern",
+  "guided.dna": "Ihr Entwickler-Identitätsprofil",
+  "guided.settings": "Quellen und KI konfigurieren",
+
+  "emptyState.header": "Während Ihre erste Analyse läuft, sehen Sie hier, was {{stack}}-Entwickler diese Woche gesehen haben",
+  "emptyState.headerDefault": "Während Ihre erste Analyse läuft, sehen Sie hier, was Entwickler diese Woche gesehen haben",
+  "emptyState.footer": "Echte Signale treffen in ~2 Minuten ein...",
+  "emptyState.badge": "Beispiel",
+
+  "firstCve.title": "4DA hat Sie geschützt",
+  "firstCve.detected": "{{minutes}} Minuten nach Veröffentlichung erkannt",
+  "firstCve.affects": "betrifft {{package}} in {{count}} Ihrer Projekte",
+  "firstCve.viewDetails": "Details anzeigen",
+  "firstCve.dismiss": "Verstanden"
 }
