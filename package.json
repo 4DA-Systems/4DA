@@ -19,6 +19,8 @@
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
     "validate:sizes": "node scripts/check-file-sizes.cjs",
+    "validate:coverage": "node scripts/coverage-map.cjs",
+    "impact": "node scripts/impact-analysis.cjs",
     "validate:game": "node scripts/validate-game-components.cjs",
     "validate:commands": "node scripts/validate-commands.cjs",
     "validate": "node scripts/check-file-sizes.cjs && pnpm run validate:game && pnpm run validate:commands && pnpm run lint && pnpm run typecheck && pnpm run test && pnpm run build",

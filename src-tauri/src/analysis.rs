@@ -37,3 +37,9 @@ pub(crate) use analysis_status::*;
 
 #[path = "analysis_tests.rs"]
 mod analysis_tests;
+
+#[path = "analysis_status_tests.rs"]
+mod analysis_status_tests;
+
+#[path = "analysis_deep_scan_tests.rs"]
+mod analysis_deep_scan_tests;
