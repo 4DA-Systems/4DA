@@ -283,6 +283,7 @@ permalink: "/signal.html"
 
     function setPlan(plan) {
       currentPlan = plan;
+      posthog.capture('signal_plan_toggled', { plan: plan });
       document.getElementById('toggle-monthly').className = plan === 'monthly' ? 'active' : '';
       document.getElementById('toggle-annual').className = plan === 'annual' ? 'active' : '';
       document.getElementById('price-value').textContent = plan === 'monthly' ? '12' : '99';
@@ -296,6 +297,7 @@ permalink: "/signal.html"
       btn.textContent = 'Redirecting to checkout...';
 
       try {
+        posthog.capture('signal_checkout_started', { plan: currentPlan });
         var resp = await fetch('/api/signal/checkout', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
