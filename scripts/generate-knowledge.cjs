@@ -112,9 +112,19 @@ function getDirectoryModules(dir) {
 }
 
 function getRecentGitLog(pathFilter, count = 10) {
+  // Use forward slashes for git on Windows
+  const normalized = pathFilter.replace(/\\/g, "/");
   return safeExec(
-    `git log --oneline -${count} -- "${pathFilter}"`
+    `git log --oneline -${count} -- "${normalized}"`
   ).trim();
+}
+
+function getLastModified(pathFilter) {
+  const normalized = pathFilter.replace(/\\/g, "/");
+  const result = safeExec(
+    `git log -1 --format="%ar" -- "${normalized}"`
+  ).trim();
+  return result || "unknown";
 }
 
 // ---------------------------------------------------------------------------
@@ -123,7 +133,7 @@ function getRecentGitLog(pathFilter, count = 10) {
 
 function parseRustCommands() {
   const rustFiles = walkDir(RUST_SRC, [".rs"]);
-  const commands = new Map(); // name -> file
+  const commands = new Map(); // name -> first file found (deduplicates #[cfg]-gated variants)
 
   for (const file of rustFiles) {
     const content = fs.readFileSync(file, "utf-8");
@@ -135,7 +145,13 @@ function parseRustCommands() {
             /^\s*(?:pub\s+)?(?:async\s+)?fn\s+([a-z_][a-z0-9_]*)/
           );
           if (fnMatch) {
-            commands.set(fnMatch[1], relPath(file));
+            // For #[cfg]-gated duplicates, prefer the non-lib.rs definition
+            // (lib.rs contains stubs; the real implementation is elsewhere)
+            const name = fnMatch[1];
+            const filePath = relPath(file);
+            if (!commands.has(name) || filePath !== "src-tauri/src/lib.rs") {
+              commands.set(name, filePath);
+            }
             break;
           }
         }
@@ -174,20 +190,44 @@ function parseTsCommandFunctions() {
   const commands = new Set();
   const lines = content.split("\n");
 
+  // Find the CommandMap interface and extract ONLY its top-level keys.
+  // Keys follow the pattern:  command_name: { params: ...; result: ... };
+  // We must distinguish these from nested interface properties (e.g. alerts: { total: number })
+  let inCommandMap = false;
+  let braceDepth = 0;
+
   for (const line of lines) {
-    // Match function exports: export async function name(
-    const funcMatch = line.match(
-      /(?:export\s+)?(?:async\s+)?function\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*\(/
-    );
-    if (funcMatch) {
-      commands.add(funcMatch[1]);
+    // Detect start of CommandMap interface
+    if (/interface\s+CommandMap\s*\{/.test(line)) {
+      inCommandMap = true;
+      braceDepth = 1;
+      continue;
     }
-    // Match object property: command_name: { params:
-    const objMatch = line.match(/^\s+([a-z_][a-z0-9_]*)\s*:\s*\{/);
-    if (objMatch) {
-      commands.add(objMatch[1]);
+
+    if (!inCommandMap) continue;
+
+    // Track brace depth to know when we exit CommandMap
+    for (const ch of line) {
+      if (ch === "{") braceDepth++;
+      else if (ch === "}") braceDepth--;
+    }
+
+    // braceDepth 0 means we've closed CommandMap
+    if (braceDepth <= 0) {
+      inCommandMap = false;
+      continue;
+    }
+
+    // Only match at braceDepth 1 (top-level keys of CommandMap)
+    // These have the pattern: command_name: { params: ...; result: ... }
+    if (braceDepth === 1 || (braceDepth === 2 && /^\s+[a-z_][a-z0-9_]*\s*:\s*\{.*params\s*:/.test(line))) {
+      const keyMatch = line.match(/^\s+([a-z_][a-z0-9_]*)\s*:\s*\{.*params\s*:/);
+      if (keyMatch) {
+        commands.add(keyMatch[1]);
+      }
     }
   }
+
   return commands;
 }
 
@@ -263,8 +303,8 @@ function generateTopology() {
 | Frontend component groups | ${Object.keys(componentDirs).length} |
 
 ## Rust Module Map
-| Module | Files | Lines | Domain |
-|--------|-------|-------|--------|
+| Module | Files | Lines | Last Modified | Domain |
+|--------|-------|-------|---------------|--------|
 `;
 
   const domainMap = {
@@ -288,19 +328,22 @@ function generateTopology() {
 
   for (const [mod, data] of Object.entries(rustModules).sort()) {
     const domain = domainMap[mod] || mod;
-    md += `| \`${mod}/\` | ${data.fileCount} | ${data.totalLines} | ${domain} |\n`;
+    const lastMod = getLastModified(`src-tauri/src/${mod}/`);
+    md += `| \`${mod}/\` | ${data.fileCount} | ${data.totalLines} | ${lastMod} | ${domain} |\n`;
   }
 
-  md += `| _(top-level .rs)_ | ${topLevelRust.length} | ${topLevelRust.reduce((s, f) => s + lineCount(f), 0)} | Commands & Core |\n`;
+  const topLevelLastMod = getLastModified("src-tauri/src/*.rs");
+  md += `| _(top-level .rs)_ | ${topLevelRust.length} | ${topLevelRust.reduce((s, f) => s + lineCount(f), 0)} | ${topLevelLastMod} | Commands & Core |\n`;
 
   md += `\n## IPC Commands by Domain\n`;
   for (const [mod, cmds] of Object.entries(commandsByModule).sort()) {
     md += `- **${mod}** (${cmds.length}): ${cmds.slice(0, 5).join(", ")}${cmds.length > 5 ? ` ... +${cmds.length - 5} more` : ""}\n`;
   }
 
-  md += `\n## Frontend Component Groups\n| Group | Files |\n|-------|-------|\n`;
+  md += `\n## Frontend Component Groups\n| Group | Files | Last Modified |\n|-------|-------|---------------|\n`;
   for (const [dir, count] of Object.entries(componentDirs).sort()) {
-    md += `| \`${dir}/\` | ${count} |\n`;
+    const lastMod = getLastModified(`src/components/${dir}/`);
+    md += `| \`${dir}/\` | ${count} | ${lastMod} |\n`;
   }
 
   md += `\n## Domain → Expert Routing\n`;

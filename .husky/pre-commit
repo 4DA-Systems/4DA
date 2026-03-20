@@ -52,6 +52,20 @@ else
     cd ..
 fi
 
+# IPC contract validation (~1s) — runs when .rs or commands.ts files are staged
+STAGED_RS=$(git diff --cached --name-only --diff-filter=ACM | grep -E '\.rs$' || true)
+STAGED_CMD=$(git diff --cached --name-only --diff-filter=ACM | grep 'commands.ts' || true)
+if [ -n "$STAGED_RS" ] || [ -n "$STAGED_CMD" ]; then
+    echo "Validating IPC contracts..."
+    node scripts/validate-commands.cjs > /dev/null 2>&1 || {
+        echo ""
+        echo "IPC contract validation failed! Ghost commands detected."
+        echo "Run 'pnpm run validate:commands' for details."
+        echo ""
+        exit 1
+    }
+fi
+
 # ESLint on staged files only (~3s vs full project ~8s) — always runs (lightweight)
 echo "Running ESLint (staged files)..."
 STAGED_TS=$(git diff --cached --name-only --diff-filter=ACM | grep -E '\.(ts|tsx)$' || true)
