@@ -1,4 +1,5 @@
 import { useState, useMemo, useCallback, useEffect, memo } from 'react';
+import { FirstCveCard } from './FirstCveCard';
 import { cmd } from '../lib/commands';
 
 // ============================================================================
@@ -191,6 +192,17 @@ const SecurityDashboard = memo(function SecurityDashboard() {
           <SeverityCount severity="medium" count={severityCounts.medium} />
           <SeverityCount severity="low" count={severityCounts.low} />
         </div>
+
+        {/* First CVE highlight — self-manages visibility via localStorage */}
+        {activeAlerts.length > 0 && (
+          <FirstCveCard
+            cveId={activeAlerts[0].cveId}
+            packageName={activeAlerts[0].packageName}
+            severity={activeAlerts[0].severity}
+            projectCount={activeAlerts[0].affectedProjects}
+            minutesSincePublication={0}
+          />
+        )}
 
         {/* Active Alerts */}
         {isEmpty ? (

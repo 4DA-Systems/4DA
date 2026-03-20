@@ -3,6 +3,7 @@ import { useVirtualizer } from '@tanstack/react-virtual';
 import { useTranslation } from 'react-i18next';
 import { useShallow } from 'zustand/react/shallow';
 import { ResultItem } from './ResultItem';
+import { SmartEmptyState } from './SmartEmptyState';
 import { ContextPanel } from './context-panel';
 import { getStageLabel } from '../utils/score';
 import { getSourceLabel } from '../config/sources';
@@ -297,9 +298,10 @@ export function ResultsView({
                   <p className="text-sm text-text-muted mb-5">
                     {t('results.startAnalysis')}
                   </p>
+                  <SmartEmptyState detectedStack={discoveredContext?.tech?.map(item => item.name) ?? []} />
                   <button
                     onClick={startAnalysis}
-                    className="px-6 py-2.5 bg-orange-500 text-white text-sm font-medium rounded-lg hover:bg-orange-600 transition-colors"
+                    className="mt-5 px-6 py-2.5 bg-orange-500 text-white text-sm font-medium rounded-lg hover:bg-orange-600 transition-colors"
                   >
                     {t('results.analyzeNow')}
                   </button>

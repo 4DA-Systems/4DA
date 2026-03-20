@@ -1937,5 +1937,22 @@
   "tips.feedbackLoop": "保存您觉得有用的文章 — 这教会系统什么对您重要。",
   "tips.feedbackLoopHint": "隐藏文章也有帮助。每次互动都能改善您的结果。",
   "tips.ollamaNudge": "您的结果使用关键词匹配。Ollama（免费、本地）可解锁语义匹配以获得更相关的结果。",
-  "tips.ollamaNudgeHint": "安装 Ollama，然后在设置 > AI 提供商中启用。完全在您的设备上运行。"
+  "tips.ollamaNudgeHint": "安装 Ollama，然后在设置 > AI 提供商中启用。完全在您的设备上运行。",
+
+  "guided.feed": "您的个性化内容信息流",
+  "guided.score": "点击查看为何评分较高",
+  "guided.save": "将项目保存到您的资料库",
+  "guided.dna": "您的开发者身份档案",
+  "guided.settings": "配置来源和 AI",
+
+  "emptyState.header": "在您的首次分析运行期间，以下是 {{stack}} 开发者本周看到的内容",
+  "emptyState.headerDefault": "在您的首次分析运行期间，以下是开发者本周看到的内容",
+  "emptyState.footer": "真实信号将在约2分钟内到达...",
+  "emptyState.badge": "示例",
+
+  "firstCve.title": "4DA 保护了您",
+  "firstCve.detected": "在发布 {{minutes}} 分钟后检测到",
+  "firstCve.affects": "在您的 {{count}} 个项目中影响 {{package}}",
+  "firstCve.viewDetails": "查看详情",
+  "firstCve.dismiss": "知道了"
 }

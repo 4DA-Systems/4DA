@@ -30,6 +30,7 @@ dist-ssr
 .claude/memory.db
 .claude/settings.local.json
 .claude/analyzer-state.json
+.claude/knowledge/
 *.local.md
 
 # ONNX model cache (binary files)

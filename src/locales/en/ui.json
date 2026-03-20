@@ -452,6 +452,14 @@
   "onboarding.welcome.skipToContent": "Skip to Content",
   "onboarding.welcome.skipHint": "You can configure later in Settings",
 
+  "onboarding.choice.title": "You're ready to go",
+  "onboarding.choice.description": "4DA is already learning about your projects in the background. You can start exploring now or fine-tune your setup first.",
+  "onboarding.choice.startUsing": "Start using 4DA",
+  "onboarding.choice.startHint": "Analysis continues in the background",
+  "onboarding.choice.or": "or",
+  "onboarding.choice.continueSetup": "Continue setup",
+  "onboarding.choice.continueHint": "Configure AI provider, stack, interests",
+
   "onboarding.nav.back": "Back",
   "onboarding.nav.next": "Next",
   "onboarding.nav.skip": "Skip",
@@ -2097,5 +2105,22 @@
   "tips.feedbackLoop": "Save articles you find useful — this teaches the system what matters to you.",
   "tips.feedbackLoopHint": "Dismissing articles also helps. Every interaction improves your results.",
   "tips.ollamaNudge": "Your results use keyword matching. Ollama (free, local) unlocks semantic matching for more relevant results.",
-  "tips.ollamaNudgeHint": "Install Ollama, then enable it in Settings > AI Provider. Runs entirely on your machine."
+  "tips.ollamaNudgeHint": "Install Ollama, then enable it in Settings > AI Provider. Runs entirely on your machine.",
+
+  "guided.feed": "Your personalized content feed",
+  "guided.score": "Tap to see why this scored high",
+  "guided.save": "Save items to your Library",
+  "guided.dna": "Your developer identity profile",
+  "guided.settings": "Configure sources and AI",
+
+  "emptyState.header": "While your first analysis runs, here's what {{stack}} developers saw this week",
+  "emptyState.headerDefault": "While your first analysis runs, here's what developers saw this week",
+  "emptyState.footer": "Real signals arriving in ~2 minutes...",
+  "emptyState.badge": "Example",
+
+  "firstCve.title": "4DA Protected You",
+  "firstCve.detected": "Detected {{minutes}} minutes after publication",
+  "firstCve.affects": "affects {{package}} in {{count}} of your projects",
+  "firstCve.viewDetails": "View Details",
+  "firstCve.dismiss": "Got it"
 }

@@ -2097,5 +2097,22 @@
   "tips.feedbackLoop": "Sauvegardez les articles qui vous semblent utiles — cela apprend au système ce qui compte pour vous.",
   "tips.feedbackLoopHint": "Ignorer des articles aide aussi. Chaque interaction améliore vos résultats.",
   "tips.ollamaNudge": "Vos résultats utilisent la correspondance par mots-clés. Ollama (gratuit, local) débloque la correspondance sémantique pour des résultats plus pertinents.",
-  "tips.ollamaNudgeHint": "Installez Ollama, puis activez-le dans Paramètres > Fournisseur d'IA. Fonctionne entièrement sur votre machine."
+  "tips.ollamaNudgeHint": "Installez Ollama, puis activez-le dans Paramètres > Fournisseur d'IA. Fonctionne entièrement sur votre machine.",
+
+  "guided.feed": "Votre flux de contenu personnalisé",
+  "guided.score": "Appuyez pour voir pourquoi ce score est élevé",
+  "guided.save": "Enregistrez des éléments dans votre Bibliothèque",
+  "guided.dna": "Votre profil d'identité développeur",
+  "guided.settings": "Configurer les sources et l'IA",
+
+  "emptyState.header": "Pendant que votre première analyse s'exécute, voici ce que les développeurs {{stack}} ont vu cette semaine",
+  "emptyState.headerDefault": "Pendant que votre première analyse s'exécute, voici ce que les développeurs ont vu cette semaine",
+  "emptyState.footer": "De vrais signaux arrivent dans ~2 minutes...",
+  "emptyState.badge": "Exemple",
+
+  "firstCve.title": "4DA vous a protégé",
+  "firstCve.detected": "Détecté {{minutes}} minutes après la publication",
+  "firstCve.affects": "affecte {{package}} dans {{count}} de vos projets",
+  "firstCve.viewDetails": "Voir les détails",
+  "firstCve.dismiss": "Compris"
 }
