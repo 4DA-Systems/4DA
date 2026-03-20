@@ -15,6 +15,7 @@ import { CommunityInsights } from './CommunityInsights';
 import { ProGate } from './ProGate';
 import { EngagementPulse } from './EngagementPulse';
 import { WisdomPulse } from './WisdomPulse';
+import { WeeklyProgressCard } from './WeeklyProgressCard';
 import { useLicense } from '../hooks/use-license';
 import { useBriefingDerived } from '../hooks/use-briefing-derived';
 import type { SourceRelevance } from '../types';
@@ -195,6 +196,9 @@ export const BriefingView = memo(function BriefingView() {
 
       {/* AWE Wisdom Pulse */}
       <WisdomPulse />
+
+      {/* Weekly Progress (shown on Mondays) */}
+      <WeeklyProgressCard />
 
       {/* Main briefing content: decisions, signals, top picks, sections, metrics */}
       <BriefingContentPanel

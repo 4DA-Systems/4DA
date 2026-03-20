@@ -55,8 +55,10 @@ mcp-4da-server/         # MCP server exposing 4DA tools (Claude Code)
 - **Rust:** std > External crates > `crate::` > `super::`
 
 ### File Size Limits
-- TypeScript/TSX: warn at 350 lines, error at 500
-- Rust: warn at 600 lines, error at 1000
+- TypeScript (.ts): warn at 300 lines, error at 500
+- TypeScript (.tsx): warn at 300 lines, error at 450
+- Rust: warn at 500 lines, error at 800
+- Rust functions: max 60 lines (warning only)
 - Exceeding files must be split or added to `scripts/check-file-sizes.cjs` exceptions
 
 ### Error Handling
