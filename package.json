@@ -28,6 +28,7 @@
     "validate:mcp": "cd mcp-4da-server && pnpm run build",
     "validate:translations": "node scripts/validate-translations.cjs",
     "validate:all": "pnpm run validate && pnpm run validate:rust && pnpm run validate:mcp && pnpm run validate:translations",
+    "generate:knowledge": "node scripts/generate-knowledge.cjs",
     "generate:types": "cd src-tauri && cargo test export_bindings --lib 2>/dev/null; if [ -d bindings ]; then mkdir -p ../src/generated && cp bindings/*.ts ../src/generated/; fi",
     "prepare": "husky"
   },
