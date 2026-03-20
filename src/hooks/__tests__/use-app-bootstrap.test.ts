@@ -6,7 +6,7 @@
  * rendering the hook directly.
  */
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { invoke } from '@tauri-apps/api/core';
+import { invoke as _invoke } from '@tauri-apps/api/core';
 
 vi.mock('@tauri-apps/api/core', () => ({
   invoke: vi.fn(),
