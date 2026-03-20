@@ -1937,5 +1937,22 @@
   "tips.feedbackLoop": "유용한 기사를 저장하세요 — 이것이 시스템에 당신에게 중요한 것을 가르칩니다.",
   "tips.feedbackLoopHint": "기사 숨기기도 도움이 됩니다. 모든 인터랙션이 결과를 개선합니다.",
   "tips.ollamaNudge": "결과가 키워드 매칭을 사용 중입니다. Ollama(무료, 로컬)로 시맨틱 매칭을 활성화하여 더 관련성 높은 결과를 얻으세요.",
-  "tips.ollamaNudgeHint": "Ollama를 설치하고 설정 > AI 제공자에서 활성화하세요. 기기에서 완전히 실행됩니다."
+  "tips.ollamaNudgeHint": "Ollama를 설치하고 설정 > AI 제공자에서 활성화하세요. 기기에서 완전히 실행됩니다.",
+
+  "guided.feed": "맞춤형 콘텐츠 피드",
+  "guided.score": "높은 점수를 받은 이유를 확인하려면 탭하세요",
+  "guided.save": "라이브러리에 항목 저장",
+  "guided.dna": "개발자 신원 프로필",
+  "guided.settings": "소스 및 AI 구성",
+
+  "emptyState.header": "첫 번째 분석이 실행되는 동안, 이번 주 {{stack}} 개발자들이 본 내용입니다",
+  "emptyState.headerDefault": "첫 번째 분석이 실행되는 동안, 이번 주 개발자들이 본 내용입니다",
+  "emptyState.footer": "실제 신호가 약 2분 후 도착합니다...",
+  "emptyState.badge": "예시",
+
+  "firstCve.title": "4DA가 당신을 보호했습니다",
+  "firstCve.detected": "공개 후 {{minutes}}분 만에 탐지",
+  "firstCve.affects": "프로젝트 {{count}}개에서 {{package}}에 영향",
+  "firstCve.viewDetails": "상세 보기",
+  "firstCve.dismiss": "확인"
 }

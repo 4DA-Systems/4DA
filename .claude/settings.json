@@ -15,6 +15,10 @@
           {
             "type": "command",
             "command": "node $(git rev-parse --show-toplevel)/.claude/scripts/analyze-prompt.cjs"
+          },
+          {
+            "type": "command",
+            "command": "node $(git rev-parse --show-toplevel)/.claude/scripts/generate-knowledge-hook.cjs"
           }
         ]
       }

@@ -2097,5 +2097,22 @@
   "tips.feedbackLoop": "Faydalı bulduğunuz makaleleri kaydedin — bu sisteme sizin için neyin önemli olduğunu öğretir.",
   "tips.feedbackLoopHint": "Makaleleri kaldırmak da yardımcı olur. Her etkileşim sonuçlarınızı iyileştirir.",
   "tips.ollamaNudge": "Sonuçlarınız anahtar kelime eşleştirmesi kullanıyor. Ollama (ücretsiz, yerel) daha ilgili sonuçlar için semantik eşleştirmeyi açar.",
-  "tips.ollamaNudgeHint": "Ollama'yı kurun, ardından Ayarlar > AI Sağlayıcı bölümünde etkinleştirin. Tamamen makinenizde çalışır."
+  "tips.ollamaNudgeHint": "Ollama'yı kurun, ardından Ayarlar > AI Sağlayıcı bölümünde etkinleştirin. Tamamen makinenizde çalışır.",
+
+  "guided.feed": "Kişiselleştirilmiş içerik akışınız",
+  "guided.score": "Neden yüksek puan aldığını görmek için dokunun",
+  "guided.save": "Öğeleri Kitaplığınıza kaydedin",
+  "guided.dna": "Geliştirici kimlik profiliniz",
+  "guided.settings": "Kaynakları ve AI'ı yapılandırın",
+
+  "emptyState.header": "İlk analiziniz çalışırken, {{stack}} geliştiricilerin bu hafta gördüklerini burada bulabilirsiniz",
+  "emptyState.headerDefault": "İlk analiziniz çalışırken, geliştiricilerin bu hafta gördüklerini burada bulabilirsiniz",
+  "emptyState.footer": "Gerçek sinyaller ~2 dakika içinde geliyor...",
+  "emptyState.badge": "Örnek",
+
+  "firstCve.title": "4DA sizi korudu",
+  "firstCve.detected": "Yayınlanmadan {{minutes}} dakika sonra tespit edildi",
+  "firstCve.affects": "projelerinizin {{count}} tanesinde {{package}}'i etkiliyor",
+  "firstCve.viewDetails": "Ayrıntıları gör",
+  "firstCve.dismiss": "Anladım"
 }
