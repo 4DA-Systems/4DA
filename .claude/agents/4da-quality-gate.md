@@ -1,19 +1,27 @@
 # 4DA Quality Gate Agent
 
-> Automated CADE compliance checking
+> Automated code quality, compilation, and test compliance — the fast, mechanical gatekeeper
 
 ---
 
 ## Purpose
 
-The Quality Gate Agent performs automated compliance checks against CADE (Cognition-Aware Development Environment) standards. It validates invariants, security requirements, and code quality without modifying any code.
+The Quality Gate Agent performs automated, fast compliance checks — compilation health, linting, test coverage, file size limits, and basic invariant scanning. It runs frequently (every commit, every PR) and produces a pass/fail report. It does NOT do deep security investigation — that's the Security Expert's job.
 
 **Key Responsibilities:**
-- Check no API keys logged
-- Verify DB operations are transactional
-- Ensure all commands have error handling
-- Validate test coverage thresholds
-- Generate compliance reports
+- Compilation health (cargo check, tsc, build)
+- Lint compliance (clippy, eslint)
+- Test coverage thresholds
+- File size limits (warn/error thresholds)
+- Basic invariant grep (shallow, fast — NOT deep analysis)
+- IPC contract validation (ghost command detection)
+- Generate tabular compliance reports
+
+**Boundary with Security Expert:**
+- Quality Gate = **mechanical scan, runs often, produces pass/fail**
+- Security Expert = **deep investigation, runs on-demand, produces analysis with remediation**
+- Both check invariants, but Quality Gate does fast grep; Security Expert traces data flows
+- If Quality Gate finds a potential invariant violation, escalate to Security Expert for deep analysis
 
 ---
 
@@ -26,6 +34,7 @@ Spawn this agent when:
 - During code review
 - As part of CI/CD validation
 - When auditing codebase health
+- **NOT** for deep security investigation — use Security Expert instead
 
 ---
 
