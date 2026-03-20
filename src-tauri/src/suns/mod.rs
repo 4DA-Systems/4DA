@@ -475,4 +475,77 @@ mod tests {
             "Disabled sun should have no next_run"
         );
     }
+
+    #[test]
+    fn test_tick_respects_interval() {
+        let mut registry = SunRegistry::new();
+        // Execute once to set last_run timestamps
+        let first_results = registry.tick();
+        // All suns should execute on first tick (last_run = 0)
+        assert!(
+            !first_results.is_empty(),
+            "First tick should execute some suns"
+        );
+
+        // Immediately tick again — no suns should execute (intervals not elapsed)
+        let second_results = registry.tick();
+        assert!(
+            second_results.is_empty(),
+            "Second immediate tick should execute nothing"
+        );
+    }
+
+    #[test]
+    fn test_tick_executes_due_suns() {
+        let mut registry = SunRegistry::new();
+        // First tick: all suns are due (never run before)
+        let results = registry.tick();
+        // All 10 enabled suns should run
+        assert_eq!(
+            results.len(),
+            10,
+            "All 10 suns should execute on first tick"
+        );
+        for (id, result) in &results {
+            assert!(
+                !result.message.is_empty(),
+                "Sun {} should produce a message",
+                id
+            );
+        }
+    }
+
+    #[test]
+    fn test_tick_skips_disabled() {
+        let mut registry = SunRegistry::new();
+        registry.set_enabled("uptime_monitor", false);
+        let results = registry.tick();
+        // uptime_monitor should NOT be in results
+        let uptime_ran = results.iter().any(|(id, _)| id == "uptime_monitor");
+        assert!(!uptime_ran, "Disabled sun should not execute on tick");
+        // Should have 9 results (10 - 1 disabled)
+        assert_eq!(results.len(), 9, "Should execute 9 of 10 suns");
+    }
+
+    #[test]
+    fn test_execute_one_bypasses_interval() {
+        let mut registry = SunRegistry::new();
+        // Execute all via tick first
+        registry.tick();
+        // Now execute_one should work even though interval hasn't passed
+        let result = registry.execute_one("uptime_monitor");
+        assert!(
+            result.is_some(),
+            "execute_one should return Some for valid sun"
+        );
+        let result = result.unwrap();
+        assert!(!result.message.is_empty(), "Result should have a message");
+    }
+
+    #[test]
+    fn test_execute_one_unknown_returns_none() {
+        let mut registry = SunRegistry::new();
+        let result = registry.execute_one("nonexistent_sun");
+        assert!(result.is_none(), "Unknown sun ID should return None");
+    }
 }

@@ -181,6 +181,16 @@ function buildBriefing(state) {
     lines.push('TEST HEALTH: not yet tracked \u2014 run /ops to record baseline');
   }
 
+  // Coverage status
+  const coverage = state.coverage;
+  if (coverage && coverage.lastRun) {
+    const ratio = (coverage.coverageRatio * 100).toFixed(1);
+    lines.push(`COVERAGE: ${ratio}% (target 25%) | ${coverage.hotUntestedCount || 0} hot+untested modules`);
+    if (coverage.hotUntestedCount > 0) {
+      instructions.push('Address hot+untested modules: node scripts/coverage-map.cjs');
+    }
+  }
+
   lines.push('');
 
   // Cadence checks
