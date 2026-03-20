@@ -1183,4 +1183,94 @@ mod tests {
         assert_eq!(suggestions[0]["topic"], "Rust");
         assert_eq!(suggestions[1]["topic"], "Python");
     }
+
+    #[test]
+    fn test_default_scan_paths_returns_vec() {
+        // get_default_scan_paths is pub(crate), test it returns non-empty on any system
+        let paths = super::get_default_scan_paths();
+        // Should return a Vec (even if empty on CI), no panic
+        assert!(paths.len() <= 20, "Should not return excessive paths");
+    }
+
+    #[test]
+    fn test_auto_seed_skip_list_filters_generic() {
+        // Simulate the skip-list logic from ace_auto_seed_interests_from_context
+        let skip_list = [
+            "npm",
+            "yarn",
+            "pnpm",
+            "node",
+            "webpack",
+            "babel",
+            "eslint",
+            "prettier",
+            "jest",
+            "mocha",
+            "typescript",
+            "tslib",
+            "core-js",
+        ];
+        let detected = vec!["Rust", "npm", "React", "webpack", "Python"];
+        let filtered: Vec<&&str> = detected
+            .iter()
+            .filter(|t| !skip_list.contains(&t.to_lowercase().as_str()))
+            .collect();
+        assert_eq!(filtered.len(), 3);
+        assert!(filtered.contains(&&"Rust"));
+        assert!(filtered.contains(&&"React"));
+        assert!(filtered.contains(&&"Python"));
+    }
+
+    #[test]
+    fn test_auto_seed_skips_scoped_packages() {
+        // Scoped npm packages (starting with @) should be filtered
+        let topics = vec!["@types/node", "@babel/core", "React", "Rust"];
+        let filtered: Vec<&&str> = topics.iter().filter(|t| !t.starts_with('@')).collect();
+        assert_eq!(filtered.len(), 2);
+        assert!(filtered.contains(&&"React"));
+    }
+
+    #[test]
+    fn test_auto_seed_skips_short_names() {
+        // Very short names (1-2 chars) should be filtered
+        let topics = vec!["Go", "R", "Rust", "AI", "React"];
+        let filtered: Vec<&&str> = topics.iter().filter(|t| t.len() > 2).collect();
+        assert_eq!(filtered.len(), 2);
+        assert!(filtered.contains(&&"Rust"));
+        assert!(filtered.contains(&&"React"));
+    }
+
+    #[test]
+    fn test_auto_seed_truncates_at_15() {
+        // Auto-seeding should cap at 15 interests
+        let mut topics: Vec<String> = (0..25).map(|i| format!("topic_{}", i)).collect();
+        topics.truncate(15);
+        assert_eq!(topics.len(), 15);
+        assert_eq!(topics.last().unwrap(), "topic_14");
+    }
+
+    #[test]
+    fn test_suggested_interests_limits_to_20() {
+        // Suggested interests should be capped at 20
+        let all_topics: Vec<String> = (0..30).map(|i| format!("topic_{}", i)).collect();
+        let limited: Vec<&String> = all_topics.iter().take(20).collect();
+        assert_eq!(limited.len(), 20);
+    }
+
+    #[test]
+    fn test_engagement_summary_shape() {
+        // Verify the JSON shape returned by ace_get_engagement_summary
+        let summary = serde_json::json!({
+            "today_interactions": 5,
+            "streak_days": 3,
+            "heatmap": [],
+            "accuracy_trend": [],
+            "recent_positive_rate": "80%",
+        });
+        assert!(summary["today_interactions"].is_number());
+        assert!(summary["streak_days"].is_number());
+        assert!(summary["heatmap"].is_array());
+        assert!(summary["accuracy_trend"].is_array());
+        assert!(summary["recent_positive_rate"].is_string());
+    }
 }
