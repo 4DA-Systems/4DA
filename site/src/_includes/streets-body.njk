@@ -542,6 +542,13 @@ Revenue compounds. Intelligence sharpens.</pre>
       }, { passive: true });
     })();
 
+    // Track STREETS CTA clicks
+    document.querySelectorAll('.btn-primary').forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        posthog.capture('streets_download_clicked', { button_text: btn.textContent.trim() });
+      });
+    });
+
     // Hamburger menu toggle
     (function() {
       var btn = document.getElementById('nav-hamburger');
