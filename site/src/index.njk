@@ -1502,6 +1502,13 @@ npx <span class="string">@4da/mcp-server</span>
         if (heroBtn) heroBtn.textContent = 'Download for ' + platform;
         if (finalBtn) finalBtn.textContent = 'Download for ' + platform + ' -- Free';
       }
+
+      // Track download clicks
+      [heroBtn, finalBtn].forEach(function(btn) {
+        if (btn) btn.addEventListener('click', function() {
+          posthog.capture('download_clicked', { platform: platform, button: btn.id });
+        });
+      });
     })();
 
     // Email notify form
@@ -1527,6 +1534,8 @@ npx <span class="string">@4da/mcp-server</span>
           if (data.ok) {
             status.textContent = "You're in. We'll keep you posted.";
             status.style.color = '#22C55E';
+            posthog.capture('email_subscribed', { source: 'landing' });
+            posthog.identify(email);
             input.value = '';
           } else {
             status.textContent = data.error || 'Something went wrong.';

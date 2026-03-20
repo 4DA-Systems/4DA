@@ -555,6 +555,7 @@ permalink: "/merch.html"
         var btn = card.querySelector('.product-buy');
         var sel = card.querySelector('.size-btn.selected');
         if (!sel) return;
+        posthog.capture('merch_buy_clicked', { product: product.title, variant: sel.textContent });
         btn.textContent = '...';
         btn.classList.add('loading');
         createCart(sel.dataset.variantId).then(function(url) {
