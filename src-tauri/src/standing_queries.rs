@@ -1,6 +1,6 @@
 //! Standing Queries — persistent intelligence monitoring.
 //!
-//! Pro-gated system that lets users define persistent search queries
+//! Signal-gated system that lets users define persistent search queries
 //! evaluated on each monitoring cycle. New matches surface as alerts.
 
 use serde::{Deserialize, Serialize};
@@ -114,7 +114,7 @@ pub fn ensure_table(conn: &rusqlite::Connection) -> Result<()> {
 /// Max 10 active queries.
 #[tauri::command]
 pub async fn create_standing_query(query_text: String) -> Result<i64> {
-    crate::settings::require_pro_feature("standing_queries")?;
+    crate::settings::require_signal_feature("standing_queries")?;
 
     let query_text = query_text.trim().to_string();
     if query_text.is_empty() {
@@ -161,7 +161,7 @@ pub async fn create_standing_query(query_text: String) -> Result<i64> {
 /// List all active standing queries, most recent first.
 #[tauri::command]
 pub async fn list_standing_queries() -> Result<Vec<StandingQuery>> {
-    crate::settings::require_pro_feature("standing_queries")?;
+    crate::settings::require_signal_feature("standing_queries")?;
 
     let conn = crate::open_db_connection()?;
     ensure_table(&conn)?;
@@ -230,7 +230,7 @@ pub async fn list_standing_queries() -> Result<Vec<StandingQuery>> {
 /// Soft-delete a standing query by setting active = 0.
 #[tauri::command]
 pub async fn delete_standing_query(id: i64) -> Result<()> {
-    crate::settings::require_pro_feature("standing_queries")?;
+    crate::settings::require_signal_feature("standing_queries")?;
 
     let conn = crate::open_db_connection()?;
     ensure_table(&conn)?;
@@ -256,7 +256,7 @@ pub async fn get_standing_query_matches(
     id: i64,
     limit: Option<usize>,
 ) -> Result<Vec<StandingQueryMatch>> {
-    crate::settings::require_pro_feature("standing_queries")?;
+    crate::settings::require_signal_feature("standing_queries")?;
 
     let conn = crate::open_db_connection()?;
     ensure_table(&conn)?;
@@ -329,7 +329,7 @@ pub async fn get_standing_query_matches(
 /// Get standing query suggestions based on engagement patterns.
 #[tauri::command]
 pub async fn get_standing_query_suggestions() -> Result<Vec<StandingQuerySuggestion>> {
-    crate::settings::require_pro_feature("standing_queries")?;
+    crate::settings::require_signal_feature("standing_queries")?;
 
     let conn = crate::open_db_connection()?;
     ensure_table(&conn)?;

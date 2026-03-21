@@ -3,9 +3,9 @@ import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../store';
 
 /**
- * Compact Pro value summary shown in the app header.
+ * Compact Signal value summary shown in the app header.
  * Displays key metrics in a single line: signals, gaps, hours saved.
- * NOT Pro-gated — free users see what they're missing.
+ * NOT Signal-gated — free users see what they're missing.
  * Reads from Zustand store (loaded once on mount via loadProValueReport).
  */
 export const ProValueBadge = memo(function ProValueBadge() {

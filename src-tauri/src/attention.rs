@@ -270,7 +270,7 @@ fn compute_trend(conn: &rusqlite::Connection, period_days: u32) -> Result<Vec<Tr
 
 #[tauri::command]
 pub fn get_attention_report(period_days: Option<u32>) -> Result<AttentionReport> {
-    crate::settings::require_pro_feature("get_attention_report")?;
+    crate::settings::require_signal_feature("get_attention_report")?;
     let days = period_days.unwrap_or(30);
     info!(target: "4da::attention", period_days = days, "Generating attention report");
     generate_report(days)
