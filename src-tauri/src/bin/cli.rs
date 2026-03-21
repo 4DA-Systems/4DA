@@ -266,7 +266,7 @@ fn cmd_signals(conn: &rusqlite::Connection, critical_only: bool, json_mode: bool
             let escaped_title = title.replace('\\', "\\\\").replace('"', "\\\"");
             json_entries.push(format!(
                 "{{\"priority\":\"{pri}\",\"signal_type\":\"{sig}\",\"source\":\"{source_type}\",\"date\":\"{}\",\"title\":\"{escaped_title}\",\"url\":\"{url_str}\",\"action\":\"{action_str}\"}}",
-                &created_at[..10]
+                if created_at.len() >= 10 { &created_at[..10] } else { &created_at }
             ));
         } else {
             let icon = match pri {
@@ -277,7 +277,11 @@ fn cmd_signals(conn: &rusqlite::Connection, critical_only: bool, json_mode: bool
             };
 
             let sig = signal_type.unwrap_or("signal");
-            let date = &created_at[..10]; // Just the date part
+            let date = if created_at.len() >= 10 {
+                &created_at[..10]
+            } else {
+                &created_at
+            };
 
             println!("[{icon}] [{pri:<8}] [{sig:<18}] [{source_type:<12}] {date}  {title}");
             if let Some(act) = action {
