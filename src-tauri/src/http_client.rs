@@ -1,14 +1,20 @@
-//! Shared HTTP client for general-purpose outbound requests.
+//! Shared HTTP clients for outbound requests.
 //!
-//! Provides a global `reqwest::Client` with sensible defaults for most use cases.
+//! Three pooled clients with distinct timeout profiles:
+//! - `HTTP_CLIENT` — general-purpose, 30s timeout, 10s connect
+//! - `PROBE_CLIENT` — health checks & API validation, 15s timeout, 5s connect
+//! - `TEAM_CLIENT` — team relay operations, 15s timeout, TeamSync user-agent
 //!
-//! **When NOT to use this client:**
+//! **When NOT to use these clients (keep purpose-built):**
 //! - `embeddings.rs` — needs 90s timeout for large embedding batches
 //! - `llm.rs` — needs dynamic timeouts (60s cloud, 120s Ollama cold start)
-//! - `settings_commands.rs::pull_ollama_model` — needs 600s timeout for model downloads
+//! - `settings_commands_llm.rs::test_ollama_connection_impl` — 120s for cold model load
+//! - `settings_commands_llm.rs::pull_ollama_model` — 600s for model downloads
+//! - `settings_commands_llm.rs::detect_local_servers` — 3s intentionally fast probe
+//! - `team_sync_scheduler.rs` — 30s timeout for background sync cycles
+//! - `webhooks.rs::deliver_webhook` — 10s timeout for fire-and-forget
+//! - `calibration_commands.rs` — 3s quick Ollama check
 //! - `sources/mod.rs` — already has its own `SHARED_CLIENT` with identical config
-//!
-//! For those cases, keep the purpose-built client and document why.
 
 use std::sync::LazyLock;
 use std::time::Duration;
@@ -24,6 +30,33 @@ pub(crate) static HTTP_CLIENT: LazyLock<reqwest::Client> = LazyLock::new(|| {
         .build()
         .unwrap_or_else(|e| {
             tracing::warn!("Failed to build HTTP client: {e}, using default");
+            reqwest::Client::new()
+        })
+});
+
+/// Shared client for quick health checks, status probes, and API validation.
+/// Tight timeouts prevent blocking on unresponsive services.
+pub(crate) static PROBE_CLIENT: LazyLock<reqwest::Client> = LazyLock::new(|| {
+    reqwest::Client::builder()
+        .user_agent("4DA/1.0")
+        .connect_timeout(Duration::from_secs(5))
+        .timeout(Duration::from_secs(15))
+        .build()
+        .unwrap_or_else(|e| {
+            tracing::warn!("Failed to build probe client: {e}, using default");
+            reqwest::Client::new()
+        })
+});
+
+/// Shared client for team relay operations (sync, create, join).
+/// Uses team-specific user-agent for relay identification.
+pub(crate) static TEAM_CLIENT: LazyLock<reqwest::Client> = LazyLock::new(|| {
+    reqwest::Client::builder()
+        .user_agent("4DA-TeamSync/1.0")
+        .timeout(Duration::from_secs(15))
+        .build()
+        .unwrap_or_else(|e| {
+            tracing::warn!("Failed to build team client: {e}, using default");
             reqwest::Client::new()
         })
 });
