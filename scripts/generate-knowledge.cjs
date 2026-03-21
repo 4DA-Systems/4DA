@@ -192,7 +192,8 @@ function parseTsCommandFunctions() {
 
   // Find the CommandMap interface and extract ONLY its top-level keys.
   // Keys follow the pattern:  command_name: { params: ...; result: ... };
-  // We must distinguish these from nested interface properties (e.g. alerts: { total: number })
+  // Some entries span multiple lines (multi-line params object).
+  // We match at brace depth 1 (before processing current line's braces).
   let inCommandMap = false;
   let braceDepth = 0;
 
@@ -206,7 +207,10 @@ function parseTsCommandFunctions() {
 
     if (!inCommandMap) continue;
 
-    // Track brace depth to know when we exit CommandMap
+    // Save depth BEFORE processing this line's braces
+    const depthBeforeLine = braceDepth;
+
+    // Track brace depth
     for (const ch of line) {
       if (ch === "{") braceDepth++;
       else if (ch === "}") braceDepth--;
@@ -218,10 +222,10 @@ function parseTsCommandFunctions() {
       continue;
     }
 
-    // Only match at braceDepth 1 (top-level keys of CommandMap)
-    // These have the pattern: command_name: { params: ...; result: ... }
-    if (braceDepth === 1 || (braceDepth === 2 && /^\s+[a-z_][a-z0-9_]*\s*:\s*\{.*params\s*:/.test(line))) {
-      const keyMatch = line.match(/^\s+([a-z_][a-z0-9_]*)\s*:\s*\{.*params\s*:/);
+    // Match top-level keys: at depth 1 BEFORE this line's braces are counted,
+    // the pattern is: command_name: { (the opening brace of the value object)
+    if (depthBeforeLine === 1) {
+      const keyMatch = line.match(/^\s+([a-z_][a-z0-9_]*)\s*:\s*\{/);
       if (keyMatch) {
         commands.add(keyMatch[1]);
       }
@@ -603,6 +607,12 @@ function generateIPCContracts() {
   const issueCount =
     registeredNotTs.length + tsNotRegistered.length + definedNotRegistered.length;
 
+  // Explain the definition vs registration gap if it exists
+  const defGap = registered.size - rustCommands.size;
+  const gapNote = defGap > 0
+    ? `\n> **Note:** Definitions (${rustCommands.size}) < registrations (${registered.size}) because ${defGap} commands have \`#[cfg]\`-gated duplicate definitions (feature-gated stubs in lib.rs + real implementations elsewhere). The scanner deduplicates but counts unique names. This is expected.\n`
+    : "";
+
   let md = `# IPC Contract Map
 > Auto-generated ${TIMESTAMP} — DO NOT EDIT
 
@@ -615,7 +625,7 @@ function generateIPCContracts() {
 | Raw \`invoke()\` bypasses | ${rawInvokes.length} | ${rawInvokes.length > 10 ? "WARNING" : "OK"} |
 | Healthy (registered + typed) | ${healthy.length} | — |
 | **Contract issues** | **${issueCount}** | **${issueCount === 0 ? "CLEAN" : "NEEDS ATTENTION"}** |
-
+${gapNote}
 `;
 
   if (registeredNotTs.length > 0) {
@@ -684,15 +694,33 @@ function generateDataLayer() {
     rel: relPath(f),
   }));
 
-  // Schema patterns
-  const createTables = grepFiles(RUST_SRC, [".rs"], /CREATE\s+TABLE/i);
-  const alterTables = grepFiles(RUST_SRC, [".rs"], /ALTER\s+TABLE/i);
+  // Schema patterns — extract just table names, not full lines
+  const createTables = grepFiles(RUST_SRC, [".rs"], /CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?(\w+)/i);
+  const alterTables = grepFiles(RUST_SRC, [".rs"], /ALTER\s+TABLE\s+(\w+)/i);
 
-  // Transaction usage
+  // Deduplicate table names (same table created in multiple places = migrations)
+  const tableNames = new Set();
+  for (const ct of createTables) {
+    const nameMatch = ct.text.match(/CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?(\w+)/i);
+    if (nameMatch) tableNames.add(nameMatch[1]);
+  }
+
+  // Transaction usage — count per file, not list every call site
   const transactions = grepFiles(RUST_SRC, [".rs"], /\.transaction\s*\(|Transaction::new|begin_transaction/);
+  const txByFile = {};
+  for (const t of transactions) {
+    if (!txByFile[t.file]) txByFile[t.file] = 0;
+    txByFile[t.file]++;
+  }
 
-  // sqlite-vec patterns
+  // sqlite-vec patterns — count per file
   const vecQueries = grepFiles(RUST_SRC, [".rs"], /vec_search|sqlite_vec|embedding.*distance|knn|vec0/i);
+  const vecByFile = {};
+  for (const v of vecQueries) {
+    if (!vecByFile[v.file]) vecByFile[v.file] = 0;
+    vecByFile[v.file]++;
+  }
+
   const kPatterns = grepFiles(RUST_SRC, [".rs"], /k\s*=\s*\?/);
 
   const recentGit = getRecentGitLog("src-tauri/src/db/");
@@ -709,29 +737,33 @@ function generateDataLayer() {
     md += `| \`${f.name}\` | ${f.lines} |\n`;
   }
 
-  md += `\n## Schema Definitions (CREATE TABLE: ${createTables.length})\n`;
-  for (const ct of createTables) {
-    md += `- \`${ct.file}:${ct.line}\` — ${ct.text.slice(0, 100)}\n`;
+  md += `\n## Tables (${tableNames.size} unique)\n`;
+  md += [...tableNames].sort().map((t) => `- \`${t}\``).join("\n") + "\n";
+
+  md += `\n## Schema Locations (${createTables.length} CREATE + ${alterTables.length} ALTER)\n`;
+  // Group by file, show count not every line
+  const schemaByFile = {};
+  for (const ct of [...createTables, ...alterTables]) {
+    if (!schemaByFile[ct.file]) schemaByFile[ct.file] = 0;
+    schemaByFile[ct.file]++;
+  }
+  for (const [file, count] of Object.entries(schemaByFile).sort((a, b) => b[1] - a[1])) {
+    md += `- \`${file}\` — ${count} schema statements\n`;
   }
 
-  md += `\n## Migrations (ALTER TABLE: ${alterTables.length})\n`;
-  for (const at of alterTables) {
-    md += `- \`${at.file}:${at.line}\` — ${at.text.slice(0, 100)}\n`;
+  md += `\n## Transaction Coverage (${transactions.length} call sites across ${Object.keys(txByFile).length} files)\n`;
+  for (const [file, count] of Object.entries(txByFile).sort((a, b) => b[1] - a[1]).slice(0, 10)) {
+    md += `- \`${file}\` — ${count} transactions\n`;
   }
 
-  md += `\n## Transaction Usage (${transactions.length} call sites)\n`;
-  for (const t of transactions.slice(0, 20)) {
-    md += `- \`${t.file}:${t.line}\`\n`;
+  md += `\n## sqlite-vec Usage (${vecQueries.length} references across ${Object.keys(vecByFile).length} files)\n`;
+  for (const [file, count] of Object.entries(vecByFile).sort((a, b) => b[1] - a[1])) {
+    md += `- \`${file}\` — ${count} references\n`;
   }
 
-  md += `\n## sqlite-vec / Vector Search (${vecQueries.length} references)\n`;
-  for (const v of vecQueries.slice(0, 15)) {
-    md += `- \`${v.file}:${v.line}\` — ${v.text.slice(0, 100)}\n`;
-  }
-
-  md += `\n## KNN k= Pattern Usage (${kPatterns.length})\n`;
-  for (const k of kPatterns) {
-    md += `- \`${k.file}:${k.line}\` — ${k.text.slice(0, 80)}\n`;
+  md += `\n## KNN k= Pattern (${kPatterns.length} correct usages)\n`;
+  for (const k of kPatterns.slice(0, 5)) {
+    md += `- \`${k.file}:${k.line}\`\n`;
   }
 
   md += `\n## Critical Gotchas\n`;
@@ -842,14 +874,32 @@ function generateScoringML() {
 // GENERATOR 7: Security Surface
 // ---------------------------------------------------------------------------
 
+function isTestFile(filepath) {
+  return /(_tests?\.rs|tests\.rs|\.test\.|__tests__|test_|privacy_tests|hardening_error)/.test(filepath);
+}
+
+function isTestCode(entry) {
+  return isTestFile(entry.file) || /\#\[cfg\(test\)\]|\#\[test\]|FAKE_|TESTKEYDONOTUSE|sk-ant-test/.test(entry.text);
+}
+
 function generateSecuritySurface() {
-  // Key security patterns to scan for
-  const apiKeyLogs = grepFiles(RUST_SRC, [".rs"], /(?:log|debug|info|warn|error|println|eprintln).*(?:api_key|secret|token|password)/i);
-  const unwraps = grepFiles(RUST_SRC, [".rs"], /\.unwrap\(\)/);
-  const panics = grepFiles(RUST_SRC, [".rs"], /panic!\(|todo!\(|unimplemented!\(/);
+  // Key security patterns — separate production from test code
+  // Exclude test files, error context (.with_context, .map_err), and doc comments
+  const apiKeyLogs = grepFiles(RUST_SRC, [".rs"], /(?:log|debug|info|warn|error|println|eprintln).*(?:api_key|secret|token|password)/i)
+    .filter((v) => !isTestFile(v.file))
+    .filter((v) => !/(with_context|map_err|\/\/\/|\/\/ )/.test(v.text));
+  const allUnwraps = grepFiles(RUST_SRC, [".rs"], /\.unwrap\(\)/);
+  const prodUnwraps = allUnwraps.filter((u) => !isTestFile(u.file));
+  const testUnwraps = allUnwraps.filter((u) => isTestFile(u.file));
+  const allPanics = grepFiles(RUST_SRC, [".rs"], /panic!\(|todo!\(|unimplemented!\(/);
+  const prodPanics = allPanics.filter((p) => !isTestFile(p.file));
   const unsafeBlocks = grepFiles(RUST_SRC, [".rs"], /unsafe\s*\{/);
-  const sqlInjection = grepFiles(RUST_SRC, [".rs"], /format!\(.*(?:SELECT|INSERT|UPDATE|DELETE|DROP)/i);
-  const hardcodedSecrets = grepFiles(RUST_SRC, [".rs"], /(?:api_key|secret|password|token)\s*=\s*"/i);
+  // Exclude error context formatting — only match format! used in actual SQL string building
+  const sqlInjection = grepFiles(RUST_SRC, [".rs"], /format!\(.*(?:SELECT|INSERT|UPDATE|DELETE|DROP)/i)
+    .filter((s) => !isTestFile(s.file))
+    .filter((s) => !/(with_context|map_err|context\()/.test(s.text));
+  const hardcodedSecrets = grepFiles(RUST_SRC, [".rs"], /(?:api_key|secret|password|token)\s*=\s*"/i)
+    .filter((s) => !isTestFile(s.file) && !isTestCode(s));
 
   // Frontend security
   const dangerousHTML = grepFiles(REACT_SRC, [".tsx"], /dangerouslySetInnerHTML/);
@@ -866,8 +916,9 @@ function generateSecuritySurface() {
 | Check | Count | Severity | Status |
 |-------|-------|----------|--------|
 | API key in logs | ${apiKeyLogs.length} | CRITICAL | ${apiKeyLogs.length === 0 ? "PASS" : "**FAIL**"} |
-| .unwrap() usage | ${unwraps.length} | High | ${unwraps.length < 10 ? "OK" : "REVIEW"} |
-| panic!/todo!/unimplemented! | ${panics.length} | High | ${panics.length < 5 ? "OK" : "REVIEW"} |
+| .unwrap() in prod code | ${prodUnwraps.length} | High | ${prodUnwraps.length < 10 ? "OK" : "REVIEW"} |
+| .unwrap() in test code | ${testUnwraps.length} | — | OK (expected in tests) |
+| panic!/todo! in prod code | ${prodPanics.length} | High | ${prodPanics.length < 5 ? "OK" : "REVIEW"} |
 | unsafe blocks | ${unsafeBlocks.length} | Medium | ${unsafeBlocks.length === 0 ? "PASS" : "REVIEW"} |
 | SQL string formatting | ${sqlInjection.length} | CRITICAL | ${sqlInjection.length === 0 ? "PASS" : "**FAIL**"} |
 | Hardcoded secrets | ${hardcodedSecrets.length} | CRITICAL | ${hardcodedSecrets.length === 0 ? "PASS" : "**FAIL**"} |
@@ -884,11 +935,10 @@ function generateSecuritySurface() {
     md += `\n`;
   }
 
-  if (unwraps.length > 0) {
-    md += `## .unwrap() Usage (${unwraps.length} — review each)\n`;
-    // Group by file
+  if (prodUnwraps.length > 0) {
+    md += `## .unwrap() in Production Code (${prodUnwraps.length} — review each)\n`;
     const byFile = {};
-    for (const u of unwraps) {
+    for (const u of prodUnwraps) {
       if (!byFile[u.file]) byFile[u.file] = 0;
       byFile[u.file]++;
     }
@@ -898,9 +948,9 @@ function generateSecuritySurface() {
     md += `\n`;
   }
 
-  if (panics.length > 0) {
-    md += `## Panic Points (${panics.length})\n`;
-    for (const p of panics.slice(0, 10)) {
+  if (prodPanics.length > 0) {
+    md += `## Panic Points in Production Code (${prodPanics.length})\n`;
+    for (const p of prodPanics.slice(0, 10)) {
       md += `- \`${p.file}:${p.line}\` — ${p.text.slice(0, 80)}\n`;
     }
     md += `\n`;

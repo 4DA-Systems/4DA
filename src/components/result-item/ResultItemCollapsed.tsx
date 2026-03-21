@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import type { SourceRelevance, FeedbackAction } from '../../types';
 import { formatScore, getScoreColor, formatRelativeAge, getScoreFactorKeys } from '../../utils/score';
 import { getSourceLabel, getSourceColorClass } from '../../config/sources';
+import { isSafeUrl } from '../../utils/sanitize-html';
 import { BadgeRow } from './BadgeRow';
 import { ProInsightRow } from './ProInsightRow';
 
@@ -63,7 +64,7 @@ export const ResultItemCollapsed = memo(function ResultItemCollapsed({
         {/* Title and URL — click title to open link */}
         <div className="flex-1 min-w-0">
           <div className="flex items-start gap-2">
-            {item.url ? (
+            {item.url && isSafeUrl(item.url) ? (
               <a
                 href={item.url}
                 target="_blank"
