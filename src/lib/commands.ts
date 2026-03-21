@@ -242,6 +242,10 @@ interface CommandMap {
   prune_personalization_cache: { params: Record<string, never>; result: { deleted: number; remaining: number; read_states: number; cache_size_bytes: number } };
   hydrate_lesson_with_llm: { params: { moduleId: string; lessonIdx: number }; result: { upgraded: number; total_blocks?: number; reason?: string } };
 
+  // -- Content Integrity --
+  check_content_integrity: { params: Record<string, never>; result: ContentIntegrityReport };
+  audit_content_integrity: { params: Record<string, never>; result: ContentIntegrityReport };
+
   // -- STREETS Health --
   get_street_health: { params: Record<string, never>; result: StreetHealthScore };
   get_streets_suggestion: { params: Record<string, never>; result: { module_id: string; module_title: string; reason: string; match_strength: number } | null };
@@ -553,6 +557,16 @@ interface CommandMap {
 // Types referenced above but not yet in shared type files
 // (These can be moved to src/types/ as they get formalized)
 // ============================================================================
+
+/** Content integrity verification report (mirrors Rust IntegrityReport) */
+interface ContentIntegrityReport {
+  passed: boolean;
+  filtered_tech: Array<{ name: string; reason: string; source: string }>;
+  phantom_tech: Array<{ name: string; detected_confidence: number; category: string; auto_removed: boolean }>;
+  verified_stack: string[];
+  auto_corrected: number;
+  checked_at: string;
+}
 
 /** Personalization context summary (mirrors Rust get_personalization_context_summary JSON) */
 interface PersonalizationContextSummary {
