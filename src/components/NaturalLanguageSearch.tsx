@@ -5,6 +5,7 @@ import { listen } from '@tauri-apps/api/event';
 import { useAppStore } from '../store';
 import { useLicense } from '../hooks';
 import { trackEvent } from '../hooks/use-telemetry';
+import { useGameComponent } from '../hooks/use-game-component';
 import { StackHealthBar, type StackHealth } from './search/StackHealthBar';
 import { SynthesisPanel, type SynthesisResponse } from './search/SynthesisPanel';
 import { GhostPreview, type GhostPreviewData } from './search/GhostPreview';
@@ -66,6 +67,16 @@ export function NaturalLanguageSearch({ onStatusChange, defaultExpanded = true }
   const analysisComplete = useAppStore((s) => s.appState.analysisComplete);
   const lastAnalyzedAt = useAppStore((s) => s.appState.lastAnalyzedAt);
   const hasAnalysisRun = analysisComplete || lastAnalyzedAt !== null;
+
+  const { containerRef: ambientRef, elementRef: ambientElement } = useGameComponent('game-briefing-atmosphere');
+
+  useEffect(() => {
+    const el = ambientElement.current;
+    if (!el) return;
+    el.setParam?.('quality', hasAnalysisRun ? 0.6 : 0.15);
+    el.setParam?.('signal_heat', result ? Math.min(result.total_count / 50, 1) : 0);
+    el.setParam?.('decision_pressure', loading ? 0.8 : 0);
+  }, [hasAnalysisRun, result, loading, ambientElement]);
 
   // Load stack health on mount
   useEffect(() => {
@@ -135,7 +146,14 @@ export function NaturalLanguageSearch({ onStatusChange, defaultExpanded = true }
   const relevantStack = result?.stack_context?.filter((s) => s.relevant) ?? [];
 
   return (
-    <div className="bg-bg-tertiary rounded-lg p-5 border border-border">
+    <div className="relative rounded-lg p-5 border border-border overflow-hidden bg-bg-tertiary/50">
+      {/* Ambient GAME field behind search panel */}
+      <div
+        ref={ambientRef}
+        className="absolute inset-0 opacity-30 pointer-events-none"
+        aria-hidden="true"
+      />
+      <div className="relative z-10">
       <button
         className="flex items-center justify-between cursor-pointer w-full text-left"
         onClick={() => setExpanded(!expanded)}
@@ -369,6 +387,7 @@ export function NaturalLanguageSearch({ onStatusChange, defaultExpanded = true }
           {isPro && <StandingQueries isPro={isPro} />}
         </div>
       )}
+      </div>
     </div>
   );
 }
