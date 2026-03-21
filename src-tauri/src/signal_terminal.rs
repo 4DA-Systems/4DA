@@ -690,6 +690,34 @@ async fn api_search(
     })))
 }
 
+/// GET /api/sources — Source health and last-fetch status.
+async fn api_sources(
+    headers: HeaderMap,
+    State(state): State<TerminalState>,
+) -> Result<Json<serde_json::Value>, (StatusCode, Json<serde_json::Value>)> {
+    check_auth(&headers, &state)?;
+
+    let registry = crate::get_source_registry();
+    let reg = registry.lock();
+    let sources: Vec<serde_json::Value> = reg
+        .sources()
+        .iter()
+        .map(|s| {
+            serde_json::json!({
+                "name": s.name(),
+                "source_type": s.source_type(),
+                "enabled": true,
+            })
+        })
+        .collect();
+    drop(reg);
+
+    Ok(Json(serde_json::json!({
+        "count": sources.len(),
+        "sources": sources,
+    })))
+}
+
 // ============================================================================
 // Phase 2 Page Handlers
 // ============================================================================
@@ -757,6 +785,7 @@ fn build_router(token: String) -> Router {
         .route("/api/dna", get(api_dna))
         .route("/api/gaps", get(api_gaps))
         .route("/api/search", get(api_search))
+        .route("/api/sources", get(api_sources))
         .layer(cors)
         .with_state(state)
 }
