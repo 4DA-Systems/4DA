@@ -32,11 +32,13 @@ const BADGE_COLORS: Partial<Record<ViewId, string>> = {
   channels: 'bg-cyan-400',
   results: 'bg-orange-400',
   profile: 'bg-amber-400',
+  insights: 'bg-amber-400',
+  saved: 'bg-green-400',
 };
 
 export const ViewTabBar = memo(function ViewTabBar() {
   const { t } = useTranslation();
-  const { activeView, resultsCount, windows, profilePct, channels, viewTier, showAllViews } = useAppStore(
+  const { activeView, resultsCount, windows, profilePct, channels, viewTier, showAllViews, savedCount, wisdomCount } = useAppStore(
     useShallow((s) => ({
       activeView: s.activeView,
       resultsCount: s.appState.relevanceResults.length,
@@ -45,18 +47,23 @@ export const ViewTabBar = memo(function ViewTabBar() {
       channels: s.channels ?? [],
       viewTier: s.viewTier,
       showAllViews: s.showAllViews,
+      savedCount: Object.values(s.feedbackGiven).filter(f => f === 'save').length,
+      wisdomCount: (s.decisionWindows ?? []).filter(w => w.status === 'open').length,
     })),
   );
   const setActiveView = useAppStore(s => s.setActiveView);
 
   const badges = useMemo(() => {
-    const b: Partial<Record<ViewId, boolean>> = {};
+    const b: Partial<Record<ViewId, number | boolean>> = {};
     if (resultsCount > 0) b.results = true;
     if ((windows ?? []).some(w => w.status === 'open')) b.briefing = true;
     if (profilePct != null && profilePct < 50) b.profile = true;
     if (channels.some(ch => ch.freshness === 'fresh')) b.channels = true;
+    // New notification badges with counts
+    if (wisdomCount > 0) b.insights = wisdomCount;
+    if (savedCount > 0) b.saved = savedCount;
     return b;
-  }, [resultsCount, windows, profilePct, channels]);
+  }, [resultsCount, windows, profilePct, channels, wisdomCount, savedCount]);
 
   const visibleTabs = useMemo(() => {
     if (showAllViews) return TABS;
@@ -68,7 +75,9 @@ export const ViewTabBar = memo(function ViewTabBar() {
     <nav aria-label="Main views">
     <div className="mb-6 flex items-center gap-1 bg-bg-secondary rounded-lg p-1 border border-border w-fit" role="tablist" aria-label="Content views">
       {visibleTabs.map(tab => {
-        const showBadge = badges[tab.id] && activeView !== tab.id;
+        const badgeValue = badges[tab.id];
+        const showBadge = badgeValue && activeView !== tab.id;
+        const badgeCount = typeof badgeValue === 'number' ? badgeValue : 0;
         return (
           <button
             key={tab.id}
@@ -88,10 +97,19 @@ export const ViewTabBar = memo(function ViewTabBar() {
               activeView === tab.id ? 'opacity-70' : 'opacity-40'
             }`}>{t(tab.subtitleKey)}</span>
             {showBadge && (
-              <span
-                className={`absolute top-1 right-1 w-1.5 h-1.5 rounded-full ${BADGE_COLORS[tab.id] || 'bg-white/60'}`}
-                aria-label="New activity"
-              />
+              badgeCount > 0 ? (
+                <span
+                  className={`absolute -top-1 -right-1 min-w-[18px] h-[18px] flex items-center justify-center rounded-full text-[10px] font-bold text-black ${BADGE_COLORS[tab.id] || 'bg-white/60'}`}
+                  aria-label={`${badgeCount} notifications`}
+                >
+                  {badgeCount > 9 ? '9+' : badgeCount}
+                </span>
+              ) : (
+                <span
+                  className={`absolute top-1 right-1 w-1.5 h-1.5 rounded-full ${BADGE_COLORS[tab.id] || 'bg-white/60'}`}
+                  aria-label="New activity"
+                />
+              )
             )}
           </button>
         );

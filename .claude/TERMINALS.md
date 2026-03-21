@@ -18,4 +18,9 @@
 
 ### T1 — Execute all phases: hygiene gates + screenshot moments + first-run excellence
 - **Status**: working
-- **Files**: scripts/check-file-sizes.cjs, src/store/feedback-slice.ts, src/components/app/AppHeader.tsx, src/components/BriefingView.tsx, src/components/Onboarding.tsx, src/components/ResultsView.tsx, src/components/FeedbackMilestone.tsx, src/components/WeeklyProgressCard.tsx, src/components/AccuracySparkline.tsx, src/components/DepHealthShield.tsx, src/components/FirstCveCard.tsx, src/components/GuidedHighlights.tsx
+- **Files**: scripts/check-file-sizes.cjs, src/store/feedback-slice.ts, src/components/Onboarding.tsx, src/components/FeedbackMilestone.tsx, src/components/WeeklyProgressCard.tsx, src/components/AccuracySparkline.tsx, src/components/DepHealthShield.tsx, src/components/FirstCveCard.tsx, src/components/GuidedHighlights.tsx
+
+### T2 — Front page Intelligence Hierarchy redesign (all 4 phases)
+- **Status**: committing
+- **Commit Lock**: HELD
+- **Files**: src/components/briefing/BriefingContentPanel.tsx, src/components/BriefingView.tsx, src/components/void-engine/VoidBanner.tsx, src/components/result-item/ResultItemCollapsed.tsx, src/components/ViewTabBar.tsx, src/components/briefing/PulseSummary.tsx, src/components/briefing/IntelligenceFeed.tsx
