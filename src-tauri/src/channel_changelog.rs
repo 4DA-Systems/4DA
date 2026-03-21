@@ -87,11 +87,14 @@ fn word_jaccard(a: &str, b: &str) -> f64 {
 
 /// Truncate a paragraph for changelog display.
 fn truncate_paragraph(p: &str) -> String {
-    if p.len() > 150 {
-        format!("{}...", &p[..150])
-    } else {
-        p.to_string()
+    if p.len() <= 150 {
+        return p.to_string();
     }
+    let mut end = 150;
+    while end > 0 && !p.is_char_boundary(end) {
+        end -= 1;
+    }
+    format!("{}...", &p[..end])
 }
 
 // ============================================================================
