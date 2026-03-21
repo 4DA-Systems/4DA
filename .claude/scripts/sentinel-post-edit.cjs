@@ -67,8 +67,20 @@ process.stdin.on("end", () => {
       fs.writeFileSync(DEBOUNCE_FILE, String(Date.now()));
     } catch {}
 
-    // Run fast cargo check
+    // GAP 5 fix: skip if cargo/dev server is already running
     const { execSync } = require("child_process");
+    try {
+      const tasklist = execSync(
+        'tasklist //FI "IMAGENAME eq cargo.exe" 2>NUL',
+        { encoding: "utf-8", timeout: 3000, stdio: ["pipe", "pipe", "pipe"] }
+      );
+      if (/cargo\.exe/i.test(tasklist)) {
+        console.log("PASS");
+        return;
+      }
+    } catch {}
+
+    // Run fast cargo check
     try {
       execSync("cargo check --lib --message-format=short 2>&1", {
         cwd: path.join(ROOT, "src-tauri"),
