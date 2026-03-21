@@ -146,9 +146,12 @@ pub(crate) fn open_db_connection() -> Result<rusqlite::Connection> {
 
     let conn = rusqlite::Connection::open(&db_path).context("Failed to open database")?;
 
-    // Set busy_timeout to prevent "database is locked" errors
-    conn.execute_batch("PRAGMA busy_timeout = 5000;")
-        .context("Failed to set busy_timeout")?;
+    // Match the PRAGMA configuration from Database::new for consistency
+    conn.execute_batch(
+        "PRAGMA foreign_keys = ON;
+         PRAGMA busy_timeout = 5000;",
+    )
+    .context("Failed to set connection PRAGMAs")?;
 
     Ok(conn)
 }

@@ -1,6 +1,7 @@
 import { memo, useState, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { SourceRelevance, FeedbackAction } from '../../types';
+import { isSafeUrl } from '../../utils/sanitize-html';
 
 interface FeedbackButtonsProps {
   item: SourceRelevance;
@@ -49,7 +50,7 @@ export const FeedbackButtons = memo(function FeedbackButtons({ item, feedback, o
 
   return (
     <div className="flex gap-2 mb-3" role="group" aria-label={t('feedback.actions', { defaultValue: 'Feedback actions' })}>
-      {item.url && (
+      {item.url && isSafeUrl(item.url) && (
         <a
           href={item.url}
           target="_blank"
