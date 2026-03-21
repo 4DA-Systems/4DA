@@ -67,7 +67,7 @@ describe('useItemSummary', () => {
       await result.current.generateSummary();
     });
 
-    expect(result.current.summaryError).toContain('LLM timeout');
+    expect(result.current.summaryError).toBe('Request timed out. Try again in a moment.');
     expect(result.current.summaryLoading).toBe(false);
   });
 

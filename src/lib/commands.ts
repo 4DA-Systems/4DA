@@ -246,6 +246,9 @@ interface CommandMap {
   check_content_integrity: { params: Record<string, never>; result: ContentIntegrityReport };
   audit_content_integrity: { params: Record<string, never>; result: ContentIntegrityReport };
 
+  // -- First-Run Simulation Audit --
+  run_first_run_simulation: { params: Record<string, never>; result: FirstRunAuditReport };
+
   // -- STREETS Health --
   get_street_health: { params: Record<string, never>; result: StreetHealthScore };
   get_streets_suggestion: { params: Record<string, never>; result: { module_id: string; module_title: string; reason: string; match_strength: number } | null };
@@ -565,6 +568,18 @@ interface ContentIntegrityReport {
   phantom_tech: Array<{ name: string; detected_confidence: number; category: string; auto_removed: boolean }>;
   verified_stack: string[];
   auto_corrected: number;
+  checked_at: string;
+}
+
+/** First-run simulation audit report (mirrors Rust FirstRunAuditReport) */
+interface FirstRunAuditReport {
+  passed: boolean;
+  lessons_audited: number;
+  unresolved_templates: Array<{ module_id: string; lesson_idx: number; severity: string; category: string; description: string; fragment: string }>;
+  fallback_only_fields: Array<{ module_id: string; lesson_idx: number; severity: string; category: string; description: string; fragment: string }>;
+  broken_markers: Array<{ module_id: string; lesson_idx: number; severity: string; category: string; description: string; fragment: string }>;
+  total_issues: number;
+  critical_issues: number;
   checked_at: string;
 }
 
@@ -1671,9 +1686,38 @@ export function cmd<K extends keyof CommandMap>(
   command: K,
   params?: CommandMap[K]['params'],
 ): Promise<CommandMap[K]['result']> {
-  return invoke<CommandMap[K]['result']>(command, params ?? {});
+  const timeoutMs = LONG_RUNNING_COMMANDS.has(command) ? LONG_TIMEOUT_MS : DEFAULT_TIMEOUT_MS;
+  return withTimeout(invoke<CommandMap[K]['result']>(command, params ?? {}), timeoutMs);
 }
 
+// ============================================================================
+// IPC Timeout — prevents hanging if a Rust command deadlocks or stalls
+// ============================================================================
+
+const DEFAULT_TIMEOUT_MS = 30_000; // 30s for most commands
+const LONG_TIMEOUT_MS = 120_000; // 120s for analysis, indexing, LLM calls
+
+/** Commands that legitimately need extended timeouts */
+const LONG_RUNNING_COMMANDS = new Set<string>([
+  'run_cached_analysis',
+  'index_context',
+  'ace_full_scan',
+  'pull_ollama_model',
+  'natural_language_query',
+  'synthesize_search',
+  'generate_briefing',
+  'setup_and_verify_ollama',
+]);
+
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+  let timer: ReturnType<typeof setTimeout>;
+  return Promise.race([
+    promise,
+    new Promise<never>((_, reject) => {
+      timer = setTimeout(() => reject(new Error(`Command timed out after ${ms / 1000}s`)), ms);
+    }),
+  ]).finally(() => clearTimeout(timer));
+}
 
 // ============================================================================
 // Re-export types used by command consumers

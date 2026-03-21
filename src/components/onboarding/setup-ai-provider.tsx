@@ -47,8 +47,12 @@ export function SetupAIProvider({
   const [localServers, setLocalServers] = useState<LocalServer[]>([]);
 
   useEffect(() => {
-    cmd('detect_environment').then(setEnvDetection).catch(() => {});
-    cmd('detect_local_servers').then((r) => setLocalServers(r.servers)).catch(() => {});
+    cmd('detect_environment').then(setEnvDetection).catch((e) => {
+      console.warn('[4DA] Environment detection failed:', e);
+    });
+    cmd('detect_local_servers').then((r) => setLocalServers(r.servers)).catch((e) => {
+      console.warn('[4DA] Local server detection failed:', e);
+    });
   }, []);
 
   const handleImportEnvKey = async (envProvider: 'anthropic' | 'openai') => {
