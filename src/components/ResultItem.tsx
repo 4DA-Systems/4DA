@@ -87,6 +87,14 @@ export const ResultItem = memo(function ResultItem({
   // Track expand dwell time — emits click+dwell when collapsed/unmounted
   useExpandTracking(item.id, item.source_type || 'unknown', isExpanded, itemTopics);
 
+  const scoreGlow = useMemo(() => {
+    if (!isTopPick) return undefined;
+    const intensity = Math.min((item.top_score - 0.72) * 10, 1);
+    return {
+      boxShadow: `0 0 ${8 + intensity * 12}px rgba(212, 175, 55, ${0.06 + intensity * 0.1}), inset 0 1px 0 rgba(212, 175, 55, ${0.05 + intensity * 0.08})`,
+    };
+  }, [isTopPick, item.top_score]);
+
   return (
     <div
       ref={viewRef}
@@ -94,7 +102,8 @@ export const ResultItem = memo(function ResultItem({
       role="option"
       aria-selected={isFocused}
       tabIndex={isFocused ? 0 : -1}
-      className={`rounded border transition-colors ${
+      style={scoreGlow}
+      className={`rounded border transition-all duration-500 ${
         isFocused
           ? 'ring-1 ring-orange-500/50'
           : ''
