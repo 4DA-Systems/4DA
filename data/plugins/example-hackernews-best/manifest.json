@@ -1,0 +1,9 @@
+{
+  "name": "example-hackernews-best",
+  "version": "0.1.0",
+  "description": "Example plugin: fetches HN Best Stories (demonstrates the plugin protocol)",
+  "author": "4DA Systems",
+  "binary": "plugin.js",
+  "poll_interval_secs": 3600,
+  "max_items": 20
+}

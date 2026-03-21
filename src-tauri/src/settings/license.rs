@@ -121,15 +121,18 @@ pub const PRO_FEATURES: &[&str] = &[
     "get_attention_report",
     "get_knowledge_gaps",
     "get_signal_chains",
+    "get_signal_chains_predicted",
     "get_project_health",
     "get_developer_dna",
     "export_developer_dna_markdown",
     "export_developer_dna_svg",
+    "export_developer_dna_card",
     "natural_language_query",
     "get_semantic_shifts",
     "generate_weekly_digest",
     "get_decision_signals",
     "synthesize_search",
+    "standing_queries",
 ];
 
 /// Check if the current user has Signal (or Team/Enterprise) tier access.
