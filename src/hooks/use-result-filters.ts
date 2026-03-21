@@ -1,6 +1,27 @@
 import { useMemo, useCallback } from 'react';
 import { useAppStore } from '../store';
 
+/** Run promise-returning tasks with bounded concurrency (prevents IPC queue saturation) */
+async function pLimit<T>(tasks: (() => Promise<T>)[], concurrency: number): Promise<PromiseSettledResult<T>[]> {
+  const results: PromiseSettledResult<T>[] = [];
+  let index = 0;
+
+  async function runNext(): Promise<void> {
+    while (index < tasks.length) {
+      const i = index++;
+      try {
+        results[i] = { status: 'fulfilled', value: await tasks[i]() };
+      } catch (reason) {
+        results[i] = { status: 'rejected', reason };
+      }
+    }
+  }
+
+  const workers = Array.from({ length: Math.min(concurrency, tasks.length) }, () => runNext());
+  await Promise.all(workers);
+  return results;
+}
+
 /** Normalize URL for dedup: strip protocol, www, trailing slash, query params */
 function normalizeUrl(url: string | null | undefined): string | null {
   if (!url) return null;
@@ -105,8 +126,9 @@ export const useResultFilters = () => {
     const itemsToDismiss = filteredResults.filter(
       item => item.top_score < threshold && !feedbackGiven[item.id],
     );
-    const results = await Promise.allSettled(
-      itemsToDismiss.map(item => recordInteraction(item.id, 'dismiss', item)),
+    const results = await pLimit(
+      itemsToDismiss.map(item => () => recordInteraction(item.id, 'dismiss', item)),
+      10,
     );
     const failed = results.filter(r => r.status === 'rejected').length;
     const succeeded = results.length - failed;
@@ -121,8 +143,9 @@ export const useResultFilters = () => {
     const itemsToSave = filteredResults.filter(
       item => item.top_score >= threshold && !feedbackGiven[item.id],
     );
-    const results = await Promise.allSettled(
-      itemsToSave.map(item => recordInteraction(item.id, 'save', item)),
+    const results = await pLimit(
+      itemsToSave.map(item => () => recordInteraction(item.id, 'save', item)),
+      10,
     );
     const failed = results.filter(r => r.status === 'rejected').length;
     const succeeded = results.length - failed;
