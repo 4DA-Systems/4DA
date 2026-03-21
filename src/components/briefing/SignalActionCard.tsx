@@ -2,6 +2,7 @@ import { memo } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { SourceRelevance, FeedbackAction } from '../../types';
 import { getSourceLabel, getSourceColorClass } from '../../config/sources';
+import { isSafeUrl } from '../../utils/sanitize-html';
 
 interface SignalActionCardProps {
   item: SourceRelevance;
@@ -81,7 +82,7 @@ export const SignalActionCard = memo(function SignalActionCard({
             </span>
           ) : (
             <>
-              {item.url && (
+              {item.url && isSafeUrl(item.url) && (
                 <button
                   onClick={() => window.open(item.url!, '_blank', 'noopener,noreferrer')}
                   className="px-2.5 py-1.5 text-xs bg-bg-tertiary text-text-secondary border border-border rounded-lg hover:bg-border transition-all font-medium"
