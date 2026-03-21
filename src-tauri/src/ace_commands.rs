@@ -142,6 +142,7 @@ pub async fn ace_full_scan(paths: Vec<String>) -> Result<serde_json::Value> {
                                 dep.version.as_deref(),
                                 ecosystem,
                                 dep.is_dev,
+                                None, // license extracted during manifest parsing
                             )
                             .ok();
                         }
@@ -152,6 +153,171 @@ pub async fn ace_full_scan(paths: Vec<String>) -> Result<serde_json::Value> {
                 }
                 drop(tech);
             }
+        }
+    }
+
+    // Phase 1a-lockfiles: Parse lockfiles for transitive dependency discovery
+    if let Ok(db) = crate::get_database() {
+        let scanner = crate::ace::scanner::ProjectScanner::new();
+        let mut lockfile_count = 0u32;
+
+        for path in &scan_paths {
+            if !path.exists() || !path.is_dir() {
+                continue;
+            }
+            // Walk directories up to depth 5 looking for lockfiles alongside manifests
+            let mut dirs_to_visit = vec![(path.clone(), 0u8)];
+            while let Some((dir, depth)) = dirs_to_visit.pop() {
+                if depth > 5 {
+                    continue;
+                }
+                let project_path = dir.to_string_lossy().to_string();
+
+                // Check for Cargo.lock
+                let cargo_lock = dir.join("Cargo.lock");
+                if cargo_lock.exists() {
+                    if let Ok(content) = std::fs::read_to_string(&cargo_lock) {
+                        // Get direct deps from the Cargo.toml in the same dir (if any)
+                        let direct_deps: Vec<String> = if let Ok(toml_content) =
+                            std::fs::read_to_string(dir.join("Cargo.toml"))
+                        {
+                            // Reuse the manifest parser to extract direct dep names
+                            let mut signal = crate::ace::scanner::ProjectSignal {
+                                manifest_type: crate::ace::scanner::ManifestType::CargoToml,
+                                manifest_path: dir.join("Cargo.toml"),
+                                project_name: None,
+                                languages: vec!["rust".to_string()],
+                                frameworks: Vec::new(),
+                                dependencies: Vec::new(),
+                                dev_dependencies: Vec::new(),
+                                detected_at: String::new(),
+                                project_license: None,
+                            };
+                            scanner.parse_cargo_toml(&toml_content, &mut signal);
+                            let mut all = signal.dependencies;
+                            all.extend(signal.dev_dependencies);
+                            all
+                        } else {
+                            Vec::new()
+                        };
+
+                        let packages =
+                            crate::ace::scanner::ProjectScanner::parse_cargo_lock(&content);
+                        for (name, version) in &packages {
+                            // Skip the root project package itself
+                            if direct_deps.is_empty() || !direct_deps.iter().any(|d| d == name) {
+                                db.store_transitive_dependency(
+                                    &project_path,
+                                    name,
+                                    Some(version.as_str()),
+                                    "rust",
+                                    false,
+                                )
+                                .ok();
+                                lockfile_count += 1;
+                            } else {
+                                // Direct dep — update version from lockfile (actual installed version)
+                                db.store_dependency(
+                                    &project_path,
+                                    name,
+                                    Some(version.as_str()),
+                                    "rust",
+                                    false,
+                                    None,
+                                )
+                                .ok();
+                            }
+                        }
+                    }
+                }
+
+                // Check for package-lock.json
+                let pkg_lock = dir.join("package-lock.json");
+                if pkg_lock.exists() {
+                    if let Ok(content) = std::fs::read_to_string(&pkg_lock) {
+                        // Get direct deps from package.json in the same dir (if any)
+                        let direct_deps: Vec<String> = if let Ok(pkg_content) =
+                            std::fs::read_to_string(dir.join("package.json"))
+                        {
+                            let mut signal = crate::ace::scanner::ProjectSignal {
+                                manifest_type: crate::ace::scanner::ManifestType::PackageJson,
+                                manifest_path: dir.join("package.json"),
+                                project_name: None,
+                                languages: vec!["javascript".to_string()],
+                                frameworks: Vec::new(),
+                                dependencies: Vec::new(),
+                                dev_dependencies: Vec::new(),
+                                detected_at: String::new(),
+                                project_license: None,
+                            };
+                            scanner.parse_package_json(&pkg_content, &mut signal);
+                            let mut all = signal.dependencies;
+                            all.extend(signal.dev_dependencies);
+                            all
+                        } else {
+                            Vec::new()
+                        };
+
+                        let packages =
+                            crate::ace::scanner::ProjectScanner::parse_package_lock_json(&content);
+                        for (name, version) in &packages {
+                            if direct_deps.is_empty() || !direct_deps.iter().any(|d| d == name) {
+                                db.store_transitive_dependency(
+                                    &project_path,
+                                    name,
+                                    Some(version.as_str()),
+                                    "javascript",
+                                    false,
+                                )
+                                .ok();
+                                lockfile_count += 1;
+                            } else {
+                                // Direct dep — update version from lockfile
+                                db.store_dependency(
+                                    &project_path,
+                                    name,
+                                    Some(version.as_str()),
+                                    "javascript",
+                                    false,
+                                    None,
+                                )
+                                .ok();
+                            }
+                        }
+                    }
+                }
+
+                // Recurse into subdirectories (skip common non-project dirs)
+                if let Ok(entries) = std::fs::read_dir(&dir) {
+                    for entry in entries.flatten() {
+                        let entry_path = entry.path();
+                        if entry_path.is_dir() {
+                            if let Some(name) = entry_path.file_name().and_then(|n| n.to_str()) {
+                                if !matches!(
+                                    name,
+                                    "node_modules"
+                                        | "target"
+                                        | ".git"
+                                        | "dist"
+                                        | "build"
+                                        | ".next"
+                                        | "__pycache__"
+                                        | ".venv"
+                                        | "venv"
+                                        | "vendor"
+                                        | ".cargo"
+                                ) {
+                                    dirs_to_visit.push((entry_path, depth + 1));
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        if lockfile_count > 0 {
+            info!(target: "4da::ace", count = lockfile_count, "Stored transitive dependencies from lockfiles");
         }
     }
 

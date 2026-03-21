@@ -5,6 +5,10 @@
  * Decisions persist and inform signal classification, tech radar, and agent context.
  */
 
+import { execFile } from "node:child_process";
+import { existsSync } from "node:fs";
+import { homedir, platform } from "node:os";
+import { join } from "node:path";
 import type { FourDADatabase } from "../db.js";
 
 // ============================================================================
@@ -222,20 +226,18 @@ export function executeDecisionMemory(
       // Bridge to AWE Wisdom Graph: forward decision for wisdom tracking.
       // Non-blocking — AWE sync is best-effort, doesn't affect 4DA recording.
       try {
-        const { execFile } = await import("node:child_process");
-        const { promisify } = await import("node:util");
-        const execFileAsync = promisify(execFile);
         const aweBin = findAweBinary();
         if (aweBin) {
           const query = `${params.subject}: ${params.decision}`;
           const domain = mapDecisionTypeToDomain(params.decision_type || "tech_choice");
-          execFileAsync(aweBin, [
+          const child = execFile(aweBin, [
             "transmute", query,
             "--domain", domain,
             "--json", "--no-persist",
-          ], { timeout: 30_000 }).catch(() => {
-            // AWE not available — silent fallback
+          ], { timeout: 30_000 }, () => {
+            // Callback required — ignore result (fire-and-forget)
           });
+          child.unref();
         }
       } catch {
         // AWE bridge is optional
@@ -426,17 +428,31 @@ function mapDecisionTypeToDomain(type: string): string {
   }
 }
 
-/** Find AWE binary (same logic as 4DA context_commands.rs). */
+/** Find AWE binary — checks env var, platform defaults, then PATH fallback. */
 function findAweBinary(): string | null {
-  const { existsSync } = require("node:fs");
-  const candidates = [
-    "D:\\runyourempire\\awe\\target\\release\\awe.exe",
-    "/d/runyourempire/awe/target/release/awe",
-  ];
+  // 1. Explicit env var takes priority
+  const envPath = process.env.FOURDA_AWE_PATH || process.env.AWE_BIN;
+  if (envPath && existsSync(envPath)) return envPath;
+
+  // 2. Platform-specific default install locations
+  const home = homedir();
+  const os = platform();
+  const candidates: string[] = [];
+
+  if (os === "win32") {
+    const appData = process.env.APPDATA || join(home, "AppData", "Roaming");
+    candidates.push(join(appData, "awe", "awe.exe"));
+  } else if (os === "darwin") {
+    candidates.push(join(home, "Library", "Application Support", "awe", "awe"));
+  } else {
+    // Linux and other Unix
+    candidates.push(join(home, ".local", "share", "awe", "awe"));
+  }
+
   for (const p of candidates) {
     if (existsSync(p)) return p;
   }
-  return process.env.AWE_BIN && existsSync(process.env.AWE_BIN)
-    ? process.env.AWE_BIN
-    : null;
+
+  // 3. Fall back to bare command name (relies on PATH)
+  return "awe";
 }

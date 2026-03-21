@@ -23,6 +23,7 @@ pub struct StoredDependency {
     pub is_direct: bool,
     pub detected_at: String,
     pub last_seen_at: String,
+    pub license: Option<String>,
 }
 
 /// A package used across multiple projects
@@ -64,15 +65,43 @@ impl Database {
         version: Option<&str>,
         ecosystem: &str,
         is_dev: bool,
+        license: Option<&str>,
     ) -> SqliteResult<()> {
         let conn = self.conn.lock();
         conn.execute(
-            "INSERT INTO user_dependencies (project_path, package_name, version, ecosystem, is_dev, is_direct, detected_at, last_seen_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, 1, datetime('now'), datetime('now'))
+            "INSERT INTO user_dependencies (project_path, package_name, version, ecosystem, is_dev, is_direct, license, detected_at, last_seen_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, 1, ?6, datetime('now'), datetime('now'))
              ON CONFLICT(project_path, package_name, ecosystem)
              DO UPDATE SET
                 version = COALESCE(?3, user_dependencies.version),
                 is_dev = ?5,
+                license = COALESCE(?6, user_dependencies.license),
+                last_seen_at = datetime('now')",
+            params![project_path, package_name, version, ecosystem, is_dev as i32, license],
+        )?;
+        Ok(())
+    }
+
+    /// Store (upsert) a transitive dependency discovered from a lockfile.
+    /// Sets `is_direct = 0` for new entries. On conflict, preserves existing
+    /// `is_direct` value (so direct deps from manifests are not downgraded).
+    /// Lockfile version is preferred (it's the actual resolved/installed version).
+    pub fn store_transitive_dependency(
+        &self,
+        project_path: &str,
+        package_name: &str,
+        version: Option<&str>,
+        ecosystem: &str,
+        is_dev: bool,
+    ) -> SqliteResult<()> {
+        let conn = self.conn.lock();
+        conn.execute(
+            "INSERT INTO user_dependencies (project_path, package_name, version, ecosystem, is_dev, is_direct, detected_at, last_seen_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, 0, datetime('now'), datetime('now'))
+             ON CONFLICT(project_path, package_name, ecosystem)
+             DO UPDATE SET
+                version = COALESCE(?3, user_dependencies.version),
+                is_dev = MIN(user_dependencies.is_dev, ?5),
                 last_seen_at = datetime('now')",
             params![project_path, package_name, version, ecosystem, is_dev as i32],
         )?;
@@ -86,7 +115,7 @@ impl Database {
     ) -> SqliteResult<Vec<StoredDependency>> {
         let conn = self.conn.lock();
         let mut stmt = conn.prepare(
-            "SELECT id, project_path, package_name, version, ecosystem, is_dev, is_direct, detected_at, last_seen_at
+            "SELECT id, project_path, package_name, version, ecosystem, is_dev, is_direct, detected_at, last_seen_at, license
              FROM user_dependencies
              WHERE project_path = ?1
              ORDER BY package_name",
@@ -108,7 +137,7 @@ impl Database {
     pub fn get_all_user_dependencies(&self) -> SqliteResult<Vec<StoredDependency>> {
         let conn = self.conn.lock();
         let mut stmt = conn.prepare(
-            "SELECT id, project_path, package_name, version, ecosystem, is_dev, is_direct, detected_at, last_seen_at
+            "SELECT id, project_path, package_name, version, ecosystem, is_dev, is_direct, detected_at, last_seen_at, license
              FROM user_dependencies
              ORDER BY ecosystem, package_name",
         )?;
@@ -267,6 +296,7 @@ fn map_dependency_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<StoredDepende
         is_direct: row.get::<_, i32>(6)? != 0,
         detected_at: row.get(7)?,
         last_seen_at: row.get(8)?,
+        license: row.get(9)?,
     })
 }
 
@@ -298,12 +328,33 @@ mod tests {
     #[test]
     fn test_store_and_retrieve_dependency() {
         let db = test_db();
-        db.store_dependency("/projects/myapp", "tokio", Some("1.35.0"), "rust", false)
-            .unwrap();
-        db.store_dependency("/projects/myapp", "serde", None, "rust", false)
-            .unwrap();
-        db.store_dependency("/projects/myapp", "pretty_assertions", None, "rust", true)
-            .unwrap();
+        db.store_dependency(
+            "/projects/myapp",
+            "tokio",
+            Some("1.35.0"),
+            "rust",
+            false,
+            Some("MIT"),
+        )
+        .unwrap();
+        db.store_dependency(
+            "/projects/myapp",
+            "serde",
+            None,
+            "rust",
+            false,
+            Some("MIT OR Apache-2.0"),
+        )
+        .unwrap();
+        db.store_dependency(
+            "/projects/myapp",
+            "pretty_assertions",
+            None,
+            "rust",
+            true,
+            None,
+        )
+        .unwrap();
 
         let deps = db.get_project_dependencies("/projects/myapp").unwrap();
         assert_eq!(deps.len(), 3);
@@ -312,12 +363,14 @@ mod tests {
         assert_eq!(tokio.version.as_deref(), Some("1.35.0"));
         assert_eq!(tokio.ecosystem, "rust");
         assert!(!tokio.is_dev);
+        assert_eq!(tokio.license.as_deref(), Some("MIT"));
 
         let pa = deps
             .iter()
             .find(|d| d.package_name == "pretty_assertions")
             .unwrap();
         assert!(pa.is_dev);
+        assert_eq!(pa.license, None);
     }
 
     #[test]
@@ -329,6 +382,7 @@ mod tests {
             Some("18.0.0"),
             "javascript",
             false,
+            Some("MIT"),
         )
         .unwrap();
         // Upsert with new version
@@ -338,22 +392,25 @@ mod tests {
             Some("19.0.0"),
             "javascript",
             false,
+            None,
         )
         .unwrap();
 
         let deps = db.get_project_dependencies("/projects/myapp").unwrap();
         assert_eq!(deps.len(), 1);
         assert_eq!(deps[0].version.as_deref(), Some("19.0.0"));
+        // License should be preserved from the first insert (COALESCE keeps existing)
+        assert_eq!(deps[0].license.as_deref(), Some("MIT"));
     }
 
     #[test]
     fn test_cross_project_packages() {
         let db = test_db();
-        db.store_dependency("/projects/app1", "serde", None, "rust", false)
+        db.store_dependency("/projects/app1", "serde", None, "rust", false, None)
             .unwrap();
-        db.store_dependency("/projects/app2", "serde", None, "rust", false)
+        db.store_dependency("/projects/app2", "serde", None, "rust", false, None)
             .unwrap();
-        db.store_dependency("/projects/app1", "tokio", None, "rust", false)
+        db.store_dependency("/projects/app1", "tokio", None, "rust", false, None)
             .unwrap();
 
         let cross = db.get_cross_project_packages().unwrap();
@@ -397,9 +454,9 @@ mod tests {
     #[test]
     fn test_get_all_user_dependencies() {
         let db = test_db();
-        db.store_dependency("/projects/app1", "tokio", None, "rust", false)
+        db.store_dependency("/projects/app1", "tokio", None, "rust", false, None)
             .unwrap();
-        db.store_dependency("/projects/app2", "react", None, "javascript", false)
+        db.store_dependency("/projects/app2", "react", None, "javascript", false, None)
             .unwrap();
 
         let all = db.get_all_user_dependencies().unwrap();
@@ -445,5 +502,79 @@ mod tests {
         assert!(!db
             .alert_exists("lodash", "javascript", "Different title")
             .unwrap());
+    }
+
+    #[test]
+    fn test_transitive_dependency_storage() {
+        let db = test_db();
+
+        // Store a direct dependency first
+        db.store_dependency(
+            "/projects/myapp",
+            "serde",
+            Some("1.0.204"),
+            "rust",
+            false,
+            None,
+        )
+        .unwrap();
+
+        // Store a transitive dependency
+        db.store_transitive_dependency(
+            "/projects/myapp",
+            "serde_derive",
+            Some("1.0.204"),
+            "rust",
+            false,
+        )
+        .unwrap();
+
+        let deps = db.get_project_dependencies("/projects/myapp").unwrap();
+        assert_eq!(deps.len(), 2);
+
+        let serde = deps.iter().find(|d| d.package_name == "serde").unwrap();
+        assert!(serde.is_direct, "Manifest dep should be direct");
+        assert_eq!(serde.version.as_deref(), Some("1.0.204"));
+
+        let serde_derive = deps
+            .iter()
+            .find(|d| d.package_name == "serde_derive")
+            .unwrap();
+        assert!(
+            !serde_derive.is_direct,
+            "Lockfile-only dep should be transitive"
+        );
+        assert_eq!(serde_derive.version.as_deref(), Some("1.0.204"));
+    }
+
+    #[test]
+    fn test_transitive_does_not_downgrade_direct() {
+        let db = test_db();
+
+        // Store as direct first (from manifest)
+        db.store_dependency(
+            "/projects/myapp",
+            "tokio",
+            Some("1.35.0"),
+            "rust",
+            false,
+            None,
+        )
+        .unwrap();
+
+        // Then store same package as transitive (from lockfile) — should NOT downgrade is_direct
+        db.store_transitive_dependency("/projects/myapp", "tokio", Some("1.35.1"), "rust", false)
+            .unwrap();
+
+        let deps = db.get_project_dependencies("/projects/myapp").unwrap();
+        assert_eq!(deps.len(), 1);
+
+        let tokio = deps.iter().find(|d| d.package_name == "tokio").unwrap();
+        assert!(
+            tokio.is_direct,
+            "Direct dep should stay direct even after transitive upsert"
+        );
+        // Version should be updated to lockfile version (COALESCE keeps non-null)
+        assert_eq!(tokio.version.as_deref(), Some("1.35.1"));
     }
 }
