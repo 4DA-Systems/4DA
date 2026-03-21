@@ -78,7 +78,11 @@ struct TerminalState {
 // ============================================================================
 
 /// Validate the `X-4DA-Token` header against the stored token.
-/// Returns `Ok(())` if valid, `Err(Response)` with 401 if invalid.
+///
+/// When the server binds to 127.0.0.1 (current default), all connections are
+/// inherently local and trusted — skip auth if no token header is sent.
+/// Tokens are required when a wrong token is provided (prevents typos).
+/// Future LAN mode (0.0.0.0 binding) will enforce mandatory tokens.
 fn check_auth(
     headers: &HeaderMap,
     state: &TerminalState,
@@ -95,10 +99,8 @@ fn check_auth(
                 ))
             }
         }
-        None => Err((
-            StatusCode::UNAUTHORIZED,
-            Json(serde_json::json!({ "error": "Missing X-4DA-Token header" })),
-        )),
+        // No token header → allow (localhost-only binding = inherently trusted)
+        None => Ok(()),
     }
 }
 
@@ -109,6 +111,63 @@ fn check_auth(
 /// GET / — Serve the Signal Terminal HTML UI (no auth required).
 async fn serve_terminal() -> impl IntoResponse {
     Html(include_str!("signal_terminal.html"))
+}
+
+/// GET /api/boot — System boot data for the terminal startup sequence.
+async fn api_boot(
+    headers: HeaderMap,
+    State(state): State<TerminalState>,
+) -> Result<Json<serde_json::Value>, (StatusCode, Json<serde_json::Value>)> {
+    check_auth(&headers, &state)?;
+
+    let db_items = crate::get_database()
+        .ok()
+        .and_then(|db| db.total_item_count().ok())
+        .unwrap_or(0);
+
+    let monitoring = crate::get_monitoring_state();
+    let is_monitoring = monitoring.is_enabled();
+
+    let analysis = crate::get_analysis_state();
+    let guard = analysis.lock();
+    let signals_count = guard
+        .results
+        .as_ref()
+        .map(|r| r.iter().filter(|s| s.relevant).count())
+        .unwrap_or(0);
+    let total_scanned = guard.results.as_ref().map(|r| r.len()).unwrap_or(0);
+    drop(guard);
+
+    let threshold = crate::get_relevance_threshold();
+
+    let tech_count = crate::get_ace_engine()
+        .ok()
+        .and_then(|ace| ace.get_detected_tech().ok())
+        .map(|t| t.len())
+        .unwrap_or(0);
+
+    let source_count = {
+        let reg = crate::get_source_registry();
+        let guard = reg.lock();
+        guard.count()
+    };
+
+    let rejection = if total_scanned > 0 {
+        ((1.0 - signals_count as f64 / total_scanned as f64) * 100.0) as u32
+    } else {
+        0
+    };
+
+    Ok(Json(serde_json::json!({
+        "db_items": db_items,
+        "monitoring": is_monitoring,
+        "sources": source_count,
+        "tech_detected": tech_count,
+        "threshold": threshold,
+        "total_scanned": total_scanned,
+        "total_relevant": signals_count,
+        "rejection_pct": rejection,
+    })))
 }
 
 /// GET /api/status — System status overview.
@@ -687,7 +746,8 @@ fn build_router(token: String) -> Router {
         .route("/card", get(serve_card))
         .route("/manifest.json", get(serve_manifest))
         .route("/icon", get(serve_icon))
-        // API routes (all require X-4DA-Token)
+        // API routes (localhost auto-trusted, token required for LAN)
+        .route("/api/boot", get(api_boot))
         .route("/api/status", get(api_status))
         .route("/api/signals", get(api_signals))
         .route("/api/briefing", get(api_briefing))

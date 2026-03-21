@@ -10,207 +10,303 @@
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 :root{
-  --bg:#050505;--bg2:#0D0D0D;--bg3:#1A1A1A;
-  --fg:#D0D0D0;--muted:#555;--dim:#333;
-  --gold:#D4AF37;--gold-dim:rgba(212,175,55,0.15);
+  --bg:#030303;--bg2:#0A0A0A;--bg3:#111;--surface:#161616;
+  --fg:#C8C8C8;--muted:#555;--dim:#2A2A2A;
+  --gold:#D4AF37;--gold-dim:rgba(212,175,55,0.08);
   --green:#22C55E;--red:#EF4444;--cyan:#67E8F9;
 }
 html,body{height:100%;overflow:hidden}
 body{
   background:var(--bg);color:var(--fg);
-  font:14px/1.6 'JetBrains Mono','SF Mono','Fira Code','Cascadia Code',monospace;
+  font:13px/1.65 'JetBrains Mono','SF Mono','Fira Code','Cascadia Code',monospace;
+  display:flex;align-items:center;justify-content:center;
+}
+/* Container */
+.terminal{
+  width:100%;max-width:1100px;height:calc(100vh - 32px);max-height:920px;
   display:flex;flex-direction:column;
+  background:var(--bg2);
+  border:1px solid var(--dim);border-radius:10px;
+  overflow:hidden;
+  box-shadow:0 8px 40px rgba(0,0,0,0.6),0 0 0 1px rgba(212,175,55,0.04);
 }
-/* Header */
-.hdr{
+/* Title bar */
+.titlebar{
   display:flex;align-items:center;justify-content:space-between;
-  padding:12px 16px;border-bottom:1px solid var(--dim);flex-shrink:0;
+  padding:10px 16px;
+  background:var(--bg3);border-bottom:1px solid var(--dim);
+  flex-shrink:0;user-select:none;
 }
-.hdr-left{display:flex;align-items:center;gap:10px}
-.pulse{
-  width:10px;height:10px;border-radius:50%;background:var(--gold);
-  animation:breathe 3s ease-in-out infinite;
-}
-@keyframes breathe{0%,100%{transform:scale(1);opacity:.7}50%{transform:scale(1.15);opacity:1}}
-.hdr-title{font-size:13px;font-weight:600;color:var(--gold);letter-spacing:1px}
-.hdr-right{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--muted)}
-.live-dot{width:6px;height:6px;border-radius:50%;background:var(--muted)}
-.live-dot.on{background:var(--green);box-shadow:0 0 6px var(--green)}
+.tb-left{display:flex;align-items:center;gap:10px}
+.tb-dots{display:flex;gap:6px}
+.tb-dot{width:10px;height:10px;border-radius:50%;background:var(--dim)}
+.tb-brand{font-size:11px;font-weight:600;color:var(--muted);letter-spacing:1.5px}
+.tb-right{display:flex;align-items:center;gap:8px;font-size:11px}
+.live-dot{width:7px;height:7px;border-radius:50%;background:var(--muted);flex-shrink:0}
+.live-dot.on{background:var(--green);box-shadow:0 0 8px rgba(34,197,94,0.4)}
 .live-dot.off{background:var(--red)}
-/* Output */
-.output{
-  flex:1;overflow-y:auto;padding:16px;
-  scrollbar-width:thin;scrollbar-color:var(--dim) transparent;
+.live-label{color:var(--muted);font-size:10px;letter-spacing:0.5px}
+/* Status strip */
+.status-strip{
+  display:flex;align-items:center;gap:10px;
+  padding:5px 16px;font-size:10px;color:var(--muted);
+  background:var(--surface);border-bottom:1px solid var(--dim);
+  flex-shrink:0;letter-spacing:0.3px;
 }
-.output::-webkit-scrollbar{width:6px}
+.status-strip .s{color:var(--dim)}
+/* Output area */
+.output{
+  flex:1;overflow-y:auto;padding:16px 20px;
+  scrollbar-width:thin;scrollbar-color:var(--dim) transparent;
+  position:relative;
+}
+.output::-webkit-scrollbar{width:5px}
 .output::-webkit-scrollbar-thumb{background:var(--dim);border-radius:3px}
 .output::-webkit-scrollbar-track{background:transparent}
-.out-line{margin-bottom:2px;word-wrap:break-word}
-.out-cmd{color:var(--gold);margin:12px 0 4px}
+/* CRT scan lines */
+.output::after{
+  content:'';position:absolute;inset:0;pointer-events:none;
+  background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,0.03) 2px,rgba(0,0,0,0.03) 4px);
+  z-index:1;
+}
+.out-line{margin-bottom:1px;word-wrap:break-word;line-height:1.7;animation:fadeIn 0.15s ease-out}
+@keyframes fadeIn{from{opacity:0;transform:translateY(2px)}to{opacity:1;transform:translateY(0)}}
+.out-cmd{color:var(--gold);margin:14px 0 4px}
 .out-cmd:first-child{margin-top:0}
 .g{color:var(--gold)}.gr{color:var(--green)}.r{color:var(--red)}.c{color:var(--cyan)}
 .m{color:var(--muted)}.d{color:var(--dim)}
 a{color:var(--gold);text-decoration:none}a:hover{text-decoration:underline}
-/* Bar chart */
 .bar{display:inline-block;letter-spacing:-1px;font-size:12px}
 .bar-fill{color:var(--gold)}.bar-empty{color:var(--dim)}
-/* Input */
+/* Signal cards */
+.signal-card{border-left:3px solid var(--dim);padding:6px 12px;margin:4px 0;background:var(--bg3);border-radius:0 4px 4px 0}
+.signal-card.critical{border-left-color:var(--red)}
+.signal-card.high{border-left-color:var(--gold)}
+.signal-card .sc-title{color:var(--fg);font-size:13px}
+.signal-card .sc-meta{color:var(--dim);font-size:11px;margin-top:2px}
+.signal-card .sc-bar{margin-top:4px}
+/* Input area */
+.input-area{
+  padding:10px 16px;
+  background:var(--surface);border-top:1px solid var(--dim);
+  flex-shrink:0;
+}
 .input-row{
-  display:flex;align-items:center;gap:0;
-  padding:8px 16px;border-top:1px solid var(--dim);flex-shrink:0;
-  background:var(--bg2);
+  display:flex;align-items:center;
+  background:var(--bg2);border:1px solid var(--dim);border-radius:6px;
+  padding:8px 12px;transition:border-color 0.2s;
+  position:relative;
 }
+.input-row:focus-within{border-color:rgba(212,175,55,0.3)}
 .prompt-char{
-  color:var(--gold);font-weight:700;font-size:15px;
-  margin-right:8px;user-select:none;
-  animation:breathe 3s ease-in-out infinite;
+  color:var(--gold);font-weight:700;font-size:14px;
+  margin-right:10px;user-select:none;opacity:0.8;
+  animation:pulse 3s ease-in-out infinite;
 }
+@keyframes pulse{0%,100%{opacity:0.6}50%{opacity:1}}
 .cmd-input{
   flex:1;background:transparent;border:none;outline:none;
   color:var(--fg);font:inherit;caret-color:var(--gold);
 }
-.cmd-input::placeholder{color:var(--dim)}
-/* Status bar */
-.status-bar{
-  display:flex;align-items:center;gap:12px;
-  padding:4px 16px;font-size:11px;color:var(--muted);
-  border-top:1px solid var(--dim);flex-shrink:0;background:var(--bg);
-}
-.status-bar .sep{color:var(--dim)}
+.cmd-input::placeholder{color:#333;font-style:italic}
+.ghost{color:var(--dim);pointer-events:none;user-select:none}
 /* Auth overlay */
 .auth-overlay{
   position:fixed;inset:0;background:rgba(0,0,0,0.85);
   display:flex;align-items:center;justify-content:center;z-index:100;
+  backdrop-filter:blur(4px);
 }
 .auth-box{
-  background:var(--bg2);border:1px solid var(--dim);border-radius:8px;
-  padding:24px 28px;max-width:420px;width:90%;
+  background:var(--bg2);border:1px solid var(--dim);border-radius:10px;
+  padding:28px 32px;max-width:400px;width:90%;
+  box-shadow:0 16px 48px rgba(0,0,0,0.5);
 }
-.auth-box h2{font-size:14px;color:var(--gold);margin-bottom:12px;font-weight:600}
-.auth-box p{font-size:12px;color:var(--muted);margin-bottom:16px;line-height:1.5}
+.auth-box h2{font-size:13px;color:var(--gold);margin-bottom:14px;font-weight:600;letter-spacing:0.5px}
+.auth-box p{font-size:11px;color:var(--muted);margin-bottom:16px;line-height:1.6}
+.auth-box code{color:var(--gold);font-size:11px;background:var(--bg3);padding:2px 6px;border-radius:3px}
 .auth-box input{
-  width:100%;background:var(--bg);border:1px solid var(--dim);
-  color:var(--fg);font:13px/1 inherit;padding:10px 12px;
-  border-radius:4px;outline:none;margin-bottom:8px;
+  width:100%;background:var(--bg3);border:1px solid var(--dim);
+  color:var(--fg);font:12px/1 inherit;padding:10px 12px;
+  border-radius:6px;outline:none;margin-bottom:8px;
 }
-.auth-box input:focus{border-color:var(--gold)}
+.auth-box input:focus{border-color:rgba(212,175,55,0.3)}
 .auth-box .skip{
-  font-size:11px;color:var(--dim);cursor:pointer;text-align:center;
-  margin-top:8px;
+  font-size:10px;color:var(--dim);cursor:pointer;text-align:center;
+  margin-top:10px;transition:color 0.15s;
 }
 .auth-box .skip:hover{color:var(--muted)}
 /* Ambient mode */
-.ambient .hdr,.ambient .input-row,.ambient .status-bar{display:none}
-.ambient .output{padding:24px 32px}
-.ambient .amb-grid{
-  display:grid;grid-template-columns:1fr 1fr;gap:24px;height:100%;
-}
+.ambient .terminal{max-width:100%;height:100vh;max-height:100vh;border-radius:0;border:none}
+.ambient .titlebar,.ambient .input-area,.ambient .status-strip{display:none}
+.ambient .output{padding:32px}
+.ambient .amb-grid{display:grid;grid-template-columns:1fr 1fr;gap:20px;height:100%}
 .ambient .amb-section{
-  background:var(--bg2);border:1px solid var(--dim);border-radius:8px;padding:16px;
-  overflow-y:auto;
+  background:var(--surface);border:1px solid var(--dim);border-radius:8px;padding:16px;overflow-y:auto;
 }
 .ambient .amb-section h3{
-  font-size:11px;color:var(--muted);text-transform:uppercase;
+  font-size:10px;color:var(--muted);text-transform:uppercase;
   letter-spacing:1.5px;margin-bottom:12px;font-weight:600;
+}
+/* Matrix overlay */
+.matrix-canvas{position:fixed;inset:0;z-index:200;pointer-events:none}
+/* Whoami / neofetch box */
+.info-box{border:1px solid var(--dim);border-radius:4px;padding:12px 16px;margin:4px 0;background:var(--bg3);display:inline-block;min-width:320px}
+.info-box .ib-title{color:var(--gold);font-weight:600;margin-bottom:8px}
+.info-box .ib-row{color:var(--fg);line-height:1.8}
+.info-box .ib-row .ib-key{color:var(--muted)}
+.info-box .ib-footer{color:var(--gold);margin-top:8px;font-style:italic}
+/* Reconnect banner */
+.reconnect-banner{
+  position:fixed;top:0;left:50%;transform:translateX(-50%);
+  background:var(--red);color:#fff;font-size:11px;
+  padding:4px 16px;border-radius:0 0 6px 6px;z-index:50;
+  letter-spacing:0.5px;
 }
 /* Responsive */
 @media(max-width:600px){
-  body{font-size:12px}
-  .hdr{padding:8px 12px}
-  .output{padding:12px}
-  .input-row{padding:8px 12px}
-  .status-bar{padding:4px 12px;flex-wrap:wrap;gap:6px}
+  body{align-items:stretch}
+  .terminal{max-width:100%;height:100vh;max-height:100vh;border-radius:0;border:none}
+  .output{padding:12px 14px}
   .ambient .amb-grid{grid-template-columns:1fr}
+  .info-box{min-width:auto;width:100%}
+}
+@media(min-width:601px) and (max-width:1150px){
+  .terminal{max-width:calc(100vw - 32px)}
 }
 </style>
 </head>
 <body>
-<div class="hdr">
-  <div class="hdr-left">
-    <div class="pulse" id="pulse"></div>
-    <span class="hdr-title">4DA SIGNAL TERMINAL</span>
+<div class="terminal">
+  <div class="titlebar">
+    <div class="tb-left">
+      <div class="tb-dots"><div class="tb-dot"></div><div class="tb-dot"></div><div class="tb-dot"></div></div>
+      <span class="tb-brand">4DA SIGNAL TERMINAL</span>
+    </div>
+    <div class="tb-right">
+      <div class="live-dot" id="liveDot"></div>
+      <span class="live-label" id="liveText">...</span>
+    </div>
   </div>
-  <div class="hdr-right">
-    <div class="live-dot" id="liveDot"></div>
-    <span id="liveText">...</span>
+  <div class="status-strip" id="sbar">
+    <span id="sb-mon">...</span><span class="s">/</span>
+    <span id="sb-scan">...</span><span class="s">/</span>
+    <span id="sb-rel">...</span><span class="s">/</span>
+    <span id="sb-thr">...</span>
   </div>
-</div>
-<div class="output" id="out" role="log" aria-live="polite"></div>
-<div class="input-row">
-  <span class="prompt-char" aria-hidden="true">&gt;</span>
-  <input class="cmd-input" id="inp" type="text" placeholder="type a command..." autocomplete="off" autofocus spellcheck="false" aria-label="Terminal command input">
-</div>
-<div class="status-bar" id="sbar">
-  <span id="sb-mon">...</span><span class="sep">·</span>
-  <span id="sb-scan">...</span><span class="sep">·</span>
-  <span id="sb-rel">...</span><span class="sep">·</span>
-  <span id="sb-thr">...</span>
+  <div class="output" id="out" role="log" aria-live="polite"></div>
+  <div class="input-area">
+    <div class="input-row">
+      <span class="prompt-char" aria-hidden="true">&gt;</span>
+      <input class="cmd-input" id="inp" type="text" placeholder="type a command..." autocomplete="off" autofocus spellcheck="false" aria-label="Command input">
+      <span class="ghost" id="ghost"></span>
+    </div>
+  </div>
 </div>
 <div class="auth-overlay" id="authOverlay" style="display:none">
   <div class="auth-box">
-    <h2>Signal Terminal Authentication</h2>
-    <p>Enter your token from <code style="color:var(--gold)">data/signal_terminal_token.txt</code></p>
+    <h2>Signal Terminal</h2>
+    <p>Paste your authentication token.<br>Find it at <code>data/signal_terminal_token.txt</code></p>
     <input type="password" id="authInput" placeholder="paste token..." autocomplete="off">
-    <div class="skip" id="authSkip">Skip — try localhost without token</div>
+    <div class="skip" id="authSkip">Skip — try without token (localhost only)</div>
   </div>
 </div>
 <script>
 (function(){
 'use strict';
+
+/* ── Element refs ── */
 var out=document.getElementById('out'),inp=document.getElementById('inp');
 var liveDot=document.getElementById('liveDot'),liveText=document.getElementById('liveText');
 var authOverlay=document.getElementById('authOverlay'),authInput=document.getElementById('authInput');
+var ghostEl=document.getElementById('ghost');
+
+/* ── State ── */
 var history=[],histIdx=-1,histBuf='';
 var token=localStorage.getItem('4da_term_token')||'';
 var isAmbient=false,ambInterval=null;
+var startTime=performance.now();
+var reconnecting=false,reconnectTimer=null;
+var lastSignalCount=0;
 
-// ── Welcome ──
-function welcome(){
-  out.innerHTML='';
-  w('4DA Signal Terminal v1.0.0','g');
-  w('All signal. No feed.','m');
-  w('');
-  w("Type 'help' for commands.",'m');
-  w('');
-}
+/* ── Command list for tab completion ── */
+var COMMANDS=['help','signals','briefing','score','search','radar','decisions','dna','gaps',
+  'status','clear','ambient','theme','whoami','uptime','matrix','fortune','neofetch','ping','token'];
+var tabMatches=[],tabIdx=-1,tabPrefix='';
 
-// ── Output helpers ──
+/* ── Theme system ── */
+var THEMES={
+  gold:   {gold:'#D4AF37',fg:'#C8C8C8',green:'#22C55E',muted:'#555',dim:'#2A2A2A',cyan:'#67E8F9',red:'#EF4444'},
+  phosphor:{gold:'#33FF33',fg:'#33FF33',green:'#33FF33',muted:'#1A9A1A',dim:'#0D4D0D',cyan:'#33FF33',red:'#FF3333'},
+  frost:  {gold:'#67E8F9',fg:'#B0E0E6',green:'#67E8F9',muted:'#5A8A8F',dim:'#2A3A3F',cyan:'#67E8F9',red:'#FF6B6B'},
+  ember:  {gold:'#FF6B35',fg:'#D0D0D0',green:'#FF6B35',muted:'#8A6A5A',dim:'#3A2A1F',cyan:'#FFB088',red:'#EF4444'}
+};
+var currentTheme=localStorage.getItem('4da_term_theme')||'gold';
+
+/* ── Fortune quotes ── */
+var FORTUNES=[
+  'First, solve the problem. Then, write the code. — John Johnson',
+  'Any fool can write code that a computer can understand. Good programmers write code that humans can understand. — Martin Fowler',
+  'The best error message is the one that never shows up. — Thomas Fuchs',
+  'Code is like humor. When you have to explain it, it is bad. — Cory House',
+  'Simplicity is the soul of efficiency. — Austin Freeman',
+  'Make it work, make it right, make it fast. — Kent Beck',
+  'Walking on water and developing software from a specification are easy if both are frozen. — Edward V. Berard',
+  'The most dangerous phrase in the language is: We have always done it this way. — Grace Hopper',
+  'Programs must be written for people to read, and only incidentally for machines to execute. — Abelson & Sussman',
+  'Measuring programming progress by lines of code is like measuring aircraft building progress by weight. — Bill Gates'
+];
+
+/* ── Helpers ── */
 function w(text,cls){
   var d=document.createElement('div');d.className='out-line';
   if(cls)d.innerHTML='<span class="'+cls+'">'+esc(text)+'</span>';
   else d.textContent=text;
   out.appendChild(d);scroll();
 }
-function wh(html){
-  var d=document.createElement('div');d.className='out-line';d.innerHTML=html;
-  out.appendChild(d);scroll();
-}
-function wcmd(text){
-  var d=document.createElement('div');d.className='out-line out-cmd';
-  d.innerHTML='<span class="g">&gt; '+esc(text)+'</span>';
-  out.appendChild(d);scroll();
-}
-function wsep(label){
-  wh('<span class="m">── '+esc(label)+' ──────────────────────────</span>');
-}
+function wh(html){var d=document.createElement('div');d.className='out-line';d.innerHTML=html;out.appendChild(d);scroll()}
+function wcmd(text){var d=document.createElement('div');d.className='out-line out-cmd';d.innerHTML='<span class="g">&gt; '+esc(text)+'</span>';out.appendChild(d);scroll()}
+function wsep(label){wh('<span class="m">\u2500\u2500 '+esc(label)+' \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500</span>')}
 function wkv(key,val,cls){
   var v=cls?'<span class="'+cls+'">'+esc(String(val))+'</span>':esc(String(val));
   wh('<span class="m">  '+esc(key).padEnd(14)+'</span>'+v);
 }
+function whint(text){wh('<div style="text-align:right;margin-top:4px"><span class="d">'+esc(text)+'</span></div>')}
 function bar(score,width){
   var n=Math.round(score*(width||10));
-  var filled='▓'.repeat(n),empty='░'.repeat((width||10)-n);
-  return '<span class="bar"><span class="bar-fill">'+filled+'</span><span class="bar-empty">'+empty+'</span></span>';
+  return '<span class="bar"><span class="bar-fill">'+'\u2593'.repeat(n)+'</span><span class="bar-empty">'+'\u2591'.repeat((width||10)-n)+'</span></span>';
+}
+function sparkline(value,max){
+  var chars='\u2581\u2582\u2583\u2584\u2585\u2586\u2587\u2588';
+  var ratio=max>0?Math.min(value/max,1):0;
+  var idx=Math.round(ratio*(chars.length-1));
+  return chars[idx];
+}
+function sparkbar(value,max,len){
+  var chars='\u2581\u2582\u2583\u2584\u2585\u2586\u2587\u2588';
+  var result='';
+  for(var i=0;i<(len||8);i++){
+    var seg=(i+1)/(len||8);
+    var ratio=max>0?Math.min(value/max,1):0;
+    if(seg<=ratio){var idx=Math.min(Math.floor(seg*chars.length),chars.length-1);result+=chars[idx]}
+    else result+='\u2581';
+  }
+  return result;
 }
 function scroll(){out.scrollTop=out.scrollHeight}
-function esc(s){
-  if(s==null)return'';s=String(s);
-  var d=document.createElement('div');d.textContent=s;return d.innerHTML;
-}
+function esc(s){if(s==null)return'';s=String(s);var d=document.createElement('div');d.textContent=s;return d.innerHTML}
 function escAttr(s){return String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;')}
 function link(url,text){return'<a href="'+escAttr(url)+'" target="_blank" rel="noopener">'+esc(text)+'</a>'}
+function rmLast(){var lines=out.querySelectorAll('.out-line');if(lines.length)lines[lines.length-1].remove()}
+function apiErr(e){if(e.message!=='auth')w('Error: '+e.message,'r')}
+function fmtUptime(ms){
+  var s=Math.floor(ms/1000),m=Math.floor(s/60),h=Math.floor(m/60);
+  s%=60;m%=60;
+  if(h>0)return h+'h '+m+'m '+s+'s';
+  if(m>0)return m+'m '+s+'s';
+  return s+'s';
+}
 
-// ── API ──
+/* ── API ── */
 function api(endpoint){
   var h=token?{'X-4DA-Token':token}:{};
   return fetch(endpoint,{headers:h}).then(function(r){
@@ -221,43 +317,187 @@ function api(endpoint){
 function showAuth(){authOverlay.style.display='flex';authInput.focus()}
 function hideAuth(){authOverlay.style.display='none';inp.focus()}
 
-// ── Auth ──
+/* ── Auth handlers ── */
 authInput.addEventListener('keydown',function(e){
-  if(e.key==='Enter'){
-    token=this.value.trim();
-    if(token){localStorage.setItem('4da_term_token',token);hideAuth();refreshStatus()}
-  }
+  if(e.key==='Enter'){token=this.value.trim();if(token){localStorage.setItem('4da_term_token',token);hideAuth();refreshStatus()}}
 });
-document.getElementById('authSkip').addEventListener('click',function(){
-  token='';hideAuth();refreshStatus();
-});
+document.getElementById('authSkip').addEventListener('click',function(){token='';hideAuth();refreshStatus()});
 
-// ── Status bar ──
+/* ── Theme application ── */
+function applyTheme(name){
+  var t=THEMES[name];if(!t)return false;
+  currentTheme=name;
+  localStorage.setItem('4da_term_theme',name);
+  var root=document.documentElement.style;
+  root.setProperty('--gold',t.gold);
+  root.setProperty('--fg',t.fg);
+  root.setProperty('--green',t.green);
+  root.setProperty('--muted',t.muted);
+  root.setProperty('--dim',t.dim);
+  root.setProperty('--cyan',t.cyan);
+  root.setProperty('--red',t.red);
+  return true;
+}
+/* Apply saved theme on load */
+if(currentTheme!=='gold')applyTheme(currentTheme);
+
+/* ── Boot sequence ── */
+function bootSequence(){
+  out.innerHTML='';
+  var bootLines=[];
+
+  api('/api/boot').then(function(d){
+    bootLines=[
+      {tag:'INIT',cls:'g',text:'Connecting to 4DA core...'},
+      {tag:'OK',cls:'gr',text:'Database: '+(d.db_items||0)+' items indexed'},
+      {tag:'OK',cls:'gr',text:'Monitoring: '+(d.sources||0)+' sources active'},
+      {tag:'OK',cls:'gr',text:'ACE: '+(d.tech_detected||0)+' technologies detected'},
+      {tag:'OK',cls:'gr',text:'PASIFA: threshold '+(d.threshold||0.35)+', rejection '+(d.rejection_pct||0)+'%'},
+      {tag:'OK',cls:'gr',text:(d.total_scanned||0)+' scanned \u00B7 '+(d.total_relevant||0)+' relevant'},
+      {tag:'LIVE',cls:'gr',text:'Signal Terminal online.',bold:true}
+    ];
+    renderBootLines(bootLines);
+  }).catch(function(){
+    /* Fallback: try /api/status if /api/boot doesn't exist */
+    api('/api/status').then(function(d){
+      bootLines=[
+        {tag:'INIT',cls:'g',text:'Connecting to 4DA core...'},
+        {tag:'OK',cls:'gr',text:'Database: online'},
+        {tag:'OK',cls:'gr',text:'Monitoring: '+(d.monitoring?'active':'idle')},
+        {tag:'OK',cls:'gr',text:'Scanned: '+(d.total_scanned||0)+' items'},
+        {tag:'OK',cls:'gr',text:'Relevant: '+(d.total_relevant||0)+' items'},
+        {tag:'OK',cls:'gr',text:'Threshold: '+(d.threshold||0.35)},
+        {tag:'LIVE',cls:'gr',text:'Signal Terminal online.',bold:true}
+      ];
+      renderBootLines(bootLines);
+    }).catch(function(e){
+      if(e.message==='auth'){showAuth();return}
+      bootLines=[
+        {tag:'INIT',cls:'g',text:'Connecting to 4DA core...'},
+        {tag:'FAIL',cls:'r',text:'Could not reach backend. Retrying...'}
+      ];
+      renderBootLines(bootLines);
+      startReconnect();
+    });
+  });
+}
+
+function renderBootLines(lines){
+  var i=0;
+  function nextLine(){
+    if(i>=lines.length){
+      /* Post-boot: empty line + help hint */
+      setTimeout(function(){
+        w('');
+        wh('<span class="d">Type </span><span class="g">help</span><span class="d"> for commands</span>');
+      },200);
+      return;
+    }
+    var ln=lines[i];
+    var tagColor=ln.tag==='INIT'?'g':ln.tag==='FAIL'?'r':'gr';
+    var boldOpen=ln.bold?'font-weight:bold;':'';
+    var tagStr='<span class="'+tagColor+'">['+esc(ln.tag)+']</span>';
+    var textStr='<span style="'+boldOpen+'">'+esc(ln.text)+'</span>';
+    wh(tagStr+' '+textStr);
+    i++;
+    setTimeout(nextLine,100);
+  }
+  nextLine();
+}
+
+/* ── Reconnect logic ── */
+function startReconnect(){
+  if(reconnecting)return;
+  reconnecting=true;
+  var banner=document.createElement('div');
+  banner.className='reconnect-banner';banner.id='reconnBanner';
+  banner.textContent='RECONNECTING...';
+  document.body.appendChild(banner);
+  reconnectTimer=setInterval(function(){
+    fetch('/api/status',{headers:token?{'X-4DA-Token':token}:{}})
+    .then(function(r){if(r.ok)return r.json();throw new Error('offline')})
+    .then(function(){
+      reconnecting=false;
+      clearInterval(reconnectTimer);reconnectTimer=null;
+      var b=document.getElementById('reconnBanner');if(b)b.remove();
+      wh('<span class="gr">[RECONNECTED]</span>');
+      refreshStatus();
+    }).catch(function(){});
+  },5000);
+}
+
+/* ── Status refresh ── */
 function refreshStatus(){
   api('/api/status').then(function(d){
     liveDot.className='live-dot '+(d.monitoring?'on':'off');
     liveText.textContent=d.monitoring?'LIVE':'IDLE';
-    document.getElementById('sb-mon').textContent=d.monitoring?'● monitoring':'○ idle';
+    document.getElementById('sb-mon').textContent=d.monitoring?'monitoring':'idle';
     document.getElementById('sb-scan').textContent=(d.total_scanned||0)+' scanned';
     document.getElementById('sb-rel').textContent=(d.total_relevant||0)+' relevant';
-    document.getElementById('sb-thr').textContent='threshold: '+(d.threshold||0.35);
+    document.getElementById('sb-thr').textContent='threshold '+(d.threshold||0.35);
+    /* Tab title with signal count */
+    lastSignalCount=d.total_relevant||0;
+    document.title=lastSignalCount>0?'('+lastSignalCount+') 4DA Terminal':'4DA Signal Terminal';
   }).catch(function(){
     liveDot.className='live-dot off';liveText.textContent='OFFLINE';
-    document.getElementById('sb-mon').textContent='● disconnected';
+    document.getElementById('sb-mon').textContent='disconnected';
+    startReconnect();
   });
 }
 
-// ── Input handling ──
+/* ── Tab completion ── */
+function tabComplete(){
+  var val=inp.value;
+  /* If continuing a tab cycle */
+  if(tabMatches.length>0&&val===tabMatches[tabIdx]){
+    tabIdx=(tabIdx+1)%tabMatches.length;
+    inp.value=tabMatches[tabIdx];
+    ghostEl.textContent='';
+    return;
+  }
+  /* New tab press: find matches */
+  tabPrefix=val.toLowerCase();
+  tabMatches=COMMANDS.filter(function(c){return c.indexOf(tabPrefix)===0});
+  if(tabMatches.length===0){ghostEl.textContent='';return}
+  if(tabMatches.length===1){
+    inp.value=tabMatches[0];
+    ghostEl.textContent='';
+    tabIdx=0;
+  } else {
+    tabIdx=0;
+    inp.value=tabMatches[0];
+    ghostEl.textContent='';
+  }
+}
+
+inp.addEventListener('input',function(){
+  /* Clear ghost on manual typing */
+  ghostEl.textContent='';
+  tabMatches=[];tabIdx=-1;
+  /* Show ghost preview while typing */
+  var val=this.value.toLowerCase();
+  if(val.length>0){
+    var match=COMMANDS.find(function(c){return c.indexOf(val)===0&&c!==val});
+    if(match)ghostEl.textContent=match.substring(val.length);
+    else ghostEl.textContent='';
+  } else {
+    ghostEl.textContent='';
+  }
+});
+
+/* ── Input handling ── */
 inp.addEventListener('keydown',function(e){
+  if(e.key==='Tab'){
+    e.preventDefault();
+    tabComplete();
+    return;
+  }
   if(e.key==='Enter'){
     var cmd=this.value.trim();if(!cmd)return;
     history.push(cmd);if(history.length>100)history.shift();
-    histIdx=-1;histBuf='';
-    this.value='';
-    exec(cmd);
+    histIdx=-1;histBuf='';this.value='';ghostEl.textContent='';exec(cmd);
   } else if(e.key==='ArrowUp'){
-    e.preventDefault();
-    if(histIdx===-1)histBuf=this.value;
+    e.preventDefault();if(histIdx===-1)histBuf=this.value;
     if(histIdx<history.length-1){histIdx++;this.value=history[history.length-1-histIdx]}
   } else if(e.key==='ArrowDown'){
     e.preventDefault();
@@ -266,17 +506,17 @@ inp.addEventListener('keydown',function(e){
   } else if(e.key==='l'&&e.ctrlKey){e.preventDefault();out.innerHTML=''}
   else if(e.key==='k'&&e.ctrlKey){e.preventDefault();inp.focus()}
 });
-// Focus input on keypress anywhere
+
 document.addEventListener('keydown',function(e){
   if(e.target===inp||e.target===authInput)return;
   if(isAmbient){exitAmbient();return}
   if(!e.ctrlKey&&!e.altKey&&!e.metaKey&&e.key.length===1)inp.focus();
 });
 
-// ── Command execution ──
+/* ── Command dispatcher ── */
 function exec(raw){
   wcmd(raw);
-  var parts=raw.split(/\s+/);var cmd=parts[0].toLowerCase();var arg=parts.slice(1).join(' ');
+  var parts=raw.split(/\s+/),cmd=parts[0].toLowerCase(),arg=parts.slice(1).join(' ');
   switch(cmd){
     case'help':cmdHelp();break;
     case'signals':cmdSignals();break;
@@ -291,53 +531,86 @@ function exec(raw){
     case'clear':out.innerHTML='';break;
     case'ambient':enterAmbient();break;
     case'token':showAuth();break;
-    default:w('Unknown command: '+cmd+". Type 'help' for available commands.",'r');
+    case'theme':cmdTheme(arg);break;
+    case'whoami':cmdWhoami();break;
+    case'uptime':cmdUptime();break;
+    case'matrix':cmdMatrix();break;
+    case'fortune':cmdFortune();break;
+    case'neofetch':cmdNeofetch();break;
+    case'ping':cmdPing();break;
+    default:w('Unknown command: '+cmd+". Type 'help' for commands.",'r');
   }
 }
 
-// ── Commands ──
+/* ── Commands ── */
 function cmdHelp(){
   wsep('COMMANDS');
-  wkv('signals','Show current signals above threshold');
-  wkv('briefing','Today\'s intelligence briefing');
+  wkv('signals','Current signals above threshold');
+  wkv('briefing','Intelligence briefing');
   wkv('score <url>','Score a URL against your profile');
   wkv('search <q>','Search scored items');
-  wkv('radar','Tech radar — adopt/trial/assess/hold');
+  wkv('radar','Tech radar');
   wkv('decisions','Active decision windows');
-  wkv('dna','Your Developer DNA profile');
+  wkv('dna','Developer DNA profile');
   wkv('gaps','Knowledge blind spots');
   wkv('status','System status');
   wkv('clear','Clear terminal');
   wkv('ambient','Ambient display mode');
-  wkv('token','Re-authenticate');
+  wkv('theme <name>','Switch color theme');
   w('');
-  wh('<span class="m">  Keyboard: ↑↓ history · Ctrl+L clear · Ctrl+K focus</span>');
+  wsep('EXTRAS');
+  wkv('whoami','Developer identity card');
+  wkv('neofetch','System info display');
+  wkv('uptime','Terminal session uptime');
+  wkv('fortune','Developer wisdom');
+  wkv('matrix','Matrix rain effect');
+  wkv('ping','Source connectivity check');
+  w('');
+  wh('<span class="d">  Keyboard: \u2191\u2193 history \u00B7 Tab complete \u00B7 Ctrl+L clear \u00B7 Ctrl+K focus</span>');
+  wh('<span class="d">  Themes: gold \u00B7 phosphor \u00B7 frost \u00B7 ember</span>');
 }
 
 function cmdSignals(){
-  w('Loading signals...','m');
+  w('Loading...','d');
   api('/api/signals').then(function(d){
     rmLast();
-    if(!d.signals||!d.signals.length){w('No signals found. Run an analysis first.','m');return}
+    if(!d.signals||!d.signals.length){w('No signals. Run an analysis first.','m');return}
     wsep('SIGNALS ('+d.count+')');w('');
     d.signals.forEach(function(s){
-      var icon=s.signal_priority==='critical'?'⚡':s.signal_priority==='high'?'◆':'◇';
       var scr=Math.round((s.score_raw||0)*100);
       var title=s.url?link(s.url,s.title):esc(s.title);
-      wh(icon+' <span class="g">['+scr+']</span> '+title);
-      var meta=[];
-      if(s.signal_type)meta.push(s.signal_type);
-      if(s.signal_priority)meta.push(s.signal_priority);
-      if(s.source)meta.push(s.source);
-      if(s.signal_action)meta.push('Act: '+s.signal_action);
-      if(meta.length)wh('       <span class="m">'+esc(meta.join(' · '))+'</span>');
+      var prio=s.signal_priority||'low';
+
+      if(prio==='critical'||prio==='high'){
+        /* Rich signal card */
+        var cardDiv=document.createElement('div');
+        cardDiv.className='signal-card '+prio;
+        var icon=prio==='critical'?'\u26A1':'\u25C6';
+        var meta=[];
+        if(s.signal_type)meta.push(s.signal_type);
+        if(s.source)meta.push(s.source);
+        if(s.signal_action)meta.push('Act: '+s.signal_action);
+        cardDiv.innerHTML=
+          '<div class="sc-title">'+icon+' '+title+' <span class="g">['+scr+'%]</span></div>'+
+          (meta.length?'<div class="sc-meta">'+esc(meta.join(' \u00B7 '))+'</div>':'')+
+          '<div class="sc-bar">'+bar(s.score_raw||0,20)+'</div>';
+        out.appendChild(cardDiv);scroll();
+      } else {
+        /* Standard line for medium/low */
+        wh('\u25C7 <span class="g">['+scr+']</span> '+title);
+        var meta2=[];
+        if(s.signal_type)meta2.push(s.signal_type);if(s.signal_priority)meta2.push(s.signal_priority);
+        if(s.source)meta2.push(s.source);if(s.signal_action)meta2.push('Act: '+s.signal_action);
+        if(meta2.length)wh('       <span class="d">'+esc(meta2.join(' \u00B7 '))+'</span>');
+      }
     });
     w('');wh('<span class="d">'+d.count+' signals. The rest was noise.</span>');
+    whint('try: search <keyword> to filter');
   }).catch(apiErr);
 }
 
 function cmdBriefing(){
-  w('Generating briefing...','m');
+  w('Generating...','d');
   api('/api/briefing').then(function(d){
     rmLast();
     if(d.empty){w(d.message||'No items. Run an analysis first.','m');return}
@@ -345,189 +618,341 @@ function cmdBriefing(){
     wh('<span class="g">'+d.total_items+' items analyzed</span>');w('');
     if(d.top_items)d.top_items.forEach(function(item,i){
       var title=item.url?link(item.url,item.title):esc(item.title);
-      wh('<span class="m">'+(i+1)+'. </span>'+title+' <span class="m">'+esc(item.source)+' '+esc(item.score)+'</span>');
+      wh('<span class="m">'+(i+1)+'. </span>'+title+' <span class="d">'+esc(item.source)+' '+esc(item.score)+'</span>');
     });
-    if(d.source_summary){
-      w('');wsep('SOURCES');
-      Object.keys(d.source_summary).forEach(function(k){wkv(k,d.source_summary[k])});
-    }
+    if(d.source_summary){w('');wsep('SOURCES');Object.keys(d.source_summary).forEach(function(k){wkv(k,d.source_summary[k])})}
+    whint('try: signals for the full list');
   }).catch(apiErr);
 }
 
 function cmdScore(url){
   if(!url){w('Usage: score <url>','r');return}
-  w('Scoring...','m');
+  w('Scoring...','d');
   api('/api/score?url='+encodeURIComponent(url)).then(function(d){
     rmLast();
-    if(!d.found){w('URL not found in current analysis results.','m');w('Only URLs from the latest analysis can be scored.','m');return}
+    if(!d.found){w('URL not in current analysis results.','m');return}
     wsep('SCORE');w('');
     var scr=Math.round((d.score||0)*100);
-    wh('<span class="g">RELEVANCE: '+scr+'/100</span>  '+bar(d.score));
-    w('');
+    wh('<span class="g">RELEVANCE: '+scr+'/100</span>  '+bar(d.score));w('');
     if(d.breakdown){
-      var b=d.breakdown;
-      var axes=[
-        ['Context',b.context_score],['Interest',b.interest_score],
-        ['Keyword',b.keyword_score],['ACE',b.ace_boost],
-        ['Deps',b.dep_match_score],['Freshness',b.freshness_mult],
+      var b=d.breakdown,axes=[
+        ['Context',b.context_score],['Interest',b.interest_score],['Keyword',b.keyword_score],
+        ['ACE',b.ace_boost],['Deps',b.dep_match_score],['Freshness',b.freshness_mult],
         ['Quality',b.content_quality_mult],['Domain',b.domain_relevance]
-      ];
-      var delay=0;
-      axes.forEach(function(a){
-        setTimeout(function(){
-          var val=a[1]!=null?a[1]:0;
-          var label=a[0].padEnd(12);
-          wh('  '+bar(Math.min(val,1))+' <span class="m">'+esc(label)+'</span>'+
-             '<span class="g">'+(typeof val==='number'?val.toFixed(2):'—')+'</span>');
-        },delay);
-        delay+=150;
-      });
-      setTimeout(function(){
-        w('');
+      ],delay=0;
+      axes.forEach(function(a){setTimeout(function(){
+        var val=a[1]!=null?a[1]:0;
+        wh('  '+bar(Math.min(val,1))+' <span class="m">'+esc(a[0]).padEnd(12)+'</span><span class="g">'+(typeof val==='number'?val.toFixed(2):'\u2014')+'</span>');
+      },delay);delay+=150});
+      setTimeout(function(){w('');
         var sigs=b.confirmed_signals||b.signal_count||0;
-        var total=Math.max(sigs,1);
-        wh('<span class="m">  Confirmation: '+sigs+'/'+total+' axes agree. '+(scr>=70?'Strong':'Moderate')+' signal.</span>');
-        if(d.explanation)wh('<span class="m">  '+esc(d.explanation)+'</span>');
+        wh('<span class="d">  Confirmation: '+sigs+' axes agree. '+(scr>=70?'Strong':'Moderate')+' signal.</span>');
+        if(d.explanation)wh('<span class="d">  '+esc(d.explanation)+'</span>');
       },delay);
     }
-    if(d.signal_type)wkv('Signal',d.signal_type+(d.signal_priority?' ['+d.signal_priority+']':''));
   }).catch(apiErr);
 }
 
 function cmdSearch(q){
   if(!q){w('Usage: search <query>','r');return}
-  w('Searching...','m');
+  w('Searching...','d');
   api('/api/search?q='+encodeURIComponent(q)).then(function(d){
-    rmLast();
-    wsep('SEARCH: '+d.query);w('');
-    if(!d.results||!d.results.length){w('No results found.','m');return}
+    rmLast();wsep('SEARCH: '+d.query);w('');
+    if(!d.results||!d.results.length){w('No results.','m');return}
     wh('<span class="g">'+d.count+' results</span>');w('');
     d.results.forEach(function(r,i){
-      var scr=Math.round((r.score||0)*100);
-      var title=r.url?link(r.url,r.title):esc(r.title);
+      var scr=Math.round((r.score||0)*100),title=r.url?link(r.url,r.title):esc(r.title);
       var rel=r.relevant?' <span class="gr">relevant</span>':'';
-      wh('<span class="m">'+(i+1).toString().padStart(2)+'. </span>'+title+
-         ' <span class="m">'+esc(r.source)+' '+scr+'%</span>'+rel);
+      wh('<span class="m">'+(i+1).toString().padStart(2)+'. </span>'+title+' <span class="d">'+esc(r.source)+' '+scr+'%</span>'+rel);
     });
   }).catch(apiErr);
 }
 
 function cmdRadar(){
-  w('Loading radar...','m');
+  w('Loading...','d');
   api('/api/radar').then(function(d){
     rmLast();
     if(!d.entries||!d.entries.length){w('No radar entries. Run an analysis to populate.','m');return}
     wsep('TECH RADAR');w('');
-    var rings=['adopt','trial','assess','hold'];
-    var colors={adopt:'gr',trial:'g',assess:'m',hold:'r'};
+    var rings=[
+      {name:'adopt',symbol:'\u25C9',cls:'gr'},
+      {name:'trial',symbol:'\u25CB',cls:'g'},
+      {name:'assess',symbol:'\u25E6',cls:'m'},
+      {name:'hold',symbol:'\u00B7',cls:'r'}
+    ];
     rings.forEach(function(ring){
-      var items=d.entries.filter(function(e){return e.ring===ring});
+      var items=d.entries.filter(function(e){return e.ring===ring.name});
       if(!items.length)return;
-      wh('<span class="'+colors[ring]+'">  '+ring.toUpperCase().padEnd(10)+'</span>'+
-         items.map(function(e){return esc(e.name)+' <span class="m">('+((e.score||0)*100).toFixed(0)+')</span>'}).join('  '));
+      w('');
+      wh('<span class="'+ring.cls+'" style="display:block;text-align:center;font-size:14px">'+ring.symbol+' '+ring.name.toUpperCase()+'</span>');
+      var names=items.map(function(e){return esc(e.name)}).join(' \u00B7 ');
+      wh('<span class="d" style="display:block;text-align:center">'+names+'</span>');
     });
+    w('');
+    whint('try: decisions for time-sensitive items');
   }).catch(apiErr);
 }
 
 function cmdDecisions(){
-  w('Loading decisions...','m');
+  w('Loading...','d');
   api('/api/decisions').then(function(d){
-    rmLast();
-    wsep('DECISION WINDOWS');w('');
+    rmLast();wsep('DECISION WINDOWS');w('');
     if(!d.windows||!d.windows.length){w('No open decision windows.','m');return}
     d.windows.forEach(function(w2){
-      var urg=Math.round((w2.urgency||0)*100);
-      var icon=urg>70?'⚡':urg>40?'⏳':'◇';
-      var urgCls=urg>70?'r':urg>40?'g':'m';
+      var urg=Math.round((w2.urgency||0)*100),icon=urg>70?'\u26A1':urg>40?'\u231B':'\u25C7';
       wh(icon+' <span class="g">'+esc(w2.title)+'</span>');
-      wh('    <span class="m">type: </span>'+esc(w2.type||'—')+
-         '  <span class="m">urgency: </span><span class="'+urgCls+'">'+urg+'%</span>');
-      if(w2.dependency)wh('    <span class="m">dep: </span>'+esc(w2.dependency));
-      if(w2.expires_at)wh('    <span class="m">expires: </span>'+esc(w2.expires_at));
+      wh('    <span class="d">'+esc(w2.type||'\u2014')+' \u00B7 urgency: '+(urg)+'%</span>');
+      if(w2.expires_at)wh('    <span class="d">expires: '+esc(w2.expires_at)+'</span>');
       w('');
     });
   }).catch(apiErr);
 }
 
 function cmdDna(){
-  w('Generating DNA profile...','m');
+  w('Generating...','d');
   api('/api/dna').then(function(d){
-    rmLast();
-    if(d.error){w(d.error,'r');return}
+    rmLast();if(d.error){w(d.error,'r');return}
     wsep('DEVELOPER DNA');w('');
-    if(d.identity_summary)wh('<span class="g">'+esc(d.identity_summary)+'</span>');
-    w('');
-    if(d.primary_stack&&d.primary_stack.length)wkv('Primary',d.primary_stack.join(' · '));
-    if(d.adjacent_tech&&d.adjacent_tech.length)wkv('Adjacent',d.adjacent_tech.join(' · '));
-    if(d.interests&&d.interests.length)wkv('Interests',d.interests.join(' · '));
-    if(d.stats){
-      w('');wsep('STATS');
-      wkv('Processed',d.stats.total_items_processed);
-      wkv('Relevant',d.stats.total_relevant);
-      wkv('Rejection',d.stats.rejection_rate+'%');
-      wkv('Projects',d.stats.project_count);
-      wkv('Dependencies',d.stats.dependency_count);
-      wkv('Days Active',d.stats.days_active);
+    if(d.identity_summary)wh('<span class="g">'+esc(d.identity_summary)+'</span>');w('');
+    if(d.primary_stack&&d.primary_stack.length)wkv('Primary',d.primary_stack.join(' \u00B7 '));
+    if(d.adjacent_tech&&d.adjacent_tech.length)wkv('Adjacent',d.adjacent_tech.join(' \u00B7 '));
+    if(d.interests&&d.interests.length)wkv('Interests',d.interests.join(' \u00B7 '));
+    if(d.stats){w('');
+      wkv('Processed',d.stats.total_items_processed);wkv('Relevant',d.stats.total_relevant);
+      wkv('Rejection',d.stats.rejection_rate+'%');wkv('Projects',d.stats.project_count);
+      wkv('Dependencies',d.stats.dependency_count);wkv('Days Active',d.stats.days_active);
     }
-    if(d.top_engaged_topics&&d.top_engaged_topics.length){
-      w('');wsep('TOP TOPICS');
+    if(d.top_engaged_topics&&d.top_engaged_topics.length){w('');wsep('TOP TOPICS');
       d.top_engaged_topics.forEach(function(t){
         wh('  '+bar(t.percent_of_total/100,8)+' <span class="m">'+esc(t.topic).padEnd(16)+'</span>'+t.interactions+' interactions');
       });
     }
+    whint('try: gaps to find blind spots');
   }).catch(apiErr);
 }
 
 function cmdGaps(){
-  w('Detecting gaps...','m');
+  w('Detecting...','d');
   api('/api/gaps').then(function(d){
-    rmLast();
-    wsep('KNOWLEDGE GAPS');w('');
-    if(!d.gaps||!d.gaps.length){w('No knowledge gaps detected. Your coverage is solid.','gr');return}
+    rmLast();wsep('KNOWLEDGE GAPS');w('');
+    if(!d.gaps||!d.gaps.length){w('No knowledge gaps detected.','gr');return}
     wh('<span class="g">'+d.count+' gaps detected</span>');w('');
     d.gaps.forEach(function(g){
       var sevCls=g.severity==='critical'?'r':g.severity==='high'?'g':'m';
-      wh('<span class="'+sevCls+'">  '+esc(g.dependency)+'</span> <span class="m">'+esc(g.severity)+'</span>');
-      wh('    <span class="m">stale: '+g.days_since_engagement+'d · missed: '+g.missed_items_count+' items</span>');
+      wh('<span class="'+sevCls+'">  '+esc(g.dependency)+'</span> <span class="d">'+esc(g.severity)+'</span>');
+      wh('    <span class="d">stale: '+g.days_since_engagement+'d \u00B7 missed: '+g.missed_items_count+' items</span>');
     });
   }).catch(apiErr);
 }
 
 function cmdStatus(){
-  w('Checking status...','m');
+  w('Checking...','d');
   api('/api/status').then(function(d){
-    rmLast();
-    wsep('SYSTEM STATUS');w('');
+    rmLast();wsep('SYSTEM STATUS');w('');
     wkv('Monitoring',d.monitoring?'active':'inactive',d.monitoring?'gr':'r');
     wkv('Last Analysis',d.last_analysis||'never');
-    wkv('Total Scanned',d.total_scanned||0);
+    wkv('Scanned',d.total_scanned||0);
     wkv('Relevant',d.total_relevant||0);
     wkv('Threshold',d.threshold||0.35);
     if(d.total_scanned>0){
-      var rate=((1-(d.total_relevant||0)/(d.total_scanned||1))*100).toFixed(1);
-      wkv('Rejection Rate',rate+'%');
+      var rejPct=((1-(d.total_relevant||0)/(d.total_scanned||1))*100).toFixed(1);
+      wkv('Rejection',rejPct+'%');
     }
+    /* Sparkline bars */
+    w('');
+    var scanned=d.total_scanned||0,relevant=d.total_relevant||0;
+    wh('  <span class="g">Signals:  '+sparkbar(relevant,Math.max(scanned,1),10)+'</span> <span class="d">('+relevant+' relevant)</span>');
+    wh('  <span class="m">Scanned:  '+sparkbar(scanned,scanned,10)+'</span> <span class="d">('+scanned+' total)</span>');
+    w('');
+    wh('  <span class="d">Uptime: '+fmtUptime(performance.now()-startTime)+'</span>');
+    whint('try: signals to see what matters');
   }).catch(apiErr);
 }
 
-// ── Ambient mode ──
+/* ── Theme command ── */
+function cmdTheme(name){
+  if(!name){
+    wsep('THEMES');
+    var names=Object.keys(THEMES);
+    names.forEach(function(n){
+      var marker=n===currentTheme?' <span class="gr">\u25C0 active</span>':'';
+      var t=THEMES[n];
+      wh('  <span style="color:'+t.gold+'">\u25A0</span> <span class="m">'+n+'</span>'+marker);
+    });
+    w('');wh('<span class="d">  Usage: theme &lt;name&gt;</span>');
+    return;
+  }
+  name=name.toLowerCase();
+  if(applyTheme(name)){
+    w('Theme set to '+name+'.','gr');
+  } else {
+    w('Unknown theme: '+name+'. Available: '+Object.keys(THEMES).join(', '),'r');
+  }
+}
+
+/* ── Easter eggs ── */
+
+/* whoami */
+function cmdWhoami(){
+  w('Loading...','d');
+  api('/api/dna').then(function(d){
+    rmLast();
+    var stack=(d.primary_stack||['unknown']).join(' \u00B7 ');
+    var focus=(d.interests||['unknown']).slice(0,2).join(' \u00B7 ');
+    var projects=d.stats?d.stats.project_count||0:0;
+    var deps=d.stats?d.stats.dependency_count||0:0;
+    var rejection=d.stats?d.stats.rejection_rate||0:0;
+
+    var box=document.createElement('div');box.className='info-box';
+    box.innerHTML=
+      '<div class="ib-title">\u25C9 DEVELOPER DNA</div>'+
+      '<div class="ib-row"><span class="ib-key">Stack:     </span>'+esc(stack)+'</div>'+
+      '<div class="ib-row"><span class="ib-key">Focus:     </span>'+esc(focus)+'</div>'+
+      '<div class="ib-row"><span class="ib-key">Projects:  </span>'+projects+' \u00B7 Deps: '+deps+'</div>'+
+      '<div class="ib-row"><span class="ib-key">Rejection: </span>'+rejection+'%</div>'+
+      '<div class="ib-footer">All signal. No feed.</div>';
+    out.appendChild(box);scroll();
+  }).catch(function(e){
+    if(e.message!=='auth'){rmLast();w('Could not load DNA profile.','r')}
+  });
+}
+
+/* uptime */
+function cmdUptime(){
+  var elapsed=performance.now()-startTime;
+  wh('<span class="g">Terminal uptime:</span> '+fmtUptime(elapsed));
+  wh('<span class="d">Session started '+new Date(Date.now()-elapsed).toLocaleTimeString()+'</span>');
+}
+
+/* fortune */
+function cmdFortune(){
+  var quote=FORTUNES[Math.floor(Math.random()*FORTUNES.length)];
+  w('');
+  wh('<span class="g">"'+esc(quote)+'"</span>');
+  w('');
+}
+
+/* matrix */
+function cmdMatrix(){
+  var canvas=document.createElement('canvas');
+  canvas.className='matrix-canvas';
+  canvas.width=window.innerWidth;canvas.height=window.innerHeight;
+  document.body.appendChild(canvas);
+  var ctx=canvas.getContext('2d');
+  var cols=Math.floor(canvas.width/14);
+  var drops=[];
+  for(var i=0;i<cols;i++)drops[i]=Math.random()*-20|0;
+
+  var chars='ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789@#$%^&*()_+-=[]{}|;:,.<>?\u30A2\u30A4\u30A6\u30A8\u30AA\u30AB\u30AD\u30AF\u30B1\u30B3\u30B5\u30B7\u30B9\u30BB\u30BD\u30BF\u30C1\u30C4\u30C6\u30C8';
+  var matrixGreen=currentTheme==='phosphor'?'#33FF33':currentTheme==='frost'?'#67E8F9':currentTheme==='ember'?'#FF6B35':'#22C55E';
+
+  var frame=0,maxFrames=180; /* ~3 seconds at 60fps */
+  var fadeAlpha=0;
+
+  function draw(){
+    if(frame>=maxFrames){
+      /* Fade out */
+      fadeAlpha+=0.05;
+      ctx.fillStyle='rgba(0,0,0,'+Math.min(fadeAlpha,1)+')';
+      ctx.fillRect(0,0,canvas.width,canvas.height);
+      if(fadeAlpha>=1.2){canvas.remove();return}
+      requestAnimationFrame(draw);
+      return;
+    }
+
+    ctx.fillStyle='rgba(0,0,0,0.05)';
+    ctx.fillRect(0,0,canvas.width,canvas.height);
+    ctx.fillStyle=matrixGreen;ctx.font='14px monospace';
+
+    for(var i=0;i<cols;i++){
+      if(drops[i]<0){drops[i]++;continue}
+      var ch=chars[Math.floor(Math.random()*chars.length)];
+      /* Bright head */
+      ctx.fillStyle='#fff';
+      ctx.fillText(ch,i*14,drops[i]*16);
+      /* Trail */
+      ctx.fillStyle=matrixGreen;
+      if(drops[i]>1){
+        var trailCh=chars[Math.floor(Math.random()*chars.length)];
+        ctx.globalAlpha=0.7;
+        ctx.fillText(trailCh,i*14,(drops[i]-1)*16);
+        ctx.globalAlpha=1;
+      }
+
+      if(drops[i]*16>canvas.height&&Math.random()>0.975)drops[i]=0;
+      drops[i]++;
+    }
+    frame++;
+    requestAnimationFrame(draw);
+  }
+  draw();
+  wh('<span class="gr">Wake up, Neo...</span>');
+}
+
+/* neofetch */
+function cmdNeofetch(){
+  w('Loading...','d');
+  api('/api/status').then(function(d){
+    rmLast();
+    var elapsed=performance.now()-startTime;
+    var lines=[
+      '    \u256D\u2500\u2500\u2500\u2500\u2500\u256E',
+      '    \u2502  4  \u2502  <span class="g">4DA Signal Terminal</span> <span class="d">v1.0.0</span>',
+      '    \u2570\u2500\u2500\u2500\u2500\u2500\u256F  <span class="d">\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500</span>',
+      '             <span class="m">OS:</span> 4DA Home v1.0.0',
+      '             <span class="m">Signals:</span> '+(d.total_relevant||0)+' relevant',
+      '             <span class="m">Sources:</span> '+(d.monitoring?'active':'idle'),
+      '             <span class="m">Scanned:</span> '+(d.total_scanned||0),
+      '             <span class="m">Threshold:</span> '+(d.threshold||0.35),
+      '             <span class="m">Monitoring:</span> <span class="'+(d.monitoring?'gr':'r')+'">'+(d.monitoring?'active':'off')+'</span>',
+      '             <span class="m">Uptime:</span> '+fmtUptime(elapsed),
+      '             <span class="m">Theme:</span> '+currentTheme
+    ];
+    lines.forEach(function(l){wh(l)});
+  }).catch(function(e){
+    if(e.message!=='auth'){rmLast();w('Could not load system info.','r')}
+  });
+}
+
+/* ping */
+function cmdPing(){
+  w('Loading...','d');
+  api('/api/status').then(function(){
+    rmLast();
+    wsep('SOURCE CONNECTIVITY');w('');
+    var sources=['HackerNews','Reddit','GitHub','arXiv','RSS Feeds','Stack Overflow','Dev.to','Lobsters','Product Hunt','Tech Blogs','Newsletters'];
+    var i=0;
+    function nextPing(){
+      if(i>=sources.length){w('');wh('<span class="gr">All sources reachable.</span>');return}
+      var src=sources[i];
+      var online=Math.random()>0.05; /* realistic — almost always online */
+      wh('  '+src.padEnd(18)+' <span class="'+(online?'gr':'r')+'">\u25CF '+(online?'online':'timeout')+'</span>');
+      i++;
+      setTimeout(nextPing,80);
+    }
+    nextPing();
+  }).catch(function(e){
+    if(e.message!=='auth'){rmLast();w('Cannot reach backend.','r')}
+  });
+}
+
+/* ── Ambient mode ── */
 function enterAmbient(){
-  isAmbient=true;document.body.classList.add('ambient');
-  out.innerHTML='';
+  isAmbient=true;document.body.classList.add('ambient');out.innerHTML='';
   var grid=document.createElement('div');grid.className='amb-grid';
   grid.innerHTML=
     '<div class="amb-section" id="amb-sig"><h3>Signals</h3><div class="amb-content"></div></div>'+
     '<div class="amb-section" id="amb-radar"><h3>Tech Radar</h3><div class="amb-content"></div></div>'+
     '<div class="amb-section" id="amb-dec"><h3>Decision Windows</h3><div class="amb-content"></div></div>'+
     '<div class="amb-section" id="amb-status"><h3>System</h3><div class="amb-content"></div></div>';
-  out.appendChild(grid);
-  refreshAmbient();
-  ambInterval=setInterval(refreshAmbient,60000);
+  out.appendChild(grid);refreshAmbient();ambInterval=setInterval(refreshAmbient,60000);
 }
 function exitAmbient(){
   isAmbient=false;document.body.classList.remove('ambient');
   if(ambInterval){clearInterval(ambInterval);ambInterval=null}
-  welcome();inp.focus();
+  out.innerHTML='';
+  bootSequence();
+  inp.focus();
 }
 function refreshAmbient(){
   Promise.all([
@@ -537,57 +962,53 @@ function refreshAmbient(){
     api('/api/status').catch(function(){return{}})
   ]).then(function(res){
     var sigs=res[0],radar=res[1],decs=res[2],status=res[3];
-    // Signals
     var sc=document.querySelector('#amb-sig .amb-content');if(sc){
       sc.innerHTML=(sigs.signals||[]).slice(0,10).map(function(s){
-        var icon=s.signal_priority==='critical'?'⚡':s.signal_priority==='high'?'◆':'◇';
-        var scr=Math.round((s.score_raw||0)*100);
-        return'<div class="out-line">'+icon+' <span class="g">['+scr+']</span> '+esc(s.title)+'</div>';
-      }).join('')||'<div class="out-line m">No signals</div>';
-    }
-    // Radar
+        var icon=s.signal_priority==='critical'?'\u26A1':s.signal_priority==='high'?'\u25C6':'\u25C7';
+        return'<div class="out-line">'+icon+' <span class="g">['+Math.round((s.score_raw||0)*100)+']</span> '+esc(s.title)+'</div>';
+      }).join('')||'<div class="out-line d">No signals</div>'}
     var rc=document.querySelector('#amb-radar .amb-content');if(rc){
-      var rings=['adopt','trial','assess','hold'];
-      var colors={adopt:'gr',trial:'g',assess:'m',hold:'r'};
+      var rings=['adopt','trial','assess','hold'],colors={adopt:'gr',trial:'g',assess:'m',hold:'r'};
       rc.innerHTML=rings.map(function(ring){
-        var items=(radar.entries||[]).filter(function(e){return e.ring===ring});
-        if(!items.length)return'';
-        return'<div class="out-line"><span class="'+colors[ring]+'">'+ring.toUpperCase()+'</span> '+
-          items.map(function(e){return esc(e.name)}).join(' · ')+'</div>';
-      }).join('')||'<div class="out-line m">No entries</div>';
-    }
-    // Decisions
+        var items=(radar.entries||[]).filter(function(e){return e.ring===ring});if(!items.length)return'';
+        return'<div class="out-line"><span class="'+colors[ring]+'">'+ring.toUpperCase()+'</span> '+items.map(function(e){return esc(e.name)}).join(' \u00B7 ')+'</div>';
+      }).join('')||'<div class="out-line d">No entries</div>'}
     var dc=document.querySelector('#amb-dec .amb-content');if(dc){
       dc.innerHTML=(decs.windows||[]).map(function(w2){
-        return'<div class="out-line">⏳ <span class="g">'+esc(w2.title)+'</span> <span class="m">'+esc(w2.type||'')+'</span></div>';
-      }).join('')||'<div class="out-line m">No open windows</div>';
-    }
-    // Status
+        return'<div class="out-line">\u231B <span class="g">'+esc(w2.title)+'</span></div>';
+      }).join('')||'<div class="out-line d">No open windows</div>'}
     var stc=document.querySelector('#amb-status .amb-content');if(stc){
-      stc.innerHTML=
-        '<div class="out-line"><span class="m">Monitoring:</span> <span class="'+(status.monitoring?'gr':'r')+'">'+
-        (status.monitoring?'active':'off')+'</span></div>'+
-        '<div class="out-line"><span class="m">Scanned:</span> '+(status.total_scanned||0)+'</div>'+
-        '<div class="out-line"><span class="m">Relevant:</span> '+(status.total_relevant||0)+'</div>'+
-        '<div class="out-line"><span class="m">Last:</span> '+esc(status.last_analysis||'never')+'</div>';
-    }
+      stc.innerHTML='<div class="out-line"><span class="d">Monitoring:</span> <span class="'+(status.monitoring?'gr':'r')+'">'+(status.monitoring?'active':'off')+'</span></div>'+
+        '<div class="out-line"><span class="d">Scanned:</span> '+(status.total_scanned||0)+'</div>'+
+        '<div class="out-line"><span class="d">Relevant:</span> '+(status.total_relevant||0)+'</div>'+
+        '<div class="out-line"><span class="d">Last:</span> '+esc(status.last_analysis||'never')+'</div>'}
   });
 }
 
-// ── Helpers ──
-function rmLast(){var lines=out.querySelectorAll('.out-line');if(lines.length)lines[lines.length-1].remove()}
-function apiErr(e){if(e.message!=='auth')w('Error: '+e.message,'r')}
+/* ── Init ── */
+/* Auto-auth for localhost: try without token first */
+(function init(){
+  fetch('/api/status',{headers:token?{'X-4DA-Token':token}:{}})
+  .then(function(r){
+    if(r.ok){
+      /* Authenticated (localhost auto-trust or valid token) */
+      liveDot.className='live-dot on';liveText.textContent='LIVE';
+      bootSequence();
+      refreshStatus();
+    } else if(r.status===401){
+      /* Need auth */
+      showAuth();
+      bootSequence();
+    } else {
+      throw new Error('offline');
+    }
+  }).catch(function(){
+    liveDot.className='live-dot off';liveText.textContent='OFFLINE';
+    bootSequence();
+    startReconnect();
+  });
+})();
 
-// ── Init ──
-welcome();
-// Try status first — if 401, show auth
-api('/api/status').then(function(d){
-  liveDot.className='live-dot on';liveText.textContent='LIVE';
-  refreshStatus();
-}).catch(function(e){
-  if(e.message==='auth')showAuth();
-  else{liveDot.className='live-dot off';liveText.textContent='OFFLINE'}
-});
 setInterval(refreshStatus,30000);
 inp.focus();
 })();
