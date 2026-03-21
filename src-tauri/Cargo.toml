@@ -31,6 +31,10 @@ futures = "0.3"
 # HTTP client
 reqwest = { version = "0.12", features = ["json", "stream"] }
 
+# Signal Terminal HTTP server
+axum = { version = "0.8", features = ["tokio"] }
+tower-http = { version = "0.6", features = ["cors"] }
+
 # URL encoding
 urlencoding = "2"
 

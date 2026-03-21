@@ -264,6 +264,8 @@ mod semantic_diff;
 pub mod settings;
 mod settings_commands;
 mod signal_chains;
+mod signal_terminal;
+mod signal_terminal_pages;
 mod signals;
 mod source_config;
 mod source_fetching;
@@ -802,6 +804,9 @@ pub fn run() {
             error!(target: "4da::startup", error = %e, "Database initialization failed");
         }
     }
+
+    // Start Signal Terminal HTTP server
+    signal_terminal::start_signal_terminal();
 
     // Initialize context engine
     match get_context_engine() {

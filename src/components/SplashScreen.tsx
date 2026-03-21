@@ -73,6 +73,12 @@ export function SplashScreen({ onComplete, minimumDisplayTime = 1500 }: SplashSc
         // Detect browser mode: if Tauri internals are missing, show specific message
         const isBrowser = !('__TAURI_INTERNALS__' in window);
         if (isBrowser) {
+          // In real browsers, redirect to Signal Terminal (skip in test/JSDOM)
+          if (!import.meta.env.VITEST) {
+            const terminalPort = import.meta.env.DEV ? 4445 : 4444;
+            window.location.href = `http://localhost:${terminalPort}/`;
+            return;
+          }
           setError('Desktop app required \u2014 open through Tauri window');
         } else {
           setError(translateError(e));
