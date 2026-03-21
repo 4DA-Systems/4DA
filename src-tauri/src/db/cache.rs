@@ -344,6 +344,34 @@ impl Database {
         ).optional()
     }
 
+    /// Get created_at timestamps for multiple source items in a single query.
+    /// Used by free-tier history gate to avoid N+1 per-item lookups.
+    pub fn get_created_at_batch(
+        &self,
+        ids: &[i64],
+    ) -> rusqlite::Result<std::collections::HashMap<i64, chrono::DateTime<chrono::Utc>>> {
+        if ids.is_empty() {
+            return Ok(std::collections::HashMap::new());
+        }
+        let conn = self.conn.lock();
+        let placeholders: String = ids.iter().map(|_| "?").collect::<Vec<_>>().join(",");
+        let sql = format!(
+            "SELECT id, created_at FROM source_items WHERE id IN ({})",
+            placeholders
+        );
+        let mut stmt = conn.prepare(&sql)?;
+        let params = rusqlite::params_from_iter(ids.iter());
+        let mut result = std::collections::HashMap::with_capacity(ids.len());
+        let rows = stmt.query_map(params, |row| {
+            Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?))
+        })?;
+        for row in rows {
+            let (id, created_at_str) = row?;
+            result.insert(id, parse_datetime(created_at_str));
+        }
+        Ok(result)
+    }
+
     // ========================================================================
     // Briefing Persistence
     // ========================================================================
