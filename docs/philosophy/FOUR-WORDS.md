@@ -2,147 +2,177 @@
 
 ## `pnpm` · `run` · `tauri` · `dev`
 
-Four words typed into a terminal. Four dimensions of autonomy. Not a coincidence — a resonance.
+**Version:** 1.0.0
+**Author:** 4DA Systems Pty Ltd
+**Date:** March 2026
+
+---
+
+## Abstract
+
+Every application begins with a command. Most commands are forgettable — incantations copied from a README, typed without thought, discarded from memory the moment the process starts. `pnpm run tauri dev` is different. It is four words that encode the entire philosophy of the application they create: efficiency without waste, will without permission, security without compromise, creation without end. This document examines each word individually, their compositional relationships, the technical cascade they trigger, and the structural resonance between a four-word command and a four-dimensional application.
 
 ---
 
 ## I. Each Word Alone
 
-### `pnpm` — The Package Manager
+### `pnpm` — The Foundation
 
-**Performant Node Package Manager.** Four letters. Born from frustration with waste — npm and yarn duplicate dependencies across projects, consuming disk space like entropy consuming order. pnpm's innovation is a content-addressable store: every package version exists exactly once on your machine, hardlinked into projects that need it. It is, at its core, a *deduplication engine*.
+**Performant Node Package Manager.** Created by Zoltan Kochan in 2017 to solve a structural problem: npm and yarn store a separate copy of every dependency in every project that uses it. A machine with twenty React projects contains twenty copies of React. pnpm introduced a content-addressable store — a single global directory where every package version exists exactly once, hardlinked into each project's `node_modules`. The result: identical correctness, a fraction of the disk usage, faster installs.
 
-This mirrors 4DA's first principle: **privacy through efficiency**. Don't copy what you don't need. Don't store what doesn't belong to you. pnpm refuses to flatten `node_modules` into an amorphous blob — it maintains a strict, nested structure where every dependency knows its place and nothing leaks where it shouldn't. Sound familiar? That's exactly how 4DA treats user data — structured, local, nothing leaking outward.
+This is not an optimisation. It is a design principle: **every piece of data should exist exactly once, in exactly the right place, accessible to everything that needs it and nothing that doesn't.**
 
-pnpm is also the *gatekeeper*. It's the first word because nothing else can happen without it. It resolves the dependency graph, ensures every package is present and accounted for, and creates the environment in which everything else operates. It is the foundation layer — invisible when working, catastrophic when absent.
+4DA is built on the same principle. Your content scores exist once, in your local database. Your API keys exist once, in your keychain. Your tech stack profile exists once, derived from your actual project manifests. Nothing is duplicated to a cloud. Nothing is copied where it doesn't belong. The package manager that builds 4DA embodies the same philosophy that 4DA enforces at runtime.
 
-**Alone, pnpm is a philosophy:** *the right thing in the right place, nothing duplicated, nothing wasted.*
+pnpm is also the *gatekeeper*. It is the first word because nothing else can happen without it. Before any code compiles, before any server starts, pnpm resolves the dependency graph — ensuring every package is present, every version is compatible, every module can find what it imports. It is the foundation layer. Invisible when correct. Catastrophic when absent.
+
+**Alone, pnpm is a principle: the right thing in the right place, nothing duplicated, nothing wasted.**
 
 ---
 
 ### `run` — The Verb
 
-The only English word in the command. The only one that existed before software. `run` predates computers by millennia — Old English *rinnan*, to flow, to move swiftly. Before it meant "execute a program," it meant *to be alive in motion*.
+The only English word in the command. The only one that predates electricity. Old English *rinnan* — to flow, to move swiftly, to be in motion. Before `run` meant "execute a process," it meant to be alive.
 
-In a terminal, `run` is the bridge between *having* and *doing*. `pnpm` alone is a noun — a tool sitting idle. `run` transforms it into action. It says: "I have defined what I want in `package.json` under `scripts`. Now *do it*."
+In a terminal, `run` is the bridge between *having* and *doing*. `pnpm` alone is a noun — a tool sitting idle on disk. `run` transforms it into action. It says: I have declared my intent in `package.json` under `scripts`. Now execute it.
 
-`run` is also the most human word here. A developer doesn't `execute` or `invoke` or `dispatch` in casual speech. They *run* it. The word carries urgency, physicality, intention. When you type `run`, you are asserting agency. You are telling the machine: *move*.
+This is the word developers chose. Not `execute`. Not `invoke`. Not `dispatch`. They *run* it. The word carries physicality, urgency, will. When you type `run`, you are asserting agency over a machine. You are issuing the oldest command a body can give itself: *move*.
 
-In the context of 4DA — an application about *autonomy* — `run` is the moment autonomy begins. The system was dormant. Now it isn't. The developer made a choice, typed a verb, and set everything in motion.
+In the context of 4DA — an application about *autonomy* — `run` is the moment autonomy begins. Before this word, the system is potential energy. After it, kinetic. The developer made a choice, typed a verb, and converted intention into process.
 
-**Alone, `run` is the act of will that separates intention from execution.**
+**Alone, `run` is the act of will that separates what you have from what you do.**
 
 ---
 
-### `tauri` — The Framework
+### `tauri` — The Architecture
 
-Named after the star Tau in the constellation Taurus — or more precisely, from the concept of the *bull*: strength, endurance, stubbornness. Tauri the framework is Rust-based, and it inherited Rust's defining trait: **refusing to compromise on safety even when it's inconvenient**.
+The Tauri framework takes its name from the Greek *tauros* (bull) — but in software, the name encodes a different kind of stubbornness: the refusal to compromise on constraints that others treat as optional.
 
-Where Electron bundles an entire Chromium browser (200MB+) into every app, Tauri uses the OS's native webview. Where Electron runs everything in a single process with full Node.js access, Tauri enforces a strict IPC boundary between frontend and backend. The frontend cannot touch the filesystem. The backend cannot touch the DOM. They communicate through a narrow, typed channel — `invoke()` calls that cross the Rust/TypeScript boundary like diplomatic messages between sovereign nations.
+Where Electron bundles a complete Chromium browser engine (~200MB) into every application, Tauri uses the operating system's native webview — the rendering engine already installed on your machine. Where Electron runs frontend and backend in a single process with full Node.js filesystem access, Tauri enforces a strict IPC boundary. The frontend cannot touch the filesystem. The backend cannot touch the DOM. They communicate through a narrow, typed channel — `invoke()` calls that cross the Rust/TypeScript boundary like diplomatic messages between sovereign states.
 
-This is not just engineering. This is *architecture as ideology*. Tauri makes a political statement: your application should not need more power than it uses. Your frontend should not have capabilities it doesn't need. Your binary should not carry weight that serves no purpose.
+This is architecture as conviction. Tauri does not ask "what features does the developer want?" It asks: "what is the minimum capability each layer needs to do its job, and how do we structurally prevent it from exceeding that?" The frontend needs to render UI — it gets a webview. The backend needs to read files and query databases — it gets Rust with full system access. Neither gets the other's powers. The binary is ~15MB instead of ~200MB. The app starts in under a second. The security boundary is not a policy — it is a compilation constraint.
 
-For 4DA specifically, Tauri is the reason the entire application is possible as described. Privacy-first, local-first, minimal footprint — these aren't aspirations bolted onto Electron. They're *structural guarantees* enforced by Tauri's architecture. The frontend literally *cannot* phone home because Tauri's security model won't let it. The binary is ~15MB instead of ~200MB because there's no bundled browser. The app starts in seconds because there's no Chromium to initialize.
+For 4DA, Tauri is the reason privacy-first is a structural guarantee rather than a marketing promise. The frontend *cannot* phone home because the Content Security Policy won't let it make requests to domains not explicitly whitelisted. The raw content data *cannot* leak to the renderer because only scored, filtered results cross the IPC bridge. These are not features that can be toggled off. They are properties of the architecture.
 
-Tauri is also the word that makes this command *different* from every other `pnpm run` command. `pnpm run build`, `pnpm run test`, `pnpm run lint` — those are generic. `pnpm run tauri` marks this as a Tauri project. It's the identity word. The signature.
+Tauri is also the word that makes this command *unique*. `pnpm run build`, `pnpm run test`, `pnpm run lint` — generic. `pnpm run tauri` — that's a signature. The identity word. The one that says: this is not a web app pretending to be native. This is a native app that happens to render with web technologies.
 
-**Alone, `tauri` is the conviction that security and performance are not features — they're constraints that make everything else possible.**
+**Alone, `tauri` is the conviction that constraints create possibility — that what an application *cannot* do is as important as what it can.**
 
 ---
 
 ### `dev` — The Mode
 
-Three letters. Short for *development*. But also short for *deviate*, *devise*, *devote*. In a terminal, `dev` means: run this in a state of becoming. Not production. Not final. *In progress.*
+Three letters. Short for *development*. The mode where nothing is final.
 
-`dev` activates hot-reload. It enables source maps. It shows errors in the browser console instead of swallowing them. It runs Vite's dev server on `localhost:4444` and Tauri's Rust backend in debug mode simultaneously, watching for changes in both `src/` and `src-tauri/src/`, recompiling whichever side changed.
+`dev` activates hot-reload — change a TypeScript file, see the result in milliseconds without restarting. It enables source maps — click an error in the browser console and jump to the exact line of source code. It runs Vite's dev server on `localhost:4444` and Tauri's Rust backend in debug mode simultaneously, watching for changes across two languages, two compilers, two runtimes.
 
-`dev` is the most philosophically loaded word in the command because it acknowledges impermanence. When you run in `dev` mode, you are saying: *this is not done yet.* And that's the only honest mode for any software that's still being shaped by a human. Production is a snapshot. Dev is the living process.
+But `dev` carries a deeper meaning. When you run in `dev` mode, you are making a statement about the nature of the thing you are building: *this is not done yet.* Production is a photograph — a frozen instant. `dev` is the darkroom. The living process. The state where the creator and the creation are still in dialogue.
 
-For 4DA — an application that will be continuously learning, adapting, and compounding — `dev` is arguably the permanent state. Even after launch, the sovereignty score is being tracked, the wisdom engine is accumulating decisions, the scoring algorithm is auto-tuning. 4DA in production is still, in a deep sense, in `dev`.
+For 4DA, `dev` is arguably the permanent condition. Even after release, the sovereignty score is tracking, the wisdom engine is accumulating decisions, the PASIFA scoring algorithm is auto-tuning its thresholds through autophagy. The user's intelligence profile compounds daily. A shipped version of 4DA is not finished — it is a living system that adapts to its operator. In the deepest sense, 4DA never leaves `dev`.
 
 **Alone, `dev` is the admission that creation is never finished — and the commitment to keep creating anyway.**
 
 ---
 
-## II. The Pairs
+## II. The Composition
 
-### `pnpm run` — Foundation Meets Will
+### What Happens When You Press Enter
 
-The package manager activated by a verb. This pair is so common it's nearly invisible — developers type it hundreds of times without thinking. But it encodes something profound: *infrastructure only matters when it's set in motion*. pnpm can sit on your machine forever, every dependency perfectly resolved, and nothing happens until someone types `run`. The best tools are inert without intention.
-
-### `tauri dev` — Identity Meets Process
-
-The framework in its developmental state. This pair is the argument that Tauri makes to the operating system: "Give me a webview, give me filesystem access, give me IPC channels — but in debug mode, with safety nets, with hot-reload, with the understanding that I'm being shaped." It's confidence and humility simultaneously.
-
-### `pnpm tauri` — Two Ecosystems Bridged
-
-JavaScript's package manager invoking Rust's application framework. This pair represents the entire modern hybrid stack: the npm ecosystem's breadth (React, Vite, thousands of UI libraries) married to Rust's depth (memory safety, zero-cost abstractions, native performance). pnpm doesn't know Rust. Tauri doesn't know npm. But through a `package.json` script entry, they're joined.
-
-### `run dev` — Action in Impermanence
-
-The most human pair. *Do the thing, in the mode where mistakes are allowed.* Every creative act starts here — not with a finished product, but with the willingness to run something that isn't done yet and see what happens.
-
----
-
-## III. The Composition — What Actually Happens
-
-When these four words are entered into a terminal, a cascade begins:
+When these four words are entered into a terminal, a precise cascade begins. Two ecosystems activate. Two compilers run. Two runtimes start. One application emerges.
 
 ```
 pnpm run tauri dev
   |
-  +-- pnpm reads package.json, finds scripts.tauri = "@tauri-apps/cli"
+  +-- PHASE 1: Resolution (pnpm, ~200ms)
+  |   pnpm reads package.json, finds scripts.tauri = "@tauri-apps/cli"
+  |   Verifies all 847 dependencies via content-addressable store
+  |   Invokes the Tauri CLI with argument: dev
   |
-  +-- Invokes: tauri dev
-  |   |
-  |   +-- Starts Vite dev server (localhost:4444)
-  |   |   +-- Compiles TypeScript -> JavaScript
-  |   |   +-- Processes React JSX -> DOM instructions
-  |   |   +-- Resolves all imports from pnpm's content-addressable store
-  |   |   +-- Opens HMR WebSocket for hot-reload
-  |   |
-  |   +-- Starts Rust compilation (cargo build --dev)
-  |   |   +-- Compiles ~300 Rust modules
-  |   |   +-- Links SQLite + sqlite-vec (vector search)
-  |   |   +-- Links Ollama client (local embeddings)
-  |   |   +-- Links all source adapters (HN, Reddit, RSS, GitHub)
-  |   |   +-- Links PASIFA scoring engine
-  |   |   +-- Links ACE context scanner
-  |   |   +-- Produces fourda.exe (debug build)
-  |   |
-  |   +-- Launches fourda.exe
-  |       +-- Opens native webview -> localhost:4444
-  |       +-- Initializes SQLite database (data/4da.db)
-  |       +-- Registers all Tauri IPC commands
-  |       +-- Starts background source polling
-  |       +-- Boots Signal Terminal
-  |       +-- Begins scoring content against user context
+  +-- PHASE 2: Frontend compilation (Vite, ~2s)
+  |   Starts Vite dev server on localhost:4444 (strict port)
+  |   Compiles TypeScript to JavaScript via esbuild
+  |   Processes React JSX into DOM instructions
+  |   Resolves all imports via pnpm's hardlinked node_modules
+  |   Opens HMR WebSocket for sub-second hot-reload
   |
-  +-- Developer sees: a window. Content appearing. Relevance emerging.
+  +-- PHASE 3: Backend compilation (cargo, ~30-90s first build)
+  |   Invokes cargo build in dev profile
+  |   Compiles 300+ Rust modules across 50+ crates
+  |   Links SQLite + sqlite-vec (vector similarity search)
+  |   Links Ollama client (local embedding generation)
+  |   Links 11 source adapters (HN, Reddit, RSS, GitHub, arXiv...)
+  |   Links PASIFA scoring engine (8-phase pipeline)
+  |   Links ACE context scanner (project discovery)
+  |   Links content integrity verification system
+  |   Produces fourda.exe — a single statically-linked binary
+  |
+  +-- PHASE 4: Ignition (Tauri, ~500ms)
+      Opens native webview pointed at localhost:4444
+      Initializes SQLite database (data/4da.db)
+      Registers 321 IPC commands across the Rust/TS boundary
+      Runs content integrity self-healing (auto-corrects dirty data)
+      Starts background source polling
+      Boots Signal Terminal
+      Begins scoring content against user context
+      Developer sees: a window. Content appearing. Relevance emerging.
 ```
 
-Four words -> two compilers -> two runtimes -> one application -> infinite compounding.
+Four words. Four phases. Two compilers. Two runtimes. 321 typed IPC commands. One application. Zero data leaving the machine.
 
 ---
 
-## IV. The Number Four
+## III. The Number Four
 
-Four words. **4**DA. This is where it stops being coincidence and starts being poetry.
+Four words. **4**DA. Four Dimensional Autonomy. The number is not a coincidence — it is a structural property.
 
-- **4 words** to start it: `pnpm`, `run`, `tauri`, `dev`
-- **4 dimensions** of autonomy the app provides
-- **4 layers** in the execution: package manager -> CLI -> compiler -> application
-- **4 boundaries** crossed: npm ecosystem -> Tauri CLI -> Rust backend -> native webview
-- **4 stages** of the developer experience: *install -> configure -> run -> compound*
+**Four words to start it:**
+`pnpm` (foundation), `run` (will), `tauri` (architecture), `dev` (process)
 
-The command itself is a fractal of the product. Just as 4DA takes raw internet noise and transforms it through four-dimensional filtering into signal, the command takes four raw words and transforms them through four layers of tooling into a living application.
+**Four dimensions of the product:**
+Content autonomy (what you see), context autonomy (how it's scored), data autonomy (where it lives), operational autonomy (how it runs)
+
+**Four phases in the build cascade:**
+Resolution, frontend compilation, backend compilation, ignition
+
+**Four layers in the content accuracy system:**
+Source gate (domain profile), seed gate (ACE auto-detection), render gate (personalization context), startup self-healing (content integrity)
+
+**Four stages of the developer experience:**
+Install, configure, run, compound
+
+**Four documents that govern the codebase:**
+INVARIANTS (what cannot change), WISDOM (how decisions are made), DECISIONS (what was decided), FAILURE_MODES (what has broken before)
+
+The number four recurs because the system was designed around the principle that **single points of anything — single axes of scoring, single layers of defense, single sources of truth — are fragile.** PASIFA requires confirmation from at least two independent axes. The content accuracy system has four independent gates. The governance model has four tiers of authority. Redundancy is not duplication. It is structural integrity.
+
+The command that starts 4DA is a four-element expression of the same principle: no single word is sufficient. `pnpm` without `run` is inert. `run` without `tauri` is generic. `tauri` without `dev` is frozen. Only the full composition — all four, in order — produces the result.
 
 ---
 
-## V. The Terminal as Origin
+## IV. The Terminal as Origin
 
-There's one more dimension worth noting. These four words are typed into a **terminal** — the same interface where 4DA's Signal Terminal lives. The tool you use to *build* 4DA is the same metaphor 4DA uses to *deliver intelligence*. The developer's terminal births the application. The application's terminal delivers the signal.
+These four words are typed into a **terminal**. The same interface — a cursor blinking on a dark background, accepting text commands, returning text responses — is also where 4DA's Signal Terminal lives. The tool you use to build 4DA is the same metaphor 4DA uses to deliver intelligence to its operator.
 
-The ouroboros is complete. Four words, entered into a terminal, create an application that contains a terminal, that delivers the intelligence the developer needs to write the next four words.
+The developer's terminal births the application. The application's terminal delivers the signal. The signal informs the developer's next decision. That decision becomes code. The code is compiled by the same four words.
 
-`pnpm run tauri dev` isn't just a command. It's the ignition sequence for a self-reinforcing loop of developer autonomy — four dimensions of it, started with four words, in a tool built for builders by a builder.
+This is not circular. It is compounding. Each cycle through the loop — build, use, learn, build again — adds accumulated context. The PASIFA scoring model gets sharper. The ACE context engine discovers new project dependencies. The wisdom engine records better decisions. The developer becomes more informed. The code becomes more precise. The next `pnpm run tauri dev` starts a slightly better version of the same application.
+
+`pnpm run tauri dev` is not a command. It is the ignition sequence for a compounding system — four dimensions of developer autonomy, initiated by four words, in a tool that feeds its own evolution.
+
+---
+
+## V. The Trilogy
+
+This essay is one of three documents that define 4DA's philosophy:
+
+| Document | Question It Answers | Audience |
+|----------|-------------------|----------|
+| **The 4DA Framework** | What is 4DA and how does it work? | The architect. The mind that needs to understand the system. |
+| **PASIFA Whitepaper** | How does the scoring methodology work, mathematically? | The skeptic. The engineer who needs proof before trust. |
+| **Four Words** | Why does this matter? What does it feel like? | The builder. The developer who types commands for a living. |
+
+The Framework convinces through structure. PASIFA convinces through evidence. Four Words convinces through resonance.
+
+Together, they form a complete argument: the system is sound (Framework), the methodology is rigorous (PASIFA), and the experience is meaningful (Four Words). A developer who reads all three understands not just what 4DA does, but *why it exists* and *why they should care*.
+
+These documents are published openly. Like the codebase itself, the philosophy is source-available. We believe the strongest position is not to hide your thinking, but to think so clearly that copying it without understanding it produces an inferior result.
