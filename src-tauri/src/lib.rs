@@ -298,6 +298,7 @@ mod taste_test_commands;
 
 mod content_integrity;
 mod content_personalization;
+mod first_run_audit;
 pub(crate) mod i18n;
 mod playbook_commands;
 mod sovereign_developer_profile;
@@ -1059,6 +1060,8 @@ pub fn run() {
             // Content Integrity Verification
             content_integrity::check_content_integrity,
             content_integrity::audit_content_integrity,
+            // First-Run Simulation Audit
+            first_run_audit::run_first_run_simulation,
             // STREETS Command Execution
             streets_commands::parse_lesson_commands,
             streets_commands::execute_streets_command,
