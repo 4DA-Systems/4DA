@@ -16,3 +16,4 @@ declare module '*/briefing-atmosphere.js';
 declare module '*/playbook-pathway.js';
 declare module '*/radar-field.js';
 declare module '*/turing-fire.js';
+declare module '*/intelligence-banner.js';
