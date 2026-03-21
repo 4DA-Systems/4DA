@@ -108,6 +108,8 @@ export interface ToastSlice {
 
 export type ViewTier = 'core' | 'explorer' | 'invested' | 'power';
 
+export type EmbeddingStatus = 'active' | 'degraded' | 'unavailable';
+
 export interface UiSlice {
   showSettings: boolean;
   showSplash: boolean;
@@ -115,6 +117,7 @@ export interface UiSlice {
   isFirstRun: boolean;
   firstRunDismissed: boolean;
   embeddingMode: 'semantic' | 'keyword-only' | null;
+  embeddingStatus: EmbeddingStatus | undefined;
   viewTier: ViewTier;
   showAllViews: boolean;
   analysisCycleCount: number;
@@ -125,6 +128,7 @@ export interface UiSlice {
   setIsFirstRun: (v: boolean) => void;
   setFirstRunDismissed: (v: boolean) => void;
   setEmbeddingMode: (mode: 'semantic' | 'keyword-only' | null) => void;
+  setEmbeddingStatus: (status: EmbeddingStatus | undefined) => void;
   incrementAnalysisCycle: () => void;
   setShowAllViews: (show: boolean) => void;
   computeViewTier: () => void;

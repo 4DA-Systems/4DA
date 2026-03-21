@@ -2,7 +2,7 @@
 
 **Last Updated**: 2026-02-03
 
-This document provides a detailed comparison of 4DA against traditional news aggregators, AI assistants, and content discovery tools.
+This document provides a detailed comparison of the 4DA framework against traditional news aggregators, AI assistants, and content discovery tools.
 
 ---
 
@@ -288,7 +288,7 @@ This would give OpenClaw users ambient intelligence without leaving chat, and gi
 - **More transparent** than Perplexity (explainable scoring)
 - **More specialized** than OpenClaw (content discovery depth)
 
-**Strategic insight**: 4DA wins by being the **best ambient intelligence for developers**, not by being a general-purpose news aggregator or task automation assistant.
+**Strategic insight**: 4DA wins by being the **best ambient intelligence system for developers**, not by being a general-purpose news aggregator or task automation assistant.
 
 The moat is **depth of relevance**, enabled by:
 1. Automatic context discovery (codebase scanning)
@@ -296,7 +296,7 @@ The moat is **depth of relevance**, enabled by:
 3. Explainability (score breakdown, confidence)
 4. Privacy (BYOK, local execution)
 
-This combination is difficult to replicate quickly, giving 4DA a 12-18 month head start to build community and refine the product.
+This combination is difficult to replicate quickly, giving 4DA a 12-18 month head start to build community and refine the framework.
 
 ---
 

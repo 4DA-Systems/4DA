@@ -117,6 +117,36 @@ impl Database {
         Ok(db)
     }
 
+    /// Checkpoint the WAL file if it exceeds the size threshold.
+    /// Returns the number of WAL pages moved to the main database.
+    pub fn checkpoint_wal_if_needed(&self) -> SqliteResult<usize> {
+        let conn = self.conn.lock();
+        // Check WAL size via PRAGMA wal_checkpoint(PASSIVE) first
+        // PASSIVE won't block writers
+        let mut pages_moved: i32 = 0;
+        conn.query_row(
+            "PRAGMA wal_checkpoint(PASSIVE)",
+            [],
+            |row| {
+                pages_moved = row.get::<_, i32>(1).unwrap_or(0);
+                Ok(())
+            },
+        )?;
+        Ok(pages_moved as usize)
+    }
+
+    /// Run lightweight scheduled maintenance (safe to call frequently).
+    /// - WAL checkpoint (PASSIVE — non-blocking)
+    /// - PRAGMA optimize (SQLite auto-tune)
+    /// Does NOT VACUUM (too heavy for frequent runs).
+    pub fn run_scheduled_maintenance(&self) -> SqliteResult<()> {
+        let conn = self.conn.lock();
+        conn.execute_batch("PRAGMA wal_checkpoint(PASSIVE);")?;
+        conn.execute_batch("PRAGMA optimize;")?;
+        tracing::info!(target: "4da::db", "Scheduled maintenance: WAL checkpoint + optimize complete");
+        Ok(())
+    }
+
     // ========================================================================
     // Context Operations
     // ========================================================================

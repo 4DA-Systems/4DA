@@ -1,6 +1,6 @@
 # The Infrastructure Layer for Developer Cognition
 
-*Why developers need an operating system, and why nobody built one until now.*
+*Why developers need an intelligence framework for their professional attention, and why nobody built one until now.*
 
 ---
 
@@ -50,7 +50,7 @@ Now apply that to your professional life as a developer:
 3. **Protect against threats.** Monitor CVE feeds. Cross-reference against your installed dependencies. Alert you within minutes of a vulnerability publication — before you see it on Twitter, before your security team sends the email.
 4. **Learn from your behavior.** Track what you save, what you dismiss, what you read. Get more accurate every week. After 3 months, know your taste better than any algorithm trained on someone else's data.
 
-That's a Developer Operating System. Not a feed reader. Not a dashboard. Not a search engine. An operating system for your attention.
+That's a Developer Operating System. Not a feed reader. Not a dashboard. Not a search engine. An intelligence framework for your attention.
 
 ## Why It Has to Be Local
 
@@ -123,4 +123,15 @@ All of these run locally. All of them get better with time. All of them are impo
 
 *We did.*
 
+## The 4DA Framework
+
+4DA is the implementation of this vision. A privacy-first developer intelligence framework built on an Authority Stack -- a hierarchy of principles, invariants, and architectural decisions that govern how intelligence flows from raw content to actionable signal.
+
+The framework encompasses PASIFA (the 5-axis scoring methodology), ACE (the Autonomous Context Engine that understands your codebase), and a compound learning system that gets measurably better every week. It is not a product bolted together from features. It is a system designed from first principles to solve the developer cognition problem.
+
+Explore the full framework at [4da.ai/framework](https://4da.ai/framework).
+
 *[Download 4DA — free, forever, private.](https://4da.ai)*
+
+---
+*4DA is a privacy-first developer intelligence system. [4DA Framework](https://4da.ai/framework) | [Download](https://4da.ai)*

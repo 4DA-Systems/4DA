@@ -4,7 +4,7 @@
 
 ### Autonomous Context Engine (ACE)
 
-ACE is 4DA's intelligence layer that understands your work without manual configuration.
+ACE is the intelligence layer at the core of the 4DA framework, understanding your work without manual configuration.
 
 #### Project Scanning
 

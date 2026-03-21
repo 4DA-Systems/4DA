@@ -207,6 +207,7 @@ const ANOMALY_CHECK_INTERVAL: u64 = 3600; // 1 hour
 const BEHAVIOR_DECAY_INTERVAL: u64 = 86400; // 24 hours (daily)
 const ACCURACY_RECORD_INTERVAL: u64 = 604800; // 7 days
 const CVE_SCAN_INTERVAL: u64 = 1800; // 30 minutes
+const DB_MAINTENANCE_INTERVAL: u64 = 3600; // 1 hour — WAL checkpoint + PRAGMA optimize
 
 /// Start the background monitoring scheduler
 pub fn start_scheduler<R: Runtime>(app: AppHandle<R>, state: Arc<MonitoringState>) {
@@ -243,6 +244,28 @@ pub fn start_scheduler<R: Runtime>(app: AppHandle<R>, state: Arc<MonitoringState
                     }
                     Err(e) => {
                         warn!(target: "4da::monitor", error = %e, "Health check failed");
+                    }
+                }
+            }
+
+            // Database maintenance — hourly WAL checkpoint + PRAGMA optimize
+            // Prevents WAL bloat (139MB+ observed) and keeps query planner current
+            let last_health_for_db = state.last_health_check.load(Ordering::Relaxed);
+            if now - last_health_for_db < 2 && now > DB_MAINTENANCE_INTERVAL {
+                // Piggyback on health check tick (runs every 5 min, but we only maintain hourly)
+                static LAST_MAINTENANCE: AtomicU64 = AtomicU64::new(0);
+                let last_maint = LAST_MAINTENANCE.load(Ordering::Relaxed);
+                if now - last_maint >= DB_MAINTENANCE_INTERVAL {
+                    LAST_MAINTENANCE.store(now, Ordering::Relaxed);
+                    if let Ok(db) = crate::get_database() {
+                        match db.run_scheduled_maintenance() {
+                            Ok(()) => {
+                                info!(target: "4da::monitor", "Hourly DB maintenance completed (WAL checkpoint + optimize)");
+                            }
+                            Err(e) => {
+                                warn!(target: "4da::monitor", error = %e, "DB maintenance failed");
+                            }
+                        }
                     }
                 }
             }

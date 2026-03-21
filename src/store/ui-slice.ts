@@ -47,6 +47,7 @@ export const createUiSlice: StateCreator<AppStore, [], [], UiSlice> = (set, get)
   isFirstRun: false,
   firstRunDismissed: false,
   embeddingMode: null,
+  embeddingStatus: undefined,
   viewTier: 'core',
   showAllViews: persisted.showAllViews,
   analysisCycleCount: persisted.analysisCycleCount,
@@ -58,6 +59,7 @@ export const createUiSlice: StateCreator<AppStore, [], [], UiSlice> = (set, get)
   setIsFirstRun: (v) => set({ isFirstRun: v }),
   setFirstRunDismissed: (v) => set({ firstRunDismissed: v }),
   setEmbeddingMode: (mode) => set({ embeddingMode: mode }),
+  setEmbeddingStatus: (status) => set({ embeddingStatus: status }),
 
   incrementAnalysisCycle: () => {
     const state = get();

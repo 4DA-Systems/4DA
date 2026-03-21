@@ -118,6 +118,95 @@ pub fn rate_limiter() -> &'static RateLimiter {
 }
 
 // ============================================================================
+// Circuit Breaker — disable source after consecutive failures
+// ============================================================================
+
+use std::collections::HashMap as CBMap;
+
+/// Circuit breaker state per source
+struct CircuitState {
+    consecutive_failures: u32,
+    tripped_at: Option<Instant>,
+}
+
+/// Circuit breaker for source adapters.
+/// After `max_failures` consecutive failures, the source is disabled for `cooldown`.
+pub(crate) struct CircuitBreaker {
+    states: parking_lot::Mutex<CBMap<String, CircuitState>>,
+    max_failures: u32,
+    cooldown: std::time::Duration,
+}
+
+impl CircuitBreaker {
+    pub fn new(max_failures: u32, cooldown_secs: u64) -> Self {
+        Self {
+            states: parking_lot::Mutex::new(CBMap::new()),
+            max_failures,
+            cooldown: std::time::Duration::from_secs(cooldown_secs),
+        }
+    }
+
+    /// Check if a source is allowed to make requests.
+    pub fn is_allowed(&self, source: &str) -> bool {
+        let states = self.states.lock();
+        match states.get(source) {
+            Some(state) => {
+                if let Some(tripped_at) = state.tripped_at {
+                    // Check if cooldown has elapsed
+                    if tripped_at.elapsed() >= self.cooldown {
+                        true // Cooldown expired, allow retry
+                    } else {
+                        tracing::debug!(
+                            target: "4da::circuit_breaker",
+                            source,
+                            remaining_secs = (self.cooldown - tripped_at.elapsed()).as_secs(),
+                            "Source circuit breaker OPEN — cooling down"
+                        );
+                        false
+                    }
+                } else {
+                    true // Not tripped
+                }
+            }
+            None => true, // No state = fresh source
+        }
+    }
+
+    /// Record a successful request — resets failure count.
+    pub fn record_success(&self, source: &str) {
+        let mut states = self.states.lock();
+        if let Some(state) = states.get_mut(source) {
+            state.consecutive_failures = 0;
+            state.tripped_at = None;
+        }
+    }
+
+    /// Record a failed request — increments failure count, may trip breaker.
+    pub fn record_failure(&self, source: &str) {
+        let mut states = self.states.lock();
+        let state = states.entry(source.to_string()).or_insert(CircuitState {
+            consecutive_failures: 0,
+            tripped_at: None,
+        });
+        state.consecutive_failures += 1;
+        if state.consecutive_failures >= self.max_failures {
+            state.tripped_at = Some(Instant::now());
+            tracing::warn!(
+                target: "4da::circuit_breaker",
+                source,
+                failures = state.consecutive_failures,
+                cooldown_secs = self.cooldown.as_secs(),
+                "Source circuit breaker TRIPPED — disabling for cooldown period"
+            );
+        }
+    }
+}
+
+/// Global circuit breaker instance (5 failures = 1 hour cooldown)
+pub(crate) static SOURCE_CIRCUIT_BREAKER: Lazy<CircuitBreaker> =
+    Lazy::new(|| CircuitBreaker::new(5, 3600));
+
+// ============================================================================
 // Tests
 // ============================================================================
 
