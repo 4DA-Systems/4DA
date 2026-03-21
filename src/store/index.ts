@@ -42,6 +42,7 @@ export type {
   AppStore,
   LicenseSlice,
   ToolkitSlice,
+  EmbeddingStatus,
 } from './types';
 
 export const useAppStore = create<AppStore>()((...a) => ({

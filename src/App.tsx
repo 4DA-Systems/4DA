@@ -28,10 +28,13 @@ const NaturalLanguageSearch = lazy(() => import('./components/NaturalLanguageSea
 const LearningIndicator = lazy(() => import('./components/LearningIndicator').then(m => ({ default: m.LearningIndicator })));
 const ProValueBadge = lazy(() => import('./components/ProValueBadge').then(m => ({ default: m.ProValueBadge })));
 const GuidedHighlights = lazy(() => import('./components/GuidedHighlights').then(m => ({ default: m.GuidedHighlights })));
+const EmbeddingStatusIndicator = lazy(() => import('./components/EmbeddingStatusIndicator').then(m => ({ default: m.EmbeddingStatusIndicator })));
 
 // Lazy-loaded non-critical views and overlays
 const SettingsModal = lazy(() => import('./components/SettingsModal').then(m => ({ default: m.SettingsModal })));
 const KeyboardShortcutsModal = lazy(() => import('./components/KeyboardShortcutsModal').then(m => ({ default: m.KeyboardShortcutsModal })));
+const FrameworkPage = lazy(() => import('./components/FrameworkPage').then(m => ({ default: m.FrameworkPage })));
+const ComparisonPage = lazy(() => import('./components/ComparisonPage').then(m => ({ default: m.ComparisonPage })));
 import {
   useSettings,
   useMonitoring,
@@ -59,6 +62,8 @@ function App() {
   const showSettings = useAppStore(s => s.showSettings);
   const setShowSettings = useAppStore(s => s.setShowSettings);
   const [showKeyboardHelp, setShowKeyboardHelp] = useState(false);
+  const [showFramework, setShowFramework] = useState(false);
+  const [showComparison, setShowComparison] = useState(false);
   const [newItemIds, setNewItemIds] = useState<Set<number>>(new Set());
   const [analysisPulse, setAnalysisPulse] = useState(false);
   // Data selectors (may change, use useShallow)
@@ -80,6 +85,7 @@ function App() {
   const loadProValueReport = useAppStore(s => s.loadProValueReport);
   const loadChannels = useAppStore(s => s.loadChannels);
   const computeViewTier = useAppStore(s => s.computeViewTier);
+  const setEmbeddingStatus = useAppStore(s => s.setEmbeddingStatus);
 
   // First-run state
   const isFirstRun = useAppStore(s => s.isFirstRun);
@@ -222,6 +228,26 @@ function App() {
     });
     return () => { unlisten.then(fn => fn()); };
   }, [activateLicense, activateStreetsLicense, addToast]);
+
+  // Embedding status listener — surfaces degraded/unavailable state to the UI
+  useEffect(() => {
+    const unlisten = listen<{ status: 'active' | 'degraded' | 'unavailable' }>('4da://embedding-status', (event) => {
+      setEmbeddingStatus(event.payload.status);
+    });
+    return () => { unlisten.then(fn => fn()); };
+  }, [setEmbeddingStatus]);
+
+  // Framework + Comparison page triggers (from AboutPanel via custom events)
+  useEffect(() => {
+    const frameworkHandler = () => setShowFramework(true);
+    const comparisonHandler = () => setShowComparison(true);
+    window.addEventListener('4da:show-framework', frameworkHandler);
+    window.addEventListener('4da:show-comparison', comparisonHandler);
+    return () => {
+      window.removeEventListener('4da:show-framework', frameworkHandler);
+      window.removeEventListener('4da:show-comparison', comparisonHandler);
+    };
+  }, []);
 
   // On mount: load cached results from previous session, or auto-analyze
   useEffect(() => {
@@ -423,6 +449,11 @@ function App() {
           </Suspense>
         </div>
 
+        {/* Embedding Status Alert */}
+        <Suspense fallback={null}>
+          <EmbeddingStatusIndicator />
+        </Suspense>
+
         {/* View Tab Bar */}
         <ViewTabBar />
 
@@ -461,6 +492,24 @@ function App() {
           <Suspense fallback={null}>
             <ViewErrorBoundary viewName="Keyboard Shortcuts">
               <KeyboardShortcutsModal onClose={() => setShowKeyboardHelp(false)} />
+            </ViewErrorBoundary>
+          </Suspense>
+        )}
+
+        {/* Framework Page — philosophy publication */}
+        {showFramework && (
+          <Suspense fallback={null}>
+            <ViewErrorBoundary viewName="Framework">
+              <FrameworkPage onClose={() => setShowFramework(false)} />
+            </ViewErrorBoundary>
+          </Suspense>
+        )}
+
+        {/* Comparison Page — competitive positioning */}
+        {showComparison && (
+          <Suspense fallback={null}>
+            <ViewErrorBoundary viewName="Comparison">
+              <ComparisonPage onClose={() => setShowComparison(false)} />
             </ViewErrorBoundary>
           </Suspense>
         )}

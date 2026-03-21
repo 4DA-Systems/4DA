@@ -31,6 +31,24 @@ pub(crate) async fn embed_texts(texts: &[String]) -> Result<Vec<Vec<f32>>> {
         return Ok(vec![]);
     }
 
+    // Batch large inputs to prevent memory spikes (max 32 texts per API call)
+    const EMBED_BATCH_SIZE: usize = 32;
+    if texts.len() > EMBED_BATCH_SIZE {
+        tracing::debug!(
+            target: "4da::embeddings",
+            count = texts.len(),
+            batch_size = EMBED_BATCH_SIZE,
+            "Batching embedding request into {} chunks",
+            (texts.len() + EMBED_BATCH_SIZE - 1) / EMBED_BATCH_SIZE
+        );
+        let mut all_embeddings = Vec::with_capacity(texts.len());
+        for chunk in texts.chunks(EMBED_BATCH_SIZE) {
+            let chunk_result = Box::pin(embed_texts(chunk)).await?;
+            all_embeddings.extend(chunk_result);
+        }
+        return Ok(all_embeddings);
+    }
+
     // Get settings to determine provider - clone inside scope so MutexGuard drops before await
     let llm_settings = {
         let settings = get_settings_manager().lock();

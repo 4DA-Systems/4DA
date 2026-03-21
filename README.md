@@ -10,7 +10,7 @@
 
 **All signal. No feed.**
 
-4DA scores content from 10 sources against your actual codebase using 5-axis relevance scoring. An item needs 2+ independent signals to survive. Everything else is rejected. Typical rejection rate: **99%+**.
+4DA is a developer intelligence system that scores content from 10 sources against your actual codebase using 5-axis relevance scoring. An item needs 2+ independent signals to survive. Everything else is rejected. Typical rejection rate: **99%+**.
 
 Privacy-first. Runs locally. Zero telemetry. BYOK. ~15MB download.
 
@@ -75,7 +75,7 @@ Meanwhile, your dependency has a breaking change, and you find out when producti
 
 ## The Solution
 
-4DA runs locally on your machine. It scans your projects, reads your `Cargo.toml` / `package.json` / `go.mod`, watches your Git activity, and builds a **domain profile** — a graduated understanding of your technology identity.
+4DA is a developer intelligence framework that runs locally on your machine. It scans your projects, reads your `Cargo.toml` / `package.json` / `go.mod`, watches your Git activity, and builds a **domain profile** — a graduated understanding of your technology identity.
 
 Then it scores every piece of incoming content against 5 independent signal axes:
 
@@ -195,7 +195,7 @@ Shareable as markdown.
 
 ## MCP Integration
 
-4DA ships with a Model Context Protocol server — plug your intelligence feed directly into Claude Code, Cursor, or any MCP-compatible tool.
+4DA ships with a Model Context Protocol server — plug your intelligence system directly into Claude Code, Cursor, or any MCP-compatible tool.
 
 ```bash
 cd mcp-4da-server
@@ -280,7 +280,7 @@ pnpm validate:all           # Full validation (lint + types + tests + build)
 | **TLDR / newsletters** | Someone else curates for "developers" broadly | One person's bias. "Developers" includes React engineers, ML researchers, and game devs — one newsletter fits none. |
 | **4DA** | Scores against your actual codebase (Cargo.toml, package.json, Git) | Requires a local codebase to scan. That's the point. |
 
-4DA doesn't personalize by what you click or subscribe to. It scores by what you **build**. Categorically different.
+4DA doesn't personalize by what you click or subscribe to. It scores by what you **build**. A categorically different approach to developer intelligence.
 
 ## Pricing
 
