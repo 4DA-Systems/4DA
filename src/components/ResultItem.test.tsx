@@ -60,7 +60,7 @@ describe('ResultItem', () => {
     expect(screen.getByText('75%')).toBeInTheDocument();
   });
 
-  it('shows preview explanation when collapsed', () => {
+  it('hides explanation when collapsed (shown only when expanded)', () => {
     const item = makeItem({ explanation: 'Matches your Rust project context' });
     render(
       <ResultItem
@@ -72,7 +72,8 @@ describe('ResultItem', () => {
       />,
     );
 
-    expect(screen.getByText('Matches your Rust project context')).toBeInTheDocument();
+    // Explanation is hidden in collapsed state (only shown when expanded)
+    expect(screen.queryByText('Matches your Rust project context')).not.toBeInTheDocument();
   });
 
   it('shows expanded details with matches when expanded', () => {
@@ -311,9 +312,9 @@ describe('ResultItem', () => {
     expect(screen.getByText('results.unknownSource')).toBeInTheDocument();
   });
 
-  it('renders signal badge when signal_type is present', () => {
+  it('renders signal dot when signal_type is present', () => {
     const item = makeItem({ signal_type: 'security_alert', signal_priority: 'critical' });
-    render(
+    const { container } = render(
       <ResultItem
         item={item}
         isExpanded={false}
@@ -323,7 +324,10 @@ describe('ResultItem', () => {
       />,
     );
 
-    expect(screen.getByText('results.signal.security_alert')).toBeInTheDocument();
+    // Signal is now a colored dot with title attribute matching signal_type
+    const dot = container.querySelector('[title="security_alert"]');
+    expect(dot).toBeInTheDocument();
+    expect(dot).toHaveClass('w-1.5', 'h-1.5', 'rounded-full');
   });
 
   it('sets correct aria-expanded and aria-controls attributes', () => {

@@ -51,6 +51,8 @@ vi.mock('../../store', () => ({
         tier: 'free', trialStatus: null, expired: false,
         daysRemaining: 0, expiresAt: null, startTrial: vi.fn(),
         activateLicense: vi.fn(),
+        // feedback (used by ViewTabBar for savedCount)
+        feedbackGiven: {},
       };
       return selector(mockState);
     }),

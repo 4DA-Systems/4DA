@@ -4,8 +4,6 @@ import type { SourceRelevance, FeedbackAction } from '../../types';
 import { formatScore, getScoreColor, formatRelativeAge, getScoreFactorKeys } from '../../utils/score';
 import { getSourceLabel, getSourceColorClass } from '../../config/sources';
 import { isSafeUrl } from '../../utils/sanitize-html';
-import { BadgeRow } from './BadgeRow';
-import { ProInsightRow } from './ProInsightRow';
 
 interface ResultItemCollapsedProps {
   item: SourceRelevance;
@@ -17,6 +15,11 @@ interface ResultItemCollapsedProps {
   fallbackReason: string;
 }
 
+/**
+ * Compact collapsed result item.
+ * Default: score + source + title on one line.
+ * Badges & explanations only appear on expand.
+ */
 export const ResultItemCollapsed = memo(function ResultItemCollapsed({
   item,
   isExpanded,
@@ -32,96 +35,76 @@ export const ResultItemCollapsed = memo(function ResultItemCollapsed({
     if (keys.length === 0) return undefined;
     return keys.map(k => t(k)).join('\n');
   }, [item, t]);
+
   return (
-    <div className="w-full px-4 py-3">
-      <div className="flex items-start gap-3">
-        {/* Score Badge + Source */}
-        <div className="flex-shrink-0 flex flex-col items-center gap-1">
-          {/* Score — click to toggle breakdown (if available) or expand */}
-          <button
-            onClick={onToggleBreakdown && item.score_breakdown ? onToggleBreakdown : onToggleExpand}
-            aria-expanded={showBreakdown}
-            aria-label={item.score_breakdown ? t('scoreDrawer.toggle', 'Toggle score breakdown') : undefined}
-            title={scoreTooltip}
-            className={`w-14 text-center py-1 rounded font-mono text-sm font-medium cursor-pointer transition-all ${getScoreColor(
-              item.top_score,
-            )} ${showBreakdown ? 'ring-1 ring-white/30' : ''} ${item.score_breakdown ? 'hover:ring-1 hover:ring-white/20' : ''}`}
-          >
-            {formatScore(item.top_score)}
-          </button>
-          {/* Source Badge — click to expand */}
-          <button
-            onClick={onToggleExpand}
-            aria-expanded={isExpanded}
-            aria-controls={`result-detail-${item.id}`}
-            aria-label={`Source: ${getSourceLabel(item.source_type || '') || item.source_type || t('results.unknownSource')}`}
-            className={`text-[10px] px-1.5 py-0.5 rounded font-medium cursor-pointer ${getSourceColorClass(item.source_type || '')}`}
-          >
-            {getSourceLabel(item.source_type || '') || item.source_type || t('results.unknownSource')}
-          </button>
-        </div>
+    <div className="w-full px-4 py-2.5">
+      {/* Primary row: score + source + title + age + expand */}
+      <div className="flex items-center gap-3">
+        {/* Score badge — click to toggle breakdown */}
+        <button
+          onClick={onToggleBreakdown && item.score_breakdown ? onToggleBreakdown : onToggleExpand}
+          aria-expanded={showBreakdown}
+          aria-label={item.score_breakdown ? t('scoreDrawer.toggle', 'Toggle score breakdown') : undefined}
+          title={scoreTooltip}
+          className={`flex-shrink-0 w-12 text-center py-0.5 rounded font-mono text-xs font-medium cursor-pointer transition-all ${getScoreColor(
+            item.top_score,
+          )} ${showBreakdown ? 'ring-1 ring-white/30' : ''} ${item.score_breakdown ? 'hover:ring-1 hover:ring-white/20' : ''}`}
+        >
+          {formatScore(item.top_score)}
+        </button>
 
-        {/* Title and URL — click title to open link */}
+        {/* Source badge */}
+        <span className={`flex-shrink-0 text-[10px] px-1.5 py-0.5 rounded font-medium ${getSourceColorClass(item.source_type || '')}`}>
+          {getSourceLabel(item.source_type || '') || item.source_type || t('results.unknownSource')}
+        </span>
+
+        {/* Signal dot */}
+        {item.signal_type && (
+          <span className={`flex-shrink-0 w-1.5 h-1.5 rounded-full ${
+            item.signal_priority === 'critical' ? 'bg-red-400' :
+            item.signal_priority === 'high' ? 'bg-amber-400' :
+            'bg-cyan-400'
+          }`} title={item.signal_type} />
+        )}
+
+        {/* Title */}
         <div className="flex-1 min-w-0">
-          <div className="flex items-start gap-2">
-            {item.url && isSafeUrl(item.url) ? (
-              <a
-                href={item.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                onClick={(e) => e.stopPropagation()}
-                className={`text-sm flex-1 hover:underline decoration-gray-600 ${
-                  item.relevant ? 'text-text-primary' : 'text-text-secondary'
-                }`}
-              >
-                {item.title}
-              </a>
-            ) : (
-              <button
-                onClick={onToggleExpand}
-                aria-label={`Expand details: ${item.title}`}
-                className={`text-sm flex-1 text-left ${
-                  item.relevant ? 'text-text-primary' : 'text-text-secondary'
-                }`}
-              >
-                {item.title}
-              </button>
-            )}
-            <BadgeRow item={item} />
-          </div>
-          {(item.url || item.created_at) && (
-            <div className="flex items-center gap-2 text-xs text-text-muted mt-1">
-              {item.url && <span className="truncate font-mono">{item.url}</span>}
-              {item.created_at && (
-                <span className="flex-shrink-0 text-text-muted/70" title={new Date(item.created_at).toLocaleString()}>
-                  {formatRelativeAge(item.created_at)}
-                </span>
-              )}
-            </div>
-          )}
-          {(item.similar_count ?? 0) > 0 && (
-            <details className="mt-0.5 group">
-              <summary className="text-[10px] text-text-muted cursor-pointer hover:text-text-secondary select-none list-none flex items-center gap-1">
-                <span className="text-[10px] text-text-muted group-open:rotate-90 transition-transform">&#9654;</span>
-                {t('results.relatedArticles', { count: item.similar_count })}
-              </summary>
-              {item.similar_titles && item.similar_titles.length > 0 && (
-                <ul className="mt-1 ml-3 space-y-0.5">
-                  {item.similar_titles.map((title, i) => (
-                    <li key={i} className="text-[10px] text-text-muted truncate">
-                      {title}
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </details>
+          {item.url && isSafeUrl(item.url) ? (
+            <a
+              href={item.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={(e) => e.stopPropagation()}
+              className={`text-sm truncate block hover:underline decoration-gray-600 ${
+                item.relevant ? 'text-text-primary' : 'text-text-secondary'
+              }`}
+            >
+              {item.title}
+            </a>
+          ) : (
+            <button
+              onClick={onToggleExpand}
+              aria-label={`Expand details: ${item.title}`}
+              className={`text-sm truncate block text-left w-full ${
+                item.relevant ? 'text-text-primary' : 'text-text-secondary'
+              }`}
+            >
+              {item.title}
+            </button>
           )}
         </div>
 
-        {/* Feedback Indicators */}
+        {/* Age */}
+        {item.created_at && (
+          <span className="flex-shrink-0 text-[10px] text-text-muted/60" title={new Date(item.created_at).toLocaleString()}>
+            {formatRelativeAge(item.created_at)}
+          </span>
+        )}
+
+        {/* Feedback indicator */}
         {feedback && (
-          <div
-            className={`text-xs px-2 py-0.5 rounded ${
+          <span
+            className={`flex-shrink-0 text-[10px] px-1.5 py-0.5 rounded ${
               feedback === 'save'
                 ? 'bg-success/20 text-success'
                 : feedback === 'dismiss'
@@ -134,38 +117,45 @@ export const ResultItemCollapsed = memo(function ResultItemCollapsed({
               : feedback === 'dismiss'
               ? `\u2717 ${t('feedback.dismissed')}`
               : `\u2298 ${t('feedback.irrelevant')}`}
-          </div>
+          </span>
         )}
 
-        {/* Expand Button */}
+        {/* Expand button */}
         <button
           onClick={onToggleExpand}
           aria-expanded={isExpanded}
           aria-controls={`result-detail-${item.id}`}
           aria-label={isExpanded ? t('results.collapseDetails') : t('results.expandDetails')}
-          className="text-text-muted text-xs hover:text-text-secondary transition-colors px-1"
+          className="flex-shrink-0 text-text-muted text-xs hover:text-text-secondary transition-colors px-1"
         >
           {isExpanded ? '\u2212' : '+'}
         </button>
       </div>
 
-      {/* Why This Matters - Preview (shown when not expanded) */}
-      {!isExpanded && (
-        <>
-          <button onClick={onToggleExpand} aria-label="Show full explanation" className="w-full text-left">
-            <div className="mt-1.5 text-xs text-text-secondary pl-[4.25rem]">
-              {item.explanation || fallbackReason}
-            </div>
-          </button>
-          {/* Wisdom annotation — shows when context score is high (AWE wisdom chunks contributed) */}
-          {item.score_breakdown && item.score_breakdown.context_score > 0.3 && item.relevant && (
-            <div className="mt-1 text-[10px] text-text-muted pl-[4.25rem] flex items-center gap-1">
-              <span className="w-1 h-1 rounded-full bg-success/60 inline-block" />
-              Matches your experience
-            </div>
+      {/* Secondary row: explanation (only when expanded) */}
+      {isExpanded && (
+        <div className="mt-1.5 text-xs text-text-secondary pl-[3.75rem]">
+          {item.explanation || fallbackReason}
+        </div>
+      )}
+
+      {/* Similar items (collapsed by default, only when expanded) */}
+      {isExpanded && (item.similar_count ?? 0) > 0 && (
+        <details className="mt-1 pl-[3.75rem] group">
+          <summary className="text-[10px] text-text-muted cursor-pointer hover:text-text-secondary select-none list-none flex items-center gap-1">
+            <span className="text-[10px] text-text-muted group-open:rotate-90 transition-transform">&#9654;</span>
+            {t('results.relatedArticles', { count: item.similar_count })}
+          </summary>
+          {item.similar_titles && item.similar_titles.length > 0 && (
+            <ul className="mt-1 ml-3 space-y-0.5">
+              {item.similar_titles.map((title, i) => (
+                <li key={i} className="text-[10px] text-text-muted truncate">
+                  {title}
+                </li>
+              ))}
+            </ul>
           )}
-          <ProInsightRow item={item} />
-        </>
+        </details>
       )}
     </div>
   );
