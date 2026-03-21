@@ -371,10 +371,7 @@ async fn dispatch_delivery_http(
     payload: &str,
 ) -> Result<bool> {
     let signature = sign_payload(secret, payload);
-    let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(30))
-        .build()
-        .context("Build HTTP client")?;
+    let client = crate::http_client::HTTP_CLIENT.clone();
 
     let response = client
         .post(url)
