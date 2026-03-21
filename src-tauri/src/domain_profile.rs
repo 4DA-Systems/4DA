@@ -308,30 +308,63 @@ fn is_notable_dependency(name: &str) -> bool {
 /// libraries, build tools, and companion packages do NOT — they belong in
 /// `all_tech` for scoring relevance, but should never be shown to the user
 /// as part of their identity.
+/// ## Inclusion Criteria
+///
+/// A technology belongs here if a developer would put it in their bio, resume
+/// headline, or conference talk title. "Rust developer" — yes. "Drizzle
+/// developer" — no.
+///
+/// Categories that pass: programming languages, major application frameworks,
+/// runtimes, cloud platforms, container/orchestration tools, databases.
+///
+/// Categories that fail: ORMs, CSS frameworks, build tools, linters, formatters,
+/// testing libraries, utility packages, package managers, companion tools.
+///
+/// ## Maintenance
+///
+/// Review quarterly. When adding a new entry, ask: "Would someone describe
+/// themselves as a [X] developer?" If yes, add it. If it's a tool *used by*
+/// a type of developer rather than *defining* that type, it stays out.
+/// Last reviewed: 2026-03.
 pub fn is_display_worthy(tech: &str) -> bool {
-    // Allowlist: languages, major frameworks, runtimes, platforms
     const DISPLAY_WORTHY: &[&str] = &[
-        // Languages
+        // ---- Languages ----
         "rust", "typescript", "javascript", "python", "go", "java", "kotlin",
         "swift", "c", "cpp", "c++", "csharp", "c#", "ruby", "php", "scala",
         "elixir", "haskell", "dart", "zig", "nim", "lua", "r", "julia",
         "wgsl", "glsl", "sql", "ocaml", "clojure", "erlang", "fsharp", "f#",
         "objective-c", "perl",
-        // Major frameworks / platforms
-        "react", "vue", "angular", "svelte", "solid", "qwik",
+        // Emerging languages (reviewed 2026-03)
+        "mojo", "gleam", "roc", "unison", "vale",
+        // ---- Web frameworks (frontend) ----
+        "react", "vue", "angular", "svelte", "solid", "solidjs", "qwik",
+        "htmx", "alpine", "alpinejs", "preact", "lit",
+        // ---- Meta-frameworks ----
         "nextjs", "next.js", "nuxt", "remix", "astro", "sveltekit",
-        "tauri", "electron", "flutter", "react-native",
-        "django", "flask", "fastapi", "rails", "spring", "springboot",
-        "express", "nest", "nestjs", "actix", "axum", "rocket", "gin",
-        "fiber", "echo",
-        "tensorflow", "pytorch", "jax",
+        "solidstart", "fresh", "analog",
+        // ---- Desktop / mobile ----
+        "tauri", "electron", "flutter", "react-native", "expo",
+        "swiftui", "jetpack-compose", "maui",
+        // ---- Backend frameworks ----
+        "django", "flask", "fastapi", "litestar",
+        "rails", "spring", "springboot", "quarkus", "micronaut",
+        "express", "nest", "nestjs", "hono", "elysia",
+        "actix", "axum", "rocket", "warp",
+        "gin", "fiber", "echo", "chi",
+        "phoenix", "plug",
+        // ---- AI / ML ----
+        "tensorflow", "pytorch", "jax", "langchain", "llamaindex",
+        "huggingface", "transformers", "onnx",
+        // ---- Runtimes ----
         "node", "nodejs", "deno", "bun",
-        // Platforms / infrastructure
+        // ---- Platforms / infrastructure ----
         "aws", "gcp", "azure", "docker", "kubernetes", "linux",
-        "wasm", "webgpu", "vercel", "cloudflare",
-        // Databases (identity-level, not ORMs)
+        "wasm", "webgpu", "vercel", "cloudflare", "supabase", "firebase",
+        "netlify", "fly", "railway",
+        // ---- Databases (identity-level, not ORMs) ----
         "postgresql", "postgres", "mysql", "mongodb", "redis", "sqlite",
-        "dynamodb", "cassandra", "elasticsearch",
+        "dynamodb", "cassandra", "elasticsearch", "neo4j", "cockroachdb",
+        "planetscale", "neon", "turso", "surrealdb",
     ];
 
     DISPLAY_WORTHY.contains(&tech)
@@ -829,8 +862,24 @@ mod tests {
 
     #[test]
     fn test_display_worthy_accepts_platforms() {
-        for p in &["aws", "gcp", "azure", "docker", "kubernetes", "linux", "wasm"] {
+        for p in &["aws", "gcp", "azure", "docker", "kubernetes", "linux", "wasm",
+                    "vercel", "cloudflare", "supabase", "firebase"] {
             assert!(is_display_worthy(p), "{} should be display-worthy", p);
+        }
+    }
+
+    #[test]
+    fn test_display_worthy_accepts_emerging_languages() {
+        for lang in &["mojo", "gleam", "roc", "unison", "vale"] {
+            assert!(is_display_worthy(lang), "{} should be display-worthy", lang);
+        }
+    }
+
+    #[test]
+    fn test_display_worthy_accepts_emerging_frameworks() {
+        for fw in &["hono", "elysia", "solidstart", "htmx", "litestar",
+                     "phoenix", "expo", "fresh", "turso", "surrealdb"] {
+            assert!(is_display_worthy(fw), "{} should be display-worthy", fw);
         }
     }
 }
