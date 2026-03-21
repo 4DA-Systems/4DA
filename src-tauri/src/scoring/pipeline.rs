@@ -74,9 +74,12 @@ pub(crate) fn score_item(
         };
     }
 
-    // KNN context search
+    // KNN context search — must check for real (non-zero) embeddings, not just non-empty.
+    // Zero-vector fallback (when Ollama is unavailable) produces identical KNN distances
+    // for all items, collapsing context_score to a uniform value.
+    let has_real_embedding = input.embedding.iter().any(|&v| v != 0.0);
     let matches: Vec<RelevanceMatch> =
-        if ctx.cached_context_count > 0 && !input.embedding.is_empty() {
+        if ctx.cached_context_count > 0 && has_real_embedding {
             db.find_similar_contexts(input.embedding, 3)
                 .unwrap_or_default()
                 .into_iter()
@@ -144,7 +147,6 @@ pub(crate) fn score_item(
         // to prevent embedding-driven false positives before user has provided feedback.
         // Only applies when content has real embeddings — keyword-based ACE boost
         // (the fallback when embeddings are zero) is already well-calibrated.
-        let has_real_embedding = input.embedding.iter().any(|&v| v != 0.0);
         let semantic_mult = if has_real_embedding
             && ctx.interest_count < 3
             && ctx.feedback_interaction_count < 10
@@ -235,7 +237,7 @@ pub(crate) fn score_item(
 
     // Taste embedding boost: cosine similarity between item and user's holistic preference vector
     let taste_boost = match ctx.taste_embedding {
-        Some(ref taste_emb) if !input.embedding.is_empty() => {
+        Some(ref taste_emb) if has_real_embedding => {
             semantic::compute_taste_boost(input.embedding, taste_emb)
         }
         _ => 0.0,
