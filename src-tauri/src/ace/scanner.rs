@@ -81,6 +81,8 @@ pub struct ProjectSignal {
     pub dependencies: Vec<String>,
     pub dev_dependencies: Vec<String>,
     pub detected_at: String,
+    /// Project-level license extracted from the manifest (e.g., "MIT", "Apache-2.0").
+    pub project_license: Option<String>,
 }
 
 impl ProjectScanner {
@@ -317,6 +319,7 @@ impl ProjectScanner {
             dependencies: Vec::new(),
             dev_dependencies: Vec::new(),
             detected_at: chrono::Utc::now().to_rfc3339(),
+            project_license: None,
         };
 
         match manifest_type {
@@ -331,11 +334,16 @@ impl ProjectScanner {
         Some(signal)
     }
 
-    fn parse_cargo_toml(&self, content: &str, signal: &mut ProjectSignal) {
+    pub(crate) fn parse_cargo_toml(&self, content: &str, signal: &mut ProjectSignal) {
         // Parse with toml crate if available, otherwise use regex
         // Extract package name
         if let Some(name) = extract_toml_value(content, "name") {
             signal.project_name = Some(name);
+        }
+
+        // Extract license (SPDX identifier from [package] section)
+        if let Some(license) = extract_toml_value(content, "license") {
+            signal.project_license = Some(license);
         }
 
         // Extract dependencies
@@ -400,13 +408,18 @@ impl ProjectScanner {
         }
     }
 
-    fn parse_package_json(&self, content: &str, signal: &mut ProjectSignal) {
+    pub(crate) fn parse_package_json(&self, content: &str, signal: &mut ProjectSignal) {
         let Ok(pkg) = serde_json::from_str::<serde_json::Value>(content) else {
             return;
         };
 
         if let Some(name) = pkg.get("name").and_then(|v| v.as_str()) {
             signal.project_name = Some(name.to_string());
+        }
+
+        // Extract license field (SPDX identifier)
+        if let Some(license) = pkg.get("license").and_then(|v| v.as_str()) {
+            signal.project_license = Some(license.to_string());
         }
 
         if let Some(deps) = pkg.get("dependencies").and_then(|v| v.as_object()) {
@@ -586,6 +599,77 @@ impl ProjectScanner {
                 }
             }
         }
+    }
+
+    // ========================================================================
+    // Lockfile Parsers — discover transitive (indirect) dependencies
+    // ========================================================================
+
+    /// Parse a Cargo.lock file and return (package_name, version) pairs.
+    /// The root project package (matching the project_name from Cargo.toml) is excluded.
+    pub(crate) fn parse_cargo_lock(content: &str) -> Vec<(String, String)> {
+        let mut packages = Vec::new();
+        let mut current_name: Option<String> = None;
+        let mut current_version: Option<String> = None;
+
+        for line in content.lines() {
+            let trimmed = line.trim();
+            if trimmed == "[[package]]" {
+                // Flush previous package
+                if let (Some(name), Some(version)) = (current_name.take(), current_version.take()) {
+                    packages.push((name, version));
+                }
+            } else if let Some(rest) = trimmed.strip_prefix("name = ") {
+                current_name = Some(rest.trim_matches('"').to_string());
+            } else if let Some(rest) = trimmed.strip_prefix("version = ") {
+                current_version = Some(rest.trim_matches('"').to_string());
+            }
+        }
+        // Don't forget the last package
+        if let (Some(name), Some(version)) = (current_name, current_version) {
+            packages.push((name, version));
+        }
+
+        packages
+    }
+
+    /// Parse a package-lock.json (v1/v2/v3) and return (package_name, version) pairs.
+    /// Skips nested node_modules (transitive-of-transitive) and the root "" entry.
+    pub(crate) fn parse_package_lock_json(content: &str) -> Vec<(String, String)> {
+        let Ok(lock) = serde_json::from_str::<serde_json::Value>(content) else {
+            return Vec::new();
+        };
+
+        let mut packages = Vec::new();
+
+        // v2/v3 format uses "packages" key
+        if let Some(pkgs) = lock.get("packages").and_then(|v| v.as_object()) {
+            for (key, value) in pkgs {
+                // Skip the root "" entry
+                if key.is_empty() {
+                    continue;
+                }
+                // Extract package name from path (e.g., "node_modules/@scope/pkg" -> "@scope/pkg")
+                let name = key.strip_prefix("node_modules/").unwrap_or(key);
+                // Skip nested node_modules (too deep — we want first-level transitive only)
+                if name.contains("node_modules/") {
+                    continue;
+                }
+                if let Some(version) = value.get("version").and_then(|v| v.as_str()) {
+                    packages.push((name.to_string(), version.to_string()));
+                }
+            }
+        }
+        // v1 format uses "dependencies" key (older lockfile format)
+        else if let Some(deps) = lock.get("dependencies").and_then(|v| v.as_object()) {
+            for (name, value) in deps {
+                if let Some(version) = value.get("version").and_then(|v| v.as_str()) {
+                    packages.push((name.to_string(), version.to_string()));
+                }
+            }
+        }
+
+        packages
     }
 }
 
@@ -814,6 +898,7 @@ mod tests {
 [package]
 name = "my-project"
 version = "0.1.0"
+license = "MIT"
 
 [dependencies]
 tokio = { version = "1", features = ["full"] }
@@ -834,6 +919,7 @@ pretty_assertions = "1.0"
             dependencies: Vec::new(),
             dev_dependencies: Vec::new(),
             detected_at: String::new(),
+            project_license: None,
         };
 
         scanner.parse_cargo_toml(content, &mut signal);
@@ -843,6 +929,7 @@ pretty_assertions = "1.0"
         assert!(signal.dependencies.contains(&"serde".to_string()));
         assert!(signal.frameworks.contains(&"tokio".to_string()));
         assert!(signal.frameworks.contains(&"axum".to_string()));
+        assert_eq!(signal.project_license, Some("MIT".to_string()));
     }
 
     #[test]
@@ -850,6 +937,7 @@ pretty_assertions = "1.0"
         let content = r#"
 {
   "name": "my-app",
+  "license": "ISC",
   "dependencies": {
     "react": "^18.0.0",
     "next": "^14.0.0"
@@ -870,6 +958,7 @@ pretty_assertions = "1.0"
             dependencies: Vec::new(),
             dev_dependencies: Vec::new(),
             detected_at: String::new(),
+            project_license: None,
         };
 
         scanner.parse_package_json(content, &mut signal);
@@ -879,6 +968,7 @@ pretty_assertions = "1.0"
         assert!(signal.frameworks.contains(&"react".to_string()));
         assert!(signal.frameworks.contains(&"next.js".to_string()));
         assert!(signal.languages.contains(&"typescript".to_string()));
+        assert_eq!(signal.project_license, Some("ISC".to_string()));
     }
 
     #[test]
@@ -1005,6 +1095,7 @@ axum = "0.7"
             dependencies: Vec::new(),
             dev_dependencies: Vec::new(),
             detected_at: String::new(),
+            project_license: None,
         };
 
         scanner.parse_cargo_toml(content, &mut signal);
@@ -1077,5 +1168,99 @@ serde = "1.0"
             1,
             "serde should not be duplicated"
         );
+    }
+
+    #[test]
+    fn test_parse_cargo_lock() {
+        let content = "# This file is automatically @generated by Cargo.\n\
+            # It is not intended for manual editing.\n\
+            version = 4\n\
+            \n\
+            [[package]]\n\
+            name = \"serde\"\n\
+            version = \"1.0.204\"\n\
+            source = \"registry+https://github.com/rust-lang/crates.io-index\"\n\
+            \n\
+            [[package]]\n\
+            name = \"serde_derive\"\n\
+            version = \"1.0.204\"\n\
+            source = \"registry+https://github.com/rust-lang/crates.io-index\"\n\
+            \n\
+            [[package]]\n\
+            name = \"proc-macro2\"\n\
+            version = \"1.0.86\"\n\
+            source = \"registry+https://github.com/rust-lang/crates.io-index\"\n";
+
+        let packages = ProjectScanner::parse_cargo_lock(content);
+        assert_eq!(packages.len(), 3);
+        assert!(packages.iter().any(|(n, v)| n == "serde" && v == "1.0.204"));
+        assert!(packages
+            .iter()
+            .any(|(n, v)| n == "serde_derive" && v == "1.0.204"));
+        assert!(packages
+            .iter()
+            .any(|(n, v)| n == "proc-macro2" && v == "1.0.86"));
+    }
+
+    #[test]
+    fn test_parse_cargo_lock_empty() {
+        let content = "# This file is automatically @generated by Cargo.\nversion = 4\n";
+        let packages = ProjectScanner::parse_cargo_lock(content);
+        assert!(packages.is_empty());
+    }
+
+    #[test]
+    fn test_parse_package_lock_json_v3() {
+        let content = serde_json::json!({
+            "name": "my-app",
+            "version": "1.0.0",
+            "lockfileVersion": 3,
+            "packages": {
+                "": { "name": "my-app", "version": "1.0.0" },
+                "node_modules/lodash": { "version": "4.17.21" },
+                "node_modules/@babel/core": { "version": "7.24.0" },
+                "node_modules/@babel/core/node_modules/semver": { "version": "6.3.1" }
+            }
+        })
+        .to_string();
+
+        let packages = ProjectScanner::parse_package_lock_json(&content);
+        // Root "" entry and nested node_modules should be excluded
+        assert_eq!(packages.len(), 2);
+        assert!(packages
+            .iter()
+            .any(|(n, v)| n == "lodash" && v == "4.17.21"));
+        assert!(packages
+            .iter()
+            .any(|(n, v)| n == "@babel/core" && v == "7.24.0"));
+    }
+
+    #[test]
+    fn test_parse_package_lock_json_v1() {
+        let content = serde_json::json!({
+            "name": "old-app",
+            "version": "1.0.0",
+            "lockfileVersion": 1,
+            "dependencies": {
+                "express": { "version": "4.18.2" },
+                "body-parser": { "version": "1.20.2" }
+            }
+        })
+        .to_string();
+
+        let packages = ProjectScanner::parse_package_lock_json(&content);
+        assert_eq!(packages.len(), 2);
+        assert!(packages
+            .iter()
+            .any(|(n, v)| n == "express" && v == "4.18.2"));
+        assert!(packages
+            .iter()
+            .any(|(n, v)| n == "body-parser" && v == "1.20.2"));
+    }
+
+    #[test]
+    fn test_parse_package_lock_json_invalid() {
+        let packages = ProjectScanner::parse_package_lock_json("not valid json");
+        assert!(packages.is_empty());
     }
 }

@@ -240,6 +240,7 @@ mod knowledge_decay;
 mod llm;
 mod llm_judge;
 mod llm_stream;
+mod local_audit;
 pub mod model_registry;
 mod monitoring;
 mod monitoring_briefing;
@@ -1218,6 +1219,8 @@ pub fn run() {
             dependency_commands::get_project_deps,
             dependency_commands::get_dependency_alerts,
             dependency_commands::resolve_dependency_alert,
+            dependency_commands::check_dependency_upgrades,
+            dependency_commands::get_license_overview,
             // Accuracy Tracking (Phase 4.1)
             accuracy::get_accuracy_report,
             accuracy::get_intelligence_report,
