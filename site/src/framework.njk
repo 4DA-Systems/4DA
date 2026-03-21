@@ -1,0 +1,1229 @@
+---
+title: "The 4DA Framework — A Philosophy for Private Developer Intelligence"
+description: "PASIFA scoring, Authority Stack governance, and the Autonomous Operations System. The philosophy behind 4DA, published openly."
+permalink: "/framework.html"
+---
+{% extends "base.njk" %}
+
+{% block head %}
+  <link rel="canonical" href="https://4da.ai/framework">
+  <meta property="og:title" content="The 4DA Framework — A Philosophy for Private Developer Intelligence">
+  <meta property="og:description" content="PASIFA scoring, Authority Stack governance, and the Autonomous Operations System. The philosophy behind 4DA, published openly.">
+  <meta property="og:type" content="article">
+  <meta property="og:url" content="https://4da.ai/framework">
+  <meta property="og:image" content="https://4da.ai/og-image.png">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="The 4DA Framework">
+  <meta name="twitter:description" content="PASIFA scoring, Authority Stack governance, and the Autonomous Operations System.">
+  <meta name="twitter:image" content="https://4da.ai/og-image.png">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: #0A0A0A;
+      color: #FFFFFF;
+      min-height: 100vh;
+      line-height: 1.7;
+    }
+
+    /* Navigation */
+    .fw-nav {
+      padding: 20px 0;
+      border-bottom: 1px solid #2A2A2A;
+    }
+    .fw-nav .container {
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 0 24px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .fw-nav a {
+      color: #A0A0A0;
+      text-decoration: none;
+      font-size: 14px;
+    }
+    .fw-nav a:hover { color: #FFFFFF; }
+    .fw-nav .brand {
+      font-weight: 600;
+      color: #FFFFFF;
+      font-size: 15px;
+    }
+
+    /* Hero */
+    .fw-hero {
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 64px 24px 0;
+      text-align: center;
+    }
+    .fw-hero h1 {
+      font-size: 40px;
+      font-weight: 700;
+      letter-spacing: -0.03em;
+      margin-bottom: 16px;
+      line-height: 1.15;
+    }
+    .fw-hero .subtitle {
+      font-size: 18px;
+      color: #A0A0A0;
+      line-height: 1.6;
+      max-width: 600px;
+      margin: 0 auto 12px;
+    }
+    .fw-hero .meta {
+      font-size: 13px;
+      color: #8A8A8A;
+      margin-bottom: 48px;
+    }
+
+    /* Container */
+    .fw-container {
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 0 24px 80px;
+    }
+
+    /* Table of Contents */
+    .fw-toc {
+      background: #141414;
+      border: 1px solid #2A2A2A;
+      border-radius: 12px;
+      padding: 28px 32px;
+      margin-bottom: 48px;
+    }
+    .fw-toc-title {
+      font-size: 13px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: #8A8A8A;
+      margin-bottom: 16px;
+    }
+    .fw-toc ol {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+      counter-reset: toc;
+    }
+    .fw-toc li {
+      counter-increment: toc;
+      margin-bottom: 8px;
+    }
+    .fw-toc li::before {
+      content: counter(toc) ".";
+      color: #D4AF37;
+      font-weight: 600;
+      font-size: 13px;
+      margin-right: 10px;
+      display: inline-block;
+      width: 22px;
+    }
+    .fw-toc a {
+      color: #C0C0C0;
+      text-decoration: none;
+      font-size: 15px;
+    }
+    .fw-toc a:hover {
+      color: #FFFFFF;
+    }
+
+    /* Section headings */
+    h2 {
+      font-size: 26px;
+      font-weight: 600;
+      margin-top: 56px;
+      margin-bottom: 16px;
+      padding-top: 32px;
+      border-top: 1px solid #1F1F1F;
+      letter-spacing: -0.02em;
+      scroll-margin-top: 24px;
+    }
+    h2:first-of-type { border-top: none; padding-top: 0; }
+    h3 {
+      font-size: 18px;
+      font-weight: 600;
+      margin-top: 36px;
+      margin-bottom: 12px;
+      color: #E0E0E0;
+      scroll-margin-top: 24px;
+    }
+    h4 {
+      font-size: 15px;
+      font-weight: 600;
+      margin-top: 28px;
+      margin-bottom: 10px;
+      color: #D4AF37;
+    }
+
+    /* Text */
+    p {
+      margin-bottom: 16px;
+      color: #C0C0C0;
+      font-size: 15px;
+    }
+    ul, ol {
+      margin-bottom: 16px;
+      padding-left: 24px;
+    }
+    li {
+      margin-bottom: 8px;
+      color: #C0C0C0;
+      font-size: 15px;
+    }
+    a { color: #D4AF37; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    strong { color: #FFFFFF; }
+    em { color: #A0A0A0; }
+
+    /* Callout / abstract */
+    .fw-abstract {
+      background: #141414;
+      border: 1px solid #2A2A2A;
+      border-left: 3px solid #D4AF37;
+      border-radius: 8px;
+      padding: 24px 28px;
+      margin-bottom: 40px;
+      font-size: 15px;
+      line-height: 1.8;
+      color: #C0C0C0;
+    }
+
+    /* Tables */
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 16px 0 28px;
+      font-size: 13px;
+    }
+    th, td {
+      padding: 10px 14px;
+      border: 1px solid #2A2A2A;
+      text-align: left;
+    }
+    th {
+      background: #141414;
+      font-weight: 600;
+      color: #FFFFFF;
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    td { color: #C0C0C0; }
+    td:first-child { color: #FFFFFF; font-weight: 500; }
+
+    /* Code blocks */
+    .fw-code {
+      background: #111111;
+      border: 1px solid #2A2A2A;
+      border-radius: 8px;
+      padding: 20px 24px;
+      margin: 16px 0 24px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 13px;
+      line-height: 1.7;
+      color: #C0C0C0;
+      overflow-x: auto;
+      white-space: pre;
+    }
+    .fw-code .comment { color: #8A8A8A; }
+    .fw-code .label { color: #D4AF37; font-weight: 500; }
+    .fw-code .value { color: #FFFFFF; }
+
+    /* Inline code */
+    code {
+      background: #1A1A1A;
+      border: 1px solid #2A2A2A;
+      border-radius: 4px;
+      padding: 2px 6px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 13px;
+      color: #D4AF37;
+    }
+
+    /* Authority Stack hierarchy */
+    .fw-hierarchy {
+      margin: 24px 0 32px;
+    }
+    .fw-hierarchy-item {
+      display: flex;
+      align-items: stretch;
+      margin-bottom: 2px;
+    }
+    .fw-hierarchy-bar {
+      width: 4px;
+      border-radius: 2px;
+      flex-shrink: 0;
+    }
+    .fw-hierarchy-content {
+      flex: 1;
+      background: #141414;
+      border: 1px solid #2A2A2A;
+      border-left: none;
+      padding: 14px 18px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .fw-hierarchy-item:first-child .fw-hierarchy-content {
+      border-radius: 0 8px 0 0;
+    }
+    .fw-hierarchy-item:first-child .fw-hierarchy-bar {
+      border-radius: 2px 0 0 0;
+    }
+    .fw-hierarchy-item:last-child .fw-hierarchy-content {
+      border-radius: 0 0 8px 0;
+    }
+    .fw-hierarchy-item:last-child .fw-hierarchy-bar {
+      border-radius: 0 0 0 2px;
+    }
+    .fw-hierarchy-name {
+      font-weight: 600;
+      font-size: 14px;
+      color: #FFFFFF;
+    }
+    .fw-hierarchy-desc {
+      font-size: 13px;
+      color: #8A8A8A;
+    }
+
+    /* Cards for principles, zero zones, gates */
+    .fw-card-grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 12px;
+      margin: 20px 0 28px;
+    }
+    .fw-card {
+      background: #141414;
+      border: 1px solid #2A2A2A;
+      border-radius: 8px;
+      padding: 18px 20px;
+    }
+    .fw-card-label {
+      font-size: 12px;
+      font-weight: 600;
+      color: #D4AF37;
+      margin-bottom: 6px;
+      letter-spacing: 0.02em;
+    }
+    .fw-card-title {
+      font-size: 15px;
+      font-weight: 600;
+      color: #FFFFFF;
+      margin-bottom: 6px;
+    }
+    .fw-card-desc {
+      font-size: 14px;
+      color: #A0A0A0;
+      line-height: 1.6;
+    }
+
+    /* Zero Zone cards */
+    .fw-zero-zone {
+      background: #141414;
+      border: 1px solid #2A2A2A;
+      border-left: 3px solid #EF4444;
+      border-radius: 8px;
+      padding: 14px 18px;
+      margin-bottom: 8px;
+    }
+    .fw-zero-zone-name {
+      font-weight: 600;
+      font-size: 14px;
+      color: #FFFFFF;
+      margin-bottom: 4px;
+    }
+    .fw-zero-zone-desc {
+      font-size: 13px;
+      color: #A0A0A0;
+    }
+
+    /* Gate cards */
+    .fw-gate {
+      background: #141414;
+      border: 1px solid #2A2A2A;
+      border-left: 3px solid #22C55E;
+      border-radius: 8px;
+      padding: 14px 18px;
+      margin-bottom: 8px;
+    }
+    .fw-gate-num {
+      font-size: 12px;
+      font-weight: 600;
+      color: #22C55E;
+      margin-bottom: 4px;
+    }
+    .fw-gate-desc {
+      font-size: 14px;
+      color: #C0C0C0;
+    }
+
+    /* Triad diagram */
+    .fw-triad {
+      background: #111111;
+      border: 1px solid #2A2A2A;
+      border-radius: 12px;
+      padding: 32px;
+      margin: 24px 0 32px;
+      text-align: center;
+    }
+    .fw-triad-row {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+    .fw-triad-node {
+      background: #1A1A1A;
+      border: 1px solid #2A2A2A;
+      border-radius: 8px;
+      padding: 14px 24px;
+      font-weight: 600;
+      font-size: 14px;
+      color: #FFFFFF;
+      min-width: 160px;
+    }
+    .fw-triad-arrow {
+      color: #D4AF37;
+      font-size: 20px;
+      font-weight: 400;
+    }
+    .fw-triad-label {
+      font-size: 12px;
+      color: #8A8A8A;
+      margin-top: 16px;
+    }
+
+    /* Comparison table highlight */
+    .fw-compare-arch { color: #22C55E !important; }
+    .fw-compare-policy { color: #EF4444 !important; }
+
+    /* Compound timeline */
+    .fw-timeline {
+      margin: 24px 0 32px;
+      padding-left: 24px;
+      border-left: 2px solid #2A2A2A;
+    }
+    .fw-timeline-item {
+      position: relative;
+      padding: 0 0 24px 20px;
+    }
+    .fw-timeline-item:last-child { padding-bottom: 0; }
+    .fw-timeline-item::before {
+      content: '';
+      position: absolute;
+      left: -29px;
+      top: 6px;
+      width: 10px;
+      height: 10px;
+      background: #D4AF37;
+      border-radius: 50%;
+      border: 2px solid #0A0A0A;
+    }
+    .fw-timeline-label {
+      font-size: 13px;
+      font-weight: 600;
+      color: #D4AF37;
+      margin-bottom: 4px;
+    }
+    .fw-timeline-text {
+      font-size: 14px;
+      color: #C0C0C0;
+      line-height: 1.6;
+    }
+
+    /* Blockquote / closing */
+    .fw-closing {
+      border-top: 1px solid #2A2A2A;
+      margin-top: 48px;
+      padding-top: 32px;
+      text-align: center;
+    }
+    .fw-closing-quote {
+      font-size: 18px;
+      font-style: italic;
+      color: #A0A0A0;
+      line-height: 1.7;
+      max-width: 640px;
+      margin: 0 auto 24px;
+    }
+    .fw-closing-attribution {
+      font-size: 13px;
+      color: #8A8A8A;
+    }
+
+    /* Decision format */
+    .fw-decision-format {
+      background: #111111;
+      border: 1px solid #2A2A2A;
+      border-radius: 8px;
+      padding: 20px 24px;
+      margin: 16px 0 24px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 13px;
+      line-height: 1.8;
+      color: #8A8A8A;
+    }
+    .fw-decision-format .field {
+      color: #D4AF37;
+    }
+    .fw-decision-format .placeholder {
+      color: #C0C0C0;
+    }
+
+    /* Antibody format */
+    .fw-antibody {
+      background: #111111;
+      border: 1px solid #2A2A2A;
+      border-left: 3px solid #D4AF37;
+      border-radius: 8px;
+      padding: 20px 24px;
+      margin: 16px 0 24px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 13px;
+      line-height: 1.8;
+    }
+    .fw-antibody .field { color: #D4AF37; }
+    .fw-antibody .value { color: #C0C0C0; }
+
+    /* Severity badges */
+    .fw-severity {
+      display: inline-block;
+      font-size: 11px;
+      font-weight: 600;
+      padding: 2px 8px;
+      border-radius: 4px;
+      letter-spacing: 0.03em;
+    }
+    .fw-severity-critical { background: #3B1111; color: #EF4444; }
+    .fw-severity-high { background: #3B2011; color: #F59E0B; }
+    .fw-severity-medium { background: #1B2B11; color: #22C55E; }
+    .fw-severity-low { background: #111B2B; color: #60A5FA; }
+
+    /* Thresholds */
+    .fw-thresholds {
+      margin: 16px 0 28px;
+    }
+    .fw-threshold-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 10px 0;
+      border-bottom: 1px solid #1A1A1A;
+    }
+    .fw-threshold-item:last-child { border-bottom: none; }
+    .fw-threshold-range {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 14px;
+      font-weight: 600;
+      min-width: 70px;
+    }
+    .fw-threshold-name {
+      font-weight: 600;
+      font-size: 14px;
+      color: #FFFFFF;
+      min-width: 100px;
+    }
+    .fw-threshold-desc {
+      font-size: 13px;
+      color: #8A8A8A;
+    }
+
+    /* Footer */
+    .fw-footer {
+      padding: 32px 0;
+      border-top: 1px solid #2A2A2A;
+    }
+    .fw-footer .container {
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 0 24px;
+    }
+    .fw-footer-pub {
+      font-size: 13px;
+      color: #8A8A8A;
+      text-align: center;
+      margin-bottom: 16px;
+    }
+    .fw-footer-links {
+      display: flex;
+      justify-content: center;
+      gap: 24px;
+      flex-wrap: wrap;
+      font-size: 13px;
+    }
+    .fw-footer-links a { color: #A0A0A0; }
+    .fw-footer-links a:hover { color: #FFFFFF; }
+
+    /* Responsive */
+    @media (max-width: 600px) {
+      .fw-hero h1 { font-size: 28px; }
+      .fw-hero .subtitle { font-size: 15px; }
+      h2 { font-size: 20px; }
+      h3 { font-size: 16px; }
+      .fw-container { padding: 0 16px 60px; }
+      .fw-hero { padding: 40px 16px 0; }
+      table { font-size: 11px; }
+      th, td { padding: 8px 10px; }
+      .fw-toc { padding: 20px 24px; }
+      .fw-hierarchy-content { flex-direction: column; align-items: flex-start; gap: 4px; }
+      .fw-triad-row { flex-direction: column; }
+      .fw-triad-arrow { transform: rotate(90deg); }
+    }
+  </style>
+{% endblock %}
+
+{% block body %}
+  <nav class="fw-nav">
+    <div class="container">
+      <a href="/" class="brand">4DA</a>
+      <a href="/privacy">Privacy Policy</a>
+    </div>
+  </nav>
+
+  <div class="fw-hero">
+    <h1>The 4DA Framework</h1>
+    <p class="subtitle">A Philosophy for Private Developer Intelligence</p>
+    <p class="meta">Version 1.0.0 &middot; 4DA Systems Pty Ltd &middot; March 2026</p>
+  </div>
+
+  <div class="fw-container">
+
+    <div class="fw-abstract">
+      4DA (4 Dimensional Autonomy) is not a feed reader, a notification aggregator, or a recommendation engine. It is a framework for sovereign developer intelligence &mdash; a system where content is scored, filtered, and surfaced by a machine that works exclusively for its operator, on its operator's hardware, with zero data leaving the machine.
+      <br><br>
+      This document formalises the three pillars of the 4DA framework: the <strong>PASIFA scoring philosophy</strong>, the <strong>Authority Stack governance model</strong>, and the <strong>Autonomous Operations System (AOS)</strong>. Together, they form a replicable methodology for building software that compounds knowledge privately.
+      <br><br>
+      These ideas are published openly. We believe the strongest competitive position is to become the standard.
+    </div>
+
+    <!-- Table of Contents -->
+    <div class="fw-toc">
+      <div class="fw-toc-title">Contents</div>
+      <ol>
+        <li><a href="#noise">The Problem: Noise Is the Default</a></li>
+        <li><a href="#pasifa">PASIFA: Privacy-Aware Scoring Intelligence</a></li>
+        <li><a href="#authority-stack">The Authority Stack: Constitutional Governance</a></li>
+        <li><a href="#aos">AOS: The Autonomous Operations System</a></li>
+        <li><a href="#triad">The Triad in Practice</a></li>
+        <li><a href="#privacy">Privacy as Architecture, Not Policy</a></li>
+        <li><a href="#compound">The Compound Knowledge Thesis</a></li>
+        <li><a href="#adoption">Principles for Adoption</a></li>
+      </ol>
+    </div>
+
+    <!-- Section 1: The Problem -->
+    <h2 id="noise">1. The Problem: Noise Is the Default</h2>
+
+    <p>A working developer receives thousands of content signals per day &mdash; Hacker News posts, GitHub trending repos, RSS articles, Reddit threads, arXiv papers, security advisories, dependency updates. The existing tools for managing this flow all share the same flaw: they optimise for engagement, not relevance.</p>
+
+    <table>
+      <thead>
+        <tr><th>Tool</th><th>What It Optimises For</th><th>What It Costs You</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Algorithmic feeds</td><td>Time on platform</td><td>Attention</td></tr>
+        <tr><td>Newsletters</td><td>Subscriber count</td><td>Context</td></tr>
+        <tr><td>RSS readers</td><td>Completeness</td><td>Filtering labour</td></tr>
+        <tr><td>AI summaries</td><td>Throughput</td><td>Privacy (your queries train models)</td></tr>
+      </tbody>
+    </table>
+
+    <p>The result: developers either consume too much (noise fatigue) or too little (miss critical signals). Both outcomes are expensive.</p>
+
+    <p>4DA's thesis is simple: <strong>a machine that knows your codebase, your tech stack, your recent work, and your declared interests can reject 99%+ of content and show you only what matters &mdash; without ever sending your data anywhere.</strong></p>
+
+    <p>This requires three innovations:</p>
+    <ol>
+      <li>A scoring algorithm that measures relevance across multiple dimensions simultaneously</li>
+      <li>A governance model that prevents the system from drifting, degrading, or creeping</li>
+      <li>An operational framework that keeps the system healthy autonomously</li>
+    </ol>
+
+    <!-- Section 2: PASIFA -->
+    <h2 id="pasifa">2. PASIFA: Privacy-Aware Scoring Intelligence</h2>
+
+    <h3>2.1 The Name</h3>
+    <p><strong>PASIFA</strong> &mdash; Privacy-Aware Semantic Intelligence Framework for Analysis.</p>
+    <p>PASIFA is not a machine learning model. It is a scoring philosophy: a structured methodology for determining whether a piece of content is relevant to a specific developer, using only information that exists locally on that developer's machine.</p>
+
+    <h3>2.2 The Five Axes</h3>
+    <p>Every piece of content is evaluated across five independent axes. Each axis answers a different question about relevance.</p>
+
+    <table>
+      <thead>
+        <tr><th>Axis</th><th>Question</th><th>Signal Source</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Context</td><td>Does this relate to what I'm working on right now?</td><td>Local project scanning (languages, frameworks, recent git activity)</td></tr>
+        <tr><td>Interest</td><td>Does this match my declared or inferred interests?</td><td>User-declared topics + learned affinities from feedback</td></tr>
+        <tr><td>ACE</td><td>Does my codebase use this technology?</td><td>Autonomous Context Engine (dependency analysis, file patterns, git history)</td></tr>
+        <tr><td>Dependency</td><td>Is this about a library I actually depend on?</td><td>Package manifest analysis (Cargo.toml, package.json, requirements.txt, etc.)</td></tr>
+        <tr><td>Learned</td><td>Has my past behaviour indicated this is valuable?</td><td>Feedback signals (saves, dismissals, clicks, time-on-content)</td></tr>
+      </tbody>
+    </table>
+
+    <h3>2.3 The Confirmation Gate</h3>
+    <p>Raw scores are not enough. A content item might score highly on a single axis by coincidence &mdash; a keyword match that is syntactically relevant but semantically irrelevant.</p>
+    <p>PASIFA requires <strong>confirmation</strong>: at least two independent axes must agree that content is relevant before it is surfaced to the user.</p>
+
+    <table>
+      <thead>
+        <tr><th>Confirming Axes</th><th>Score Multiplier</th><th>Score Ceiling</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>0</td><td>0.25</td><td>0.20</td></tr>
+        <tr><td>1</td><td>0.45</td><td>0.28</td></tr>
+        <tr><td>2</td><td>1.00</td><td>0.65</td></tr>
+        <tr><td>3</td><td>1.10</td><td>0.85</td></tr>
+        <tr><td>4</td><td>1.20</td><td>1.00</td></tr>
+        <tr><td>5</td><td>1.25</td><td>1.00</td></tr>
+      </tbody>
+    </table>
+
+    <p>With 0&ndash;1 confirming axes, content is heavily penalised &mdash; the ceiling ensures it cannot reach the relevance threshold regardless of any single strong signal. This is the mechanism behind the 99%+ rejection rate.</p>
+
+    <p><strong>Why this matters:</strong> Most recommendation systems optimise for recall (show more, miss less). PASIFA optimises for precision (show less, be right). A single false positive &mdash; irrelevant content surfaced to the user &mdash; erodes trust faster than ten correct recommendations build it.</p>
+
+    <h3>2.4 The Scoring Pipeline</h3>
+    <p>The V2 pipeline structures scoring into eight sequential phases:</p>
+
+    <div class="fw-code"><span class="label">Phase 1: Signal Extraction</span>
+  Extract raw values for all five axes from the content item and local context.
+
+<span class="label">Phase 2: KNN Calibration</span>
+  Apply sigmoid calibration to distance-based scores (cosine similarity,
+  embedding distance) to suppress noise from high-distance matches.
+  Parameters: center=0.49, scale=12.
+
+<span class="label">Phase 3: Gate Count</span>
+  Count confirming signals BEFORE any combination. This ensures the gate
+  operates on clean, pre-combination signals &mdash; not on artifacts of how
+  signals were mixed.
+
+<span class="label">Phase 4: Semantic Integration</span>
+  Apply semantic boost multiplicatively: base * (1.0 + semantic_boost).
+  Multiplicative integration preserves signal proportionality.
+  Additive integration (V1) allowed semantic to overwhelm weak bases.
+
+<span class="label">Phase 5: Quality Composite</span>
+  All quality multipliers (source authority, recency, domain quality)
+  dampened and multiplied in a single pass. Domain quality is multiplicative,
+  not dampened &mdash; it represents hard relevance, not soft preference.
+
+<span class="label">Phase 6: Boost Application</span>
+  All boosts (feedback, affinity, dependency, taste) summed, capped at
+  [-0.15, 0.35], then dampened. The cap prevents any single boost from
+  overwhelming the base signal.
+
+<span class="label">Phase 7: Confirmation Gate</span>
+  Apply the gate table from Phase 3's count. Multiply score by gate
+  multiplier, then cap at gate ceiling.
+
+<span class="label">Phase 8: Final Threshold</span>
+  Compare gated score against the auto-tuning relevance threshold.
+  Items below threshold are rejected. Items above are ranked by score.</div>
+
+    <h3>2.5 Key Design Decisions</h3>
+
+    <p><strong>Why five axes, not one?</strong></p>
+    <p>A single relevance score (e.g., cosine similarity of embeddings) is fragile. It captures semantic closeness but misses dependency relationships, recent work context, and learned preferences. Five axes provide triangulation &mdash; the same way a GPS needs multiple satellites to determine position accurately.</p>
+
+    <p><strong>Why a confirmation gate, not a weighted sum?</strong></p>
+    <p>A weighted sum allows one extremely high axis to overwhelm four irrelevant axes. The confirmation gate requires independent agreement. This is analogous to scientific peer review &mdash; a single strong result is interesting; two independent replications are convincing.</p>
+
+    <p><strong>Why optimise for precision over recall?</strong></p>
+    <p>Because the cost of false positives (irrelevant content shown) is asymmetrically higher than the cost of false negatives (relevant content missed). A missed article can be found later. An irrelevant article that wastes 30 seconds of attention can never be recovered. At scale, this asymmetry compounds into either trust or distrust.</p>
+
+    <p><strong>Why local-only signals?</strong></p>
+    <p>Because any signal that requires sending data externally introduces a privacy dependency that cannot be architecturally guaranteed. PASIFA uses only data that exists on the developer's machine &mdash; project files, git history, declared interests, feedback signals. This is not a limitation; it is the design.</p>
+
+    <h3>2.6 Calibration and Compound Learning</h3>
+    <p>PASIFA is not static. Three mechanisms enable the system to improve over time for each individual user:</p>
+
+    <ol>
+      <li><strong>Feedback Integration:</strong> Explicit signals (save, dismiss, mark irrelevant) and implicit signals (time spent, link clicks) adjust affinity scores for topics and sources. These adjustments have a 30-day half-life to prevent stale preferences from dominating.</li>
+      <li><strong>Autophagy Calibration:</strong> The system periodically re-evaluates its own scoring accuracy by comparing predicted relevance against observed user behaviour. Calibration deltas are injected into the scoring context to correct systematic over- or under-scoring of specific topics.</li>
+      <li><strong>Taste Embedding:</strong> A 384-dimensional vector representing the user's holistic preferences, computed as a weighted centroid of topic affinity embeddings. This enables semantic similarity scoring against the user's overall taste, not just individual topic matches.</li>
+    </ol>
+
+    <p>All three mechanisms operate locally. No calibration data is transmitted externally. The result is a system that becomes more accurate for its specific user over time &mdash; a compound knowledge advantage that cannot be replicated by cloning the code.</p>
+
+    <!-- Section 3: Authority Stack -->
+    <h2 id="authority-stack">3. The Authority Stack</h2>
+
+    <h3>3.1 The Problem It Solves</h3>
+    <p>Software projects accumulate decisions over time. Without explicit governance, these decisions exist only in commit messages, pull request threads, and the memories of the people who made them. When those people leave, or when the project reaches sufficient complexity, decisions get re-litigated. The same arguments repeat. The same trade-offs are re-debated. Entropy increases.</p>
+    <p>The Authority Stack is a hierarchical governance framework that prevents this.</p>
+
+    <h3>3.2 The Hierarchy</h3>
+    <p>Higher always wins. A decision cannot violate an invariant. A convention cannot override a principle.</p>
+
+    <div class="fw-hierarchy">
+      <div class="fw-hierarchy-item">
+        <div class="fw-hierarchy-bar" style="background: #EF4444;"></div>
+        <div class="fw-hierarchy-content">
+          <span class="fw-hierarchy-name">INVARIANTS.md</span>
+          <span class="fw-hierarchy-desc">What must ALWAYS or NEVER happen (highest authority)</span>
+        </div>
+      </div>
+      <div class="fw-hierarchy-item">
+        <div class="fw-hierarchy-bar" style="background: #F59E0B;"></div>
+        <div class="fw-hierarchy-content">
+          <span class="fw-hierarchy-name">WISDOM.md</span>
+          <span class="fw-hierarchy-desc">How we work: principles, gates, enforcement</span>
+        </div>
+      </div>
+      <div class="fw-hierarchy-item">
+        <div class="fw-hierarchy-bar" style="background: #D4AF37;"></div>
+        <div class="fw-hierarchy-content">
+          <span class="fw-hierarchy-name">DECISIONS.md</span>
+          <span class="fw-hierarchy-desc">What was chosen and why (prevents re-litigation)</span>
+        </div>
+      </div>
+      <div class="fw-hierarchy-item">
+        <div class="fw-hierarchy-bar" style="background: #22C55E;"></div>
+        <div class="fw-hierarchy-content">
+          <span class="fw-hierarchy-name">FAILURE_MODES.md</span>
+          <span class="fw-hierarchy-desc">What breaks and how (institutional memory)</span>
+        </div>
+      </div>
+      <div class="fw-hierarchy-item">
+        <div class="fw-hierarchy-bar" style="background: #60A5FA;"></div>
+        <div class="fw-hierarchy-content">
+          <span class="fw-hierarchy-name">CLAUDE.md</span>
+          <span class="fw-hierarchy-desc">Operational instructions (lowest authority)</span>
+        </div>
+      </div>
+    </div>
+
+    <h4>Invariants &mdash; The Constitution</h4>
+    <p>Invariants are non-negotiable constraints. They define what the system MUST always do and MUST never do. They are not goals, preferences, or aspirations &mdash; they are structural guarantees.</p>
+
+    <table>
+      <thead>
+        <tr><th>ID</th><th>Invariant</th><th>Why It's Non-Negotiable</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>INV-001</td><td>Precision MUST be &gt;85%</td><td>Below this, the system produces more noise than signal</td></tr>
+        <tr><td>INV-002</td><td>System MUST work with zero configuration</td><td>Any setup requirement is a barrier to adoption</td></tr>
+        <tr><td>INV-004</td><td>NO data leaves the machine without explicit consent</td><td>Privacy is architecture, not policy</td></tr>
+        <tr><td>INV-020</td><td>Signals with confidence &lt;0.3 MUST be rejected</td><td>Low-confidence signals poison the learning model</td></tr>
+        <tr><td>INV-030</td><td>API keys MUST NEVER appear in logs</td><td>One leaked key destroys all trust</td></tr>
+      </tbody>
+    </table>
+
+    <p><strong>Violation Protocol:</strong> If an invariant violation is discovered, all other work stops. The violation is documented, the impact is assessed, a minimal fix is created, a regression test is added, and FAILURE_MODES.md is updated. This protocol is itself non-negotiable.</p>
+
+    <h4>Wisdom &mdash; The Operating Principles</h4>
+    <p>Seven principles govern all development activity:</p>
+
+    <div class="fw-card-grid">
+      <div class="fw-card">
+        <div class="fw-card-label">W-1</div>
+        <div class="fw-card-title">Consequences Compound</div>
+        <div class="fw-card-desc">Every outcome shapes what follows. Check history before proposing. Record outcomes.</div>
+      </div>
+      <div class="fw-card">
+        <div class="fw-card-label">W-2</div>
+        <div class="fw-card-title">Privacy Is Architecture</div>
+        <div class="fw-card-desc">Data that can leak will leak. Enforce by structure, not policy. Violation = extinction event.</div>
+      </div>
+      <div class="fw-card">
+        <div class="fw-card-label">W-3</div>
+        <div class="fw-card-title">Trust Is Asymmetric</div>
+        <div class="fw-card-desc">One regression destroys more trust than ten clean commits build. Never claim certainty where probability exists.</div>
+      </div>
+      <div class="fw-card">
+        <div class="fw-card-label">W-4</div>
+        <div class="fw-card-title">Structural Impossibility</div>
+        <div class="fw-card-desc">Don't forbid &mdash; make impossible. Architecture over policy.</div>
+      </div>
+      <div class="fw-card">
+        <div class="fw-card-label">W-5</div>
+        <div class="fw-card-title">Human Sovereignty</div>
+        <div class="fw-card-desc">AI amplifies, never replaces. Surface choices, don't make them.</div>
+      </div>
+      <div class="fw-card">
+        <div class="fw-card-label">W-6</div>
+        <div class="fw-card-title">Refusal Valid, Paralysis Not</div>
+        <div class="fw-card-desc">"I shouldn't" is legitimate. State what you know and don't. Let the human decide.</div>
+      </div>
+      <div class="fw-card">
+        <div class="fw-card-label">W-7</div>
+        <div class="fw-card-title">Simplicity Is the Final Guard</div>
+        <div class="fw-card-desc">Every layer is an attack surface. Build the minimum. Then stop.</div>
+      </div>
+    </div>
+
+    <h4>Zero Zones</h4>
+    <p>Structural impossibilities that admit no override and no emergency exception:</p>
+
+    <div class="fw-zero-zone">
+      <div class="fw-zero-zone-name">Data Exfiltration</div>
+      <div class="fw-zero-zone-desc">Raw user data cannot leave the machine</div>
+    </div>
+    <div class="fw-zero-zone">
+      <div class="fw-zero-zone-name">Credential Exposure</div>
+      <div class="fw-zero-zone-desc">API keys cannot appear in any output</div>
+    </div>
+    <div class="fw-zero-zone">
+      <div class="fw-zero-zone-name">Silent Failure</div>
+      <div class="fw-zero-zone-desc">Errors cannot be swallowed without trace</div>
+    </div>
+    <div class="fw-zero-zone">
+      <div class="fw-zero-zone-name">Self-Expanding Scope</div>
+      <div class="fw-zero-zone-desc">AI cannot broaden task scope without human approval</div>
+    </div>
+    <div class="fw-zero-zone">
+      <div class="fw-zero-zone-name">Manufactured Certainty</div>
+      <div class="fw-zero-zone-desc">AI cannot present assumption as fact</div>
+    </div>
+
+    <h4>Wisdom Gates</h4>
+    <p>Decision checkpoints that trigger automatically:</p>
+
+    <div class="fw-gate">
+      <div class="fw-gate-num">Gate 1</div>
+      <div class="fw-gate-desc">Before modifying architecture &rarr; read prior decisions and invariants</div>
+    </div>
+    <div class="fw-gate">
+      <div class="fw-gate-num">Gate 2</div>
+      <div class="fw-gate-desc">Before irreversible actions &rarr; confirm with human, state what cannot be undone</div>
+    </div>
+    <div class="fw-gate">
+      <div class="fw-gate-num">Gate 3</div>
+      <div class="fw-gate-desc">Before claiming completion &rarr; tests pass, build succeeds, evidence provided</div>
+    </div>
+    <div class="fw-gate">
+      <div class="fw-gate-num">Gate 4</div>
+      <div class="fw-gate-desc">Before introducing complexity &rarr; can this be solved without a new abstraction?</div>
+    </div>
+
+    <h4>Decisions &mdash; The Precedent Log</h4>
+    <p>Every significant architectural decision is recorded with its rationale, alternatives considered, date, and status. This prevents re-litigation &mdash; the most insidious form of entropy in software projects.</p>
+
+    <div class="fw-decision-format"><span class="field">AD-NNN:</span> <span class="placeholder">[Decision Title]</span>
+<span class="field">Date:</span> <span class="placeholder">YYYY-MM-DD</span>
+<span class="field">Status:</span> <span class="placeholder">ACCEPTED | SUPERSEDED | DEPRECATED</span>
+<span class="field">Context:</span> <span class="placeholder">[What prompted the decision]</span>
+<span class="field">Decision:</span> <span class="placeholder">[What was chosen]</span>
+<span class="field">Alternatives:</span> <span class="placeholder">[What was rejected and why]</span>
+<span class="field">Consequences:</span> <span class="placeholder">[Known trade-offs]</span></div>
+
+    <p>Decisions can be superseded but never deleted. The history of reasoning is itself valuable &mdash; it shows what was tried, why it failed, and what constraints were active at the time.</p>
+
+    <h4>Failure Modes &mdash; Institutional Memory</h4>
+    <p>Every known failure pattern is catalogued with its severity, trigger conditions, mitigation strategy, and verification method. This document grows over time as the system encounters new failure modes.</p>
+    <p>Severity levels: <span class="fw-severity fw-severity-critical">CRITICAL</span> <span class="fw-severity fw-severity-high">HIGH</span> <span class="fw-severity fw-severity-medium">MEDIUM</span> <span class="fw-severity fw-severity-low">LOW</span></p>
+    <p>The discipline is simple: every bug fix MUST check FAILURE_MODES.md for prior art, and every new failure pattern MUST be added. This creates an immune system that prevents the same class of bug from recurring.</p>
+
+    <h3>3.3 Why This Works</h3>
+    <ul>
+      <li><strong>Re-litigation is expensive.</strong> Debating the same architectural question costs hours. DECISIONS.md makes the answer findable in seconds.</li>
+      <li><strong>Regressions are asymmetrically costly.</strong> One regression destroys more trust than ten features build. INVARIANTS.md prevents the regressions.</li>
+      <li><strong>Institutional memory is fragile.</strong> People forget, contexts change, teams turn over. The Authority Stack externalises memory into versioned documents.</li>
+      <li><strong>AI assistants need constraints.</strong> AI coding assistants are powerful but directionless without governance. The Authority Stack provides constitutional boundaries.</li>
+    </ul>
+
+    <!-- Section 4: AOS -->
+    <h2 id="aos">4. AOS: The Autonomous Operations System</h2>
+
+    <h3>4.1 The Problem</h3>
+    <p>Even well-architected software degrades without active maintenance. Tests erode. Dependencies age. Dead code accumulates. Decision debt compounds. In traditional teams, this maintenance is distributed across team members. In a solo or small-team context, it must be systematised.</p>
+    <p>AOS (Autonomous Operations System) is a framework for measuring and maintaining system health autonomously.</p>
+
+    <h3>4.2 The Sovereignty Score</h3>
+    <p>A single number (0&ndash;100) that represents the system's current health, computed from 10 weighted components:</p>
+
+    <table>
+      <thead>
+        <tr><th>Component</th><th>Weight</th><th>What It Measures</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Build Health</td><td>15%</td><td>Can the system compile and build?</td></tr>
+        <tr><td>Test Health</td><td>15%</td><td>Do all tests pass?</td></tr>
+        <tr><td>Source Pipeline</td><td>10%</td><td>Are data sources responsive?</td></tr>
+        <tr><td>Dependency Freshness</td><td>10%</td><td>How current are dependencies?</td></tr>
+        <tr><td>Invariant Compliance</td><td>15%</td><td>Are all invariants satisfied?</td></tr>
+        <tr><td>File Size Compliance</td><td>5%</td><td>Are files within maintainability limits?</td></tr>
+        <tr><td>Decision Debt</td><td>10%</td><td>Are architectural decisions reviewed?</td></tr>
+        <tr><td>Strategic Alignment</td><td>5%</td><td>Does development match stated priorities?</td></tr>
+        <tr><td>Memory Health</td><td>5%</td><td>Is accumulated knowledge being utilised?</td></tr>
+        <tr><td>Metabolism</td><td>10%</td><td>Is the codebase alive or accumulating dead code?</td></tr>
+      </tbody>
+    </table>
+
+    <p><strong>Thresholds:</strong></p>
+    <div class="fw-thresholds">
+      <div class="fw-threshold-item">
+        <span class="fw-threshold-range" style="color: #22C55E;">90&ndash;100</span>
+        <span class="fw-threshold-name">Sovereign</span>
+        <span class="fw-threshold-desc">The system is self-sustaining</span>
+      </div>
+      <div class="fw-threshold-item">
+        <span class="fw-threshold-range" style="color: #60A5FA;">70&ndash;89</span>
+        <span class="fw-threshold-name">Healthy</span>
+        <span class="fw-threshold-desc">Minor attention needed</span>
+      </div>
+      <div class="fw-threshold-item">
+        <span class="fw-threshold-range" style="color: #F59E0B;">50&ndash;69</span>
+        <span class="fw-threshold-name">Degraded</span>
+        <span class="fw-threshold-desc">Targeted remediation required</span>
+      </div>
+      <div class="fw-threshold-item">
+        <span class="fw-threshold-range" style="color: #EF4444;">Below 50</span>
+        <span class="fw-threshold-name">Critical</span>
+        <span class="fw-threshold-desc">War room activation</span>
+      </div>
+    </div>
+
+    <p>The Sovereignty Score is not a vanity metric. It is a diagnostic tool &mdash; when it drops, the specific component that degraded tells you exactly where to focus.</p>
+
+    <h3>4.3 Decision Delegation</h3>
+    <p>Not all decisions require human judgment. AOS defines three tiers:</p>
+
+    <div class="fw-card-grid">
+      <div class="fw-card">
+        <div class="fw-card-label">Tier 1 &mdash; Autonomous</div>
+        <div class="fw-card-desc">The system handles these without asking. Build fixes, lint corrections, dependency patches, documentation sync, test maintenance.</div>
+      </div>
+      <div class="fw-card">
+        <div class="fw-card-label">Tier 2 &mdash; Recommend</div>
+        <div class="fw-card-desc">The system analyses options and presents them with trade-offs. Scoring algorithm changes, architecture modifications, feature additions, design changes.</div>
+      </div>
+      <div class="fw-card">
+        <div class="fw-card-label">Tier 3 &mdash; Human Only</div>
+        <div class="fw-card-desc">The system surfaces information but never initiates. Launch decisions, pricing changes, strategic pivots, security incidents, external communications.</div>
+      </div>
+    </div>
+
+    <p>This delegation matrix is itself governed by the Authority Stack &mdash; it can be modified only through DECISIONS.md.</p>
+
+    <h3>4.4 Operational Cadences</h3>
+    <p>Health checks run at four frequencies:</p>
+    <ul>
+      <li><strong>Session:</strong> Sovereignty delta, overdue cadences, escalation queue, immune scan</li>
+      <li><strong>Daily:</strong> Source health, build validation, test suite, file sizes, sovereignty score</li>
+      <li><strong>Weekly:</strong> Strategic drift detection, codebase metabolism, decision propagation, pre-launch checks</li>
+      <li><strong>Monthly:</strong> Decision replay, full invariant audit, wisdom crystallisation, dependency assessment, compound intelligence score</li>
+    </ul>
+
+    <h3>4.5 The Immune System</h3>
+    <p>AOS includes a biological metaphor: antibodies. When a bug is fixed, an antibody is created &mdash; a pattern that can detect similar bugs elsewhere in the codebase.</p>
+
+    <div class="fw-antibody"><span class="field">PATTERN:</span>  <span class="value">[vulnerability class]</span>
+<span class="field">FOUND IN:</span> <span class="value">[file:line]</span>
+<span class="field">FIX:</span>      <span class="value">[what was done]</span>
+<span class="field">SCAN FOR:</span> <span class="value">[regex or grep pattern to detect similar issues]</span></div>
+
+    <p>When an antibody is created, it scans: (1) the module containing the fix, (2) all files importing from the fixed module, (3) all files in the same language. This creates a spreading immune response &mdash; each bug fix makes the system more resistant to the entire class of bug, not just the specific instance.</p>
+
+    <h3>4.6 Compound Intelligence</h3>
+    <p>AOS tracks whether the system is getting smarter over time through six metrics:</p>
+
+    <table>
+      <thead>
+        <tr><th>Component</th><th>Weight</th><th>What "Smarter" Means</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Memory Utilisation</td><td>20%</td><td>Stored decisions are actually referenced in future work</td></tr>
+        <tr><td>Immune Effectiveness</td><td>20%</td><td>Antibodies prevent repeat bugs</td></tr>
+        <tr><td>Wisdom Accumulation</td><td>15%</td><td>Patterns are crystallised into principles</td></tr>
+        <tr><td>Quality Trend</td><td>20%</td><td>Quality gate pass rate is improving</td></tr>
+        <tr><td>Rework Trend</td><td>15%</td><td>Rework rate is declining</td></tr>
+        <tr><td>Session Productivity</td><td>10%</td><td>Each session produces more sovereignty improvement</td></tr>
+      </tbody>
+    </table>
+
+    <p>If the compound score increases month-over-month, the system is learning. If it decreases, something is degrading &mdash; and the specific component tells you what.</p>
+
+    <!-- Section 5: Triad in Practice -->
+    <h2 id="triad">5. The Triad in Practice</h2>
+
+    <p>PASIFA, the Authority Stack, and AOS are not independent systems. They form a closed loop:</p>
+
+    <div class="fw-triad">
+      <div class="fw-triad-row">
+        <div class="fw-triad-node">Authority Stack<br><small style="color: #8A8A8A; font-weight: 400;">governs</small></div>
+        <div class="fw-triad-arrow">&rarr;</div>
+        <div class="fw-triad-node">PASIFA<br><small style="color: #8A8A8A; font-weight: 400;">scores</small></div>
+        <div class="fw-triad-arrow">&rarr;</div>
+        <div class="fw-triad-node">AOS<br><small style="color: #8A8A8A; font-weight: 400;">maintains</small></div>
+      </div>
+      <div class="fw-triad-label">&larr;&mdash;&mdash;&mdash;&mdash;&mdash;&mdash;&mdash; feedback loop &mdash;&mdash;&mdash;&mdash;&mdash;&mdash;&mdash;&rarr;</div>
+    </div>
+
+    <ul>
+      <li>The <strong>Authority Stack</strong> defines what PASIFA must always do (invariants), how it should work (principles), and what has been decided (decisions)</li>
+      <li><strong>PASIFA</strong> operates within those constraints to score content for relevance</li>
+      <li><strong>AOS</strong> monitors PASIFA's health, detects degradation, and escalates when invariants are at risk</li>
+      <li><strong>Feedback</strong> from AOS operations (bugs found, patterns crystallised, decisions replayed) updates the Authority Stack</li>
+    </ul>
+
+    <p>Each system makes the others more effective. The Authority Stack prevents PASIFA from drifting. AOS prevents the Authority Stack from becoming stale. PASIFA provides the scoring that AOS measures and maintains.</p>
+
+    <!-- Section 6: Privacy as Architecture -->
+    <h2 id="privacy">6. Privacy as Architecture, Not Policy</h2>
+
+    <p>Most software claims privacy through policy: "We don't sell your data." "We use encryption." "Read our privacy policy."</p>
+    <p>4DA claims privacy through architecture: <strong>it is structurally impossible for data to leave the machine without the user's explicit action.</strong></p>
+
+    <h3>6.1 How This Is Enforced</h3>
+
+    <table>
+      <thead>
+        <tr><th>Layer</th><th>Mechanism</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>CSP</td><td>Restricts all network requests to a whitelist: user's own API providers, public data sources, local Ollama. No 4DA-owned endpoints.</td></tr>
+        <tr><td>Keychain</td><td>API keys stored in OS-level secure storage (Windows Credential Manager, macOS Keychain, Linux Secret Service). Never in plaintext on disk.</td></tr>
+        <tr><td>Zero Telemetry</td><td>No analytics, no tracking, no phone-home, no error reporting to any external service.</td></tr>
+        <tr><td>Secrets Scanning</td><td>23+ pattern detectors prevent API keys, credentials, private keys, PII from ever entering version control.</td></tr>
+        <tr><td>Local Database</td><td>SQLite on the user's filesystem. No cloud sync unless explicitly enabled through encrypted Team Sync.</td></tr>
+        <tr><td>INV-004</td><td>"NO data leaves the machine without explicit user consent" &mdash; non-negotiable, violation = critical bug.</td></tr>
+        <tr><td>W-2</td><td>"Data that can leak will leak. Enforce by structure, not policy." &mdash; the architectural philosophy.</td></tr>
+      </tbody>
+    </table>
+
+    <h3>6.2 Why Architecture Beats Policy</h3>
+
+    <p><strong>Policy depends on trust.</strong> The user must believe that the company will honour its promises. This trust is:</p>
+    <ul>
+      <li><strong class="fw-compare-policy">Fragile</strong> &mdash; One breach destroys it</li>
+      <li><strong class="fw-compare-policy">Unverifiable</strong> &mdash; Users cannot audit a cloud service</li>
+      <li><strong class="fw-compare-policy">Revocable</strong> &mdash; Terms of service can change</li>
+    </ul>
+
+    <p><strong>Architecture depends on structure.</strong> The user can verify that data stays local by:</p>
+    <ul>
+      <li><strong class="fw-compare-arch">Reading the CSP</strong> in the Tauri configuration</li>
+      <li><strong class="fw-compare-arch">Monitoring network traffic</strong> during operation</li>
+      <li><strong class="fw-compare-arch">Auditing the source code</strong> (FSL-1.1 makes it available)</li>
+    </ul>
+
+    <p>Architecture-based privacy is a one-way door. Once you build a system that works without exfiltrating data, you cannot "accidentally" add telemetry &mdash; it would violate the CSP, the invariants, the pre-commit hooks, and the CI pipeline simultaneously.</p>
+
+    <!-- Section 7: Compound Knowledge -->
+    <h2 id="compound">7. The Compound Knowledge Thesis</h2>
+
+    <p>The central thesis of 4DA is that <strong>a private intelligence system compounds knowledge in ways that cloud systems cannot.</strong></p>
+
+    <h3>7.1 Why Cloud Systems Plateau</h3>
+    <p>Cloud recommendation systems improve by aggregating data across users. This creates a cold-start problem (new users get generic recommendations) and a convergence problem (all users eventually see similar content). The system converges toward the average user, not the individual.</p>
+
+    <h3>7.2 Why Local Systems Compound</h3>
+    <p>A local system that learns from one user's behaviour &mdash; their codebase, their feedback, their reading patterns, their git activity &mdash; develops an increasingly precise model of that individual's relevance function.</p>
+    <p>This precision compounds:</p>
+
+    <div class="fw-timeline">
+      <div class="fw-timeline-item">
+        <div class="fw-timeline-label">Month 1</div>
+        <div class="fw-timeline-text">The system knows your declared interests</div>
+      </div>
+      <div class="fw-timeline-item">
+        <div class="fw-timeline-label">Month 3</div>
+        <div class="fw-timeline-text">The system has learned your feedback patterns and adjusted scoring</div>
+      </div>
+      <div class="fw-timeline-item">
+        <div class="fw-timeline-label">Month 6</div>
+        <div class="fw-timeline-text">The system has a taste embedding that captures your holistic preferences</div>
+      </div>
+      <div class="fw-timeline-item">
+        <div class="fw-timeline-label">Month 12</div>
+        <div class="fw-timeline-text">The system's calibration deltas have corrected systematic biases specific to your domain</div>
+      </div>
+    </div>
+
+    <p>A competitor who clones the code gets the algorithm but not the calibration. A cloud competitor who aggregates across users gets breadth but not depth. The compound advantage is personal and non-transferable.</p>
+
+    <h3>7.3 The Network Extension</h3>
+    <p>The compound thesis extends to teams through encrypted metadata sharing:</p>
+    <ul>
+      <li>Each node (4DA instance) develops deep individual intelligence</li>
+      <li>Metadata (not raw data) can be shared through encrypted relays</li>
+      <li>Each node interprets shared metadata through its own local context</li>
+      <li>The network becomes collectively smarter without any node sacrificing sovereignty</li>
+    </ul>
+    <p>This is the "dumb relay, smart clients" architecture: the relay server sees only encrypted blobs. Intelligence is distributed. No single point of failure. No single point of surveillance.</p>
+
+    <!-- Section 8: Adoption -->
+    <h2 id="adoption">8. Principles for Adoption</h2>
+
+    <p>The 4DA Framework is published openly. These principles guide adoption:</p>
+
+    <h3>For Tool Builders</h3>
+    <ol>
+      <li><strong>Score, don't rank.</strong> Relevance is multi-dimensional. A single sorted list destroys the information that multiple axes provide. Show the user WHY something is relevant, not just THAT it is.</li>
+      <li><strong>Gate, don't threshold.</strong> A simple score threshold allows single-axis flukes. A confirmation gate requires independent agreement. This is the difference between a heuristic and a methodology.</li>
+      <li><strong>Govern, don't document.</strong> Documentation describes. Governance constrains. An invariant is not a "best practice" &mdash; it is a structural guarantee with a violation protocol.</li>
+      <li><strong>Measure, don't assume.</strong> System health is not "it works" or "it doesn't." It is a score with components. When the score drops, the components tell you why.</li>
+      <li><strong>Compound, don't aggregate.</strong> Individual depth beats collective breadth for personal relevance. Build systems that get smarter for one user, not systems that get average across many.</li>
+    </ol>
+
+    <h3>For Organisations</h3>
+    <ol>
+      <li><strong>Build an Authority Stack.</strong> Start with invariants (what must never break), add principles (how you work), then decisions (what was chosen and why). This costs a day to set up and saves months of re-litigation.</li>
+      <li><strong>Automate the immune system.</strong> Every bug fix should generate an antibody. Every antibody should scan the codebase. This turns each incident into a permanent defensive improvement.</li>
+      <li><strong>Measure sovereignty.</strong> Define the components of your system's health. Weight them. Compute a score. Track it over time. When it drops, the component weights tell you where to focus.</li>
+      <li><strong>Make privacy structural.</strong> If your system claims privacy, enforce it through architecture (CSP, keychain, local storage), not policy (privacy pages, terms of service). Architecture is verifiable. Policy is not.</li>
+    </ol>
+
+    <h3>For the Industry</h3>
+    <p>If these ideas become the standard &mdash; if PASIFA-style multi-axis scoring, Authority Stack governance, and AOS operational frameworks become expected &mdash; then every tool that adopts them validates the approach. The industry moves toward privacy-first, structurally-governed, compound-knowledge systems.</p>
+    <p>That is the outcome we are building toward.</p>
+
+    <!-- Glossary -->
+    <h2 id="glossary">Appendix A: Glossary</h2>
+
+    <table>
+      <thead>
+        <tr><th>Term</th><th>Definition</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>4DA</td><td>4 Dimensional Autonomy &mdash; the application and framework</td></tr>
+        <tr><td>ACE</td><td>Autonomous Context Engine &mdash; zero-config local project scanner</td></tr>
+        <tr><td>AOS</td><td>Autonomous Operations System &mdash; operational health framework</td></tr>
+        <tr><td>Authority Stack</td><td>Hierarchical governance: Invariants &gt; Wisdom &gt; Decisions &gt; Failure Modes</td></tr>
+        <tr><td>Confirmation Gate</td><td>Requirement for 2+ independent axes to confirm relevance</td></tr>
+        <tr><td>Compound Knowledge</td><td>Intelligence that deepens for a specific user over time</td></tr>
+        <tr><td>PASIFA</td><td>Privacy-Aware Semantic Intelligence Framework for Analysis</td></tr>
+        <tr><td>Sovereignty Score</td><td>0&ndash;100 health metric computed from 10 weighted components</td></tr>
+        <tr><td>Taste Embedding</td><td>384-dim vector representing a user's holistic preferences</td></tr>
+        <tr><td>Zero Zone</td><td>Structural impossibility that admits no override</td></tr>
+      </tbody>
+    </table>
+
+    <!-- Reference Implementation -->
+    <h2 id="reference">Appendix B: Reference Implementation</h2>
+    <p>The reference implementation of the 4DA Framework is the 4DA application itself:</p>
+    <ul>
+      <li><strong>Source code:</strong> Available under FSL-1.1-Apache-2.0 license</li>
+      <li><strong>Scoring pipeline:</strong> <code>src-tauri/src/scoring/</code> (14 modules, ~9,200 lines of Rust)</li>
+      <li><strong>Authority Stack:</strong> <code>.ai/</code> directory (WISDOM.md, INVARIANTS.md, DECISIONS.md, FAILURE_MODES.md)</li>
+      <li><strong>AOS:</strong> <code>.ai/OPS.md</code> + <code>scripts/</code> (21 validation and operational scripts)</li>
+      <li><strong>Website:</strong> <a href="https://4da.ai">4da.ai</a></li>
+    </ul>
+
+    <!-- Closing -->
+    <div class="fw-closing">
+      <p class="fw-closing-quote">The strongest competitive position is not to have the best code. It is to define the standard that everyone else builds toward.</p>
+      <p class="fw-closing-attribution">Published by 4DA Systems Pty Ltd (ACN 696 078 841). March 2026.</p>
+    </div>
+  </div>
+
+  <div class="fw-footer">
+    <div class="container">
+      <p class="fw-footer-pub">Published by 4DA Systems Pty Ltd</p>
+      <div class="fw-footer-links">
+        <a href="/">Home</a>
+        <a href="/privacy">Privacy Policy</a>
+        <a href="/terms">Terms of Service</a>
+        <a href="mailto:support@4da.ai">support@4da.ai</a>
+      </div>
+    </div>
+  </div>
+{% endblock %}
