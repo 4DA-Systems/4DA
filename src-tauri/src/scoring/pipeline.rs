@@ -78,29 +78,28 @@ pub(crate) fn score_item(
     // Zero-vector fallback (when Ollama is unavailable) produces identical KNN distances
     // for all items, collapsing context_score to a uniform value.
     let has_real_embedding = input.embedding.iter().any(|&v| v != 0.0);
-    let matches: Vec<RelevanceMatch> =
-        if ctx.cached_context_count > 0 && has_real_embedding {
-            db.find_similar_contexts(input.embedding, 3)
-                .unwrap_or_default()
-                .into_iter()
-                .map(|result| {
-                    let similarity = 1.0 / (1.0 + result.distance);
-                    let matched_text = if result.text.len() > 100 {
-                        let truncated: String = result.text.chars().take(100).collect();
-                        format!("{}...", truncated)
-                    } else {
-                        result.text
-                    };
-                    RelevanceMatch {
-                        source_file: result.source_file,
-                        matched_text,
-                        similarity,
-                    }
-                })
-                .collect()
-        } else {
-            vec![]
-        };
+    let matches: Vec<RelevanceMatch> = if ctx.cached_context_count > 0 && has_real_embedding {
+        db.find_similar_contexts(input.embedding, 3)
+            .unwrap_or_default()
+            .into_iter()
+            .map(|result| {
+                let similarity = 1.0 / (1.0 + result.distance);
+                let matched_text = if result.text.len() > 100 {
+                    let truncated: String = result.text.chars().take(100).collect();
+                    format!("{}...", truncated)
+                } else {
+                    result.text
+                };
+                RelevanceMatch {
+                    source_file: result.source_file,
+                    matched_text,
+                    similarity,
+                }
+            })
+            .collect()
+    } else {
+        vec![]
+    };
 
     // Raw scores from embedding similarity (compressed in ~0.40-0.56 range)
     let raw_context = matches.first().map(|m| m.similarity).unwrap_or(0.0);
