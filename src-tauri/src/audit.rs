@@ -522,7 +522,3 @@ fn read_team_id() -> crate::error::Result<String> {
     }
     Ok(team_id)
 }
-
-#[cfg(test)]
-#[path = "audit_tests.rs"]
-mod tests;

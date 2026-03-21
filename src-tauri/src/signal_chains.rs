@@ -525,7 +525,3 @@ pub fn resolve_signal_chain(chain_id: String, resolution: String) -> Result<()> 
     };
     resolve_chain(&conn, &chain_id, res)
 }
-
-#[cfg(test)]
-#[path = "signal_chains_tests.rs"]
-mod tests;

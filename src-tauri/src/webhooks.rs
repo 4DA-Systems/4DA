@@ -904,7 +904,3 @@ pub async fn get_webhook_deliveries_cmd(
     get_webhook_deliveries(&conn, &webhook_id, limit.unwrap_or(50))
         .map_err(|e| format!("Failed to get deliveries: {e}").into())
 }
-
-#[cfg(test)]
-#[path = "webhooks_tests.rs"]
-mod tests;

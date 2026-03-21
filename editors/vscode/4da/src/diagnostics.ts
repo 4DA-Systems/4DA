@@ -1,12 +1,17 @@
 import * as vscode from 'vscode';
 import type { MCPClient } from './mcpClient';
+import type { StatusBarManager } from './statusBar';
 
 export class DiagnosticsManager implements vscode.Disposable {
     private collection: vscode.DiagnosticCollection;
     private disposables: vscode.Disposable[] = [];
     private refreshTimer: ReturnType<typeof setTimeout> | undefined;
+    private client: MCPClient;
+    private statusBar: StatusBarManager | undefined;
 
-    constructor(private client: MCPClient) {
+    constructor(client: MCPClient, statusBar?: StatusBarManager) {
+        this.client = client;
+        this.statusBar = statusBar;
         this.collection = vscode.languages.createDiagnosticCollection('4da');
 
         const watcher = vscode.workspace.createFileSystemWatcher(
@@ -26,7 +31,11 @@ export class DiagnosticsManager implements vscode.Disposable {
 
     private async doRefresh() {
         const editor = vscode.window.activeTextEditor;
-        if (!editor) return;
+        if (!editor) {
+            // No editor — clear file alert count
+            this.statusBar?.setFileAlertCount(0);
+            return;
+        }
 
         const doc = editor.document;
         const diagnostics: vscode.Diagnostic[] = [];
@@ -55,6 +64,13 @@ export class DiagnosticsManager implements vscode.Disposable {
         }
 
         this.collection.set(doc.uri, diagnostics);
+
+        // Update status bar with file-specific alert count
+        const alertCount = diagnostics.filter(
+            d => d.severity === vscode.DiagnosticSeverity.Error ||
+                 d.severity === vscode.DiagnosticSeverity.Warning
+        ).length;
+        this.statusBar?.setFileAlertCount(alertCount);
     }
 
     dispose() {

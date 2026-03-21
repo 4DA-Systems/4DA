@@ -113,12 +113,22 @@ function LoadingSkeleton() {
 // DependencyDashboard
 // ============================================================================
 
+interface AceScanSummary {
+  projects_scanned: number;
+  total_dependencies: number;
+  primary_stack: string;
+  languages: string[];
+  frameworks: string[];
+  has_data: boolean;
+}
+
 const DependencyDashboard = memo(function DependencyDashboard() {
   const [overview, setOverview] = useState<OverviewData | null>(null);
   const [selectedProject, setSelectedProject] = useState<string | null>(null);
   const [projectDeps, setProjectDeps] = useState<DepEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingProject, setLoadingProject] = useState(false);
+  const [scanSummary, setScanSummary] = useState<AceScanSummary | null>(null);
 
   // Fetch overview on mount
   useEffect(() => {
@@ -171,6 +181,15 @@ const DependencyDashboard = memo(function DependencyDashboard() {
     return overview.projects.find(p => p.path === selectedProject) ?? null;
   }, [overview, selectedProject]);
 
+  // Fetch ACE scan summary when no dependency data is available
+  useEffect(() => {
+    if (!loading && (!overview || overview.total_dependencies === 0)) {
+      cmd('ace_get_scan_summary')
+        .then((data) => setScanSummary(data as unknown as AceScanSummary))
+        .catch(() => {});
+    }
+  }, [loading, overview]);
+
   if (loading) return <LoadingSkeleton />;
 
   if (!overview || overview.total_dependencies === 0) {
@@ -183,13 +202,30 @@ const DependencyDashboard = memo(function DependencyDashboard() {
           </p>
         </div>
         <div className="p-5">
-          <div className="bg-bg-primary rounded-lg border border-border/50 p-6 text-center">
-            <p className="text-sm text-text-muted mb-2">No dependency data available</p>
-            <p className="text-xs text-text-muted/60 leading-relaxed">
-              Run a context scan to detect your projects and dependencies.
-              4DA will index them automatically from your manifests.
-            </p>
-          </div>
+          {scanSummary && scanSummary.has_data ? (
+            <div className="bg-bg-primary rounded-lg border border-border/50 p-6 text-center">
+              <div className="flex items-center justify-center gap-2 mb-2">
+                <div className="w-2 h-2 rounded-full bg-accent-gold/60 animate-pulse" />
+                <p className="text-sm text-text-secondary">
+                  4DA detected: {scanSummary.primary_stack || scanSummary.languages.join(', ')}
+                </p>
+              </div>
+              <p className="text-xs text-text-muted mb-4">
+                {scanSummary.total_dependencies} dependencies across {scanSummary.projects_scanned} project{scanSummary.projects_scanned !== 1 ? 's' : ''}
+              </p>
+              <p className="text-xs text-text-muted/60 leading-relaxed">
+                Run a dependency scan to unlock vulnerability tracking and cross-project analysis.
+              </p>
+            </div>
+          ) : (
+            <div className="bg-bg-primary rounded-lg border border-border/50 p-6 text-center">
+              <p className="text-sm text-text-muted mb-2">No dependency data available</p>
+              <p className="text-xs text-text-muted/60 leading-relaxed">
+                Run a context scan to detect your projects and dependencies.
+                4DA will index them automatically from your manifests.
+              </p>
+            </div>
+          )}
         </div>
       </div>
     );

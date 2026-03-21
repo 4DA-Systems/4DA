@@ -1,5 +1,7 @@
-import { memo, useState, useMemo, useCallback } from 'react';
+import { memo, useState, useEffect, useMemo, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
+import { listen } from '@tauri-apps/api/event';
+import { cmd } from '../../lib/commands';
 import { DigestView } from '../DigestView';
 import { CommunityInsights } from '../CommunityInsights';
 import { DecisionWindowsPanel } from '../DecisionWindowsPanel';
@@ -58,6 +60,60 @@ export const BriefingContentPanel = memo(function BriefingContentPanel({
   const { t } = useTranslation();
 
   const [gapExpanded, setGapExpanded] = useState(false);
+
+  // Standing query proactive nudge
+  const [topEngagedTopic, setTopEngagedTopic] = useState<{ topic: string; count: number } | null>(null);
+  const [nudgeDismissed, setNudgeDismissed] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    Promise.allSettled([
+      cmd('ace_get_topic_affinities'),
+      cmd('list_standing_queries'),
+    ]).then(([affinitiesResult, queriesResult]) => {
+      if (cancelled) return;
+      if (affinitiesResult.status !== 'fulfilled') return;
+      const affinities = affinitiesResult.value?.affinities ?? [];
+      const rawQueries = queriesResult.status === 'fulfilled' ? queriesResult.value : [];
+      const queries = Array.isArray(rawQueries) ? rawQueries : [];
+      const queryTopics = new Set(queries.map((q: { query_text: string }) => q.query_text?.toLowerCase?.() ?? ''));
+      // Find the top engaged topic that doesn't already have a standing query
+      const candidate = affinities
+        .filter((a: { topic: string; positive_signals: number }) =>
+          a.positive_signals >= 3 && !queryTopics.has(a.topic.toLowerCase()))
+        .sort((a: { positive_signals: number }, b: { positive_signals: number }) =>
+          b.positive_signals - a.positive_signals)[0];
+      if (candidate) {
+        setTopEngagedTopic({ topic: candidate.topic, count: candidate.positive_signals });
+      }
+    });
+    return () => { cancelled = true; };
+  }, []);
+
+  const handleCreateWatch = useCallback(async (topic: string) => {
+    try {
+      await cmd('create_standing_query', { queryText: topic });
+      setTopEngagedTopic(null);
+    } catch {
+      // Non-critical — silently fail
+    }
+  }, []);
+
+  // Analysis narration — live feed of what 4DA is doing
+  const [narration, setNarration] = useState<string | null>(null);
+
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const unlisten = listen<{ narration_type: string; message: string }>('analysis-narration', (event) => {
+      setNarration(event.payload?.message || null);
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(() => setNarration(null), 3000);
+    });
+    return () => {
+      unlisten.then(fn => fn());
+      if (timer) clearTimeout(timer);
+    };
+  }, []);
 
   // Intelligence gaps -- non-healthy sources
   const gaps = useMemo(
@@ -124,6 +180,14 @@ export const BriefingContentPanel = memo(function BriefingContentPanel({
 
   return (
     <>
+      {/* Analysis narration — live feed of what 4DA is analyzing */}
+      {narration && (
+        <div className="px-4 py-2 text-xs text-text-muted/70 flex items-center gap-2 animate-pulse">
+          <div className="w-1.5 h-1.5 rounded-full bg-accent-gold flex-shrink-0" />
+          {narration}
+        </div>
+      )}
+
       {/* 0a. Weekly Digest */}
       <DigestView />
 
@@ -164,6 +228,30 @@ export const BriefingContentPanel = memo(function BriefingContentPanel({
         onDismiss={onDismiss}
         onRecordClick={onRecordClick}
       />
+
+      {/* 4b. Standing query proactive nudge */}
+      {topEngagedTopic && !nudgeDismissed && (
+        <div className="bg-bg-tertiary rounded-lg border border-border/30 p-3">
+          <p className="text-xs text-text-secondary">
+            You've engaged with {topEngagedTopic.count} articles about{' '}
+            <span className="text-text-primary font-medium">{topEngagedTopic.topic}</span> recently.
+          </p>
+          <div className="flex items-center gap-3 mt-1.5">
+            <button
+              onClick={() => handleCreateWatch(topEngagedTopic.topic)}
+              className="text-xs text-accent-gold hover:text-white transition-colors"
+            >
+              Watch for more?
+            </button>
+            <button
+              onClick={() => setNudgeDismissed(true)}
+              className="text-xs text-text-muted hover:text-text-secondary transition-colors"
+            >
+              Dismiss
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* 5. Briefing content */}
       <div className="bg-bg-secondary rounded-lg border border-orange-500/20 overflow-hidden">
