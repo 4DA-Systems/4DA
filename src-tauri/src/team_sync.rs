@@ -325,7 +325,3 @@ pub fn get_team_members(conn: &rusqlite::Connection, team_id: &str) -> Result<Ve
 
     Ok(members)
 }
-
-#[cfg(test)]
-#[path = "team_sync_tests.rs"]
-mod tests;

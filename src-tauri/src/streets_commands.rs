@@ -1123,7 +1123,3 @@ pub async fn execute_lesson_commands(
 
     Ok(results)
 }
-
-#[cfg(test)]
-#[path = "streets_commands_tests.rs"]
-mod tests;

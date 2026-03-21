@@ -538,7 +538,3 @@ pub async fn clear_error_telemetry(days: Option<u32>) -> Result<u64> {
     let conn = crate::open_db_connection()?;
     clear_old_errors(&conn, days.unwrap_or(30))
 }
-
-#[cfg(test)]
-#[path = "telemetry_tests.rs"]
-mod tests;

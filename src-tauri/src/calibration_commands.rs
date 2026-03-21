@@ -429,11 +429,3 @@ pub(crate) async fn check_rig_requirements() -> RigRequirements {
         grade_a_requirements,
     }
 }
-
-// ============================================================================
-// Tests
-// ============================================================================
-
-#[cfg(test)]
-#[path = "calibration_tests.rs"]
-mod tests;

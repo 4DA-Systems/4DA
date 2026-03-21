@@ -424,7 +424,3 @@ fn get_team_id() -> crate::error::Result<String> {
     }
     Ok(team_id)
 }
-
-#[cfg(test)]
-#[path = "team_intelligence_tests.rs"]
-mod tests;

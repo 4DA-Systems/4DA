@@ -7,8 +7,10 @@ import { MCPClient } from './mcpClient';
 
 let statusBar: StatusBarManager;
 let diagnostics: DiagnosticsManager;
+let panelProvider: SignalPanelProvider;
 let mcpClient: MCPClient;
 let refreshInterval: ReturnType<typeof setInterval> | undefined;
+let lastSecurityCount = -1;
 
 export async function activate(context: vscode.ExtensionContext) {
     mcpClient = new MCPClient();
@@ -27,10 +29,11 @@ export async function activate(context: vscode.ExtensionContext) {
     context.subscriptions.push(statusBar);
 
     // Signal panel — sidebar webview with signal feed
-    const panelProvider = new SignalPanelProvider(context.extensionUri, mcpClient);
+    panelProvider = new SignalPanelProvider(context.extensionUri, mcpClient);
     context.subscriptions.push(
         vscode.window.registerWebviewViewProvider('4da.signalPanel', panelProvider)
     );
+    context.subscriptions.push(panelProvider);
 
     // Hover provider — dependency info on import statements
     const hoverProvider = new HoverProvider(mcpClient);
@@ -45,7 +48,7 @@ export async function activate(context: vscode.ExtensionContext) {
     }
 
     // Diagnostics — inline vulnerability warnings
-    diagnostics = new DiagnosticsManager(mcpClient);
+    diagnostics = new DiagnosticsManager(mcpClient, statusBar);
     context.subscriptions.push(diagnostics);
 
     // Commands
@@ -63,17 +66,49 @@ export async function activate(context: vscode.ExtensionContext) {
         })
     );
 
-    // Periodic refresh
+    // Periodic refresh with security alert detection
     const config = vscode.workspace.getConfiguration('4da');
     const interval = (config.get<number>('refreshInterval') ?? 300) * 1000;
-    refreshInterval = setInterval(() => {
-        statusBar.refresh();
+    refreshInterval = setInterval(async () => {
+        await statusBar.refresh();
         diagnostics.refresh();
+        await checkSecurityAlerts();
     }, interval);
 
     // Initial load
     await statusBar.refresh();
     diagnostics.refresh();
+    await checkSecurityAlerts();
+}
+
+/**
+ * Check for security alerts and show toast notifications when new ones appear.
+ * Only fires when the count changes to avoid notification spam.
+ */
+async function checkSecurityAlerts() {
+    try {
+        const signals = await mcpClient.getSignals();
+        const securitySignals = signals.filter(
+            s => s.signalType === 'security_alert'
+        );
+        const count = securitySignals.length;
+
+        if (count > 0 && count !== lastSecurityCount && lastSecurityCount !== -1) {
+            const msg = count === 1
+                ? `4DA: Security alert — ${securitySignals[0].title}`
+                : `4DA: ${count} security alerts detected`;
+
+            vscode.window.showWarningMessage(msg, 'View Details').then(action => {
+                if (action === 'View Details') {
+                    vscode.commands.executeCommand('4da.showSignals');
+                }
+            });
+        }
+
+        lastSecurityCount = count;
+    } catch {
+        // Silently fail — security check is non-critical
+    }
 }
 
 export function deactivate() {

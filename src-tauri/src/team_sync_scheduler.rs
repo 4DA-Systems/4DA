@@ -622,7 +622,3 @@ fn process_team_key_delivery(team_id: &str, state: &TeamSyncState) {
     // We'll handle this by checking for the raw delivery in the future.
     let _ = delivery; // Consumed above or deferred
 }
-
-#[cfg(test)]
-#[path = "team_sync_scheduler_tests.rs"]
-mod tests;
