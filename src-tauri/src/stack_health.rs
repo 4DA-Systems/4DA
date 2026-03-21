@@ -384,7 +384,7 @@ fn status_rank(status: &str) -> u8 {
 // ============================================================================
 
 /// Get full stack health report.
-/// NO Pro gate — this is the hook that makes free users want Pro.
+/// NO Signal gate — this is the hook that makes free users want Signal.
 #[tauri::command]
 pub async fn get_stack_health() -> Result<StackHealth> {
     let conn = crate::open_db_connection()?;
@@ -392,7 +392,7 @@ pub async fn get_stack_health() -> Result<StackHealth> {
 }
 
 /// Get missed intelligence signals for detected stack.
-/// NO Pro gate on counts. The example_titles field shows top 3 always (the teaser).
+/// NO Signal gate on counts. The example_titles field shows top 3 always (the teaser).
 #[tauri::command]
 pub async fn get_missed_intelligence(days: Option<u32>) -> Result<MissedIntelligence> {
     let conn = crate::open_db_connection()?;

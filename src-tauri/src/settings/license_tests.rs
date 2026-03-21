@@ -79,24 +79,39 @@ mod tests {
             activated_at: None,
             trial_started_at: None,
         };
-        assert!(!is_pro_feature_available("generate_ai_briefing", &free));
-        assert!(is_pro_feature_available("some_free_feature", &free));
+        // Signal-gated features should be blocked for free users
+        assert!(!is_signal_feature_available("get_attention_report", &free));
+        assert!(is_signal_feature_available("some_free_feature", &free));
 
         let signal = LicenseConfig {
             tier: "signal".to_string(),
             ..free.clone()
         };
-        assert!(is_pro_feature_available("generate_ai_briefing", &signal));
+        assert!(is_signal_feature_available("get_attention_report", &signal));
 
         // Legacy "pro" tier should still work
         let legacy_pro = LicenseConfig {
             tier: "pro".to_string(),
             ..free.clone()
         };
-        assert!(is_pro_feature_available(
-            "generate_ai_briefing",
+        assert!(is_signal_feature_available(
+            "get_attention_report",
             &legacy_pro
         ));
+    }
+
+    #[test]
+    fn briefing_features_available_to_free_users() {
+        let free = LicenseConfig {
+            tier: "free".to_string(),
+            license_key: String::new(),
+            activated_at: None,
+            trial_started_at: None,
+        };
+        // Briefing features use BYOK model — available to all users
+        assert!(is_signal_feature_available("generate_ai_briefing", &free));
+        assert!(is_signal_feature_available("get_latest_briefing", &free));
+        assert!(is_signal_feature_available("generate_weekly_digest", &free));
     }
 
     /// Verify LicenseConfig survives a JSON serialization roundtrip.

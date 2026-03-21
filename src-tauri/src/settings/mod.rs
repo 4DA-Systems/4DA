@@ -171,6 +171,9 @@ pub struct MonitoringConfig {
     /// Persisted so restart doesn't re-trigger today's briefing.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub last_briefing_date: Option<String>,
+    /// Whether 4DA launches automatically at system startup (default: false)
+    #[serde(default)]
+    pub launch_at_startup: Option<bool>,
 }
 
 fn default_notification_threshold() -> String {
@@ -189,6 +192,7 @@ impl Default for MonitoringConfig {
             morning_briefing: None, // Defaults to true via unwrap_or(true)
             briefing_time: None,    // Defaults to "08:00"
             last_briefing_date: None,
+            launch_at_startup: None,
         }
     }
 }

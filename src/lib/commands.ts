@@ -118,6 +118,8 @@ interface CommandMap {
   validate_api_key: { params: { provider: string; key: string; baseUrl?: string | null }; result: { valid: boolean; format_ok: boolean; connection_ok: boolean; error: string | null; model_access: string[] } };
   run_calibration: { params: Record<string, never>; result: CalibrationResult };
   set_close_to_tray: { params: { enabled: boolean }; result: void };
+  set_launch_at_startup: { params: { enabled: boolean }; result: { launch_at_startup: boolean; message: string } };
+  get_launch_at_startup: { params: Record<string, never>; result: boolean };
   record_interaction: { params: { sourceItemId: number; action: string }; result: { success: boolean } };
 
   // -- Taste Test Calibration --
