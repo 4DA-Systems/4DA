@@ -260,11 +260,7 @@ async fn test_ollama_connection_impl(llm: &LLMProvider) -> Result<serde_json::Va
 #[tauri::command]
 pub async fn check_ollama_status(base_url: Option<String>) -> Result<serde_json::Value> {
     let url = base_url.unwrap_or_else(|| "http://localhost:11434".to_string());
-    let client = reqwest::Client::builder()
-        .connect_timeout(std::time::Duration::from_secs(5))
-        .timeout(std::time::Duration::from_secs(15))
-        .build()
-        .map_err(|e| format!("Failed to create HTTP client: {}", e))?;
+    let client = crate::http_client::PROBE_CLIENT.clone();
 
     // Check if Ollama is running
     let version_url = format!("{}/api/version", url);
@@ -405,11 +401,7 @@ pub async fn list_provider_models(
     base_url: Option<String>,
     api_key: Option<String>,
 ) -> Result<serde_json::Value> {
-    let client = reqwest::Client::builder()
-        .connect_timeout(std::time::Duration::from_secs(5))
-        .timeout(std::time::Duration::from_secs(15))
-        .build()
-        .map_err(|e| format!("Failed to create HTTP client: {e}"))?;
+    let client = crate::http_client::PROBE_CLIENT.clone();
 
     match provider.as_str() {
         "ollama" => {

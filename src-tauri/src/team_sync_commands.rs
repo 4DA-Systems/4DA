@@ -432,11 +432,7 @@ pub async fn create_team(relay_url: String, display_name: String) -> Result<serd
     let team_id = uuid::Uuid::new_v4().to_string();
 
     // Call relay to create team
-    let http = reqwest::Client::builder()
-        .user_agent("4DA-TeamSync/1.0")
-        .timeout(std::time::Duration::from_secs(15))
-        .build()
-        .map_err(|e| format!("HTTP client error: {e}"))?;
+    let http = crate::http_client::TEAM_CLIENT.clone();
 
     let url = format!("{}/teams", relay_url.trim_end_matches('/'));
     let body = serde_json::json!({
@@ -574,11 +570,7 @@ pub async fn create_team_invite(
         )
     };
 
-    let http = reqwest::Client::builder()
-        .user_agent("4DA-TeamSync/1.0")
-        .timeout(std::time::Duration::from_secs(15))
-        .build()
-        .map_err(|e| format!("HTTP client error: {e}"))?;
+    let http = crate::http_client::TEAM_CLIENT.clone();
 
     let url = format!(
         "{}/teams/{}/invites",
@@ -649,11 +641,7 @@ pub async fn join_team_via_invite(
     let client_id = uuid::Uuid::new_v4().to_string();
 
     // Call relay to join via invite
-    let http = reqwest::Client::builder()
-        .user_agent("4DA-TeamSync/1.0")
-        .timeout(std::time::Duration::from_secs(15))
-        .build()
-        .map_err(|e| format!("HTTP client error: {e}"))?;
+    let http = crate::http_client::TEAM_CLIENT.clone();
 
     let url = format!("{}/auth/invite", relay_url.trim_end_matches('/'));
     let body = serde_json::json!({

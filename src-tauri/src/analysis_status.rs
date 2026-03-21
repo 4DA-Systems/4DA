@@ -472,18 +472,22 @@ pub(crate) async fn get_analysis_status() -> Result<AnalysisState> {
     drop(guard);
 
     // Free-tier history gate: filter out items older than 30 days
+    // Uses batch query to avoid N+1 per-item DB lookups
     if !crate::settings::is_signal() {
         if let Some(ref mut results) = result.results {
             let cutoff =
                 chrono::Utc::now() - chrono::Duration::hours(crate::db::FREE_HISTORY_LIMIT_HOURS);
             if let Ok(db) = get_database() {
-                results.retain(|item| {
-                    match db.get_source_item_by_id(item.id as i64) {
-                        Ok(Some(stored)) => stored.created_at >= cutoff,
-                        // If we can't look up the item, keep it (fail open for UX)
-                        _ => true,
-                    }
-                });
+                let ids: Vec<i64> = results.iter().map(|item| item.id as i64).collect();
+                if let Ok(created_dates) = db.get_created_at_batch(&ids) {
+                    results.retain(|item| {
+                        match created_dates.get(&(item.id as i64)) {
+                            Some(created_at) => *created_at >= cutoff,
+                            // If we can't look up the item, keep it (fail open for UX)
+                            None => true,
+                        }
+                    });
+                }
             }
         }
     }
