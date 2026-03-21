@@ -6,6 +6,7 @@ import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../store';
 import { useShallow } from 'zustand/react/shallow';
 import { ViewErrorBoundary } from './ViewErrorBoundary';
+import { PanelErrorBoundary } from './PanelErrorBoundary';
 import { ResultsView } from './ResultsView';
 
 // Lazy-loaded views — each only loads when navigated to
@@ -84,11 +85,21 @@ export function ViewRouter({ newItemIds, focusedIndex }: ViewRouterProps) {
       ) : activeView === 'insights' ? (
         <ViewErrorBoundary viewName="Decisions">
           <section aria-label={t('nav.insights', { defaultValue: 'Radar' })} className="space-y-6">
-            <TechRadar />
-            <WisdomPanel />
-            <DecisionMemory />
-            <SecurityDashboard />
-            <DependencyDashboard />
+            <PanelErrorBoundary name="Tech Radar">
+              <TechRadar />
+            </PanelErrorBoundary>
+            <PanelErrorBoundary name="Wisdom Panel">
+              <WisdomPanel />
+            </PanelErrorBoundary>
+            <PanelErrorBoundary name="Decision Memory">
+              <DecisionMemory />
+            </PanelErrorBoundary>
+            <PanelErrorBoundary name="Security Dashboard">
+              <SecurityDashboard />
+            </PanelErrorBoundary>
+            <PanelErrorBoundary name="Dependency Dashboard">
+              <DependencyDashboard />
+            </PanelErrorBoundary>
           </section>
         </ViewErrorBoundary>
       ) : activeView === 'saved' ? (
