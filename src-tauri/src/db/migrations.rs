@@ -226,7 +226,7 @@ impl Database {
             .query_row("SELECT version FROM schema_version", [], |row| row.get(0))
             .unwrap_or(1);
 
-        const TARGET_VERSION: i64 = 37;
+        const TARGET_VERSION: i64 = 38;
         if current_version < TARGET_VERSION {
             // Drop the conn lock briefly to allow backup (needs filesystem access)
             drop(conn);
@@ -1075,6 +1075,17 @@ impl Database {
                 )?;
             }
 
+            // Phase 38: Drop abandoned feature tables
+            if current_version < 38 {
+                Self::run_versioned_migration(
+                    &conn,
+                    37,
+                    38,
+                    "Phase 38: Drop abandoned feature tables",
+                    Self::migrate_to_phase_38,
+                )?;
+            }
+
             info!(target: "4da::db", "Database schema initialized with sqlite-vec");
             return Ok(());
         }
@@ -1741,6 +1752,22 @@ impl Database {
             conn.execute("ALTER TABLE user_dependencies ADD COLUMN license TEXT", [])?;
         }
         info!(target: "4da::db", "Added license column to user_dependencies");
+        Ok(())
+    }
+
+    fn migrate_to_phase_38(conn: &Connection) -> SqliteResult<()> {
+        // Clean up abandoned feature tables (coach system + video curriculum)
+        // These were created in earlier migrations but never used in production.
+        // The other dead tables (chunk_sentiment, query_cache, query_history,
+        // file_metadata_cache, item_relationships, git_commit_history) were
+        // already dropped in Phase 26.
+        conn.execute_batch(
+            "DROP TABLE IF EXISTS coach_messages;
+             DROP TABLE IF EXISTS coach_documents;
+             DROP TABLE IF EXISTS coach_nudges;
+             DROP TABLE IF EXISTS video_curriculum;",
+        )?;
+        info!(target: "4da::db", "Cleaned up 4 abandoned feature tables");
         Ok(())
     }
 }

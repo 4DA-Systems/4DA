@@ -154,8 +154,6 @@ ocr = ["dep:ocrs", "dep:rten", "dep:image"]
 archive = ["dep:zip", "dep:tar", "dep:flate2"]
 void-universe = []
 sql-check = []
-calibrated-sim = []
-generate-sim-fixtures = []
 experimental = []
 # Feature-gated command groups (ghost commands with zero frontend callers)
 team-sync = []       # Team Sync, Intelligence, Monitoring (AD-023) — 17 commands
