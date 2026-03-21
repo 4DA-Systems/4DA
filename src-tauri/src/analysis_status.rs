@@ -443,7 +443,7 @@ pub(crate) async fn cancel_analysis() -> Result<()> {
 
 /// Get current analysis state (with timeout auto-recovery)
 ///
-/// Applies free-tier history gate: non-Pro users only see items from the last 30 days.
+/// Applies free-tier history gate: non-Signal users only see items from the last 30 days.
 /// The gate is enforced here as a defense-in-depth measure on top of the DB-level
 /// filter in `get_items_tiered` / `get_items_since_timestamp_tiered`.
 #[tauri::command]
@@ -472,7 +472,7 @@ pub(crate) async fn get_analysis_status() -> Result<AnalysisState> {
     drop(guard);
 
     // Free-tier history gate: filter out items older than 30 days
-    if !crate::settings::is_pro() {
+    if !crate::settings::is_signal() {
         if let Some(ref mut results) = result.results {
             let cutoff =
                 chrono::Utc::now() - chrono::Duration::hours(crate::db::FREE_HISTORY_LIMIT_HOURS);

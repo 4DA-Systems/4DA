@@ -715,7 +715,7 @@ pub fn start_signal_terminal() {
 
     info!(target: "4da::terminal", port = port, "Starting Signal Terminal");
 
-    tokio::spawn(async move {
+    tauri::async_runtime::spawn(async move {
         let app = build_router(token);
         let addr = std::net::SocketAddr::from(([127, 0, 0, 1], port));
 

@@ -1,15 +1,15 @@
-//! Weekly Intelligence Digest — Pro-gated aggregated intelligence report.
+//! Weekly Intelligence Digest — aggregated intelligence report.
 //!
 //! Combines attention report, signal chains, knowledge gaps, and top items
 //! from the past week into a single structured digest. All data sourced
 //! locally from SQLite — no external API calls required.
+//! Free for all users (BYOK model — user pays for their own LLM).
 
 use chrono::{Duration, Utc};
 use serde::{Deserialize, Serialize};
 use tracing::{debug, warn};
 
 use crate::error::Result;
-use crate::settings::require_pro_feature;
 
 // ============================================================================
 // Types
@@ -262,8 +262,6 @@ pub async fn get_latest_digest() -> Result<WeeklyDigest> {
 
 #[tauri::command]
 pub async fn generate_weekly_digest() -> Result<WeeklyDigest> {
-    require_pro_feature("generate_weekly_digest")?;
-
     let now = Utc::now();
     let week_ago = now - Duration::days(7);
 

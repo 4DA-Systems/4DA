@@ -41,12 +41,11 @@ test.describe('4DA Smoke Tests', () => {
     const findings: string[] = [];
     const checks = [
       { loc: 'text=Daily Overview', lbl: 'Daily Overview - free-tier briefing' },
-      { loc: 'text=Intelligence Briefing', lbl: 'Intelligence Briefing - Pro briefing' },
+      { loc: 'text=Intelligence Briefing', lbl: 'Intelligence Briefing' },
       { loc: 'text=No Intelligence Yet', lbl: 'No Intelligence Yet - no analysis run' },
       { loc: 'text=Briefing Ready to Generate', lbl: 'Briefing Ready to Generate' },
       { loc: 'text=Gathering Intelligence', lbl: 'Gathering Intelligence - in progress' },
-      { loc: 'text=AI Briefings is a Pro feature', lbl: 'AI Briefings ProGate active' },
-      { loc: 'text=Upgrade to Pro', lbl: 'Upgrade to Pro CTA' },
+      { loc: 'text=Upgrade to Signal', lbl: 'Upgrade to Signal CTA' },
       { loc: 'text=Start 30-Day Free Trial', lbl: 'Start 30-Day Free Trial button' },
       { loc: 'text=Generate AI Briefing', lbl: 'Generate AI Briefing button' },
     ];
