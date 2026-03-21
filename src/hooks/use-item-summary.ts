@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { cmd } from '../lib/commands';
+import { translateError } from '../utils/error-messages';
 
 export interface ItemSummaryState {
   summary: string | null;
@@ -19,7 +20,11 @@ export function useItemSummary(itemId: number, isExpanded: boolean): ItemSummary
     let cancelled = false;
     cmd('get_item_summary', { itemId })
       .then(result => { if (!cancelled) setSummary(result.summary); })
-      .catch(() => {});
+      .catch((e) => {
+        // Cache miss is expected — log but don't set error state
+        // (user hasn't triggered anything, no need to surface this)
+        console.warn('[4DA] Cached summary fetch failed:', e);
+      });
     return () => { cancelled = true; };
   }, [isExpanded, itemId]);
 
@@ -30,7 +35,7 @@ export function useItemSummary(itemId: number, isExpanded: boolean): ItemSummary
       const result = await cmd('generate_item_summary', { itemId });
       setSummary(result.summary);
     } catch (e) {
-      setSummaryError(String(e));
+      setSummaryError(translateError(e));
     } finally {
       setSummaryLoading(false);
     }
