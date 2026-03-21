@@ -805,9 +805,6 @@ pub fn run() {
         }
     }
 
-    // Start Signal Terminal HTTP server
-    signal_terminal::start_signal_terminal();
-
     // Initialize context engine
     match get_context_engine() {
         Ok(engine) => {
@@ -862,6 +859,10 @@ pub fn run() {
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_deep_link::init())
+        .plugin(tauri_plugin_autostart::init(
+            tauri_plugin_autostart::MacosLauncher::LaunchAgent,
+            None,
+        ))
         .invoke_handler(tauri::generate_handler![
             // Context
             context_commands::get_context_files,
@@ -932,6 +933,8 @@ pub fn run() {
             monitoring_commands::set_notification_threshold,
             monitoring_commands::trigger_notification_test,
             monitoring_commands::set_close_to_tray,
+            monitoring_commands::set_launch_at_startup,
+            monitoring_commands::get_launch_at_startup,
             // ACE (frontend-used subset)
             ace_commands::ace_get_detected_tech,
             ace_commands::ace_get_active_topics,
@@ -1115,16 +1118,16 @@ pub fn run() {
             channel_commands::create_custom_channel,
             channel_commands::preview_channel_sources,
             channel_commands::delete_channel,
-            // Natural Language Search (Pro)
+            // Natural Language Search (Signal)
             natural_language_search::natural_language_query,
-            // Search Synthesis — LLM briefings (Pro)
+            // Search Synthesis — LLM briefings (Signal)
             search_synthesis::synthesize_search,
-            // Weekly Intelligence Digest (Pro)
+            // Weekly Intelligence Digest (free — BYOK)
             weekly_digest::generate_weekly_digest,
             weekly_digest::get_latest_digest,
-            // Decision Impact Tracking (Pro)
+            // Decision Impact Tracking (Signal)
             decision_signals::get_decision_signals,
-            // Standing Queries (Pro)
+            // Standing Queries (Signal)
             standing_queries::create_standing_query,
             standing_queries::list_standing_queries,
             standing_queries::delete_standing_query,
@@ -1252,6 +1255,9 @@ pub fn run() {
         .setup(|app| {
             // Record app start time for diagnostics uptime tracking
             diagnostics::record_start_time();
+
+            // Start Signal Terminal HTTP server (requires Tokio runtime from Tauri)
+            signal_terminal::start_signal_terminal();
 
             // Set up system tray (non-fatal: app works without tray)
             let tray = match monitoring::setup_tray(app.handle()) {
@@ -1446,8 +1452,8 @@ pub fn run() {
                                 }
                             });
 
-                            // Evaluate standing queries for Pro users
-                            if crate::settings::is_pro() {
+                            // Evaluate standing queries for Signal users
+                            if crate::settings::is_signal() {
                                 let standing_handle = handle.clone();
                                 tauri::async_runtime::spawn(async move {
                                     if let Ok(conn) = crate::open_db_connection() {
