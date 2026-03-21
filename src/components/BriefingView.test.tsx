@@ -130,120 +130,89 @@ describe('BriefingView', () => {
     });
   });
 
-  describe('content state', () => {
-    const sampleContent = `## Action Required
-- Update dependency X to v2.0
-- Review security advisory
-
-## Worth Knowing
-- New Rust compiler feature released
-- TypeScript 6.0 in beta
-
-## Filtered Out
-- Generic blog post about JavaScript basics`;
-
-    it('renders parsed sections', () => {
-      setMockState({
-        aiBriefing: { content: sampleContent, loading: false, error: null, model: 'test-model', lastGenerated: new Date() },
-        appState: { relevanceResults: [] },
-      });
-      render(<BriefingView />);
-      expect(screen.getByText('Action Required')).toBeInTheDocument();
-      expect(screen.getByText('Worth Knowing')).toBeInTheDocument();
-      expect(screen.getByText('Filtered Out')).toBeInTheDocument();
-    });
-
-    it('renders list items within sections', () => {
-      setMockState({
-        aiBriefing: { content: sampleContent, loading: false, error: null, model: null, lastGenerated: null },
-        appState: { relevanceResults: [] },
-      });
-      render(<BriefingView />);
-      expect(screen.getByText(/Update dependency X/)).toBeInTheDocument();
-      expect(screen.getByText(/New Rust compiler/)).toBeInTheDocument();
-    });
-
-    it('shows model attribution in footer', () => {
-      setMockState({
-        aiBriefing: { content: '## Overview\nTest', loading: false, error: null, model: 'claude-3-5-haiku', lastGenerated: new Date() },
-        appState: { relevanceResults: [] },
-      });
-      render(<BriefingView />);
-      expect(screen.getByText('briefing.viaModel')).toBeInTheDocument();
-    });
-
-    it('shows refresh button', () => {
-      const genFn = vi.fn();
-      setMockState({
-        aiBriefing: { content: '## Test\nContent', loading: false, error: null, model: null, lastGenerated: null },
-        appState: { relevanceResults: [] },
-        generateBriefing: genFn,
-      });
-      render(<BriefingView />);
-      fireEvent.click(screen.getByText('action.refresh'));
-      expect(genFn).toHaveBeenCalledTimes(1);
-    });
-
-    it('renders top pick cards when high-scoring results exist', () => {
+  describe('content state (3-zone Intelligence Hierarchy)', () => {
+    it('renders pulse summary with item counts', () => {
       setMockState({
         aiBriefing: { content: '## Test\nContent', loading: false, error: null, model: null, lastGenerated: null },
         appState: {
           relevanceResults: [
-            { id: 1, title: 'Top Item', top_score: 0.85, relevant: true },
-            { id: 2, title: 'Low Item', top_score: 0.2, relevant: false },
+            { id: 1, title: 'Item A', top_score: 0.6, relevant: true },
+            { id: 2, title: 'Item B', top_score: 0.3, relevant: false },
+            { id: 3, title: 'Item C', top_score: 0.7, relevant: true },
           ],
         },
       });
       render(<BriefingView />);
-      expect(screen.getByText('briefing.topPicks')).toBeInTheDocument();
-      expect(screen.getByTestId('briefing-card')).toBeInTheDocument();
+      // PulseSummary shows "X items analyzed, Y relevant to you."
+      expect(screen.getByText(/pulse\.itemsAnalyzed/)).toBeInTheDocument();
     });
 
-    it('shows View All Results button', () => {
-      const setView = vi.fn();
-      setMockState({
-        aiBriefing: { content: '## Test\nContent', loading: false, error: null, model: null, lastGenerated: null },
-        appState: { relevanceResults: [{ id: 1 }, { id: 2 }, { id: 3 }] },
-        setActiveView: setView,
-      });
-      render(<BriefingView />);
-      fireEvent.click(screen.getByText('briefing.viewAllResults'));
-      expect(setView).toHaveBeenCalledWith('results');
-    });
-
-    it('renders signal action cards for critical items', () => {
+    it('renders attention cards for critical signal items', () => {
       setMockState({
         aiBriefing: { content: '## Test\nContent', loading: false, error: null, model: null, lastGenerated: null },
         appState: {
           relevanceResults: [
-            { id: 1, title: 'Critical CVE', top_score: 0.9, relevant: true, signal_priority: 'critical', signal_type: 'security' },
+            { id: 1, title: 'Critical CVE', top_score: 0.9, relevant: true, signal_priority: 'critical', signal_type: 'security', url: 'https://example.com' },
             { id: 2, title: 'Normal Item', top_score: 0.5, relevant: true },
           ],
         },
       });
       render(<BriefingView />);
-      expect(screen.getByTestId('signal-card')).toBeInTheDocument();
+      // AttentionCards renders the critical signal item's action or title
+      expect(screen.getByText('Critical CVE')).toBeInTheDocument();
     });
 
-    it('shows freshness badge when lastGenerated is set', () => {
+    it('shows view all link when many relevant results', () => {
+      const setView = vi.fn();
+      // Need >15 relevant items (excluding signals) to trigger "View all" button
+      const manyResults = Array.from({ length: 20 }, (_, i) => ({
+        id: i + 1,
+        title: `Item ${i + 1}`,
+        top_score: 0.6,
+        relevant: true,
+        source_type: 'hackernews',
+      }));
+      setMockState({
+        aiBriefing: { content: '## Test\nContent', loading: false, error: null, model: null, lastGenerated: null },
+        appState: { relevanceResults: manyResults },
+        setActiveView: setView,
+      });
+      render(<BriefingView />);
+      // IntelligenceFeed shows "View all" button when totalRelevant > 15
+      const viewAllButton = screen.getByText('briefing.viewAllResults');
+      expect(viewAllButton).toBeInTheDocument();
+      fireEvent.click(viewAllButton);
+      expect(setView).toHaveBeenCalledWith('results');
+    });
+
+    it('renders feed items in intelligence feed', () => {
+      setMockState({
+        aiBriefing: { content: '## Test\nContent', loading: false, error: null, model: null, lastGenerated: null },
+        appState: {
+          relevanceResults: [
+            { id: 1, title: 'Relevant Article', top_score: 0.4, relevant: true, source_type: 'hackernews' },
+            { id: 2, title: 'Another Article', top_score: 0.35, relevant: true, source_type: 'reddit' },
+          ],
+        },
+      });
+      render(<BriefingView />);
+      // IntelligenceFeed renders relevant items (scores < 0.5 so not in AttentionCards topItems)
+      expect(screen.getByText('Relevant Article')).toBeInTheDocument();
+      expect(screen.getByText('Another Article')).toBeInTheDocument();
+    });
+
+    it('shows freshness timestamp when lastGenerated is set', () => {
       setMockState({
         aiBriefing: { content: '## Test\nContent', loading: false, error: null, model: null, lastGenerated: new Date() },
-        appState: { relevanceResults: [] },
+        appState: {
+          relevanceResults: [
+            { id: 1, title: 'Item', top_score: 0.6, relevant: true, source_type: 'hackernews' },
+          ],
+        },
       });
       render(<BriefingView />);
+      // PulseSummary shows RelativeTimestamp when lastGenerated exists
       expect(screen.getByText('Just now')).toBeInTheDocument();
-    });
-
-    it('shows stale indicator when new items arrived after briefing', () => {
-      const briefingTime = new Date(Date.now() - 60000); // 1 min ago
-      const bgTime = new Date(); // now
-      setMockState({
-        aiBriefing: { content: '## Test\nContent', loading: false, error: null, model: null, lastGenerated: briefingTime },
-        appState: { relevanceResults: [] },
-        lastBackgroundResultsAt: bgTime,
-      });
-      render(<BriefingView />);
-      expect(screen.getByText('briefing.staleNotice')).toBeInTheDocument();
     });
   });
 
@@ -280,14 +249,16 @@ describe('BriefingView', () => {
       expect(genFn).toHaveBeenCalledTimes(1);
     });
 
-    it('shows error alongside stale content when error occurs with existing briefing', () => {
+    it('shows error alongside content panel when error occurs with existing briefing', () => {
       setMockState({
         aiBriefing: { content: '## Previous\n- Old content', loading: false, error: 'API key expired', model: 'test', lastGenerated: new Date() },
         appState: { relevanceResults: [] },
       });
       render(<BriefingView />);
+      // Error alert is shown alongside the 3-zone content panel
       expect(screen.getByText('error.generic')).toBeInTheDocument();
-      expect(screen.getByText('Previous')).toBeInTheDocument();
+      // PulseSummary renders (even with no results it shows noData message)
+      expect(screen.getByText('pulse.noData')).toBeInTheDocument();
     });
 
     it('calls generateBriefing on retry and transitions to loading state', () => {

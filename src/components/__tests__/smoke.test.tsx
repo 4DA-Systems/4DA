@@ -120,6 +120,9 @@ vi.mock('../../store', () => ({
         expiresAt: null,
         startTrial: vi.fn(),
         activateLicense: vi.fn(),
+
+        // feedback (used by ViewTabBar for savedCount)
+        feedbackGiven: {},
       };
       return selector(mockState);
     }),

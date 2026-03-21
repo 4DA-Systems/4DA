@@ -3,19 +3,13 @@ import { listen } from '@tauri-apps/api/event';
 import { useTranslation } from 'react-i18next';
 import { useShallow } from 'zustand/react/shallow';
 import { useAppStore } from '../store';
-import { BriefingAtmosphere } from './briefing/BriefingHelpers';
 import { BriefingSkeleton } from './briefing/BriefingSkeleton';
 import { BriefingContentPanel } from './briefing/BriefingContentPanel';
-import { BriefingSupplementary } from './briefing/BriefingSupplementary';
 import { PersonalizeNudge } from './briefing/PersonalizeNudge';
 import { BriefingLoadingState, BriefingReadyState } from './BriefingEmptyStates';
 import { BriefingWarmupState } from './BriefingWarmupState';
-import { DigestView } from './DigestView';
-import { CommunityInsights } from './CommunityInsights';
 import { ProGate } from './ProGate';
 import { EngagementPulse } from './EngagementPulse';
-import { WisdomPulse } from './WisdomPulse';
-import { WeeklyProgressCard } from './WeeklyProgressCard';
 import { useLicense } from '../hooks/use-license';
 import { useBriefingDerived } from '../hooks/use-briefing-derived';
 import type { SourceRelevance } from '../types';
@@ -23,11 +17,10 @@ import type { SourceRelevance } from '../types';
 export const BriefingView = memo(function BriefingView() {
   const { t } = useTranslation();
 
-  // Consolidated data subscriptions with useShallow
   const {
     briefing, results, isLoading, analysisComplete, feedbackGiven,
-    lastBackgroundResultsAt, sourceHealth, pulse,
-    freeBriefing, freeBriefingLoading, embeddingMode,
+    lastBackgroundResultsAt, sourceHealth,
+    freeBriefing, freeBriefingLoading,
   } = useAppStore(
     useShallow((s) => ({
       briefing: s.aiBriefing,
@@ -37,20 +30,16 @@ export const BriefingView = memo(function BriefingView() {
       feedbackGiven: s.feedbackGiven,
       lastBackgroundResultsAt: s.lastBackgroundResultsAt,
       sourceHealth: s.sourceHealth,
-      pulse: s.intelligencePulse,
       freeBriefing: s.freeBriefing,
       freeBriefingLoading: s.freeBriefingLoading,
-      embeddingMode: s.embeddingMode,
     })),
   );
 
-  // Action selectors (stable references)
   const generateBriefing = useAppStore(s => s.generateBriefing);
   const recordInteraction = useAppStore(s => s.recordInteraction);
   const setActiveView = useAppStore(s => s.setActiveView);
   const addToast = useAppStore(s => s.addToast);
   const generateFreeBriefing = useAppStore(s => s.generateFreeBriefing);
-  const loadPulse = useAppStore(s => s.loadIntelligencePulse);
   const startAnalysis = useAppStore(s => s.startAnalysis);
   const setShowSettings = useAppStore(s => s.setShowSettings);
 
@@ -64,17 +53,11 @@ export const BriefingView = memo(function BriefingView() {
 
   const { isPro } = useLicense();
 
-  // Stable callbacks for memo-wrapped child components
   const handleSave = useCallback((it: SourceRelevance) => recordInteraction(it.id, 'save', it), [recordInteraction]);
   const handleDismiss = useCallback((it: SourceRelevance) => recordInteraction(it.id, 'dismiss', it), [recordInteraction]);
   const handleRecordClick = useCallback((it: SourceRelevance) => recordInteraction(it.id, 'click', it), [recordInteraction]);
 
-  // Load intelligence pulse from store
-  useEffect(() => {
-    loadPulse();
-  }, [loadPulse]);
-
-  // Listen for standing query matches from background monitoring
+  // Listen for standing query matches
   useEffect(() => {
     const unlisten = listen<Array<{ query_id: number; query_text: string; new_matches: number; example_title: string | null }>>(
       'standing-query-matches',
@@ -91,15 +74,14 @@ export const BriefingView = memo(function BriefingView() {
     return () => { unlisten.then(fn => fn()); };
   }, [addToast, t]);
 
-  // Auto-generate free briefing for all users when analysis completes
+  // Auto-generate free briefing when analysis completes
   useEffect(() => {
     if (analysisComplete && results.length > 0 && !freeBriefing && !freeBriefingLoading) {
       generateFreeBriefing();
     }
   }, [analysisComplete, results.length, freeBriefing, freeBriefingLoading, generateFreeBriefing]);
 
-  // Derived computations (gaps, quality, health, signals, top picks)
-  const { isStale, signalItems, topItems } =
+  const { signalItems, topItems } =
     useBriefingDerived(results, sourceHealth, briefing, lastBackgroundResultsAt);
 
   // Loading skeleton
@@ -172,9 +154,9 @@ export const BriefingView = memo(function BriefingView() {
     return <BriefingWarmupState onAnalyze={startAnalysis} />;
   }
 
-  // Briefing content view
+  // Main view: Intelligence Hierarchy (3 zones)
   return (
-    <section aria-label={t('briefing.intelligenceBriefing')} className="bg-bg-primary rounded-lg space-y-6">
+    <section aria-label={t('briefing.intelligenceBriefing')} className="bg-bg-primary rounded-lg space-y-5">
       {showPersonalizeNudge && (
         <PersonalizeNudge
           onOpenSettings={() => setShowSettings(true)}
@@ -182,50 +164,34 @@ export const BriefingView = memo(function BriefingView() {
         />
       )}
 
-      <BriefingAtmosphere
-        signalCount={signalItems.length}
-        topCount={topItems.length}
-        hasContent={!!briefing.content}
-      />
-
-      {/* Weekly Digest */}
-      <DigestView />
-
-      {/* Community Intelligence status */}
-      <CommunityInsights />
-
-      {/* AWE Wisdom Pulse */}
-      <WisdomPulse />
-
-      {/* Weekly Progress (shown on Mondays) */}
-      <WeeklyProgressCard />
-
-      {/* Main briefing content: decisions, signals, top picks, sections, metrics */}
       <BriefingContentPanel
         briefing={briefing}
         results={results}
         feedbackGiven={feedbackGiven}
         sourceHealth={sourceHealth}
-        pulse={pulse}
-        isStale={isStale}
-        isPro={isPro}
         signalItems={signalItems}
         topItems={topItems}
         onSave={handleSave}
         onDismiss={handleDismiss}
         onRecordClick={handleRecordClick}
-        generateBriefing={generateBriefing}
         setActiveView={setActiveView}
-        addToast={addToast}
       />
 
-      {/* Supplementary: STREETS, weekly summary, missions, tips, intel report */}
-      <BriefingSupplementary
-        results={results}
-        feedbackGiven={feedbackGiven}
-        embeddingMode={embeddingMode}
-        analysisComplete={analysisComplete}
-      />
+      {/* Error display */}
+      {briefing.error && (
+        <div role="alert" className="p-4 bg-red-900/20 border border-red-500/30 rounded-lg">
+          <div className="flex flex-col items-center justify-center gap-3 text-center">
+            <p className="text-text-secondary text-sm">{t('error.generic')}</p>
+            <button
+              onClick={generateBriefing}
+              className="px-3 py-1.5 text-xs bg-bg-tertiary hover:bg-white/10 rounded transition-colors text-text-secondary"
+              aria-label="Retry generating briefing"
+            >
+              {t('action.retry')}
+            </button>
+          </div>
+        </div>
+      )}
     </section>
   );
 });
