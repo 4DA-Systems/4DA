@@ -763,6 +763,10 @@ pub(crate) async fn auto_seed_interests_from_ace() -> Result<()> {
                             crate::ace::TechCategory::Language
                                 | crate::ace::TechCategory::Framework
                         ) && t.confidence >= 0.7
+                            // CONTENT ACCURACY GATE: Only seed display-worthy tech
+                            // into tech_stack. ORMs like drizzle, utility libs, and
+                            // companion packages must not pollute the user's identity.
+                            && crate::domain_profile::is_display_worthy(&t.name.to_lowercase())
                     })
                     .take(10)
                     .collect();

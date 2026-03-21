@@ -50,12 +50,17 @@ pub fn build_domain_profile(conn: &rusqlite::Connection) -> DomainProfile {
     let mut interest_topics = HashSet::new();
 
     // 1. Onboarding tech stack (primary — highest weight)
+    // CONTENT ACCURACY GATE: Only display-worthy tech enters primary_stack.
+    // Non-display-worthy tech (ORMs, utility libs) goes into all_tech for
+    // scoring but never reaches user-facing personalized content.
     if let Ok(mut stmt) = conn.prepare("SELECT technology FROM tech_stack") {
         if let Ok(rows) = stmt.query_map([], |row| row.get::<_, String>(0)) {
             for tech in rows.flatten() {
                 let lower = tech.to_lowercase();
-                primary_stack.insert(lower.clone());
-                all_tech.insert(lower);
+                all_tech.insert(lower.clone());
+                if is_display_worthy(&lower) {
+                    primary_stack.insert(lower);
+                }
             }
         }
     }
@@ -290,6 +295,46 @@ fn is_notable_dependency(name: &str) -> bool {
         return false;
     }
     !UTILITY_DEPS.contains(&name)
+}
+
+/// Check if a technology is display-worthy in user-facing personalized content.
+///
+/// This is the **content accuracy gate** — only technologies that genuinely
+/// represent a developer's identity should appear in personalized STREETS
+/// content, template interpolation ({= stack.primary =}), DiffRibbons,
+/// and Developer DNA summaries.
+///
+/// Languages, major frameworks, runtimes, and platforms pass. ORMs, utility
+/// libraries, build tools, and companion packages do NOT — they belong in
+/// `all_tech` for scoring relevance, but should never be shown to the user
+/// as part of their identity.
+pub fn is_display_worthy(tech: &str) -> bool {
+    // Allowlist: languages, major frameworks, runtimes, platforms
+    const DISPLAY_WORTHY: &[&str] = &[
+        // Languages
+        "rust", "typescript", "javascript", "python", "go", "java", "kotlin",
+        "swift", "c", "cpp", "c++", "csharp", "c#", "ruby", "php", "scala",
+        "elixir", "haskell", "dart", "zig", "nim", "lua", "r", "julia",
+        "wgsl", "glsl", "sql", "ocaml", "clojure", "erlang", "fsharp", "f#",
+        "objective-c", "perl",
+        // Major frameworks / platforms
+        "react", "vue", "angular", "svelte", "solid", "qwik",
+        "nextjs", "next.js", "nuxt", "remix", "astro", "sveltekit",
+        "tauri", "electron", "flutter", "react-native",
+        "django", "flask", "fastapi", "rails", "spring", "springboot",
+        "express", "nest", "nestjs", "actix", "axum", "rocket", "gin",
+        "fiber", "echo",
+        "tensorflow", "pytorch", "jax",
+        "node", "nodejs", "deno", "bun",
+        // Platforms / infrastructure
+        "aws", "gcp", "azure", "docker", "kubernetes", "linux",
+        "wasm", "webgpu", "vercel", "cloudflare",
+        // Databases (identity-level, not ORMs)
+        "postgresql", "postgres", "mysql", "mongodb", "redis", "sqlite",
+        "dynamodb", "cassandra", "elasticsearch",
+    ];
+
+    DISPLAY_WORTHY.contains(&tech)
 }
 
 /// Infer domain concerns from the user's tech profile.
@@ -713,5 +758,79 @@ mod tests {
         };
         let topics = vec!["accessibility".to_string()];
         assert_eq!(compute_domain_relevance(&topics, &profile), 0.60);
+    }
+
+    // ====================================================================
+    // Content Accuracy Gate Tests (is_display_worthy)
+    // ====================================================================
+
+    #[test]
+    fn test_display_worthy_rejects_orms() {
+        // The drizzle bug: ORMs must never appear in primary_stack
+        assert!(!is_display_worthy("drizzle"));
+        assert!(!is_display_worthy("prisma"));
+        assert!(!is_display_worthy("typeorm"));
+        assert!(!is_display_worthy("sequelize"));
+        assert!(!is_display_worthy("knex"));
+        assert!(!is_display_worthy("mongoose"));
+    }
+
+    #[test]
+    fn test_display_worthy_rejects_build_tools() {
+        assert!(!is_display_worthy("webpack"));
+        assert!(!is_display_worthy("vite"));
+        assert!(!is_display_worthy("esbuild"));
+        assert!(!is_display_worthy("rollup"));
+        assert!(!is_display_worthy("turbopack"));
+        assert!(!is_display_worthy("biome"));
+        assert!(!is_display_worthy("eslint"));
+    }
+
+    #[test]
+    fn test_display_worthy_rejects_companion_packages() {
+        assert!(!is_display_worthy("tailwindcss"));
+        assert!(!is_display_worthy("trpc"));
+        assert!(!is_display_worthy("zod"));
+        assert!(!is_display_worthy("turborepo"));
+        assert!(!is_display_worthy("pnpm"));
+    }
+
+    #[test]
+    fn test_display_worthy_accepts_all_languages() {
+        for lang in &[
+            "rust", "typescript", "javascript", "python", "go", "java",
+            "kotlin", "swift", "ruby", "php", "scala", "elixir",
+            "haskell", "dart", "zig", "nim", "lua", "julia",
+        ] {
+            assert!(is_display_worthy(lang), "{} should be display-worthy", lang);
+        }
+    }
+
+    #[test]
+    fn test_display_worthy_accepts_major_frameworks() {
+        for fw in &[
+            "react", "vue", "angular", "svelte", "nextjs", "tauri",
+            "electron", "django", "flask", "fastapi", "rails", "spring",
+            "express", "actix", "axum", "rocket", "flutter",
+        ] {
+            assert!(is_display_worthy(fw), "{} should be display-worthy", fw);
+        }
+    }
+
+    #[test]
+    fn test_display_worthy_accepts_databases() {
+        for db in &[
+            "postgresql", "postgres", "mysql", "mongodb", "redis",
+            "sqlite", "elasticsearch",
+        ] {
+            assert!(is_display_worthy(db), "{} should be display-worthy", db);
+        }
+    }
+
+    #[test]
+    fn test_display_worthy_accepts_platforms() {
+        for p in &["aws", "gcp", "azure", "docker", "kubernetes", "linux", "wasm"] {
+            assert!(is_display_worthy(p), "{} should be display-worthy", p);
+        }
     }
 }

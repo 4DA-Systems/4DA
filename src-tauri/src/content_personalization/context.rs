@@ -238,7 +238,25 @@ fn assemble_profile(conn: &Connection) -> ProfileData {
 
 fn assemble_stack(conn: &Connection) -> StackData {
     let profile = crate::domain_profile::build_domain_profile(conn);
-    let mut primary: Vec<String> = profile.primary_stack.into_iter().collect();
+
+    // CONTENT ACCURACY GATE (defense-in-depth): Even if upstream data is dirty,
+    // the personalization context must only contain display-worthy tech in primary.
+    // This is the last filter before data reaches template interpolation.
+    let mut primary: Vec<String> = profile
+        .primary_stack
+        .into_iter()
+        .filter(|t| {
+            let worthy = crate::domain_profile::is_display_worthy(t);
+            if !worthy {
+                debug!(
+                    target: "4da::personalize",
+                    tech = %t,
+                    "Filtered non-display-worthy tech from personalization primary stack"
+                );
+            }
+            worthy
+        })
+        .collect();
     primary.sort();
     let mut adjacent: Vec<String> = profile.adjacent_tech.into_iter().collect();
     adjacent.sort();

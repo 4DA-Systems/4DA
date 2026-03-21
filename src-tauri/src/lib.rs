@@ -296,6 +296,7 @@ pub mod stacks;
 pub mod taste_test;
 mod taste_test_commands;
 
+mod content_integrity;
 mod content_personalization;
 pub(crate) mod i18n;
 mod playbook_commands;
@@ -1055,6 +1056,9 @@ pub fn run() {
             content_personalization::commands::get_personalization_context_summary,
             content_personalization::commands::prune_personalization_cache,
             content_personalization::commands::hydrate_lesson_with_llm,
+            // Content Integrity Verification
+            content_integrity::check_content_integrity,
+            content_integrity::audit_content_integrity,
             // STREETS Command Execution
             streets_commands::parse_lesson_commands,
             streets_commands::execute_streets_command,
@@ -1724,6 +1728,22 @@ fn initialize_ace_on_startup(app_handle: tauri::AppHandle) {
         // This provides immediate value without requiring manual configuration
         if let Err(e) = ace_commands::auto_seed_interests_from_ace().await {
             warn!(target: "4da::startup", error = %e, "Auto-seeding interests failed (non-fatal)");
+        }
+
+        // CONTENT INTEGRITY: Auto-verify and clean personalized content data.
+        // Removes non-display-worthy tech from tech_stack (e.g. ORMs like drizzle
+        // that were incorrectly seeded) and detects phantom tech. Runs every startup.
+        if let Ok(conn) = open_db_connection() {
+            let report = content_integrity::verify_content_integrity(&conn, true);
+            if !report.passed {
+                info!(
+                    target: "4da::startup",
+                    filtered = report.filtered_tech.len(),
+                    phantoms = report.phantom_tech.len(),
+                    corrected = report.auto_corrected,
+                    "Content integrity auto-corrected issues"
+                );
+            }
         }
 
         // PASIFA: Index README files from discovered projects for semantic search
