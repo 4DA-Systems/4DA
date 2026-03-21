@@ -11,7 +11,7 @@ use super::{
 };
 
 /// Maximum history depth for free-tier users (30 days in hours).
-/// Pro and trial users have unlimited history access.
+/// Signal and trial users have unlimited history access.
 pub const FREE_HISTORY_LIMIT_HOURS: i64 = 30 * 24;
 
 // Cache for feedback topic summary — invalidated on feedback writes.
@@ -369,14 +369,14 @@ impl Database {
     /// Get recent source items respecting the free-tier history gate.
     ///
     /// Free users are limited to 30 days of history (`FREE_HISTORY_LIMIT_HOURS`).
-    /// Pro / trial users receive the full requested window.
+    /// Signal / trial users receive the full requested window.
     /// The gate is applied at the SQL level so older items are never loaded.
     pub fn get_items_tiered(
         &self,
         requested_hours: i64,
         limit: usize,
     ) -> SqliteResult<Vec<StoredSourceItem>> {
-        let effective_hours = if crate::settings::is_pro() {
+        let effective_hours = if crate::settings::is_signal() {
             requested_hours
         } else {
             requested_hours.min(FREE_HISTORY_LIMIT_HOURS)
@@ -427,7 +427,7 @@ impl Database {
         since: &str,
         limit: usize,
     ) -> SqliteResult<Vec<StoredSourceItem>> {
-        if crate::settings::is_pro() {
+        if crate::settings::is_signal() {
             self.get_items_since_timestamp(since, limit)
         } else {
             // Free tier: clamp to 30-day floor even if `since` is older

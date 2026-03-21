@@ -491,15 +491,15 @@ pub struct SignalChainWithPrediction {
 
 #[tauri::command]
 pub fn get_signal_chains() -> Result<Vec<SignalChain>> {
-    crate::settings::require_pro_feature("get_signal_chains")?;
+    crate::settings::require_signal_feature("get_signal_chains")?;
     let conn = crate::open_db_connection()?;
     detect_chains(&conn)
 }
 
-/// Get signal chains with lifecycle predictions (Pro)
+/// Get signal chains with lifecycle predictions (Signal-gated)
 #[tauri::command]
 pub fn get_signal_chains_predicted() -> Result<Vec<SignalChainWithPrediction>> {
-    crate::settings::require_pro_feature("get_signal_chains_predicted")?;
+    crate::settings::require_signal_feature("get_signal_chains_predicted")?;
     let conn = crate::open_db_connection()?;
     let chains = detect_chains(&conn)?;
     Ok(chains

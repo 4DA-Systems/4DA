@@ -169,13 +169,13 @@ pub async fn create_custom_channel(
     let db = get_database()?;
 
     // Free tier gate: limit custom channels
-    if !crate::settings::is_pro() {
+    if !crate::settings::is_signal() {
         let custom_count = db
             .count_custom_channels()
             .context("Failed to count channels")?;
         if custom_count >= FREE_TIER_MAX_CHANNELS {
             return Err(format!(
-                "Free tier limited to {} custom channels. Upgrade to Pro for unlimited channels.",
+                "Free tier limited to {} custom channels. Upgrade to Signal for unlimited channels.",
                 FREE_TIER_MAX_CHANNELS
             )
             .into());

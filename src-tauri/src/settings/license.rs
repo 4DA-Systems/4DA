@@ -114,10 +114,8 @@ fn maybe_revalidate_license() {
 // Feature Tier Gating
 // ============================================================================
 
-/// Pro-gated features list
-pub const PRO_FEATURES: &[&str] = &[
-    "generate_ai_briefing",
-    "get_latest_briefing",
+/// Signal-gated features list
+pub const SIGNAL_FEATURES: &[&str] = &[
     "get_attention_report",
     "get_knowledge_gaps",
     "get_signal_chains",
@@ -129,7 +127,6 @@ pub const PRO_FEATURES: &[&str] = &[
     "export_developer_dna_card",
     "natural_language_query",
     "get_semantic_shifts",
-    "generate_weekly_digest",
     "get_decision_signals",
     "synthesize_search",
     "standing_queries",
@@ -138,7 +135,7 @@ pub const PRO_FEATURES: &[&str] = &[
 /// Check if the current user has Signal (or Team/Enterprise) tier access.
 /// Returns true for "signal", "team", "enterprise", legacy "pro", or an active trial.
 /// Triggers periodic re-validation to catch settings.json manipulation.
-pub fn is_pro() -> bool {
+pub fn is_signal() -> bool {
     maybe_revalidate_license();
     let manager = crate::get_settings_manager();
     let guard = manager.lock();
@@ -186,25 +183,25 @@ fn is_paid_tier(tier: &str) -> bool {
 }
 
 /// Check if a feature is available for the given tier, including trial period
-pub fn is_pro_feature_available(feature: &str, license: &LicenseConfig) -> bool {
+pub fn is_signal_feature_available(feature: &str, license: &LicenseConfig) -> bool {
     if is_paid_tier(license.tier.as_str()) {
         return true;
     }
     if is_trial_active(license) {
         return true;
     }
-    !PRO_FEATURES.contains(&feature)
+    !SIGNAL_FEATURES.contains(&feature)
 }
 
-/// Gate a Pro feature — returns Ok(()) if allowed, Err if not
-/// Call at the top of any Pro-gated Tauri command.
+/// Gate a Signal feature — returns Ok(()) if allowed, Err if not
+/// Call at the top of any Signal-gated Tauri command.
 /// Triggers periodic re-validation to catch settings.json manipulation.
-pub fn require_pro_feature(feature: &str) -> Result<()> {
+pub fn require_signal_feature(feature: &str) -> Result<()> {
     maybe_revalidate_license();
     let manager = crate::get_settings_manager();
     let guard = manager.lock();
     let license = &guard.get().license;
-    if is_pro_feature_available(feature, license) {
+    if is_signal_feature_available(feature, license) {
         Ok(())
     } else {
         Err(format!(

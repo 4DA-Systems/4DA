@@ -101,6 +101,9 @@ flate2 = { version = "1.0", optional = true }     # Gzip compression/decompressi
 # Semantic version parsing (CVE version range matching)
 semver = "1"
 
+# System startup (launch at login)
+tauri-plugin-autostart = "2"
+
 # Compile-time scoring macros
 fourda-macros = { path = "fourda-macros" }
 ed25519-dalek = { version = "2.2.0", features = ["rand_core"] }

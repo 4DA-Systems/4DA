@@ -1,4 +1,4 @@
-//! Decision Impact Tracking — Pro-gated cross-referencing of decisions
+//! Decision Impact Tracking — Signal-gated cross-referencing of decisions
 //! with incoming signals.
 //!
 //! For each active decision, finds source items that support or challenge
@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 use tracing::debug;
 
 use crate::error::Result;
-use crate::settings::require_pro_feature;
+use crate::settings::require_signal_feature;
 
 // ============================================================================
 // Types
@@ -195,7 +195,7 @@ fn find_signals_for_decision(
 
 #[tauri::command]
 pub async fn get_decision_signals() -> Result<Vec<DecisionSignals>> {
-    require_pro_feature("get_decision_signals")?;
+    require_signal_feature("get_decision_signals")?;
 
     let conn = crate::open_db_connection()?;
 

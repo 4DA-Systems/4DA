@@ -1,6 +1,6 @@
 //! Search Synthesis — LLM-powered briefings for Intelligence Console queries.
 //!
-//! Pro-gated. Takes a natural language query, gathers deep context from the
+//! Signal-gated. Takes a natural language query, gathers deep context from the
 //! local DB (search results, tech stack, active decisions, knowledge gaps),
 //! and calls the configured LLM to produce a grounded intelligence briefing
 //! that references the user's specific context.
@@ -314,7 +314,7 @@ pub async fn synthesize_search(
     app: tauri::AppHandle,
     query_text: String,
 ) -> Result<SynthesisResponse> {
-    crate::settings::require_pro_feature("synthesize_search")?;
+    crate::settings::require_signal_feature("synthesize_search")?;
 
     let query_text = query_text.trim().to_string();
     if query_text.is_empty() {

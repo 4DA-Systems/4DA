@@ -20,7 +20,6 @@ pub(crate) use crate::digest_config::get_latest_briefing_text;
 /// Get the latest persisted briefing from the database (survives restarts)
 #[tauri::command]
 pub async fn get_latest_briefing() -> Result<serde_json::Value> {
-    crate::settings::require_pro_feature("get_latest_briefing")?;
     let db = get_database()?;
     match db.get_latest_briefing() {
         Ok(Some((content, model, item_count, created_at))) => Ok(serde_json::json!({
@@ -38,7 +37,7 @@ pub async fn get_latest_briefing() -> Result<serde_json::Value> {
 }
 
 /// Internal briefing generation -- called by both the Tauri command and auto-trigger.
-/// `auto_triggered`: when true, suppresses Pro gate check and adjusts logging.
+/// `auto_triggered`: when true, adjusts logging to indicate automatic trigger.
 /// `anomaly_context`: optional unresolved anomaly descriptions to inject into the prompt.
 pub(crate) async fn generate_briefing_internal(
     auto_triggered: bool,
@@ -324,7 +323,6 @@ Rules:
 /// Uses the configured LLM (Ollama by default) to synthesize insights
 #[tauri::command]
 pub async fn generate_ai_briefing(app: tauri::AppHandle) -> Result<serde_json::Value> {
-    crate::settings::require_pro_feature("generate_ai_briefing")?;
     // Improvement C: Gather unresolved anomalies for context injection
     let anomalies = {
         if let Ok(ace) = crate::get_ace_engine() {

@@ -107,8 +107,8 @@ pub async fn maybe_generate_digest<R: Runtime>(app: &AppHandle<R>) {
 
     info!(target: "4da::jobs", frequency = %frequency, "Digest is due, generating");
 
-    // For weekly frequency on Pro, try the full weekly digest with signal chains + knowledge gaps
-    if frequency == "weekly" && crate::settings::is_pro() {
+    // For weekly frequency, try the full weekly digest with signal chains + knowledge gaps
+    if frequency == "weekly" && crate::settings::is_signal() {
         if let Ok(conn) = crate::open_db_connection() {
             if crate::weekly_digest::should_generate_digest(&conn) {
                 match crate::weekly_digest::generate_weekly_digest().await {
@@ -399,8 +399,8 @@ pub fn maybe_save_mini_digest(state: &crate::monitoring::MonitoringState) {
 /// Check signal chains for escalating/peak phases and send OS notifications.
 /// Called hourly alongside anomaly detection and decision window checks.
 pub fn maybe_notify_escalating_chains<R: Runtime>(app: &AppHandle<R>) {
-    // Only for Pro users (signal chains are a Pro feature)
-    if !crate::settings::is_pro() {
+    // Only for Signal users (signal chains are a Signal feature)
+    if !crate::settings::is_signal() {
         return;
     }
 

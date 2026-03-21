@@ -1,5 +1,5 @@
 import { cmd } from '../../lib/commands';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { MonitoringStatus } from '../../types';
 
@@ -33,6 +33,49 @@ function CloseToTrayToggle({ initialValue }: { initialValue: boolean }) {
       <div>
         <span className="text-sm text-white">{t('settings.monitoring.closeToTray')}</span>
         <p className="text-xs text-text-muted">{t('settings.monitoring.closeToTrayDescription')}</p>
+      </div>
+      <button
+        onClick={toggle}
+        className={`relative w-10 h-5 rounded-full transition-colors ${
+          enabled ? 'bg-green-500/40' : 'bg-gray-600'
+        }`}
+      >
+        <span
+          className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-transform ${
+            enabled ? 'translate-x-5' : 'translate-x-0.5'
+          }`}
+        />
+      </button>
+    </div>
+  );
+}
+
+function LaunchAtStartupToggle() {
+  const { t } = useTranslation();
+  const [enabled, setEnabled] = useState(false);
+  const [loaded, setLoaded] = useState(false);
+
+  useEffect(() => {
+    cmd('get_launch_at_startup').then(v => { setEnabled(v); setLoaded(true); }).catch(() => setLoaded(true));
+  }, []);
+
+  const toggle = async () => {
+    const next = !enabled;
+    setEnabled(next);
+    try {
+      await cmd('set_launch_at_startup', { enabled: next });
+    } catch {
+      setEnabled(!next);
+    }
+  };
+
+  if (!loaded) return null;
+
+  return (
+    <div className="flex items-center justify-between p-3 bg-bg-secondary rounded-lg border border-border">
+      <div>
+        <span className="text-sm text-white">{t('settings.monitoring.launchAtStartup', 'Launch at startup')}</span>
+        <p className="text-xs text-text-muted">{t('settings.monitoring.launchAtStartupDescription', 'Start 4DA automatically when you log in')}</p>
       </div>
       <button
         onClick={toggle}
@@ -139,6 +182,7 @@ export function MonitoringSection({
           </div>
 
           <CloseToTrayToggle initialValue={monitoring.close_to_tray} />
+          <LaunchAtStartupToggle />
 
           <div className="flex items-center justify-between text-xs text-text-muted px-1">
             <span>{t('settings.monitoring.totalChecks', { count: monitoring.total_checks })}</span>

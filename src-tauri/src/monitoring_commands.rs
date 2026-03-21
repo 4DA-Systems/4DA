@@ -4,7 +4,7 @@
 //! enabling/disabling monitoring, and setting intervals.
 
 use tauri::AppHandle;
-use tracing::info;
+use tracing::{info, warn};
 
 use crate::error::Result;
 use crate::{get_monitoring_state, get_settings_manager, monitoring, settings};
@@ -91,16 +91,18 @@ pub async fn set_monitoring_interval(minutes: u64) -> Result<serde_json::Value> 
         let manager = get_settings_manager();
         let guard = manager.lock();
         let license = &guard.get().license;
-        let is_pro =
-            matches!(license.tier.as_str(), "pro" | "team") || settings::is_trial_active(license);
+        let is_paid = matches!(
+            license.tier.as_str(),
+            "signal" | "pro" | "team" | "enterprise"
+        ) || settings::is_trial_active(license);
 
-        if is_pro {
+        if is_paid {
             if minutes < 5 {
                 return Err("Minimum monitoring interval is 5 minutes.".into());
             }
         } else if minutes < 30 {
             return Err(
-                "Free tier minimum monitoring interval is 30 minutes. Upgrade to Pro for intervals as low as 5 minutes."
+                "Free tier minimum monitoring interval is 30 minutes. Upgrade to Signal for intervals as low as 5 minutes."
                     .into(),
             );
         }
@@ -194,6 +196,51 @@ pub async fn set_close_to_tray(enabled: bool) -> Result<serde_json::Value> {
         "close_to_tray": enabled,
         "message": if enabled { "Window will hide to tray on close" } else { "Window will quit on close" }
     }))
+}
+
+/// Set whether 4DA launches at system startup.
+#[tauri::command]
+pub async fn set_launch_at_startup(
+    app: tauri::AppHandle,
+    enabled: bool,
+) -> Result<serde_json::Value> {
+    // Update the autostart plugin
+    use tauri_plugin_autostart::ManagerExt;
+    let autostart = app.autolaunch();
+    if enabled {
+        if let Err(e) = autostart.enable() {
+            warn!(target: "4da::settings", error = %e, "Failed to enable autostart");
+        }
+    } else {
+        if let Err(e) = autostart.disable() {
+            warn!(target: "4da::settings", error = %e, "Failed to disable autostart");
+        }
+    }
+
+    // Persist in settings
+    {
+        let mut settings = get_settings_manager().lock();
+        let m = settings.get().monitoring.clone();
+        let _ = settings.set_monitoring_config(settings::MonitoringConfig {
+            launch_at_startup: Some(enabled),
+            ..m
+        });
+    }
+
+    info!(target: "4da::settings", launch_at_startup = enabled, "Startup launch updated");
+
+    Ok(serde_json::json!({
+        "launch_at_startup": enabled,
+        "message": if enabled { "4DA will launch at system startup" } else { "4DA will not launch at system startup" }
+    }))
+}
+
+/// Get current autostart state.
+#[tauri::command]
+pub async fn get_launch_at_startup(app: tauri::AppHandle) -> Result<bool> {
+    use tauri_plugin_autostart::ManagerExt;
+    let autostart = app.autolaunch();
+    Ok(autostart.is_enabled().unwrap_or(false))
 }
 
 #[cfg(test)]

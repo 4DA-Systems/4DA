@@ -1,7 +1,7 @@
 //! Natural Language Search — Intelligence Console query engine.
 //!
 //! Tiered search: free users get 3 results + ghost preview,
-//! Pro users get full results + decision/gap cross-referencing.
+//! Signal users get full results + decision/gap cross-referencing.
 //! Stack-aware boosting prioritises results matching the user's tech.
 
 use chrono::{Duration, Utc};
@@ -584,7 +584,7 @@ fn is_llm_configured() -> bool {
 }
 
 // ============================================================================
-// Tauri Command — Pro-gated
+// Tauri Command — Signal-gated
 // ============================================================================
 
 const FREE_RESULT_LIMIT: usize = 3;
@@ -597,8 +597,8 @@ pub async fn natural_language_query(query_text: String) -> Result<QueryResult> {
         return Err("Query cannot be empty".into());
     }
 
-    crate::settings::require_pro_feature("natural_language_query")?;
-    let is_pro = crate::settings::is_pro();
+    crate::settings::require_signal_feature("natural_language_query")?;
+    let is_pro = crate::settings::is_signal();
 
     // 1. Parse intent locally
     let parsed = parse_query_local(&query_text);
@@ -639,7 +639,7 @@ pub async fn natural_language_query(query_text: String) -> Result<QueryResult> {
 
     let total_count = all_items.len();
 
-    // 6. Pro-only intelligence: decisions + gaps
+    // 6. Signal-only intelligence: decisions + gaps
     let (related_decisions, knowledge_gaps) = if is_pro {
         let conn = crate::open_db_connection()?;
         let decisions = find_related_decisions(&conn, &parsed.keywords);
@@ -649,7 +649,7 @@ pub async fn natural_language_query(query_text: String) -> Result<QueryResult> {
         (Vec::new(), Vec::new())
     };
 
-    // 7. Count Pro intelligence for ghost preview (even if user is Pro, compute for response)
+    // 7. Count Signal intelligence for ghost preview (even if user is Signal, compute for response)
     let decision_count = if is_pro {
         related_decisions.len()
     } else {
@@ -673,7 +673,7 @@ pub async fn natural_language_query(query_text: String) -> Result<QueryResult> {
             synthesis_available: is_llm_configured(),
         })
     } else if !is_pro {
-        // Even with few results, show ghost if there's Pro intelligence
+        // Even with few results, show ghost if there's Signal intelligence
         if decision_count > 0 || gap_count > 0 || is_llm_configured() {
             Some(GhostPreview {
                 total_results: total_count,

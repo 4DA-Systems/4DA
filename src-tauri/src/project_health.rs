@@ -121,7 +121,7 @@ pub fn compute_project_health(
 
 #[tauri::command]
 pub fn get_project_health(project_path: Option<String>) -> Result<Vec<ProjectHealth>> {
-    crate::settings::require_pro_feature("get_project_health")?;
+    crate::settings::require_signal_feature("get_project_health")?;
     let conn = crate::open_db_connection()?;
     if let Some(path) = project_path {
         let health = compute_project_health(&conn, &path)?;

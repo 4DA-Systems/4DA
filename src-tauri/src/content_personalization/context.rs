@@ -32,7 +32,7 @@ pub struct PersonalizationContext {
     pub progress: ProgressData,
     // Source 7: Settings / LLM config
     pub settings: SettingsData,
-    // Source 8: Developer DNA (Pro only, partial for free)
+    // Source 8: Developer DNA (Signal only, partial for free)
     pub dna: DnaData,
     // Derived / computed fields
     pub computed: ComputedFields,
@@ -109,7 +109,7 @@ pub struct SettingsData {
     pub llm_model: String,
 }
 
-/// Developer DNA data (Pro features gated).
+/// Developer DNA data (Signal features gated).
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct DnaData {
     pub is_full: bool,

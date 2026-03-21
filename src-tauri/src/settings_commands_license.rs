@@ -49,7 +49,7 @@ pub async fn get_license_tier() -> Result<serde_json::Value> {
         "tier": license.tier,
         "activated_at": license.activated_at,
         "has_key": !license.license_key.is_empty(),
-        "pro_features": crate::settings::PRO_FEATURES,
+        "signal_features": crate::settings::SIGNAL_FEATURES,
         "expires_at": expires_at,
         "days_remaining": days_remaining,
         "expired": expired,
