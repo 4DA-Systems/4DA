@@ -514,6 +514,8 @@ interface CommandMap {
   get_project_deps: { params: { projectPath: string }; result: ProjectDepsResult };
   get_dependency_alerts: { params: Record<string, never>; result: DependencyAlertsResult };
   resolve_dependency_alert: { params: { alertId: number }; result: void };
+  check_dependency_upgrades: { params: Record<string, never>; result: { checked: number; upgrades_available: number; upgrades: Array<{ package: string; ecosystem: string; current: string; latest: string; is_major_upgrade: boolean; project: string }> } };
+  get_license_overview: { params: Record<string, never>; result: { total: number; compatible: number; caution: number; warning: number; unknown: number; issues: Array<{ package: string; license: string; status: string; reason: string }> } };
 
   // -- Accuracy Tracking (Phase 4.1) --
   get_accuracy_report: { params: { period?: string }; result: AccuracyReport };

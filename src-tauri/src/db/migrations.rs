@@ -226,7 +226,7 @@ impl Database {
             .query_row("SELECT version FROM schema_version", [], |row| row.get(0))
             .unwrap_or(1);
 
-        const TARGET_VERSION: i64 = 34;
+        const TARGET_VERSION: i64 = 37;
         if current_version < TARGET_VERSION {
             // Drop the conn lock briefly to allow backup (needs filesystem access)
             drop(conn);
@@ -1065,6 +1065,16 @@ impl Database {
                 )?;
             }
 
+            if current_version < 37 {
+                Self::run_versioned_migration(
+                    &conn,
+                    36,
+                    37,
+                    "Phase 37: License compliance column",
+                    Self::migrate_to_phase_37,
+                )?;
+            }
+
             info!(target: "4da::db", "Database schema initialized with sqlite-vec");
             return Ok(());
         }
@@ -1716,6 +1726,21 @@ impl Database {
             CREATE INDEX IF NOT EXISTS idx_dep_alerts_severity ON dependency_alerts(severity);",
         )?;
         info!(target: "4da::db", "Created Dependency Intelligence tables");
+        Ok(())
+    }
+
+    fn migrate_to_phase_37(conn: &Connection) -> SqliteResult<()> {
+        let has_license: bool = conn
+            .query_row(
+                "SELECT COUNT(*) FROM pragma_table_info('user_dependencies') WHERE name='license'",
+                [],
+                |row| row.get::<_, i64>(0).map(|count| count > 0),
+            )
+            .unwrap_or(false);
+        if !has_license {
+            conn.execute("ALTER TABLE user_dependencies ADD COLUMN license TEXT", [])?;
+        }
+        info!(target: "4da::db", "Added license column to user_dependencies");
         Ok(())
     }
 }
