@@ -1,8 +1,9 @@
-import { memo, useCallback } from 'react';
+import { memo, useCallback, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { getSourceLabel, getSourceColorClass } from '../../config/sources';
 import { formatScore } from '../../utils/score';
 import { isSafeUrl } from '../../utils/sanitize-html';
+import { useGameComponent } from '../../hooks/use-game-component';
 import type { SourceRelevance, FeedbackAction } from '../../types';
 
 interface AttentionCardsProps {
@@ -78,6 +79,18 @@ const AttentionCard = memo(function AttentionCard({
   const style = PRIORITY_STYLES[priority] || PRIORITY_STYLES.high;
   const source = item.source_type || 'hackernews';
 
+  // GAME score fingerprint — unique visual identity per item
+  const { containerRef: fpRef, elementRef: fpElRef } = useGameComponent('game-score-fingerprint');
+
+  useEffect(() => {
+    const el = fpElRef.current;
+    if (!el) return;
+    el.setParam?.('relevance', item.score_breakdown?.context_score ?? 0);
+    el.setParam?.('freshness', item.score_breakdown?.freshness_mult ?? 0.5);
+    el.setParam?.('depth', item.score_breakdown?.content_quality_mult ?? 0.5);
+    el.setParam?.('confidence', item.confidence ?? 0.5);
+  }, [item, fpElRef]);
+
   const handleOpen = useCallback(() => {
     onRecordClick(item);
     if (item.url && isSafeUrl(item.url)) {
@@ -103,7 +116,8 @@ const AttentionCard = memo(function AttentionCard({
         <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${getSourceColorClass(source)}`}>
           {getSourceLabel(source)}
         </span>
-        <span className="text-xs font-mono text-text-muted ml-auto">
+        <div ref={fpRef} className="w-6 h-6 rounded flex-shrink-0 ml-auto" aria-hidden="true" />
+        <span className="text-xs font-mono text-text-muted">
           {formatScore(item.top_score)}
         </span>
       </div>

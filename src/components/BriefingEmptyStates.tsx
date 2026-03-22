@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../store';
+import { useGameComponent } from '../hooks/use-game-component';
 
 /** Analysis in progress — spinner + live progress */
 export function BriefingLoadingState() {
@@ -92,10 +93,12 @@ export function BriefingReadyState() {
 export function BriefingNoDataState() {
   const { t } = useTranslation();
   const startAnalysis = useAppStore(s => s.startAnalysis);
+  const { containerRef: turingRef } = useGameComponent('game-turing-fire');
 
   return (
-    <div className="bg-bg-primary rounded-lg">
-      <div className="flex flex-col items-center justify-center py-20 px-8">
+    <div className="relative bg-bg-primary rounded-lg">
+      <div ref={turingRef} className="absolute inset-0 opacity-[0.18] rounded-lg overflow-hidden pointer-events-none" aria-hidden="true" />
+      <div className="relative flex flex-col items-center justify-center py-20 px-8">
         <div className="w-20 h-20 mb-6 bg-bg-secondary rounded-2xl border border-border flex items-center justify-center">
           <svg className="w-8 h-8 text-text-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />

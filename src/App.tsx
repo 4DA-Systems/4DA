@@ -23,6 +23,7 @@ import { UpdateBanner } from './components/UpdateBanner';
 // Lazy-loaded non-critical-path components
 const FirstRunTransition = lazy(() => import('./components/FirstRunTransition').then(m => ({ default: m.FirstRunTransition })));
 const GuidedHighlights = lazy(() => import('./components/GuidedHighlights').then(m => ({ default: m.GuidedHighlights })));
+const MilestoneOverlay = lazy(() => import('./components/MilestoneOverlay').then(m => ({ default: m.MilestoneOverlay })));
 
 // Lazy-loaded non-critical views and overlays
 const SettingsModal = lazy(() => import('./components/SettingsModal').then(m => ({ default: m.SettingsModal })));
@@ -315,6 +316,18 @@ function App() {
       setAnalysisPulse(true);
       setTimeout(() => setAnalysisPulse(false), 500);
     },
+    onSaveFocused: () => {
+      const item = filteredResults[focusedIndex];
+      if (item) useAppStore.getState().recordInteraction(item.id, 'save', item);
+    },
+    onDismissFocused: () => {
+      const item = filteredResults[focusedIndex];
+      if (item) useAppStore.getState().recordInteraction(item.id, 'dismiss', item);
+    },
+    onFocusSearch: () => {
+      const el = document.querySelector<HTMLInputElement>('[data-search-input]');
+      el?.focus();
+    },
   });
 
   return (
@@ -416,6 +429,7 @@ function App() {
         {/* Toast Notifications */}
         <ToastContainer toasts={toasts} onDismiss={removeToast} />
         <FeedbackMilestone count={feedbackCount} />
+        <Suspense fallback={null}><MilestoneOverlay /></Suspense>
 
         {/* Guided Highlights — one-time feature discovery overlay (self-dismisses via localStorage) */}
         <Suspense fallback={null}><GuidedHighlights /></Suspense>

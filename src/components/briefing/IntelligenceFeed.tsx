@@ -112,11 +112,25 @@ const FeedItem = memo(function FeedItem({
     }
   }, [item, onRecordClick]);
 
+  const hoverReason = useMemo(() => {
+    const parts: string[] = [];
+    if (item.explanation) return item.explanation;
+    const b = item.score_breakdown;
+    if (b) {
+      if (b.context_score > 0.3) parts.push('Matches your context');
+      if (b.matched_deps?.length) parts.push(`Affects ${b.matched_deps.slice(0, 2).join(', ')}`);
+      if (b.interest_score > 0.3) parts.push('Interest match');
+      if (b.ace_boost > 0.1) parts.push('Active in recent work');
+    }
+    if (item.source_type) parts.push(getSourceLabel(item.source_type));
+    return parts.join(' \u00b7 ') || item.title;
+  }, [item]);
+
   // Dim if already acted on
   const dimmed = feedback === 'dismiss' || feedback === 'mark_irrelevant';
 
   return (
-    <div className={`group flex items-center gap-3 px-4 py-2.5 hover:bg-white/[0.02] transition-colors ${
+    <div title={hoverReason} className={`group flex items-center gap-3 px-4 py-2.5 hover:bg-white/[0.02] transition-colors ${
       dimmed ? 'opacity-40' : ''
     }`}>
       {/* Score */}
