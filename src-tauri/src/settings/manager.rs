@@ -216,14 +216,16 @@ impl SettingsManager {
         Ok(())
     }
 
-    /// Save usage stats to disk
+    /// Save usage stats to disk (atomic: temp file → rename)
     fn save_usage(&self) -> Result<()> {
         if let Some(parent) = self.usage_path.parent() {
             fs::create_dir_all(parent)?;
         }
 
         let json = serde_json::to_string_pretty(&self.usage)?;
-        fs::write(&self.usage_path, json)?;
+        let tmp_path = self.usage_path.with_extension("json.tmp");
+        fs::write(&tmp_path, &json)?;
+        fs::rename(&tmp_path, &self.usage_path)?;
         Ok(())
     }
 

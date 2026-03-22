@@ -109,9 +109,9 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
     // ── Layer 1: halo ──
     {
         var p = vec2<f32>(uv.x * aspect, uv.y);
-        var sdf_result = sdf_box(p, 0.360000, 0.840000);
-        sdf_result = sdf_result - 0.040000;
-        sdf_result = abs(sdf_result) - 0.020000;
+        var sdf_result = sdf_box(p, 2.600000, 0.860000);
+        sdf_result = sdf_result - 0.080000;
+        sdf_result = abs(sdf_result) - 0.060000;
         let glow_pulse = 0.400000 * (0.9 + 0.1 * sin(time * 2.0));
         let glow_result = apply_glow(sdf_result, glow_pulse);
         var color_result = vec4<f32>(vec3<f32>(glow_result), glow_result);
@@ -126,9 +126,9 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
         var p = vec2<f32>(uv.x * aspect, uv.y);
         { let ra = time * 0.800000; let rc = cos(ra); let rs = sin(ra);
         p = vec2<f32>(p.x * rc - p.y * rs, p.x * rs + p.y * rc); }
-        var sdf_result = sdf_box(p, 0.350000, 0.820000);
-        sdf_result = sdf_result - 0.035000;
-        sdf_result = abs(sdf_result) - 0.005000;
+        var sdf_result = sdf_box(p, 2.530000, 0.820000);
+        sdf_result = sdf_result - 0.070000;
+        sdf_result = abs(sdf_result) - 0.015000;
         let arc_theta = atan2(p.x, p.y) + 3.14159265359;
         sdf_result = select(999.0, sdf_result, arc_theta < 0.500000);
         let glow_pulse = 0.250000 * (0.9 + 0.1 * sin(time * 2.0));
@@ -145,9 +145,9 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
     // ── Layer 3: track ──
     {
         var p = vec2<f32>(uv.x * aspect, uv.y);
-        var sdf_result = sdf_box(p, 0.350000, 0.820000);
-        sdf_result = sdf_result - 0.035000;
-        sdf_result = abs(sdf_result) - 0.002000;
+        var sdf_result = sdf_box(p, 2.530000, 0.820000);
+        sdf_result = sdf_result - 0.070000;
+        sdf_result = abs(sdf_result) - 0.005000;
         let glow_pulse = 0.120000 * (0.9 + 0.1 * sin(time * 2.0));
         let glow_result = apply_glow(sdf_result, glow_pulse);
         var color_result = vec4<f32>(vec3<f32>(glow_result), glow_result);
@@ -160,8 +160,8 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
     // ── Layer 4: card ──
     {
         var p = vec2<f32>(uv.x * aspect, uv.y);
-        var sdf_result = sdf_box(p, 0.355000, 0.830000);
-        sdf_result = sdf_result - 0.035000;
+        var sdf_result = sdf_box(p, 2.540000, 0.830000);
+        sdf_result = sdf_result - 0.065000;
         let shade_fw = fwidth(sdf_result);
         let shade_alpha = 1.0 - smoothstep(-shade_fw, shade_fw, sdf_result);
         var color_result = vec4<f32>(vec3<f32>(0.055000, 0.055000, 0.055000) * shade_alpha, shade_alpha);
@@ -292,9 +292,9 @@ void main(){
     // ── Layer 1: halo ──
     {
         vec2 p = vec2(uv.x * aspect, uv.y);
-        float sdf_result = sdf_box(p, 0.360000, 0.840000);
-        sdf_result -= 0.040000;
-        sdf_result = abs(sdf_result) - 0.020000;
+        float sdf_result = sdf_box(p, 2.600000, 0.860000);
+        sdf_result -= 0.080000;
+        sdf_result = abs(sdf_result) - 0.060000;
         float glow_pulse = 0.400000 * (0.9 + 0.1 * sin(time * 2.0));
         float glow_result = apply_glow(sdf_result, glow_pulse);
 
@@ -310,9 +310,9 @@ void main(){
         vec2 p = vec2(uv.x * aspect, uv.y);
         { float ra = time * 0.800000; float rc = cos(ra); float rs = sin(ra);
         p = vec2(p.x * rc - p.y * rs, p.x * rs + p.y * rc); }
-        float sdf_result = sdf_box(p, 0.350000, 0.820000);
-        sdf_result -= 0.035000;
-        sdf_result = abs(sdf_result) - 0.005000;
+        float sdf_result = sdf_box(p, 2.530000, 0.820000);
+        sdf_result -= 0.070000;
+        sdf_result = abs(sdf_result) - 0.015000;
         float arc_theta = atan(p.x, p.y) + 3.14159265359;
         sdf_result = (arc_theta < 0.500000 ? sdf_result : 999.0);
         float glow_pulse = 0.250000 * (0.9 + 0.1 * sin(time * 2.0));
@@ -330,9 +330,9 @@ void main(){
     // ── Layer 3: track ──
     {
         vec2 p = vec2(uv.x * aspect, uv.y);
-        float sdf_result = sdf_box(p, 0.350000, 0.820000);
-        sdf_result -= 0.035000;
-        sdf_result = abs(sdf_result) - 0.002000;
+        float sdf_result = sdf_box(p, 2.530000, 0.820000);
+        sdf_result -= 0.070000;
+        sdf_result = abs(sdf_result) - 0.005000;
         float glow_pulse = 0.120000 * (0.9 + 0.1 * sin(time * 2.0));
         float glow_result = apply_glow(sdf_result, glow_pulse);
 
@@ -346,8 +346,8 @@ void main(){
     // ── Layer 4: card ──
     {
         vec2 p = vec2(uv.x * aspect, uv.y);
-        float sdf_result = sdf_box(p, 0.355000, 0.830000);
-        sdf_result -= 0.035000;
+        float sdf_result = sdf_box(p, 2.540000, 0.830000);
+        sdf_result -= 0.065000;
         float shade_fw = fwidth(sdf_result);
         float shade_alpha = 1.0 - smoothstep(-shade_fw, shade_fw, sdf_result);
         vec4 color_result = vec4(vec3(0.055000, 0.055000, 0.055000) * shade_alpha, shade_alpha);

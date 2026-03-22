@@ -6,8 +6,9 @@
   "license": "FSL-1.1-Apache-2.0",
   "homepage": "https://4da.ai",
   "type": "module",
+  "packageManager": "pnpm@9.15.0",
   "scripts": {
-    "dev": "vite",
+    "dev": "node scripts/kill-port.cjs 4444 && vite",
     "copy:notif": "node -e \"const fs=require('fs'),p=require('path');['notif-critical','notif-high','notif-medium','notif-digest'].forEach(n=>{const s=p.join('src/lib/game-components',n+'.js'),d=p.join('public',n+'.js');if(fs.existsSync(s))fs.copyFileSync(s,d)})\"",
     "build": "pnpm run copy:notif && tsc && vite build",
     "preview": "vite preview",
