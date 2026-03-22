@@ -24,6 +24,15 @@ pub(crate) fn emit_progress(
     if let Err(e) = app.emit("analysis-progress", &status) {
         tracing::warn!("Failed to emit 'analysis-progress': {e}");
     }
+
+    // Broadcast to SSE clients
+    crate::signal_terminal_events::broadcast(
+        crate::signal_terminal_events::TerminalEvent::AnalysisProgress {
+            stage: stage.to_string(),
+            progress,
+            message: message.to_string(),
+        },
+    );
 }
 
 // ============================================================================
@@ -126,6 +135,14 @@ pub(crate) fn void_signal_analysis_complete(app: &AppHandle, results: &[SourceRe
             void_engine::signal_after_analysis(db, monitoring, &top_scores, summary.as_ref());
         void_engine::emit_if_changed(app, signal);
     }
+
+    // Broadcast to SSE clients
+    crate::signal_terminal_events::broadcast(
+        crate::signal_terminal_events::TerminalEvent::AnalysisComplete {
+            relevant_count: results.iter().filter(|r| r.relevant).count(),
+            total_count: results.len(),
+        },
+    );
 }
 
 /// Emit void signal: notification fired
