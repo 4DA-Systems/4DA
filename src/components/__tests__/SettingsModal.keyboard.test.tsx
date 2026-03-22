@@ -1,7 +1,7 @@
 /**
  * Keyboard navigation tests for SettingsModal.
  *
- * Tests Tab through 6 tabs, Escape closes, arrow key navigation within tab list.
+ * Tests Tab through 5 tabs, Escape closes, aria-selected toggling.
  */
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
@@ -20,37 +20,23 @@ vi.mock('../../store', () => ({
       settingsForm: { provider: 'anthropic', apiKey: '', model: 'claude-3-5-haiku-20241022', baseUrl: '', openaiApiKey: '', embeddingThreshold: 0.25, rerankEnabled: false, maxItemsPerBatch: 10, minEmbeddingScore: 0.1, dailyTokenLimit: 100000, dailyCostLimitCents: 50 },
       setSettingsFormFull: vi.fn(), settingsStatus: '', setSettingsStatus: vi.fn(),
       saveSettings: vi.fn(), testConnection: vi.fn(), ollamaStatus: null, ollamaModels: [],
-      checkOllamaStatus: vi.fn(),
+      checkOllamaStatus: vi.fn(), modelRegistry: null, refreshModelRegistry: vi.fn(),
       monitoring: { enabled: false, interval_minutes: 30, is_checking: false, last_check_ago: null, total_checks: 0 },
       monitoringInterval: 30, notificationThreshold: 'high_and_above',
       setMonitoringInterval: vi.fn(), setNotificationThreshold: vi.fn(), toggleMonitoring: vi.fn(),
       updateMonitoringInterval: vi.fn(), testNotification: vi.fn(),
       scanDirectories: [], newScanDir: '', setNewScanDir: vi.fn(), isScanning: false, discoveredContext: null,
       runAutoDiscovery: vi.fn(), runFullScan: vi.fn(), addScanDirectory: vi.fn(), removeScanDirectory: vi.fn(),
-      learnedAffinities: [], antiTopics: [], loadLearnedBehavior: vi.fn(),
-      systemHealth: { anomalies: [], anomalyCount: 0, embeddingOperational: true, rateLimitStatus: null, accuracyMetrics: null },
-      similarTopicQuery: '', setSimilarTopicQuery: vi.fn(), similarTopicResults: [],
-      runAnomalyDetection: vi.fn(), resolveAnomaly: vi.fn(), findSimilarTopics: vi.fn(),
-      saveWatcherState: vi.fn(), loadSystemHealth: vi.fn(),
-      userContext: { role: null, tech_stack: [], domains: [], interests: [], exclusions: [], stats: { interest_count: 0, exclusion_count: 0 } },
-      suggestedInterests: [], newInterest: '', setNewInterest: vi.fn(), newExclusion: '', setNewExclusion: vi.fn(),
-      newTechStack: '', setNewTechStack: vi.fn(), newRole: '', setNewRole: vi.fn(),
-      addInterest: vi.fn(), removeInterest: vi.fn(), addExclusion: vi.fn(), removeExclusion: vi.fn(),
-      addTechStack: vi.fn(), removeTechStack: vi.fn(), updateRole: vi.fn(),
-      loadSuggestedInterests: vi.fn(), loadSettings: vi.fn(), loadMonitoringStatus: vi.fn(),
-      loadDiscoveredContext: vi.fn(), loadUserContext: vi.fn(),
-      streetsTier: 'playbook', loadStreetsTier: vi.fn(), activateStreetsLicense: vi.fn(),
-      loadLicense: vi.fn(), loadTrialStatus: vi.fn(), license: null, trialStatus: null,
+      loadSettings: vi.fn(), loadMonitoringStatus: vi.fn(),
+      loadDiscoveredContext: vi.fn(), loadUserContext: vi.fn(), loadSuggestedInterests: vi.fn(),
+      tier: 'free', showTeamInviteDialog: false, setShowTeamInviteDialog: vi.fn(),
     };
     return selector(mockState);
   }),
 }));
 
 // Mock child components
-vi.mock('../LearnedBehaviorPanel', () => ({ LearnedBehaviorPanel: () => <div data-testid="learned-behavior-panel" /> }));
-vi.mock('../SystemHealthPanel', () => ({ SystemHealthPanel: () => <div data-testid="system-health-panel" /> }));
 vi.mock('../IndexedDocumentsPanel', () => ({ IndexedDocumentsPanel: () => <div data-testid="indexed-documents-panel" /> }));
-vi.mock('../NaturalLanguageSearch', () => ({ NaturalLanguageSearch: () => <div data-testid="natural-language-search" /> }));
 vi.mock('../SourceConfigPanel', () => ({ SourceConfigPanel: () => <div data-testid="source-config-panel" /> }));
 vi.mock('../settings/AIProviderSection', () => ({ AIProviderSection: () => <div data-testid="ai-provider-section" /> }));
 vi.mock('../settings/MonitoringSection', () => ({ MonitoringSection: () => <div data-testid="monitoring-section" /> }));
@@ -59,10 +45,8 @@ vi.mock('../settings/ContextDiscoverySection', () => ({ ContextDiscoverySection:
 vi.mock('../settings/PersonalizationSection', () => ({ PersonalizationSection: () => <div data-testid="personalization-section" /> }));
 vi.mock('../settings/CommunityIntelligenceSection', () => ({ CommunityIntelligenceSection: () => <div data-testid="community-intelligence-section" /> }));
 vi.mock('../settings/LocaleSection', () => ({ LocaleSection: () => <div data-testid="locale-section" /> }));
+vi.mock('../settings/LicenseSection', () => ({ LicenseSection: () => <div data-testid="license-section" /> }));
 vi.mock('../ProValuePanel', () => ({ ProValuePanel: () => <div data-testid="pro-value-panel" /> }));
-vi.mock('../DeveloperDna', () => ({ DeveloperDnaPanel: () => <div data-testid="developer-dna-panel" /> }));
-vi.mock('../settings/AttentionDashboard', () => ({ AttentionDashboard: () => <div data-testid="attention-dashboard" /> }));
-vi.mock('../settings/ProjectHealthRadar', () => ({ ProjectHealthRadar: () => <div data-testid="project-health-radar" /> }));
 
 describe('SettingsModal keyboard navigation', () => {
   it('calls onClose when Escape key is pressed', () => {
@@ -72,10 +56,10 @@ describe('SettingsModal keyboard navigation', () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
-  it('has tab elements with proper role', () => {
+  it('has 5 tab elements with proper role', () => {
     render(<SettingsModal onClose={vi.fn()} />);
     const tabs = screen.getAllByRole('tab');
-    expect(tabs.length).toBeGreaterThanOrEqual(6);
+    expect(tabs).toHaveLength(5);
   });
 
   it('General tab is selected by default with aria-selected', () => {
@@ -94,7 +78,13 @@ describe('SettingsModal keyboard navigation', () => {
 
   it('tabs switch aria-selected correctly across all tabs', () => {
     render(<SettingsModal onClose={vi.fn()} />);
-    const tabNames = ['settings.tabs.general', 'settings.tabs.sources', 'settings.tabs.profile', 'settings.tabs.projects', 'settings.tabs.advanced', 'settings.tabs.about'];
+    const tabNames = [
+      'settings.tabs.general',
+      'settings.tabs.intelligence',
+      'settings.tabs.sources',
+      'settings.tabs.projects',
+      'settings.tabs.about',
+    ];
 
     for (const name of tabNames) {
       const tab = screen.getByRole('tab', { name });
@@ -113,13 +103,13 @@ describe('SettingsModal keyboard navigation', () => {
     render(<SettingsModal onClose={vi.fn()} />);
     const closeBtn = screen.getByLabelText('Close settings');
     expect(closeBtn.tagName).toBe('BUTTON');
-    // Buttons are focusable by default unless tabIndex=-1
     expect(closeBtn).not.toHaveAttribute('tabindex', '-1');
   });
 
-  it('Save and Test buttons are focusable in General tab', () => {
+  it('Save and Test buttons are focusable in Intelligence tab', () => {
     render(<SettingsModal onClose={vi.fn()} />);
-    const saveBtn = screen.getByText('settings.saveSettings');
+    fireEvent.click(screen.getByRole('tab', { name: 'settings.tabs.intelligence' }));
+    const saveBtn = screen.getByText('settings.ai.saveConfiguration');
     const testBtn = screen.getByText('settings.testConnection');
     expect(saveBtn.closest('button')).toBeInTheDocument();
     expect(testBtn.closest('button')).toBeInTheDocument();

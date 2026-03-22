@@ -103,7 +103,7 @@ export function DigestSection({ setSettingsStatus }: DigestSectionProps) {
         smtp_from: smtpForm.fromAddress || undefined,
         smtp_use_tls: smtpForm.useTls,
       });
-      setSettingsStatus('Email configuration saved');
+      setSettingsStatus(t('settings.digest.emailConfigSaved'));
       setTimeout(() => setSettingsStatus(''), 2000);
     } catch (error) {
       setSettingsStatus(`Error: ${error}`);
@@ -121,7 +121,7 @@ export function DigestSection({ setSettingsStatus }: DigestSectionProps) {
       setSettingsStatus(result);
       setTimeout(() => setSettingsStatus(''), 4000);
     } catch (error) {
-      setSettingsStatus(`Email test failed: ${error}`);
+      setSettingsStatus(`${t('settings.digest.emailTestFailed')}: ${error}`);
     } finally {
       setTestingSend(false);
     }
@@ -189,8 +189,8 @@ export function DigestSection({ setSettingsStatus }: DigestSectionProps) {
                 >
                   <div className="flex items-center gap-3">
                     <div className={`w-2 h-2 rounded-full ${emailEnabled ? 'bg-blue-500' : 'bg-gray-600'}`} />
-                    <span className="text-sm text-text-secondary">Email delivery</span>
-                    <span className="text-xs text-text-muted">(optional)</span>
+                    <span className="text-sm text-text-secondary">{t('settings.digest.emailDelivery')}</span>
+                    <span className="text-xs text-text-muted">{t('settings.digest.emailDeliveryOptional')}</span>
                   </div>
                   <svg
                     className={`w-4 h-4 text-text-muted transition-transform ${emailEnabled ? 'rotate-180' : ''}`}
@@ -203,13 +203,12 @@ export function DigestSection({ setSettingsStatus }: DigestSectionProps) {
                 {emailEnabled && (
                   <div className="p-4 space-y-4 border-t border-border">
                     <p className="text-xs text-text-muted leading-relaxed">
-                      Sent directly from your machine via your email provider.
-                      4DA never sees your email address or digest contents.
+                      {t('settings.digest.privacyNote')}
                     </p>
 
                     <div className="space-y-3">
                       <div>
-                        <label className="block text-xs text-text-muted mb-1">Email address</label>
+                        <label className="block text-xs text-text-muted mb-1">{t('settings.digest.emailAddress')}</label>
                         <input
                           type="email"
                           value={smtpForm.email}
@@ -221,7 +220,7 @@ export function DigestSection({ setSettingsStatus }: DigestSectionProps) {
 
                       <div className="grid grid-cols-2 gap-3">
                         <div>
-                          <label className="block text-xs text-text-muted mb-1">SMTP host</label>
+                          <label className="block text-xs text-text-muted mb-1">{t('settings.digest.smtpHost')}</label>
                           <input
                             type="text"
                             value={smtpForm.host}
@@ -231,7 +230,7 @@ export function DigestSection({ setSettingsStatus }: DigestSectionProps) {
                           />
                         </div>
                         <div>
-                          <label className="block text-xs text-text-muted mb-1">Port</label>
+                          <label className="block text-xs text-text-muted mb-1">{t('settings.digest.port')}</label>
                           <input
                             type="text"
                             value={smtpForm.port}
@@ -243,7 +242,7 @@ export function DigestSection({ setSettingsStatus }: DigestSectionProps) {
                       </div>
 
                       <div>
-                        <label className="block text-xs text-text-muted mb-1">Username</label>
+                        <label className="block text-xs text-text-muted mb-1">{t('settings.digest.username')}</label>
                         <input
                           type="text"
                           value={smtpForm.username}
@@ -254,7 +253,7 @@ export function DigestSection({ setSettingsStatus }: DigestSectionProps) {
                       </div>
 
                       <div>
-                        <label className="block text-xs text-text-muted mb-1">Password</label>
+                        <label className="block text-xs text-text-muted mb-1">{t('settings.digest.password')}</label>
                         <input
                           type="password"
                           value={smtpForm.password}
@@ -265,7 +264,7 @@ export function DigestSection({ setSettingsStatus }: DigestSectionProps) {
                       </div>
 
                       <div>
-                        <label className="block text-xs text-text-muted mb-1">From address</label>
+                        <label className="block text-xs text-text-muted mb-1">{t('settings.digest.fromAddress')}</label>
                         <input
                           type="email"
                           value={smtpForm.fromAddress}
@@ -282,7 +281,7 @@ export function DigestSection({ setSettingsStatus }: DigestSectionProps) {
                           onChange={e => setSmtpForm(prev => ({ ...prev, useTls: e.target.checked }))}
                           className="rounded border-border"
                         />
-                        Use TLS (recommended)
+                        {t('settings.digest.useTls')}
                       </label>
                     </div>
 
@@ -292,14 +291,14 @@ export function DigestSection({ setSettingsStatus }: DigestSectionProps) {
                         disabled={savingSmtp || !smtpForm.email}
                         className="px-4 py-2 text-sm rounded-lg bg-white/10 text-white border border-border hover:bg-white/20 transition-colors disabled:opacity-40"
                       >
-                        {savingSmtp ? 'Saving...' : 'Save'}
+                        {savingSmtp ? t('action.saving') : t('settings.digest.saveSmtp')}
                       </button>
                       <button
                         onClick={handleTestEmail}
                         disabled={testingSend || !smtpConfigured}
                         className="px-4 py-2 text-sm rounded-lg bg-blue-500/10 text-blue-400 border border-blue-500/30 hover:bg-blue-500/20 transition-colors disabled:opacity-40"
                       >
-                        {testingSend ? 'Sending...' : 'Send test email'}
+                        {testingSend ? t('settings.digest.sendingTest') : t('settings.digest.sendTestEmail')}
                       </button>
                     </div>
                   </div>
