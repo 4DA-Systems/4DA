@@ -400,6 +400,7 @@ permalink: "/signal.html"
       <div class="toggle">
         <button id="toggle-monthly" class="active" onclick="setPlan('monthly')">Monthly</button>
         <button id="toggle-annual" onclick="setPlan('annual')">Annual <span class="save-badge">SAVE $45</span></button>
+        <button id="toggle-lifetime" onclick="setPlan('lifetime')">Lifetime</button>
       </div>
 
       <div class="price-card">
@@ -411,7 +412,7 @@ permalink: "/signal.html"
           <span>$12</span> / 160 work hours = <span>$0.075/hr</span> for an intelligence system that watches your ecosystem 24/7
         </div>
         <button class="price-btn" id="checkout-btn" onclick="startCheckout()">Subscribe to Signal</button>
-        <div class="price-trial">30-day free trial included in the app. No credit card required to try.</div>
+        <div class="price-trial">45-day free trial included in the app. No credit card required to try.</div>
         <ul class="price-features">
           <li>Everything in the free tier</li>
           <li>Developer DNA profiling + exports</li>
@@ -461,7 +462,7 @@ permalink: "/signal.html"
       </div>
       <div class="faq-item">
         <div class="faq-q">Can I try before subscribing?</div>
-        <div class="faq-a">Yes. 4DA includes a 30-day free trial of all Signal features. No credit card required. Install the app, enable Signal features, and evaluate with your real codebase and real content. The compound advantage means the trial gets more valuable every day you use it.</div>
+        <div class="faq-a">Yes. 4DA includes a 45-day free trial of all Signal features. No credit card required. Install the app, enable Signal features, and evaluate with your real codebase and real content. The compound advantage means the trial gets more valuable every day you use it.</div>
       </div>
       <div class="faq-item">
         <div class="faq-q">What if I cancel?</div>
@@ -493,12 +494,22 @@ permalink: "/signal.html"
       posthog.capture('signal_plan_toggled', { plan: plan });
       document.getElementById('toggle-monthly').className = plan === 'monthly' ? 'active' : '';
       document.getElementById('toggle-annual').className = plan === 'annual' ? 'active' : '';
-      document.getElementById('price-value').textContent = plan === 'monthly' ? '12' : '99';
-      document.getElementById('price-period').textContent = plan === 'monthly' ? '/mo' : '/yr';
-      document.getElementById('annual-note').innerHTML = plan === 'annual' ? '$8.25/mo billed annually' : '&nbsp;';
-      document.getElementById('price-math').innerHTML = plan === 'monthly'
-        ? '<span>$12</span> / 160 work hours = <span>$0.075/hr</span> for an intelligence system that watches your ecosystem 24/7'
-        : '<span>$99</span> / 12 months = <span>$8.25/mo</span> — save $45/yr while your intelligence compounds';
+      document.getElementById('toggle-lifetime').className = plan === 'lifetime' ? 'active' : '';
+      if (plan === 'lifetime') {
+        document.getElementById('price-value').textContent = '249';
+        document.getElementById('price-period').textContent = '';
+        document.getElementById('annual-note').innerHTML = 'One-time payment. Yours forever.';
+        document.getElementById('price-math').innerHTML = '<span>$249</span> once = <span>never think about it again</span>';
+        document.getElementById('checkout-btn').textContent = 'Buy Signal Lifetime';
+      } else {
+        document.getElementById('price-value').textContent = plan === 'monthly' ? '12' : '99';
+        document.getElementById('price-period').textContent = plan === 'monthly' ? '/mo' : '/yr';
+        document.getElementById('annual-note').innerHTML = plan === 'annual' ? '$8.25/mo billed annually' : '&nbsp;';
+        document.getElementById('price-math').innerHTML = plan === 'monthly'
+          ? '<span>$12</span> / 160 work hours = <span>$0.075/hr</span> for an intelligence system that watches your ecosystem 24/7'
+          : '<span>$99</span> / 12 months = <span>$8.25/mo</span> &mdash; save $45/yr while your intelligence compounds';
+        document.getElementById('checkout-btn').textContent = 'Subscribe to Signal';
+      }
     }
 
     async function startCheckout() {
@@ -519,11 +530,11 @@ permalink: "/signal.html"
           window.location.href = data.url;
         } else {
           btn.textContent = data.error || 'Checkout unavailable';
-          setTimeout(function() { btn.disabled = false; btn.textContent = 'Subscribe to Signal'; }, 3000);
+          setTimeout(function() { btn.disabled = false; btn.textContent = currentPlan === 'lifetime' ? 'Buy Signal Lifetime' : 'Subscribe to Signal'; }, 3000);
         }
       } catch (err) {
         btn.textContent = 'Network error. Try again.';
-        setTimeout(function() { btn.disabled = false; btn.textContent = 'Subscribe to Signal'; }, 3000);
+        setTimeout(function() { btn.disabled = false; btn.textContent = currentPlan === 'lifetime' ? 'Buy Signal Lifetime' : 'Subscribe to Signal'; }, 3000);
       }
     }
   </script>

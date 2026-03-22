@@ -179,7 +179,7 @@ pub async fn start_trial() -> Result<serde_json::Value> {
 
     Ok(serde_json::json!({
         "success": true,
-        "days_remaining": 30,
+        "days_remaining": 45,
     }))
 }
 

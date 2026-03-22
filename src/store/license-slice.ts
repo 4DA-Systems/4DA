@@ -71,7 +71,7 @@ export const createLicenseSlice: StateCreator<AppStore, [], [], LicenseSlice> = 
         set({
           trialStatus: {
             active: true,
-            days_remaining: result.days_remaining ?? 30,
+            days_remaining: result.days_remaining ?? 45,
             started_at: new Date().toISOString(),
             has_license: false,
           },
