@@ -1,6 +1,8 @@
-import { useEffect } from 'react';
+import { useEffect, lazy, Suspense } from 'react';
 import { useTranslation } from 'react-i18next';
 import { registerGameComponent } from '../lib/game-components';
+
+const GeometryShowcase = lazy(() => import('./geometry/GeometryShowcase').then(m => ({ default: m.GeometryShowcase })));
 
 export function AboutPanel() {
   const { t } = useTranslation();
@@ -156,6 +158,13 @@ export function AboutPanel() {
             </div>
           ))}
         </div>
+      </div>
+
+      {/* Platonic Architecture — all geometry components */}
+      <div className="bg-bg-tertiary/30 border border-[#D4AF37]/20 rounded-xl p-4">
+        <Suspense fallback={null}>
+          <GeometryShowcase />
+        </Suspense>
       </div>
 
       {/* Framework + Philosophy */}
