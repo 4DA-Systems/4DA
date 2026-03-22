@@ -51,20 +51,6 @@ vi.mock('../store', () => ({
   useAppStore: vi.fn((selector: (s: Record<string, unknown>) => unknown) => selector(mockState)),
 }));
 
-// Mock BriefingCard to isolate BriefingView tests
-vi.mock('./BriefingCard', () => ({
-  BriefingCard: ({ item }: { item: { title: string } }) => (
-    <div data-testid="briefing-card">{item.title}</div>
-  ),
-}));
-
-// Mock SignalActionCard
-vi.mock('./briefing/SignalActionCard', () => ({
-  SignalActionCard: ({ item }: { item: { title: string } }) => (
-    <div data-testid="signal-card">{item.title}</div>
-  ),
-}));
-
 describe('BriefingView', () => {
   describe('loading state', () => {
     it('renders loading skeleton', () => {

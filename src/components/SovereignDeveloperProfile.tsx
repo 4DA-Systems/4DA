@@ -1,9 +1,12 @@
-import { useEffect, useState, memo, useCallback, useMemo } from 'react';
+import { lazy, Suspense, useEffect, useState, memo, useCallback, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../store';
 import { cmd } from '../lib/commands';
 import type { DimensionCompleteness } from '../types/profile';
 import { DeveloperDnaSection } from './DeveloperDnaSection';
+
+const IntelligenceProfileCard = lazy(() => import('./IntelligenceProfileCard').then(m => ({ default: m.IntelligenceProfileCard })));
+const LearningIndicator = lazy(() => import('./LearningIndicator').then(m => ({ default: m.LearningIndicator })));
 
 // ============================================================================
 // Completeness Ring (SVG)
@@ -121,6 +124,9 @@ export const SovereignDeveloperProfile = memo(function SovereignDeveloperProfile
   const exportMarkdown = useAppStore((s) => s.exportProfileMarkdown);
   const exportJson = useAppStore((s) => s.exportProfileJson);
   const setActiveView = useAppStore((s) => s.setActiveView);
+  const learnedAffinities = useAppStore((s) => s.learnedAffinities);
+  const antiTopics = useAppStore((s) => s.antiTopics);
+  const lastLearnedTopic = useAppStore((s) => s.lastLearnedTopic);
   const [exportStatus, setExportStatus] = useState<string | null>(null);
 
   useEffect(() => {
@@ -274,6 +280,20 @@ export const SovereignDeveloperProfile = memo(function SovereignDeveloperProfile
           )}
         </DimensionCard>
       </div>
+
+      {/* Intelligence Profile Card */}
+      <Suspense fallback={null}>
+        <IntelligenceProfileCard />
+      </Suspense>
+
+      {/* Learning Indicator */}
+      <Suspense fallback={null}>
+        <LearningIndicator
+          learnedAffinities={learnedAffinities}
+          antiTopics={antiTopics}
+          lastLearnedTopic={lastLearnedTopic}
+        />
+      </Suspense>
 
       {/* Intelligence Section */}
       {hasIntelligence && (
