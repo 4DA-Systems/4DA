@@ -12,13 +12,8 @@
 <!-- Add entries below. Format:
 ### T[N] — [short description]
 - **Status**: working | committing | done
+- **Since**: ISO timestamp (e.g., 2026-03-22T10:00:00Z)
 - **Commit Lock**: HELD | (omit if not held)
 - **Files**: list of files being modified
 -->
 
-### T1 — Execute all phases: hygiene gates + screenshot moments + first-run excellence
-- **Status**: working
-- **Files**: scripts/check-file-sizes.cjs, src/store/feedback-slice.ts, src/components/Onboarding.tsx, src/components/FeedbackMilestone.tsx, src/components/WeeklyProgressCard.tsx, src/components/AccuracySparkline.tsx, src/components/DepHealthShield.tsx, src/components/FirstCveCard.tsx, src/components/GuidedHighlights.tsx
-
-### T2 — Full application redesign (Waves 1A-3D)
-- **Status**: done

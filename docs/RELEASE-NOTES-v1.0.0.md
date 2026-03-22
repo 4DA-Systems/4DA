@@ -7,7 +7,8 @@
 - **5-axis relevance scoring** — every piece of content scored against your codebase using the PASIFA algorithm
 - **10 built-in content sources** — Hacker News, Reddit, RSS, GitHub, and more — all fetched locally
 - **STREETS Playbook** — 7 modules for developer growth, all included free
-- **AI briefings & Score Autopsy** (Pro) — natural language summaries and full scoring transparency
+- **AI briefings** (Free) — AI-generated daily and weekly intelligence summaries
+- **Score Autopsy & intelligence panels** (Signal) — full scoring transparency, knowledge gaps, signal chains
 - **30 MCP tools** — deep integration with Claude Code, Cursor, and GitHub Copilot
 - **Full i18n support** — internationalized interface out of the box
 
@@ -35,8 +36,8 @@ No account required. No configuration needed.
 
 ## Pricing
 
-- **Free:** All 10 sources, full scoring engine, STREETS Playbook, MCP tools
-- **Pro ($12/mo):** AI briefings, Developer DNA, Score Autopsy, Natural Language Queries
+- **Free:** All 10 sources, full scoring engine, AI briefings, STREETS Playbook, MCP tools
+- **Signal ($12/mo):** Developer DNA, Signal Chains, Knowledge Gaps, Score Autopsy, Natural Language Search
 
 ## Links
 

@@ -8,7 +8,6 @@ import { BriefingContentPanel } from './briefing/BriefingContentPanel';
 import { PersonalizeNudge } from './briefing/PersonalizeNudge';
 import { BriefingLoadingState, BriefingReadyState } from './BriefingEmptyStates';
 import { BriefingWarmupState } from './BriefingWarmupState';
-import { ProGate } from './ProGate';
 import { EngagementPulse } from './EngagementPulse';
 import { useLicense } from '../hooks/use-license';
 import { useBriefingDerived } from '../hooks/use-briefing-derived';
@@ -135,14 +134,12 @@ export const BriefingView = memo(function BriefingView() {
             )}
             <div className="mt-3 pt-3 border-t border-border flex items-center justify-between">
               <span className="text-xs text-text-muted">{t('briefing.itemsAnalyzed', { count: freeBriefing.total_items })}</span>
-              <ProGate feature="AI Briefings">
-                <button
-                  onClick={generateBriefing}
-                  className="px-3 py-1.5 text-xs bg-orange-500/10 text-orange-400 border border-orange-500/20 rounded-lg hover:bg-orange-500/20 transition-all font-medium"
-                >
-                  {t('briefing.generateAI')}
-                </button>
-              </ProGate>
+              <button
+                onClick={generateBriefing}
+                className="px-3 py-1.5 text-xs bg-orange-500/10 text-orange-400 border border-orange-500/20 rounded-lg hover:bg-orange-500/20 transition-all font-medium"
+              >
+                {t('briefing.generateAI')}
+              </button>
             </div>
           </div>
           <EngagementPulse />
