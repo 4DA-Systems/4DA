@@ -331,10 +331,21 @@ void main(){
               + exp(-min_vd * 30.0) * 0.4 * min_vdf;
     float total = (core + halo + vtx) * u_p_glow_intensity + pulse_glow;
 
+    // Face fill
+    float face_fill = 0.0;
+    if (u_p_fill_opacity > 0.001){
+        float near_count = 0.0;
+        for (int fi = 0; fi < 12; fi++){
+            near_count += smoothstep(0.5, 0.1, length(uv - p[fi]));
+        }
+        face_fill = smoothstep(1.5, 3.0, near_count) * u_p_fill_opacity;
+    }
+
     vec3 gold = vec3(0.831, 0.686, 0.216);
+    vec3 amber = vec3(0.6, 0.45, 0.15);
     vec3 hot = vec3(1.0, 0.95, 0.85);
     vec3 pulse_tint = vec3(0.9, 0.95, 1.0) * pulse_glow * 0.5;
-    vec3 color = gold * total + hot * max(total - 0.5, 0.0) * 0.5 + pulse_tint;
+    vec3 color = gold * total + hot * max(total - 0.5, 0.0) * 0.5 + pulse_tint + amber * face_fill;
     fragColor = vec4(clamp(color, 0.0, 1.0), 1.0);
 }
 `;
@@ -342,6 +353,7 @@ const UNIFORMS = [
   { name: 'rotation_speed', default: 0.25 },
   { name: 'glow_intensity', default: 1.0 },
   { name: 'pulse', default: 0.0 },
+  { name: 'fill_opacity', default: 0.0 },
 ];
 
 class GameRenderer {
