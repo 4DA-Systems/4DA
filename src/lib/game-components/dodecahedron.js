@@ -422,7 +422,9 @@ class GameRenderer {
     data[4] = this.audioData.energy;
     data[5] = this.audioData.beat;
     data[6] = w; data[7] = h;
-    data[8] = this.mouseX; data[9] = this.mouseY;
+    this._smx = (this._smx ?? 0.5) + (this.mouseX - (this._smx ?? 0.5)) * 0.07;
+    this._smy = (this._smy ?? 0.5) + (this.mouseY - (this._smy ?? 0.5)) * 0.07;
+    data[8] = this._smx; data[9] = this._smy;
     let i = 10;
     for (const u of this.uniformDefs) data[i++] = this.userParams[u.name] ?? u.default;
     this.device.queue.writeBuffer(this.uniformBuffer, 0, data);
@@ -432,7 +434,7 @@ class GameRenderer {
     const mainPass = encoder.beginRenderPass({
       colorAttachments: [{
         view: this.ctx.getCurrentTexture().createView(),
-        loadOp: 'clear', storeOp: 'store', clearValue: { r: 0, g: 0, b: 0, a: 1 }
+        loadOp: 'clear', storeOp: 'store', clearValue: { r: 0, g: 0, b: 0, a: 0 }
       }]
     });
     mainPass.setPipeline(this.pipeline);
@@ -535,7 +537,7 @@ class GameRendererGL {
     const gl = this.gl;
     const t = performance.now() / 1000 - this.startTime;
     gl.viewport(0, 0, this.canvas.width, this.canvas.height);
-    gl.clearColor(0, 0, 0, 1);
+    gl.clearColor(0, 0, 0, 0);
     gl.clear(gl.COLOR_BUFFER_BIT);
     gl.useProgram(this.program);
 
@@ -546,7 +548,9 @@ class GameRendererGL {
     gl.uniform1f(this.locs.energy, this.audioData.energy);
     gl.uniform1f(this.locs.beat, this.audioData.beat);
     gl.uniform2f(this.locs.resolution, this.canvas.width, this.canvas.height);
-    gl.uniform2f(this.locs.mouse, this.mouseX, this.mouseY);
+    this._smx = (this._smx ?? 0.5) + (this.mouseX - (this._smx ?? 0.5)) * 0.07;
+    this._smy = (this._smy ?? 0.5) + (this.mouseY - (this._smy ?? 0.5)) * 0.07;
+    gl.uniform2f(this.locs.mouse, this._smx, this._smy);
     for (const u of this.uniformDefs) {
       gl.uniform1f(this.paramLocs[u.name], this.userParams[u.name] ?? u.default);
     }
