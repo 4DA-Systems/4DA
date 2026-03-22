@@ -136,6 +136,7 @@ h2{color:#D4AF37;font-size:13px;margin:20px 0 8px;text-transform:uppercase;lette
 <div class="ep"><span class="method">GET</span><span class="path">/offline</span><div class="desc">Offline page shown when app is not running</div></div>
 
 <h2>Data APIs (auth required)</h2>
+<div class="ep"><span class="method">GET</span><span class="path">/api/boot</span><div class="desc">System boot data: status, signals, briefing in one request</div></div>
 <div class="ep"><span class="method">GET</span><span class="path">/api/status</span><div class="desc">System status: monitoring state, signal counts, threshold</div></div>
 <div class="ep"><span class="method">GET</span><span class="path">/api/signals</span><div class="desc">Top 50 relevant signals from latest analysis</div></div>
 <div class="ep"><span class="method">GET</span><span class="path">/api/briefing</span><div class="desc">Structured briefing: top 5 items with source diversity</div></div>
@@ -145,6 +146,9 @@ h2{color:#D4AF37;font-size:13px;margin:20px 0 8px;text-transform:uppercase;lette
 <div class="ep"><span class="method">GET</span><span class="path">/api/dna</span><div class="desc">Developer DNA profile: stack, interests, stats</div></div>
 <div class="ep"><span class="method">GET</span><span class="path">/api/gaps</span><div class="desc">Knowledge gaps: stale dependencies, missed items</div></div>
 <div class="ep"><span class="method">GET</span><span class="path">/api/search?q=...</span><div class="desc">Full-text search across scored items</div></div>
+<div class="ep"><span class="method">GET</span><span class="path">/api/sources</span><div class="desc">Registered content sources and their status</div></div>
+<div class="ep"><span class="method">GET</span><span class="path">/api/stream</span><div class="desc">SSE live event stream (Server-Sent Events)</div></div>
+<div class="ep"><span class="method">GET</span><span class="path">/api/simulate?add=X</span><div class="desc">Simulate adding/removing tech from your stack</div></div>
 <div class="ep"><span class="method">GET</span><span class="path">/api/docs</span><div class="desc">This page</div></div>
 </body>
 </html>"#;

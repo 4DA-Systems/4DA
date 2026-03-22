@@ -5,10 +5,10 @@
   <title>GAME Notification Test</title>
   <script type="module" src="/notif-card-critical.js"></script>
   <style>
-    body { margin: 0; background: #111; display: flex; align-items: center; justify-content: center; height: 100vh; }
+    body { margin: 0; background: #222; display: flex; align-items: center; justify-content: center; height: 100vh; }
     .container { position: relative; width: 440px; height: 160px; }
 
-    /* GAME canvas — renders border effects BEHIND the card */
+    /* GAME canvas renders EVERYTHING — card body, border, sweep, halo */
     game-notif-card-critical {
       position: absolute;
       inset: 0;
@@ -16,22 +16,19 @@
       z-index: 0;
     }
 
-    /* CSS card — opaque, sits ON TOP of GAME border */
-    .card {
+    /* Text overlay — transparent, sits on top of the GAME-rendered card */
+    .text-overlay {
       position: absolute;
-      /* Inset by ~16px to leave room for GAME border glow */
-      left: 16px; right: 16px; top: 13px; bottom: 13px;
-      background: rgba(14, 14, 14, 0.95);
-      border-radius: 14px;
+      /* Positioned to align with the GAME card body */
+      left: 24px; right: 24px; top: 18px; bottom: 18px;
       z-index: 1;
-      padding: 14px 16px 14px 20px;
+      pointer-events: auto;
       display: flex;
       flex-direction: column;
       gap: 4px;
-      /* Subtle inner shadow for depth */
-      box-shadow: 0 8px 32px rgba(0,0,0,0.5);
       font-family: 'Inter', -apple-system, sans-serif;
       color: white;
+      cursor: pointer;
     }
 
     .header { display: flex; align-items: center; gap: 8px; }
@@ -48,11 +45,11 @@
 </head>
 <body>
   <div class="container">
-    <!-- GAME border effects layer (behind) -->
+    <!-- GAME renders the entire card visual — body, border, sweep, halo -->
     <game-notif-card-critical intensity="1" hover="0"></game-notif-card-critical>
 
-    <!-- CSS card (on top) -->
-    <div class="card">
+    <!-- Text floats on top — no background, fully transparent -->
+    <div class="text-overlay">
       <div class="header">
         <span class="dot"></span>
         <span class="label">SECURITY ALERT</span>

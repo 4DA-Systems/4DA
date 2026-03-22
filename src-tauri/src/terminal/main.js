@@ -20,6 +20,7 @@ var watchInterval=null;
 var lastNotifiedCritical=0;
 var jsonMode=false;
 var cmdStartTime=0;
+var focusMode=false;
 var cachedSignals=null;
 var aliases=JSON.parse(localStorage.getItem('4da_aliases')||'{}');
 var readingQueue=JSON.parse(localStorage.getItem('4da_queue')||'[]');
@@ -29,7 +30,7 @@ var searchMemory=JSON.parse(localStorage.getItem('4da_search_memory')||'[]');
 var COMMANDS=['help','signals','briefing','score','search','radar','decisions','dna','gaps',
   'status','clear','ambient','theme','whoami','uptime','matrix','fortune','neofetch','ping','token',
   'more','diff','watch','copy','alias','unalias','sources','save','queue','read','simulate','shell',
-  'memory','open','learn','ignore'];
+  'memory','open','learn','ignore','timeline','compare','focus','export'];
 var tabMatches=[],tabIdx=-1,tabPrefix='';
 
 /* ── Command descriptions for help and palette ── */
@@ -68,7 +69,11 @@ var CMD_HELP={
   'memory':'What you\'ve been tracking',
   'open':'Open signal URL in browser',
   'learn':'Boost future signals about a topic',
-  'ignore':'Suppress signals about a topic'
+  'ignore':'Suppress signals about a topic',
+  'timeline':'Signal arrival over 7 days',
+  'compare':'Head-to-head tech comparison',
+  'focus':'Toggle focus mode (critical only)',
+  'export':'Export as Markdown to clipboard'
 };
 
 /* ── Theme system ── */
@@ -583,6 +588,11 @@ function execSingle(raw){
     case'open':cmdOpen(arg);break;
     case'learn':cmdLearn(arg);break;
     case'ignore':cmdIgnore(arg);break;
+    /* Signal Terminal Tools */
+    case'timeline':cmdTimeline();break;
+    case'compare':cmdCompare(arg);break;
+    case'focus':cmdFocus(arg);break;
+    case'export':cmdExport(arg);break;
     default:
       /* Phase 3.1: Try natural language interpretation */
       var nlp=tryNaturalLanguage(raw);
@@ -610,58 +620,40 @@ function execSingle(raw){
 
 /* ── Commands ── */
 function cmdHelp(){
-  wsep('COMMANDS');
-  wkv('signals','Current signals above threshold');
+  wsep('INTELLIGENCE');
+  wkv('signals','Current signals (--source, --priority, --top)');
   wkv('briefing','Intelligence briefing');
-  wkv('score <url>','Score a URL against your profile');
-  wkv('search <q>','Search scored items');
-  wkv('radar','Stack intelligence \u2014 health, priorities, trends');
-  wkv('decisions','Active decision windows');
+  wkv('radar','Stack intelligence — health, priorities, trends');
   wkv('dna','Developer DNA profile');
   wkv('gaps','Knowledge blind spots');
-  wkv('status','System status');
-  wkv('sources','List registered sources');
-  wkv('diff','Compare signals with previous snapshot');
-  wkv('clear','Clear terminal');
-  wkv('ambient','Ambient display mode');
-  wkv('theme <name>','Switch color theme');
+  wkv('diff','What changed since last analysis');
+  wkv('memory','Topics you\'re tracking');
+  wkv('timeline','Signal arrival over 7 days');
   w('');
-  wsep('INTELLIGENCE');
-  wkv('memory','What you\'ve been tracking');
-  wkv('open <n>','Open signal URL in browser');
-  wkv('learn <topic>','Boost future signals about a topic');
-  wkv('ignore <topic>','Suppress signals about a topic');
-  w('');
-  wsep('POWER USER');
+  wsep('ACTIONS');
+  wkv('score <url>','Score a URL against your profile');
+  wkv('search <q>','Search scored items');
   wkv('simulate','Simulate adding/removing tech');
+  wkv('compare','Head-to-head: compare react vue');
+  wkv('open <n>','Open signal URL by index');
+  wkv('save <n>','Save signal to reading queue');
+  wkv('learn <topic>','Track a topic');
+  wkv('copy','Copy last output to clipboard');
+  wkv('export','Export as Markdown to clipboard');
+  w('');
+  wsep('SYSTEM');
+  wkv('status','System status');
+  wkv('sources','Registered sources');
   wkv('shell','Shell integration snippets');
   wkv('watch <cmd>','Auto-refresh every 30s');
-  wkv('alias n = cmd','Set command alias');
-  wkv('unalias <n>','Remove alias');
-  wkv('copy','Copy last output to clipboard');
-  wkv('save <n>','Save signal #n to reading queue');
-  wkv('queue','Show reading queue');
-  wkv('read <n>','Open & remove queued item #n');
-  wkv('more','Show more results from last command');
+  wkv('focus','Focus mode — critical only');
+  wkv('theme','Color themes: gold/phosphor/frost/ember');
+  wkv('alias','Manage command aliases');
+  wkv('queue','Reading queue');
+  wkv('clear','Clear terminal');
+  wkv('ambient','Ambient display mode');
   w('');
-  wsep('EXTRAS');
-  wkv('whoami','Developer identity card');
-  wkv('neofetch','System info display');
-  wkv('uptime','Terminal session uptime');
-  wkv('fortune','Developer wisdom');
-  wkv('matrix','Matrix rain effect');
-  wkv('ping','Source connectivity check');
-  w('');
-  wsep('FLAGS');
-  wh('<span class="d">  --json         Append to any command for raw JSON output</span>');
-  wh('<span class="d">  --source X     Filter signals by source</span>');
-  wh('<span class="d">  --priority X   Filter signals by priority</span>');
-  wh('<span class="d">  --top N        Show only top N signals</span>');
-  w('');
-  wh('<span class="d">  Keyboard: \u2191\u2193 history \u00B7 Tab complete \u00B7 Ctrl+L clear \u00B7 Ctrl+K focus \u00B7 Ctrl+Shift+P palette</span>');
-  wh('<span class="d">  Chaining: cmd1 ; cmd2 ; cmd3 (semicolons run commands sequentially)</span>');
-  wh('<span class="d">  Natural language: try "show me signals" or "anything new?"</span>');
-  wh('<span class="d">  Themes: gold \u00B7 phosphor \u00B7 frost \u00B7 ember</span>');
+  wh('<span class="d">  Keyboard: ↑↓ history · Ctrl+L clear · Ctrl+K focus · Ctrl+Shift+P palette</span>');
   showTiming();
 }
 
@@ -707,6 +699,11 @@ function cmdSignals(arg){
     /* Phase 2.3: Apply filters */
     var flags=parseFlags(arg);
     var filtered=d.signals.slice();
+    if(focusMode){
+      filtered=filtered.filter(function(s){
+        return s.signal_priority==='critical'||s.signal_priority==='high';
+      });
+    }
     if(flags.source)filtered=filtered.filter(function(s){return s.source&&s.source.toLowerCase()===flags.source.toLowerCase()});
     if(flags.priority)filtered=filtered.filter(function(s){return s.signal_priority===flags.priority});
     if(flags.top)filtered=filtered.slice(0,flags.top);
@@ -1429,6 +1426,10 @@ function tryNaturalLanguage(raw){
   if(lower.match(/open.*?(\d+)/)) return 'open '+lower.match(/open.*?(\d+)/)[1];
   if(lower.match(/remember|memory|track|history/)) return 'memory';
   if(lower.match(/learn.*about\s+(.+)/i)) return 'learn '+raw.match(/learn.*about\s+(.+)/i)[1];
+  if(lower.match(/timeline|when.*signal|signal.*histor|over.*time/)) return 'timeline';
+  if(lower.match(/compare|versus|vs\b|head.*head/)) return 'compare ' + raw.replace(/^.*?(compare|vs|versus)\s*/i, '');
+  if(lower.match(/focus|deep.*work|do.*not.*disturb|quiet|critical.*only/)) return 'focus on';
+  if(lower.match(/export|markdown|share.*signal|copy.*all/)) return 'export';
   return null;
 }
 
@@ -1649,6 +1650,239 @@ function cmdIgnore(arg){
   w('Ignoring: "'+arg+'" \u2014 this will take effect in the desktop app\'s exclusion settings.','g');
   w('Note: Use the desktop app Settings to permanently exclude topics.','d');
   showTiming();
+}
+
+/* ── Timeline command ── */
+function cmdTimeline() {
+  w('Loading timeline...', 'd');
+  cmdStartTime = performance.now();
+  api('/api/signals').then(function(d) {
+    rmLast();
+    wsep('SIGNAL TIMELINE (7 days)');
+    w('');
+    if (!d.signals || !d.signals.length) { w('No signals to visualize.', 'm'); showTiming(); return; }
+
+    // Group signals by day
+    var now = Date.now();
+    var days = [];
+    var dayLabels = [];
+    for (var i = 6; i >= 0; i--) {
+      var dayEnd = now - i * 86400000;
+      var dayName = new Date(dayEnd).toLocaleDateString('en', { weekday: 'short' });
+      dayLabels.push(dayName);
+      days.push(0);
+    }
+
+    // Count signals per day (use created_at if available, else distribute evenly)
+    var hasTimestamps = d.signals.some(function(s) { return s.created_at; });
+    if (hasTimestamps) {
+      d.signals.forEach(function(s) {
+        if (!s.created_at) return;
+        var ts = new Date(s.created_at).getTime();
+        for (var i = 0; i < 7; i++) {
+          var dayStart = now - (7 - i) * 86400000;
+          var dayEnd = now - (6 - i) * 86400000;
+          if (ts >= dayStart && ts < dayEnd) { days[i]++; break; }
+        }
+      });
+    } else {
+      // No timestamps — show total as today
+      days[6] = d.signals.length;
+    }
+
+    var maxCount = Math.max.apply(null, days) || 1;
+    var blocks = ['\u2581', '\u2582', '\u2583', '\u2584', '\u2585', '\u2586', '\u2587', '\u2588'];
+
+    // Render sparkline
+    var sparklineStr = days.map(function(count) {
+      var idx = Math.round((count / maxCount) * 7);
+      return '<span class="g">' + blocks[Math.min(idx, 7)] + '</span>';
+    }).join('');
+
+    wh('  ' + sparklineStr);
+    wh('  <span class="d">' + dayLabels.join(' ') + '</span>');
+    w('');
+
+    // Per-day breakdown
+    days.forEach(function(count, i) {
+      wh('  <span class="d">' + dayLabels[i].padEnd(4) + '</span>' + bar(count / maxCount, 20) + ' <span class="m">' + count + '</span>');
+    });
+
+    w('');
+    var total = days.reduce(function(a, b) { return a + b; }, 0);
+    wh('<span class="d">' + total + ' signals over 7 days \u00B7 avg ' + (total / 7).toFixed(1) + '/day</span>');
+    showTiming();
+    whint('try: signals to see the full list');
+  }).catch(apiErr);
+}
+
+/* ── Compare command ── */
+function cmdCompare(arg) {
+  if (!arg || arg.split(/\s+/).length < 2) {
+    w('Usage: compare react vue', 'r');
+    return;
+  }
+  var parts = arg.split(/\s+/);
+  var tech1 = parts[0].toLowerCase();
+  var tech2 = parts[1].toLowerCase();
+
+  w('Comparing...', 'd');
+  cmdStartTime = performance.now();
+
+  Promise.all([
+    api('/api/radar'),
+    api('/api/signals')
+  ]).then(function(res) {
+    rmLast();
+    var radar = res[0], sigs = res[1];
+    var entries = radar.entries || [];
+    var signals = sigs.signals || [];
+
+    var e1 = entries.find(function(e) { return e.name.toLowerCase() === tech1; });
+    var e2 = entries.find(function(e) { return e.name.toLowerCase() === tech2; });
+
+    var s1 = signals.filter(function(s) { return s.title.toLowerCase().indexOf(tech1) !== -1; }).length;
+    var s2 = signals.filter(function(s) { return s.title.toLowerCase().indexOf(tech2) !== -1; }).length;
+
+    wsep('COMPARE: ' + tech1 + ' vs ' + tech2);
+    w('');
+
+    // Header
+    wh('  <span class="m">' + ''.padEnd(14) + tech1.padEnd(16) + tech2.padEnd(16) + '</span>');
+    w('');
+
+    // Radar score
+    var score1 = e1 ? e1.score.toFixed(2) : 'n/a';
+    var score2 = e2 ? e2.score.toFixed(2) : 'n/a';
+    wh('  <span class="d">Radar Score   </span>' + padScore(score1, e1) + padScore(score2, e2));
+
+    // Ring
+    var ring1 = e1 ? e1.ring : 'n/a';
+    var ring2 = e2 ? e2.ring : 'n/a';
+    wh('  <span class="d">Ring          </span><span class="m">' + ring1.padEnd(16) + ring2.padEnd(16) + '</span>');
+
+    // Movement
+    var mov1 = e1 ? e1.movement : 'n/a';
+    var mov2 = e2 ? e2.movement : 'n/a';
+    wh('  <span class="d">Movement      </span><span class="m">' + mov1.padEnd(16) + mov2.padEnd(16) + '</span>');
+
+    // Signal count
+    wh('  <span class="d">Signals       </span><span class="' + (s1 > s2 ? 'g' : 'm') + '">' + String(s1).padEnd(16) + '</span><span class="' + (s2 > s1 ? 'g' : 'm') + '">' + String(s2).padEnd(16) + '</span>');
+
+    // Quadrant
+    var q1 = e1 ? e1.quadrant : 'n/a';
+    var q2 = e2 ? e2.quadrant : 'n/a';
+    wh('  <span class="d">Category      </span><span class="m">' + q1.padEnd(16) + q2.padEnd(16) + '</span>');
+
+    w('');
+
+    // Verdict
+    if (e1 && e2) {
+      var winner = e1.score > e2.score ? tech1 : e2.score > e1.score ? tech2 : 'tied';
+      if (winner !== 'tied') {
+        wh('<span class="g">  ' + winner + ' leads</span> <span class="d">by ' + Math.abs(e1.score - e2.score).toFixed(2) + ' score points and ' + Math.abs(s1 - s2) + ' signal' + (Math.abs(s1 - s2) !== 1 ? 's' : '') + '</span>');
+      } else {
+        wh('<span class="g">  Tied</span> <span class="d">\u2014 equal radar scores</span>');
+      }
+    } else if (!e1 && !e2) {
+      w('Neither technology found in your radar.', 'm');
+    } else {
+      var found = e1 ? tech1 : tech2;
+      var missing = e1 ? tech2 : tech1;
+      w(found + ' is in your radar. ' + missing + ' is not tracked.', 'm');
+    }
+
+    showTiming();
+    whint('try: simulate add ' + (e1 ? tech2 : tech1) + ' to see impact');
+  }).catch(apiErr);
+}
+
+function padScore(score, entry) {
+  if (!entry) return '<span class="d">' + score.padEnd(16) + '</span>';
+  var cls = entry.score >= 0.7 ? 'gr' : entry.score >= 0.4 ? 'g' : 'm';
+  return '<span class="' + cls + '">' + score.padEnd(16) + '</span>';
+}
+
+/* ── Focus command ── */
+function cmdFocus(arg) {
+  if (arg === 'off' || (focusMode && !arg)) {
+    focusMode = false;
+    w('Focus mode OFF \u2014 showing all signals.', 'gr');
+    return;
+  }
+  if (arg === 'on' || (!focusMode && !arg)) {
+    focusMode = true;
+    w('Focus mode ON \u2014 only critical and high-priority signals.', 'g');
+    w('Type focus off to return to full feed.', 'd');
+    return;
+  }
+  w('Usage: focus [on|off]', 'r');
+}
+
+/* ── Export command ── */
+function cmdExport(arg) {
+  var target = (arg || 'signals').toLowerCase();
+  w('Exporting ' + target + '...', 'd');
+  cmdStartTime = performance.now();
+
+  var endpoint = '/api/' + target;
+  if (target === 'md' || target === 'signals') endpoint = '/api/signals';
+  else if (target === 'briefing') endpoint = '/api/briefing';
+  else if (target === 'dna') endpoint = '/api/dna';
+  else if (target === 'radar') endpoint = '/api/radar';
+
+  api(endpoint).then(function(d) {
+    rmLast();
+    var md = '';
+
+    if (target === 'signals' || target === 'md') {
+      md = '# 4DA Signals\n\n';
+      md += '*Generated: ' + new Date().toISOString().slice(0, 10) + '*\n\n';
+      (d.signals || []).forEach(function(s, i) {
+        md += (i + 1) + '. **' + s.title + '**';
+        if (s.url) md += ' \u2014 [link](' + s.url + ')';
+        md += '\n';
+        md += '   - Source: ' + s.source + ' | Score: ' + s.score + '\n';
+        if (s.signal_type) md += '   - Type: ' + s.signal_type + ' | Priority: ' + (s.signal_priority || 'n/a') + '\n';
+        md += '\n';
+      });
+    } else if (target === 'dna') {
+      md = '# Developer DNA\n\n';
+      if (d.identity_summary) md += '> ' + d.identity_summary + '\n\n';
+      if (d.primary_stack) md += '**Stack:** ' + d.primary_stack.join(', ') + '\n\n';
+      if (d.interests) md += '**Interests:** ' + d.interests.join(', ') + '\n\n';
+      if (d.stats) {
+        md += '| Metric | Value |\n|--------|-------|\n';
+        md += '| Projects | ' + d.stats.project_count + ' |\n';
+        md += '| Dependencies | ' + d.stats.dependency_count + ' |\n';
+        md += '| Days Active | ' + d.stats.days_active + ' |\n';
+      }
+    } else if (target === 'radar') {
+      md = '# Stack Intelligence\n\n';
+      var rings = { adopt: 'Core Stack', trial: 'Expanding', assess: 'Watching', hold: 'Fading' };
+      ['adopt', 'trial', 'assess', 'hold'].forEach(function(ring) {
+        var items = (d.entries || []).filter(function(e) { return e.ring === ring; });
+        if (items.length) {
+          md += '## ' + rings[ring] + '\n\n';
+          items.forEach(function(e) { md += '- ' + e.name + ' (' + e.score.toFixed(2) + ')\n'; });
+          md += '\n';
+        }
+      });
+    } else {
+      md = JSON.stringify(d, null, 2);
+    }
+
+    // Copy to clipboard
+    navigator.clipboard.writeText(md).then(function() {
+      w('Exported ' + target + ' as Markdown \u2014 copied to clipboard.', 'gr');
+      wh('<span class="d">' + md.split('\n').length + ' lines \u00B7 ' + md.length + ' chars</span>');
+    }).catch(function() {
+      // Fallback: show in terminal
+      w('Clipboard unavailable. Markdown output:', 'm');
+      wh('<pre style="color:var(--fg);font-size:11px;max-height:300px;overflow:auto">' + esc(md) + '</pre>');
+    });
+    showTiming();
+  }).catch(apiErr);
 }
 
 /* ── Ambient mode ── */
