@@ -1005,6 +1005,15 @@ fn build_router(token: String) -> Router {
         .route("/api/sources", get(api_sources))
         .route("/api/stream", get(api_stream))
         .route("/api/simulate", get(api_simulate))
+        .fallback(|| async {
+            (
+                StatusCode::NOT_FOUND,
+                Json(serde_json::json!({
+                    "error": "Not found",
+                    "hint": "Try /api/docs for available endpoints"
+                })),
+            )
+        })
         .layer(cors)
         .with_state(state)
 }
