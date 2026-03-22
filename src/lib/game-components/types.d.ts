@@ -17,3 +17,7 @@ declare module '*/playbook-pathway.js';
 declare module '*/radar-field.js';
 declare module '*/turing-fire.js';
 declare module '*/intelligence-banner.js';
+declare module '*/tetrahedron.js';
+declare module '*/pentachoron.js';
+declare module '*/icosahedron.js';
+declare module '*/simplex-unfold.js';

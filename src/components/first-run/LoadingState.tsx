@@ -153,7 +153,7 @@ export function LoadingState({
 }: LoadingStateProps) {
   const { t } = useTranslation();
 
-  useEffect(() => { registerGameComponent('game-boot-ring'); }, []);
+  useEffect(() => { registerGameComponent('game-simplex-unfold'); }, []);
 
   // Estimated time remaining — initialized from parent's source-count estimate
   // Uses a ref-based counter to avoid infinite timer chains in test environments
@@ -196,8 +196,8 @@ export function LoadingState({
       </div>
 
       {phase === 'preparing' && (
-        <div className="w-10 h-10 mx-auto mb-2 opacity-60">
-          <game-boot-ring style={{ width: '40px', height: '40px' }} />
+        <div className="w-16 h-16 mx-auto mb-2 opacity-70">
+          <game-simplex-unfold style={{ width: '64px', height: '64px' }} />
         </div>
       )}
 
