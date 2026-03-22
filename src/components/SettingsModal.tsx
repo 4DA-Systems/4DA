@@ -1,17 +1,14 @@
-import { useEffect, useState, useCallback, memo } from 'react';
+import { useEffect, useState, useCallback, memo, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useShallow } from 'zustand/react/shallow';
 import { PanelErrorBoundary } from './PanelErrorBoundary';
-import { LearnedBehaviorPanel } from './LearnedBehaviorPanel';
-import { IndexedDocumentsPanel } from './IndexedDocumentsPanel';
-import { NaturalLanguageSearch } from './NaturalLanguageSearch';
 import { SourceConfigPanel } from './SourceConfigPanel';
 import { ContextDiscoverySection } from './settings/ContextDiscoverySection';
 import { PersonalizationSection } from './settings/PersonalizationSection';
-import { DeveloperDnaPanel } from './DeveloperDna';
+import { IndexedDocumentsPanel } from './IndexedDocumentsPanel';
 import { AboutPanel } from './AboutPanel';
 import { SettingsGeneralTab } from './settings/SettingsGeneralTab';
-import { SettingsAdvancedTab } from './settings/SettingsAdvancedTab';
+import { SettingsIntelligenceTab } from './settings/SettingsIntelligenceTab';
 import { SettingsTeamTab } from './settings/SettingsTeamTab';
 import { TeamInviteDialog } from './settings/TeamInviteDialog';
 import { useAppStore } from '../store';
@@ -21,10 +18,9 @@ import { translateError } from '../utils/error-messages';
 // Types
 // ============================================================================
 
-type SettingsTab = 'general' | 'sources' | 'profile' | 'projects' | 'advanced' | 'team' | 'about';
+type SettingsTab = 'general' | 'intelligence' | 'sources' | 'projects' | 'team' | 'about';
 
-const BASE_TAB_IDS: SettingsTab[] = ['general', 'sources', 'profile', 'projects', 'team', 'advanced', 'about'];
-const TEAM_TAB_IDS: SettingsTab[] = ['general', 'sources', 'profile', 'projects', 'team', 'advanced', 'about'];
+const BASE_TAB_IDS: SettingsTab[] = ['general', 'intelligence', 'sources', 'projects', 'about'];
 
 // ============================================================================
 // Props
@@ -44,17 +40,23 @@ export const SettingsModal = memo(function SettingsModal({ onClose }: SettingsMo
   const showTeamInviteDialog = useAppStore(s => s.showTeamInviteDialog);
   const setShowTeamInviteDialog = useAppStore(s => s.setShowTeamInviteDialog);
   const isTeamOrEnterprise = tier === 'team' || tier === 'enterprise';
-  const TAB_IDS = isTeamOrEnterprise ? TEAM_TAB_IDS : BASE_TAB_IDS;
+
+  // Dynamically add Team tab only for Team/Enterprise tiers
+  const TAB_IDS = useMemo<SettingsTab[]>(() => {
+    if (isTeamOrEnterprise) {
+      return ['general', 'intelligence', 'sources', 'projects', 'team', 'about'];
+    }
+    return BASE_TAB_IDS;
+  }, [isTeamOrEnterprise]);
+
   const [activeTab, setActiveTab] = useState<SettingsTab>('general');
   const [initialized, setInitialized] = useState<Set<SettingsTab>>(new Set(['general']));
 
-  // Data selectors
+  // Data selectors — streamlined (removed ~20 unused selectors)
   const {
     settings, settingsForm, settingsStatus, ollamaStatus, ollamaModels, modelRegistry,
     monitoring, monitoringInterval, notificationThreshold,
     scanDirectories, newScanDir, isScanning, discoveredContext,
-    learnedAffinities, antiTopics, systemHealth,
-    similarTopicQuery, similarTopicResults,
   } = useAppStore(
     useShallow((s) => ({
       settings: s.settings,
@@ -70,11 +72,6 @@ export const SettingsModal = memo(function SettingsModal({ onClose }: SettingsMo
       newScanDir: s.newScanDir,
       isScanning: s.isScanning,
       discoveredContext: s.discoveredContext,
-      learnedAffinities: s.learnedAffinities,
-      antiTopics: s.antiTopics,
-      systemHealth: s.systemHealth,
-      similarTopicQuery: s.similarTopicQuery,
-      similarTopicResults: s.similarTopicResults,
     })),
   );
 
@@ -95,20 +92,13 @@ export const SettingsModal = memo(function SettingsModal({ onClose }: SettingsMo
   const runFullScan = useAppStore(s => s.runFullScan);
   const addScanDirectory = useAppStore(s => s.addScanDirectory);
   const removeScanDirectory = useAppStore(s => s.removeScanDirectory);
-  const loadLearnedBehavior = useAppStore(s => s.loadLearnedBehavior);
-  const setSimilarTopicQuery = useAppStore(s => s.setSimilarTopicQuery);
-  const runAnomalyDetection = useAppStore(s => s.runAnomalyDetection);
-  const resolveAnomaly = useAppStore(s => s.resolveAnomaly);
-  const findSimilarTopics = useAppStore(s => s.findSimilarTopics);
-  const saveWatcherState = useAppStore(s => s.saveWatcherState);
-  const loadSystemHealth = useAppStore(s => s.loadSystemHealth);
   const loadSettings = useAppStore(s => s.loadSettings);
   const loadMonitoringStatus = useAppStore(s => s.loadMonitoringStatus);
   const loadDiscoveredContext = useAppStore(s => s.loadDiscoveredContext);
   const loadUserContext = useAppStore(s => s.loadUserContext);
   const loadSuggestedInterests = useAppStore(s => s.loadSuggestedInterests);
 
-  // General tab loads on mount
+  // General + Intelligence tabs load on mount
   useEffect(() => {
     loadSettings();
     loadMonitoringStatus();
@@ -120,9 +110,7 @@ export const SettingsModal = memo(function SettingsModal({ onClose }: SettingsMo
     if (initialized.has(tab)) return;
     setInitialized(prev => new Set(prev).add(tab));
     switch (tab) {
-      case 'profile': loadUserContext(); loadSuggestedInterests(); loadLearnedBehavior(); break;
-      case 'projects': loadDiscoveredContext(); break;
-      case 'advanced': loadSystemHealth(); break;
+      case 'projects': loadDiscoveredContext(); loadUserContext(); loadSuggestedInterests(); break;
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps -- stable store actions
   }, [initialized]);
@@ -201,14 +189,33 @@ export const SettingsModal = memo(function SettingsModal({ onClose }: SettingsMo
         {/* Tab Content */}
         <div className="p-6 space-y-6">
           {activeTab === 'general' && (
-            <SettingsGeneralTab settings={settings} settingsForm={settingsForm} setSettingsForm={setSettingsFormFull}
-              ollamaStatus={ollamaStatus} ollamaModels={ollamaModels} checkOllamaStatus={checkOllamaStatus}
-              modelRegistry={modelRegistry} onRefreshRegistry={refreshModelRegistry}
-              monitoring={monitoring} monitoringInterval={monitoringInterval} setMonitoringInterval={setMonitoringInterval}
-              notificationThreshold={notificationThreshold} setNotificationThreshold={setNotificationThreshold}
-              onToggleMonitoring={handleToggleMonitoring} onUpdateInterval={handleUpdateMonitoringInterval}
-              onTestNotification={handleTestNotification} setSettingsStatus={setSettingsStatus}
-              saveSettings={saveSettings} testConnection={testConnection} />
+            <SettingsGeneralTab
+              monitoring={monitoring}
+              monitoringInterval={monitoringInterval}
+              setMonitoringInterval={setMonitoringInterval}
+              notificationThreshold={notificationThreshold}
+              setNotificationThreshold={setNotificationThreshold}
+              onToggleMonitoring={handleToggleMonitoring}
+              onUpdateInterval={handleUpdateMonitoringInterval}
+              onTestNotification={handleTestNotification}
+              setSettingsStatus={setSettingsStatus}
+            />
+          )}
+
+          {activeTab === 'intelligence' && (
+            <SettingsIntelligenceTab
+              settings={settings}
+              settingsForm={settingsForm}
+              setSettingsForm={setSettingsFormFull}
+              ollamaStatus={ollamaStatus}
+              ollamaModels={ollamaModels}
+              checkOllamaStatus={checkOllamaStatus}
+              modelRegistry={modelRegistry}
+              onRefreshRegistry={refreshModelRegistry}
+              setSettingsStatus={setSettingsStatus}
+              saveSettings={saveSettings}
+              testConnection={testConnection}
+            />
           )}
 
           {activeTab === 'sources' && (
@@ -216,18 +223,6 @@ export const SettingsModal = memo(function SettingsModal({ onClose }: SettingsMo
               <PanelErrorBoundary name="Source Configuration">
                 <SourceConfigPanel onStatusChange={setSettingsStatus} />
               </PanelErrorBoundary>
-            </div>
-          )}
-
-          {activeTab === 'profile' && (
-            <div id="tabpanel-profile" role="tabpanel">
-              <div className="space-y-6">
-                <PanelErrorBoundary name="Personalization"><PersonalizationSection /></PanelErrorBoundary>
-                <PanelErrorBoundary name="Developer DNA"><DeveloperDnaPanel /></PanelErrorBoundary>
-                <PanelErrorBoundary name="Learned Behavior">
-                  <LearnedBehaviorPanel affinities={learnedAffinities} antiTopics={antiTopics} onRefresh={loadLearnedBehavior} />
-                </PanelErrorBoundary>
-              </div>
             </div>
           )}
 
@@ -240,19 +235,12 @@ export const SettingsModal = memo(function SettingsModal({ onClose }: SettingsMo
                     runFullScan={runFullScan} addScanDirectory={addScanDirectory} removeScanDirectory={removeScanDirectory} />
                 </PanelErrorBoundary>
                 <PanelErrorBoundary name="Indexed Documents"><IndexedDocumentsPanel onStatusChange={setSettingsStatus} /></PanelErrorBoundary>
-                <PanelErrorBoundary name="Natural Language Search"><NaturalLanguageSearch onStatusChange={setSettingsStatus} /></PanelErrorBoundary>
+                <PanelErrorBoundary name="Personalization"><PersonalizationSection /></PanelErrorBoundary>
               </div>
             </div>
           )}
 
-          {activeTab === 'advanced' && (
-            <SettingsAdvancedTab systemHealth={systemHealth} similarTopicQuery={similarTopicQuery}
-              setSimilarTopicQuery={setSimilarTopicQuery} similarTopicResults={similarTopicResults}
-              runAnomalyDetection={runAnomalyDetection} resolveAnomaly={resolveAnomaly}
-              findSimilarTopics={findSimilarTopics} saveWatcherState={saveWatcherState} loadSystemHealth={loadSystemHealth} />
-          )}
-
-          {activeTab === 'team' && (
+          {activeTab === 'team' && isTeamOrEnterprise && (
             <SettingsTeamTab tier={tier} isTeamOrEnterprise={isTeamOrEnterprise} setSettingsStatus={setSettingsStatus} />
           )}
 
