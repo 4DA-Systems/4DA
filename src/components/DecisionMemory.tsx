@@ -145,7 +145,7 @@ export const DecisionMemory = memo(function DecisionMemory() {
       {/* Header */}
       <div className="px-5 py-4 border-b border-border flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <div ref={tetRef} className="w-8 h-8 rounded-lg overflow-hidden border border-border/20" />
+          <div ref={tetRef} className="w-12 h-12 rounded-lg overflow-hidden border border-border/20" />
           <div>
             <h2 className="font-medium text-white text-sm">{t('decisions.title')}</h2>
             <p className="text-xs text-text-muted">
