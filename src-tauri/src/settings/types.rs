@@ -159,10 +159,18 @@ pub struct MonitoringConfig {
     /// Whether 4DA launches automatically at system startup (default: false)
     #[serde(default)]
     pub launch_at_startup: Option<bool>,
+    /// Notification style: "custom" (GAME-powered popup) or "native" (OS toast).
+    /// Default: "custom".
+    #[serde(default = "default_notification_style")]
+    pub notification_style: String,
 }
 
 fn default_notification_threshold() -> String {
     "high_and_above".to_string()
+}
+
+fn default_notification_style() -> String {
+    "custom".to_string()
 }
 
 impl Default for MonitoringConfig {
@@ -178,6 +186,7 @@ impl Default for MonitoringConfig {
             briefing_time: None,    // Defaults to "08:00"
             last_briefing_date: None,
             launch_at_startup: None,
+            notification_style: default_notification_style(),
         }
     }
 }
