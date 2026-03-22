@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { cmd } from '../lib/commands';
 import { useAppStore } from '../store';
+import { useGameComponent } from '../hooks/use-game-component';
 
 interface SourceInfo {
   type: string;
@@ -16,6 +17,7 @@ export function BriefingWarmupState({ onAnalyze }: { onAnalyze: () => void }) {
   const fired = useRef(false);
   const [enabledSources, setEnabledSources] = useState<string[]>([]);
   const [autoStartPending, setAutoStartPending] = useState(!isBrowserMode);
+  const { containerRef: turingRef } = useGameComponent('game-turing-fire');
 
   // Load actual configured sources from the backend
   useEffect(() => {
@@ -51,8 +53,9 @@ export function BriefingWarmupState({ onAnalyze }: { onAnalyze: () => void }) {
   const stack = userContext?.tech_stack || [];
 
   return (
-    <div className="text-center py-12 px-6">
-      <div className="max-w-md mx-auto">
+    <div className="relative text-center py-12 px-6">
+      <div ref={turingRef} className="absolute inset-0 opacity-[0.15] rounded-lg overflow-hidden pointer-events-none" aria-hidden="true" />
+      <div className="relative max-w-md mx-auto">
         <h2 className="text-xl font-semibold text-white mb-2">
           {t('briefing.warmup.title', 'Your Intelligence System')}
         </h2>
