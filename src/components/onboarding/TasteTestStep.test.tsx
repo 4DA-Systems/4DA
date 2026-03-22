@@ -398,14 +398,20 @@ describe('TasteTestStep', () => {
       <TasteTestStep isAnimating={false} onComplete={mockOnComplete} onSkip={mockOnSkip} />,
     );
 
+    // Advance just enough to resolve taste_test_start (resolved mock) and
+    // the 150ms card animation delay. Do NOT use runAllTimersAsync() here
+    // as it would drain all pending timers including future 30s IPC timeouts.
     await act(async () => {
       fireEvent.click(screen.getByText('Start calibration'));
-      await vi.runAllTimersAsync();
+      await vi.advanceTimersByTimeAsync(500);
     });
 
+    // Click interested → taste_test_respond returns complete → enters finalizing
+    // → cmd('taste_test_finalize') starts (never resolves). Advance only 200ms
+    // to stay well within the 30s timeout window.
     await act(async () => {
       fireEvent.click(screen.getByTestId('interested-btn'));
-      await vi.runAllTimersAsync();
+      await vi.advanceTimersByTimeAsync(200);
     });
 
     expect(screen.getByText('Analyzing your preferences...')).toBeInTheDocument();
