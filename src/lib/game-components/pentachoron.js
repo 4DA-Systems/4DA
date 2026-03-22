@@ -165,11 +165,11 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
     }
 
     // Anti-aliased edge core + depth halo + vertex glow
-    let edge_w = 0.004 + 0.003 * min_vw;
+    let edge_w = 0.008 + 0.005 * min_vw;
     let aa = fwidth(min_d);
     let core = (1.0 - smoothstep(edge_w - aa, edge_w + aa, min_d)) * 0.8 * min_vw;
     let halo = halo_sum * 0.09;
-    let vtx_w = 0.011;
+    let vtx_w = 0.018;
     let vtx_aa = fwidth(min_vd);
     let vtx = (1.0 - smoothstep(vtx_w - vtx_aa, vtx_w + vtx_aa, min_vd)) * min_vw
             + exp(-min_vd * 35.0) * 0.5 * min_vw;
@@ -178,8 +178,9 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
     // 4DA gold palette with white-hot bloom
     let gold = vec3<f32>(0.831, 0.686, 0.216);
     let hot = vec3<f32>(1.0, 0.95, 0.85);
-    let color = gold * total + hot * max(total - 0.45, 0.0) * 0.7;
-    return vec4<f32>(clamp(color, vec3<f32>(0.0), vec3<f32>(1.0)), 1.0);
+    let color = clamp(gold * total + hot * max(total - 0.45, 0.0) * 0.7, vec3<f32>(0.0), vec3<f32>(1.0));
+    let alpha = clamp(total * 1.5, 0.0, 1.0);
+    return vec4<f32>(color * alpha, alpha);
 }
 `;
 const GLSL_V = `#version 300 es
@@ -314,11 +315,11 @@ void main(){
         if (vd < min_vd) { min_vd = vd; min_vw = wdepth[i]; }
     }
 
-    float edge_w = 0.004 + 0.003 * min_vw;
+    float edge_w = 0.008 + 0.005 * min_vw;
     float aa = fwidth(min_d);
     float core = (1.0 - smoothstep(edge_w - aa, edge_w + aa, min_d)) * 0.8 * min_vw;
     float halo = halo_sum * 0.09;
-    float vtx_w = 0.011;
+    float vtx_w = 0.018;
     float vtx_aa = fwidth(min_vd);
     float vtx = (1.0 - smoothstep(vtx_w - vtx_aa, vtx_w + vtx_aa, min_vd)) * min_vw
               + exp(-min_vd * 35.0) * 0.5 * min_vw;
@@ -326,8 +327,9 @@ void main(){
 
     vec3 gold = vec3(0.831, 0.686, 0.216);
     vec3 hot = vec3(1.0, 0.95, 0.85);
-    vec3 color = gold * total + hot * max(total - 0.45, 0.0) * 0.7;
-    fragColor = vec4(clamp(color, 0.0, 1.0), 1.0);
+    vec3 color = clamp(gold * total + hot * max(total - 0.45, 0.0) * 0.7, 0.0, 1.0);
+    float alpha = clamp(total * 1.5, 0.0, 1.0);
+    fragColor = vec4(color * alpha, alpha);
 }
 `;
 const UNIFORMS = [
@@ -426,7 +428,9 @@ class GameRenderer {
     data[4] = this.audioData.energy;
     data[5] = this.audioData.beat;
     data[6] = w; data[7] = h;
-    data[8] = this.mouseX; data[9] = this.mouseY;
+    this._smx = (this._smx ?? 0.5) + (this.mouseX - (this._smx ?? 0.5)) * 0.07;
+    this._smy = (this._smy ?? 0.5) + (this.mouseY - (this._smy ?? 0.5)) * 0.07;
+    data[8] = this._smx; data[9] = this._smy;
     let i = 10;
     for (const u of this.uniformDefs) data[i++] = this.userParams[u.name] ?? u.default;
     this.device.queue.writeBuffer(this.uniformBuffer, 0, data);
@@ -436,7 +440,7 @@ class GameRenderer {
     const mainPass = encoder.beginRenderPass({
       colorAttachments: [{
         view: this.ctx.getCurrentTexture().createView(),
-        loadOp: 'clear', storeOp: 'store', clearValue: { r: 0, g: 0, b: 0, a: 1 }
+        loadOp: 'clear', storeOp: 'store', clearValue: { r: 0, g: 0, b: 0, a: 0 }
       }]
     });
     mainPass.setPipeline(this.pipeline);
@@ -539,7 +543,7 @@ class GameRendererGL {
     const gl = this.gl;
     const t = performance.now() / 1000 - this.startTime;
     gl.viewport(0, 0, this.canvas.width, this.canvas.height);
-    gl.clearColor(0, 0, 0, 1);
+    gl.clearColor(0, 0, 0, 0);
     gl.clear(gl.COLOR_BUFFER_BIT);
     gl.useProgram(this.program);
 
@@ -550,7 +554,9 @@ class GameRendererGL {
     gl.uniform1f(this.locs.energy, this.audioData.energy);
     gl.uniform1f(this.locs.beat, this.audioData.beat);
     gl.uniform2f(this.locs.resolution, this.canvas.width, this.canvas.height);
-    gl.uniform2f(this.locs.mouse, this.mouseX, this.mouseY);
+    this._smx = (this._smx ?? 0.5) + (this.mouseX - (this._smx ?? 0.5)) * 0.07;
+    this._smy = (this._smy ?? 0.5) + (this.mouseY - (this._smy ?? 0.5)) * 0.07;
+    gl.uniform2f(this.locs.mouse, this._smx, this._smy);
     for (const u of this.uniformDefs) {
       gl.uniform1f(this.paramLocs[u.name], this.userParams[u.name] ?? u.default);
     }
