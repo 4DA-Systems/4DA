@@ -154,6 +154,7 @@ pub mod settings;
 mod settings_commands;
 mod signal_chains;
 mod signal_terminal;
+mod signal_terminal_events;
 mod signal_terminal_pages;
 mod signals;
 mod source_config;

@@ -27,7 +27,7 @@ var readingQueue=JSON.parse(localStorage.getItem('4da_queue')||'[]');
 /* ── Command list for tab completion ── */
 var COMMANDS=['help','signals','briefing','score','search','radar','decisions','dna','gaps',
   'status','clear','ambient','theme','whoami','uptime','matrix','fortune','neofetch','ping','token',
-  'more','diff','watch','copy','alias','unalias','sources','save','queue','read'];
+  'more','diff','watch','copy','alias','unalias','sources','save','queue','read','simulate','shell'];
 var tabMatches=[],tabIdx=-1,tabPrefix='';
 
 /* ── Command descriptions for help and palette ── */
@@ -60,7 +60,9 @@ var CMD_HELP={
   'sources':'List registered sources',
   'save':'Save signal to reading queue (save <n>)',
   'queue':'Show reading queue',
-  'read':'Open queued item (read <n>)'
+  'read':'Open queued item (read <n>)',
+  'simulate':'Simulate adding/removing tech from your stack',
+  'shell':'Shell integration snippets for zsh/bash/fish'
 };
 
 /* ── Theme system ── */
@@ -267,7 +269,7 @@ function renderBootLines(lines){
       /* Post-boot: empty line + help hint */
       setTimeout(function(){
         w('');
-        wh('<span class="d">Type </span><span class="g">help</span><span class="d"> for commands \u00B7 </span><span class="d">Ctrl+P</span><span class="d"> command palette</span>');
+        wh('<span class="d">Type </span><span class="g">help</span><span class="d"> for commands \u00B7 </span><span class="d">Ctrl+Shift+P</span><span class="d"> command palette</span>');
       },200);
       return;
     }
@@ -340,6 +342,37 @@ function refreshStatus(){
   });
 }
 
+/* ── SSE Live Stream ── */
+var eventSource = null;
+
+function connectStream() {
+  if (eventSource) { eventSource.close(); eventSource = null; }
+  var url = '/api/stream';
+  eventSource = new EventSource(url);
+
+  eventSource.onmessage = function(e) {
+    try {
+      var evt = JSON.parse(e.data);
+      if (evt.type === 'AnalysisComplete') {
+        wh('<span class="gr">[LIVE] Analysis complete: ' + evt.relevant_count + ' relevant / ' + evt.total_count + ' total</span>');
+        refreshStatus();
+      } else if (evt.type === 'AnalysisProgress') {
+        document.getElementById('sb-mon').textContent = evt.stage + ' ' + Math.round(evt.progress * 100) + '%';
+      } else if (evt.type === 'Heartbeat') {
+        if (evt.critical_count > 0) {
+          document.title = '(' + evt.critical_count + ' critical) 4DA Terminal';
+        }
+      }
+    } catch(err) { /* ignore parse errors */ }
+  };
+
+  eventSource.onerror = function() {
+    if (eventSource.readyState === EventSource.CLOSED) {
+      eventSource = null;
+    }
+  };
+}
+
 /* ── Tab completion ── */
 function tabComplete(){
   var val=inp.value;
@@ -407,7 +440,7 @@ inp.addEventListener('keydown',function(e){
 document.addEventListener('keydown',function(e){
   if(e.target===inp||e.target===authInput)return;
   /* Phase 2.5: Command palette */
-  if(e.key==='p'&&e.ctrlKey){
+  if(e.key==='p'&&e.ctrlKey&&e.shiftKey){
     e.preventDefault();
     showPalette();
     return;
@@ -486,6 +519,9 @@ function execSingle(raw){
     case'save':cmdSave(arg);break;
     case'queue':cmdQueue();break;
     case'read':cmdRead(arg);break;
+    /* Phase 4 */
+    case'simulate':cmdSimulate(arg);break;
+    case'shell':cmdShell();break;
     default:
       /* Phase 3.1: Try natural language interpretation */
       var nlp=tryNaturalLanguage(raw);
@@ -530,6 +566,8 @@ function cmdHelp(){
   wkv('theme <name>','Switch color theme');
   w('');
   wsep('POWER USER');
+  wkv('simulate','Simulate adding/removing tech');
+  wkv('shell','Shell integration snippets');
   wkv('watch <cmd>','Auto-refresh every 30s');
   wkv('alias n = cmd','Set command alias');
   wkv('unalias <n>','Remove alias');
@@ -553,7 +591,7 @@ function cmdHelp(){
   wh('<span class="d">  --priority X   Filter signals by priority</span>');
   wh('<span class="d">  --top N        Show only top N signals</span>');
   w('');
-  wh('<span class="d">  Keyboard: \u2191\u2193 history \u00B7 Tab complete \u00B7 Ctrl+L clear \u00B7 Ctrl+K focus \u00B7 Ctrl+P palette</span>');
+  wh('<span class="d">  Keyboard: \u2191\u2193 history \u00B7 Tab complete \u00B7 Ctrl+L clear \u00B7 Ctrl+K focus \u00B7 Ctrl+Shift+P palette</span>');
   wh('<span class="d">  Chaining: cmd1 ; cmd2 ; cmd3 (semicolons run commands sequentially)</span>');
   wh('<span class="d">  Natural language: try "show me signals" or "anything new?"</span>');
   wh('<span class="d">  Themes: gold \u00B7 phosphor \u00B7 frost \u00B7 ember</span>');
@@ -1315,8 +1353,11 @@ function tryNaturalLanguage(raw){
   if(lower.match(/how.*doing|system|health/))return 'status';
   if(lower.match(/briefing|summary|digest|overview/))return 'briefing';
   if(lower.match(/decision|window|deadline|time.*sensitiv/))return 'decisions';
-  if(lower.match(/source|feed|where.*from/))return 'sources';
+  if(lower.match(/source|feed|where.*from|where.*data/))return 'sources';
   if(lower.match(/reading.*list|saved|bookmarks/))return 'queue';
+  if(lower.match(/simulat|what.*if|add.*stack|remove.*stack/)) return 'simulate ' + raw.replace(/^.*?(add|remove)\s*/i, '$1 ');
+  if(lower.match(/shell|prompt|zsh|bash|fish|terminal.*integrat/)) return 'shell';
+  if(lower.match(/save|bookmark|queue|read.*later/)) return 'queue';
   return null;
 }
 
@@ -1412,13 +1453,81 @@ function cmdRead(arg){
   showTiming();
 }
 
+/* ── Phase 4: Simulate command ── */
+function cmdSimulate(arg) {
+  if (!arg) { w('Usage: simulate add python  OR  simulate remove react', 'r'); return; }
+  var parts = arg.split(/\s+/);
+  var action = parts[0];
+  var tech = parts.slice(1).join(' ');
+  if ((action !== 'add' && action !== 'remove') || !tech) {
+    w('Usage: simulate add <tech>  OR  simulate remove <tech>', 'r');
+    return;
+  }
+  w('Simulating...', 'd');
+  var endpoint = '/api/simulate?' + action + '=' + encodeURIComponent(tech);
+  cmdStartTime = performance.now();
+  api(endpoint).then(function(d) {
+    rmLast();
+    if (d.error) { w(d.error, 'r'); return; }
+    wsep('SIMULATION: ' + d.action + ' ' + d.technology);
+    w('');
+    wh('<span class="g">' + d.affected_count + ' signals affected</span> out of ' + d.total_evaluated + ' evaluated');
+    w('');
+    if (d.impacts) {
+      d.impacts.filter(function(i) { return i.affected; }).forEach(function(i) {
+        var arrow = i.delta > 0 ? '\u2191' : '\u2193';
+        var cls = i.delta > 0 ? 'gr' : 'r';
+        var current = Math.round(i.current_score * 100);
+        var simulated = Math.round(i.simulated_score * 100);
+        wh('  <span class="' + cls + '">' + arrow + '</span> ' + esc(i.title));
+        wh('    <span class="d">' + current + '% \u2192 ' + simulated + '% (' + (i.delta > 0 ? '+' : '') + Math.round(i.delta * 100) + '%)</span>');
+      });
+    }
+    if (d.affected_count === 0) {
+      w('No current signals mention "' + d.technology + '".', 'm');
+      w('This tech would affect future analyses, not current results.', 'd');
+    }
+    showTiming();
+    whint('try: radar to see your current stack');
+  }).catch(apiErr);
+}
+
+/* ── Phase 4: Shell integration command ── */
+function cmdShell() {
+  wsep('SHELL INTEGRATION');
+  w('');
+  w('Add to your shell config to show 4DA signal count in your prompt:', 'm');
+  w('');
+  wh('<span class="g">\u2500\u2500 bash / zsh \u2500\u2500</span>');
+  wh('<span class="d">  # Add to ~/.bashrc or ~/.zshrc</span>');
+  wh('  4da_signals() { curl -s http://localhost:4445/api/status 2>/dev/null | grep -o \'"total_relevant":[0-9]*\' | cut -d: -f2; }');
+  wh('  export RPROMPT=\'$(4da_signals) signals\'');
+  w('');
+  wh('<span class="g">\u2500\u2500 fish \u2500\u2500</span>');
+  wh('<span class="d">  # Add to ~/.config/fish/config.fish</span>');
+  wh('  function 4da_signals; curl -s http://localhost:4445/api/status 2>/dev/null | string match -r \'"total_relevant":\\d+\' | string split : | tail -1; end');
+  w('');
+  wh('<span class="g">\u2500\u2500 PowerShell \u2500\u2500</span>');
+  wh('<span class="d">  # Add to $PROFILE</span>');
+  wh('  function 4da { (Invoke-RestMethod http://localhost:4445/api/status).total_relevant }');
+  w('');
+  wh('<span class="g">\u2500\u2500 CI/CD (GitHub Actions) \u2500\u2500</span>');
+  wh('<span class="d">  # Check for critical gaps before deploy</span>');
+  wh('  curl -s http://localhost:4445/api/gaps | jq \'.gaps[] | select(.severity == "critical")\'');
+  w('');
+  whint('copy last output with: copy');
+}
+
 /* ── Ambient mode ── */
 function enterAmbient(){
   isAmbient=true;document.body.classList.add('ambient');out.innerHTML='';
   var grid=document.createElement('div');grid.className='amb-grid';
   grid.innerHTML=
+    '<div class="amb-section" style="grid-column:1/-1;text-align:center;padding:32px">' +
+    '<div id="amb-health" style="font-size:64px;font-weight:700;color:var(--gold)">--</div>' +
+    '<div style="font-size:11px;color:var(--muted);margin-top:4px">STACK HEALTH</div></div>' +
     '<div class="amb-section" id="amb-sig"><h3>Signals</h3><div class="amb-content"></div></div>'+
-    '<div class="amb-section" id="amb-radar"><h3>Tech Radar</h3><div class="amb-content"></div></div>'+
+    '<div class="amb-section" id="amb-radar"><h3>Stack Intelligence</h3><div class="amb-content"></div></div>'+
     '<div class="amb-section" id="amb-dec"><h3>Decision Windows</h3><div class="amb-content"></div></div>'+
     '<div class="amb-section" id="amb-status"><h3>System</h3><div class="amb-content"></div></div>';
   out.appendChild(grid);refreshAmbient();ambInterval=setInterval(refreshAmbient,60000);
@@ -1449,6 +1558,17 @@ function refreshAmbient(){
         var items=(radar.entries||[]).filter(function(e){return e.ring===ring});if(!items.length)return'';
         return'<div class="out-line"><span class="'+colors[ring]+'">'+ring.toUpperCase()+'</span> '+items.map(function(e){return esc(e.name)}).join(' \u00B7 ')+'</div>';
       }).join('')||'<div class="out-line d">No entries</div>'}
+    /* Health grade computation */
+    var total = (radar.entries||[]).length;
+    var adoptCount = (radar.entries||[]).filter(function(e){return e.ring==='adopt'}).length;
+    var holdCount = (radar.entries||[]).filter(function(e){return e.ring==='hold'}).length;
+    var healthScore = total > 0 ? ((adoptCount/total)*60 + (1-holdCount/total)*30 + 10) : 0;
+    var grade = healthScore >= 90 ? 'A' : healthScore >= 80 ? 'A-' : healthScore >= 70 ? 'B+' : healthScore >= 60 ? 'B' : healthScore >= 50 ? 'C' : 'D';
+    var healthEl = document.getElementById('amb-health');
+    if(healthEl) {
+      healthEl.textContent = grade;
+      healthEl.style.color = healthScore >= 70 ? 'var(--green)' : healthScore >= 50 ? 'var(--gold)' : 'var(--red)';
+    }
     var dc=document.querySelector('#amb-dec .amb-content');if(dc){
       dc.innerHTML=(decs.windows||[]).map(function(w2){
         return'<div class="out-line">\u231B <span class="g">'+esc(w2.title)+'</span></div>';
@@ -1476,6 +1596,7 @@ if('Notification' in window && Notification.permission==='default'){
       liveDot.className='live-dot on';liveText.textContent='LIVE';
       bootSequence();
       refreshStatus();
+      connectStream();
     } else if(r.status===401){
       /* Need auth */
       showAuth();

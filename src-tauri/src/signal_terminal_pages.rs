@@ -132,6 +132,8 @@ h2{color:#D4AF37;font-size:13px;margin:20px 0 8px;text-transform:uppercase;lette
 <div class="ep"><span class="method">GET</span><span class="path">/card</span><div class="desc">Intelligence Card (shareable developer profile)</div></div>
 <div class="ep"><span class="method">GET</span><span class="path">/manifest.json</span><div class="desc">PWA manifest</div></div>
 <div class="ep"><span class="method">GET</span><span class="path">/icon</span><div class="desc">SVG icon (192x192)</div></div>
+<div class="ep"><span class="method">GET</span><span class="path">/sw.js</span><div class="desc">Service worker for offline fallback</div></div>
+<div class="ep"><span class="method">GET</span><span class="path">/offline</span><div class="desc">Offline page shown when app is not running</div></div>
 
 <h2>Data APIs (auth required)</h2>
 <div class="ep"><span class="method">GET</span><span class="path">/api/status</span><div class="desc">System status: monitoring state, signal counts, threshold</div></div>
@@ -155,52 +157,74 @@ pub const CARD_HTML: &str = r#"<!DOCTYPE html>
 <title>4DA — Intelligence Card</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
-body{background:#050505;color:#D0D0D0;font:13px/1.6 'JetBrains Mono',monospace;padding:24px;display:flex;flex-direction:column;align-items:center}
-.card{border:2px solid #D4AF37;border-radius:8px;background:#0A0A0A;padding:24px;max-width:420px;width:100%}
-.card h1{color:#D4AF37;font-size:16px;margin-bottom:4px}
-.card .summary{color:#888;font-size:12px;margin-bottom:16px}
-.section{margin:12px 0}
-.section-title{color:#D4AF37;font-size:11px;text-transform:uppercase;letter-spacing:1px;margin-bottom:6px}
-.tag{display:inline-block;background:#1A1A1A;border:1px solid #333;border-radius:3px;padding:2px 8px;margin:2px;font-size:11px;color:#D0D0D0}
-.stat-row{display:flex;justify-content:space-between;font-size:12px;padding:3px 0;border-bottom:1px solid #1A1A1A}
-.stat-label{color:#888}
-.stat-val{color:#D4AF37}
-.actions{margin-top:16px;text-align:center}
-.btn{background:#D4AF37;color:#050505;border:none;padding:8px 16px;border-radius:4px;font:700 12px/1 'JetBrains Mono',monospace;cursor:pointer}
-.btn:hover{background:#e8c44a}
+body{background:#030303;color:#D0D0D0;font:13px/1.6 'JetBrains Mono','SF Mono','Fira Code',monospace;padding:24px;display:flex;flex-direction:column;align-items:center;min-height:100vh}
+.back{color:#D4AF37;text-decoration:none;font-size:12px;align-self:flex-start;margin-bottom:16px}
+.card{border:1px solid #2A2A2A;border-radius:12px;background:linear-gradient(145deg,#0A0A0A 0%,#111 100%);padding:28px 32px;max-width:460px;width:100%;position:relative;overflow:hidden}
+.card::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,#D4AF37,#B8962E,#D4AF37)}
+.identity{margin-bottom:20px}
+.identity h1{color:#fff;font-size:18px;font-weight:600;margin-bottom:6px;letter-spacing:0.5px}
+.identity .summary{color:#777;font-size:11px;line-height:1.6}
+.section{margin:16px 0}
+.section-title{color:#D4AF37;font-size:10px;text-transform:uppercase;letter-spacing:2px;margin-bottom:8px;font-weight:600}
+.badges{display:flex;flex-wrap:wrap;gap:6px}
+.badge{background:#1A1A1A;border:1px solid #333;border-radius:20px;padding:4px 12px;font-size:11px;color:#E0E0E0;transition:border-color .2s}
+.badge:hover{border-color:#D4AF37}
+.stats-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.stat{background:#0D0D0D;border:1px solid #1A1A1A;border-radius:6px;padding:10px 12px}
+.stat-val{color:#D4AF37;font-size:18px;font-weight:700;line-height:1}
+.stat-label{color:#555;font-size:10px;text-transform:uppercase;letter-spacing:1px;margin-top:4px}
+.actions{margin-top:20px;display:flex;gap:8px;justify-content:center}
+.btn{border:none;padding:8px 18px;border-radius:6px;font:600 11px/1 'JetBrains Mono','SF Mono',monospace;cursor:pointer;transition:all .2s}
+.btn-primary{background:#D4AF37;color:#050505}
+.btn-primary:hover{background:#e8c44a;transform:translateY(-1px)}
+.btn-secondary{background:#1A1A1A;color:#888;border:1px solid #333}
+.btn-secondary:hover{border-color:#D4AF37;color:#D4AF37}
+.brand{text-align:center;margin-top:20px;padding-top:16px;border-top:1px solid #1A1A1A}
+.brand span{color:#333;font-size:9px;letter-spacing:2px;text-transform:uppercase}
 .status{text-align:center;color:#888;padding:48px 0}
 .err{color:#EF4444}
-.back{color:#D4AF37;text-decoration:none;font-size:12px;align-self:flex-start;margin-bottom:16px}
 </style>
 </head>
 <body>
 <a class="back" href="/">&larr; Terminal</a>
 <div class="card" id="card"><div class="status">Loading DNA...</div></div>
-<div class="actions" id="actions" style="display:none"><button class="btn" onclick="copyCard()">Copy as HTML</button></div>
+<div class="actions" id="actions" style="display:none">
+<button class="btn btn-primary" onclick="copyHtml()">Copy as HTML</button>
+<button class="btn btn-secondary" onclick="copyText()">Copy as Text</button>
+</div>
 <script>
+var dnaData=null;
 (async()=>{
 const C=document.getElementById('card');
 const A=document.getElementById('actions');
 try{
 const tk=localStorage.getItem('4da-token')||'';
 const r=await fetch('/api/dna',{headers:{'X-4DA-Token':tk}});
-const d=await r.json();
+const d=await r.json();dnaData=d;
 if(d.error){C.innerHTML='<div class="status err">'+d.error.replace(/</g,'&lt;')+'</div>';return}
-let h='<h1>Intelligence Card</h1>';
-h+='<div class="summary">'+(d.identity_summary||'No profile yet').replace(/</g,'&lt;')+'</div>';
-if(d.primary_stack&&d.primary_stack.length){h+='<div class="section"><div class="section-title">Stack</div>';d.primary_stack.forEach(s=>{h+='<span class="tag">'+s.replace(/</g,'&lt;')+'</span>'});h+='</div>'}
-if(d.interests&&d.interests.length){h+='<div class="section"><div class="section-title">Interests</div>';d.interests.forEach(s=>{h+='<span class="tag">'+s.replace(/</g,'&lt;')+'</span>'});h+='</div>'}
-if(d.stats){const s=d.stats;h+='<div class="section"><div class="section-title">Stats</div>';
-h+='<div class="stat-row"><span class="stat-label">Items processed</span><span class="stat-val">'+(s.total_items_processed||0)+'</span></div>';
-h+='<div class="stat-row"><span class="stat-label">Relevant</span><span class="stat-val">'+(s.total_relevant||0)+'</span></div>';
-h+='<div class="stat-row"><span class="stat-label">Projects</span><span class="stat-val">'+(s.project_count||0)+'</span></div>';
-h+='<div class="stat-row"><span class="stat-label">Dependencies</span><span class="stat-val">'+(s.dependency_count||0)+'</span></div>';
-h+='<div class="stat-row"><span class="stat-label">Days active</span><span class="stat-val">'+(s.days_active||0)+'</span></div>';
-h+='</div>'}
-C.innerHTML=h;A.style.display='block';
+var h='<div class="identity"><h1>'+(d.identity_summary||'Developer').replace(/</g,'&lt;')+'</h1></div>';
+if(d.primary_stack&&d.primary_stack.length){h+='<div class="section"><div class="section-title">Primary Stack</div><div class="badges">';d.primary_stack.forEach(function(s){h+='<span class="badge">'+s.replace(/</g,'&lt;')+'</span>'});h+='</div></div>'}
+if(d.stats){var s=d.stats;var rej=s.rejection_rate?Math.round(s.rejection_rate*100)+'%':'N/A';
+h+='<div class="section"><div class="section-title">Intelligence Stats</div><div class="stats-grid">';
+h+='<div class="stat"><div class="stat-val">'+(s.project_count||0)+'</div><div class="stat-label">Projects</div></div>';
+h+='<div class="stat"><div class="stat-val">'+(s.dependency_count||0)+'</div><div class="stat-label">Dependencies</div></div>';
+h+='<div class="stat"><div class="stat-val">'+rej+'</div><div class="stat-label">Rejection Rate</div></div>';
+h+='<div class="stat"><div class="stat-val">'+(s.days_active||0)+'</div><div class="stat-label">Days Active</div></div>';
+h+='</div></div>'}
+if(d.interests&&d.interests.length){h+='<div class="section"><div class="section-title">Interests</div><div class="badges">';d.interests.forEach(function(s){h+='<span class="badge">'+s.replace(/</g,'&lt;')+'</span>'});h+='</div></div>'}
+h+='<div class="brand"><span>Generated by 4DA Signal Terminal</span></div>';
+C.innerHTML=h;A.style.display='flex';
 }catch(e){C.innerHTML='<div class="status err">'+String(e).replace(/</g,'&lt;')+'</div>'}
 })();
-function copyCard(){const el=document.getElementById('card');const html=el.outerHTML;navigator.clipboard.writeText(html).then(()=>{const b=document.querySelector('.btn');b.textContent='Copied!';setTimeout(()=>b.textContent='Copy as HTML',1500)}).catch(()=>alert('Copy failed'))}
+function copyHtml(){var el=document.getElementById('card');navigator.clipboard.writeText(el.outerHTML).then(function(){flash('btn-primary','Copied!')}).catch(function(){alert('Copy failed')})}
+function copyText(){if(!dnaData)return;var lines=[];lines.push(dnaData.identity_summary||'Developer');lines.push('');
+if(dnaData.primary_stack)lines.push('Stack: '+dnaData.primary_stack.join(', '));
+if(dnaData.stats){var s=dnaData.stats;lines.push('Projects: '+(s.project_count||0)+' | Dependencies: '+(s.dependency_count||0));
+lines.push('Rejection Rate: '+(s.rejection_rate?Math.round(s.rejection_rate*100)+'%':'N/A')+' | Days Active: '+(s.days_active||0))}
+if(dnaData.interests)lines.push('Interests: '+dnaData.interests.join(', '));
+lines.push('');lines.push('Generated by 4DA Signal Terminal');
+navigator.clipboard.writeText(lines.join('\n')).then(function(){flash('btn-secondary','Copied!')}).catch(function(){alert('Copy failed')})}
+function flash(cls,msg){var b=document.querySelector('.'+cls);var orig=b.textContent;b.textContent=msg;setTimeout(function(){b.textContent=orig},1500)}
 </script>
 </body>
 </html>"#;
