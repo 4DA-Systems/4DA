@@ -18,8 +18,8 @@ use tracing::{info, warn};
 const WINDOW_LABEL: &str = "notification";
 
 /// Notification window dimensions (logical pixels).
-const WINDOW_WIDTH: u32 = 416;
-const WINDOW_HEIGHT: u32 = 146;
+const WINDOW_WIDTH: u32 = 440;
+const WINDOW_HEIGHT: u32 = 166;
 
 /// Margin from screen edges (pixels).
 const MARGIN_RIGHT: i32 = 16;
