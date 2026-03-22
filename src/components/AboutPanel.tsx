@@ -28,6 +28,13 @@ export function AboutPanel() {
         <p className="text-xs text-text-muted mt-0.5">{t('app.tagline')}</p>
       </div>
 
+      {/* Platonic Architecture — the mathematical identity */}
+      <div className="bg-bg-tertiary/30 border border-[#D4AF37]/20 rounded-xl p-4">
+        <Suspense fallback={null}>
+          <GeometryShowcase />
+        </Suspense>
+      </div>
+
       {/* Built With Section */}
       <div className="bg-bg-tertiary/50 border border-border rounded-xl p-5 space-y-4">
         <h4 className="text-sm font-medium text-white tracking-wide uppercase">
@@ -158,13 +165,6 @@ export function AboutPanel() {
             </div>
           ))}
         </div>
-      </div>
-
-      {/* Platonic Architecture — all geometry components */}
-      <div className="bg-bg-tertiary/30 border border-[#D4AF37]/20 rounded-xl p-4">
-        <Suspense fallback={null}>
-          <GeometryShowcase />
-        </Suspense>
       </div>
 
       {/* Framework + Philosophy */}

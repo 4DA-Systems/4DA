@@ -35,6 +35,20 @@ const GEOMETRIES: GeometryEntry[] = [
     description: '12 sovereign nodes, each connected to exactly 5 peers. Any message reaches any node in 3 hops. Built from 5 interlocking tetrahedra — the same building blocks as the pentachoron.',
   },
   {
+    tag: 'game-dodecahedron',
+    name: 'Dodecahedron',
+    vertices: 20, edges: 30, dimension: '3D',
+    role: 'Governance',
+    description: "The icosahedron's dual. 12 pentagonal faces — each a governance region. Where the icosahedron carries data, the dodecahedron carries authority. Same 30 edges, different perspective.",
+  },
+  {
+    tag: 'game-compound-five-tetrahedra',
+    name: 'Compound of Five',
+    vertices: 20, edges: 30, dimension: '3D',
+    role: 'Thread',
+    description: '5 interlocking tetrahedra, each a different gold tint. The mathematical bridge: the pentachoron has 5 tetrahedral cells, the icosahedron is built from 5 tetrahedra. Same number, different dimensions.',
+  },
+  {
     tag: 'game-simplex-unfold',
     name: 'Simplex Unfold',
     vertices: 5, edges: 10, dimension: '0D→4D',
