@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { cmd } from '../lib/commands';
 import { useGameComponent } from '../hooks/use-game-component';
 
-import { RadarSVG } from './tech-radar/RadarSVG';
+import { StackIntelligence } from './tech-radar/StackIntelligence';
 import { RadarEntryPanel } from './tech-radar/RadarEntryPanel';
 import { TemporalSlider } from './tech-radar/TemporalSlider';
 import type { RadarEntry } from './tech-radar/RadarSVG';
@@ -138,10 +138,10 @@ export const TechRadar = memo(function TechRadar() {
         </div>
       </div>
 
-      {/* Radar SVG with GAME background */}
+      {/* Stack Intelligence dashboard with GAME background */}
       <div className="relative p-4 flex justify-center">
         <RadarField entries={data.entries} userStack={userStack} />
-        <RadarSVG
+        <StackIntelligence
           entries={data.entries}
           userStack={userStack}
           onEntryClick={handleEntryClick}
