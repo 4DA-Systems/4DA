@@ -422,9 +422,6 @@ interface CommandMap {
   get_intelligence_growth: { params: Record<string, never>; result: IntelligenceGrowthData };
   get_session_diff: { params: Record<string, never>; result: { new_items: number; new_relevant: number; hours_since_last: number; has_previous: boolean } };
 
-  // -- Notification Window --
-  notification_clicked: { params: Record<string, never>; result: void };
-
   // -- Community Intelligence --
   get_community_status: { params: Record<string, never>; result: CommunityStatus };
   set_community_intelligence_enabled: { params: { enabled: boolean }; result: void };
