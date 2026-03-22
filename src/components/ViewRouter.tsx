@@ -22,6 +22,9 @@ const CalibrationView = lazy(() => import('./CalibrationView').then(m => ({ defa
 const WisdomPanel = lazy(() => import('./WisdomPanel').then(m => ({ default: m.WisdomPanel })));
 const SignalsPanel = lazy(() => import('./SignalsPanel').then(m => ({ default: m.SignalsPanel })));
 const KnowledgeGapsPanel = lazy(() => import('./KnowledgeGapsPanel').then(m => ({ default: m.KnowledgeGapsPanel })));
+const DecisionWindowsPanel = lazy(() => import('./DecisionWindowsPanel').then(m => ({ default: m.DecisionWindowsPanel })));
+const WeeklyIntelligenceSummary = lazy(() => import('./WeeklyIntelligenceSummary').then(m => ({ default: m.WeeklyIntelligenceSummary })));
+const IntelligenceReportCard = lazy(() => import('./IntelligenceReport'));
 const SecurityDashboard = lazy(() => import('./SecurityDashboard'));
 const DependencyDashboard = lazy(() => import('./DependencyDashboard'));
 const IntelligenceConsole = lazy(() => import('./IntelligenceConsole'));
@@ -85,6 +88,9 @@ export function ViewRouter({ newItemIds, focusedIndex }: ViewRouterProps) {
       ) : activeView === 'insights' ? (
         <ViewErrorBoundary viewName="Decisions">
           <section aria-label={t('nav.insights', { defaultValue: 'Radar' })} className="space-y-6">
+            <PanelErrorBoundary name="Decision Windows">
+              <DecisionWindowsPanel />
+            </PanelErrorBoundary>
             <PanelErrorBoundary name="Tech Radar">
               <TechRadar />
             </PanelErrorBoundary>
@@ -93,6 +99,12 @@ export function ViewRouter({ newItemIds, focusedIndex }: ViewRouterProps) {
             </PanelErrorBoundary>
             <PanelErrorBoundary name="Decision Memory">
               <DecisionMemory />
+            </PanelErrorBoundary>
+            <PanelErrorBoundary name="Weekly Intelligence Summary">
+              <WeeklyIntelligenceSummary />
+            </PanelErrorBoundary>
+            <PanelErrorBoundary name="Intelligence Report">
+              <IntelligenceReportCard />
             </PanelErrorBoundary>
             <PanelErrorBoundary name="Security Dashboard">
               <SecurityDashboard />

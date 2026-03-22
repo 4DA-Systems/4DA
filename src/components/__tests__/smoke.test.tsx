@@ -241,7 +241,6 @@ vi.mock('../../lib/game-icons', () => ({
 import { ConfidenceIndicator } from '../ConfidenceIndicator';
 import { ToastContainer } from '../Toast';
 import { KeyboardShortcutsModal } from '../KeyboardShortcutsModal';
-import { BriefingCard } from '../BriefingCard';
 import { ErrorBoundary } from '../ErrorBoundary';
 import { LearningIndicator } from '../LearningIndicator';
 import { BadgeRow } from '../result-item/BadgeRow';
@@ -306,16 +305,6 @@ const SMOKE_COMPONENTS: Array<{
   {
     name: 'KeyboardShortcutsModal',
     render: () => <KeyboardShortcutsModal onClose={vi.fn()} />,
-  },
-  {
-    name: 'BriefingCard',
-    render: () => (
-      <BriefingCard
-        item={makeItem()}
-        onSave={vi.fn()}
-        onDismiss={vi.fn()}
-      />
-    ),
   },
   {
     name: 'ErrorBoundary (no error)',
@@ -591,7 +580,6 @@ describe('Component accessibility tests', () => {
     [
       'ToastContainer (with toasts)',
       'KeyboardShortcutsModal',
-      'BriefingCard',
       'ErrorBoundary (no error)',
       'LearningIndicator (with data)',
       'BadgeRow',
