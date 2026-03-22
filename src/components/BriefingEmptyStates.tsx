@@ -102,8 +102,8 @@ export function BriefingNoDataState() {
     <div className="relative bg-bg-primary rounded-lg">
       <div ref={turingRef} className="absolute inset-0 opacity-[0.18] rounded-lg overflow-hidden pointer-events-none" aria-hidden="true" />
       <div className="relative flex flex-col items-center justify-center py-20 px-8">
-        <div className="w-20 h-20 mb-6 rounded-2xl border border-border/30 overflow-hidden" role="img" aria-label="4DA">
-          <game-simplex-unfold style={{ width: '80px', height: '80px', display: 'block' }} />
+        <div className="w-[120px] h-[120px] mb-6 rounded-2xl border border-border/30 overflow-hidden" role="img" aria-label="4DA">
+          <game-simplex-unfold style={{ width: '120px', height: '120px', display: 'block' }} />
         </div>
         <h2 className="text-xl font-medium text-white mb-2">{t('briefing.noIntelligence')}</h2>
         <p className="text-sm text-text-muted text-center max-w-md mb-6">
