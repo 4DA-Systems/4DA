@@ -85,7 +85,7 @@ pnpm run tauri dev
   |
   +-- PHASE 1: Resolution (pnpm, ~200ms)
   |   pnpm reads package.json, finds scripts.tauri = "@tauri-apps/cli"
-  |   Verifies all 847 dependencies via content-addressable store
+  |   Resolves the full dependency graph via content-addressable store
   |   Invokes the Tauri CLI with argument: dev
   |
   +-- PHASE 2: Frontend compilation (Vite, ~2s)
@@ -97,7 +97,7 @@ pnpm run tauri dev
   |
   +-- PHASE 3: Backend compilation (cargo, ~30-90s first build)
   |   Invokes cargo build in dev profile
-  |   Compiles 300+ Rust modules across 50+ crates
+  |   Compiles 300+ Rust modules across 800+ crates
   |   Links SQLite + sqlite-vec (vector similarity search)
   |   Links Ollama client (local embedding generation)
   |   Links 11 source adapters (HN, Reddit, RSS, GitHub, arXiv...)
@@ -109,7 +109,7 @@ pnpm run tauri dev
   +-- PHASE 4: Ignition (Tauri, ~500ms)
       Opens native webview pointed at localhost:4444
       Initializes SQLite database (data/4da.db)
-      Registers 321 IPC commands across the Rust/TS boundary
+      Registers 324 IPC commands across the Rust/TS boundary
       Runs content integrity self-healing (auto-corrects dirty data)
       Starts background source polling
       Boots Signal Terminal
@@ -117,7 +117,7 @@ pnpm run tauri dev
       Developer sees: a window. Content appearing. Relevance emerging.
 ```
 
-Four words. Four phases. Two compilers. Two runtimes. 321 typed IPC commands. One application. Zero data leaving the machine.
+Four words. Four phases. Two compilers. Two runtimes. 324 typed IPC commands. One application. Zero data leaving the machine.
 
 ---
 

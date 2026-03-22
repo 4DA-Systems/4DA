@@ -503,7 +503,7 @@ PASIFA includes no analytics, no tracking, no phone-home, and no error reporting
 
 ## 9. Reference Implementation
 
-The reference implementation of PASIFA is in the 4DA application, an open-source (FSL-1.1-Apache-2.0) Tauri 2.0 desktop application.
+The reference implementation of PASIFA is in the 4DA application, a source-available (FSL-1.1-Apache-2.0) Tauri 2.0 desktop application.
 
 ### Source Files
 
@@ -599,5 +599,5 @@ where $R$ is the relevance computation (Phase 4), $Q$ is the quality composite (
 ---
 
 *PASIFA is the scoring methodology of 4DA, a privacy-first developer intelligence system.*
-*Reference implementation: github.com/4da-systems/4da | Framework: 4da.ai/framework*
+*Reference implementation: github.com/4da-systems/4da | Philosophy: 4da.ai/philosophy*
 *Published by 4DA Systems Pty Ltd (ACN 696 078 841). March 2026.*

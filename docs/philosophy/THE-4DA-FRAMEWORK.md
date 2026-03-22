@@ -493,7 +493,7 @@ That is the outcome we are building toward.
 
 The reference implementation of the 4DA Framework is the 4DA application itself:
 - **Source code:** Available under FSL-1.1-Apache-2.0 license
-- **Scoring pipeline:** `src-tauri/src/scoring/` (14 modules, ~9,200 lines of Rust)
+- **Scoring pipeline:** `src-tauri/src/scoring/` (19 modules, ~9,200 lines of Rust)
 - **Authority Stack:** `.ai/` directory (WISDOM.md, INVARIANTS.md, DECISIONS.md, FAILURE_MODES.md)
 - **AOS:** `.ai/OPS.md` + `scripts/` (21 validation and operational scripts)
 - **Website:** 4da.ai
