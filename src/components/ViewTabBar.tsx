@@ -73,7 +73,7 @@ export const ViewTabBar = memo(function ViewTabBar() {
 
   return (
     <nav aria-label="Main views">
-    <div className="mb-6 flex items-center gap-1 bg-bg-secondary rounded-lg p-1 border border-border w-fit" role="tablist" aria-label="Content views">
+    <div className="mb-4 flex items-center gap-1 bg-bg-secondary rounded-lg p-1 border border-border w-fit" role="tablist" aria-label="Content views">
       {visibleTabs.map(tab => {
         const badgeValue = badges[tab.id];
         const showBadge = badgeValue && activeView !== tab.id;
@@ -85,7 +85,7 @@ export const ViewTabBar = memo(function ViewTabBar() {
             aria-selected={activeView === tab.id}
             aria-controls={`view-panel-${tab.id}`}
             onClick={() => { trackEvent(`view_open:${tab.id}`, tab.id); setActiveView(tab.id); }}
-            className={`relative px-4 py-1.5 text-sm rounded-md transition-all ${
+            className={`relative px-3 py-1.5 text-sm rounded-md transition-all ${
               activeView === tab.id
                 ? `${tab.activeColor} font-medium`
                 : 'text-text-muted hover:text-text-secondary'
@@ -93,9 +93,6 @@ export const ViewTabBar = memo(function ViewTabBar() {
             title={t(tab.subtitleKey)}
           >
             <span>{t(tab.labelKey)}</span>
-            <span className={`block text-[10px] leading-tight ${
-              activeView === tab.id ? 'opacity-70' : 'opacity-40'
-            }`}>{t(tab.subtitleKey)}</span>
             {showBadge && (
               badgeCount > 0 ? (
                 <span

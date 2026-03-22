@@ -11,11 +11,9 @@ import sunLogo from './assets/sun-logo.webp';
 import { SplashScreen } from './components/SplashScreen';
 // Onboarding — only shown on first launch, lazy-loaded for returning users
 const Onboarding = lazy(() => import('./components/Onboarding').then(m => ({ default: m.Onboarding })));
-import { VoidEngine } from './components/void-engine/VoidEngine';
-import { OllamaStatus } from './components/OllamaStatus';
 import { ToastContainer } from './components/Toast';
 import { FeedbackMilestone } from './components/FeedbackMilestone';
-import { ActionBar } from './components/ActionBar';
+import { UnifiedAppBar } from './components/app/UnifiedAppBar';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { ViewErrorBoundary } from './components/ViewErrorBoundary';
 import { ViewTabBar } from './components/ViewTabBar';
@@ -24,11 +22,7 @@ import { UpdateBanner } from './components/UpdateBanner';
 
 // Lazy-loaded non-critical-path components
 const FirstRunTransition = lazy(() => import('./components/FirstRunTransition').then(m => ({ default: m.FirstRunTransition })));
-const NaturalLanguageSearch = lazy(() => import('./components/NaturalLanguageSearch').then(m => ({ default: m.NaturalLanguageSearch })));
-const LearningIndicator = lazy(() => import('./components/LearningIndicator').then(m => ({ default: m.LearningIndicator })));
-const ProValueBadge = lazy(() => import('./components/ProValueBadge').then(m => ({ default: m.ProValueBadge })));
 const GuidedHighlights = lazy(() => import('./components/GuidedHighlights').then(m => ({ default: m.GuidedHighlights })));
-const EmbeddingStatusIndicator = lazy(() => import('./components/EmbeddingStatusIndicator').then(m => ({ default: m.EmbeddingStatusIndicator })));
 
 // Lazy-loaded non-critical views and overlays
 const SettingsModal = lazy(() => import('./components/SettingsModal').then(m => ({ default: m.SettingsModal })));
@@ -106,7 +100,6 @@ function App() {
   const { update, installing, installUpdate, dismiss: dismissUpdate } = useUpdateCheck();
   // All application state via hooks
   const {
-    settings,
     settingsForm,
     setSettingsStatus,
     showOnboarding,
@@ -143,11 +136,7 @@ function App() {
   } = useContextDiscovery(setSettingsStatus);
 
   // Feedback hook — all state and recordInteraction live in the store
-  const {
-    learnedAffinities,
-    antiTopics,
-    lastLearnedTopic,
-  } = useFeedback();
+  useFeedback();
 
   // System health hook - data loaded on mount, consumed by SettingsModal via Zustand
   useSystemHealth(setSettingsStatus);
@@ -177,9 +166,6 @@ function App() {
   // AI Briefing (extracted hook)
   const {
     aiBriefing,
-    autoBriefingEnabled,
-    setAutoBriefingEnabled,
-    generateBriefing,
   } = useBriefing(state.relevanceResults, state.analysisComplete);
 
   // 5c. Stabilize onAnalyze callback
@@ -229,13 +215,18 @@ function App() {
     return () => { unlisten.then(fn => fn()); };
   }, [activateLicense, activateStreetsLicense, addToast]);
 
-  // Embedding status listener — surfaces degraded/unavailable state to the UI
+  // Embedding status listener — surfaces degraded/unavailable state via toast
   useEffect(() => {
     const unlisten = listen<{ status: 'active' | 'degraded' | 'unavailable' }>('4da://embedding-status', (event) => {
       setEmbeddingStatus(event.payload.status);
+      if (event.payload.status !== 'active') {
+        addToast('warning', event.payload.status === 'degraded'
+          ? 'Semantic scoring limited — embeddings using fallback'
+          : 'Embedding service unavailable — using keyword signals only');
+      }
     });
     return () => { unlisten.then(fn => fn()); };
-  }, [setEmbeddingStatus]);
+  }, [setEmbeddingStatus, addToast]);
 
   // Framework + Comparison page triggers (from AboutPanel via custom events)
   useEffect(() => {
@@ -368,42 +359,19 @@ function App() {
         >
           {t('app.skipToContent')}
         </a>
-        {/* Header - Polished */}
-        <header className="mb-8 flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <div className="w-12 h-12 flex items-center justify-center flex-shrink-0">
-              <VoidEngine size={48} />
-            </div>
-            <div>
-              <h1 className="text-2xl font-semibold tracking-tight text-white">{t('app.title')}</h1>
-              <p className="text-gray-500 text-sm">{t('app.tagline')}</p>
-            </div>
-          </div>
-          <div className="flex items-center gap-3">
-            {monitoring?.enabled && (
-              <div className="flex items-center gap-2 px-3 py-2 bg-green-500/10 border border-green-500/30 rounded-lg">
-                <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
-                <span className="text-xs text-green-400 font-medium">{t('header.live')}</span>
-              </div>
-            )}
-            <OllamaStatus provider={settingsForm.provider} />
-            <Suspense fallback={null}><ProValueBadge /></Suspense>
-            <span className={`px-2 py-1 text-[11px] font-bold uppercase tracking-wider rounded ${
-              isPro
-                ? 'bg-[#D4AF37]/20 text-[#D4AF37] border border-[#D4AF37]/30'
-                : 'bg-bg-tertiary text-gray-400 border border-border'
-            }`}>
-              {tier}
-            </span>
-            <button
-              data-settings-trigger
-              onClick={() => setShowSettings(true)}
-              className="px-4 py-2 text-sm bg-bg-secondary text-gray-300 border border-border rounded-lg hover:bg-bg-tertiary hover:border-orange-500/30 transition-all"
-            >
-              {t('header.settings')}
-            </button>
-          </div>
-        </header>
+        {/* Unified App Bar — compact header + status + search + actions */}
+        <UnifiedAppBar
+          state={state}
+          monitoring={monitoring}
+          settingsFormProvider={settingsForm.provider}
+          isPro={isPro}
+          tier={tier}
+          summaryBadges={summaryBadges}
+          aiBriefing={aiBriefing}
+          onAnalyze={handleAnalyze}
+          onOpenSettings={() => setShowSettings(true)}
+          analysisPulse={analysisPulse}
+        />
 
         {/* Browser Mode Notice */}
         {isBrowserMode && (
@@ -419,41 +387,6 @@ function App() {
         )}
 
         <main id="main-content">
-        {/* Action Bar */}
-        <ActionBar
-          state={state}
-          settings={settings}
-          aiBriefing={aiBriefing}
-          autoBriefingEnabled={autoBriefingEnabled}
-          summaryBadges={summaryBadges}
-          onAnalyze={handleAnalyze}
-          onGenerateBriefing={generateBriefing}
-          onToggleAutoBriefing={() => setAutoBriefingEnabled(!autoBriefingEnabled)}
-          onToast={addToast}
-          analysisPulse={analysisPulse}
-        />
-
-        {/* Learning Indicator - Visible Learning Loop */}
-        <Suspense fallback={null}>
-          <LearningIndicator
-            learnedAffinities={learnedAffinities}
-            antiTopics={antiTopics}
-            lastLearnedTopic={lastLearnedTopic}
-          />
-        </Suspense>
-
-        {/* Intelligence Console */}
-        <div className="mb-6">
-          <Suspense fallback={null}>
-            <NaturalLanguageSearch defaultExpanded={true} />
-          </Suspense>
-        </div>
-
-        {/* Embedding Status Alert */}
-        <Suspense fallback={null}>
-          <EmbeddingStatusIndicator />
-        </Suspense>
-
         {/* View Tab Bar */}
         <ViewTabBar />
 
