@@ -94,40 +94,44 @@ html, body {
    Priority Variants (border + CSS glow fallback)
    ======================================================================== */
 
+/* Critical: RED — tight red inner, red-white diffusion */
 .notification-card.critical {
-  border-color: rgba(255, 120, 120, 0.4);
+  border-color: rgba(220, 50, 50, 0.5);
   box-shadow:
-    0 0 0 1px rgba(255, 120, 120, 0.3),
-    0 0 12px rgba(255, 140, 140, 0.22),
-    0 0 32px rgba(255, 200, 200, 0.1),
-    0 0 56px rgba(255, 255, 255, 0.04),
+    0 0 0 1px rgba(220, 50, 50, 0.35),
+    0 0 10px rgba(220, 60, 60, 0.3),
+    0 0 28px rgba(240, 120, 120, 0.12),
+    0 0 50px rgba(255, 255, 255, 0.04),
     0 4px 20px rgba(0, 0, 0, 0.5);
 }
 
+/* High: ORANGE — warm orange inner, white outer */
 .notification-card.high {
-  border-color: rgba(240, 220, 160, 0.35);
+  border-color: rgba(230, 130, 40, 0.4);
   box-shadow:
-    0 0 0 1px rgba(240, 220, 160, 0.22),
-    0 0 10px rgba(245, 230, 180, 0.16),
-    0 0 28px rgba(255, 245, 220, 0.08),
-    0 0 48px rgba(255, 255, 255, 0.03),
+    0 0 0 1px rgba(230, 130, 40, 0.28),
+    0 0 10px rgba(235, 145, 60, 0.2),
+    0 0 26px rgba(245, 180, 120, 0.08),
+    0 0 44px rgba(255, 255, 255, 0.03),
     0 4px 20px rgba(0, 0, 0, 0.5);
 }
 
+/* Medium: CLEAN WHITE — neutral, professional */
 .notification-card.medium {
-  border-color: rgba(200, 200, 210, 0.2);
+  border-color: rgba(220, 220, 225, 0.2);
   box-shadow:
-    0 0 0 1px rgba(200, 200, 210, 0.12),
-    0 0 12px rgba(220, 220, 230, 0.08),
-    0 0 28px rgba(255, 255, 255, 0.03),
+    0 0 0 1px rgba(220, 220, 225, 0.12),
+    0 0 10px rgba(240, 240, 245, 0.08),
+    0 0 24px rgba(255, 255, 255, 0.03),
     0 4px 20px rgba(0, 0, 0, 0.5);
 }
 
+/* Low: SUBTLE WHITE — barely there, just enough presence */
 .notification-card.low {
-  border-color: rgba(180, 190, 210, 0.15);
+  border-color: rgba(210, 215, 225, 0.14);
   box-shadow:
-    0 0 0 1px rgba(200, 205, 220, 0.08),
-    0 0 10px rgba(220, 225, 240, 0.05),
+    0 0 0 1px rgba(220, 222, 230, 0.08),
+    0 0 8px rgba(240, 242, 250, 0.04),
     0 4px 20px rgba(0, 0, 0, 0.5);
 }
 
@@ -141,22 +145,22 @@ html, body {
 }
 
 .notification-card.critical:hover {
-  border-color: rgba(255, 150, 150, 0.5);
+  border-color: rgba(230, 60, 60, 0.6);
   box-shadow:
-    0 0 0 1px rgba(255, 150, 150, 0.35),
-    0 0 16px rgba(255, 170, 170, 0.28),
-    0 0 40px rgba(255, 220, 220, 0.14),
-    0 0 64px rgba(255, 255, 255, 0.06),
+    0 0 0 1px rgba(230, 60, 60, 0.4),
+    0 0 14px rgba(235, 80, 80, 0.35),
+    0 0 34px rgba(245, 140, 140, 0.16),
+    0 0 58px rgba(255, 255, 255, 0.06),
     0 4px 20px rgba(0, 0, 0, 0.5);
 }
 
 .notification-card.high:hover {
-  border-color: rgba(250, 235, 180, 0.45);
+  border-color: rgba(235, 140, 50, 0.5);
   box-shadow:
-    0 0 0 1px rgba(250, 235, 180, 0.28),
-    0 0 14px rgba(252, 240, 200, 0.2),
-    0 0 34px rgba(255, 250, 230, 0.1),
-    0 0 52px rgba(255, 255, 255, 0.04),
+    0 0 0 1px rgba(235, 140, 50, 0.35),
+    0 0 14px rgba(240, 155, 70, 0.25),
+    0 0 32px rgba(250, 190, 130, 0.1),
+    0 0 50px rgba(255, 255, 255, 0.04),
     0 4px 20px rgba(0, 0, 0, 0.5);
 }
 
