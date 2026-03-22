@@ -11,8 +11,9 @@ import {
   PrivacySection,
   CompoundSection,
 } from './framework/FrameworkSections';
+import { GeometryShowcase } from './geometry/GeometryShowcase';
 
-type Section = 'overview' | 'pasifa' | 'authority' | 'aos' | 'privacy' | 'compound';
+type Section = 'overview' | 'pasifa' | 'authority' | 'aos' | 'privacy' | 'compound' | 'geometry';
 
 const SECTIONS: Array<{ id: Section; labelKey: string }> = [
   { id: 'overview', labelKey: 'Overview' },
@@ -21,6 +22,7 @@ const SECTIONS: Array<{ id: Section; labelKey: string }> = [
   { id: 'aos', labelKey: 'Operations (AOS)' },
   { id: 'privacy', labelKey: 'Privacy Architecture' },
   { id: 'compound', labelKey: 'Compound Knowledge' },
+  { id: 'geometry', labelKey: 'Platonic Architecture' },
 ];
 
 interface FrameworkPageProps {
@@ -39,6 +41,7 @@ export const FrameworkPage = memo(function FrameworkPage({ onClose }: FrameworkP
       case 'aos': return <AosSection />;
       case 'privacy': return <PrivacySection />;
       case 'compound': return <CompoundSection />;
+      case 'geometry': return <GeometryShowcase />;
     }
   };
 

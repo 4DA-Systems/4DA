@@ -4,6 +4,7 @@ import { cmd } from '../lib/commands';
 import sunLogo from '../assets/sun-logo.webp';
 import { translateError } from '../utils/error-messages';
 import { TuringPattern } from './TuringPattern';
+import { registerGameComponent } from '../lib/game-components';
 
 /**
  * V2 Splash Screen — Turing pattern background with gold-on-dark palette.
@@ -46,6 +47,8 @@ export function SplashScreenV2({ onComplete, minimumDisplayTime = 6000 }: Splash
   const [error, setError] = useState<string | null>(null);
   const [showTuring, setShowTuring] = useState(true);
   const [hasWebGPU, setHasWebGPU] = useState(true); // optimistic
+
+  useEffect(() => { registerGameComponent('game-pentachoron'); }, []);
 
   // Minimum display time — gives the pattern time to emerge
   useEffect(() => {
@@ -207,6 +210,18 @@ export function SplashScreenV2({ onComplete, minimumDisplayTime = 6000 }: Splash
         }}>
           4DA
         </h1>
+
+        {/* Pentachoron accent — 4D identity mark */}
+        <div style={{
+          width: 56,
+          height: 56,
+          marginBottom: '0.75rem',
+          opacity: 0.2,
+          borderRadius: 8,
+          overflow: 'hidden',
+        }}>
+          <game-pentachoron style={{ width: '56px', height: '56px', display: 'block' }} />
+        </div>
 
         {/* Tagline */}
         <p style={{
