@@ -27,6 +27,10 @@ const COMPONENTS = {
   'game-radar-field': () => import('./game-components/radar-field.js'),
   'game-turing-fire': () => import('./game-components/turing-fire.js'),
   'game-intelligence-banner': () => import('./game-components/intelligence-banner.js'),
+  'game-tetrahedron': () => import('./game-components/tetrahedron.js'),
+  'game-pentachoron': () => import('./game-components/pentachoron.js'),
+  'game-icosahedron': () => import('./game-components/icosahedron.js'),
+  'game-simplex-unfold': () => import('./game-components/simplex-unfold.js'),
 } as const;
 
 export type GameComponentTag = keyof typeof COMPONENTS;
