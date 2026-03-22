@@ -99,7 +99,8 @@ mod tests {
 
     #[test]
     fn event_subscriptions_registered() {
-        let content = include_str!("lib.rs");
+        // Setup logic lives in app_setup.rs (extracted from lib.rs)
+        let content = include_str!("app_setup.rs");
 
         // These are the critical event listeners wired in setup()
         let expected_events = [
@@ -112,7 +113,7 @@ mod tests {
         for event in &expected_events {
             assert!(
                 content.contains(event),
-                "Missing event subscription for '{event}' in lib.rs setup()"
+                "Missing event subscription for '{event}' in app_setup.rs setup_app()"
             );
         }
     }
@@ -123,7 +124,8 @@ mod tests {
 
     #[test]
     fn tray_setup_failure_handled_gracefully() {
-        let content = include_str!("lib.rs");
+        // Tray setup logic lives in app_setup.rs (extracted from lib.rs)
+        let content = include_str!("app_setup.rs");
 
         // The tray setup must use a match with Ok/Err, not unwrap/expect
         // This ensures tray failures don't crash the app

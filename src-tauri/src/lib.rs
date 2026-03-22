@@ -25,7 +25,7 @@ pub(crate) use embeddings::embed_texts;
 // Re-exports from events
 pub(crate) use events::{
     emit_progress, void_signal_analysis_complete, void_signal_cache_filled, void_signal_error,
-    void_signal_fetch_progress, void_signal_fetching, void_signal_notification,
+    void_signal_fetch_progress, void_signal_fetching,
 };
 
 // Re-exports from utils (preserves `use crate::fn_name` interface)
