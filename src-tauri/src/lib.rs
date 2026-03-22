@@ -136,6 +136,7 @@ mod monitoring_commands;
 mod monitoring_jobs;
 mod monitoring_notifications;
 mod natural_language_search;
+mod notification_window;
 mod novelty;
 mod ollama;
 mod plugin_commands;
@@ -432,6 +433,8 @@ pub fn run() {
             monitoring_commands::set_close_to_tray,
             monitoring_commands::set_launch_at_startup,
             monitoring_commands::get_launch_at_startup,
+            // Notification window
+            notification_window::notification_clicked,
             // ACE (frontend-used subset)
             ace_commands::ace_get_detected_tech,
             ace_commands::ace_get_active_topics,
@@ -644,6 +647,7 @@ pub fn run() {
             suns_commands::get_street_health,
             // Intelligence History
             intelligence_history::get_intelligence_growth,
+            intelligence_history::get_session_diff,
             // Community Intelligence
             community_intelligence::get_community_status,
             community_intelligence::set_community_intelligence_enabled,

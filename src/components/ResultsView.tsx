@@ -79,25 +79,30 @@ export function ResultsView({
   );
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-      {/* Context Files Panel */}
-      <ContextPanel
-        contextFiles={state.contextFiles}
-        discoveredContext={discoveredContext}
-        loading={state.loading}
-        onReload={loadContextFiles}
-        onIndex={indexContext}
-        onClear={clearContext}
-      />
+    <div className="space-y-6">
+      {/* Context Files Panel (collapsible) */}
+      <details className="bg-bg-secondary rounded-lg border border-border">
+        <summary className="px-5 py-3 text-xs text-text-muted cursor-pointer hover:text-text-secondary">
+          Context Files ({state.contextFiles.length} files)
+        </summary>
+        <ContextPanel
+          contextFiles={state.contextFiles}
+          discoveredContext={discoveredContext}
+          loading={state.loading}
+          onReload={loadContextFiles}
+          onIndex={indexContext}
+          onClear={clearContext}
+        />
+      </details>
 
       {/* Relevance Results Panel */}
-      <section aria-label={t('results.title')} className="lg:col-span-2 bg-bg-secondary rounded-lg border border-border overflow-hidden">
+      <section aria-label={t('results.title')} className="bg-bg-secondary rounded-lg border border-border overflow-hidden">
         <div className="px-5 py-4 border-b border-border">
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-3">
-              <div className="w-8 h-8 bg-bg-tertiary rounded-lg flex items-center justify-center">
-                <span className="text-text-muted">R</span>
-              </div>
+              <div aria-hidden="true" className={`w-2 h-2 rounded-full flex-shrink-0 ${
+                state.analysisComplete ? (relevantCount > 0 ? 'bg-green-400' : 'bg-text-muted/50') : 'bg-orange-400 animate-pulse'
+              }`} />
               <div>
                 <div className="flex items-center gap-2">
                   <h2 className="font-medium text-white">{t('results.title')}</h2>
@@ -109,28 +114,11 @@ export function ResultsView({
                 </div>
                 <p className="text-xs text-text-muted" aria-live="polite">
                   {state.analysisComplete
-                    ? t('results.itemsRelevant', { items: filteredResults.length, relevant: relevantCount })
+                    ? `${filteredResults.length} items · ${relevantCount} relevant · ${topPicksCount} high confidence`
                     : t('results.clickAnalyze')}
                 </p>
-                {state.analysisComplete && filteredResults.length > 0 && (
-                  <span className="text-xs text-text-muted">
-                    {filteredResults.length} items
-                  </span>
-                )}
               </div>
             </div>
-            {state.analysisComplete && (
-              <div className="flex items-center gap-2">
-                {topPicksCount > 0 && (
-                  <span className="text-xs px-2 py-1 bg-orange-500/10 text-orange-400 rounded-lg">
-                    {t('results.topPicks', { count: topPicksCount })}
-                  </span>
-                )}
-                <span className="text-xs px-2 py-1 bg-green-500/10 text-green-400 rounded-lg">
-                  {t('results.relevant', { count: relevantCount })}
-                </span>
-              </div>
-            )}
           </div>
 
           {/* Filter Bar */}

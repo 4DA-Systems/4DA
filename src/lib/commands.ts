@@ -120,6 +120,7 @@ interface CommandMap {
   set_close_to_tray: { params: { enabled: boolean }; result: void };
   set_launch_at_startup: { params: { enabled: boolean }; result: { launch_at_startup: boolean; message: string } };
   get_launch_at_startup: { params: Record<string, never>; result: boolean };
+  notification_clicked: { params: Record<string, never>; result: void };
   record_interaction: { params: { sourceItemId: number; action: string }; result: { success: boolean } };
 
   // -- Taste Test Calibration --
@@ -419,6 +420,10 @@ interface CommandMap {
 
   // -- Intelligence History --
   get_intelligence_growth: { params: Record<string, never>; result: IntelligenceGrowthData };
+  get_session_diff: { params: Record<string, never>; result: { new_items: number; new_relevant: number; hours_since_last: number; has_previous: boolean } };
+
+  // -- Notification Window --
+  notification_clicked: { params: Record<string, never>; result: void };
 
   // -- Community Intelligence --
   get_community_status: { params: Record<string, never>; result: CommunityStatus };

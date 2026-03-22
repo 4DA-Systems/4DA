@@ -64,7 +64,7 @@ export const ResultItemCollapsed = memo(function ResultItemCollapsed({
             item.signal_priority === 'critical' ? 'bg-red-400' :
             item.signal_priority === 'high' ? 'bg-amber-400' :
             'bg-cyan-400'
-          }`} title={item.signal_type} />
+          }`} title={item.signal_type} role="img" aria-label={`${item.signal_priority || 'normal'} priority: ${item.signal_type}`} />
         )}
 
         {/* Title */}
