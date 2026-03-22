@@ -20,5 +20,6 @@
 - **Status**: working
 - **Files**: scripts/check-file-sizes.cjs, src/store/feedback-slice.ts, src/components/Onboarding.tsx, src/components/FeedbackMilestone.tsx, src/components/WeeklyProgressCard.tsx, src/components/AccuracySparkline.tsx, src/components/DepHealthShield.tsx, src/components/FirstCveCard.tsx, src/components/GuidedHighlights.tsx
 
-### T2 — Front page Intelligence Hierarchy redesign (all 4 phases)
-- **Status**: done
+### T2 — Full application redesign (Waves 1A-3D)
+- **Status**: working
+- **Files**: Wave 1A: deleting DigestView, CommunityInsights, WisdomPulse, AppHeader, BriefingMetrics, BriefingTopPicks, SignalActionCard, BriefingSupplementary, BriefingCard, BriefingHelpers cleanup. Wave 1C: ViewRouter.tsx, SovereignDeveloperProfile.tsx. Wave 1B: App.tsx, ActionBar.tsx, NaturalLanguageSearch.tsx, ViewTabBar.tsx, EmbeddingStatusIndicator.tsx, new UnifiedAppBar.tsx. Wave 2-3: AttentionCards.tsx, MilestoneOverlay.tsx, BriefingWarmupState.tsx, BriefingEmptyStates.tsx, IntelligenceFeed.tsx, use-keyboard-shortcuts.ts, PulseSummary.tsx, intelligence_history.rs
