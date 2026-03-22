@@ -21,8 +21,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Novelty detection filters seen-before content and boosts new releases
 - Content quality analysis evaluates title quality, content depth, and source authority
 
-**AI Briefings (Pro)**
+**AI Briefings (Free)**
 - AI-generated daily intelligence briefings summarize your top signals
+- AI-generated weekly digest of the most important developments across all sources
+
+**Intelligence Layer (Signal)**
 - Score Autopsy explains exactly why each article received its score
 - Natural language queries against your content stream
 - Signal cards surface critical and high-priority items above the briefing

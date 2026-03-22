@@ -1,28 +1,29 @@
 ---
-title: "Signal -- AI-Powered Developer Intelligence | 4DA"
-description: "Upgrade to Signal for AI briefings, Developer DNA, score autopsy, semantic shifts, natural language search, and more. $12/mo or $99/yr."
+title: "Signal -- The Intelligence Layer | 4DA"
+description: "Signal adds compound intelligence to 4DA: Developer DNA, Signal Chains, Knowledge Gaps, Semantic Shifts, Natural Language Search, and more. $12/mo or $99/yr."
 permalink: "/signal.html"
 ---
 {% extends "base.njk" %}
 
 {% block head %}
   <link rel="canonical" href="https://4da.ai/signal">
-  <meta property="og:title" content="Signal -- AI-Powered Developer Intelligence">
-  <meta property="og:description" content="AI briefings, Developer DNA, score autopsy, semantic shifts, and natural language search. $12/mo or $99/yr.">
+  <meta property="og:title" content="Signal -- The Intelligence Layer">
+  <meta property="og:description" content="Developer DNA, Signal Chains, Knowledge Gaps, Semantic Shifts, Natural Language Search. Intelligence that compounds with every interaction. $12/mo.">
   <meta property="og:type" content="website">
   <meta property="og:url" content="https://4da.ai/signal">
   <meta property="og:image" content="https://4da.ai/og-image.png">
   <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:title" content="Signal -- AI-Powered Developer Intelligence">
-  <meta name="twitter:description" content="AI briefings, Developer DNA, score autopsy, semantic shifts, and natural language search.">
+  <meta name="twitter:title" content="Signal -- The Intelligence Layer">
+  <meta name="twitter:description" content="Developer DNA, Signal Chains, Knowledge Gaps, Semantic Shifts, Natural Language Search. Intelligence that compounds.">
   <meta name="twitter:image" content="https://4da.ai/og-image.png">
 
   <style>
     *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
     :root {
-      --bg: #0A0A0A; --bg-card: #141414; --bg-hover: #1A1A1A;
+      --bg: #0A0A0A; --bg-card: #141414; --bg-hover: #1A1A1A; --bg-depth: #0E0E0E;
       --text: #FFFFFF; --text-secondary: #A0A0A0; --text-muted: #666;
-      --accent: #D4AF37; --border: #2A2A2A; --success: #22C55E; --radius: 12px;
+      --accent: #D4AF37; --accent-dim: rgba(212,175,55,0.08); --accent-border: rgba(212,175,55,0.15);
+      --border: #2A2A2A; --success: #22C55E; --radius: 12px;
     }
     html { scroll-behavior: smooth; }
     body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; background: var(--bg); color: var(--text); line-height: 1.6; -webkit-font-smoothing: antialiased; }
@@ -41,47 +42,86 @@ permalink: "/signal.html"
     .nav-links a:hover { color: var(--text); opacity: 1; }
 
     /* Hero */
-    .hero { padding: 100px 0 60px; text-align: center; }
+    .hero { padding: 100px 0 40px; text-align: center; }
     .hero-label { font-family: 'JetBrains Mono', monospace; font-size: 12px; letter-spacing: 0.12em; color: var(--accent); margin-bottom: 20px; text-transform: uppercase; }
-    .hero h1 { font-size: clamp(36px, 5vw, 52px); font-weight: 600; line-height: 1.1; letter-spacing: -0.03em; margin-bottom: 16px; }
+    .hero h1 { font-size: clamp(36px, 5vw, 52px); font-weight: 600; line-height: 1.1; letter-spacing: -0.03em; margin-bottom: 20px; }
     .hero h1 span { color: var(--accent); }
-    .hero p { font-size: 17px; color: var(--text-secondary); max-width: 560px; margin: 0 auto; line-height: 1.7; }
+    .hero .hero-sub { font-size: 18px; color: var(--text-secondary); max-width: 600px; margin: 0 auto 32px; line-height: 1.7; }
+    .hero .hero-technical { font-family: 'JetBrains Mono', monospace; font-size: 13px; color: var(--text-muted); max-width: 640px; margin: 0 auto; line-height: 1.8; padding: 20px 24px; background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; text-align: left; }
+    .hero .hero-technical .comment { color: #4A6A4A; }
+    .hero .hero-technical .key { color: var(--accent); }
+    .hero .hero-technical .val { color: #A0A0A0; }
 
     .divider { border: none; border-top: 1px solid var(--border); margin: 0; }
 
-    /* Free vs Signal comparison */
-    .compare { padding: 60px 0; }
-    .compare-label { font-family: 'JetBrains Mono', monospace; font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--accent); margin-bottom: 12px; text-align: center; }
-    .compare-title { font-size: 24px; font-weight: 600; text-align: center; margin-bottom: 40px; letter-spacing: -0.02em; }
+    /* Already Free */
+    .already-free { padding: 60px 0 40px; }
+    .section-label { font-family: 'JetBrains Mono', monospace; font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--accent); margin-bottom: 12px; text-align: center; }
+    .section-title { font-size: 24px; font-weight: 600; text-align: center; margin-bottom: 12px; letter-spacing: -0.02em; }
+    .section-sub { font-size: 15px; color: var(--text-secondary); text-align: center; max-width: 560px; margin: 0 auto 36px; line-height: 1.7; }
+    .free-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 8px; max-width: 700px; margin: 0 auto; }
+    .free-item { font-size: 13px; color: var(--text-muted); padding: 6px 0; }
+    .free-item::before { content: "// "; font-family: 'JetBrains Mono', monospace; font-size: 11px; }
+    .free-highlight { color: var(--text-secondary); font-weight: 500; }
 
-    .free-section { margin-bottom: 48px; }
-    .free-section h3 { font-size: 16px; font-weight: 600; margin-bottom: 16px; color: var(--text-secondary); }
-    .free-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px; }
-    .free-item { font-size: 14px; color: var(--text-muted); padding: 8px 0; }
-    .free-item::before { content: "// "; color: var(--text-muted); font-family: 'JetBrains Mono', monospace; font-size: 12px; }
+    /* Signal Features */
+    .signal-section { padding: 60px 0; }
+    .signal-grid { display: grid; grid-template-columns: 1fr; gap: 20px; margin-bottom: 40px; }
+    .feature-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); padding: 28px 28px 24px; transition: border-color 0.3s; position: relative; overflow: hidden; }
+    .feature-card:hover { border-color: var(--accent-border); }
+    .feature-card .tag { display: inline-block; font-family: 'JetBrains Mono', monospace; font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--accent); background: var(--accent-dim); padding: 3px 10px; border-radius: 4px; margin-bottom: 12px; }
+    .feature-card h3 { font-size: 18px; font-weight: 600; margin-bottom: 8px; letter-spacing: -0.01em; }
+    .feature-card .scenario { font-size: 14px; color: var(--text-secondary); line-height: 1.7; margin-bottom: 12px; }
+    .feature-card .technical { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--text-muted); padding: 10px 14px; background: var(--bg-depth); border-radius: 6px; line-height: 1.6; }
+    .feature-card .technical span { color: var(--accent); }
 
-    .signal-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px; }
-    .signal-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); padding: 24px; transition: border-color 0.2s; }
-    .signal-card:hover { border-color: #3A3A3A; }
-    .signal-card h4 { font-size: 15px; font-weight: 600; margin-bottom: 6px; }
-    .signal-card p { font-size: 13px; color: var(--text-secondary); line-height: 1.6; }
-    .signal-card .tag { display: inline-block; font-family: 'JetBrains Mono', monospace; font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--accent); background: rgba(212,175,55,0.1); padding: 2px 8px; border-radius: 4px; margin-bottom: 10px; }
+    /* Two-column layout for feature cards */
+    .signal-grid-2col { display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px; }
+
+    /* Compound section */
+    .compound { padding: 60px 0; }
+    .compound-content { max-width: 640px; margin: 0 auto; }
+    .compound-phases { margin-top: 32px; }
+    .phase { padding: 20px 0; border-bottom: 1px solid var(--border); }
+    .phase:last-child { border-bottom: none; }
+    .phase-header { display: flex; align-items: baseline; gap: 12px; margin-bottom: 6px; }
+    .phase-label { font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--accent); font-weight: 600; flex-shrink: 0; }
+    .phase-title { font-size: 15px; font-weight: 600; }
+    .phase-desc { font-size: 13px; color: var(--text-secondary); line-height: 1.6; padding-left: 72px; }
+
+    /* How it works */
+    .how-it-works { padding: 60px 0; }
+    .how-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; margin-top: 32px; }
+    .how-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); padding: 24px; }
+    .how-card .step { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--accent); margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.06em; }
+    .how-card h4 { font-size: 14px; font-weight: 600; margin-bottom: 6px; }
+    .how-card p { font-size: 13px; color: var(--text-secondary); line-height: 1.6; }
+
+    /* Data sovereignty callout */
+    .sovereignty { padding: 48px 0; }
+    .sovereignty-box { background: var(--bg-card); border: 1px solid var(--accent-border); border-radius: 16px; padding: 32px 40px; max-width: 700px; margin: 0 auto; }
+    .sovereignty-box h3 { font-size: 18px; font-weight: 600; margin-bottom: 12px; }
+    .sovereignty-box p { font-size: 14px; color: var(--text-secondary); line-height: 1.7; margin-bottom: 8px; }
+    .sovereignty-box p:last-child { margin-bottom: 0; }
+    .sovereignty-box .highlight { color: var(--text); font-weight: 500; }
 
     /* Pricing */
     .pricing { padding: 60px 0; text-align: center; }
-    .pricing-label { font-family: 'JetBrains Mono', monospace; font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--accent); margin-bottom: 12px; }
-    .pricing-title { font-size: 24px; font-weight: 600; margin-bottom: 32px; letter-spacing: -0.02em; }
+    .pricing-title { font-size: 24px; font-weight: 600; margin-bottom: 8px; letter-spacing: -0.02em; }
+    .pricing-sub { font-size: 14px; color: var(--text-secondary); margin-bottom: 32px; }
 
     .toggle { display: inline-flex; background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; padding: 3px; margin-bottom: 32px; }
     .toggle button { padding: 8px 24px; border: none; background: transparent; color: var(--text-muted); font-size: 14px; font-weight: 500; border-radius: 6px; cursor: pointer; transition: all 0.2s; }
     .toggle button.active { background: var(--accent); color: #000; }
     .save-badge { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--success); margin-left: 4px; }
 
-    .price-card { background: var(--bg-card); border: 2px solid var(--accent); border-radius: 16px; padding: 40px; max-width: 400px; margin: 0 auto; }
+    .price-card { background: var(--bg-card); border: 2px solid var(--accent); border-radius: 16px; padding: 40px; max-width: 440px; margin: 0 auto; }
     .price-amount { font-size: 48px; font-weight: 600; letter-spacing: -0.03em; }
     .price-amount .currency { font-size: 20px; color: var(--text-secondary); vertical-align: top; margin-right: 2px; }
     .price-amount .period { font-size: 16px; color: var(--text-muted); font-weight: 400; }
-    .price-annual-note { font-size: 13px; color: var(--text-muted); margin: 8px 0 24px; min-height: 20px; }
+    .price-annual-note { font-size: 13px; color: var(--text-muted); margin: 8px 0 20px; min-height: 20px; }
+    .price-math { font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--text-muted); margin-bottom: 24px; padding: 10px 16px; background: var(--bg-depth); border-radius: 6px; text-align: left; }
+    .price-math span { color: var(--accent); }
     .price-btn { display: block; width: 100%; padding: 14px; font-size: 15px; font-weight: 600; border: none; border-radius: 10px; cursor: pointer; transition: all 0.2s; background: var(--accent); color: #000; }
     .price-btn:hover { opacity: 0.9; transform: translateY(-1px); }
     .price-btn:disabled { opacity: 0.5; cursor: wait; }
@@ -98,6 +138,7 @@ permalink: "/signal.html"
     .faq-item:first-child { border-top: 1px solid var(--border); }
     .faq-q { font-size: 15px; font-weight: 600; margin-bottom: 8px; }
     .faq-a { font-size: 14px; color: var(--text-secondary); line-height: 1.7; }
+    .faq-a code { font-size: 12px; background: var(--bg-card); padding: 2px 6px; border-radius: 4px; border: 1px solid var(--border); }
 
     /* Footer */
     footer { padding: 48px 0; border-top: 1px solid var(--border); text-align: center; }
@@ -105,10 +146,13 @@ permalink: "/signal.html"
     footer a { color: var(--text-muted); }
     footer a:hover { color: var(--text); }
 
-    @media (max-width: 600px) {
-      .signal-grid { grid-template-columns: 1fr; }
-      .free-grid { grid-template-columns: 1fr; }
+    @media (max-width: 700px) {
+      .signal-grid-2col { grid-template-columns: 1fr; }
+      .how-grid { grid-template-columns: 1fr; }
+      .free-grid { grid-template-columns: 1fr 1fr; }
       .price-card { padding: 28px; }
+      .sovereignty-box { padding: 24px; }
+      .phase-desc { padding-left: 0; margin-top: 4px; }
     }
   </style>
 {% endblock %}
@@ -125,78 +169,128 @@ permalink: "/signal.html"
     </div>
   </nav>
 
+  <!-- ==================== HERO ==================== -->
   <header class="hero">
     <div class="container">
       <div class="hero-label">4DA Signal</div>
-      <h1>Intelligence that<br>compounds <span>daily</span></h1>
-      <p>Signal takes 4DA's scoring engine and adds an AI layer that learns your codebase, surfaces patterns, and briefs you on what matters before you ask.</p>
+      <h1>The intelligence layer<br>your tools <span>can't replicate</span></h1>
+      <p class="hero-sub">4DA already scores content against your codebase across 10 sources. Signal adds the analysis engine that connects the dots, detects your blind spots, and gets smarter with every interaction.</p>
+      <div class="hero-technical">
+        <div><span class="comment">// what signal does in a sentence</span></div>
+        <div><span class="key">input</span>:&nbsp; <span class="val">10 sources &times; your codebase context &times; time</span></div>
+        <div><span class="key">output</span>: <span class="val">connected intelligence, blind spot detection, domain evolution tracking</span></div>
+        <div><span class="key">delta</span>:&nbsp; <span class="val">compounds daily &mdash; week 1 is useful, month 3 is indispensable</span></div>
+      </div>
     </div>
   </header>
 
   <hr class="divider">
 
-  <section class="compare">
+  <!-- ==================== FREE TIER ==================== -->
+  <section class="already-free">
     <div class="container">
-      <div class="compare-label">What you get</div>
-      <div class="compare-title">Free is powerful. Signal is compounding.</div>
+      <div class="section-label">Already included free</div>
+      <div class="section-title">Most developers never need more than this.</div>
+      <p class="section-sub">The free tier is a complete product. AI briefings, scoring, context discovery, and the full STREETS Playbook are included forever. No trial. No account. No expiration.</p>
+      <div class="free-grid">
+        <div class="free-item free-highlight">AI daily briefings</div>
+        <div class="free-item free-highlight">AI weekly digest</div>
+        <div class="free-item">10 content sources</div>
+        <div class="free-item">PASIFA scoring engine</div>
+        <div class="free-item">ACE context scanner</div>
+        <div class="free-item">STREETS playbook (7 modules)</div>
+        <div class="free-item">Behavior learning</div>
+        <div class="free-item">MCP server (31 tools)</div>
+        <div class="free-item">Feed UI + saved items</div>
+        <div class="free-item">CLI binary</div>
+        <div class="free-item">Runs 100% locally</div>
+        <div class="free-item">Unlimited use</div>
+      </div>
+    </div>
+  </section>
 
-      <div class="free-section">
-        <h3>Free tier (included forever)</h3>
-        <div class="free-grid">
-          <div class="free-item">10 content sources</div>
-          <div class="free-item">PASIFA scoring engine</div>
-          <div class="free-item">ACE context scanner</div>
-          <div class="free-item">STREETS playbook (all 7 modules)</div>
-          <div class="free-item">Feed UI + saved items</div>
-          <div class="free-item">Runs 100% locally</div>
+  <hr class="divider">
+
+  <!-- ==================== SIGNAL FEATURES ==================== -->
+  <section class="signal-section">
+    <div class="container">
+      <div class="section-label">What Signal adds</div>
+      <div class="section-title">The analysis engine that turns data into decisions.</div>
+      <p class="section-sub">Every feature below works locally, uses your own API keys, and produces intelligence that is impossible to get any other way &mdash; because it requires your codebase context and your interaction history to exist.</p>
+
+      <!-- Primary Features (full-width) -->
+      <div class="signal-grid">
+        <div class="feature-card">
+          <span class="tag">Signal Chains</span>
+          <h3>See the full story, not fragments</h3>
+          <p class="scenario">A Tokio release drops. Three hours later, a blog post explains the migration path. By evening, two HN threads debate the trade-offs and a Reddit thread surfaces a workaround for a breaking change. You see all four &mdash; separately. Signal Chains connects them into one linked narrative, ranked by relevance to your Cargo.toml. One click, complete picture.</p>
+          <div class="technical"><span>chains</span> = cross-source entity linking + temporal clustering + codebase affinity scoring</div>
+        </div>
+
+        <div class="feature-card">
+          <span class="tag">Knowledge Gaps</span>
+          <h3>What you don't know &mdash; quantified</h3>
+          <p class="scenario">Your package.json says you use Next.js 14. You've shipped App Router pages. But Knowledge Gaps notices you've never engaged with any content about Server Actions, Partial Prerendering, or the new caching semantics. Those aren't random omissions &mdash; they're blind spots in features you're actively shipping against. Knowledge Gaps surfaces them before they become production incidents.</p>
+          <div class="technical"><span>gaps</span> = dependency graph analysis &times; content engagement history &times; topic coverage scoring</div>
+        </div>
+
+        <div class="feature-card">
+          <span class="tag">Developer DNA</span>
+          <h3>Your technical identity, auto-generated</h3>
+          <p class="scenario">Developer DNA builds a living profile of your expertise: 68% systems (Rust, WASM, networking), 24% web (TypeScript, React), 8% infrastructure (Docker, CI/CD). It tracks depth, not just breadth &mdash; you're not just a "Rust developer," you're deep in async runtimes and shallow on macros. Watch it evolve as your work evolves. Export as SVG card for your README, markdown for your portfolio, or keep it private.</p>
+          <div class="technical"><span>dna</span> = manifest analysis + interaction patterns + expertise depth weighting | export: svg, md, card</div>
         </div>
       </div>
 
-      <div class="signal-grid">
-        <div class="signal-card">
-          <span class="tag">AI Briefings</span>
-          <h4>Daily intelligence briefings</h4>
-          <p>AI-generated summaries of what changed in your world overnight. Prioritised by your codebase context, not algorithmic engagement.</p>
-        </div>
-        <div class="signal-card">
-          <span class="tag">Developer DNA</span>
-          <h4>Your technical fingerprint</h4>
-          <p>Auto-generated profile of your stack, expertise depth, and knowledge gaps. Evolves as your work evolves.</p>
-        </div>
-        <div class="signal-card">
-          <span class="tag">Score Autopsy</span>
-          <h4>Understand every score</h4>
-          <p>Deep-dive into why any item scored the way it did. See which signals fired, which axes dominated, and what the engine weighed.</p>
-        </div>
-        <div class="signal-card">
-          <span class="tag">Signal Chains</span>
-          <h4>Connected intelligence</h4>
-          <p>Discover hidden connections between content items. See how a GitHub release relates to a blog post relates to a HN discussion.</p>
-        </div>
-        <div class="signal-card">
+      <!-- Secondary Features (two-column) -->
+      <div class="signal-grid-2col">
+        <div class="feature-card">
           <span class="tag">Semantic Shifts</span>
-          <h4>Track topic evolution</h4>
-          <p>Watch how topics in your feed evolve over time. Spot emerging trends before they become obvious.</p>
+          <h3>Watch your domain evolve in real time</h3>
+          <p class="scenario">Three months ago, "edge runtime" appeared in 2% of your feed. Now it's 19%. Semantic Shifts pinpoints the inflection to a specific Vercel blog post on March 3rd that triggered a conversation cascade across 4 sources. Trend detection that's personal to your stack, not the internet's.</p>
+          <div class="technical"><span>shifts</span> = embedding trajectory analysis over sliding time windows per topic cluster</div>
         </div>
-        <div class="signal-card">
+
+        <div class="feature-card">
           <span class="tag">Natural Language Search</span>
-          <h4>Ask, don't filter</h4>
-          <p>Search your entire content history with natural language. "What changed in React Server Components this month?"</p>
+          <h3>Ask your content history anything</h3>
+          <p class="scenario">"What was that article about SQLite WAL mode performance from last week?" Signal searches across all 10 sources, your saves, your dismissals, and your interaction history. Semantic search, not keyword matching. It finds the article even if you never saved it &mdash; because you read it for 4 minutes.</p>
+          <div class="technical"><span>search</span> = vector similarity + interaction-weighted ranking + cross-source semantic retrieval</div>
         </div>
-        <div class="signal-card">
-          <span class="tag">Weekly Digest</span>
-          <h4>Curated weekly report</h4>
-          <p>AI-generated weekly summary of the most important developments across all your sources, ranked by relevance to your work.</p>
-        </div>
-        <div class="signal-card">
+
+        <div class="feature-card">
           <span class="tag">Project Health</span>
-          <h4>Ecosystem monitoring</h4>
-          <p>Track the health of dependencies, frameworks, and tools in your stack. Early warning when something you rely on shifts.</p>
+          <h3>Early warning for your dependencies</h3>
+          <p class="scenario">Your Cargo.toml has 47 dependencies. Project Health monitors their pulse: commit velocity, issue trends, release cadence, maintainer activity. When a critical dep goes quiet for 3 weeks after 6 months of weekly releases, you know before the GitHub issue asking "is this project dead?" appears.</p>
+          <div class="technical"><span>health</span> = dependency manifest parsing &times; upstream signal monitoring &times; anomaly detection</div>
         </div>
-        <div class="signal-card">
+
+        <div class="feature-card">
+          <span class="tag">Score Autopsy</span>
+          <h3>Full transparency on every score</h3>
+          <p class="scenario">An item scored 0.87. Why? Score Autopsy shows the full breakdown: Relevance 0.92 (3 matching technologies in your manifest), Freshness 0.85 (posted 4 hours ago), Authority 0.78 (author maintains a dep you use), Proximity 0.91 (direct stack overlap), Action Potential 0.89 (migration guide format). Every axis, every weight, every signal. No black boxes.</p>
+          <div class="technical"><span>autopsy</span> = full PASIFA 5-axis decomposition with per-signal attribution and weight explanation</div>
+        </div>
+
+        <div class="feature-card">
+          <span class="tag">Standing Queries</span>
+          <h3>Persistent watchlists that never sleep</h3>
+          <p class="scenario">Set "Tauri security advisories" as a standing query. Every new item from every source gets tested against it. When CVE-2026-XXXX drops at 3am and appears on a security blog, Standing Queries flags it before your next coffee. Like Google Alerts but running against scored, codebase-relevant content.</p>
+          <div class="technical"><span>standing</span> = persistent semantic queries &times; real-time new-item evaluation &times; notification triggers</div>
+        </div>
+
+        <div class="feature-card">
           <span class="tag">Attention Report</span>
-          <h4>Where your focus goes</h4>
-          <p>Analytics on what you're reading, saving, and engaging with. Understand your own attention patterns.</p>
+          <h3>See where your focus actually goes</h3>
+          <p class="scenario">You spent 71% of your reading time on Rust content this month, but your project is 55% TypeScript. Your attention doesn't match your work distribution. Attention Report shows the disconnect &mdash; and whether it's a problem (neglecting your primary stack) or a signal (you're preparing to migrate).</p>
+          <div class="technical"><span>attention</span> = interaction time tracking &times; stack distribution analysis &times; attention/work divergence scoring</div>
+        </div>
+
+        <div class="feature-card">
+          <span class="tag">Decision Signals</span>
+          <h3>Content that arrives at the right moment</h3>
+          <p class="scenario">You've been reading 6 articles about Hono vs Express this week. Decision Signals detects the pattern and proactively surfaces the 3 most authoritative comparisons, a benchmark from last month you missed, and a migration guide from a team that just shipped the switch. The right information at the decision point.</p>
+          <div class="technical"><span>decisions</span> = reading pattern clustering + decision-point detection + proactive content surfacing</div>
         </div>
       </div>
     </div>
@@ -204,10 +298,104 @@ permalink: "/signal.html"
 
   <hr class="divider">
 
+  <!-- ==================== COMPOUND ADVANTAGE ==================== -->
+  <section class="compound">
+    <div class="container">
+      <div class="section-label">The compound advantage</div>
+      <div class="section-title">Signal gets smarter. Every other tool stays static.</div>
+      <div class="compound-content">
+        <p class="section-sub" style="text-align:left;margin-bottom:24px;">Every save, every dismiss, every click, every minute spent reading teaches Signal about your work. The intelligence compounds. Here's what that looks like over time:</p>
+
+        <div class="compound-phases">
+          <div class="phase">
+            <div class="phase-header">
+              <span class="phase-label">Day 1</span>
+              <span class="phase-title">Codebase scan</span>
+            </div>
+            <p class="phase-desc">ACE reads your manifests. Signal knows your stack, your dependencies, your language distribution. Scoring begins immediately. You see relevant content within 60 seconds.</p>
+          </div>
+          <div class="phase">
+            <div class="phase-header">
+              <span class="phase-label">Week 1</span>
+              <span class="phase-title">Behavior learning kicks in</span>
+            </div>
+            <p class="phase-desc">Signal learns what you engage with and what you skip. Developer DNA begins forming. Knowledge Gaps start identifying areas where your dependency graph exceeds your reading history.</p>
+          </div>
+          <div class="phase">
+            <div class="phase-header">
+              <span class="phase-label">Month 1</span>
+              <span class="phase-title">Patterns emerge</span>
+            </div>
+            <p class="phase-desc">Signal Chains connect items across sources. Semantic Shifts detect topic trajectories. Decision Signals recognize when you're evaluating a technology choice. Attention Reports show where your focus diverges from your work.</p>
+          </div>
+          <div class="phase">
+            <div class="phase-header">
+              <span class="phase-label">Month 3</span>
+              <span class="phase-title">Compounding intelligence</span>
+            </div>
+            <p class="phase-desc">90 days of interaction data. Signal anticipates your needs. It surfaces content you didn't know you needed. Knowledge Gaps close. Your Developer DNA shows expertise trajectory. Standing Queries have caught things you would have missed. The tool that was useful on day 1 is now indispensable.</p>
+          </div>
+          <div class="phase">
+            <div class="phase-header">
+              <span class="phase-label">Year 1</span>
+              <span class="phase-title">A second technical brain</span>
+            </div>
+            <p class="phase-desc">365 days of codebase-aware, privacy-preserving intelligence. Semantic Shifts show you how your entire domain evolved. Developer DNA charts your growth. Signal Chains have connected hundreds of narratives. No other tool on Earth has this data, because no other tool runs locally against your codebase for a year.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <hr class="divider">
+
+  <!-- ==================== DATA SOVEREIGNTY ==================== -->
+  <section class="sovereignty">
+    <div class="container">
+      <div class="sovereignty-box">
+        <h3>Your intelligence stays yours. Always.</h3>
+        <p>Signal runs 100% locally. Your codebase, your interaction history, your Developer DNA, your Knowledge Gaps &mdash; none of it touches our servers. <span class="highlight">The license key is the only network call Signal makes to us.</span></p>
+        <p>AI features use your own API keys (BYOK). Anthropic, OpenAI, or Ollama for fully local inference. We never see your prompts. We never see the responses. We are <span class="highlight">architecturally unable</span> to access your data.</p>
+        <p>Cancel your subscription and your data stays. Your interaction history, your Developer DNA, your entire intelligence graph &mdash; all of it remains on your machine. We unlock the analysis engine. The data is always yours.</p>
+      </div>
+    </div>
+  </section>
+
+  <hr class="divider">
+
+  <!-- ==================== HOW IT WORKS ==================== -->
+  <section class="how-it-works">
+    <div class="container">
+      <div class="section-label">Under the hood</div>
+      <div class="section-title">For developers who want to know how.</div>
+      <div class="how-grid">
+        <div class="how-card">
+          <div class="step">01 / Ingestion</div>
+          <h4>10 sources, unified pipeline</h4>
+          <p>Hacker News, Reddit, GitHub, RSS, Lobsters, DevTo, and more. Each source adapter normalizes content into a common schema. Fetched on your machine, stored in SQLite locally.</p>
+        </div>
+        <div class="how-card">
+          <div class="step">02 / Scoring</div>
+          <h4>PASIFA 5-axis engine</h4>
+          <p>Every item scored on Proximity, Action Potential, Significance, Information Freshness, and Authority. Weighted by your interaction history. Multi-signal confirmation gate rejects noise. 99%+ of content is filtered out.</p>
+        </div>
+        <div class="how-card">
+          <div class="step">03 / Intelligence</div>
+          <h4>Signal analysis layer</h4>
+          <p>Cross-source entity linking builds Signal Chains. Embedding trajectory analysis detects Semantic Shifts. Dependency graph diffing surfaces Knowledge Gaps. All computed locally using sqlite-vec for vector operations.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <hr class="divider">
+
+  <!-- ==================== PRICING ==================== -->
   <section class="pricing" id="pricing">
     <div class="container">
-      <div class="pricing-label">Pricing</div>
+      <div class="section-label">Pricing</div>
       <div class="pricing-title">One tier. No gotchas.</div>
+      <p class="pricing-sub">The free tier is a complete product. Signal is for developers who want compound intelligence.</p>
 
       <div class="toggle">
         <button id="toggle-monthly" class="active" onclick="setPlan('monthly')">Monthly</button>
@@ -219,16 +407,22 @@ permalink: "/signal.html"
           <span class="currency">$</span><span id="price-value">12</span><span class="period" id="price-period">/mo</span>
         </div>
         <div class="price-annual-note" id="annual-note">&nbsp;</div>
+        <div class="price-math" id="price-math">
+          <span>$12</span> / 160 work hours = <span>$0.075/hr</span> for an intelligence system that watches your ecosystem 24/7
+        </div>
         <button class="price-btn" id="checkout-btn" onclick="startCheckout()">Subscribe to Signal</button>
         <div class="price-trial">30-day free trial included in the app. No credit card required to try.</div>
         <ul class="price-features">
-          <li>Everything in Free</li>
-          <li>AI briefings + weekly digest</li>
-          <li>Developer DNA profile</li>
-          <li>Score autopsy on any item</li>
-          <li>Signal chains + semantic shifts</li>
+          <li>Everything in the free tier</li>
+          <li>Developer DNA profiling + exports</li>
+          <li>Signal chain analysis</li>
+          <li>Knowledge gap detection</li>
+          <li>Semantic shift tracking</li>
           <li>Natural language search</li>
+          <li>Standing queries (persistent watchlists)</li>
+          <li>Score autopsy (full 5-axis breakdown)</li>
           <li>Project health monitoring</li>
+          <li>Decision signals</li>
           <li>Attention analytics</li>
           <li>Priority support</li>
         </ul>
@@ -240,29 +434,42 @@ permalink: "/signal.html"
 
   <hr class="divider">
 
+  <!-- ==================== FAQ ==================== -->
   <section class="faq">
     <div class="container">
       <div class="faq-title">Questions</div>
 
       <div class="faq-item">
+        <div class="faq-q">What's the difference between free and Signal?</div>
+        <div class="faq-a">Free gives you the full scoring engine, AI briefings, all 10 sources, and the complete STREETS Playbook. Signal adds the intelligence analysis layer: Signal Chains, Knowledge Gaps, Developer DNA, Semantic Shifts, Natural Language Search, Project Health, Standing Queries, Score Autopsy, Attention Reports, and Decision Signals. Free surfaces relevant content. Signal tells you what it means, what you're missing, and how your domain is evolving.</div>
+      </div>
+      <div class="faq-item">
+        <div class="faq-q">Wait, AI briefings are free?</div>
+        <div class="faq-a">Yes. Daily and weekly AI-generated briefings are included in the free tier. They use your own API key (BYOK) or local Ollama. We believe every developer deserves an AI-generated summary of what matters to their stack. Signal adds the intelligence that makes those briefings richer &mdash; connected chains, blind spot detection, and trend context.</div>
+      </div>
+      <div class="faq-item">
         <div class="faq-q">What happens to my data?</div>
         <div class="faq-a">Nothing. 4DA runs 100% locally. Signal features use your own API keys (BYOK) to call AI models. Raw data never leaves your machine. The license key is the only thing that touches our servers.</div>
       </div>
       <div class="faq-item">
-        <div class="faq-q">Do I need an API key for Signal features?</div>
-        <div class="faq-a">AI briefings and natural language search require an LLM API key (OpenAI, Anthropic, or local Ollama). You provide your own key in settings. We never see or store it.</div>
+        <div class="faq-q">Do I need an API key?</div>
+        <div class="faq-a">The scoring engine and content surfacing work without any API key. AI-powered features (briefings, natural language search, score autopsy) need an LLM provider: OpenAI, Anthropic, or Ollama for fully local inference. You provide your own key in settings. We never see or store it.</div>
+      </div>
+      <div class="faq-item">
+        <div class="faq-q">Why does Signal cost money if it uses my API key?</div>
+        <div class="faq-a">Your API key powers the models. Signal provides the intelligence architecture built on top &mdash; the cross-source entity linking, the dependency graph analysis, the temporal embedding tracking, the interaction-weighted ranking algorithms. Think of it as: you bring the engine, Signal is the dashboard, the instruments, and the navigation system.</div>
       </div>
       <div class="faq-item">
         <div class="faq-q">Can I try before subscribing?</div>
-        <div class="faq-a">Yes. 4DA includes a 30-day free trial of all Signal features. No credit card required. The trial starts automatically when you first open the app.</div>
-      </div>
-      <div class="faq-item">
-        <div class="faq-q">How do I activate my license?</div>
-        <div class="faq-a">After payment, you'll receive a license key. Paste it in 4DA Settings or click "Open in 4DA" on the confirmation page to activate instantly.</div>
+        <div class="faq-a">Yes. 4DA includes a 30-day free trial of all Signal features. No credit card required. Install the app, enable Signal features, and evaluate with your real codebase and real content. The compound advantage means the trial gets more valuable every day you use it.</div>
       </div>
       <div class="faq-item">
         <div class="faq-q">What if I cancel?</div>
-        <div class="faq-a">Your license remains valid until the end of the billing period. After that, you revert to the free tier. No data is lost — everything stays local on your machine.</div>
+        <div class="faq-a">Your license remains valid until the end of the billing period. After that, you revert to the free tier. No data is lost &mdash; your interaction history, your Developer DNA, your entire intelligence graph stays on your machine. You just lose access to the analysis tools that query it.</div>
+      </div>
+      <div class="faq-item">
+        <div class="faq-q">How is this different from GitHub Copilot / Cursor / etc?</div>
+        <div class="faq-a">Those tools help you write code. 4DA helps you know what to build and why. It operates on the information layer: what's happening in your ecosystem, what you're missing, how your domain is evolving. They're complementary. 4DA even ships an MCP server with 31 tools so your AI coding assistant can draw from your scored intelligence feed.</div>
       </div>
       <div class="faq-item">
         <div class="faq-q">Is there a team plan?</div>
@@ -289,6 +496,9 @@ permalink: "/signal.html"
       document.getElementById('price-value').textContent = plan === 'monthly' ? '12' : '99';
       document.getElementById('price-period').textContent = plan === 'monthly' ? '/mo' : '/yr';
       document.getElementById('annual-note').innerHTML = plan === 'annual' ? '$8.25/mo billed annually' : '&nbsp;';
+      document.getElementById('price-math').innerHTML = plan === 'monthly'
+        ? '<span>$12</span> / 160 work hours = <span>$0.075/hr</span> for an intelligence system that watches your ecosystem 24/7'
+        : '<span>$99</span> / 12 months = <span>$8.25/mo</span> — save $45/yr while your intelligence compounds';
     }
 
     async function startCheckout() {

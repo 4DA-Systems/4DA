@@ -594,6 +594,37 @@ function checkFileSizes() {
   }
 }
 
+function checkGitHygiene() {
+  const result = safeExec("bash .claude/hooks/git-hygiene-check.sh --json", {
+    timeout: 5000,
+  });
+
+  if (!result.ok || !result.output.trim()) {
+    addSignal("git_hygiene", "ok", "All", "", "Git hygiene check skipped");
+    return;
+  }
+
+  try {
+    const data = JSON.parse(result.output.trim());
+    const n = data.needs_attention || 0;
+    const staleCount = (data.stale_done || []).length + (data.stale_empty || []).length;
+    const detail = `Safe excluded: ${data.safe_excluded || 0}, Claimed: ${data.claimed || 0}, Stale entries: ${staleCount}`;
+
+    if (n >= 10) {
+      addSignal("git_hygiene", "critical", "All", "",
+        `${n} unclaimed files accumulating — commit discipline breakdown`, detail);
+    } else if (n >= 5) {
+      addSignal("git_hygiene", "warning", "All", "",
+        `${n} unclaimed files need attention`, detail);
+    } else {
+      addSignal("git_hygiene", "ok", "All", "",
+        `Git hygiene clean (${n} unclaimed)`, detail);
+    }
+  } catch {
+    addSignal("git_hygiene", "ok", "All", "", "Git hygiene check parse error");
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Main
 // ---------------------------------------------------------------------------
@@ -609,6 +640,7 @@ function main() {
   checkTestRegression();
   checkSovereignty();
   checkFileSizes();
+  checkGitHygiene();
 
   const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
 
