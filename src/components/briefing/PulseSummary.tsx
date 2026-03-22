@@ -1,5 +1,6 @@
-import { memo, useMemo } from 'react';
+import { memo, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { cmd } from '../../lib/commands';
 import { RelativeTimestamp } from './BriefingHelpers';
 import type { SourceRelevance, SourceHealthStatus } from '../../types';
 import type { BriefingState } from '../../store/types';
@@ -25,6 +26,17 @@ export const PulseSummary = memo(function PulseSummary({
 }: PulseSummaryProps) {
   const { t } = useTranslation();
 
+  const [diff, setDiff] = useState<{
+    new_items: number;
+    new_relevant: number;
+    hours_since_last: number;
+    has_previous: boolean;
+  } | null>(null);
+
+  useEffect(() => {
+    cmd('get_session_diff').then(setDiff).catch(() => {});
+  }, []);
+
   const stats = useMemo(() => {
     const total = results.length;
     const relevant = results.filter(r => r.relevant).length;
@@ -44,12 +56,22 @@ export const PulseSummary = memo(function PulseSummary({
       return t('pulse.noData', 'No intelligence gathered yet. Run an analysis to get started.');
     }
 
-    // New items
-    parts.push(t('pulse.itemsAnalyzed', {
-      count: stats.total,
-      relevant: stats.relevant,
-      defaultValue: '{{count}} items analyzed, {{relevant}} relevant to you.',
-    }));
+    // New items — prefer session diff when available
+    if (diff?.has_previous && diff.new_items > 0) {
+      parts.push(t('pulse.newSinceLastSession', {
+        newItems: diff.new_items,
+        newRelevant: diff.new_relevant,
+        defaultValue: '{{newItems}} new items since last session. {{newRelevant}} newly relevant.',
+      }));
+    } else if (diff?.has_previous && diff.new_items === 0) {
+      parts.push(t('pulse.noNewItems', 'No new items since last session.'));
+    } else {
+      parts.push(t('pulse.itemsAnalyzed', {
+        count: stats.total,
+        relevant: stats.relevant,
+        defaultValue: '{{count}} items analyzed, {{relevant}} relevant to you.',
+      }));
+    }
 
     // Signals needing attention
     if (signalCount > 0) {
@@ -77,7 +99,7 @@ export const PulseSummary = memo(function PulseSummary({
     }
 
     return parts.join(' ');
-  }, [stats, signalCount, topCount, t]);
+  }, [stats, signalCount, topCount, diff, t]);
 
   // Visual state: determine the "mood" of the pulse
   const moodColor = useMemo(() => {
