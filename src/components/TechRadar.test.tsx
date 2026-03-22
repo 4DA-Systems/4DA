@@ -25,6 +25,14 @@ vi.mock('./tech-radar/RadarSVG', () => ({
   ),
 }));
 
+vi.mock('./tech-radar/StackIntelligence', () => ({
+  StackIntelligence: ({ entries }: { entries: unknown[] }) => (
+    <div data-testid="radar-svg">
+      {entries.length} entries
+    </div>
+  ),
+}));
+
 vi.mock('./tech-radar/RadarEntryPanel', () => ({
   RadarEntryPanel: () => <div data-testid="radar-entry-panel" />,
 }));
