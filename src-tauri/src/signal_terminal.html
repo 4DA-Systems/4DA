@@ -276,7 +276,7 @@ var CMD_HELP={
   'briefing':'Intelligence briefing',
   'score':'Score a URL (score <url>)',
   'search':'Search scored items (search <q>)',
-  'radar':'Tech radar',
+  'radar':'Tech intelligence \u2014 your stack, expanding, watching, fading',
   'decisions':'Active decision windows',
   'dna':'Developer DNA profile',
   'gaps':'Knowledge blind spots',
@@ -758,7 +758,7 @@ function cmdHelp(){
   wkv('briefing','Intelligence briefing');
   wkv('score <url>','Score a URL against your profile');
   wkv('search <q>','Search scored items');
-  wkv('radar','Tech radar');
+  wkv('radar','Tech intelligence \u2014 your stack, expanding, watching, fading');
   wkv('decisions','Active decision windows');
   wkv('dna','Developer DNA profile');
   wkv('gaps','Knowledge blind spots');
@@ -956,23 +956,34 @@ function cmdRadar(){
     rmLast();
     if(jsonMode){wh('<pre style="color:var(--fg)">'+esc(JSON.stringify(d,null,2))+'</pre>');showTiming();return}
     if(!d.entries||!d.entries.length){w('No radar entries. Run an analysis to populate.','m');showTiming();return}
-    wsep('TECH RADAR');w('');
-    var rings=[
-      {name:'adopt',symbol:'\u25C9',cls:'gr'},
-      {name:'trial',symbol:'\u25CB',cls:'g'},
-      {name:'assess',symbol:'\u25E6',cls:'m'},
-      {name:'hold',symbol:'\u00B7',cls:'r'}
+    wsep('TECH INTELLIGENCE');w('');
+    var tiers=[
+      {ring:'adopt',label:'CORE STACK',cls:'gr'},
+      {ring:'trial',label:'EXPANDING',cls:'g'},
+      {ring:'assess',label:'WATCHING',cls:'m'},
+      {ring:'hold',label:'FADING',cls:'r'}
     ];
-    rings.forEach(function(ring){
-      var items=d.entries.filter(function(e){return e.ring===ring.name});
+    var total=d.entries.length;
+    var minScore=1;
+    tiers.forEach(function(tier){
+      var items=d.entries.filter(function(e){return e.ring===tier.ring});
       if(!items.length)return;
+      items.sort(function(a,b){return(b.score||0)-(a.score||0)});
+      wh('<span class="'+tier.cls+'" style="font-size:11px;letter-spacing:1px">  '+tier.label+'</span>');
+      items.forEach(function(e){
+        var s=typeof e.score==='number'?e.score:0;
+        if(s<minScore)minScore=s;
+        var name=esc(e.name);
+        var padName=name.length<20?name+' '.repeat(20-name.length):name;
+        var scoreStr=s.toFixed(2);
+        var padScore=scoreStr.length<6?' '.repeat(6-scoreStr.length)+scoreStr:scoreStr;
+        wh('  '+bar(s,10)+'  '+padName+' <span class="d">'+padScore+'</span>');
+      });
       w('');
-      wh('<span class="'+ring.cls+'" style="display:block;text-align:center;font-size:14px">'+ring.symbol+' '+ring.name.toUpperCase()+'</span>');
-      var names=items.map(function(e){return esc(e.name)}).join(' \u00B7 ');
-      wh('<span class="d" style="display:block;text-align:center">'+names+'</span>');
     });
+    wh('<span class="d">  '+total+' technolog'+(total===1?'y':'ies')+' tracked \u00B7 threshold '+minScore.toFixed(2)+'</span>');
     w('');
-    whint('try: decisions for time-sensitive items');
+    whint('try: dna for your developer profile');
     showTiming();
   }).catch(apiErr);
 }

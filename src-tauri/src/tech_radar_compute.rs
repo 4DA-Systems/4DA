@@ -205,11 +205,23 @@ pub(crate) fn compute_radar(conn: &Connection) -> Result<TechRadar> {
         .into_iter()
         .map(|(name, eb)| eb.into_entry(name))
         .collect();
+
+    // Filter to meaningful entries
+    final_entries.retain(|e| {
+        e.score >= 0.25 && e.name.len() >= 3 && !e.name.contains('/') && !e.name.starts_with('@')
+    });
+
+    // Dedup case-insensitive
+    let mut seen = std::collections::HashSet::new();
+    final_entries.retain(|e| seen.insert(e.name.to_lowercase()));
+
+    // Keep top 40 by score
     final_entries.sort_by(|a, b| {
         b.score
             .partial_cmp(&a.score)
             .unwrap_or(std::cmp::Ordering::Equal)
     });
+    final_entries.truncate(40);
 
     info!(target: "4da::tech_radar", count = final_entries.len(), "Tech radar computed");
     Ok(TechRadar {
