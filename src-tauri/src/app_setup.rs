@@ -228,6 +228,26 @@ pub(crate) fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::
         });
     });
 
+    // Pre-warm the custom notification window (hidden, ready for instant show)
+    if let Err(e) = crate::notification_window::init_notification_window(app.handle()) {
+        warn!(target: "4da::notify", error = %e, "Notification window pre-warm failed (will retry on first notification)");
+    }
+
+    // Listen for notification-hidden from the notification frontend
+    let app_handle_notif = app_handle.clone();
+    app.listen("notification-hidden", move |_| {
+        crate::notification_window::hide_notification(&app_handle_notif);
+    });
+
+    // Listen for notification-clicked from the notification frontend
+    let app_handle_click = app_handle.clone();
+    app.listen("notification-clicked", move |_| {
+        let handle = app_handle_click.clone();
+        tauri::async_runtime::spawn(async move {
+            crate::notification_window::notification_clicked(handle).await;
+        });
+    });
+
     info!(target: "4da::tray", "System tray and monitoring initialized");
 
     // Ensure Ollama models are available and warm on startup

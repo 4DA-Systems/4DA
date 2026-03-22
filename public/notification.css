@@ -1,0 +1,375 @@
+/* 4DA Custom Notification Window
+   Standalone styles — no Tailwind, no React dependencies.
+   Design system: Inter/JetBrains Mono, dark theme, gold accent. */
+
+/* ========================================================================
+   Reset & Base
+   ======================================================================== */
+
+*, *::before, *::after { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  user-select: none;
+  overflow: hidden;
+}
+
+/* ========================================================================
+   Notification Window (full viewport container)
+   ======================================================================== */
+
+.notification-window {
+  width: 416px;
+  height: 146px;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* ========================================================================
+   GAME Atmosphere Layer
+   ======================================================================== */
+
+.game-layer {
+  position: absolute;
+  inset: 0;
+  border-radius: 12px;
+  overflow: hidden;
+  opacity: 0;
+  transition: opacity 0.3s ease-out;
+  pointer-events: none;
+}
+
+.game-layer.active {
+  opacity: var(--game-opacity, 0.12);
+}
+
+/* ========================================================================
+   Content Card
+   ======================================================================== */
+
+.notification-card {
+  position: relative;
+  z-index: 1;
+  width: 400px;
+  height: 130px;
+  background: rgba(14, 14, 14, 0.92);
+  border-radius: 12px;
+  padding: 14px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  border: 1px solid rgba(42, 42, 42, 0.8);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+  /* Enter animation initial state */
+  opacity: 0;
+  transform: scale(0.96);
+  transition: opacity 0.2s ease-out, transform 0.2s ease-out, box-shadow 0.3s ease;
+}
+
+.notification-card.visible {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.notification-card.exiting {
+  opacity: 0;
+  transform: scale(0.96);
+  transition: opacity 0.4s ease-in, transform 0.4s ease-in;
+}
+
+.notification-card.dismissing {
+  opacity: 0;
+  transform: translateX(50px);
+  transition: opacity 0.15s ease-in, transform 0.15s ease-in;
+}
+
+/* ========================================================================
+   Priority Variants (border + CSS glow fallback)
+   ======================================================================== */
+
+.notification-card.critical {
+  border-color: rgba(239, 68, 68, 0.35);
+  box-shadow:
+    0 0 0 1px rgba(239, 68, 68, 0.2),
+    0 0 24px rgba(239, 68, 68, 0.15),
+    0 4px 20px rgba(0, 0, 0, 0.5);
+}
+
+.notification-card.high {
+  border-color: rgba(212, 175, 55, 0.3);
+  box-shadow:
+    0 0 0 1px rgba(212, 175, 55, 0.15),
+    0 0 20px rgba(212, 175, 55, 0.1),
+    0 4px 20px rgba(0, 0, 0, 0.5);
+}
+
+.notification-card.medium {
+  border-color: rgba(160, 160, 160, 0.2);
+  box-shadow:
+    0 0 0 1px rgba(160, 160, 160, 0.1),
+    0 0 16px rgba(160, 160, 160, 0.06),
+    0 4px 20px rgba(0, 0, 0, 0.5);
+}
+
+.notification-card.low {
+  border-color: rgba(42, 42, 42, 0.8);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+}
+
+/* ========================================================================
+   Hover States
+   ======================================================================== */
+
+.notification-card:hover {
+  cursor: pointer;
+  border-color: rgba(255, 255, 255, 0.15);
+}
+
+.notification-card.critical:hover {
+  box-shadow:
+    0 0 0 1px rgba(239, 68, 68, 0.3),
+    0 0 30px rgba(239, 68, 68, 0.2),
+    0 4px 20px rgba(0, 0, 0, 0.5);
+}
+
+.notification-card.high:hover {
+  box-shadow:
+    0 0 0 1px rgba(212, 175, 55, 0.25),
+    0 0 26px rgba(212, 175, 55, 0.15),
+    0 4px 20px rgba(0, 0, 0, 0.5);
+}
+
+/* ========================================================================
+   Header Row
+   ======================================================================== */
+
+.notification-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 18px;
+  flex-shrink: 0;
+}
+
+.priority-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.priority-dot.critical {
+  background: #EF4444;
+  box-shadow: 0 0 6px rgba(239, 68, 68, 0.6);
+}
+
+.priority-dot.high {
+  background: #D4AF37;
+  box-shadow: 0 0 6px rgba(212, 175, 55, 0.5);
+}
+
+.priority-dot.medium {
+  background: #A0A0A0;
+}
+
+.priority-dot.low {
+  background: #6B7280;
+}
+
+.type-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: #A0A0A0;
+}
+
+.header-spacer {
+  flex: 1;
+}
+
+.source-badge {
+  font-size: 11px;
+  color: #8A8A8A;
+  font-family: 'JetBrains Mono', 'SF Mono', 'Fira Code', monospace;
+}
+
+.header-sep {
+  font-size: 11px;
+  color: #555;
+}
+
+.time-ago {
+  font-size: 11px;
+  color: #8A8A8A;
+}
+
+/* ========================================================================
+   Body
+   ======================================================================== */
+
+.notification-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-height: 0;
+}
+
+.title-text {
+  font-size: 14px;
+  font-weight: 500;
+  color: #FFFFFF;
+  line-height: 1.3;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.action-text {
+  font-size: 12px;
+  color: #D4AF37;
+  font-style: italic;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.action-text:empty {
+  display: none;
+}
+
+/* ========================================================================
+   Footer
+   ======================================================================== */
+
+.notification-footer {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 20px;
+  flex-shrink: 0;
+}
+
+.deps-container {
+  display: flex;
+  gap: 6px;
+  flex-wrap: nowrap;
+  overflow: hidden;
+}
+
+.dep-pill {
+  font-size: 11px;
+  font-family: 'JetBrains Mono', 'SF Mono', 'Fira Code', monospace;
+  color: #8A8A8A;
+  background: rgba(42, 42, 42, 0.6);
+  padding: 2px 8px;
+  border-radius: 4px;
+  white-space: nowrap;
+}
+
+.dep-overflow {
+  font-size: 11px;
+  color: #555;
+}
+
+/* ========================================================================
+   Chain Visualization
+   ======================================================================== */
+
+.chain-container {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.chain-dots {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.chain-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+}
+
+.chain-dot.filled {
+  background: #D4AF37;
+}
+
+.chain-dot.empty {
+  background: #333;
+  border: 1px solid #555;
+}
+
+.chain-connector {
+  width: 8px;
+  height: 2px;
+  background: #333;
+}
+
+.chain-connector.filled {
+  background: #D4AF37;
+}
+
+.chain-sources {
+  font-size: 11px;
+  color: #8A8A8A;
+  margin-left: 8px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ========================================================================
+   Dismiss Button
+   ======================================================================== */
+
+.dismiss-btn {
+  position: absolute;
+  top: 8px;
+  right: 10px;
+  width: 20px;
+  height: 20px;
+  border: none;
+  background: transparent;
+  color: #555;
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.15s, background 0.15s;
+  z-index: 2;
+  padding: 0;
+}
+
+.dismiss-btn:hover {
+  color: #A0A0A0;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+/* ========================================================================
+   Reduced Motion
+   ======================================================================== */
+
+@media (prefers-reduced-motion: reduce) {
+  .notification-card,
+  .game-layer {
+    transition: none !important;
+  }
+  .notification-card.visible {
+    transform: none;
+  }
+}

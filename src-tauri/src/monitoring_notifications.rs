@@ -8,6 +8,7 @@ use tauri_plugin_notification::NotificationExt;
 use tracing::{info, warn};
 
 use crate::monitoring::{BatchedNotification, MonitoringState};
+use crate::notification_window::NotificationData;
 
 // Re-export briefing types and functions so existing `monitoring_notifications::X` paths still work
 #[allow(unused_imports)]
@@ -71,22 +72,45 @@ pub fn complete_scheduled_check<R: Runtime>(
     if let Some(ref summary) = signal_summary {
         let total_security = summary.critical_count + summary.high_count;
         if total_security > MAX_SECURITY_NOTIFICATIONS_PER_CYCLE {
-            let title = format!("4DA — {} Security Alerts Detected", total_security);
-            let body = format!(
-                "{} critical, {} high priority alerts found. Open 4DA for details.",
+            let title = format!(
+                "{} critical, {} high priority alerts found",
                 summary.critical_count, summary.high_count
             );
-            if let Err(e) = app
-                .notification()
-                .builder()
-                .title(&title)
-                .body(&body)
-                .show()
-            {
-                warn!(target: "4da::notify", error = %e, "Failed to send summary security notification");
+
+            if notification_style() == "custom" {
+                crate::notification_window::show_notification(
+                    app,
+                    NotificationData {
+                        variant: "multi".to_string(),
+                        priority: "critical".to_string(),
+                        signal_type: Some("security_alert".to_string()),
+                        title: title.clone(),
+                        action: Some("Open 4DA for details".to_string()),
+                        source: None,
+                        matched_deps: vec![],
+                        count: Some(total_security),
+                        chain_sources: None,
+                        chain_phase: None,
+                        chain_links_filled: None,
+                        chain_links_total: None,
+                        time_ago: "just now".to_string(),
+                    },
+                );
             } else {
-                info!(target: "4da::notify", total_security, "Sent summary security notification (flood cap)");
+                let native_title =
+                    format!("4DA — {} Security Alerts Detected", total_security);
+                if let Err(e) = app
+                    .notification()
+                    .builder()
+                    .title(&native_title)
+                    .body(&title)
+                    .show()
+                {
+                    warn!(target: "4da::notify", error = %e, "Failed to send summary security notification");
+                }
             }
+
+            info!(target: "4da::notify", total_security, "Sent summary security notification (flood cap)");
             // Batch the rest for briefing
             batch_generic_items(state, new_relevant_count, &signal_summary);
             return;
@@ -192,23 +216,52 @@ pub fn drain_batched_notifications(state: &MonitoringState) -> Vec<BatchedNotifi
 // Notification Dispatch
 // ============================================================================
 
+/// Read the notification style setting ("custom" or "native").
+fn notification_style() -> String {
+    let settings = crate::get_settings_manager().lock();
+    settings.get().monitoring.notification_style.clone()
+}
+
 /// Send a notification about new relevant items
 pub fn send_notification<R: Runtime>(
     app: &AppHandle<R>,
     relevant_count: usize,
     _total_count: usize,
 ) {
-    let title = "4DA - New Relevant Items";
-    let body = if relevant_count == 1 {
+    let title = if relevant_count == 1 {
         "1 new item matches your interests".to_string()
     } else {
         format!("{} new items match your interests", relevant_count)
     };
 
-    if let Err(e) = app.notification().builder().title(title).body(&body).show() {
+    if notification_style() == "custom" {
+        crate::notification_window::show_notification(
+            app,
+            NotificationData {
+                variant: "digest".to_string(),
+                priority: "low".to_string(),
+                signal_type: None,
+                title,
+                action: Some("Click to review in briefing".to_string()),
+                source: None,
+                matched_deps: vec![],
+                count: Some(relevant_count),
+                chain_sources: None,
+                chain_phase: None,
+                chain_links_filled: None,
+                chain_links_total: None,
+                time_ago: "just now".to_string(),
+            },
+        );
+        return;
+    }
+
+    // Native OS notification fallback
+    let native_title = "4DA - New Relevant Items";
+    if let Err(e) = app.notification().builder().title(native_title).body(&title).show() {
         warn!(target: "4da::notify", error = %e, "Failed to send notification");
     } else {
-        info!(target: "4da::notify", body = %body, "Sent notification");
+        info!(target: "4da::notify", body = %title, "Sent notification");
     }
 }
 
@@ -218,57 +271,79 @@ pub fn send_signal_notification<R: Runtime>(
     priority: &str,
     summary: &SignalSummary,
 ) {
-    let (title, body) = match priority {
-        "critical" => {
-            let title = format!(
-                "4DA - {} Critical Signal{}",
-                summary.critical_count,
-                if summary.critical_count > 1 { "s" } else { "" }
-            );
-            let body = if let Some((ref sig_type, ref action)) = summary.top_signal {
-                let label = match sig_type.as_str() {
-                    "security_alert" => "Security Alert",
-                    "breaking_change" => "Breaking Change",
-                    _ => "Alert",
-                };
-                format!("{}: {}", label, action)
-            } else {
-                format!(
-                    "{} critical items need your attention",
-                    summary.critical_count
-                )
-            };
-            (title, body)
-        }
-        "high" => {
-            let title = format!(
-                "4DA - {} High Priority Signal{}",
-                summary.high_count,
-                if summary.high_count > 1 { "s" } else { "" }
-            );
-            let body = if let Some((_, ref action)) = summary.top_signal {
-                action.clone()
-            } else {
-                format!("{} high priority items found", summary.high_count)
-            };
-            (title, body)
-        }
-        _ => (
-            "4DA - New Signals".to_string(),
-            "New actionable signals detected".to_string(),
+    let count = match priority {
+        "critical" => summary.critical_count,
+        "high" => summary.high_count,
+        _ => 1,
+    };
+
+    let (signal_type, action_text) = summary
+        .top_signal
+        .as_ref()
+        .map(|(st, act)| (Some(st.clone()), Some(act.clone())))
+        .unwrap_or((None, None));
+
+    // Build the display title for the notification body
+    let display_title = if let Some(ref action) = action_text {
+        let label = match signal_type.as_deref() {
+            Some("security_alert") => "Security Alert",
+            Some("breaking_change") => "Breaking Change",
+            _ => "Alert",
+        };
+        format!("{}: {}", label, action)
+    } else {
+        format!("{} {} priority items found", count, priority)
+    };
+
+    if notification_style() == "custom" {
+        // Determine variant: multi if >1 signal, else single signal
+        let variant = if count > 1 { "multi" } else { "signal" };
+        crate::notification_window::show_notification(
+            app,
+            NotificationData {
+                variant: variant.to_string(),
+                priority: priority.to_string(),
+                signal_type,
+                title: display_title,
+                action: action_text,
+                source: None,
+                matched_deps: vec![],
+                count: if count > 1 { Some(count) } else { None },
+                chain_sources: None,
+                chain_phase: None,
+                chain_links_filled: None,
+                chain_links_total: None,
+                time_ago: "just now".to_string(),
+            },
+        );
+        return;
+    }
+
+    // Native OS notification fallback
+    let native_title = match priority {
+        "critical" => format!(
+            "4DA - {} Critical Signal{}",
+            count,
+            if count > 1 { "s" } else { "" }
         ),
+        "high" => format!(
+            "4DA - {} High Priority Signal{}",
+            count,
+            if count > 1 { "s" } else { "" }
+        ),
+        _ => "4DA - New Signals".to_string(),
     };
 
     if let Err(e) = app
         .notification()
         .builder()
-        .title(&title)
-        .body(&body)
+        .title(&native_title)
+        .body(&display_title)
         .show()
     {
         warn!(target: "4da::notify", error = %e, "Failed to send signal notification");
     } else {
-        info!(target: "4da::notify", priority = priority, body = %body, "Sent signal notification");
+        info!(target: "4da::notify", priority = priority, body = %display_title, "Sent signal notification");
     }
 }
 
@@ -279,17 +354,46 @@ pub fn send_chain_prediction_notification<R: Runtime>(
     phase: &str,
     forecast: &str,
 ) {
-    let title = match phase {
-        "escalating" => format!("4DA — {} Escalating", chain_name),
-        "peak" => format!("4DA — {} at Peak", chain_name),
-        _ => format!("4DA — {} Signal Chain", chain_name),
+    let priority = match phase {
+        "escalating" | "peak" => "critical",
+        "active" => "high",
+        _ => "medium",
     };
 
-    // Truncate forecast for notification body (OS limits ~200 chars)
+    // Truncate forecast for display
     let body = if forecast.len() > 180 {
         format!("{}...", truncate_safe(forecast, 177))
     } else {
         forecast.to_string()
+    };
+
+    if notification_style() == "custom" {
+        crate::notification_window::show_notification(
+            app,
+            NotificationData {
+                variant: "chain".to_string(),
+                priority: priority.to_string(),
+                signal_type: None,
+                title: chain_name.to_string(),
+                action: Some(body.clone()),
+                source: None,
+                matched_deps: vec![],
+                count: None,
+                chain_sources: None, // Caller can extend this later
+                chain_phase: Some(phase.to_string()),
+                chain_links_filled: None,
+                chain_links_total: Some(4),
+                time_ago: "just now".to_string(),
+            },
+        );
+        return;
+    }
+
+    // Native OS notification fallback
+    let title = match phase {
+        "escalating" => format!("4DA — {} Escalating", chain_name),
+        "peak" => format!("4DA — {} at Peak", chain_name),
+        _ => format!("4DA — {} Signal Chain", chain_name),
     };
 
     if let Err(e) = app
