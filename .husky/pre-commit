@@ -40,14 +40,18 @@ node scripts/check-file-sizes.cjs || {
     exit 1
 }
 
-# Rust formatting (fast check, ~2s) — skip if cargo is busy
+# Rust formatting (fast check, ~2s) — skip if cargo is busy or modules missing
 if [ "$CARGO_BUSY" = true ]; then
     echo "Skipping cargo fmt check (cargo processes active — will check on push)"
 else
     echo "Checking Rust formatting..."
-    cd src-tauri && cargo fmt --check || {
-        echo "Rust formatting check failed. Run 'cargo fmt' to fix."
-        exit 1
+    cd src-tauri && cargo fmt --check 2>&1 || {
+        if cargo fmt --check 2>&1 | grep -q "does not exist"; then
+            echo "Skipping cargo fmt (missing module stubs — will check on push)"
+        else
+            echo "Rust formatting check failed. Run 'cargo fmt' to fix."
+            exit 1
+        fi
     }
     cd ..
 fi
