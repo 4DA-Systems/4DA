@@ -88,7 +88,7 @@ export const UnifiedAppBar = memo(function UnifiedAppBar({
         {/* Left: VoidEngine + status */}
         <div className="flex items-center gap-3 flex-shrink-0">
           <div className="w-8 h-8 flex items-center justify-center">
-            <VoidEngine size={32} variant="pentachoron" />
+            <VoidEngine size={32} />
           </div>
           <div className="flex items-center gap-2">
             <div className={`w-2 h-2 rounded-full flex-shrink-0 ${statusDotColor}`} aria-hidden="true" />
