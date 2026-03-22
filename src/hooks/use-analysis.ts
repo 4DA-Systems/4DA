@@ -141,6 +141,11 @@ export function useAnalysis(
           useAppStore.getState().startAnalysis();
         }),
 
+        // Custom notification clicked — navigate to briefing/signals view
+        listen('navigate-to-signals', () => {
+          useAppStore.getState().setActiveView('briefing');
+        }),
+
         listen<SourceRelevance[]>('background-results', (event) => {
           const newItems = event.payload;
           if (newItems.length === 0) return;
