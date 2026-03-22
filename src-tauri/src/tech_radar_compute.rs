@@ -132,7 +132,7 @@ impl EntryBuilder {
         Self {
             ring,
             quadrant: RadarQuadrant::Tools,
-            movement: RadarMovement::New,
+            movement: RadarMovement::Stable,
             signals: Vec::new(),
             decision_ref: None,
             stack_weight,
@@ -205,6 +205,23 @@ pub(crate) fn compute_radar(conn: &Connection) -> Result<TechRadar> {
         .into_iter()
         .map(|(name, eb)| eb.into_entry(name))
         .collect();
+
+    // Blocklist of common non-technology words that aren't real technologies
+    const NOISE_WORDS: &[&str] = &[
+        "conf", "config", "debug", "image", "next", "yaml", "json", "toml",
+        "test", "tests", "build", "dist", "src", "lib", "bin", "docs",
+        "utils", "helpers", "types", "models", "core", "base", "common",
+        "main", "index", "app", "server", "client", "api", "http",
+        "async", "sync", "error", "errors", "log", "logs", "data",
+        "file", "files", "path", "paths", "env", "dev", "prod",
+        "setup", "init", "run", "start", "stop", "clean", "lint",
+        "format", "check", "publish", "deploy", "release", "version",
+    ];
+
+    final_entries.retain(|e| {
+        let name_lower = e.name.to_lowercase();
+        !NOISE_WORDS.contains(&name_lower.as_str())
+    });
 
     // Filter to meaningful entries
     final_entries.retain(|e| {
@@ -374,7 +391,7 @@ fn detect_movement(conn: &Connection, entries: &mut HashMap<String, EntryBuilder
         _ => 0,
     };
     for (name, eb) in entries.iter_mut() {
-        if eb.movement != RadarMovement::New {
+        if eb.movement != RadarMovement::Stable {
             continue;
         }
         if let Some(prev_ring) = prev_map.get(name) {

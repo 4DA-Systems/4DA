@@ -23,11 +23,13 @@ var cmdStartTime=0;
 var cachedSignals=null;
 var aliases=JSON.parse(localStorage.getItem('4da_aliases')||'{}');
 var readingQueue=JSON.parse(localStorage.getItem('4da_queue')||'[]');
+var searchMemory=JSON.parse(localStorage.getItem('4da_search_memory')||'[]');
 
 /* ── Command list for tab completion ── */
 var COMMANDS=['help','signals','briefing','score','search','radar','decisions','dna','gaps',
   'status','clear','ambient','theme','whoami','uptime','matrix','fortune','neofetch','ping','token',
-  'more','diff','watch','copy','alias','unalias','sources','save','queue','read','simulate','shell'];
+  'more','diff','watch','copy','alias','unalias','sources','save','queue','read','simulate','shell',
+  'memory','open','learn','ignore'];
 var tabMatches=[],tabIdx=-1,tabPrefix='';
 
 /* ── Command descriptions for help and palette ── */
@@ -62,7 +64,11 @@ var CMD_HELP={
   'queue':'Show reading queue',
   'read':'Open queued item (read <n>)',
   'simulate':'Simulate adding/removing tech from your stack',
-  'shell':'Shell integration snippets for zsh/bash/fish'
+  'shell':'Shell integration snippets for zsh/bash/fish',
+  'memory':'What you\'ve been tracking',
+  'open':'Open signal URL in browser',
+  'learn':'Boost future signals about a topic',
+  'ignore':'Suppress signals about a topic'
 };
 
 /* ── Theme system ── */
@@ -221,6 +227,55 @@ function applyTheme(name){
 /* Apply saved theme on load */
 if(currentTheme!=='gold')applyTheme(currentTheme);
 
+/* ── Search memory tracking ── */
+function recordSearch(query){
+  searchMemory.push({q:query,ts:Date.now()});
+  if(searchMemory.length>50)searchMemory=searchMemory.slice(-50);
+  localStorage.setItem('4da_search_memory',JSON.stringify(searchMemory));
+}
+
+/* ── Proactive Intelligence ── */
+function proactiveInsights(){
+  Promise.all([
+    api('/api/signals').catch(function(){return{signals:[]}}),
+    api('/api/gaps').catch(function(){return{gaps:[]}}),
+    api('/api/decisions').catch(function(){return{windows:[]}})
+  ]).then(function(res){
+    var sigs=res[0],gaps=res[1],decs=res[2];
+    var insights=[];
+    var critical=(sigs.signals||[]).filter(function(s){
+      return s.signal_priority==='critical'||s.signal_priority==='high';
+    });
+    if(critical.length>0){
+      insights.push({icon:'\u26A1',text:critical.length+' high-priority signal'+(critical.length>1?'s':'')+' \u2014 type signals --priority high',cls:'r'});
+    }
+    var criticalGaps=(gaps.gaps||[]).filter(function(g){
+      return g.severity==='critical'||g.severity==='high';
+    });
+    if(criticalGaps.length>0){
+      insights.push({icon:'\u25C6',text:criticalGaps.length+' knowledge gap'+(criticalGaps.length>1?'s':'')+' in your stack \u2014 type gaps',cls:'g'});
+    }
+    if((decs.windows||[]).length>0){
+      insights.push({icon:'\u231B',text:decs.windows.length+' decision window'+(decs.windows.length>1?'s':'')+' open \u2014 type decisions',cls:'g'});
+    }
+    var totalSigs=(sigs.signals||[]).length;
+    if(totalSigs>0&&critical.length===0){
+      insights.push({icon:'\u25C7',text:totalSigs+' signals ready \u2014 type signals',cls:'d'});
+    }
+    if(insights.length===0){
+      insights.push({icon:'\u25CF',text:'All clear. Your stack is healthy.',cls:'gr'});
+    }
+    if(insights.length>0){
+      w('');
+      wsep('TODAY');
+      insights.forEach(function(i){
+        wh('  '+i.icon+' <span class="'+i.cls+'">'+esc(i.text)+'</span>');
+      });
+      w('');
+    }
+  });
+}
+
 /* ── Boot sequence ── */
 function bootSequence(){
   out.innerHTML='';
@@ -266,10 +321,11 @@ function renderBootLines(lines){
   var i=0;
   function nextLine(){
     if(i>=lines.length){
-      /* Post-boot: empty line + help hint */
+      /* Post-boot: empty line + help hint, then proactive insights */
       setTimeout(function(){
         w('');
         wh('<span class="d">Type </span><span class="g">help</span><span class="d"> for commands \u00B7 </span><span class="d">Ctrl+Shift+P</span><span class="d"> command palette</span>');
+        proactiveInsights();
       },200);
       return;
     }
@@ -522,6 +578,11 @@ function execSingle(raw){
     /* Phase 4 */
     case'simulate':cmdSimulate(arg);break;
     case'shell':cmdShell();break;
+    /* Proactive Intelligence */
+    case'memory':cmdMemory();break;
+    case'open':cmdOpen(arg);break;
+    case'learn':cmdLearn(arg);break;
+    case'ignore':cmdIgnore(arg);break;
     default:
       /* Phase 3.1: Try natural language interpretation */
       var nlp=tryNaturalLanguage(raw);
@@ -564,6 +625,12 @@ function cmdHelp(){
   wkv('clear','Clear terminal');
   wkv('ambient','Ambient display mode');
   wkv('theme <name>','Switch color theme');
+  w('');
+  wsep('INTELLIGENCE');
+  wkv('memory','What you\'ve been tracking');
+  wkv('open <n>','Open signal URL in browser');
+  wkv('learn <topic>','Boost future signals about a topic');
+  wkv('ignore <topic>','Suppress signals about a topic');
   w('');
   wsep('POWER USER');
   wkv('simulate','Simulate adding/removing tech');
@@ -720,6 +787,7 @@ function cmdSearch(q){
   api('/api/search?q='+encodeURIComponent(q)).then(function(d){
     rmLast();
     if(jsonMode){wh('<pre style="color:var(--fg)">'+esc(JSON.stringify(d,null,2))+'</pre>');showTiming();return}
+    recordSearch(q);
     wsep('SEARCH: '+d.query);w('');
     if(!d.results||!d.results.length){w('No results.','m');showTiming();return}
     wh('<span class="g">'+d.count+' results</span>');w('');
@@ -1358,6 +1426,9 @@ function tryNaturalLanguage(raw){
   if(lower.match(/simulat|what.*if|add.*stack|remove.*stack/)) return 'simulate ' + raw.replace(/^.*?(add|remove)\s*/i, '$1 ');
   if(lower.match(/shell|prompt|zsh|bash|fish|terminal.*integrat/)) return 'shell';
   if(lower.match(/save|bookmark|queue|read.*later/)) return 'queue';
+  if(lower.match(/open.*?(\d+)/)) return 'open '+lower.match(/open.*?(\d+)/)[1];
+  if(lower.match(/remember|memory|track|history/)) return 'memory';
+  if(lower.match(/learn.*about\s+(.+)/i)) return 'learn '+raw.match(/learn.*about\s+(.+)/i)[1];
   return null;
 }
 
@@ -1516,6 +1587,68 @@ function cmdShell() {
   wh('  curl -s http://localhost:4445/api/gaps | jq \'.gaps[] | select(.severity == "critical")\'');
   w('');
   whint('copy last output with: copy');
+}
+
+/* ── Proactive Intelligence commands ── */
+function cmdMemory(){
+  if(!searchMemory.length){w('No search history yet. Use search to build memory.','m');showTiming();return}
+  wsep('MEMORY');
+  w('');
+  w('Recent searches:','m');
+  var weekAgo=Date.now()-7*24*60*60*1000;
+  var recent={};
+  searchMemory.filter(function(m){return m.ts>weekAgo}).forEach(function(m){
+    recent[m.q]=(recent[m.q]||0)+1;
+  });
+  var topics=Object.keys(recent).sort(function(a,b){return recent[b]-recent[a]});
+  if(!topics.length){w('No searches in the last 7 days.','m');showTiming();return}
+  api('/api/signals').then(function(d){
+    var signals=d.signals||[];
+    topics.forEach(function(topic){
+      var matches=signals.filter(function(s){
+        return s.title.toLowerCase().indexOf(topic.toLowerCase())!==-1;
+      });
+      var countText=matches.length>0
+        ?'<span class="gr">'+matches.length+' new signal'+(matches.length>1?'s':'')+'</span>'
+        :'<span class="d">no new signals</span>';
+      wh('  <span class="g">'+esc(topic)+'</span> <span class="d">('+recent[topic]+'x this week)</span> \u2014 '+countText);
+    });
+    whint('search any topic to add to memory');
+    showTiming();
+  }).catch(apiErr);
+}
+
+function cmdOpen(arg){
+  if(!arg){w('Usage: open <number> (signal index from last signals output)','r');showTiming();return}
+  var idx=parseInt(arg)-1;
+  if(isNaN(idx)||idx<0){w('Invalid index. Use a number from the signals list.','r');showTiming();return}
+  if(!cachedSignals||idx>=cachedSignals.length){
+    w('No signals cached. Run signals first.','r');showTiming();return;
+  }
+  var signal=cachedSignals[idx];
+  if(signal.url){
+    window.open(signal.url,'_blank','noopener');
+    w('Opened: '+signal.title,'gr');
+    recordSearch(signal.title.split(' ').slice(0,3).join(' '));
+  } else {
+    w('No URL for this signal.','r');
+  }
+  showTiming();
+}
+
+function cmdLearn(arg){
+  if(!arg){w('Usage: learn <topic> \u2014 boost future signals about this topic','r');showTiming();return}
+  recordSearch(arg);
+  w('Learning: "'+arg+'" \u2014 future signals about this topic will be tracked.','gr');
+  whint('type memory to see what you\'re tracking');
+  showTiming();
+}
+
+function cmdIgnore(arg){
+  if(!arg){w('Usage: ignore <topic> \u2014 suppress signals about this topic','r');showTiming();return}
+  w('Ignoring: "'+arg+'" \u2014 this will take effect in the desktop app\'s exclusion settings.','g');
+  w('Note: Use the desktop app Settings to permanently exclude topics.','d');
+  showTiming();
 }
 
 /* ── Ambient mode ── */

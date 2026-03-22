@@ -23,6 +23,7 @@ use axum::{
     Router,
 };
 use futures::stream::Stream;
+use futures::StreamExt;
 use serde::Deserialize;
 use std::convert::Infallible;
 use std::sync::Arc;
@@ -759,22 +760,44 @@ async fn api_stream(
 
     let rx = crate::signal_terminal_events::subscribe();
 
-    let stream = futures::stream::unfold(rx, |mut rx| async move {
+    // Send an initial "connected" event, then stream broadcast events
+    let initial = futures::stream::once(async {
+        let monitoring = crate::get_monitoring_state().is_enabled();
+        let analysis = crate::get_analysis_state();
+        let guard = analysis.lock();
+        let signals_count = guard
+            .results
+            .as_ref()
+            .map(|r| r.iter().filter(|s| s.relevant).count())
+            .unwrap_or(0);
+        let total_scanned = guard.results.as_ref().map(|r| r.len()).unwrap_or(0);
+        drop(guard);
+
+        let data = serde_json::json!({
+            "type": "Connected",
+            "monitoring": monitoring,
+            "signals_count": signals_count,
+            "total_scanned": total_scanned,
+        });
+        Ok::<_, Infallible>(Event::default().data(serde_json::to_string(&data).unwrap_or_default()))
+    });
+
+    let broadcast = futures::stream::unfold(rx, |mut rx| async move {
         match rx.recv().await {
             Ok(evt) => {
                 let json = serde_json::to_string(&evt).unwrap_or_default();
-                let event = Event::default().data(json);
-                Some((Ok(event), rx))
+                Some((Ok(Event::default().data(json)), rx))
             }
             Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => {
-                let event = Event::default().comment("lagged");
-                Some((Ok(event), rx))
+                Some((Ok(Event::default().comment("lagged")), rx))
             }
             Err(tokio::sync::broadcast::error::RecvError::Closed) => None,
         }
     });
 
-    Ok(Sse::new(stream).keep_alive(
+    let combined = initial.chain(broadcast);
+
+    Ok(Sse::new(combined).keep_alive(
         KeepAlive::new()
             .interval(std::time::Duration::from_secs(15))
             .text("keepalive"),
@@ -839,12 +862,16 @@ async fn api_simulate(
                             .map(|e| e.to_lowercase().contains(&tech_lower))
                             .unwrap_or(false);
 
-                    let score_delta = if mentions_tech {
-                        if action == "add" {
-                            0.15
-                        } else {
-                            -0.15
-                        }
+                    // Proportional delta based on mention strength
+                    let mention_count = title_lower.matches(&tech_lower).count()
+                        + r.explanation
+                            .as_ref()
+                            .map(|e| e.to_lowercase().matches(&tech_lower).count())
+                            .unwrap_or(0);
+
+                    let base_delta = if action == "add" { 0.08 } else { -0.08 };
+                    let score_delta = if mention_count > 0 {
+                        (base_delta * mention_count as f32).clamp(-0.25, 0.25)
                     } else {
                         0.0
                     };
@@ -867,8 +894,17 @@ async fn api_simulate(
 
     let affected_count = impacts
         .iter()
-        .filter(|i| i["affected"].as_bool() == Some(true))
+        .filter(|i| i["delta"].as_f64().map(|d| d != 0.0).unwrap_or(false))
         .count();
+
+    let message = if affected_count == 0 {
+        Some(format!(
+            "No current signals mention '{}'. Adding it would affect future analyses when content about {} appears in your sources.",
+            tech, tech
+        ))
+    } else {
+        None
+    };
 
     Ok(Json(serde_json::json!({
         "action": action,
@@ -876,6 +912,7 @@ async fn api_simulate(
         "affected_count": affected_count,
         "total_evaluated": impacts.len(),
         "impacts": impacts,
+        "message": message,
     })))
 }
 
