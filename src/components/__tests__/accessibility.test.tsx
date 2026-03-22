@@ -113,9 +113,6 @@ import { SplashScreen } from '../SplashScreen';
 import { DecisionMemory } from '../DecisionMemory';
 import { CompoundAdvantageScore } from '../CompoundAdvantageScore';
 import { AutophagyInsights } from '../AutophagyInsights';
-import { makeSettings } from '../../test/factories';
-import { ActionBar } from '../ActionBar';
-
 describe('Accessibility: ConfidenceIndicator', () => {
   it('has no a11y violations with confidence value', async () => {
     const { container } = render(<ConfidenceIndicator confidence={0.85} />);
@@ -183,40 +180,3 @@ describe('Accessibility: AutophagyInsights', () => {
   });
 });
 
-describe('Accessibility: ActionBar', () => {
-  it('has no a11y violations in idle state', async () => {
-    const { container } = render(
-      <ActionBar
-        state={{ loading: false, analysisComplete: false, status: 'Ready', lastAnalyzedAt: null, progress: 0, progressStage: '', relevanceResults: [] }}
-        settings={makeSettings()}
-        aiBriefing={{ loading: false, error: null }}
-        autoBriefingEnabled={false}
-        summaryBadges={null}
-        onAnalyze={vi.fn()}
-        onGenerateBriefing={vi.fn()}
-        onToggleAutoBriefing={vi.fn()}
-        onToast={vi.fn()}
-      />,
-    );
-    const results = await axe(container);
-    expect(results).toHaveNoViolations();
-  });
-
-  it('has no a11y violations in loading state', async () => {
-    const { container } = render(
-      <ActionBar
-        state={{ loading: true, analysisComplete: false, status: 'Analyzing...', lastAnalyzedAt: null, progress: 0.5, progressStage: 'fetch', relevanceResults: [] }}
-        settings={makeSettings()}
-        aiBriefing={{ loading: false, error: null }}
-        autoBriefingEnabled={false}
-        summaryBadges={null}
-        onAnalyze={vi.fn()}
-        onGenerateBriefing={vi.fn()}
-        onToggleAutoBriefing={vi.fn()}
-        onToast={vi.fn()}
-      />,
-    );
-    const results = await axe(container);
-    expect(results).toHaveNoViolations();
-  });
-});

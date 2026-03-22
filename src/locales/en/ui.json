@@ -279,7 +279,7 @@
   "settings.saveSettings": "Save Settings",
   "settings.testConnection": "Test Connection",
 
-  "nav.results": "Feed",
+  "nav.results": "Signal",
   "nav.briefing": "Briefing",
   "nav.insights": "Radar",
   "nav.saved": "Library",
@@ -288,9 +288,9 @@
   "nav.coach": "Coach",
   "nav.profile": "DNA",
   "nav.profile.subtitle": "Your developer identity",
-  "nav.briefing.label": "Briefing",
-  "nav.briefing.subtitle": "AI-generated summary of what matters",
-  "nav.results.subtitle": "Every item scored against your profile",
+  "nav.briefing.label": "Brief",
+  "nav.briefing.subtitle": "Your intelligence at a glance",
+  "nav.results.subtitle": "Every item scored against your stack",
   "nav.insights.subtitle": "Strategy & tech radar",
   "nav.saved.subtitle": "Your bookmarked items",
   "nav.toolkit.subtitle": "Score testing & debugging",
@@ -303,7 +303,7 @@
   "nav.calibrate": "System",
   "nav.calibrate.subtitle": "Health & calibration",
 
-  "results.title": "Relevance Results",
+  "results.title": "Signal Analysis",
   "results.new": "{{count}} new",
   "results.itemsRelevant": "{{items}} items, {{relevant}} relevant",
   "results.clickAnalyze": "Click Analyze to discover relevant content",
@@ -313,7 +313,7 @@
   "results.noResults": "No results yet",
   "results.startAnalysis": "Run analysis to discover relevant content",
   "results.cached": "{{relevant}}/{{total}} items relevant (cached)",
-  "results.topPicks": "{{count}} top picks",
+  "results.topPicks": "{{count}} High Confidence",
   "results.analyzeNow": "Analyze Now",
   "results.noMatch": "No matching results",
   "results.analyzedNoMatch": "{{count}} items analyzed, but none match your current filters.",
@@ -329,7 +329,7 @@
   "results.relevantOnly": "Relevant Only",
   "results.showAllItems": "Show All",
   "results.saved": "Saved",
-  "results.topPicksGroup": "Top Picks",
+  "results.topPicksGroup": "High Confidence",
   "results.relevantGroup": "Relevant",
   "results.belowThreshold": "Below Threshold",
 
@@ -381,7 +381,7 @@
   "briefing.profile.moreGaps": "+{{count}} more",
   "briefing.profile.intelligenceGrowth": "Learning Progress",
 
-  "feed.title": "Worth Reading",
+  "feed.title": "Signal Stream",
   "feed.viewAll": "View all {{count}}",
 
   "pulse.noData": "No intelligence gathered yet. Run an analysis to get started.",

@@ -127,7 +127,7 @@ vi.mock('../../store', () => ({
       return selector(mockState);
     }),
     {
-      // Static getState/setState used by some components (e.g., ActionBar, PlaybookView)
+      // Static getState/setState used by some components (e.g., PlaybookView)
       getState: () => ({
         setShowSettings: vi.fn(),
         playbookProgress: null,
@@ -226,7 +226,7 @@ vi.mock('../../config/content-types', () => ({
   getContentTypeBadge: () => null,
 }));
 
-// Mock game-components and game-icons (used by AchievementsPanel, ActionBar, etc.)
+// Mock game-components and game-icons (used by AchievementsPanel, etc.)
 vi.mock('../../lib/game-components', () => ({
   registerGameComponent: vi.fn(() => Promise.resolve()),
 }));
@@ -263,12 +263,10 @@ import { AutophagyInsights } from '../AutophagyInsights';
 import { LearnedBehaviorPanel } from '../LearnedBehaviorPanel';
 import { SplashScreen } from '../SplashScreen';
 import { VoidHeartbeat } from '../void-engine/VoidHeartbeat';
-import { ActionBar } from '../ActionBar';
-
 // ---------------------------------------------------------------------------
 // Shared test data
 // ---------------------------------------------------------------------------
-import { makeItem, makeBreakdown, makeSettings } from '../../test/factories';
+import { makeItem, makeBreakdown } from '../../test/factories';
 
 // ---------------------------------------------------------------------------
 // Smoke test suite
@@ -535,30 +533,6 @@ const SMOKE_COMPONENTS: Array<{
       />
     ),
   },
-  {
-    name: 'ActionBar (idle state)',
-    render: () => (
-      <ActionBar
-        state={{
-          loading: false,
-          analysisComplete: false,
-          status: 'Ready',
-          lastAnalyzedAt: null,
-          progress: 0,
-          progressStage: '',
-          relevanceResults: [],
-        }}
-        settings={makeSettings()}
-        aiBriefing={{ loading: false, error: null }}
-        autoBriefingEnabled={false}
-        summaryBadges={null}
-        onAnalyze={vi.fn()}
-        onGenerateBriefing={vi.fn()}
-        onToggleAutoBriefing={vi.fn()}
-        onToast={vi.fn()}
-      />
-    ),
-  },
 ];
 
 describe('Component smoke tests', () => {
@@ -584,7 +558,6 @@ describe('Component accessibility tests', () => {
       'LearningIndicator (with data)',
       'BadgeRow',
       'AboutPanel',
-      'ActionBar (idle state)',
       'OllamaStatus (ollama provider)',
     ].includes(name),
   );
