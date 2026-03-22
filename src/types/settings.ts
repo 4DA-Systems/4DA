@@ -43,6 +43,7 @@ export interface MonitoringStatus {
   last_check_ago: string | null;
   total_checks: number;
   close_to_tray: boolean;
+  notification_style?: string;
 }
 
 export interface UserContext {

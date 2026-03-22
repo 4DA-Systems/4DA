@@ -30,8 +30,8 @@ const MARGIN_BOTTOM: i32 = 64;
 // Auto-dismiss cancellation (module-level state)
 // ============================================================================
 
-static DISMISS_CANCEL: once_cell::sync::Lazy<std::sync::Mutex<Option<Arc<AtomicBool>>>> =
-    once_cell::sync::Lazy::new(|| std::sync::Mutex::new(None));
+static DISMISS_CANCEL: std::sync::LazyLock<std::sync::Mutex<Option<Arc<AtomicBool>>>> =
+    std::sync::LazyLock::new(|| std::sync::Mutex::new(None));
 
 // ============================================================================
 // Data Types
@@ -72,6 +72,9 @@ pub struct NotificationData {
     pub chain_links_total: Option<usize>,
     /// Relative time string (e.g. "2m ago").
     pub time_ago: String,
+    /// Database ID of the top signal item (for deep-linking on click).
+    #[serde(default)]
+    pub item_id: Option<i64>,
 }
 
 // ============================================================================
@@ -183,12 +186,7 @@ pub fn show_notification<R: Runtime>(app: &AppHandle<R>, data: NotificationData)
     );
 
     // Start auto-dismiss timer.
-    let dismiss_ms = match data.priority.as_str() {
-        "critical" => 8000u64,
-        "high" => 6000,
-        "medium" => 5000,
-        _ => 4000,
-    };
+    let dismiss_ms = dismiss_duration_ms(&data.priority);
 
     let cancelled = Arc::new(AtomicBool::new(false));
     {
@@ -221,8 +219,9 @@ pub fn hide_notification<R: Runtime>(app: &AppHandle<R>) {
 ///
 /// Hides the notification, brings the main window to focus, and emits a
 /// navigation event so the main window can switch to the signals view.
+/// Optionally includes the item_id for deep-linking to the specific signal.
 #[tauri::command]
-pub async fn notification_clicked(app: AppHandle) {
+pub async fn notification_clicked(app: AppHandle, item_id: Option<i64>) {
     hide_notification(&app);
 
     if let Some(main_window) = app.get_webview_window("main") {
@@ -230,11 +229,12 @@ pub async fn notification_clicked(app: AppHandle) {
         let _ = main_window.set_focus();
     }
 
-    if let Err(e) = app.emit_to("main", "navigate-to-signals", ()) {
+    let payload = serde_json::json!({ "item_id": item_id });
+    if let Err(e) = app.emit_to("main", "navigate-to-signals", &payload) {
         warn!(target: "4da::notify", error = %e, "Failed to emit navigate-to-signals");
     }
 
-    info!(target: "4da::notify", "Notification clicked — navigating to signals");
+    info!(target: "4da::notify", item_id = ?item_id, "Notification clicked — navigating to signals");
 }
 
 // ============================================================================
@@ -248,5 +248,135 @@ fn cancel_dismiss_timer() {
         if let Some(flag) = guard.take() {
             flag.store(true, Ordering::Relaxed);
         }
+    }
+}
+
+/// Map priority string to auto-dismiss duration in milliseconds.
+fn dismiss_duration_ms(priority: &str) -> u64 {
+    match priority {
+        "critical" => 8000,
+        "high" => 6000,
+        "medium" => 5000,
+        _ => 4000,
+    }
+}
+
+// ============================================================================
+// Tests
+// ============================================================================
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn notification_data_serialization_roundtrip() {
+        let data = NotificationData {
+            variant: "signal".to_string(),
+            priority: "critical".to_string(),
+            signal_type: Some("security_alert".to_string()),
+            title: "CVE-2026-1234 in SQLite".to_string(),
+            action: Some("Update dependency immediately".to_string()),
+            source: Some("cve".to_string()),
+            matched_deps: vec!["sqlite".to_string(), "rusqlite".to_string()],
+            count: None,
+            chain_sources: None,
+            chain_phase: None,
+            chain_links_filled: None,
+            chain_links_total: None,
+            time_ago: "just now".to_string(),
+            item_id: Some(42),
+        };
+
+        let json = serde_json::to_string(&data).unwrap();
+        let roundtrip: NotificationData = serde_json::from_str(&json).unwrap();
+        assert_eq!(roundtrip.variant, "signal");
+        assert_eq!(roundtrip.priority, "critical");
+        assert_eq!(roundtrip.signal_type.as_deref(), Some("security_alert"));
+        assert_eq!(roundtrip.matched_deps.len(), 2);
+        assert_eq!(roundtrip.item_id, Some(42));
+    }
+
+    #[test]
+    fn notification_data_minimal_fields() {
+        // Only required fields — optional fields default correctly
+        let json = r#"{"variant":"digest","priority":"low","title":"5 items","time_ago":"2m ago"}"#;
+        let data: NotificationData = serde_json::from_str(json).unwrap();
+        assert_eq!(data.variant, "digest");
+        assert!(data.signal_type.is_none());
+        assert!(data.matched_deps.is_empty());
+        assert!(data.item_id.is_none());
+    }
+
+    #[test]
+    fn dismiss_duration_by_priority() {
+        assert_eq!(dismiss_duration_ms("critical"), 8000);
+        assert_eq!(dismiss_duration_ms("high"), 6000);
+        assert_eq!(dismiss_duration_ms("medium"), 5000);
+        assert_eq!(dismiss_duration_ms("low"), 4000);
+        assert_eq!(dismiss_duration_ms("unknown"), 4000);
+        assert_eq!(dismiss_duration_ms(""), 4000);
+    }
+
+    #[test]
+    fn cancel_dismiss_timer_sets_flag() {
+        // Set up a flag
+        let flag = Arc::new(AtomicBool::new(false));
+        {
+            let mut guard = DISMISS_CANCEL.lock().unwrap();
+            *guard = Some(Arc::clone(&flag));
+        }
+
+        // Cancel should set the flag to true
+        cancel_dismiss_timer();
+        assert!(flag.load(Ordering::Relaxed));
+
+        // Guard should now be None
+        let guard = DISMISS_CANCEL.lock().unwrap();
+        assert!(guard.is_none());
+    }
+
+    #[test]
+    fn cancel_dismiss_timer_no_op_when_empty() {
+        // Ensure guard is empty
+        {
+            let mut guard = DISMISS_CANCEL.lock().unwrap();
+            *guard = None;
+        }
+
+        // Should not panic
+        cancel_dismiss_timer();
+
+        let guard = DISMISS_CANCEL.lock().unwrap();
+        assert!(guard.is_none());
+    }
+
+    #[test]
+    fn chain_notification_data() {
+        let data = NotificationData {
+            variant: "chain".to_string(),
+            priority: "critical".to_string(),
+            signal_type: None,
+            title: "lodash vulnerability".to_string(),
+            action: Some("Act within ~8h".to_string()),
+            source: None,
+            matched_deps: vec![],
+            count: None,
+            chain_sources: Some(vec![
+                "hackernews".to_string(),
+                "reddit".to_string(),
+                "github".to_string(),
+            ]),
+            chain_phase: Some("escalating".to_string()),
+            chain_links_filled: Some(3),
+            chain_links_total: Some(4),
+            time_ago: "just now".to_string(),
+            item_id: None,
+        };
+
+        let json = serde_json::to_string(&data).unwrap();
+        assert!(json.contains("escalating"));
+        assert!(json.contains("hackernews"));
+        assert!(json.contains("chain_links_filled"));
     }
 }

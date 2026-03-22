@@ -241,10 +241,14 @@ pub(crate) fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::
 
     // Listen for notification-clicked from the notification frontend
     let app_handle_click = app_handle.clone();
-    app.listen("notification-clicked", move |_| {
+    app.listen("notification-clicked", move |event| {
         let handle = app_handle_click.clone();
+        // Extract optional item_id from the event payload
+        let item_id = serde_json::from_str::<serde_json::Value>(event.payload())
+            .ok()
+            .and_then(|v| v.get("item_id")?.as_i64());
         tauri::async_runtime::spawn(async move {
-            crate::notification_window::notification_clicked(handle).await;
+            crate::notification_window::notification_clicked(handle, item_id).await;
         });
     });
 
@@ -523,11 +527,35 @@ fn build_signal_summary(results: &[crate::SourceRelevance]) -> Option<monitoring
             })
         })
         .and_then(|r| Some((r.signal_type.clone()?, r.signal_action.clone()?)));
+    let top_item_id = results
+        .iter()
+        .filter(|r| r.signal_type.is_some())
+        .max_by(|a, b| {
+            let pa = match a.signal_priority.as_deref() {
+                Some("critical") => 4u8,
+                Some("high") => 3,
+                Some("medium") => 2,
+                _ => 1,
+            };
+            let pb = match b.signal_priority.as_deref() {
+                Some("critical") => 4u8,
+                Some("high") => 3,
+                Some("medium") => 2,
+                _ => 1,
+            };
+            pa.cmp(&pb).then_with(|| {
+                a.top_score
+                    .partial_cmp(&b.top_score)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            })
+        })
+        .map(|r| r.id as i64);
     if critical_count > 0 || high_count > 0 {
         Some(monitoring::SignalSummary {
             critical_count,
             high_count,
             top_signal,
+            top_item_id,
         })
     } else {
         None
