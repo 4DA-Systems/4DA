@@ -48,7 +48,7 @@ export const IntelligenceFeed = memo(function IntelligenceFeed({
     <div>
       <div className="flex items-center justify-between mb-3 px-1">
         <h3 className="text-xs font-medium text-text-muted uppercase tracking-wider">
-          {t('feed.title', 'Worth Reading')}
+          {t('feed.title', 'Signal Stream')}
         </h3>
         {totalRelevant > 15 && (
           <button
