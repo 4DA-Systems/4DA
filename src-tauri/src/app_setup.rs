@@ -38,6 +38,15 @@ pub(crate) fn initialize_pre_tauri() {
     info!(target: "4da::startup", "4DA Home - Personalized Intelligence");
     info!(target: "4da::startup", "All signal. No feed.");
     info!(target: "4da::startup", "========================================");
+
+    // Clean up temp files from any crashed previous session
+    if let Some(data_dir) = dirs::data_local_dir() {
+        let temp_dir = data_dir.join("4da").join("temp");
+        if temp_dir.exists() {
+            let _ = std::fs::remove_dir_all(&temp_dir);
+            info!(target: "4da::startup", "Cleaned stale temp directory");
+        }
+    }
     info!(target: "4da::startup", context_dir = ?get_context_dir(), "Context directory");
     info!(target: "4da::startup", model = "all-MiniLM-L6-v2", dimensions = 384, "Embedding model");
 
