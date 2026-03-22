@@ -165,11 +165,11 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
     }
 
     // Anti-aliased edge core + depth halo + vertex glow
-    let edge_w = 0.008 + 0.005 * min_vw;
+    let edge_w = 0.012 + 0.007 * min_vw;
     let aa = fwidth(min_d);
     let core = (1.0 - smoothstep(edge_w - aa, edge_w + aa, min_d)) * 0.8 * min_vw;
-    let halo = halo_sum * 0.09;
-    let vtx_w = 0.018;
+    let halo = halo_sum * 0.14;
+    let vtx_w = 0.025;
     let vtx_aa = fwidth(min_vd);
     let vtx = (1.0 - smoothstep(vtx_w - vtx_aa, vtx_w + vtx_aa, min_vd)) * min_vw
             + exp(-min_vd * 35.0) * 0.5 * min_vw;
@@ -315,11 +315,11 @@ void main(){
         if (vd < min_vd) { min_vd = vd; min_vw = wdepth[i]; }
     }
 
-    float edge_w = 0.008 + 0.005 * min_vw;
+    float edge_w = 0.012 + 0.007 * min_vw;
     float aa = fwidth(min_d);
     float core = (1.0 - smoothstep(edge_w - aa, edge_w + aa, min_d)) * 0.8 * min_vw;
-    float halo = halo_sum * 0.09;
-    float vtx_w = 0.018;
+    float halo = halo_sum * 0.14;
+    float vtx_w = 0.025;
     float vtx_aa = fwidth(min_vd);
     float vtx = (1.0 - smoothstep(vtx_w - vtx_aa, vtx_w + vtx_aa, min_vd)) * min_vw
               + exp(-min_vd * 35.0) * 0.5 * min_vw;

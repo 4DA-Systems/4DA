@@ -49,15 +49,15 @@ export function PentachoronMark({ signal, size = 200 }: PentachoronMarkProps) {
 
   // Map void signals to pentachoron params
   useEffect(() => {
-    // Rotation speed: idle = 0.15, active = 0.5, urgent = 0.8
-    const baseSpeed = 0.15 + signal.signal_intensity * 0.5 + signal.signal_urgency * 0.15;
+    // Rotation speed: idle = 0.25, active = 0.6, urgent = 0.9
+    const baseSpeed = 0.25 + signal.signal_intensity * 0.4 + signal.signal_urgency * 0.15;
     setParam('rotation_speed', baseSpeed);
 
     // 4D rotation: metabolism drives the w-axis rotation — the "thinking" dimension
-    setParam('w_rotation', 0.1 + signal.metabolism * 0.3);
+    setParam('w_rotation', 0.15 + signal.metabolism * 0.25);
 
-    // Glow: base 0.6, pulse brightens, errors dim
-    const glow = signal.error > 0.5 ? 0.3 : 0.6 + signal.pulse * 0.3 + signal.heat * 0.1;
+    // Glow: base 1.2 (bright for small sizes), pulse brightens, errors dim
+    const glow = signal.error > 0.5 ? 0.5 : 1.2 + signal.pulse * 0.3 + signal.heat * 0.1;
     setParam('glow_intensity', glow);
   }, [signal, setParam]);
 
