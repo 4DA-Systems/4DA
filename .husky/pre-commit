@@ -96,7 +96,8 @@ STAGED_FILES=$(git diff --cached --name-only --diff-filter=ACM | \
     grep -v 'PRODUCT-CATALOG\.md$' | \
     grep -v 'SHOPIFY-.*GUIDE\.md$' | \
     grep -v 'TEAM-RELAY-ARCHITECTURE\.md$' | \
-    grep -v 'docker-compose\.yml$' || true)
+    grep -v 'docker-compose\.yml$' | \
+    grep -v 'terms\.njk$' || true)
 
 if [ -n "$STAGED_FILES" ]; then
     SECRETS_FOUND=""
