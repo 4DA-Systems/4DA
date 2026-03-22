@@ -39,11 +39,24 @@ html, body {
 .game-layer {
   position: absolute;
   inset: 0;
-  border-radius: 12px;
+  border-radius: 0;
   overflow: hidden;
   opacity: 0;
-  transition: opacity 0.3s ease-out;
+  transition: opacity 0.5s ease-out;
   pointer-events: none;
+  /* Atmosphere fades at window edges for soft bleed */
+  -webkit-mask-image: radial-gradient(
+    ellipse 90% 85% at 50% 50%,
+    black 40%,
+    rgba(0,0,0,0.6) 70%,
+    transparent 100%
+  );
+  mask-image: radial-gradient(
+    ellipse 90% 85% at 50% 50%,
+    black 40%,
+    rgba(0,0,0,0.6) 70%,
+    transparent 100%
+  );
 }
 
 .game-layer.active {
@@ -57,20 +70,29 @@ html, body {
 .notification-card {
   position: relative;
   z-index: 1;
-  width: 400px;
-  height: 130px;
-  background: rgba(14, 14, 14, 0.92);
-  border-radius: 12px;
-  padding: 14px 18px;
+  width: 420px;
+  height: 148px;
+  /* Gradient background: opaque center → transparent edges */
+  background: radial-gradient(
+    ellipse 85% 80% at 50% 50%,
+    rgba(10, 10, 10, 0.92) 0%,
+    rgba(10, 10, 10, 0.88) 50%,
+    rgba(10, 10, 10, 0.65) 75%,
+    rgba(10, 10, 10, 0.25) 90%,
+    transparent 100%
+  );
+  border-radius: 16px;
+  padding: 18px 22px;
   display: flex;
   flex-direction: column;
   gap: 6px;
-  border: 1px solid rgba(42, 42, 42, 0.8);
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+  /* No hard border — atmosphere bleeds through edges */
+  border: none;
+  box-shadow: none;
   /* Enter animation initial state */
   opacity: 0;
   transform: scale(0.96);
-  transition: opacity 0.2s ease-out, transform 0.2s ease-out, box-shadow 0.3s ease;
+  transition: opacity 0.2s ease-out, transform 0.2s ease-out;
 }
 
 .notification-card.visible {
@@ -94,49 +116,11 @@ html, body {
    Priority Variants (border + CSS glow fallback)
    ======================================================================== */
 
-/* Critical: RED — bold red glow that commands attention */
-.notification-card.critical {
-  border-color: rgba(220, 50, 50, 0.55);
-  box-shadow:
-    0 0 0 1px rgba(220, 50, 50, 0.4),
-    0 0 8px rgba(220, 50, 50, 0.4),
-    0 0 20px rgba(230, 80, 80, 0.25),
-    0 0 40px rgba(240, 140, 140, 0.1),
-    0 0 60px rgba(255, 255, 255, 0.04),
-    0 6px 24px rgba(0, 0, 0, 0.6);
-}
-
-/* High: ORANGE — warm, unmistakable urgency */
-.notification-card.high {
-  border-color: rgba(230, 120, 35, 0.45);
-  box-shadow:
-    0 0 0 1px rgba(230, 120, 35, 0.35),
-    0 0 8px rgba(235, 130, 50, 0.3),
-    0 0 18px rgba(240, 160, 90, 0.14),
-    0 0 36px rgba(255, 220, 180, 0.05),
-    0 0 52px rgba(255, 255, 255, 0.03),
-    0 6px 24px rgba(0, 0, 0, 0.6);
-}
-
-/* Medium: CLEAN WHITE — neutral, professional */
-.notification-card.medium {
-  border-color: rgba(200, 200, 210, 0.22);
-  box-shadow:
-    0 0 0 1px rgba(210, 210, 218, 0.14),
-    0 0 8px rgba(230, 230, 240, 0.1),
-    0 0 20px rgba(255, 255, 255, 0.04),
-    0 6px 24px rgba(0, 0, 0, 0.6);
-}
-
-/* Low: SUBTLE WHITE — present but undemanding */
-.notification-card.low {
-  border-color: rgba(200, 205, 215, 0.16);
-  box-shadow:
-    0 0 0 1px rgba(210, 212, 222, 0.1),
-    0 0 8px rgba(230, 232, 245, 0.06),
-    0 0 18px rgba(255, 255, 255, 0.02),
-    0 6px 24px rgba(0, 0, 0, 0.6);
-}
+/* Priority cards — no hard borders, atmosphere does the work */
+.notification-card.critical { box-shadow: inset 0 0 30px rgba(220, 50, 50, 0.06); }
+.notification-card.high { box-shadow: inset 0 0 30px rgba(230, 130, 40, 0.05); }
+.notification-card.medium { box-shadow: inset 0 0 20px rgba(200, 200, 210, 0.03); }
+.notification-card.low { box-shadow: none; }
 
 /* ========================================================================
    Hover States
@@ -144,29 +128,23 @@ html, body {
 
 .notification-card:hover {
   cursor: pointer;
-  border-color: rgba(255, 255, 255, 0.15);
+  /* Brighten center on hover — the atmosphere handles the outer glow */
+  background: radial-gradient(
+    ellipse 85% 80% at 50% 50%,
+    rgba(18, 18, 18, 0.94) 0%,
+    rgba(14, 14, 14, 0.88) 50%,
+    rgba(10, 10, 10, 0.6) 75%,
+    rgba(10, 10, 10, 0.2) 90%,
+    transparent 100%
+  );
 }
 
 .notification-card.critical:hover {
-  border-color: rgba(230, 60, 60, 0.65);
-  box-shadow:
-    0 0 0 1px rgba(230, 60, 60, 0.5),
-    0 0 10px rgba(230, 60, 60, 0.5),
-    0 0 24px rgba(240, 100, 100, 0.3),
-    0 0 48px rgba(250, 160, 160, 0.12),
-    0 0 68px rgba(255, 255, 255, 0.05),
-    0 6px 24px rgba(0, 0, 0, 0.6);
+  box-shadow: inset 0 0 40px rgba(220, 50, 50, 0.1);
 }
 
 .notification-card.high:hover {
-  border-color: rgba(235, 130, 45, 0.55);
-  box-shadow:
-    0 0 0 1px rgba(235, 130, 45, 0.4),
-    0 0 10px rgba(240, 140, 60, 0.35),
-    0 0 22px rgba(245, 170, 100, 0.18),
-    0 0 42px rgba(255, 230, 190, 0.06),
-    0 0 58px rgba(255, 255, 255, 0.03),
-    0 6px 24px rgba(0, 0, 0, 0.6);
+  box-shadow: inset 0 0 40px rgba(230, 130, 40, 0.08);
 }
 
 /* ========================================================================

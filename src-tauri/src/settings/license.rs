@@ -212,7 +212,11 @@ pub fn require_signal_feature(feature: &str) -> Result<()> {
     }
 }
 
-/// Check if the free trial is still active (30 days from trial_started_at)
+/// Trial duration in days. Reverse trial: auto-starts on first launch,
+/// giving users enough time for compound intelligence effects to demonstrate value.
+const TRIAL_DURATION_DAYS: i64 = 45;
+
+/// Check if the free trial is still active (45 days from trial_started_at)
 pub fn is_trial_active(license: &LicenseConfig) -> bool {
     if is_paid_tier(license.tier.as_str()) {
         return false; // Not on trial, has a real license
@@ -221,7 +225,7 @@ pub fn is_trial_active(license: &LicenseConfig) -> bool {
         Some(started) => {
             if let Ok(start_date) = chrono::DateTime::parse_from_rfc3339(started) {
                 let elapsed = chrono::Utc::now().signed_duration_since(start_date);
-                elapsed.num_days() < 30
+                elapsed.num_days() < TRIAL_DURATION_DAYS
             } else {
                 false
             }
@@ -244,7 +248,7 @@ pub fn get_trial_status(license: &LicenseConfig) -> TrialStatus {
         Some(started) => {
             if let Ok(start_date) = chrono::DateTime::parse_from_rfc3339(started) {
                 let elapsed = chrono::Utc::now().signed_duration_since(start_date);
-                let remaining = 30 - elapsed.num_days();
+                let remaining = TRIAL_DURATION_DAYS - elapsed.num_days();
                 TrialStatus {
                     active: remaining > 0,
                     days_remaining: remaining.max(0) as i32,

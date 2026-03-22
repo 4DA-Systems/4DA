@@ -46,10 +46,10 @@ If any of these do not reflect your expected tier, see Troubleshooting below.
 
 ## Trial
 
-4DA offers a **30-day free trial** of Pro features. No license key is needed to start the trial.
+4DA offers a **45-day free trial** of Signal features. No license key is needed to start the trial.
 
 - The trial activates automatically when you first launch the app.
-- All Pro features are available during the trial period.
+- All Signal features are available during the trial period.
 - When the trial expires, the app reverts to the free tier. Your data and settings are preserved.
 - You can upgrade to a paid license at any time during or after the trial.
 
@@ -79,7 +79,7 @@ If any of these do not reflect your expected tier, see Troubleshooting below.
 - If it does occur, re-enter your key in Settings > General > License and click Activate again.
 - If the problem persists, check that the `data/settings.json` file is writable and not being reset by another process.
 
-### Activation succeeds but Pro features are unavailable
+### Activation succeeds but Signal features are unavailable
 
 - Restart the app to ensure all feature gates refresh.
 - Verify the displayed tier in Settings matches what you expect.
@@ -89,7 +89,7 @@ If any of these do not reflect your expected tier, see Troubleshooting below.
 
 ### Does 4DA work offline after activation?
 
-Yes. License validation is cached locally for 24 hours. You can use Pro features offline during that window. The next time you are online, validation refreshes automatically in the background. If you remain offline for more than 24 hours, the app may prompt for revalidation when connectivity returns.
+Yes. License validation is cached locally for 24 hours. You can use Signal features offline during that window. The next time you are online, validation refreshes automatically in the background. If you remain offline for more than 24 hours, the app may prompt for revalidation when connectivity returns.
 
 ### Can I move my license to a different machine?
 
@@ -103,9 +103,9 @@ Reinstalling clears local settings. Re-enter your license key after installation
 
 Yes. All 7 STREETS modules are available to every user, regardless of tier. No license key is needed for the playbook.
 
-### How do I upgrade from Pro to Team?
+### How do I upgrade from Signal to Team?
 
-Purchase a Team license at [4da.ai](https://4da.ai). Enter the new Team key in Settings. The previous Pro key will be replaced.
+Purchase a Team license at [4da.ai](https://4da.ai). Enter the new Team key in Settings. The previous Signal key will be replaced.
 
 ### How do I cancel or get a refund?
 
