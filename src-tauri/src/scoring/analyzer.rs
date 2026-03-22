@@ -332,6 +332,7 @@ pub(crate) async fn run_background_analysis<R: tauri::Runtime>(
             critical_count: critical,
             high_count: high,
             top_signal,
+            top_item_id: None,
         }
     };
 

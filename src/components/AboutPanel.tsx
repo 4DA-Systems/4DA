@@ -1,17 +1,22 @@
+import { useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
-import sunLogo from '../assets/sun-logo.webp';
+import { registerGameComponent } from '../lib/game-components';
 
 export function AboutPanel() {
   const { t } = useTranslation();
+
+  useEffect(() => {
+    registerGameComponent('game-simplex-unfold');
+    registerGameComponent('game-pentachoron');
+  }, []);
+
   return (
     <div className="space-y-8">
-      {/* Logo + Identity */}
+      {/* Logo + Identity — Simplex unfold as living brand mark */}
       <div className="flex flex-col items-center text-center">
-        <img
-          src={sunLogo}
-          alt={t('about.logoAlt')}
-          className="w-28 h-28 rounded-2xl object-cover shadow-lg shadow-orange-500/20 mb-4"
-        />
+        <div className="w-28 h-28 mb-4 rounded-2xl overflow-hidden shadow-lg shadow-orange-500/20 border border-border/30">
+          <game-simplex-unfold style={{ width: '112px', height: '112px', display: 'block' }} />
+        </div>
         <h3 className="text-xl font-semibold text-white">{t('app.title')}</h3>
         <p className="text-sm text-text-secondary mt-1">{t('about.fullName')}</p>
         <p className="text-xs text-text-muted mt-0.5">{t('app.tagline')}</p>
@@ -54,12 +59,14 @@ export function AboutPanel() {
             <span className="text-[10px] text-text-muted font-medium uppercase tracking-wider">{t('about.vision')}</span>
           </div>
 
-          {/* Connection */}
+          {/* Connection — pentachoron as the 5th vertex linking human + AI */}
           <div className="flex flex-col items-center gap-1">
             <div className="flex items-center gap-1">
-              <div className="w-6 h-px bg-gray-600" />
-              <div className="w-2 h-2 rounded-full bg-orange-500/60" />
-              <div className="w-6 h-px bg-gray-600" />
+              <div className="w-4 h-px bg-gray-600" />
+              <div className="w-11 h-11 rounded-lg overflow-hidden border border-border/20">
+                <game-pentachoron style={{ width: '44px', height: '44px', display: 'block' }} />
+              </div>
+              <div className="w-4 h-px bg-gray-600" />
             </div>
             <span className="text-[9px] text-text-muted">{t('about.collaborative')}</span>
           </div>
