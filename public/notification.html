@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>4DA Notification</title>
+  <link rel="stylesheet" href="/notification.css">
+  <!-- Pre-load all GAME atmosphere components (self-registering WebComponents) -->
+  <script type="module" src="/notif-critical.js"></script>
+  <script type="module" src="/notif-high.js"></script>
+  <script type="module" src="/notif-medium.js"></script>
+  <script type="module" src="/notif-digest.js"></script>
+</head>
+<body>
+  <div id="notification" class="notification-window" role="status" aria-live="polite">
+    <!-- GAME atmosphere layer -->
+    <div id="game-layer" class="game-layer"></div>
+
+    <!-- Content card -->
+    <div id="card" class="notification-card">
+      <!-- Header -->
+      <div class="notification-header">
+        <span id="priority-dot" class="priority-dot"></span>
+        <span id="type-label" class="type-label">SIGNAL</span>
+        <span class="header-spacer"></span>
+        <span id="source-badge" class="source-badge">hackernews</span>
+        <span class="header-sep">&middot;</span>
+        <span id="time-ago" class="time-ago">just now</span>
+      </div>
+
+      <!-- Body -->
+      <div id="notification-body" class="notification-body">
+        <div id="title-text" class="title-text">Signal title here</div>
+        <div id="action-text" class="action-text">Suggested action</div>
+      </div>
+
+      <!-- Footer -->
+      <div id="notification-footer" class="notification-footer">
+        <div id="deps-container" class="deps-container"></div>
+        <div id="chain-container" class="chain-container" style="display:none">
+          <div id="chain-dots" class="chain-dots"></div>
+        </div>
+      </div>
+
+      <!-- Dismiss button -->
+      <button id="dismiss-btn" class="dismiss-btn" aria-label="Dismiss notification">&times;</button>
+    </div>
+  </div>
+
+  <script type="module" src="/notification.js"></script>
+</body>
+</html>
