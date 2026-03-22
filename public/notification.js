@@ -165,8 +165,8 @@ function updateContent(data) {
     currentPriority === 'critical' ? 'assertive' : 'polite'
   );
 
-  // GAME atmosphere opacity scales with priority
-  var gameOpacity = { critical: 0.15, high: 0.12, medium: 0.08, low: 0.05 };
+  // GAME atmosphere opacity scales with priority — bold enough to see
+  var gameOpacity = { critical: 0.28, high: 0.20, medium: 0.12, low: 0.07 };
   gameLayer.style.setProperty(
     '--game-opacity',
     String(gameOpacity[currentPriority] || 0.05)

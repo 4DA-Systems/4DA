@@ -24,8 +24,8 @@ html, body {
    ======================================================================== */
 
 .notification-window {
-  width: 416px;
-  height: 146px;
+  width: 440px;
+  height: 166px;
   position: relative;
   display: flex;
   align-items: center;
@@ -94,45 +94,48 @@ html, body {
    Priority Variants (border + CSS glow fallback)
    ======================================================================== */
 
-/* Critical: RED — tight red inner, red-white diffusion */
+/* Critical: RED — bold red glow that commands attention */
 .notification-card.critical {
-  border-color: rgba(220, 50, 50, 0.5);
+  border-color: rgba(220, 50, 50, 0.55);
   box-shadow:
-    0 0 0 1px rgba(220, 50, 50, 0.35),
-    0 0 10px rgba(220, 60, 60, 0.3),
-    0 0 28px rgba(240, 120, 120, 0.12),
-    0 0 50px rgba(255, 255, 255, 0.04),
-    0 4px 20px rgba(0, 0, 0, 0.5);
+    0 0 0 1px rgba(220, 50, 50, 0.4),
+    0 0 8px rgba(220, 50, 50, 0.4),
+    0 0 20px rgba(230, 80, 80, 0.25),
+    0 0 40px rgba(240, 140, 140, 0.1),
+    0 0 60px rgba(255, 255, 255, 0.04),
+    0 6px 24px rgba(0, 0, 0, 0.6);
 }
 
-/* High: ORANGE — warm orange inner, white outer */
+/* High: ORANGE — warm, unmistakable urgency */
 .notification-card.high {
-  border-color: rgba(230, 130, 40, 0.4);
+  border-color: rgba(230, 120, 35, 0.45);
   box-shadow:
-    0 0 0 1px rgba(230, 130, 40, 0.28),
-    0 0 10px rgba(235, 145, 60, 0.2),
-    0 0 26px rgba(245, 180, 120, 0.08),
-    0 0 44px rgba(255, 255, 255, 0.03),
-    0 4px 20px rgba(0, 0, 0, 0.5);
+    0 0 0 1px rgba(230, 120, 35, 0.35),
+    0 0 8px rgba(235, 130, 50, 0.3),
+    0 0 18px rgba(240, 160, 90, 0.14),
+    0 0 36px rgba(255, 220, 180, 0.05),
+    0 0 52px rgba(255, 255, 255, 0.03),
+    0 6px 24px rgba(0, 0, 0, 0.6);
 }
 
 /* Medium: CLEAN WHITE — neutral, professional */
 .notification-card.medium {
-  border-color: rgba(220, 220, 225, 0.2);
+  border-color: rgba(200, 200, 210, 0.22);
   box-shadow:
-    0 0 0 1px rgba(220, 220, 225, 0.12),
-    0 0 10px rgba(240, 240, 245, 0.08),
-    0 0 24px rgba(255, 255, 255, 0.03),
-    0 4px 20px rgba(0, 0, 0, 0.5);
+    0 0 0 1px rgba(210, 210, 218, 0.14),
+    0 0 8px rgba(230, 230, 240, 0.1),
+    0 0 20px rgba(255, 255, 255, 0.04),
+    0 6px 24px rgba(0, 0, 0, 0.6);
 }
 
-/* Low: SUBTLE WHITE — barely there, just enough presence */
+/* Low: SUBTLE WHITE — present but undemanding */
 .notification-card.low {
-  border-color: rgba(210, 215, 225, 0.14);
+  border-color: rgba(200, 205, 215, 0.16);
   box-shadow:
-    0 0 0 1px rgba(220, 222, 230, 0.08),
-    0 0 8px rgba(240, 242, 250, 0.04),
-    0 4px 20px rgba(0, 0, 0, 0.5);
+    0 0 0 1px rgba(210, 212, 222, 0.1),
+    0 0 8px rgba(230, 232, 245, 0.06),
+    0 0 18px rgba(255, 255, 255, 0.02),
+    0 6px 24px rgba(0, 0, 0, 0.6);
 }
 
 /* ========================================================================
@@ -145,23 +148,25 @@ html, body {
 }
 
 .notification-card.critical:hover {
-  border-color: rgba(230, 60, 60, 0.6);
+  border-color: rgba(230, 60, 60, 0.65);
   box-shadow:
-    0 0 0 1px rgba(230, 60, 60, 0.4),
-    0 0 14px rgba(235, 80, 80, 0.35),
-    0 0 34px rgba(245, 140, 140, 0.16),
-    0 0 58px rgba(255, 255, 255, 0.06),
-    0 4px 20px rgba(0, 0, 0, 0.5);
+    0 0 0 1px rgba(230, 60, 60, 0.5),
+    0 0 10px rgba(230, 60, 60, 0.5),
+    0 0 24px rgba(240, 100, 100, 0.3),
+    0 0 48px rgba(250, 160, 160, 0.12),
+    0 0 68px rgba(255, 255, 255, 0.05),
+    0 6px 24px rgba(0, 0, 0, 0.6);
 }
 
 .notification-card.high:hover {
-  border-color: rgba(235, 140, 50, 0.5);
+  border-color: rgba(235, 130, 45, 0.55);
   box-shadow:
-    0 0 0 1px rgba(235, 140, 50, 0.35),
-    0 0 14px rgba(240, 155, 70, 0.25),
-    0 0 32px rgba(250, 190, 130, 0.1),
-    0 0 50px rgba(255, 255, 255, 0.04),
-    0 4px 20px rgba(0, 0, 0, 0.5);
+    0 0 0 1px rgba(235, 130, 45, 0.4),
+    0 0 10px rgba(240, 140, 60, 0.35),
+    0 0 22px rgba(245, 170, 100, 0.18),
+    0 0 42px rgba(255, 230, 190, 0.06),
+    0 0 58px rgba(255, 255, 255, 0.03),
+    0 6px 24px rgba(0, 0, 0, 0.6);
 }
 
 /* ========================================================================
@@ -183,14 +188,21 @@ html, body {
   flex-shrink: 0;
 }
 
+@keyframes dot-pulse {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.4); opacity: 0.7; }
+}
+
 .priority-dot.critical {
   background: #EF4444;
-  box-shadow: 0 0 6px rgba(239, 68, 68, 0.6);
+  box-shadow: 0 0 8px rgba(239, 68, 68, 0.7), 0 0 16px rgba(239, 68, 68, 0.3);
+  animation: dot-pulse 2s ease-in-out infinite;
 }
 
 .priority-dot.high {
-  background: #D4AF37;
-  box-shadow: 0 0 6px rgba(212, 175, 55, 0.5);
+  background: #E88A30;
+  box-shadow: 0 0 8px rgba(232, 138, 48, 0.6), 0 0 14px rgba(232, 138, 48, 0.2);
+  animation: dot-pulse 3s ease-in-out infinite;
 }
 
 .priority-dot.medium {
@@ -389,5 +401,9 @@ html, body {
   }
   .notification-card.visible {
     transform: none;
+  }
+  .priority-dot.critical,
+  .priority-dot.high {
+    animation: none !important;
   }
 }
