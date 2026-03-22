@@ -142,8 +142,18 @@ export function useAnalysis(
         }),
 
         // Custom notification clicked — navigate to briefing/signals view
-        listen('navigate-to-signals', () => {
+        listen<{ item_id?: number }>('navigate-to-signals', (event) => {
           useAppStore.getState().setActiveView('briefing');
+          const itemId = event.payload?.item_id;
+          if (itemId) {
+            // Brief delay to allow view to mount, then scroll to item
+            setTimeout(() => {
+              const el = document.querySelector(`[data-item-id="${itemId}"]`);
+              el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+              el?.classList.add('ring-1', 'ring-orange-500/50');
+              setTimeout(() => el?.classList.remove('ring-1', 'ring-orange-500/50'), 3000);
+            }, 300);
+          }
         }),
 
         listen<SourceRelevance[]>('background-results', (event) => {

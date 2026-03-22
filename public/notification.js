@@ -30,6 +30,7 @@ const notificationEl = document.getElementById('notification');
 let dismissTimer = null;
 let isHovering = false;
 let currentPriority = 'low';
+let currentItemId = null;
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -146,6 +147,7 @@ function swapGameComponent(priority) {
 /** Populate the notification card DOM from a data payload. */
 function updateContent(data) {
   currentPriority = data.priority || 'low';
+  currentItemId = data.item_id || null;
 
   // Swap priority classes on card and dot
   card.classList.remove('critical', 'high', 'medium', 'low');
@@ -221,12 +223,59 @@ function updateContent(data) {
 }
 
 // ---------------------------------------------------------------------------
+// Sound synthesis (Web Audio API — no audio files needed)
+// ---------------------------------------------------------------------------
+
+var audioCtx = null;
+
+/** Play a synthesized notification chime based on priority. */
+function playNotificationSound(priority) {
+  // Only critical and high get sounds
+  if (priority !== 'critical' && priority !== 'high') return;
+
+  try {
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    var ctx = audioCtx;
+    var now = ctx.currentTime;
+
+    if (priority === 'critical') {
+      // Two ascending tones: C5 → E5 (urgent)
+      playTone(ctx, 523.25, now, 0.08, 0.15);       // C5
+      playTone(ctx, 659.25, now + 0.1, 0.08, 0.15);  // E5
+    } else {
+      // Single soft chime: G4 (present but gentle)
+      playTone(ctx, 392.0, now, 0.12, 0.1);  // G4
+    }
+  } catch {
+    // Audio not available — silent fallback
+  }
+}
+
+/** Play a single sine tone with attack/decay envelope. */
+function playTone(ctx, freq, startTime, duration, volume) {
+  var osc = ctx.createOscillator();
+  var gain = ctx.createGain();
+  osc.type = 'sine';
+  osc.frequency.value = freq;
+  gain.gain.setValueAtTime(0, startTime);
+  gain.gain.linearRampToValueAtTime(volume, startTime + 0.01);  // 10ms attack
+  gain.gain.exponentialRampToValueAtTime(0.001, startTime + duration);  // decay
+  osc.connect(gain);
+  gain.connect(ctx.destination);
+  osc.start(startTime);
+  osc.stop(startTime + duration + 0.05);
+}
+
+// ---------------------------------------------------------------------------
 // Show / Hide
 // ---------------------------------------------------------------------------
 
 /** Show the notification with enter animation. */
 function showNotification(data) {
   updateContent(data);
+
+  // Play notification sound for critical/high priority
+  playNotificationSound(currentPriority);
 
   // Reset animation state
   card.classList.remove('visible', 'exiting', 'dismissing');
@@ -330,7 +379,7 @@ card.addEventListener('mouseleave', function () {
 // Click card to navigate (but not if clicking dismiss button)
 card.addEventListener('click', function (e) {
   if (e.target === dismissBtn || dismissBtn.contains(e.target)) return;
-  emitTauri('notification-clicked');
+  emitTauri('notification-clicked', { item_id: currentItemId });
 });
 
 // Dismiss button
@@ -344,7 +393,7 @@ document.addEventListener('keydown', function (e) {
   if (e.key === 'Escape') {
     hideNotification('dismiss');
   } else if (e.key === 'Enter') {
-    emitTauri('notification-clicked');
+    emitTauri('notification-clicked', { item_id: currentItemId });
   }
 });
 
