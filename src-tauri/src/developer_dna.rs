@@ -106,7 +106,10 @@ pub fn generate_dna() -> Result<DeveloperDna> {
     interests.sort();
 
     // 2. Top dependencies (from project_dependencies, limit 30)
-    let top_dependencies = get_top_dependencies(&conn)?;
+    let mut top_dependencies = get_top_dependencies(&conn)?;
+    // Dedup dependencies by name (case-insensitive, keep first occurrence)
+    let mut seen_deps = std::collections::HashSet::new();
+    top_dependencies.retain(|d| seen_deps.insert(d.name.to_lowercase()));
 
     // 3. Engagement data (from feedback/interactions)
     let top_engaged_topics = get_top_engaged_topics(&conn)?;
@@ -379,8 +382,21 @@ fn compute_stats(conn: &rusqlite::Connection) -> Result<DnaStats> {
     };
     let total_relevant = feedback_relevant.max(scoring_relevant);
 
-    let rejection_rate = if total_items > 0 {
-        ((1.0 - total_relevant as f32 / total_items as f32) * 100.0)
+    // Use analysis-scanned count as denominator (same as boot/status endpoints)
+    // to avoid inflated rejection rate from accumulated DB items
+    let analysis_total = {
+        let state = crate::get_analysis_state();
+        let guard = state.lock();
+        guard.results.as_ref().map(|r| r.len() as u32).unwrap_or(0)
+    };
+    let effective_total = if analysis_total > 0 {
+        analysis_total
+    } else {
+        total_items
+    };
+
+    let rejection_rate = if effective_total > 0 {
+        ((1.0 - total_relevant as f32 / effective_total as f32) * 100.0)
             .min(100.0)
             .max(0.0)
     } else {
