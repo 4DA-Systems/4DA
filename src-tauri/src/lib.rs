@@ -433,6 +433,7 @@ pub fn run() {
             monitoring_commands::set_close_to_tray,
             monitoring_commands::set_launch_at_startup,
             monitoring_commands::get_launch_at_startup,
+            monitoring_commands::set_notification_style,
             // Notification window
             notification_window::notification_clicked,
             // ACE (frontend-used subset)

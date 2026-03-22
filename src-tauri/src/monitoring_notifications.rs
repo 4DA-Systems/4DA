@@ -43,6 +43,8 @@ pub struct SignalSummary {
     pub critical_count: usize,
     pub high_count: usize,
     pub top_signal: Option<(String, String)>, // (signal_type, action)
+    /// Database ID of the highest-priority signal item (for deep-linking).
+    pub top_item_id: Option<i64>,
 }
 
 // ============================================================================
@@ -94,6 +96,7 @@ pub fn complete_scheduled_check<R: Runtime>(
                         chain_links_filled: None,
                         chain_links_total: None,
                         time_ago: "just now".to_string(),
+                        item_id: summary.top_item_id,
                     },
                 );
             } else {
@@ -251,6 +254,7 @@ pub fn send_notification<R: Runtime>(
                 chain_links_filled: None,
                 chain_links_total: None,
                 time_ago: "just now".to_string(),
+                item_id: None,
             },
         );
         return;
@@ -314,6 +318,7 @@ pub fn send_signal_notification<R: Runtime>(
                 chain_links_filled: None,
                 chain_links_total: None,
                 time_ago: "just now".to_string(),
+                item_id: summary.top_item_id,
             },
         );
         return;
@@ -384,6 +389,7 @@ pub fn send_chain_prediction_notification<R: Runtime>(
                 chain_links_filled: None,
                 chain_links_total: Some(4),
                 time_ago: "just now".to_string(),
+                item_id: None,
             },
         );
         return;

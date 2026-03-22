@@ -120,7 +120,7 @@ interface CommandMap {
   set_close_to_tray: { params: { enabled: boolean }; result: void };
   set_launch_at_startup: { params: { enabled: boolean }; result: { launch_at_startup: boolean; message: string } };
   get_launch_at_startup: { params: Record<string, never>; result: boolean };
-  notification_clicked: { params: Record<string, never>; result: void };
+  notification_clicked: { params: { item_id?: number | null }; result: void };
   record_interaction: { params: { sourceItemId: number; action: string }; result: { success: boolean } };
 
   // -- Taste Test Calibration --
@@ -176,6 +176,7 @@ interface CommandMap {
   set_monitoring_enabled: { params: { enabled: boolean }; result: void };
   set_monitoring_interval: { params: { minutes: number }; result: void };
   set_notification_threshold: { params: { threshold: string }; result: void };
+  set_notification_style: { params: { style: string }; result: { notification_style: string } };
   trigger_notification_test: { params: Record<string, never>; result: void };
 
   // -- Briefing --

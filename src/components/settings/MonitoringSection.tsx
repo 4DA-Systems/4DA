@@ -181,6 +181,21 @@ export function MonitoringSection({
             </select>
           </div>
 
+          <div className="flex items-center gap-3">
+            <label className="text-sm text-text-secondary">{t('settings.monitoring.notificationStyle', 'Notification style')}</label>
+            <select
+              value={monitoring.notification_style || 'custom'}
+              onChange={(e) => {
+                cmd('set_notification_style', { style: e.target.value }).catch(() => {});
+              }}
+              className="px-3 py-2 bg-bg-secondary border border-border rounded-lg text-sm text-white focus:border-orange-500 focus:outline-none appearance-none cursor-pointer"
+              style={{ backgroundImage: 'url("data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'12\' height=\'12\' fill=\'%23666\' viewBox=\'0 0 16 16\'%3E%3Cpath d=\'M8 11L3 6h10z\'/%3E%3C/svg%3E")', backgroundRepeat: 'no-repeat', backgroundPosition: 'right 0.75rem center', paddingRight: '2rem' }}
+            >
+              <option value="custom">{t('settings.monitoring.styleCustom', 'GAME atmosphere')}</option>
+              <option value="native">{t('settings.monitoring.styleNative', 'OS native')}</option>
+            </select>
+          </div>
+
           <CloseToTrayToggle initialValue={monitoring.close_to_tray} />
           <LaunchAtStartupToggle />
 

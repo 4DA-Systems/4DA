@@ -25,12 +25,13 @@ pub async fn get_monitoring_status() -> Result<serde_json::Value> {
     let secs_since_check = if last_check > 0 { now - last_check } else { 0 };
 
     // Include settings from config
-    let (notification_threshold, close_to_tray) = {
+    let (notification_threshold, close_to_tray, notification_style) = {
         let settings = get_settings_manager().lock();
         let m = &settings.get().monitoring;
         (
             m.notification_threshold.clone(),
             m.close_to_tray.unwrap_or(true),
+            m.notification_style.clone(),
         )
     };
 
@@ -44,7 +45,8 @@ pub async fn get_monitoring_status() -> Result<serde_json::Value> {
         "last_relevant_count": state.last_relevant_count.load(std::sync::atomic::Ordering::Relaxed),
         "total_checks": state.total_checks.load(std::sync::atomic::Ordering::Relaxed),
         "notification_threshold": notification_threshold,
-        "close_to_tray": close_to_tray
+        "close_to_tray": close_to_tray,
+        "notification_style": notification_style
     }))
 }
 
@@ -173,6 +175,34 @@ pub async fn trigger_notification_test(app: AppHandle) -> Result<serde_json::Val
     Ok(serde_json::json!({
         "success": true,
         "message": "Test notification sent"
+    }))
+}
+
+/// Set notification style ("custom" for GAME-powered or "native" for OS toasts)
+#[tauri::command]
+pub async fn set_notification_style(style: String) -> Result<serde_json::Value> {
+    let valid = ["custom", "native"];
+    if !valid.contains(&style.as_str()) {
+        return Err(format!(
+            "Invalid notification style '{}'. Must be 'custom' or 'native'.",
+            style
+        )
+        .into());
+    }
+
+    {
+        let mut settings = get_settings_manager().lock();
+        let existing = settings.get().monitoring.clone();
+        let _ = settings.set_monitoring_config(settings::MonitoringConfig {
+            notification_style: style.clone(),
+            ..existing
+        });
+    }
+
+    info!(target: "4da::monitor", style = %style, "Notification style updated");
+
+    Ok(serde_json::json!({
+        "notification_style": style
     }))
 }
 
