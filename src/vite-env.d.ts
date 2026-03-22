@@ -19,9 +19,18 @@ declare module 'react' {
       'game-ambient-intelligence': React.DetailedHTMLProps<React.HTMLAttributes<HTMLElement>, HTMLElement>;
       'game-score-fingerprint': React.DetailedHTMLProps<React.HTMLAttributes<HTMLElement>, HTMLElement>;
       'game-decision-countdown': React.DetailedHTMLProps<React.HTMLAttributes<HTMLElement>, HTMLElement>;
+      'game-signal-waveform': React.DetailedHTMLProps<React.HTMLAttributes<HTMLElement>, HTMLElement>;
+      'game-knowledge-depth': React.DetailedHTMLProps<React.HTMLAttributes<HTMLElement>, HTMLElement>;
+      'game-source-vitals': React.DetailedHTMLProps<React.HTMLAttributes<HTMLElement>, HTMLElement>;
+      'game-briefing-atmosphere': React.DetailedHTMLProps<React.HTMLAttributes<HTMLElement>, HTMLElement>;
+      'game-playbook-pathway': React.DetailedHTMLProps<React.HTMLAttributes<HTMLElement>, HTMLElement>;
+      'game-radar-field': React.DetailedHTMLProps<React.HTMLAttributes<HTMLElement>, HTMLElement>;
+      'game-turing-fire': React.DetailedHTMLProps<React.HTMLAttributes<HTMLElement>, HTMLElement>;
+      'game-intelligence-banner': React.DetailedHTMLProps<React.HTMLAttributes<HTMLElement>, HTMLElement>;
       'game-tetrahedron': React.DetailedHTMLProps<React.HTMLAttributes<HTMLElement>, HTMLElement>;
       'game-pentachoron': React.DetailedHTMLProps<React.HTMLAttributes<HTMLElement>, HTMLElement>;
       'game-icosahedron': React.DetailedHTMLProps<React.HTMLAttributes<HTMLElement>, HTMLElement>;
+      'game-dodecahedron': React.DetailedHTMLProps<React.HTMLAttributes<HTMLElement>, HTMLElement>;
       'game-simplex-unfold': React.DetailedHTMLProps<React.HTMLAttributes<HTMLElement>, HTMLElement>;
     }
   }

@@ -20,4 +20,5 @@ declare module '*/intelligence-banner.js';
 declare module '*/tetrahedron.js';
 declare module '*/pentachoron.js';
 declare module '*/icosahedron.js';
+declare module '*/dodecahedron.js';
 declare module '*/simplex-unfold.js';

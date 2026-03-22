@@ -2,6 +2,7 @@ import { useState, useEffect, memo, useCallback, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useShallow } from 'zustand/react/shallow';
 import { useAppStore } from '../store';
+import { useGameComponent } from '../hooks/use-game-component';
 import type { DeveloperDecision } from '../store/decisions-slice';
 
 const DECISION_TYPES = [
@@ -71,9 +72,20 @@ export const DecisionMemory = memo(function DecisionMemory() {
   const removeTechDecision = useAppStore((s) => s.removeTechDecision);
   const addToast = useAppStore((s) => s.addToast);
 
+  const { containerRef: tetRef, elementRef: tetEl } = useGameComponent('game-tetrahedron');
+
   useEffect(() => {
     loadDecisions();
   }, [loadDecisions]);
+
+  // Tetrahedron responds to decision state: more reconsidering = faster spin, dimmer glow
+  useEffect(() => {
+    const reconsidering = decisions.filter(d => d.status === 'reconsidering').length;
+    const total = decisions.length || 1;
+    const stability = 1.0 - reconsidering / total;
+    tetEl.current?.setParam?.('rotation_speed', 0.2 + (1.0 - stability) * 0.8);
+    tetEl.current?.setParam?.('glow_intensity', 0.5 + stability * 0.5);
+  }, [decisions, tetEl]);
 
   const grouped = useMemo(() =>
     DECISION_TYPES.reduce<Record<string, DeveloperDecision[]>>(
@@ -133,9 +145,7 @@ export const DecisionMemory = memo(function DecisionMemory() {
       {/* Header */}
       <div className="px-5 py-4 border-b border-border flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <div className="w-8 h-8 bg-bg-tertiary rounded-lg flex items-center justify-center">
-            <span className="text-sm text-text-secondary">D</span>
-          </div>
+          <div ref={tetRef} className="w-8 h-8 rounded-lg overflow-hidden border border-border/20" />
           <div>
             <h2 className="font-medium text-white text-sm">{t('decisions.title')}</h2>
             <p className="text-xs text-text-muted">
