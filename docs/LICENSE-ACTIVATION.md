@@ -1,20 +1,20 @@
 # License Activation Guide
 
-This guide covers how to activate a 4DA Pro or Team license. If you are using the free tier, no license key is required.
+This guide covers how to activate a 4DA Signal or Team license. If you are using the free tier, no license key is required.
 
 ## Tiers Overview
 
 | Tier | Key Required | Includes |
 |------|-------------|----------|
-| **Free** | No | All core features, STREETS playbook (all 7 modules), relevance scoring, multi-source analysis, ACE context engine |
-| **Pro** | Yes | Everything in Free + AI briefings, audio briefings, advanced analytics, batch operations |
-| **Team** | Yes | Everything in Pro + team-scoped context sharing, centralized configuration |
+| **Free** | No | All core features, AI briefings, STREETS playbook (all 7 modules), relevance scoring, multi-source analysis, ACE context engine |
+| **Signal** | Yes | Everything in Free + Developer DNA, Signal Chains, Knowledge Gaps, Semantic Shifts, Natural Language Search, Score Autopsy, Project Health, Standing Queries, Attention Report, Decision Signals |
+| **Team** | Yes | Everything in Signal + team-scoped context sharing, centralized configuration |
 
-The free tier is fully functional. Pro and Team unlock additional capabilities for users who want deeper analysis and workflow automation.
+The free tier is fully functional and includes AI briefings. Signal and Team unlock the intelligence analysis layer for users who want compound insights from their content.
 
 ## Getting Your License Key
 
-1. Go to [4da.ai](https://4da.ai) and select a Pro or Team plan.
+1. Go to [4da.ai/signal](https://4da.ai/signal) and select a Signal or Team plan.
 2. Complete the purchase. You will receive a license key via email.
 3. Your key is in the format:
 
@@ -30,7 +30,7 @@ The free tier is fully functional. Pro and Team unlock additional capabilities f
 2. **Navigate to the License section** on the General tab.
 3. **Paste your license key** into the input field. Copy-paste is recommended to avoid typos.
 4. **Click Activate**. The app will validate your key against the Keygen API.
-5. **Confirmation**: On success, the tier indicator changes to **Pro** (displayed in gold) with the message "All Pro features unlocked."
+5. **Confirmation**: On success, the tier indicator changes to **Signal** (displayed in gold) with the message "All Signal features unlocked."
 
 The key is persisted in your local settings. You will not need to re-enter it after restarting the app.
 
@@ -38,8 +38,8 @@ The key is persisted in your local settings. You will not need to re-enter it af
 
 After activation, confirm the following:
 
-- **Settings > General**: The License section displays your active tier as "Pro" or "Team."
-- **Feature availability**: Pro-only features (AI briefings, audio briefings, advanced analytics, batch operations) are accessible without restriction.
+- **Settings > General**: The License section displays your active tier as "Signal" or "Team."
+- **Feature availability**: Signal-only features (Developer DNA, Signal Chains, Knowledge Gaps, Score Autopsy, Natural Language Search) are accessible without restriction.
 - **Status bar**: The app may display a tier badge in the UI confirming your active plan.
 
 If any of these do not reflect your expected tier, see Troubleshooting below.

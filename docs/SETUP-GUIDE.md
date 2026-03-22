@@ -58,7 +58,7 @@ When you first open 4DA, you'll see a splash screen while the system initializes
 
 ### Option 1: Built-in Local (Default, Free)
 
-No configuration needed. 4DA includes a built-in local embedding model for basic scoring. This works offline with zero API cost but doesn't support AI briefings or re-ranking.
+No configuration needed. 4DA includes a built-in local embedding model for basic scoring. This works offline with zero API cost but doesn't support AI briefings or LLM re-ranking. To use AI briefings (free), add an LLM provider below.
 
 **Best for:** Privacy-first users, offline use, trying 4DA without API keys.
 
@@ -296,9 +296,9 @@ Go to the **Calibrate** tab to review and tune scoring accuracy. Rate items as r
 
 | Tier | Price | Features |
 |------|-------|----------|
-| **Free** | $0 | All sources, scoring, learning, basic briefing, Module S (Sovereign Setup) |
-| **Pro** | Paid | AI briefings, Developer DNA, full STREETS Playbook, tech radar, decision windows |
-| **Team** | Paid | Everything in Pro + team features |
+| **Free** | $0 | All sources, scoring, learning, AI briefings, STREETS Playbook (all 7 modules) |
+| **Signal** | Paid | Everything in Free + Developer DNA, Signal Chains, Knowledge Gaps, Score Autopsy, Natural Language Search, Semantic Shifts, Project Health |
+| **Team** | Paid | Everything in Signal + team features |
 
 ### Activating a License Key
 
@@ -384,7 +384,7 @@ The splash screen shows initialization progress. If it gets stuck:
 
 ### "No API Key Configured"
 
-You need at least one AI provider for briefings and re-ranking. See [AI Provider Setup](#ai-provider-setup).
+You need at least one AI provider configured for AI briefings and re-ranking. AI briefings are free — just add a provider. See [AI Provider Setup](#ai-provider-setup).
 
 For basic scoring without AI, select **Built-in (Local)** as your provider — no API key needed.
 
@@ -442,7 +442,7 @@ Your license should persist across restarts. If it reverts to "Free":
 
 1. Re-enter your license key in **Settings > General > License**
 2. Click **Activate**
-3. Verify the green "Pro" badge appears
+3. Verify the gold "Signal" badge appears
 4. Restart the app to confirm it persists
 
 If the issue continues, check that 4DA has write access to its data directory.
