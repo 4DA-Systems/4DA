@@ -123,8 +123,8 @@ test-screenshots/
 .claude/worktrees/
 site/.vercel/
 
-# Runtime screenshots (Lightshot dumps, not project assets)
-data/screenshot-*.png
+# Runtime screenshots and dev images (not project assets)
+data/*.png
 
 # Runtime signal token
 data/signal_terminal_token.txt
@@ -196,3 +196,5 @@ known_hosts
 .npmrc
 !.npmrc.example
 .pypirc
+
+.vercel
