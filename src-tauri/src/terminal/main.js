@@ -36,7 +36,7 @@ var CMD_HELP={
   'briefing':'Intelligence briefing',
   'score':'Score a URL (score <url>)',
   'search':'Search scored items (search <q>)',
-  'radar':'Tech intelligence \u2014 your stack, expanding, watching, fading',
+  'radar':'Stack intelligence \u2014 health, priorities, trends',
   'decisions':'Active decision windows',
   'dna':'Developer DNA profile',
   'gaps':'Knowledge blind spots',
@@ -518,7 +518,7 @@ function cmdHelp(){
   wkv('briefing','Intelligence briefing');
   wkv('score <url>','Score a URL against your profile');
   wkv('search <q>','Search scored items');
-  wkv('radar','Tech intelligence \u2014 your stack, expanding, watching, fading');
+  wkv('radar','Stack intelligence \u2014 health, priorities, trends');
   wkv('decisions','Active decision windows');
   wkv('dna','Developer DNA profile');
   wkv('gaps','Knowledge blind spots');
@@ -716,32 +716,95 @@ function cmdRadar(){
     rmLast();
     if(jsonMode){wh('<pre style="color:var(--fg)">'+esc(JSON.stringify(d,null,2))+'</pre>');showTiming();return}
     if(!d.entries||!d.entries.length){w('No radar entries. Run an analysis to populate.','m');showTiming();return}
-    wsep('TECH INTELLIGENCE');w('');
+    var entries=d.entries;
+    var total=entries.length;
+
+    /* ── Health grade ── */
+    var holdCount=entries.filter(function(e){return e.ring==='hold'}).length;
+    var adoptCount=entries.filter(function(e){return e.ring==='adopt'}).length;
+    var downCount=entries.filter(function(e){return e.movement==='down'}).length;
+    var healthScore=((adoptCount/total)*60)+((1-holdCount/total)*30)+((1-downCount/total)*10);
+    var healthGrade;
+    if(healthScore>=90)healthGrade='A';
+    else if(healthScore>=80)healthGrade='A-';
+    else if(healthScore>=70)healthGrade='B+';
+    else if(healthScore>=60)healthGrade='B';
+    else if(healthScore>=50)healthGrade='C';
+    else healthGrade='D';
+
+    /* ── Sub-scores ── */
+    var secScore=holdCount===0?'A':(holdCount<=1?'B':'C');
+    var freshScore=downCount===0?'A':(downCount<=2?'B':'C');
+    var maintScore=adoptCount>=total*0.4?'A':(adoptCount>=total*0.2?'B':'C');
+
+    wsep('STACK INTELLIGENCE');w('');
+    var gradeCls=healthGrade.charAt(0)==='A'?'gr':(healthGrade.charAt(0)==='B'?'g':'r');
+    wh('  <span class="m">HEALTH:</span> <span class="'+gradeCls+'" style="font-size:14px;font-weight:600">'+healthGrade+'</span>');
+    wh('  <span class="d">security: '+secScore+' \u00B7 freshness: '+freshScore+' \u00B7 maintenance: '+maintScore+'</span>');
+    w('');
+
+    /* ── Needs attention ── */
+    var attention=entries.filter(function(e){return e.ring==='hold'||e.movement==='down'});
+    if(attention.length){
+      wh('<span class="r" style="font-size:11px;letter-spacing:1px">  NEEDS ATTENTION</span>');
+      attention.forEach(function(e){
+        var reason=e.ring==='hold'?'hold':'declining';
+        var sigCount=(e.signals&&e.signals.length)||0;
+        var detail=sigCount>0?(sigCount+' signal'+(sigCount===1?'':'s')):'';
+        if(e.ring==='hold'&&e.movement==='down')detail=detail?(detail+' \u00B7 declining community'):'declining community';
+        else if(e.ring==='hold')detail=detail||'on hold';
+        wh('  <span class="r">\u25C6 '+esc(e.name).padEnd(20)+'</span><span class="d">'+esc(reason).padEnd(9)+'</span><span class="r">\u2193</span>  <span class="d">'+esc(detail)+'</span>');
+      });
+      w('');
+    }
+
+    /* ── Tier display ── */
     var tiers=[
       {ring:'adopt',label:'CORE STACK',cls:'gr'},
       {ring:'trial',label:'EXPANDING',cls:'g'},
-      {ring:'assess',label:'WATCHING',cls:'m'},
-      {ring:'hold',label:'FADING',cls:'r'}
+      {ring:'assess',label:'WATCHING',cls:'m'}
     ];
-    var total=d.entries.length;
-    var minScore=1;
     tiers.forEach(function(tier){
-      var items=d.entries.filter(function(e){return e.ring===tier.ring});
+      var items=entries.filter(function(e){return e.ring===tier.ring});
       if(!items.length)return;
       items.sort(function(a,b){return(b.score||0)-(a.score||0)});
       wh('<span class="'+tier.cls+'" style="font-size:11px;letter-spacing:1px">  '+tier.label+'</span>');
       items.forEach(function(e){
         var s=typeof e.score==='number'?e.score:0;
-        if(s<minScore)minScore=s;
         var name=esc(e.name);
-        var padName=name.length<20?name+' '.repeat(20-name.length):name;
+        var padName=name.padEnd(35);
         var scoreStr=s.toFixed(2);
-        var padScore=scoreStr.length<6?' '.repeat(6-scoreStr.length)+scoreStr:scoreStr;
-        wh('  '+bar(s,10)+'  '+padName+' <span class="d">'+padScore+'</span>');
+        wh('  '+bar(s,10)+'  <span class="'+tier.cls+'">'+padName+'</span><span class="d">'+scoreStr+'</span>');
       });
       w('');
     });
-    wh('<span class="d">  '+total+' technolog'+(total===1?'y':'ies')+' tracked \u00B7 threshold '+minScore.toFixed(2)+'</span>');
+
+    /* ── Movement ── */
+    var moving=entries.filter(function(e){return e.movement&&e.movement!=='stable'});
+    var stable=entries.filter(function(e){return!e.movement||e.movement==='stable'});
+    var movementOrder={up:0,'new':1,down:2};
+    moving.sort(function(a,b){return(movementOrder[a.movement]||1)-(movementOrder[b.movement]||1)});
+    if(moving.length||stable.length){
+      wh('<span class="m" style="font-size:11px;letter-spacing:1px">  MOVEMENT</span>');
+      moving.forEach(function(e){
+        var arrow,label,cls;
+        if(e.movement==='up'){arrow='\u2191';label='accelerating';cls='gr'}
+        else if(e.movement==='new'){arrow='\u2726';label='new';cls='g'}
+        else{arrow='\u2193';label='declining';cls='r'}
+        var sigCount=(e.signals&&e.signals.length)||0;
+        wh('  <span class="'+cls+'">'+arrow+' '+esc(e.name).padEnd(20)+'</span><span class="d">'+esc(label)+' \u00B7 '+sigCount+' signal'+(sigCount===1?'':'s')+'</span>');
+      });
+      stable.forEach(function(e){
+        var sigCount=(e.signals&&e.signals.length)||0;
+        wh('  <span class="m">\u2192 '+esc(e.name).padEnd(20)+'</span><span class="d">stable \u00B7 '+sigCount+' signal'+(sigCount===1?'':'s')+'</span>');
+      });
+      w('');
+    }
+
+    /* ── Footer ── */
+    var projectCount=0;
+    entries.forEach(function(e){projectCount+=((e.signals&&e.signals.length)||0)});
+    wh('<span class="d">  '+total+' technolog'+(total===1?'y':'ies')+' \u00B7 '+projectCount+' signals</span>');
     w('');
     whint('try: dna for your developer profile');
     showTiming();
