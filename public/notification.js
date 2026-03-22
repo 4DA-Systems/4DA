@@ -165,8 +165,8 @@ function updateContent(data) {
     currentPriority === 'critical' ? 'assertive' : 'polite'
   );
 
-  // GAME atmosphere opacity — the atmosphere IS the notification
-  var gameOpacity = { critical: 0.45, high: 0.32, medium: 0.18, low: 0.10 };
+  // GAME atmosphere — subtle living texture, not the main event
+  var gameOpacity = { critical: 0.12, high: 0.09, medium: 0.06, low: 0.04 };
   gameLayer.style.setProperty(
     '--game-opacity',
     String(gameOpacity[currentPriority] || 0.05)
