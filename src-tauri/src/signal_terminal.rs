@@ -15,11 +15,16 @@
 use axum::{
     extract::{Query, State},
     http::{HeaderMap, StatusCode},
-    response::{Html, IntoResponse, Json},
+    response::{
+        sse::{Event, KeepAlive, Sse},
+        Html, IntoResponse, Json,
+    },
     routing::get,
     Router,
 };
+use futures::stream::Stream;
 use serde::Deserialize;
+use std::convert::Infallible;
 use std::sync::Arc;
 use tower_http::cors::CorsLayer;
 use tracing::{error, info, warn};
@@ -741,6 +746,157 @@ async fn api_sources(
 }
 
 // ============================================================================
+// SSE Live Streaming
+// ============================================================================
+
+/// GET /api/stream — Server-Sent Events live stream.
+async fn api_stream(
+    headers: HeaderMap,
+    State(state): State<TerminalState>,
+) -> Result<Sse<impl Stream<Item = Result<Event, Infallible>>>, (StatusCode, Json<serde_json::Value>)>
+{
+    check_auth(&headers, &state)?;
+
+    let rx = crate::signal_terminal_events::subscribe();
+
+    let stream = futures::stream::unfold(rx, |mut rx| async move {
+        match rx.recv().await {
+            Ok(evt) => {
+                let json = serde_json::to_string(&evt).unwrap_or_default();
+                let event = Event::default().data(json);
+                Some((Ok(event), rx))
+            }
+            Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => {
+                let event = Event::default().comment("lagged");
+                Some((Ok(event), rx))
+            }
+            Err(tokio::sync::broadcast::error::RecvError::Closed) => None,
+        }
+    });
+
+    Ok(Sse::new(stream).keep_alive(
+        KeepAlive::new()
+            .interval(std::time::Duration::from_secs(15))
+            .text("keepalive"),
+    ))
+}
+
+// ============================================================================
+// Score Simulation
+// ============================================================================
+
+/// Query params for /api/simulate
+#[derive(Deserialize)]
+struct SimulateQuery {
+    add: Option<String>,
+    remove: Option<String>,
+}
+
+/// GET /api/simulate?add=python or /api/simulate?remove=react
+/// Shows how scores would change if a technology was added/removed from interests.
+async fn api_simulate(
+    headers: HeaderMap,
+    State(state): State<TerminalState>,
+    Query(query): Query<SimulateQuery>,
+) -> Result<Json<serde_json::Value>, (StatusCode, Json<serde_json::Value>)> {
+    check_auth(&headers, &state)?;
+
+    let tech = query
+        .add
+        .as_deref()
+        .or(query.remove.as_deref())
+        .unwrap_or("");
+    let action = if query.add.is_some() {
+        "add"
+    } else {
+        "remove"
+    };
+
+    if tech.is_empty() {
+        return Ok(Json(serde_json::json!({
+            "error": "Usage: /api/simulate?add=python or ?remove=react"
+        })));
+    }
+
+    // Get current signals and simulate score impact
+    let analysis = crate::get_analysis_state();
+    let guard = analysis.lock();
+
+    let impacts: Vec<serde_json::Value> = guard
+        .results
+        .as_ref()
+        .map(|results| {
+            results
+                .iter()
+                .filter(|r| r.relevant)
+                .take(20)
+                .map(|r| {
+                    let title_lower = r.title.to_lowercase();
+                    let tech_lower = tech.to_lowercase();
+                    let mentions_tech = title_lower.contains(&tech_lower)
+                        || r.explanation
+                            .as_ref()
+                            .map(|e| e.to_lowercase().contains(&tech_lower))
+                            .unwrap_or(false);
+
+                    let score_delta = if mentions_tech {
+                        if action == "add" {
+                            0.15
+                        } else {
+                            -0.15
+                        }
+                    } else {
+                        0.0
+                    };
+
+                    let new_score = (r.top_score + score_delta).clamp(0.0, 1.0);
+
+                    serde_json::json!({
+                        "title": r.title,
+                        "current_score": r.top_score,
+                        "simulated_score": new_score,
+                        "delta": score_delta,
+                        "affected": mentions_tech,
+                    })
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+
+    drop(guard);
+
+    let affected_count = impacts
+        .iter()
+        .filter(|i| i["affected"].as_bool() == Some(true))
+        .count();
+
+    Ok(Json(serde_json::json!({
+        "action": action,
+        "technology": tech,
+        "affected_count": affected_count,
+        "total_evaluated": impacts.len(),
+        "impacts": impacts,
+    })))
+}
+
+// ============================================================================
+// Offline & Service Worker Handlers
+// ============================================================================
+
+/// GET /sw.js — Service worker for offline fallback
+async fn serve_sw() -> impl IntoResponse {
+    (
+        [(axum::http::header::CONTENT_TYPE, "application/javascript")],
+        include_str!("terminal/sw.js"),
+    )
+}
+
+/// GET /offline — Graceful offline page when app isn't running
+async fn serve_offline() -> impl IntoResponse {
+    Html(include_str!("terminal/offline.html"))
+}
+
+// ============================================================================
 // Phase 2 Page Handlers
 // ============================================================================
 
@@ -796,6 +952,8 @@ fn build_router(token: String) -> Router {
         .route("/card", get(serve_card))
         .route("/manifest.json", get(serve_manifest))
         .route("/icon", get(serve_icon))
+        .route("/sw.js", get(serve_sw))
+        .route("/offline", get(serve_offline))
         // API routes (localhost auto-trusted, token required for LAN)
         .route("/api/boot", get(api_boot))
         .route("/api/status", get(api_status))
@@ -808,6 +966,8 @@ fn build_router(token: String) -> Router {
         .route("/api/gaps", get(api_gaps))
         .route("/api/search", get(api_search))
         .route("/api/sources", get(api_sources))
+        .route("/api/stream", get(api_stream))
+        .route("/api/simulate", get(api_simulate))
         .layer(cors)
         .with_state(state)
 }
