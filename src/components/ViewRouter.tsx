@@ -22,6 +22,7 @@ const CalibrationView = lazy(() => import('./CalibrationView').then(m => ({ defa
 const WisdomPanel = lazy(() => import('./WisdomPanel').then(m => ({ default: m.WisdomPanel })));
 const SignalsPanel = lazy(() => import('./SignalsPanel').then(m => ({ default: m.SignalsPanel })));
 const KnowledgeGapsPanel = lazy(() => import('./KnowledgeGapsPanel').then(m => ({ default: m.KnowledgeGapsPanel })));
+const WhatYouWouldHaveMissed = lazy(() => import('./WhatYouWouldHaveMissed').then(m => ({ default: m.WhatYouWouldHaveMissed })));
 const DecisionWindowsPanel = lazy(() => import('./DecisionWindowsPanel').then(m => ({ default: m.DecisionWindowsPanel })));
 const WeeklyIntelligenceSummary = lazy(() => import('./WeeklyIntelligenceSummary').then(m => ({ default: m.WeeklyIntelligenceSummary })));
 const IntelligenceReportCard = lazy(() => import('./IntelligenceReport'));
@@ -138,6 +139,7 @@ export function ViewRouter({ newItemIds, focusedIndex }: ViewRouterProps) {
         <ViewErrorBoundary viewName="Results">
           {analysisComplete && (
             <Suspense fallback={null}>
+              <WhatYouWouldHaveMissed />
               <SignalsPanel results={relevanceResults} />
               <KnowledgeGapsPanel />
             </Suspense>
