@@ -5,6 +5,7 @@
 //   STRIPE_SECRET_KEY     — Stripe secret key (sk_live_... or sk_test_...)
 //   SIGNAL_PRICE_MONTHLY  — Stripe price ID for Signal monthly ($12/mo AUD)
 //   SIGNAL_PRICE_ANNUAL   — Stripe price ID for Signal annual ($99/yr AUD)
+//   SIGNAL_PRICE_LIFETIME — Stripe price ID for Signal lifetime ($249 AUD one-time)
 //   SITE_URL              — Base URL for redirects (e.g. https://4da.ai)
 
 import Stripe from 'stripe';
@@ -19,6 +20,11 @@ const PLANS = {
     priceEnv: 'SIGNAL_PRICE_ANNUAL',
     mode: 'subscription',
     metadata: { streets_tier: 'signal', billing_period: 'annual' },
+  },
+  lifetime: {
+    priceEnv: 'SIGNAL_PRICE_LIFETIME',
+    mode: 'payment',
+    metadata: { streets_tier: 'signal', billing_period: 'lifetime' },
   },
 };
 
@@ -64,7 +70,7 @@ export default async function handler(req, res) {
   const { plan } = body;
   const config = PLANS[plan];
   if (!config) {
-    return res.status(400).json({ error: 'Invalid plan. Use "monthly" or "annual".' });
+    return res.status(400).json({ error: 'Invalid plan. Use "monthly", "annual", or "lifetime".' });
   }
 
   const priceId = process.env[config.priceEnv];
