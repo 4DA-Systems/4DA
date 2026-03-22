@@ -523,7 +523,7 @@ Includes:
 
 **The unit economics are exceptional:** Because the processing happens on the user's machine, your hosting costs are near zero. A traditional SaaS at $29/month might spend $5-10 per user on infrastructure. A local-first SaaS at $29/month spends $0.10 per user on a license server and update distribution. Your margins are 95%+ instead of 60-70%.
 
-**Real example:** 4DA (the product this course is part of) is a Tauri desktop app that runs local AI inference, local database, and local file processing. Infrastructure cost per user: effectively zero. The Pro tier at $12/month is almost entirely margin.
+**Real example:** 4DA (the product this course is part of) is a Tauri desktop app that runs local AI inference, local database, and local file processing. Infrastructure cost per user: effectively zero. The Signal tier at $12/month is almost entirely margin.
 
 **Start This Week:**
 

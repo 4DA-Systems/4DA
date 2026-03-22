@@ -153,7 +153,13 @@ export function useAppBootstrap() {
     loadPersistedBriefing();
     loadSourceHealth();
     loadLicense();
-    loadTrialStatus();
+    loadTrialStatus().then(() => {
+      // Reverse trial: auto-start for free-tier users on first launch
+      const s = useAppStore.getState();
+      if (s.tier === 'free' && !s.expired && s.trialStatus && !s.trialStatus.started_at) {
+        s.startTrial();
+      }
+    });
     loadProValueReport();
     computeViewTier();
     cmd('prune_personalization_cache').catch(() => {});

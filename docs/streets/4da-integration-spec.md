@@ -15,12 +15,12 @@ STREETS is not a separate product bolted onto 4DA. It's the **monetization thesi
 1. Developer uses 4DA to stay current (free tier)
 2. 4DA surfaces signals: trending frameworks, breaking changes, new techniques
 3. Developer realizes these signals = income opportunities (STREETS mindset)
-4. Developer upgrades to Pro for AI briefings, deeper intelligence
+4. Developer upgrades to Signal for AI briefings, deeper intelligence
 5. Developer uses intelligence to build products, content, services
-6. Income justifies Pro subscription many times over
+6. Income justifies Signal subscription many times over
 7. Developer tells other developers (organic growth)
 
-**Revenue impact:** STREETS transforms the value narrative of 4DA Pro from "nice to have intelligence" to "income-generating radar." The $12/mo Pro subscription pays for itself if it surfaces ONE opportunity per month.
+**Revenue impact:** STREETS transforms the value narrative of 4DA Signal from "nice to have intelligence" to "income-generating radar." The $12/mo Signal subscription pays for itself if it surfaces ONE opportunity per month.
 
 ---
 
@@ -77,10 +77,10 @@ pub struct OpportunitySignal {
 
 **Implementation approach:**
 - Phase 1: Rule-based detection from existing signal data (no LLM cost)
-- Phase 2: LLM-enhanced classification for Pro users (uses their BYOK key)
+- Phase 2: LLM-enhanced classification for Signal users (uses their BYOK key)
 - Phase 3: Community-validated opportunities (users confirm/dismiss)
 
-### 2.2 STREETS Dashboard Panel (Pro Feature)
+### 2.2 STREETS Dashboard Panel (Signal Feature)
 
 **What:** A new panel in the 4DA UI showing opportunity signals in a dedicated view.
 
@@ -90,7 +90,7 @@ pub struct OpportunitySignal {
 
 ```
 +--------------------------------------------------+
-| STREETS — Opportunity Radar            [Pro]      |
+| STREETS — Opportunity Radar            [Signal]   |
 +--------------------------------------------------+
 | This Week: 3 opportunities detected              |
 |                                                   |
@@ -127,7 +127,7 @@ pub struct OpportunitySignal {
 - Opportunity type badges use accent colors: HIGH = #EF4444, MEDIUM = #F97316, LOW = #22C55E
 - Revenue engine tag uses gold accent (#D4AF37)
 
-### 2.3 Opportunity in Daily Briefing (Pro Feature)
+### 2.3 Opportunity in Daily Briefing (Signal Feature)
 
 **What:** Add an "Opportunities" section to the existing AI daily briefing.
 
@@ -191,7 +191,7 @@ pub struct MarketableSkill {
 
 ```
 +--------------------------------------------------+
-| Developer DNA — Income Readiness        [Pro]     |
+| Developer DNA — Income Readiness        [Signal]  |
 +--------------------------------------------------+
 |                                                   |
 | Niche Score: 87/100                               |
@@ -257,7 +257,7 @@ get_opportunity_history(options?: {
 - NEVER show popups or modals about STREETS
 - Only surface in dedicated "Learn" or "Grow" sections
 - Free tier: small banner in the Opportunity panel — "Learn to act on these signals → STREETS"
-- Pro tier: contextual tip when viewing an opportunity — "STREETS Module R teaches 8 revenue engines for signals like this"
+- Signal tier: contextual tip when viewing an opportunity — "STREETS Module R teaches 8 revenue engines for signals like this"
 
 ### 3.2 Pricing Model
 
@@ -329,7 +329,7 @@ STREETS Student completes Module T (Technical Moats)
 ### Phase 4: Intelligence Loop (LLM-Enhanced)
 **Timeline:** 8-12 weeks
 **What:**
-- LLM-powered opportunity detection (Pro only, uses BYOK key)
+- LLM-powered opportunity detection (Signal only, uses BYOK key)
 - Personalized opportunity scoring based on Developer DNA
 - Community-validated opportunities
 - New MCP tools
@@ -350,12 +350,12 @@ STREETS Student completes Module T (Technical Moats)
 ### Revenue Attribution
 
 ```
-4DA Pro only:              $12/mo per user
+4DA Signal only:           $12/mo per user
 STREETS Playbook:          $0 (free inside 4DA — drives adoption)
 STREETS Community:         $29/mo per user (or $249/year)
 STREETS Cohort:            $499 per participant
 
-At 200 Pro users + 150 Community members + 24 Cohort participants:
+At 200 Signal users + 150 Community members + 24 Cohort participants:
   4DA MRR:         $2,400/mo
   Community MRR:   $4,350/mo
   Cohort Rev:      $11,976/quarter (24 seats x $499)
@@ -373,10 +373,10 @@ At 200 Pro users + 150 Community members + 24 Cohort participants:
    - Section (4da.ai/streets): simpler infrastructure, shared authority
    - **Recommendation:** Subdomain `streets.4da.ai` — keeps brand connection while allowing independent growth
 
-2. **Should opportunity signals be free or Pro-only?**
-   - Free: drives upgrades by showing value ("you're seeing opportunities, imagine what Pro briefings add")
-   - Pro: cleaner tier separation, more upgrade incentive
-   - **Recommendation:** Show 1 opportunity/week on free, unlimited on Pro
+2. **Should opportunity signals be free or Signal-only?**
+   - Free: drives upgrades by showing value ("you're seeing opportunities, imagine what Signal briefings add")
+   - Signal: cleaner tier separation, more upgrade incentive
+   - **Recommendation:** Show 1 opportunity/week on free, unlimited on Signal
 
 3. **Should STREETS content live in the 4DA repo or separate?**
    - Same repo: easier to manage, single deploy
