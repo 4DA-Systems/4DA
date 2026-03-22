@@ -13,6 +13,7 @@ const COMPONENTS = {
   'game-celebration-burst': () => import('./game-components/celebration-burst.js'),
   'game-scan-ring': () => import('./game-components/scan-ring.js'),
   'game-status-orb': () => import('./game-components/status-orb.js'),
+  // boot-ring replaced by simplex-unfold in LoadingState (2026-03-22)
   'game-boot-ring': () => import('./game-components/boot-ring.js'),
   'game-engagement-bars': () => import('./game-components/engagement-bars.js'),
   'game-achievement-progress': () => import('./game-components/achievement-progress.js'),
@@ -30,6 +31,7 @@ const COMPONENTS = {
   'game-tetrahedron': () => import('./game-components/tetrahedron.js'),
   'game-pentachoron': () => import('./game-components/pentachoron.js'),
   'game-icosahedron': () => import('./game-components/icosahedron.js'),
+  'game-dodecahedron': () => import('./game-components/dodecahedron.js'),
   'game-simplex-unfold': () => import('./game-components/simplex-unfold.js'),
 } as const;
 

@@ -14,7 +14,11 @@ export function AboutPanel() {
     <div className="space-y-8">
       {/* Logo + Identity — Simplex unfold as living brand mark */}
       <div className="flex flex-col items-center text-center">
-        <div className="w-28 h-28 mb-4 rounded-2xl overflow-hidden shadow-lg shadow-orange-500/20 border border-border/30">
+        <div
+          className="w-28 h-28 mb-4 rounded-2xl overflow-hidden shadow-lg shadow-orange-500/20 border border-border/30"
+          role="img"
+          aria-label={t('about.logoAlt')}
+        >
           <game-simplex-unfold style={{ width: '112px', height: '112px', display: 'block' }} />
         </div>
         <h3 className="text-xl font-semibold text-white">{t('app.title')}</h3>
@@ -63,7 +67,11 @@ export function AboutPanel() {
           <div className="flex flex-col items-center gap-1">
             <div className="flex items-center gap-1">
               <div className="w-4 h-px bg-gray-600" />
-              <div className="w-11 h-11 rounded-lg overflow-hidden border border-border/20">
+              <div
+                className="w-11 h-11 rounded-lg overflow-hidden border border-border/20"
+                role="img"
+                aria-label={t('about.collaborative')}
+              >
                 <game-pentachoron style={{ width: '44px', height: '44px', display: 'block' }} />
               </div>
               <div className="w-4 h-px bg-gray-600" />

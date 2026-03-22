@@ -58,7 +58,9 @@ fn proj3(p: vec3<f32>) -> vec2<f32> {
 fn dist_seg(p: vec2<f32>, a: vec2<f32>, b: vec2<f32>) -> f32 {
     let pa = p - a;
     let ba = b - a;
-    let t = clamp(dot(pa, ba) / dot(ba, ba), 0.0, 1.0);
+    let l2 = dot(ba, ba);
+    if (l2 < 0.0001) { return length(pa); }
+    let t = clamp(dot(pa, ba) / l2, 0.0, 1.0);
     return length(pa - ba * t);
 }
 
@@ -69,18 +71,25 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
     let time = fract(u.time / 120.0) * 120.0;
     let spd = u.rotation_speed;
 
+    // Audio reactivity: bass = scale pulse, energy = rotation boost
+    let audio_scale = 1.0 + u.audio_bass * 0.08 + u.audio_beat * 0.05;
+    let audio_rot = 1.0 + u.audio_energy * 0.5;
+
     // Regular tetrahedron vertices on unit sphere
     let k = 0.5774; // 1/sqrt(3)
-    let sc = 0.55;
+    let sc = 0.55 * audio_scale;
     var v: array<vec3<f32>, 4>;
     v[0] = vec3<f32>(k, k, k) * sc;
     v[1] = vec3<f32>(k, -k, -k) * sc;
     v[2] = vec3<f32>(-k, k, -k) * sc;
     v[3] = vec3<f32>(-k, -k, k) * sc;
 
-    // 3D rotation
+    // 3D rotation + mouse influence + audio boost
+    let mx = (u.mouse.x - 0.5) * 0.6;
+    let my = (u.mouse.y - 0.5) * 0.6;
+    let aspd = spd * audio_rot;
     for (var i = 0u; i < 4u; i++) {
-        v[i] = rot_y(rot_x(v[i], time * spd * 0.7), time * spd);
+        v[i] = rot_y(rot_x(v[i], time * aspd * 0.7 + my), time * aspd + mx);
     }
 
     // Perspective projection to 2D
@@ -89,7 +98,13 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
         p[i] = proj3(v[i]);
     }
 
-    // 6 edge distances
+    // Depth factors — front edges brighter, back edges dimmer
+    var df: array<f32, 4>;
+    for (var i = 0u; i < 4u; i++) {
+        df[i] = 0.35 + 0.65 * (v[i].z + sc) / (2.0 * sc);
+    }
+
+    // 6 edge distances with depth-weighted halo
     let d01 = dist_seg(uv, p[0], p[1]);
     let d02 = dist_seg(uv, p[0], p[2]);
     let d03 = dist_seg(uv, p[0], p[3]);
@@ -98,16 +113,32 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
     let d23 = dist_seg(uv, p[2], p[3]);
     let min_d = min(min(min(d01, d02), min(d03, d12)), min(d13, d23));
 
-    // Nearest vertex distance
+    // Depth-weighted halo — each edge glows proportional to avg vertex depth
+    var halo_sum = exp(-d01 * 20.0) * (df[0] + df[1]) * 0.5
+                 + exp(-d02 * 20.0) * (df[0] + df[2]) * 0.5
+                 + exp(-d03 * 20.0) * (df[0] + df[3]) * 0.5
+                 + exp(-d12 * 20.0) * (df[1] + df[2]) * 0.5
+                 + exp(-d13 * 20.0) * (df[1] + df[3]) * 0.5
+                 + exp(-d23 * 20.0) * (df[2] + df[3]) * 0.5;
+
+    // Nearest vertex distance + depth
     var min_vd = length(uv - p[0]);
+    var min_vdf = df[0];
     for (var i = 1u; i < 4u; i++) {
-        min_vd = min(min_vd, length(uv - p[i]));
+        let vd = length(uv - p[i]);
+        if (vd < min_vd) { min_vd = vd; min_vdf = df[i]; }
     }
 
-    // Edge core + halo + vertex glow
-    let core = exp(-min_d * 120.0) * 0.85;
-    let halo = exp(-min_d * 22.0) * 0.3;
-    let vtx = exp(-min_vd * 70.0) * 1.3;
+    // Anti-aliased edge core (fwidth smoothstep) + depth halo + vertex glow
+    let edge_w = 0.005 + 0.003 * min_vdf; // edge width varies with depth
+    let aa = fwidth(min_d);
+    let core = (1.0 - smoothstep(edge_w - aa, edge_w + aa, min_d)) * 0.85 * min_vdf;
+    let halo = halo_sum * 0.12;
+    // Anti-aliased vertex dots
+    let vtx_w = 0.012;
+    let vtx_aa = fwidth(min_vd);
+    let vtx = (1.0 - smoothstep(vtx_w - vtx_aa, vtx_w + vtx_aa, min_vd)) * min_vdf
+            + exp(-min_vd * 40.0) * 0.6 * min_vdf; // soft halo around vertex
     let total = (core + halo + vtx) * u.glow_intensity;
 
     // Gold color with white-hot bloom at bright points
@@ -165,7 +196,9 @@ vec2 proj3(vec3 p){
 
 float dist_seg(vec2 p, vec2 a, vec2 b){
     vec2 pa = p - a, ba = b - a;
-    float t = clamp(dot(pa, ba) / dot(ba, ba), 0.0, 1.0);
+    float l2 = dot(ba, ba);
+    if (l2 < 0.0001) return length(pa);
+    float t = clamp(dot(pa, ba) / l2, 0.0, 1.0);
     return length(pa - ba * t);
 }
 
@@ -183,13 +216,21 @@ void main(){
     v[2] = vec3(-k, k, -k) * sc;
     v[3] = vec3(-k, -k, k) * sc;
 
+    float mx = (u_mouse.x - 0.5) * 0.6;
+    float my = (u_mouse.y - 0.5) * 0.6;
     for (int i = 0; i < 4; i++){
-        v[i] = rot_y(rot_x(v[i], time * spd * 0.7), time * spd);
+        v[i] = rot_y(rot_x(v[i], time * spd * 0.7 + my), time * spd + mx);
     }
 
     vec2 p[4];
     for (int i = 0; i < 4; i++){
         p[i] = proj3(v[i]);
+    }
+
+    // Depth factors
+    float df[4];
+    for (int i = 0; i < 4; i++){
+        df[i] = 0.35 + 0.65 * (v[i].z + sc) / (2.0 * sc);
     }
 
     float d01 = dist_seg(uv, p[0], p[1]);
@@ -200,14 +241,28 @@ void main(){
     float d23 = dist_seg(uv, p[2], p[3]);
     float min_d = min(min(min(d01, d02), min(d03, d12)), min(d13, d23));
 
+    float halo_sum = exp(-d01 * 20.0) * (df[0] + df[1]) * 0.5
+                   + exp(-d02 * 20.0) * (df[0] + df[2]) * 0.5
+                   + exp(-d03 * 20.0) * (df[0] + df[3]) * 0.5
+                   + exp(-d12 * 20.0) * (df[1] + df[2]) * 0.5
+                   + exp(-d13 * 20.0) * (df[1] + df[3]) * 0.5
+                   + exp(-d23 * 20.0) * (df[2] + df[3]) * 0.5;
+
     float min_vd = length(uv - p[0]);
+    float min_vdf = df[0];
     for (int i = 1; i < 4; i++){
-        min_vd = min(min_vd, length(uv - p[i]));
+        float vd = length(uv - p[i]);
+        if (vd < min_vd) { min_vd = vd; min_vdf = df[i]; }
     }
 
-    float core = exp(-min_d * 120.0) * 0.85;
-    float halo = exp(-min_d * 22.0) * 0.3;
-    float vtx = exp(-min_vd * 70.0) * 1.3;
+    float edge_w = 0.005 + 0.003 * min_vdf;
+    float aa = fwidth(min_d);
+    float core = (1.0 - smoothstep(edge_w - aa, edge_w + aa, min_d)) * 0.85 * min_vdf;
+    float halo = halo_sum * 0.12;
+    float vtx_w = 0.012;
+    float vtx_aa = fwidth(min_vd);
+    float vtx = (1.0 - smoothstep(vtx_w - vtx_aa, vtx_w + vtx_aa, min_vd)) * min_vdf
+              + exp(-min_vd * 40.0) * 0.6 * min_vdf;
     float total = (core + halo + vtx) * u_p_glow_intensity;
 
     vec3 gold = vec3(0.831, 0.686, 0.216);

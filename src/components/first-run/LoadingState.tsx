@@ -197,7 +197,7 @@ export function LoadingState({
 
       {phase === 'preparing' && (
         <div className="w-16 h-16 mx-auto mb-2 opacity-70">
-          <game-simplex-unfold style={{ width: '64px', height: '64px' }} />
+          <game-simplex-unfold style={{ width: '64px', height: '64px', display: 'block' }} />
         </div>
       )}
 

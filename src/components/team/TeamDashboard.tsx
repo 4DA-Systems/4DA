@@ -1,8 +1,7 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../../store';
-import { registerGameComponent } from '../../lib/game-components';
-import type { GameElement } from '../../hooks/use-game-component';
+import { useGameComponent, type GameElement } from '../../hooks/use-game-component';
 import { TeamMemberList } from './TeamMemberList';
 import { TeamSignalFeed } from './TeamSignalFeed';
 import { TeamDecisionTracker } from './TeamDecisionTracker';
@@ -29,8 +28,7 @@ export function TeamDashboard() {
 
   const [collapsed, setCollapsed] = useState(false);
   const [activeTab, setActiveTab] = useState<DashboardTab>('intelligence');
-  const icoContainerRef = useRef<HTMLDivElement>(null);
-  const icoElementRef = useRef<GameElement | null>(null);
+  const { containerRef: icoContainerRef, elementRef: icoElementRef } = useGameComponent('game-icosahedron');
 
   useEffect(() => {
     if (tier === 'team' || tier === 'enterprise') {
@@ -40,31 +38,10 @@ export function TeamDashboard() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tier]);
 
-  // Mount icosahedron network visualization
-  useEffect(() => {
-    let cancelled = false;
-    registerGameComponent('game-icosahedron').then(() => {
-      if (cancelled || !icoContainerRef.current) return;
-      const el = document.createElement('game-icosahedron');
-      el.style.width = '100%';
-      el.style.height = '100%';
-      el.style.display = 'block';
-      icoContainerRef.current.appendChild(el);
-      icoElementRef.current = el as GameElement;
-    });
-    return () => {
-      cancelled = true;
-      if (icoElementRef.current && icoContainerRef.current?.contains(icoElementRef.current)) {
-        icoContainerRef.current.removeChild(icoElementRef.current);
-      }
-      icoElementRef.current = null;
-    };
-  }, []);
-
   // Sync icosahedron pulse to relay activity
   const setIcoParam = useCallback((name: string, value: number) => {
-    icoElementRef.current?.setParam?.(name, value);
-  }, []);
+    (icoElementRef.current as GameElement)?.setParam?.(name, value);
+  }, [icoElementRef]);
 
   useEffect(() => {
     const pending = teamStatus?.pending_outbound ?? 0;

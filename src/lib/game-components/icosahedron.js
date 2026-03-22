@@ -32,6 +32,7 @@ const WGSL_F = `struct Uniforms {
     rotation_speed: f32,
     glow_intensity: f32,
     pulse: f32,
+    fill_opacity: f32,
 };
 
 @group(0) @binding(0) var<uniform> u: Uniforms;
@@ -65,7 +66,9 @@ fn proj3(p: vec3<f32>) -> vec2<f32> {
 fn dist_seg(p: vec2<f32>, a: vec2<f32>, b: vec2<f32>) -> f32 {
     let pa = p - a;
     let ba = b - a;
-    let t = clamp(dot(pa, ba) / dot(ba, ba), 0.0, 1.0);
+    let l2 = dot(ba, ba);
+    if (l2 < 0.0001) { return length(pa); }
+    let t = clamp(dot(pa, ba) / l2, 0.0, 1.0);
     return length(pa - ba * t);
 }
 
@@ -80,7 +83,11 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
     let phi = 1.6180339887;
     // Normalize to unit sphere: divide by sqrt(1 + phi*phi)
     let norm = 1.0 / sqrt(1.0 + phi * phi); // ~0.5257
-    let sc = 0.38; // visual scale
+    let sc = 0.38 * audio_scale; // visual scale + audio pulse
+
+    // Audio reactivity
+    let audio_scale = 1.0 + u.audio_bass * 0.05 + u.audio_beat * 0.03;
+    let audio_rot = 1.0 + u.audio_energy * 0.3;
 
     // 12 icosahedral vertices: (0, +/-1, +/-phi), (+-1, +/-phi, 0), (+/-phi, 0, +/-1)
     var v: array<vec3<f32>, 12>;
@@ -97,15 +104,21 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
     v[10] = vec3<f32>(-phi, 0.0,  1.0) * norm * sc;
     v[11] = vec3<f32>(-phi, 0.0, -1.0) * norm * sc;
 
-    // 3D rotation — slow tumble
+    // 3D rotation — slow tumble + mouse + audio boost
+    let mx = (u.mouse.x - 0.5) * 0.5;
+    let my = (u.mouse.y - 0.5) * 0.5;
+    let aspd = spd * audio_rot;
     for (var i = 0u; i < 12u; i++) {
-        v[i] = rot_y(rot_x(rot_z(v[i], time * spd * 0.3), time * spd * 0.5), time * spd);
+        v[i] = rot_y(rot_x(rot_z(v[i], time * aspd * 0.3), time * aspd * 0.5 + my), time * aspd + mx);
     }
 
-    // Perspective projection to 2D
+    // Perspective projection to 2D + depth factors
     var p: array<vec2<f32>, 12>;
+    var df: array<f32, 12>;
+    let r = norm * sc; // vertex radius for depth normalization
     for (var i = 0u; i < 12u; i++) {
         p[i] = proj3(v[i]);
+        df[i] = 0.3 + 0.7 * (v[i].z + r) / (2.0 * r);
     }
 
     // 30 edges — distance to nearest edge
@@ -140,30 +153,48 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
     min_d = min(min_d, dist_seg(uv, p[8], p[9]));
     min_d = min(min_d, dist_seg(uv, p[10], p[11]));
 
-    // Nearest vertex distance + optional pulse highlight
+    // Nearest vertex distance + depth + optional pulse highlight
     var min_vd = 999.0;
+    var min_vdf = 0.5;
     var pulse_glow = 0.0;
     for (var i = 0u; i < 12u; i++) {
         let vd = length(uv - p[i]);
-        min_vd = min(min_vd, vd);
+        if (vd < min_vd) { min_vd = vd; min_vdf = df[i]; }
         // Pulse: sequentially highlight vertices
         let phase = fract(time * u.pulse * 0.1 - f32(i) / 12.0);
         let pw = exp(-phase * 8.0) * u.pulse;
-        pulse_glow += exp(-vd * 50.0) * pw;
+        pulse_glow += exp(-vd * 50.0) * pw * df[i];
     }
 
-    // Glow layers
-    let core = exp(-min_d * 90.0) * 0.75;
-    let halo = exp(-min_d * 16.0) * 0.2;
-    let vtx = exp(-min_vd * 55.0) * 1.1;
+    // Anti-aliased edge core + halo + vertex glow
+    let edge_w = 0.003 + 0.002 * min_vdf;
+    let aa = fwidth(min_d);
+    let core = (1.0 - smoothstep(edge_w - aa, edge_w + aa, min_d)) * 0.75 * min_vdf;
+    let halo = exp(-min_d * 16.0) * 0.15;
+    let vtx_w = 0.009;
+    let vtx_aa = fwidth(min_vd);
+    let vtx = (1.0 - smoothstep(vtx_w - vtx_aa, vtx_w + vtx_aa, min_vd)) * min_vdf
+            + exp(-min_vd * 30.0) * 0.4 * min_vdf;
     let total = (core + halo + vtx) * u.glow_intensity + pulse_glow;
+
+    // Translucent face fill — faint amber glow inside the projected hull
+    var face_fill = 0.0;
+    if (u.fill_opacity > 0.001) {
+        // Approximate: if pixel is close to multiple vertices, it's likely inside a face
+        var near_count = 0.0;
+        for (var fi = 0u; fi < 12u; fi++) {
+            near_count += smoothstep(0.5, 0.1, length(uv - p[fi]));
+        }
+        // Inside when near_count is high (surrounded by projected vertices)
+        face_fill = smoothstep(1.5, 3.0, near_count) * u.fill_opacity;
+    }
 
     // Gold color with white-hot bloom
     let gold = vec3<f32>(0.831, 0.686, 0.216);
+    let amber = vec3<f32>(0.6, 0.45, 0.15); // deeper amber for face fill
     let hot = vec3<f32>(1.0, 0.95, 0.85);
-    // Pulse adds a slight blue-white tint
     let pulse_tint = vec3<f32>(0.9, 0.95, 1.0) * pulse_glow * 0.5;
-    let color = gold * total + hot * max(total - 0.5, 0.0) * 0.5 + pulse_tint;
+    let color = gold * total + hot * max(total - 0.5, 0.0) * 0.5 + pulse_tint + amber * face_fill;
     return vec4<f32>(clamp(color, vec3<f32>(0.0), vec3<f32>(1.0)), 1.0);
 }
 `;
@@ -194,6 +225,7 @@ uniform vec2 u_mouse;
 uniform float u_p_rotation_speed;
 uniform float u_p_glow_intensity;
 uniform float u_p_pulse;
+uniform float u_p_fill_opacity;
 
 in vec2 v_uv;
 out vec4 fragColor;
@@ -206,7 +238,9 @@ vec2 proj3(vec3 p){ float d=3.5; float s=d/(d-p.z); return p.xy*s; }
 
 float dist_seg(vec2 p, vec2 a, vec2 b){
     vec2 pa=p-a, ba=b-a;
-    float t=clamp(dot(pa,ba)/dot(ba,ba), 0.0, 1.0);
+    float l2=dot(ba,ba);
+    if (l2 < 0.0001) return length(pa);
+    float t=clamp(dot(pa,ba)/l2, 0.0, 1.0);
     return length(pa-ba*t);
 }
 
@@ -234,12 +268,16 @@ void main(){
     v[10] = vec3(-phi, 0.0,  1.0) * norm * sc;
     v[11] = vec3(-phi, 0.0, -1.0) * norm * sc;
 
+    float mx = (u_mouse.x - 0.5) * 0.5;
+    float my = (u_mouse.y - 0.5) * 0.5;
     for (int i = 0; i < 12; i++){
-        v[i] = rot_y(rot_x(rot_z(v[i], time*spd*0.3), time*spd*0.5), time*spd);
+        v[i] = rot_y(rot_x(rot_z(v[i], time*spd*0.3), time*spd*0.5 + my), time*spd + mx);
     }
 
     vec2 p[12];
-    for (int i = 0; i < 12; i++){ p[i] = proj3(v[i]); }
+    float df[12];
+    float r = norm * sc;
+    for (int i = 0; i < 12; i++){ p[i] = proj3(v[i]); df[i] = 0.3 + 0.7 * (v[i].z + r) / (2.0 * r); }
 
     float min_d = dist_seg(uv, p[0], p[2]);
     min_d = min(min_d, dist_seg(uv, p[0], p[4]));
@@ -273,18 +311,24 @@ void main(){
     min_d = min(min_d, dist_seg(uv, p[10], p[11]));
 
     float min_vd = 999.0;
+    float min_vdf = 0.5;
     float pulse_glow = 0.0;
     for (int i = 0; i < 12; i++){
         float vd = length(uv - p[i]);
-        min_vd = min(min_vd, vd);
+        if (vd < min_vd) { min_vd = vd; min_vdf = df[i]; }
         float phase = fract(time * u_p_pulse * 0.1 - float(i) / 12.0);
         float pw = exp(-phase * 8.0) * u_p_pulse;
-        pulse_glow += exp(-vd * 50.0) * pw;
+        pulse_glow += exp(-vd * 50.0) * pw * df[i];
     }
 
-    float core = exp(-min_d * 90.0) * 0.75;
-    float halo = exp(-min_d * 16.0) * 0.2;
-    float vtx = exp(-min_vd * 55.0) * 1.1;
+    float edge_w = 0.003 + 0.002 * min_vdf;
+    float aa = fwidth(min_d);
+    float core = (1.0 - smoothstep(edge_w - aa, edge_w + aa, min_d)) * 0.75 * min_vdf;
+    float halo = exp(-min_d * 16.0) * 0.15;
+    float vtx_w = 0.009;
+    float vtx_aa = fwidth(min_vd);
+    float vtx = (1.0 - smoothstep(vtx_w - vtx_aa, vtx_w + vtx_aa, min_vd)) * min_vdf
+              + exp(-min_vd * 30.0) * 0.4 * min_vdf;
     float total = (core + halo + vtx) * u_p_glow_intensity + pulse_glow;
 
     vec3 gold = vec3(0.831, 0.686, 0.216);

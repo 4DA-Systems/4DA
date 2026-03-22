@@ -1,6 +1,6 @@
-// GAME Component: pentachoron — hand-crafted, Platonic geometry series.
-// 5 vertices in 4D, 10 edges. The 4D simplex. 4DA's true form.
-// 4D rotation uses golden-ratio-derived speeds for quasi-periodic motion.
+// GAME Component: dodecahedron — hand-crafted, Platonic geometry series.
+// 20 vertices, 30 edges, 12 pentagonal faces. Dual of the icosahedron.
+// The shape of the universe — pentagonal symmetry, golden ratio encoded.
 (function(){
 const WGSL_V = `struct VertexOutput {
     @builtin(position) pos: vec4<f32>,
@@ -31,7 +31,6 @@ const WGSL_F = `struct Uniforms {
     mouse: vec2<f32>,
     rotation_speed: f32,
     glow_intensity: f32,
-    w_rotation: f32,
 };
 
 @group(0) @binding(0) var<uniform> u: Uniforms;
@@ -41,34 +40,23 @@ struct VertexOutput {
     @location(0) uv: vec2<f32>,
 };
 
-// 4D rotation in the XW plane
-fn rot_xw(p: vec4<f32>, a: f32) -> vec4<f32> {
+fn rot_x(p: vec3<f32>, a: f32) -> vec3<f32> {
     let c = cos(a); let s = sin(a);
-    return vec4<f32>(c * p.x + s * p.w, p.y, p.z, -s * p.x + c * p.w);
+    return vec3<f32>(p.x, c * p.y - s * p.z, s * p.y + c * p.z);
 }
 
-// 4D rotation in the ZW plane
-fn rot_zw(p: vec4<f32>, a: f32) -> vec4<f32> {
+fn rot_y(p: vec3<f32>, a: f32) -> vec3<f32> {
     let c = cos(a); let s = sin(a);
-    return vec4<f32>(p.x, p.y, c * p.z + s * p.w, -s * p.z + c * p.w);
+    return vec3<f32>(c * p.x + s * p.z, p.y, -s * p.x + c * p.z);
 }
 
-// 4D rotation in the YZ plane
-fn rot_yz(p: vec4<f32>, a: f32) -> vec4<f32> {
+fn rot_z(p: vec3<f32>, a: f32) -> vec3<f32> {
     let c = cos(a); let s = sin(a);
-    return vec4<f32>(p.x, c * p.y - s * p.z, s * p.y + c * p.z, p.w);
+    return vec3<f32>(c * p.x - s * p.y, s * p.x + c * p.y, p.z);
 }
 
-// 4D -> 3D perspective projection with breathing
-fn proj4(p: vec4<f32>, breath: f32) -> vec3<f32> {
-    let d = 2.5 + breath;
-    let s = d / (d - p.w);
-    return p.xyz * s;
-}
-
-// 3D -> 2D perspective projection
 fn proj3(p: vec3<f32>) -> vec2<f32> {
-    let d = 4.0;
+    let d = 3.5;
     let s = d / (d - p.z);
     return p.xy * s;
 }
@@ -88,97 +76,109 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
     let uv = (input.uv * 2.0 - 1.0) * vec2<f32>(aspect, 1.0);
     let time = fract(u.time / 120.0) * 120.0;
     let spd = u.rotation_speed;
-    let wspd = u.w_rotation;
 
-    // Audio reactivity
-    let audio_scale = 1.0 + u.audio_bass * 0.06 + u.audio_beat * 0.04;
-    let audio_rot = 1.0 + u.audio_energy * 0.4;
+    // Golden ratio
+    let phi = 1.6180339887;
+    let ip = 1.0 / phi; // 0.6180339887
+    // All vertices have length sqrt(3), normalize to unit sphere
+    let norm = 1.0 / sqrt(3.0); // 0.5774
+    let sc = 0.32; // visual scale — dodecahedron is larger, scale down
 
-    // Regular pentachoron vertices on 4D unit sphere
-    // v0-v3: regular tetrahedron with w = -1/4
-    // v4: apex at w = 1
-    let q = 0.559; // sqrt(5)/4 — normalized coordinate
-    let sc = 0.5 * audio_scale;  // visual scale + audio pulse
-    var v: array<vec4<f32>, 5>;
-    v[0] = vec4<f32>( q,  q,  q, -0.25) * sc;
-    v[1] = vec4<f32>( q, -q, -q, -0.25) * sc;
-    v[2] = vec4<f32>(-q,  q, -q, -0.25) * sc;
-    v[3] = vec4<f32>(-q, -q,  q, -0.25) * sc;
-    v[4] = vec4<f32>(0.0, 0.0, 0.0, 1.0) * sc;
+    // 20 dodecahedral vertices
+    // v0-v7: cube vertices (+-1, +-1, +-1)
+    var v: array<vec3<f32>, 20>;
+    v[0]  = vec3<f32>( 1.0,  1.0,  1.0) * norm * sc;
+    v[1]  = vec3<f32>( 1.0,  1.0, -1.0) * norm * sc;
+    v[2]  = vec3<f32>( 1.0, -1.0,  1.0) * norm * sc;
+    v[3]  = vec3<f32>( 1.0, -1.0, -1.0) * norm * sc;
+    v[4]  = vec3<f32>(-1.0,  1.0,  1.0) * norm * sc;
+    v[5]  = vec3<f32>(-1.0,  1.0, -1.0) * norm * sc;
+    v[6]  = vec3<f32>(-1.0, -1.0,  1.0) * norm * sc;
+    v[7]  = vec3<f32>(-1.0, -1.0, -1.0) * norm * sc;
+    // v8-v11: (0, +-1/phi, +-phi)
+    v[8]  = vec3<f32>( 0.0,   ip,  phi) * norm * sc;
+    v[9]  = vec3<f32>( 0.0,   ip, -phi) * norm * sc;
+    v[10] = vec3<f32>( 0.0,  -ip,  phi) * norm * sc;
+    v[11] = vec3<f32>( 0.0,  -ip, -phi) * norm * sc;
+    // v12-v15: (+-1/phi, +-phi, 0)
+    v[12] = vec3<f32>(  ip,  phi,  0.0) * norm * sc;
+    v[13] = vec3<f32>( -ip,  phi,  0.0) * norm * sc;
+    v[14] = vec3<f32>(  ip, -phi,  0.0) * norm * sc;
+    v[15] = vec3<f32>( -ip, -phi,  0.0) * norm * sc;
+    // v16-v19: (+-phi, 0, +-1/phi)
+    v[16] = vec3<f32>( phi,  0.0,   ip) * norm * sc;
+    v[17] = vec3<f32>( phi,  0.0,  -ip) * norm * sc;
+    v[18] = vec3<f32>(-phi,  0.0,   ip) * norm * sc;
+    v[19] = vec3<f32>(-phi,  0.0,  -ip) * norm * sc;
 
-    // 4D rotation — golden ratio speeds + mouse + audio boost
-    let mx = (u.mouse.x - 0.5) * 0.4;
-    let my = (u.mouse.y - 0.5) * 0.4;
-    let awspd = wspd * audio_rot;
-    let aspd = spd * audio_rot;
-    for (var i = 0u; i < 5u; i++) {
-        v[i] = rot_xw(v[i], time * awspd + mx);
-        v[i] = rot_zw(v[i], time * awspd * 0.618 + my);
-        v[i] = rot_yz(v[i], time * aspd * 0.382);
+    // 3D rotation — slow tumble + mouse influence
+    let mx = (u.mouse.x - 0.5) * 0.5;
+    let my = (u.mouse.y - 0.5) * 0.5;
+    for (var i = 0u; i < 20u; i++) {
+        v[i] = rot_y(rot_x(rot_z(v[i], time * spd * 0.3), time * spd * 0.5 + my), time * spd + mx);
     }
 
-    // Breathing projection — pentachoron inhales/exhales in 4D
-    let breath = sin(time * 0.4) * 0.15;
-
-    // Double projection: 4D -> 3D -> 2D
-    var p: array<vec2<f32>, 5>;
-    var wdepth: array<f32, 5>; // w-depth for brightness cues
-    for (var i = 0u; i < 5u; i++) {
-        let p3 = proj4(v[i], breath);
-        p[i] = proj3(p3);
-        wdepth[i] = 0.35 + 0.65 * (v[i].w + sc) / (2.0 * sc);
+    // Perspective projection to 2D + depth factors
+    var p: array<vec2<f32>, 20>;
+    var df: array<f32, 20>;
+    let r = norm * sc; // vertex radius for depth normalization
+    for (var i = 0u; i < 20u; i++) {
+        p[i] = proj3(v[i]);
+        df[i] = 0.3 + 0.7 * (v[i].z + r) / (2.0 * r);
     }
 
-    // 10 edges (complete graph K5) — all pairs of 5 vertices
-    let d01 = dist_seg(uv, p[0], p[1]);
-    let d02 = dist_seg(uv, p[0], p[2]);
-    let d03 = dist_seg(uv, p[0], p[3]);
-    let d04 = dist_seg(uv, p[0], p[4]);
-    let d12 = dist_seg(uv, p[1], p[2]);
-    let d13 = dist_seg(uv, p[1], p[3]);
-    let d14 = dist_seg(uv, p[1], p[4]);
-    let d23 = dist_seg(uv, p[2], p[3]);
-    let d24 = dist_seg(uv, p[2], p[4]);
-    let d34 = dist_seg(uv, p[3], p[4]);
-    var min_d = min(min(min(d01, d02), min(d03, d04)), min(min(d12, d13), min(d14, d23)));
-    min_d = min(min_d, min(d24, d34));
+    // 30 edges — distance to nearest edge (unrolled)
+    // Cube-to-rectangle edges (24)
+    var min_d = dist_seg(uv, p[0], p[8]);
+    min_d = min(min_d, dist_seg(uv, p[0], p[12]));
+    min_d = min(min_d, dist_seg(uv, p[0], p[16]));
+    min_d = min(min_d, dist_seg(uv, p[1], p[9]));
+    min_d = min(min_d, dist_seg(uv, p[1], p[12]));
+    min_d = min(min_d, dist_seg(uv, p[1], p[17]));
+    min_d = min(min_d, dist_seg(uv, p[2], p[10]));
+    min_d = min(min_d, dist_seg(uv, p[2], p[14]));
+    min_d = min(min_d, dist_seg(uv, p[2], p[16]));
+    min_d = min(min_d, dist_seg(uv, p[3], p[11]));
+    min_d = min(min_d, dist_seg(uv, p[3], p[14]));
+    min_d = min(min_d, dist_seg(uv, p[3], p[17]));
+    min_d = min(min_d, dist_seg(uv, p[4], p[8]));
+    min_d = min(min_d, dist_seg(uv, p[4], p[13]));
+    min_d = min(min_d, dist_seg(uv, p[4], p[18]));
+    min_d = min(min_d, dist_seg(uv, p[5], p[9]));
+    min_d = min(min_d, dist_seg(uv, p[5], p[13]));
+    min_d = min(min_d, dist_seg(uv, p[5], p[19]));
+    min_d = min(min_d, dist_seg(uv, p[6], p[10]));
+    min_d = min(min_d, dist_seg(uv, p[6], p[15]));
+    min_d = min(min_d, dist_seg(uv, p[6], p[18]));
+    min_d = min(min_d, dist_seg(uv, p[7], p[11]));
+    min_d = min(min_d, dist_seg(uv, p[7], p[15]));
+    min_d = min(min_d, dist_seg(uv, p[7], p[19]));
+    // Rectangle-pair edges (6)
+    min_d = min(min_d, dist_seg(uv, p[8], p[10]));
+    min_d = min(min_d, dist_seg(uv, p[9], p[11]));
+    min_d = min(min_d, dist_seg(uv, p[12], p[13]));
+    min_d = min(min_d, dist_seg(uv, p[14], p[15]));
+    min_d = min(min_d, dist_seg(uv, p[16], p[17]));
+    min_d = min(min_d, dist_seg(uv, p[18], p[19]));
 
-    // Depth-weighted halo — edges closer in w-space glow brighter
-    let hk = 18.0;
-    var halo_sum = exp(-d01 * hk) * (wdepth[0] + wdepth[1]) * 0.5
-                 + exp(-d02 * hk) * (wdepth[0] + wdepth[2]) * 0.5
-                 + exp(-d03 * hk) * (wdepth[0] + wdepth[3]) * 0.5
-                 + exp(-d04 * hk) * (wdepth[0] + wdepth[4]) * 0.5
-                 + exp(-d12 * hk) * (wdepth[1] + wdepth[2]) * 0.5
-                 + exp(-d13 * hk) * (wdepth[1] + wdepth[3]) * 0.5
-                 + exp(-d14 * hk) * (wdepth[1] + wdepth[4]) * 0.5
-                 + exp(-d23 * hk) * (wdepth[2] + wdepth[3]) * 0.5
-                 + exp(-d24 * hk) * (wdepth[2] + wdepth[4]) * 0.5
-                 + exp(-d34 * hk) * (wdepth[3] + wdepth[4]) * 0.5;
-
-    // Nearest vertex distance with depth
-    var min_vd = length(uv - p[0]);
-    var min_vw = wdepth[0];
-    for (var i = 1u; i < 5u; i++) {
+    // Depth-weighted vertex glow
+    var min_vd = 999.0;
+    var min_vdf = 0.5;
+    for (var i = 0u; i < 20u; i++) {
         let vd = length(uv - p[i]);
-        if (vd < min_vd) { min_vd = vd; min_vw = wdepth[i]; }
+        if (vd < min_vd) { min_vd = vd; min_vdf = df[i]; }
     }
 
-    // Anti-aliased edge core + depth halo + vertex glow
-    let edge_w = 0.004 + 0.003 * min_vw;
-    let aa = fwidth(min_d);
-    let core = (1.0 - smoothstep(edge_w - aa, edge_w + aa, min_d)) * 0.8 * min_vw;
-    let halo = halo_sum * 0.09;
-    let vtx_w = 0.011;
-    let vtx_aa = fwidth(min_vd);
-    let vtx = (1.0 - smoothstep(vtx_w - vtx_aa, vtx_w + vtx_aa, min_vd)) * min_vw
-            + exp(-min_vd * 35.0) * 0.5 * min_vw;
+    // Glow layers — depth-aware
+    let core = exp(-min_d * 90.0) * 0.75;
+    let halo = exp(-min_d * 16.0) * 0.15;
+    let vtx = exp(-min_vd * 55.0) * 1.1 * min_vdf;
     let total = (core + halo + vtx) * u.glow_intensity;
 
-    // 4DA gold palette with white-hot bloom
+    // Gold color with white-hot bloom
     let gold = vec3<f32>(0.831, 0.686, 0.216);
     let hot = vec3<f32>(1.0, 0.95, 0.85);
-    let color = gold * total + hot * max(total - 0.45, 0.0) * 0.7;
+    let color = gold * total + hot * max(total - 0.5, 0.0) * 0.5;
     return vec4<f32>(clamp(color, vec3<f32>(0.0), vec3<f32>(1.0)), 1.0);
 }
 `;
@@ -208,44 +208,22 @@ uniform vec2 u_resolution;
 uniform vec2 u_mouse;
 uniform float u_p_rotation_speed;
 uniform float u_p_glow_intensity;
-uniform float u_p_w_rotation;
 
 in vec2 v_uv;
 out vec4 fragColor;
 
-vec4 rot_xw(vec4 p, float a){
-    float c = cos(a), s = sin(a);
-    return vec4(c*p.x + s*p.w, p.y, p.z, -s*p.x + c*p.w);
-}
+vec3 rot_x(vec3 p, float a){ float c=cos(a),s=sin(a); return vec3(p.x,c*p.y-s*p.z,s*p.y+c*p.z); }
+vec3 rot_y(vec3 p, float a){ float c=cos(a),s=sin(a); return vec3(c*p.x+s*p.z,p.y,-s*p.x+c*p.z); }
+vec3 rot_z(vec3 p, float a){ float c=cos(a),s=sin(a); return vec3(c*p.x-s*p.y,s*p.x+c*p.y,p.z); }
 
-vec4 rot_zw(vec4 p, float a){
-    float c = cos(a), s = sin(a);
-    return vec4(p.x, p.y, c*p.z + s*p.w, -s*p.z + c*p.w);
-}
-
-vec4 rot_yz(vec4 p, float a){
-    float c = cos(a), s = sin(a);
-    return vec4(p.x, c*p.y - s*p.z, s*p.y + c*p.z, p.w);
-}
-
-vec3 proj4b(vec4 p, float breath){
-    float d = 2.5 + breath;
-    float s = d / (d - p.w);
-    return p.xyz * s;
-}
-
-vec2 proj3(vec3 p){
-    float d = 4.0;
-    float s = d / (d - p.z);
-    return p.xy * s;
-}
+vec2 proj3(vec3 p){ float d=3.5; float s=d/(d-p.z); return p.xy*s; }
 
 float dist_seg(vec2 p, vec2 a, vec2 b){
-    vec2 pa = p - a, ba = b - a;
-    float l2 = dot(ba, ba);
+    vec2 pa=p-a, ba=b-a;
+    float l2=dot(ba,ba);
     if (l2 < 0.0001) return length(pa);
-    float t = clamp(dot(pa, ba) / l2, 0.0, 1.0);
-    return length(pa - ba * t);
+    float t=clamp(dot(pa,ba)/l2, 0.0, 1.0);
+    return length(pa-ba*t);
 }
 
 void main(){
@@ -253,87 +231,105 @@ void main(){
     vec2 uv = (v_uv * 2.0 - 1.0) * vec2(aspect, 1.0);
     float time = fract(u_time / 120.0) * 120.0;
     float spd = u_p_rotation_speed;
-    float wspd = u_p_w_rotation;
 
-    float q = 0.559;
-    float sc = 0.5;
-    vec4 v[5];
-    v[0] = vec4( q,  q,  q, -0.25) * sc;
-    v[1] = vec4( q, -q, -q, -0.25) * sc;
-    v[2] = vec4(-q,  q, -q, -0.25) * sc;
-    v[3] = vec4(-q, -q,  q, -0.25) * sc;
-    v[4] = vec4(0.0, 0.0, 0.0, 1.0) * sc;
+    float phi = 1.6180339887;
+    float ip = 1.0 / phi;
+    float norm = 1.0 / sqrt(3.0);
+    float sc = 0.32;
 
-    float mx = (u_mouse.x - 0.5) * 0.4;
-    float my = (u_mouse.y - 0.5) * 0.4;
-    for (int i = 0; i < 5; i++){
-        v[i] = rot_xw(v[i], time * wspd + mx);
-        v[i] = rot_zw(v[i], time * wspd * 0.618 + my);
-        v[i] = rot_yz(v[i], time * spd * 0.382);
+    // 20 dodecahedral vertices
+    vec3 v[20];
+    // Cube vertices
+    v[0]  = vec3( 1.0,  1.0,  1.0) * norm * sc;
+    v[1]  = vec3( 1.0,  1.0, -1.0) * norm * sc;
+    v[2]  = vec3( 1.0, -1.0,  1.0) * norm * sc;
+    v[3]  = vec3( 1.0, -1.0, -1.0) * norm * sc;
+    v[4]  = vec3(-1.0,  1.0,  1.0) * norm * sc;
+    v[5]  = vec3(-1.0,  1.0, -1.0) * norm * sc;
+    v[6]  = vec3(-1.0, -1.0,  1.0) * norm * sc;
+    v[7]  = vec3(-1.0, -1.0, -1.0) * norm * sc;
+    // (0, +-1/phi, +-phi)
+    v[8]  = vec3( 0.0,   ip,  phi) * norm * sc;
+    v[9]  = vec3( 0.0,   ip, -phi) * norm * sc;
+    v[10] = vec3( 0.0,  -ip,  phi) * norm * sc;
+    v[11] = vec3( 0.0,  -ip, -phi) * norm * sc;
+    // (+-1/phi, +-phi, 0)
+    v[12] = vec3(  ip,  phi,  0.0) * norm * sc;
+    v[13] = vec3( -ip,  phi,  0.0) * norm * sc;
+    v[14] = vec3(  ip, -phi,  0.0) * norm * sc;
+    v[15] = vec3( -ip, -phi,  0.0) * norm * sc;
+    // (+-phi, 0, +-1/phi)
+    v[16] = vec3( phi,  0.0,   ip) * norm * sc;
+    v[17] = vec3( phi,  0.0,  -ip) * norm * sc;
+    v[18] = vec3(-phi,  0.0,   ip) * norm * sc;
+    v[19] = vec3(-phi,  0.0,  -ip) * norm * sc;
+
+    float mx = (u_mouse.x - 0.5) * 0.5;
+    float my = (u_mouse.y - 0.5) * 0.5;
+    for (int i = 0; i < 20; i++){
+        v[i] = rot_y(rot_x(rot_z(v[i], time*spd*0.3), time*spd*0.5 + my), time*spd + mx);
     }
 
-    float breath = sin(time * 0.4) * 0.15;
+    vec2 p[20];
+    float df[20];
+    float r = norm * sc;
+    for (int i = 0; i < 20; i++){ p[i] = proj3(v[i]); df[i] = 0.3 + 0.7 * (v[i].z + r) / (2.0 * r); }
 
-    vec2 p[5];
-    float wdepth[5];
-    for (int i = 0; i < 5; i++){
-        vec3 p3 = proj4b(v[i], breath);
-        p[i] = proj3(p3);
-        wdepth[i] = 0.35 + 0.65 * (v[i].w + sc) / (2.0 * sc);
-    }
+    // 30 edges — cube-to-rectangle (24)
+    float min_d = dist_seg(uv, p[0], p[8]);
+    min_d = min(min_d, dist_seg(uv, p[0], p[12]));
+    min_d = min(min_d, dist_seg(uv, p[0], p[16]));
+    min_d = min(min_d, dist_seg(uv, p[1], p[9]));
+    min_d = min(min_d, dist_seg(uv, p[1], p[12]));
+    min_d = min(min_d, dist_seg(uv, p[1], p[17]));
+    min_d = min(min_d, dist_seg(uv, p[2], p[10]));
+    min_d = min(min_d, dist_seg(uv, p[2], p[14]));
+    min_d = min(min_d, dist_seg(uv, p[2], p[16]));
+    min_d = min(min_d, dist_seg(uv, p[3], p[11]));
+    min_d = min(min_d, dist_seg(uv, p[3], p[14]));
+    min_d = min(min_d, dist_seg(uv, p[3], p[17]));
+    min_d = min(min_d, dist_seg(uv, p[4], p[8]));
+    min_d = min(min_d, dist_seg(uv, p[4], p[13]));
+    min_d = min(min_d, dist_seg(uv, p[4], p[18]));
+    min_d = min(min_d, dist_seg(uv, p[5], p[9]));
+    min_d = min(min_d, dist_seg(uv, p[5], p[13]));
+    min_d = min(min_d, dist_seg(uv, p[5], p[19]));
+    min_d = min(min_d, dist_seg(uv, p[6], p[10]));
+    min_d = min(min_d, dist_seg(uv, p[6], p[15]));
+    min_d = min(min_d, dist_seg(uv, p[6], p[18]));
+    min_d = min(min_d, dist_seg(uv, p[7], p[11]));
+    min_d = min(min_d, dist_seg(uv, p[7], p[15]));
+    min_d = min(min_d, dist_seg(uv, p[7], p[19]));
+    // Rectangle-pair edges (6)
+    min_d = min(min_d, dist_seg(uv, p[8], p[10]));
+    min_d = min(min_d, dist_seg(uv, p[9], p[11]));
+    min_d = min(min_d, dist_seg(uv, p[12], p[13]));
+    min_d = min(min_d, dist_seg(uv, p[14], p[15]));
+    min_d = min(min_d, dist_seg(uv, p[16], p[17]));
+    min_d = min(min_d, dist_seg(uv, p[18], p[19]));
 
-    float d01 = dist_seg(uv, p[0], p[1]);
-    float d02 = dist_seg(uv, p[0], p[2]);
-    float d03 = dist_seg(uv, p[0], p[3]);
-    float d04 = dist_seg(uv, p[0], p[4]);
-    float d12 = dist_seg(uv, p[1], p[2]);
-    float d13 = dist_seg(uv, p[1], p[3]);
-    float d14 = dist_seg(uv, p[1], p[4]);
-    float d23 = dist_seg(uv, p[2], p[3]);
-    float d24 = dist_seg(uv, p[2], p[4]);
-    float d34 = dist_seg(uv, p[3], p[4]);
-    float min_d = min(min(min(d01, d02), min(d03, d04)), min(min(d12, d13), min(d14, d23)));
-    min_d = min(min_d, min(d24, d34));
-
-    float hk = 18.0;
-    float halo_sum = exp(-d01*hk) * (wdepth[0]+wdepth[1])*0.5
-                   + exp(-d02*hk) * (wdepth[0]+wdepth[2])*0.5
-                   + exp(-d03*hk) * (wdepth[0]+wdepth[3])*0.5
-                   + exp(-d04*hk) * (wdepth[0]+wdepth[4])*0.5
-                   + exp(-d12*hk) * (wdepth[1]+wdepth[2])*0.5
-                   + exp(-d13*hk) * (wdepth[1]+wdepth[3])*0.5
-                   + exp(-d14*hk) * (wdepth[1]+wdepth[4])*0.5
-                   + exp(-d23*hk) * (wdepth[2]+wdepth[3])*0.5
-                   + exp(-d24*hk) * (wdepth[2]+wdepth[4])*0.5
-                   + exp(-d34*hk) * (wdepth[3]+wdepth[4])*0.5;
-
-    float min_vd = length(uv - p[0]);
-    float min_vw = wdepth[0];
-    for (int i = 1; i < 5; i++){
+    // Depth-weighted vertex glow
+    float min_vd = 999.0;
+    float min_vdf = 0.5;
+    for (int i = 0; i < 20; i++){
         float vd = length(uv - p[i]);
-        if (vd < min_vd) { min_vd = vd; min_vw = wdepth[i]; }
+        if (vd < min_vd) { min_vd = vd; min_vdf = df[i]; }
     }
 
-    float edge_w = 0.004 + 0.003 * min_vw;
-    float aa = fwidth(min_d);
-    float core = (1.0 - smoothstep(edge_w - aa, edge_w + aa, min_d)) * 0.8 * min_vw;
-    float halo = halo_sum * 0.09;
-    float vtx_w = 0.011;
-    float vtx_aa = fwidth(min_vd);
-    float vtx = (1.0 - smoothstep(vtx_w - vtx_aa, vtx_w + vtx_aa, min_vd)) * min_vw
-              + exp(-min_vd * 35.0) * 0.5 * min_vw;
+    float core = exp(-min_d * 90.0) * 0.75;
+    float halo = exp(-min_d * 16.0) * 0.15;
+    float vtx = exp(-min_vd * 55.0) * 1.1 * min_vdf;
     float total = (core + halo + vtx) * u_p_glow_intensity;
 
     vec3 gold = vec3(0.831, 0.686, 0.216);
     vec3 hot = vec3(1.0, 0.95, 0.85);
-    vec3 color = gold * total + hot * max(total - 0.45, 0.0) * 0.7;
+    vec3 color = gold * total + hot * max(total - 0.5, 0.0) * 0.5;
     fragColor = vec4(clamp(color, 0.0, 1.0), 1.0);
 }
 `;
 const UNIFORMS = [
-  { name: 'rotation_speed', default: 0.3 },
+  { name: 'rotation_speed', default: 0.25 },
   { name: 'glow_intensity', default: 1.0 },
-  { name: 'w_rotation', default: 0.2 },
 ];
 
 class GameRenderer {
@@ -563,7 +559,7 @@ class GameRendererGL {
 }
 
 
-class Pentachoron extends HTMLElement {
+class Dodecahedron extends HTMLElement {
   constructor() {
     super();
     this.attachShadow({ mode: 'open' });
@@ -598,7 +594,7 @@ class Pentachoron extends HTMLElement {
       if (gl.init()) {
         this._renderer = gl;
       } else {
-        console.warn('game-pentachoron: no WebGPU or WebGL2 support');
+        console.warn('game-dodecahedron: no WebGPU or WebGL2 support');
         return;
       }
     }
@@ -623,5 +619,5 @@ class Pentachoron extends HTMLElement {
   }
 }
 
-customElements.define('game-pentachoron', Pentachoron);
+customElements.define('game-dodecahedron', Dodecahedron);
 })();
