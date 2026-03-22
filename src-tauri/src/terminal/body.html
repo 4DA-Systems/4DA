@@ -1,0 +1,34 @@
+<div class="terminal">
+  <div class="titlebar">
+    <div class="tb-left">
+      <div class="tb-dots"><div class="tb-dot"></div><div class="tb-dot"></div><div class="tb-dot"></div></div>
+      <span class="tb-brand">4DA SIGNAL TERMINAL</span>
+    </div>
+    <div class="tb-right">
+      <div class="live-dot" id="liveDot"></div>
+      <span class="live-label" id="liveText">...</span>
+    </div>
+  </div>
+  <div class="status-strip" id="sbar">
+    <span id="sb-mon">...</span><span class="s">/</span>
+    <span id="sb-scan">...</span><span class="s">/</span>
+    <span id="sb-rel">...</span><span class="s">/</span>
+    <span id="sb-thr">...</span>
+  </div>
+  <div class="output" id="out" role="log" aria-live="polite"></div>
+  <div class="input-area">
+    <div class="input-row">
+      <span class="prompt-char" aria-hidden="true">&gt;</span>
+      <input class="cmd-input" id="inp" type="text" placeholder="type a command..." autocomplete="off" autofocus spellcheck="false" aria-label="Command input">
+      <span class="ghost" id="ghost"></span>
+    </div>
+  </div>
+</div>
+<div class="auth-overlay" id="authOverlay" style="display:none">
+  <div class="auth-box">
+    <h2>Signal Terminal</h2>
+    <p>Paste your authentication token.<br>Find it at <code>data/signal_terminal_token.txt</code></p>
+    <input type="password" id="authInput" placeholder="paste token..." autocomplete="off">
+    <div class="skip" id="authSkip">Skip — try without token (localhost only)</div>
+  </div>
+</div>

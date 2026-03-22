@@ -109,8 +109,30 @@ fn check_auth(
 // ============================================================================
 
 /// GET / — Serve the Signal Terminal HTML UI (no auth required).
+///
+/// The terminal is split into modular source files under `terminal/`
+/// and assembled at compile time via `concat!` + `include_str!`.
+/// This keeps the self-contained property while enabling maintainable modules:
+///   terminal/styles.css  — all CSS (~190 lines)
+///   terminal/body.html   — DOM structure (~34 lines)
+///   terminal/main.js     — all JavaScript (~1430 lines)
 async fn serve_terminal() -> impl IntoResponse {
-    Html(include_str!("signal_terminal.html"))
+    Html(concat!(
+        "<!DOCTYPE html><html lang=\"en\"><head>\
+         <meta charset=\"utf-8\">\
+         <meta name=\"viewport\" content=\"width=device-width,initial-scale=1,maximum-scale=1\">\
+         <title>4DA Signal Terminal</title>\
+         <link rel=\"manifest\" href=\"/manifest.json\">\
+         <meta name=\"theme-color\" content=\"#D4AF37\">\
+         <link rel=\"icon\" href=\"/icon\" type=\"image/svg+xml\">\
+         <style>",
+        include_str!("terminal/styles.css"),
+        "</style></head><body>",
+        include_str!("terminal/body.html"),
+        "<script>",
+        include_str!("terminal/main.js"),
+        "</script></body></html>",
+    ))
 }
 
 /// GET /api/boot — System boot data for the terminal startup sequence.
