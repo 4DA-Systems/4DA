@@ -130,10 +130,11 @@ export function CreateChannelModal({ open, onClose }: CreateChannelModalProps) {
         <div className="p-6 space-y-4">
           {/* Title */}
           <div>
-            <label className="block text-sm font-medium text-text-secondary mb-1">
+            <label htmlFor="channel-title" className="block text-sm font-medium text-text-secondary mb-1">
               {t('channels.titleLabel')}
             </label>
             <input
+              id="channel-title"
               type="text"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
@@ -147,10 +148,11 @@ export function CreateChannelModal({ open, onClose }: CreateChannelModalProps) {
 
           {/* Description */}
           <div>
-            <label className="block text-sm font-medium text-text-secondary mb-1">
+            <label htmlFor="channel-description" className="block text-sm font-medium text-text-secondary mb-1">
               {t('channels.descriptionLabel')}
             </label>
             <textarea
+              id="channel-description"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               rows={2}
@@ -160,10 +162,11 @@ export function CreateChannelModal({ open, onClose }: CreateChannelModalProps) {
 
           {/* Topics */}
           <div>
-            <label className="block text-sm font-medium text-text-secondary mb-1">
+            <label htmlFor="channel-topics" className="block text-sm font-medium text-text-secondary mb-1">
               {t('channels.topicsLabel')}
             </label>
             <input
+              id="channel-topics"
               type="text"
               value={topicInput}
               onChange={(e) => setTopicInput(e.target.value)}

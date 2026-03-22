@@ -45,7 +45,6 @@ const EXCEPTIONS = {
   'src/components/__tests__/ActionBar.test.tsx':           'ActionBar tests — 26 tests covering all UI states and interactions',
   'src/store/types.ts':                                    'Store type registry — combined slice interfaces and AppStore union type',
   'src/components/onboarding/TasteTestStep.test.tsx':      'TasteTest tests — 22 tests across all onboarding phases',
-  'src/components/PlaybookView.tsx':                        'Playbook — STREETS module viewer + progress tracking',
   'src/components/NaturalLanguageSearch.tsx':               'NLS UI — search interface + results + ghost preview',
   'src/components/NaturalLanguageSearch.test.tsx':          'NLS tests — 14 tests for search UI states and interactions',
   'src/components/playbook/PlaybookView.test.tsx':         'Playbook tests — 15 tests for module navigation and progress',

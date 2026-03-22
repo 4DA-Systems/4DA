@@ -158,6 +158,7 @@ export const DecisionMemory = memo(function DecisionMemory() {
             <select
               value={form.decision_type}
               onChange={(e) => setForm({ ...form, decision_type: e.target.value })}
+              aria-label={t('decisions.typeLabel', 'Decision type')}
               className="px-3 py-2 text-xs bg-bg-tertiary text-white border border-border rounded-lg focus:outline-none focus:border-white/30"
             >
               {DECISION_TYPES.map((dtype) => (
@@ -169,6 +170,7 @@ export const DecisionMemory = memo(function DecisionMemory() {
             <input
               type="text"
               placeholder={t('decisions.subject')}
+              aria-label={t('decisions.subject')}
               value={form.subject}
               onChange={(e) => setForm({ ...form, subject: e.target.value })}
               className="flex-1 px-3 py-2 text-xs bg-bg-tertiary text-white border border-border rounded-lg placeholder-gray-600 focus:outline-none focus:border-white/30"
@@ -176,6 +178,7 @@ export const DecisionMemory = memo(function DecisionMemory() {
           </div>
           <textarea
             placeholder={t('decisions.whatDecided')}
+            aria-label={t('decisions.whatDecided')}
             value={form.decision}
             onChange={(e) => setForm({ ...form, decision: e.target.value })}
             rows={2}
@@ -184,6 +187,7 @@ export const DecisionMemory = memo(function DecisionMemory() {
           />
           <textarea
             placeholder={t('decisions.rationaleOptional')}
+            aria-label={t('decisions.rationaleOptional')}
             value={form.rationale}
             onChange={(e) => setForm({ ...form, rationale: e.target.value })}
             rows={2}
@@ -201,6 +205,7 @@ export const DecisionMemory = memo(function DecisionMemory() {
               onChange={(e) =>
                 setForm({ ...form, confidence: parseInt(e.target.value, 10) / 100 })
               }
+              aria-label={t('decisions.confidence', { value: Math.round(form.confidence * 100) })}
               className="flex-1 accent-white h-1"
             />
             <button

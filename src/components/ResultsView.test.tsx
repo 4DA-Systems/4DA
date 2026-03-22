@@ -247,8 +247,8 @@ describe('ResultsView', () => {
   // =========================================================================
   it('displays results count text', () => {
     render(<ResultsView {...defaultProps} />);
-    // With analysisComplete=true, shows the itemsRelevant i18n key
-    expect(screen.getByText('results.itemsRelevant')).toBeInTheDocument();
+    // With analysisComplete=true, shows the summary sentence
+    expect(screen.getByText('0 items · 0 relevant · 0 high confidence')).toBeInTheDocument();
   });
 
   // =========================================================================
@@ -256,7 +256,7 @@ describe('ResultsView', () => {
   // =========================================================================
   it('results count has aria-live="polite" attribute', () => {
     render(<ResultsView {...defaultProps} />);
-    const countEl = screen.getByText('results.itemsRelevant');
+    const countEl = screen.getByText('0 items · 0 relevant · 0 high confidence');
     expect(countEl).toHaveAttribute('aria-live', 'polite');
   });
 
@@ -455,7 +455,7 @@ describe('ResultsView', () => {
     });
     render(<ResultsView {...defaultProps} />);
     // Results count is still shown (not the not-started state)
-    expect(screen.getByText('results.itemsRelevant')).toBeInTheDocument();
+    expect(screen.getByText('0 items · 0 relevant · 0 high confidence')).toBeInTheDocument();
     // Filter bar is still accessible
     expect(screen.getByRole('toolbar', { name: 'Filter and sort controls' })).toBeInTheDocument();
     // The "no results" empty state should NOT be shown
