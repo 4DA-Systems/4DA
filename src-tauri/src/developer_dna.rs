@@ -359,7 +359,7 @@ fn compute_stats(conn: &rusqlite::Connection) -> Result<DnaStats> {
         .query_row("SELECT COUNT(*) FROM source_items", [], |row| row.get(0))
         .unwrap_or(0);
 
-    let total_relevant: u32 = conn
+    let feedback_relevant: u32 = conn
         .query_row(
             "SELECT COUNT(*) FROM source_items WHERE id IN (SELECT item_id FROM feedback WHERE action IN ('save', 'click'))",
             [],
@@ -367,8 +367,22 @@ fn compute_stats(conn: &rusqlite::Connection) -> Result<DnaStats> {
         )
         .unwrap_or(0);
 
+    // Also check AnalysisState for scoring-engine relevant count
+    let scoring_relevant = {
+        let state = crate::get_analysis_state();
+        let guard = state.lock();
+        guard
+            .results
+            .as_ref()
+            .map(|r| r.iter().filter(|s| s.relevant).count() as u32)
+            .unwrap_or(0)
+    };
+    let total_relevant = feedback_relevant.max(scoring_relevant);
+
     let rejection_rate = if total_items > 0 {
-        (1.0 - total_relevant as f32 / total_items as f32) * 100.0
+        ((1.0 - total_relevant as f32 / total_items as f32) * 100.0)
+            .min(100.0)
+            .max(0.0)
     } else {
         0.0
     };
