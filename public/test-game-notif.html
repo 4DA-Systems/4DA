@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>GAME Notification Test</title>
+  <script type="module" src="/notif-card-critical.js"></script>
+  <style>
+    body { margin: 0; background: #111; display: flex; align-items: center; justify-content: center; height: 100vh; }
+    .container { position: relative; width: 440px; height: 160px; }
+
+    /* GAME canvas — renders border effects BEHIND the card */
+    game-notif-card-critical {
+      position: absolute;
+      inset: 0;
+      display: block;
+      z-index: 0;
+    }
+
+    /* CSS card — opaque, sits ON TOP of GAME border */
+    .card {
+      position: absolute;
+      /* Inset by ~16px to leave room for GAME border glow */
+      left: 16px; right: 16px; top: 13px; bottom: 13px;
+      background: rgba(14, 14, 14, 0.95);
+      border-radius: 14px;
+      z-index: 1;
+      padding: 14px 16px 14px 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      /* Subtle inner shadow for depth */
+      box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+      font-family: 'Inter', -apple-system, sans-serif;
+      color: white;
+    }
+
+    .header { display: flex; align-items: center; gap: 8px; }
+    .dot { width: 8px; height: 8px; border-radius: 50%; background: #DC3030; box-shadow: 0 0 6px rgba(220,48,48,0.5); animation: pulse 2s ease-in-out infinite; }
+    @keyframes pulse { 0%,100%{transform:scale(1);opacity:1} 50%{transform:scale(1.4);opacity:0.7} }
+    .label { font-size: 11px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; color: #A0A0A0; }
+    .spacer { flex: 1; }
+    .meta { font-size: 11px; color: #8A8A8A; font-family: 'JetBrains Mono', monospace; }
+    .title { font-size: 14px; font-weight: 500; margin-top: 4px; }
+    .action { font-size: 12px; color: #D4AF37; font-style: italic; }
+    .pills { display: flex; gap: 6px; margin-top: 6px; }
+    .pill { font-size: 11px; color: #8A8A8A; background: rgba(42,42,42,0.6); padding: 2px 8px; border-radius: 4px; font-family: 'JetBrains Mono', monospace; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <!-- GAME border effects layer (behind) -->
+    <game-notif-card-critical intensity="1" hover="0"></game-notif-card-critical>
+
+    <!-- CSS card (on top) -->
+    <div class="card">
+      <div class="header">
+        <span class="dot"></span>
+        <span class="label">SECURITY ALERT</span>
+        <span class="spacer"></span>
+        <span class="meta">cve &middot; just now</span>
+      </div>
+      <div class="title">CVE-2026-1234 in SQLite: RCE vulnerability</div>
+      <div class="action">Update dependency immediately</div>
+      <div class="pills">
+        <span class="pill">sqlite</span>
+        <span class="pill">rusqlite</span>
+      </div>
+    </div>
+  </div>
+</body>
+</html>
