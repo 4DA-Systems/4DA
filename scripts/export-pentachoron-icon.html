@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Pentachoron Icon Export</title>
+  <style>
+    body { margin: 0; background: #000; display: flex; align-items: center; justify-content: center; min-height: 100vh; flex-direction: column; gap: 20px; font-family: monospace; color: #aaa; }
+    canvas { border: 1px solid #333; }
+    button { padding: 10px 20px; background: #D4AF37; color: #000; border: none; cursor: pointer; font-family: monospace; font-weight: bold; }
+    button:hover { background: #E5C04A; }
+    .info { font-size: 12px; }
+  </style>
+</head>
+<body>
+  <h3 style="color: #D4AF37;">Pentachoron Icon Export</h3>
+  <p class="info">The pentachoron rotates below. Click "Export Frame" to capture at the current angle.</p>
+  <game-pentachoron id="penta" style="width: 1024px; height: 1024px; display: block;"></game-pentachoron>
+  <div style="display: flex; gap: 10px;">
+    <button onclick="exportFrame()">Export 1024x1024 PNG</button>
+    <button onclick="exportFrame512()">Export 512x512 PNG</button>
+    <button onclick="pauseResume()">Pause / Resume</button>
+  </div>
+  <p class="info" id="status">Hover over the pentachoron to find the best angle, then export.</p>
+
+  <script type="module">
+    // Load the pentachoron component
+    import('../src/lib/game-components/pentachoron.js');
+  </script>
+  <script>
+    // Wait for component to render
+    function getCanvas() {
+      const el = document.getElementById('penta');
+      return el?.shadowRoot?.querySelector('canvas');
+    }
+
+    function exportFrame() {
+      const canvas = getCanvas();
+      if (!canvas) { document.getElementById('status').textContent = 'Error: canvas not found'; return; }
+      canvas.toBlob(blob => {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'pentachoron-icon-1024.png';
+        a.click();
+        URL.revokeObjectURL(url);
+        document.getElementById('status').textContent = 'Exported 1024x1024 PNG!';
+      }, 'image/png');
+    }
+
+    function exportFrame512() {
+      const canvas = getCanvas();
+      if (!canvas) return;
+      // Downscale to 512
+      const tmp = document.createElement('canvas');
+      tmp.width = 512; tmp.height = 512;
+      tmp.getContext('2d').drawImage(canvas, 0, 0, 512, 512);
+      tmp.toBlob(blob => {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'pentachoron-icon-512.png';
+        a.click();
+        URL.revokeObjectURL(url);
+        document.getElementById('status').textContent = 'Exported 512x512 PNG!';
+      }, 'image/png');
+    }
+
+    let paused = false;
+    function pauseResume() {
+      const el = document.getElementById('penta');
+      const renderer = el?._renderer;
+      if (!renderer) return;
+      if (paused) { renderer.start(); paused = false; }
+      else { renderer.stop(); paused = true; }
+      document.getElementById('status').textContent = paused ? 'Paused — rotate with mouse, then export' : 'Resumed';
+    }
+
+    // Make functions global
+    window.exportFrame = exportFrame;
+    window.exportFrame512 = exportFrame512;
+    window.pauseResume = pauseResume;
+  </script>
+</body>
+</html>

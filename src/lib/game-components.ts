@@ -33,6 +33,7 @@ const COMPONENTS = {
   'game-icosahedron': () => import('./game-components/icosahedron.js'),
   'game-dodecahedron': () => import('./game-components/dodecahedron.js'),
   'game-simplex-unfold': () => import('./game-components/simplex-unfold.js'),
+  'game-compound-five-tetrahedra': () => import('./game-components/compound-five-tetrahedra.js'),
 } as const;
 
 export type GameComponentTag = keyof typeof COMPONENTS;

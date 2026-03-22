@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>4DA Platonic Geometry Showcase</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { background: #0A0A0A; color: #fff; font-family: 'Inter', -apple-system, sans-serif; min-height: 100vh; padding: 40px; }
+    h1 { font-size: 24px; font-weight: 600; margin-bottom: 8px; color: #D4AF37; }
+    h1 span { color: #fff; }
+    .subtitle { font-size: 13px; color: #8A8A8A; margin-bottom: 40px; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 24px; }
+    .card { background: #141414; border: 1px solid #2A2A2A; border-radius: 16px; padding: 20px; transition: border-color 0.3s; }
+    .card:hover { border-color: #D4AF37; }
+    .card-header { display: flex; align-items: center; gap: 16px; margin-bottom: 12px; }
+    .viz { border-radius: 12px; overflow: hidden; border: 1px solid #2A2A2A; flex-shrink: 0; }
+    .card-title { font-size: 14px; font-weight: 600; }
+    .card-role { font-size: 10px; color: #D4AF37; font-weight: 600; text-transform: uppercase; letter-spacing: 0.1em; }
+    .card-meta { font-size: 11px; color: #8A8A8A; font-family: 'JetBrains Mono', monospace; }
+    .card-desc { font-size: 12px; color: #A0A0A0; line-height: 1.6; margin-top: 8px; }
+    .hero { display: flex; align-items: center; justify-content: center; margin-bottom: 40px; gap: 40px; flex-wrap: wrap; }
+    .hero-viz { border-radius: 20px; overflow: hidden; border: 1px solid #2A2A2A; }
+    .hero-text { max-width: 400px; }
+    .hero-text h2 { font-size: 18px; margin-bottom: 8px; }
+    .hero-text p { font-size: 13px; color: #A0A0A0; line-height: 1.6; }
+    .section-title { font-size: 16px; font-weight: 600; margin: 40px 0 20px; color: #D4AF37; text-transform: uppercase; letter-spacing: 0.1em; }
+    .params { margin-top: 12px; display: flex; flex-wrap: wrap; gap: 6px; }
+    .param { font-size: 9px; padding: 2px 8px; background: #1F1F1F; border: 1px solid #2A2A2A; border-radius: 4px; color: #8A8A8A; font-family: 'JetBrains Mono', monospace; }
+  </style>
+</head>
+<body>
+  <!-- Hero: Pentachoron -->
+  <div class="hero">
+    <div class="hero-viz">
+      <game-pentachoron style="width: 240px; height: 240px; display: block;"></game-pentachoron>
+    </div>
+    <div class="hero-text">
+      <h1><span>4DA</span> Platonic Architecture</h1>
+      <p>Identity, architecture, and network topology aligned with the most efficient structures mathematics can produce. Every shape is mathematically verified, GPU-rendered with anti-aliased edges, depth cues, mouse interaction, and audio reactivity.</p>
+    </div>
+  </div>
+
+  <div class="section-title">The Simplex Family</div>
+  <div class="grid">
+    <div class="card">
+      <div class="card-header">
+        <div class="viz"><game-tetrahedron style="width: 100px; height: 100px; display: block;"></game-tetrahedron></div>
+        <div>
+          <div class="card-title">Tetrahedron</div>
+          <div class="card-role">Foundation</div>
+          <div class="card-meta">3D &middot; 4v &middot; 6e</div>
+        </div>
+      </div>
+      <div class="card-desc">The simplest solid. 4 vertices, fully connected. Self-dual: the product mirrors the user. Every pillar supports every other &mdash; privacy, local-first, BYOK, zero-config.</div>
+      <div class="params"><span class="param">rotation_speed</span><span class="param">glow_intensity</span><span class="param">mouse</span><span class="param">audio</span><span class="param">depth_cues</span></div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <div class="viz"><game-pentachoron style="width: 100px; height: 100px; display: block;"></game-pentachoron></div>
+        <div>
+          <div class="card-title">Pentachoron</div>
+          <div class="card-role">Identity</div>
+          <div class="card-meta">4D &middot; 5v &middot; 10e</div>
+        </div>
+      </div>
+      <div class="card-desc">The 4D simplex. 5 tetrahedral cells interlocking. Rotating at golden-ratio speeds (1.0, 0.618, 0.382) for quasi-periodic motion. Breathing 4D projection. The 5th vertex is you.</div>
+      <div class="params"><span class="param">rotation_speed</span><span class="param">w_rotation</span><span class="param">glow_intensity</span><span class="param">4D_breathing</span><span class="param">mouse</span><span class="param">audio</span></div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <div class="viz"><game-simplex-unfold style="width: 100px; height: 100px; display: block;"></game-simplex-unfold></div>
+        <div>
+          <div class="card-title">Simplex Unfold</div>
+          <div class="card-role">Emergence</div>
+          <div class="card-meta">0D&rarr;4D &middot; animated</div>
+        </div>
+      </div>
+      <div class="card-desc">Point &rarr; line &rarr; triangle &rarr; tetrahedron &rarr; pentachoron. Each dimension adds one vertex fully connected to all before it. Silver-to-gold color shift. 4D wobble at final phase.</div>
+      <div class="params"><span class="param">phase_offset</span><span class="param">auto_speed</span><span class="param">glow_intensity</span></div>
+    </div>
+  </div>
+
+  <div class="section-title">Network Topology</div>
+  <div class="grid">
+    <div class="card">
+      <div class="card-header">
+        <div class="viz"><game-icosahedron style="width: 100px; height: 100px; display: block;"></game-icosahedron></div>
+        <div>
+          <div class="card-title">Icosahedron</div>
+          <div class="card-role">Network</div>
+          <div class="card-meta">3D &middot; 12v &middot; 30e</div>
+        </div>
+      </div>
+      <div class="card-desc">12 sovereign nodes, 5-connected, diameter 3, triangulated consensus. Golden ratio coordinates. Vertex highlighting, face fill, geodesic subdivision preview.</div>
+      <div class="params"><span class="param">rotation_speed</span><span class="param">pulse</span><span class="param">fill_opacity</span><span class="param">highlight_vertex</span><span class="param">geodesic</span><span class="param">mouse</span></div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <div class="viz"><game-dodecahedron style="width: 100px; height: 100px; display: block;"></game-dodecahedron></div>
+        <div>
+          <div class="card-title">Dodecahedron</div>
+          <div class="card-role">Governance</div>
+          <div class="card-meta">3D &middot; 20v &middot; 30e</div>
+        </div>
+      </div>
+      <div class="card-desc">The icosahedron's dual. 12 pentagonal faces, each representing a governance region. Where the icosahedron is the data plane, the dodecahedron is the control plane.</div>
+      <div class="params"><span class="param">rotation_speed</span><span class="param">glow_intensity</span><span class="param">mouse</span></div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <div class="viz"><game-compound-five-tetrahedra style="width: 100px; height: 100px; display: block;"></game-compound-five-tetrahedra></div>
+        <div>
+          <div class="card-title">Compound of Five</div>
+          <div class="card-role">Thread</div>
+          <div class="card-meta">3D &middot; 20v &middot; 30e &middot; 5 colors</div>
+        </div>
+      </div>
+      <div class="card-desc">5 interlocking tetrahedra forming an icosahedron. The mathematical bridge: pentachoron has 5 tetrahedral cells, icosahedron is built from 5 tetrahedra. Each in a distinct gold-palette tint.</div>
+      <div class="params"><span class="param">rotation_speed</span><span class="param">glow_intensity</span><span class="param">5-color palette</span><span class="param">mouse</span><span class="param">audio</span></div>
+    </div>
+  </div>
+
+  <!-- These JS files are IIFEs, not ES modules. Use plain <script> tags.
+       ES module imports via file:// protocol are blocked by CORS in all browsers. -->
+  <script src="../src/lib/game-components/tetrahedron.js"></script>
+  <script src="../src/lib/game-components/pentachoron.js"></script>
+  <script src="../src/lib/game-components/icosahedron.js"></script>
+  <script src="../src/lib/game-components/dodecahedron.js"></script>
+  <script src="../src/lib/game-components/compound-five-tetrahedra.js"></script>
+  <script src="../src/lib/game-components/simplex-unfold.js"></script>
+</body>
+</html>

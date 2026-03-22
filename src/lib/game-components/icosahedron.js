@@ -33,6 +33,9 @@ const WGSL_F = `struct Uniforms {
     glow_intensity: f32,
     pulse: f32,
     fill_opacity: f32,
+    highlight_vertex: f32,
+    highlight_color: f32,
+    geodesic: f32,
 };
 
 @group(0) @binding(0) var<uniform> u: Uniforms;
@@ -79,15 +82,15 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
     let time = fract(u.time / 120.0) * 120.0;
     let spd = u.rotation_speed;
 
+    // Audio reactivity (must be declared before use)
+    let audio_scale = 1.0 + u.audio_bass * 0.05 + u.audio_beat * 0.03;
+    let audio_rot = 1.0 + u.audio_energy * 0.3;
+
     // Golden ratio
     let phi = 1.6180339887;
     // Normalize to unit sphere: divide by sqrt(1 + phi*phi)
     let norm = 1.0 / sqrt(1.0 + phi * phi); // ~0.5257
     let sc = 0.38 * audio_scale; // visual scale + audio pulse
-
-    // Audio reactivity
-    let audio_scale = 1.0 + u.audio_bass * 0.05 + u.audio_beat * 0.03;
-    let audio_rot = 1.0 + u.audio_energy * 0.3;
 
     // 12 icosahedral vertices: (0, +/-1, +/-phi), (+-1, +/-phi, 0), (+/-phi, 0, +/-1)
     var v: array<vec3<f32>, 12>;
@@ -153,10 +156,55 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
     min_d = min(min_d, dist_seg(uv, p[8], p[9]));
     min_d = min(min_d, dist_seg(uv, p[10], p[11]));
 
-    // Nearest vertex distance + depth + optional pulse highlight
+    // Geodesic mode: add midpoint vertices on each edge (frequency 2 preview)
+    var geo_glow = 0.0;
+    if (u.geodesic > 0.5) {
+        // Compute midpoints of all 30 edges, project, and add vertex dots
+        // Edge midpoint = normalize((v[a] + v[b]) / 2) * radius, then project
+        // For efficiency, compute distance to nearest midpoint only
+        var mid_min = 999.0;
+        // Midpoint distances unrolled inline (cannot define helper functions mid-shader)
+        // Sample 12 edge midpoints (every other edge) for visual density
+        let m0 = proj3((v[0] + v[2]) * 0.5);
+        let m1 = proj3((v[0] + v[8]) * 0.5);
+        let m2 = proj3((v[1] + v[3]) * 0.5);
+        let m3 = proj3((v[1] + v[9]) * 0.5);
+        let m4 = proj3((v[2] + v[8]) * 0.5);
+        let m5 = proj3((v[3] + v[9]) * 0.5);
+        let m6 = proj3((v[4] + v[8]) * 0.5);
+        let m7 = proj3((v[5] + v[9]) * 0.5);
+        let m8 = proj3((v[6] + v[10]) * 0.5);
+        let m9 = proj3((v[7] + v[11]) * 0.5);
+        let m10 = proj3((v[4] + v[6]) * 0.5);
+        let m11 = proj3((v[8] + v[9]) * 0.5);
+        mid_min = min(mid_min, length(uv - m0));
+        mid_min = min(mid_min, length(uv - m1));
+        mid_min = min(mid_min, length(uv - m2));
+        mid_min = min(mid_min, length(uv - m3));
+        mid_min = min(mid_min, length(uv - m4));
+        mid_min = min(mid_min, length(uv - m5));
+        mid_min = min(mid_min, length(uv - m6));
+        mid_min = min(mid_min, length(uv - m7));
+        mid_min = min(mid_min, length(uv - m8));
+        mid_min = min(mid_min, length(uv - m9));
+        mid_min = min(mid_min, length(uv - m10));
+        mid_min = min(mid_min, length(uv - m11));
+        let geo_aa = fwidth(mid_min);
+        geo_glow = (1.0 - smoothstep(0.006 - geo_aa, 0.006 + geo_aa, mid_min)) * 0.5
+                 + exp(-mid_min * 25.0) * 0.2;
+    }
+
+    // Nearest vertex distance + depth + pulse + vertex highlight
     var min_vd = 999.0;
     var min_vdf = 0.5;
     var pulse_glow = 0.0;
+    var highlight_glow = vec3<f32>(0.0);
+    let hv = i32(round(u.highlight_vertex)); // -1 = none, 0-11 = vertex index
+    // highlight_color: 0=green(synced), 1=red(error), 0.5=blue(syncing)
+    let hc_r = select(0.2, 1.0, u.highlight_color > 0.7);
+    let hc_g = select(0.9, 0.3, u.highlight_color > 0.7);
+    let hc_b = select(0.3, 0.3, u.highlight_color < 0.3);
+    let hc = vec3<f32>(hc_r, hc_g, hc_b);
     for (var i = 0u; i < 12u; i++) {
         let vd = length(uv - p[i]);
         if (vd < min_vd) { min_vd = vd; min_vdf = df[i]; }
@@ -164,6 +212,11 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
         let phase = fract(time * u.pulse * 0.1 - f32(i) / 12.0);
         let pw = exp(-phase * 8.0) * u.pulse;
         pulse_glow += exp(-vd * 50.0) * pw * df[i];
+        // Vertex highlight: specific vertex glows in highlight color
+        if (hv >= 0 && i32(i) == hv) {
+            let hw = exp(-vd * 40.0) * (0.8 + 0.2 * sin(time * 3.0));
+            highlight_glow += hc * hw;
+        }
     }
 
     // Anti-aliased edge core + halo + vertex glow
@@ -175,7 +228,7 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
     let vtx_aa = fwidth(min_vd);
     let vtx = (1.0 - smoothstep(vtx_w - vtx_aa, vtx_w + vtx_aa, min_vd)) * min_vdf
             + exp(-min_vd * 30.0) * 0.4 * min_vdf;
-    let total = (core + halo + vtx) * u.glow_intensity + pulse_glow;
+    let total = (core + halo + vtx + geo_glow) * u.glow_intensity + pulse_glow;
 
     // Translucent face fill — faint amber glow inside the projected hull
     var face_fill = 0.0;
@@ -194,7 +247,7 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
     let amber = vec3<f32>(0.6, 0.45, 0.15); // deeper amber for face fill
     let hot = vec3<f32>(1.0, 0.95, 0.85);
     let pulse_tint = vec3<f32>(0.9, 0.95, 1.0) * pulse_glow * 0.5;
-    let color = gold * total + hot * max(total - 0.5, 0.0) * 0.5 + pulse_tint + amber * face_fill;
+    let color = gold * total + hot * max(total - 0.5, 0.0) * 0.5 + pulse_tint + amber * face_fill + highlight_glow;
     return vec4<f32>(clamp(color, vec3<f32>(0.0), vec3<f32>(1.0)), 1.0);
 }
 `;
@@ -226,6 +279,9 @@ uniform float u_p_rotation_speed;
 uniform float u_p_glow_intensity;
 uniform float u_p_pulse;
 uniform float u_p_fill_opacity;
+uniform float u_p_highlight_vertex;
+uniform float u_p_highlight_color;
+uniform float u_p_geodesic;
 
 in vec2 v_uv;
 out vec4 fragColor;
@@ -310,15 +366,46 @@ void main(){
     min_d = min(min_d, dist_seg(uv, p[8], p[9]));
     min_d = min(min_d, dist_seg(uv, p[10], p[11]));
 
+    // Geodesic midpoints (GLSL version)
+    float geo_glow = 0.0;
+    if (u_p_geodesic > 0.5) {
+        float mid_min = 999.0;
+        mid_min = min(mid_min, length(uv - proj3((v[0]+v[2])*0.5)));
+        mid_min = min(mid_min, length(uv - proj3((v[0]+v[8])*0.5)));
+        mid_min = min(mid_min, length(uv - proj3((v[1]+v[3])*0.5)));
+        mid_min = min(mid_min, length(uv - proj3((v[1]+v[9])*0.5)));
+        mid_min = min(mid_min, length(uv - proj3((v[2]+v[8])*0.5)));
+        mid_min = min(mid_min, length(uv - proj3((v[3]+v[9])*0.5)));
+        mid_min = min(mid_min, length(uv - proj3((v[4]+v[8])*0.5)));
+        mid_min = min(mid_min, length(uv - proj3((v[5]+v[9])*0.5)));
+        mid_min = min(mid_min, length(uv - proj3((v[6]+v[10])*0.5)));
+        mid_min = min(mid_min, length(uv - proj3((v[7]+v[11])*0.5)));
+        mid_min = min(mid_min, length(uv - proj3((v[4]+v[6])*0.5)));
+        mid_min = min(mid_min, length(uv - proj3((v[8]+v[9])*0.5)));
+        float geo_aa = fwidth(mid_min);
+        geo_glow = (1.0 - smoothstep(0.006 - geo_aa, 0.006 + geo_aa, mid_min)) * 0.5
+                 + exp(-mid_min * 25.0) * 0.2;
+    }
+
     float min_vd = 999.0;
     float min_vdf = 0.5;
     float pulse_glow = 0.0;
+    vec3 highlight_glow = vec3(0.0);
+    int hv = int(round(u_p_highlight_vertex));
+    float hc_r = u_p_highlight_color > 0.7 ? 1.0 : 0.2;
+    float hc_g = u_p_highlight_color > 0.7 ? 0.3 : 0.9;
+    float hc_b = 0.3;
+    vec3 hc = vec3(hc_r, hc_g, hc_b);
     for (int i = 0; i < 12; i++){
         float vd = length(uv - p[i]);
         if (vd < min_vd) { min_vd = vd; min_vdf = df[i]; }
         float phase = fract(time * u_p_pulse * 0.1 - float(i) / 12.0);
         float pw = exp(-phase * 8.0) * u_p_pulse;
         pulse_glow += exp(-vd * 50.0) * pw * df[i];
+        if (hv >= 0 && i == hv) {
+            float hw = exp(-vd * 40.0) * (0.8 + 0.2 * sin(time * 3.0));
+            highlight_glow += hc * hw;
+        }
     }
 
     float edge_w = 0.003 + 0.002 * min_vdf;
@@ -329,7 +416,7 @@ void main(){
     float vtx_aa = fwidth(min_vd);
     float vtx = (1.0 - smoothstep(vtx_w - vtx_aa, vtx_w + vtx_aa, min_vd)) * min_vdf
               + exp(-min_vd * 30.0) * 0.4 * min_vdf;
-    float total = (core + halo + vtx) * u_p_glow_intensity + pulse_glow;
+    float total = (core + halo + vtx + geo_glow) * u_p_glow_intensity + pulse_glow;
 
     // Face fill
     float face_fill = 0.0;
@@ -345,7 +432,7 @@ void main(){
     vec3 amber = vec3(0.6, 0.45, 0.15);
     vec3 hot = vec3(1.0, 0.95, 0.85);
     vec3 pulse_tint = vec3(0.9, 0.95, 1.0) * pulse_glow * 0.5;
-    vec3 color = gold * total + hot * max(total - 0.5, 0.0) * 0.5 + pulse_tint + amber * face_fill;
+    vec3 color = gold * total + hot * max(total - 0.5, 0.0) * 0.5 + pulse_tint + amber * face_fill + highlight_glow;
     fragColor = vec4(clamp(color, 0.0, 1.0), 1.0);
 }
 `;
@@ -354,6 +441,9 @@ const UNIFORMS = [
   { name: 'glow_intensity', default: 1.0 },
   { name: 'pulse', default: 0.0 },
   { name: 'fill_opacity', default: 0.0 },
+  { name: 'highlight_vertex', default: -1.0 },
+  { name: 'highlight_color', default: 0.0 },
+  { name: 'geodesic', default: 0.0 },
 ];
 
 class GameRenderer {
