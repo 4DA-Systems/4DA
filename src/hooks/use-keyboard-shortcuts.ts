@@ -24,6 +24,12 @@ interface KeyboardShortcutActions {
   onOpenResult?: (index: number) => void;
   /** Callback fired when analysis is triggered via keyboard shortcut */
   onAnalyzeTriggered?: () => void;
+  /** Save the currently focused item */
+  onSaveFocused?: () => void;
+  /** Dismiss the currently focused item */
+  onDismissFocused?: () => void;
+  /** Focus the search input */
+  onFocusSearch?: () => void;
 }
 
 export function useKeyboardShortcuts(actions: KeyboardShortcutActions) {
@@ -119,6 +125,22 @@ export function useKeyboardShortcuts(actions: KeyboardShortcutActions) {
 
       if (e.key === '?' && current.onHelp) {
         current.onHelp();
+        return;
+      }
+
+      if (e.key === 's' && current.onSaveFocused) {
+        e.preventDefault();
+        current.onSaveFocused();
+        return;
+      }
+      if (e.key === 'd' && current.onDismissFocused) {
+        e.preventDefault();
+        current.onDismissFocused();
+        return;
+      }
+      if (e.key === '/' && current.onFocusSearch) {
+        e.preventDefault();
+        current.onFocusSearch();
         return;
       }
     };

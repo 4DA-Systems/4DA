@@ -67,6 +67,11 @@
   "analysis.stackDetected": "Auto-detected your stack: {{stack}}. Scoring will prioritize matching sources.",
   "analysis.keyboardTriggered": "Analysis started",
 
+  "appbar.searchPlaceholder": "Search intelligence...",
+  "appbar.analyzing": "Analyzing...",
+  "appbar.relevant": "{{count}} relevant",
+  "appbar.top": "{{count}} top",
+
   "badge.llm": "LLM",
   "badge.on": "ON",
   "badge.off": "OFF",
@@ -375,6 +380,18 @@
   "briefing.profile.knowledgeGaps": "Learning Opportunities ({{count}})",
   "briefing.profile.moreGaps": "+{{count}} more",
   "briefing.profile.intelligenceGrowth": "Learning Progress",
+
+  "feed.title": "Worth Reading",
+  "feed.viewAll": "View all {{count}}",
+
+  "pulse.noData": "No intelligence gathered yet. Run an analysis to get started.",
+  "pulse.itemsAnalyzed": "{{count}} items analyzed, {{relevant}} relevant to you.",
+  "pulse.signalsNeedAttention": "{{count}} need your attention.",
+  "pulse.topPicks": "{{count}} top picks.",
+  "pulse.sourcesPartial": "{{healthy}}/{{total}} sources healthy.",
+  "pulse.newSince": "{{count}} new since {{timeAgo}}.",
+  "pulse.movedToTop": "{{count}} moved to top picks.",
+  "pulse.securityAlert": "{{count}} security alert appeared.",
 
   "search.title": "Search Your Intelligence",
   "search.subtitle": "Find signals, articles, and insights across your feed",
