@@ -1,4 +1,4 @@
-import { useRef, useMemo, useCallback } from 'react';
+import { useRef, useMemo, useCallback, useEffect } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { useTranslation } from 'react-i18next';
 import { useShallow } from 'zustand/react/shallow';
@@ -9,6 +9,7 @@ import { getStageLabel } from '../utils/score';
 import { getSourceLabel } from '../config/sources';
 import { useAppStore } from '../store';
 import { useResultFilters } from '../hooks';
+import { registerGameComponent } from '../lib/game-components';
 
 interface ResultsViewProps {
   newItemIds: Set<number>;
@@ -20,6 +21,7 @@ export function ResultsView({
   focusedIndex,
 }: ResultsViewProps) {
   const { t } = useTranslation();
+  useEffect(() => { registerGameComponent('game-tetrahedron'); }, []);
   // Data selectors (may change, use useShallow)
   const { state, feedbackGiven, discoveredContext, expandedItem } = useAppStore(
     useShallow((s) => ({
@@ -277,10 +279,8 @@ export function ResultsView({
                 </>
               ) : (
                 <>
-                  <div className="w-16 h-16 mx-auto mb-4 bg-bg-tertiary rounded-full flex items-center justify-center">
-                    <svg className="w-7 h-7 text-text-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                    </svg>
+                  <div className="w-16 h-16 mx-auto mb-4 rounded-xl border border-border/30 overflow-hidden" role="img" aria-label="4DA">
+                    <game-tetrahedron style={{ width: '64px', height: '64px', display: 'block' }} />
                   </div>
                   <p className="text-lg text-white mb-2">{t('results.noResults')}</p>
                   <p className="text-sm text-text-muted mb-5">

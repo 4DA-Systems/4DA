@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>GAME Shader Validator</title>
+  <style>
+    body { background: #0A0A0A; color: #fff; font-family: monospace; padding: 20px; }
+    .result { padding: 8px 12px; margin: 4px 0; border-radius: 6px; font-size: 13px; }
+    .pass { background: #22C55E20; border: 1px solid #22C55E40; color: #22C55E; }
+    .fail { background: #EF444420; border: 1px solid #EF444440; color: #EF4444; }
+    .warn { background: #D4AF3720; border: 1px solid #D4AF3740; color: #D4AF37; }
+    h2 { color: #D4AF37; margin: 20px 0 10px; font-size: 14px; }
+    #status { font-size: 16px; margin-bottom: 20px; }
+  </style>
+</head>
+<body>
+  <h1>GAME Shader Validator</h1>
+  <div id="status">Validating...</div>
+  <div id="results"></div>
+
+  <!-- Load all components -->
+  <script src="../src/lib/game-components/tetrahedron.js"></script>
+  <script src="../src/lib/game-components/pentachoron.js"></script>
+  <script src="../src/lib/game-components/icosahedron.js"></script>
+  <script src="../src/lib/game-components/dodecahedron.js"></script>
+  <script src="../src/lib/game-components/compound-five-tetrahedra.js"></script>
+  <script src="../src/lib/game-components/simplex-unfold.js"></script>
+
+  <script>
+    const COMPONENTS = [
+      'game-tetrahedron',
+      'game-pentachoron',
+      'game-icosahedron',
+      'game-dodecahedron',
+      'game-compound-five-tetrahedra',
+      'game-simplex-unfold',
+    ];
+
+    const results = document.getElementById('results');
+    const status = document.getElementById('status');
+    let passCount = 0;
+    let failCount = 0;
+
+    function log(msg, type) {
+      const div = document.createElement('div');
+      div.className = 'result ' + type;
+      div.textContent = msg;
+      results.appendChild(div);
+      if (type === 'pass') passCount++;
+      if (type === 'fail') failCount++;
+    }
+
+    async function validateComponent(tag) {
+      const heading = document.createElement('h2');
+      heading.textContent = tag;
+      results.appendChild(heading);
+
+      // 1. Check registration
+      const CE = customElements.get(tag);
+      if (!CE) {
+        log('FAIL: Custom element not registered', 'fail');
+        return;
+      }
+      log('Custom element registered', 'pass');
+
+      // 2. Create and mount
+      const el = document.createElement(tag);
+      el.style.width = '64px';
+      el.style.height = '64px';
+      el.style.display = 'block';
+      el.style.position = 'absolute';
+      el.style.left = '-9999px';
+      document.body.appendChild(el);
+
+      // Wait for async init
+      await new Promise(r => setTimeout(r, 500));
+
+      // 3. Check shadow DOM
+      if (!el.shadowRoot) {
+        log('FAIL: No shadow DOM created', 'fail');
+        document.body.removeChild(el);
+        return;
+      }
+      log('Shadow DOM created', 'pass');
+
+      // 4. Check canvas
+      const canvas = el.shadowRoot.querySelector('canvas');
+      if (!canvas) {
+        log('FAIL: No canvas element in shadow DOM', 'fail');
+        document.body.removeChild(el);
+        return;
+      }
+      log('Canvas element present', 'pass');
+
+      // 5. Check canvas dimensions
+      if (canvas.width === 0 || canvas.height === 0) {
+        log('WARN: Canvas is 0x0 (may need resize)', 'warn');
+      } else {
+        log(`Canvas size: ${canvas.width}x${canvas.height}`, 'pass');
+      }
+
+      // 6. Check GPU context
+      const hasWebGPU = !!canvas.getContext('webgpu');
+      const hasWebGL = !!canvas.getContext('webgl2');
+      if (hasWebGPU) {
+        log('WebGPU context active', 'pass');
+      } else if (hasWebGL) {
+        log('WebGL2 fallback active', 'warn');
+      } else {
+        log('FAIL: No GPU context (neither WebGPU nor WebGL2)', 'fail');
+      }
+
+      // 7. Check renderer is running
+      const renderer = el._renderer;
+      if (renderer && renderer.running) {
+        log('Renderer running', 'pass');
+      } else if (renderer) {
+        log('WARN: Renderer exists but not running', 'warn');
+      } else {
+        log('FAIL: No renderer initialized (shader compilation likely failed)', 'fail');
+      }
+
+      // 8. Check setParam works
+      if (typeof el.setParam === 'function') {
+        try {
+          el.setParam('glow_intensity', 0.5);
+          log('setParam() callable', 'pass');
+        } catch (e) {
+          log('FAIL: setParam() threw: ' + e.message, 'fail');
+        }
+      } else {
+        log('WARN: setParam not available (renderer may not be ready)', 'warn');
+      }
+
+      // 9. Check pixel output (is it actually rendering?)
+      try {
+        // Force a render and check if canvas has non-black pixels
+        await new Promise(r => setTimeout(r, 200));
+        const ctx2d = document.createElement('canvas').getContext('2d');
+        ctx2d.canvas.width = 64;
+        ctx2d.canvas.height = 64;
+        ctx2d.drawImage(canvas, 0, 0, 64, 64);
+        const data = ctx2d.getImageData(0, 0, 64, 64).data;
+        let nonBlack = 0;
+        for (let i = 0; i < data.length; i += 4) {
+          if (data[i] > 5 || data[i+1] > 5 || data[i+2] > 5) nonBlack++;
+        }
+        const pct = ((nonBlack / (64*64)) * 100).toFixed(1);
+        if (nonBlack > 10) {
+          log(`Rendering pixels: ${pct}% non-black (${nonBlack} pixels)`, 'pass');
+        } else {
+          log(`FAIL: Only ${nonBlack} non-black pixels — likely not rendering`, 'fail');
+        }
+      } catch (e) {
+        log('WARN: Could not read pixels: ' + e.message, 'warn');
+      }
+
+      document.body.removeChild(el);
+    }
+
+    async function runAll() {
+      for (const tag of COMPONENTS) {
+        await validateComponent(tag);
+      }
+      status.textContent = `Done: ${passCount} passed, ${failCount} failed`;
+      status.style.color = failCount === 0 ? '#22C55E' : '#EF4444';
+    }
+
+    // Run after components have loaded
+    setTimeout(runAll, 300);
+  </script>
+</body>
+</html>
