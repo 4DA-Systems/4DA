@@ -524,7 +524,20 @@ fn days_since_last_engagement(conn: &rusqlite::Connection, package_name: &str) -
                 Ok(999) // Can't parse date, treat as very old
             }
         }
-        None => Ok(999), // No engagement ever
+        None => {
+            // Fallback: check if this tech was recently detected by ACE
+            if let Ok(ace) = crate::get_ace_engine() {
+                if let Ok(techs) = ace.get_detected_tech() {
+                    for tech in &techs {
+                        if tech.name.to_lowercase() == package_name.to_lowercase() {
+                            // Tech is actively detected in the user's projects — not stale
+                            return Ok(0);
+                        }
+                    }
+                }
+            }
+            Ok(999) // No engagement ever
+        }
     }
 }
 
