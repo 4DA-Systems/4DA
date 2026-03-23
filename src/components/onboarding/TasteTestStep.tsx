@@ -99,8 +99,9 @@ export function TasteTestStep({ isAnimating, onComplete, onSkip }: TasteTestStep
           Let's calibrate your feed
         </h2>
         <p className="text-text-secondary text-sm max-w-md mx-auto">
-          We'll show you up to 15 articles. Just tell us which ones you'd read.
-          This takes about 60 seconds and dramatically improves your content recommendations.
+          We'll show you up to 15 articles — just tell us which ones you'd read.
+          Your responses train 4DA's scoring engine so it surfaces content that matches your interests,
+          and helps AI tools working on your behalf make better decisions.
         </p>
         {error && <p className="text-red-400 text-xs">{error}</p>}
         <div className="flex items-center justify-center gap-4 pt-2">
