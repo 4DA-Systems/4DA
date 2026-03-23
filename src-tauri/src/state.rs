@@ -408,15 +408,24 @@ pub(crate) fn get_job_queue() -> Result<&'static Arc<parking_lot::RwLock<job_que
 }
 
 // ============================================================================
-// LLM Daily Token Usage Counter (hard cutoff for cost protection)
+// LLM Daily Usage Counters (hard cutoff for cost protection)
 // ============================================================================
 
 /// Tracks total LLM tokens consumed today (all providers, all callers).
 static LLM_DAILY_TOKENS: AtomicU64 = AtomicU64::new(0);
 
+/// Tracks estimated LLM cost in USD cents consumed today.
+static LLM_DAILY_COST_CENTS: AtomicU64 = AtomicU64::new(0);
+
 /// Stores the date string (YYYY-MM-DD local time) for daily reset detection.
 static LLM_DAILY_RESET_DATE: Lazy<Mutex<String>> =
     Lazy::new(|| Mutex::new(chrono::Local::now().format("%Y-%m-%d").to_string()));
+
+/// Whether the 80% token warning has been emitted today (avoid log spam).
+static LLM_TOKEN_WARNING_EMITTED: AtomicBool = AtomicBool::new(false);
+
+/// Whether the 80% cost warning has been emitted today (avoid log spam).
+static LLM_COST_WARNING_EMITTED: AtomicBool = AtomicBool::new(false);
 
 /// Record LLM token usage and check if still under the daily limit.
 /// Returns `true` if usage is within the limit, `false` if the limit has been exceeded.
@@ -424,28 +433,93 @@ static LLM_DAILY_RESET_DATE: Lazy<Mutex<String>> =
 pub(crate) fn record_llm_tokens(count: u64) -> bool {
     maybe_reset_daily_counter();
     let new_total = LLM_DAILY_TOKENS.fetch_add(count, Ordering::Relaxed) + count;
-    let limit = get_daily_token_limit();
-    if limit > 0 && new_total > limit {
-        warn!(
-            target: "4da::llm",
-            used = new_total,
-            limit = limit,
-            "Daily LLM token limit exceeded"
-        );
-        return false;
+    let limit = get_llm_daily_token_limit();
+
+    if limit > 0 {
+        // Emit warning at 80% usage (once per day)
+        let threshold_80 = limit * 4 / 5;
+        if new_total >= threshold_80
+            && !LLM_TOKEN_WARNING_EMITTED.swap(true, Ordering::Relaxed)
+        {
+            warn!(
+                target: "4da::llm",
+                used = new_total,
+                limit = limit,
+                percent = (new_total as f64 / limit as f64 * 100.0) as u32,
+                "LLM daily token usage at 80%+ — approaching limit"
+            );
+        }
+
+        if new_total > limit {
+            warn!(
+                target: "4da::llm",
+                used = new_total,
+                limit = limit,
+                "Daily LLM token limit exceeded"
+            );
+            return false;
+        }
     }
     true
 }
 
-/// Check if the daily token limit has already been reached (pre-call gate).
-/// Returns `true` if we are over the limit.
+/// Record LLM cost usage and check if still under the daily cost limit.
+/// `cost_cents` is the estimated cost of the call in USD cents.
+/// Returns `true` if usage is within the limit, `false` if exceeded.
+pub(crate) fn record_llm_cost(cost_cents: u64) -> bool {
+    if cost_cents == 0 {
+        return true;
+    }
+    maybe_reset_daily_counter();
+    let new_total = LLM_DAILY_COST_CENTS.fetch_add(cost_cents, Ordering::Relaxed) + cost_cents;
+    let limit = get_llm_daily_cost_limit();
+
+    if limit > 0 {
+        // Emit warning at 80% usage (once per day)
+        let threshold_80 = limit * 4 / 5;
+        if new_total >= threshold_80
+            && !LLM_COST_WARNING_EMITTED.swap(true, Ordering::Relaxed)
+        {
+            warn!(
+                target: "4da::llm",
+                used_cents = new_total,
+                limit_cents = limit,
+                percent = (new_total as f64 / limit as f64 * 100.0) as u32,
+                "LLM daily cost at 80%+ — approaching limit (${:.2} / ${:.2})",
+                new_total as f64 / 100.0,
+                limit as f64 / 100.0,
+            );
+        }
+
+        if new_total > limit {
+            warn!(
+                target: "4da::llm",
+                used_cents = new_total,
+                limit_cents = limit,
+                "Daily LLM cost limit exceeded"
+            );
+            return false;
+        }
+    }
+    true
+}
+
+/// Check if either the daily token limit or cost limit has been reached (pre-call gate).
+/// Returns `true` if we are over any limit.
 pub(crate) fn is_llm_limit_reached() -> bool {
     maybe_reset_daily_counter();
-    let limit = get_daily_token_limit();
-    if limit == 0 {
-        return false; // 0 = unlimited
+
+    let token_limit = get_llm_daily_token_limit();
+    if token_limit > 0 && LLM_DAILY_TOKENS.load(Ordering::Relaxed) >= token_limit {
+        return true;
     }
-    LLM_DAILY_TOKENS.load(Ordering::Relaxed) >= limit
+
+    let cost_limit = get_llm_daily_cost_limit();
+    if cost_limit > 0 && LLM_DAILY_COST_CENTS.load(Ordering::Relaxed) >= cost_limit {
+        return true;
+    }
+
+    false
 }
 
 /// Get current daily LLM token usage and the configured limit.
@@ -453,25 +527,43 @@ pub(crate) fn is_llm_limit_reached() -> bool {
 pub(crate) fn get_llm_token_usage() -> (u64, u64) {
     maybe_reset_daily_counter();
     let used = LLM_DAILY_TOKENS.load(Ordering::Relaxed);
-    let limit = get_daily_token_limit();
+    let limit = get_llm_daily_token_limit();
     (used, limit)
 }
 
-/// Reset the counter if the date has changed (new day = fresh budget).
+/// Get current daily LLM cost usage and the configured limit.
+/// Returns `(used_cents, limit_cents)` where limit=0 means unlimited.
+pub(crate) fn get_llm_cost_usage() -> (u64, u64) {
+    maybe_reset_daily_counter();
+    let used = LLM_DAILY_COST_CENTS.load(Ordering::Relaxed);
+    let limit = get_llm_daily_cost_limit();
+    (used, limit)
+}
+
+/// Reset the counters if the date has changed (new day = fresh budget).
 fn maybe_reset_daily_counter() {
     let today = chrono::Local::now().format("%Y-%m-%d").to_string();
     let mut date = LLM_DAILY_RESET_DATE.lock();
     if *date != today {
         LLM_DAILY_TOKENS.store(0, Ordering::Relaxed);
-        info!(target: "4da::llm", old_date = %*date, new_date = %today, "Daily LLM token counter reset");
+        LLM_DAILY_COST_CENTS.store(0, Ordering::Relaxed);
+        LLM_TOKEN_WARNING_EMITTED.store(false, Ordering::Relaxed);
+        LLM_COST_WARNING_EMITTED.store(false, Ordering::Relaxed);
+        info!(target: "4da::llm", old_date = %*date, new_date = %today, "Daily LLM usage counters reset");
         *date = today;
     }
 }
 
-/// Read the daily_token_limit from settings (cached per call; settings rarely change).
-fn get_daily_token_limit() -> u64 {
+/// Read the LLM daily_token_limit from settings.
+fn get_llm_daily_token_limit() -> u64 {
     let settings = get_settings_manager().lock();
-    settings.get().rerank.daily_token_limit
+    settings.get().llm_limits.daily_token_limit
+}
+
+/// Read the LLM daily_cost_limit_cents from settings.
+fn get_llm_daily_cost_limit() -> u64 {
+    let settings = get_settings_manager().lock();
+    settings.get().llm_limits.daily_cost_limit_cents
 }
 
 // ============================================================================

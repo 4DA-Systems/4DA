@@ -265,6 +265,12 @@ impl SettingsManager {
         self.save()
     }
 
+    /// Update LLM rate-limiting configuration
+    pub fn set_llm_limits(&mut self, config: LlmLimitsConfig) -> Result<()> {
+        self.settings.llm_limits = config;
+        self.save()
+    }
+
     /// Update monitoring configuration
     pub fn set_monitoring_config(&mut self, config: MonitoringConfig) -> Result<()> {
         self.settings.monitoring = config;

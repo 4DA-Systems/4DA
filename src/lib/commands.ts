@@ -103,9 +103,10 @@ interface CommandMap {
 
   // -- Settings & Configuration --
   get_settings: { params: Record<string, never>; result: Settings };
-  get_llm_usage: { params: Record<string, never>; result: { used: number; limit: number; limit_reached: boolean; unlimited: boolean } };
+  get_llm_usage: { params: Record<string, never>; result: { used: number; limit: number; limit_reached: boolean; unlimited: boolean; cost_used_cents: number; cost_limit_cents: number; cost_limit_reached: boolean } };
   set_llm_provider: { params: { provider: string; apiKey: string; model: string; baseUrl: string | null; openaiApiKey?: string | null }; result: void };
   set_rerank_config: { params: { enabled: boolean; maxItems: number; minScore: number; dailyTokenLimit: number; dailyCostLimit: number }; result: void };
+  set_llm_limits: { params: { dailyTokenLimit: number; dailyCostLimitCents: number }; result: void };
   test_llm_connection: { params: Record<string, never>; result: { success: boolean; message: string } };
   check_ollama_status: { params: { baseUrl: string | null }; result: { operational: boolean; models: string[]; error: string | null } };
   mark_onboarding_complete: { params: Record<string, never>; result: void };
