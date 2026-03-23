@@ -7,6 +7,7 @@ import { DimensionBar, StatusRow, RecommendationItem } from './calibration/Calib
 import { gradeColor } from './calibration/calibration-utils';
 import type { CalibrationResult, Recommendation } from '../types/calibration';
 import type { PullProgress } from './calibration/calibration-utils';
+import { translateError } from '../utils/error-messages';
 
 export function CalibrationView() {
   const { t } = useTranslation();
@@ -28,7 +29,7 @@ export function CalibrationView() {
       if (result) setPrevGrade(result.grade);
       setResult(data);
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(translateError(e));
     } finally {
       setLoading(false);
     }
@@ -69,7 +70,7 @@ export function CalibrationView() {
             baseUrl: null,
           });
         } catch (e) {
-          setError(t('calibration.modelPullFailed', { error: e instanceof Error ? e.message : String(e) }));
+          setError(t('calibration.modelPullFailed', { error: translateError(e) }));
           setActionInProgress(null);
           setPullProgress(null);
         }
@@ -94,7 +95,7 @@ export function CalibrationView() {
             setShowSettings(true);
           }
         } catch (e) {
-          setError(t('calibration.stackDetectionFailed', { error: e instanceof Error ? e.message : String(e) }));
+          setError(t('calibration.stackDetectionFailed', { error: translateError(e) }));
         } finally {
           setActionInProgress(null);
         }

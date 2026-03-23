@@ -54,7 +54,7 @@ export function SmartEmptyState({ detectedStack }: SmartEmptyStateProps) {
   const label = stackLabel(key);
 
   return (
-    <div className="bg-bg-primary rounded-lg px-6 py-8">
+    <div className="bg-bg-primary rounded-lg px-6 py-8" aria-label="Example signals — real data will appear after your first analysis">
       <p className="text-sm text-text-secondary text-center mb-6">
         While your first analysis runs, here's what {label ? `${label} ` : ''}developers saw this week
       </p>
@@ -73,7 +73,10 @@ export function SmartEmptyState({ detectedStack }: SmartEmptyStateProps) {
             <div className="flex-1 min-w-0">
               <p className="text-sm text-white font-medium">{signal.title}</p>
             </div>
-            <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20 flex-shrink-0">
+            <span
+              className="text-[10px] px-2 py-1 rounded-md bg-amber-500/15 text-amber-400 border border-amber-500/30 font-medium uppercase tracking-wider flex-shrink-0"
+              aria-label="This is an example signal, not real data"
+            >
               Example
             </span>
           </div>

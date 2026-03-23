@@ -65,23 +65,58 @@ export function KeyboardShortcutsModal({ onClose }: KeyboardShortcutsModalProps)
             &times;
           </button>
         </div>
-        <div className="p-6 space-y-3">
-          {[
-            { key: 'R', label: t('shortcuts.runAnalysis') },
-            { key: 'F', label: t('shortcuts.toggleFilter') },
-            { key: 'B', label: t('shortcuts.switchView') },
-            { key: ',', label: t('shortcuts.openSettings') },
-
-            { key: 'Esc', label: t('shortcuts.closePanel') },
-            { key: '?', label: t('shortcuts.showHelp') },
-          ].map(({ key, label }) => (
-            <div key={key} className="flex items-center justify-between">
-              <kbd className="px-2 py-1 bg-bg-tertiary border border-border rounded text-sm font-mono text-white min-w-[2.5rem] text-center">
-                {key}
-              </kbd>
-              <span className="text-sm text-text-secondary">{label}</span>
+        <div className="p-6 space-y-4">
+          {/* Navigation */}
+          <div>
+            <div className="text-[10px] uppercase tracking-wider text-text-muted mb-2">{t('shortcuts.navigateItems')}</div>
+            <div className="space-y-2">
+              {[
+                { key: 'j', label: t('shortcuts.nextItem', 'Next item') },
+                { key: 'k', label: t('shortcuts.previousItem', 'Previous item') },
+              ].map(({ key, label }) => (
+                <div key={key} className="flex items-center justify-between">
+                  <kbd className="px-2 py-1 bg-bg-tertiary border border-border rounded text-sm font-mono text-white min-w-[2.5rem] text-center">{key}</kbd>
+                  <span className="text-sm text-text-secondary">{label}</span>
+                </div>
+              ))}
             </div>
-          ))}
+          </div>
+          {/* Actions */}
+          <div>
+            <div className="text-[10px] uppercase tracking-wider text-text-muted mb-2">{t('shortcuts.actionsGroup', 'Actions')}</div>
+            <div className="space-y-2">
+              {[
+                { key: 'Enter', label: t('shortcuts.openItem', 'Open item') },
+                { key: 's', label: t('shortcuts.saveItem') },
+                { key: 'd', label: t('shortcuts.dismissItem', 'Dismiss item') },
+                { key: 'R', label: t('shortcuts.runAnalysis') },
+              ].map(({ key, label }) => (
+                <div key={key} className="flex items-center justify-between">
+                  <kbd className="px-2 py-1 bg-bg-tertiary border border-border rounded text-sm font-mono text-white min-w-[2.5rem] text-center">{key}</kbd>
+                  <span className="text-sm text-text-secondary">{label}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+          {/* Views & Panels */}
+          <div>
+            <div className="text-[10px] uppercase tracking-wider text-text-muted mb-2">{t('shortcuts.viewsGroup', 'Views & Panels')}</div>
+            <div className="space-y-2">
+              {[
+                { key: '/', label: t('shortcuts.focusSearch', 'Focus search') },
+                { key: 'F', label: t('shortcuts.toggleFilter') },
+                { key: 'B', label: t('shortcuts.switchView') },
+                { key: ',', label: t('shortcuts.openSettings') },
+                { key: 'Esc', label: t('shortcuts.closePanel') },
+                { key: '?', label: t('shortcuts.showHelp') },
+              ].map(({ key, label }) => (
+                <div key={key} className="flex items-center justify-between">
+                  <kbd className="px-2 py-1 bg-bg-tertiary border border-border rounded text-sm font-mono text-white min-w-[2.5rem] text-center">{key}</kbd>
+                  <span className="text-sm text-text-secondary">{label}</span>
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
       </div>
     </div>

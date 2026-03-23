@@ -402,7 +402,7 @@ function App() {
               {t('browser.description')}
             </p>
             <p className="text-xs text-gray-500 mt-2">
-              Run <code className="bg-bg-tertiary px-1 py-0.5 rounded text-gray-400 font-mono text-[11px]">npm run tauri dev</code> or launch the installed app.
+              {t('browser.hint')}
             </p>
           </div>
         )}
