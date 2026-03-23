@@ -154,10 +154,23 @@ impl Source for GitHubSource {
             .await
             .map_err(|e| SourceError::Network(e.to_string()))?;
 
-        if !response.status().is_success() {
-            let status = response.status();
+        let status = response.status();
+        if status == reqwest::StatusCode::TOO_MANY_REQUESTS {
+            return Err(SourceError::RateLimited(
+                "GitHub rate limited (HTTP 429)".to_string(),
+            ));
+        }
+        if status == reqwest::StatusCode::FORBIDDEN {
+            return Err(SourceError::Forbidden(
+                "GitHub forbidden (HTTP 403) — check API rate limits or auth".to_string(),
+            ));
+        }
+        if !status.is_success() {
             warn!(status = %status, "GitHub API request failed");
-            return Err(SourceError::Network(format!("HTTP {}", status)));
+            return Err(SourceError::Network(format!(
+                "GitHub API error: HTTP {}",
+                status.as_u16()
+            )));
         }
 
         let search_result: GitHubSearchResponse = response
@@ -230,8 +243,14 @@ impl Source for GitHubSource {
             .await
             .map_err(|e| SourceError::Network(e.to_string()))?;
 
-        if !response.status().is_success() {
-            warn!(repo = %full_name, "README not found or rate limited");
+        let readme_status = response.status();
+        if readme_status == reqwest::StatusCode::TOO_MANY_REQUESTS {
+            return Err(SourceError::RateLimited(
+                "GitHub README rate limited (HTTP 429)".to_string(),
+            ));
+        }
+        if !readme_status.is_success() {
+            warn!(repo = %full_name, status = %readme_status, "README not found or forbidden");
             return Ok(item.content.clone()); // Return description as fallback
         }
 

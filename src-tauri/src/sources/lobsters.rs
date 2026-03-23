@@ -66,10 +66,21 @@ impl LobstersSource {
             .await
             .map_err(|e| SourceError::Network(e.to_string()))?;
 
-        if !response.status().is_success() {
+        let status = response.status();
+        if status == reqwest::StatusCode::TOO_MANY_REQUESTS {
+            return Err(SourceError::RateLimited(
+                "Lobste.rs rate limited (HTTP 429)".to_string(),
+            ));
+        }
+        if status == reqwest::StatusCode::FORBIDDEN {
+            return Err(SourceError::Forbidden(
+                "Lobste.rs forbidden (HTTP 403)".to_string(),
+            ));
+        }
+        if !status.is_success() {
             return Err(SourceError::Network(format!(
                 "Lobste.rs API error: HTTP {}",
-                response.status()
+                status.as_u16()
             )));
         }
 
