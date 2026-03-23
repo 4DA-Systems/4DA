@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { cmd } from '../lib/commands';
+import { reportError } from '../lib/error-reporter';
 import sunLogo from '../assets/sun-logo.webp';
 import { translateError } from '../utils/error-messages';
 
@@ -69,7 +70,7 @@ export function SplashScreen({ onComplete, minimumDisplayTime = 1500 }: SplashSc
         setBackendReady(true);
 
       } catch (e) {
-        console.error('[SplashScreen] Backend check failed:', e);
+        reportError('SplashScreen.backendCheck', e);
         // Detect browser mode: if Tauri internals are missing, show specific message
         const isBrowser = !('__TAURI_INTERNALS__' in window);
         if (isBrowser) {

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { cmd } from '../lib/commands';
+import { reportError } from '../lib/error-reporter';
 
 interface ScoreAutopsyProps {
   itemId: number;
@@ -71,7 +72,7 @@ export const ScoreAutopsy: React.FC<ScoreAutopsyProps> = ({
       }) as unknown as AutopsyResult;
       setAutopsy(result);
     } catch (err) {
-      console.error('Autopsy failed:', err);
+      reportError('ScoreAutopsy.load', err);
       setError(err instanceof Error ? err.message : t('autopsy.failed'));
     } finally {
       setLoading(false);

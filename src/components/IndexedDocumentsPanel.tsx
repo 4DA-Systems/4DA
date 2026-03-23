@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { cmd } from '../lib/commands';
+import { reportError } from '../lib/error-reporter';
 import type {
   IndexedDocument,
   DocumentContentResponse,
@@ -73,7 +74,7 @@ export function IndexedDocumentsPanel({ onStatusChange }: IndexedDocumentsPanelP
       setStats(statsResult);
       loaded.current = true;
     } catch (error) {
-      console.error('Failed to load indexed documents:', error);
+      reportError('IndexedDocumentsPanel.load', error);
       onStatusChange?.(`Error loading documents: ${error}`);
     } finally {
       setLoading(false);
@@ -94,7 +95,7 @@ export function IndexedDocumentsPanel({ onStatusChange }: IndexedDocumentsPanelP
       });
       setSearchResults(result.results);
     } catch (error) {
-      console.error('Search failed:', error);
+      reportError('IndexedDocumentsPanel.search', error);
       onStatusChange?.(`Search error: ${error}`);
     } finally {
       setLoading(false);
@@ -110,7 +111,7 @@ export function IndexedDocumentsPanel({ onStatusChange }: IndexedDocumentsPanelP
       });
       setSelectedDoc(result);
     } catch (error) {
-      console.error('Failed to load document:', error);
+      reportError('IndexedDocumentsPanel.loadDocument', error);
       onStatusChange?.(`Error loading document: ${error}`);
     } finally {
       setLoading(false);
