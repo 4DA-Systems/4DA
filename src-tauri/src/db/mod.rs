@@ -321,7 +321,10 @@ pub(crate) fn parse_datetime(s: String) -> chrono::DateTime<chrono::Utc> {
     use chrono::{NaiveDateTime, TimeZone, Utc};
     NaiveDateTime::parse_from_str(&s, "%Y-%m-%d %H:%M:%S")
         .map(|dt| Utc.from_utc_datetime(&dt))
-        .unwrap_or_else(|_| Utc::now())
+        .unwrap_or_else(|_| {
+            tracing::warn!("Failed to parse datetime '{}', falling back to now", s);
+            Utc::now()
+        })
 }
 
 /// Hash content for deduplication

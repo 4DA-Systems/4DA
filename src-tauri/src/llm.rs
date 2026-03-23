@@ -11,6 +11,16 @@ use crate::state::{is_llm_limit_reached, record_llm_cost, record_llm_tokens};
 use serde::{Deserialize, Serialize};
 use tracing::{debug, warn};
 
+/// Static HTTP client for Ollama fallback — avoids creating a new client per call.
+static OLLAMA_FALLBACK_CLIENT: std::sync::LazyLock<reqwest::Client> =
+    std::sync::LazyLock::new(|| {
+        reqwest::Client::builder()
+            .connect_timeout(std::time::Duration::from_secs(10))
+            .timeout(std::time::Duration::from_secs(120))
+            .build()
+            .unwrap_or_else(|_| reqwest::Client::new())
+    });
+
 pub use crate::llm_judge::RelevanceJudge;
 
 /// Sanitize API error response text to prevent leaking secrets.
@@ -269,14 +279,7 @@ impl LLMClient {
             "stream": false
         });
 
-        // Use a longer timeout for Ollama cold starts
-        let fallback_client = reqwest::Client::builder()
-            .connect_timeout(std::time::Duration::from_secs(10))
-            .timeout(std::time::Duration::from_secs(120))
-            .build()
-            .unwrap_or_else(|_| reqwest::Client::new());
-
-        let response = fallback_client
+        let response = OLLAMA_FALLBACK_CLIENT
             .post(&url)
             .header("content-type", "application/json")
             .json(&body)

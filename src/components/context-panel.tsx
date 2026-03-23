@@ -67,7 +67,11 @@ export function ContextPanel({
                 {t('context.index')}
               </button>
               <button
-                onClick={onClear}
+                onClick={() => {
+                  if (window.confirm('Clear all indexed context files? You will need to re-index them.')) {
+                    onClear();
+                  }
+                }}
                 className="px-3 py-1.5 text-xs bg-red-500/10 text-red-400 border border-red-500/30 rounded-lg hover:bg-red-500/20 transition-all"
                 title={t('context.clear')}
                 aria-label={t('context.clear')}

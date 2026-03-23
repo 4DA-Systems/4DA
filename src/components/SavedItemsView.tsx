@@ -11,6 +11,7 @@ export function SavedItemsView() {
   const [items, setItems] = useState<SavedItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [copiedId, setCopiedId] = useState<number | null>(null);
   const addToast = useAppStore(s => s.addToast);
   const setFeedbackGivenFull = useAppStore(s => s.setFeedbackGivenFull);
 
@@ -133,11 +134,15 @@ export function SavedItemsView() {
                   </span>
                   {item.url && (
                     <button
-                      onClick={() => window.navigator.clipboard.writeText(item.url!)}
-                      aria-label={`${t('saved.copyUrl')} for ${item.title}`}
-                      className="text-[10px] text-text-muted hover:text-text-secondary transition-colors"
+                      onClick={() => {
+                        window.navigator.clipboard.writeText(item.url!);
+                        setCopiedId(item.item_id);
+                        setTimeout(() => setCopiedId(prev => prev === item.item_id ? null : prev), 2000);
+                      }}
+                      aria-label={copiedId === item.item_id ? t('saved.copied', 'Copied!') : `${t('saved.copyUrl')} for ${item.title}`}
+                      className={`text-[10px] transition-colors ${copiedId === item.item_id ? 'text-green-400' : 'text-text-muted hover:text-text-secondary'}`}
                     >
-                      {t('saved.copyUrl')}
+                      {copiedId === item.item_id ? t('saved.copied', 'Copied!') : t('saved.copyUrl')}
                     </button>
                   )}
                 </div>
