@@ -105,39 +105,67 @@ function escapeHtml(str) {
 // GAME atmosphere management
 // ---------------------------------------------------------------------------
 
-/** Map priority to GAME WebComponent tag name. */
+/** Map priority to GAME WebComponent tag name + script path. */
 var GAME_TAGS = {
   critical: 'game-notif-critical',
   high: 'game-notif-high',
   medium: 'game-notif-medium',
   low: 'game-notif-digest',
 };
-
+var GAME_SCRIPTS = {
+  critical: '/notif-critical.js',
+  high: '/notif-high.js',
+  medium: '/notif-medium.js',
+  low: '/notif-digest.js',
+};
+var loadedScripts = {};
 var currentGameEl = null;
 
-/** Swap the GAME atmosphere WebComponent in the game-layer div. */
+/** Lazy-load a GAME component script (only loaded once per priority). */
+function ensureGameScript(priority) {
+  if (loadedScripts[priority]) return;
+  loadedScripts[priority] = true;
+  var src = GAME_SCRIPTS[priority];
+  if (!src) return;
+  var script = document.createElement('script');
+  script.type = 'module';
+  script.src = src;
+  document.head.appendChild(script);
+}
+
+/** Swap the GAME atmosphere WebComponent in the game-layer div.
+ *  Lazy-loads: only creates the element when actually shown,
+ *  and pauses rendering when hidden (avoids zero-size texture errors). */
 function swapGameComponent(priority) {
   var tagName = GAME_TAGS[priority] || GAME_TAGS.low;
 
   // Skip if already showing the correct component
   if (currentGameEl && currentGameEl.tagName.toLowerCase() === tagName) return;
 
-  // Remove current GAME element
+  // Remove current GAME element (stops its render loop)
   if (currentGameEl) {
     currentGameEl.remove();
     currentGameEl = null;
   }
 
-  // Check if the custom element is defined (components loaded in HTML head)
-  if (!customElements.get(tagName)) {
-    // GAME component not available — CSS glow fallback handles visual
-    return;
-  }
+  // Check if the custom element is defined
+  if (!customElements.get(tagName)) return;
 
-  // Create and insert the GAME WebComponent
+  // Only create if the window is actually visible (non-zero size)
+  var rect = gameLayer.getBoundingClientRect();
+  if (rect.width < 1 || rect.height < 1) return;
+
   currentGameEl = document.createElement(tagName);
   currentGameEl.style.cssText = 'width:100%;height:100%;display:block;';
   gameLayer.appendChild(currentGameEl);
+}
+
+/** Destroy GAME component when notification hides (stops GPU rendering). */
+function destroyGameComponent() {
+  if (currentGameEl) {
+    currentGameEl.remove();
+    currentGameEl = null;
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -172,8 +200,10 @@ function updateContent(data) {
     String(gameOpacity[currentPriority] || 0.05)
   );
 
-  // Swap GAME atmosphere WebComponent based on priority
-  swapGameComponent(currentPriority);
+  // Lazy-load + swap GAME atmosphere WebComponent
+  ensureGameScript(currentPriority);
+  // Defer swap slightly to allow script to register the custom element
+  setTimeout(function () { swapGameComponent(currentPriority); }, 100);
 
   // -- Header --
   typeLabel.textContent = getTypeLabel(data.variant, data.signal_type);
@@ -314,10 +344,11 @@ function hideNotification(reason) {
   }
   gameLayer.classList.remove('active');
 
-  // After animation completes, signal Rust to hide the window
+  // After animation completes, clean up GAME + signal Rust to hide
   var delay = reason === 'dismiss' ? 150 : 400;
   setTimeout(function () {
     card.classList.remove('visible', 'exiting', 'dismissing');
+    destroyGameComponent(); // Stop GPU rendering when hidden
     emitTauri('notification-hidden');
   }, delay);
 }
@@ -355,6 +386,8 @@ async function init() {
       showNotification(event.payload);
     });
 
+    // Signal readiness to Rust — safe to emit data now
+    emitTauri('notification-ready');
     console.log('[4DA Notification] Ready');
   } catch (e) {
     console.error('[4DA Notification] Init failed:', e);

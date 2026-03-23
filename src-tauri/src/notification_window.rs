@@ -33,6 +33,9 @@ const MARGIN_BOTTOM: i32 = 64;
 static DISMISS_CANCEL: std::sync::LazyLock<std::sync::Mutex<Option<Arc<AtomicBool>>>> =
     std::sync::LazyLock::new(|| std::sync::Mutex::new(None));
 
+/// Whether the notification window's JS listener is registered and ready.
+static WINDOW_READY: AtomicBool = AtomicBool::new(false);
+
 // ============================================================================
 // Data Types
 // ============================================================================
@@ -107,6 +110,12 @@ pub fn init_notification_window<R: Runtime>(app: &AppHandle<R>) -> tauri::Result
     Ok(())
 }
 
+/// Mark the notification window as ready (JS listener registered).
+/// Called when the frontend emits `notification-ready`.
+pub fn mark_ready() {
+    WINDOW_READY.store(true, Ordering::Relaxed);
+}
+
 /// Show the notification window with the given data payload.
 ///
 /// Positions the window in the bottom-right corner of the primary monitor,
@@ -168,7 +177,18 @@ pub fn show_notification<R: Runtime>(app: &AppHandle<R>, data: NotificationData)
     }
 
     // Emit data to the notification webview.
-    if let Err(e) = app.emit_to(WINDOW_LABEL, "notification-data", &data) {
+    // If the JS listener isn't ready yet, retry after a short delay.
+    if !WINDOW_READY.load(Ordering::Relaxed) {
+        info!(target: "4da::notify", "Window not ready, deferring notification by 500ms");
+        let app_deferred = app.clone();
+        let data_deferred = data.clone();
+        tauri::async_runtime::spawn(async move {
+            tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+            if let Err(e) = app_deferred.emit_to(WINDOW_LABEL, "notification-data", &data_deferred) {
+                warn!(target: "4da::notify", error = %e, "Deferred emit failed");
+            }
+        });
+    } else if let Err(e) = app.emit_to(WINDOW_LABEL, "notification-data", &data) {
         warn!(target: "4da::notify", error = %e, "Failed to emit notification data");
     }
 

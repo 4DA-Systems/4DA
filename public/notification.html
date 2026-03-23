@@ -5,11 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>4DA Notification</title>
   <link rel="stylesheet" href="/notification.css">
-  <!-- Pre-load all GAME atmosphere components (self-registering WebComponents) -->
-  <script type="module" src="/notif-critical.js"></script>
-  <script type="module" src="/notif-high.js"></script>
-  <script type="module" src="/notif-medium.js"></script>
-  <script type="module" src="/notif-digest.js"></script>
+  <!-- GAME components loaded lazily by notification.js when first needed -->
 </head>
 <body>
   <div id="notification" class="notification-window" role="status" aria-live="polite">
