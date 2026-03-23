@@ -242,6 +242,12 @@ pub(crate) fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::
         warn!(target: "4da::notify", error = %e, "Notification window pre-warm failed (will retry on first notification)");
     }
 
+    // Listen for notification-ready from the notification frontend
+    app.listen("notification-ready", move |_| {
+        crate::notification_window::mark_ready();
+        info!(target: "4da::notify", "Notification window JS listener registered");
+    });
+
     // Listen for notification-hidden from the notification frontend
     let app_handle_notif = app_handle.clone();
     app.listen("notification-hidden", move |_| {
