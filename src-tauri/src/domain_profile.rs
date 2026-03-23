@@ -329,42 +329,149 @@ fn is_notable_dependency(name: &str) -> bool {
 pub fn is_display_worthy(tech: &str) -> bool {
     const DISPLAY_WORTHY: &[&str] = &[
         // ---- Languages ----
-        "rust", "typescript", "javascript", "python", "go", "java", "kotlin",
-        "swift", "c", "cpp", "c++", "csharp", "c#", "ruby", "php", "scala",
-        "elixir", "haskell", "dart", "zig", "nim", "lua", "r", "julia",
-        "wgsl", "glsl", "sql", "ocaml", "clojure", "erlang", "fsharp", "f#",
-        "objective-c", "perl",
+        "rust",
+        "typescript",
+        "javascript",
+        "python",
+        "go",
+        "java",
+        "kotlin",
+        "swift",
+        "c",
+        "cpp",
+        "c++",
+        "csharp",
+        "c#",
+        "ruby",
+        "php",
+        "scala",
+        "elixir",
+        "haskell",
+        "dart",
+        "zig",
+        "nim",
+        "lua",
+        "r",
+        "julia",
+        "wgsl",
+        "glsl",
+        "sql",
+        "ocaml",
+        "clojure",
+        "erlang",
+        "fsharp",
+        "f#",
+        "objective-c",
+        "perl",
         // Emerging languages (reviewed 2026-03)
-        "mojo", "gleam", "roc", "unison", "vale",
+        "mojo",
+        "gleam",
+        "roc",
+        "unison",
+        "vale",
         // ---- Web frameworks (frontend) ----
-        "react", "vue", "angular", "svelte", "solid", "solidjs", "qwik",
-        "htmx", "alpine", "alpinejs", "preact", "lit",
+        "react",
+        "vue",
+        "angular",
+        "svelte",
+        "solid",
+        "solidjs",
+        "qwik",
+        "htmx",
+        "alpine",
+        "alpinejs",
+        "preact",
+        "lit",
         // ---- Meta-frameworks ----
-        "nextjs", "next.js", "nuxt", "remix", "astro", "sveltekit",
-        "solidstart", "fresh", "analog",
+        "nextjs",
+        "next.js",
+        "nuxt",
+        "remix",
+        "astro",
+        "sveltekit",
+        "solidstart",
+        "fresh",
+        "analog",
         // ---- Desktop / mobile ----
-        "tauri", "electron", "flutter", "react-native", "expo",
-        "swiftui", "jetpack-compose", "maui",
+        "tauri",
+        "electron",
+        "flutter",
+        "react-native",
+        "expo",
+        "swiftui",
+        "jetpack-compose",
+        "maui",
         // ---- Backend frameworks ----
-        "django", "flask", "fastapi", "litestar",
-        "rails", "spring", "springboot", "quarkus", "micronaut",
-        "express", "nest", "nestjs", "hono", "elysia",
-        "actix", "axum", "rocket", "warp",
-        "gin", "fiber", "echo", "chi",
-        "phoenix", "plug",
+        "django",
+        "flask",
+        "fastapi",
+        "litestar",
+        "rails",
+        "spring",
+        "springboot",
+        "quarkus",
+        "micronaut",
+        "express",
+        "nest",
+        "nestjs",
+        "hono",
+        "elysia",
+        "actix",
+        "axum",
+        "rocket",
+        "warp",
+        "gin",
+        "fiber",
+        "echo",
+        "chi",
+        "phoenix",
+        "plug",
         // ---- AI / ML ----
-        "tensorflow", "pytorch", "jax", "langchain", "llamaindex",
-        "huggingface", "transformers", "onnx",
+        "tensorflow",
+        "pytorch",
+        "jax",
+        "langchain",
+        "llamaindex",
+        "huggingface",
+        "transformers",
+        "onnx",
         // ---- Runtimes ----
-        "node", "nodejs", "deno", "bun",
+        "node",
+        "nodejs",
+        "deno",
+        "bun",
         // ---- Platforms / infrastructure ----
-        "aws", "gcp", "azure", "docker", "kubernetes", "linux",
-        "wasm", "webgpu", "vercel", "cloudflare", "supabase", "firebase",
-        "netlify", "fly", "railway",
+        "aws",
+        "gcp",
+        "azure",
+        "docker",
+        "kubernetes",
+        "linux",
+        "wasm",
+        "webgpu",
+        "vercel",
+        "cloudflare",
+        "supabase",
+        "firebase",
+        "netlify",
+        "fly",
+        "railway",
         // ---- Databases (identity-level, not ORMs) ----
-        "postgresql", "postgres", "mysql", "mongodb", "redis", "sqlite",
-        "dynamodb", "cassandra", "elasticsearch", "neo4j", "cockroachdb",
-        "planetscale", "neon", "turso", "surrealdb",
+        "postgresql",
+        "postgres",
+        "mysql",
+        "mongodb",
+        "redis",
+        "sqlite",
+        "dynamodb",
+        "cassandra",
+        "elasticsearch",
+        "neo4j",
+        "cockroachdb",
+        "planetscale",
+        "neon",
+        "turso",
+        "surrealdb",
     ];
 
     DISPLAY_WORTHY.contains(&tech)
@@ -831,9 +938,24 @@ mod tests {
     #[test]
     fn test_display_worthy_accepts_all_languages() {
         for lang in &[
-            "rust", "typescript", "javascript", "python", "go", "java",
-            "kotlin", "swift", "ruby", "php", "scala", "elixir",
-            "haskell", "dart", "zig", "nim", "lua", "julia",
+            "rust",
+            "typescript",
+            "javascript",
+            "python",
+            "go",
+            "java",
+            "kotlin",
+            "swift",
+            "ruby",
+            "php",
+            "scala",
+            "elixir",
+            "haskell",
+            "dart",
+            "zig",
+            "nim",
+            "lua",
+            "julia",
         ] {
             assert!(is_display_worthy(lang), "{} should be display-worthy", lang);
         }
@@ -842,9 +964,8 @@ mod tests {
     #[test]
     fn test_display_worthy_accepts_major_frameworks() {
         for fw in &[
-            "react", "vue", "angular", "svelte", "nextjs", "tauri",
-            "electron", "django", "flask", "fastapi", "rails", "spring",
-            "express", "actix", "axum", "rocket", "flutter",
+            "react", "vue", "angular", "svelte", "nextjs", "tauri", "electron", "django", "flask",
+            "fastapi", "rails", "spring", "express", "actix", "axum", "rocket", "flutter",
         ] {
             assert!(is_display_worthy(fw), "{} should be display-worthy", fw);
         }
@@ -853,8 +974,13 @@ mod tests {
     #[test]
     fn test_display_worthy_accepts_databases() {
         for db in &[
-            "postgresql", "postgres", "mysql", "mongodb", "redis",
-            "sqlite", "elasticsearch",
+            "postgresql",
+            "postgres",
+            "mysql",
+            "mongodb",
+            "redis",
+            "sqlite",
+            "elasticsearch",
         ] {
             assert!(is_display_worthy(db), "{} should be display-worthy", db);
         }
@@ -862,8 +988,19 @@ mod tests {
 
     #[test]
     fn test_display_worthy_accepts_platforms() {
-        for p in &["aws", "gcp", "azure", "docker", "kubernetes", "linux", "wasm",
-                    "vercel", "cloudflare", "supabase", "firebase"] {
+        for p in &[
+            "aws",
+            "gcp",
+            "azure",
+            "docker",
+            "kubernetes",
+            "linux",
+            "wasm",
+            "vercel",
+            "cloudflare",
+            "supabase",
+            "firebase",
+        ] {
             assert!(is_display_worthy(p), "{} should be display-worthy", p);
         }
     }
@@ -877,8 +1014,18 @@ mod tests {
 
     #[test]
     fn test_display_worthy_accepts_emerging_frameworks() {
-        for fw in &["hono", "elysia", "solidstart", "htmx", "litestar",
-                     "phoenix", "expo", "fresh", "turso", "surrealdb"] {
+        for fw in &[
+            "hono",
+            "elysia",
+            "solidstart",
+            "htmx",
+            "litestar",
+            "phoenix",
+            "expo",
+            "fresh",
+            "turso",
+            "surrealdb",
+        ] {
             assert!(is_display_worthy(fw), "{} should be display-worthy", fw);
         }
     }

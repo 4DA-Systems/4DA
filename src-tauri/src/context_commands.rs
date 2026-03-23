@@ -252,8 +252,7 @@ pub async fn sync_awe_wisdom() -> Result<String> {
 
     // 1. Get validated principles from AWE
     if let Ok(output) = run_awe_with_timeout(
-        std::process::Command::new(&awe_path)
-            .args(["wisdom", "--domain", "software-engineering"]),
+        std::process::Command::new(&awe_path).args(["wisdom", "--domain", "software-engineering"]),
         30,
     ) {
         let stdout = String::from_utf8_lossy(&output.stdout);
@@ -304,17 +303,16 @@ pub async fn sync_awe_wisdom() -> Result<String> {
     for dir in &context_dirs {
         let dir_str = dir.to_string_lossy();
         if let Ok(output) = run_awe_with_timeout(
-            std::process::Command::new(&awe_path)
-                .args([
-                    "scan",
-                    "--repo",
-                    &dir_str,
-                    "--domain",
-                    "software-engineering",
-                    "--limit",
-                    "50",
-                    "--json",
-                ]),
+            std::process::Command::new(&awe_path).args([
+                "scan",
+                "--repo",
+                &dir_str,
+                "--domain",
+                "software-engineering",
+                "--limit",
+                "50",
+                "--json",
+            ]),
             30,
         ) {
             let stdout = String::from_utf8_lossy(&output.stdout);
@@ -366,10 +364,9 @@ pub async fn get_awe_summary() -> Result<String> {
     });
 
     // Get health data
-    if let Ok(output) = run_awe_with_timeout(
-        std::process::Command::new(&awe_path).args(["health"]),
-        15,
-    ) {
+    if let Ok(output) =
+        run_awe_with_timeout(std::process::Command::new(&awe_path).args(["health"]), 15)
+    {
         let stdout = String::from_utf8_lossy(&output.stdout);
         // Parse "Decisions tracked: N"
         if let Some(cap) = stdout.lines().find(|l| l.contains("Decisions tracked")) {
@@ -398,8 +395,7 @@ pub async fn get_awe_summary() -> Result<String> {
 
     // Get top principle from wisdom command
     if let Ok(output) = run_awe_with_timeout(
-        std::process::Command::new(&awe_path)
-            .args(["wisdom", "-d", "software-engineering"]),
+        std::process::Command::new(&awe_path).args(["wisdom", "-d", "software-engineering"]),
         15,
     ) {
         let stdout = String::from_utf8_lossy(&output.stdout);
@@ -423,8 +419,7 @@ pub async fn get_awe_summary() -> Result<String> {
 
     // Get pending count
     if let Ok(output) = run_awe_with_timeout(
-        std::process::Command::new(&awe_path)
-            .args(["pending", "--limit", "100"]),
+        std::process::Command::new(&awe_path).args(["pending", "--limit", "100"]),
         15,
     ) {
         let stdout = String::from_utf8_lossy(&output.stdout);
@@ -486,11 +481,8 @@ pub async fn run_awe_transmute(query: String, mode: String) -> Result<String> {
         }
     }
 
-    let output = run_awe_with_timeout(
-        std::process::Command::new(&awe_path).args(&args),
-        30,
-    )
-    .map_err(|e| format!("Failed to run AWE: {e}"))?;
+    let output = run_awe_with_timeout(std::process::Command::new(&awe_path).args(&args), 30)
+        .map_err(|e| format!("Failed to run AWE: {e}"))?;
 
     // Clean up temp file
     let _ = std::fs::remove_file(&ctx_path);

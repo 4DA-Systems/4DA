@@ -124,14 +124,10 @@ impl Database {
         // Check WAL size via PRAGMA wal_checkpoint(PASSIVE) first
         // PASSIVE won't block writers
         let mut pages_moved: i32 = 0;
-        conn.query_row(
-            "PRAGMA wal_checkpoint(PASSIVE)",
-            [],
-            |row| {
-                pages_moved = row.get::<_, i32>(1).unwrap_or(0);
-                Ok(())
-            },
-        )?;
+        conn.query_row("PRAGMA wal_checkpoint(PASSIVE)", [], |row| {
+            pages_moved = row.get::<_, i32>(1).unwrap_or(0);
+            Ok(())
+        })?;
         Ok(pages_moved as usize)
     }
 
