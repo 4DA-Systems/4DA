@@ -2,11 +2,10 @@
   "app.title": "4DA",
   "app.tagline": "सिर्फ़ सिग्नल। कोई फ़ीड नहीं।",
   "app.skipToContent": "मुख्य सामग्री पर जाएँ",
-
+  "app.viewChanged": "{{view}} पर नेविगेट किया गया",
   "header.settings": "सेटिंग्स",
   "header.live": "लाइव",
   "header.signalsLearned": "{{count}} सीखे गए",
-
   "action.analyze": "विश्लेषण करें",
   "action.analyzing": "विश्लेषण हो रहा है...",
   "action.save": "सहेजें",
@@ -50,7 +49,6 @@
   "action.error": "त्रुटि",
   "action.runAnalysis": "विश्लेषण चलाएँ",
   "action.cancelAnalysis": "विश्लेषण रद्द करें",
-
   "analysis.statusRelevant": "{{relevant}}/{{total}} आइटम प्रासंगिक",
   "analysis.statusError": "त्रुटि: {{message}}",
   "analysis.complete": "विश्लेषण पूर्ण: {{count}} प्रासंगिक आइटम मिले",
@@ -66,11 +64,23 @@
   "analysis.sourceError": "{{source}}: {{error}}",
   "analysis.stackDetected": "आपका स्टैक स्वचालित रूप से पहचाना गया: {{stack}}। स्कोरिंग मेल खाने वाले स्रोतों को प्राथमिकता देगी।",
   "analysis.keyboardTriggered": "विश्लेषण शुरू हुआ",
-
+  "appbar.searchPlaceholder": "इंटेलिजेंस खोजें...",
+  "appbar.analyzing": "विश्लेषण हो रहा है...",
+  "appbar.relevant": "{{count}} प्रासंगिक",
+  "appbar.top": "{{count}} शीर्ष",
+  "feed.title": "सिग्नल स्ट्रीम",
+  "feed.viewAll": "सभी देखें ({{count}})",
+  "pulse.noData": "अभी तक कोई डेटा एकत्र नहीं हुआ। शुरू करने के लिए विश्लेषण चलाएँ।",
+  "pulse.itemsAnalyzed": "{{count}} आइटम विश्लेषित, {{relevant}} आपके लिए प्रासंगिक।",
+  "pulse.signalsNeedAttention": "{{count}} को आपके ध्यान की आवश्यकता है।",
+  "pulse.topPicks": "{{count}} शीर्ष चयन।",
+  "pulse.sourcesPartial": "{{healthy}}/{{total}} स्रोत सक्रिय।",
+  "pulse.newSince": "{{timeAgo}} से {{count}} नए।",
+  "pulse.movedToTop": "{{count}} शीर्ष पर पहुँचे।",
+  "pulse.securityAlert": "{{count}} सुरक्षा चेतावनी का पता चला।",
   "badge.llm": "LLM",
   "badge.on": "चालू",
   "badge.off": "बंद",
-
   "status.enabled": "सक्षम",
   "status.disabled": "अक्षम",
   "status.active": "सक्रिय",
@@ -79,7 +89,6 @@
   "status.disconnected": "डिस्कनेक्टेड",
   "status.online": "ऑनलाइन",
   "status.offline": "ऑफ़लाइन",
-
   "settings.title": "सेटिंग्स",
   "settings.locale.title": "भाषा और क्षेत्र",
   "settings.locale.description": "स्थानीयकृत सामग्री के लिए अपना देश, भाषा और मुद्रा सेट करें",
@@ -113,7 +122,6 @@
   "settings.monitoring.lastCheck": "अंतिम: {{time}}",
   "settings.monitoring.testNotification": "सूचना जाँचें",
   "settings.monitoring.loading": "निगरानी स्थिति लोड हो रही है...",
-
   "settings.ai.title": "AI प्रदाता",
   "settings.ai.description": "अपना LLM प्रदाता चुनें",
   "settings.ai.provider": "प्रदाता",
@@ -147,7 +155,6 @@
   "settings.ai.tokens": "टोकन",
   "settings.ai.cost": "लागत",
   "settings.ai.reranked": "पुनः-रैंक किया गया",
-
   "settings.context.title": "स्वचालित संदर्भ खोज",
   "settings.context.description": "उन डायरेक्टरियों को स्कैन करें जो आपको परिभाषित करती हैं - प्रोजेक्ट, नोट्स, दस्तावेज़",
   "settings.context.discovering": "खोज रहा है...",
@@ -163,7 +170,6 @@
   "settings.context.techStack": "तकनीकी स्टैक",
   "settings.context.topics": "विषय",
   "settings.context.more": "+{{count}} और",
-
   "settings.digest.title": "साप्ताहिक सारांश",
   "settings.digest.description": "प्रत्येक विश्लेषण के बाद फ़िल्टर किए गए परिणामों को डाइजेस्ट फ़ाइल के रूप में सहेजें",
   "settings.digest.enabled": "डाइजेस्ट सक्षम",
@@ -172,7 +178,6 @@
   "settings.digest.minScore": "न्यूनतम स्कोर",
   "settings.digest.maxItems": "अधिकतम आइटम",
   "settings.digest.loading": "डाइजेस्ट सेटिंग्स लोड हो रही हैं...",
-
   "settings.personalization.title": "मैन्युअल समायोजन",
   "settings.personalization.description": "रुचियों और बहिष्करणों के साथ अपने संदर्भ को सूक्ष्म-ट्यून करें",
   "settings.personalization.role": "आपकी भूमिका",
@@ -201,7 +206,6 @@
   "settings.personalization.removeExclusion": "बहिष्करण {{name}} हटाएँ",
   "settings.personalization.noExclusions": "कोई बहिष्करण सेट नहीं",
   "settings.personalization.loading": "संदर्भ लोड हो रहा है...",
-
   "settings.license.title": "लाइसेंस",
   "settings.license.currentTier": "वर्तमान स्तर:",
   "settings.license.tierTeam": "Team",
@@ -224,7 +228,6 @@
   "settings.license.starting": "शुरू हो रहा है...",
   "settings.license.startTrial": "45-दिन का मुफ़्त परीक्षण शुरू करें",
   "settings.license.getKey": "4da.ai/signal पर लाइसेंस कुंजी प्राप्त करें",
-
   "settings.streets.title": "STREETS सदस्यता",
   "settings.streets.currentTier": "वर्तमान स्तर:",
   "settings.streets.placeholder": "STREETS लाइसेंस कुंजी दर्ज करें",
@@ -234,14 +237,12 @@
   "settings.streets.tierSignal": "Signal ($12/माह)",
   "settings.streets.tierTeam": "Team ($29/सीट/माह)",
   "settings.streets.tierEnterprise": "Enterprise",
-
   "settings.ai.builtInLocal": "अंतर्निर्मित (स्थानीय)",
   "settings.ai.builtInModel": "all-MiniLM-L6-v2 (384 आयाम)",
   "settings.ai.builtInDescription": "शून्य-कॉन्फ़िग स्थानीय एम्बेडिंग्स। कोई API कुंजी आवश्यक नहीं। मॉडल पहले उपयोग पर स्वचालित रूप से डाउनलोड होता है (~90MB)।",
   "settings.ai.refreshModels": "मॉडल ताज़ा करें",
   "settings.ai.registryLastUpdated": "मॉडल अपडेट किए गए: {{time}}",
   "settings.ai.costUnavailable": "लागू नहीं",
-
   "settings.attention.title": "ध्यान डैशबोर्ड",
   "settings.attention.description": "आपका ध्यान कहाँ जाता है बनाम आपके कोड को कहाँ ज़रूरत है",
   "settings.attention.days": "{{count}} दिन",
@@ -251,7 +252,6 @@
   "settings.attention.blindSpots": "अंधे क्षेत्र",
   "settings.attention.risk": "{{level}} जोखिम",
   "settings.attention.noData": "अभी पर्याप्त इंटरैक्शन डेटा नहीं है। ध्यान पैटर्न बनाने के लिए कुछ दिन 4DA का उपयोग करें।",
-
   "settings.health.title": "प्रोजेक्ट स्वास्थ्य राडार",
   "settings.health.description": "डिपेंडेंसी ताज़गी, सुरक्षा, गति, समुदाय",
   "settings.health.scanning": "प्रोजेक्ट स्कैन हो रहे हैं...",
@@ -263,7 +263,6 @@
   "settings.health.dependencies": "{{count}} डिपेंडेंसीज़",
   "settings.health.lastChecked": "अंतिम जाँच {{date}}",
   "settings.health.never": "कभी नहीं",
-
   "settings.tabs.general": "सामान्य",
   "settings.tabs.intelligence": "बुद्धिमत्ता",
   "settings.tabs.sources": "स्रोत",
@@ -289,7 +288,6 @@
   "settings.digest.emailConfigSaved": "ईमेल कॉन्फ़िगरेशन सहेजा गया",
   "settings.digest.emailTestFailed": "ईमेल परीक्षण विफल",
   "settings.testConnection": "कनेक्शन जाँचें",
-
   "nav.results": "फ़ीड",
   "nav.briefing": "ब्रीफ़िंग",
   "nav.insights": "राडार",
@@ -313,7 +311,6 @@
   "nav.console.subtitle": "सटीकता, प्रोजेक्ट और AI लागत",
   "nav.calibrate": "सिस्टम",
   "nav.calibrate.subtitle": "स्वास्थ्य और कैलिब्रेशन",
-
   "results.title": "प्रासंगिकता परिणाम",
   "results.new": "{{count}} नए",
   "results.itemsRelevant": "{{items}} आइटम, {{relevant}} प्रासंगिक",
@@ -343,7 +340,6 @@
   "results.topPicksGroup": "शीर्ष चयन",
   "results.relevantGroup": "प्रासंगिक",
   "results.belowThreshold": "सीमा से नीचे",
-
   "briefing.title": "AI ब्रीफ़िंग",
   "briefing.generate": "ब्रीफ़िंग बनाएँ",
   "briefing.generating": "बना रहा है...",
@@ -371,7 +367,6 @@
   "briefing.viewAllResults": "सभी {{count}} परिणाम देखें",
   "briefing.systemLearned": "सिस्टम ने सीखा",
   "briefing.intelligenceMetrics": "इंटेलिजेंस मेट्रिक्स",
-
   "briefing.profile.title": "आपकी प्रोफ़ाइल",
   "briefing.profile.autophagyAccuracy": "ऑटोफ़ेजी सटीकता",
   "briefing.profile.autophagySummary": "{{cycles}} सीखने के चक्र · {{topics}} विषय · {{items}} आइटम (7 दिन)",
@@ -391,19 +386,18 @@
   "briefing.profile.knowledgeGaps": "सीखने के अवसर ({{count}})",
   "briefing.profile.moreGaps": "+{{count}} और",
   "briefing.profile.intelligenceGrowth": "सीखने की प्रगति",
-
   "search.title": "अपनी इंटेलिजेंस खोजें",
   "search.subtitle": "अपने फ़ीड में सिग्नल, लेख और अंतर्दृष्टि खोजें",
   "search.placeholder": "अपनी सामग्री के बारे में कुछ भी पूछें...",
   "search.searching": "खोज रहा है...",
   "search.noResults": "कोई परिणाम नहीं मिला",
-  "search.tryDifferent": "एक अलग क्वेरी या व्यापक कीवर्ड आज़माएँ",
+  "search.tryDifferent": "अलग कीवर्ड या व्यापक क्वेरी आज़माएँ",
   "search.tryThese": "ये आज़माएँ:",
   "search.queryType": "{{intent}} क्वेरी",
   "search.customRange": "कस्टम रेंज",
   "search.unknownFile": "अज्ञात फ़ाइल",
   "search.stats": "{{count}} परिणाम {{ms}} मिलीसेकंड में ({{confidence}}% विश्वास)",
-  "search.indexFirst": "अपनी सामग्री को इंडेक्स करने के लिए पहले विश्लेषण चलाएँ",
+  "search.indexFirst": "पहले अपनी फ़ाइलें इंडेक्स करें (सेटिंग्स > संदर्भ)",
   "search.noAnalysisTitle": "इंटेलिजेंस कंसोल तैयार — पहले विश्लेषण की प्रतीक्षा",
   "search.noAnalysisHint": "इंटेलिजेंस कंसोल अनलॉक करने के लिए अपना पहला विश्लेषण चलाएँ",
   "search.capabilityStack": "स्टैक-जागरूक खोज",
@@ -431,29 +425,24 @@
   "search.relatedDecisions": "संबंधित निर्णय",
   "search.knowledgeGaps": "सीखने के अवसर",
   "search.staleForDays": "{{days}} दिन पुराना",
-
   "time.justNow": "अभी",
   "time.minutesAgo": "{{count}} मिनट पहले",
   "time.hoursAgo": "{{count}} घंटे पहले",
   "time.daysAgo": "{{count}} दिन पहले",
-
   "tier.free": "मुफ़्त",
   "tier.pro": "Signal",
   "tier.signal": "Signal",
   "tier.team": "Team",
   "tier.enterprise": "Enterprise",
-
   "update.available": "अपडेट उपलब्ध: v{{version}}",
   "update.install": "इंस्टॉल करें और पुनः आरंभ करें",
   "update.installing": "इंस्टॉल हो रहा है...",
   "update.later": "बाद में",
   "update.defaultBody": "एक नया संस्करण इंस्टॉल के लिए तैयार है।",
   "update.download": "अपडेट डाउनलोड करें",
-
   "browser.title": "डेस्कटॉप ऐप आवश्यक",
   "browser.description": "4DA डेस्कटॉप ऐप के रूप में चलता है ताकि आपकी स्थानीय फ़ाइलों तक पहुँच सके, स्रोतों की निगरानी कर सके, और सब कुछ आपकी मशीन पर निजी रख सके।",
   "browser.hint": "<code>npm run tauri dev</code> चलाएँ या इंस्टॉल किया हुआ ऐप लॉन्च करें।",
-
   "onboarding.welcome.title": "4DA में आपका स्वागत है",
   "onboarding.welcome.tagline": "सिर्फ़ सिग्नल। कोई फ़ीड नहीं।",
   "onboarding.welcome.description": "4DA आपके प्रोजेक्ट्स से पता लगाता है कि आपको क्या महत्वपूर्ण है और इंटरनेट से प्रासंगिक सामग्री सामने लाता है - इससे पहले कि आप जानें कि आपको इसकी ज़रूरत है।",
@@ -467,19 +456,16 @@
   "onboarding.welcome.quickSetupHint": "त्वरित सेटअप — अधिकांश चरण स्वचालित हैं",
   "onboarding.welcome.skipToContent": "सामग्री पर जाएँ",
   "onboarding.welcome.skipHint": "आप बाद में सेटिंग्स में कॉन्फ़िगर कर सकते हैं",
-
   "onboarding.nav.back": "वापस",
   "onboarding.nav.next": "अगला",
   "onboarding.nav.skip": "छोड़ें",
   "onboarding.nav.continue": "जारी रखें",
   "onboarding.nav.skipForNow": "अभी छोड़ें",
-
   "onboarding.stepLabel.welcome": "स्वागत",
   "onboarding.stepLabel.setup": "सेटअप",
   "onboarding.stepLabel.calibrate": "कैलिब्रेट",
   "onboarding.stepProgress": "चरण {{current}} / {{total}}",
   "onboarding.version": "संस्करण {{version}}",
-
   "onboarding.apiKeys.title": "API कुंजियाँ",
   "onboarding.apiKeys.subtitle": "सर्वोत्तम परिणामों के लिए API कुंजियाँ कॉन्फ़िगर करें, या कीवर्ड-ओनली मोड आज़माएँ।",
   "onboarding.apiKeys.installingModels": "स्थानीय AI के लिए मॉडल इंस्टॉल हो रहे हैं...",
@@ -518,7 +504,6 @@
   "onboarding.apiKeys.keywordModeDesc": "API कुंजी या Ollama के बिना, 4DA अभी भी कीवर्ड मिलान का उपयोग करके काम कर सकता है। परिणाम सिमैंटिक खोज की तुलना में कम सटीक होंगे, लेकिन फिर भी उपयोगी। आप बाद में सेटिंग्स में API कुंजियाँ जोड़ सकते हैं।",
   "onboarding.apiKeys.tryKeywordMode": "कीवर्ड-ओनली मोड आज़माएँ",
   "onboarding.apiKeys.installingModelsBtn": "मॉडल इंस्टॉल हो रहे हैं...",
-
   "onboarding.complete.title": "सब तैयार है!",
   "onboarding.complete.subtitle": "4DA ने आपके लिए प्रासंगिक सामग्री खोजी। इसे और बेहतर बनाने का तरीका यहाँ है।",
   "onboarding.complete.keepImproving": "4DA को सुधारते रहें",
@@ -530,7 +515,6 @@
   "onboarding.complete.letItRunDesc": "बैकग्राउंड निगरानी हर 30 मिनट में जाँच करती है",
   "onboarding.complete.startUsing": "4DA का उपयोग शुरू करें",
   "onboarding.complete.settingsHint": "अपनी प्राथमिकताएँ समायोजित करने के लिए कभी भी सेटिंग्स दबाएँ",
-
   "onboarding.interests.title": "आपकी रुचियाँ",
   "onboarding.interests.subtitle": "4DA को समझने दें कि क्या दिखाना है। आपकी प्रतिक्रिया समय के साथ स्कोरिंग को सुधारती है।",
   "onboarding.interests.roleLabel": "आप क्या करते हैं?",
@@ -545,7 +529,6 @@
   "onboarding.interests.finishSetup": "सेटअप पूर्ण करें",
   "onboarding.interests.remove": "{{topic}} हटाएँ",
   "onboarding.interests.addLabel": "रुचि का विषय जोड़ें",
-
   "onboarding.context.title": "अपना संदर्भ खोजें",
   "onboarding.context.subtitle": "4DA आपके प्रोजेक्ट्स को स्कैन करके खोजता है कि आपके लिए क्या मायने रखता है। 100% स्थानीय, 100% निजी।",
   "onboarding.context.discoveryComplete": "खोज पूर्ण!",
@@ -569,7 +552,6 @@
   "onboarding.context.faqControlDesc": "हाँ! आप सेटिंग्स में कभी भी डायरेक्टरियाँ जोड़ या हटा सकते हैं। 4DA स्वचालित रूप से node_modules, .git फ़ोल्डर, और छिपी सिस्टम फ़ाइलों जैसे संवेदनशील स्थानों को अनदेखा करता है।",
   "onboarding.context.faqTimeTitle": "स्कैनिंग में कितना समय लगता है?",
   "onboarding.context.faqTimeDesc": "आमतौर पर कुछ सेकंड से एक मिनट तक, इस पर निर्भर करता है कि आपके कितने प्रोजेक्ट हैं। प्रारंभिक स्कैन सबसे लंबा होता है - उसके बाद, 4DA केवल परिवर्तनों की जाँच करता है।",
-
   "onboarding.scan.title": "गहन इंटेलिजेंस स्कैन",
   "onboarding.scan.subtitle": "आपकी व्यक्तिगत फ़ीड बनाने के लिए सभी स्रोतों से 300-500+ आइटम का व्यापक स्कैन।",
   "onboarding.scan.inProgress": "गहन स्कैन प्रगति में",
@@ -586,7 +568,6 @@
   "onboarding.scan.startDeepScan": "गहन स्कैन शुरू करें",
   "onboarding.scan.timeEstimateShort": "व्यापक परिणामों के लिए 2-5 मिनट लगते हैं",
   "onboarding.scan.seeResults": "मेरे परिणाम देखें →",
-
   "onboarding.results.title": "आपके परिणाम",
   "onboarding.results.topPicksSubtitle": "पूरे इंटरनेट से आपके शीर्ष चयन यहाँ हैं।",
   "onboarding.results.building": "आपकी व्यक्तिगत इंटेलिजेंस फ़ीड बन रही है...",
@@ -603,7 +584,6 @@
   "onboarding.results.enter4DA": "4DA में प्रवेश करें",
   "onboarding.results.backgroundScanHint": "पूर्ण स्कैन बैकग्राउंड में जारी है - आप कभी भी प्रवेश कर सकते हैं।",
   "onboarding.results.backgroundScanDone": "व्यापक परिणामों के लिए पूर्ण स्कैन बैकग्राउंड में जारी है।",
-
   "onboarding.setup.title": "त्वरित सेटअप",
   "onboarding.setup.subtitle": "अपना AI और रुचियाँ कॉन्फ़िगर करें। सब कुछ स्थानीय और निजी रहता है।",
   "onboarding.setup.aiProvider": "AI प्रदाता",
@@ -634,7 +614,6 @@
   "onboarding.setup.keyFormatHint": "कुंजी प्रारूप सही नहीं लग रहा",
   "onboarding.setup.keyFormatHintSoft": "कुंजी प्रारूप सही नहीं हो सकता - आप अभी भी जारी रख सकते हैं",
   "onboarding.setup.usingTechStack": "सामग्री स्कोरिंग के लिए तकनीकी स्टैक का उपयोग",
-
   "onboarding.setupAi.localAiReady": "स्थानीय AI तैयार — कोई API कुंजी आवश्यक नहीं",
   "onboarding.setupAi.local": "स्थानीय",
   "onboarding.setupAi.localLabel": "स्थानीय",
@@ -654,7 +633,6 @@
   "onboarding.setupAi.privacyMessage": "आपका डेटा कभी आपकी मशीन से बाहर नहीं जाता। कोई API कुंजी नहीं, कोई क्लाउड खाता नहीं, कोई उपयोग ट्रैकिंग नहीं।",
   "onboarding.setupAi.ollamaExplainer": "Ollama AI मॉडल सीधे आपके कंप्यूटर पर चलाता है — पूरी तरह निजी, पूरी तरह मुफ़्त।",
   "onboarding.setupAi.noKeyHint": "कोई API कुंजी नहीं? कोई बात नहीं। 4DA डिफ़ॉल्ट रूप से कीवर्ड मिलान का उपयोग करता है। बेहतर परिणामों के लिए सेटिंग्स में कभी भी कुंजी जोड़ें।",
-
   "settings.translations.title": "अनुवाद संपादक",
   "settings.translations.description": "ऐप में किसी भी अनुवादित स्ट्रिंग को ओवरराइड करें",
   "settings.translations.search": "कुंजी या मान से खोजें...",
@@ -672,38 +650,36 @@
   "settings.translations.noResults": "आपकी खोज से कोई अनुवाद मेल नहीं खाता",
   "settings.translations.allNamespaces": "सभी",
   "settings.translations.editorToggle": "अनुवाद संपादक",
-
   "error.generic": "कुछ गलत हो गया",
   "error.tryAgain": "पुनः प्रयास करें",
   "error.dbUnavailable": "डेटाबेस उपलब्ध नहीं",
   "error.somethingWrong": "कुछ गलत हो गया",
   "error.reload": "ऐप पुनः लोड करें",
   "error.tryRecover": "पुनर्प्राप्ति का प्रयास करें",
-
+  "error.viewFailed": "{{viewName}} लोड करने में विफल",
+  "error.viewRecovery": "एक अप्रत्याशित त्रुटि हुई। पुनः प्रयास करें या दृश्य बदलें।",
+  "error.retry": "पुनः प्रयास",
+  "error.playbookBrowser": "प्लेबुक के लिए डेस्कटॉप ऐप आवश्यक है",
+  "error.playbookFailed": "प्लेबुक सामग्री लोड करने में विफल",
   "commandDeck.title": "कमांड डेक",
   "commandDeck.git": "Git",
   "commandDeck.commands": "कमांड",
   "commandDeck.history": "इतिहास",
   "commandDeck.toggle": "टॉगल",
   "commandDeck.tabs": "टैब",
-
   "commandRunner.noDir": "कोई डायरेक्टरी चयनित नहीं",
   "commandRunner.placeholder": "कमांड दर्ज करें...",
   "commandRunner.exit": "निकास {{code}}",
   "commandRunner.hint": "कमांड टाइप करें और Enter दबाएँ",
-
   "toolkit.search": "टूल खोजें...",
   "toolkit.pinned": "पिन किए गए",
   "toolkit.utilities": "उपयोगिताएँ ({{count}})",
   "toolkit.noMatch": "\"{{query}}\" से कोई टूल मेल नहीं खाता",
-
   "advantage.score": "आपकी बढ़त",
   "advantage.acted": "{{acted}}/{{opened}} पर कार्रवाई",
   "advantage.avgLead": "{{hours}} घंटे औसत बढ़त",
-
   "engagement.streak": "लगातार",
   "engagement.activity": "7-दिन की गतिविधि",
-
   "pro.hint": "Signal: {{feature}}",
   "pro.upgrade": "Signal में अपग्रेड करें",
   "pro.renew": "नवीनीकरण",
@@ -718,7 +694,6 @@
   "pro.startingTrial": "शुरू हो रहा है...",
   "pro.haveLicenseKey": "लाइसेंस कुंजी है?",
   "pro.invalidLicenseKey": "अमान्य लाइसेंस कुंजी",
-
   "proValue.title": "आपकी इंटेलिजेंस वैल्यू",
   "proValue.lastDays": "पिछले {{days}} दिन",
   "proValue.activeSince": "{{date}} से सक्रिय",
@@ -736,7 +711,6 @@
   "proValue.dataDepth": "डेटा गहराई",
   "proValue.learningInteractions": "{{count}} सीखने के इंटरैक्शन",
   "proValue.dataSpans": "{{days}} दिनों का विस्तार",
-
   "documents.title": "इंडेक्स किए गए दस्तावेज़",
   "documents.documentsIndexed": "{{count}} दस्तावेज़ इंडेक्स किए गए",
   "documents.back": "← वापस",
@@ -751,14 +725,12 @@
   "documents.noDocuments": "अभी तक कोई दस्तावेज़ इंडेक्स नहीं किया गया",
   "documents.addFiles": "इंडेक्स करने के लिए अपनी स्कैन डायरेक्टरियों में PDF, DOCX, या अन्य फ़ाइलें जोड़ें",
   "documents.totalStats": "{{chunks}} खंडों में {{words}} शब्द",
-
   "community.title": "सामुदायिक इंटेलिजेंस",
   "community.active": "सक्रिय",
   "community.description": "सभी 4DA उपयोगकर्ताओं के लिए सटीकता में सुधार करने हेतु अनामीकृत स्कोरिंग पैटर्न का योगदान।",
   "community.frequency": "आवृत्ति",
   "community.lastSync": "अंतिम सिंक",
   "community.pending": "लंबित",
-
   "settings.team.title": "टीम सिंक",
   "settings.team.loading": "टीम स्थिति लोड हो रही है...",
   "settings.team.created": "टीम सफलतापूर्वक बनाई गई",
@@ -803,7 +775,6 @@
   "settings.team.expiresAt": "समाप्ति",
   "settings.team.inviteInstructions": "प्राप्तकर्ता को सेटिंग्स > टीम सिंक > टीम में शामिल हों पर जाकर यह कोड दर्ज करना चाहिए।",
   "settings.team.generateAnother": "एक और आमंत्रण बनाएँ",
-
   "settings.community.title": "सामुदायिक इंटेलिजेंस",
   "settings.community.subtitle": "सभी 4DA उपयोगकर्ताओं के लिए स्कोरिंग सुधारने में मदद करें",
   "settings.community.confirmTitle": "सामुदायिक इंटेलिजेंस सक्षम करें?",
@@ -823,7 +794,6 @@
   "settings.community.lastContribution": "अंतिम योगदान",
   "settings.community.never": "कभी नहीं",
   "settings.community.anonymousId": "गुमनाम आईडी",
-
   "team.dashboard.title": "टीम",
   "team.dashboard.signals": "सिग्नल",
   "team.dashboard.decisions": "निर्णय",
@@ -832,7 +802,6 @@
   "team.dashboard.members": "सदस्य",
   "team.dashboard.pending": "लंबित",
   "team.dashboard.lastSync": "अंतिम सिंक",
-
   "team.decisions.title": "टीम निर्णय",
   "team.decisions.all": "सभी",
   "team.decisions.proposed": "प्रस्तावित",
@@ -847,18 +816,14 @@
   "team.decisions.castVote": "वोट डालें",
   "team.decisions.accept": "स्वीकार करें",
   "team.decisions.reject": "अस्वीकार करें",
-
   "team.members.empty": "अभी तक कोई टीम सदस्य नहीं। शुरू करने के लिए किसी को आमंत्रित करें।",
   "team.members.you": "आप",
-
   "team.notifications.bell": "टीम सूचनाएँ",
   "team.notifications.title": "सूचनाएँ",
   "team.notifications.markAllRead": "सभी पढ़ी गई चिह्नित करें",
   "team.notifications.empty": "कोई सूचना नहीं",
-
   "team.roles.member": "सदस्य",
   "team.roles.admin": "व्यवस्थापक",
-
   "team.signals.empty": "अभी तक कोई साझा सिग्नल नहीं। जब सदस्य खोजें साझा करते हैं तो टीम सिग्नल यहाँ दिखाई देते हैं।",
   "team.signals.hint": "अपने सिग्नल चेन दृश्य से सिग्नल साझा करें, या टीम सेटिंग्स में स्वचालित साझाकरण सक्षम करें।",
   "team.signals.active": "सक्रिय",
@@ -868,13 +833,11 @@
   "team.signals.detectors": "पहचानकर्ता",
   "team.signals.resolvedBy": "हल किया",
   "team.signals.resolveNotes": "हल करने के नोट्स...",
-
   "team.sources.title": "साझा स्रोत",
   "team.sources.recommend": "+ सिफ़ारिश करें",
   "team.sources.whyRecommend": "यह स्रोत मूल्यवान क्यों है?",
   "team.sources.share": "टीम के साथ साझा करें",
   "team.sources.empty": "अभी तक कोई साझा स्रोत नहीं। अपनी टीम के लिए स्रोतों की सिफ़ारिश करें।",
-
   "team.dashboard.intelligence": "इंटेलिजेंस",
   "team.intelligence.title": "टीम इंटेलिजेंस",
   "team.intelligence.coverage": "स्टैक कवरेज",
@@ -908,7 +871,6 @@
   "team.signals.confidence": "विश्वास",
   "team.signals.suggestedAction": "सुझाया गया",
   "team.signals.memberDetections": "द्वारा पहचाना गया",
-
   "enterprise.audit.title": "ऑडिट लॉग",
   "enterprise.audit.description": "संगठन-व्यापी गतिविधियों को ट्रैक करें। सभी परिवर्तन अपरिवर्तनीय और टाइमस्टैम्प्ड हैं।",
   "enterprise.audit.badge": "Enterprise",
@@ -937,7 +899,6 @@
   "enterprise.audit.eventsByDay": "दिन के अनुसार इवेंट",
   "enterprise.audit.topActors": "शीर्ष कर्ता",
   "enterprise.audit.topActions": "शीर्ष कार्रवाइयाँ",
-
   "enterprise.health.title": "सिस्टम स्वास्थ्य",
   "enterprise.health.description": "वास्तविक-समय इंफ्रास्ट्रक्चर और सेवा स्थिति",
   "enterprise.health.relay": "रिले",
@@ -951,7 +912,6 @@
   "enterprise.health.fetched": "प्राप्त",
   "enterprise.health.errors": "त्रुटियाँ",
   "enterprise.health.orgMetrics": "संगठन मेट्रिक्स",
-
   "enterprise.webhooks.title": "Webhooks",
   "enterprise.webhooks.enterprise": "Enterprise",
   "enterprise.webhooks.cancel": "रद्द करें",
@@ -989,10 +949,8 @@
   "enterprise.webhooks.colStatus": "स्थिति",
   "enterprise.webhooks.colHttpCode": "HTTP",
   "enterprise.webhooks.colAttempts": "प्रयास",
-
   "enterprise.docs.title": "Webhook और API संदर्भ",
   "enterprise.docs.description": "अपने इंफ्रास्ट्रक्चर के साथ 4DA webhooks को एकीकृत करने के लिए तकनीकी संदर्भ।",
-
   "enterprise.export.title": "डेटा निर्यात और पोर्टेबिलिटी",
   "enterprise.export.description": "बैकअप, अनुपालन, या माइग्रेशन के लिए अपना डेटा निर्यात करें। API कुंजियाँ कभी शामिल नहीं होतीं।",
   "enterprise.export.sections": "निर्यात अनुभाग",
@@ -1000,14 +958,12 @@
   "enterprise.export.exportAll": "सभी चयनित निर्यात करें ({{selectedSections}} अनुभाग)",
   "enterprise.export.previous": "पिछले निर्यात",
   "enterprise.export.privacy": "निर्यात में कभी API कुंजियाँ, पासवर्ड, टोकन, या रहस्य शामिल नहीं होते। स्रोत कॉन्फ़िगरेशन प्रमाणीकरण क्रेडेंशियल के बिना शामिल होते हैं। सभी निर्यात स्थानीय रूप से आपकी डेटा डायरेक्टरी में संग्रहीत होते हैं।",
-
   "enterprise.diagnostics.title": "कॉन्फ़िगरेशन डायग्नोस्टिक्स",
   "enterprise.diagnostics.description": "समर्थन से संपर्क किए बिना अपने सेटअप को सत्यापित करें और समस्याओं का निवारण करें।",
   "enterprise.diagnostics.running": "चल रहा है...",
   "enterprise.diagnostics.run": "डायग्नोस्टिक्स चलाएँ",
   "enterprise.diagnostics.empty": "अपना कॉन्फ़िगरेशन सत्यापित करने के लिए \"डायग्नोस्टिक्स चलाएँ\" पर क्लिक करें।",
   "enterprise.diagnostics.tips": "त्वरित समाधान",
-
   "enterprise.policies.title": "डेटा प्रतिधारण नीतियाँ",
   "enterprise.policies.description": "विभिन्न डेटा प्रकारों को कितने समय तक रखा जाए नियंत्रित करें। हटाने से पहले 7-दिन की अनुग्रह अवधि लागू होती है।",
   "enterprise.policies.default": "डिफ़ॉल्ट",
@@ -1017,7 +973,6 @@
   "enterprise.policies.e2e": "सभी टीम रिले डेटा एंड-टू-एंड एन्क्रिप्टेड है (XChaCha20Poly1305)।",
   "enterprise.policies.localFirst": "प्राथमिक डेटा स्टोरेज प्रत्येक मशीन पर स्थानीय रहता है।",
   "enterprise.policies.relayDumb": "रिले सर्वर एन्क्रिप्टेड पेलोड नहीं पढ़ सकता। \"मूर्ख रिले, बुद्धिमान क्लाइंट।\"",
-
   "enterprise.org.title": "संगठन",
   "enterprise.org.notConfigured": "कोई संगठन कॉन्फ़िगर नहीं। संगठन प्रबंधन Enterprise स्तर पर उपलब्ध है।",
   "enterprise.org.enterprise": "Enterprise",
@@ -1031,7 +986,6 @@
   "enterprise.org.crossTeamSignals": "क्रॉस-टीम सिग्नल सहसंबंध",
   "enterprise.org.affectsTeams": "प्रभावित",
   "enterprise.org.activity": "टीम गतिविधि",
-
   "enterprise.sso.title": "सिंगल साइन-ऑन (SSO)",
   "enterprise.sso.description": "अपने संगठन के लिए SAML या OIDC प्रमाणीकरण कॉन्फ़िगर करें।",
   "enterprise.sso.logout": "साइन आउट",
@@ -1039,7 +993,6 @@
   "enterprise.sso.notConfigured": "SSO कॉन्फ़िगर नहीं है। टीम सदस्यों को प्रमाणित करने के लिए SAML या OpenID Connect सेट करें।",
   "enterprise.sso.configure": "SSO कॉन्फ़िगर करें",
   "enterprise.sso.info": "SSO सत्यापन आपकी मशीन पर स्थानीय रूप से होता है। 4DA कभी किसी सर्वर को क्रेडेंशियल नहीं भेजता। आपका पहचान प्रदाता localhost कॉलबैक के माध्यम से सीधे डेस्कटॉप ऐप को प्रमाणित करता है।",
-
   "enterprise.wizard.title": "टीम सेटअप विज़ार्ड",
   "enterprise.wizard.description": "4 चरणों में अपनी टीम सेट करें। सभी संचार एंड-टू-एंड एन्क्रिप्टेड है।",
   "enterprise.wizard.teamActive": "टीम सक्रिय है",
@@ -1058,13 +1011,10 @@
   "enterprise.wizard.doneNote": "आपका एन्क्रिप्टेड टीम रिले सक्रिय है। सदस्य आमंत्रण कोड का उपयोग करके शामिल हो सकते हैं।",
   "enterprise.wizard.security": "सभी टीम संचार XChaCha20Poly1305 एन्क्रिप्शन का उपयोग करता है। रिले सर्वर आपका डेटा नहीं पढ़ सकता — यह केवल एन्क्रिप्टेड ब्लॉब संग्रहीत और रूट करता है। \"मूर्ख रिले, बुद्धिमान क्लाइंट।\"",
   "enterprise.wizard.teamCreated": "टीम सफलतापूर्वक बनाई गई!",
-
   "enterprise.invite.createFailed": "आमंत्रण बनाने में विफल",
-
   "intelligence.cycles": "{{count}} चक्र",
   "intelligence.summary": "{{analyzed}} आइटम संसाधित, {{surfaced}} सामने आए ({{rate}}% अस्वीकृति दर)",
   "intelligence.antiPatterns": "{{count}} स्कोरिंग एंटी-पैटर्न पहचाना और सही किया गया",
-
   "feedback.openLink": "लिंक खोलें",
   "feedback.saved": "सहेजा गया",
   "feedback.dismissed": "खारिज किया गया",
@@ -1073,7 +1023,6 @@
   "feedback.irrelevant": "अप्रासंगिक",
   "feedback.actions": "प्रतिक्रिया कार्रवाइयाँ",
   "feedback.sessionSaves": "{{count}} इस सत्र में सहेजे गए",
-
   "results.unknownSource": "अज्ञात",
   "results.relatedArticles": "+{{count}} संबंधित लेख",
   "results.relatedArticles_other": "+{{count}} संबंधित लेख",
@@ -1083,7 +1032,6 @@
   "results.aiSummary": "AI सारांश",
   "results.generateAiSummary": "AI सारांश बनाएँ",
   "results.topMatches": "शीर्ष मिलान:",
-
   "ollama.pulling": "मॉडल खींच रहा है",
   "ollama.loading": "लोड हो रहा है...",
   "ollama.ready": "Ollama तैयार",
@@ -1097,7 +1045,6 @@
   "ollama.hintInstall": "ollama.com से इंस्टॉल करें",
   "ollama.hintServe": "चलाएँ: ollama serve",
   "ollama.hintRetry": "पुनः कनेक्ट करने के लिए स्थिति संकेतक पर क्लिक करें",
-
   "splash.starting": "शुरू हो रहा है...",
   "splash.database": "डेटाबेस इनिशियलाइज़ हो रहा है...",
   "splash.models": "AI उपलब्धता जाँच रहा है...",
@@ -1108,7 +1055,6 @@
   "splash.progress": "स्टार्टअप प्रगति: {{percent}}%",
   "splash.version": "संस्करण {{version}}",
   "splash.refreshIfStuck": "अटका हो तो ताज़ा करें",
-
   "firstRun.errorTitle": "विश्लेषण में बाधा आई",
   "firstRun.tryAgain": "पुनः प्रयास करें",
   "firstRun.topMatch": "शीर्ष मिलान",
@@ -1151,7 +1097,6 @@
   "firstRun.yourDna": "आपका डेवलपर DNA",
   "firstRun.dnaHint": "अब हम आपके स्टैक के बारे में प्रासंगिक सामग्री पर नज़र रख रहे हैं",
   "firstRun.skipAhead": "आगे बढ़ें",
-
   "shortcuts.title": "कीबोर्ड शॉर्टकट",
   "shortcuts.close": "कीबोर्ड शॉर्टकट बंद करें",
   "shortcuts.runAnalysis": "विश्लेषण चलाएँ",
@@ -1163,7 +1108,6 @@
   "shortcuts.openBriefing": "ब्रीफ़िंग खोलें",
   "shortcuts.saveItem": "वर्तमान आइटम सहेजें",
   "shortcuts.navigateItems": "आइटम नेविगेट करें",
-
   "about.fullName": "4 Dimensional Autonomy",
   "about.attribution": "विकास श्रेय",
   "about.vision": "दृष्टि",
@@ -1191,7 +1135,11 @@
   "about.tagline": "सभी अधिकार सुरक्षित। दृष्टि से निर्मित, Claude के साथ इंजीनियर किया गया।",
   "about.privacyPolicy": "गोपनीयता नीति",
   "about.termsOfService": "सेवा की शर्तें",
-
+  "about.viewFramework": "फ्रेमवर्क देखें",
+  "about.viewComparison": "तुलना करें",
+  "about.geometryTitle": "प्लेटोनिक आर्किटेक्चर",
+  "comparison.title": "प्रतिस्पर्धी तुलना",
+  "comparison.subtitle": "4DA मौजूदा टूल्स से कैसे तुलना करता है",
   "sources.title": "स्रोत कॉन्फ़िगरेशन",
   "sources.customCount": "{{count}} कस्टम",
   "sources.subtitle": "RSS फ़ीड, YouTube, GitHub भाषाएँ, Twitter/X",
@@ -1217,21 +1165,19 @@
   "sources.twitter.keySaved": "X API कुंजी सहेजी गई",
   "sources.twitter.keyCleared": "X API कुंजी साफ़ की गई",
   "sources.twitter.update": "अपडेट",
-
   "saved.empty.title": "अभी तक कोई सहेजा गया आइटम नहीं",
   "saved.empty.subtitle": "अपना संग्रह बनाने के लिए परिणाम दृश्य से आइटम सहेजें।",
   "saved.count": "{{count}} सहेजे गए आइटम",
   "saved.itemRemoved": "आइटम सहेजे गए संग्रह से हटाया गया",
   "saved.copyUrl": "URL कॉपी करें",
   "saved.remove": "हटाएँ",
-
+  "saved.title": "सहेजे गए आइटम",
   "briefing.warmup.title": "आपका इंटेलिजेंस सिस्टम",
   "briefing.warmup.stackDetected": "स्टैक पहचाना गया",
   "briefing.warmup.sourcesReady": "स्रोत तैयार",
   "briefing.warmup.description": "4DA स्रोतों को स्कैन करेगा, प्रत्येक आइटम को आपकी प्रोफ़ाइल के विरुद्ध स्कोर करेगा, और जो मायने रखता है उसे सामने लाएगा।",
   "briefing.warmup.activate": "इंटेलिजेंस शुरू करें",
   "briefing.warmup.autoStart": "स्वचालित रूप से शुरू हो रहा है...",
-
   "briefing.gatheringIntelligence": "इंटेलिजेंस एकत्र हो रहा है",
   "briefing.analysisRunning": "विश्लेषण चल रहा है। परिणाम तैयार होने पर आपकी ब्रीफ़िंग बनाई जाएगी।",
   "briefing.loadingStageFetch": "आपके स्टैक से प्रासंगिक सिग्नलों के लिए स्रोत स्कैन हो रहे हैं...",
@@ -1245,7 +1191,6 @@
   "briefing.orPress": "या दबाएँ",
   "briefing.personalizeTitle": "अपनी फ़ीड व्यक्तिगत बनाएँ",
   "briefing.personalizeBody": "बेहतर परिणामों के लिए सेटिंग्स में अपनी रुचियाँ और तकनीकी स्टैक जोड़ें।",
-
   "coach.chat.title": "STREETS कोच",
   "coach.chat.emptyDescription": "स्वतंत्र डेवलपर आय बनाने के बारे में कुछ भी पूछें। आपकी सॉवरेन प्रोफ़ाइल और प्लेबुक प्रगति हर उत्तर को सूचित करती है।",
   "coach.chat.placeholder": "अपने कोच से पूछें...",
@@ -1254,7 +1199,6 @@
   "coach.chat.suggestEngine": "कौन सा राजस्व इंजन मेरी प्रोफ़ाइल के लिए सबसे अच्छा है?",
   "coach.chat.suggest30DayPlan": "मुझे 30-दिन की लॉन्च योजना बनाने में मदद करें",
   "coach.chat.suggestMarketFit": "बाज़ार फ़िट के लिए मेरे प्रोजेक्ट आइडिया की समीक्षा करें",
-
   "coach.engine.title": "इंजन सिफ़ारिशकर्ता",
   "coach.engine.subtitle": "आपकी प्रोफ़ाइल का AI-संचालित विश्लेषण",
   "coach.engine.analyzeProfile": "मेरी प्रोफ़ाइल का विश्लेषण करें",
@@ -1270,7 +1214,6 @@
   "coach.engine.overallAnalysis": "समग्र विश्लेषण",
   "coach.engine.profileGaps": "प्रोफ़ाइल कमियाँ",
   "coach.engine.emptyDescription": "अपनी सॉवरेन प्रोफ़ाइल, कौशल और लक्ष्यों के आधार पर AI-संचालित इंजन सिफ़ारिशें प्राप्त करने के लिए \"मेरी प्रोफ़ाइल का विश्लेषण करें\" पर क्लिक करें।",
-
   "coach.launch.title": "लॉन्च समीक्षा",
   "coach.launch.subtitle": "AI-संचालित लॉन्च तैयारी विश्लेषण के लिए अपना प्रोजेक्ट सबमिट करें",
   "coach.launch.placeholder": "अपने प्रोजेक्ट, लक्ष्य दर्शक, मूल्य निर्धारण मॉडल, और वर्तमान स्थिति का वर्णन करें...",
@@ -1285,7 +1228,6 @@
   "coach.launch.strengths": "ताकतें",
   "coach.launch.gaps": "कमियाँ",
   "coach.launch.recommendations": "सिफ़ारिशें",
-
   "coach.progress.title": "प्रगति जाँच",
   "coach.progress.subtitle": "अपनी STREETS यात्रा को ट्रैक करें और व्यक्तिगत सुझाव पाएँ",
   "coach.progress.checkingIn": "जाँच हो रही है...",
@@ -1300,7 +1242,6 @@
   "coach.progress.noNudges": "कोई सक्रिय सुझाव नहीं। व्यक्तिगत मार्गदर्शन प्राप्त करने के लिए जाँच चलाएँ।",
   "coach.progress.checkInResults": "जाँच परिणाम",
   "coach.progress.runningCheckIn": "प्रगति जाँच चल रही है...",
-
   "coach.strategy.title": "रणनीति दस्तावेज़",
   "coach.strategy.subtitle": "आपकी प्रोफ़ाइल पर आधारित व्यक्तिगत राजस्व रणनीति",
   "coach.strategy.generating": "बना रहा है...",
@@ -1310,7 +1251,6 @@
   "coach.strategy.generatingHint": "AI द्वारा आपकी प्रोफ़ाइल के विश्लेषण में कुछ समय लग सकता है",
   "coach.strategy.lineCount": "{{count}} पंक्तियाँ",
   "coach.strategy.emptyDescription": "अपनी सॉवरेन प्रोफ़ाइल, अनुशंसित इंजनों, और वर्तमान प्रगति के अनुसार एक व्यापक रणनीति दस्तावेज़ बनाएँ।",
-
   "coach.gate.title": "STREETS कोच",
   "coach.gate.subtitle": "आपकी राजस्व यात्रा के लिए AI-संचालित कोचिंग",
   "coach.gate.currentTier": "वर्तमान स्तर:",
@@ -1322,13 +1262,11 @@
   "coach.gate.featureProgress": "प्रगति ट्रैकिंग और सुझाव",
   "coach.gate.enterLicenseKey": "लाइसेंस कुंजी दर्ज करें",
   "coach.gate.getSignal": "Signal प्राप्त करें — $12/माह",
-
   "coach.template.title": "टेम्पलेट लाइब्रेरी",
   "coach.template.subtitle": "आपकी STREETS यात्रा के लिए तैयार Markdown टेम्पलेट",
   "coach.template.all": "सभी",
   "coach.template.emptyNoTemplates": "अभी तक कोई टेम्पलेट उपलब्ध नहीं। टेम्पलेट लाइब्रेरी तक पहुँच के लिए Signal में अपग्रेड करें।",
   "coach.template.emptyNoMatch": "चयनित श्रेणी से कोई टेम्पलेट मेल नहीं खाता।",
-
   "coach.video.title": "वीडियो पाठ्यक्रम",
   "coach.video.subtitle": "STREETS वीडियो पाठ — आपकी प्रगति के साथ अनलॉक होते हैं",
   "coach.video.curriculumProgress": "पाठ्यक्रम प्रगति",
@@ -1338,10 +1276,8 @@
   "coach.video.unlocksOnDay": "दिन {{day}} पर अनलॉक होता है",
   "coach.video.dripDay": "दिन {{day}}",
   "coach.video.emptyDescription": "अभी तक कोई वीडियो पाठ उपलब्ध नहीं। पूर्ण STREETS वीडियो पाठ्यक्रम तक पहुँच के लिए Signal में अपग्रेड करें।",
-
   "playbook.regional.approximateEquivalent": "{{currency}} में अनुमानित समतुल्य",
   "playbook.regional.inYourRegion": "(आपके क्षेत्र में ~{{amount}}{{unit}})",
-
   "playbook.sovereign.title": "सॉवरेन प्रोफ़ाइल",
   "playbook.sovereign.subtitle": "STREETS कमांड से संचित हार्डवेयर और सिस्टम तथ्य",
   "playbook.sovereign.loading": "सॉवरेन प्रोफ़ाइल लोड हो रही है...",
@@ -1353,9 +1289,7 @@
   "playbook.sovereign.generateStackDoc": "स्टैक दस्तावेज़ बनाएँ",
   "playbook.sovereign.missing": "अनुपलब्ध: {{fields}}",
   "playbook.sovereign.stackDocument": "सॉवरेन स्टैक दस्तावेज़",
-
   "playbook.health.title": "STREETS स्वास्थ्य",
-
   "playbook.code.runAllSafe": "सभी सुरक्षित चलाएँ ({{count}})",
   "playbook.code.runCommand": "कमांड चलाएँ",
   "playbook.code.parseCommands": "कमांड पार्स करें",
@@ -1363,14 +1297,11 @@
   "playbook.code.failed": "विफल (निकास {{code}})",
   "playbook.code.showOutput": "आउटपुट दिखाएँ",
   "playbook.code.showError": "त्रुटि दिखाएँ",
-
   "playbook.templates": "टेम्पलेट",
   "playbook.templatesSubtitle": "लॉन्च और विकास उपकरण",
-
   "commandDeck.confirm": "पुष्टि करें",
   "commandDeck.repo.noRepos": "कोई रिपॉज़ नहीं मिला",
   "commandDeck.repo.selectRepo": "रिपॉज़िटरी चुनें",
-
   "commandDeck.git.loading": "Git स्थिति लोड हो रही है...",
   "commandDeck.git.selectRepo": "शुरू करने के लिए रिपॉज़िटरी चुनें",
   "commandDeck.git.repoHint": "ACE-खोजे गए रिपॉज़ ऊपर सिलेक्टर में दिखाई देते हैं",
@@ -1393,19 +1324,15 @@
   "commandDeck.git.confirmPush": "{{count}} कमिट(s) origin/{{branch}} पर पुश करें?",
   "commandDeck.git.push": "पुश",
   "commandDeck.git.ahead": "{{count}} आगे",
-
   "commandDeck.history.noCommands": "कोई कमांड इतिहास नहीं",
   "commandDeck.history.recentCommits": "हाल के कमिट",
-
   "toolkit.unpin": "अनपिन",
   "toolkit.pinToTop": "शीर्ष पर पिन करें",
-
   "toolkit.shell.back": "वापस",
   "toolkit.shell.escToClose": "बंद करने के लिए Esc",
   "toolkit.shell.loadingTool": "टूल लोड हो रहा है...",
   "toolkit.shell.errorEncountered": "{{toolName}} में त्रुटि आई",
   "toolkit.shell.backToToolkit": "टूलकिट पर वापस",
-
   "toolkit.colorPicker.hue": "ह्यू",
   "toolkit.colorPicker.pickFromScreen": "स्क्रीन से चुनें",
   "toolkit.colorPicker.wcagContrast": "WCAG कंट्रास्ट",
@@ -1413,14 +1340,12 @@
   "toolkit.colorPicker.pass": "उत्तीर्ण",
   "toolkit.colorPicker.fail": "विफल",
   "toolkit.colorPicker.copyLabel": "{{label}} कॉपी करें",
-
   "toolkit.cronBuilder.minute": "मिनट",
   "toolkit.cronBuilder.hour": "घंटा",
   "toolkit.cronBuilder.dayOfMonth": "दिन (महीने का)",
   "toolkit.cronBuilder.month": "महीना",
   "toolkit.cronBuilder.dayOfWeek": "दिन (सप्ताह का)",
   "toolkit.cronBuilder.presets": "प्रीसेट",
-
   "toolkit.decisionLog.type": "प्रकार",
   "toolkit.decisionLog.status": "स्थिति",
   "toolkit.decisionLog.addDecision": "निर्णय जोड़ें",
@@ -1436,14 +1361,12 @@
   "toolkit.decisionLog.tags": "टैग",
   "toolkit.decisionLog.empty": "अभी तक कोई निर्णय दर्ज नहीं",
   "toolkit.decisionLog.emptyHint": "अपनी तकनीकी पसंद को ट्रैक करने के लिए \"निर्णय जोड़ें\" पर क्लिक करें",
-
   "toolkit.diffViewer.original": "मूल",
   "toolkit.diffViewer.originalPlaceholder": "मूल टेक्स्ट पेस्ट करें...",
   "toolkit.diffViewer.modified": "संशोधित",
   "toolkit.diffViewer.modifiedPlaceholder": "संशोधित टेक्स्ट पेस्ट करें...",
   "toolkit.diffViewer.unified": "एकीकृत",
   "toolkit.diffViewer.sideBySide": "साथ-साथ",
-
   "toolkit.encoder.output": "आउटपुट",
   "toolkit.encoder.base64Detected": "Base64 पहचाना गया",
   "toolkit.encoder.base64Placeholder": "एनकोड करने के लिए टेक्स्ट दर्ज करें या डीकोड करने के लिए Base64...",
@@ -1454,7 +1377,6 @@
   "toolkit.encoder.algorithm": "एल्गोरिदम",
   "toolkit.encoder.hashPlaceholder": "हैश करने के लिए टेक्स्ट दर्ज करें...",
   "toolkit.encoder.hashOutputHint": "हैश आउटपुट यहाँ दिखाई देगा",
-
   "toolkit.envSnapshot.captureSnapshot": "स्नैपशॉट कैप्चर करें",
   "toolkit.envSnapshot.capturing": "कैप्चर हो रहा है...",
   "toolkit.envSnapshot.copyAsMarkdown": "Markdown के रूप में कॉपी करें",
@@ -1464,7 +1386,6 @@
   "toolkit.envSnapshot.runtimeVersions": "रनटाइम संस्करण",
   "toolkit.envSnapshot.git": "Git",
   "toolkit.envSnapshot.recentCommits": "हाल के कमिट",
-
   "toolkit.exportPack.generateExport": "निर्यात बनाएँ",
   "toolkit.exportPack.generating": "बना रहा है...",
   "toolkit.exportPack.sections": "अनुभाग",
@@ -1472,7 +1393,6 @@
   "toolkit.exportPack.downloadMd": ".md डाउनलोड करें",
   "toolkit.exportPack.empty": "पूर्वावलोकन देखने के लिए अपनी डेवलपर प्रोफ़ाइल बनाएँ",
   "toolkit.exportPack.emptyHint": "आपके DNA, तकनीकी राडार, और निर्णयों को एक साझा करने योग्य Markdown दस्तावेज़ में मिलाता है",
-
   "toolkit.httpProbe.send": "भेजें",
   "toolkit.httpProbe.sending": "भेज रहा है...",
   "toolkit.httpProbe.headers": "हेडर",
@@ -1485,7 +1405,6 @@
   "toolkit.httpProbe.responseBody": "प्रतिक्रिया बॉडी",
   "toolkit.httpProbe.history": "इतिहास",
   "toolkit.httpProbe.noRequests": "अभी तक कोई अनुरोध नहीं",
-
   "toolkit.jsonViewer.editor": "संपादक",
   "toolkit.jsonViewer.tree": "ट्री",
   "toolkit.jsonViewer.diff": "डिफ़",
@@ -1501,10 +1420,8 @@
   "toolkit.jsonViewer.right": "दाएँ",
   "toolkit.jsonViewer.rightPlaceholder": "दूसरा JSON पेस्ट करें...",
   "toolkit.jsonViewer.diffResult": "डिफ़ परिणाम",
-
   "toolkit.mockData.type": "प्रकार",
   "toolkit.mockData.count": "संख्या",
-
   "toolkit.portScanner.scanPorts": "पोर्ट स्कैन करें",
   "toolkit.portScanner.scanning": "स्कैन हो रहा है...",
   "toolkit.portScanner.filterPlaceholder": "पोर्ट या प्रोसेस से फ़िल्टर...",
@@ -1518,7 +1435,6 @@
   "toolkit.portScanner.empty": "अभी तक कोई पोर्ट स्कैन नहीं",
   "toolkit.portScanner.emptyHint": "सुन रही सेवाओं की खोज के लिए पोर्ट स्कैन करें क्लिक करें",
   "toolkit.portScanner.noMatch": "\"{{filter}}\" से कोई पोर्ट मेल नहीं खाता",
-
   "toolkit.regex.patternPlaceholder": "रीजेक्स पैटर्न दर्ज करें...",
   "toolkit.regex.replaceMode": "रिप्लेस मोड",
   "toolkit.regex.matchCount": "{{count}} मिलान",
@@ -1530,7 +1446,6 @@
   "toolkit.regex.replacePreview": "रिप्लेस पूर्वावलोकन",
   "toolkit.regex.matches": "मिलान",
   "toolkit.regex.namedCaptureGroups": "नामित कैप्चर समूह",
-
   "toolkit.scoringSandbox.title": "शीर्षक",
   "toolkit.scoringSandbox.titlePlaceholder": "स्कोर करने के लिए लेख शीर्षक दर्ज करें...",
   "toolkit.scoringSandbox.content": "सामग्री (वैकल्पिक)",
@@ -1557,7 +1472,6 @@
   "toolkit.scoringSandbox.affinityMultiplier": "रुझान गुणक",
   "toolkit.scoringSandbox.domainRelevance": "डोमेन प्रासंगिकता",
   "toolkit.scoringSandbox.contentQuality": "सामग्री गुणवत्ता",
-
   "toolkit.sourceDebugger.testFeed": "फ़ीड जाँचें",
   "toolkit.sourceDebugger.testing": "जाँच हो रही है...",
   "toolkit.sourceDebugger.clear": "साफ़ करें",
@@ -1568,20 +1482,17 @@
   "toolkit.sourceDebugger.validationUrl": "URL http:// या https:// से शुरू होना चाहिए",
   "toolkit.sourceDebugger.itemCount": "{{count}} आइटम",
   "toolkit.sourceDebugger.itemCount_other": "{{count}} आइटम",
-
   "toolkit.sovereignProfile.loading": "सॉवरेन प्रोफ़ाइल लोड हो रही है...",
   "toolkit.sovereignProfile.completeness": "प्रोफ़ाइल पूर्णता",
   "toolkit.sovereignProfile.generateDocument": "दस्तावेज़ बनाएँ",
   "toolkit.sovereignProfile.generating": "बना रहा है...",
   "toolkit.sovereignProfile.runStreets": "पॉप्युलेट करने के लिए STREETS कमांड चलाएँ",
   "toolkit.sovereignProfile.stackDocument": "स्टैक दस्तावेज़",
-
   "toolkit.stackHealth.scanning": "स्कैन हो रहा है...",
   "toolkit.stackHealth.analyzing": "प्रोजेक्ट स्वास्थ्य का विश्लेषण...",
   "toolkit.stackHealth.empty": "अभी तक कोई स्वास्थ्य डेटा नहीं",
   "toolkit.stackHealth.emptyHint": "प्रोजेक्ट डिपेंडेंसीज़ स्कैन करने के लिए ताज़ा करें क्लिक करें",
   "toolkit.stackHealth.noProjects": "कोई प्रोजेक्ट नहीं मिला। ACE को पहले प्रोजेक्ट खोजने होंगे।",
-
   "agentMemory.title": "एजेंट मेमोरी",
   "agentMemory.empty": "अभी तक कोई एजेंट मेमोरी नहीं",
   "agentMemory.emptyHint": "क्रॉस-एजेंट संदर्भ बनाना शुरू करने के लिए MCP के माध्यम से AI एजेंट कनेक्ट करें।",
@@ -1603,12 +1514,10 @@
   "agentMemory.expires": "समाप्ति",
   "agentMemory.promotedTo": "निर्णय #{{id}} में प्रमोट किया गया",
   "agentMemory.promoteToDecision": "निर्णय में प्रमोट करें",
-
   "reader.readArticle": "लेख पढ़ें",
   "reader.noContent": "इस आइटम के लिए कोई सामग्री उपलब्ध नहीं।",
   "reader.wordCount": "{{count}} शब्द",
   "reader.readTime": "~{{minutes}} मिनट पठन",
-
   "audio.feature": "ऑडियो ब्रीफ़िंग",
   "audio.play": "ऑडियो ब्रीफ़िंग चलाएँ",
   "audio.pause": "ऑडियो ब्रीफ़िंग रोकें",
@@ -1616,7 +1525,6 @@
   "audio.generating": "ऑडियो बन रहा है...",
   "audio.playFailed": "ऑडियो चलाने में विफल",
   "audio.playbackBlocked": "ऑडियो प्लेबैक अवरुद्ध",
-
   "autophagy.title": "4DA कैसे सीखता है",
   "autophagy.feature": "ऑटोफ़ेजी अंतर्दृष्टि",
   "autophagy.calibrationAccuracy": "कैलिब्रेशन सटीकता",
@@ -1627,12 +1535,10 @@
   "autophagy.calibrations": "कैलिब्रेशन",
   "autophagy.antiPatterns": "एंटी-पैटर्न",
   "autophagy.recentCycles": "हाल के चक्र",
-
   "decisions.title": "लेने योग्य निर्णय",
   "decisions.subtitle": "समय-सीमित अवसर",
   "decisions.affects": "प्रभावित",
   "decisions.act": "कार्रवाई",
-
   "delegation.title": "कार्य कोचिंग",
   "delegation.empty": "कोई प्रत्यायोजन डेटा उपलब्ध नहीं",
   "delegation.emptyHint": "प्रत्यायोजन स्कोर देखने के लिए सेटिंग्स में अपना तकनीकी स्टैक जोड़ें।",
@@ -1653,7 +1559,6 @@
   "delegation.factorMaturity": "परिपक्वता",
   "delegation.factorReversibility": "प्रत्यावर्तनीयता",
   "delegation.factorSecurity": "सुरक्षा",
-
   "knowledgeGaps.title": "सीखने के अवसर",
   "knowledgeGaps.feature": "सीखने के अवसर",
   "knowledgeGaps.count": "{{count}} कमी",
@@ -1663,22 +1568,18 @@
   "knowledgeGaps.missedArticles_other": "{{count}} प्रासंगिक लेख जिन्हें आपने नहीं देखा",
   "knowledgeGaps.noEngagement": "कोई सहभागिता दर्ज नहीं",
   "knowledgeGaps.daysSinceEngagement": "अंतिम सहभागिता से {{days}} दिन",
-
   "intelligence.title": "लाइव सिग्नल",
   "intelligence.feature": "लाइव सिग्नल",
   "intelligence.calibration": "कैलिब्रेशन सटीकता",
   "intelligence.learned": "सिस्टम ने क्या सीखा",
   "intelligence.sourceQuality": "स्रोत गुणवत्ता",
-
   "digest.title": "साप्ताहिक डाइजेस्ट",
   "digest.analyzed": "विश्लेषित",
   "digest.relevant": "प्रासंगिक",
   "digest.avgScore": "औसत स्कोर",
   "digest.topItems": "शीर्ष आइटम",
-
   "standingQueries.singleMatch": "\"{{query}}\" — {{count}} नया मिलान मिला",
   "standingQueries.multiMatch": "{{count}} स्टैंडिंग क्वेरीज़ में नए मिलान हैं",
-
   "learnedBehavior.title": "प्रतिक्रिया और रुझान",
   "learnedBehavior.subtitle": "आपकी सहेजने और खारिज करने की कार्रवाइयों से प्रभावित विषय",
   "learnedBehavior.topicAffinities": "विषय रुझान",
@@ -1688,7 +1589,6 @@
   "learnedBehavior.antiTopics": "स्वचालित-पहचाने एंटी-विषय",
   "learnedBehavior.antiTopicsHint": "इन विषयों वाले आइटम की प्रासंगिकता स्कोरिंग में कटौती होगी",
   "learnedBehavior.refresh": "सीखा हुआ व्यवहार ताज़ा करें",
-
   "signals.title": "प्रमुख सिग्नल",
   "signals.feature": "सिग्नल चेन",
   "signals.activeChains": "{{count}} सक्रिय चेन",
@@ -1696,7 +1596,6 @@
   "signals.signalCount": "{{count}} सिग्नल",
   "signals.signalCount_other": "{{count}} सिग्नल",
   "signals.resolve": "हल करें",
-
   "techRadar.title": "तकनीकी राडार",
   "techRadar.loading": "तकनीकी राडार लोड हो रहा है...",
   "techRadar.empty": "कोई राडार डेटा उपलब्ध नहीं",
@@ -1716,7 +1615,6 @@
   "techRadar.backToFull": "पूर्ण दृश्य पर वापस",
   "techRadar.current": "वर्तमान",
   "techRadar.timeline": "समयरेखा",
-
   "results.affinityBoost": "{{topic}} में आपकी रुचि के कारण बूस्ट किया गया",
   "results.signal.security_alert": "सुरक्षा",
   "results.signal.breaking_change": "ब्रेकिंग",
@@ -1742,23 +1640,19 @@
   "results.predictedContext": "पूर्वानुमानित संदर्भ",
   "results.predictedAt": "{{time}} पर पूर्वानुमानित",
   "results.refreshInterval": "हर 5 मिनट ताज़ा होता है",
-
   "pro.signals": "{{count}} सिग्नल",
   "pro.signals_other": "{{count}} सिग्नल",
   "pro.gaps": "{{count}} कमी",
   "pro.gaps_other": "{{count}} कमियाँ",
   "pro.hoursSaved": "~{{hours}} घंटे बचाए",
   "pro.intelligenceSummary": "सिग्नल इंटेलिजेंस: {{summary}} (पिछले {{days}} दिन)",
-
   "search.nlqFeature": "प्राकृतिक भाषा क्वेरी",
   "search.nlqTitle": "प्राकृतिक भाषा क्वेरी",
   "search.nlqSubtitle": "अपनी फ़ीड के बारे में सामान्य भाषा में पूछें",
   "search.nlqPlaceholder": "अपनी फ़ीड के बारे में पूछें...",
   "search.nlqHint": "अपनी फ़ीड के बारे में प्राकृतिक भाषा में प्रश्न पूछें",
   "search.query": "क्वेरी",
-  "search.indexFirst": "पहले अपनी फ़ाइलें इंडेक्स करें (सेटिंग्स > संदर्भ)",
   "search.untitled": "शीर्षकहीन",
-  "search.tryDifferent": "अलग कीवर्ड या व्यापक क्वेरी आज़माएँ",
   "search.resultStats": "{{count}} परिणाम {{ms}} मिलीसेकंड में",
   "search.resultStats_other": "{{count}} परिणाम {{ms}} मिलीसेकंड में",
   "search.stackContext": "आपका स्टैक",
@@ -1768,13 +1662,10 @@
   "search.attention": "ध्यान चाहिए",
   "search.stale": "पुराना",
   "search.critical": "गंभीर",
-  "search.relatedDecisions": "संबंधित निर्णय",
-  "search.knowledgeGaps": "सीखने के अवसर",
   "search.daysStale": "{{days}} दिन पुराना",
   "search.watchCreated": "वॉच बनाया गया",
   "search.watchDeleted": "वॉच हटाया गया",
   "search.noLlm": "AI संश्लेषण के लिए LLM प्रदाता कॉन्फ़िगर करें",
-
   "context.title": "संदर्भ",
   "context.filesIndexed": "{{count}} फ़ाइलें इंडेक्स की गईं",
   "context.reloadFiles": "फ़ाइलें पुनः लोड करें",
@@ -1789,9 +1680,7 @@
   "context.exportFailed": "निर्यात विफल: {{error}}",
   "context.exporting": "संदर्भ पैकेट निर्यात हो रहा है",
   "context.exportToClipboard": "संदर्भ पैकेट निर्यात करें (क्लिपबोर्ड)",
-
   "briefing.read": "पढ़ें",
-
   "onboarding.locale.detecting": "क्षेत्र का पता लगा रहा है...",
   "onboarding.locale.country": "देश",
   "onboarding.locale.language": "भाषा",
@@ -1802,7 +1691,6 @@
   "onboarding.locale.selectCountry": "देश चुनें",
   "onboarding.locale.selectLanguage": "भाषा चुनें",
   "onboarding.locale.selectCurrency": "मुद्रा चुनें",
-
   "onboarding.stack.loading": "स्टैक प्रोफ़ाइल लोड हो रहे हैं...",
   "onboarding.stack.description": "बेहतर सामग्री स्कोरिंग के लिए अपना तकनीकी स्टैक चुनें। स्वचालित-पहचाने गए स्टैक पहले से चयनित हैं।",
   "onboarding.stack.painPoints": "{{count}} समस्या बिंदु",
@@ -1812,16 +1700,20 @@
   "onboarding.stack.clickToToggle": "टॉगल करने के लिए क्लिक करें।",
   "onboarding.stack.noSelection": "कोई स्टैक नहीं चुना — स्कोरिंग डिफ़ॉल्ट व्यवहार का उपयोग करेगी।",
   "onboarding.stack.autoSelectedBanner": "आपके प्रोजेक्ट्स के आधार पर स्वचालित-चयनित",
-
   "onboarding.projects.scanning": "आपके प्रोजेक्ट्स स्कैन हो रहे हैं...",
   "onboarding.projects.detected": "आपके स्थानीय प्रोजेक्ट्स से पहचाना गया:",
   "onboarding.projects.noTech": "कोई विशिष्ट तकनीक नहीं पहचानी गई। 4DA आपकी गतिविधि से सीखेगा।",
   "onboarding.projects.manageHint": "सेटिंग्स में कभी भी डायरेक्टरियाँ प्रबंधित करें।",
-
+  "onboarding.choice.title": "सब तैयार है",
+  "onboarding.choice.description": "4DA पहले से ही बैकग्राउंड में आपकी परियोजनाओं के बारे में सीख रहा है। आप अभी एक्सप्लोर करना शुरू कर सकते हैं या पहले सेटअप समायोजित कर सकते हैं।",
+  "onboarding.choice.startUsing": "4DA का उपयोग शुरू करें",
+  "onboarding.choice.startHint": "विश्लेषण बैकग्राउंड में जारी रहता है",
+  "onboarding.choice.or": "या",
+  "onboarding.choice.continueSetup": "सेटअप जारी रखें",
+  "onboarding.choice.continueHint": "AI प्रदाता, स्टैक, रुचियाँ कॉन्फ़िगर करें",
   "learnedBehavior.learningCount": "सीख रहा है: {{count}} प्राथमिकता",
   "learnedBehavior.learningCount_other": "सीख रहा है: {{count}} प्राथमिकताएँ",
   "learnedBehavior.moreCount": "+{{count}} और",
-
   "channels.renderNow": "अभी रेंडर करें",
   "channels.rerender": "पुनः रेंडर",
   "channels.rendering": "रेंडर हो रहा है...",
@@ -1852,10 +1744,7 @@
   "channels.basicMode": "बेसिक मोड",
   "channels.configureOllama": "AI संश्लेषण के लिए Ollama कॉन्फ़िगर करें",
   "coach.freeSession": "मुफ़्त सत्र {{current}}/{{max}}",
-
   "toolkit.title": "डेवलपर टूलकिट",
-
-  "decisions.title": "लेने योग्य निर्णय",
   "decisions.recorded": "{{count}} निर्णय दर्ज किए गए",
   "decisions.record": "निर्णय दर्ज करें",
   "decisions.decision": "निर्णय",
@@ -1883,7 +1772,7 @@
   "decisions.supersededBy": "#{{id}} द्वारा अधिक्रमित",
   "decisions.autoDetectedNotice": "कुछ तकनीकी पसंद आपके स्थानीय प्रोजेक्ट्स से स्वचालित-पहचानी गईं",
   "decisions.autoDetectedHint": "अगर कुछ गलत लगता है, तो इसे सही करने के लिए हटाएँ बटन का उपयोग करें। यह आपकी प्लेबुक और प्रोफ़ाइल को भी अपडेट करता है।",
-
+  "decisions.toggleDetail": "विवरण टॉगल करें",
   "calibration.title": "सिस्टम स्वास्थ्य",
   "calibration.subtitle": "आपके सेटअप के लिए ईमानदार स्कोरिंग गुणवत्ता मूल्यांकन",
   "calibration.running": "कैलिब्रेट हो रहा है...",
@@ -1934,7 +1823,13 @@
   "calibration.onboarding.noContent": "कैलिब्रेशन के लिए विश्लेषण सामग्री आवश्यक है।",
   "calibration.onboarding.noContentHint": "पहले विश्लेषण चलाएँ, फिर कैलिब्रेट करने वापस आएँ।",
   "calibration.action.working": "काम हो रहा है...",
-
+  "health.issueCount": "{{count}} सिस्टम समस्याएँ पाई गईं",
+  "missed.title": "जो आप चूक जाते",
+  "missed.scanned": "{{count}} आइटम स्कैन किए गए",
+  "missed.noiseRejected": "शोर अस्वीकृत",
+  "missed.signalSurfaced": "सिग्नल पहचाना गया",
+  "missed.timeSaved": "समय बचाया गया",
+  "missed.filtered": "फ़िल्टर किया गया",
   "profile.copyProfile": "प्रोफ़ाइल कॉपी करें",
   "profile.exportJson": "JSON निर्यात करें",
   "profile.copyDna": "DNA कॉपी करें",
@@ -1958,7 +1853,6 @@
   "profile.deps": "डिपेंडेंसीज़",
   "profile.filtered": "फ़िल्टर किए गए",
   "profile.factCount": "{{count}} तथ्य",
-
   "dna.title": "डेवलपर DNA",
   "dna.defaultSubtitle": "आपका तकनीकी फ़िंगरप्रिंट, स्वचालित-खोजा गया",
   "dna.building": "DNA प्रोफ़ाइल बन रही है...",
@@ -1986,20 +1880,17 @@
   "dna.downloadSvg": "कार्ड डाउनलोड करें (SVG)",
   "dna.cardDownloaded": "डेवलपर DNA कार्ड डाउनलोड हो गया",
   "dna.cardDownloadFailed": "कार्ड डाउनलोड करने में विफल",
-
   "techRadar.ringAdopt": "अपनाएँ",
   "techRadar.ringTrial": "परीक्षण",
   "techRadar.ringAssess": "मूल्यांकन",
   "techRadar.ringHold": "रोकें",
   "techRadar.svgLabel": "तकनीकी राडार विज़ुअलाइज़ेशन",
-
   "tasteTest.readThis": "मैं यह पढ़ूँगा",
   "tasteTest.skip": "छोड़ें",
   "tasteTest.loveThis": "बहुत पसंद",
   "tasteTest.markInteresting": "\"{{title}}\" को रोचक चिह्नित करें",
   "tasteTest.skipTitle": "\"{{title}}\" छोड़ें",
   "tasteTest.loveTitle": "\"{{title}}\" पसंद",
-
   "techRadar.closePanel": "पैनल बंद करें",
   "techRadar.score": "स्कोर: {{score}}",
   "techRadar.decisionRef": "निर्णय #{{id}}",
@@ -2011,7 +1902,6 @@
   "techRadar.movementOut": "बाहर जा रहा है",
   "techRadar.movementNew": "नई प्रविष्टि",
   "techRadar.movementStable": "स्थिर",
-
   "sovereignProfile.gpu": "GPU: {{tier}}",
   "sovereignProfile.llm": "LLM: {{tier}}",
   "sovereignProfile.cpu": "CPU: {{model}}",
@@ -2035,7 +1925,6 @@
   "sovereignProfile.action.prefsLabel": "अपनी फ़ीड तेज़ करने के लिए रुचियाँ जोड़ें",
   "sovereignProfile.action.openSettings": "सेटिंग्स खोलें",
   "sovereignProfile.action.contextLabel": "4DA को प्रोजेक्ट फ़ोल्डर की ओर इंगित करें",
-
   "scoreTooltip.stackMatch": "स्टैक मिलान: मज़बूत",
   "scoreTooltip.partialStackMatch": "स्टैक मिलान: आंशिक",
   "scoreTooltip.interestMatch": "आपकी रुचियों से मेल खाता है",
@@ -2048,7 +1937,6 @@
   "scoreTooltip.highQuality": "उच्च गुणवत्ता सामग्री",
   "scoreTooltip.novelContent": "नवीन सामग्री",
   "scoreTooltip.serendipity": "अनपेक्षित खोज",
-
   "scoreDrawer.toggle": "स्कोर विश्लेषण टॉगल करें",
   "scoreDrawer.title": "स्कोर विश्लेषण",
   "scoreDrawer.signals": "सिग्नल",
@@ -2058,7 +1946,6 @@
   "scoreDrawer.comparing": "तुलना कर रहा है",
   "scoreDrawer.compareWith": "तुलना करें",
   "scoreDrawer.selectItem": "एक आइटम चुनें...",
-
   "scoreDrawer.factor.context": "प्रोजेक्ट संदर्भ",
   "scoreDrawer.factor.interest": "रुचि मिलान",
   "scoreDrawer.factor.dependency": "डिपेंडेंसी मिलान",
@@ -2076,20 +1963,16 @@
   "scoreDrawer.factor.affinity": "विषय रुझान",
   "scoreDrawer.factor.anti": "एंटी-विषय दंड",
   "scoreDrawer.factor.confirmation": "सिग्नल पुष्टि",
-
   "briefing.profile.feedbackImpact": "आपकी प्रतिक्रिया ने {{count}} भविष्य के सिग्नल को आकार दिया है",
   "briefing.profile.feedbackImpact_other": "आपकी प्रतिक्रिया ने {{count}} भविष्य के सिग्नलों को आकार दिया है",
-
   "briefing.streetsMatchStrength": "{{pct}}% मिलान",
   "briefing.streetsOpenModule": "मॉड्यूल {{id}} खोलें",
   "briefing.streetsNotNow": "अभी नहीं",
-
   "playbook.personalizedBanner": "आपके सेटअप के लिए व्यक्तिगत",
   "playbook.personalizedBannerDesc": "आपकी सॉवरेन प्रोफ़ाइल और इंटेलिजेंस फ़ीड का उपयोग करके अनुकूलित सामग्री",
   "playbook.feedEchoSave": "सहेजें",
   "playbook.feedEchoSaved": "सहेजा गया",
   "playbook.feedEchoNewItems": "पिछली विज़िट के बाद {{count}} नए",
-
   "missions.title": "शुरू करें",
   "missions.saveArticles": "3 उपयोगी लेख सहेजें",
   "missions.dismissArticles": "2 अप्रासंगिक लेख खारिज करें",
@@ -2099,7 +1982,6 @@
   "missions.completed": "मिशन पूर्ण: {{mission}}। अगला: {{next}}",
   "missions.allComplete": "सभी मिशन पूर्ण! आपका इंटेलिजेंस सिस्टम कैलिब्रेट हो गया है।",
   "missions.dismiss": "मिशन खारिज करें",
-
   "weekly.title": "साप्ताहिक इंटेलिजेंस सारांश",
   "weekly.analyzed": "विश्लेषित आइटम",
   "weekly.cycles": "सीखने के चक्र",
@@ -2109,23 +1991,19 @@
   "weekly.addInterest": "+ जोड़ें",
   "weekly.interestAdded": "'{{topic}}' रुचियों में जोड़ा गया",
   "weekly.interestFailed": "रुचि जोड़ने में विफल",
-
   "tips.feedbackLoop": "उपयोगी लेख सहेजें — यह सिस्टम को सिखाता है कि आपके लिए क्या मायने रखता है।",
   "tips.feedbackLoopHint": "लेख खारिज करना भी मदद करता है। हर इंटरैक्शन आपके परिणामों को सुधारता है।",
   "tips.ollamaNudge": "आपके परिणाम कीवर्ड मिलान का उपयोग करते हैं। Ollama (मुफ़्त, स्थानीय) अधिक प्रासंगिक परिणामों के लिए सिमैंटिक मिलान अनलॉक करता है।",
   "tips.ollamaNudgeHint": "Ollama इंस्टॉल करें, फिर इसे सेटिंग्स > AI प्रदाता में सक्षम करें। पूरी तरह आपकी मशीन पर चलता है।",
-
   "guided.feed": "आपका व्यक्तिगत कंटेंट फ़ीड",
   "guided.score": "इसका स्कोर ऊंचा क्यों है, देखने के लिए टैप करें",
   "guided.save": "आइटम अपनी लाइब्रेरी में सहेजें",
   "guided.dna": "आपकी डेवलपर पहचान प्रोफ़ाइल",
   "guided.settings": "स्रोत और AI कॉन्फ़िगर करें",
-
   "emptyState.header": "जब तक आपका पहला विश्लेषण चलता है, यहाँ देखें कि {{stack}} डेवलपर्स ने इस सप्ताह क्या देखा",
   "emptyState.headerDefault": "जब तक आपका पहला विश्लेषण चलता है, यहाँ देखें कि डेवलपर्स ने इस सप्ताह क्या देखा",
   "emptyState.footer": "वास्तविक सिग्नल ~2 मिनट में आ रहे हैं...",
   "emptyState.badge": "उदाहरण",
-
   "firstCve.title": "4DA ने आपकी रक्षा की",
   "firstCve.detected": "प्रकाशन के {{minutes}} मिनट बाद पता चला",
   "firstCve.affects": "आपके {{count}} प्रोजेक्ट्स में {{package}} को प्रभावित करता है",

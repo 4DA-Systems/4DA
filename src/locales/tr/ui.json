@@ -2,11 +2,10 @@
   "app.title": "4DA",
   "app.tagline": "Sadece sinyal. Besleme yok.",
   "app.skipToContent": "Ana içeriğe geç",
-
+  "app.viewChanged": "{{view}} görünümüne gidildi",
   "header.settings": "Ayarlar",
   "header.live": "Canlı",
   "header.signalsLearned": "{{count}} öğrenildi",
-
   "action.analyze": "Analiz Et",
   "action.analyzing": "Analiz ediliyor...",
   "action.save": "Kaydet",
@@ -50,7 +49,6 @@
   "action.error": "Hata",
   "action.runAnalysis": "Analiz çalıştır",
   "action.cancelAnalysis": "Analizi iptal et",
-
   "analysis.statusRelevant": "{{relevant}}/{{total}} öğe ilgili",
   "analysis.statusError": "Hata: {{message}}",
   "analysis.complete": "Analiz tamamlandı: {{count}} ilgili öğe bulundu",
@@ -66,11 +64,23 @@
   "analysis.sourceError": "{{source}}: {{error}}",
   "analysis.stackDetected": "Yığınınız otomatik olarak algılandı: {{stack}}. Puanlama eşleşen kaynakları önceliklendirecek.",
   "analysis.keyboardTriggered": "Analiz başlatıldı",
-
+  "appbar.searchPlaceholder": "İstihbarat ara...",
+  "appbar.analyzing": "Analiz ediliyor...",
+  "appbar.relevant": "{{count}} ilgili",
+  "appbar.top": "{{count}} öne çıkan",
+  "feed.title": "Sinyal Akışı",
+  "feed.viewAll": "Tümünü gör ({{count}})",
+  "pulse.noData": "Henüz veri toplanmadı. Başlamak için bir analiz çalıştırın.",
+  "pulse.itemsAnalyzed": "{{count}} öğe analiz edildi, {{relevant}} tanesi sizinle ilgili.",
+  "pulse.signalsNeedAttention": "{{count}} tanesi dikkatinizi gerektiriyor.",
+  "pulse.topPicks": "{{count}} öne çıkan seçim.",
+  "pulse.sourcesPartial": "{{healthy}}/{{total}} kaynak çalışıyor.",
+  "pulse.newSince": "{{timeAgo}} tarihinden bu yana {{count}} yeni.",
+  "pulse.movedToTop": "{{count}} tanesi öne çıkanlara yükseldi.",
+  "pulse.securityAlert": "{{count}} güvenlik uyarısı algılandı.",
   "badge.llm": "LLM",
   "badge.on": "AÇIK",
   "badge.off": "KAPALI",
-
   "status.enabled": "Etkin",
   "status.disabled": "Devre Dışı",
   "status.active": "Aktif",
@@ -79,7 +89,6 @@
   "status.disconnected": "Bağlantı Kesildi",
   "status.online": "Çevrimiçi",
   "status.offline": "Çevrimdışı",
-
   "settings.title": "Ayarlar",
   "settings.locale.title": "Dil ve Bölge",
   "settings.locale.description": "Yerelleştirilmiş içerik için ülkenizi, dilinizi ve para biriminizi ayarlayın",
@@ -113,7 +122,6 @@
   "settings.monitoring.lastCheck": "Son: {{time}}",
   "settings.monitoring.testNotification": "Test Bildirimi",
   "settings.monitoring.loading": "İzleme durumu yükleniyor...",
-
   "settings.ai.title": "AI Sağlayıcı",
   "settings.ai.description": "LLM sağlayıcınızı seçin",
   "settings.ai.provider": "Sağlayıcı",
@@ -147,7 +155,6 @@
   "settings.ai.tokens": "Tokenlar",
   "settings.ai.cost": "Maliyet",
   "settings.ai.reranked": "Yeniden sıralandı",
-
   "settings.context.title": "Otomatik Bağlam Keşfi",
   "settings.context.description": "Sizi tanımlayan dizinleri tarayın - projeler, notlar, belgeler",
   "settings.context.discovering": "Keşfediliyor...",
@@ -163,7 +170,6 @@
   "settings.context.techStack": "Teknoloji Yığını",
   "settings.context.topics": "Konular",
   "settings.context.more": "+{{count}} daha",
-
   "settings.digest.title": "Haftalık Özet",
   "settings.digest.description": "Her analizden sonra filtrelenmiş sonuçları özet dosyası olarak kaydedin",
   "settings.digest.enabled": "Özet etkin",
@@ -172,7 +178,6 @@
   "settings.digest.minScore": "Min Puan",
   "settings.digest.maxItems": "Maks Öğe",
   "settings.digest.loading": "Özet ayarları yükleniyor...",
-
   "settings.personalization.title": "Manuel Ayarlamalar",
   "settings.personalization.description": "İlgi alanları ve hariç tutmalarla bağlamınızı ince ayarlayın",
   "settings.personalization.role": "Rolünüz",
@@ -201,7 +206,6 @@
   "settings.personalization.removeExclusion": "{{name}} hariç tutmasını kaldır",
   "settings.personalization.noExclusions": "Henüz hariç tutma ayarlanmadı",
   "settings.personalization.loading": "Bağlam yükleniyor...",
-
   "settings.license.title": "Lisans",
   "settings.license.currentTier": "Mevcut katman:",
   "settings.license.tierTeam": "Team",
@@ -224,7 +228,6 @@
   "settings.license.starting": "Başlatılıyor...",
   "settings.license.startTrial": "45 Günlük Ücretsiz Denemeyi Başlat",
   "settings.license.getKey": "4da.ai/signal adresinden lisans anahtarı edinin",
-
   "settings.streets.title": "STREETS Üyeliği",
   "settings.streets.currentTier": "Mevcut katman:",
   "settings.streets.placeholder": "STREETS lisans anahtarını girin",
@@ -234,14 +237,12 @@
   "settings.streets.tierSignal": "Signal ($12/ay)",
   "settings.streets.tierTeam": "Team ($29/koltuk/ay)",
   "settings.streets.tierEnterprise": "Enterprise",
-
   "settings.ai.builtInLocal": "Yerleşik (Yerel)",
   "settings.ai.builtInModel": "all-MiniLM-L6-v2 (384 boyut)",
   "settings.ai.builtInDescription": "Sıfır yapılandırmalı yerel gömmeler. API anahtarı gerekmez. Model ilk kullanımda otomatik olarak indirilir (~90MB).",
   "settings.ai.refreshModels": "Modelleri yenile",
   "settings.ai.registryLastUpdated": "Modeller güncellendi: {{time}}",
   "settings.ai.costUnavailable": "Yok",
-
   "settings.attention.title": "Dikkat Panosu",
   "settings.attention.description": "Odağınızın nereye gittiği ile kodunuzun neye ihtiyaç duyduğu",
   "settings.attention.days": "{{count}} gün",
@@ -251,7 +252,6 @@
   "settings.attention.blindSpots": "Kör Noktalar",
   "settings.attention.risk": "{{level}} risk",
   "settings.attention.noData": "Henüz yeterli etkileşim verisi yok. Dikkat kalıpları oluşturmak için birkaç gün 4DA kullanın.",
-
   "settings.health.title": "Proje Sağlık Radarı",
   "settings.health.description": "Bağımlılık güncelliği, güvenlik, ivme, topluluk",
   "settings.health.scanning": "Projeler taranıyor...",
@@ -263,7 +263,6 @@
   "settings.health.dependencies": "{{count}} bağımlılık",
   "settings.health.lastChecked": "Son kontrol {{date}}",
   "settings.health.never": "hiçbir zaman",
-
   "settings.tabs.general": "Genel",
   "settings.tabs.intelligence": "Zeka",
   "settings.tabs.sources": "Kaynaklar",
@@ -289,7 +288,6 @@
   "settings.digest.emailConfigSaved": "E-posta yapılandırması kaydedildi",
   "settings.digest.emailTestFailed": "E-posta testi başarısız",
   "settings.testConnection": "Bağlantıyı Test Et",
-
   "nav.results": "Akış",
   "nav.briefing": "Brifing",
   "nav.insights": "Radar",
@@ -313,7 +311,6 @@
   "nav.console.subtitle": "Doğruluk, projeler ve AI maliyetleri",
   "nav.calibrate": "Sistem",
   "nav.calibrate.subtitle": "Sağlık ve kalibrasyon",
-
   "results.title": "İlgililik Sonuçları",
   "results.new": "{{count}} yeni",
   "results.itemsRelevant": "{{items}} öğe, {{relevant}} ilgili",
@@ -343,7 +340,6 @@
   "results.topPicksGroup": "En İyi Seçimler",
   "results.relevantGroup": "İlgili",
   "results.belowThreshold": "Eşik Altı",
-
   "briefing.title": "AI Brifingi",
   "briefing.generate": "Brifing Oluştur",
   "briefing.generating": "Oluşturuluyor...",
@@ -371,7 +367,6 @@
   "briefing.viewAllResults": "Tüm {{count}} Sonucu Görüntüle",
   "briefing.systemLearned": "Sistem öğrendi",
   "briefing.intelligenceMetrics": "İstihbarat Metrikleri",
-
   "briefing.profile.title": "Profiliniz",
   "briefing.profile.autophagyAccuracy": "Otofaji Doğruluğu",
   "briefing.profile.autophagySummary": "{{cycles}} öğrenme döngüsü · {{topics}} konu · {{items}} öğe (7g)",
@@ -391,19 +386,18 @@
   "briefing.profile.knowledgeGaps": "Öğrenme Fırsatları ({{count}})",
   "briefing.profile.moreGaps": "+{{count}} daha",
   "briefing.profile.intelligenceGrowth": "Öğrenme İlerlemesi",
-
   "search.title": "İstihbaratınızda Arayın",
   "search.subtitle": "Akışınızda sinyaller, makaleler ve içgörüler bulun",
   "search.placeholder": "İçeriğiniz hakkında bir şey sorun...",
   "search.searching": "Aranıyor...",
   "search.noResults": "Sonuç bulunamadı",
-  "search.tryDifferent": "Farklı bir sorgu veya daha geniş anahtar kelimeler deneyin",
+  "search.tryDifferent": "Farklı anahtar kelimeler veya daha geniş bir sorgu deneyin",
   "search.tryThese": "Bunları deneyin:",
   "search.queryType": "{{intent}} sorgusu",
   "search.customRange": "Özel aralık",
   "search.unknownFile": "Bilinmeyen dosya",
   "search.stats": "{{count}} sonuç {{ms}}ms içinde ({{confidence}}% güven)",
-  "search.indexFirst": "İçeriğinizi dizinlemek için önce bir analiz çalıştırın",
+  "search.indexFirst": "Önce dosyalarınızı dizinleyin (Ayarlar > Bağlam)",
   "search.noAnalysisTitle": "İstihbarat Konsolu hazır — ilk analiz bekleniyor",
   "search.noAnalysisHint": "İstihbarat Konsolunu açmak için ilk analizinizi çalıştırın",
   "search.capabilityStack": "Yığın farkındalıklı arama",
@@ -431,29 +425,24 @@
   "search.relatedDecisions": "İlgili Kararlar",
   "search.knowledgeGaps": "Öğrenme Fırsatları",
   "search.staleForDays": "{{days}}g eski",
-
   "time.justNow": "Az önce",
   "time.minutesAgo": "{{count}}dk önce",
   "time.hoursAgo": "{{count}}sa önce",
   "time.daysAgo": "{{count}}g önce",
-
   "tier.free": "Ücretsiz",
   "tier.pro": "Signal",
   "tier.signal": "Signal",
   "tier.team": "Team",
   "tier.enterprise": "Enterprise",
-
   "update.available": "Güncelleme mevcut: v{{version}}",
   "update.install": "Kur ve Yeniden Başlat",
   "update.installing": "Kuruluyor...",
   "update.later": "Sonra",
   "update.defaultBody": "Yeni bir sürüm kurulmaya hazır.",
   "update.download": "Güncellemeyi İndir",
-
   "browser.title": "Masaüstü Uygulaması Gerekli",
   "browser.description": "4DA, yerel dosyalarınıza erişmek, kaynakları izlemek ve her şeyi makinenizde gizli tutmak için masaüstü uygulaması olarak çalışır.",
   "browser.hint": "<code>npm run tauri dev</code> komutunu çalıştırın veya yüklü uygulamayı başlatın.",
-
   "onboarding.welcome.title": "4DA'ya Hoş Geldiniz",
   "onboarding.welcome.tagline": "Sadece sinyal. Besleme yok.",
   "onboarding.welcome.description": "4DA, projelerinizden neyi önemsediğinizi keşfeder ve internet genelinden ilgili içeriği ortaya çıkarır - ihtiyacınız olduğunu bilmeden önce.",
@@ -467,19 +456,16 @@
   "onboarding.welcome.quickSetupHint": "Hızlı kurulum — çoğu adım otomatiktir",
   "onboarding.welcome.skipToContent": "İçeriğe Geç",
   "onboarding.welcome.skipHint": "Daha sonra Ayarlar'da yapılandırabilirsiniz",
-
   "onboarding.nav.back": "Geri",
   "onboarding.nav.next": "İleri",
   "onboarding.nav.skip": "Atla",
   "onboarding.nav.continue": "Devam Et",
   "onboarding.nav.skipForNow": "Şimdilik atla",
-
   "onboarding.stepLabel.welcome": "Hoş Geldiniz",
   "onboarding.stepLabel.setup": "Kurulum",
   "onboarding.stepLabel.calibrate": "Kalibrasyon",
   "onboarding.stepProgress": "Adım {{current}} / {{total}}",
   "onboarding.version": "Sürüm {{version}}",
-
   "onboarding.apiKeys.title": "API Anahtarları",
   "onboarding.apiKeys.subtitle": "En iyi sonuçlar için API anahtarlarını yapılandırın veya yalnızca anahtar kelime modunu deneyin.",
   "onboarding.apiKeys.installingModels": "Yerel AI için modeller kuruluyor...",
@@ -518,7 +504,6 @@
   "onboarding.apiKeys.keywordModeDesc": "API anahtarı veya Ollama olmadan 4DA, anahtar kelime eşleştirmesi kullanarak çalışmaya devam edebilir. Sonuçlar semantik aramadan daha az hassas olacak, ancak yine de faydalı. API anahtarlarını daha sonra Ayarlar'da ekleyebilirsiniz.",
   "onboarding.apiKeys.tryKeywordMode": "Yalnızca anahtar kelime modunu deneyin",
   "onboarding.apiKeys.installingModelsBtn": "Modeller kuruluyor...",
-
   "onboarding.complete.title": "Her Şey Hazır!",
   "onboarding.complete.subtitle": "4DA sizin için ilgili içerik buldu. İşte daha iyi hale getirmenin yolu.",
   "onboarding.complete.keepImproving": "4DA'yı geliştirmeye devam edin",
@@ -530,7 +515,6 @@
   "onboarding.complete.letItRunDesc": "Arka plan izleme her 30 dakikada kontrol eder",
   "onboarding.complete.startUsing": "4DA'yı Kullanmaya Başla",
   "onboarding.complete.settingsHint": "Tercihlerinizi ayarlamak için istediğiniz zaman Ayarlar'a basın",
-
   "onboarding.interests.title": "İlgi Alanlarınız",
   "onboarding.interests.subtitle": "4DA'nın neyi göstereceğini anlamasına yardımcı olun. Geri bildiriminiz zaman içinde puanlamayı geliştirir.",
   "onboarding.interests.roleLabel": "Ne iş yapıyorsunuz?",
@@ -545,7 +529,6 @@
   "onboarding.interests.finishSetup": "Kurulumu Bitir",
   "onboarding.interests.remove": "{{topic}} kaldır",
   "onboarding.interests.addLabel": "İlgi alanı konusu ekleyin",
-
   "onboarding.context.title": "Bağlamınızı Keşfedin",
   "onboarding.context.subtitle": "4DA, projelerinizi tarayarak sizin için neyin önemli olduğunu keşfeder. %100 yerel, %100 gizli.",
   "onboarding.context.discoveryComplete": "Keşif Tamamlandı!",
@@ -569,7 +552,6 @@
   "onboarding.context.faqControlDesc": "Evet! İstediğiniz zaman Ayarlar'da dizin ekleyebilir veya kaldırabilirsiniz. 4DA otomatik olarak node_modules, .git klasörleri ve gizli sistem dosyaları gibi hassas konumları yok sayar.",
   "onboarding.context.faqTimeTitle": "Tarama ne kadar sürer?",
   "onboarding.context.faqTimeDesc": "Genellikle birkaç saniyeden bir dakikaya kadar, kaç projeniz olduğuna bağlı olarak. İlk tarama en uzun olandır - ondan sonra 4DA yalnızca değişiklikleri kontrol eder.",
-
   "onboarding.scan.title": "Derin İstihbarat Taraması",
   "onboarding.scan.subtitle": "Kişiselleştirilmiş akışınızı oluşturmak için tüm kaynaklardan 300-500+ öğenin kapsamlı taraması.",
   "onboarding.scan.inProgress": "Derin Tarama Devam Ediyor",
@@ -586,7 +568,6 @@
   "onboarding.scan.startDeepScan": "Derin Taramayı Başlat",
   "onboarding.scan.timeEstimateShort": "Kapsamlı sonuçlar için 2-5 dakika sürer",
   "onboarding.scan.seeResults": "Sonuçlarımı Gör →",
-
   "onboarding.results.title": "Sonuçlarınız",
   "onboarding.results.topPicksSubtitle": "İşte internet genelinden en iyi seçimleriniz.",
   "onboarding.results.building": "Kişiselleştirilmiş istihbarat akışınız oluşturuluyor...",
@@ -603,7 +584,6 @@
   "onboarding.results.enter4DA": "4DA'ya Girin",
   "onboarding.results.backgroundScanHint": "Tam tarama arka planda devam ediyor - istediğiniz zaman girebilirsiniz.",
   "onboarding.results.backgroundScanDone": "Kapsamlı sonuçlar için tam tarama arka planda devam ediyor.",
-
   "onboarding.setup.title": "Hızlı Kurulum",
   "onboarding.setup.subtitle": "AI ve ilgi alanlarınızı yapılandırın. Her şey yerel ve gizli kalır.",
   "onboarding.setup.aiProvider": "AI Sağlayıcı",
@@ -634,7 +614,6 @@
   "onboarding.setup.keyFormatHint": "Anahtar formatı doğru görünmüyor",
   "onboarding.setup.keyFormatHintSoft": "Anahtar formatı doğru olmayabilir - yine de devam edebilirsiniz",
   "onboarding.setup.usingTechStack": "İçerik puanlaması için teknoloji yığını kullanılıyor",
-
   "onboarding.setupAi.localAiReady": "Yerel AI hazır — API anahtarı gerekmez",
   "onboarding.setupAi.local": "Yerel",
   "onboarding.setupAi.localLabel": "Yerel",
@@ -654,7 +633,6 @@
   "onboarding.setupAi.privacyMessage": "Verileriniz makinenizden asla çıkmaz. API anahtarı yok, bulut hesabı yok, kullanım izleme yok.",
   "onboarding.setupAi.ollamaExplainer": "Ollama, AI modellerini doğrudan bilgisayarınızda çalıştırır — tamamen gizli, tamamen ücretsiz.",
   "onboarding.setupAi.noKeyHint": "API anahtarınız mı yok? Sorun değil. 4DA varsayılan olarak anahtar kelime eşleştirmesi kullanır. Gelişmiş sonuçlar için istediğiniz zaman Ayarlar'da anahtar ekleyin.",
-
   "settings.translations.title": "Çeviri Düzenleyicisi",
   "settings.translations.description": "Uygulamadaki herhangi bir çevrilmiş metni geçersiz kılın",
   "settings.translations.search": "Anahtar veya değere göre ara...",
@@ -672,38 +650,36 @@
   "settings.translations.noResults": "Aramanızla eşleşen çeviri yok",
   "settings.translations.allNamespaces": "Tümü",
   "settings.translations.editorToggle": "Çeviri Düzenleyicisi",
-
   "error.generic": "Bir şeyler ters gitti",
   "error.tryAgain": "Tekrar deneyin",
   "error.dbUnavailable": "Veritabanı kullanılamıyor",
   "error.somethingWrong": "Bir şeyler ters gitti",
   "error.reload": "Uygulamayı Yeniden Yükle",
   "error.tryRecover": "Kurtarmayı Dene",
-
+  "error.viewFailed": "{{viewName}} yüklenemedi",
+  "error.viewRecovery": "Beklenmeyen bir hata oluştu. Tekrar deneyin veya görünümü değiştirin.",
+  "error.retry": "Tekrar dene",
+  "error.playbookBrowser": "Kılavuz masaüstü uygulaması gerektirir",
+  "error.playbookFailed": "Kılavuz içeriği yüklenemedi",
   "commandDeck.title": "Komut Güvertesi",
   "commandDeck.git": "Git",
   "commandDeck.commands": "Komutlar",
   "commandDeck.history": "Geçmiş",
   "commandDeck.toggle": "Değiştir",
   "commandDeck.tabs": "Sekmeler",
-
   "commandRunner.noDir": "Dizin seçilmedi",
   "commandRunner.placeholder": "Komut girin...",
   "commandRunner.exit": "çıkış {{code}}",
   "commandRunner.hint": "Bir komut yazın ve Enter'a basın",
-
   "toolkit.search": "Araçlarda ara...",
   "toolkit.pinned": "Sabitlenmiş",
   "toolkit.utilities": "Araçlar ({{count}})",
   "toolkit.noMatch": "\"{{query}}\" ile eşleşen araç yok",
-
   "advantage.score": "Avantajınız",
   "advantage.acted": "{{acted}}/{{opened}} harekete geçildi",
   "advantage.avgLead": "{{hours}}sa ortalama öncülük",
-
   "engagement.streak": "seri",
   "engagement.activity": "7 günlük aktivite",
-
   "pro.hint": "Signal: {{feature}}",
   "pro.upgrade": "Signal'e Yükselt",
   "pro.renew": "Yenile",
@@ -718,7 +694,6 @@
   "pro.startingTrial": "Başlatılıyor...",
   "pro.haveLicenseKey": "Lisans anahtarınız var mı?",
   "pro.invalidLicenseKey": "Geçersiz lisans anahtarı",
-
   "proValue.title": "İstihbarat Değeriniz",
   "proValue.lastDays": "Son {{days}} gün",
   "proValue.activeSince": "{{date}} tarihinden beri aktif",
@@ -736,7 +711,6 @@
   "proValue.dataDepth": "Veri Derinliği",
   "proValue.learningInteractions": "{{count}} öğrenme etkileşimi",
   "proValue.dataSpans": "{{days}} gün kapsıyor",
-
   "documents.title": "Dizinlenmiş Belgeler",
   "documents.documentsIndexed": "{{count}} belge dizinlendi",
   "documents.back": "← Geri",
@@ -751,14 +725,12 @@
   "documents.noDocuments": "Henüz belge dizinlenmedi",
   "documents.addFiles": "Dizinlemek için tarama dizinlerinize PDF, DOCX veya diğer dosyaları ekleyin",
   "documents.totalStats": "{{chunks}} parçada {{words}} kelime",
-
   "community.title": "Topluluk İstihbaratı",
   "community.active": "Aktif",
   "community.description": "Tüm 4DA kullanıcıları için doğruluğu artırmak amacıyla anonimleştirilmiş puanlama kalıplarına katkıda bulunma.",
   "community.frequency": "Sıklık",
   "community.lastSync": "Son senkronizasyon",
   "community.pending": "Beklemede",
-
   "settings.team.title": "Takım Senkronizasyonu",
   "settings.team.loading": "Takım durumu yükleniyor...",
   "settings.team.created": "Takım başarıyla oluşturuldu",
@@ -803,7 +775,6 @@
   "settings.team.expiresAt": "Sona erme",
   "settings.team.inviteInstructions": "Alıcı, Ayarlar > Takım Senkronizasyonu > Takıma Katıl bölümüne gidip bu kodu girmelidir.",
   "settings.team.generateAnother": "Başka Bir Davet Oluştur",
-
   "settings.community.title": "Topluluk İstihbaratı",
   "settings.community.subtitle": "Tüm 4DA kullanıcıları için puanlamayı iyileştirmeye yardımcı olun",
   "settings.community.confirmTitle": "Topluluk İstihbaratı etkinleştirilsin mi?",
@@ -823,7 +794,6 @@
   "settings.community.lastContribution": "Son katkı",
   "settings.community.never": "Hiçbir zaman",
   "settings.community.anonymousId": "Anonim kimlik",
-
   "team.dashboard.title": "Takım",
   "team.dashboard.signals": "Sinyaller",
   "team.dashboard.decisions": "Kararlar",
@@ -832,7 +802,6 @@
   "team.dashboard.members": "üye",
   "team.dashboard.pending": "beklemede",
   "team.dashboard.lastSync": "Son senkronizasyon",
-
   "team.decisions.title": "Takım Kararları",
   "team.decisions.all": "Tümü",
   "team.decisions.proposed": "Önerilen",
@@ -847,18 +816,14 @@
   "team.decisions.castVote": "Oy Ver",
   "team.decisions.accept": "Kabul Et",
   "team.decisions.reject": "Reddet",
-
   "team.members.empty": "Henüz takım üyesi yok. Başlamak için birini davet edin.",
   "team.members.you": "siz",
-
   "team.notifications.bell": "Takım bildirimleri",
   "team.notifications.title": "Bildirimler",
   "team.notifications.markAllRead": "Tümünü okundu işaretle",
   "team.notifications.empty": "Bildirim yok",
-
   "team.roles.member": "Üye",
   "team.roles.admin": "Yönetici",
-
   "team.signals.empty": "Henüz paylaşılan sinyal yok. Üyeler keşiflerini paylaştığında takım sinyalleri burada görünür.",
   "team.signals.hint": "Sinyal Zincirleri görünümünüzden sinyalleri paylaşın veya Takım Ayarları'nda otomatik paylaşımı etkinleştirin.",
   "team.signals.active": "aktif",
@@ -868,13 +833,11 @@
   "team.signals.detectors": "algılayıcılar",
   "team.signals.resolvedBy": "Çözüldü",
   "team.signals.resolveNotes": "Çözüm notları...",
-
   "team.sources.title": "Paylaşılan Kaynaklar",
   "team.sources.recommend": "+ Öner",
   "team.sources.whyRecommend": "Bu kaynak neden değerli?",
   "team.sources.share": "Takımla Paylaş",
   "team.sources.empty": "Henüz paylaşılan kaynak yok. Takımınızın takip etmesi gereken kaynakları önerin.",
-
   "team.dashboard.intelligence": "İstihbarat",
   "team.intelligence.title": "Takım İstihbaratı",
   "team.intelligence.coverage": "Yığın Kapsamı",
@@ -908,7 +871,6 @@
   "team.signals.confidence": "güven",
   "team.signals.suggestedAction": "Önerilen",
   "team.signals.memberDetections": "Tarafından algılandı",
-
   "enterprise.audit.title": "Denetim Günlüğü",
   "enterprise.audit.description": "Kuruluş genelindeki aktiviteleri izleyin. Tüm değişiklikler değiştirilemez ve zaman damgalıdır.",
   "enterprise.audit.badge": "Enterprise",
@@ -937,7 +899,6 @@
   "enterprise.audit.eventsByDay": "Güne göre olaylar",
   "enterprise.audit.topActors": "Üst aktörler",
   "enterprise.audit.topActions": "Üst eylemler",
-
   "enterprise.health.title": "Sistem Sağlığı",
   "enterprise.health.description": "Gerçek zamanlı altyapı ve hizmet durumu",
   "enterprise.health.relay": "Aktarıcı",
@@ -951,7 +912,6 @@
   "enterprise.health.fetched": "alındı",
   "enterprise.health.errors": "hatalar",
   "enterprise.health.orgMetrics": "Kuruluş Metrikleri",
-
   "enterprise.webhooks.title": "Webhooks",
   "enterprise.webhooks.enterprise": "Enterprise",
   "enterprise.webhooks.cancel": "İptal",
@@ -989,10 +949,8 @@
   "enterprise.webhooks.colStatus": "Durum",
   "enterprise.webhooks.colHttpCode": "HTTP",
   "enterprise.webhooks.colAttempts": "Denemeler",
-
   "enterprise.docs.title": "Webhook ve API Referansı",
   "enterprise.docs.description": "4DA webhookları altyapınızla entegre etmek için teknik referans.",
-
   "enterprise.export.title": "Veri Dışa Aktarma ve Taşınabilirlik",
   "enterprise.export.description": "Yedekleme, uyumluluk veya geçiş için verilerinizi dışa aktarın. API anahtarları asla dahil edilmez.",
   "enterprise.export.sections": "Dışa Aktarma Bölümleri",
@@ -1000,14 +958,12 @@
   "enterprise.export.exportAll": "Tüm Seçilenleri Dışa Aktar ({{selectedSections}} bölüm)",
   "enterprise.export.previous": "Önceki Dışa Aktarmalar",
   "enterprise.export.privacy": "Dışa aktarmalar asla API anahtarları, parolalar, tokenlar veya gizli bilgiler içermez. Kaynak yapılandırmaları kimlik doğrulama bilgileri olmadan dahil edilir. Tüm dışa aktarmalar yerel olarak veri dizininizde saklanır.",
-
   "enterprise.diagnostics.title": "Yapılandırma Tanılama",
   "enterprise.diagnostics.description": "Destek ile iletişime geçmeden kurulumunuzu doğrulayın ve sorunları giderin.",
   "enterprise.diagnostics.running": "Çalışıyor...",
   "enterprise.diagnostics.run": "Tanılama Çalıştır",
   "enterprise.diagnostics.empty": "Yapılandırmanızı doğrulamak için \"Tanılama Çalıştır\"a tıklayın.",
   "enterprise.diagnostics.tips": "Hızlı Düzeltmeler",
-
   "enterprise.policies.title": "Veri Saklama Politikaları",
   "enterprise.policies.description": "Farklı veri türlerinin ne kadar süre saklanacağını kontrol edin. Silme öncesi 7 günlük tolerans süresi uygulanır.",
   "enterprise.policies.default": "varsayılan",
@@ -1017,7 +973,6 @@
   "enterprise.policies.e2e": "Tüm takım aktarıcı verileri uçtan uca şifrelenmiştir (XChaCha20Poly1305).",
   "enterprise.policies.localFirst": "Birincil veri depolama her makinede yerel kalır.",
   "enterprise.policies.relayDumb": "Aktarıcı sunucu şifreli verileri okuyamaz. \"Aptal aktarıcı, akıllı istemciler.\"",
-
   "enterprise.org.title": "Kuruluş",
   "enterprise.org.notConfigured": "Yapılandırılmış kuruluş yok. Kuruluş yönetimi Enterprise katmanında kullanılabilir.",
   "enterprise.org.enterprise": "Enterprise",
@@ -1031,7 +986,6 @@
   "enterprise.org.crossTeamSignals": "Takımlar Arası Sinyal Korelasyonları",
   "enterprise.org.affectsTeams": "Etkilenen",
   "enterprise.org.activity": "Takım Aktivitesi",
-
   "enterprise.sso.title": "Tek Oturum Açma (SSO)",
   "enterprise.sso.description": "Kuruluşunuz için SAML veya OIDC kimlik doğrulamasını yapılandırın.",
   "enterprise.sso.logout": "Oturumu Kapat",
@@ -1039,7 +993,6 @@
   "enterprise.sso.notConfigured": "SSO yapılandırılmadı. Takım üyelerini doğrulamak için SAML veya OpenID Connect kurun.",
   "enterprise.sso.configure": "SSO Yapılandır",
   "enterprise.sso.info": "SSO doğrulaması makinenizde yerel olarak gerçekleşir. 4DA hiçbir sunucuya kimlik bilgisi göndermez. Kimlik sağlayıcınız localhost geri çağrısı aracılığıyla doğrudan masaüstü uygulamasına kimlik doğrulaması yapar.",
-
   "enterprise.wizard.title": "Takım Kurulum Sihirbazı",
   "enterprise.wizard.description": "4 adımda takımınızı kurun. Tüm iletişim uçtan uca şifrelenmiştir.",
   "enterprise.wizard.teamActive": "Takım aktif",
@@ -1058,13 +1011,10 @@
   "enterprise.wizard.doneNote": "Şifreli takım aktarıcınız aktif. Üyeler davet kodlarını kullanarak katılabilir.",
   "enterprise.wizard.security": "Tüm takım iletişimi XChaCha20Poly1305 şifreleme kullanır. Aktarıcı sunucu verilerinizi okuyamaz — yalnızca şifreli verileri depolar ve yönlendirir. \"Aptal aktarıcı, akıllı istemciler.\"",
   "enterprise.wizard.teamCreated": "Takım başarıyla oluşturuldu!",
-
   "enterprise.invite.createFailed": "Davet oluşturulamadı",
-
   "intelligence.cycles": "{{count}} döngü",
   "intelligence.summary": "{{analyzed}} öğe işlendi, {{surfaced}} ortaya çıktı ({{rate}}% reddetme oranı)",
   "intelligence.antiPatterns": "{{count}} puanlama karşı kalıp(lar) algılandı ve düzeltildi",
-
   "feedback.openLink": "Bağlantıyı Aç",
   "feedback.saved": "Kaydedildi",
   "feedback.dismissed": "Kaldırıldı",
@@ -1073,7 +1023,6 @@
   "feedback.irrelevant": "İlgisiz",
   "feedback.actions": "Geri bildirim eylemleri",
   "feedback.sessionSaves": "Bu oturumda {{count}} kaydedildi",
-
   "results.unknownSource": "Bilinmeyen",
   "results.relatedArticles": "+{{count}} ilgili makale",
   "results.relatedArticles_other": "+{{count}} ilgili makale",
@@ -1083,7 +1032,6 @@
   "results.aiSummary": "AI Özeti",
   "results.generateAiSummary": "AI Özeti Oluştur",
   "results.topMatches": "En İyi Eşleşmeler:",
-
   "ollama.pulling": "Modeller çekiliyor",
   "ollama.loading": "Yükleniyor...",
   "ollama.ready": "Ollama hazır",
@@ -1097,7 +1045,6 @@
   "ollama.hintInstall": "ollama.com adresinden kurun",
   "ollama.hintServe": "Çalıştırın: ollama serve",
   "ollama.hintRetry": "Yeniden bağlanmak için durum göstergesine tıklayın",
-
   "splash.starting": "Başlatılıyor...",
   "splash.database": "Veritabanı başlatılıyor...",
   "splash.models": "AI kullanılabilirliği kontrol ediliyor...",
@@ -1108,7 +1055,6 @@
   "splash.progress": "Başlatma ilerlemesi: %{{percent}}",
   "splash.version": "Sürüm {{version}}",
   "splash.refreshIfStuck": "Takılırsa yenile",
-
   "firstRun.errorTitle": "Analizde Sorun Oluştu",
   "firstRun.tryAgain": "Tekrar Dene",
   "firstRun.topMatch": "En İyi Eşleşme",
@@ -1151,7 +1097,6 @@
   "firstRun.yourDna": "Geliştirici DNA'nız",
   "firstRun.dnaHint": "Artık yığınınız hakkında ilgili içerik izleniyor",
   "firstRun.skipAhead": "İleri atla",
-
   "shortcuts.title": "Klavye Kısayolları",
   "shortcuts.close": "Klavye kısayollarını kapat",
   "shortcuts.runAnalysis": "Analiz çalıştır",
@@ -1163,7 +1108,6 @@
   "shortcuts.openBriefing": "Brifingi aç",
   "shortcuts.saveItem": "Mevcut öğeyi kaydet",
   "shortcuts.navigateItems": "Öğeler arasında gezin",
-
   "about.fullName": "4 Dimensional Autonomy",
   "about.attribution": "Geliştirme Atıf",
   "about.vision": "Vizyon",
@@ -1191,7 +1135,11 @@
   "about.tagline": "Tüm hakları saklıdır. Vizyonla inşa edildi, Claude ile mühendislik edildi.",
   "about.privacyPolicy": "Gizlilik Politikası",
   "about.termsOfService": "Hizmet Koşulları",
-
+  "about.viewFramework": "Framework'ü görüntüle",
+  "about.viewComparison": "Karşılaştır",
+  "about.geometryTitle": "Platonik Mimari",
+  "comparison.title": "Rekabet Karşılaştırması",
+  "comparison.subtitle": "4DA mevcut araçlarla nasıl karşılaştırılır",
   "sources.title": "Kaynak Yapılandırması",
   "sources.customCount": "{{count}} özel",
   "sources.subtitle": "RSS akışları, YouTube, GitHub dilleri, Twitter/X",
@@ -1217,21 +1165,19 @@
   "sources.twitter.keySaved": "X API anahtarı kaydedildi",
   "sources.twitter.keyCleared": "X API anahtarı temizlendi",
   "sources.twitter.update": "Güncelle",
-
   "saved.empty.title": "Henüz kaydedilmiş öğe yok",
   "saved.empty.subtitle": "Koleksiyonunuzu oluşturmak için Sonuçlar görünümünden öğeleri kaydedin.",
   "saved.count": "{{count}} kaydedilmiş öğe",
   "saved.itemRemoved": "Öğe kaydedilen koleksiyondan kaldırıldı",
   "saved.copyUrl": "URL Kopyala",
   "saved.remove": "Kaldır",
-
+  "saved.title": "Kaydedilen öğeler",
   "briefing.warmup.title": "İstihbarat Sisteminiz",
   "briefing.warmup.stackDetected": "Yığın algılandı",
   "briefing.warmup.sourcesReady": "Kaynaklar hazır",
   "briefing.warmup.description": "4DA kaynakları tarayacak, her öğeyi profilinize göre puanlayacak ve önemli olanı ortaya çıkaracak.",
   "briefing.warmup.activate": "İstihbaratı Başlat",
   "briefing.warmup.autoStart": "Otomatik olarak başlatılıyor...",
-
   "briefing.gatheringIntelligence": "İstihbarat Toplanıyor",
   "briefing.analysisRunning": "Analiz çalışıyor. Sonuçlar hazır olduğunda brifinginiz oluşturulacak.",
   "briefing.loadingStageFetch": "Yığınınızla ilgili sinyaller için kaynaklar taranıyor...",
@@ -1245,7 +1191,6 @@
   "briefing.orPress": "veya basın",
   "briefing.personalizeTitle": "Akışınızı kişiselleştirin",
   "briefing.personalizeBody": "Daha iyi sonuçlar için Ayarlar'da ilgi alanlarınızı ve teknoloji yığınınızı ekleyin.",
-
   "coach.chat.title": "STREETS Koçu",
   "coach.chat.emptyDescription": "Bağımsız geliştirici geliri oluşturmak hakkında her şeyi sorun. Egemen profiliniz ve rehber ilerlemeniz her yanıtı bilgilendirir.",
   "coach.chat.placeholder": "Koçunuza sorun...",
@@ -1254,7 +1199,6 @@
   "coach.chat.suggestEngine": "Profilime en uygun gelir motoru hangisi?",
   "coach.chat.suggest30DayPlan": "30 günlük bir lansman planı oluşturmama yardımcı olun",
   "coach.chat.suggestMarketFit": "Proje fikrimi pazar uyumu için inceleyin",
-
   "coach.engine.title": "Motor Önerici",
   "coach.engine.subtitle": "Profilinizin AI destekli analizi",
   "coach.engine.analyzeProfile": "Profilimi Analiz Et",
@@ -1270,7 +1214,6 @@
   "coach.engine.overallAnalysis": "Genel Analiz",
   "coach.engine.profileGaps": "Profil Açıkları",
   "coach.engine.emptyDescription": "Egemen profilinize, becerilerinize ve hedeflerinize dayalı AI destekli motor önerileri almak için \"Profilimi Analiz Et\"e tıklayın.",
-
   "coach.launch.title": "Lansman İncelemesi",
   "coach.launch.subtitle": "AI destekli lansman hazırlık analizi için projenizi gönderin",
   "coach.launch.placeholder": "Projenizi, hedef kitlenizi, fiyatlandırma modelinizi ve mevcut durumunuzu açıklayın...",
@@ -1285,7 +1228,6 @@
   "coach.launch.strengths": "Güçlü Yönler",
   "coach.launch.gaps": "Açıklar",
   "coach.launch.recommendations": "Öneriler",
-
   "coach.progress.title": "İlerleme Kontrolü",
   "coach.progress.subtitle": "STREETS yolculuğunuzu izleyin ve kişiselleştirilmiş öneriler alın",
   "coach.progress.checkingIn": "Kontrol ediliyor...",
@@ -1300,7 +1242,6 @@
   "coach.progress.noNudges": "Aktif öneri yok. Kişiselleştirilmiş rehberlik almak için kontrol çalıştırın.",
   "coach.progress.checkInResults": "Kontrol Sonuçları",
   "coach.progress.runningCheckIn": "İlerleme kontrolü çalışıyor...",
-
   "coach.strategy.title": "Strateji Belgesi",
   "coach.strategy.subtitle": "Profilinize dayalı kişiselleştirilmiş gelir stratejisi",
   "coach.strategy.generating": "Oluşturuluyor...",
@@ -1310,7 +1251,6 @@
   "coach.strategy.generatingHint": "AI profilinizi analiz ederken biraz zaman alabilir",
   "coach.strategy.lineCount": "{{count}} satır",
   "coach.strategy.emptyDescription": "Egemen profilinize, önerilen motorlara ve mevcut ilerlemenize göre uyarlanmış kapsamlı bir strateji belgesi oluşturun.",
-
   "coach.gate.title": "STREETS Koçu",
   "coach.gate.subtitle": "Gelir yolculuğunuz için AI destekli koçluk",
   "coach.gate.currentTier": "Mevcut katman:",
@@ -1322,13 +1262,11 @@
   "coach.gate.featureProgress": "İlerleme izleme ve öneriler",
   "coach.gate.enterLicenseKey": "Lisans anahtarını girin",
   "coach.gate.getSignal": "Signal Edinin — $12/ay",
-
   "coach.template.title": "Şablon Kütüphanesi",
   "coach.template.subtitle": "STREETS yolculuğunuz için kullanıma hazır Markdown şablonları",
   "coach.template.all": "Tümü",
   "coach.template.emptyNoTemplates": "Henüz şablon mevcut değil. Şablon kütüphanesine erişmek için Signal'e yükseltin.",
   "coach.template.emptyNoMatch": "Seçili kategoriyle eşleşen şablon yok.",
-
   "coach.video.title": "Video Müfredatı",
   "coach.video.subtitle": "STREETS video dersleri — ilerledikçe açılır",
   "coach.video.curriculumProgress": "Müfredat İlerlemesi",
@@ -1338,10 +1276,8 @@
   "coach.video.unlocksOnDay": "Gün {{day}}'de açılır",
   "coach.video.dripDay": "Gün {{day}}",
   "coach.video.emptyDescription": "Henüz video dersi mevcut değil. Tam STREETS video müfredatına erişmek için Signal'e yükseltin.",
-
   "playbook.regional.approximateEquivalent": "{{currency}} cinsinden yaklaşık karşılık",
   "playbook.regional.inYourRegion": "(bölgenizde ~{{amount}}{{unit}})",
-
   "playbook.sovereign.title": "Egemen Profil",
   "playbook.sovereign.subtitle": "STREETS komutlarından biriken donanım ve sistem bilgileri",
   "playbook.sovereign.loading": "Egemen profil yükleniyor...",
@@ -1353,9 +1289,7 @@
   "playbook.sovereign.generateStackDoc": "Yığın Belgesi Oluştur",
   "playbook.sovereign.missing": "Eksik: {{fields}}",
   "playbook.sovereign.stackDocument": "Egemen Yığın Belgesi",
-
   "playbook.health.title": "STREETS Sağlığı",
-
   "playbook.code.runAllSafe": "Tüm Güvenli Olanları Çalıştır ({{count}})",
   "playbook.code.runCommand": "Komutu çalıştır",
   "playbook.code.parseCommands": "Komutları ayrıştır",
@@ -1363,14 +1297,11 @@
   "playbook.code.failed": "Başarısız (çıkış {{code}})",
   "playbook.code.showOutput": "Çıktıyı göster",
   "playbook.code.showError": "Hatayı göster",
-
   "playbook.templates": "Şablonlar",
   "playbook.templatesSubtitle": "Lansman ve büyüme araçları",
-
   "commandDeck.confirm": "Onayla",
   "commandDeck.repo.noRepos": "Depo bulunamadı",
   "commandDeck.repo.selectRepo": "Depo seçin",
-
   "commandDeck.git.loading": "Git durumu yükleniyor...",
   "commandDeck.git.selectRepo": "Başlamak için bir depo seçin",
   "commandDeck.git.repoHint": "ACE tarafından keşfedilen depolar yukarıdaki seçicide görünür",
@@ -1393,19 +1324,15 @@
   "commandDeck.git.confirmPush": "{{count}} commit origin/{{branch}} dalına gönderilsin mi?",
   "commandDeck.git.push": "Gönder",
   "commandDeck.git.ahead": "{{count}} ilerde",
-
   "commandDeck.history.noCommands": "Komut geçmişi yok",
   "commandDeck.history.recentCommits": "Son Commit'ler",
-
   "toolkit.unpin": "Sabitlemeyi kaldır",
   "toolkit.pinToTop": "Üste sabitle",
-
   "toolkit.shell.back": "Geri",
   "toolkit.shell.escToClose": "Kapatmak için Esc",
   "toolkit.shell.loadingTool": "Araç yükleniyor...",
   "toolkit.shell.errorEncountered": "{{toolName}} bir hatayla karşılaştı",
   "toolkit.shell.backToToolkit": "Araç Setine Dön",
-
   "toolkit.colorPicker.hue": "Ton",
   "toolkit.colorPicker.pickFromScreen": "Ekrandan Seç",
   "toolkit.colorPicker.wcagContrast": "WCAG Kontrast",
@@ -1413,14 +1340,12 @@
   "toolkit.colorPicker.pass": "Geçti",
   "toolkit.colorPicker.fail": "Başarısız",
   "toolkit.colorPicker.copyLabel": "{{label}} kopyala",
-
   "toolkit.cronBuilder.minute": "Dakika",
   "toolkit.cronBuilder.hour": "Saat",
   "toolkit.cronBuilder.dayOfMonth": "Gün (ay)",
   "toolkit.cronBuilder.month": "Ay",
   "toolkit.cronBuilder.dayOfWeek": "Gün (hafta)",
   "toolkit.cronBuilder.presets": "Hazır Ayarlar",
-
   "toolkit.decisionLog.type": "Tür",
   "toolkit.decisionLog.status": "Durum",
   "toolkit.decisionLog.addDecision": "Karar Ekle",
@@ -1436,14 +1361,12 @@
   "toolkit.decisionLog.tags": "Etiketler",
   "toolkit.decisionLog.empty": "Henüz karar kaydedilmedi",
   "toolkit.decisionLog.emptyHint": "Teknik tercihlerinizi izlemeye başlamak için \"Karar Ekle\"ye tıklayın",
-
   "toolkit.diffViewer.original": "Orijinal",
   "toolkit.diffViewer.originalPlaceholder": "Orijinal metni yapıştırın...",
   "toolkit.diffViewer.modified": "Değiştirilmiş",
   "toolkit.diffViewer.modifiedPlaceholder": "Değiştirilmiş metni yapıştırın...",
   "toolkit.diffViewer.unified": "Birleşik",
   "toolkit.diffViewer.sideBySide": "Yan Yana",
-
   "toolkit.encoder.output": "Çıktı",
   "toolkit.encoder.base64Detected": "Base64 algılandı",
   "toolkit.encoder.base64Placeholder": "Kodlamak için metin veya kod çözmek için Base64 girin...",
@@ -1454,7 +1377,6 @@
   "toolkit.encoder.algorithm": "Algoritma",
   "toolkit.encoder.hashPlaceholder": "Hash'lemek için metin girin...",
   "toolkit.encoder.hashOutputHint": "Hash çıktısı burada görünecek",
-
   "toolkit.envSnapshot.captureSnapshot": "Anlık Görüntü Al",
   "toolkit.envSnapshot.capturing": "Alınıyor...",
   "toolkit.envSnapshot.copyAsMarkdown": "Markdown Olarak Kopyala",
@@ -1464,7 +1386,6 @@
   "toolkit.envSnapshot.runtimeVersions": "Çalışma Zamanı Sürümleri",
   "toolkit.envSnapshot.git": "Git",
   "toolkit.envSnapshot.recentCommits": "Son Commit'ler",
-
   "toolkit.exportPack.generateExport": "Dışa Aktarma Oluştur",
   "toolkit.exportPack.generating": "Oluşturuluyor...",
   "toolkit.exportPack.sections": "Bölümler",
@@ -1472,7 +1393,6 @@
   "toolkit.exportPack.downloadMd": ".md İndir",
   "toolkit.exportPack.empty": "Önizleme görmek için geliştirici profilinizi oluşturun",
   "toolkit.exportPack.emptyHint": "DNA'nızı, teknoloji radarınızı ve kararlarınızı paylaşılabilir bir Markdown belgesinde birleştirir",
-
   "toolkit.httpProbe.send": "Gönder",
   "toolkit.httpProbe.sending": "Gönderiliyor...",
   "toolkit.httpProbe.headers": "Başlıklar",
@@ -1485,7 +1405,6 @@
   "toolkit.httpProbe.responseBody": "Yanıt Gövdesi",
   "toolkit.httpProbe.history": "Geçmiş",
   "toolkit.httpProbe.noRequests": "Henüz istek yok",
-
   "toolkit.jsonViewer.editor": "Düzenleyici",
   "toolkit.jsonViewer.tree": "Ağaç",
   "toolkit.jsonViewer.diff": "Fark",
@@ -1501,10 +1420,8 @@
   "toolkit.jsonViewer.right": "Sağ",
   "toolkit.jsonViewer.rightPlaceholder": "İkinci JSON'ı yapıştırın...",
   "toolkit.jsonViewer.diffResult": "Fark sonucu",
-
   "toolkit.mockData.type": "Tür",
   "toolkit.mockData.count": "Sayı",
-
   "toolkit.portScanner.scanPorts": "Portları Tara",
   "toolkit.portScanner.scanning": "Taranıyor...",
   "toolkit.portScanner.filterPlaceholder": "Port veya işleme göre filtrele...",
@@ -1518,7 +1435,6 @@
   "toolkit.portScanner.empty": "Henüz port taranmadı",
   "toolkit.portScanner.emptyHint": "Dinleyen hizmetleri keşfetmek için Portları Tara'ya tıklayın",
   "toolkit.portScanner.noMatch": "\"{{filter}}\" ile eşleşen port yok",
-
   "toolkit.regex.patternPlaceholder": "Düzenli ifade kalıbı girin...",
   "toolkit.regex.replaceMode": "Değiştirme Modu",
   "toolkit.regex.matchCount": "{{count}} eşleşme",
@@ -1530,7 +1446,6 @@
   "toolkit.regex.replacePreview": "Değiştirme Önizleme",
   "toolkit.regex.matches": "Eşleşmeler",
   "toolkit.regex.namedCaptureGroups": "Adlandırılmış Yakalama Grupları",
-
   "toolkit.scoringSandbox.title": "Başlık",
   "toolkit.scoringSandbox.titlePlaceholder": "Puanlamak için makale başlığı girin...",
   "toolkit.scoringSandbox.content": "İçerik (isteğe bağlı)",
@@ -1557,7 +1472,6 @@
   "toolkit.scoringSandbox.affinityMultiplier": "Eğilim Çarpanı",
   "toolkit.scoringSandbox.domainRelevance": "Alan İlgililiği",
   "toolkit.scoringSandbox.contentQuality": "İçerik Kalitesi",
-
   "toolkit.sourceDebugger.testFeed": "Akışı Test Et",
   "toolkit.sourceDebugger.testing": "Test ediliyor...",
   "toolkit.sourceDebugger.clear": "Temizle",
@@ -1568,20 +1482,17 @@
   "toolkit.sourceDebugger.validationUrl": "URL http:// veya https:// ile başlamalıdır",
   "toolkit.sourceDebugger.itemCount": "{{count}} öğe",
   "toolkit.sourceDebugger.itemCount_other": "{{count}} öğe",
-
   "toolkit.sovereignProfile.loading": "Egemen profil yükleniyor...",
   "toolkit.sovereignProfile.completeness": "Profil Tamlığı",
   "toolkit.sovereignProfile.generateDocument": "Belge Oluştur",
   "toolkit.sovereignProfile.generating": "Oluşturuluyor...",
   "toolkit.sovereignProfile.runStreets": "Doldurmak için STREETS komutlarını çalıştırın",
   "toolkit.sovereignProfile.stackDocument": "Yığın Belgesi",
-
   "toolkit.stackHealth.scanning": "Taranıyor...",
   "toolkit.stackHealth.analyzing": "Proje sağlığı analiz ediliyor...",
   "toolkit.stackHealth.empty": "Henüz sağlık verisi yok",
   "toolkit.stackHealth.emptyHint": "Proje bağımlılıklarını taramak için Yenile'ye tıklayın",
   "toolkit.stackHealth.noProjects": "Proje algılanmadı. ACE'nin önce projeleri keşfetmesi gerekiyor.",
-
   "agentMemory.title": "Ajan Belleği",
   "agentMemory.empty": "Henüz ajan belleği yok",
   "agentMemory.emptyHint": "Ajanlar arası bağlam oluşturmaya başlamak için MCP aracılığıyla bir AI ajanı bağlayın.",
@@ -1603,12 +1514,10 @@
   "agentMemory.expires": "Sona erme",
   "agentMemory.promotedTo": "Karar #{{id}}'ye terfi ettirildi",
   "agentMemory.promoteToDecision": "Karara Terfi Ettir",
-
   "reader.readArticle": "Makaleyi Oku",
   "reader.noContent": "Bu öğe için içerik mevcut değil.",
   "reader.wordCount": "{{count}} kelime",
   "reader.readTime": "~{{minutes}} dk okuma",
-
   "audio.feature": "Sesli Brifing",
   "audio.play": "Sesli brifingi çal",
   "audio.pause": "Sesli brifingi duraklat",
@@ -1616,7 +1525,6 @@
   "audio.generating": "Ses oluşturuluyor...",
   "audio.playFailed": "Ses çalınamadı",
   "audio.playbackBlocked": "Ses çalma engellendi",
-
   "autophagy.title": "4DA Nasıl Öğrenir",
   "autophagy.feature": "Otofaji İçgörüleri",
   "autophagy.calibrationAccuracy": "Kalibrasyon Doğruluğu",
@@ -1627,12 +1535,10 @@
   "autophagy.calibrations": "Kalibrasyonlar",
   "autophagy.antiPatterns": "Karşı Kalıplar",
   "autophagy.recentCycles": "Son Döngüler",
-
   "decisions.title": "Alınacak Kararlar",
   "decisions.subtitle": "Zaman sınırlı fırsatlar",
   "decisions.affects": "Etkilenen",
   "decisions.act": "Harekete Geç",
-
   "delegation.title": "Görev Koçluğu",
   "delegation.empty": "Yetkilendirme verisi mevcut değil",
   "delegation.emptyHint": "Yetkilendirme puanlarını görmek için ayarlarda teknoloji yığınınızı ekleyin.",
@@ -1653,7 +1559,6 @@
   "delegation.factorMaturity": "Olgunluk",
   "delegation.factorReversibility": "Geri Alınabilirlik",
   "delegation.factorSecurity": "Güvenlik",
-
   "knowledgeGaps.title": "Öğrenme Fırsatları",
   "knowledgeGaps.feature": "Öğrenme Fırsatları",
   "knowledgeGaps.count": "{{count}} açık",
@@ -1663,22 +1568,18 @@
   "knowledgeGaps.missedArticles_other": "İncelemediğiniz {{count}} ilgili makale",
   "knowledgeGaps.noEngagement": "Etkileşim kaydedilmedi",
   "knowledgeGaps.daysSinceEngagement": "Son etkileşimden {{days}} gün geçti",
-
   "intelligence.title": "Canlı Sinyaller",
   "intelligence.feature": "Canlı Sinyaller",
   "intelligence.calibration": "Kalibrasyon Doğruluğu",
   "intelligence.learned": "Sistemin öğrendikleri",
   "intelligence.sourceQuality": "Kaynak kalitesi",
-
   "digest.title": "Haftalık Özet",
   "digest.analyzed": "analiz edildi",
   "digest.relevant": "ilgili",
   "digest.avgScore": "ort puan",
   "digest.topItems": "En İyi Öğeler",
-
   "standingQueries.singleMatch": "\"{{query}}\" — {{count}} yeni eşleşme bulundu",
   "standingQueries.multiMatch": "{{count}} sürekli sorguda yeni eşleşmeler var",
-
   "learnedBehavior.title": "Geri Bildirim ve Eğilimler",
   "learnedBehavior.subtitle": "Kaydetme ve kaldırma eylemlerinizden etkilenen konular",
   "learnedBehavior.topicAffinities": "Konu Eğilimleri",
@@ -1688,7 +1589,6 @@
   "learnedBehavior.antiTopics": "Otomatik Algılanan Karşı Konular",
   "learnedBehavior.antiTopicsHint": "Bu konulara sahip öğeler ilgililik puanlamasında cezalandırılacak",
   "learnedBehavior.refresh": "Öğrenilmiş Davranışı Yenile",
-
   "signals.title": "Temel Sinyaller",
   "signals.feature": "Sinyal Zincirleri",
   "signals.activeChains": "{{count}} aktif zincir",
@@ -1696,7 +1596,6 @@
   "signals.signalCount": "{{count}} sinyal",
   "signals.signalCount_other": "{{count}} sinyal",
   "signals.resolve": "Çöz",
-
   "techRadar.title": "Teknoloji Radarı",
   "techRadar.loading": "Teknoloji radarı yükleniyor...",
   "techRadar.empty": "Radar verisi mevcut değil",
@@ -1716,7 +1615,6 @@
   "techRadar.backToFull": "Tam görünüme dön",
   "techRadar.current": "Mevcut",
   "techRadar.timeline": "Zaman Çizelgesi",
-
   "results.affinityBoost": "{{topic}} konusuna gösterdiğiniz ilgi nedeniyle takviye edildi",
   "results.signal.security_alert": "Güvenlik",
   "results.signal.breaking_change": "Kırılma",
@@ -1742,23 +1640,19 @@
   "results.predictedContext": "Öngörülen Bağlam",
   "results.predictedAt": "{{time}} öngörüldü",
   "results.refreshInterval": "Her 5dk yenilenir",
-
   "pro.signals": "{{count}} sinyal",
   "pro.signals_other": "{{count}} sinyal",
   "pro.gaps": "{{count}} açık",
   "pro.gaps_other": "{{count}} açık",
   "pro.hoursSaved": "~{{hours}}sa tasarruf",
   "pro.intelligenceSummary": "Sinyal İstihbaratı: {{summary}} (son {{days}} gün)",
-
   "search.nlqFeature": "Doğal Dil Sorgusu",
   "search.nlqTitle": "Doğal Dil Sorgusu",
   "search.nlqSubtitle": "Akışınız hakkında günlük dilde sorun",
   "search.nlqPlaceholder": "Akışınız hakkında sorun...",
   "search.nlqHint": "Akışınız hakkında doğal dilde soru sorun",
   "search.query": "Sorgu",
-  "search.indexFirst": "Önce dosyalarınızı dizinleyin (Ayarlar > Bağlam)",
   "search.untitled": "Başlıksız",
-  "search.tryDifferent": "Farklı anahtar kelimeler veya daha geniş bir sorgu deneyin",
   "search.resultStats": "{{count}} sonuç {{ms}}ms içinde",
   "search.resultStats_other": "{{count}} sonuç {{ms}}ms içinde",
   "search.stackContext": "Yığınınız",
@@ -1768,13 +1662,10 @@
   "search.attention": "dikkat gerekiyor",
   "search.stale": "eski",
   "search.critical": "kritik",
-  "search.relatedDecisions": "İlgili Kararlar",
-  "search.knowledgeGaps": "Öğrenme Fırsatları",
   "search.daysStale": "{{days}}g eski",
   "search.watchCreated": "İzleme oluşturuldu",
   "search.watchDeleted": "İzleme kaldırıldı",
   "search.noLlm": "AI sentezi için LLM sağlayıcı yapılandırın",
-
   "context.title": "Bağlam",
   "context.filesIndexed": "{{count}} dosya dizinlendi",
   "context.reloadFiles": "Dosyaları yeniden yükle",
@@ -1789,9 +1680,7 @@
   "context.exportFailed": "Dışa aktarma başarısız: {{error}}",
   "context.exporting": "Bağlam paketi dışa aktarılıyor",
   "context.exportToClipboard": "Bağlam paketini dışa aktar (pano)",
-
   "briefing.read": "Oku",
-
   "onboarding.locale.detecting": "Bölge algılanıyor...",
   "onboarding.locale.country": "Ülke",
   "onboarding.locale.language": "Dil",
@@ -1802,7 +1691,6 @@
   "onboarding.locale.selectCountry": "Ülke seçin",
   "onboarding.locale.selectLanguage": "Dil seçin",
   "onboarding.locale.selectCurrency": "Para birimi seçin",
-
   "onboarding.stack.loading": "Yığın profilleri yükleniyor...",
   "onboarding.stack.description": "Daha akıllı içerik puanlaması için teknoloji yığınınızı seçin. Otomatik algılanan yığınlar önceden seçilmiştir.",
   "onboarding.stack.painPoints": "{{count}} sorun noktası",
@@ -1812,16 +1700,20 @@
   "onboarding.stack.clickToToggle": "Değiştirmek için tıklayın.",
   "onboarding.stack.noSelection": "Yığın seçilmedi — puanlama varsayılan davranışı kullanacak.",
   "onboarding.stack.autoSelectedBanner": "Projelerinize göre otomatik seçildi",
-
   "onboarding.projects.scanning": "Projeleriniz taranıyor...",
   "onboarding.projects.detected": "Yerel projelerinizden algılananlar:",
   "onboarding.projects.noTech": "Belirli bir teknoloji algılanmadı. 4DA aktivitenizden öğrenecek.",
   "onboarding.projects.manageHint": "Dizinleri istediğiniz zaman Ayarlar'da yönetin.",
-
+  "onboarding.choice.title": "Hazırsınız",
+  "onboarding.choice.description": "4DA arka planda projelerinizi öğreniyor. Şimdi keşfetmeye başlayabilir veya önce ayarlarınızı yapılandırabilirsiniz.",
+  "onboarding.choice.startUsing": "4DA'yı kullanmaya başla",
+  "onboarding.choice.startHint": "Analiz arka planda devam ediyor",
+  "onboarding.choice.or": "veya",
+  "onboarding.choice.continueSetup": "Kuruluma devam et",
+  "onboarding.choice.continueHint": "AI sağlayıcı, yığın, ilgi alanlarını yapılandır",
   "learnedBehavior.learningCount": "Öğreniyor: {{count}} tercih",
   "learnedBehavior.learningCount_other": "Öğreniyor: {{count}} tercih",
   "learnedBehavior.moreCount": "+{{count}} daha",
-
   "channels.renderNow": "Şimdi İşle",
   "channels.rerender": "Yeniden İşle",
   "channels.rendering": "İşleniyor...",
@@ -1852,10 +1744,7 @@
   "channels.basicMode": "Temel Mod",
   "channels.configureOllama": "AI sentezi için Ollama yapılandırın",
   "coach.freeSession": "Ücretsiz oturum {{current}}/{{max}}",
-
   "toolkit.title": "Geliştirici Araç Seti",
-
-  "decisions.title": "Alınacak Kararlar",
   "decisions.recorded": "{{count}} karar kaydedildi",
   "decisions.record": "Karar Kaydet",
   "decisions.decision": "Karar",
@@ -1883,7 +1772,7 @@
   "decisions.supersededBy": "#{{id}} tarafından üstüne geçildi",
   "decisions.autoDetectedNotice": "Bazı teknik tercihler yerel projelerinizden otomatik algılandı",
   "decisions.autoDetectedHint": "Bir şey yanlış görünüyorsa düzeltmek için Kaldır düğmesini kullanın. Bu ayrıca rehberinizi ve profilinizi günceller.",
-
+  "decisions.toggleDetail": "Ayrıntıları aç/kapat",
   "calibration.title": "Sistem Sağlığı",
   "calibration.subtitle": "Kurulumunuz için dürüst puanlama kalitesi değerlendirmesi",
   "calibration.running": "Kalibre ediliyor...",
@@ -1934,7 +1823,13 @@
   "calibration.onboarding.noContent": "Kalibrasyon için analiz edilecek içerik gerekiyor.",
   "calibration.onboarding.noContentHint": "Önce bir analiz çalıştırın, ardından kalibre etmek için geri gelin.",
   "calibration.action.working": "Çalışıyor...",
-
+  "health.issueCount": "{{count}} sistem sorunu algılandı",
+  "missed.title": "Kaçırmış olacağınız şeyler",
+  "missed.scanned": "{{count}} öğe tarandı",
+  "missed.noiseRejected": "gürültü reddedildi",
+  "missed.signalSurfaced": "sinyal tespit edildi",
+  "missed.timeSaved": "kazanılan zaman",
+  "missed.filtered": "filtrelendi",
   "profile.copyProfile": "Profili Kopyala",
   "profile.exportJson": "JSON Dışa Aktar",
   "profile.copyDna": "DNA Kopyala",
@@ -1958,7 +1853,6 @@
   "profile.deps": "bağımlılıklar",
   "profile.filtered": "filtrelendi",
   "profile.factCount": "{{count}} bilgi",
-
   "dna.title": "Geliştirici DNA'sı",
   "dna.defaultSubtitle": "Teknik parmak iziniz, otomatik keşfedildi",
   "dna.building": "DNA profili oluşturuluyor...",
@@ -1986,20 +1880,17 @@
   "dna.downloadSvg": "Kartı İndir (SVG)",
   "dna.cardDownloaded": "Geliştirici DNA kartı indirildi",
   "dna.cardDownloadFailed": "Kart indirme başarısız",
-
   "techRadar.ringAdopt": "Benimse",
   "techRadar.ringTrial": "Deneme",
   "techRadar.ringAssess": "Değerlendir",
   "techRadar.ringHold": "Beklet",
   "techRadar.svgLabel": "Teknoloji radarı görselleştirmesi",
-
   "tasteTest.readThis": "Bunu okurum",
   "tasteTest.skip": "Atla",
   "tasteTest.loveThis": "Bayıldım",
   "tasteTest.markInteresting": "\"{{title}}\" ilginç olarak işaretle",
   "tasteTest.skipTitle": "\"{{title}}\" atla",
   "tasteTest.loveTitle": "\"{{title}}\" bayıldım",
-
   "techRadar.closePanel": "Paneli kapat",
   "techRadar.score": "Puan: {{score}}",
   "techRadar.decisionRef": "Karar #{{id}}",
@@ -2011,7 +1902,6 @@
   "techRadar.movementOut": "Dışarı Taşınıyor",
   "techRadar.movementNew": "Yeni Giriş",
   "techRadar.movementStable": "Kararlı",
-
   "sovereignProfile.gpu": "GPU: {{tier}}",
   "sovereignProfile.llm": "LLM: {{tier}}",
   "sovereignProfile.cpu": "CPU: {{model}}",
@@ -2035,7 +1925,6 @@
   "sovereignProfile.action.prefsLabel": "Akışınızı keskinleştirmek için ilgi alanları ekleyin",
   "sovereignProfile.action.openSettings": "Ayarları Aç",
   "sovereignProfile.action.contextLabel": "4DA'yı bir proje klasörüne yönlendirin",
-
   "scoreTooltip.stackMatch": "Yığın eşleşmesi: güçlü",
   "scoreTooltip.partialStackMatch": "Yığın eşleşmesi: kısmi",
   "scoreTooltip.interestMatch": "İlgi alanlarınızla eşleşiyor",
@@ -2048,7 +1937,6 @@
   "scoreTooltip.highQuality": "Yüksek kaliteli içerik",
   "scoreTooltip.novelContent": "Özgün içerik",
   "scoreTooltip.serendipity": "Tesadüfi keşif",
-
   "scoreDrawer.toggle": "Puan dökümünü değiştir",
   "scoreDrawer.title": "Puan Dökümü",
   "scoreDrawer.signals": "Sinyaller",
@@ -2058,7 +1946,6 @@
   "scoreDrawer.comparing": "Karşılaştırılıyor",
   "scoreDrawer.compareWith": "Karşılaştır",
   "scoreDrawer.selectItem": "Bir öğe seçin...",
-
   "scoreDrawer.factor.context": "Proje bağlamı",
   "scoreDrawer.factor.interest": "İlgi eşleşmesi",
   "scoreDrawer.factor.dependency": "Bağımlılık eşleşmesi",
@@ -2076,20 +1963,16 @@
   "scoreDrawer.factor.affinity": "Konu eğilimi",
   "scoreDrawer.factor.anti": "Karşı konu cezası",
   "scoreDrawer.factor.confirmation": "Sinyal doğrulaması",
-
   "briefing.profile.feedbackImpact": "Geri bildiriminiz {{count}} gelecek sinyali şekillendirdi",
   "briefing.profile.feedbackImpact_other": "Geri bildiriminiz {{count}} gelecek sinyali şekillendirdi",
-
   "briefing.streetsMatchStrength": "%{{pct}} eşleşme",
   "briefing.streetsOpenModule": "Modül {{id}}'yi Aç",
   "briefing.streetsNotNow": "Şimdi değil",
-
   "playbook.personalizedBanner": "Kurulumunuz için kişiselleştirildi",
   "playbook.personalizedBannerDesc": "Egemen profiliniz ve istihbarat akışınız kullanılarak uyarlanmış içerik",
   "playbook.feedEchoSave": "Kaydet",
   "playbook.feedEchoSaved": "Kaydedildi",
   "playbook.feedEchoNewItems": "Son ziyaretten bu yana {{count}} yeni",
-
   "missions.title": "Başlarken",
   "missions.saveArticles": "Faydalı bulduğunuz 3 makaleyi kaydedin",
   "missions.dismissArticles": "Umursamadığınız 2 makaleyi kaldırın",
@@ -2099,7 +1982,6 @@
   "missions.completed": "Görev tamamlandı: {{mission}}. Sonraki: {{next}}",
   "missions.allComplete": "Tüm görevler tamamlandı! İstihbarat sisteminiz kalibre edildi.",
   "missions.dismiss": "Görevleri kaldır",
-
   "weekly.title": "Haftalık İstihbarat Özeti",
   "weekly.analyzed": "analiz edilen öğe",
   "weekly.cycles": "öğrenme döngüsü",
@@ -2109,23 +1991,19 @@
   "weekly.addInterest": "+ Ekle",
   "weekly.interestAdded": "'{{topic}}' ilgi alanlarına eklendi",
   "weekly.interestFailed": "İlgi alanı eklenemedi",
-
   "tips.feedbackLoop": "Faydalı bulduğunuz makaleleri kaydedin — bu sisteme sizin için neyin önemli olduğunu öğretir.",
   "tips.feedbackLoopHint": "Makaleleri kaldırmak da yardımcı olur. Her etkileşim sonuçlarınızı iyileştirir.",
   "tips.ollamaNudge": "Sonuçlarınız anahtar kelime eşleştirmesi kullanıyor. Ollama (ücretsiz, yerel) daha ilgili sonuçlar için semantik eşleştirmeyi açar.",
   "tips.ollamaNudgeHint": "Ollama'yı kurun, ardından Ayarlar > AI Sağlayıcı bölümünde etkinleştirin. Tamamen makinenizde çalışır.",
-
   "guided.feed": "Kişiselleştirilmiş içerik akışınız",
   "guided.score": "Neden yüksek puan aldığını görmek için dokunun",
   "guided.save": "Öğeleri Kitaplığınıza kaydedin",
   "guided.dna": "Geliştirici kimlik profiliniz",
   "guided.settings": "Kaynakları ve AI'ı yapılandırın",
-
   "emptyState.header": "İlk analiziniz çalışırken, {{stack}} geliştiricilerin bu hafta gördüklerini burada bulabilirsiniz",
   "emptyState.headerDefault": "İlk analiziniz çalışırken, geliştiricilerin bu hafta gördüklerini burada bulabilirsiniz",
   "emptyState.footer": "Gerçek sinyaller ~2 dakika içinde geliyor...",
   "emptyState.badge": "Örnek",
-
   "firstCve.title": "4DA sizi korudu",
   "firstCve.detected": "Yayınlanmadan {{minutes}} dakika sonra tespit edildi",
   "firstCve.affects": "projelerinizin {{count}} tanesinde {{package}}'i etkiliyor",
