@@ -4,7 +4,7 @@
  * Runs all critical checks that must pass before any deployment:
  *   1. TypeScript compilation (fresh, no cache)
  *   2. Vite build (actual bundling, not just type check)
- *   3. Site build verification (Eleventy)
+ *   3. Site build verification (Eleventy, if site/ exists)
  *   4. Rust compilation (cargo check)
  *   5. Frontend tests (Vitest)
  *   6. File size limits
