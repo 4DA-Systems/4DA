@@ -413,10 +413,10 @@ export function ResultsView({
                         isExpanded={expandedItem === item.id}
                         isFocused={focusedIndex === idx}
                         isNew={newItemIds.has(item.id)}
-                        onToggleExpand={() => handleToggleExpand(item.id)}
+                        onToggleExpand={handleToggleExpand}
                         feedbackGiven={feedbackGiven}
                         onRecordInteraction={recordInteraction}
-                        comparePool={filteredResults}
+                        comparePool={expandedItem === item.id ? filteredResults : undefined}
                       />
                     </div>
                   </div>

@@ -57,6 +57,17 @@ body {
   font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
 }
 
+/* Keyboard focus ring — gold accent for all interactive elements */
+:focus-visible {
+  outline: 2px solid var(--color-accent-gold);
+  outline-offset: 2px;
+}
+
+/* Remove focus ring for mouse/touch interactions */
+:focus:not(:focus-visible) {
+  outline: none;
+}
+
 /* Global spinner keyframe — used by inline-styled spinners in CalibrationStep, etc. */
 @keyframes spin {
   from { transform: rotate(0deg); }

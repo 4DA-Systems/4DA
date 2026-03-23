@@ -24,20 +24,26 @@ const TABS: Array<{ id: ConsoleTab; label: string; description: string }> = [
 // ============================================================================
 
 function TabButton({
+  id,
   active,
   label,
   description,
+  controls,
   onClick,
 }: {
+  id: string;
   active: boolean;
   label: string;
   description: string;
+  controls: string;
   onClick: () => void;
 }) {
   return (
     <button
+      id={id}
       role="tab"
       aria-selected={active}
+      aria-controls={controls}
       onClick={onClick}
       className={`px-5 py-3 text-left transition-colors border-b-2 ${
         active
@@ -125,16 +131,18 @@ export const IntelligenceConsole = memo(function IntelligenceConsole() {
         {TABS.map(t => (
           <TabButton
             key={t.id}
+            id={`tab-${t.id}`}
             active={tab === t.id}
             label={t.label}
             description={t.description}
+            controls={`tabpanel-${t.id}`}
             onClick={() => setTab(t.id)}
           />
         ))}
       </div>
 
       {/* Tab content */}
-      <div role="tabpanel">
+      <div id={`tabpanel-${tab}`} role="tabpanel" aria-labelledby={`tab-${tab}`}>
         {tab === 'accuracy' && <AccuracyTab />}
         {tab === 'convergence' && <ConvergenceTab />}
         {tab === 'costs' && <CostTab />}
