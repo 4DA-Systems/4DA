@@ -29,7 +29,7 @@ The free tier is fully functional and includes AI briefings. Signal and Team unl
 1. **Open Settings** -- press `,` (comma) or click the gear icon in the top navigation.
 2. **Navigate to the License section** on the General tab.
 3. **Paste your license key** into the input field. Copy-paste is recommended to avoid typos.
-4. **Click Activate**. The app will validate your key against the Keygen API.
+4. **Click Activate**. The app will validate your key using Ed25519 license validation.
 5. **Confirmation**: On success, the tier indicator changes to **Signal** (displayed in gold) with the message "All Signal features unlocked."
 
 The key is persisted in your local settings. You will not need to re-enter it after restarting the app.
@@ -64,7 +64,7 @@ If any of these do not reflect your expected tier, see Troubleshooting below.
 ### Network error during activation
 
 - License validation requires an internet connection. Check that you are online.
-- If you are behind a corporate proxy or firewall, ensure outbound HTTPS requests to the Keygen API are not blocked.
+- If you are behind a corporate proxy or firewall, ensure outbound HTTPS requests for Ed25519 license validation are not blocked.
 - Wait a moment and try again. Transient network failures resolve on retry.
 
 ### "Key already activated" or device limit reached
@@ -113,4 +113,4 @@ Contact support@4da.ai with your purchase details. Refer to the refund policy on
 
 ### Where is my license key stored?
 
-Locally in `data/settings.json` on your machine. It is never transmitted to 4DA servers beyond the initial Keygen validation call. See the [Privacy Features](./FEATURES.md#privacy-features) documentation.
+Locally in `data/settings.json` on your machine. It is never transmitted to 4DA servers beyond the initial Ed25519 license validation call. See the [Privacy Features](./FEATURES.md#privacy-features) documentation.
