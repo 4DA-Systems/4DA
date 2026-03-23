@@ -178,6 +178,7 @@ interface CommandMap {
   set_notification_threshold: { params: { threshold: string }; result: void };
   set_notification_style: { params: { style: string }; result: { notification_style: string } };
   trigger_notification_test: { params: Record<string, never>; result: void };
+  trigger_notification_preview: { params: { priority: string }; result: { success: boolean; priority: string } };
 
   // -- Briefing --
   get_latest_briefing: { params: Record<string, never>; result: { content: string; model: string | null; item_count: number; created_at: string } | null };

@@ -168,7 +168,7 @@ pub async fn set_notification_threshold(threshold: String) -> Result<serde_json:
     }))
 }
 
-/// Test notification delivery
+/// Test notification delivery (default: low digest)
 #[tauri::command]
 pub async fn trigger_notification_test(app: AppHandle) -> Result<serde_json::Value> {
     monitoring::send_notification(&app, 3, 30);
@@ -176,6 +176,72 @@ pub async fn trigger_notification_test(app: AppHandle) -> Result<serde_json::Val
         "success": true,
         "message": "Test notification sent"
     }))
+}
+
+/// Test notification with specific priority and content
+#[tauri::command]
+pub async fn trigger_notification_preview(
+    app: AppHandle,
+    priority: String,
+) -> Result<serde_json::Value> {
+    let data = match priority.as_str() {
+        "critical" => crate::notification_window::NotificationData {
+            variant: "signal".to_string(),
+            priority: "critical".to_string(),
+            signal_type: Some("security_alert".to_string()),
+            title: "CVE-2026-1234 in SQLite: RCE vulnerability".to_string(),
+            action: Some("Update dependency immediately".to_string()),
+            source: Some("cve".to_string()),
+            matched_deps: vec!["sqlite".to_string(), "rusqlite".to_string()],
+            count: None,
+            chain_sources: None,
+            chain_phase: None,
+            chain_links_filled: None,
+            chain_links_total: None,
+            time_ago: "just now".to_string(),
+            item_id: Some(42),
+        },
+        "high" => crate::notification_window::NotificationData {
+            variant: "signal".to_string(),
+            priority: "high".to_string(),
+            signal_type: Some("breaking_change".to_string()),
+            title: "React 20 drops class components — migration guide".to_string(),
+            action: Some("Check migration path".to_string()),
+            source: Some("hackernews".to_string()),
+            matched_deps: vec!["react".to_string(), "react-dom".to_string()],
+            count: None,
+            chain_sources: None,
+            chain_phase: None,
+            chain_links_filled: None,
+            chain_links_total: None,
+            time_ago: "5m ago".to_string(),
+            item_id: None,
+        },
+        "medium" => crate::notification_window::NotificationData {
+            variant: "signal".to_string(),
+            priority: "medium".to_string(),
+            signal_type: Some("tool_discovery".to_string()),
+            title: "Show HN: A new Rust testing framework".to_string(),
+            action: Some("via hackernews".to_string()),
+            source: Some("hackernews".to_string()),
+            matched_deps: vec!["rust".to_string()],
+            count: None,
+            chain_sources: None,
+            chain_phase: None,
+            chain_links_filled: None,
+            chain_links_total: None,
+            time_ago: "12m ago".to_string(),
+            item_id: None,
+        },
+        _ => {
+            // Low/default
+            monitoring::send_notification(&app, 3, 30);
+            return Ok(serde_json::json!({ "success": true, "priority": "low" }));
+        }
+    };
+
+    crate::notification_window::show_notification(&app, data);
+    Ok(serde_json::json!({ "success": true, "priority": priority }))
 }
 
 /// Set notification style ("custom" for GAME-powered or "native" for OS toasts)
