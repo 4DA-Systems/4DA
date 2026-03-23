@@ -102,30 +102,51 @@ function escapeHtml(str) {
 }
 
 // ---------------------------------------------------------------------------
-// GAME atmosphere management
+// GAME GPU rendering (progressive enhancement over CSS)
 // ---------------------------------------------------------------------------
 
-/** Map priority to GAME WebComponent tag name + script path. */
-var GAME_TAGS = {
-  critical: 'game-notif-critical',
-  high: 'game-notif-high',
-  medium: 'game-notif-medium',
-  low: 'game-notif-digest',
+/** GAME card components — full GPU-rendered card with occlude blend. */
+var GAME_CARD_TAGS = {
+  critical: 'game-notif-card-critical',
+  high: 'game-notif-card-high',
+  medium: 'game-notif-card-medium',
+  low: 'game-notif-card-low',
 };
-var GAME_SCRIPTS = {
-  critical: '/notif-critical.js',
-  high: '/notif-high.js',
-  medium: '/notif-medium.js',
-  low: '/notif-digest.js',
+var GAME_CARD_SCRIPTS = {
+  critical: '/notif-card-critical.js',
+  high: '/notif-card-high.js',
+  medium: '/notif-card-medium.js',
+  low: '/notif-card-low.js',
 };
 var loadedScripts = {};
 var currentGameEl = null;
+var gpuAvailable = null; // null = untested, true/false after detection
 
-/** Lazy-load a GAME component script (only loaded once per priority). */
+/** Detect if GPU rendering is available (WebGL2 as minimum). */
+function detectGPU() {
+  if (gpuAvailable !== null) return gpuAvailable;
+  try {
+    var canvas = document.createElement('canvas');
+    var gl = canvas.getContext('webgl2') || canvas.getContext('webgl');
+    gpuAvailable = !!gl;
+    if (gl) {
+      // Clean up the test context
+      var ext = gl.getExtension('WEBGL_lose_context');
+      if (ext) ext.loseContext();
+    }
+    canvas.remove();
+  } catch (e) {
+    gpuAvailable = false;
+  }
+  console.log('[4DA Notification] GPU available:', gpuAvailable);
+  return gpuAvailable;
+}
+
+/** Lazy-load a GAME card component script (only loaded once per priority). */
 function ensureGameScript(priority) {
   if (loadedScripts[priority]) return;
   loadedScripts[priority] = true;
-  var src = GAME_SCRIPTS[priority];
+  var src = GAME_CARD_SCRIPTS[priority];
   if (!src) return;
   var script = document.createElement('script');
   script.type = 'module';
@@ -133,31 +154,36 @@ function ensureGameScript(priority) {
   document.head.appendChild(script);
 }
 
-/** Swap the GAME atmosphere WebComponent in the game-layer div.
- *  Lazy-loads: only creates the element when actually shown,
- *  and pauses rendering when hidden (avoids zero-size texture errors). */
-function swapGameComponent(priority) {
-  var tagName = GAME_TAGS[priority] || GAME_TAGS.low;
+/** Upgrade from CSS card to GAME-rendered card.
+ *  CSS card stays visible until GAME is confirmed working.
+ *  If GAME fails, CSS card remains — user sees no difference. */
+function upgradeToGameCard(priority) {
+  if (!detectGPU()) return; // No GPU — CSS card stays
+
+  var tagName = GAME_CARD_TAGS[priority] || GAME_CARD_TAGS.low;
 
   // Skip if already showing the correct component
   if (currentGameEl && currentGameEl.tagName.toLowerCase() === tagName) return;
 
-  // Remove current GAME element (stops its render loop)
-  if (currentGameEl) {
-    currentGameEl.remove();
-    currentGameEl = null;
-  }
+  // Remove current GAME element
+  destroyGameComponent();
 
-  // Check if the custom element is defined
+  // Check if the custom element is registered yet
   if (!customElements.get(tagName)) return;
 
-  // Only create if the window is actually visible (non-zero size)
+  // Only create if visible (non-zero size)
   var rect = gameLayer.getBoundingClientRect();
   if (rect.width < 1 || rect.height < 1) return;
 
+  // Create GAME element behind the CSS card
   currentGameEl = document.createElement(tagName);
-  currentGameEl.style.cssText = 'width:100%;height:100%;display:block;';
+  currentGameEl.style.cssText = 'position:absolute;inset:0;display:block;z-index:0;';
   gameLayer.appendChild(currentGameEl);
+
+  // GAME renders the full card — hide CSS card background so text floats on GAME
+  card.classList.add('game-active');
+  gameLayer.classList.add('active');
+  gameLayer.style.setProperty('--game-opacity', '1');
 }
 
 /** Destroy GAME component when notification hides (stops GPU rendering). */
@@ -166,6 +192,9 @@ function destroyGameComponent() {
     currentGameEl.remove();
     currentGameEl = null;
   }
+  // Restore CSS card background
+  card.classList.remove('game-active');
+  gameLayer.classList.remove('active');
 }
 
 // ---------------------------------------------------------------------------
@@ -200,10 +229,12 @@ function updateContent(data) {
     String(gameOpacity[currentPriority] || 0.05)
   );
 
-  // Lazy-load + swap GAME atmosphere WebComponent
-  ensureGameScript(currentPriority);
-  // Defer swap slightly to allow script to register the custom element
-  setTimeout(function () { swapGameComponent(currentPriority); }, 100);
+  // Progressive enhancement: try to upgrade CSS card to GAME-rendered card
+  if (detectGPU()) {
+    ensureGameScript(currentPriority);
+    // Defer upgrade to allow script to register the custom element
+    setTimeout(function () { upgradeToGameCard(currentPriority); }, 150);
+  }
 
   // -- Header --
   typeLabel.textContent = getTypeLabel(data.variant, data.signal_type);
