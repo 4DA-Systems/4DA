@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { cmd } from '../../lib/commands';
+import { reportError } from '../../lib/error-reporter';
 
 interface StandingQuery {
   id: number;
@@ -38,7 +39,7 @@ export function StandingQueries({ isPro }: StandingQueriesProps) {
       const result = await cmd('list_standing_queries') as unknown as StandingQuery[];
       setWatches(result);
     } catch (err) {
-      console.error('Failed to load standing queries:', err);
+      reportError('StandingQueries.load', err);
     } finally {
       setLoading(false);
     }
@@ -64,7 +65,7 @@ export function StandingQueries({ isPro }: StandingQueriesProps) {
       await cmd('delete_standing_query', { id });
       setWatches((prev) => prev.filter((w) => w.id !== id));
     } catch (err) {
-      console.error('Failed to delete standing query:', err);
+      reportError('StandingQueries.delete', err);
     }
   };
 
@@ -76,7 +77,7 @@ export function StandingQueries({ isPro }: StandingQueriesProps) {
       setSuggestions((prev) => prev.filter((s) => s.topic !== suggestion.topic));
       await loadWatches();
     } catch (err) {
-      console.error('Failed to create standing query from suggestion:', err);
+      reportError('StandingQueries.createFromSuggestion', err);
     } finally {
       setCreatingSuggestion(null);
     }

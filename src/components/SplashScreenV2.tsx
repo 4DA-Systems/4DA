@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { cmd } from '../lib/commands';
+import { reportError } from '../lib/error-reporter';
 import sunLogo from '../assets/sun-logo.webp';
 import { translateError } from '../utils/error-messages';
 import { TuringPattern } from './TuringPattern';
@@ -75,7 +76,7 @@ export function SplashScreenV2({ onComplete, minimumDisplayTime = 6000 }: Splash
         setStage('ready');
         setBackendReady(true);
       } catch (e) {
-        console.error('[SplashScreen] Backend check failed:', e);
+        reportError('SplashScreenV2.backendCheck', e);
         const isBrowser = !('__TAURI_INTERNALS__' in window);
         if (isBrowser) {
           // In real browsers, redirect to Signal Terminal (skip in test/JSDOM)

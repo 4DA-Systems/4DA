@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { cmd } from '../../lib/commands';
+import { reportError } from '../../lib/error-reporter';
 
 interface DigestSectionProps {
   setSettingsStatus: (status: string) => void;
@@ -58,7 +59,7 @@ export function DigestSection({ setSettingsStatus }: DigestSectionProps) {
       const config = await cmd('get_digest_config') as unknown as DigestConfig;
       setDigestConfig(config);
     } catch (error) {
-      console.error('Failed to load digest config:', error);
+      reportError('DigestSection.loadConfig', error);
     }
   };
 
