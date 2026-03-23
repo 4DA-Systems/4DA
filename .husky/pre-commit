@@ -80,6 +80,19 @@ if [ -n "$STAGED_TS" ]; then
     }
 fi
 
+# TypeScript type checking (incremental for speed, ~3-8s) — only when .ts/.tsx files are staged
+if [ -n "$STAGED_TS" ]; then
+    if [ "$DEV_SERVER_RUNNING" = true ]; then
+        echo "TypeScript check (dev server running — may be slower)..."
+    else
+        echo "Checking TypeScript types (incremental)..."
+    fi
+    node --max-old-space-size=8192 node_modules/typescript/bin/tsc --noEmit --incremental --tsBuildInfoFile .tsbuildinfo 2>&1 || {
+        echo "TypeScript type check failed. Fix type errors before committing."
+        exit 1
+    }
+fi
+
 # Secret scanning — comprehensive, nukeproof detection
 # Blocks commits containing real API keys, tokens, private keys, PII, and credentials
 echo "Scanning for secrets..."
