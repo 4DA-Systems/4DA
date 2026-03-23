@@ -7,7 +7,7 @@
 
 use crate::error::{Result, ResultExt};
 use crate::settings::LLMProvider;
-use crate::state::{is_llm_limit_reached, record_llm_tokens};
+use crate::state::{is_llm_limit_reached, record_llm_cost, record_llm_tokens};
 use serde::{Deserialize, Serialize};
 use tracing::{debug, warn};
 
@@ -135,24 +135,23 @@ impl LLMClient {
     }
 
     /// Send a completion request.
-    /// Enforces the daily token limit — returns an error if the budget is exhausted.
+    /// Enforces daily token and cost limits — returns an error if the budget is exhausted.
     /// When a cloud provider (anthropic/openai) fails with a network or API error,
     /// transparently falls back to local Ollama at localhost:11434.
     pub async fn complete(&self, system: &str, messages: Vec<Message>) -> Result<LLMResponse> {
         // Hard cutoff: refuse to call the LLM if daily limit is already reached
         if is_llm_limit_reached() {
-            let (used, limit) = crate::state::get_llm_token_usage();
+            let (tokens_used, tokens_limit) = crate::state::get_llm_token_usage();
+            let (cost_used, cost_limit) = crate::state::get_llm_cost_usage();
             warn!(
                 target: "4da::llm",
-                used = used,
-                limit = limit,
-                "LLM call blocked — daily token limit reached"
+                tokens_used = tokens_used,
+                tokens_limit = tokens_limit,
+                cost_used_cents = cost_used,
+                cost_limit_cents = cost_limit,
+                "LLM call blocked — daily limit reached"
             );
-            return Err(format!(
-                "Daily LLM token limit reached ({}/{} tokens). Resets at midnight.",
-                used, limit
-            )
-            .into());
+            return Err(Self::format_limit_error(tokens_used, tokens_limit, cost_used, cost_limit).into());
         }
 
         let result = match self.provider.provider.as_str() {
@@ -191,15 +190,18 @@ impl LLMClient {
             }
         };
 
-        // Record token usage (atomic, lock-free for the counter itself)
+        // Record token + cost usage (atomic, lock-free for the counters)
         let total_tokens = response.input_tokens + response.output_tokens;
         if total_tokens > 0 {
-            let within_limit = record_llm_tokens(total_tokens);
-            if !within_limit {
+            let tokens_ok = record_llm_tokens(total_tokens);
+            let cost_cents = self.estimate_cost_cents(response.input_tokens, response.output_tokens);
+            let cost_ok = record_llm_cost(cost_cents);
+            if !tokens_ok || !cost_ok {
                 debug!(
                     target: "4da::llm",
                     tokens = total_tokens,
-                    "Token limit exceeded after this call — future calls will be blocked"
+                    cost_cents = cost_cents,
+                    "Limit exceeded after this call — future calls will be blocked"
                 );
             }
 
@@ -226,9 +228,10 @@ impl LLMClient {
             return false;
         }
 
-        // Don't fallback for token/budget limit errors (these are intentional caps)
+        // Don't fallback for token/budget/cost limit errors (these are intentional caps)
         let error_str = error.to_string();
         let is_limit_error = error_str.contains("token limit")
+            || error_str.contains("cost limit")
             || error_str.contains("rate limit")
             || error_str.contains("quota")
             || error_str.contains("billing")
@@ -568,18 +571,17 @@ impl LLMClient {
     {
         // Hard cutoff: refuse to call the LLM if daily limit is already reached
         if is_llm_limit_reached() {
-            let (used, limit) = crate::state::get_llm_token_usage();
+            let (tokens_used, tokens_limit) = crate::state::get_llm_token_usage();
+            let (cost_used, cost_limit) = crate::state::get_llm_cost_usage();
             warn!(
                 target: "4da::llm",
-                used = used,
-                limit = limit,
-                "Streaming LLM call blocked — daily token limit reached"
+                tokens_used = tokens_used,
+                tokens_limit = tokens_limit,
+                cost_used_cents = cost_used,
+                cost_limit_cents = cost_limit,
+                "Streaming LLM call blocked — daily limit reached"
             );
-            return Err(format!(
-                "Daily LLM token limit reached ({}/{} tokens). Resets at midnight.",
-                used, limit
-            )
-            .into());
+            return Err(Self::format_limit_error(tokens_used, tokens_limit, cost_used, cost_limit).into());
         }
 
         let result = match self.provider.provider.as_str() {
@@ -633,15 +635,18 @@ impl LLMClient {
             Err(err) => return Err(err),
         };
 
-        // Record token usage
+        // Record token + cost usage
         let total_tokens = response.input_tokens + response.output_tokens;
         if total_tokens > 0 {
-            let within_limit = record_llm_tokens(total_tokens);
-            if !within_limit {
+            let tokens_ok = record_llm_tokens(total_tokens);
+            let cost_cents = self.estimate_cost_cents(response.input_tokens, response.output_tokens);
+            let cost_ok = record_llm_cost(cost_cents);
+            if !tokens_ok || !cost_ok {
                 debug!(
                     target: "4da::llm",
                     tokens = total_tokens,
-                    "Token limit exceeded after streaming call — future calls will be blocked"
+                    cost_cents = cost_cents,
+                    "Limit exceeded after streaming call — future calls will be blocked"
                 );
             }
 
@@ -656,6 +661,39 @@ impl LLMClient {
         }
 
         Ok(response)
+    }
+
+    /// Format a human-readable error message when daily limits are reached.
+    fn format_limit_error(
+        tokens_used: u64,
+        tokens_limit: u64,
+        cost_used: u64,
+        cost_limit: u64,
+    ) -> String {
+        let mut parts = Vec::new();
+
+        if tokens_limit > 0 && tokens_used >= tokens_limit {
+            parts.push(format!(
+                "Daily LLM token limit exceeded (used: {}, limit: {})",
+                tokens_used, tokens_limit
+            ));
+        }
+        if cost_limit > 0 && cost_used >= cost_limit {
+            parts.push(format!(
+                "Daily LLM cost limit exceeded (used: {}c, limit: {}c / ${:.2})",
+                cost_used,
+                cost_limit,
+                cost_limit as f64 / 100.0
+            ));
+        }
+
+        if parts.is_empty() {
+            // Fallback (shouldn't happen, but be defensive)
+            parts.push("Daily LLM limit reached".to_string());
+        }
+
+        parts.push("Adjust in Settings > Intelligence, or wait until midnight reset.".to_string());
+        parts.join(". ")
     }
 
     /// Estimate cost in cents based on provider and tokens.
