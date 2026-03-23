@@ -59,8 +59,8 @@ mod tests {
         assert!(status.active);
         assert!(status.days_remaining >= 29);
 
-        // Expired trial
-        let expired = chrono::Utc::now() - chrono::Duration::days(31);
+        // Expired trial (must exceed TRIAL_DURATION_DAYS which is 45)
+        let expired = chrono::Utc::now() - chrono::Duration::days(46);
         let license = LicenseConfig {
             trial_started_at: Some(expired.to_rfc3339()),
             ..license
