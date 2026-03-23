@@ -2,7 +2,7 @@
  * Tool Dispatch Registry
  *
  * Map-based dispatch replacing the monolithic switch statement in index.ts.
- * All 30 execute functions are imported once and mapped by tool name.
+ * All 32 execute functions are imported once and mapped by tool name.
  *
  * Adding a new tool = add to this map + schema-registry + barrel export.
  */
@@ -40,6 +40,8 @@ import {
   executeAutophagyStatus,
   executeDecisionWindows,
   executeCompoundAdvantage,
+  executeRecordAgentFeedback,
+  executeGetAgentFeedbackStats,
 } from "./tools/index.js";
 
 /**
@@ -102,6 +104,10 @@ const DISPATCH_MAP: Record<string, ToolExecutor> = {
   autophagy_status: executeAutophagyStatus,
   decision_windows: executeDecisionWindows,
   compound_advantage: executeCompoundAdvantage,
+
+  // Agent Feedback
+  record_agent_feedback: executeRecordAgentFeedback,
+  get_agent_feedback_stats: executeGetAgentFeedbackStats,
 };
 
 /**

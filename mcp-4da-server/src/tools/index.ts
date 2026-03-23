@@ -1,12 +1,12 @@
 /**
- * Tool exports for 4DA MCP Server — 30 tools across 8 categories
+ * Tool exports for 4DA MCP Server — 32 tools across 8 categories
  *
  * Core (4)                  — content feed, context, relevance, feedback
  * Intelligence (9)          — briefings, signals, autopsy, trends, topics, chains, shifts, attention
  * Diagnostic (3)            — source health, config validation, LLM status
  * Knowledge & Health (4)    — knowledge gaps, project health, reverse mentions, context export
  * Decision Intelligence (3) — decision memory, tech radar, alignment checks
- * Agent Autonomy (3)        — persistent memory, session briefs, delegation scoring
+ * Agent Autonomy (5)        — persistent memory, session briefs, delegation scoring, agent feedback
  * Developer DNA (1)         — tech identity profile
  * Intelligence Metabolism (3)— autophagy status, decision windows, compound advantage
  */
@@ -165,3 +165,14 @@ export {
   compoundAdvantageTool,
   executeCompoundAdvantage,
 } from "./compound-advantage.js";
+
+// Agent Feedback Tools
+export {
+  recordAgentFeedbackTool,
+  executeRecordAgentFeedback,
+} from "./record-agent-feedback.js";
+
+export {
+  agentFeedbackStatsTool,
+  executeGetAgentFeedbackStats,
+} from "./agent-feedback-stats.js";
