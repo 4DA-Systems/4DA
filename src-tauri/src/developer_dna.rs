@@ -855,7 +855,7 @@ fn build_topics_bar_svg(topics: &[EngagedTopic]) -> String {
         let seg_width = if total_pct > 0.0 {
             (topic.percent_of_total / total_pct) * bar_width
         } else {
-            bar_width / top3.len() as f32
+            bar_width / top3.len().max(1) as f32
         };
 
         let rx = if i == 0 { "3" } else { "0" };

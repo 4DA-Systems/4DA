@@ -33,7 +33,7 @@ function findMostCriticalSave(results: SourceRelevance[]): SourceRelevance | nul
   for (const priority of SIGNAL_PRIORITY_ORDER) {
     const match = results.find(
       r => r.score_breakdown?.content_type === priority
-        || r.score_breakdown?.content_type === priority
+        || r.signal_type === priority
     );
     if (match) return match;
   }
@@ -61,7 +61,7 @@ function formatTimeSaved(totalScanned: number): string {
 }
 
 function getSignalLabel(item: SourceRelevance): string | null {
-  const type = item.score_breakdown?.content_type || item.score_breakdown?.content_type;
+  const type = item.score_breakdown?.content_type || item.signal_type;
   switch (type) {
     case 'security_alert': return 'Security advisory';
     case 'breaking_change': return 'Breaking change';
@@ -74,7 +74,7 @@ function getSignalLabel(item: SourceRelevance): string | null {
 }
 
 function getSignalColor(item: SourceRelevance): string {
-  const type = item.score_breakdown?.content_type || item.score_breakdown?.content_type;
+  const type = item.score_breakdown?.content_type || item.signal_type;
   switch (type) {
     case 'security_alert': return '#EF4444';
     case 'breaking_change': return '#F97316';

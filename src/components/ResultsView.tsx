@@ -57,6 +57,7 @@ export function ResultsView({
     setShowSavedOnly,
     setSearchQuery,
     toggleSourceFilter,
+    resetSourceFilters,
     filteredResults,
     dismissAllBelow,
     saveAllAbove,
@@ -319,15 +320,15 @@ export function ResultsView({
                     {t('results.showAll')}
                   </button>
                 )}
-                {sourceFilters.size > 0 && (
+                {sourceFilters.size < uniqueSources.length && (
                   <button
-                    onClick={() => sourceFilters.forEach(s => toggleSourceFilter(s))}
+                    onClick={() => resetSourceFilters()}
                     className="px-4 py-2 text-sm bg-bg-tertiary text-text-secondary rounded-lg border border-border hover:border-orange-500/30 transition-all"
                   >
                     {t('results.clearSourceFilters')}
                   </button>
                 )}
-                {!showOnlyRelevant && sourceFilters.size === 0 && <p className="text-xs text-text-muted">Try a broader search query or add more interests in Settings</p>}
+                {!showOnlyRelevant && sourceFilters.size === uniqueSources.length && <p className="text-xs text-text-muted">Try a broader search query or add more interests in Settings</p>}
               </div>
               {state.nearMisses && state.nearMisses.length > 0 && (
                 <div className="mt-8 mx-auto max-w-lg">
