@@ -230,6 +230,20 @@ export const TOOL_REGISTRY: Record<string, ToolRegistryEntry> = {
     category: "metabolism",
     tags: ["compound", "advantage", "leverage", "score"],
   },
+
+  // Agent Feedback Tools
+  record_agent_feedback: {
+    summary: "Record whether agent-recommended content was used, rejected, or partially used",
+    schemaFile: "record-agent-feedback.json",
+    category: "agent",
+    tags: ["agent", "feedback", "learning", "pasifa", "scoring"],
+  },
+  get_agent_feedback_stats: {
+    summary: "Get statistics on agent recommendation usage — source usefulness, top items, trends",
+    schemaFile: "agent-feedback-stats.json",
+    category: "agent",
+    tags: ["agent", "feedback", "statistics", "analytics", "pasifa"],
+  },
 };
 
 /**

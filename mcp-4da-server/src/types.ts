@@ -332,3 +332,124 @@ export interface SignalEventRow {
   data: string;
   created_at: string;
 }
+
+// =============================================================================
+// Agent Feedback
+// =============================================================================
+
+/**
+ * Valid agent feedback outcome types
+ */
+export type AgentFeedbackOutcome = "used" | "rejected" | "partially_used";
+
+/**
+ * Parameters for recording agent feedback
+ */
+export interface RecordAgentFeedbackParams {
+  item_ids: string[];
+  outcome: AgentFeedbackOutcome;
+  context?: string;
+  session_task?: string;
+}
+
+/**
+ * Result from recording agent feedback
+ */
+export interface AgentFeedbackResult {
+  success: boolean;
+  message: string;
+  recorded_count: number;
+}
+
+/**
+ * Parameters for getting agent feedback stats
+ */
+export interface GetAgentFeedbackStatsParams {
+  days?: number;
+}
+
+/**
+ * Outcome breakdown in agent feedback stats
+ */
+export interface AgentFeedbackOutcomeStats {
+  used: number;
+  rejected: number;
+  partially_used: number;
+  total: number;
+}
+
+/**
+ * Per-source feedback stats
+ */
+export interface AgentFeedbackSourceStats {
+  source_type: string;
+  used: number;
+  rejected: number;
+  partially_used: number;
+  total: number;
+  usefulness_rate: number;
+}
+
+/**
+ * A frequently used item
+ */
+export interface AgentFeedbackTopItem {
+  item_id: string;
+  title: string | null;
+  source_type: string | null;
+  used_count: number;
+  rejected_count: number;
+}
+
+/**
+ * A recent feedback entry
+ */
+export interface AgentFeedbackRecentEntry {
+  item_id: string;
+  outcome: string;
+  context: string | null;
+  session_task: string | null;
+  recorded_at: string;
+}
+
+/**
+ * Full agent feedback stats response
+ */
+export interface AgentFeedbackStats {
+  period_days: number;
+  outcomes: AgentFeedbackOutcomeStats;
+  by_source: AgentFeedbackSourceStats[];
+  top_used_items: AgentFeedbackTopItem[];
+  recent_feedback: AgentFeedbackRecentEntry[];
+}
+
+/** Row from agent_feedback table */
+export interface AgentFeedbackRow {
+  item_id: string;
+  outcome: string;
+  context: string | null;
+  session_task: string | null;
+  recorded_at: string;
+}
+
+/** Row from agent_feedback stats query — outcome counts */
+export interface AgentFeedbackOutcomeRow {
+  outcome: string;
+  cnt: number;
+}
+
+/** Row from agent_feedback stats query — source breakdown */
+export interface AgentFeedbackSourceRow {
+  source_type: string;
+  outcome: string;
+  cnt: number;
+}
+
+/** Row from agent_feedback stats query — top items */
+export interface AgentFeedbackTopItemRow {
+  item_id: string;
+  title: string | null;
+  source_type: string | null;
+  used_count: number;
+  rejected_count: number;
+}
