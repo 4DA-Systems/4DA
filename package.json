@@ -35,6 +35,7 @@
     "sentinel:quick": "node scripts/sentinel-scan.cjs --quick",
     "generate:types": "cd src-tauri && cargo test export_bindings --lib 2>/dev/null; if [ -d bindings ]; then mkdir -p ../src/generated && cp bindings/*.ts ../src/generated/; fi",
     "guardian": "node scripts/build-guardian.cjs",
+    "quality": "node scripts/compound-quality-check.cjs",
     "prepare": "husky"
   },
   "dependencies": {
