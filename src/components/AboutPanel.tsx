@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { registerGameComponent } from '../lib/game-components';
 
 const GeometryShowcase = lazy(() => import('./geometry/GeometryShowcase').then(m => ({ default: m.GeometryShowcase })));
+const ConfigDiagnostics = lazy(() => import('./enterprise/ConfigDiagnostics').then(m => ({ default: m.ConfigDiagnostics })));
 
 export function AboutPanel() {
   const { t } = useTranslation();
@@ -193,6 +194,13 @@ export function AboutPanel() {
             {t('about.viewComparison', { defaultValue: 'Compare' })}
           </button>
         </div>
+      </div>
+
+      {/* System Diagnostics — accessible to all users */}
+      <div className="bg-bg-tertiary/30 border border-border/50 rounded-xl p-4">
+        <Suspense fallback={null}>
+          <ConfigDiagnostics />
+        </Suspense>
       </div>
 
       {/* Version + Copyright */}
