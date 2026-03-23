@@ -8,11 +8,12 @@ import { ProValuePanel } from '../ProValuePanel';
 import type { Settings } from '../../types';
 import type { OllamaStatus } from '../../hooks/use-settings';
 import type { ModelRegistryData } from '../../store/types';
+import type { SettingsForm } from './ai-provider-types';
 
 interface SettingsIntelligenceTabProps {
   settings: Settings | null;
-  settingsForm: any;
-  setSettingsForm: (form: any) => void;
+  settingsForm: SettingsForm;
+  setSettingsForm: React.Dispatch<React.SetStateAction<SettingsForm>>;
   ollamaStatus: OllamaStatus | null;
   ollamaModels: string[];
   checkOllamaStatus: (baseUrl?: string) => void;
