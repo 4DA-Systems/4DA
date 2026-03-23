@@ -208,13 +208,11 @@ pub(crate) fn compute_radar(conn: &Connection) -> Result<TechRadar> {
 
     // Blocklist of common non-technology words that aren't real technologies
     const NOISE_WORDS: &[&str] = &[
-        "conf", "config", "debug", "image", "next", "yaml", "json", "toml",
-        "test", "tests", "build", "dist", "src", "lib", "bin", "docs",
-        "utils", "helpers", "types", "models", "core", "base", "common",
-        "main", "index", "app", "server", "client", "api", "http",
-        "async", "sync", "error", "errors", "log", "logs", "data",
-        "file", "files", "path", "paths", "env", "dev", "prod",
-        "setup", "init", "run", "start", "stop", "clean", "lint",
+        "conf", "config", "debug", "image", "next", "yaml", "json", "toml", "test", "tests",
+        "build", "dist", "src", "lib", "bin", "docs", "utils", "helpers", "types", "models",
+        "core", "base", "common", "main", "index", "app", "server", "client", "api", "http",
+        "async", "sync", "error", "errors", "log", "logs", "data", "file", "files", "path",
+        "paths", "env", "dev", "prod", "setup", "init", "run", "start", "stop", "clean", "lint",
         "format", "check", "publish", "deploy", "release", "version",
     ];
 

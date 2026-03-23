@@ -124,6 +124,7 @@ pub fn rate_limiter() -> &'static RateLimiter {
 use std::collections::HashMap as CBMap;
 
 /// Circuit breaker state per source
+#[allow(dead_code)]
 struct CircuitState {
     consecutive_failures: u32,
     tripped_at: Option<Instant>,
@@ -131,12 +132,14 @@ struct CircuitState {
 
 /// Circuit breaker for source adapters.
 /// After `max_failures` consecutive failures, the source is disabled for `cooldown`.
+#[allow(dead_code)]
 pub(crate) struct CircuitBreaker {
     states: parking_lot::Mutex<CBMap<String, CircuitState>>,
     max_failures: u32,
     cooldown: std::time::Duration,
 }
 
+#[allow(dead_code)]
 impl CircuitBreaker {
     pub fn new(max_failures: u32, cooldown_secs: u64) -> Self {
         Self {
@@ -203,6 +206,7 @@ impl CircuitBreaker {
 }
 
 /// Global circuit breaker instance (5 failures = 1 hour cooldown)
+#[allow(dead_code)]
 pub(crate) static SOURCE_CIRCUIT_BREAKER: Lazy<CircuitBreaker> =
     Lazy::new(|| CircuitBreaker::new(5, 3600));
 

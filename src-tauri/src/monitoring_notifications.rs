@@ -100,8 +100,7 @@ pub fn complete_scheduled_check<R: Runtime>(
                     },
                 );
             } else {
-                let native_title =
-                    format!("4DA — {} Security Alerts Detected", total_security);
+                let native_title = format!("4DA — {} Security Alerts Detected", total_security);
                 if let Err(e) = app
                     .notification()
                     .builder()
@@ -262,7 +261,13 @@ pub fn send_notification<R: Runtime>(
 
     // Native OS notification fallback
     let native_title = "4DA - New Relevant Items";
-    if let Err(e) = app.notification().builder().title(native_title).body(&title).show() {
+    if let Err(e) = app
+        .notification()
+        .builder()
+        .title(native_title)
+        .body(&title)
+        .show()
+    {
         warn!(target: "4da::notify", error = %e, "Failed to send notification");
     } else {
         info!(target: "4da::notify", body = %title, "Sent notification");

@@ -155,12 +155,10 @@ pub fn show_notification<R: Runtime>(app: &AppHandle<R>, data: NotificationData)
             let monitor_pos = monitor.position();
 
             // Physical pixel coordinates for the window origin.
-            let px = monitor_pos.x
-                + (screen.width as i32)
+            let px = monitor_pos.x + (screen.width as i32)
                 - ((WINDOW_WIDTH as f64 * scale) as i32)
                 - ((MARGIN_RIGHT as f64 * scale) as i32);
-            let py = monitor_pos.y
-                + (screen.height as i32)
+            let py = monitor_pos.y + (screen.height as i32)
                 - ((WINDOW_HEIGHT as f64 * scale) as i32)
                 - ((MARGIN_BOTTOM as f64 * scale) as i32);
 
@@ -184,7 +182,8 @@ pub fn show_notification<R: Runtime>(app: &AppHandle<R>, data: NotificationData)
         let data_deferred = data.clone();
         tauri::async_runtime::spawn(async move {
             tokio::time::sleep(std::time::Duration::from_millis(500)).await;
-            if let Err(e) = app_deferred.emit_to(WINDOW_LABEL, "notification-data", &data_deferred) {
+            if let Err(e) = app_deferred.emit_to(WINDOW_LABEL, "notification-data", &data_deferred)
+            {
                 warn!(target: "4da::notify", error = %e, "Deferred emit failed");
             }
         });

@@ -50,6 +50,7 @@ pub(crate) static PROBE_CLIENT: LazyLock<reqwest::Client> = LazyLock::new(|| {
 
 /// Shared client for team relay operations (sync, create, join).
 /// Uses team-specific user-agent for relay identification.
+#[allow(dead_code)]
 pub(crate) static TEAM_CLIENT: LazyLock<reqwest::Client> = LazyLock::new(|| {
     reqwest::Client::builder()
         .user_agent("4DA-TeamSync/1.0")

@@ -192,17 +192,22 @@ pub async fn set_rerank_config(
 
 /// Update LLM rate-limiting configuration (daily token and cost caps)
 #[tauri::command]
-pub async fn set_llm_limits(
-    daily_token_limit: u64,
-    daily_cost_limit_cents: u64,
-) -> Result<()> {
+pub async fn set_llm_limits(daily_token_limit: u64, daily_cost_limit_cents: u64) -> Result<()> {
     let manager = get_settings_manager();
     let mut guard = manager.lock();
 
     let config = LlmLimitsConfig {
         // 0 = unlimited (valid), otherwise must be at least 1
-        daily_token_limit: if daily_token_limit == 0 { 0 } else { daily_token_limit.max(1) },
-        daily_cost_limit_cents: if daily_cost_limit_cents == 0 { 0 } else { daily_cost_limit_cents.max(1) },
+        daily_token_limit: if daily_token_limit == 0 {
+            0
+        } else {
+            daily_token_limit.max(1)
+        },
+        daily_cost_limit_cents: if daily_cost_limit_cents == 0 {
+            0
+        } else {
+            daily_cost_limit_cents.max(1)
+        },
     };
 
     guard.set_llm_limits(config)?;

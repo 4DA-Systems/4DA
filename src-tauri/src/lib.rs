@@ -87,11 +87,11 @@ mod decision_signals;
 mod decisions;
 #[cfg(feature = "experimental")]
 mod delegation;
-mod dependency_commands;
 #[cfg(not(feature = "experimental"))]
 #[allow(dead_code)] // Feature-gated: stub active only when "experimental" is disabled
 #[path = "delegation_stub.rs"]
 mod delegation;
+mod dependency_commands;
 mod developer_dna;
 mod diagnostics;
 mod digest;
@@ -109,7 +109,6 @@ mod game_achievements;
 mod game_achievements;
 #[cfg(feature = "experimental")]
 mod game_commands;
-mod http_client;
 #[cfg(not(feature = "experimental"))]
 #[allow(dead_code)] // Feature-gated: stub active only when "experimental" is disabled
 #[path = "game_commands_stub.rs"]
@@ -121,6 +120,7 @@ mod game_engine;
 mod game_engine;
 mod health;
 mod health_commands;
+mod http_client;
 mod indexed_documents_commands;
 mod intelligence_history;
 mod job_queue;
@@ -211,6 +211,12 @@ mod toolkit_http;
 // Team sync — encrypted metadata relay (AD-023)
 // Gated: 17 commands with zero frontend callers. Enable with --features team-sync.
 #[cfg(feature = "team-sync")]
+mod team_intelligence;
+#[cfg(feature = "team-sync")]
+mod team_monitoring;
+#[cfg(feature = "team-sync")]
+mod team_notifications;
+#[cfg(feature = "team-sync")]
 mod team_sync;
 #[cfg(feature = "team-sync")]
 mod team_sync_commands;
@@ -223,17 +229,8 @@ mod team_sync_types;
 #[cfg(not(feature = "team-sync"))]
 #[path = "team_sync_types_stub.rs"]
 mod team_sync_types;
-#[cfg(feature = "team-sync")]
-mod team_intelligence;
-#[cfg(feature = "team-sync")]
-mod team_monitoring;
-#[cfg(feature = "team-sync")]
-mod team_notifications;
 
 // Stubs when team-sync is disabled (commands register but return errors)
-#[cfg(not(feature = "team-sync"))]
-#[path = "team_sync_commands_stub.rs"]
-mod team_sync_commands;
 #[cfg(not(feature = "team-sync"))]
 #[path = "team_intelligence_stub.rs"]
 mod team_intelligence;
@@ -243,6 +240,9 @@ mod team_monitoring;
 #[cfg(not(feature = "team-sync"))]
 #[path = "team_notifications_stub.rs"]
 mod team_notifications;
+#[cfg(not(feature = "team-sync"))]
+#[path = "team_sync_commands_stub.rs"]
+mod team_sync_commands;
 
 // Enterprise: audit log, webhooks, organizations, analytics
 // Gated: 15 commands with zero frontend callers. Enable with --features enterprise.
@@ -266,17 +266,17 @@ mod webhooks;
 #[path = "audit_stub.rs"]
 mod audit;
 #[cfg(not(feature = "enterprise"))]
-#[path = "webhooks_stub.rs"]
-mod webhooks;
+#[path = "enterprise_analytics_stub.rs"]
+mod enterprise_analytics;
 #[cfg(not(feature = "enterprise"))]
 #[path = "organization_stub.rs"]
 mod organization;
 #[cfg(not(feature = "enterprise"))]
-#[path = "enterprise_analytics_stub.rs"]
-mod enterprise_analytics;
-#[cfg(not(feature = "enterprise"))]
 #[path = "sso_stub.rs"]
 mod sso;
+#[cfg(not(feature = "enterprise"))]
+#[path = "webhooks_stub.rs"]
+mod webhooks;
 
 mod telemetry;
 mod toolkit_intelligence;

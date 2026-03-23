@@ -161,7 +161,9 @@ impl LLMClient {
                 cost_limit_cents = cost_limit,
                 "LLM call blocked — daily limit reached"
             );
-            return Err(Self::format_limit_error(tokens_used, tokens_limit, cost_used, cost_limit).into());
+            return Err(
+                Self::format_limit_error(tokens_used, tokens_limit, cost_used, cost_limit).into(),
+            );
         }
 
         let result = match self.provider.provider.as_str() {
@@ -204,7 +206,8 @@ impl LLMClient {
         let total_tokens = response.input_tokens + response.output_tokens;
         if total_tokens > 0 {
             let tokens_ok = record_llm_tokens(total_tokens);
-            let cost_cents = self.estimate_cost_cents(response.input_tokens, response.output_tokens);
+            let cost_cents =
+                self.estimate_cost_cents(response.input_tokens, response.output_tokens);
             let cost_ok = record_llm_cost(cost_cents);
             if !tokens_ok || !cost_ok {
                 debug!(
@@ -584,7 +587,9 @@ impl LLMClient {
                 cost_limit_cents = cost_limit,
                 "Streaming LLM call blocked — daily limit reached"
             );
-            return Err(Self::format_limit_error(tokens_used, tokens_limit, cost_used, cost_limit).into());
+            return Err(
+                Self::format_limit_error(tokens_used, tokens_limit, cost_used, cost_limit).into(),
+            );
         }
 
         let result = match self.provider.provider.as_str() {
@@ -642,7 +647,8 @@ impl LLMClient {
         let total_tokens = response.input_tokens + response.output_tokens;
         if total_tokens > 0 {
             let tokens_ok = record_llm_tokens(total_tokens);
-            let cost_cents = self.estimate_cost_cents(response.input_tokens, response.output_tokens);
+            let cost_cents =
+                self.estimate_cost_cents(response.input_tokens, response.output_tokens);
             let cost_ok = record_llm_cost(cost_cents);
             if !tokens_ok || !cost_ok {
                 debug!(

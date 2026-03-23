@@ -438,9 +438,7 @@ pub(crate) fn record_llm_tokens(count: u64) -> bool {
     if limit > 0 {
         // Emit warning at 80% usage (once per day)
         let threshold_80 = limit * 4 / 5;
-        if new_total >= threshold_80
-            && !LLM_TOKEN_WARNING_EMITTED.swap(true, Ordering::Relaxed)
-        {
+        if new_total >= threshold_80 && !LLM_TOKEN_WARNING_EMITTED.swap(true, Ordering::Relaxed) {
             warn!(
                 target: "4da::llm",
                 used = new_total,
@@ -477,9 +475,7 @@ pub(crate) fn record_llm_cost(cost_cents: u64) -> bool {
     if limit > 0 {
         // Emit warning at 80% usage (once per day)
         let threshold_80 = limit * 4 / 5;
-        if new_total >= threshold_80
-            && !LLM_COST_WARNING_EMITTED.swap(true, Ordering::Relaxed)
-        {
+        if new_total >= threshold_80 && !LLM_COST_WARNING_EMITTED.swap(true, Ordering::Relaxed) {
             warn!(
                 target: "4da::llm",
                 used_cents = new_total,

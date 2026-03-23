@@ -8,9 +8,7 @@ use tauri::AppHandle;
 
 #[tauri::command]
 pub fn get_game_state() -> Result<serde_json::Value> {
-    Ok(
-        serde_json::json!({"counters": [], "achievements": [], "streak": 0, "last_active": null}),
-    )
+    Ok(serde_json::json!({"counters": [], "achievements": [], "streak": 0, "last_active": null}))
 }
 
 #[tauri::command]

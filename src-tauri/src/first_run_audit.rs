@@ -108,44 +108,22 @@ pub fn run_first_run_audit() -> FirstRunAuditReport {
             let lesson_idx = idx as u32;
 
             // Process through the template engine (same path as real rendering)
-            let processed =
-                crate::content_personalization::template_processor::process_template(
-                    &lesson.content,
-                    &ctx,
-                );
+            let processed = crate::content_personalization::template_processor::process_template(
+                &lesson.content,
+                &ctx,
+            );
 
             // CHECK 1: Unresolved L1 interpolation tags
-            check_unresolved_l1(
-                &processed.content,
-                &module.id,
-                lesson_idx,
-                &mut report,
-            );
+            check_unresolved_l1(&processed.content, &module.id, lesson_idx, &mut report);
 
             // CHECK 2: Unresolved L2 conditional tags
-            check_unresolved_l2(
-                &processed.content,
-                &module.id,
-                lesson_idx,
-                &mut report,
-            );
+            check_unresolved_l2(&processed.content, &module.id, lesson_idx, &mut report);
 
             // CHECK 3: Excessive fallback usage (data exists but fallback shows)
-            check_fallback_quality(
-                &processed,
-                &module.id,
-                lesson_idx,
-                &ctx,
-                &mut report,
-            );
+            check_fallback_quality(&processed, &module.id, lesson_idx, &ctx, &mut report);
 
             // CHECK 4: Broken injection markers (still present after processing)
-            check_broken_markers(
-                &processed.content,
-                &module.id,
-                lesson_idx,
-                &mut report,
-            );
+            check_broken_markers(&processed.content, &module.id, lesson_idx, &mut report);
         }
     }
 
@@ -364,7 +342,10 @@ mod tests {
 
         check_unresolved_l1("Hello {= name =} world", "S", 0, &mut report);
         assert_eq!(report.unresolved_templates.len(), 1);
-        assert_eq!(report.unresolved_templates[0].severity, IssueSeverity::Critical);
+        assert_eq!(
+            report.unresolved_templates[0].severity,
+            IssueSeverity::Critical
+        );
     }
 
     #[test]
@@ -397,7 +378,12 @@ mod tests {
             checked_at: String::new(),
         };
 
-        check_unresolved_l2("Hello {? if something ?} world {? endif ?}", "S", 0, &mut report);
+        check_unresolved_l2(
+            "Hello {? if something ?} world {? endif ?}",
+            "S",
+            0,
+            &mut report,
+        );
         assert_eq!(report.unresolved_templates.len(), 2);
     }
 
@@ -414,7 +400,12 @@ mod tests {
             checked_at: String::new(),
         };
 
-        check_broken_markers("Text {@ insight hardware_benchmark @} more", "S", 0, &mut report);
+        check_broken_markers(
+            "Text {@ insight hardware_benchmark @} more",
+            "S",
+            0,
+            &mut report,
+        );
         assert_eq!(report.broken_markers.len(), 1);
     }
 }

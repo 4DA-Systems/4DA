@@ -42,6 +42,7 @@ pub(crate) struct IntelligenceReport {
 // SQL Schema
 // ============================================================================
 
+#[allow(dead_code)]
 pub(crate) const ACCURACY_SQL: &str = "
 CREATE TABLE IF NOT EXISTS accuracy_history (
     id INTEGER PRIMARY KEY AUTOINCREMENT,

@@ -169,8 +169,8 @@ mod tests {
         let settings_json =
             serde_json::from_str::<Settings>("{\"llm\":{\"provider\":\"none\",\"api_key\":\"\",\"model\":\"\",\"base_url\":null,\"openai_api_key\":\"\"},\"rerank\":{\"enabled\":true,\"max_items_per_batch\":48,\"min_embedding_score\":0.2,\"daily_token_limit\":500000,\"daily_cost_limit_cents\":100},\"context_dirs\":[],\"embedding_threshold\":0.5}")
                 .ok();
-        let settings_json =
-            serde_json::to_string_pretty(&settings_json.unwrap_or_default()).expect("serialize default settings");
+        let settings_json = serde_json::to_string_pretty(&settings_json.unwrap_or_default())
+            .expect("serialize default settings");
         std::fs::write(tmp.join("settings.json"), settings_json).expect("write settings");
 
         // Write malformed usage.json
