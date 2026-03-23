@@ -829,11 +829,7 @@ async fn api_simulate(
         .as_deref()
         .or(query.remove.as_deref())
         .unwrap_or("");
-    let action = if query.add.is_some() {
-        "add"
-    } else {
-        "remove"
-    };
+    let action = if query.add.is_some() { "add" } else { "remove" };
 
     if tech.is_empty() {
         return Ok(Json(serde_json::json!({

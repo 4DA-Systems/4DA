@@ -161,8 +161,7 @@ pub(crate) fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::
     // Start team sync scheduler (if configured)
     #[cfg(feature = "team-sync")]
     {
-        let team_state =
-            std::sync::Arc::new(crate::team_sync_scheduler::TeamSyncState::default());
+        let team_state = std::sync::Arc::new(crate::team_sync_scheduler::TeamSyncState::default());
         let settings = get_settings_manager().lock();
         if let Some(ref relay_cfg) = settings.get().team_relay {
             team_state.configure(relay_cfg);
@@ -299,11 +298,8 @@ pub(crate) fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::
             };
             tauri::async_runtime::spawn(async move {
                 info!(target: "4da::license", "Startup license validation (Keygen)");
-                let result = crate::settings::validate_license_key_keygen(
-                    &license_key,
-                    &current_tier,
-                )
-                .await;
+                let result =
+                    crate::settings::validate_license_key_keygen(&license_key, &current_tier).await;
                 if result.tier != current_tier {
                     let manager = get_settings_manager();
                     let mut guard = manager.lock();

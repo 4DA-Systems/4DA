@@ -146,6 +146,7 @@ fn parse_github_advisory(item: &serde_json::Value) -> Option<CveAdvisory> {
 // ============================================================================
 
 /// Convert CVE advisories to SourceItems for the PASIFA scoring pipeline.
+#[allow(dead_code)]
 pub(crate) fn advisories_to_source_items(advisories: &[CveAdvisory]) -> Vec<SourceItem> {
     advisories
         .iter()

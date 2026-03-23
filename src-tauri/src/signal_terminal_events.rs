@@ -12,6 +12,7 @@ use tokio::sync::broadcast;
 /// Events sent to terminal SSE clients.
 #[derive(Clone, Debug, Serialize)]
 #[serde(tag = "type")]
+#[allow(dead_code)]
 pub enum TerminalEvent {
     /// System status update (monitoring, counts, etc.)
     Status {
@@ -33,10 +34,7 @@ pub enum TerminalEvent {
         total_count: usize,
     },
     /// Heartbeat (keepalive with minimal data)
-    Heartbeat {
-        pulse: f32,
-        critical_count: u32,
-    },
+    Heartbeat { pulse: f32, critical_count: u32 },
 }
 
 static BROADCASTER: Lazy<Arc<broadcast::Sender<TerminalEvent>>> = Lazy::new(|| {

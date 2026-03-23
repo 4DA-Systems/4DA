@@ -129,8 +129,14 @@ fn process_cargo_lock(
     let packages = crate::ace::scanner::ProjectScanner::parse_cargo_lock(&content);
     for (name, version) in &packages {
         if direct_deps.is_empty() || !direct_deps.iter().any(|d| d == name) {
-            db.store_transitive_dependency(project_path, name, Some(version.as_str()), "rust", false)
-                .ok();
+            db.store_transitive_dependency(
+                project_path,
+                name,
+                Some(version.as_str()),
+                "rust",
+                false,
+            )
+            .ok();
             count += 1;
         } else {
             db.store_dependency(

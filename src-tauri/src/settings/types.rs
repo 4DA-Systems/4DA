@@ -460,8 +460,8 @@ pub struct LlmLimitsConfig {
 impl Default for LlmLimitsConfig {
     fn default() -> Self {
         Self {
-            daily_token_limit: 500_000,     // generous default — protects against runaway usage
-            daily_cost_limit_cents: 200,    // $2.00/day default limit
+            daily_token_limit: 500_000, // generous default — protects against runaway usage
+            daily_cost_limit_cents: 200, // $2.00/day default limit
         }
     }
 }
