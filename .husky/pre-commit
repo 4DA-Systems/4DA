@@ -1,6 +1,6 @@
 #!/bin/sh
-# CADE Pre-commit Hook — fast gate (< 10s)
-# Heavy checks (tsc, full tests) moved to pre-push
+# CADE Pre-commit Hook — fast gate
+# Runs: file sizes, cargo fmt, IPC contracts, ESLint, tsc (incremental), secrets
 # Process-aware: skips heavy ops when dev server is running to prevent crashes
 
 echo "Running CADE pre-commit validation..."

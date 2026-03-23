@@ -1,0 +1,17 @@
+# Vercel CLI deploy ignores — only site/ matters
+# (rootDirectory=site handles Git-triggered deploys)
+src-tauri/
+src/
+public/
+data/
+dist/
+node_modules/
+target/
+.claude/
+.ai/
+mcp-*/
+docs/
+scripts/
+*.db
+*.exe
+.tsbuildinfo
