@@ -581,6 +581,18 @@ export class FourDADatabase {
         computed_at TEXT NOT NULL DEFAULT (datetime('now'))
       );
       CREATE INDEX IF NOT EXISTS idx_advantage_period ON advantage_score(period, computed_at);
+
+      -- Agent feedback — queried by record_agent_feedback, get_agent_feedback_stats
+      CREATE TABLE IF NOT EXISTS agent_feedback (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        item_id TEXT NOT NULL,
+        outcome TEXT NOT NULL,
+        context TEXT,
+        session_task TEXT,
+        recorded_at TEXT DEFAULT (datetime('now'))
+      );
+      CREATE INDEX IF NOT EXISTS idx_agent_feedback_item ON agent_feedback(item_id);
+      CREATE INDEX IF NOT EXISTS idx_agent_feedback_outcome ON agent_feedback(outcome);
     `);
   }
 
@@ -1073,6 +1085,221 @@ export class FourDADatabase {
         message: `Failed to record feedback: ${error instanceof Error ? error.message : String(error)}`,
       };
     }
+  }
+
+  // ===========================================================================
+  // Agent Feedback
+  // ===========================================================================
+
+  /**
+   * Ensure the agent_feedback table exists.
+   * Called on first use so existing databases (created before this feature)
+   * get the table added without requiring a migration.
+   */
+  private ensureAgentFeedbackTable(): void {
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS agent_feedback (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        item_id TEXT NOT NULL,
+        outcome TEXT NOT NULL,
+        context TEXT,
+        session_task TEXT,
+        recorded_at TEXT DEFAULT (datetime('now'))
+      );
+      CREATE INDEX IF NOT EXISTS idx_agent_feedback_item ON agent_feedback(item_id);
+      CREATE INDEX IF NOT EXISTS idx_agent_feedback_outcome ON agent_feedback(outcome);
+    `);
+  }
+
+  /**
+   * Record agent feedback on recommended content items
+   */
+  recordAgentFeedback(
+    itemIds: string[],
+    outcome: string,
+    context?: string,
+    sessionTask?: string
+  ): { success: boolean; message: string; recorded_count: number } {
+    this.ensureAgentFeedbackTable();
+
+    const validOutcomes = ["used", "rejected", "partially_used"];
+    if (!validOutcomes.includes(outcome)) {
+      return {
+        success: false,
+        message: `Invalid outcome: ${outcome}. Valid outcomes: ${validOutcomes.join(", ")}`,
+        recorded_count: 0,
+      };
+    }
+
+    if (!itemIds || itemIds.length === 0) {
+      return {
+        success: false,
+        message: "item_ids must contain at least one item ID",
+        recorded_count: 0,
+      };
+    }
+
+    try {
+      const stmt = this.db.prepare(`
+        INSERT INTO agent_feedback (item_id, outcome, context, session_task)
+        VALUES (?, ?, ?, ?)
+      `);
+
+      const insertMany = this.db.transaction((ids: string[]) => {
+        let count = 0;
+        for (const id of ids) {
+          stmt.run(id, outcome, context || null, sessionTask || null);
+          count++;
+        }
+        return count;
+      });
+
+      const count = insertMany(itemIds);
+      return {
+        success: true,
+        message: `Recorded ${outcome} feedback for ${count} item(s)`,
+        recorded_count: count,
+      };
+    } catch (error) {
+      return {
+        success: false,
+        message: `Failed to record agent feedback: ${error instanceof Error ? error.message : String(error)}`,
+        recorded_count: 0,
+      };
+    }
+  }
+
+  /**
+   * Get agent feedback statistics for the given period
+   */
+  getAgentFeedbackStats(days: number = 30): {
+    period_days: number;
+    outcomes: { used: number; rejected: number; partially_used: number; total: number };
+    by_source: Array<{
+      source_type: string;
+      used: number;
+      rejected: number;
+      partially_used: number;
+      total: number;
+      usefulness_rate: number;
+    }>;
+    top_used_items: Array<{
+      item_id: string;
+      title: string | null;
+      source_type: string | null;
+      used_count: number;
+      rejected_count: number;
+    }>;
+    recent_feedback: Array<{
+      item_id: string;
+      outcome: string;
+      context: string | null;
+      session_task: string | null;
+      recorded_at: string;
+    }>;
+  } {
+    this.ensureAgentFeedbackTable();
+
+    const cutoff = `datetime('now', '-${Math.max(1, Math.min(365, days))} days')`;
+
+    // Outcome totals
+    const outcomeRows = this.db
+      .prepare(
+        `SELECT outcome, COUNT(*) as cnt
+         FROM agent_feedback
+         WHERE recorded_at >= ${cutoff}
+         GROUP BY outcome`
+      )
+      .all() as Array<{ outcome: string; cnt: number }>;
+
+    const outcomes = { used: 0, rejected: 0, partially_used: 0, total: 0 };
+    for (const row of outcomeRows) {
+      if (row.outcome === "used") outcomes.used = row.cnt;
+      else if (row.outcome === "rejected") outcomes.rejected = row.cnt;
+      else if (row.outcome === "partially_used") outcomes.partially_used = row.cnt;
+      outcomes.total += row.cnt;
+    }
+
+    // By source type — join with source_items to get source_type
+    const sourceRows = this.db
+      .prepare(
+        `SELECT COALESCE(si.source_type, 'unknown') as source_type, af.outcome, COUNT(*) as cnt
+         FROM agent_feedback af
+         LEFT JOIN source_items si ON CAST(af.item_id AS INTEGER) = si.id
+         WHERE af.recorded_at >= ${cutoff}
+         GROUP BY source_type, af.outcome
+         ORDER BY cnt DESC`
+      )
+      .all() as Array<{ source_type: string; outcome: string; cnt: number }>;
+
+    // Aggregate source rows into per-source stats
+    const sourceMap = new Map<string, { used: number; rejected: number; partially_used: number; total: number }>();
+    for (const row of sourceRows) {
+      if (!sourceMap.has(row.source_type)) {
+        sourceMap.set(row.source_type, { used: 0, rejected: 0, partially_used: 0, total: 0 });
+      }
+      const entry = sourceMap.get(row.source_type)!;
+      if (row.outcome === "used") entry.used += row.cnt;
+      else if (row.outcome === "rejected") entry.rejected += row.cnt;
+      else if (row.outcome === "partially_used") entry.partially_used += row.cnt;
+      entry.total += row.cnt;
+    }
+
+    const bySource = Array.from(sourceMap.entries()).map(([source_type, stats]) => ({
+      source_type,
+      ...stats,
+      usefulness_rate: stats.total > 0 ? (stats.used + stats.partially_used * 0.5) / stats.total : 0,
+    }));
+
+    // Top used items
+    const topItems = this.db
+      .prepare(
+        `SELECT
+           af.item_id,
+           si.title,
+           si.source_type,
+           SUM(CASE WHEN af.outcome = 'used' THEN 1 ELSE 0 END) as used_count,
+           SUM(CASE WHEN af.outcome = 'rejected' THEN 1 ELSE 0 END) as rejected_count
+         FROM agent_feedback af
+         LEFT JOIN source_items si ON CAST(af.item_id AS INTEGER) = si.id
+         WHERE af.recorded_at >= ${cutoff}
+         GROUP BY af.item_id
+         HAVING used_count > 0
+         ORDER BY used_count DESC
+         LIMIT 10`
+      )
+      .all() as Array<{
+        item_id: string;
+        title: string | null;
+        source_type: string | null;
+        used_count: number;
+        rejected_count: number;
+      }>;
+
+    // Recent feedback entries
+    const recentFeedback = this.db
+      .prepare(
+        `SELECT item_id, outcome, context, session_task, recorded_at
+         FROM agent_feedback
+         WHERE recorded_at >= ${cutoff}
+         ORDER BY recorded_at DESC
+         LIMIT 20`
+      )
+      .all() as Array<{
+        item_id: string;
+        outcome: string;
+        context: string | null;
+        session_task: string | null;
+        recorded_at: string;
+      }>;
+
+    return {
+      period_days: days,
+      outcomes,
+      by_source: bySource,
+      top_used_items: topItems,
+      recent_feedback: recentFeedback,
+    };
   }
 
   // ===========================================================================

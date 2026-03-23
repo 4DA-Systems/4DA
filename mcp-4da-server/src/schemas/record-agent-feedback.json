@@ -1,0 +1,28 @@
+{
+  "name": "record_agent_feedback",
+  "description": "Record whether content recommended by 4DA was useful in the agent's task.\n\nCall this after using get_relevant_content results to help 4DA learn what's actually valuable for AI-assisted development.\n\nOutcomes:\n- \"used\": Agent/developer used the recommended content (strong positive signal)\n- \"rejected\": Content was not useful — outdated, irrelevant, or wrong context (negative signal)\n- \"partially_used\": Some value extracted but not directly applicable (weak positive signal)\n\nThis feedback helps 4DA's PASIFA scoring system learn which content sources and topics are genuinely useful when agents recommend them.",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "item_ids": {
+        "type": "array",
+        "items": { "type": "string" },
+        "description": "Source item IDs that were recommended (from get_relevant_content results)"
+      },
+      "outcome": {
+        "type": "string",
+        "enum": ["used", "rejected", "partially_used"],
+        "description": "Whether the agent/developer used the recommended content"
+      },
+      "context": {
+        "type": "string",
+        "description": "Brief context about why (e.g., 'recommended to developer, they found it relevant' or 'content was outdated')"
+      },
+      "session_task": {
+        "type": "string",
+        "description": "What task the agent was working on when it used this content"
+      }
+    },
+    "required": ["item_ids", "outcome"]
+  }
+}
