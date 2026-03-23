@@ -124,7 +124,7 @@ header('Frontend Tests');
 {
   const res = run(
     'vitest',
-    'node_modules/.bin/vitest run',
+    'npx vitest run',
     { timeout: 300_000, env: { NODE_OPTIONS: '--max-old-space-size=4096' } }
   );
   record('Frontend tests (Vitest)', res.ok, res.duration, res.ok ? null : res.output);
