@@ -28,6 +28,7 @@ const WGSL_F = `struct Uniforms {
     resolution: vec2<f32>,
     mouse: vec2<f32>,
     mouse_down: f32,
+    aspect_ratio: f32,
     p_intensity: f32,
     p_hover: f32,
 };
@@ -95,7 +96,7 @@ fn dither_noise(uv: vec2<f32>) -> f32 {
 @fragment
 fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
     let uv = input.uv * 2.0 - 1.0;
-    let aspect = u.resolution.x / u.resolution.y;
+    let aspect = u.aspect_ratio;
     let time = fract(u.time / 120.0) * 120.0;
     let mouse_x = u.mouse.x;
     let mouse_y = u.mouse.y;
@@ -109,7 +110,7 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
     // ── Layer 1: halo ──
     {
         var p = vec2<f32>(uv.x * aspect, uv.y);
-        var sdf_result = sdf_box(p, 2.620000, 0.880000);
+        var sdf_result = sdf_box(p, 2.550000, 0.880000);
         sdf_result = sdf_result - 0.080000;
         sdf_result = abs(sdf_result) - 0.050000;
         let glow_pulse = 0.350000 * (0.9 + 0.1 * sin(time * 2.0));
@@ -126,7 +127,7 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
         var p = vec2<f32>(uv.x * aspect, uv.y);
         { let ra = time * 0.600000; let rc = cos(ra); let rs = sin(ra);
         p = vec2<f32>(p.x * rc - p.y * rs, p.x * rs + p.y * rc); }
-        var sdf_result = sdf_box(p, 2.550000, 0.830000);
+        var sdf_result = sdf_box(p, 2.500000, 0.830000);
         sdf_result = sdf_result - 0.070000;
         sdf_result = abs(sdf_result) - 0.012000;
         let arc_theta = atan2(p.x, p.y) + 3.14159265359;
@@ -145,7 +146,7 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
     // ── Layer 3: track ──
     {
         var p = vec2<f32>(uv.x * aspect, uv.y);
-        var sdf_result = sdf_box(p, 2.550000, 0.830000);
+        var sdf_result = sdf_box(p, 2.500000, 0.830000);
         sdf_result = sdf_result - 0.070000;
         sdf_result = abs(sdf_result) - 0.003000;
         let glow_pulse = 0.100000 * (0.9 + 0.1 * sin(time * 2.0));
@@ -160,7 +161,7 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
     // ── Layer 4: card ──
     {
         var p = vec2<f32>(uv.x * aspect, uv.y);
-        var sdf_result = sdf_box(p, 2.560000, 0.840000);
+        var sdf_result = sdf_box(p, 2.510000, 0.840000);
         sdf_result = sdf_result - 0.065000;
         let shade_fw = fwidth(sdf_result);
         let shade_alpha = 1.0 - smoothstep(-shade_fw, shade_fw, sdf_result);
@@ -218,6 +219,7 @@ uniform float u_audio_beat;
 uniform vec2 u_resolution;
 uniform vec2 u_mouse;
 uniform float u_mouse_down;
+uniform float u_aspect_ratio;
 uniform float u_p_intensity;
 uniform float u_p_hover;
 uniform sampler2D u_prev_frame;
@@ -278,7 +280,7 @@ float dither_noise(vec2 uv) {
 
 void main(){
     vec2 uv = v_uv * 2.0 - 1.0;
-    float aspect = u_resolution.x / u_resolution.y;
+    float aspect = u_aspect_ratio;
     float time = fract(u_time / 120.0) * 120.0;
     float mouse_x = u_mouse.x;
     float mouse_y = u_mouse.y;
@@ -292,7 +294,7 @@ void main(){
     // ── Layer 1: halo ──
     {
         vec2 p = vec2(uv.x * aspect, uv.y);
-        float sdf_result = sdf_box(p, 2.620000, 0.880000);
+        float sdf_result = sdf_box(p, 2.550000, 0.880000);
         sdf_result -= 0.080000;
         sdf_result = abs(sdf_result) - 0.050000;
         float glow_pulse = 0.350000 * (0.9 + 0.1 * sin(time * 2.0));
@@ -310,7 +312,7 @@ void main(){
         vec2 p = vec2(uv.x * aspect, uv.y);
         { float ra = time * 0.600000; float rc = cos(ra); float rs = sin(ra);
         p = vec2(p.x * rc - p.y * rs, p.x * rs + p.y * rc); }
-        float sdf_result = sdf_box(p, 2.550000, 0.830000);
+        float sdf_result = sdf_box(p, 2.500000, 0.830000);
         sdf_result -= 0.070000;
         sdf_result = abs(sdf_result) - 0.012000;
         float arc_theta = atan(p.x, p.y) + 3.14159265359;
@@ -330,7 +332,7 @@ void main(){
     // ── Layer 3: track ──
     {
         vec2 p = vec2(uv.x * aspect, uv.y);
-        float sdf_result = sdf_box(p, 2.550000, 0.830000);
+        float sdf_result = sdf_box(p, 2.500000, 0.830000);
         sdf_result -= 0.070000;
         sdf_result = abs(sdf_result) - 0.003000;
         float glow_pulse = 0.100000 * (0.9 + 0.1 * sin(time * 2.0));
@@ -346,7 +348,7 @@ void main(){
     // ── Layer 4: card ──
     {
         vec2 p = vec2(uv.x * aspect, uv.y);
-        float sdf_result = sdf_box(p, 2.560000, 0.840000);
+        float sdf_result = sdf_box(p, 2.510000, 0.840000);
         sdf_result -= 0.065000;
         float shade_fw = fwidth(sdf_result);
         float shade_alpha = 1.0 - smoothstep(-shade_fw, shade_fw, sdf_result);
@@ -476,7 +478,7 @@ class GameRenderer {
     const vMod = this.device.createShaderModule({ code: this.wgslVertex });
     const fMod = this.device.createShaderModule({ code: this.wgslFragment });
 
-    const floatCount = 11 + this.uniformDefs.length;
+    const floatCount = 12 + this.uniformDefs.length;
     const bufSize = Math.ceil(floatCount * 4 / 16) * 16;
     this.uniformBuffer = this.device.createBuffer({
       size: bufSize, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
@@ -557,7 +559,8 @@ class GameRenderer {
     data[6] = w; data[7] = h;
     data[8] = this.mouseX; data[9] = this.mouseY;
     data[10] = this.mouseDown;
-    let i = 11;
+    data[11] = w / (h || 1);
+    let i = 12;
     for (const u of this.uniformDefs) data[i++] = this.userParams[u.name] ?? u.default;
     this.device.queue.writeBuffer(this.uniformBuffer, 0, data);
 
@@ -764,6 +767,7 @@ class GameRendererGL {
       resolution: gl.getUniformLocation(this.program, 'u_resolution'),
       mouse: gl.getUniformLocation(this.program, 'u_mouse'),
       mouse_down: gl.getUniformLocation(this.program, 'u_mouse_down'),
+      aspect_ratio: gl.getUniformLocation(this.program, 'u_aspect_ratio'),
     };
     this.paramLocs = {};
     for (const u of this.uniformDefs) {
@@ -822,6 +826,7 @@ class GameRendererGL {
     gl.uniform2f(this.locs.resolution, this.canvas.width, this.canvas.height);
     gl.uniform2f(this.locs.mouse, this.mouseX, this.mouseY);
     gl.uniform1f(this.locs.mouse_down, this.mouseDown);
+    gl.uniform1f(this.locs.aspect_ratio, this.canvas.width / (this.canvas.height || 1));
     for (const u of this.uniformDefs) {
       gl.uniform1f(this.paramLocs[u.name], this.userParams[u.name] ?? u.default);
     }
@@ -975,7 +980,7 @@ class NotifCardCritical extends HTMLElement {
 
   connectedCallback() {
     const style = document.createElement('style');
-    style.textContent = ':host{display:block;width:100%;height:100%}canvas{width:100%;height:100%;display:block}';
+    style.textContent = ':host{display:block;width:100%;height:100%;position:relative}canvas{width:100%;height:100%;display:block}';
     const canvas = document.createElement('canvas');
     this.shadowRoot.appendChild(style);
     this.shadowRoot.appendChild(canvas);
