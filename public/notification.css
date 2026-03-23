@@ -38,16 +38,17 @@ html, body {
 
 .game-layer {
   position: absolute;
-  inset: 8px;
-  border-radius: 14px;
+  inset: 0;
+  border-radius: 0;
   overflow: hidden;
   opacity: 0;
   transition: opacity 0.4s ease-out;
   pointer-events: none;
+  z-index: 0;
 }
 
 .game-layer.active {
-  opacity: var(--game-opacity, 0.10);
+  opacity: var(--game-opacity, 1);
 }
 
 /* ========================================================================
@@ -114,6 +115,19 @@ html, body {
 .notification-card.visible {
   opacity: 1;
   transform: scale(1) translateY(0);
+}
+
+/* When GAME is rendering the card, make CSS card transparent.
+   GAME handles the card body, border, and sweep via GPU.
+   CSS card becomes a transparent text container only. */
+.notification-card.game-active {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+}
+.notification-card.game-active::before,
+.notification-card.game-active::after {
+  display: none !important;
 }
 
 .notification-card.exiting {
