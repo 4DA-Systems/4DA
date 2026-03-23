@@ -427,6 +427,40 @@ The relay is structurally unable to access team intelligence. Even if compromise
 
 ---
 
+## Security Model
+
+The Team Relay uses end-to-end encryption (E2E) so that the relay server is zero-knowledge by design. All cryptographic operations happen client-side; the relay only stores and routes opaque ciphertext.
+
+### Cryptographic Stack
+
+| Layer | Primitive | Purpose |
+|-------|-----------|---------|
+| Symmetric encryption | **XChaCha20Poly1305** | Authenticated encryption of all metadata payloads. 192-bit random nonces eliminate collision risk across millions of messages. Tampered blobs fail decryption rather than silently corrupting data. |
+| Key exchange | **X25519** (Diffie-Hellman) | Ephemeral key agreement between team members. Each client generates an X25519 keypair on join; shared secrets are derived pairwise. |
+| Key derivation | **HKDF-SHA256** | Expands the X25519 shared secret into a symmetric encryption key scoped to `"4da-team-sync-v1"`. Salt is the team ID, preventing cross-team key reuse. |
+
+### Threat Model
+
+| Threat | Mitigation |
+|--------|------------|
+| **Relay compromise** | Relay holds only ciphertext. No key material is stored server-side. A compromised relay leaks nothing beyond encrypted blobs and team/client IDs. |
+| **Man-in-the-middle** | X25519 key exchange with server-registered public keys. TLS (rustls) on all transport. |
+| **Replay attacks** | Each entry has a unique `entry_id` and monotonic `relay_seq`. Clients deduplicate on receipt. |
+| **Nonce reuse** | XChaCha20's 192-bit nonce space makes random nonce collision astronomically unlikely. |
+| **Key rotation** | Admin can generate a new team symmetric key and re-distribute encrypted to each member's public key via the relay. Old entries remain decryptable with the prior key stored locally. |
+| **Member departure** | Admin rotates the team key after removing a member. The departed member's cached key cannot decrypt future entries. |
+| **At-rest encryption** | Private keys stored in local SQLite are encrypted with a machine-derived key (`team_crypto.our_private_key`). |
+
+### Implementation Crates (all pure Rust, no FFI)
+
+- `chacha20poly1305 0.10` -- AEAD cipher (same family as WireGuard, Signal)
+- `x25519-dalek 2` -- Key exchange (same as Signal protocol)
+- `hkdf 0.12` -- Key derivation
+- `ed25519-dalek 2` -- JWT signing for relay auth (already in Cargo.toml)
+- `sha2 0.10` -- HKDF hash function (already in Cargo.toml)
+
+---
+
 ## Existing Infrastructure We Reuse
 
 | Component | File | What We Reuse |

@@ -369,9 +369,9 @@ At 200 Signal users + 150 Community members + 24 Cohort participants:
 ## 6. Open Questions
 
 1. **Should STREETS be a separate domain or a section of 4da.ai?**
-   - Separate (streets.4da.ai): cleaner brand, dedicated SEO
+   - Separate (4da.ai/streets): cleaner brand, dedicated SEO
    - Section (4da.ai/streets): simpler infrastructure, shared authority
-   - **Recommendation:** Subdomain `streets.4da.ai` — keeps brand connection while allowing independent growth
+   - **Recommendation:** Subdomain `4da.ai/streets` — keeps brand connection while allowing independent growth
 
 2. **Should opportunity signals be free or Signal-only?**
    - Free: drives upgrades by showing value ("you're seeing opportunities, imagine what Signal briefings add")
