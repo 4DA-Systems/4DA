@@ -2,14 +2,17 @@
  * Build Guardian — comprehensive pre-deploy verification.
  *
  * Runs all critical checks that must pass before any deployment:
- *   1. TypeScript compilation (incremental)
- *   2. Site build verification (Eleventy dry-run)
- *   3. Frontend tests (Vitest)
- *   4. File size limits
- *   5. IPC contract validation
+ *   1. TypeScript compilation (fresh, no cache)
+ *   2. Vite build (actual bundling, not just type check)
+ *   3. Site build verification (Eleventy)
+ *   4. Rust compilation (cargo check)
+ *   5. Frontend tests (Vitest)
+ *   6. File size limits
+ *   7. IPC contract validation
  *
  * Usage:
- *   node scripts/build-guardian.cjs          # full check
+ *   node scripts/build-guardian.cjs          # full check (7 gates)
+ *   node scripts/build-guardian.cjs --quick  # skip tests + Rust (4 gates)
  *   pnpm run guardian                        # via package.json
  *
  * Exit: 0 if all checks pass, 1 if any check fails.
@@ -21,6 +24,7 @@ const { execSync } = require('child_process');
 const path = require('path');
 
 const ROOT = path.resolve(__dirname, '..');
+const QUICK = process.argv.includes('--quick');
 
 // ============================================================================
 // Helpers
@@ -90,18 +94,29 @@ console.log('============================================================');
 console.log('  BUILD GUARDIAN — Pre-deploy Verification');
 console.log('============================================================');
 
-// --- 1. TypeScript compilation ---
+// --- 1. TypeScript compilation (fresh, no incremental cache) ---
 header('TypeScript Compilation');
 {
   const res = run(
     'tsc',
-    'node --max-old-space-size=8192 node_modules/typescript/bin/tsc --noEmit --incremental --tsBuildInfoFile .tsbuildinfo',
+    'node --max-old-space-size=8192 node_modules/typescript/bin/tsc --noEmit',
     { timeout: 180_000 }
   );
   record('TypeScript (tsc --noEmit)', res.ok, res.duration, res.ok ? null : res.output);
 }
 
-// --- 2. Site build verification ---
+// --- 2. Vite build (actual bundling — catches what tsc alone misses) ---
+header('Vite Build');
+{
+  const res = run(
+    'vite',
+    'npx vite build',
+    { timeout: 180_000, env: { NODE_OPTIONS: '--max-old-space-size=8192' } }
+  );
+  record('Vite build', res.ok, res.duration, res.ok ? null : res.output);
+}
+
+// --- 3. Site build verification ---
 header('Site Build Verification');
 {
   const siteDir = path.join(ROOT, 'site');
@@ -109,40 +124,62 @@ header('Site Build Verification');
   if (fs.existsSync(siteDir) && fs.existsSync(path.join(siteDir, 'package.json'))) {
     const res = run(
       'eleventy',
-      'npx @11ty/eleventy --dryrun',
+      'npx @11ty/eleventy',
       { cwd: siteDir, timeout: 60_000 }
     );
-    record('Site build (Eleventy --dryrun)', res.ok, res.duration, res.ok ? null : res.output);
+    record('Site build (Eleventy)', res.ok, res.duration, res.ok ? null : res.output);
   } else {
     console.log(`  ${SKIP} Site build (site/ directory not found)`);
     results.push({ name: 'Site build', passed: true, duration: '0.0', detail: null });
   }
 }
 
-// --- 3. Frontend tests ---
-header('Frontend Tests');
-{
-  const res = run(
-    'vitest',
-    'npx vitest run',
-    { timeout: 300_000, env: { NODE_OPTIONS: '--max-old-space-size=4096' } }
-  );
-  record('Frontend tests (Vitest)', res.ok, res.duration, res.ok ? null : res.output);
+// --- 4. Rust compilation (cargo check is faster than cargo build) ---
+if (!QUICK) {
+  header('Rust Compilation');
+  {
+    const tauriDir = path.join(ROOT, 'src-tauri');
+    const fs = require('fs');
+    if (fs.existsSync(path.join(tauriDir, 'Cargo.toml'))) {
+      const res = run(
+        'cargo',
+        'cargo check',
+        { cwd: tauriDir, timeout: 300_000 }
+      );
+      record('Rust (cargo check)', res.ok, res.duration, res.ok ? null : res.output);
+    } else {
+      console.log(`  ${SKIP} Rust check (src-tauri/ not found)`);
+      results.push({ name: 'Rust check', passed: true, duration: '0.0', detail: null });
+    }
+  }
 }
 
-// --- 4. File size limits ---
+// --- 5. Frontend tests ---
+if (!QUICK) {
+  header('Frontend Tests');
+  {
+    const res = run(
+      'vitest',
+      'npx vitest run',
+      { timeout: 300_000, env: { NODE_OPTIONS: '--max-old-space-size=4096' } }
+    );
+    record('Frontend tests (Vitest)', res.ok, res.duration, res.ok ? null : res.output);
+  }
+}
+
+// --- 6. File size limits ---
 header('File Size Limits');
 {
   const res = run('sizes', 'node scripts/check-file-sizes.cjs');
   record('File size limits', res.ok, res.duration, res.ok ? null : res.output);
 }
 
-// --- 5. IPC contract validation ---
+// --- 7. IPC contract validation ---
 header('IPC Contract Validation');
 {
   const res = run('ipc', 'node scripts/validate-commands.cjs');
   // validate-commands.cjs always exits 0, so check output for "MISMATCH" or "ghost"
-  const hasIssues = res.output && /ghost|MISMATCH/i.test(res.output);
+  const hasIssues = res.output && /ghost|MISMATCH|UNREGISTERED/i.test(res.output);
   const passed = res.ok && !hasIssues;
   record('IPC contracts', passed, res.duration, passed ? null : res.output);
 }
