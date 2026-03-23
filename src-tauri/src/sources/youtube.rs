@@ -83,11 +83,26 @@ impl YouTubeSource {
             .await
             .with_context(|| format!("Network error for{}", channel.name))?;
 
-        if !resp.status().is_success() {
+        let status = resp.status();
+        if status == reqwest::StatusCode::TOO_MANY_REQUESTS {
+            return Err(format!(
+                "YouTube rate limited for {} (HTTP 429)",
+                channel.name,
+            )
+            .into());
+        }
+        if status == reqwest::StatusCode::FORBIDDEN {
+            return Err(format!(
+                "YouTube forbidden for {} (HTTP 403)",
+                channel.name,
+            )
+            .into());
+        }
+        if !status.is_success() {
             return Err(format!(
                 "YouTube feed error for {}: HTTP {}",
                 channel.name,
-                resp.status()
+                status.as_u16()
             )
             .into());
         }

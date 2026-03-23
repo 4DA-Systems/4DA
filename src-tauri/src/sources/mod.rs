@@ -17,6 +17,7 @@ pub mod arxiv;
 pub mod cve;
 pub(crate) mod cve_matching;
 pub mod devto;
+pub mod freshness;
 pub mod github;
 pub mod hackernews;
 pub mod lobsters;
@@ -141,8 +142,10 @@ pub enum SourceError {
     Network(String),
     /// Error parsing response
     Parse(String),
-    /// Rate limited by source
-    RateLimited,
+    /// Rate limited by source (HTTP 429)
+    RateLimited(String),
+    /// Forbidden / auth error (HTTP 403) — not retryable
+    Forbidden(String),
     /// Source is disabled
     Disabled,
     /// Other error
@@ -154,7 +157,8 @@ impl std::fmt::Display for SourceError {
         match self {
             SourceError::Network(msg) => write!(f, "Network error: {}", msg),
             SourceError::Parse(msg) => write!(f, "Parse error: {}", msg),
-            SourceError::RateLimited => write!(f, "Rate limited"),
+            SourceError::RateLimited(msg) => write!(f, "Rate limited: {}", msg),
+            SourceError::Forbidden(msg) => write!(f, "Forbidden: {}", msg),
             SourceError::Disabled => write!(f, "Source disabled"),
             SourceError::Other(msg) => write!(f, "Error: {}", msg),
         }

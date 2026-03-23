@@ -48,16 +48,18 @@ impl std::fmt::Display for RetryExhaustedError {
 }
 
 /// Check whether a SourceError is worth retrying.
-/// Parse errors and Disabled errors are deterministic and will not succeed on retry.
+/// Parse errors, Disabled, and Forbidden errors are deterministic and will not succeed on retry.
 fn is_retryable(err: &SourceError) -> bool {
     match err {
         SourceError::Network(_) => true,
-        SourceError::RateLimited => true,
+        SourceError::RateLimited(_) => true,
         SourceError::Other(_) => true,
         // Parse errors are deterministic — retrying won't help
         SourceError::Parse(_) => false,
         // Disabled is a config issue — retrying won't help
         SourceError::Disabled => false,
+        // Forbidden (403) means auth/permission issues — retrying won't help
+        SourceError::Forbidden(_) => false,
     }
 }
 
@@ -323,7 +325,16 @@ mod retry_tests {
 
     #[test]
     fn rate_limited_is_retryable() {
-        assert!(is_retryable(&SourceError::RateLimited));
+        assert!(is_retryable(&SourceError::RateLimited(
+            "test rate limit".into()
+        )));
+    }
+
+    #[test]
+    fn forbidden_is_not_retryable() {
+        assert!(!is_retryable(&SourceError::Forbidden(
+            "auth failure".into()
+        )));
     }
 
     #[test]
