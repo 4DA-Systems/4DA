@@ -65,6 +65,7 @@ pub(crate) struct ModelRecommendation {
 // SQL Schema
 // ============================================================================
 
+#[allow(dead_code)]
 pub(crate) const AI_USAGE_SQL: &str = "
 CREATE TABLE IF NOT EXISTS ai_usage (
     id INTEGER PRIMARY KEY AUTOINCREMENT,

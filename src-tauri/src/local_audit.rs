@@ -23,6 +23,7 @@ pub(crate) struct LocalAuditFinding {
     pub description: Option<String>,
     pub affected_versions: Option<String>,
     pub source_url: Option<String>,
+    #[allow(dead_code)]
     pub fix_version: Option<String>,
 }
 

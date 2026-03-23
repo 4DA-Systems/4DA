@@ -53,6 +53,7 @@ pub(crate) struct KnowledgeDecay {
     pub recommendation: String,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub(crate) struct InterestTrend {
     pub topic: String,
@@ -65,6 +66,7 @@ pub(crate) struct InterestTrend {
 // SQL Schema
 // ============================================================================
 
+#[allow(dead_code)]
 pub(crate) const TEMPORAL_GRAPH_SQL: &str = "
 CREATE TABLE IF NOT EXISTS developer_timeline (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -130,6 +132,7 @@ pub(crate) fn detect_decay(tech_name: &str, weeks_ago: u32) -> KnowledgeDecay {
 }
 
 /// Compute interest trends by comparing current and previous snapshots.
+#[allow(dead_code)]
 pub(crate) fn compute_interest_trends(
     current: &[InterestEntry],
     previous: &[InterestEntry],
