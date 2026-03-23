@@ -909,6 +909,42 @@ pub(crate) fn score_item(
         .map(|d| d.package_name.clone())
         .collect();
 
+    // ── Signal classification ─────────────────────────────────────────
+    let (sig_type, sig_priority, sig_action, sig_triggers, sig_horizon) = classify_signals(
+        relevant,
+        combined_score,
+        raw.domain_relevance,
+        &content_type,
+        options,
+        classifier,
+        input,
+        ctx,
+        &raw.matched_deps,
+    );
+
+    // ── Necessity scoring ─────────────────────────────────────────────
+    let age_hours = input
+        .created_at
+        .map(|ts| {
+            (chrono::Utc::now() - *ts).num_minutes().max(0) as f64 / 60.0
+        })
+        .unwrap_or(0.0);
+
+    let necessity_inputs = necessity::NecessityInputs {
+        dep_match_score: raw.dep_match_score,
+        matched_deps: matched_dep_names.clone(),
+        signal_type: sig_type.clone(),
+        signal_priority: sig_priority.clone(),
+        cve_severity: None, // CVE severity is folded into signal_priority by the classifier
+        cvss_score: None,   // Not directly available at this pipeline stage
+        affected_project_count: 0, // TODO: wire cross-project dep counts when available
+        skill_gap_boost,
+        window_boost,
+        age_hours,
+        content_type: Some(content_type.slug().to_string()),
+    };
+    let necessity_result = necessity::compute_necessity(&necessity_inputs);
+
     // ── Score breakdown ───────────────────────────────────────────────
     let score_breakdown = ScoreBreakdown {
         context_score: cal.context_score,
@@ -941,20 +977,23 @@ pub(crate) fn score_item(
         window_boost,
         matched_window_id,
         skill_gap_boost,
+        necessity_score: necessity_result.score,
+        necessity_reason: if necessity_result.score > 0.0 {
+            Some(necessity_result.reason)
+        } else {
+            None
+        },
+        necessity_category: if necessity_result.score > 0.0 {
+            Some(necessity_result.category.slug().to_string())
+        } else {
+            None
+        },
+        necessity_urgency: if necessity_result.score > 0.0 {
+            Some(necessity_result.urgency.label().to_string())
+        } else {
+            None
+        },
     };
-
-    // ── Signal classification ─────────────────────────────────────────
-    let (sig_type, sig_priority, sig_action, sig_triggers, sig_horizon) = classify_signals(
-        relevant,
-        combined_score,
-        raw.domain_relevance,
-        &content_type,
-        options,
-        classifier,
-        input,
-        ctx,
-        &raw.matched_deps,
-    );
 
     // ── STREETS revenue engine mapping ────────────────────────────────
     let streets_engine = if relevant {

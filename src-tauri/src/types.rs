@@ -122,6 +122,18 @@ pub struct ScoreBreakdown {
     /// Skill gap boost from sovereign profile intelligence (0.0-0.20)
     #[serde(default)]
     pub skill_gap_boost: f32,
+    /// Necessity score: "what you'd regret missing" (0.0-1.0)
+    #[serde(default)]
+    pub necessity_score: f32,
+    /// One-line explanation of why this item is necessary
+    #[serde(default)]
+    pub necessity_reason: Option<String>,
+    /// Necessity category (security_vulnerability, breaking_change, etc.)
+    #[serde(default)]
+    pub necessity_category: Option<String>,
+    /// Necessity urgency (immediate, this_week, awareness, none)
+    #[serde(default)]
+    pub necessity_urgency: Option<String>,
 }
 
 pub(crate) fn default_freshness() -> f32 {
