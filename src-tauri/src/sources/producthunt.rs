@@ -178,12 +178,32 @@ impl Source for ProductHuntSource {
 
         let url = "https://www.producthunt.com/feed";
 
-        let xml = self
+        let response = self
             .client
             .get(url)
             .send()
             .await
-            .map_err(|e| SourceError::Network(e.to_string()))?
+            .map_err(|e| SourceError::Network(e.to_string()))?;
+
+        let status = response.status();
+        if status == reqwest::StatusCode::TOO_MANY_REQUESTS {
+            return Err(SourceError::RateLimited(
+                "Product Hunt rate limited (HTTP 429)".to_string(),
+            ));
+        }
+        if status == reqwest::StatusCode::FORBIDDEN {
+            return Err(SourceError::Forbidden(
+                "Product Hunt forbidden (HTTP 403)".to_string(),
+            ));
+        }
+        if !status.is_success() {
+            return Err(SourceError::Network(format!(
+                "Product Hunt API error: HTTP {}",
+                status.as_u16()
+            )));
+        }
+
+        let xml = response
             .text()
             .await
             .map_err(|e| SourceError::Network(e.to_string()))?;

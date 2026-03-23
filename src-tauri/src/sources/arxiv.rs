@@ -202,10 +202,21 @@ impl ArxivSource {
             .await
             .map_err(|e| SourceError::Network(e.to_string()))?;
 
-        if !response.status().is_success() {
+        let status = response.status();
+        if status == reqwest::StatusCode::TOO_MANY_REQUESTS {
+            return Err(SourceError::RateLimited(
+                "arXiv rate limited (HTTP 429)".to_string(),
+            ));
+        }
+        if status == reqwest::StatusCode::FORBIDDEN {
+            return Err(SourceError::Forbidden(
+                "arXiv forbidden (HTTP 403)".to_string(),
+            ));
+        }
+        if !status.is_success() {
             return Err(SourceError::Network(format!(
-                "arXiv API returned status: {}",
-                response.status()
+                "arXiv API error: HTTP {}",
+                status.as_u16()
             )));
         }
 
