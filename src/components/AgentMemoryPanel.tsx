@@ -185,6 +185,8 @@ export const AgentMemoryPanel = memo(function AgentMemoryPanel() {
                 <button
                   onClick={() => setExpandedId(isExpanded ? null : m.id)}
                   className="w-full px-4 py-3 flex items-center gap-3 text-left"
+                  aria-expanded={isExpanded}
+                  aria-label={`Toggle details for ${m.subject}`}
                 >
                   {/* Memory type icon */}
                   <div className="w-6 h-6 bg-bg-primary rounded flex items-center justify-center flex-shrink-0">

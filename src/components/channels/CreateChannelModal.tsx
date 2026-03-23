@@ -35,9 +35,42 @@ export function CreateChannelModal({ open, onClose }: CreateChannelModalProps) {
   const [error, setError] = useState<string | null>(null);
   const [sourcePreview, setSourcePreview] = useState<SourcePreview | null>(null);
   const previewTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
 
   const slug = slugify(title);
   const canSubmit = title.trim().length > 0 && topics.length > 0 && !submitting;
+
+  useEffect(() => {
+    const previouslyFocused = document.activeElement as HTMLElement;
+    const dialog = dialogRef.current;
+    if (dialog) {
+      const firstInput = dialog.querySelector<HTMLElement>('input, button, select, textarea');
+      firstInput?.focus();
+    }
+
+    const handleKeyDown = (e: globalThis.KeyboardEvent) => {
+      if (e.key === 'Tab' && dialog) {
+        const focusable = dialog.querySelectorAll<HTMLElement>(
+          'input, button, select, textarea, [tabindex]:not([tabindex="-1"])'
+        );
+        const first = focusable[0];
+        const last = focusable[focusable.length - 1];
+        if (e.shiftKey && document.activeElement === first) {
+          e.preventDefault();
+          last?.focus();
+        } else if (!e.shiftKey && document.activeElement === last) {
+          e.preventDefault();
+          first?.focus();
+        }
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+      previouslyFocused?.focus();
+    };
+  }, []);
 
   // Debounced source preview when topics change
   useEffect(() => {
@@ -108,15 +141,17 @@ export function CreateChannelModal({ open, onClose }: CreateChannelModalProps) {
       className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4"
       role="dialog"
       aria-modal="true"
+      aria-labelledby="create-channel-title"
       onClick={onClose}
     >
       <div
+        ref={dialogRef}
         className="bg-bg-secondary border border-border rounded-xl w-full max-w-md shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
         <div className="px-6 py-4 border-b border-border flex items-center justify-between">
-          <h2 className="text-lg font-medium text-white">{t('channels.createTitle')}</h2>
+          <h2 id="create-channel-title" className="text-lg font-medium text-white">{t('channels.createTitle')}</h2>
           <button
             onClick={onClose}
             aria-label={t('action.close')}

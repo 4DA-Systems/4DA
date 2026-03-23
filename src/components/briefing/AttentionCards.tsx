@@ -147,12 +147,14 @@ const AttentionCard = memo(function AttentionCard({
         )}
         <button
           onClick={() => onSave(item)}
+          aria-label={t('action.save', 'Save') + ': ' + item.title}
           className="px-2.5 py-1 text-xs bg-green-500/10 text-green-400 border border-green-500/20 rounded hover:bg-green-500/20 transition-all"
         >
           {t('action.save', 'Save')}
         </button>
         <button
           onClick={() => onDismiss(item)}
+          aria-label={t('action.dismiss', 'Dismiss') + ': ' + item.title}
           className="px-2.5 py-1 text-xs text-text-muted border border-border rounded hover:bg-red-500/10 hover:text-red-400 hover:border-red-500/20 transition-all ml-auto"
         >
           {t('action.dismiss', 'Dismiss')}

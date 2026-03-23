@@ -24,6 +24,7 @@ export function ToastContainer({ toasts, onDismiss }: ToastContainerProps) {
         return (
           <div
             key={toast.id}
+            role={toast.type === 'error' ? 'alert' : 'status'}
             className={`bg-bg-secondary border border-border ${style.border} border-l-4 rounded-lg px-4 py-3 shadow-lg flex items-start gap-3 animate-slide-in`}
           >
             <span className={`${style.text} font-bold text-sm flex-shrink-0 mt-0.5`}>

@@ -39,7 +39,7 @@ interface ResultItemProps {
   isExpanded: boolean;
   isFocused?: boolean;
   isNew?: boolean;
-  onToggleExpand: () => void;
+  onToggleExpand: (itemId: number) => void;
   feedbackGiven: FeedbackGiven;
   onRecordInteraction: (
     itemId: number,
@@ -118,7 +118,7 @@ export const ResultItem = memo(function ResultItem({
       <ResultItemCollapsed
         item={item}
         isExpanded={isExpanded}
-        onToggleExpand={onToggleExpand}
+        onToggleExpand={() => onToggleExpand(item.id)}
         onToggleBreakdown={toggleBreakdown}
         showBreakdown={showBreakdown}
         feedback={feedback}

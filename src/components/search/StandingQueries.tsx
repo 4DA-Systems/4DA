@@ -118,7 +118,7 @@ export function StandingQueries({ isPro }: StandingQueriesProps) {
               </button>
               <button
                 onClick={() => handleDismissSuggestion(suggestion.topic)}
-                className="text-text-muted hover:text-text-secondary opacity-0 group-hover:opacity-100 transition-all text-xs"
+                className="text-text-muted hover:text-text-secondary opacity-0 group-hover:opacity-100 focus:opacity-100 transition-all text-xs"
                 aria-label={t('action.dismiss', 'Dismiss')}
               >
                 {'\u2715'}
@@ -154,7 +154,7 @@ export function StandingQueries({ isPro }: StandingQueriesProps) {
           )}
           <button
             onClick={() => handleDelete(watch.id)}
-            className="text-text-muted hover:text-red-400 opacity-0 group-hover:opacity-100 transition-all text-xs"
+            className="text-text-muted hover:text-red-400 opacity-0 group-hover:opacity-100 focus:opacity-100 transition-all text-xs"
             aria-label={t('action.delete')}
           >
             {'\u2715'}
