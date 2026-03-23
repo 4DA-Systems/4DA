@@ -435,6 +435,7 @@ pub fn run() {
             monitoring_commands::set_launch_at_startup,
             monitoring_commands::get_launch_at_startup,
             monitoring_commands::set_notification_style,
+            monitoring_commands::trigger_notification_preview,
             // Notification window
             notification_window::notification_clicked,
             // ACE (frontend-used subset)
