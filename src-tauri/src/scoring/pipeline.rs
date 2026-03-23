@@ -586,6 +586,10 @@ pub(crate) fn score_item(
         window_boost,
         matched_window_id,
         skill_gap_boost,
+        necessity_score: 0.0,
+        necessity_reason: None,
+        necessity_category: None,
+        necessity_urgency: None,
     };
 
     // Optional signal classification — four gates (all general, tech-stack-agnostic):

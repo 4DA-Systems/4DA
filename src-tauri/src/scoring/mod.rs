@@ -11,6 +11,7 @@ mod dependencies;
 mod explanation;
 mod gate;
 mod keywords;
+pub(crate) mod necessity;
 mod pipeline;
 mod pipeline_v2;
 mod semantic;
