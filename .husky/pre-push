@@ -18,6 +18,14 @@ NODE_OPTIONS="--max-old-space-size=4096" pnpm run test -- --run 2>/dev/null || {
     exit 1
 }
 
+# Site build verification (catches Eleventy/Vercel failures before push)
+echo "Verifying site build..."
+cd site && npx @11ty/eleventy --dryrun 2>&1 || {
+    echo "Site build failed. Fix site errors before pushing."
+    exit 1
+}
+cd ..
+
 # Secret scan — defense-in-depth (catches secrets added via --no-verify)
 # Uses the same comprehensive patterns as pre-commit
 echo "Scanning for secrets in push range..."
