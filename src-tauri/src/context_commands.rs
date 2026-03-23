@@ -492,6 +492,9 @@ pub async fn run_awe_transmute(query: String, mode: String) -> Result<String> {
     )
     .map_err(|e| format!("Failed to run AWE: {e}"))?;
 
+    // Clean up temp file
+    let _ = std::fs::remove_file(&ctx_path);
+
     let stdout = String::from_utf8_lossy(&output.stdout);
 
     // Parse the JSON output and extract wisdom

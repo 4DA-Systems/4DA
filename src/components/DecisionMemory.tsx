@@ -417,7 +417,11 @@ export const DecisionMemory = memo(function DecisionMemory() {
                           </button>
                           {d.decision_type === 'tech_choice' && (
                             <button
-                              onClick={() => removeTechDecision(d.subject)}
+                              onClick={() => {
+                                if (window.confirm('Remove this decision? This cannot be undone.')) {
+                                  removeTechDecision(d.subject);
+                                }
+                              }}
                               className="px-3 py-1.5 text-xs bg-red-500/10 text-red-400 border border-red-500/20 rounded hover:bg-red-500/20 transition-colors"
                               aria-label={`${t('decisions.remove')} ${d.subject}`}
                             >

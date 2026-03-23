@@ -151,13 +151,17 @@ export function NaturalLanguageSearch({ onStatusChange, defaultExpanded = true }
   const handleSuggestedQuery = (sq: string) => setQuery(sq);
   const clearResults = () => { setResult(null); setQuery(''); setSynthesis(null); };
   const [watchCreated, setWatchCreated] = useState(false);
+  const addToast = useAppStore(s => s.addToast);
   const handleWatch = async () => {
     if (!query.trim()) return;
     try {
       await cmd('create_standing_query', { queryText: query });
       setWatchCreated(true);
       setTimeout(() => setWatchCreated(false), 2000);
-    } catch (err) { reportError('NaturalLanguageSearch.watchCreation', err); }
+    } catch (err) {
+      reportError('NaturalLanguageSearch.watchCreation', err);
+      addToast('error', t('search.watchFailed', 'Failed to create watch. Please try again.'));
+    }
   };
   const relevantStack = result?.stack_context?.filter((s) => s.relevant) ?? [];
 

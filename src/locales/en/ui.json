@@ -1191,6 +1191,13 @@
   "shortcuts.openBriefing": "Open briefing",
   "shortcuts.saveItem": "Save current item",
   "shortcuts.navigateItems": "Navigate items",
+  "shortcuts.nextItem": "Next item",
+  "shortcuts.previousItem": "Previous item",
+  "shortcuts.openItem": "Open item",
+  "shortcuts.dismissItem": "Dismiss item",
+  "shortcuts.focusSearch": "Focus search",
+  "shortcuts.actionsGroup": "Actions",
+  "shortcuts.viewsGroup": "Views & Panels",
 
   "about.fullName": "4 Dimensional Autonomy",
   "about.attribution": "Development Attribution",
@@ -1251,6 +1258,7 @@
   "saved.count": "{{count}} saved items",
   "saved.itemRemoved": "Item removed from saved collection",
   "saved.copyUrl": "Copy URL",
+  "saved.copied": "Copied!",
   "saved.remove": "Remove",
 
   "briefing.warmup.title": "Your Intelligence System",
@@ -1800,6 +1808,7 @@
   "search.knowledgeGaps": "Learning Opportunities",
   "search.daysStale": "{{days}}d stale",
   "search.watchCreated": "Watch created",
+  "search.watchFailed": "Failed to create watch. Please try again.",
   "search.watchDeleted": "Watch removed",
   "search.noLlm": "Configure an LLM provider for AI synthesis",
 

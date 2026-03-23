@@ -4,9 +4,10 @@
 //! Three-layer design: bundled defaults → disk cache → in-memory singleton.
 //! Refreshes from LiteLLM's community-maintained registry (≤1x/24h).
 
+use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::sync::{LazyLock, RwLock};
+use std::sync::LazyLock;
 use tracing::{debug, info, warn};
 
 use crate::error::{Result, ResultExt};
@@ -214,7 +215,7 @@ fn save_to_disk(registry: &ModelRegistry) {
 /// Look up a model by ID. Uses fuzzy matching: exact > starts-with > contains.
 /// When multiple models match in fuzzy tiers, returns the shortest key (most specific).
 pub fn get_model_info(model_id: &str) -> Option<ModelInfo> {
-    let registry = REGISTRY.read().ok()?;
+    let registry = REGISTRY.read();
     let id_lower = model_id.to_lowercase();
 
     // Exact match
@@ -262,10 +263,7 @@ pub fn get_model_info(model_id: &str) -> Option<ModelInfo> {
 
 /// Get curated model list for a provider (for UI dropdowns).
 pub fn get_provider_models(provider: &str) -> Vec<String> {
-    let registry = match REGISTRY.read() {
-        Ok(r) => r,
-        Err(_) => return Vec::new(),
-    };
+    let registry = REGISTRY.read();
 
     let mut models: Vec<String> = registry
         .models
@@ -324,10 +322,7 @@ pub fn estimate_cost_or_zero(
 
 /// Get the full registry snapshot (for frontend consumption).
 pub fn get_registry_snapshot() -> ModelRegistry {
-    REGISTRY
-        .read()
-        .map(|r| r.clone())
-        .unwrap_or_else(|_| bundled_registry())
+    REGISTRY.read().clone()
 }
 
 // ============================================================================
@@ -377,9 +372,7 @@ pub async fn refresh_registry() -> Result<()> {
 
     // Check if we've refreshed in the last 24 hours
     {
-        let registry = REGISTRY
-            .read()
-            .map_err(|e| format!("Registry lock poisoned: {e}"))?;
+        let registry = REGISTRY.read();
         if registry.fetched_at > 0 && now - registry.fetched_at < 86_400 {
             debug!(target: "4da::registry", age_hours = (now - registry.fetched_at) / 3600, "Registry is fresh, skipping refresh");
             return Ok(());
@@ -500,9 +493,7 @@ pub async fn refresh_registry() -> Result<()> {
 
     // Update in-memory singleton
     {
-        let mut registry = REGISTRY
-            .write()
-            .map_err(|e| format!("Registry lock poisoned: {e}"))?;
+        let mut registry = REGISTRY.write();
         *registry = new_registry.clone();
     }
 
@@ -549,9 +540,8 @@ pub async fn get_model_registry() -> Result<serde_json::Value> {
 pub async fn refresh_model_registry() -> Result<serde_json::Value> {
     // Force refresh by temporarily setting fetched_at to 0
     {
-        if let Ok(mut registry) = REGISTRY.write() {
-            registry.fetched_at = 0;
-        }
+        let mut registry = REGISTRY.write();
+        registry.fetched_at = 0;
     }
 
     refresh_registry().await?;
@@ -589,7 +579,7 @@ mod tests {
     fn test_fuzzy_model_lookup() {
         // Initialize registry with bundled data
         {
-            let mut registry = REGISTRY.write().unwrap();
+            let mut registry = REGISTRY.write();
             *registry = bundled_registry();
         }
 
@@ -610,7 +600,7 @@ mod tests {
     fn test_estimate_cost_matches_expectations() {
         // Initialize
         {
-            let mut registry = REGISTRY.write().unwrap();
+            let mut registry = REGISTRY.write();
             *registry = bundled_registry();
         }
 
@@ -631,7 +621,7 @@ mod tests {
     #[test]
     fn test_unknown_model_returns_none() {
         {
-            let mut registry = REGISTRY.write().unwrap();
+            let mut registry = REGISTRY.write();
             *registry = bundled_registry();
         }
 
@@ -654,7 +644,7 @@ mod tests {
     #[test]
     fn test_get_provider_models() {
         {
-            let mut registry = REGISTRY.write().unwrap();
+            let mut registry = REGISTRY.write();
             *registry = bundled_registry();
         }
 
