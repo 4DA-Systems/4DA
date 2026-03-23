@@ -83,4 +83,20 @@ matched_window_id: bigint | null,
 /**
  * Skill gap boost from sovereign profile intelligence (0.0-0.20)
  */
-skill_gap_boost: number, };
+skill_gap_boost: number, 
+/**
+ * Necessity score: "what you'd regret missing" (0.0-1.0)
+ */
+necessity_score: number, 
+/**
+ * One-line explanation of why this item is necessary
+ */
+necessity_reason: string | null, 
+/**
+ * Necessity category (security_vulnerability, breaking_change, etc.)
+ */
+necessity_category: string | null, 
+/**
+ * Necessity urgency (immediate, this_week, awareness, none)
+ */
+necessity_urgency: string | null, };
