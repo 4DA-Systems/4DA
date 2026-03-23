@@ -26,6 +26,7 @@ interface UnifiedAppBarProps {
   onAnalyze: () => void;
   onOpenSettings: () => void;
   analysisPulse: boolean;
+  embeddingStatus?: 'active' | 'degraded' | 'unavailable';
 }
 
 // ============================================================================
@@ -43,6 +44,7 @@ export const UnifiedAppBar = memo(function UnifiedAppBar({
   onAnalyze,
   onOpenSettings,
   analysisPulse,
+  embeddingStatus,
 }: UnifiedAppBarProps) {
   const { t } = useTranslation();
   const [searchQuery, setSearchQuery] = useState('');
@@ -180,6 +182,25 @@ export const UnifiedAppBar = memo(function UnifiedAppBar({
             </button>
           )}
 
+          {/* Persistent keyword-only mode indicator */}
+          {embeddingStatus === 'unavailable' && (
+            <button
+              onClick={onOpenSettings}
+              className="text-[10px] px-2 py-0.5 bg-amber-500/20 text-amber-400 rounded hover:bg-amber-500/30 transition-colors"
+              title={t('status.keywordOnlyTooltip', 'Semantic scoring unavailable. Configure an AI provider in Settings for better results.')}
+            >
+              {t('status.keywordOnly', 'Keyword mode')}
+            </button>
+          )}
+          {embeddingStatus === 'degraded' && (
+            <button
+              onClick={onOpenSettings}
+              className="text-[10px] px-2 py-0.5 bg-amber-500/10 text-amber-300 rounded hover:bg-amber-500/20 transition-colors"
+              title={t('status.degradedTooltip', 'Embeddings using fallback. Results may be less accurate.')}
+            >
+              {t('status.degraded', 'Limited')}
+            </button>
+          )}
           <OllamaStatus provider={settingsFormProvider} />
           <Suspense fallback={null}><ProValueBadge /></Suspense>
 
