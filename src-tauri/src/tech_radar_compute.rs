@@ -288,7 +288,7 @@ fn overlay_decisions(conn: &Connection, entries: &mut HashMap<String, EntryBuild
                 let alt_lower = alt.to_lowercase();
                 let eb = entries
                     .entry(alt_lower.clone())
-                    .or_insert_with(|| EntryBuilder::new(RadarRing::Hold, 0.2));
+                    .or_insert_with(|| EntryBuilder::new(RadarRing::Hold, 0.7));
                 eb.ring = RadarRing::Hold;
                 eb.quadrant = classify_quadrant(&alt_lower);
                 eb.decision_ref = Some(id);
