@@ -6,6 +6,7 @@ import { useAppStore } from '../store';
 import { useLicense } from '../hooks';
 import { trackEvent } from '../hooks/use-telemetry';
 import { useGameComponent } from '../hooks/use-game-component';
+import { reportError } from '../lib/error-reporter';
 import { StackHealthBar, type StackHealth } from './search/StackHealthBar';
 import { SynthesisPanel, type SynthesisResponse } from './search/SynthesisPanel';
 import { GhostPreview, type GhostPreviewData } from './search/GhostPreview';
@@ -84,7 +85,7 @@ export function NaturalLanguageSearch({ onStatusChange, defaultExpanded = true }
     cmd('get_stack_health')
       .then(r => r as unknown as StackHealth)
       .then(setStackHealth)
-      .catch((err: unknown) => console.error('Stack health load failed:', err));
+      .catch((err: unknown) => reportError('NaturalLanguageSearch.stackHealth', err));
   }, []);
 
   const fetchSynthesis = useCallback(async (queryText: string) => {
@@ -106,7 +107,7 @@ export function NaturalLanguageSearch({ onStatusChange, defaultExpanded = true }
       setSynthesis(resp);
       setStreamingText('');
     } catch (err) {
-      console.error('Synthesis failed:', err);
+      reportError('NaturalLanguageSearch.synthesis', err);
       setSynthesis(null);
     } finally {
       unlisten();
@@ -138,7 +139,7 @@ export function NaturalLanguageSearch({ onStatusChange, defaultExpanded = true }
       }
     } catch (err) {
       const msg = String(err);
-      console.error('Search failed:', err);
+      reportError('NaturalLanguageSearch.search', err);
       setError(msg.includes('No context') ? t('search.indexFirst') : msg);
       onStatusChange?.(`Search error: ${err}`);
     } finally {
@@ -156,7 +157,7 @@ export function NaturalLanguageSearch({ onStatusChange, defaultExpanded = true }
       await cmd('create_standing_query', { queryText: query });
       setWatchCreated(true);
       setTimeout(() => setWatchCreated(false), 2000);
-    } catch (err) { console.error('Watch creation failed:', err); }
+    } catch (err) { reportError('NaturalLanguageSearch.watchCreation', err); }
   };
   const relevantStack = result?.stack_context?.filter((s) => s.relevant) ?? [];
 

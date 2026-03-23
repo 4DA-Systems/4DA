@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { cmd } from '../lib/commands';
+import { reportError } from '../lib/error-reporter';
 import { translateError } from '../utils/error-messages';
 
 interface SourceConfigPanelProps {
@@ -38,7 +39,7 @@ export function SourceConfigPanel({ onStatusChange }: SourceConfigPanelProps) {
       setHasXApiKey(xKeyExists);
       setGithubLanguages(github.languages);
     } catch (error) {
-      console.error('Failed to load source config:', error);
+      reportError('SourceConfigPanel.load', error);
     }
   }, []);
 

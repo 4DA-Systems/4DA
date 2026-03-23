@@ -1,6 +1,7 @@
 import { useState, useEffect, memo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { cmd } from '../lib/commands';
+import { reportError } from '../lib/error-reporter';
 import { ProGate } from './ProGate';
 import type { SignalChainWithPrediction, ChainPhase } from '../types';
 
@@ -65,7 +66,7 @@ export const SignalChainsPanel = memo(function SignalChainsPanel() {
       await cmd('resolve_signal_chain', { chainId, resolution: 'resolved' });
       setChains(prev => prev.filter(c => c.id !== chainId));
     } catch (e) {
-      console.error('Failed to resolve chain:', e);
+      reportError('SignalChains.resolve', e);
     }
   };
 
