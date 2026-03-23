@@ -160,16 +160,21 @@ const FeedItem = memo(function FeedItem({
 
       {/* Signal indicator */}
       {item.signal_type && (
-        <span className={`flex-shrink-0 w-1.5 h-1.5 rounded-full ${
-          item.signal_priority === 'critical' ? 'bg-red-400' :
-          item.signal_priority === 'high' ? 'bg-amber-400' :
-          'bg-cyan-400'
-        }`} title={item.signal_type} />
+        <span
+          className={`flex-shrink-0 w-1.5 h-1.5 rounded-full ${
+            item.signal_priority === 'critical' ? 'bg-red-400' :
+            item.signal_priority === 'high' ? 'bg-amber-400' :
+            'bg-cyan-400'
+          }`}
+          role="img"
+          aria-label={item.signal_type || 'Normal'}
+          title={item.signal_type}
+        />
       )}
 
       {/* Hover actions */}
       {!feedback && (
-        <div className="flex-shrink-0 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+        <div className="flex-shrink-0 flex items-center gap-1 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
           <button
             onClick={(e) => { e.stopPropagation(); onSave(item); }}
             className="px-1.5 py-0.5 text-[10px] text-green-400 hover:bg-green-500/10 rounded transition-colors"

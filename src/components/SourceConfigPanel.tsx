@@ -170,6 +170,7 @@ export function SourceConfigPanel({ onStatusChange }: SourceConfigPanelProps) {
     <div className="bg-bg-tertiary rounded-lg p-5 border border-border">
       <button
         onClick={() => setExpanded(!expanded)}
+        aria-expanded={expanded}
         className="w-full flex items-center gap-3"
       >
         <div className="w-8 h-8 bg-cyan-500/20 rounded-lg flex items-center justify-center flex-shrink-0">
@@ -222,7 +223,8 @@ export function SourceConfigPanel({ onStatusChange }: SourceConfigPanelProps) {
                     </span>
                     <button
                       onClick={() => removeRssFeed(feed)}
-                      className="text-text-muted hover:text-red-400 ml-2 opacity-0 group-hover:opacity-100 transition-opacity text-xs"
+                      aria-label={t('sources.rss.removeFeed', 'Remove feed')}
+                      className="text-text-muted hover:text-red-400 ml-2 opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity text-xs"
                     >
                       x
                     </button>
@@ -266,6 +268,7 @@ export function SourceConfigPanel({ onStatusChange }: SourceConfigPanelProps) {
                     {ch.length > 20 ? ch.slice(0, 8) + '...' + ch.slice(-8) : ch}
                     <button
                       onClick={() => removeYoutubeChannel(ch)}
+                      aria-label={t('sources.youtube.removeChannel', 'Remove channel')}
                       className="text-red-400/40 hover:text-red-400 transition-colors"
                     >
                       x
@@ -311,6 +314,7 @@ export function SourceConfigPanel({ onStatusChange }: SourceConfigPanelProps) {
                   {lang}
                   <button
                     onClick={() => removeGithubLanguage(lang)}
+                    aria-label={t('sources.github.removeLanguage', 'Remove language')}
                     className="text-purple-400/40 hover:text-red-400 transition-colors"
                   >
                     x
@@ -356,6 +360,7 @@ export function SourceConfigPanel({ onStatusChange }: SourceConfigPanelProps) {
                     @{h}
                     <button
                       onClick={() => removeTwitterHandle(h)}
+                      aria-label={t('sources.twitter.removeHandle', 'Remove handle')}
                       className="text-blue-400/40 hover:text-red-400 transition-colors"
                     >
                       x

@@ -74,6 +74,7 @@ export const TemporalSlider = memo(function TemporalSlider({ onSnapshotChange }:
         value={selectedIndex < 0 ? max : selectedIndex}
         onChange={handleChange}
         disabled={!hasSnapshots}
+        aria-label={t('techRadar.timeline')}
         className="flex-1 h-1 appearance-none bg-[#2A2A2A] rounded-full cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed accent-[#D4AF37]"
         style={{ colorScheme: 'dark' }}
       />

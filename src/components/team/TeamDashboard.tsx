@@ -99,8 +99,10 @@ export function TeamDashboard() {
             {TABS.map(tab => (
               <button
                 key={tab.key}
+                id={`team-tab-${tab.key}`}
                 role="tab"
                 aria-selected={activeTab === tab.key}
+                aria-controls={`team-tabpanel-${tab.key}`}
                 onClick={() => setActiveTab(tab.key)}
                 className={`flex-1 px-3 py-2 text-[10px] font-medium transition-all ${
                   activeTab === tab.key
@@ -114,7 +116,7 @@ export function TeamDashboard() {
           </div>
 
           {/* Tab Content */}
-          <div className="p-3 max-h-80 overflow-y-auto">
+          <div id={`team-tabpanel-${activeTab}`} role="tabpanel" aria-labelledby={`team-tab-${activeTab}`} className="p-3 max-h-80 overflow-y-auto">
             {teamLoading ? (
               <div className="flex items-center justify-center py-6">
                 <span className="text-xs text-text-muted">{t('action.loading', 'Loading...')}</span>

@@ -24,10 +24,9 @@ export function GuidedHighlights() {
   const [activeTooltip, setActiveTooltip] = useState<string | null>(null);
   const [unmounted, setUnmounted] = useState(false);
 
-  // Check if already shown
-  const alreadyShown = (() => {
+  const [alreadyShown] = useState(() => {
     try { return localStorage.getItem(STORAGE_KEY) === 'true'; } catch { return false; }
-  })();
+  });
 
   const markComplete = useCallback(() => {
     try { localStorage.setItem(STORAGE_KEY, 'true'); } catch { /* noop */ }

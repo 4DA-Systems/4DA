@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { cmd } from '../lib/commands';
 import { listen } from '@tauri-apps/api/event';
@@ -67,6 +67,7 @@ export function NaturalLanguageSearch({ onStatusChange, defaultExpanded = true }
   const analysisComplete = useAppStore((s) => s.appState.analysisComplete);
   const lastAnalyzedAt = useAppStore((s) => s.appState.lastAnalyzedAt);
   const hasAnalysisRun = analysisComplete || lastAnalyzedAt !== null;
+  const synthesisUnlistenRef = useRef<(() => void) | null>(null);
 
   const { containerRef: ambientRef, elementRef: ambientElement } = useGameComponent('game-briefing-atmosphere');
 
@@ -90,22 +91,36 @@ export function NaturalLanguageSearch({ onStatusChange, defaultExpanded = true }
     setSynthesisLoading(true);
     setStreamingText('');
 
-    // Listen for streaming tokens from the backend
+    if (synthesisUnlistenRef.current) {
+      synthesisUnlistenRef.current();
+      synthesisUnlistenRef.current = null;
+    }
+
     const unlisten = await listen<string>('synthesis-token', (event) => {
       setStreamingText(prev => prev + event.payload);
     });
+    synthesisUnlistenRef.current = unlisten;
 
     try {
       const resp = await cmd('synthesize_search', { queryText }) as unknown as SynthesisResponse;
       setSynthesis(resp);
-      setStreamingText(''); // Clear streaming text once we have full response
+      setStreamingText('');
     } catch (err) {
       console.error('Synthesis failed:', err);
       setSynthesis(null);
     } finally {
       unlisten();
+      synthesisUnlistenRef.current = null;
       setSynthesisLoading(false);
     }
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (synthesisUnlistenRef.current) {
+        synthesisUnlistenRef.current();
+      }
+    };
   }, []);
 
   const handleSearch = async () => {

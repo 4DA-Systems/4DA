@@ -212,19 +212,25 @@ export function AboutPanel() {
           {t('about.tagline')}
         </p>
         <div className="flex items-center justify-center gap-3 mt-2">
-          <button
-            onClick={() => import('@tauri-apps/plugin-opener').then(({ openUrl }) => openUrl('https://4da.ai/privacy'))}
+          <a
+            href="https://4da.ai/privacy"
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={(e) => { e.preventDefault(); import('@tauri-apps/plugin-opener').then(({ openUrl }) => openUrl('https://4da.ai/privacy')); }}
             className="text-[10px] text-text-muted hover:text-text-secondary transition-colors underline underline-offset-2"
           >
             {t('about.privacyPolicy')}
-          </button>
+          </a>
           <span className="text-text-muted text-[10px]">&middot;</span>
-          <button
-            onClick={() => import('@tauri-apps/plugin-opener').then(({ openUrl }) => openUrl('https://4da.ai/terms'))}
+          <a
+            href="https://4da.ai/terms"
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={(e) => { e.preventDefault(); import('@tauri-apps/plugin-opener').then(({ openUrl }) => openUrl('https://4da.ai/terms')); }}
             className="text-[10px] text-text-muted hover:text-text-secondary transition-colors underline underline-offset-2"
           >
             {t('about.termsOfService')}
-          </button>
+          </a>
         </div>
       </div>
     </div>

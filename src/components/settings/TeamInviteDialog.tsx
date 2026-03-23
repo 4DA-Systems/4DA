@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../../store';
 
@@ -16,6 +16,39 @@ export function TeamInviteDialog({ onClose }: TeamInviteDialogProps) {
   const [expiresAt, setExpiresAt] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const dialogRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const previouslyFocused = document.activeElement as HTMLElement;
+    const dialog = dialogRef.current;
+    if (dialog) {
+      const firstInput = dialog.querySelector<HTMLElement>('input, button, select, textarea');
+      firstInput?.focus();
+    }
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Tab' && dialog) {
+        const focusable = dialog.querySelectorAll<HTMLElement>(
+          'input, button, select, textarea, [tabindex]:not([tabindex="-1"])'
+        );
+        const first = focusable[0];
+        const last = focusable[focusable.length - 1];
+        if (e.shiftKey && document.activeElement === first) {
+          e.preventDefault();
+          last?.focus();
+        } else if (!e.shiftKey && document.activeElement === last) {
+          e.preventDefault();
+          first?.focus();
+        }
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+      previouslyFocused?.focus();
+    };
+  }, []);
 
   const handleCreate = async () => {
     setLoading(true);
@@ -53,7 +86,7 @@ export function TeamInviteDialog({ onClose }: TeamInviteDialogProps) {
       onClick={e => { if (e.target === e.currentTarget) onClose(); }}
       onKeyDown={e => { if (e.key === 'Escape') onClose(); }}
     >
-      <div className="bg-bg-secondary border border-border rounded-xl w-full max-w-md shadow-2xl">
+      <div ref={dialogRef} className="bg-bg-secondary border border-border rounded-xl w-full max-w-md shadow-2xl">
         {/* Header */}
         <div className="px-5 py-4 border-b border-border flex items-center justify-between">
           <h3 id="invite-dialog-title" className="text-sm font-medium text-white">
@@ -76,9 +109,10 @@ export function TeamInviteDialog({ onClose }: TeamInviteDialogProps) {
                 <label className="text-xs text-text-muted block mb-2">
                   {t('settings.team.inviteRole', 'Role')}
                 </label>
-                <div className="flex gap-2">
+                <div className="flex gap-2" role="group" aria-label="Role selection">
                   <button
                     onClick={() => setRole('member')}
+                    aria-pressed={role === 'member'}
                     className={`flex-1 px-3 py-2 text-xs rounded-lg border transition-all ${
                       role === 'member'
                         ? 'border-[#22C55E]/50 bg-[#22C55E]/10 text-[#22C55E]'
@@ -89,6 +123,7 @@ export function TeamInviteDialog({ onClose }: TeamInviteDialogProps) {
                   </button>
                   <button
                     onClick={() => setRole('admin')}
+                    aria-pressed={role === 'admin'}
                     className={`flex-1 px-3 py-2 text-xs rounded-lg border transition-all ${
                       role === 'admin'
                         ? 'border-[#22C55E]/50 bg-[#22C55E]/10 text-[#22C55E]'

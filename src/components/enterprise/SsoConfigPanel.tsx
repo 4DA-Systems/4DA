@@ -178,8 +178,9 @@ export function SsoConfigPanel() {
         <div className="space-y-3">
           {/* Provider Type */}
           <div>
-            <label className="text-[10px] text-text-muted block mb-1">Provider Type</label>
+            <label htmlFor="sso-provider-type" className="text-[10px] text-text-muted block mb-1">Provider Type</label>
             <select
+              id="sso-provider-type"
               value={form.provider_type}
               onChange={e => setForm(f => ({ ...f, provider_type: e.target.value }))}
               className="w-full px-2 py-1.5 text-xs bg-bg-primary border border-border rounded text-white focus:outline-none focus:border-[#22C55E]/50"
@@ -191,8 +192,9 @@ export function SsoConfigPanel() {
 
           {/* IdP URL */}
           <div>
-            <label className="text-[10px] text-text-muted block mb-1">Identity Provider URL</label>
+            <label htmlFor="sso-idp-url" className="text-[10px] text-text-muted block mb-1">Identity Provider URL</label>
             <input
+              id="sso-idp-url"
               type="url"
               value={form.idp_url}
               onChange={e => setForm(f => ({ ...f, idp_url: e.target.value }))}
@@ -203,8 +205,9 @@ export function SsoConfigPanel() {
 
           {/* Entity ID */}
           <div>
-            <label className="text-[10px] text-text-muted block mb-1">Entity ID / Audience</label>
+            <label htmlFor="sso-entity-id" className="text-[10px] text-text-muted block mb-1">Entity ID / Audience</label>
             <input
+              id="sso-entity-id"
               type="text"
               value={form.entity_id}
               onChange={e => setForm(f => ({ ...f, entity_id: e.target.value }))}
@@ -216,8 +219,9 @@ export function SsoConfigPanel() {
           {/* SAML Certificate */}
           {form.provider_type === 'saml' && (
             <div>
-              <label className="text-[10px] text-text-muted block mb-1">IdP Certificate (PEM)</label>
+              <label htmlFor="sso-certificate" className="text-[10px] text-text-muted block mb-1">IdP Certificate (PEM)</label>
               <textarea
+                id="sso-certificate"
                 value={form.certificate}
                 onChange={e => setForm(f => ({ ...f, certificate: e.target.value }))}
                 rows={4}
@@ -231,8 +235,9 @@ export function SsoConfigPanel() {
           {form.provider_type === 'oidc' && (
             <>
               <div>
-                <label className="text-[10px] text-text-muted block mb-1">Client ID</label>
+                <label htmlFor="sso-client-id" className="text-[10px] text-text-muted block mb-1">Client ID</label>
                 <input
+                  id="sso-client-id"
                   type="text"
                   value={form.client_id}
                   onChange={e => setForm(f => ({ ...f, client_id: e.target.value }))}
@@ -240,8 +245,9 @@ export function SsoConfigPanel() {
                 />
               </div>
               <div>
-                <label className="text-[10px] text-text-muted block mb-1">Issuer URL</label>
+                <label htmlFor="sso-issuer" className="text-[10px] text-text-muted block mb-1">Issuer URL</label>
                 <input
+                  id="sso-issuer"
                   type="url"
                   value={form.issuer}
                   onChange={e => setForm(f => ({ ...f, issuer: e.target.value }))}

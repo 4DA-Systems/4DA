@@ -136,7 +136,7 @@ export const SettingsModal = memo(function SettingsModal({ onClose }: SettingsMo
     };
     modal.addEventListener('keydown', handleKeyDown);
     return () => { modal.removeEventListener('keydown', handleKeyDown); previouslyFocused?.focus(); };
-  }, [activeTab, onClose]);
+  }, [onClose]);
 
   // Monitoring action wrappers
   const handleToggleMonitoring = async () => {
@@ -170,7 +170,7 @@ export const SettingsModal = memo(function SettingsModal({ onClose }: SettingsMo
           </div>
           <div className="px-6 flex gap-1 border-b border-border" role="tablist" aria-label="Settings navigation">
             {TAB_IDS.map(tabId => (
-              <button key={tabId} role="tab" aria-selected={activeTab === tabId} aria-controls={`tabpanel-${tabId}`} onClick={() => handleTabChange(tabId)}
+              <button key={tabId} id={`tab-${tabId}`} role="tab" aria-selected={activeTab === tabId} aria-controls={`tabpanel-${tabId}`} onClick={() => handleTabChange(tabId)}
                 className={`px-4 py-3 text-sm transition-all relative ${activeTab === tabId ? 'text-orange-400 font-medium' : 'text-text-muted hover:text-text-secondary'}`}>
                 {t(`settings.tabs.${tabId}`)}
                 {activeTab === tabId && <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-orange-500" />}
@@ -189,6 +189,7 @@ export const SettingsModal = memo(function SettingsModal({ onClose }: SettingsMo
         {/* Tab Content */}
         <div className="p-6 space-y-6">
           {activeTab === 'general' && (
+            <div id={`tabpanel-${activeTab}`} role="tabpanel" aria-labelledby={`tab-${activeTab}`}>
             <SettingsGeneralTab
               monitoring={monitoring}
               monitoringInterval={monitoringInterval}
@@ -200,9 +201,11 @@ export const SettingsModal = memo(function SettingsModal({ onClose }: SettingsMo
               onTestNotification={handleTestNotification}
               setSettingsStatus={setSettingsStatus}
             />
+            </div>
           )}
 
           {activeTab === 'intelligence' && (
+            <div id={`tabpanel-${activeTab}`} role="tabpanel" aria-labelledby={`tab-${activeTab}`}>
             <SettingsIntelligenceTab
               settings={settings}
               settingsForm={settingsForm}
@@ -216,10 +219,11 @@ export const SettingsModal = memo(function SettingsModal({ onClose }: SettingsMo
               saveSettings={saveSettings}
               testConnection={testConnection}
             />
+            </div>
           )}
 
           {activeTab === 'sources' && (
-            <div id="tabpanel-sources" role="tabpanel">
+            <div id="tabpanel-sources" role="tabpanel" aria-labelledby="tab-sources">
               <PanelErrorBoundary name="Source Configuration">
                 <SourceConfigPanel onStatusChange={setSettingsStatus} />
               </PanelErrorBoundary>
@@ -227,7 +231,7 @@ export const SettingsModal = memo(function SettingsModal({ onClose }: SettingsMo
           )}
 
           {activeTab === 'projects' && (
-            <div id="tabpanel-projects" role="tabpanel">
+            <div id="tabpanel-projects" role="tabpanel" aria-labelledby="tab-projects">
               <div className="space-y-6">
                 <PanelErrorBoundary name="Context Discovery">
                   <ContextDiscoverySection scanDirectories={scanDirectories} newScanDir={newScanDir} setNewScanDir={setNewScanDir}
@@ -241,11 +245,13 @@ export const SettingsModal = memo(function SettingsModal({ onClose }: SettingsMo
           )}
 
           {activeTab === 'team' && isTeamOrEnterprise && (
+            <div id={`tabpanel-${activeTab}`} role="tabpanel" aria-labelledby={`tab-${activeTab}`}>
             <SettingsTeamTab tier={tier} isTeamOrEnterprise={isTeamOrEnterprise} setSettingsStatus={setSettingsStatus} />
+            </div>
           )}
 
           {activeTab === 'about' && (
-            <div id="tabpanel-about" role="tabpanel">
+            <div id="tabpanel-about" role="tabpanel" aria-labelledby="tab-about">
               <PanelErrorBoundary name="About"><AboutPanel /></PanelErrorBoundary>
             </div>
           )}

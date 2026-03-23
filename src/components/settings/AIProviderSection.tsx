@@ -194,8 +194,9 @@ export function AIProviderSection({
           )}
 
           <div>
-            <label className="text-xs text-text-muted block mb-2">{t('settings.ai.provider')}</label>
+            <label htmlFor="ai-provider-select" className="text-xs text-text-muted block mb-2">{t('settings.ai.provider')}</label>
             <select
+              id="ai-provider-select"
               value={settingsForm.provider}
               onChange={(e) => {
                 const newProvider = e.target.value;
@@ -240,8 +241,9 @@ export function AIProviderSection({
 
           {settingsForm.provider !== 'ollama' && settingsForm.provider !== 'local' && (
             <div>
-              <label className="text-xs text-text-muted block mb-2">{t('settings.ai.apiKey')}</label>
+              <label htmlFor="ai-api-key" className="text-xs text-text-muted block mb-2">{t('settings.ai.apiKey')}</label>
               <input
+                id="ai-api-key"
                 type="password"
                 value={settingsForm.apiKey}
                 onChange={(e) => {
@@ -277,8 +279,9 @@ export function AIProviderSection({
 
           {settingsForm.provider !== 'local' && settingsForm.provider !== 'openai-compatible' && (
             <div>
-              <label className="text-xs text-text-muted block mb-2">{t('settings.ai.model')}</label>
+              <label htmlFor="ai-model-select" className="text-xs text-text-muted block mb-2">{t('settings.ai.model')}</label>
               <select
+                id="ai-model-select"
                 value={settingsForm.model}
                 onChange={(e) => setSettingsForm((f) => ({ ...f, model: e.target.value }))}
                 className="w-full px-4 py-3 bg-bg-secondary border border-border rounded-lg text-sm text-white focus:border-orange-500 focus:outline-none"
@@ -326,8 +329,9 @@ export function AIProviderSection({
 
           {settingsForm.provider === 'openai-compatible' && (
             <div>
-              <label className="text-xs text-text-muted block mb-2">{t('settings.ai.modelName')}</label>
+              <label htmlFor="ai-model-name" className="text-xs text-text-muted block mb-2">{t('settings.ai.modelName')}</label>
               <input
+                id="ai-model-name"
                 type="text"
                 value={settingsForm.model}
                 onChange={(e) => setSettingsForm((f) => ({ ...f, model: e.target.value }))}
@@ -339,8 +343,9 @@ export function AIProviderSection({
 
           {settingsForm.provider === 'ollama' && (
             <div>
-              <label className="text-xs text-text-muted block mb-2">{t('settings.ai.baseUrl')}</label>
+              <label htmlFor="ai-base-url" className="text-xs text-text-muted block mb-2">{t('settings.ai.baseUrl')}</label>
               <input
+                id="ai-base-url"
                 type="text"
                 value={settingsForm.baseUrl}
                 onChange={(e) => setSettingsForm((f) => ({ ...f, baseUrl: e.target.value }))}
@@ -352,8 +357,9 @@ export function AIProviderSection({
 
           {settingsForm.provider === 'openai-compatible' && (
             <div>
-              <label className="text-xs text-text-muted block mb-2">{t('settings.ai.baseUrl')}</label>
+              <label htmlFor="ai-base-url" className="text-xs text-text-muted block mb-2">{t('settings.ai.baseUrl')}</label>
               <input
+                id="ai-base-url"
                 type="text"
                 value={settingsForm.baseUrl}
                 onChange={(e) => setSettingsForm((f) => ({ ...f, baseUrl: e.target.value }))}

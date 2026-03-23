@@ -3,7 +3,7 @@
 
 import './i18n';
 
-import { useState, useEffect, useCallback, useMemo, lazy, Suspense } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef, lazy, Suspense } from 'react';
 import { listen } from '@tauri-apps/api/event';
 import { useTranslation } from 'react-i18next';
 import './App.css';
@@ -61,6 +61,7 @@ function App() {
   const [showFramework, setShowFramework] = useState(false);
   const [showComparison, setShowComparison] = useState(false);
   const [newItemIds, setNewItemIds] = useState<Set<number>>(new Set());
+  const newItemTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [analysisPulse, setAnalysisPulse] = useState(false);
   // Data selectors (may change, use useShallow)
   const { activeView, showOnlyRelevant, filteredResults } = useAppStore(
@@ -84,10 +85,14 @@ function App() {
   const setEmbeddingStatus = useAppStore(s => s.setEmbeddingStatus);
 
   // First-run state
-  const isFirstRun = useAppStore(s => s.isFirstRun);
-  const firstRunDismissed = useAppStore(s => s.firstRunDismissed);
-  const setIsFirstRun = useAppStore(s => s.setIsFirstRun);
-  const setFirstRunDismissed = useAppStore(s => s.setFirstRunDismissed);
+  const { isFirstRun, firstRunDismissed, setIsFirstRun, setFirstRunDismissed } = useAppStore(
+    useShallow((s) => ({
+      isFirstRun: s.isFirstRun,
+      firstRunDismissed: s.firstRunDismissed,
+      setIsFirstRun: s.setIsFirstRun,
+      setFirstRunDismissed: s.setFirstRunDismissed,
+    })),
+  );
 
   const feedbackCount = useAppStore(s => Object.keys(s.feedbackGiven).length);
   const { tier, isPro } = useLicense();
@@ -120,8 +125,10 @@ function App() {
       for (const id of itemIds) next.add(id);
       return next;
     });
+    // Clear any existing timer before setting a new one
+    if (newItemTimerRef.current) clearTimeout(newItemTimerRef.current);
     // Auto-clear "New" badges after 60 seconds
-    setTimeout(() => setNewItemIds(new Set()), 60000);
+    newItemTimerRef.current = setTimeout(() => setNewItemIds(new Set()), 60000);
   }, []);
 
   const {
