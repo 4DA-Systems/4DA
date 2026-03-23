@@ -58,7 +58,7 @@ pub(crate) fn gather_channel_sources(
             .count();
 
         if matched > 0 {
-            let base_score = matched as f64 / channel_topics.len() as f64;
+            let base_score = matched as f64 / channel_topics.len().max(1) as f64;
             // Apply affinity boost from learned topic preferences
             let affinity_mult = compute_affinity_multiplier(&item_topics_lower, &ace_ctx);
             let score = (base_score * affinity_mult as f64).min(1.0);
@@ -108,7 +108,7 @@ pub(crate) fn preview_channel_sources(
             .count();
 
         if hit_count > 0 {
-            let score = hit_count as f64 / topics_lower.len() as f64;
+            let score = hit_count as f64 / topics_lower.len().max(1) as f64;
             matched_titles.push((item.title.clone(), score));
         }
     }

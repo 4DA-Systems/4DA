@@ -54,6 +54,7 @@ export const useResultFilters = () => {
   const showSavedOnly = useAppStore(s => s.showSavedOnly);
   const searchQuery = useAppStore(s => s.searchQuery);
   const toggleSourceFilter = useAppStore(s => s.toggleSourceFilter);
+  const resetSourceFilters = useAppStore(s => s.resetSourceFilters);
   const setSortBy = useAppStore(s => s.setSortBy);
   const setShowOnlyRelevant = useAppStore(s => s.setShowOnlyRelevant);
   const setShowSavedOnly = useAppStore(s => s.setShowSavedOnly);
@@ -167,6 +168,7 @@ export const useResultFilters = () => {
     searchQuery,
     setSearchQuery,
     toggleSourceFilter,
+    resetSourceFilters,
     filteredResults,
     dismissAllBelow,
     saveAllAbove,

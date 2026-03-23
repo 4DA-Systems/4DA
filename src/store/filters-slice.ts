@@ -21,6 +21,8 @@ export const createFiltersSlice: StateCreator<AppStore, [], [], FiltersSlice> = 
     });
   },
 
+  resetSourceFilters: () => set({ sourceFilters: new Set(ALL_SOURCE_IDS) }),
+
   setSortBy: (sort) => set({ sortBy: sort }),
   setShowOnlyRelevant: (show) => set({ showOnlyRelevant: show }),
   setSearchQuery: (q) => set({ searchQuery: q }),
