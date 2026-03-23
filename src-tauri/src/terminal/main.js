@@ -239,45 +239,122 @@ function recordSearch(query){
   localStorage.setItem('4da_search_memory',JSON.stringify(searchMemory));
 }
 
-/* ── Proactive Intelligence ── */
-function proactiveInsights(){
+/* ── Intelligence Brief ── */
+function intelligenceBrief(){
+  // Fetch signals, gaps, decisions, radar, and diff data in parallel
   Promise.all([
     api('/api/signals').catch(function(){return{signals:[]}}),
     api('/api/gaps').catch(function(){return{gaps:[]}}),
-    api('/api/decisions').catch(function(){return{windows:[]}})
+    api('/api/decisions').catch(function(){return{windows:[]}}),
+    api('/api/radar').catch(function(){return{entries:[]}}),
+    api('/api/status').catch(function(){return{}})
   ]).then(function(res){
-    var sigs=res[0],gaps=res[1],decs=res[2];
-    var insights=[];
-    var critical=(sigs.signals||[]).filter(function(s){
-      return s.signal_priority==='critical'||s.signal_priority==='high';
-    });
+    var sigs=res[0], gaps=res[1], decs=res[2], radar=res[3], status=res[4];
+    var signals=sigs.signals||[];
+    var gapList=gaps.gaps||[];
+    var windows=decs.windows||[];
+    var entries=radar.entries||[];
+
+    // Cache signals for 'open' command
+    cachedSignals=signals;
+
+    // ── Header ──
+    var now=new Date();
+    var dateStr=now.toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric',year:'numeric'});
+    var timeStr=now.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',hour12:false});
+    w('');
+    wh('<span class="d">' + esc(dateStr) + ' \u00B7 ' + timeStr + '</span>');
+    w('');
+
+    // ── Count what matters ──
+    var critical=signals.filter(function(s){return s.signal_priority==='critical'});
+    var high=signals.filter(function(s){return s.signal_priority==='high'});
+    var important=critical.concat(high);
+    var topSignals=important.length>0 ? important.slice(0,5) : signals.slice(0,5);
+    var briefCount=topSignals.length;
+
+    if(briefCount===0){
+      wh('<span class="m">No signals yet. Run an analysis in the desktop app.</span>');
+      w('');
+      wh('<span class="d">Type </span><span class="g">help</span><span class="d"> for commands</span>');
+      return;
+    }
+
+    // ── Brief header ──
     if(critical.length>0){
-      insights.push({icon:'\u26A1',text:critical.length+' high-priority signal'+(critical.length>1?'s':'')+' \u2014 type signals --priority high',cls:'r'});
+      wh('<span class="r">' + critical.length + ' critical</span><span class="d"> \u00B7 </span><span class="g">' + signals.length + ' signals</span><span class="d"> \u00B7 </span><span class="m">' + (status.total_scanned||0) + ' scanned</span>');
+    } else {
+      wh('<span class="g">' + signals.length + ' signals</span><span class="d"> that matter to your code today</span>');
     }
-    var criticalGaps=(gaps.gaps||[]).filter(function(g){
-      return g.severity==='critical'||g.severity==='high';
+    w('');
+
+    // ── Signal cards (top 5) ──
+    topSignals.forEach(function(s, i){
+      var icon = s.signal_priority==='critical' ? '\u26A1' : s.signal_priority==='high' ? '\u25C6' : '\u25C7';
+      var scr = Math.round((s.score_raw||0)*100);
+      var titleText = s.title.length > 70 ? s.title.substring(0, 67) + '...' : s.title;
+      var title = s.url ? link(s.url, titleText) : esc(titleText);
+
+      // Signal line with icon and score
+      wh(icon + ' ' + title);
+
+      // Context line — WHY this matters to you
+      var context = [];
+      if(s.explanation) context.push(s.explanation);
+      if(s.signal_action) context.push(s.signal_action);
+      var contextStr = context.length > 0 ? context[0] : s.source + ' \u00B7 ' + scr + '%';
+      // Truncate context
+      if(contextStr.length > 80) contextStr = contextStr.substring(0, 77) + '...';
+      wh('  <span class="d">' + esc(contextStr) + '</span>');
+
+      // Spacing between cards (but not after last)
+      if(i < topSignals.length - 1) w('');
     });
-    if(criticalGaps.length>0){
-      insights.push({icon:'\u25C6',text:criticalGaps.length+' knowledge gap'+(criticalGaps.length>1?'s':'')+' in your stack \u2014 type gaps',cls:'g'});
+
+    // ── Stack health ──
+    w('');
+    var adoptCount = entries.filter(function(e){return e.ring==='adopt'}).length;
+    var holdCount = entries.filter(function(e){return e.ring==='hold'}).length;
+    var total = entries.length || 1;
+    var healthScore = (adoptCount/total)*60 + (1-holdCount/total)*30 + 10;
+    var grade = healthScore>=90?'A':healthScore>=80?'A-':healthScore>=70?'B+':healthScore>=60?'B':healthScore>=50?'C':'D';
+    var gradeCls = healthScore>=70?'gr':healthScore>=50?'g':'r';
+
+    var healthLine = '<span class="d">Stack Health: </span><span class="' + gradeCls + '">' + grade + '</span>';
+
+    // Gaps and decisions inline
+    var alerts = [];
+    var critGaps = gapList.filter(function(g){return g.severity==='critical'||g.severity==='high'});
+    if(critGaps.length > 0) alerts.push(critGaps.length + ' knowledge gap' + (critGaps.length>1?'s':''));
+    if(windows.length > 0) alerts.push(windows.length + ' decision window' + (windows.length>1?'s':''));
+    if(alerts.length > 0) healthLine += '<span class="d"> \u00B7 </span><span class="g">' + alerts.join(' \u00B7 ') + '</span>';
+
+    wh(healthLine);
+
+    // ── Diff from last visit ──
+    var prevSignals = JSON.parse(localStorage.getItem('4da_prev_signals')||'[]');
+    var currentIds = signals.map(function(s){return s.url||s.title});
+    if(prevSignals.length > 0){
+      var newCount = currentIds.filter(function(u){return prevSignals.indexOf(u)===-1}).length;
+      var droppedCount = prevSignals.filter(function(u){return currentIds.indexOf(u)===-1}).length;
+      if(newCount > 0 || droppedCount > 0){
+        var diffParts = [];
+        if(newCount > 0) diffParts.push('<span class="gr">+' + newCount + ' new</span>');
+        if(droppedCount > 0) diffParts.push('<span class="r">-' + droppedCount + ' dropped</span>');
+        wh('<span class="d">Since last visit: </span>' + diffParts.join('<span class="d"> \u00B7 </span>'));
+      }
     }
-    if((decs.windows||[]).length>0){
-      insights.push({icon:'\u231B',text:decs.windows.length+' decision window'+(decs.windows.length>1?'s':'')+' open \u2014 type decisions',cls:'g'});
-    }
-    var totalSigs=(sigs.signals||[]).length;
-    if(totalSigs>0&&critical.length===0){
-      insights.push({icon:'\u25C7',text:totalSigs+' signals ready \u2014 type signals',cls:'d'});
-    }
-    if(insights.length===0){
-      insights.push({icon:'\u25CF',text:'All clear. Your stack is healthy.',cls:'gr'});
-    }
-    if(insights.length>0){
-      w('');
-      wsep('TODAY');
-      insights.forEach(function(i){
-        wh('  '+i.icon+' <span class="'+i.cls+'">'+esc(i.text)+'</span>');
-      });
-      w('');
-    }
+    // Save current for next diff
+    localStorage.setItem('4da_prev_signals', JSON.stringify(currentIds));
+
+    // ── Scan stats ──
+    var rejection = status.total_scanned > 0 ? Math.round((1 - (status.total_relevant||0)/(status.total_scanned||1)) * 100) : 0;
+    wh('<span class="d">' + (status.total_scanned||0) + ' scanned \u00B7 ' + rejection + '% noise eliminated \u00B7 last scan ' + (status.last_analysis||'never') + '</span>');
+
+    // ── Separator + prompt hint ──
+    w('');
+    wh('<span class="d">\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500</span>');
+    wh('<span class="d">open 1-' + briefCount + ' to read \u00B7 signals for full list \u00B7 help for all commands</span>');
   });
 }
 
@@ -288,13 +365,10 @@ function bootSequence(){
 
   api('/api/boot').then(function(d){
     bootLines=[
-      {tag:'INIT',cls:'g',text:'Connecting to 4DA core...'},
-      {tag:'OK',cls:'gr',text:'Database: '+(d.db_items||0)+' items indexed'},
-      {tag:'OK',cls:'gr',text:'Monitoring: '+(d.sources||0)+' sources active'},
-      {tag:'OK',cls:'gr',text:'ACE: '+(d.tech_detected||0)+' technologies detected'},
-      {tag:'OK',cls:'gr',text:'PASIFA: threshold '+(d.threshold||0.35)+', rejection '+(d.rejection_pct||0)+'%'},
-      {tag:'OK',cls:'gr',text:(d.total_scanned||0)+' scanned \u00B7 '+(d.total_relevant||0)+' relevant'},
-      {tag:'LIVE',cls:'gr',text:'Signal Terminal online.',bold:true}
+      {tag:'4DA',cls:'g',text:'Signal Terminal',bold:true},
+      {tag:'OK',cls:'gr',text:(d.db_items||0)+' items \u00B7 '+(d.sources||0)+' sources \u00B7 '+(d.tech_detected||0)+' tech detected'},
+      {tag:'OK',cls:'gr',text:'threshold '+(d.threshold||0.35)+' \u00B7 rejection '+(d.rejection_pct||0)+'%'},
+      {tag:'LIVE',cls:'gr',text:(d.total_relevant||0)+' signals ready',bold:true}
     ];
     renderBootLines(bootLines);
   }).catch(function(){
@@ -326,11 +400,9 @@ function renderBootLines(lines){
   var i=0;
   function nextLine(){
     if(i>=lines.length){
-      /* Post-boot: empty line + help hint, then proactive insights */
+      /* Post-boot: show intelligence brief */
       setTimeout(function(){
-        w('');
-        wh('<span class="d">Type </span><span class="g">help</span><span class="d"> for commands \u00B7 </span><span class="d">Ctrl+Shift+P</span><span class="d"> command palette</span>');
-        proactiveInsights();
+        intelligenceBrief();
       },200);
       return;
     }
@@ -341,7 +413,7 @@ function renderBootLines(lines){
     var textStr='<span style="'+boldOpen+'">'+esc(ln.text)+'</span>';
     wh(tagStr+' '+textStr);
     i++;
-    setTimeout(nextLine,100);
+    setTimeout(nextLine,60);
   }
   nextLine();
 }
@@ -375,7 +447,6 @@ function refreshStatus(){
     document.getElementById('sb-mon').textContent=d.monitoring?'monitoring':'idle';
     document.getElementById('sb-scan').textContent=(d.total_scanned||0)+' scanned';
     document.getElementById('sb-rel').textContent=(d.total_relevant||0)+' relevant';
-    document.getElementById('sb-thr').textContent='threshold '+(d.threshold||0.35);
     /* Tab title with signal count */
     lastSignalCount=d.total_relevant||0;
     document.title=lastSignalCount>0?'('+lastSignalCount+') 4DA Terminal':'4DA Signal Terminal';
@@ -417,6 +488,11 @@ function connectStream() {
       if (evt.type === 'AnalysisComplete') {
         wh('<span class="gr">[LIVE] Analysis complete: ' + evt.relevant_count + ' relevant / ' + evt.total_count + ' total</span>');
         refreshStatus();
+        // Refresh the brief with new data
+        setTimeout(function(){
+          out.innerHTML='';
+          intelligenceBrief();
+        }, 1000);
       } else if (evt.type === 'AnalysisProgress') {
         document.getElementById('sb-mon').textContent = evt.stage + ' ' + Math.round(evt.progress * 100) + '%';
       } else if (evt.type === 'Heartbeat') {
@@ -553,7 +629,7 @@ function execSingle(raw){
     case'dna':cmdDna();break;
     case'gaps':cmdGaps();break;
     case'status':cmdStatus();break;
-    case'clear':out.innerHTML='';break;
+    case'clear':out.innerHTML='';intelligenceBrief();break;
     case'ambient':enterAmbient();break;
     case'token':showAuth();break;
     case'theme':cmdTheme(arg);break;
