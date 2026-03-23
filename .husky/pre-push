@@ -36,6 +36,13 @@ if [ -d "site" ] && [ -f "site/package.json" ]; then
     }
 fi
 
+# Compound quality check — ensures every change leaves the codebase strictly better
+echo "Running compound quality check..."
+node scripts/compound-quality-check.cjs || {
+    echo "Compound quality check failed. Fix issues before pushing."
+    exit 1
+}
+
 # Secret scan — defense-in-depth (catches secrets added via --no-verify)
 # Uses the same comprehensive patterns as pre-commit
 echo "Scanning for secrets in push range..."
