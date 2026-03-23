@@ -83,6 +83,7 @@ function App() {
   const loadChannels = useAppStore(s => s.loadChannels);
   const computeViewTier = useAppStore(s => s.computeViewTier);
   const setEmbeddingStatus = useAppStore(s => s.setEmbeddingStatus);
+  const embeddingStatus = useAppStore(s => s.embeddingStatus);
 
   // First-run state
   const { isFirstRun, firstRunDismissed, setIsFirstRun, setFirstRunDismissed } = useAppStore(
@@ -392,6 +393,7 @@ function App() {
           onAnalyze={handleAnalyze}
           onOpenSettings={() => setShowSettings(true)}
           analysisPulse={analysisPulse}
+          embeddingStatus={embeddingStatus}
         />
 
         {/* Browser Mode Notice */}
