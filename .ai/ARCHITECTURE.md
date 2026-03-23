@@ -171,6 +171,17 @@ Sources                              ▲
 - Commands defined in `commands.rs` and domain-specific `*_commands.rs` modules
 - `lib.rs` re-exports all public types and accessors via `pub use` / `pub(crate) use`
 
+### IPC Authorization Model
+
+4DA uses Tauri's capability system for coarse-grained window permissions (capabilities/default.json, capabilities/notification.json). Individual Tauri commands do NOT have per-command role checks — the frontend and backend share a single trust boundary as a local desktop application.
+
+Authorization is enforced at the implementation level:
+- License tier checks (ProGate component, is_paid_tier() in Rust)
+- Feature gates (team-sync, enterprise features disabled unless compiled with feature flags)
+- Settings validation (API keys validated before use, paths checked for existence)
+
+This is intentional: fine-grained IPC authorization adds complexity without security benefit in a single-user local application where the attacker would need code execution on the user's machine.
+
 ### Privacy Boundary
 - Raw data stays local
 - Only aggregated/anonymized data may leave (with consent)
