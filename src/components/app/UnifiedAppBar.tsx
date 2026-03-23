@@ -5,6 +5,7 @@ import { memo, useState, useCallback, Suspense, lazy } from 'react';
 import { useTranslation } from 'react-i18next';
 import { VoidEngine } from '../void-engine/VoidEngine';
 import { OllamaStatus } from '../OllamaStatus';
+import { SystemHealthDot } from '../SystemHealthDot';
 import { cmd } from '../../lib/commands';
 import type { AppState } from '../../store/types';
 
@@ -190,6 +191,9 @@ export const UnifiedAppBar = memo(function UnifiedAppBar({
           }`}>
             {tier}
           </span>
+
+          {/* System health — shows amber/red dot if issues detected */}
+          <SystemHealthDot onClick={onOpenSettings} />
 
           {/* Settings gear */}
           <button

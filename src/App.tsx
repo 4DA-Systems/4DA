@@ -19,6 +19,7 @@ import { ViewErrorBoundary } from './components/ViewErrorBoundary';
 import { ViewTabBar } from './components/ViewTabBar';
 import { ViewRouter } from './components/ViewRouter';
 import { UpdateBanner } from './components/UpdateBanner';
+import { HealthBanner } from './components/HealthBanner';
 
 // Lazy-loaded non-critical-path components
 const FirstRunTransition = lazy(() => import('./components/FirstRunTransition').then(m => ({ default: m.FirstRunTransition })));
@@ -400,6 +401,9 @@ function App() {
         )}
 
         <main id="main-content">
+        {/* Health warnings — dismissible, only shows if issues found */}
+        <HealthBanner />
+
         {/* View Tab Bar */}
         <ViewTabBar />
 
