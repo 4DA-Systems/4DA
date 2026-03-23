@@ -251,10 +251,11 @@ pub async fn sync_awe_wisdom() -> Result<String> {
     let mut decisions_detected = 0;
 
     // 1. Get validated principles from AWE
-    if let Ok(output) = std::process::Command::new(&awe_path)
-        .args(["wisdom", "--domain", "software-engineering"])
-        .output()
-    {
+    if let Ok(output) = run_awe_with_timeout(
+        std::process::Command::new(&awe_path)
+            .args(["wisdom", "--domain", "software-engineering"]),
+        30,
+    ) {
         let stdout = String::from_utf8_lossy(&output.stdout);
         // Parse principles and anti-patterns from output
         let mut current_section = "";
@@ -302,19 +303,20 @@ pub async fn sync_awe_wisdom() -> Result<String> {
     let context_dirs = crate::get_context_dirs();
     for dir in &context_dirs {
         let dir_str = dir.to_string_lossy();
-        if let Ok(output) = std::process::Command::new(&awe_path)
-            .args([
-                "scan",
-                "--repo",
-                &dir_str,
-                "--domain",
-                "software-engineering",
-                "--limit",
-                "50",
-                "--json",
-            ])
-            .output()
-        {
+        if let Ok(output) = run_awe_with_timeout(
+            std::process::Command::new(&awe_path)
+                .args([
+                    "scan",
+                    "--repo",
+                    &dir_str,
+                    "--domain",
+                    "software-engineering",
+                    "--limit",
+                    "50",
+                    "--json",
+                ]),
+            30,
+        ) {
             let stdout = String::from_utf8_lossy(&output.stdout);
             if let Ok(result) = serde_json::from_str::<serde_json::Value>(&stdout) {
                 if let Some(found) = result.get("decisions_detected").and_then(|v| v.as_u64()) {
@@ -364,10 +366,10 @@ pub async fn get_awe_summary() -> Result<String> {
     });
 
     // Get health data
-    if let Ok(output) = std::process::Command::new(&awe_path)
-        .args(["health"])
-        .output()
-    {
+    if let Ok(output) = run_awe_with_timeout(
+        std::process::Command::new(&awe_path).args(["health"]),
+        15,
+    ) {
         let stdout = String::from_utf8_lossy(&output.stdout);
         // Parse "Decisions tracked: N"
         if let Some(cap) = stdout.lines().find(|l| l.contains("Decisions tracked")) {
@@ -395,10 +397,11 @@ pub async fn get_awe_summary() -> Result<String> {
     }
 
     // Get top principle from wisdom command
-    if let Ok(output) = std::process::Command::new(&awe_path)
-        .args(["wisdom", "-d", "software-engineering"])
-        .output()
-    {
+    if let Ok(output) = run_awe_with_timeout(
+        std::process::Command::new(&awe_path)
+            .args(["wisdom", "-d", "software-engineering"]),
+        15,
+    ) {
         let stdout = String::from_utf8_lossy(&output.stdout);
         // Find first principle line: "[85%] statement"
         for line in stdout.lines() {
@@ -419,10 +422,11 @@ pub async fn get_awe_summary() -> Result<String> {
     }
 
     // Get pending count
-    if let Ok(output) = std::process::Command::new(&awe_path)
-        .args(["pending", "--limit", "100"])
-        .output()
-    {
+    if let Ok(output) = run_awe_with_timeout(
+        std::process::Command::new(&awe_path)
+            .args(["pending", "--limit", "100"]),
+        15,
+    ) {
         let stdout = String::from_utf8_lossy(&output.stdout);
         if let Some(cap) = stdout.lines().find(|l| l.contains("decision(s) need")) {
             if let Some(num) = cap.split_whitespace().next() {
@@ -482,10 +486,11 @@ pub async fn run_awe_transmute(query: String, mode: String) -> Result<String> {
         }
     }
 
-    let output = std::process::Command::new(&awe_path)
-        .args(&args)
-        .output()
-        .map_err(|e| format!("Failed to run AWE: {e}"))?;
+    let output = run_awe_with_timeout(
+        std::process::Command::new(&awe_path).args(&args),
+        30,
+    )
+    .map_err(|e| format!("Failed to run AWE: {e}"))?;
 
     let stdout = String::from_utf8_lossy(&output.stdout);
 
@@ -540,8 +545,8 @@ pub async fn run_awe_quick_check(query: String) -> Result<String> {
         return Err("AWE binary not found".into());
     };
 
-    let output = std::process::Command::new(&awe_path)
-        .args([
+    let output = run_awe_with_timeout(
+        std::process::Command::new(&awe_path).args([
             "transmute",
             &query,
             "--json",
@@ -549,9 +554,10 @@ pub async fn run_awe_quick_check(query: String) -> Result<String> {
             "software-engineering",
             "--stages",
             "receive,interrogate,articulate",
-        ])
-        .output()
-        .map_err(|e| format!("Failed to run AWE: {e}"))?;
+        ]),
+        30,
+    )
+    .map_err(|e| format!("Failed to run AWE: {e}"))?;
 
     Ok(String::from_utf8_lossy(&output.stdout).to_string())
 }
@@ -564,8 +570,8 @@ pub async fn run_awe_consequence_scan(query: String) -> Result<String> {
         return Err("AWE binary not found".into());
     };
 
-    let output = std::process::Command::new(&awe_path)
-        .args([
+    let output = run_awe_with_timeout(
+        std::process::Command::new(&awe_path).args([
             "transmute",
             &query,
             "--json",
@@ -573,9 +579,10 @@ pub async fn run_awe_consequence_scan(query: String) -> Result<String> {
             "software-engineering",
             "--stages",
             "receive,consequent,articulate",
-        ])
-        .output()
-        .map_err(|e| format!("Failed to run AWE: {e}"))?;
+        ]),
+        30,
+    )
+    .map_err(|e| format!("Failed to run AWE: {e}"))?;
 
     Ok(String::from_utf8_lossy(&output.stdout).to_string())
 }
@@ -592,17 +599,18 @@ pub async fn run_awe_feedback(
         return Err("AWE binary not found".into());
     };
 
-    let output = std::process::Command::new(&awe_path)
-        .args([
+    let output = run_awe_with_timeout(
+        std::process::Command::new(&awe_path).args([
             "feedback",
             &decision_id,
             "--outcome",
             &outcome,
             "--details",
             &details,
-        ])
-        .output()
-        .map_err(|e| format!("Failed to run AWE: {e}"))?;
+        ]),
+        15,
+    )
+    .map_err(|e| format!("Failed to run AWE: {e}"))?;
 
     Ok(String::from_utf8_lossy(&output.stdout).to_string())
 }
@@ -615,10 +623,11 @@ pub async fn run_awe_recall(domain: String) -> Result<String> {
         return Err("AWE binary not found".into());
     };
 
-    let output = std::process::Command::new(&awe_path)
-        .args(["wisdom", "-d", &domain])
-        .output()
-        .map_err(|e| format!("Failed to run AWE: {e}"))?;
+    let output = run_awe_with_timeout(
+        std::process::Command::new(&awe_path).args(["wisdom", "-d", &domain]),
+        15,
+    )
+    .map_err(|e| format!("Failed to run AWE: {e}"))?;
 
     Ok(String::from_utf8_lossy(&output.stdout).to_string())
 }
@@ -631,12 +640,43 @@ pub async fn run_awe_calibration(domain: String) -> Result<String> {
         return Err("AWE binary not found".into());
     };
 
-    let output = std::process::Command::new(&awe_path)
-        .args(["calibration", "-d", &domain])
-        .output()
-        .map_err(|e| format!("Failed to run AWE: {e}"))?;
+    let output = run_awe_with_timeout(
+        std::process::Command::new(&awe_path).args(["calibration", "-d", &domain]),
+        15,
+    )
+    .map_err(|e| format!("Failed to run AWE: {e}"))?;
 
     Ok(String::from_utf8_lossy(&output.stdout).to_string())
+}
+
+/// Run an AWE subprocess with a timeout to prevent indefinite blocking.
+fn run_awe_with_timeout(
+    cmd: &mut std::process::Command,
+    timeout_secs: u64,
+) -> std::result::Result<std::process::Output, String> {
+    let mut child = cmd
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .map_err(|e| format!("Failed to start AWE: {e}"))?;
+    let start = std::time::Instant::now();
+    loop {
+        match child.try_wait() {
+            Ok(Some(_status)) => {
+                return child
+                    .wait_with_output()
+                    .map_err(|e| format!("Failed to read AWE output: {e}"));
+            }
+            Ok(None) => {
+                if start.elapsed().as_secs() > timeout_secs {
+                    child.kill().ok();
+                    return Err(format!("AWE timed out after {timeout_secs}s"));
+                }
+                std::thread::sleep(std::time::Duration::from_millis(100));
+            }
+            Err(e) => return Err(format!("Failed to wait for AWE: {e}")),
+        }
+    }
 }
 
 /// Find the AWE binary (release build).

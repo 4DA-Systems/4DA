@@ -208,9 +208,9 @@ function App() {
           const key = url.searchParams.get('key');
           if (key) {
             // Try both activation paths — the backend figures out the tier
-            const proOk = await activateLicense(key);
+            const proResult = await activateLicense(key);
             const streetsOk = await activateStreetsLicense(key);
-            if (proOk || streetsOk) {
+            if (proResult.ok || streetsOk) {
               addToast('success', 'License activated successfully');
             } else {
               addToast('error', 'Invalid license key');
