@@ -448,6 +448,24 @@ impl Default for LocaleConfig {
     }
 }
 
+/// LLM rate-limiting configuration (daily token + cost caps)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LlmLimitsConfig {
+    /// Daily token limit for LLM calls (0 = unlimited)
+    pub daily_token_limit: u64,
+    /// Daily cost limit in USD cents for LLM calls (0 = unlimited)
+    pub daily_cost_limit_cents: u64,
+}
+
+impl Default for LlmLimitsConfig {
+    fn default() -> Self {
+        Self {
+            daily_token_limit: 500_000,     // generous default — protects against runaway usage
+            daily_cost_limit_cents: 200,    // $2.00/day default limit
+        }
+    }
+}
+
 /// Main settings structure
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Settings {
@@ -455,6 +473,9 @@ pub struct Settings {
     pub llm: LLMProvider,
     /// Re-ranking configuration
     pub rerank: RerankConfig,
+    /// LLM rate-limiting configuration (daily token + cost caps)
+    #[serde(default)]
+    pub llm_limits: LlmLimitsConfig,
     /// Usage statistics -- kept for backwards-compatible deserialization, but
     /// runtime usage is stored in a separate `usage.json` file.
     #[serde(default, skip_serializing)]
@@ -533,6 +554,7 @@ impl std::fmt::Debug for Settings {
         f.debug_struct("Settings")
             .field("llm", &self.llm)
             .field("rerank", &self.rerank)
+            .field("llm_limits", &self.llm_limits)
             .field("context_dirs", &self.context_dirs)
             .field("embedding_threshold", &self.embedding_threshold)
             .field("monitoring", &self.monitoring)
@@ -617,6 +639,7 @@ impl Default for Settings {
         Self {
             llm: LLMProvider::default(),
             rerank: RerankConfig::default(),
+            llm_limits: LlmLimitsConfig::default(),
             usage: UsageStats::default(),
             context_dirs: vec![],
             embedding_threshold: 0.50,

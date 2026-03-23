@@ -9,7 +9,7 @@
 use tracing::info;
 
 use crate::error::Result;
-use crate::settings::{LLMProvider, RerankConfig};
+use crate::settings::{LLMProvider, LlmLimitsConfig, RerankConfig};
 
 use crate::get_settings_manager;
 
@@ -52,6 +52,10 @@ pub async fn get_settings() -> Result<serde_json::Value> {
             "daily_token_limit": settings.rerank.daily_token_limit,
             "daily_cost_limit_cents": settings.rerank.daily_cost_limit_cents
         },
+        "llm_limits": {
+            "daily_token_limit": settings.llm_limits.daily_token_limit,
+            "daily_cost_limit_cents": settings.llm_limits.daily_cost_limit_cents
+        },
         "usage": {
             "tokens_today": guard.get_usage().tokens_today,
             "cost_today_cents": guard.get_usage().cost_today_cents,
@@ -69,16 +73,22 @@ pub async fn get_settings() -> Result<serde_json::Value> {
     }))
 }
 
-/// Get current daily LLM token usage vs configured limit.
-/// Returns { used, limit, limit_reached, resets_at } for the frontend.
+/// Get current daily LLM token and cost usage vs configured limits.
+/// Returns token and cost usage information for the frontend.
 #[tauri::command]
 pub async fn get_llm_usage() -> Result<serde_json::Value> {
-    let (used, limit) = crate::get_llm_token_usage();
+    let (tokens_used, tokens_limit) = crate::get_llm_token_usage();
+    let (cost_used, cost_limit) = crate::state::get_llm_cost_usage();
+    let token_limit_reached = tokens_limit > 0 && tokens_used >= tokens_limit;
+    let cost_limit_reached = cost_limit > 0 && cost_used >= cost_limit;
     Ok(serde_json::json!({
-        "used": used,
-        "limit": limit,
-        "limit_reached": limit > 0 && used >= limit,
-        "unlimited": limit == 0,
+        "used": tokens_used,
+        "limit": tokens_limit,
+        "limit_reached": token_limit_reached || cost_limit_reached,
+        "unlimited": tokens_limit == 0 && cost_limit == 0,
+        "cost_used_cents": cost_used,
+        "cost_limit_cents": cost_limit,
+        "cost_limit_reached": cost_limit_reached,
     }))
 }
 
@@ -177,6 +187,31 @@ pub async fn set_rerank_config(
 
     guard.set_rerank_config(config)?;
     info!(target: "4da::settings", enabled = enabled, "Re-rank config updated");
+    Ok(())
+}
+
+/// Update LLM rate-limiting configuration (daily token and cost caps)
+#[tauri::command]
+pub async fn set_llm_limits(
+    daily_token_limit: u64,
+    daily_cost_limit_cents: u64,
+) -> Result<()> {
+    let manager = get_settings_manager();
+    let mut guard = manager.lock();
+
+    let config = LlmLimitsConfig {
+        // 0 = unlimited (valid), otherwise must be at least 1
+        daily_token_limit: if daily_token_limit == 0 { 0 } else { daily_token_limit.max(1) },
+        daily_cost_limit_cents: if daily_cost_limit_cents == 0 { 0 } else { daily_cost_limit_cents.max(1) },
+    };
+
+    guard.set_llm_limits(config)?;
+    info!(
+        target: "4da::settings",
+        token_limit = daily_token_limit,
+        cost_limit_cents = daily_cost_limit_cents,
+        "LLM rate limits updated"
+    );
     Ok(())
 }
 
