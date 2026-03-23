@@ -2,9 +2,12 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { cmd } from '../../lib/commands';
-import type { Settings } from '../../types';
-import type { OllamaStatus } from '../../hooks/use-settings';
+import { ReRankingSection } from './ReRankingSection';
+import { UsageStatsSection } from './UsageStatsSection';
+import type { SettingsForm, AIProviderSectionProps } from './ai-provider-types';
 import type { ModelRegistryData } from '../../store/types';
+
+export type { SettingsForm, AIProviderSectionProps };
 
 // Fallback provider model options (used while registry loads)
 const fallbackModels: Record<string, string[]> = {
@@ -23,29 +26,6 @@ const popularEndpoints: { name: string; url: string }[] = [
   { name: 'LM Studio', url: 'http://localhost:1234/v1' },
   { name: 'llama.cpp', url: 'http://localhost:8080/v1' },
 ];
-
-interface SettingsForm {
-  provider: string;
-  apiKey: string;
-  model: string;
-  baseUrl: string;
-  rerankEnabled: boolean;
-  maxItems: number;
-  minScore: number;
-  dailyTokenLimit: number;
-  dailyCostLimit: number;
-}
-
-interface AIProviderSectionProps {
-  settings: Settings | null;
-  settingsForm: SettingsForm;
-  setSettingsForm: React.Dispatch<React.SetStateAction<SettingsForm>>;
-  ollamaStatus: OllamaStatus | null;
-  ollamaModels: string[];
-  checkOllamaStatus: (baseUrl?: string) => void;
-  modelRegistry?: ModelRegistryData | null;
-  onRefreshRegistry?: () => void;
-}
 
 /** Get models for a provider from registry, falling back to hardcoded defaults. */
 function getProviderModels(provider: string, registry: ModelRegistryData | null | undefined): string[] {
@@ -386,113 +366,10 @@ export function AIProviderSection({
         </div>
       </div>
 
-      {/* Re-ranking Section */}
-      <div className="bg-bg-tertiary rounded-lg p-5 border border-border">
-        <div className="flex items-center gap-3 mb-4">
-          <div className="w-8 h-8 bg-orange-500/20 rounded-lg flex items-center justify-center">
-            <span>&#x26a1;</span>
-          </div>
-          <div>
-            <h3 className="text-sm font-medium text-white">{t('settings.ai.rerankTitle')}</h3>
-            <p className="text-xs text-text-muted">{t('settings.ai.rerankDescription')}</p>
-          </div>
-        </div>
+      <ReRankingSection settingsForm={settingsForm} setSettingsForm={setSettingsForm} />
 
-        <div className="space-y-4">
-          <label className="flex items-center gap-3 cursor-pointer p-3 bg-bg-secondary rounded-lg border border-border hover:border-orange-500/30 transition-all">
-            <input
-              type="checkbox"
-              checked={settingsForm.rerankEnabled}
-              onChange={(e) => setSettingsForm((f) => ({ ...f, rerankEnabled: e.target.checked }))}
-              className="w-5 h-5 accent-orange-500 rounded"
-            />
-            <div>
-              <span className="text-sm text-white">{t('settings.ai.enableRerank')}</span>
-              <p className="text-xs text-text-muted mt-0.5">{t('settings.ai.rerankNote')}</p>
-            </div>
-          </label>
-
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="text-xs text-text-muted block mb-2">{t('settings.ai.maxItemsBatch')}</label>
-              <input
-                type="number"
-                value={settingsForm.maxItems}
-                onChange={(e) => setSettingsForm((f) => ({ ...f, maxItems: parseInt(e.target.value) || 15 }))}
-                className="w-full px-4 py-3 bg-bg-secondary border border-border rounded-lg text-sm text-white focus:border-orange-500 focus:outline-none"
-              />
-            </div>
-            <div>
-              <label className="text-xs text-text-muted block mb-2">{t('settings.ai.minScore')}</label>
-              <input
-                type="number"
-                step="0.05"
-                value={settingsForm.minScore}
-                onChange={(e) => setSettingsForm((f) => ({ ...f, minScore: parseFloat(e.target.value) || 0.25 }))}
-                className="w-full px-4 py-3 bg-bg-secondary border border-border rounded-lg text-sm text-white focus:border-orange-500 focus:outline-none"
-              />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="text-xs text-text-muted block mb-2">{t('settings.ai.dailyTokenLimit')}</label>
-              <input
-                type="number"
-                value={settingsForm.dailyTokenLimit}
-                onChange={(e) => setSettingsForm((f) => ({ ...f, dailyTokenLimit: parseInt(e.target.value) || 100000 }))}
-                className="w-full px-4 py-3 bg-bg-secondary border border-border rounded-lg text-sm text-white focus:border-orange-500 focus:outline-none"
-              />
-            </div>
-            <div>
-              <label className="text-xs text-text-muted block mb-2">{t('settings.ai.costLimit')}</label>
-              <input
-                type="number"
-                value={settingsForm.dailyCostLimit}
-                onChange={(e) => setSettingsForm((f) => ({ ...f, dailyCostLimit: parseInt(e.target.value) || 50 }))}
-                className="w-full px-4 py-3 bg-bg-secondary border border-border rounded-lg text-sm text-white focus:border-orange-500 focus:outline-none"
-              />
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Usage Stats */}
       {settings && (
-        <div className="bg-bg-tertiary rounded-lg p-5 border border-border">
-          <div className="flex items-center gap-3 mb-4">
-            <div className="w-8 h-8 bg-green-500/20 rounded-lg flex items-center justify-center">
-              <span>&#x1f4c8;</span>
-            </div>
-            <div>
-              <h3 className="text-sm font-medium text-white">{t('settings.ai.usageTitle')}</h3>
-              <p className="text-xs text-text-muted">{t('settings.ai.usageDescription')}</p>
-            </div>
-          </div>
-          <div className="grid grid-cols-3 gap-4">
-            <div className="bg-bg-secondary rounded-lg p-3 text-center">
-              <p className="text-xl font-semibold text-white">{settings.usage.tokens_today.toLocaleString()}</p>
-              <p className="text-xs text-text-muted">{t('settings.ai.tokens')}</p>
-            </div>
-            <div className="bg-bg-secondary rounded-lg p-3 text-center">
-              {settingsForm.provider === 'openai-compatible' ? (
-                <>
-                  <p className="text-xl font-semibold text-text-muted">{t('settings.ai.costUnavailable')}</p>
-                  <p className="text-xs text-text-muted">{t('settings.ai.cost')}</p>
-                </>
-              ) : (
-                <>
-                  <p className="text-xl font-semibold text-green-400">${(settings.usage.cost_today_cents / 100).toFixed(2)}</p>
-                  <p className="text-xs text-text-muted">{t('settings.ai.cost')}</p>
-                </>
-              )}
-            </div>
-            <div className="bg-bg-secondary rounded-lg p-3 text-center">
-              <p className="text-xl font-semibold text-orange-400">{settings.usage.items_reranked}</p>
-              <p className="text-xs text-text-muted">{t('settings.ai.reranked')}</p>
-            </div>
-          </div>
-        </div>
+        <UsageStatsSection settings={settings} provider={settingsForm.provider} />
       )}
     </>
   );
