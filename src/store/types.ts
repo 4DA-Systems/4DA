@@ -187,6 +187,7 @@ export interface FiltersSlice {
   searchQuery: string;
   showSavedOnly: boolean;
   toggleSourceFilter: (source: string) => void;
+  resetSourceFilters: () => void;
   setSortBy: (sort: 'score' | 'date') => void;
   setShowOnlyRelevant: (show: boolean) => void;
   setSearchQuery: (q: string) => void;

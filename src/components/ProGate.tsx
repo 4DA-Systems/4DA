@@ -52,10 +52,10 @@ export function ProGate({ children, feature }: ProGateProps) {
     if (!licenseKey.trim()) return;
     setActivating(true);
     setError(null);
-    const success = await activateLicense(licenseKey.trim());
+    const result = await activateLicense(licenseKey.trim());
     setActivating(false);
-    if (!success) {
-      setError(t('pro.invalidLicenseKey'));
+    if (!result.ok) {
+      setError(result.reason || t('pro.invalidLicenseKey'));
     }
   };
 

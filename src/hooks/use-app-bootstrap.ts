@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { listen } from '@tauri-apps/api/event';
 import { useTranslation } from 'react-i18next';
 import { useShallow } from 'zustand/react/shallow';
@@ -34,6 +34,7 @@ export function useAppBootstrap() {
   const setShowSettings = useAppStore(s => s.setShowSettings);
   const [showKeyboardHelp, setShowKeyboardHelp] = useState(false);
   const [newItemIds, setNewItemIds] = useState<Set<number>>(new Set());
+  const newItemTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [analysisPulse, setAnalysisPulse] = useState(false);
 
   // Data selectors (may change, use useShallow)
@@ -92,8 +93,10 @@ export function useAppBootstrap() {
       for (const id of itemIds) next.add(id);
       return next;
     });
+    // Clear any existing timer before setting a new one
+    if (newItemTimerRef.current) clearTimeout(newItemTimerRef.current);
     // Auto-clear "New" badges after 60 seconds
-    setTimeout(() => setNewItemIds(new Set()), 60000);
+    newItemTimerRef.current = setTimeout(() => setNewItemIds(new Set()), 60000);
   }, []);
 
   const {
@@ -175,9 +178,9 @@ export function useAppBootstrap() {
         if (url.hostname === 'activate' || url.pathname === '/activate') {
           const key = url.searchParams.get('key');
           if (key) {
-            const proOk = await activateLicense(key);
+            const proResult = await activateLicense(key);
             const streetsOk = await activateStreetsLicense(key);
-            if (proOk || streetsOk) {
+            if (proResult.ok || streetsOk) {
               addToast('success', 'License activated successfully');
             } else {
               addToast('error', 'Invalid license key');
