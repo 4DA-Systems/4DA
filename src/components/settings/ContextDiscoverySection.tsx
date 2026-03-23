@@ -87,7 +87,7 @@ export function ContextDiscoverySection({
                     <button
                       onClick={() => removeScanDirectory(dir)}
                       aria-label={t('settings.context.removeDir', { dir })}
-                      className="text-text-muted hover:text-red-400 ml-2 opacity-0 group-hover:opacity-100 transition-opacity"
+                      className="text-text-muted hover:text-red-400 ml-2 opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity"
                     >
                       &times;
                     </button>

@@ -34,7 +34,7 @@ export const ResultItemCollapsed = memo(function ResultItemCollapsed({
     const keys = getScoreFactorKeys(item);
     if (keys.length === 0) return undefined;
     return keys.map(k => t(k)).join('\n');
-  }, [item, t]);
+  }, [item.score_breakdown, t]);
 
   return (
     <div className="w-full px-4 py-2.5">
