@@ -1,4 +1,4 @@
-// GAME Component: notif-card-critical — auto-generated, do not edit.
+// GAME Component: notif-card-high — auto-generated, do not edit.
 (function(){
 const WGSL_V = `struct VertexOutput {
     @builtin(position) pos: vec4<f32>,
@@ -112,31 +112,31 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
         var sdf_result = sdf_box(p, 2.620000, 0.880000);
         sdf_result = sdf_result - 0.080000;
         sdf_result = abs(sdf_result) - 0.050000;
-        let glow_pulse = 0.350000 * (0.9 + 0.1 * sin(time * 2.0));
+        let glow_pulse = 0.300000 * (0.9 + 0.1 * sin(time * 2.0));
         let glow_result = apply_glow(sdf_result, glow_pulse);
         var color_result = vec4<f32>(vec3<f32>(glow_result), glow_result);
-        color_result = vec4<f32>(color_result.rgb * vec3<f32>(0.250000, 0.040000, 0.025000), color_result.a);
-        let la = color_result.a * 0.040000;
-        let lc = color_result.rgb * 0.040000;
+        color_result = vec4<f32>(color_result.rgb * vec3<f32>(0.200000, 0.080000, 0.020000), color_result.a);
+        let la = color_result.a * 0.030000;
+        let lc = color_result.rgb * 0.030000;
         final_color = vec4<f32>(final_color.rgb * (1.0 - la) + lc, final_color.a * (1.0 - la) + la);
     }
 
     // ── Layer 2: sweep ──
     {
         var p = vec2<f32>(uv.x * aspect, uv.y);
-        { let ra = time * 0.600000; let rc = cos(ra); let rs = sin(ra);
+        { let ra = time * 0.500000; let rc = cos(ra); let rs = sin(ra);
         p = vec2<f32>(p.x * rc - p.y * rs, p.x * rs + p.y * rc); }
         var sdf_result = sdf_box(p, 2.550000, 0.830000);
         sdf_result = sdf_result - 0.070000;
         sdf_result = abs(sdf_result) - 0.012000;
         let arc_theta = atan2(p.x, p.y) + 3.14159265359;
         sdf_result = select(999.0, sdf_result, arc_theta < 0.350000);
-        let glow_pulse = 0.220000 * (0.9 + 0.1 * sin(time * 2.0));
+        let glow_pulse = 0.200000 * (0.9 + 0.1 * sin(time * 2.0));
         let glow_result = apply_glow(sdf_result, glow_pulse);
         var color_result = vec4<f32>(vec3<f32>(glow_result), glow_result);
-        color_result = vec4<f32>(color_result.rgb * vec3<f32>(0.450000, 0.070000, 0.040000), color_result.a);
+        color_result = vec4<f32>(color_result.rgb * vec3<f32>(0.400000, 0.150000, 0.030000), color_result.a);
         let prev_color = textureSample(prev_frame, prev_sampler, input.uv);
-        color_result = mix(color_result, prev_color, 0.550000);
+        color_result = mix(color_result, prev_color, 0.500000);
         let la = color_result.a;
         let lc = color_result.rgb;
         final_color = vec4<f32>(final_color.rgb * (1.0 - la) + lc, final_color.a * (1.0 - la) + la);
@@ -148,10 +148,10 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
         var sdf_result = sdf_box(p, 2.550000, 0.830000);
         sdf_result = sdf_result - 0.070000;
         sdf_result = abs(sdf_result) - 0.003000;
-        let glow_pulse = 0.100000 * (0.9 + 0.1 * sin(time * 2.0));
+        let glow_pulse = 0.080000 * (0.9 + 0.1 * sin(time * 2.0));
         let glow_result = apply_glow(sdf_result, glow_pulse);
         var color_result = vec4<f32>(vec3<f32>(glow_result), glow_result);
-        color_result = vec4<f32>(color_result.rgb * vec3<f32>(0.120000, 0.030000, 0.025000), color_result.a);
+        color_result = vec4<f32>(color_result.rgb * vec3<f32>(0.100000, 0.040000, 0.020000), color_result.a);
         let la = color_result.a;
         let lc = color_result.rgb;
         final_color = vec4<f32>(final_color.rgb * (1.0 - la) + lc, final_color.a * (1.0 - la) + la);
@@ -173,18 +173,18 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
     // ── Layer 5: noise ──
     {
         var p = vec2<f32>(uv.x * aspect, uv.y);
-        { let warp_x = fbm2(p * 2.000000 + vec2<f32>(0.0, 1.3), i32(2.000000), 0.025000, 2.000000);
-        let warp_y = fbm2(p * 2.000000 + vec2<f32>(1.7, 0.0), i32(2.000000), 0.025000, 2.000000);
-        p = p + vec2<f32>(warp_x, warp_y) * 0.025000; }
+        { let warp_x = fbm2(p * 2.000000 + vec2<f32>(0.0, 1.3), i32(2.000000), 0.020000, 2.000000);
+        let warp_y = fbm2(p * 2.000000 + vec2<f32>(1.7, 0.0), i32(2.000000), 0.020000, 2.000000);
+        p = p + vec2<f32>(warp_x, warp_y) * 0.020000; }
         var sdf_result = fbm2((p * 3.000000 + vec2<f32>(time * 0.1, time * 0.07)), i32(3.000000), 0.500000, 2.000000);
-        let glow_pulse = 0.350000 * (0.9 + 0.1 * sin(time * 2.0));
+        let glow_pulse = 0.300000 * (0.9 + 0.1 * sin(time * 2.0));
         let glow_result = apply_glow(sdf_result, glow_pulse);
         var color_result = vec4<f32>(vec3<f32>(glow_result), glow_result);
-        color_result = vec4<f32>(color_result.rgb * vec3<f32>(0.100000, 0.020000, 0.015000), color_result.a);
+        color_result = vec4<f32>(color_result.rgb * vec3<f32>(0.080000, 0.030000, 0.010000), color_result.a);
         let prev_color = textureSample(prev_frame, prev_sampler, input.uv);
         color_result = mix(color_result, prev_color, 0.940000);
-        let la = color_result.a * 0.012000;
-        let lc = color_result.rgb * 0.012000;
+        let la = color_result.a * 0.010000;
+        let lc = color_result.rgb * 0.010000;
         final_color = vec4<f32>(final_color.rgb * (1.0 - la) + lc, final_color.a * (1.0 - la) + la);
     }
 
@@ -295,33 +295,33 @@ void main(){
         float sdf_result = sdf_box(p, 2.620000, 0.880000);
         sdf_result -= 0.080000;
         sdf_result = abs(sdf_result) - 0.050000;
-        float glow_pulse = 0.350000 * (0.9 + 0.1 * sin(time * 2.0));
+        float glow_pulse = 0.300000 * (0.9 + 0.1 * sin(time * 2.0));
         float glow_result = apply_glow(sdf_result, glow_pulse);
 
         vec4 color_result = vec4(vec3(glow_result), glow_result);
-        color_result = vec4(color_result.rgb * vec3(0.250000, 0.040000, 0.025000), color_result.a);
-        float la = color_result.a * 0.040000;
-        vec3 lc = color_result.rgb * 0.040000;
+        color_result = vec4(color_result.rgb * vec3(0.200000, 0.080000, 0.020000), color_result.a);
+        float la = color_result.a * 0.030000;
+        vec3 lc = color_result.rgb * 0.030000;
         final_color = vec4(final_color.rgb * (1.0 - la) + lc, final_color.a * (1.0 - la) + la);
     }
 
     // ── Layer 2: sweep ──
     {
         vec2 p = vec2(uv.x * aspect, uv.y);
-        { float ra = time * 0.600000; float rc = cos(ra); float rs = sin(ra);
+        { float ra = time * 0.500000; float rc = cos(ra); float rs = sin(ra);
         p = vec2(p.x * rc - p.y * rs, p.x * rs + p.y * rc); }
         float sdf_result = sdf_box(p, 2.550000, 0.830000);
         sdf_result -= 0.070000;
         sdf_result = abs(sdf_result) - 0.012000;
         float arc_theta = atan(p.x, p.y) + 3.14159265359;
         sdf_result = (arc_theta < 0.350000 ? sdf_result : 999.0);
-        float glow_pulse = 0.220000 * (0.9 + 0.1 * sin(time * 2.0));
+        float glow_pulse = 0.200000 * (0.9 + 0.1 * sin(time * 2.0));
         float glow_result = apply_glow(sdf_result, glow_pulse);
 
         vec4 color_result = vec4(vec3(glow_result), glow_result);
-        color_result = vec4(color_result.rgb * vec3(0.450000, 0.070000, 0.040000), color_result.a);
+        color_result = vec4(color_result.rgb * vec3(0.400000, 0.150000, 0.030000), color_result.a);
         vec4 prev_color = texture(u_prev_frame, v_uv);
-        color_result = mix(color_result, prev_color, 0.550000);
+        color_result = mix(color_result, prev_color, 0.500000);
         float la = color_result.a;
         vec3 lc = color_result.rgb;
         final_color = vec4(final_color.rgb * (1.0 - la) + lc, final_color.a * (1.0 - la) + la);
@@ -333,11 +333,11 @@ void main(){
         float sdf_result = sdf_box(p, 2.550000, 0.830000);
         sdf_result -= 0.070000;
         sdf_result = abs(sdf_result) - 0.003000;
-        float glow_pulse = 0.100000 * (0.9 + 0.1 * sin(time * 2.0));
+        float glow_pulse = 0.080000 * (0.9 + 0.1 * sin(time * 2.0));
         float glow_result = apply_glow(sdf_result, glow_pulse);
 
         vec4 color_result = vec4(vec3(glow_result), glow_result);
-        color_result = vec4(color_result.rgb * vec3(0.120000, 0.030000, 0.025000), color_result.a);
+        color_result = vec4(color_result.rgb * vec3(0.100000, 0.040000, 0.020000), color_result.a);
         float la = color_result.a;
         vec3 lc = color_result.rgb;
         final_color = vec4(final_color.rgb * (1.0 - la) + lc, final_color.a * (1.0 - la) + la);
@@ -359,19 +359,19 @@ void main(){
     // ── Layer 5: noise ──
     {
         vec2 p = vec2(uv.x * aspect, uv.y);
-        { float warp_x = fbm2(p * 2.000000 + vec2(0.0, 1.3), int(2.000000), 0.025000, 2.000000);
-        float warp_y = fbm2(p * 2.000000 + vec2(1.7, 0.0), int(2.000000), 0.025000, 2.000000);
-        p = p + vec2(warp_x, warp_y) * 0.025000; }
+        { float warp_x = fbm2(p * 2.000000 + vec2(0.0, 1.3), int(2.000000), 0.020000, 2.000000);
+        float warp_y = fbm2(p * 2.000000 + vec2(1.7, 0.0), int(2.000000), 0.020000, 2.000000);
+        p = p + vec2(warp_x, warp_y) * 0.020000; }
         float sdf_result = fbm2((p * 3.000000 + vec2(time * 0.1, time * 0.07)), int(3.000000), 0.500000, 2.000000);
-        float glow_pulse = 0.350000 * (0.9 + 0.1 * sin(time * 2.0));
+        float glow_pulse = 0.300000 * (0.9 + 0.1 * sin(time * 2.0));
         float glow_result = apply_glow(sdf_result, glow_pulse);
 
         vec4 color_result = vec4(vec3(glow_result), glow_result);
-        color_result = vec4(color_result.rgb * vec3(0.100000, 0.020000, 0.015000), color_result.a);
+        color_result = vec4(color_result.rgb * vec3(0.080000, 0.030000, 0.010000), color_result.a);
         vec4 prev_color = texture(u_prev_frame, v_uv);
         color_result = mix(color_result, prev_color, 0.940000);
-        float la = color_result.a * 0.012000;
-        vec3 lc = color_result.rgb * 0.012000;
+        float la = color_result.a * 0.010000;
+        vec3 lc = color_result.rgb * 0.010000;
         final_color = vec4(final_color.rgb * (1.0 - la) + lc, final_color.a * (1.0 - la) + la);
     }
 
@@ -409,7 +409,7 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
     let pixel = textureSample(pass_tex, pass_sampler, uv);
     var color_result = pixel;
 
-    let vign = 1.0 - 0.050000 * length(uv - 0.5);
+    let vign = 1.0 - 0.040000 * length(uv - 0.5);
     color_result = vec4<f32>(color_result.rgb * vign, color_result.a * vign);
     return color_result;
 }
@@ -895,8 +895,8 @@ class GameRendererGL {
 class GameResonanceNetwork {
   constructor() {
     this._couplings = [
-      { source: 'intensity', target: 'sweep', field: 'brightness', weight: 0.3 },
-      { source: 'hover', target: 'sweep', field: 'brightness', weight: 0.1 },
+      { source: 'intensity', target: 'sweep', field: 'brightness', weight: 0.25 },
+      { source: 'hover', target: 'sweep', field: 'brightness', weight: 0.08 },
     ];
     this._damping = 0.95;
     this._maxDepth = 4;
@@ -964,7 +964,7 @@ class GameResonanceNetwork {
 }
 
 
-class NotifCardCritical extends HTMLElement {
+class NotifCardHigh extends HTMLElement {
   constructor() {
     super();
     this.attachShadow({ mode: 'open' });
@@ -1000,7 +1000,7 @@ class NotifCardCritical extends HTMLElement {
       if (gl.init()) {
         this._renderer = gl;
       } else {
-        console.warn('game-notif-card-critical: no WebGPU or WebGL2 support');
+        console.warn('game-notif-card-high: no WebGPU or WebGL2 support');
         return;
       }
     }
@@ -1057,5 +1057,5 @@ class NotifCardCritical extends HTMLElement {
   }
 }
 
-customElements.define('game-notif-card-critical', NotifCardCritical);
+customElements.define('game-notif-card-high', NotifCardHigh);
 })();
