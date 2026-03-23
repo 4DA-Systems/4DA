@@ -2,11 +2,10 @@
   "app.title": "4DA",
   "app.tagline": "Tout signal. Aucun bruit.",
   "app.skipToContent": "Aller au contenu principal",
-
+  "app.viewChanged": "Navigation vers {{view}}",
   "header.settings": "Paramètres",
   "header.live": "En direct",
   "header.signalsLearned": "{{count}} appris",
-
   "action.analyze": "Analyser",
   "action.analyzing": "Analyse en cours...",
   "action.save": "Enregistrer",
@@ -50,7 +49,6 @@
   "action.error": "Erreur",
   "action.runAnalysis": "Lancer l'analyse",
   "action.cancelAnalysis": "Annuler l'analyse",
-
   "analysis.statusRelevant": "{{relevant}}/{{total}} éléments pertinents",
   "analysis.statusError": "Erreur : {{message}}",
   "analysis.complete": "Analyse terminée : {{count}} éléments pertinents trouvés",
@@ -66,11 +64,23 @@
   "analysis.sourceError": "{{source}} : {{error}}",
   "analysis.stackDetected": "Stack détecté automatiquement : {{stack}}. Le scoring priorisera les sources correspondantes.",
   "analysis.keyboardTriggered": "Analyse lancée",
-
+  "appbar.searchPlaceholder": "Rechercher dans l'intelligence...",
+  "appbar.analyzing": "Analyse en cours...",
+  "appbar.relevant": "{{count}} pertinents",
+  "appbar.top": "{{count}} prioritaires",
+  "feed.title": "Flux de signaux",
+  "feed.viewAll": "Voir tous ({{count}})",
+  "pulse.noData": "Aucune donnée collectée. Lancez une analyse pour commencer.",
+  "pulse.itemsAnalyzed": "{{count}} éléments analysés, {{relevant}} pertinents pour vous.",
+  "pulse.signalsNeedAttention": "{{count}} nécessitent votre attention.",
+  "pulse.topPicks": "{{count}} sélections prioritaires.",
+  "pulse.sourcesPartial": "{{healthy}}/{{total}} sources opérationnelles.",
+  "pulse.newSince": "{{count}} nouveaux depuis {{timeAgo}}.",
+  "pulse.movedToTop": "{{count}} promus en prioritaires.",
+  "pulse.securityAlert": "{{count}} alerte de sécurité détectée.",
   "badge.llm": "LLM",
   "badge.on": "ON",
   "badge.off": "OFF",
-
   "status.enabled": "Activé",
   "status.disabled": "Désactivé",
   "status.active": "Actif",
@@ -79,7 +89,6 @@
   "status.disconnected": "Déconnecté",
   "status.online": "En ligne",
   "status.offline": "Hors ligne",
-
   "settings.title": "Paramètres",
   "settings.locale.title": "Langue et région",
   "settings.locale.description": "Définissez votre pays, langue et devise pour un contenu localisé",
@@ -113,7 +122,6 @@
   "settings.monitoring.lastCheck": "Dernière : {{time}}",
   "settings.monitoring.testNotification": "Notification de test",
   "settings.monitoring.loading": "Chargement de l'état de surveillance...",
-
   "settings.ai.title": "Fournisseur d'IA",
   "settings.ai.description": "Choisissez votre fournisseur LLM",
   "settings.ai.provider": "Fournisseur",
@@ -147,11 +155,10 @@
   "settings.ai.tokens": "Jetons",
   "settings.ai.cost": "Coût",
   "settings.ai.reranked": "Reclassés",
-
   "settings.context.title": "Découverte automatique du contexte",
   "settings.context.description": "Analysez les répertoires qui vous définissent — projets, notes, documents",
   "settings.context.discovering": "Découverte...",
-  "settings.context.autoDiscover": "\u2728 Découvrir mon contexte",
+  "settings.context.autoDiscover": "✨ Découvrir mon contexte",
   "settings.context.dirPathLabel": "Chemin du répertoire à analyser",
   "settings.context.addDirPlaceholder": "Ou ajoutez un répertoire spécifique : ~/notes, D:\\recherche",
   "settings.context.noDirs": "Aucun répertoire configuré pour l'instant",
@@ -163,7 +170,6 @@
   "settings.context.techStack": "Stack technique",
   "settings.context.topics": "Sujets",
   "settings.context.more": "+{{count}} de plus",
-
   "settings.digest.title": "Résumé hebdomadaire",
   "settings.digest.description": "Enregistre les résultats filtrés dans un fichier de résumé après chaque analyse",
   "settings.digest.enabled": "Résumé activé",
@@ -172,7 +178,6 @@
   "settings.digest.minScore": "Score minimum",
   "settings.digest.maxItems": "Éléments max",
   "settings.digest.loading": "Chargement des paramètres de résumé...",
-
   "settings.personalization.title": "Ajustements manuels",
   "settings.personalization.description": "Affinez votre contexte avec des intérêts et des exclusions",
   "settings.personalization.role": "Votre rôle",
@@ -201,7 +206,6 @@
   "settings.personalization.removeExclusion": "Supprimer l'exclusion {{name}}",
   "settings.personalization.noExclusions": "Aucune exclusion définie",
   "settings.personalization.loading": "Chargement du contexte...",
-
   "settings.license.title": "Licence",
   "settings.license.currentTier": "Niveau actuel :",
   "settings.license.tierTeam": "Team",
@@ -224,7 +228,6 @@
   "settings.license.starting": "Démarrage...",
   "settings.license.startTrial": "Démarrer l'essai gratuit de 45 jours",
   "settings.license.getKey": "Obtenez une clé de licence sur 4da.ai/signal",
-
   "settings.streets.title": "Adhésion STREETS",
   "settings.streets.currentTier": "Niveau actuel :",
   "settings.streets.placeholder": "Saisissez la clé de licence STREETS",
@@ -234,14 +237,12 @@
   "settings.streets.tierSignal": "Signal (12 $/mois)",
   "settings.streets.tierTeam": "Team (29 $/place/mois)",
   "settings.streets.tierEnterprise": "Enterprise",
-
   "settings.ai.builtInLocal": "Intégré (Local)",
   "settings.ai.builtInModel": "all-MiniLM-L6-v2 (384 dimensions)",
   "settings.ai.builtInDescription": "Embeddings locaux sans configuration. Aucune clé API requise. Le modèle est téléchargé automatiquement lors de la première utilisation (~90 Mo).",
   "settings.ai.refreshModels": "Actualiser les modèles",
   "settings.ai.registryLastUpdated": "Modèles mis à jour : {{time}}",
   "settings.ai.costUnavailable": "N/D",
-
   "settings.attention.title": "Tableau de bord de l'attention",
   "settings.attention.description": "Où se porte votre attention vs. où votre code en a besoin",
   "settings.attention.days": "{{count}} jours",
@@ -251,7 +252,6 @@
   "settings.attention.blindSpots": "Angles morts",
   "settings.attention.risk": "Risque {{level}}",
   "settings.attention.noData": "Pas assez de données d'interaction pour l'instant. Utilisez 4DA pendant quelques jours pour construire des schémas d'attention.",
-
   "settings.health.title": "Radar de santé du projet",
   "settings.health.description": "Fraîcheur des dépendances, sécurité, dynamique, communauté",
   "settings.health.scanning": "Analyse des projets...",
@@ -263,7 +263,6 @@
   "settings.health.dependencies": "{{count}} dépendances",
   "settings.health.lastChecked": "Dernière vérification {{date}}",
   "settings.health.never": "jamais",
-
   "settings.tabs.general": "Général",
   "settings.tabs.intelligence": "Intelligence",
   "settings.tabs.sources": "Sources",
@@ -289,7 +288,6 @@
   "settings.digest.emailConfigSaved": "Configuration e-mail sauvegardée",
   "settings.digest.emailTestFailed": "Échec du test e-mail",
   "settings.testConnection": "Tester la connexion",
-
   "nav.results": "Flux",
   "nav.briefing": "Briefing",
   "nav.insights": "Radar",
@@ -313,7 +311,6 @@
   "nav.console.subtitle": "Précision, projets et coûts IA",
   "nav.calibrate": "Système",
   "nav.calibrate.subtitle": "Santé et calibration",
-
   "results.title": "Résultats de pertinence",
   "results.new": "{{count}} nouveaux",
   "results.itemsRelevant": "{{items}} éléments, {{relevant}} pertinents",
@@ -343,7 +340,6 @@
   "results.topPicksGroup": "Meilleures sélections",
   "results.relevantGroup": "Pertinents",
   "results.belowThreshold": "Sous le seuil",
-
   "briefing.title": "Briefing IA",
   "briefing.generate": "Générer le briefing",
   "briefing.generating": "Génération...",
@@ -371,10 +367,9 @@
   "briefing.viewAllResults": "Voir les {{count}} résultats",
   "briefing.systemLearned": "Le système a appris",
   "briefing.intelligenceMetrics": "Métriques d'intelligence",
-
   "briefing.profile.title": "Votre profil",
   "briefing.profile.autophagyAccuracy": "Précision de l'autophagie",
-  "briefing.profile.autophagySummary": "{{cycles}} cycles d'apprentissage \u00b7 {{topics}} sujets \u00b7 {{items}} éléments (7j)",
+  "briefing.profile.autophagySummary": "{{cycles}} cycles d'apprentissage · {{topics}} sujets · {{items}} éléments (7j)",
   "briefing.profile.topAffinities": "Principales affinités",
   "briefing.profile.strongestSignals": "Signaux les plus forts",
   "briefing.profile.interactHint": "Interagissez avec les résultats pour construire des affinités",
@@ -391,19 +386,18 @@
   "briefing.profile.knowledgeGaps": "Opportunités d'apprentissage ({{count}})",
   "briefing.profile.moreGaps": "+{{count}} de plus",
   "briefing.profile.intelligenceGrowth": "Progression de l'apprentissage",
-
   "search.title": "Recherchez dans votre intelligence",
   "search.subtitle": "Trouvez des signaux, articles et informations dans votre flux",
   "search.placeholder": "Posez une question sur votre contenu...",
   "search.searching": "Recherche...",
   "search.noResults": "Aucun résultat trouvé",
-  "search.tryDifferent": "Essayez une requête différente ou des mots-clés plus larges",
+  "search.tryDifferent": "Essayez des mots-clés différents ou une requête plus large",
   "search.tryThese": "Essayez ceux-ci :",
   "search.queryType": "requête {{intent}}",
   "search.customRange": "Plage personnalisée",
   "search.unknownFile": "Fichier inconnu",
   "search.stats": "{{count}} résultats en {{ms}}ms ({{confidence}}% de confiance)",
-  "search.indexFirst": "Lancez d'abord une analyse pour indexer votre contenu",
+  "search.indexFirst": "Indexez d'abord vos fichiers (Paramètres > Contexte)",
   "search.noAnalysisTitle": "Console d'intelligence prête — en attente de la première analyse",
   "search.noAnalysisHint": "Lancez votre première analyse pour débloquer la Console d'Intelligence",
   "search.capabilityStack": "Recherche par stack",
@@ -431,29 +425,24 @@
   "search.relatedDecisions": "Décisions liées",
   "search.knowledgeGaps": "Opportunités d'apprentissage",
   "search.staleForDays": "{{days}}j sans mise à jour",
-
   "time.justNow": "À l'instant",
   "time.minutesAgo": "il y a {{count}}min",
   "time.hoursAgo": "il y a {{count}}h",
   "time.daysAgo": "il y a {{count}}j",
-
   "tier.free": "Gratuit",
   "tier.pro": "Signal",
   "tier.signal": "Signal",
   "tier.team": "Team",
   "tier.enterprise": "Enterprise",
-
   "update.available": "Mise à jour disponible : v{{version}}",
   "update.install": "Installer et redémarrer",
   "update.installing": "Installation...",
   "update.later": "Plus tard",
   "update.defaultBody": "Une nouvelle version est prête à être installée.",
   "update.download": "Télécharger la mise à jour",
-
   "browser.title": "Application de bureau requise",
   "browser.description": "4DA fonctionne comme une application de bureau pour accéder à vos fichiers locaux, surveiller les sources et garder tout privé sur votre machine.",
   "browser.hint": "Exécutez <code>npm run tauri dev</code> ou lancez l'application installée.",
-
   "onboarding.welcome.title": "Bienvenue sur 4DA",
   "onboarding.welcome.tagline": "Tout signal. Aucun bruit.",
   "onboarding.welcome.description": "4DA découvre ce qui vous intéresse à partir de vos projets et fait remonter le contenu pertinent d'internet — avant même que vous n'en ayez besoin.",
@@ -467,19 +456,16 @@
   "onboarding.welcome.quickSetupHint": "Configuration rapide — la plupart des étapes sont automatiques",
   "onboarding.welcome.skipToContent": "Aller au contenu",
   "onboarding.welcome.skipHint": "Vous pourrez configurer plus tard dans les Paramètres",
-
   "onboarding.nav.back": "Retour",
   "onboarding.nav.next": "Suivant",
   "onboarding.nav.skip": "Passer",
   "onboarding.nav.continue": "Continuer",
   "onboarding.nav.skipForNow": "Passer pour l'instant",
-
   "onboarding.stepLabel.welcome": "Bienvenue",
   "onboarding.stepLabel.setup": "Configuration",
   "onboarding.stepLabel.calibrate": "Calibrer",
   "onboarding.stepProgress": "Étape {{current}} sur {{total}}",
   "onboarding.version": "Version {{version}}",
-
   "onboarding.apiKeys.title": "Clés API",
   "onboarding.apiKeys.subtitle": "Configurez vos clés API pour de meilleurs résultats, ou essayez le mode mots-clés uniquement.",
   "onboarding.apiKeys.installingModels": "Installation des modèles pour l'IA locale...",
@@ -518,7 +504,6 @@
   "onboarding.apiKeys.keywordModeDesc": "Sans clé API ni Ollama, 4DA peut fonctionner par correspondance de mots-clés. Les résultats seront moins précis que la recherche sémantique, mais restent utiles. Vous pourrez ajouter des clés API plus tard dans les Paramètres.",
   "onboarding.apiKeys.tryKeywordMode": "Essayer le mode mots-clés uniquement",
   "onboarding.apiKeys.installingModelsBtn": "Installation des modèles...",
-
   "onboarding.complete.title": "Tout est prêt !",
   "onboarding.complete.subtitle": "4DA a trouvé du contenu pertinent pour vous. Voici comment l'améliorer encore.",
   "onboarding.complete.keepImproving": "Continuez à améliorer 4DA",
@@ -530,7 +515,6 @@
   "onboarding.complete.letItRunDesc": "La surveillance en arrière-plan vérifie toutes les 30 min",
   "onboarding.complete.startUsing": "Commencer à utiliser 4DA",
   "onboarding.complete.settingsHint": "Appuyez sur Paramètres à tout moment pour ajuster vos préférences",
-
   "onboarding.interests.title": "Vos intérêts",
   "onboarding.interests.subtitle": "Aidez 4DA à comprendre quoi faire remonter. Vos retours affinent le scoring au fil du temps.",
   "onboarding.interests.roleLabel": "Que faites-vous ?",
@@ -545,7 +529,6 @@
   "onboarding.interests.finishSetup": "Terminer la configuration",
   "onboarding.interests.remove": "Supprimer {{topic}}",
   "onboarding.interests.addLabel": "Ajouter un sujet d'intérêt",
-
   "onboarding.context.title": "Découvrez votre contexte",
   "onboarding.context.subtitle": "4DA découvre ce qui vous intéresse en analysant vos projets. 100% local, 100% privé.",
   "onboarding.context.discoveryComplete": "Découverte terminée !",
@@ -569,7 +552,6 @@
   "onboarding.context.faqControlDesc": "Oui ! Vous pouvez ajouter ou supprimer des répertoires à tout moment dans les Paramètres. 4DA ignore automatiquement les emplacements sensibles comme node_modules, les dossiers .git et les fichiers système cachés.",
   "onboarding.context.faqTimeTitle": "Combien de temps dure l'analyse ?",
   "onboarding.context.faqTimeDesc": "Généralement quelques secondes à une minute selon le nombre de projets que vous avez. L'analyse initiale est la plus longue — ensuite, 4DA ne vérifie que les changements.",
-
   "onboarding.scan.title": "Analyse approfondie d'intelligence",
   "onboarding.scan.subtitle": "Analyse complète de plus de 300-500 éléments dans toutes les sources pour construire votre flux personnalisé.",
   "onboarding.scan.inProgress": "Analyse approfondie en cours",
@@ -585,8 +567,7 @@
   "onboarding.scan.readyDesc": "Nous allons analyser en profondeur plus de 300-500 éléments de HN (5 catégories), arXiv (16 domaines), Reddit (40+ subs) et GitHub pour construire votre flux d'intelligence personnalisé.",
   "onboarding.scan.startDeepScan": "Lancer l'analyse approfondie",
   "onboarding.scan.timeEstimateShort": "Prend 2 à 5 minutes pour des résultats complets",
-  "onboarding.scan.seeResults": "Voir mes résultats \u2192",
-
+  "onboarding.scan.seeResults": "Voir mes résultats →",
   "onboarding.results.title": "Vos résultats",
   "onboarding.results.topPicksSubtitle": "Voici vos meilleures sélections de tout l'internet.",
   "onboarding.results.building": "Construction de votre flux d'intelligence personnalisé...",
@@ -603,7 +584,6 @@
   "onboarding.results.enter4DA": "Entrer dans 4DA",
   "onboarding.results.backgroundScanHint": "L'analyse complète continue en arrière-plan — vous pouvez entrer à tout moment.",
   "onboarding.results.backgroundScanDone": "L'analyse complète continue en arrière-plan pour des résultats exhaustifs.",
-
   "onboarding.setup.title": "Configuration rapide",
   "onboarding.setup.subtitle": "Configurez votre IA et vos intérêts. Tout reste local et privé.",
   "onboarding.setup.aiProvider": "Fournisseur d'IA",
@@ -634,7 +614,6 @@
   "onboarding.setup.keyFormatHint": "Le format de la clé ne semble pas correct",
   "onboarding.setup.keyFormatHintSoft": "Le format de la clé pourrait ne pas être correct — vous pouvez quand même continuer",
   "onboarding.setup.usingTechStack": "Utilisation du stack technique pour le scoring du contenu",
-
   "onboarding.setupAi.localAiReady": "IA locale prête — aucune clé API nécessaire",
   "onboarding.setupAi.local": "Local",
   "onboarding.setupAi.localLabel": "Local",
@@ -654,7 +633,6 @@
   "onboarding.setupAi.privacyMessage": "Vos données ne quittent jamais votre machine. Pas de clés API, pas de comptes cloud, pas de suivi d'utilisation.",
   "onboarding.setupAi.ollamaExplainer": "Ollama exécute les modèles IA directement sur votre ordinateur — totalement privé, totalement gratuit.",
   "onboarding.setupAi.noKeyHint": "Pas de clé API ? Pas de problème. 4DA utilise la correspondance par mots-clés par défaut. Ajoutez une clé à tout moment dans les Paramètres pour des résultats améliorés.",
-
   "settings.translations.title": "Éditeur de traductions",
   "settings.translations.description": "Remplacez toute chaîne traduite dans l'application",
   "settings.translations.search": "Rechercher par clé ou valeur...",
@@ -672,38 +650,36 @@
   "settings.translations.noResults": "Aucune traduction ne correspond à votre recherche",
   "settings.translations.allNamespaces": "Tous",
   "settings.translations.editorToggle": "Éditeur de traductions",
-
   "error.generic": "Une erreur est survenue",
   "error.tryAgain": "Réessayer",
   "error.dbUnavailable": "Base de données indisponible",
   "error.somethingWrong": "Une erreur est survenue",
   "error.reload": "Recharger l'application",
   "error.tryRecover": "Tenter la récupération",
-
+  "error.viewFailed": "{{viewName}} n'a pas pu se charger",
+  "error.viewRecovery": "Une erreur inattendue s'est produite. Réessayez ou changez de vue.",
+  "error.retry": "Réessayer",
+  "error.playbookBrowser": "Le playbook nécessite l'application de bureau",
+  "error.playbookFailed": "Échec du chargement du contenu du playbook",
   "commandDeck.title": "Panneau de commande",
   "commandDeck.git": "Git",
   "commandDeck.commands": "Commandes",
   "commandDeck.history": "Historique",
   "commandDeck.toggle": "Basculer",
   "commandDeck.tabs": "Onglets",
-
   "commandRunner.noDir": "Aucun répertoire sélectionné",
   "commandRunner.placeholder": "Saisissez une commande...",
   "commandRunner.exit": "exit {{code}}",
   "commandRunner.hint": "Tapez une commande et appuyez sur Entrée",
-
   "toolkit.search": "Rechercher des outils...",
   "toolkit.pinned": "Épinglés",
   "toolkit.utilities": "Utilitaires ({{count}})",
   "toolkit.noMatch": "Aucun outil ne correspond à « {{query}} »",
-
   "advantage.score": "Votre avantage",
   "advantage.acted": "{{acted}}/{{opened}} traités",
   "advantage.avgLead": "{{hours}}h d'avance en moyenne",
-
   "engagement.streak": "série",
   "engagement.activity": "Activité sur 7 jours",
-
   "pro.hint": "Signal : {{feature}}",
   "pro.upgrade": "Passer à Signal",
   "pro.renew": "Renouveler",
@@ -718,7 +694,6 @@
   "pro.startingTrial": "Démarrage...",
   "pro.haveLicenseKey": "Vous avez une clé de licence ?",
   "pro.invalidLicenseKey": "Clé de licence invalide",
-
   "proValue.title": "Votre valeur d'intelligence",
   "proValue.lastDays": "{{days}} derniers jours",
   "proValue.activeSince": "Actif depuis {{date}}",
@@ -736,10 +711,9 @@
   "proValue.dataDepth": "Profondeur des données",
   "proValue.learningInteractions": "{{count}} interactions d'apprentissage",
   "proValue.dataSpans": "Couvre {{days}} jours",
-
   "documents.title": "Documents indexés",
   "documents.documentsIndexed": "{{count}} documents indexés",
-  "documents.back": "\u2190 Retour",
+  "documents.back": "← Retour",
   "documents.type": "Type",
   "documents.size": "Taille",
   "documents.words": "Mots",
@@ -751,14 +725,12 @@
   "documents.noDocuments": "Aucun document indexé pour l'instant",
   "documents.addFiles": "Ajoutez des fichiers PDF, DOCX ou autres à vos répertoires d'analyse pour les indexer",
   "documents.totalStats": "{{words}} mots dans {{chunks}} fragments",
-
   "community.title": "Intelligence communautaire",
   "community.active": "Actif",
   "community.description": "Contribution de schémas de scoring anonymisés pour améliorer la précision pour tous les utilisateurs de 4DA.",
   "community.frequency": "Fréquence",
   "community.lastSync": "Dernière synchronisation",
   "community.pending": "En attente",
-
   "settings.team.title": "Synchronisation d'équipe",
   "settings.team.loading": "Chargement de l'état de l'équipe...",
   "settings.team.created": "Équipe créée avec succès",
@@ -803,7 +775,6 @@
   "settings.team.expiresAt": "Expire",
   "settings.team.inviteInstructions": "Le destinataire doit aller dans Paramètres > Synchronisation d'équipe > Rejoindre une équipe et saisir ce code.",
   "settings.team.generateAnother": "Générer une autre invitation",
-
   "settings.community.title": "Intelligence communautaire",
   "settings.community.subtitle": "Aidez à améliorer le scoring pour tous les utilisateurs de 4DA",
   "settings.community.confirmTitle": "Activer l'intelligence communautaire ?",
@@ -823,7 +794,6 @@
   "settings.community.lastContribution": "Dernière contribution",
   "settings.community.never": "Jamais",
   "settings.community.anonymousId": "ID anonyme",
-
   "team.dashboard.title": "Équipe",
   "team.dashboard.signals": "Signaux",
   "team.dashboard.decisions": "Décisions",
@@ -832,7 +802,6 @@
   "team.dashboard.members": "membres",
   "team.dashboard.pending": "en attente",
   "team.dashboard.lastSync": "Dernière synchronisation",
-
   "team.decisions.title": "Décisions d'équipe",
   "team.decisions.all": "Toutes",
   "team.decisions.proposed": "Proposées",
@@ -847,18 +816,14 @@
   "team.decisions.castVote": "Voter",
   "team.decisions.accept": "Accepter",
   "team.decisions.reject": "Rejeter",
-
   "team.members.empty": "Aucun membre d'équipe pour l'instant. Invitez quelqu'un pour commencer.",
   "team.members.you": "vous",
-
   "team.notifications.bell": "Notifications d'équipe",
   "team.notifications.title": "Notifications",
   "team.notifications.markAllRead": "Tout marquer comme lu",
   "team.notifications.empty": "Aucune notification",
-
   "team.roles.member": "Membre",
   "team.roles.admin": "Administrateur",
-
   "team.signals.empty": "Aucun signal partagé pour l'instant. Les signaux d'équipe apparaissent ici lorsque les membres partagent leurs découvertes.",
   "team.signals.hint": "Partagez des signaux depuis votre vue Chaînes de signaux, ou activez le partage automatique dans les Paramètres d'équipe.",
   "team.signals.active": "actifs",
@@ -868,13 +833,11 @@
   "team.signals.detectors": "détecteurs",
   "team.signals.resolvedBy": "Résolu",
   "team.signals.resolveNotes": "Notes de résolution...",
-
   "team.sources.title": "Sources partagées",
   "team.sources.recommend": "+ Recommander",
   "team.sources.whyRecommend": "Pourquoi cette source est-elle précieuse ?",
   "team.sources.share": "Partager avec l'équipe",
   "team.sources.empty": "Aucune source partagée pour l'instant. Recommandez des sources que votre équipe devrait suivre.",
-
   "team.dashboard.intelligence": "Intelligence",
   "team.intelligence.title": "Intelligence d'équipe",
   "team.intelligence.coverage": "Couverture du stack",
@@ -908,7 +871,6 @@
   "team.signals.confidence": "confiance",
   "team.signals.suggestedAction": "Suggéré",
   "team.signals.memberDetections": "Détecté par",
-
   "enterprise.audit.title": "Journal d'audit",
   "enterprise.audit.description": "Suivez les activités de toute l'organisation. Toutes les modifications sont immuables et horodatées.",
   "enterprise.audit.badge": "Enterprise",
@@ -937,7 +899,6 @@
   "enterprise.audit.eventsByDay": "Événements par jour",
   "enterprise.audit.topActors": "Acteurs principaux",
   "enterprise.audit.topActions": "Actions principales",
-
   "enterprise.health.title": "Santé du système",
   "enterprise.health.description": "État de l'infrastructure et des services en temps réel",
   "enterprise.health.relay": "Relais",
@@ -951,7 +912,6 @@
   "enterprise.health.fetched": "récupérés",
   "enterprise.health.errors": "erreurs",
   "enterprise.health.orgMetrics": "Métriques de l'organisation",
-
   "enterprise.webhooks.title": "Webhooks",
   "enterprise.webhooks.enterprise": "Enterprise",
   "enterprise.webhooks.cancel": "Annuler",
@@ -989,10 +949,8 @@
   "enterprise.webhooks.colStatus": "Statut",
   "enterprise.webhooks.colHttpCode": "HTTP",
   "enterprise.webhooks.colAttempts": "Tentatives",
-
   "enterprise.docs.title": "Référence Webhooks et API",
   "enterprise.docs.description": "Référence technique pour intégrer les webhooks 4DA avec votre infrastructure.",
-
   "enterprise.export.title": "Exportation et portabilité des données",
   "enterprise.export.description": "Exportez vos données pour la sauvegarde, la conformité ou la migration. Les clés API ne sont jamais incluses.",
   "enterprise.export.sections": "Sections d'exportation",
@@ -1000,14 +958,12 @@
   "enterprise.export.exportAll": "Exporter toute la sélection ({{selectedSections}} sections)",
   "enterprise.export.previous": "Exportations précédentes",
   "enterprise.export.privacy": "Les exportations n'incluent jamais de clés API, mots de passe, tokens ni secrets. Les configurations de sources sont incluses sans identifiants d'authentification. Toutes les exportations sont stockées localement dans votre répertoire de données.",
-
   "enterprise.diagnostics.title": "Diagnostics de configuration",
   "enterprise.diagnostics.description": "Validez votre configuration et résolvez les problèmes sans contacter le support.",
   "enterprise.diagnostics.running": "Exécution...",
   "enterprise.diagnostics.run": "Lancer les diagnostics",
   "enterprise.diagnostics.empty": "Cliquez sur « Lancer les diagnostics » pour valider votre configuration.",
   "enterprise.diagnostics.tips": "Corrections rapides",
-
   "enterprise.policies.title": "Politiques de rétention des données",
   "enterprise.policies.description": "Contrôlez la durée de conservation des différents types de données. Un délai de grâce de 7 jours s'applique avant la suppression.",
   "enterprise.policies.default": "par défaut",
@@ -1017,7 +973,6 @@
   "enterprise.policies.e2e": "Toutes les données du relay d'équipe sont chiffrées de bout en bout (XChaCha20Poly1305).",
   "enterprise.policies.localFirst": "Le stockage principal des données reste local sur chaque machine.",
   "enterprise.policies.relayDumb": "Le serveur relay ne peut pas lire les charges chiffrées. « Relay bête, clients intelligents. »",
-
   "enterprise.org.title": "Organisation",
   "enterprise.org.notConfigured": "Aucune organisation configurée. La gestion d'organisation est disponible au niveau Enterprise.",
   "enterprise.org.enterprise": "Enterprise",
@@ -1031,7 +986,6 @@
   "enterprise.org.crossTeamSignals": "Corrélations de signaux inter-équipes",
   "enterprise.org.affectsTeams": "Affecte",
   "enterprise.org.activity": "Activité de l'équipe",
-
   "enterprise.sso.title": "Authentification unique (SSO)",
   "enterprise.sso.description": "Configurez l'authentification SAML ou OIDC pour votre organisation.",
   "enterprise.sso.logout": "Se déconnecter",
@@ -1039,7 +993,6 @@
   "enterprise.sso.notConfigured": "SSO n'est pas configuré. Configurez SAML ou OpenID Connect pour authentifier les membres de l'équipe.",
   "enterprise.sso.configure": "Configurer SSO",
   "enterprise.sso.info": "La vérification SSO se fait localement sur votre machine. 4DA n'envoie jamais d'identifiants à aucun serveur. Votre fournisseur d'identité s'authentifie directement auprès de l'application de bureau via un callback localhost.",
-
   "enterprise.wizard.title": "Assistant de configuration d'équipe",
   "enterprise.wizard.description": "Configurez votre équipe en 4 étapes. Toute la communication est chiffrée de bout en bout.",
   "enterprise.wizard.teamActive": "L'équipe est active",
@@ -1058,13 +1011,10 @@
   "enterprise.wizard.doneNote": "Votre relay d'équipe chiffré est actif. Les membres peuvent rejoindre en utilisant des codes d'invitation.",
   "enterprise.wizard.security": "Toute la communication d'équipe utilise le chiffrement XChaCha20Poly1305. Le serveur relay ne peut pas lire vos données — il ne stocke et ne route que des blobs chiffrés. « Relay bête, clients intelligents. »",
   "enterprise.wizard.teamCreated": "Équipe créée avec succès !",
-
   "enterprise.invite.createFailed": "Échec de la création de l'invitation",
-
   "intelligence.cycles": "{{count}} cycles",
   "intelligence.summary": "{{analyzed}} éléments traités, {{surfaced}} remontés ({{rate}}% de rejet)",
   "intelligence.antiPatterns": "{{count}} anti-pattern(s) de scoring détecté(s) et corrigé(s)",
-
   "feedback.openLink": "Ouvrir le lien",
   "feedback.saved": "Sauvegardé",
   "feedback.dismissed": "Ignoré",
@@ -1073,7 +1023,6 @@
   "feedback.irrelevant": "Non pertinent",
   "feedback.actions": "Actions de retour",
   "feedback.sessionSaves": "{{count}} sauvegardés cette session",
-
   "results.unknownSource": "Inconnu",
   "results.relatedArticles": "+{{count}} article lié",
   "results.relatedArticles_other": "+{{count}} articles liés",
@@ -1083,7 +1032,6 @@
   "results.aiSummary": "Résumé IA",
   "results.generateAiSummary": "Générer un résumé IA",
   "results.topMatches": "Meilleures correspondances :",
-
   "ollama.pulling": "Téléchargement des modèles",
   "ollama.loading": "Chargement...",
   "ollama.ready": "Ollama prêt",
@@ -1097,7 +1045,6 @@
   "ollama.hintInstall": "Installer depuis ollama.com",
   "ollama.hintServe": "Exécuter : ollama serve",
   "ollama.hintRetry": "Cliquez sur l'indicateur d'état pour reconnecter",
-
   "splash.starting": "Démarrage...",
   "splash.database": "Initialisation de la base de données...",
   "splash.models": "Vérification de la disponibilité IA...",
@@ -1108,7 +1055,6 @@
   "splash.progress": "Progression du démarrage : {{percent}}%",
   "splash.version": "Version {{version}}",
   "splash.refreshIfStuck": "Actualiser si bloqué",
-
   "firstRun.errorTitle": "L'analyse a rencontré un problème",
   "firstRun.tryAgain": "Réessayer",
   "firstRun.topMatch": "Meilleure correspondance",
@@ -1151,7 +1097,6 @@
   "firstRun.yourDna": "Votre Developer DNA",
   "firstRun.dnaHint": "Nous surveillons désormais le contenu pertinent sur votre stack",
   "firstRun.skipAhead": "Passer en avant",
-
   "shortcuts.title": "Raccourcis clavier",
   "shortcuts.close": "Fermer les raccourcis clavier",
   "shortcuts.runAnalysis": "Lancer l'analyse",
@@ -1163,7 +1108,6 @@
   "shortcuts.openBriefing": "Ouvrir le briefing",
   "shortcuts.saveItem": "Sauvegarder l'élément actuel",
   "shortcuts.navigateItems": "Naviguer entre les éléments",
-
   "about.fullName": "4 Dimensional Autonomy",
   "about.attribution": "Attribution du développement",
   "about.vision": "Vision",
@@ -1187,11 +1131,15 @@
   "about.attributionClaudeName": "Claude",
   "about.attributionClaudeAfter": "(Anthropic — modèles Opus 4.5 et Opus 4.6), servant de moteur principal d'implémentation à travers des milliers de cycles itératifs de développement.",
   "about.attributionLegitimacy": "Ce modèle de développement dirigé par l'humain et implémenté par l'IA est une approche légitime et de plus en plus standard en ingénierie logicielle. L'historique git complet sert de registre vérifiable et auditable de l'extérieur de ce processus.",
-  "about.copyright": "v{{version}} \u00b7 \u00a9 2025\u20132026 4DA Systems",
+  "about.copyright": "v{{version}} · © 2025–2026 4DA Systems",
   "about.tagline": "Tous droits réservés. Construit avec une vision, conçu avec Claude.",
   "about.privacyPolicy": "Politique de confidentialité",
   "about.termsOfService": "Conditions d'utilisation",
-
+  "about.viewFramework": "Voir le framework",
+  "about.viewComparison": "Comparer",
+  "about.geometryTitle": "Architecture platonicienne",
+  "comparison.title": "Comparatif",
+  "comparison.subtitle": "Comment 4DA se compare aux outils existants",
   "sources.title": "Configuration des sources",
   "sources.customCount": "{{count}} personnalisées",
   "sources.subtitle": "Flux RSS, YouTube, langages GitHub, Twitter/X",
@@ -1217,21 +1165,19 @@
   "sources.twitter.keySaved": "Clé API X enregistrée",
   "sources.twitter.keyCleared": "Clé API X supprimée",
   "sources.twitter.update": "Mettre à jour",
-
   "saved.empty.title": "Aucun élément sauvegardé pour l'instant",
   "saved.empty.subtitle": "Sauvegardez des éléments depuis la vue Résultats pour constituer votre collection.",
   "saved.count": "{{count}} éléments sauvegardés",
   "saved.itemRemoved": "Élément retiré de la collection sauvegardée",
   "saved.copyUrl": "Copier l'URL",
   "saved.remove": "Retirer",
-
+  "saved.title": "Éléments sauvegardés",
   "briefing.warmup.title": "Votre système d'intelligence",
   "briefing.warmup.stackDetected": "Stack détecté",
   "briefing.warmup.sourcesReady": "Sources prêtes",
   "briefing.warmup.description": "4DA va analyser les sources, évaluer chaque élément par rapport à votre profil et faire remonter ce qui compte.",
   "briefing.warmup.activate": "Lancer l'intelligence",
   "briefing.warmup.autoStart": "Démarrage automatique...",
-
   "briefing.gatheringIntelligence": "Collecte de l'intelligence",
   "briefing.analysisRunning": "L'analyse est en cours. Votre briefing sera généré lorsque les résultats seront prêts.",
   "briefing.loadingStageFetch": "Analyse des sources à la recherche de signaux pertinents pour votre stack...",
@@ -1245,7 +1191,6 @@
   "briefing.orPress": "ou appuyez sur",
   "briefing.personalizeTitle": "Personnalisez votre flux",
   "briefing.personalizeBody": "Ajoutez vos intérêts et votre stack technique dans les Paramètres pour de meilleurs résultats.",
-
   "coach.chat.title": "Coach STREETS",
   "coach.chat.emptyDescription": "Posez n'importe quelle question sur la génération de revenus indépendants en tant que développeur. Votre profil souverain et votre progression dans le playbook guident chaque réponse.",
   "coach.chat.placeholder": "Posez une question à votre coach...",
@@ -1254,7 +1199,6 @@
   "coach.chat.suggestEngine": "Quel moteur de revenus convient le mieux à mon profil ?",
   "coach.chat.suggest30DayPlan": "Aidez-moi à créer un plan de lancement en 30 jours",
   "coach.chat.suggestMarketFit": "Évaluez mon idée de projet pour l'adéquation au marché",
-
   "coach.engine.title": "Recommandation de moteurs",
   "coach.engine.subtitle": "Analyse de votre profil par IA",
   "coach.engine.analyzeProfile": "Analyser mon profil",
@@ -1270,7 +1214,6 @@
   "coach.engine.overallAnalysis": "Analyse globale",
   "coach.engine.profileGaps": "Lacunes du profil",
   "coach.engine.emptyDescription": "Cliquez sur « Analyser mon profil » pour obtenir des recommandations de moteurs par IA basées sur votre profil souverain, vos compétences et vos objectifs.",
-
   "coach.launch.title": "Revue de lancement",
   "coach.launch.subtitle": "Soumettez votre projet pour une analyse de préparation au lancement par IA",
   "coach.launch.placeholder": "Décrivez votre projet, public cible, modèle tarifaire et état actuel...",
@@ -1285,7 +1228,6 @@
   "coach.launch.strengths": "Points forts",
   "coach.launch.gaps": "Lacunes",
   "coach.launch.recommendations": "Recommandations",
-
   "coach.progress.title": "Bilan de progression",
   "coach.progress.subtitle": "Suivez votre parcours STREETS et recevez des encouragements personnalisés",
   "coach.progress.checkingIn": "Vérification...",
@@ -1300,7 +1242,6 @@
   "coach.progress.noNudges": "Aucun encouragement actif. Lancez un bilan pour recevoir des conseils personnalisés.",
   "coach.progress.checkInResults": "Résultats du bilan",
   "coach.progress.runningCheckIn": "Bilan de progression en cours...",
-
   "coach.strategy.title": "Document de stratégie",
   "coach.strategy.subtitle": "Stratégie de revenus personnalisée basée sur votre profil",
   "coach.strategy.generating": "Génération...",
@@ -1310,7 +1251,6 @@
   "coach.strategy.generatingHint": "Cela peut prendre un moment pendant que l'IA analyse votre profil",
   "coach.strategy.lineCount": "{{count}} lignes",
   "coach.strategy.emptyDescription": "Générez un document de stratégie complet adapté à votre profil souverain, vos moteurs recommandés et votre progression actuelle.",
-
   "coach.gate.title": "Coach STREETS",
   "coach.gate.subtitle": "Coaching par IA pour votre parcours de revenus",
   "coach.gate.currentTier": "Niveau actuel :",
@@ -1322,13 +1262,11 @@
   "coach.gate.featureProgress": "Suivi de progression et encouragements",
   "coach.gate.enterLicenseKey": "Saisissez la clé de licence",
   "coach.gate.getSignal": "Obtenir Signal — 12 $/mois",
-
   "coach.template.title": "Bibliothèque de modèles",
   "coach.template.subtitle": "Modèles markdown prêts à l'emploi pour votre parcours STREETS",
   "coach.template.all": "Tous",
   "coach.template.emptyNoTemplates": "Aucun modèle disponible pour l'instant. Passez à Signal pour accéder à la bibliothèque de modèles.",
   "coach.template.emptyNoMatch": "Aucun modèle ne correspond à la catégorie sélectionnée.",
-
   "coach.video.title": "Programme vidéo",
   "coach.video.subtitle": "Leçons vidéo STREETS — débloquées au fur et à mesure de votre progression",
   "coach.video.curriculumProgress": "Progression du programme",
@@ -1338,10 +1276,8 @@
   "coach.video.unlocksOnDay": "Débloquée le jour {{day}}",
   "coach.video.dripDay": "Jour {{day}}",
   "coach.video.emptyDescription": "Aucune leçon vidéo disponible pour l'instant. Passez à Signal pour accéder au programme vidéo complet de STREETS.",
-
   "playbook.regional.approximateEquivalent": "Équivalent approximatif en {{currency}}",
   "playbook.regional.inYourRegion": "(~{{amount}}{{unit}} dans votre région)",
-
   "playbook.sovereign.title": "Profil souverain",
   "playbook.sovereign.subtitle": "Données matérielles et système accumulées à partir des commandes STREETS",
   "playbook.sovereign.loading": "Chargement du profil souverain...",
@@ -1353,9 +1289,7 @@
   "playbook.sovereign.generateStackDoc": "Générer le document de stack",
   "playbook.sovereign.missing": "Manquant : {{fields}}",
   "playbook.sovereign.stackDocument": "Document de stack souverain",
-
   "playbook.health.title": "Santé STREETS",
-
   "playbook.code.runAllSafe": "Exécuter tous les sûrs ({{count}})",
   "playbook.code.runCommand": "Exécuter la commande",
   "playbook.code.parseCommands": "Analyser les commandes",
@@ -1363,14 +1297,11 @@
   "playbook.code.failed": "Échoué (exit {{code}})",
   "playbook.code.showOutput": "Afficher la sortie",
   "playbook.code.showError": "Afficher l'erreur",
-
   "playbook.templates": "Modèles",
   "playbook.templatesSubtitle": "Outils de lancement et croissance",
-
   "commandDeck.confirm": "Confirmer",
   "commandDeck.repo.noRepos": "Aucun dépôt trouvé",
   "commandDeck.repo.selectRepo": "Sélectionner un dépôt",
-
   "commandDeck.git.loading": "Chargement de l'état git...",
   "commandDeck.git.selectRepo": "Sélectionnez un dépôt pour commencer",
   "commandDeck.git.repoHint": "Les dépôts découverts par ACE apparaissent dans le sélecteur ci-dessus",
@@ -1393,19 +1324,15 @@
   "commandDeck.git.confirmPush": "Pousser {{count}} commit(s) vers origin/{{branch}} ?",
   "commandDeck.git.push": "Pousser",
   "commandDeck.git.ahead": "{{count}} en avance",
-
   "commandDeck.history.noCommands": "Aucun historique de commandes",
   "commandDeck.history.recentCommits": "Commits récents",
-
   "toolkit.unpin": "Désépingler",
   "toolkit.pinToTop": "Épingler en haut",
-
   "toolkit.shell.back": "Retour",
   "toolkit.shell.escToClose": "Échap pour fermer",
   "toolkit.shell.loadingTool": "Chargement de l'outil...",
   "toolkit.shell.errorEncountered": "{{toolName}} a rencontré une erreur",
   "toolkit.shell.backToToolkit": "Retour aux Outils",
-
   "toolkit.colorPicker.hue": "Teinte",
   "toolkit.colorPicker.pickFromScreen": "Sélectionner depuis l'écran",
   "toolkit.colorPicker.wcagContrast": "Contraste WCAG",
@@ -1413,14 +1340,12 @@
   "toolkit.colorPicker.pass": "Réussi",
   "toolkit.colorPicker.fail": "Échoué",
   "toolkit.colorPicker.copyLabel": "Copier {{label}}",
-
   "toolkit.cronBuilder.minute": "Minute",
   "toolkit.cronBuilder.hour": "Heure",
   "toolkit.cronBuilder.dayOfMonth": "Jour (mois)",
   "toolkit.cronBuilder.month": "Mois",
   "toolkit.cronBuilder.dayOfWeek": "Jour (semaine)",
   "toolkit.cronBuilder.presets": "Préréglages",
-
   "toolkit.decisionLog.type": "Type",
   "toolkit.decisionLog.status": "Statut",
   "toolkit.decisionLog.addDecision": "Ajouter une décision",
@@ -1436,14 +1361,12 @@
   "toolkit.decisionLog.tags": "Étiquettes",
   "toolkit.decisionLog.empty": "Aucune décision enregistrée pour l'instant",
   "toolkit.decisionLog.emptyHint": "Cliquez sur « Ajouter une décision » pour commencer à suivre vos choix techniques",
-
   "toolkit.diffViewer.original": "Original",
   "toolkit.diffViewer.originalPlaceholder": "Collez le texte original...",
   "toolkit.diffViewer.modified": "Modifié",
   "toolkit.diffViewer.modifiedPlaceholder": "Collez le texte modifié...",
   "toolkit.diffViewer.unified": "Unifié",
   "toolkit.diffViewer.sideBySide": "Côte à côte",
-
   "toolkit.encoder.output": "Sortie",
   "toolkit.encoder.base64Detected": "Base64 détecté",
   "toolkit.encoder.base64Placeholder": "Saisissez du texte à encoder ou du Base64 à décoder...",
@@ -1454,7 +1377,6 @@
   "toolkit.encoder.algorithm": "Algorithme",
   "toolkit.encoder.hashPlaceholder": "Saisissez du texte à hacher...",
   "toolkit.encoder.hashOutputHint": "Le hash apparaîtra ici",
-
   "toolkit.envSnapshot.captureSnapshot": "Capturer un snapshot",
   "toolkit.envSnapshot.capturing": "Capture...",
   "toolkit.envSnapshot.copyAsMarkdown": "Copier en Markdown",
@@ -1464,7 +1386,6 @@
   "toolkit.envSnapshot.runtimeVersions": "Versions d'exécution",
   "toolkit.envSnapshot.git": "Git",
   "toolkit.envSnapshot.recentCommits": "Commits récents",
-
   "toolkit.exportPack.generateExport": "Générer l'exportation",
   "toolkit.exportPack.generating": "Génération...",
   "toolkit.exportPack.sections": "Rubriques",
@@ -1472,7 +1393,6 @@
   "toolkit.exportPack.downloadMd": "Télécharger .md",
   "toolkit.exportPack.empty": "Générez votre profil développeur pour voir un aperçu",
   "toolkit.exportPack.emptyHint": "Combine votre DNA, radar technologique et décisions dans un document markdown partageable",
-
   "toolkit.httpProbe.send": "Envoyer",
   "toolkit.httpProbe.sending": "Envoi...",
   "toolkit.httpProbe.headers": "En-têtes",
@@ -1485,7 +1405,6 @@
   "toolkit.httpProbe.responseBody": "Corps de la réponse",
   "toolkit.httpProbe.history": "Historique",
   "toolkit.httpProbe.noRequests": "Aucune requête pour l'instant",
-
   "toolkit.jsonViewer.editor": "Éditeur",
   "toolkit.jsonViewer.tree": "Arbre",
   "toolkit.jsonViewer.diff": "Différences",
@@ -1501,10 +1420,8 @@
   "toolkit.jsonViewer.right": "Droite",
   "toolkit.jsonViewer.rightPlaceholder": "Collez le second JSON...",
   "toolkit.jsonViewer.diffResult": "Résultat du diff",
-
   "toolkit.mockData.type": "Type",
   "toolkit.mockData.count": "Quantité",
-
   "toolkit.portScanner.scanPorts": "Analyser les ports",
   "toolkit.portScanner.scanning": "Analyse...",
   "toolkit.portScanner.filterPlaceholder": "Filtrer par port ou processus...",
@@ -1518,7 +1435,6 @@
   "toolkit.portScanner.empty": "Aucun port analysé pour l'instant",
   "toolkit.portScanner.emptyHint": "Cliquez sur Analyser les ports pour découvrir les services en écoute",
   "toolkit.portScanner.noMatch": "Aucun port ne correspond à « {{filter}} »",
-
   "toolkit.regex.patternPlaceholder": "Saisissez un pattern regex...",
   "toolkit.regex.replaceMode": "Mode remplacement",
   "toolkit.regex.matchCount": "{{count}} correspondance",
@@ -1530,7 +1446,6 @@
   "toolkit.regex.replacePreview": "Aperçu du remplacement",
   "toolkit.regex.matches": "Correspondances",
   "toolkit.regex.namedCaptureGroups": "Groupes de capture nommés",
-
   "toolkit.scoringSandbox.title": "Titre",
   "toolkit.scoringSandbox.titlePlaceholder": "Saisissez un titre d'article à évaluer...",
   "toolkit.scoringSandbox.content": "Contenu (facultatif)",
@@ -1557,7 +1472,6 @@
   "toolkit.scoringSandbox.affinityMultiplier": "Multiplicateur d'affinité",
   "toolkit.scoringSandbox.domainRelevance": "Pertinence du domaine",
   "toolkit.scoringSandbox.contentQuality": "Qualité du contenu",
-
   "toolkit.sourceDebugger.testFeed": "Tester le flux",
   "toolkit.sourceDebugger.testing": "Test...",
   "toolkit.sourceDebugger.clear": "Effacer",
@@ -1568,20 +1482,17 @@
   "toolkit.sourceDebugger.validationUrl": "L'URL doit commencer par http:// ou https://",
   "toolkit.sourceDebugger.itemCount": "{{count}} élément",
   "toolkit.sourceDebugger.itemCount_other": "{{count}} éléments",
-
   "toolkit.sovereignProfile.loading": "Chargement du profil souverain...",
   "toolkit.sovereignProfile.completeness": "Complétude du profil",
   "toolkit.sovereignProfile.generateDocument": "Générer le document",
   "toolkit.sovereignProfile.generating": "Génération...",
   "toolkit.sovereignProfile.runStreets": "Exécutez les commandes STREETS pour remplir",
   "toolkit.sovereignProfile.stackDocument": "Document de stack",
-
   "toolkit.stackHealth.scanning": "Analyse...",
   "toolkit.stackHealth.analyzing": "Analyse de la santé du projet...",
   "toolkit.stackHealth.empty": "Aucune donnée de santé pour l'instant",
   "toolkit.stackHealth.emptyHint": "Cliquez sur Actualiser pour analyser les dépendances du projet",
   "toolkit.stackHealth.noProjects": "Aucun projet détecté. ACE doit d'abord découvrir des projets.",
-
   "agentMemory.title": "Mémoire de l'agent",
   "agentMemory.empty": "Aucune mémoire d'agent pour l'instant",
   "agentMemory.emptyHint": "Connectez un agent IA via MCP pour commencer à construire un contexte inter-agents.",
@@ -1603,12 +1514,10 @@
   "agentMemory.expires": "Expire",
   "agentMemory.promotedTo": "Promu en décision #{{id}}",
   "agentMemory.promoteToDecision": "Promouvoir en décision",
-
   "reader.readArticle": "Lire l'article",
   "reader.noContent": "Aucun contenu disponible pour cet élément.",
   "reader.wordCount": "{{count}} mots",
   "reader.readTime": "~{{minutes}} min de lecture",
-
   "audio.feature": "Briefings audio",
   "audio.play": "Lire le briefing audio",
   "audio.pause": "Mettre en pause le briefing audio",
@@ -1616,7 +1525,6 @@
   "audio.generating": "Génération audio...",
   "audio.playFailed": "Échec de la lecture audio",
   "audio.playbackBlocked": "Lecture audio bloquée",
-
   "autophagy.title": "Comment 4DA apprend",
   "autophagy.feature": "Aperçus d'autophagie",
   "autophagy.calibrationAccuracy": "Précision de calibration",
@@ -1627,12 +1535,10 @@
   "autophagy.calibrations": "Étalonnages",
   "autophagy.antiPatterns": "Anti-patterns",
   "autophagy.recentCycles": "Cycles récents",
-
   "decisions.title": "Décisions à prendre",
   "decisions.subtitle": "Opportunités à durée limitée",
   "decisions.affects": "Affecte",
   "decisions.act": "Agir",
-
   "delegation.title": "Coaching de tâches",
   "delegation.empty": "Aucune donnée de délégation disponible",
   "delegation.emptyHint": "Ajoutez votre stack technique dans les paramètres pour voir les scores de délégation.",
@@ -1653,7 +1559,6 @@
   "delegation.factorMaturity": "Maturité",
   "delegation.factorReversibility": "Réversibilité",
   "delegation.factorSecurity": "Sécurité",
-
   "knowledgeGaps.title": "Opportunités d'apprentissage",
   "knowledgeGaps.feature": "Opportunités d'apprentissage",
   "knowledgeGaps.count": "{{count}} lacune",
@@ -1663,22 +1568,18 @@
   "knowledgeGaps.missedArticles_other": "{{count}} articles pertinents avec lesquels vous n'avez pas interagi",
   "knowledgeGaps.noEngagement": "Aucune interaction enregistrée",
   "knowledgeGaps.daysSinceEngagement": "{{days}}j depuis la dernière interaction",
-
   "intelligence.title": "Signaux en direct",
   "intelligence.feature": "Signaux en direct",
   "intelligence.calibration": "Précision de calibration",
   "intelligence.learned": "Ce que le système a appris",
   "intelligence.sourceQuality": "Qualité des sources",
-
   "digest.title": "Résumé hebdomadaire",
   "digest.analyzed": "analysés",
   "digest.relevant": "pertinents",
   "digest.avgScore": "score moyen",
   "digest.topItems": "Éléments phares",
-
   "standingQueries.singleMatch": "« {{query}} » — {{count}} nouvelle correspondance trouvée",
   "standingQueries.multiMatch": "{{count}} requêtes permanentes ont de nouvelles correspondances",
-
   "learnedBehavior.title": "Retours et affinités",
   "learnedBehavior.subtitle": "Sujets influencés par vos actions de sauvegarde et d'ignorance",
   "learnedBehavior.topicAffinities": "Affinités de sujets",
@@ -1688,7 +1589,6 @@
   "learnedBehavior.antiTopics": "Anti-sujets détectés automatiquement",
   "learnedBehavior.antiTopicsHint": "Les éléments avec ces sujets seront pénalisés dans le scoring de pertinence",
   "learnedBehavior.refresh": "Actualiser le comportement appris",
-
   "signals.title": "Signaux clés",
   "signals.feature": "Chaînes de signaux",
   "signals.activeChains": "{{count}} chaîne active",
@@ -1696,7 +1596,6 @@
   "signals.signalCount": "{{count}} signal",
   "signals.signalCount_other": "{{count}} signaux",
   "signals.resolve": "Résoudre",
-
   "techRadar.title": "Radar technologique",
   "techRadar.loading": "Chargement du radar technologique...",
   "techRadar.empty": "Aucune donnée radar disponible",
@@ -1716,7 +1615,6 @@
   "techRadar.backToFull": "Retour à la vue complète",
   "techRadar.current": "Actuel",
   "techRadar.timeline": "Chronologie",
-
   "results.affinityBoost": "Favorisé car vous avez montré de l'intérêt pour {{topic}}",
   "results.signal.security_alert": "Sécurité",
   "results.signal.breaking_change": "Rupture",
@@ -1737,28 +1635,24 @@
   "results.lowQualityBadge": "Qualité faible",
   "results.decisionMatch": "Décision : {{subject}}",
   "results.streetsDefault": "Ce contenu correspond à un moteur de revenus STREETS.",
-  "results.exploreInPlaybook": "Explorer {{engine}} dans le Playbook STREETS \u2192",
+  "results.exploreInPlaybook": "Explorer {{engine}} dans le Playbook STREETS →",
   "results.predictiveFeature": "Contexte prédictif",
   "results.predictedContext": "Contexte prédit",
   "results.predictedAt": "Prédit à {{time}}",
   "results.refreshInterval": "Actualisation toutes les 5 min",
-
   "pro.signals": "{{count}} signal",
   "pro.signals_other": "{{count}} signaux",
   "pro.gaps": "{{count}} lacune",
   "pro.gaps_other": "{{count}} lacunes",
   "pro.hoursSaved": "~{{hours}}h économisées",
   "pro.intelligenceSummary": "Intelligence de signaux : {{summary}} ({{days}} derniers jours)",
-
   "search.nlqFeature": "Requête en langage naturel",
   "search.nlqTitle": "Requête en langage naturel",
   "search.nlqSubtitle": "Interrogez votre flux en langage naturel",
   "search.nlqPlaceholder": "Posez une question sur votre flux...",
   "search.nlqHint": "Posez une question sur votre flux en langage naturel",
   "search.query": "Requête",
-  "search.indexFirst": "Indexez d'abord vos fichiers (Paramètres > Contexte)",
   "search.untitled": "Sans titre",
-  "search.tryDifferent": "Essayez des mots-clés différents ou une requête plus large",
   "search.resultStats": "{{count}} résultat en {{ms}}ms",
   "search.resultStats_other": "{{count}} résultats en {{ms}}ms",
   "search.stackContext": "Votre stack",
@@ -1768,13 +1662,10 @@
   "search.attention": "nécessite attention",
   "search.stale": "obsolète",
   "search.critical": "critique",
-  "search.relatedDecisions": "Décisions liées",
-  "search.knowledgeGaps": "Opportunités d'apprentissage",
   "search.daysStale": "{{days}}j obsolète",
   "search.watchCreated": "Veille créée",
   "search.watchDeleted": "Veille supprimée",
   "search.noLlm": "Configurez un fournisseur LLM pour la synthèse IA",
-
   "context.title": "Contexte",
   "context.filesIndexed": "{{count}} fichiers indexés",
   "context.reloadFiles": "Recharger les fichiers",
@@ -1789,9 +1680,7 @@
   "context.exportFailed": "Échec de l'exportation : {{error}}",
   "context.exporting": "Exportation du paquet de contexte",
   "context.exportToClipboard": "Exporter le paquet de contexte (presse-papiers)",
-
   "briefing.read": "Lire",
-
   "onboarding.locale.detecting": "Détection de la région...",
   "onboarding.locale.country": "Pays",
   "onboarding.locale.language": "Langue",
@@ -1802,7 +1691,6 @@
   "onboarding.locale.selectCountry": "Sélectionner un pays",
   "onboarding.locale.selectLanguage": "Sélectionner une langue",
   "onboarding.locale.selectCurrency": "Sélectionner une devise",
-
   "onboarding.stack.loading": "Chargement des profils de stack...",
   "onboarding.stack.description": "Sélectionnez votre stack technique pour un scoring de contenu plus intelligent. Les stacks détectés automatiquement sont présélectionnés.",
   "onboarding.stack.painPoints": "{{count}} points de friction",
@@ -1812,16 +1700,20 @@
   "onboarding.stack.clickToToggle": "Cliquez pour basculer.",
   "onboarding.stack.noSelection": "Aucun stack sélectionné — le scoring utilisera le comportement par défaut.",
   "onboarding.stack.autoSelectedBanner": "Sélectionné automatiquement en fonction de vos projets",
-
   "onboarding.projects.scanning": "Analyse de vos projets...",
   "onboarding.projects.detected": "Détecté depuis vos projets locaux :",
   "onboarding.projects.noTech": "Aucune technologie spécifique détectée. 4DA apprendra de votre activité.",
   "onboarding.projects.manageHint": "Gérez les répertoires à tout moment dans les Paramètres.",
-
+  "onboarding.choice.title": "Vous êtes prêt",
+  "onboarding.choice.description": "4DA apprend déjà vos projets en arrière-plan. Vous pouvez commencer à explorer maintenant ou affiner la configuration d'abord.",
+  "onboarding.choice.startUsing": "Commencer à utiliser 4DA",
+  "onboarding.choice.startHint": "L'analyse continue en arrière-plan",
+  "onboarding.choice.or": "ou",
+  "onboarding.choice.continueSetup": "Continuer la configuration",
+  "onboarding.choice.continueHint": "Configurer le fournisseur IA, stack, centres d'intérêt",
   "learnedBehavior.learningCount": "Apprentissage : {{count}} préférence",
   "learnedBehavior.learningCount_other": "Apprentissage : {{count}} préférences",
   "learnedBehavior.moreCount": "+{{count}} de plus",
-
   "channels.renderNow": "Rendre maintenant",
   "channels.rerender": "Re-rendre",
   "channels.rendering": "Rendu...",
@@ -1852,10 +1744,7 @@
   "channels.basicMode": "Mode basique",
   "channels.configureOllama": "Configurez Ollama pour la synthèse IA",
   "coach.freeSession": "Session gratuite {{current}}/{{max}}",
-
   "toolkit.title": "Boîte à outils du développeur",
-
-  "decisions.title": "Décisions à prendre",
   "decisions.recorded": "{{count}} décisions enregistrées",
   "decisions.record": "Enregistrer une décision",
   "decisions.decision": "Décision",
@@ -1883,7 +1772,7 @@
   "decisions.supersededBy": "Remplacé par #{{id}}",
   "decisions.autoDetectedNotice": "Certains choix techniques ont été détectés automatiquement depuis vos projets locaux",
   "decisions.autoDetectedHint": "Si quelque chose semble incorrect, utilisez le bouton Supprimer pour corriger. Cela met aussi à jour votre playbook et profil.",
-
+  "decisions.toggleDetail": "Afficher/masquer les détails",
   "calibration.title": "Santé du système",
   "calibration.subtitle": "Évaluation honnête de la qualité du scoring pour votre configuration",
   "calibration.running": "Calibration...",
@@ -1904,7 +1793,7 @@
   "calibration.fullyCalibrated": "Votre système est entièrement calibré",
   "calibration.allScoringReady": "Tous les systèmes de scoring fonctionnent à précision maximale pour votre configuration.",
   "calibration.analyzing": "Analyse de votre système et de la précision du scoring...",
-  "calibration.gradeImproved": "Grade amélioré : {{prev}} \u2192 {{next}}",
+  "calibration.gradeImproved": "Grade amélioré : {{prev}} → {{next}}",
   "calibration.recommendationsHint": "Corrigez ceux-ci pour améliorer votre grade. Les actions se recalibrent automatiquement une fois terminées.",
   "calibration.action.pullModel": "Télécharger le modèle",
   "calibration.action.pulling": "Téléchargement...",
@@ -1934,7 +1823,13 @@
   "calibration.onboarding.noContent": "La calibration nécessite du contenu à analyser.",
   "calibration.onboarding.noContentHint": "Lancez d'abord une analyse, puis revenez pour calibrer.",
   "calibration.action.working": "En cours...",
-
+  "health.issueCount": "{{count}} problèmes système détectés",
+  "missed.title": "Ce que vous auriez manqué",
+  "missed.scanned": "{{count}} éléments analysés",
+  "missed.noiseRejected": "bruit rejeté",
+  "missed.signalSurfaced": "signal détecté",
+  "missed.timeSaved": "temps économisé",
+  "missed.filtered": "filtrés",
   "profile.copyProfile": "Copier le profil",
   "profile.exportJson": "Exporter en JSON",
   "profile.copyDna": "Copier le DNA",
@@ -1958,7 +1853,6 @@
   "profile.deps": "dépendances",
   "profile.filtered": "filtrés",
   "profile.factCount": "{{count}} données",
-
   "dna.title": "ADN du développeur",
   "dna.defaultSubtitle": "Votre empreinte technique, découverte automatiquement",
   "dna.building": "Construction du profil DNA...",
@@ -1969,7 +1863,7 @@
   "dna.ecosystem": "Écosystème",
   "dna.copyDna": "Copier le DNA",
   "dna.copiedToClipboard": "Developer DNA copié dans le presse-papiers",
-  "dna.statsLine": "{{days}}j actif \u00b7 {{items}} éléments traités \u00b7 {{rate}}% filtrés",
+  "dna.statsLine": "{{days}}j actif · {{items}} éléments traités · {{rate}}% filtrés",
   "dna.keyDependencies": "Dépendances clés",
   "dna.moreItems": "+{{count}} de plus",
   "dna.interests": "Intérêts",
@@ -1977,7 +1871,7 @@
   "dna.blindSpots": "Angles morts",
   "dna.daysStale": "{{days}}j obsolète",
   "dna.sourceEngagement": "Engagement par source",
-  "dna.sourceStats": "{{seen}} vus \u00b7 {{saved}} sauvegardés",
+  "dna.sourceStats": "{{seen}} vus · {{saved}} sauvegardés",
   "dna.projects": "Projets",
   "dna.dependencies": "Dépendances",
   "dna.rejectionRate": "Taux de rejet",
@@ -1986,20 +1880,17 @@
   "dna.downloadSvg": "Télécharger la carte (SVG)",
   "dna.cardDownloaded": "Carte Developer DNA téléchargée",
   "dna.cardDownloadFailed": "Échec du téléchargement de la carte",
-
   "techRadar.ringAdopt": "Adopter",
   "techRadar.ringTrial": "Essai",
   "techRadar.ringAssess": "Évaluer",
   "techRadar.ringHold": "Maintenir",
   "techRadar.svgLabel": "Visualisation du radar technologique",
-
   "tasteTest.readThis": "Je lirais ça",
   "tasteTest.skip": "Passer",
   "tasteTest.loveThis": "J'adore",
   "tasteTest.markInteresting": "Marquer « {{title}} » comme intéressant",
   "tasteTest.skipTitle": "Passer « {{title}} »",
   "tasteTest.loveTitle": "J'adore « {{title}} »",
-
   "techRadar.closePanel": "Fermer le panneau",
   "techRadar.score": "Score : {{score}}",
   "techRadar.decisionRef": "Décision #{{id}}",
@@ -2011,7 +1902,6 @@
   "techRadar.movementOut": "En régression",
   "techRadar.movementNew": "Nouvelle entrée",
   "techRadar.movementStable": "Stable",
-
   "sovereignProfile.gpu": "GPU : {{tier}}",
   "sovereignProfile.llm": "LLM : {{tier}}",
   "sovereignProfile.cpu": "CPU : {{model}}",
@@ -2025,7 +1915,7 @@
   "sovereignProfile.activeDecisions": "{{count}} décisions actives",
   "sovereignProfile.projectsMonitored": "{{count}} projets surveillés",
   "sovereignProfile.activeTopics": "Actifs : {{topics}}",
-  "sovereignProfile.sourceStats": "{{seen}} vus \u00b7 {{saved}} sauvegardés",
+  "sovereignProfile.sourceStats": "{{seen}} vus · {{saved}} sauvegardés",
   "sovereignProfile.action.infraLabel": "Détecter votre GPU, CPU et configuration LLM",
   "sovereignProfile.action.scanNow": "Analyser maintenant",
   "sovereignProfile.action.stackLabel": "Découvrir votre stack technique depuis vos projets",
@@ -2035,7 +1925,6 @@
   "sovereignProfile.action.prefsLabel": "Ajoutez des intérêts pour affiner votre flux",
   "sovereignProfile.action.openSettings": "Ouvrir les paramètres",
   "sovereignProfile.action.contextLabel": "Dirigez 4DA vers un dossier de projet",
-
   "scoreTooltip.stackMatch": "Correspondance stack : forte",
   "scoreTooltip.partialStackMatch": "Correspondance stack : partielle",
   "scoreTooltip.interestMatch": "Correspond à vos intérêts",
@@ -2048,7 +1937,6 @@
   "scoreTooltip.highQuality": "Contenu de haute qualité",
   "scoreTooltip.novelContent": "Contenu inédit",
   "scoreTooltip.serendipity": "Découverte fortuite",
-
   "scoreDrawer.toggle": "Basculer le détail du score",
   "scoreDrawer.title": "Détail du score",
   "scoreDrawer.signals": "Signaux",
@@ -2058,7 +1946,6 @@
   "scoreDrawer.comparing": "Comparaison avec",
   "scoreDrawer.compareWith": "Comparer avec",
   "scoreDrawer.selectItem": "Sélectionnez un élément...",
-
   "scoreDrawer.factor.context": "Contexte du projet",
   "scoreDrawer.factor.interest": "Correspondance d'intérêts",
   "scoreDrawer.factor.dependency": "Correspondance de dépendances",
@@ -2076,20 +1963,16 @@
   "scoreDrawer.factor.affinity": "Affinité de sujet",
   "scoreDrawer.factor.anti": "Pénalité anti-sujet",
   "scoreDrawer.factor.confirmation": "Confirmation de signal",
-
   "briefing.profile.feedbackImpact": "Vos retours ont façonné {{count}} signal futur",
   "briefing.profile.feedbackImpact_other": "Vos retours ont façonné {{count}} signaux futurs",
-
   "briefing.streetsMatchStrength": "{{pct}}% de correspondance",
   "briefing.streetsOpenModule": "Ouvrir le Module {{id}}",
   "briefing.streetsNotNow": "Pas maintenant",
-
   "playbook.personalizedBanner": "Personnalisé pour votre configuration",
   "playbook.personalizedBannerDesc": "Contenu adapté en utilisant votre profil souverain et votre flux d'intelligence",
   "playbook.feedEchoSave": "Sauvegarder",
   "playbook.feedEchoSaved": "Sauvegardé",
   "playbook.feedEchoNewItems": "{{count}} nouveaux depuis votre dernière visite",
-
   "missions.title": "Premiers pas",
   "missions.saveArticles": "Sauvegardez 3 articles qui vous semblent utiles",
   "missions.dismissArticles": "Ignorez 2 articles qui ne vous intéressent pas",
@@ -2099,7 +1982,6 @@
   "missions.completed": "Mission accomplie : {{mission}}. Suivante : {{next}}",
   "missions.allComplete": "Toutes les missions sont accomplies ! Votre système d'intelligence est calibré.",
   "missions.dismiss": "Ignorer les missions",
-
   "weekly.title": "Résumé d'intelligence hebdomadaire",
   "weekly.analyzed": "éléments analysés",
   "weekly.cycles": "cycles d'apprentissage",
@@ -2109,23 +1991,19 @@
   "weekly.addInterest": "+ Ajouter",
   "weekly.interestAdded": "« {{topic}} » ajouté aux intérêts",
   "weekly.interestFailed": "Échec de l'ajout de l'intérêt",
-
   "tips.feedbackLoop": "Sauvegardez les articles qui vous semblent utiles — cela apprend au système ce qui compte pour vous.",
   "tips.feedbackLoopHint": "Ignorer des articles aide aussi. Chaque interaction améliore vos résultats.",
   "tips.ollamaNudge": "Vos résultats utilisent la correspondance par mots-clés. Ollama (gratuit, local) débloque la correspondance sémantique pour des résultats plus pertinents.",
   "tips.ollamaNudgeHint": "Installez Ollama, puis activez-le dans Paramètres > Fournisseur d'IA. Fonctionne entièrement sur votre machine.",
-
   "guided.feed": "Votre flux de contenu personnalisé",
   "guided.score": "Appuyez pour voir pourquoi ce score est élevé",
   "guided.save": "Enregistrez des éléments dans votre Bibliothèque",
   "guided.dna": "Votre profil d'identité développeur",
   "guided.settings": "Configurer les sources et l'IA",
-
   "emptyState.header": "Pendant que votre première analyse s'exécute, voici ce que les développeurs {{stack}} ont vu cette semaine",
   "emptyState.headerDefault": "Pendant que votre première analyse s'exécute, voici ce que les développeurs ont vu cette semaine",
   "emptyState.footer": "De vrais signaux arrivent dans ~2 minutes...",
   "emptyState.badge": "Exemple",
-
   "firstCve.title": "4DA vous a protégé",
   "firstCve.detected": "Détecté {{minutes}} minutes après la publication",
   "firstCve.affects": "affecte {{package}} dans {{count}} de vos projets",

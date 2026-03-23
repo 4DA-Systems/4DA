@@ -2,11 +2,10 @@
   "app.title": "4DA",
   "app.tagline": "All signal. No feed.",
   "app.skipToContent": "Skip to main content",
-
+  "app.viewChanged": "Navigated to {{view}}",
   "header.settings": "Settings",
   "header.live": "Live",
   "header.signalsLearned": "{{count}} learned",
-
   "action.analyze": "Analyze",
   "action.analyzing": "Analyzing...",
   "action.save": "Save",
@@ -50,7 +49,6 @@
   "action.error": "Error",
   "action.runAnalysis": "Run analysis",
   "action.cancelAnalysis": "Cancel analysis",
-
   "analysis.statusRelevant": "{{relevant}}/{{total}} items relevant",
   "analysis.statusError": "Error: {{message}}",
   "analysis.complete": "Analysis complete: {{count}} relevant items found",
@@ -66,16 +64,13 @@
   "analysis.sourceError": "{{source}}: {{error}}",
   "analysis.stackDetected": "Auto-detected your stack: {{stack}}. Scoring will prioritize matching sources.",
   "analysis.keyboardTriggered": "Analysis started",
-
   "appbar.searchPlaceholder": "Search intelligence...",
   "appbar.analyzing": "Analyzing...",
   "appbar.relevant": "{{count}} relevant",
   "appbar.top": "{{count}} top",
-
   "badge.llm": "LLM",
   "badge.on": "ON",
   "badge.off": "OFF",
-
   "status.enabled": "Enabled",
   "status.disabled": "Disabled",
   "status.active": "Active",
@@ -84,7 +79,6 @@
   "status.disconnected": "Disconnected",
   "status.online": "Online",
   "status.offline": "Offline",
-
   "settings.title": "Settings",
   "settings.locale.title": "Language & Region",
   "settings.locale.description": "Set your country, language, and currency for localized content",
@@ -118,7 +112,6 @@
   "settings.monitoring.lastCheck": "Last: {{time}}",
   "settings.monitoring.testNotification": "Test Notification",
   "settings.monitoring.loading": "Loading monitoring status...",
-
   "settings.ai.title": "AI Provider",
   "settings.ai.description": "Choose your LLM provider",
   "settings.ai.provider": "Provider",
@@ -146,17 +139,16 @@
   "settings.ai.maxItemsBatch": "Max items/batch",
   "settings.ai.minScore": "Min score",
   "settings.ai.dailyTokenLimit": "Daily token limit",
-  "settings.ai.costLimit": "Cost limit (\u00a2/day)",
+  "settings.ai.costLimit": "Cost limit (¢/day)",
   "settings.ai.usageTitle": "Usage Today",
   "settings.ai.usageDescription": "Token consumption",
   "settings.ai.tokens": "Tokens",
   "settings.ai.cost": "Cost",
   "settings.ai.reranked": "Re-ranked",
-
   "settings.context.title": "Automatic Context Discovery",
   "settings.context.description": "Scan directories that define who you are - projects, notes, documents",
   "settings.context.discovering": "Discovering...",
-  "settings.context.autoDiscover": "\u2728 Auto-Discover My Context",
+  "settings.context.autoDiscover": "✨ Auto-Discover My Context",
   "settings.context.dirPathLabel": "Directory path to scan",
   "settings.context.addDirPlaceholder": "Or add specific directory: ~/notes, D:\\research",
   "settings.context.noDirs": "No directories configured yet",
@@ -168,7 +160,6 @@
   "settings.context.techStack": "Tech Stack",
   "settings.context.topics": "Topics",
   "settings.context.more": "+{{count}} more",
-
   "settings.digest.title": "Weekly Summary",
   "settings.digest.description": "Save filtered results as a digest file after each analysis",
   "settings.digest.enabled": "Digest enabled",
@@ -177,7 +168,6 @@
   "settings.digest.minScore": "Min Score",
   "settings.digest.maxItems": "Max Items",
   "settings.digest.loading": "Loading digest settings...",
-
   "settings.personalization.title": "Manual Adjustments",
   "settings.personalization.description": "Fine-tune your context with interests and exclusions",
   "settings.personalization.role": "Your Role",
@@ -206,7 +196,6 @@
   "settings.personalization.removeExclusion": "Remove exclusion {{name}}",
   "settings.personalization.noExclusions": "No exclusions set",
   "settings.personalization.loading": "Loading context...",
-
   "settings.license.title": "License",
   "settings.license.currentTier": "Current tier:",
   "settings.license.tierTeam": "Team",
@@ -229,7 +218,6 @@
   "settings.license.starting": "Starting...",
   "settings.license.startTrial": "Start 45-Day Free Trial",
   "settings.license.getKey": "Get a license key at 4da.ai/signal",
-
   "settings.streets.title": "STREETS Membership",
   "settings.streets.currentTier": "Current tier:",
   "settings.streets.placeholder": "Enter STREETS license key",
@@ -239,14 +227,12 @@
   "settings.streets.tierSignal": "Signal ($12/mo)",
   "settings.streets.tierTeam": "Team ($29/seat/mo)",
   "settings.streets.tierEnterprise": "Enterprise",
-
   "settings.ai.builtInLocal": "Built-in (Local)",
   "settings.ai.builtInModel": "all-MiniLM-L6-v2 (384 dimensions)",
   "settings.ai.builtInDescription": "Zero-config local embeddings. No API key required. The model is downloaded automatically on first use (~90MB).",
   "settings.ai.refreshModels": "Refresh models",
   "settings.ai.registryLastUpdated": "Models updated: {{time}}",
   "settings.ai.costUnavailable": "N/A",
-
   "settings.attention.title": "Attention Dashboard",
   "settings.attention.description": "Where your focus goes vs. where your code needs it",
   "settings.attention.days": "{{count}} days",
@@ -256,7 +242,6 @@
   "settings.attention.blindSpots": "Blind Spots",
   "settings.attention.risk": "{{level}} risk",
   "settings.attention.noData": "Not enough interaction data yet. Use 4DA for a few days to build attention patterns.",
-
   "settings.health.title": "Project Health Radar",
   "settings.health.description": "Dependency freshness, security, momentum, community",
   "settings.health.scanning": "Scanning projects...",
@@ -268,7 +253,6 @@
   "settings.health.dependencies": "{{count}} dependencies",
   "settings.health.lastChecked": "Last checked {{date}}",
   "settings.health.never": "never",
-
   "settings.tabs.general": "General",
   "settings.tabs.intelligence": "Intelligence",
   "settings.tabs.sources": "Sources",
@@ -276,12 +260,9 @@
   "settings.tabs.team": "Team",
   "settings.tabs.about": "About",
   "settings.testConnection": "Test Connection",
-
   "settings.display.showAllViews": "Show all views",
   "settings.display.showAllViewsDescription": "Display all navigation tabs regardless of usage",
-
   "settings.ai.saveConfiguration": "Save AI Configuration",
-
   "settings.digest.emailDelivery": "Email delivery",
   "settings.digest.emailDeliveryOptional": "(optional)",
   "settings.digest.emailAddress": "Email address",
@@ -297,7 +278,6 @@
   "settings.digest.privacyNote": "Sent directly from your machine via your email provider. 4DA never sees your email address or digest contents.",
   "settings.digest.emailConfigSaved": "Email configuration saved",
   "settings.digest.emailTestFailed": "Email test failed",
-
   "nav.results": "Signal",
   "nav.briefing": "Briefing",
   "nav.insights": "Radar",
@@ -321,7 +301,6 @@
   "nav.console.subtitle": "Accuracy, projects & AI costs",
   "nav.calibrate": "System",
   "nav.calibrate.subtitle": "Health & calibration",
-
   "results.title": "Signal Analysis",
   "results.new": "{{count}} new",
   "results.itemsRelevant": "{{items}} items, {{relevant}} relevant",
@@ -351,7 +330,6 @@
   "results.topPicksGroup": "High Confidence",
   "results.relevantGroup": "Relevant",
   "results.belowThreshold": "Below Threshold",
-
   "briefing.title": "AI Briefing",
   "briefing.generate": "Generate Briefing",
   "briefing.generating": "Generating...",
@@ -379,10 +357,9 @@
   "briefing.viewAllResults": "View All {{count}} Results",
   "briefing.systemLearned": "System learned",
   "briefing.intelligenceMetrics": "Intelligence Metrics",
-
   "briefing.profile.title": "Your Profile",
   "briefing.profile.autophagyAccuracy": "Autophagy Accuracy",
-  "briefing.profile.autophagySummary": "{{cycles}} learning cycles \u00b7 {{topics}} topics \u00b7 {{items}} items (7d)",
+  "briefing.profile.autophagySummary": "{{cycles}} learning cycles · {{topics}} topics · {{items}} items (7d)",
   "briefing.profile.topAffinities": "Top Affinities",
   "briefing.profile.strongestSignals": "Strongest Signals",
   "briefing.profile.interactHint": "Interact with results to build affinities",
@@ -399,10 +376,8 @@
   "briefing.profile.knowledgeGaps": "Learning Opportunities ({{count}})",
   "briefing.profile.moreGaps": "+{{count}} more",
   "briefing.profile.intelligenceGrowth": "Learning Progress",
-
   "feed.title": "Signal Stream",
   "feed.viewAll": "View all {{count}}",
-
   "pulse.noData": "No intelligence gathered yet. Run an analysis to get started.",
   "pulse.itemsAnalyzed": "{{count}} items analyzed, {{relevant}} relevant to you.",
   "pulse.signalsNeedAttention": "{{count}} need your attention.",
@@ -411,19 +386,18 @@
   "pulse.newSince": "{{count}} new since {{timeAgo}}.",
   "pulse.movedToTop": "{{count}} moved to top picks.",
   "pulse.securityAlert": "{{count}} security alert appeared.",
-
   "search.title": "Search Your Intelligence",
   "search.subtitle": "Find signals, articles, and insights across your feed",
   "search.placeholder": "Ask anything about your content...",
   "search.searching": "Searching...",
   "search.noResults": "No results found",
-  "search.tryDifferent": "Try a different query or broader keywords",
+  "search.tryDifferent": "Try different keywords or a broader query",
   "search.tryThese": "Try these:",
   "search.queryType": "{{intent}} query",
   "search.customRange": "Custom range",
   "search.unknownFile": "Unknown file",
   "search.stats": "{{count}} results in {{ms}}ms ({{confidence}}% confidence)",
-  "search.indexFirst": "Run an analysis first to index your content",
+  "search.indexFirst": "Index your files first (Settings > Context)",
   "search.noAnalysisTitle": "Intelligence Console ready — awaiting first analysis",
   "search.noAnalysisHint": "Run your first analysis to unlock the Intelligence Console",
   "search.capabilityStack": "Stack-aware search",
@@ -441,7 +415,7 @@
   "search.analyzingSignals": "Analyzing signals...",
   "search.synthesizing": "Synthesizing...",
   "search.groundedIn": "Grounded in {{count}} of {{total}} signals",
-  "search.ungrounded": "Ungrounded \u2014 no sources cited. Verify independently.",
+  "search.ungrounded": "Ungrounded — no sources cited. Verify independently.",
   "search.viewSources": "{{count}} sources",
   "search.myWatches": "My Watches",
   "search.watchHint": "Watch a search to get notified of new matches",
@@ -451,29 +425,24 @@
   "search.relatedDecisions": "Related Decisions",
   "search.knowledgeGaps": "Learning Opportunities",
   "search.staleForDays": "{{days}}d stale",
-
   "time.justNow": "Just now",
   "time.minutesAgo": "{{count}}m ago",
   "time.hoursAgo": "{{count}}h ago",
   "time.daysAgo": "{{count}}d ago",
-
   "tier.free": "Free",
   "tier.pro": "Signal",
   "tier.signal": "Signal",
   "tier.team": "Team",
   "tier.enterprise": "Enterprise",
-
   "update.available": "Update available: v{{version}}",
   "update.install": "Install & Restart",
   "update.installing": "Installing...",
   "update.later": "Later",
   "update.defaultBody": "A new version is ready to install.",
   "update.download": "Download Update",
-
   "browser.title": "Desktop App Required",
   "browser.description": "4DA runs as a desktop app to access your local files, monitor sources, and keep everything private on your machine.",
   "browser.hint": "Run <code>npm run tauri dev</code> or launch the installed app.",
-
   "onboarding.welcome.title": "Welcome to 4DA",
   "onboarding.welcome.tagline": "All signal. No feed.",
   "onboarding.welcome.description": "4DA discovers what you care about from your projects and surfaces relevant content from across the internet - before you know you need it.",
@@ -487,7 +456,6 @@
   "onboarding.welcome.quickSetupHint": "Quick setup — most steps are automatic",
   "onboarding.welcome.skipToContent": "Skip to Content",
   "onboarding.welcome.skipHint": "You can configure later in Settings",
-
   "onboarding.choice.title": "You're ready to go",
   "onboarding.choice.description": "4DA is already learning about your projects in the background. You can start exploring now or fine-tune your setup first.",
   "onboarding.choice.startUsing": "Start using 4DA",
@@ -495,19 +463,16 @@
   "onboarding.choice.or": "or",
   "onboarding.choice.continueSetup": "Continue setup",
   "onboarding.choice.continueHint": "Configure AI provider, stack, interests",
-
   "onboarding.nav.back": "Back",
   "onboarding.nav.next": "Next",
   "onboarding.nav.skip": "Skip",
   "onboarding.nav.continue": "Continue",
   "onboarding.nav.skipForNow": "Skip for now",
-
   "onboarding.stepLabel.welcome": "Welcome",
   "onboarding.stepLabel.setup": "Setup",
   "onboarding.stepLabel.calibrate": "Calibrate",
   "onboarding.stepProgress": "Step {{current}} of {{total}}",
   "onboarding.version": "Version {{version}}",
-
   "onboarding.apiKeys.title": "API Keys",
   "onboarding.apiKeys.subtitle": "Configure API keys for best results, or try keyword-only mode.",
   "onboarding.apiKeys.installingModels": "Installing models for local AI...",
@@ -546,7 +511,6 @@
   "onboarding.apiKeys.keywordModeDesc": "Without an API key or Ollama, 4DA can still work using keyword matching. Results will be less precise than semantic search, but still useful. You can add API keys later in Settings.",
   "onboarding.apiKeys.tryKeywordMode": "Try keyword-only mode",
   "onboarding.apiKeys.installingModelsBtn": "Installing models...",
-
   "onboarding.complete.title": "You're All Set!",
   "onboarding.complete.subtitle": "4DA found relevant content for you. Here's how to make it even better.",
   "onboarding.complete.keepImproving": "Keep improving 4DA",
@@ -558,7 +522,6 @@
   "onboarding.complete.letItRunDesc": "Background monitoring checks every 30 min",
   "onboarding.complete.startUsing": "Start Using 4DA",
   "onboarding.complete.settingsHint": "Press Settings anytime to adjust your preferences",
-
   "onboarding.interests.title": "Your Interests",
   "onboarding.interests.subtitle": "Help 4DA understand what to surface. Your feedback refines scoring over time.",
   "onboarding.interests.roleLabel": "What do you do?",
@@ -573,7 +536,6 @@
   "onboarding.interests.finishSetup": "Finish Setup",
   "onboarding.interests.remove": "Remove {{topic}}",
   "onboarding.interests.addLabel": "Add a topic of interest",
-
   "onboarding.context.title": "Discover Your Context",
   "onboarding.context.subtitle": "4DA discovers what matters to you by scanning your projects. 100% local, 100% private.",
   "onboarding.context.discoveryComplete": "Discovery Complete!",
@@ -597,7 +559,6 @@
   "onboarding.context.faqControlDesc": "Yes! You can add or remove directories anytime in Settings. 4DA automatically ignores sensitive locations like node_modules, .git folders, and hidden system files.",
   "onboarding.context.faqTimeTitle": "How long does scanning take?",
   "onboarding.context.faqTimeDesc": "Usually a few seconds to a minute depending on how many projects you have. The initial scan is the longest - after that, 4DA only checks for changes.",
-
   "onboarding.scan.title": "Deep Intelligence Scan",
   "onboarding.scan.subtitle": "Comprehensive scan of 300-500+ items across all sources to build your personalized feed.",
   "onboarding.scan.inProgress": "Deep Scan in Progress",
@@ -613,8 +574,7 @@
   "onboarding.scan.readyDesc": "We'll comprehensively scan 300-500+ items from HN (5 categories), arXiv (16 fields), Reddit (40+ subs), and GitHub to build your personalized intelligence feed.",
   "onboarding.scan.startDeepScan": "Start Deep Scan",
   "onboarding.scan.timeEstimateShort": "Takes 2-5 minutes for comprehensive results",
-  "onboarding.scan.seeResults": "See My Results \u2192",
-
+  "onboarding.scan.seeResults": "See My Results →",
   "onboarding.results.title": "Your Results",
   "onboarding.results.topPicksSubtitle": "Here are your top picks from across the internet.",
   "onboarding.results.building": "Building your personalized intelligence feed...",
@@ -631,7 +591,6 @@
   "onboarding.results.enter4DA": "Enter 4DA",
   "onboarding.results.backgroundScanHint": "Full scan continues in background - you can enter anytime.",
   "onboarding.results.backgroundScanDone": "Full scan continues in background for comprehensive results.",
-
   "onboarding.setup.title": "Quick Setup",
   "onboarding.setup.subtitle": "Configure your AI and interests. Everything stays local and private.",
   "onboarding.setup.aiProvider": "AI Provider",
@@ -662,7 +621,6 @@
   "onboarding.setup.keyFormatHint": "Key format doesn't look right",
   "onboarding.setup.keyFormatHintSoft": "Key format may not be correct - you can still continue",
   "onboarding.setup.usingTechStack": "Using tech stack for content scoring",
-
   "onboarding.setupAi.localAiReady": "Local AI ready — no API keys needed",
   "onboarding.setupAi.local": "Local",
   "onboarding.setupAi.localLabel": "Local",
@@ -680,9 +638,8 @@
   "onboarding.setupAi.keywordHint": "Keyword matching works out of the box. AI adds deeper semantic matching.",
   "onboarding.setupAi.basicModeHint": "No worries — 4DA works without AI using keyword matching. You can set up Ollama or add an API key later in Settings.",
   "onboarding.setupAi.privacyMessage": "Your data never leaves your machine. No API keys, no cloud accounts, no usage tracking.",
-  "onboarding.setupAi.ollamaExplainer": "Ollama runs AI models directly on your computer \u2014 completely private, completely free.",
+  "onboarding.setupAi.ollamaExplainer": "Ollama runs AI models directly on your computer — completely private, completely free.",
   "onboarding.setupAi.noKeyHint": "No API key? No problem. 4DA uses keyword matching by default. Add a key anytime in Settings for enhanced results.",
-
   "settings.translations.title": "Translation Editor",
   "settings.translations.description": "Override any translated string in the app",
   "settings.translations.search": "Search by key or value...",
@@ -700,38 +657,36 @@
   "settings.translations.noResults": "No translations match your search",
   "settings.translations.allNamespaces": "All",
   "settings.translations.editorToggle": "Translation Editor",
-
   "error.generic": "Something went wrong",
   "error.tryAgain": "Try again",
   "error.dbUnavailable": "Database unavailable",
   "error.somethingWrong": "Something went wrong",
   "error.reload": "Reload App",
   "error.tryRecover": "Try to Recover",
-
+  "error.viewFailed": "{{viewName}} failed to load",
+  "error.viewRecovery": "An unexpected error occurred. Try again or switch views.",
+  "error.retry": "Retry",
+  "error.playbookBrowser": "Playbook requires the desktop app",
+  "error.playbookFailed": "Failed to load playbook content",
   "commandDeck.title": "Command Deck",
   "commandDeck.git": "Git",
   "commandDeck.commands": "Commands",
   "commandDeck.history": "History",
   "commandDeck.toggle": "Toggle",
   "commandDeck.tabs": "Tabs",
-
   "commandRunner.noDir": "No directory selected",
   "commandRunner.placeholder": "Enter command...",
   "commandRunner.exit": "exit {{code}}",
   "commandRunner.hint": "Type a command and press Enter",
-
   "toolkit.search": "Search tools...",
   "toolkit.pinned": "Pinned",
   "toolkit.utilities": "Utilities ({{count}})",
   "toolkit.noMatch": "No tools match \"{{query}}\"",
-
   "advantage.score": "Your Edge",
   "advantage.acted": "{{acted}}/{{opened}} acted",
   "advantage.avgLead": "{{hours}}h avg lead",
-
   "engagement.streak": "streak",
   "engagement.activity": "7-day activity",
-
   "pro.hint": "Signal: {{feature}}",
   "pro.upgrade": "Upgrade to Signal",
   "pro.renew": "Renew",
@@ -746,7 +701,6 @@
   "pro.startingTrial": "Starting...",
   "pro.haveLicenseKey": "Have a license key?",
   "pro.invalidLicenseKey": "Invalid license key",
-
   "proValue.title": "Your Intelligence Value",
   "proValue.lastDays": "Last {{days}} days",
   "proValue.activeSince": "Active since {{date}}",
@@ -764,7 +718,6 @@
   "proValue.dataDepth": "Data Depth",
   "proValue.learningInteractions": "{{count}} learning interactions",
   "proValue.dataSpans": "Spans {{days}} days",
-
   "documents.title": "Indexed Documents",
   "documents.documentsIndexed": "{{count}} documents indexed",
   "documents.back": "← Back",
@@ -779,14 +732,12 @@
   "documents.noDocuments": "No documents indexed yet",
   "documents.addFiles": "Add PDF, DOCX, or other files to your scan directories to index them",
   "documents.totalStats": "{{words}} words across {{chunks}} chunks",
-
   "community.title": "Community Intelligence",
   "community.active": "Active",
   "community.description": "Contributing anonymized scoring patterns to improve accuracy for all 4DA users.",
   "community.frequency": "Frequency",
   "community.lastSync": "Last sync",
   "community.pending": "Pending",
-
   "settings.team.title": "Team Sync",
   "settings.team.loading": "Loading team status...",
   "settings.team.created": "Team created successfully",
@@ -831,7 +782,6 @@
   "settings.team.expiresAt": "Expires",
   "settings.team.inviteInstructions": "The recipient should go to Settings > Team Sync > Join Team and enter this code.",
   "settings.team.generateAnother": "Generate Another Invite",
-
   "settings.community.title": "Community Intelligence",
   "settings.community.subtitle": "Help improve scoring for all 4DA users",
   "settings.community.confirmTitle": "Enable Community Intelligence?",
@@ -851,7 +801,6 @@
   "settings.community.lastContribution": "Last contribution",
   "settings.community.never": "Never",
   "settings.community.anonymousId": "Anonymous ID",
-
   "team.dashboard.title": "Team",
   "team.dashboard.signals": "Signals",
   "team.dashboard.decisions": "Decisions",
@@ -860,7 +809,6 @@
   "team.dashboard.members": "members",
   "team.dashboard.pending": "pending",
   "team.dashboard.lastSync": "Last sync",
-
   "team.decisions.title": "Team Decisions",
   "team.decisions.all": "All",
   "team.decisions.proposed": "Proposed",
@@ -875,18 +823,14 @@
   "team.decisions.castVote": "Cast Vote",
   "team.decisions.accept": "Accept",
   "team.decisions.reject": "Reject",
-
   "team.members.empty": "No team members yet. Invite someone to get started.",
   "team.members.you": "you",
-
   "team.notifications.bell": "Team notifications",
   "team.notifications.title": "Notifications",
   "team.notifications.markAllRead": "Mark all read",
   "team.notifications.empty": "No notifications",
-
   "team.roles.member": "Member",
   "team.roles.admin": "Admin",
-
   "team.signals.empty": "No shared signals yet. Team signals appear here when members share discoveries.",
   "team.signals.hint": "Share signals from your Signal Chains view, or enable auto-sharing in Team Settings.",
   "team.signals.active": "active",
@@ -896,13 +840,11 @@
   "team.signals.detectors": "detectors",
   "team.signals.resolvedBy": "Resolved",
   "team.signals.resolveNotes": "Resolution notes...",
-
   "team.sources.title": "Shared Sources",
   "team.sources.recommend": "+ Recommend",
   "team.sources.whyRecommend": "Why is this source valuable?",
   "team.sources.share": "Share with Team",
   "team.sources.empty": "No shared sources yet. Recommend sources your team should follow.",
-
   "team.dashboard.intelligence": "Intelligence",
   "team.intelligence.title": "Team Intelligence",
   "team.intelligence.coverage": "Stack Coverage",
@@ -936,7 +878,6 @@
   "team.signals.confidence": "confidence",
   "team.signals.suggestedAction": "Suggested",
   "team.signals.memberDetections": "Detected by",
-
   "enterprise.audit.title": "Audit Log",
   "enterprise.audit.description": "Track organization-wide activities. All changes are immutable and timestamped.",
   "enterprise.audit.badge": "Enterprise",
@@ -965,7 +906,6 @@
   "enterprise.audit.eventsByDay": "Events by day",
   "enterprise.audit.topActors": "Top actors",
   "enterprise.audit.topActions": "Top actions",
-
   "enterprise.health.title": "System Health",
   "enterprise.health.description": "Real-time infrastructure and service status",
   "enterprise.health.relay": "Relay",
@@ -979,7 +919,6 @@
   "enterprise.health.fetched": "fetched",
   "enterprise.health.errors": "errors",
   "enterprise.health.orgMetrics": "Organization Metrics",
-
   "enterprise.webhooks.title": "Webhooks",
   "enterprise.webhooks.enterprise": "Enterprise",
   "enterprise.webhooks.cancel": "Cancel",
@@ -1017,10 +956,8 @@
   "enterprise.webhooks.colStatus": "Status",
   "enterprise.webhooks.colHttpCode": "HTTP",
   "enterprise.webhooks.colAttempts": "Attempts",
-
   "enterprise.docs.title": "Webhook & API Reference",
   "enterprise.docs.description": "Technical reference for integrating 4DA webhooks with your infrastructure.",
-
   "enterprise.export.title": "Data Export & Portability",
   "enterprise.export.description": "Export your data for backup, compliance, or migration. No API keys are ever included.",
   "enterprise.export.sections": "Export Sections",
@@ -1028,14 +965,12 @@
   "enterprise.export.exportAll": "Export All Selected ({{selectedSections}} sections)",
   "enterprise.export.previous": "Previous Exports",
   "enterprise.export.privacy": "Exports never include API keys, passwords, tokens, or secrets. Source configurations are included without authentication credentials. All exports are stored locally in your data directory.",
-
   "enterprise.diagnostics.title": "Configuration Diagnostics",
   "enterprise.diagnostics.description": "Validate your setup and troubleshoot issues without contacting support.",
   "enterprise.diagnostics.running": "Running...",
   "enterprise.diagnostics.run": "Run Diagnostics",
   "enterprise.diagnostics.empty": "Click \"Run Diagnostics\" to validate your configuration.",
   "enterprise.diagnostics.tips": "Quick Fixes",
-
   "enterprise.policies.title": "Data Retention Policies",
   "enterprise.policies.description": "Control how long different data types are retained. A 7-day grace period applies before deletion.",
   "enterprise.policies.default": "default",
@@ -1045,7 +980,6 @@
   "enterprise.policies.e2e": "All team relay data is end-to-end encrypted (XChaCha20Poly1305).",
   "enterprise.policies.localFirst": "Primary data storage remains local to each machine.",
   "enterprise.policies.relayDumb": "The relay server cannot read encrypted payloads. \"Dumb relay, smart clients.\"",
-
   "enterprise.org.title": "Organization",
   "enterprise.org.notConfigured": "No organization configured. Organization management is available on the Enterprise tier.",
   "enterprise.org.enterprise": "Enterprise",
@@ -1059,7 +993,6 @@
   "enterprise.org.crossTeamSignals": "Cross-Team Signal Correlations",
   "enterprise.org.affectsTeams": "Affects",
   "enterprise.org.activity": "Team Activity",
-
   "enterprise.sso.title": "Single Sign-On (SSO)",
   "enterprise.sso.description": "Configure SAML or OIDC authentication for your organization.",
   "enterprise.sso.logout": "Sign Out",
@@ -1067,7 +1000,6 @@
   "enterprise.sso.notConfigured": "SSO is not configured. Set up SAML or OpenID Connect to authenticate team members.",
   "enterprise.sso.configure": "Configure SSO",
   "enterprise.sso.info": "SSO verification happens locally on your machine. 4DA never sends credentials to any server. Your identity provider authenticates directly to the desktop app via a localhost callback.",
-
   "enterprise.wizard.title": "Team Setup Wizard",
   "enterprise.wizard.description": "Set up your team in 4 steps. All communication is end-to-end encrypted.",
   "enterprise.wizard.teamActive": "Team is active",
@@ -1086,13 +1018,10 @@
   "enterprise.wizard.doneNote": "Your encrypted team relay is active. Members can join using invite codes.",
   "enterprise.wizard.security": "All team communication uses XChaCha20Poly1305 encryption. The relay server cannot read your data — it only stores and routes encrypted blobs. \"Dumb relay, smart clients.\"",
   "enterprise.wizard.teamCreated": "Team created successfully!",
-
   "enterprise.invite.createFailed": "Failed to create invite",
-
   "intelligence.cycles": "{{count}} cycles",
   "intelligence.summary": "{{analyzed}} items processed, {{surfaced}} surfaced ({{rate}}% rejection rate)",
   "intelligence.antiPatterns": "{{count}} scoring anti-pattern(s) detected and corrected",
-
   "feedback.openLink": "Open Link",
   "feedback.saved": "Saved",
   "feedback.dismissed": "Dismissed",
@@ -1101,7 +1030,6 @@
   "feedback.irrelevant": "Irrelevant",
   "feedback.actions": "Feedback actions",
   "feedback.sessionSaves": "{{count}} saved this session",
-
   "results.unknownSource": "Unknown",
   "results.relatedArticles": "+{{count}} related article",
   "results.relatedArticles_other": "+{{count}} related articles",
@@ -1111,7 +1039,6 @@
   "results.aiSummary": "AI Summary",
   "results.generateAiSummary": "Generate AI Summary",
   "results.topMatches": "Top Matches:",
-
   "ollama.pulling": "Pulling models",
   "ollama.loading": "Loading...",
   "ollama.ready": "Ollama ready",
@@ -1125,7 +1052,6 @@
   "ollama.hintInstall": "Install from ollama.com",
   "ollama.hintServe": "Run: ollama serve",
   "ollama.hintRetry": "Click the status indicator to reconnect",
-
   "splash.starting": "Starting up...",
   "splash.database": "Initializing database...",
   "splash.models": "Checking AI availability...",
@@ -1136,7 +1062,6 @@
   "splash.progress": "Startup progress: {{percent}}%",
   "splash.version": "Version {{version}}",
   "splash.refreshIfStuck": "Refresh if stuck",
-
   "firstRun.errorTitle": "Analysis Hit a Snag",
   "firstRun.tryAgain": "Try Again",
   "firstRun.topMatch": "Top Match",
@@ -1179,7 +1104,6 @@
   "firstRun.yourDna": "Your Developer DNA",
   "firstRun.dnaHint": "We're now watching for relevant content about your stack",
   "firstRun.skipAhead": "Skip ahead",
-
   "shortcuts.title": "Keyboard Shortcuts",
   "shortcuts.close": "Close keyboard shortcuts",
   "shortcuts.runAnalysis": "Run analysis",
@@ -1198,7 +1122,6 @@
   "shortcuts.focusSearch": "Focus search",
   "shortcuts.actionsGroup": "Actions",
   "shortcuts.viewsGroup": "Views & Panels",
-
   "about.fullName": "4 Dimensional Autonomy",
   "about.attribution": "Development Attribution",
   "about.vision": "Vision",
@@ -1217,16 +1140,20 @@
   "about.logoAlt": "4DA Sun Logo",
   "about.attributionCreatorBefore": "4DA was conceived, designed, and directed by",
   "about.attributionCreatorName": "4DA Systems",
-  "about.attributionCreatorAfter": "(4DA Systems) \u2014 product vision, architecture decisions, design philosophy, quality standards, and every choice that defines what 4DA is.",
+  "about.attributionCreatorAfter": "(4DA Systems) — product vision, architecture decisions, design philosophy, quality standards, and every choice that defines what 4DA is.",
   "about.attributionClaudeBefore": "The codebase was primarily engineered through collaborative sessions with",
   "about.attributionClaudeName": "Claude",
-  "about.attributionClaudeAfter": "(Anthropic \u2014 Opus 4.5 and Opus 4.6 models), serving as the principal implementation engine across thousands of iterative development cycles.",
+  "about.attributionClaudeAfter": "(Anthropic — Opus 4.5 and Opus 4.6 models), serving as the principal implementation engine across thousands of iterative development cycles.",
   "about.attributionLegitimacy": "This human-directed, AI-implemented development model is a legitimate and increasingly standard approach to software engineering. The complete git history serves as a verifiable, externally auditable record of this process.",
-  "about.copyright": "v{{version}} \u00b7 \u00a9 2025\u20132026 4DA Systems",
+  "about.copyright": "v{{version}} · © 2025–2026 4DA Systems",
   "about.tagline": "All rights reserved. Built with vision, engineered with Claude.",
   "about.privacyPolicy": "Privacy Policy",
   "about.termsOfService": "Terms of Service",
-
+  "about.viewFramework": "View Framework",
+  "about.viewComparison": "Compare",
+  "about.geometryTitle": "Platonic Architecture",
+  "comparison.title": "Competitive Comparison",
+  "comparison.subtitle": "How 4DA compares to existing tools",
   "sources.title": "Source Configuration",
   "sources.customCount": "{{count}} custom",
   "sources.subtitle": "RSS feeds, YouTube, GitHub languages, Twitter/X",
@@ -1252,7 +1179,6 @@
   "sources.twitter.keySaved": "X API key saved",
   "sources.twitter.keyCleared": "X API key cleared",
   "sources.twitter.update": "Update",
-
   "saved.empty.title": "No saved items yet",
   "saved.empty.subtitle": "Save items from the Results view to build your collection.",
   "saved.count": "{{count}} saved items",
@@ -1260,14 +1186,13 @@
   "saved.copyUrl": "Copy URL",
   "saved.copied": "Copied!",
   "saved.remove": "Remove",
-
+  "saved.title": "Saved items",
   "briefing.warmup.title": "Your Intelligence System",
   "briefing.warmup.stackDetected": "Stack detected",
   "briefing.warmup.sourcesReady": "Sources ready",
   "briefing.warmup.description": "4DA will scan sources, score every item against your profile, and surface what matters.",
   "briefing.warmup.activate": "Start Intelligence",
   "briefing.warmup.autoStart": "Starting automatically...",
-
   "briefing.gatheringIntelligence": "Gathering Intelligence",
   "briefing.analysisRunning": "Analysis is running. Your briefing will be generated when results are ready.",
   "briefing.loadingStageFetch": "Scanning sources for signals relevant to your stack...",
@@ -1281,7 +1206,6 @@
   "briefing.orPress": "or press",
   "briefing.personalizeTitle": "Personalize your feed",
   "briefing.personalizeBody": "Add your interests and tech stack in Settings for better results.",
-
   "coach.chat.title": "STREETS Coach",
   "coach.chat.emptyDescription": "Ask anything about building independent developer income. Your sovereign profile and playbook progress inform every answer.",
   "coach.chat.placeholder": "Ask your coach...",
@@ -1290,7 +1214,6 @@
   "coach.chat.suggestEngine": "What revenue engine fits my profile best?",
   "coach.chat.suggest30DayPlan": "Help me create a 30-day launch plan",
   "coach.chat.suggestMarketFit": "Review my project idea for market fit",
-
   "coach.engine.title": "Engine Recommender",
   "coach.engine.subtitle": "AI-powered analysis of your profile",
   "coach.engine.analyzeProfile": "Analyze My Profile",
@@ -1306,7 +1229,6 @@
   "coach.engine.overallAnalysis": "Overall Analysis",
   "coach.engine.profileGaps": "Profile Gaps",
   "coach.engine.emptyDescription": "Click \"Analyze My Profile\" to get AI-powered engine recommendations based on your sovereign profile, skills, and goals.",
-
   "coach.launch.title": "Launch Review",
   "coach.launch.subtitle": "Submit your project for AI-powered launch readiness analysis",
   "coach.launch.placeholder": "Describe your project, target audience, pricing model, and current status...",
@@ -1321,7 +1243,6 @@
   "coach.launch.strengths": "Strengths",
   "coach.launch.gaps": "Gaps",
   "coach.launch.recommendations": "Recommendations",
-
   "coach.progress.title": "Progress Check-in",
   "coach.progress.subtitle": "Track your STREETS journey and get personalized nudges",
   "coach.progress.checkingIn": "Checking in...",
@@ -1336,7 +1257,6 @@
   "coach.progress.noNudges": "No active nudges. Run a check-in to receive personalized guidance.",
   "coach.progress.checkInResults": "Check-In Results",
   "coach.progress.runningCheckIn": "Running progress check-in...",
-
   "coach.strategy.title": "Strategy Document",
   "coach.strategy.subtitle": "Personalized revenue strategy based on your profile",
   "coach.strategy.generating": "Generating...",
@@ -1346,7 +1266,6 @@
   "coach.strategy.generatingHint": "This may take a moment while the AI analyzes your profile",
   "coach.strategy.lineCount": "{{count}} lines",
   "coach.strategy.emptyDescription": "Generate a comprehensive strategy document tailored to your sovereign profile, recommended engines, and current progress.",
-
   "coach.gate.title": "STREETS Coach",
   "coach.gate.subtitle": "AI-powered coaching for your revenue journey",
   "coach.gate.currentTier": "Current tier:",
@@ -1358,13 +1277,11 @@
   "coach.gate.featureProgress": "Progress tracking and nudges",
   "coach.gate.enterLicenseKey": "Enter license key",
   "coach.gate.getSignal": "Get Signal — $12/mo",
-
   "coach.template.title": "Template Library",
   "coach.template.subtitle": "Ready-to-use markdown templates for your STREETS journey",
   "coach.template.all": "All",
   "coach.template.emptyNoTemplates": "No templates available yet. Upgrade to Signal to access the template library.",
   "coach.template.emptyNoMatch": "No templates match the selected category.",
-
   "coach.video.title": "Video Curriculum",
   "coach.video.subtitle": "STREETS video lessons — unlocked as you progress",
   "coach.video.curriculumProgress": "Curriculum Progress",
@@ -1374,10 +1291,8 @@
   "coach.video.unlocksOnDay": "Unlocks on Day {{day}}",
   "coach.video.dripDay": "Day {{day}}",
   "coach.video.emptyDescription": "No video lessons available yet. Upgrade to Signal to access the full STREETS video curriculum.",
-
   "playbook.regional.approximateEquivalent": "Approximate equivalent in {{currency}}",
   "playbook.regional.inYourRegion": "(~{{amount}}{{unit}} in your region)",
-
   "playbook.sovereign.title": "Sovereign Profile",
   "playbook.sovereign.subtitle": "Hardware and system facts accumulated from STREETS commands",
   "playbook.sovereign.loading": "Loading sovereign profile...",
@@ -1389,9 +1304,7 @@
   "playbook.sovereign.generateStackDoc": "Generate Stack Document",
   "playbook.sovereign.missing": "Missing: {{fields}}",
   "playbook.sovereign.stackDocument": "Sovereign Stack Document",
-
   "playbook.health.title": "STREETS Health",
-
   "playbook.code.runAllSafe": "Run All Safe ({{count}})",
   "playbook.code.runCommand": "Run command",
   "playbook.code.parseCommands": "Parse commands",
@@ -1399,14 +1312,11 @@
   "playbook.code.failed": "Failed (exit {{code}})",
   "playbook.code.showOutput": "Show output",
   "playbook.code.showError": "Show error",
-
   "playbook.templates": "Templates",
   "playbook.templatesSubtitle": "Launch & growth tools",
-
   "commandDeck.confirm": "Confirm",
   "commandDeck.repo.noRepos": "No repos found",
   "commandDeck.repo.selectRepo": "Select repository",
-
   "commandDeck.git.loading": "Loading git status...",
   "commandDeck.git.selectRepo": "Select a repository to begin",
   "commandDeck.git.repoHint": "ACE-discovered repos appear in the selector above",
@@ -1429,19 +1339,15 @@
   "commandDeck.git.confirmPush": "Push {{count}} commit(s) to origin/{{branch}}?",
   "commandDeck.git.push": "Push",
   "commandDeck.git.ahead": "{{count}} ahead",
-
   "commandDeck.history.noCommands": "No command history",
   "commandDeck.history.recentCommits": "Recent Commits",
-
   "toolkit.unpin": "Unpin",
   "toolkit.pinToTop": "Pin to top",
-
   "toolkit.shell.back": "Back",
   "toolkit.shell.escToClose": "Esc to close",
   "toolkit.shell.loadingTool": "Loading tool...",
   "toolkit.shell.errorEncountered": "{{toolName}} encountered an error",
   "toolkit.shell.backToToolkit": "Back to Toolkit",
-
   "toolkit.colorPicker.hue": "Hue",
   "toolkit.colorPicker.pickFromScreen": "Pick from Screen",
   "toolkit.colorPicker.wcagContrast": "WCAG Contrast",
@@ -1449,14 +1355,12 @@
   "toolkit.colorPicker.pass": "Pass",
   "toolkit.colorPicker.fail": "Fail",
   "toolkit.colorPicker.copyLabel": "Copy {{label}}",
-
   "toolkit.cronBuilder.minute": "Minute",
   "toolkit.cronBuilder.hour": "Hour",
   "toolkit.cronBuilder.dayOfMonth": "Day (month)",
   "toolkit.cronBuilder.month": "Month",
   "toolkit.cronBuilder.dayOfWeek": "Day (week)",
   "toolkit.cronBuilder.presets": "Presets",
-
   "toolkit.decisionLog.type": "Type",
   "toolkit.decisionLog.status": "Status",
   "toolkit.decisionLog.addDecision": "Add Decision",
@@ -1472,14 +1376,12 @@
   "toolkit.decisionLog.tags": "Tags",
   "toolkit.decisionLog.empty": "No decisions recorded yet",
   "toolkit.decisionLog.emptyHint": "Click \"Add Decision\" to start tracking your technical choices",
-
   "toolkit.diffViewer.original": "Original",
   "toolkit.diffViewer.originalPlaceholder": "Paste original text...",
   "toolkit.diffViewer.modified": "Modified",
   "toolkit.diffViewer.modifiedPlaceholder": "Paste modified text...",
   "toolkit.diffViewer.unified": "Unified",
   "toolkit.diffViewer.sideBySide": "Side by Side",
-
   "toolkit.encoder.output": "Output",
   "toolkit.encoder.base64Detected": "Base64 detected",
   "toolkit.encoder.base64Placeholder": "Enter text to encode or Base64 to decode...",
@@ -1490,7 +1392,6 @@
   "toolkit.encoder.algorithm": "Algorithm",
   "toolkit.encoder.hashPlaceholder": "Enter text to hash...",
   "toolkit.encoder.hashOutputHint": "Hash output will appear here",
-
   "toolkit.envSnapshot.captureSnapshot": "Capture Snapshot",
   "toolkit.envSnapshot.capturing": "Capturing...",
   "toolkit.envSnapshot.copyAsMarkdown": "Copy as Markdown",
@@ -1500,7 +1401,6 @@
   "toolkit.envSnapshot.runtimeVersions": "Runtime Versions",
   "toolkit.envSnapshot.git": "Git",
   "toolkit.envSnapshot.recentCommits": "Recent Commits",
-
   "toolkit.exportPack.generateExport": "Generate Export",
   "toolkit.exportPack.generating": "Generating...",
   "toolkit.exportPack.sections": "Sections",
@@ -1508,7 +1408,6 @@
   "toolkit.exportPack.downloadMd": "Download .md",
   "toolkit.exportPack.empty": "Generate your developer profile to see a preview",
   "toolkit.exportPack.emptyHint": "Combines your DNA, tech radar, and decisions into a shareable markdown document",
-
   "toolkit.httpProbe.send": "Send",
   "toolkit.httpProbe.sending": "Sending...",
   "toolkit.httpProbe.headers": "Headers",
@@ -1521,7 +1420,6 @@
   "toolkit.httpProbe.responseBody": "Response Body",
   "toolkit.httpProbe.history": "History",
   "toolkit.httpProbe.noRequests": "No requests yet",
-
   "toolkit.jsonViewer.editor": "Editor",
   "toolkit.jsonViewer.tree": "Tree",
   "toolkit.jsonViewer.diff": "Diff",
@@ -1537,10 +1435,8 @@
   "toolkit.jsonViewer.right": "Right",
   "toolkit.jsonViewer.rightPlaceholder": "Paste second JSON...",
   "toolkit.jsonViewer.diffResult": "Diff result",
-
   "toolkit.mockData.type": "Type",
   "toolkit.mockData.count": "Count",
-
   "toolkit.portScanner.scanPorts": "Scan Ports",
   "toolkit.portScanner.scanning": "Scanning...",
   "toolkit.portScanner.filterPlaceholder": "Filter by port or process...",
@@ -1554,7 +1450,6 @@
   "toolkit.portScanner.empty": "No ports scanned yet",
   "toolkit.portScanner.emptyHint": "Click Scan Ports to discover listening services",
   "toolkit.portScanner.noMatch": "No ports match \"{{filter}}\"",
-
   "toolkit.regex.patternPlaceholder": "Enter regex pattern...",
   "toolkit.regex.replaceMode": "Replace Mode",
   "toolkit.regex.matchCount": "{{count}} match",
@@ -1566,7 +1461,6 @@
   "toolkit.regex.replacePreview": "Replace Preview",
   "toolkit.regex.matches": "Matches",
   "toolkit.regex.namedCaptureGroups": "Named Capture Groups",
-
   "toolkit.scoringSandbox.title": "Title",
   "toolkit.scoringSandbox.titlePlaceholder": "Enter article title to score...",
   "toolkit.scoringSandbox.content": "Content (optional)",
@@ -1593,7 +1487,6 @@
   "toolkit.scoringSandbox.affinityMultiplier": "Affinity Multiplier",
   "toolkit.scoringSandbox.domainRelevance": "Domain Relevance",
   "toolkit.scoringSandbox.contentQuality": "Content Quality",
-
   "toolkit.sourceDebugger.testFeed": "Test Feed",
   "toolkit.sourceDebugger.testing": "Testing...",
   "toolkit.sourceDebugger.clear": "Clear",
@@ -1604,20 +1497,17 @@
   "toolkit.sourceDebugger.validationUrl": "URL must start with http:// or https://",
   "toolkit.sourceDebugger.itemCount": "{{count}} item",
   "toolkit.sourceDebugger.itemCount_other": "{{count}} items",
-
   "toolkit.sovereignProfile.loading": "Loading sovereign profile...",
   "toolkit.sovereignProfile.completeness": "Profile Completeness",
   "toolkit.sovereignProfile.generateDocument": "Generate Document",
   "toolkit.sovereignProfile.generating": "Generating...",
   "toolkit.sovereignProfile.runStreets": "Run STREETS commands to populate",
   "toolkit.sovereignProfile.stackDocument": "Stack Document",
-
   "toolkit.stackHealth.scanning": "Scanning...",
   "toolkit.stackHealth.analyzing": "Analyzing project health...",
   "toolkit.stackHealth.empty": "No health data yet",
   "toolkit.stackHealth.emptyHint": "Click Refresh to scan project dependencies",
   "toolkit.stackHealth.noProjects": "No projects detected. ACE must discover projects first.",
-
   "agentMemory.title": "Agent Memory",
   "agentMemory.empty": "No agent memories yet",
   "agentMemory.emptyHint": "Connect an AI agent via MCP to start building cross-agent context.",
@@ -1639,12 +1529,10 @@
   "agentMemory.expires": "Expires",
   "agentMemory.promotedTo": "Promoted to decision #{{id}}",
   "agentMemory.promoteToDecision": "Promote to Decision",
-
   "reader.readArticle": "Read Article",
   "reader.noContent": "No content available for this item.",
   "reader.wordCount": "{{count}} words",
   "reader.readTime": "~{{minutes}} min read",
-
   "audio.feature": "Audio Briefings",
   "audio.play": "Play audio briefing",
   "audio.pause": "Pause audio briefing",
@@ -1652,7 +1540,6 @@
   "audio.generating": "Generating audio...",
   "audio.playFailed": "Failed to play audio",
   "audio.playbackBlocked": "Audio playback blocked",
-
   "autophagy.title": "How 4DA Learns",
   "autophagy.feature": "Autophagy Insights",
   "autophagy.calibrationAccuracy": "Calibration Accuracy",
@@ -1663,12 +1550,10 @@
   "autophagy.calibrations": "Calibrations",
   "autophagy.antiPatterns": "Anti-Patterns",
   "autophagy.recentCycles": "Recent Cycles",
-
   "decisions.title": "Decisions to Make",
   "decisions.subtitle": "Time-bounded opportunities",
   "decisions.affects": "Affects",
   "decisions.act": "Act",
-
   "delegation.title": "Task Coaching",
   "delegation.empty": "No delegation data available",
   "delegation.emptyHint": "Add your tech stack in settings to see delegation scores.",
@@ -1689,7 +1574,6 @@
   "delegation.factorMaturity": "Maturity",
   "delegation.factorReversibility": "Reversibility",
   "delegation.factorSecurity": "Security",
-
   "knowledgeGaps.title": "Learning Opportunities",
   "knowledgeGaps.feature": "Learning Opportunities",
   "knowledgeGaps.count": "{{count}} gap",
@@ -1699,22 +1583,18 @@
   "knowledgeGaps.missedArticles_other": "{{count}} relevant articles you haven't engaged with",
   "knowledgeGaps.noEngagement": "No engagement recorded",
   "knowledgeGaps.daysSinceEngagement": "{{days}}d since last engagement",
-
   "intelligence.title": "Live Signals",
   "intelligence.feature": "Live Signals",
   "intelligence.calibration": "Calibration Accuracy",
   "intelligence.learned": "What the system learned",
   "intelligence.sourceQuality": "Source quality",
-
   "digest.title": "Weekly Digest",
   "digest.analyzed": "analyzed",
   "digest.relevant": "relevant",
   "digest.avgScore": "avg score",
   "digest.topItems": "Top Items",
-
   "standingQueries.singleMatch": "\"{{query}}\" — {{count}} new match found",
   "standingQueries.multiMatch": "{{count}} standing queries have new matches",
-
   "learnedBehavior.title": "Feedback & Affinities",
   "learnedBehavior.subtitle": "Topics influenced by your save and dismiss actions",
   "learnedBehavior.topicAffinities": "Topic Affinities",
@@ -1724,7 +1604,6 @@
   "learnedBehavior.antiTopics": "Auto-Detected Anti-Topics",
   "learnedBehavior.antiTopicsHint": "Items with these topics will be penalized in relevance scoring",
   "learnedBehavior.refresh": "Refresh Learned Behavior",
-
   "signals.title": "Key Signals",
   "signals.feature": "Signal Chains",
   "signals.activeChains": "{{count}} active chain",
@@ -1732,7 +1611,6 @@
   "signals.signalCount": "{{count}} signal",
   "signals.signalCount_other": "{{count}} signals",
   "signals.resolve": "Resolve",
-
   "techRadar.title": "Tech Radar",
   "techRadar.loading": "Loading tech radar...",
   "techRadar.empty": "No radar data available",
@@ -1752,7 +1630,6 @@
   "techRadar.backToFull": "Back to full view",
   "techRadar.current": "Current",
   "techRadar.timeline": "Timeline",
-
   "results.affinityBoost": "Boosted because you've shown interest in {{topic}}",
   "results.signal.security_alert": "Security",
   "results.signal.breaking_change": "Breaking",
@@ -1778,23 +1655,19 @@
   "results.predictedContext": "Predicted Context",
   "results.predictedAt": "Predicted at {{time}}",
   "results.refreshInterval": "Refreshes every 5m",
-
   "pro.signals": "{{count}} signal",
   "pro.signals_other": "{{count}} signals",
   "pro.gaps": "{{count}} gap",
   "pro.gaps_other": "{{count}} gaps",
   "pro.hoursSaved": "~{{hours}}h saved",
   "pro.intelligenceSummary": "Signal Intelligence: {{summary}} (last {{days}} days)",
-
   "search.nlqFeature": "Natural Language Query",
   "search.nlqTitle": "Natural Language Query",
   "search.nlqSubtitle": "Ask about your feed in plain language",
   "search.nlqPlaceholder": "Ask about your feed...",
   "search.nlqHint": "Ask a question about your feed in natural language",
   "search.query": "Query",
-  "search.indexFirst": "Index your files first (Settings > Context)",
   "search.untitled": "Untitled",
-  "search.tryDifferent": "Try different keywords or a broader query",
   "search.resultStats": "{{count}} result in {{ms}}ms",
   "search.resultStats_other": "{{count}} results in {{ms}}ms",
   "search.stackContext": "Your stack",
@@ -1804,14 +1677,11 @@
   "search.attention": "needs attention",
   "search.stale": "stale",
   "search.critical": "critical",
-  "search.relatedDecisions": "Related Decisions",
-  "search.knowledgeGaps": "Learning Opportunities",
   "search.daysStale": "{{days}}d stale",
   "search.watchCreated": "Watch created",
   "search.watchFailed": "Failed to create watch. Please try again.",
   "search.watchDeleted": "Watch removed",
   "search.noLlm": "Configure an LLM provider for AI synthesis",
-
   "context.title": "Context",
   "context.filesIndexed": "{{count}} files indexed",
   "context.reloadFiles": "Reload files",
@@ -1826,9 +1696,7 @@
   "context.exportFailed": "Export failed: {{error}}",
   "context.exporting": "Exporting context packet",
   "context.exportToClipboard": "Export context packet (clipboard)",
-
   "briefing.read": "Read",
-
   "onboarding.locale.detecting": "Detecting region...",
   "onboarding.locale.country": "Country",
   "onboarding.locale.language": "Language",
@@ -1839,7 +1707,6 @@
   "onboarding.locale.selectCountry": "Select country",
   "onboarding.locale.selectLanguage": "Select language",
   "onboarding.locale.selectCurrency": "Select currency",
-
   "onboarding.stack.loading": "Loading stack profiles...",
   "onboarding.stack.description": "Select your tech stack for smarter content scoring. Auto-detected stacks are pre-selected.",
   "onboarding.stack.painPoints": "{{count}} pain points",
@@ -1849,16 +1716,13 @@
   "onboarding.stack.clickToToggle": "Click to toggle.",
   "onboarding.stack.noSelection": "No stacks selected — scoring will use default behavior.",
   "onboarding.stack.autoSelectedBanner": "Auto-selected based on your projects",
-
   "onboarding.projects.scanning": "Scanning your projects...",
   "onboarding.projects.detected": "Detected from your local projects:",
   "onboarding.projects.noTech": "No specific technologies detected. 4DA will learn from your activity.",
   "onboarding.projects.manageHint": "Manage directories anytime in Settings.",
-
   "learnedBehavior.learningCount": "Learning: {{count}} preference",
   "learnedBehavior.learningCount_other": "Learning: {{count}} preferences",
   "learnedBehavior.moreCount": "+{{count}} more",
-
   "channels.renderNow": "Render Now",
   "channels.rerender": "Re-render",
   "channels.rendering": "Rendering...",
@@ -1889,10 +1753,7 @@
   "channels.basicMode": "Basic Mode",
   "channels.configureOllama": "Configure Ollama for AI synthesis",
   "coach.freeSession": "Free session {{current}}/{{max}}",
-
   "toolkit.title": "Developer Toolkit",
-
-  "decisions.title": "Decisions to Make",
   "decisions.recorded": "{{count}} decisions recorded",
   "decisions.record": "Record Decision",
   "decisions.decision": "Decision",
@@ -1920,7 +1781,7 @@
   "decisions.supersededBy": "Superseded by #{{id}}",
   "decisions.autoDetectedNotice": "Some tech choices were auto-detected from your local projects",
   "decisions.autoDetectedHint": "If something looks wrong, use the Remove button to correct it. This also updates your playbook and profile.",
-
+  "decisions.toggleDetail": "Toggle details",
   "calibration.title": "System Health",
   "calibration.subtitle": "Honest scoring quality assessment for your setup",
   "calibration.running": "Calibrating...",
@@ -1941,7 +1802,7 @@
   "calibration.fullyCalibrated": "Your rig is fully calibrated",
   "calibration.allScoringReady": "All scoring systems are operating at maximum accuracy for your setup.",
   "calibration.analyzing": "Analyzing your rig and scoring accuracy...",
-  "calibration.gradeImproved": "Grade improved: {{prev}} \u2192 {{next}}",
+  "calibration.gradeImproved": "Grade improved: {{prev}} → {{next}}",
   "calibration.recommendationsHint": "Fix these to improve your grade. Actions auto-recalibrate when complete.",
   "calibration.action.pullModel": "Pull Model",
   "calibration.action.pulling": "Pulling...",
@@ -1971,7 +1832,13 @@
   "calibration.onboarding.noContent": "Calibration requires content to analyze.",
   "calibration.onboarding.noContentHint": "Run an analysis first, then come back to calibrate.",
   "calibration.action.working": "Working...",
-
+  "health.issueCount": "{{count}} system issues detected",
+  "missed.title": "What you would have missed",
+  "missed.scanned": "{{count}} items scanned",
+  "missed.noiseRejected": "noise rejected",
+  "missed.signalSurfaced": "signal surfaced",
+  "missed.timeSaved": "time saved",
+  "missed.filtered": "filtered",
   "profile.copyProfile": "Copy Profile",
   "profile.exportJson": "Export JSON",
   "profile.copyDna": "Copy DNA",
@@ -1995,7 +1862,6 @@
   "profile.deps": "deps",
   "profile.filtered": "filtered",
   "profile.factCount": "{{count}} facts",
-
   "dna.title": "Developer DNA",
   "dna.defaultSubtitle": "Your technical fingerprint, auto-discovered",
   "dna.building": "Building DNA profile...",
@@ -2006,7 +1872,7 @@
   "dna.ecosystem": "Ecosystem",
   "dna.copyDna": "Copy DNA",
   "dna.copiedToClipboard": "Developer DNA copied to clipboard",
-  "dna.statsLine": "{{days}}d active \u00b7 {{items}} items processed \u00b7 {{rate}}% filtered",
+  "dna.statsLine": "{{days}}d active · {{items}} items processed · {{rate}}% filtered",
   "dna.keyDependencies": "Key Dependencies",
   "dna.moreItems": "+{{count}} more",
   "dna.interests": "Interests",
@@ -2014,7 +1880,7 @@
   "dna.blindSpots": "Blind Spots",
   "dna.daysStale": "{{days}}d stale",
   "dna.sourceEngagement": "Source Engagement",
-  "dna.sourceStats": "{{seen}} seen \u00b7 {{saved}} saved",
+  "dna.sourceStats": "{{seen}} seen · {{saved}} saved",
   "dna.projects": "Projects",
   "dna.dependencies": "Dependencies",
   "dna.rejectionRate": "Rejection Rate",
@@ -2023,20 +1889,17 @@
   "dna.downloadSvg": "Download Card (SVG)",
   "dna.cardDownloaded": "Developer DNA card downloaded",
   "dna.cardDownloadFailed": "Failed to download card",
-
   "techRadar.ringAdopt": "Adopt",
   "techRadar.ringTrial": "Trial",
   "techRadar.ringAssess": "Assess",
   "techRadar.ringHold": "Hold",
   "techRadar.svgLabel": "Technology radar visualization",
-
   "tasteTest.readThis": "I'd read this",
   "tasteTest.skip": "Skip",
   "tasteTest.loveThis": "Love this",
   "tasteTest.markInteresting": "Mark \"{{title}}\" as interesting",
   "tasteTest.skipTitle": "Skip \"{{title}}\"",
   "tasteTest.loveTitle": "Love \"{{title}}\"",
-
   "techRadar.closePanel": "Close panel",
   "techRadar.score": "Score: {{score}}",
   "techRadar.decisionRef": "Decision #{{id}}",
@@ -2048,7 +1911,6 @@
   "techRadar.movementOut": "Moving Out",
   "techRadar.movementNew": "New Entry",
   "techRadar.movementStable": "Stable",
-
   "sovereignProfile.gpu": "GPU: {{tier}}",
   "sovereignProfile.llm": "LLM: {{tier}}",
   "sovereignProfile.cpu": "CPU: {{model}}",
@@ -2062,7 +1924,7 @@
   "sovereignProfile.activeDecisions": "{{count}} active decisions",
   "sovereignProfile.projectsMonitored": "{{count}} projects monitored",
   "sovereignProfile.activeTopics": "Active: {{topics}}",
-  "sovereignProfile.sourceStats": "{{seen}} seen \u00b7 {{saved}} saved",
+  "sovereignProfile.sourceStats": "{{seen}} seen · {{saved}} saved",
   "sovereignProfile.action.infraLabel": "Detect your GPU, CPU, and LLM setup",
   "sovereignProfile.action.scanNow": "Scan Now",
   "sovereignProfile.action.stackLabel": "Discover your tech stack from projects",
@@ -2072,7 +1934,6 @@
   "sovereignProfile.action.prefsLabel": "Add interests to sharpen your feed",
   "sovereignProfile.action.openSettings": "Open Settings",
   "sovereignProfile.action.contextLabel": "Point 4DA at a project folder",
-
   "scoreTooltip.stackMatch": "Stack match: strong",
   "scoreTooltip.partialStackMatch": "Stack match: partial",
   "scoreTooltip.interestMatch": "Matches your interests",
@@ -2085,7 +1946,6 @@
   "scoreTooltip.highQuality": "High quality content",
   "scoreTooltip.novelContent": "Novel content",
   "scoreTooltip.serendipity": "Serendipity pick",
-
   "scoreDrawer.toggle": "Toggle score breakdown",
   "scoreDrawer.title": "Score Breakdown",
   "scoreDrawer.signals": "Signals",
@@ -2095,7 +1955,6 @@
   "scoreDrawer.comparing": "Comparing with",
   "scoreDrawer.compareWith": "Compare with",
   "scoreDrawer.selectItem": "Select an item...",
-
   "scoreDrawer.factor.context": "Project context",
   "scoreDrawer.factor.interest": "Interest match",
   "scoreDrawer.factor.dependency": "Dependency match",
@@ -2113,20 +1972,16 @@
   "scoreDrawer.factor.affinity": "Topic affinity",
   "scoreDrawer.factor.anti": "Anti-topic penalty",
   "scoreDrawer.factor.confirmation": "Signal confirmation",
-
   "briefing.profile.feedbackImpact": "Your feedback has shaped {{count}} future signal",
   "briefing.profile.feedbackImpact_other": "Your feedback has shaped {{count}} future signals",
-
   "briefing.streetsMatchStrength": "{{pct}}% match",
   "briefing.streetsOpenModule": "Open Module {{id}}",
   "briefing.streetsNotNow": "Not now",
-
   "playbook.personalizedBanner": "Personalized for your setup",
   "playbook.personalizedBannerDesc": "Content adapted using your sovereign profile and intelligence feed",
   "playbook.feedEchoSave": "Save",
   "playbook.feedEchoSaved": "Saved",
   "playbook.feedEchoNewItems": "{{count}} new since last visit",
-
   "missions.title": "Getting Started",
   "missions.saveArticles": "Save 3 articles you find useful",
   "missions.dismissArticles": "Dismiss 2 articles you don't care about",
@@ -2136,7 +1991,6 @@
   "missions.completed": "Mission complete: {{mission}}. Next: {{next}}",
   "missions.allComplete": "All missions complete! Your intelligence system is calibrated.",
   "missions.dismiss": "Dismiss missions",
-
   "weekly.title": "Weekly Intelligence Summary",
   "weekly.analyzed": "items analyzed",
   "weekly.cycles": "learning cycles",
@@ -2146,23 +2000,19 @@
   "weekly.addInterest": "+ Add",
   "weekly.interestAdded": "Added '{{topic}}' to interests",
   "weekly.interestFailed": "Failed to add interest",
-
   "tips.feedbackLoop": "Save articles you find useful — this teaches the system what matters to you.",
   "tips.feedbackLoopHint": "Dismissing articles also helps. Every interaction improves your results.",
   "tips.ollamaNudge": "Your results use keyword matching. Ollama (free, local) unlocks semantic matching for more relevant results.",
   "tips.ollamaNudgeHint": "Install Ollama, then enable it in Settings > AI Provider. Runs entirely on your machine.",
-
   "guided.feed": "Your personalized content feed",
   "guided.score": "Tap to see why this scored high",
   "guided.save": "Save items to your Library",
   "guided.dna": "Your developer identity profile",
   "guided.settings": "Configure sources and AI",
-
   "emptyState.header": "While your first analysis runs, here's what {{stack}} developers saw this week",
   "emptyState.headerDefault": "While your first analysis runs, here's what developers saw this week",
   "emptyState.footer": "Real signals arriving in ~2 minutes...",
   "emptyState.badge": "Example",
-
   "firstCve.title": "4DA Protected You",
   "firstCve.detected": "Detected {{minutes}} minutes after publication",
   "firstCve.affects": "affects {{package}} in {{count}} of your projects",
