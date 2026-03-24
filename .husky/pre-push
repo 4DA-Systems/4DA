@@ -21,8 +21,8 @@ NODE_OPTIONS="--max-old-space-size=4096" pnpm run test -- --run 2>/dev/null || {
 # Rust compilation + lint check (skip if cargo is not available or src-tauri missing)
 if [ -f "src-tauri/Cargo.toml" ] && command -v cargo > /dev/null 2>&1; then
     echo "Checking Rust compilation + Clippy..."
-    (cd src-tauri && cargo clippy --lib -- -D warnings 2>&1) || {
-        echo "Rust Clippy check failed. Fix Rust errors/warnings before pushing."
+    (cd src-tauri && cargo clippy --lib 2>&1) || {
+        echo "Rust Clippy check failed. Fix deny-level lint violations before pushing."
         exit 1
     }
 fi
