@@ -71,13 +71,16 @@ if [ -n "$STAGED_RS" ] || [ -n "$STAGED_CMD" ]; then
 fi
 
 # ESLint on staged files only (~3s vs full project ~8s) — always runs (lightweight)
+# Needs extra memory for type-checked linting (no-floating-promises, no-misused-promises)
 echo "Running ESLint (staged files)..."
 STAGED_TS=$(git diff --cached --name-only --diff-filter=ACM | grep -E '\.(ts|tsx)$' || true)
 if [ -n "$STAGED_TS" ]; then
+    export NODE_OPTIONS="--max-old-space-size=8192"
     echo "$STAGED_TS" | xargs node_modules/.bin/eslint --no-warn-ignored 2>/dev/null || {
         echo "ESLint check failed. Fix lint errors before committing."
         exit 1
     }
+    unset NODE_OPTIONS
 fi
 
 # TypeScript type checking (incremental for speed, ~3-8s) — only when .ts/.tsx files are staged

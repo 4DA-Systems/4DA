@@ -172,6 +172,36 @@ streets-execution = [] # STREETS command execution (not content) — 3 commands
 name = "sql_checker"
 required-features = ["sql-check"]
 
+[lints.rust]
+unsafe_code = "deny"
+
+[lints.clippy]
+# Deny dangerous patterns
+unwrap_used = "deny"
+expect_used = "warn"
+panic = "warn"
+# Pedantic — good code practices
+pedantic = { level = "warn", priority = -1 }
+# Allow specific pedantic lints that are too noisy for this codebase
+module_name_repetitions = "allow"
+must_use_candidate = "allow"
+missing_errors_doc = "allow"
+missing_panics_doc = "allow"
+doc_markdown = "allow"
+items_after_statements = "allow"
+too_many_lines = "allow"
+cast_possible_truncation = "allow"
+cast_sign_loss = "allow"
+cast_precision_loss = "allow"
+cast_lossless = "allow"
+struct_excessive_bools = "allow"
+fn_params_excessive_bools = "allow"
+similar_names = "allow"
+unreadable_literal = "allow"
+# These are valid patterns in our codebase
+wildcard_imports = "allow"
+enum_glob_use = "allow"
+
 [profile.release]
 strip = true
 lto = true

@@ -123,6 +123,7 @@ fn get_process_memory() -> u64 {
 
 /// Windows: use GetProcessMemoryInfo via Win32 FFI
 #[cfg(target_os = "windows")]
+#[allow(unsafe_code)]
 fn get_process_memory_windows() -> u64 {
     use std::mem::MaybeUninit;
     #[repr(C)]
@@ -161,6 +162,7 @@ fn get_process_memory_windows() -> u64 {
 
 /// macOS: use mach kernel task_info API for resident memory size
 #[cfg(target_os = "macos")]
+#[allow(unsafe_code)]
 fn get_process_memory_macos() -> u64 {
     use std::mem::{size_of, MaybeUninit};
 
@@ -627,6 +629,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(unsafe_code)]
     fn macos_struct_field_offsets() {
         // Verify field offsets match XNU mach_task_basic_info_data_t layout
         #[repr(C)]
