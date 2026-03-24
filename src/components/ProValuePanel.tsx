@@ -89,7 +89,7 @@ export const ProValuePanel = memo(function ProValuePanel() {
           {report.estimated_hours_saved > 0 ? (
             <>
               <div className="text-3xl font-semibold text-white tracking-tight">
-                {report.estimated_hours_saved}<span className="text-teal-400/80 text-lg ml-1">{t('proValue.hoursSaved')}</span>
+                {report.estimated_hours_saved}<span className="text-teal-400/80 text-lg ms-1">{t('proValue.hoursSaved')}</span>
               </div>
               <p className="text-xs text-text-muted mt-1">
                 {t('proValue.itemsSurfaced', { count: report.items_surfaced })}

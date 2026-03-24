@@ -21,7 +21,7 @@ export function WelcomeStep({ isAnimating, onNext, onSkip }: WelcomeStepProps) {
       <p className="text-text-muted mb-8 max-w-md mx-auto">
         {t('onboarding.welcome.description')}
       </p>
-      <div className="space-y-3 text-left bg-bg-secondary p-5 rounded-lg mb-8 max-w-md mx-auto">
+      <div className="space-y-3 text-start bg-bg-secondary p-5 rounded-lg mb-8 max-w-md mx-auto">
         <ul className="text-text-secondary space-y-3">
           <li className="flex items-start gap-3">
             <span className="flex-shrink-0 w-8 h-8 bg-green-500/20 rounded-lg flex items-center justify-center">

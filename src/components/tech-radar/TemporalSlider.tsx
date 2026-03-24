@@ -49,7 +49,7 @@ export const TemporalSlider = memo(function TemporalSlider({ onSnapshotChange }:
       if (idx >= snapshots.length) {
         onSnapshotChange(null);
       } else {
-        onSnapshotChange(snapshots[idx].date);
+        onSnapshotChange(snapshots[idx]!.date);
       }
     },
     [snapshots, onSnapshotChange],
@@ -60,7 +60,7 @@ export const TemporalSlider = memo(function TemporalSlider({ onSnapshotChange }:
   const displayLabel =
     selectedIndex >= snapshots.length || selectedIndex < 0
       ? t('techRadar.current')
-      : snapshots[selectedIndex].label;
+      : snapshots[selectedIndex]!.label;
 
   if (loading) return null;
 
@@ -78,7 +78,7 @@ export const TemporalSlider = memo(function TemporalSlider({ onSnapshotChange }:
         className="flex-1 h-1 appearance-none bg-border rounded-full cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed accent-accent-gold"
         style={{ colorScheme: 'dark' }}
       />
-      <span className="text-[10px] text-text-secondary font-mono w-16 text-right whitespace-nowrap">
+      <span className="text-[10px] text-text-secondary font-mono w-16 text-end whitespace-nowrap">
         {displayLabel}
       </span>
     </div>

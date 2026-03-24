@@ -102,7 +102,7 @@ export function CelebrationState({
       {/* Developer DNA Preview — first "it knows me" moment */}
       {detectedTech && detectedTech.length > 0 && (
         <div className="mb-6 max-w-sm mx-auto">
-          <p className="text-[10px] text-text-muted uppercase tracking-wider mb-2 text-left">
+          <p className="text-[10px] text-text-muted uppercase tracking-wider mb-2 text-start">
             {t('firstRun.yourDna', 'Your Developer DNA')}
           </p>
           <div className="flex flex-wrap gap-1.5 justify-center">
@@ -137,16 +137,16 @@ export function CelebrationState({
 
       {/* Top signal highlight with match reasoning */}
       {topSignal && (
-        <div className="mb-6 p-4 bg-bg-secondary rounded-lg border border-orange-500/20 text-left max-w-sm mx-auto">
+        <div className="mb-6 p-4 bg-bg-secondary rounded-lg border border-orange-500/20 text-start max-w-sm mx-auto">
           <p className="text-[10px] text-orange-400 font-medium uppercase tracking-wider mb-1">
             {topSignal.score_breakdown?.dep_match_score && topSignal.score_breakdown.dep_match_score > 0
               ? t('firstRun.topMatchStack', 'Matches your stack')
               : t('firstRun.topMatch')}
             {topSignal.top_score != null && (
-              <span className="ml-2 text-text-muted normal-case">{(topSignal.top_score).toFixed(2)}</span>
+              <span className="ms-2 text-text-muted normal-case">{(topSignal.top_score).toFixed(2)}</span>
             )}
             {topSignal.source_type && (
-              <span className="ml-2 text-text-muted normal-case">{getSourceFullName(topSignal.source_type)}</span>
+              <span className="ms-2 text-text-muted normal-case">{getSourceFullName(topSignal.source_type)}</span>
             )}
           </p>
           <p className="text-sm text-white font-medium leading-snug line-clamp-2">{topSignal.title}</p>
@@ -169,11 +169,11 @@ export function CelebrationState({
       {/* Stack-specific insights */}
       {stackInsights.length > 0 && (
         <div className="mb-6 space-y-2 max-w-sm mx-auto">
-          <p className="text-[10px] text-text-muted uppercase tracking-wider mb-1 text-left">
+          <p className="text-[10px] text-text-muted uppercase tracking-wider mb-1 text-start">
             {t('firstRun.stackInsight', 'Stack Insight')}
           </p>
           {stackInsights.slice(0, 3).map((insight, i) => (
-            <div key={i} className="px-4 py-2.5 bg-bg-secondary rounded-lg border border-border text-left">
+            <div key={i} className="px-4 py-2.5 bg-bg-secondary rounded-lg border border-border text-start">
               <p className="text-xs text-text-secondary leading-relaxed">{insight}</p>
             </div>
           ))}
@@ -193,7 +193,7 @@ export function CelebrationState({
 
       {/* Basic Mode indicator */}
       {embeddingMode === 'keyword-only' && (
-        <div className="mb-6 px-4 py-3 bg-amber-500/10 border border-amber-500/30 rounded-lg max-w-sm mx-auto text-left">
+        <div className="mb-6 px-4 py-3 bg-amber-500/10 border border-amber-500/30 rounded-lg max-w-sm mx-auto text-start">
           <p className="text-xs font-medium text-amber-400">
             {t('firstRun.basicMode')}
           </p>

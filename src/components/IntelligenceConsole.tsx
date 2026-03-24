@@ -42,7 +42,7 @@ function TabButton({
       aria-selected={active}
       aria-controls={controls}
       onClick={onClick}
-      className={`px-5 py-3 text-left transition-colors border-b-2 ${
+      className={`px-5 py-3 text-start transition-colors border-b-2 ${
         active
           ? 'border-accent-gold text-white'
           : 'border-transparent text-text-muted hover:text-text-secondary hover:border-border'

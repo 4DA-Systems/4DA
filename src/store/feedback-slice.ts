@@ -93,7 +93,7 @@ export const createFeedbackSlice: StateCreator<AppStore, [], [], FeedbackSlice> 
         cmd('ace_record_accuracy_feedback', {
           item_id: itemId,
           predicted_score: item.top_score,
-          feedback_type: feedbackTypeMap[actionType],
+          feedback_type: feedbackTypeMap[actionType]!,
         }),
         // Feed the main DB feedback table — powers autophagy calibration analysis
         cmd('record_item_feedback', {

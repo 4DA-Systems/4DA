@@ -27,6 +27,7 @@ export function TeamInviteDialog({ onClose }: TeamInviteDialogProps) {
     }
 
     const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') { onClose(); return; }
       if (e.key === 'Tab' && dialog) {
         const focusable = dialog.querySelectorAll<HTMLElement>(
           'input, button, select, textarea, [tabindex]:not([tabindex="-1"])'
@@ -48,7 +49,7 @@ export function TeamInviteDialog({ onClose }: TeamInviteDialogProps) {
       document.removeEventListener('keydown', handleKeyDown);
       previouslyFocused?.focus();
     };
-  }, []);
+  }, [onClose]);
 
   const handleCreate = async () => {
     setLoading(true);
@@ -78,15 +79,9 @@ export function TeamInviteDialog({ onClose }: TeamInviteDialogProps) {
   };
 
   return (
-    <div
-      className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[60] p-4"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="invite-dialog-title"
-      onClick={e => { if (e.target === e.currentTarget) onClose(); }}
-      onKeyDown={e => { if (e.key === 'Escape') onClose(); }}
-    >
-      <div ref={dialogRef} className="bg-bg-secondary border border-border rounded-xl w-full max-w-md shadow-2xl">
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[60] p-4">
+      <button type="button" className="absolute inset-0 w-full h-full cursor-default" onClick={onClose} aria-label={t('enterprise.invite.close', 'Close')} tabIndex={-1} />
+      <div ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="invite-dialog-title" className="relative bg-bg-secondary border border-border rounded-xl w-full max-w-md shadow-2xl">
         {/* Header */}
         <div className="px-5 py-4 border-b border-border flex items-center justify-between">
           <h3 id="invite-dialog-title" className="text-sm font-medium text-white">

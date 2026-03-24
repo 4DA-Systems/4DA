@@ -318,7 +318,7 @@ export function TeamSection({ onStatus }: { onStatus: (s: string) => void }) {
               </h4>
               <div className="space-y-1" role="list" aria-label={t('settings.team.memberList', 'Members')}>
                 {teamMembers.map(member => {
-                  const badge = ROLE_BADGE[member.role] ?? ROLE_BADGE.member;
+                  const badge = (ROLE_BADGE[member.role] ?? ROLE_BADGE.member)!;
                   return (
                     <div
                       key={member.client_id}
@@ -362,7 +362,7 @@ export function TeamSection({ onStatus }: { onStatus: (s: string) => void }) {
                     className={`relative w-8 h-4 rounded-full transition-colors ${sharingPrefs[pref.key] ? 'bg-success' : 'bg-border'}`}
                   >
                     <span
-                      className={`absolute top-0.5 left-0.5 w-3 h-3 rounded-full bg-white transition-transform ${sharingPrefs[pref.key] ? 'translate-x-4' : 'translate-x-0'}`}
+                      className={`absolute top-0.5 start-0.5 w-3 h-3 rounded-full bg-white transition-transform ${sharingPrefs[pref.key] ? 'translate-x-4' : 'translate-x-0'}`}
                     />
                   </button>
                   <span className="text-xs text-text-secondary group-hover:text-white transition-colors">

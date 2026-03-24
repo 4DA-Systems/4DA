@@ -175,7 +175,7 @@ export function ConfigDiagnostics() {
       {checks.length > 0 && (
         <div className="space-y-1.5">
           {checks.map((check, i) => {
-            const style = STATUS_STYLES[check.status] || STATUS_STYLES.running;
+            const style = (STATUS_STYLES[check.status] ?? STATUS_STYLES.running)!;
             return (
               <div
                 key={i}

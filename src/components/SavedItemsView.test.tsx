@@ -2,6 +2,20 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { SavedItemsView } from './SavedItemsView';
 
+// Mock virtual list — JSDOM has no layout so virtualizer renders nothing
+vi.mock('@tanstack/react-virtual', () => ({
+  useVirtualizer: ({ count }: { count: number }) => ({
+    getTotalSize: () => count * 80,
+    getVirtualItems: () =>
+      Array.from({ length: count }, (_, i) => ({
+        index: i,
+        key: i,
+        start: i * 80,
+        size: 80,
+      })),
+  }),
+}));
+
 // Mock Tauri API
 const mockInvoke = vi.fn();
 vi.mock('@tauri-apps/api/core', () => ({

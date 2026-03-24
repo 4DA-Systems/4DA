@@ -85,7 +85,7 @@ export function QuickSetupStep({ isAnimating, onComplete, onBack }: QuickSetupSt
             &#x25CB;
           </span>
         )}
-        <div className="text-left">
+        <div className="text-start">
           <div className="text-white font-medium text-sm">{title}</div>
           <div className="text-text-muted text-xs">{subtitle}</div>
         </div>
@@ -111,7 +111,7 @@ export function QuickSetupStep({ isAnimating, onComplete, onBack }: QuickSetupSt
         </div>
       )}
 
-      <div className="space-y-3 mb-6 max-h-[55vh] overflow-y-auto pr-1">
+      <div className="space-y-3 mb-6 max-h-[55vh] overflow-y-auto pe-1">
         {/* Section 1: AI Provider */}
         <div>
           <SectionHeader

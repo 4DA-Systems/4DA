@@ -175,7 +175,7 @@ export function TranslationEditor({ language }: TranslationEditorProps) {
 
   const handleSave = useCallback(async () => {
     if (!editingKey) return;
-    const [namespace, ...rest] = editingKey.split(':');
+    const [namespace, ...rest] = editingKey.split(':') as [string, ...string[]];
     try {
       await cmd('save_translation_override', {
         lang: language, namespace, key: rest.join(':'), value: editValue,
@@ -225,7 +225,7 @@ export function TranslationEditor({ language }: TranslationEditorProps) {
         <input type="text" value={search} onChange={(e) => setSearch(e.target.value)}
           placeholder={t('settings.translations.search')} style={s.search} />
         {NAMESPACES.map((ns) => (
-          <button key={ns} role="button"
+          <button key={ns}
             aria-label={ns === 'all' ? t('settings.translations.allNamespaces') : ns}
             onClick={() => setNsFilter(ns)} style={nsBtn(nsFilter === ns)}>
             {ns === 'all' ? t('settings.translations.allNamespaces') : ns}
@@ -243,7 +243,7 @@ export function TranslationEditor({ language }: TranslationEditorProps) {
         {filteredEntries.length === 0 ? (
           <div style={s.noResults}>{t('settings.translations.noResults')}</div>
         ) : filteredEntries.map(([fullKey, entry]) => {
-          const [ns, ...keyParts] = fullKey.split(':');
+          const [ns, ...keyParts] = fullKey.split(':') as [string, ...string[]];
           const shortKey = keyParts.join(':');
           const isEditing = editingKey === fullKey;
           const displayValue = entry.translated ?? entry.english;
@@ -255,9 +255,8 @@ export function TranslationEditor({ language }: TranslationEditorProps) {
               <span style={s.keyName}>{shortKey}</span>
               {isEditing ? (
                 <>
-                  <input type="text" value={editValue} onChange={(e) => setEditValue(e.target.value)}
-                    style={s.editInput} autoFocus
-                    onKeyDown={(e) => { if (e.key === 'Enter') handleSave(); if (e.key === 'Escape') handleCancel(); }} />
+                  {/* eslint-disable-next-line jsx-a11y/no-autofocus -- intentional: focus edit input when user clicks to edit a translation */}
+                  <input type="text" value={editValue} onChange={(e) => setEditValue(e.target.value)} style={s.editInput} autoFocus onKeyDown={(e) => { if (e.key === 'Enter') handleSave(); if (e.key === 'Escape') handleCancel(); }} />
                   <button onClick={handleSave} aria-label={t('settings.translations.save')}
                     style={{ ...s.btn, borderColor: ACCENT.success, color: ACCENT.success }}>
                     {t('action.save')}

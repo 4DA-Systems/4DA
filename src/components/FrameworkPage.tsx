@@ -75,12 +75,12 @@ export const FrameworkPage = memo(function FrameworkPage({ onClose }: FrameworkP
       {/* Navigation + Content */}
       <div className="flex-1 flex overflow-hidden">
         {/* Sidebar Navigation */}
-        <nav className="w-48 border-r border-border p-4 space-y-1 flex-shrink-0" aria-label="Framework sections">
+        <nav className="w-48 border-e border-border p-4 space-y-1 flex-shrink-0" aria-label="Framework sections">
           {SECTIONS.map(({ id, labelKey }) => (
             <button
               key={id}
               onClick={() => setActiveSection(id)}
-              className={`w-full text-left px-3 py-2 text-sm rounded-lg transition-all ${
+              className={`w-full text-start px-3 py-2 text-sm rounded-lg transition-all ${
                 activeSection === id
                   ? 'bg-orange-500/15 text-orange-400 font-medium'
                   : 'text-text-muted hover:text-text-secondary hover:bg-bg-tertiary/50'

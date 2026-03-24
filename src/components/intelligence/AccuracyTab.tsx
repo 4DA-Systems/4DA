@@ -19,7 +19,7 @@ function StatCard({ label, value, suffix, color }: { label: string; value: strin
   return (
     <div className="bg-bg-tertiary rounded-lg border border-border px-4 py-3">
       <div className={`text-xl font-semibold ${color ?? 'text-white'}`}>
-        {value}{suffix && <span className="text-sm ml-0.5">{suffix}</span>}
+        {value}{suffix && <span className="text-sm ms-0.5">{suffix}</span>}
       </div>
       <div className="text-xs text-text-muted mt-0.5">{label}</div>
     </div>
@@ -186,7 +186,7 @@ export const AccuracyTab = memo(function AccuracyTab() {
                       style={{ width: `${Math.min(tech.confidence * 100, 100)}%` }}
                     />
                   </div>
-                  <span className="text-xs text-text-muted w-10 text-right">
+                  <span className="text-xs text-text-muted w-10 text-end">
                     {(tech.confidence * 100).toFixed(0)}%
                   </span>
                 </div>
@@ -206,10 +206,10 @@ export const AccuracyTab = memo(function AccuracyTab() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="bg-bg-tertiary text-text-muted text-xs uppercase tracking-wider">
-                  <th className="text-left px-4 py-2.5 font-medium">{t('accuracy.thTechnology')}</th>
-                  <th className="text-left px-4 py-2.5 font-medium">{t('accuracy.thWeeksIdle')}</th>
-                  <th className="text-left px-4 py-2.5 font-medium">{t('accuracy.thRisk')}</th>
-                  <th className="text-left px-4 py-2.5 font-medium">{t('accuracy.thAction')}</th>
+                  <th className="text-start px-4 py-2.5 font-medium">{t('accuracy.thTechnology')}</th>
+                  <th className="text-start px-4 py-2.5 font-medium">{t('accuracy.thWeeksIdle')}</th>
+                  <th className="text-start px-4 py-2.5 font-medium">{t('accuracy.thRisk')}</th>
+                  <th className="text-start px-4 py-2.5 font-medium">{t('accuracy.thAction')}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">

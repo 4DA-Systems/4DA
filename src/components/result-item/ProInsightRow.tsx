@@ -46,7 +46,7 @@ export function ProInsightRow({ item }: ProInsightRowProps) {
 
   // Free user: show teaser with contextual upgrade path
   return (
-    <div className="mt-1 pl-[4.25rem] flex items-center gap-2">
+    <div className="mt-1 ps-[4.25rem] flex items-center gap-2">
       {hasSignal && (
         <span className="text-[10px] text-cyan-400/70">
           {SIGNAL_LABELS[item.signal_type!] || item.signal_type}
@@ -64,7 +64,7 @@ export function ProInsightRow({ item }: ProInsightRowProps) {
           href="https://4da.ai/signal"
           target="_blank"
           rel="noopener noreferrer"
-          className="inline-flex items-center gap-0.5 text-[10px] text-accent-gold/50 hover:text-accent-gold transition-colors ml-auto"
+          className="inline-flex items-center gap-0.5 text-[10px] text-accent-gold/50 hover:text-accent-gold transition-colors ms-auto"
         >
           <ProStar />
           {t('results.seeWhy')} {formatScore(item.top_score)}
@@ -91,7 +91,7 @@ function InlineTrialStart({ score }: { score: number }) {
     <button
       onClick={handleStart}
       disabled={starting}
-      className="inline-flex items-center gap-0.5 text-[10px] text-accent-gold/50 hover:text-accent-gold transition-colors ml-auto disabled:opacity-50"
+      className="inline-flex items-center gap-0.5 text-[10px] text-accent-gold/50 hover:text-accent-gold transition-colors ms-auto disabled:opacity-50"
     >
       <ProStar />
       {starting ? t('pro.startingTrial') : t('results.tryProFree', { score: formatScore(score) })}
@@ -126,7 +126,7 @@ function ProInsightDetail({ item }: { item: SourceRelevance }) {
   if (parts.length === 0 && !item.signal_action) return null;
 
   return (
-    <div className="mt-1 pl-[4.25rem] space-y-0.5">
+    <div className="mt-1 ps-[4.25rem] space-y-0.5">
       {/* Signal action (tactical advice) */}
       {item.signal_action && (
         <div className="text-[10px] text-cyan-400/80 leading-snug">

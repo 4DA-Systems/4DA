@@ -194,7 +194,17 @@ export const SovereignDeveloperProfile = memo(function SovereignDeveloperProfile
     );
   }
 
-  if (!profile) return null;
+  if (!profile) return (
+    <div className="bg-bg-secondary rounded-lg border border-red-500/30 p-6 text-center">
+      <p className="text-sm text-red-400 mb-3">{t('profile.loadFailed', { defaultValue: 'Failed to load your developer profile.' })}</p>
+      <button
+        onClick={loadProfile}
+        className="px-3 py-1.5 text-xs bg-red-500/10 text-red-400 rounded hover:bg-red-500/20 transition-colors"
+      >
+        {t('action.retry')}
+      </button>
+    </div>
+  );
 
   const intel = profile.intelligence;
 

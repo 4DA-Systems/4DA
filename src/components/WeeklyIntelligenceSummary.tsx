@@ -41,7 +41,10 @@ export const WeeklyIntelligenceSummary = memo(function WeeklyIntelligenceSummary
         const affinities = affinityResult.status === 'fulfilled' ? affinityResult.value : null;
         const suggestions = suggestionsResult.status === 'fulfilled' ? suggestionsResult.value : [];
 
-        if (!pulse || pulse.total_cycles === 0) return;
+        if (!pulse || pulse.total_cycles === 0) {
+          setVisible(true);
+          return;
+        }
 
         // Find new topics (high positive affinity, recent interactions)
         const newTopics: string[] = [];
@@ -91,7 +94,13 @@ export const WeeklyIntelligenceSummary = memo(function WeeklyIntelligenceSummary
     }
   };
 
-  if (!visible || !data) return null;
+  if (!visible) return null;
+
+  if (!data) return (
+    <div className="bg-bg-secondary rounded-lg border border-border p-4">
+      <p className="text-sm text-text-muted">{t('weekly.comingSoon')}</p>
+    </div>
+  );
 
   const trendArrow = data.accuracyTrend != null
     ? data.accuracyTrend > 2 ? '\u2191' : data.accuracyTrend < -2 ? '\u2193' : '\u2192'
@@ -133,7 +142,7 @@ export const WeeklyIntelligenceSummary = memo(function WeeklyIntelligenceSummary
           <div>
             <span className="text-lg font-bold text-white tabular-nums">
               {data.calibrationAccuracy}%
-              {trendArrow && <span className={`ml-1 text-sm ${trendColor}`}>{trendArrow}</span>}
+              {trendArrow && <span className={`ms-1 text-sm ${trendColor}`}>{trendArrow}</span>}
             </span>
             <p className="text-[10px] text-text-muted">{t('weekly.accuracy', 'accuracy')}</p>
           </div>
@@ -165,7 +174,7 @@ export const WeeklyIntelligenceSummary = memo(function WeeklyIntelligenceSummary
               <div key={s.topic} className="flex items-center justify-between py-1">
                 <div>
                   <span className="text-xs text-text-primary">{s.topic}</span>
-                  <span className="text-[10px] text-text-muted ml-2">{s.reason}</span>
+                  <span className="text-[10px] text-text-muted ms-2">{s.reason}</span>
                 </div>
                 <button
                   onClick={() => addInterest(s.topic)}

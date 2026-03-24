@@ -67,7 +67,7 @@ export function ArticleReader({ itemId, url, contentType }: ArticleReaderProps) 
             <span className="text-[10px] text-red-400">{error}</span>
             <button
               onClick={loadContent}
-              className="ml-2 text-[10px] text-red-300 underline hover:text-red-200"
+              className="ms-2 text-[10px] text-red-300 underline hover:text-red-200"
             >
               {t('action.retry')}
             </button>

@@ -43,7 +43,7 @@ export const PlaybookSidebar = memo(function PlaybookSidebar({
           <button
             key={modId}
             onClick={() => onModuleClick(modId)}
-            className={`w-full text-left px-3 py-2.5 rounded-lg transition-all flex items-center gap-3 group ${
+            className={`w-full text-start px-3 py-2.5 rounded-lg transition-all flex items-center gap-3 group ${
               isActive
                 ? 'bg-accent-gold/15 border border-accent-gold/30'
                 : 'hover:bg-bg-tertiary border border-transparent'
@@ -77,7 +77,7 @@ export const PlaybookSidebar = memo(function PlaybookSidebar({
       {/* Templates */}
       <button
         onClick={onShowTemplates}
-        className={`w-full text-left px-3 py-2.5 rounded-lg transition-all flex items-center gap-3 group ${
+        className={`w-full text-start px-3 py-2.5 rounded-lg transition-all flex items-center gap-3 group ${
           showTemplates
             ? 'bg-accent-gold/15 border border-accent-gold/30'
             : 'hover:bg-bg-tertiary border border-transparent'

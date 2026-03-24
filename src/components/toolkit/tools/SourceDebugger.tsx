@@ -195,7 +195,7 @@ export default function SourceDebugger() {
               </span>
             )}
 
-            <div className="flex items-center gap-4 ml-auto text-xs text-text-secondary font-mono shrink-0">
+            <div className="flex items-center gap-4 ms-auto text-xs text-text-secondary font-mono shrink-0">
               <span>{t('toolkit.sourceDebugger.itemCount', { count: result.item_count })}</span>
               <span>{result.fetch_duration_ms}ms</span>
             </div>
@@ -235,14 +235,14 @@ export default function SourceDebugger() {
 
                   {/* Published date */}
                   {item.published_at && (
-                    <p className="text-[10px] text-text-muted font-mono ml-5 mb-1">
+                    <p className="text-[10px] text-text-muted font-mono ms-5 mb-1">
                       {item.published_at}
                     </p>
                   )}
 
                   {/* Content preview */}
                   {item.content_preview && (
-                    <p className="text-xs text-text-secondary ml-5 line-clamp-2">
+                    <p className="text-xs text-text-secondary ms-5 line-clamp-2">
                       {truncate(item.content_preview, 200)}
                     </p>
                   )}

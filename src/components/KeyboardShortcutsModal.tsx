@@ -52,8 +52,9 @@ export function KeyboardShortcutsModal({ onClose }: KeyboardShortcutsModalProps)
   }, [onClose]);
 
   return (
-    <div ref={modalRef} className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4" role="dialog" aria-modal="true" aria-labelledby="keyboard-shortcuts-title" onClick={onClose}>
-      <div className="bg-bg-secondary border border-border rounded-xl w-full max-w-sm shadow-2xl" onClick={e => e.stopPropagation()}>
+    <div ref={modalRef} className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+      <button type="button" className="absolute inset-0 w-full h-full cursor-default" onClick={onClose} aria-label={t('shortcuts.close')} tabIndex={-1} />
+      <div role="dialog" aria-modal="true" aria-labelledby="keyboard-shortcuts-title" className="relative bg-bg-secondary border border-border rounded-xl w-full max-w-sm shadow-2xl">
         <div className="px-6 py-4 border-b border-border flex items-center justify-between">
           <h2 id="keyboard-shortcuts-title" className="text-lg font-medium text-white">{t('shortcuts.title')}</h2>
           <button

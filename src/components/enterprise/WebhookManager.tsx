@@ -249,7 +249,7 @@ function WebhookForm({ onSubmit, onCancel }: WebhookFormProps) {
                   {category}
                 </button>
               </legend>
-              <div className="flex flex-wrap gap-2 pl-1">
+              <div className="flex flex-wrap gap-2 ps-1">
                 {events.map(event => {
                   const checked = selectedEvents.includes(event);
                   return (

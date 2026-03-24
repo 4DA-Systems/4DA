@@ -28,7 +28,7 @@ const AVATAR_COLORS = [
 function avatarColor(name: string): string {
   let hash = 0;
   for (let i = 0; i < name.length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash);
-  return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length];
+  return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length]!;
 }
 
 function actionCategory(action: string): string {
@@ -183,7 +183,7 @@ export function AuditLogViewer() {
           <option value="">{t('enterprise.audit.allResources', 'All resources')}</option>
           {resourceTypes.map(rt => <option key={rt} value={rt}>{rt}</option>)}
         </select>
-        <div className="flex items-center gap-1 ml-auto">
+        <div className="flex items-center gap-1 ms-auto">
           <input type="date" value={exportFrom} onChange={e => setExportFrom(e.target.value)} aria-label={t('enterprise.audit.fromDate', 'From date')} className={dateCls} />
           <span className="text-[10px] text-text-muted">&ndash;</span>
           <input type="date" value={exportTo} onChange={e => setExportTo(e.target.value)} aria-label={t('enterprise.audit.toDate', 'To date')} className={dateCls} />
@@ -201,11 +201,11 @@ export function AuditLogViewer() {
       <div className="overflow-x-auto">
         <table className="w-full text-xs" role="table" aria-label={t('enterprise.audit.tableLabel', 'Audit log entries')}>
           <thead>
-            <tr className="text-left text-text-muted border-b border-border">
-              <th className="pb-2 pr-3 font-medium">{t('enterprise.audit.colTime', 'Time')}</th>
-              <th className="pb-2 pr-3 font-medium">{t('enterprise.audit.colActor', 'Actor')}</th>
-              <th className="pb-2 pr-3 font-medium">{t('enterprise.audit.colAction', 'Action')}</th>
-              <th className="pb-2 pr-3 font-medium">{t('enterprise.audit.colResource', 'Resource')}</th>
+            <tr className="text-start text-text-muted border-b border-border">
+              <th className="pb-2 pe-3 font-medium">{t('enterprise.audit.colTime', 'Time')}</th>
+              <th className="pb-2 pe-3 font-medium">{t('enterprise.audit.colActor', 'Actor')}</th>
+              <th className="pb-2 pe-3 font-medium">{t('enterprise.audit.colAction', 'Action')}</th>
+              <th className="pb-2 pe-3 font-medium">{t('enterprise.audit.colResource', 'Resource')}</th>
               <th className="pb-2 font-medium">{t('enterprise.audit.colDetails', 'Details')}</th>
             </tr>
           </thead>
@@ -217,10 +217,10 @@ export function AuditLogViewer() {
               const hasDetails = entry.details != null;
               return (
                 <tr key={entry.event_id} className="border-b border-border/50 hover:bg-bg-secondary/50 transition-colors">
-                  <td className="py-2 pr-3 whitespace-nowrap text-text-muted" title={entry.created_at}>
+                  <td className="py-2 pe-3 whitespace-nowrap text-text-muted" title={entry.created_at}>
                     {formatRelativeTime(entry.created_at)}
                   </td>
-                  <td className="py-2 pr-3">
+                  <td className="py-2 pe-3">
                     <div className="flex items-center gap-1.5">
                       <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-semibold text-white ${avatarColor(entry.actor_display_name)}`} aria-hidden="true">
                         {entry.actor_display_name.charAt(0).toUpperCase()}
@@ -230,15 +230,15 @@ export function AuditLogViewer() {
                       </span>
                     </div>
                   </td>
-                  <td className="py-2 pr-3">
+                  <td className="py-2 pe-3">
                     <span className={`inline-block px-1.5 py-0.5 rounded border text-[10px] font-medium ${colorClass}`}>
                       {entry.action}
                     </span>
                   </td>
-                  <td className="py-2 pr-3 text-text-muted">
+                  <td className="py-2 pe-3 text-text-muted">
                     <span>{entry.resource_type}</span>
                     {entry.resource_id && (
-                      <span className="ml-1 text-text-muted/60" title={entry.resource_id}>
+                      <span className="ms-1 text-text-muted/60" title={entry.resource_id}>
                         {entry.resource_id.length > 12 ? `${entry.resource_id.slice(0, 12)}...` : entry.resource_id}
                       </span>
                     )}
@@ -305,7 +305,7 @@ export function AuditLogViewer() {
                         <div className="flex-1 h-2.5 bg-bg-secondary rounded-full overflow-hidden">
                           <div className="h-full bg-success/50 rounded-full transition-all" style={{ width: `${(count / summaryMaxDay) * 100}%` }} />
                         </div>
-                        <span className="text-[10px] text-text-muted w-6 text-right">{count}</span>
+                        <span className="text-[10px] text-text-muted w-6 text-end">{count}</span>
                       </div>
                     ))}
                   </div>

@@ -12,62 +12,62 @@ describe('parseBriefingContent', () => {
     const content = '## Action Required\n- Update dependency X\n- Fix CVE';
     const sections = parseBriefingContent(content);
     expect(sections).toHaveLength(1);
-    expect(sections[0].title).toBe('Action Required');
-    expect(sections[0].type).toBe('action');
-    expect(sections[0].lines).toHaveLength(2);
+    expect(sections[0]!.title).toBe('Action Required');
+    expect(sections[0]!.type).toBe('action');
+    expect(sections[0]!.lines).toHaveLength(2);
   });
 
   it('parses multiple sections', () => {
     const content = '## Action Required\n- Update X\n\n## Worth Knowing\n- New feature\n\n## Filtered Out\n- Noise';
     const sections = parseBriefingContent(content);
     expect(sections).toHaveLength(3);
-    expect(sections[0].type).toBe('action');
-    expect(sections[1].type).toBe('worth_knowing');
-    expect(sections[2].type).toBe('filtered');
+    expect(sections[0]!.type).toBe('action');
+    expect(sections[1]!.type).toBe('worth_knowing');
+    expect(sections[2]!.type).toBe('filtered');
   });
 
   it('classifies action sections', () => {
     const content = '## Urgent Actions\n- Fix now';
     const sections = parseBriefingContent(content);
-    expect(sections[0].type).toBe('action');
+    expect(sections[0]!.type).toBe('action');
   });
 
   it('classifies critical as action type', () => {
     const content = '## Critical Alerts\n- Security issue';
     const sections = parseBriefingContent(content);
-    expect(sections[0].type).toBe('action');
+    expect(sections[0]!.type).toBe('action');
   });
 
   it('classifies worth_knowing sections', () => {
     const content = '## Notable Developments\n- New release';
     const sections = parseBriefingContent(content);
-    expect(sections[0].type).toBe('worth_knowing');
+    expect(sections[0]!.type).toBe('worth_knowing');
   });
 
   it('classifies filtered sections', () => {
     const content = '## Filtered Out\n- Blog spam';
     const sections = parseBriefingContent(content);
-    expect(sections[0].type).toBe('filtered');
+    expect(sections[0]!.type).toBe('filtered');
   });
 
   it('classifies skip as filtered type', () => {
     const content = '## Skip These\n- Not relevant';
     const sections = parseBriefingContent(content);
-    expect(sections[0].type).toBe('filtered');
+    expect(sections[0]!.type).toBe('filtered');
   });
 
   it('defaults to general for unknown section titles', () => {
     const content = '## Overview\n- Summary of findings';
     const sections = parseBriefingContent(content);
-    expect(sections[0].type).toBe('general');
+    expect(sections[0]!.type).toBe('general');
   });
 
   it('handles content before first section as Overview', () => {
     const content = 'Some preamble text\n## Real Section\n- Content';
     const sections = parseBriefingContent(content);
     expect(sections).toHaveLength(2);
-    expect(sections[0].title).toBe('Overview');
-    expect(sections[0].lines).toContain('Some preamble text');
+    expect(sections[0]!.title).toBe('Overview');
+    expect(sections[0]!.lines).toContain('Some preamble text');
   });
 
   it('returns empty array for empty string', () => {
@@ -78,13 +78,13 @@ describe('parseBriefingContent', () => {
     const content = '## Empty Section';
     const sections = parseBriefingContent(content);
     expect(sections).toHaveLength(1);
-    expect(sections[0].lines).toEqual([]);
+    expect(sections[0]!.lines).toEqual([]);
   });
 
   it('preserves empty lines within sections', () => {
     const content = '## Test\n- Line 1\n\n- Line 2';
     const sections = parseBriefingContent(content);
-    expect(sections[0].lines).toHaveLength(3);
+    expect(sections[0]!.lines).toHaveLength(3);
   });
 });
 

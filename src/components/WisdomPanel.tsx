@@ -181,7 +181,7 @@ export const WisdomPanel = memo(function WisdomPanel() {
               <div className="pt-2 border-t border-border/30">
                 <p className="text-xs text-text-muted mb-1">{t('wisdom.watchFor')}</p>
                 {result.watch_for.map((w, i) => (
-                  <p key={i} className="text-xs text-text-secondary ml-2">
+                  <p key={i} className="text-xs text-text-secondary ms-2">
                     {w}
                   </p>
                 ))}

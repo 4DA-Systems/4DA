@@ -54,7 +54,7 @@ function DataPointRow({ point }: { point: DataPoint }) {
   return (
     <div className={`flex items-start justify-between gap-4 ${point.highlight ? 'text-white' : 'text-text-secondary'}`}>
       <span className="text-xs text-text-muted flex-shrink-0 w-32">{point.label}</span>
-      <div className="flex-1 text-right">
+      <div className="flex-1 text-end">
         <span className={`text-sm ${point.highlight ? 'text-accent-gold font-medium' : ''}`}>
           {point.value}
         </span>

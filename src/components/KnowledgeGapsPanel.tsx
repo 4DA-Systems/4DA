@@ -53,11 +53,11 @@ export const KnowledgeGapsPanel = memo(function KnowledgeGapsPanel() {
           <div className="w-8 h-8 bg-bg-tertiary rounded-lg flex items-center justify-center">
             <span className="text-text-secondary">📖</span>
           </div>
-          <div className="text-left">
+          <div className="text-start">
             <h2 className="font-medium text-white text-sm">{t('knowledgeGaps.title')}</h2>
             <p className="text-xs text-text-muted">
               {t('knowledgeGaps.count', { count: gaps.length })}
-              {criticalCount > 0 && <span className="text-amber-400 ml-1">{t('knowledgeGaps.needAttention', { count: criticalCount })}</span>}
+              {criticalCount > 0 && <span className="text-amber-400 ms-1">{t('knowledgeGaps.needAttention', { count: criticalCount })}</span>}
             </p>
           </div>
         </div>
@@ -67,13 +67,13 @@ export const KnowledgeGapsPanel = memo(function KnowledgeGapsPanel() {
       {expanded && (
         <div className="p-4 space-y-2 border-t border-border">
           {gaps.map((gap, i) => {
-            const sev = SEVERITY_CONFIG[gap.gap_severity] || SEVERITY_CONFIG.low;
+            const sev = (SEVERITY_CONFIG[gap.gap_severity] ?? SEVERITY_CONFIG.low)!;
             return (
               <div key={i} className={`px-4 py-3 rounded-lg border ${sev.border} ${sev.bg}`}>
                 <div className="flex items-center gap-2">
                   <span className={`text-sm font-medium ${sev.color}`}>{gap.dependency}</span>
                   {gap.version && <span className="text-[10px] text-text-muted">v{gap.version}</span>}
-                  <span className={`ml-auto text-[10px] px-1.5 py-0.5 rounded ${sev.bg} ${sev.color} border ${sev.border}`}>
+                  <span className={`ms-auto text-[10px] px-1.5 py-0.5 rounded ${sev.bg} ${sev.color} border ${sev.border}`}>
                     {gap.gap_severity}
                   </span>
                 </div>

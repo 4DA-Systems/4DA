@@ -90,7 +90,7 @@ export function CommunityIntelligenceSection() {
           }`}
         >
           <span
-            className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white transition-transform ${
+            className={`absolute top-0.5 start-0.5 w-4 h-4 rounded-full bg-white transition-transform ${
               status.enabled ? 'translate-x-5' : 'translate-x-0'
             }`}
           />
@@ -107,7 +107,7 @@ export function CommunityIntelligenceSection() {
             <p className="text-xs text-text-secondary">
               {t('settings.community.shared', "What's shared:")}
             </p>
-            <ul className="text-xs text-text-muted space-y-0.5 ml-3">
+            <ul className="text-xs text-text-muted space-y-0.5 ms-3">
               <li>{t('settings.community.sharedWeights', 'Anonymized scoring weights')}</li>
               <li>{t('settings.community.sharedAccuracy', 'Stack profile accuracy metrics')}</li>
               <li>{t('settings.community.sharedTrends', 'Aggregated topic trend signals')}</li>
@@ -115,7 +115,7 @@ export function CommunityIntelligenceSection() {
             <p className="text-xs text-text-secondary mt-2">
               {t('settings.community.neverShared', "What's NEVER shared:")}
             </p>
-            <ul className="text-xs text-text-muted space-y-0.5 ml-3">
+            <ul className="text-xs text-text-muted space-y-0.5 ms-3">
               <li>{t('settings.community.neverContent', 'Your content, URLs, or bookmarks')}</li>
               <li>{t('settings.community.neverIdentity', 'Your identity or API keys')}</li>
               <li>{t('settings.community.neverStack', 'Your tech stack or interests')}</li>

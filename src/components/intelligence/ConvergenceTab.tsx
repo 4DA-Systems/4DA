@@ -31,7 +31,7 @@ function StatCard({ label, value, suffix, color }: { label: string; value: strin
   return (
     <div className="bg-bg-tertiary rounded-lg border border-border px-4 py-3">
       <div className={`text-xl font-semibold ${color ?? 'text-white'}`}>
-        {value}{suffix && <span className="text-sm ml-0.5">{suffix}</span>}
+        {value}{suffix && <span className="text-sm ms-0.5">{suffix}</span>}
       </div>
       <div className="text-xs text-text-muted mt-0.5">{label}</div>
     </div>
@@ -177,9 +177,9 @@ export const ConvergenceTab = memo(function ConvergenceTab() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="bg-bg-tertiary text-text-muted text-xs uppercase tracking-wider">
-                  <th className="text-left px-4 py-2.5 font-medium">{t('convergence.thPackage')}</th>
-                  <th className="text-left px-4 py-2.5 font-medium">{t('convergence.thEcosystem')}</th>
-                  <th className="text-left px-4 py-2.5 font-medium">{t('convergence.thProjects')}</th>
+                  <th className="text-start px-4 py-2.5 font-medium">{t('convergence.thPackage')}</th>
+                  <th className="text-start px-4 py-2.5 font-medium">{t('convergence.thEcosystem')}</th>
+                  <th className="text-start px-4 py-2.5 font-medium">{t('convergence.thProjects')}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
@@ -206,10 +206,10 @@ export const ConvergenceTab = memo(function ConvergenceTab() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="bg-bg-tertiary text-text-muted text-xs uppercase tracking-wider">
-                  <th className="text-left px-4 py-2.5 font-medium">{t('convergence.thProject')}</th>
-                  <th className="text-left px-4 py-2.5 font-medium">{t('convergence.thDeps')}</th>
-                  <th className="text-left px-4 py-2.5 font-medium">{t('convergence.thFreshness')}</th>
-                  <th className="text-left px-4 py-2.5 font-medium">{t('convergence.thVulns')}</th>
+                  <th className="text-start px-4 py-2.5 font-medium">{t('convergence.thProject')}</th>
+                  <th className="text-start px-4 py-2.5 font-medium">{t('convergence.thDeps')}</th>
+                  <th className="text-start px-4 py-2.5 font-medium">{t('convergence.thFreshness')}</th>
+                  <th className="text-start px-4 py-2.5 font-medium">{t('convergence.thVulns')}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">

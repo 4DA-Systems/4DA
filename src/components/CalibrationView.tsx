@@ -256,7 +256,7 @@ export function CalibrationView() {
                   {t('calibration.toReachGradeA')}
                 </div>
                 {result.rig_requirements.grade_a_requirements.map((req, i) => (
-                  <div key={i} className="text-xs text-text-secondary py-0.5 pl-3">
+                  <div key={i} className="text-xs text-text-secondary py-0.5 ps-3">
                     {req}
                   </div>
                 ))}

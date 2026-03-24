@@ -63,7 +63,7 @@ export function LicenseSection({ onStatus }: { onStatus: (s: string) => void }) 
     team: { label: t('settings.license.tierTeam'), color: 'text-success' },
     enterprise: { label: t('tier.enterprise'), color: 'text-success' },
   };
-  const { label: tierLabel, color: tierColor } = tierConfig[tier] ?? tierConfig.free;
+  const { label: tierLabel, color: tierColor } = (tierConfig[tier] ?? tierConfig.free)!;
 
   return (
     <div className="bg-bg-tertiary rounded-lg p-4 border border-border">

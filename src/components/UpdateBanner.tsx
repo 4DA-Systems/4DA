@@ -20,7 +20,7 @@ export function UpdateBanner({ update, installing, onInstall, onDismiss }: Updat
   const { t } = useTranslation();
 
   return (
-    <div className="fixed bottom-4 right-4 z-50 bg-bg-secondary border border-accent-gold/40 rounded-xl px-5 py-4 shadow-lg max-w-sm">
+    <div className="fixed bottom-4 end-4 z-50 bg-bg-secondary border border-accent-gold/40 rounded-xl px-5 py-4 shadow-lg max-w-sm">
       <div className="flex items-start gap-3">
         <div className="flex-1">
           <p className="text-sm font-medium text-white">{t('update.available', { version: update.version })}</p>

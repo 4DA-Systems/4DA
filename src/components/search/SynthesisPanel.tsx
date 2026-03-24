@@ -33,7 +33,7 @@ function parseCitations(
   return parts.map((part, i) => {
     const match = part.match(/^\[(\d+)\]$/);
     if (match) {
-      const idx = parseInt(match[1], 10);
+      const idx = parseInt(match[1]!, 10);
       const source = sources.find(s => s.index === idx);
       if (source?.url) {
         return (
@@ -42,7 +42,7 @@ function parseCitations(
             href={source.url}
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex items-center justify-center w-4 h-4 text-[9px] bg-cyan-500/20 text-cyan-400 rounded-sm hover:bg-cyan-500/30 transition-colors align-super ml-0.5 mr-0.5 no-underline"
+            className="inline-flex items-center justify-center w-4 h-4 text-[9px] bg-cyan-500/20 text-cyan-400 rounded-sm hover:bg-cyan-500/30 transition-colors align-super ms-0.5 me-0.5 no-underline"
             title={source.title}
           >
             {idx}
@@ -50,7 +50,7 @@ function parseCitations(
         );
       }
       return (
-        <span key={i} className="text-[9px] text-cyan-400/60 align-super ml-0.5 mr-0.5" title={source?.title}>
+        <span key={i} className="text-[9px] text-cyan-400/60 align-super ms-0.5 me-0.5" title={source?.title}>
           [{idx}]
         </span>
       );
@@ -90,7 +90,7 @@ export function SynthesisPanel({ isPro, synthesis, loading, streamingText, onRet
         <div>
           <p className="text-sm text-text-secondary leading-relaxed">
             {streamingText}
-            <span className="inline-block w-0.5 h-4 bg-cyan-400 ml-0.5 animate-pulse" />
+            <span className="inline-block w-0.5 h-4 bg-cyan-400 ms-0.5 animate-pulse" />
           </p>
           <div className="flex items-center gap-2 mt-2">
             <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse" />
@@ -138,7 +138,7 @@ export function SynthesisPanel({ isPro, synthesis, loading, streamingText, onRet
               <div className="mt-1 space-y-0.5">
                 {synthesis!.sources.map(source => (
                   <div key={source.index} className="flex items-center gap-1.5 text-[10px]">
-                    <span className="text-cyan-400/60 w-3 text-right">{source.index}.</span>
+                    <span className="text-cyan-400/60 w-3 text-end">{source.index}.</span>
                     {source.url ? (
                       <a
                         href={source.url}

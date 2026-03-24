@@ -138,7 +138,7 @@ export function DataExportPanel() {
               <button
                 onClick={() => handleExportSection(section.key)}
                 disabled={singleExporting === section.key}
-                className="text-[10px] text-text-muted hover:text-success transition-colors ml-2"
+                className="text-[10px] text-text-muted hover:text-success transition-colors ms-2"
                 title={`Export ${section.label} only`}
               >
                 {singleExporting === section.key ? '...' : '\u{2B07}'}
@@ -174,7 +174,7 @@ export function DataExportPanel() {
               >
                 <div>
                   <span className="text-xs text-white font-mono">{exp.export_id.slice(0, 12)}...</span>
-                  <span className="text-[10px] text-text-muted ml-2">
+                  <span className="text-[10px] text-text-muted ms-2">
                     {exp.format.toUpperCase()} &middot; {exp.total_records} records &middot; {exp.sections.length} sections
                   </span>
                 </div>

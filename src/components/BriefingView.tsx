@@ -64,7 +64,7 @@ export const BriefingView = memo(function BriefingView() {
         const alerts = event.payload.filter(a => a.new_matches > 0);
         if (alerts.length > 0) {
           const msg = alerts.length === 1
-            ? t('standingQueries.singleMatch', { query: alerts[0].query_text, count: alerts[0].new_matches })
+            ? t('standingQueries.singleMatch', { query: alerts[0]!.query_text, count: alerts[0]!.new_matches })
             : t('standingQueries.multiMatch', { count: alerts.length });
           addToast('info', msg);
         }
@@ -112,14 +112,14 @@ export const BriefingView = memo(function BriefingView() {
                     {item.url ? (
                       <button
                         onClick={() => window.open(item.url!, '_blank', 'noopener,noreferrer')}
-                        className="text-sm text-white hover:text-orange-400 text-left transition-colors"
+                        className="text-sm text-white hover:text-orange-400 text-start transition-colors"
                       >
                         {item.title}
                       </button>
                     ) : (
                       <span className="text-sm text-white">{item.title}</span>
                     )}
-                    <span className="text-xs text-text-muted ml-2">{item.source}</span>
+                    <span className="text-xs text-text-muted ms-2">{item.source}</span>
                   </div>
                 </div>
               ))}

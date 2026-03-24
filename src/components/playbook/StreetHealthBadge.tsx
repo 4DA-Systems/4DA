@@ -34,7 +34,7 @@ export function StreetHealthBadge() {
   if (!streetHealth) return null;
 
   const pct = Math.round(streetHealth.overall * 100);
-  const trendInfo = TREND_ICONS[streetHealth.trend] || TREND_ICONS.stable;
+  const trendInfo = (TREND_ICONS[streetHealth.trend] ?? TREND_ICONS.stable)!;
   const scoreColor =
     pct >= 70 ? '#22C55E' : pct >= 40 ? '#D4AF37' : '#EF4444';
 

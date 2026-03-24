@@ -199,10 +199,10 @@ const SecurityDashboard = memo(function SecurityDashboard() {
         {/* First CVE highlight — self-manages visibility via localStorage */}
         {activeAlerts.length > 0 && (
           <FirstCveCard
-            cveId={activeAlerts[0].cveId}
-            packageName={activeAlerts[0].packageName}
-            severity={activeAlerts[0].severity}
-            projectCount={activeAlerts[0].affectedProjects}
+            cveId={activeAlerts[0]!.cveId}
+            packageName={activeAlerts[0]!.packageName}
+            severity={activeAlerts[0]!.severity}
+            projectCount={activeAlerts[0]!.affectedProjects}
             minutesSincePublication={0}
           />
         )}
@@ -238,7 +238,7 @@ const SecurityDashboard = memo(function SecurityDashboard() {
                       {alert.packageName}
                     </span>
                   </div>
-                  <div className="flex items-center gap-3 shrink-0 ml-3">
+                  <div className="flex items-center gap-3 shrink-0 ms-3">
                     <span className="text-xs text-text-muted">
                       {t('security.projectCount', { count: alert.affectedProjects })}
                     </span>

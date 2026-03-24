@@ -43,7 +43,7 @@ function BreakdownBar({ label, value }: { label: string; value: number }) {
           style={{ width: `${pct}%` }}
         />
       </div>
-      <span className="text-xs font-mono text-text-secondary w-12 text-right">
+      <span className="text-xs font-mono text-text-secondary w-12 text-end">
         {value.toFixed(2)}
       </span>
     </div>

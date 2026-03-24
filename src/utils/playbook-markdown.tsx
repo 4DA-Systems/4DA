@@ -23,15 +23,15 @@ function processInline(text: string): ReactNode[] {
     // Links [text](url)
     const linkMatch = remaining.match(/^(.*?)\[([^\]]+)\]\(([^)]+)\)(.*)/s);
     if (linkMatch) {
-      if (linkMatch[1]) parts.push(...processInlineSimple(linkMatch[1], key));
+      if (linkMatch[1]) parts.push(...processInlineSimple(linkMatch[1]!, key));
       key++;
       parts.push(
-        <a key={`link-${key}`} href={linkMatch[3]} target="_blank" rel="noopener noreferrer"
+        <a key={`link-${key}`} href={linkMatch[3]!} target="_blank" rel="noopener noreferrer"
           className="text-[#D4AF37] hover:underline">
           {linkMatch[2]}
         </a>,
       );
-      remaining = linkMatch[4];
+      remaining = linkMatch[4] ?? '';
       continue;
     }
 
@@ -83,15 +83,15 @@ export function renderMarkdown(content: string, config?: { moduleId?: string; le
   let key = 0;
 
   while (i < lines.length) {
-    const line = lines[i];
+    const line = lines[i]!;
 
     // Code block
     if (line.startsWith('```')) {
       const lang = line.slice(3).trim();
       const codeLines: string[] = [];
       i++;
-      while (i < lines.length && !lines[i].startsWith('```')) {
-        codeLines.push(lines[i]);
+      while (i < lines.length && !lines[i]!.startsWith('```')) {
+        codeLines.push(lines[i]!);
         i++;
       }
       i++; // skip closing ```
@@ -156,8 +156,8 @@ export function renderMarkdown(content: string, config?: { moduleId?: string; le
     // Blockquote
     if (line.startsWith('> ')) {
       const quoteLines: string[] = [];
-      while (i < lines.length && lines[i].startsWith('> ')) {
-        quoteLines.push(lines[i].slice(2));
+      while (i < lines.length && lines[i]!.startsWith('> ')) {
+        quoteLines.push(lines[i]!.slice(2));
         i++;
       }
       elements.push(
@@ -173,8 +173,8 @@ export function renderMarkdown(content: string, config?: { moduleId?: string; le
     // Table (pipe-delimited)
     if (line.includes('|') && line.trim().startsWith('|')) {
       const tableLines: string[] = [];
-      while (i < lines.length && lines[i].includes('|') && lines[i].trim().startsWith('|')) {
-        tableLines.push(lines[i]);
+      while (i < lines.length && lines[i]!.includes('|') && lines[i]!.trim().startsWith('|')) {
+        tableLines.push(lines[i]!);
         i++;
       }
       // Parse header + separator + rows
@@ -185,7 +185,8 @@ export function renderMarkdown(content: string, config?: { moduleId?: string; le
         );
 
       if (rows.length > 0) {
-        const [header, ...body] = rows;
+        const header = rows[0]!;
+        const body = rows.slice(1);
         elements.push(
           <div key={`tbl-${key++}`} className="overflow-x-auto my-3">
             <table className="w-full text-xs border border-[#2A2A2A] rounded">
@@ -219,8 +220,8 @@ export function renderMarkdown(content: string, config?: { moduleId?: string; le
     // Unordered list
     if (line.match(/^\s*[-*]\s/)) {
       const listItems: string[] = [];
-      while (i < lines.length && lines[i].match(/^\s*[-*]\s/)) {
-        listItems.push(lines[i].replace(/^\s*[-*]\s/, ''));
+      while (i < lines.length && lines[i]!.match(/^\s*[-*]\s/)) {
+        listItems.push(lines[i]!.replace(/^\s*[-*]\s/, ''));
         i++;
       }
       elements.push(
@@ -236,8 +237,8 @@ export function renderMarkdown(content: string, config?: { moduleId?: string; le
     // Ordered list
     if (line.match(/^\s*\d+\.\s/)) {
       const listItems: string[] = [];
-      while (i < lines.length && lines[i].match(/^\s*\d+\.\s/)) {
-        listItems.push(lines[i].replace(/^\s*\d+\.\s/, ''));
+      while (i < lines.length && lines[i]!.match(/^\s*\d+\.\s/)) {
+        listItems.push(lines[i]!.replace(/^\s*\d+\.\s/, ''));
         i++;
       }
       elements.push(
@@ -253,8 +254,8 @@ export function renderMarkdown(content: string, config?: { moduleId?: string; le
     // Injection marker: {@ type block_id [params] @}
     const injectionMatch = line.trim().match(INJECTION_MARKER_RE);
     if (injectionMatch) {
-      const blockType = injectionMatch[1];
-      const blockId = injectionMatch[2];
+      const blockType = injectionMatch[1]!;
+      const blockId = injectionMatch[2]!;
       elements.push(
         <div
           key={`inject-${key++}`}

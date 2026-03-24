@@ -185,7 +185,7 @@ export const TechRadar = memo(function TechRadar() {
           <span>{t('techRadar.yourStack')}</span>
         </div>
         {data.generated_at && (
-          <span className="ml-auto text-text-muted">
+          <span className="ms-auto text-text-muted">
             {t('techRadar.generated', { date: new Date(data.generated_at).toLocaleDateString() })}
           </span>
         )}

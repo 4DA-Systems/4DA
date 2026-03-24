@@ -189,7 +189,7 @@ function ChannelContentBody({
       }
 
       // Render the provenance badge
-      const sourceNum = parseInt(match[1], 10);
+      const sourceNum = parseInt(match[1]!, 10);
       const prov = provenanceMap.get(sourceNum);
 
       if (prov) {

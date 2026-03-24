@@ -111,7 +111,7 @@ export function ResultItemExpanded({
                 {match.source_file}
               </span>
             </div>
-            <div className="text-text-secondary pl-12 leading-relaxed">
+            <div className="text-text-secondary ps-12 leading-relaxed">
               "{match.matched_text}"
             </div>
           </li>

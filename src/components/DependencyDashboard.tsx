@@ -62,7 +62,7 @@ const DependencyDashboard = memo(function DependencyDashboard() {
         setOverview(data);
         // Auto-select first project if available
         if (data.projects.length > 0) {
-          setSelectedProject(data.projects[0].path);
+          setSelectedProject(data.projects[0]!.path);
         }
       })
       .catch(() => setOverview(null))

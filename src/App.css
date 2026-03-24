@@ -16,6 +16,8 @@
   --color-border: #2A2A2A;
   --color-success: #22C55E;
   --color-error: #EF4444;
+  --color-accent-action: #F97316;
+  --color-accent-action-hover: #EA580C;
 }
 
 /* Base styles */

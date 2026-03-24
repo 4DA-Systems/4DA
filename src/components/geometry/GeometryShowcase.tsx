@@ -101,7 +101,7 @@ export function GeometryShowcase() {
             <button
               key={geo.tag}
               onClick={() => setExpanded(isExpanded ? null : geo.tag)}
-              className={`bg-bg-tertiary/40 border rounded-xl p-3 text-left transition-all hover:bg-bg-tertiary/60 ${
+              className={`bg-bg-tertiary/40 border rounded-xl p-3 text-start transition-all hover:bg-bg-tertiary/60 ${
                 isExpanded ? 'border-accent-gold/40' : 'border-border/50'
               }`}
             >

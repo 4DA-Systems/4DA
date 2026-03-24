@@ -266,13 +266,13 @@ export const PlaybookView = memo(function PlaybookView() {
               <div className="border border-accent-gold/15 rounded-xl bg-accent-gold/5 overflow-hidden">
                 <button
                   onClick={() => setPersonalizeBannerOpen((p) => !p)}
-                  className="w-full flex items-center gap-2 px-4 py-2.5 text-left"
+                  className="w-full flex items-center gap-2 px-4 py-2.5 text-start"
                   aria-expanded={personalizeBannerOpen}
                 >
                   <span className="text-[10px] text-accent-gold uppercase tracking-wider font-semibold">
                     {t('playbook.personalizedBanner')}
                   </span>
-                  <span className={`ml-auto text-[10px] text-accent-gold/60 transition-transform duration-200 ${personalizeBannerOpen ? 'rotate-90' : ''}`} aria-hidden="true">{'\u25B8'}</span>
+                  <span className={`ms-auto text-[10px] text-accent-gold/60 transition-transform duration-200 ${personalizeBannerOpen ? 'rotate-90' : ''}`} aria-hidden="true">{'\u25B8'}</span>
                 </button>
                 {personalizeBannerOpen && (
                   <div className="px-4 pb-3">

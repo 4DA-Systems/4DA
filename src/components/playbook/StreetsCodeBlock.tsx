@@ -172,7 +172,7 @@ export function StreetsCodeBlock({ code, language, moduleId, lessonIdx, blockInd
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-1.5">
           {/* Language label */}
-          <span className="text-[10px] text-text-muted mr-2 font-mono">{language}</span>
+          <span className="text-[10px] text-text-muted me-2 font-mono">{language}</span>
           {/* OS tabs */}
           {osTabs.length > 1 && osTabs.map((os) => (
             <button
@@ -293,7 +293,7 @@ export function StreetsCodeBlock({ code, language, moduleId, lessonIdx, blockInd
               {/* Execution result panel */}
               {result && isExpanded && (
                 <div
-                  className={`mt-1 mb-2 ml-1 p-3 rounded text-xs font-mono border-l-2 bg-bg-primary cursor-pointer ${
+                  className={`mt-1 mb-2 ms-1 p-3 rounded text-xs font-mono border-s-2 bg-bg-primary cursor-pointer ${
                     result.success ? 'border-success' : 'border-error'
                   }`}
                   onClick={() => matchedCmd && toggleResult(matchedCmd.id)}
@@ -322,7 +322,7 @@ export function StreetsCodeBlock({ code, language, moduleId, lessonIdx, blockInd
                 <button
                   onClick={() => toggleResult(matchedCmd.id)}
                   aria-label={result.success ? t('playbook.code.showOutput') : t('playbook.code.showError')}
-                  className={`ml-1 mt-0.5 mb-1 px-2 py-0.5 text-[10px] rounded ${
+                  className={`ms-1 mt-0.5 mb-1 px-2 py-0.5 text-[10px] rounded ${
                     result.success
                       ? 'text-success bg-success/5 hover:bg-success/10'
                       : 'text-error bg-error/5 hover:bg-error/10'

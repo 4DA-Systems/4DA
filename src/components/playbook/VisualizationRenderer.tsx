@@ -28,7 +28,7 @@ function BarChart({ bars, maxValue, unit }: { bars: { label: string; value: numb
         const pct = maxValue > 0 ? (bar.value / maxValue) * 100 : 0;
         return (
           <div key={bar.label} className="flex items-center gap-3">
-            <span className="text-[10px] text-text-muted w-12 text-right flex-shrink-0">{bar.label}</span>
+            <span className="text-[10px] text-text-muted w-12 text-end flex-shrink-0">{bar.label}</span>
             <div className="flex-1 h-4 bg-bg-tertiary rounded-full overflow-hidden relative">
               <div
                 className="h-full rounded-full transition-all duration-500"
@@ -38,7 +38,7 @@ function BarChart({ bars, maxValue, unit }: { bars: { label: string; value: numb
                 }}
               />
             </div>
-            <span className={`text-xs flex-shrink-0 w-16 text-right ${bar.highlight ? 'text-accent-gold font-medium' : 'text-text-secondary'}`}>
+            <span className={`text-xs flex-shrink-0 w-16 text-end ${bar.highlight ? 'text-accent-gold font-medium' : 'text-text-secondary'}`}>
               {bar.value.toFixed(0)} {unit}
             </span>
           </div>
@@ -68,7 +68,7 @@ function RankList({ items }: { items: { rank: number; name: string; score: numbe
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#8A8A8A" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
             )}
           </span>
-          <span className="text-[10px] text-text-muted w-10 text-right flex-shrink-0">
+          <span className="text-[10px] text-text-muted w-10 text-end flex-shrink-0">
             {Math.round(item.score * 100)}%
           </span>
         </div>
@@ -112,7 +112,7 @@ function RateTable({ headers, rows }: { headers: string[]; rows: { cells: string
       <thead>
         <tr className="bg-bg-tertiary">
           {headers.map((h, i) => (
-            <th key={i} className="px-3 py-1.5 text-left text-white font-medium border-b border-border">{h}</th>
+            <th key={i} className="px-3 py-1.5 text-start text-white font-medium border-b border-border">{h}</th>
           ))}
         </tr>
       </thead>
