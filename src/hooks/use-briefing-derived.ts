@@ -72,10 +72,10 @@ export function useBriefingDerived(
     return lastBackgroundResultsAt.getTime() > briefing.lastGenerated.getTime();
   }, [briefing.lastGenerated, lastBackgroundResultsAt]);
 
-  // Critical/high signal items for action cards
+  // Critical/alert signal items for action cards
   const signalItems = useMemo(() => {
     return results
-      .filter(r => r.signal_priority === 'critical' || r.signal_priority === 'high')
+      .filter(r => r.signal_priority === 'critical' || r.signal_priority === 'alert')
       .slice(0, 3);
   }, [results]);
 

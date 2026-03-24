@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>4DA Intelligence Briefing</title>
+  <link rel="stylesheet" href="/briefing.css">
+</head>
+<body>
+  <div id="briefing" class="briefing-window" role="dialog" aria-label="Intelligence Briefing">
+    <!-- GAME atmosphere layer -->
+    <div id="game-layer" class="game-layer"></div>
+
+    <!-- Briefing card -->
+    <div id="card" class="briefing-card">
+      <!-- Header -->
+      <div class="briefing-header">
+        <span id="briefing-title" class="briefing-title">4DA Intelligence Briefing</span>
+        <button id="dismiss-btn" class="dismiss-btn" aria-label="Dismiss briefing">&times;</button>
+      </div>
+
+      <!-- Scrollable items list -->
+      <div id="items-list" class="items-list"></div>
+
+      <!-- Knowledge gaps section -->
+      <div id="gaps-section" class="gaps-section" style="display:none">
+        <div class="section-header gaps-header">Blind Spots</div>
+        <div id="gaps-list" class="gaps-list"></div>
+      </div>
+
+      <!-- Ongoing topics (collapsed) -->
+      <div id="ongoing-section" class="ongoing-section" style="display:none">
+        <div id="ongoing-line" class="ongoing-line"></div>
+      </div>
+
+      <!-- Footer -->
+      <div class="briefing-footer">
+        <span id="total-count" class="total-count"></span>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="/briefing.js"></script>
+</body>
+</html>

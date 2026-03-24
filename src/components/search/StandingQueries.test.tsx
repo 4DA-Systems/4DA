@@ -132,7 +132,7 @@ describe('StandingQueries', () => {
     mockInvoke.mockResolvedValue(undefined);
 
     const deleteButtons = screen.getAllByLabelText('action.delete');
-    fireEvent.click(deleteButtons[0]);
+    fireEvent.click(deleteButtons[0]!);
 
     await waitFor(() => {
       expect(mockInvoke).toHaveBeenCalledWith('delete_standing_query', { id: 1 });
@@ -194,7 +194,7 @@ describe('StandingQueries', () => {
 
     // Click Watch on first suggestion
     const watchButtons = screen.getAllByText('search.watch');
-    fireEvent.click(watchButtons[0]);
+    fireEvent.click(watchButtons[0]!);
 
     await waitFor(() => {
       expect(mockInvoke).toHaveBeenCalledWith('create_standing_query', { queryText: 'WebAssembly' });

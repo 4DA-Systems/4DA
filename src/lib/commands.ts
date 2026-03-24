@@ -122,6 +122,8 @@ interface CommandMap {
   set_launch_at_startup: { params: { enabled: boolean }; result: { launch_at_startup: boolean; message: string } };
   get_launch_at_startup: { params: Record<string, never>; result: boolean };
   notification_clicked: { params: { item_id?: number | null }; result: void };
+  briefing_item_clicked: { params: { item_id?: number | null }; result: void };
+  briefing_open_url: { params: { url: string }; result: void };
   record_interaction: { params: { sourceItemId: number; action: string }; result: { success: boolean } };
 
   // -- Taste Test Calibration --

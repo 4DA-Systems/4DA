@@ -39,9 +39,9 @@ const SIGNAL_CONFIG: Record<string, { icon: string; color: string; borderColor: 
 
 const PRIORITY_CONFIG: Record<string, { label: string; color: string; bgColor: string; dot: string }> = {
   critical: { label: 'CRITICAL', color: 'text-red-400', bgColor: 'bg-red-500/20', dot: 'bg-red-400' },
-  high: { label: 'HIGH', color: 'text-orange-400', bgColor: 'bg-orange-500/20', dot: 'bg-orange-400' },
-  medium: { label: 'MED', color: 'text-yellow-400', bgColor: 'bg-yellow-500/20', dot: 'bg-yellow-400' },
-  low: { label: 'LOW', color: 'text-text-secondary', bgColor: 'bg-gray-500/20', dot: 'bg-gray-400' },
+  alert: { label: 'ALERT', color: 'text-orange-400', bgColor: 'bg-orange-500/20', dot: 'bg-orange-400' },
+  advisory: { label: 'ADVISORY', color: 'text-yellow-400', bgColor: 'bg-yellow-500/20', dot: 'bg-yellow-400' },
+  watch: { label: 'WATCH', color: 'text-text-secondary', bgColor: 'bg-gray-500/20', dot: 'bg-gray-400' },
 };
 
 const SIGNAL_LABELS: Record<string, string> = {
@@ -80,7 +80,7 @@ export const SignalsPanel = memo(function SignalsPanel({ results }: SignalsPanel
         similar_titles: r.similar_titles || [],
       }));
 
-    const priorityOrder: Record<string, number> = { critical: 4, high: 3, medium: 2, low: 1 };
+    const priorityOrder: Record<string, number> = { critical: 4, alert: 3, advisory: 2, watch: 1 };
     const sorted = [...signals].sort((a, b) => {
       const pd = (priorityOrder[b.signal_priority] || 0) - (priorityOrder[a.signal_priority] || 0);
       if (pd !== 0) return pd;
@@ -108,7 +108,7 @@ export const SignalsPanel = memo(function SignalsPanel({ results }: SignalsPanel
   );
 
   const criticalCount = priorityCounts['critical'] || 0;
-  const highCount = priorityCounts['high'] || 0;
+  const highCount = priorityCounts['alert'] || 0;
 
   return (
     <div className="mb-6 bg-bg-secondary rounded-lg border border-border overflow-hidden">
@@ -123,15 +123,15 @@ export const SignalsPanel = memo(function SignalsPanel({ results }: SignalsPanel
           <div className="w-8 h-8 bg-bg-tertiary rounded-lg flex items-center justify-center">
             <span className="text-text-secondary">⚡</span>
           </div>
-          <div className="text-left">
+          <div className="text-start">
             <h2 className="font-medium text-white">{t('signals.title')}</h2>
             <p className="text-xs text-text-muted">
               {t('signals.actionable', { count: signals.length })}
               {criticalCount > 0 && (
-                <span className="ml-2 text-red-400">{t('signals.critical', { count: criticalCount })}</span>
+                <span className="ms-2 text-red-400">{t('signals.critical', { count: criticalCount })}</span>
               )}
               {highCount > 0 && (
-                <span className="ml-2 text-orange-400">{t('signals.high', { count: highCount })}</span>
+                <span className="ms-2 text-orange-400">{t('signals.high', { count: highCount })}</span>
               )}
             </p>
           </div>
@@ -140,8 +140,8 @@ export const SignalsPanel = memo(function SignalsPanel({ results }: SignalsPanel
           {/* Priority dots summary */}
           <div className="flex gap-1">
             {criticalCount > 0 && <span className="w-2 h-2 rounded-full bg-red-400" title={`${criticalCount} critical`} />}
-            {highCount > 0 && <span className="w-2 h-2 rounded-full bg-orange-400" title={`${highCount} high`} />}
-            {(priorityCounts['medium'] || 0) > 0 && <span className="w-2 h-2 rounded-full bg-yellow-400" title={`${priorityCounts['medium']} medium`} />}
+            {highCount > 0 && <span className="w-2 h-2 rounded-full bg-orange-400" title={`${highCount} alert`} />}
+            {(priorityCounts['advisory'] || 0) > 0 && <span className="w-2 h-2 rounded-full bg-yellow-400" title={`${priorityCounts['advisory']} advisory`} />}
           </div>
           <span className="text-text-muted text-sm">{expanded ? '▾' : '▸'}</span>
         </div>
@@ -159,16 +159,16 @@ export const SignalsPanel = memo(function SignalsPanel({ results }: SignalsPanel
                 <button
                   key={type}
                   onClick={() => setTypeFilter(isActive ? null : type)}
-                  aria-label={`Filter by signal type: ${SIGNAL_LABELS[type] || type}`}
+                  aria-label={`Filter by signal type: ${SIGNAL_LABELS[type] ?? type}`}
                   aria-pressed={isActive}
                   className={`px-2.5 py-1 text-[11px] rounded-lg border transition-all flex items-center gap-1.5 ${
                     isActive
-                      ? `${config?.bgColor || 'bg-white/10'} ${config?.color || 'text-white'} ${config?.borderColor || 'border-white/20'}`
+                      ? `${config?.bgColor ?? 'bg-white/10'} ${config?.color ?? 'text-white'} ${config?.borderColor ?? 'border-white/20'}`
                       : 'bg-bg-tertiary text-text-secondary border-border hover:border-[#3A3A3A]'
                   }`}
                 >
-                  <span>{config?.icon || '?'}</span>
-                  <span>{SIGNAL_LABELS[type] || type}</span>
+                  <span>{config?.icon ?? '?'}</span>
+                  <span>{SIGNAL_LABELS[type] ?? type}</span>
                   <span className="text-[10px] opacity-60">{count}</span>
                 </button>
               );
@@ -180,10 +180,10 @@ export const SignalsPanel = memo(function SignalsPanel({ results }: SignalsPanel
             )}
 
             {/* Priority filters */}
-            {['critical', 'high', 'medium', 'low'].map((p) => {
+            {['critical', 'alert', 'advisory', 'watch'].map((p) => {
               const count = priorityCounts[p] || 0;
               if (count === 0) return null;
-              const config = PRIORITY_CONFIG[p];
+              const config = PRIORITY_CONFIG[p]!;
               const isActive = priorityFilter === p;
               return (
                 <button
@@ -239,8 +239,8 @@ export const SignalsPanel = memo(function SignalsPanel({ results }: SignalsPanel
 const SignalRow = ({ signal }: { signal: SignalItem }) => {
   const { t } = useTranslation();
   const [showTriggers, setShowTriggers] = useState(false);
-  const config = SIGNAL_CONFIG[signal.signal_type] || SIGNAL_CONFIG['tech_trend'];
-  const priority = PRIORITY_CONFIG[signal.signal_priority] || PRIORITY_CONFIG['low'];
+  const config = (SIGNAL_CONFIG[signal.signal_type] ?? SIGNAL_CONFIG['tech_trend'])!;
+  const priority = (PRIORITY_CONFIG[signal.signal_priority] ?? PRIORITY_CONFIG['watch'])!;
 
   return (
     <div
@@ -280,7 +280,7 @@ const SignalRow = ({ signal }: { signal: SignalItem }) => {
           {/* Bottom row: type badge + priority + score + triggers */}
           <div className="flex items-center gap-2 mt-2">
             <span className={`px-1.5 py-0.5 text-[10px] rounded ${config.bgColor} ${config.color} border ${config.borderColor}`}>
-              {SIGNAL_LABELS[signal.signal_type] || signal.signal_type}
+              {SIGNAL_LABELS[signal.signal_type] ?? signal.signal_type}
             </span>
             <span className={`px-1.5 py-0.5 text-[10px] font-medium rounded ${priority.bgColor} ${priority.color}`}>
               {priority.label}
@@ -294,7 +294,7 @@ const SignalRow = ({ signal }: { signal: SignalItem }) => {
                 onClick={() => setShowTriggers(!showTriggers)}
                 aria-expanded={showTriggers}
                 aria-label={showTriggers ? t('signals.hideTriggers') : t('signals.triggers', { count: signal.signal_triggers.length })}
-                className="text-[10px] text-text-muted hover:text-text-secondary transition-colors ml-auto"
+                className="text-[10px] text-text-muted hover:text-text-secondary transition-colors ms-auto"
               >
                 {showTriggers ? t('signals.hideTriggers') : t('signals.triggers', { count: signal.signal_triggers.length })}
               </button>

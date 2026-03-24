@@ -222,7 +222,7 @@ mod tests {
             confidence: Some(0.8),
             score_breakdown: None,
             signal_type: Some("security_alert".to_string()),
-            signal_priority: Some("high".to_string()),
+            signal_priority: Some("alert".to_string()),
             signal_action: Some("Review API key management".to_string()),
             signal_triggers: None,
             signal_horizon: None,

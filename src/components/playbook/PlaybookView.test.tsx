@@ -264,7 +264,7 @@ describe('PlaybookView', () => {
 
     // Click a module button — find the "S" module button in the sidebar
     const moduleButtons = screen.getAllByText('S');
-    fireEvent.click(moduleButtons[0]);
+    fireEvent.click(moduleButtons[0]!);
 
     // Templates should be hidden, module content should be loading
     expect(screen.queryByTestId('template-library')).not.toBeInTheDocument();

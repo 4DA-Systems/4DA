@@ -64,7 +64,7 @@ describe('filters-slice', () => {
 
       // Remove all but the last
       for (let i = 0; i < sources.length - 1; i++) {
-        useAppStore.getState().toggleSourceFilter(sources[i]);
+        useAppStore.getState().toggleSourceFilter(sources[i]!);
       }
 
       // The last source should remain
@@ -72,7 +72,7 @@ describe('filters-slice', () => {
       expect(remaining.size).toBe(1);
 
       // Trying to toggle the last source should keep it
-      const lastSource = Array.from(remaining)[0];
+      const lastSource = Array.from(remaining)[0]!;
       useAppStore.getState().toggleSourceFilter(lastSource);
       expect(useAppStore.getState().sourceFilters.has(lastSource)).toBe(true);
       expect(useAppStore.getState().sourceFilters.size).toBe(1);

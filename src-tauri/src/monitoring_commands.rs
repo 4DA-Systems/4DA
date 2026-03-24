@@ -201,9 +201,9 @@ pub async fn trigger_notification_preview(
             time_ago: "just now".to_string(),
             item_id: Some(42),
         },
-        "high" => crate::notification_window::NotificationData {
+        "alert" => crate::notification_window::NotificationData {
             variant: "signal".to_string(),
-            priority: "high".to_string(),
+            priority: "alert".to_string(),
             signal_type: Some("breaking_change".to_string()),
             title: "React 20 drops class components — migration guide".to_string(),
             action: Some("Check migration path".to_string()),
@@ -217,9 +217,9 @@ pub async fn trigger_notification_preview(
             time_ago: "5m ago".to_string(),
             item_id: None,
         },
-        "medium" => crate::notification_window::NotificationData {
+        "advisory" => crate::notification_window::NotificationData {
             variant: "signal".to_string(),
-            priority: "medium".to_string(),
+            priority: "advisory".to_string(),
             signal_type: Some("tool_discovery".to_string()),
             title: "Show HN: A new Rust testing framework".to_string(),
             action: Some("via hackernews".to_string()),
@@ -235,7 +235,7 @@ pub async fn trigger_notification_preview(
         },
         _ => crate::notification_window::NotificationData {
             variant: "digest".to_string(),
-            priority: "low".to_string(),
+            priority: "watch".to_string(),
             signal_type: None,
             title: "3 new items match your interests".to_string(),
             action: Some("Click to review in briefing".to_string()),
@@ -410,12 +410,12 @@ mod tests {
             title: "New Rust RFC".to_string(),
             source_type: "hackernews".to_string(),
             score: 0.85,
-            signal_priority: Some("high".to_string()),
+            signal_priority: Some("alert".to_string()),
         };
         assert_eq!(notification.title, "New Rust RFC");
         assert_eq!(notification.source_type, "hackernews");
         assert!(notification.score > 0.8);
-        assert_eq!(notification.signal_priority, Some("high".to_string()));
+        assert_eq!(notification.signal_priority, Some("alert".to_string()));
     }
 
     #[test]

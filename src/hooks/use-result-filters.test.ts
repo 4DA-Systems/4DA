@@ -106,7 +106,7 @@ describe('useResultFilters', () => {
       });
       const { result } = renderHook(() => useResultFilters());
       expect(result.current.filteredResults).toHaveLength(1);
-      expect(result.current.filteredResults[0].id).toBe(1);
+      expect(result.current.filteredResults[0]!.id).toBe(1);
     });
 
     it('filters by search query matching title', () => {
@@ -151,7 +151,7 @@ describe('useResultFilters', () => {
       });
       const { result } = renderHook(() => useResultFilters());
       expect(result.current.filteredResults).toHaveLength(1);
-      expect(result.current.filteredResults[0].top_score).toBe(0.8);
+      expect(result.current.filteredResults[0]!.top_score).toBe(0.8);
     });
 
     it('normalizes URLs for dedup (strips protocol, www, trailing slash)', () => {
@@ -165,7 +165,7 @@ describe('useResultFilters', () => {
       });
       const { result } = renderHook(() => useResultFilters());
       expect(result.current.filteredResults).toHaveLength(1);
-      expect(result.current.filteredResults[0].top_score).toBe(0.8);
+      expect(result.current.filteredResults[0]!.top_score).toBe(0.8);
     });
 
     it('tags deduplicated items with seen_on sources', () => {
@@ -178,7 +178,7 @@ describe('useResultFilters', () => {
         },
       });
       const { result } = renderHook(() => useResultFilters());
-      expect(result.current.filteredResults[0].seen_on).toEqual(
+      expect(result.current.filteredResults[0]!.seen_on).toEqual(
         expect.arrayContaining(['hackernews', 'reddit']),
       );
     });
