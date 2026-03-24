@@ -75,7 +75,7 @@ impl RateLimiter {
                     let elapsed = last.elapsed();
                     let interval = source_interval(source);
                     if elapsed < interval {
-                        Some(interval.checked_sub(elapsed).unwrap())
+                        Some(interval.saturating_sub(elapsed))
                     } else {
                         None
                     }
@@ -162,7 +162,7 @@ impl CircuitBreaker {
                         tracing::debug!(
                             target: "4da::circuit_breaker",
                             source,
-                            remaining_secs = self.cooldown.checked_sub(tripped_at.elapsed()).unwrap().as_secs(),
+                            remaining_secs = self.cooldown.saturating_sub(tripped_at.elapsed()).as_secs(),
                             "Source circuit breaker OPEN — cooling down"
                         );
                         false

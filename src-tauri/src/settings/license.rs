@@ -34,7 +34,7 @@ pub fn check_activation_rate_limit() -> Result<()> {
         .lock()
         .map_err(|_| "Rate limiter lock poisoned")?;
     let now = std::time::Instant::now();
-    let one_minute_ago = now.checked_sub(std::time::Duration::from_secs(60)).unwrap();
+    let one_minute_ago = now.checked_sub(std::time::Duration::from_secs(60)).unwrap_or(now);
 
     // Remove attempts older than 1 minute
     attempts.retain(|t| *t > one_minute_ago);
