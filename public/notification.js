@@ -119,6 +119,7 @@ var GAME_CARD_SCRIPTS = {
   low: '/notif-card-low.js',
 };
 var loadedScripts = {};
+var runtimeLoaded = false;
 var currentGameEl = null;
 var gpuAvailable = null; // null = untested, true/false after detection
 
@@ -142,16 +143,35 @@ function detectGPU() {
   return gpuAvailable;
 }
 
-/** Lazy-load a GAME card component script (only loaded once per priority). */
+/** Load the shared GAME runtime (renderer classes) once. Returns a promise. */
+function ensureGameRuntime() {
+  if (runtimeLoaded) return Promise.resolve();
+  return new Promise(function (resolve) {
+    runtimeLoaded = true;
+    var script = document.createElement('script');
+    script.src = '/game-runtime.js';
+    script.onload = resolve;
+    script.onerror = function () {
+      runtimeLoaded = false; // Allow retry
+      resolve(); // Don't block — component will fail gracefully
+    };
+    document.head.appendChild(script);
+  });
+}
+
+/** Lazy-load a GAME card component script (only loaded once per priority).
+ *  Loads the shared runtime first, then the lightweight component. */
 function ensureGameScript(priority) {
   if (loadedScripts[priority]) return;
   loadedScripts[priority] = true;
   var src = GAME_CARD_SCRIPTS[priority];
   if (!src) return;
-  var script = document.createElement('script');
-  script.type = 'module';
-  script.src = src;
-  document.head.appendChild(script);
+  ensureGameRuntime().then(function () {
+    var script = document.createElement('script');
+    script.type = 'module';
+    script.src = src;
+    document.head.appendChild(script);
+  });
 }
 
 /** Upgrade from CSS card to GAME-rendered card.
