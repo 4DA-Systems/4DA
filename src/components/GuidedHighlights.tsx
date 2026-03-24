@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 
 const STORAGE_KEY = '4da_highlights_shown';
 const AUTO_DISMISS_MS = 30000;
@@ -6,20 +7,21 @@ const TOOLTIP_DURATION_MS = 3000;
 
 interface Highlight {
   id: string;
-  label: string;
+  i18nKey: string;
   top: string;
   left: string;
 }
 
 const highlights: Highlight[] = [
-  { id: 'feed', label: 'Your personalized content feed', top: '48px', left: '80px' },
-  { id: 'score', label: 'Tap to see why this scored high', top: '140px', left: '64px' },
-  { id: 'save', label: 'Save items to your Library', top: '140px', left: 'calc(100% - 120px)' },
-  { id: 'dna', label: 'Your developer identity profile', top: '48px', left: '200px' },
-  { id: 'settings', label: 'Configure sources and AI', top: '48px', left: 'calc(100% - 48px)' },
+  { id: 'feed', i18nKey: 'guided.feed', top: '48px', left: '80px' },
+  { id: 'score', i18nKey: 'guided.score', top: '140px', left: '64px' },
+  { id: 'save', i18nKey: 'guided.save', top: '140px', left: 'calc(100% - 120px)' },
+  { id: 'dna', i18nKey: 'guided.dna', top: '48px', left: '200px' },
+  { id: 'settings', i18nKey: 'guided.settings', top: '48px', left: 'calc(100% - 48px)' },
 ];
 
 export function GuidedHighlights() {
+  const { t } = useTranslation();
   const [dismissed, setDismissed] = useState<Set<string>>(new Set());
   const [activeTooltip, setActiveTooltip] = useState<string | null>(null);
   const [unmounted, setUnmounted] = useState(false);
@@ -63,7 +65,7 @@ export function GuidedHighlights() {
       {visible.map(h => (
         <button
           key={h.id}
-          aria-label={`Feature highlight: ${h.label}`}
+          aria-label={`Feature highlight: ${t(h.i18nKey)}`}
           onClick={() => handleClick(h.id)}
           className="absolute pointer-events-auto cursor-pointer group"
           style={{ top: h.top, left: h.left }}
@@ -79,7 +81,7 @@ export function GuidedHighlights() {
             className="absolute z-50 px-3 py-2 rounded-lg bg-bg-secondary border border-border text-xs text-white shadow-lg max-w-[200px] animate-in fade-in"
             style={{ top: `calc(${h.top} + 20px)`, left: h.left }}
           >
-            {h.label}
+            {t(h.i18nKey)}
           </div>
         );
       })()}

@@ -38,7 +38,7 @@ describe('GuidedHighlights', () => {
     render(<GuidedHighlights />);
     const dots = screen.getAllByRole('button', { name: /highlight/i });
     fireEvent.click(dots[0]);
-    expect(screen.getByText('Your personalized content feed')).toBeInTheDocument();
+    expect(screen.getByText('guided.feed')).toBeInTheDocument();
   });
 
   it('auto-dismisses all highlights after 30 seconds', () => {

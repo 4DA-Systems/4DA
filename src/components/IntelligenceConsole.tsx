@@ -2,6 +2,7 @@
 // Licensed under the Functional Source License 1.1 (FSL-1.1-Apache-2.0). See LICENSE file.
 
 import { useState, useEffect, memo } from 'react';
+import { useTranslation } from 'react-i18next';
 import { cmd } from '../lib/commands';
 import { AccuracyTab } from './intelligence/AccuracyTab';
 import { ConvergenceTab } from './intelligence/ConvergenceTab';
@@ -13,11 +14,7 @@ import { CostTab } from './intelligence/CostTab';
 
 type ConsoleTab = 'accuracy' | 'convergence' | 'costs';
 
-const TABS: Array<{ id: ConsoleTab; label: string; description: string }> = [
-  { id: 'accuracy', label: 'Accuracy', description: 'Scoring accuracy, tech snapshot, knowledge decay' },
-  { id: 'convergence', label: 'Projects', description: 'Tech convergence, cross-project dependencies' },
-  { id: 'costs', label: 'AI Costs', description: 'Usage breakdown, cost optimization' },
-];
+const TAB_IDS: ConsoleTab[] = ['accuracy', 'convergence', 'costs'];
 
 // ============================================================================
 // TabButton
@@ -64,8 +61,15 @@ function TabButton({
 // ============================================================================
 
 export const IntelligenceConsole = memo(function IntelligenceConsole() {
+  const { t } = useTranslation();
   const [tab, setTab] = useState<ConsoleTab>('accuracy');
   const [hasAnyData, setHasAnyData] = useState<boolean | null>(null);
+
+  const TABS = TAB_IDS.map(id => ({
+    id,
+    label: t(`console.tab_${id}` as const),
+    description: t(`console.tabDesc_${id}` as const),
+  }));
 
   useEffect(() => {
     Promise.allSettled([
@@ -96,20 +100,19 @@ export const IntelligenceConsole = memo(function IntelligenceConsole() {
     return (
       <div className="bg-bg-secondary rounded-lg border border-border overflow-hidden flex flex-col">
         <div className="px-5 py-4 border-b border-border">
-          <h3 className="text-sm font-medium text-white">Intelligence Console</h3>
+          <h3 className="text-sm font-medium text-white">{t('console.title')}</h3>
           <p className="text-xs text-text-muted mt-1">
-            Accuracy tracking, project convergence, and AI cost analysis.
+            {t('console.subtitle')}
           </p>
         </div>
         <div className="flex flex-col items-center justify-center h-64 text-center px-8">
           <div className="w-3 h-3 rounded-full bg-success/60 animate-pulse mb-4" />
-          <h3 className="text-sm font-medium text-text-primary mb-2">Intelligence Growing</h3>
+          <h3 className="text-sm font-medium text-text-primary mb-2">{t('console.growing')}</h3>
           <p className="text-xs text-text-muted max-w-xs">
-            4DA is learning your patterns. Accuracy metrics, tech convergence,
-            and cost tracking will appear here as data accumulates.
+            {t('console.learningPatterns')}
           </p>
           <p className="text-xs text-text-muted/60 mt-3">
-            First insights typically appear within a week of regular use.
+            {t('console.firstInsights')}
           </p>
         </div>
       </div>
@@ -120,23 +123,23 @@ export const IntelligenceConsole = memo(function IntelligenceConsole() {
     <div className="bg-bg-secondary rounded-lg border border-border overflow-hidden flex flex-col">
       {/* Header */}
       <div className="px-5 py-4 border-b border-border">
-        <h3 className="text-sm font-medium text-white">Intelligence Console</h3>
+        <h3 className="text-sm font-medium text-white">{t('console.title')}</h3>
         <p className="text-xs text-text-muted mt-1">
-          Accuracy tracking, project convergence, and AI cost analysis.
+          {t('console.subtitle')}
         </p>
       </div>
 
       {/* Tab bar */}
       <div className="flex border-b border-border" role="tablist" aria-label="Intelligence console tabs">
-        {TABS.map(t => (
+        {TABS.map(tabDef => (
           <TabButton
-            key={t.id}
-            id={`tab-${t.id}`}
-            active={tab === t.id}
-            label={t.label}
-            description={t.description}
-            controls={`tabpanel-${t.id}`}
-            onClick={() => setTab(t.id)}
+            key={tabDef.id}
+            id={`tab-${tabDef.id}`}
+            active={tab === tabDef.id}
+            label={tabDef.label}
+            description={tabDef.description}
+            controls={`tabpanel-${tabDef.id}`}
+            onClick={() => setTab(tabDef.id)}
           />
         ))}
       </div>

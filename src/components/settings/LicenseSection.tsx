@@ -58,10 +58,10 @@ export function LicenseSection({ onStatus }: { onStatus: (s: string) => void }) 
 
   const tierConfig: Record<string, { label: string; color: string }> = {
     free: { label: t('tier.free'), color: 'text-text-secondary' },
-    signal: { label: t('tier.signal'), color: 'text-[#D4AF37]' },
-    pro: { label: t('tier.signal'), color: 'text-[#D4AF37]' }, // legacy compat
-    team: { label: t('settings.license.tierTeam'), color: 'text-[#22C55E]' },
-    enterprise: { label: t('tier.enterprise'), color: 'text-[#22C55E]' },
+    signal: { label: t('tier.signal'), color: 'text-accent-gold' },
+    pro: { label: t('tier.signal'), color: 'text-accent-gold' }, // legacy compat
+    team: { label: t('settings.license.tierTeam'), color: 'text-success' },
+    enterprise: { label: t('tier.enterprise'), color: 'text-success' },
   };
   const { label: tierLabel, color: tierColor } = tierConfig[tier] ?? tierConfig.free;
 
@@ -74,12 +74,12 @@ export function LicenseSection({ onStatus }: { onStatus: (s: string) => void }) 
         <span className="text-xs text-text-muted">{t('settings.license.currentTier')}</span>
         <span className={`text-xs font-semibold ${tierColor}`}>{tierLabel}</span>
         {trialActive && (
-          <span className="text-[10px] px-1.5 py-0.5 bg-[#D4AF37]/15 text-[#D4AF37] rounded">
+          <span className="text-[10px] px-1.5 py-0.5 bg-accent-gold/15 text-accent-gold rounded">
             {t('settings.license.trialDaysLeft', { days: trialStatus.days_remaining })}
           </span>
         )}
         {trialExpired && (
-          <span className="text-[10px] px-1.5 py-0.5 bg-[#EF4444]/15 text-[#EF4444] rounded">
+          <span className="text-[10px] px-1.5 py-0.5 bg-error/15 text-error rounded">
             {t('settings.license.trialExpired')}
           </span>
         )}
@@ -87,9 +87,9 @@ export function LicenseSection({ onStatus }: { onStatus: (s: string) => void }) 
 
       {/* Expired license banner */}
       {expired && (
-        <div className="mb-3 p-2.5 rounded-lg bg-[#EF4444]/10 border border-[#EF4444]/30">
-          <p className="text-xs font-medium text-[#EF4444] mb-1">{t('settings.license.expired')}</p>
-          <p className="text-[10px] text-[#EF4444]/70">
+        <div className="mb-3 p-2.5 rounded-lg bg-error/10 border border-error/30">
+          <p className="text-xs font-medium text-error mb-1">{t('settings.license.expired')}</p>
+          <p className="text-[10px] text-error/70">
             {expiresAt
               ? t('settings.license.expiredOn', { date: new Date(expiresAt).toLocaleDateString() })
               : t('settings.license.expiredGeneric')}
@@ -98,7 +98,7 @@ export function LicenseSection({ onStatus }: { onStatus: (s: string) => void }) 
             href="https://4da.ai/signal"
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-block mt-2 px-3 py-1.5 text-[10px] font-semibold text-black bg-[#D4AF37] rounded hover:bg-[#C4A030] transition-colors"
+            className="inline-block mt-2 px-3 py-1.5 text-[10px] font-semibold text-black bg-accent-gold rounded hover:bg-[#C4A030] transition-colors"
           >
             {t('settings.license.renew')}
           </a>
@@ -107,8 +107,8 @@ export function LicenseSection({ onStatus }: { onStatus: (s: string) => void }) 
 
       {/* Expiry warning (< 14 days) */}
       {expiryWarning && (
-        <div className="mb-3 p-2.5 rounded-lg bg-[#D4AF37]/10 border border-[#D4AF37]/30">
-          <p className="text-[10px] text-[#D4AF37]">
+        <div className="mb-3 p-2.5 rounded-lg bg-accent-gold/10 border border-accent-gold/30">
+          <p className="text-[10px] text-accent-gold">
             {t('settings.license.expiresIn', { count: daysRemaining })}{' '}
             <a href="https://4da.ai/signal" target="_blank" rel="noopener noreferrer" className="underline font-medium">
               {t('settings.license.renewNow')}
@@ -134,12 +134,12 @@ export function LicenseSection({ onStatus }: { onStatus: (s: string) => void }) 
               onChange={e => setKey(e.target.value)}
               placeholder="XXXXXX-XXXXXX-XXXXXX-XXXXXX-XXXXXX-V3"
               onKeyDown={e => e.key === 'Enter' && handleActivate()}
-              className="flex-1 px-3 py-2 bg-bg-primary border border-border rounded-lg text-sm text-white placeholder-gray-600 focus:outline-none focus:border-[#D4AF37]/50 font-mono text-xs"
+              className="flex-1 px-3 py-2 bg-bg-primary border border-border rounded-lg text-sm text-white placeholder-gray-600 focus:outline-none focus:border-accent-gold/50 font-mono text-xs"
             />
             <button
               onClick={handleActivate}
               disabled={licenseLoading || !key.trim()}
-              className="px-4 py-2 text-sm font-medium text-black bg-[#D4AF37] rounded-lg hover:bg-[#C4A030] transition-colors disabled:opacity-50"
+              className="px-4 py-2 text-sm font-medium text-black bg-accent-gold rounded-lg hover:bg-[#C4A030] transition-colors disabled:opacity-50"
             >
               {licenseLoading ? '...' : t('action.activate')}
             </button>
@@ -170,7 +170,7 @@ export function LicenseSection({ onStatus }: { onStatus: (s: string) => void }) 
             href="https://4da.ai/signal"
             target="_blank"
             rel="noopener noreferrer"
-            className="block text-center text-xs text-[#D4AF37] hover:underline"
+            className="block text-center text-xs text-accent-gold hover:underline"
           >
             {t('settings.license.getKey')}
           </a>

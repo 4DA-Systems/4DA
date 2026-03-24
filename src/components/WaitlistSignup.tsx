@@ -111,31 +111,31 @@ const WaitlistSignup = memo(function WaitlistSignup({
   if (submitted) {
     return (
       <WaitlistContainer inline={inline}>
-        <div className="max-w-md w-full rounded-xl border border-[#2A2A2A] bg-[#141414] shadow-2xl overflow-hidden">
+        <div className="max-w-md w-full rounded-xl border border-border bg-bg-secondary shadow-2xl overflow-hidden">
           <div className="px-8 py-10 text-center">
-            <div className="w-14 h-14 mx-auto mb-5 rounded-full bg-[#22C55E]/10 flex items-center justify-center">
-              <svg className="w-7 h-7 text-[#22C55E]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <div className="w-14 h-14 mx-auto mb-5 rounded-full bg-success/10 flex items-center justify-center">
+              <svg className="w-7 h-7 text-success" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
               </svg>
             </div>
             <h3 className="text-xl font-semibold text-white mb-2">
               You&apos;re on the list
             </h3>
-            <p className="text-sm text-[#A0A0A0] leading-relaxed mb-6">
+            <p className="text-sm text-text-secondary leading-relaxed mb-6">
               We&apos;ll reach out when 4DA {config.name} is ready.
               <br />
               You&apos;ll be among the first to experience it.
             </p>
-            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-[#1F1F1F] border border-[#2A2A2A]">
-              <div className="w-2 h-2 rounded-full bg-[#22C55E] animate-pulse" />
-              <span className="text-xs text-[#A0A0A0]">
+            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-bg-tertiary border border-border">
+              <div className="w-2 h-2 rounded-full bg-success animate-pulse" />
+              <span className="text-xs text-text-secondary">
                 Position secured for {config.name} early access
               </span>
             </div>
             {onClose && (
               <button
                 onClick={onClose}
-                className="block mx-auto mt-6 text-sm text-[#8A8A8A] hover:text-white transition-colors"
+                className="block mx-auto mt-6 text-sm text-text-muted hover:text-white transition-colors"
               >
                 Continue using 4DA
               </button>
@@ -149,13 +149,13 @@ const WaitlistSignup = memo(function WaitlistSignup({
   // ---- Main Form ----
   return (
     <WaitlistContainer inline={inline}>
-      <div className="max-w-lg w-full rounded-xl border border-[#2A2A2A] bg-[#141414] shadow-2xl overflow-hidden">
+      <div className="max-w-lg w-full rounded-xl border border-border bg-bg-secondary shadow-2xl overflow-hidden">
         {/* Header */}
         <div className="relative px-6 pt-6 pb-5">
           {onClose && (
             <button
               onClick={onClose}
-              className="absolute top-4 right-4 p-1 text-[#8A8A8A] hover:text-white transition-colors rounded-lg hover:bg-white/5"
+              className="absolute top-4 right-4 p-1 text-text-muted hover:text-white transition-colors rounded-lg hover:bg-white/5"
               aria-label="Close"
             >
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -165,33 +165,33 @@ const WaitlistSignup = memo(function WaitlistSignup({
           )}
 
           <div className="flex items-start gap-3">
-            <div className="w-10 h-10 rounded-lg bg-[#D4AF37]/10 flex items-center justify-center text-[#D4AF37] shrink-0 mt-0.5">
+            <div className="w-10 h-10 rounded-lg bg-accent-gold/10 flex items-center justify-center text-accent-gold shrink-0 mt-0.5">
               {config.icon}
             </div>
             <div className="pr-6">
               <div className="flex items-center gap-2.5">
                 <h2 className="text-lg font-semibold text-white">4DA {config.name}</h2>
-                <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#D4AF37]/10 text-[#D4AF37] font-semibold uppercase tracking-wider">
+                <span className="text-[10px] px-2 py-0.5 rounded-full bg-accent-gold/10 text-accent-gold font-semibold uppercase tracking-wider">
                   Coming Soon
                 </span>
               </div>
-              <p className="text-xs text-[#8A8A8A] mt-0.5">
+              <p className="text-xs text-text-muted mt-0.5">
                 {config.price} &middot; {config.annual}
               </p>
             </div>
           </div>
 
-          <p className="text-[13px] text-[#A0A0A0] mt-4 leading-relaxed">
+          <p className="text-[13px] text-text-secondary mt-4 leading-relaxed">
             {config.tagline}
           </p>
-          <p className="text-xs text-[#8A8A8A] mt-2 italic">
+          <p className="text-xs text-text-muted mt-2 italic">
             {config.value}
           </p>
         </div>
 
         {/* Features */}
-        <div className="px-6 py-4 border-t border-[#1F1F1F] bg-[#0F0F0F]">
-          <p className="text-[10px] text-[#8A8A8A] uppercase tracking-wider font-medium mb-3">
+        <div className="px-6 py-4 border-t border-bg-tertiary bg-[#0F0F0F]">
+          <p className="text-[10px] text-text-muted uppercase tracking-wider font-medium mb-3">
             What&apos;s included
           </p>
           <ul className="space-y-1">
@@ -202,13 +202,13 @@ const WaitlistSignup = memo(function WaitlistSignup({
                   onClick={() => setExpandedFeature(expandedFeature === i ? null : i)}
                   className="w-full flex items-start gap-2.5 py-1.5 text-left group"
                 >
-                  <span className="text-[#22C55E] text-xs mt-0.5 shrink-0 font-mono">+</span>
+                  <span className="text-success text-xs mt-0.5 shrink-0 font-mono">+</span>
                   <span className="text-[13px] text-[#C0C0C0] group-hover:text-white transition-colors">
                     {feature.text}
                   </span>
                 </button>
                 {expandedFeature === i && feature.detail && (
-                  <p className="ml-5 pb-2 text-xs text-[#8A8A8A] leading-relaxed">
+                  <p className="ml-5 pb-2 text-xs text-text-muted leading-relaxed">
                     {feature.detail}
                   </p>
                 )}
@@ -218,8 +218,8 @@ const WaitlistSignup = memo(function WaitlistSignup({
         </div>
 
         {/* Form */}
-        <form onSubmit={handleSubmit} className="px-6 py-5 border-t border-[#1F1F1F]">
-          <p className="text-[10px] text-[#8A8A8A] uppercase tracking-wider font-medium mb-3">
+        <form onSubmit={handleSubmit} className="px-6 py-5 border-t border-bg-tertiary">
+          <p className="text-[10px] text-text-muted uppercase tracking-wider font-medium mb-3">
             Get early access
           </p>
 
@@ -231,7 +231,7 @@ const WaitlistSignup = memo(function WaitlistSignup({
               placeholder="Work email *"
               required
               autoComplete="email"
-              className="w-full text-sm px-3.5 py-2.5 rounded-lg bg-[#1F1F1F] border border-[#2A2A2A] text-white placeholder:text-[#8A8A8A] focus:outline-none focus:border-[#D4AF37]/40 focus:ring-1 focus:ring-[#D4AF37]/20 transition-all"
+              className="w-full text-sm px-3.5 py-2.5 rounded-lg bg-bg-tertiary border border-border text-white placeholder:text-text-muted focus:outline-none focus:border-accent-gold/40 focus:ring-1 focus:ring-accent-gold/20 transition-all"
             />
             <div className="flex gap-2.5">
               <input
@@ -240,14 +240,14 @@ const WaitlistSignup = memo(function WaitlistSignup({
                 onChange={(e) => setName(e.target.value)}
                 placeholder="Your name"
                 autoComplete="name"
-                className="w-1/2 text-sm px-3.5 py-2.5 rounded-lg bg-[#1F1F1F] border border-[#2A2A2A] text-white placeholder:text-[#8A8A8A] focus:outline-none focus:border-[#D4AF37]/40 focus:ring-1 focus:ring-[#D4AF37]/20 transition-all"
+                className="w-1/2 text-sm px-3.5 py-2.5 rounded-lg bg-bg-tertiary border border-border text-white placeholder:text-text-muted focus:outline-none focus:border-accent-gold/40 focus:ring-1 focus:ring-accent-gold/20 transition-all"
               />
               <input
                 type="text"
                 value={teamSize}
                 onChange={(e) => setTeamSize(e.target.value)}
                 placeholder="Team size"
-                className="w-1/2 text-sm px-3.5 py-2.5 rounded-lg bg-[#1F1F1F] border border-[#2A2A2A] text-white placeholder:text-[#8A8A8A] focus:outline-none focus:border-[#D4AF37]/40 focus:ring-1 focus:ring-[#D4AF37]/20 transition-all"
+                className="w-1/2 text-sm px-3.5 py-2.5 rounded-lg bg-bg-tertiary border border-border text-white placeholder:text-text-muted focus:outline-none focus:border-accent-gold/40 focus:ring-1 focus:ring-accent-gold/20 transition-all"
               />
             </div>
             <div className="flex gap-2.5">
@@ -257,14 +257,14 @@ const WaitlistSignup = memo(function WaitlistSignup({
                 onChange={(e) => setCompany(e.target.value)}
                 placeholder="Company"
                 autoComplete="organization"
-                className="w-1/2 text-sm px-3.5 py-2.5 rounded-lg bg-[#1F1F1F] border border-[#2A2A2A] text-white placeholder:text-[#8A8A8A] focus:outline-none focus:border-[#D4AF37]/40 focus:ring-1 focus:ring-[#D4AF37]/20 transition-all"
+                className="w-1/2 text-sm px-3.5 py-2.5 rounded-lg bg-bg-tertiary border border-border text-white placeholder:text-text-muted focus:outline-none focus:border-accent-gold/40 focus:ring-1 focus:ring-accent-gold/20 transition-all"
               />
               <input
                 type="text"
                 value={role}
                 onChange={(e) => setRole(e.target.value)}
                 placeholder="Role (e.g. Eng Manager)"
-                className="w-1/2 text-sm px-3.5 py-2.5 rounded-lg bg-[#1F1F1F] border border-[#2A2A2A] text-white placeholder:text-[#8A8A8A] focus:outline-none focus:border-[#D4AF37]/40 focus:ring-1 focus:ring-[#D4AF37]/20 transition-all"
+                className="w-1/2 text-sm px-3.5 py-2.5 rounded-lg bg-bg-tertiary border border-border text-white placeholder:text-text-muted focus:outline-none focus:border-accent-gold/40 focus:ring-1 focus:ring-accent-gold/20 transition-all"
               />
             </div>
           </div>
@@ -272,12 +272,12 @@ const WaitlistSignup = memo(function WaitlistSignup({
           <button
             type="submit"
             disabled={submitting || !email.trim()}
-            className="w-full mt-4 text-sm font-semibold px-4 py-3 rounded-lg bg-white text-[#0A0A0A] hover:bg-[#F0F0F0] active:bg-[#E0E0E0] transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+            className="w-full mt-4 text-sm font-semibold px-4 py-3 rounded-lg bg-white text-bg-primary hover:bg-[#F0F0F0] active:bg-[#E0E0E0] transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
           >
             {submitting ? 'Joining...' : `Join the ${config.name} Waitlist`}
           </button>
 
-          <p className="mt-3 text-[10px] text-[#8A8A8A] text-center leading-relaxed">
+          <p className="mt-3 text-[10px] text-text-muted text-center leading-relaxed">
             Stored on your device only. No data sent externally.
             <br />
             We&apos;ll reach out when {config.name} launches.
