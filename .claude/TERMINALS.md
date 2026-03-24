@@ -18,8 +18,9 @@
 -->
 
 ### T1 — Proactive intelligence hardening + launch pipeline
-- **Status**: working
+- **Status**: committing
 - **Since**: 2026-03-25T13:00:00Z
+- **Commit Lock**: HELD
 - **Files**:
   - Wave 1: .github/workflows/release.yml, paddle-webhook/*, docs/LAUNCH-PIPELINE.md, docs/SHOW-HN-DRAFT.md, docs/PROACTIVE-INTELLIGENCE-PLAN.md, .claude/commands/swans.md
   - Wave 2: src/components/first-run/FirstRunTransition.tsx, src-tauri/src/scoring/pipeline.rs

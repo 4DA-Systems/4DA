@@ -435,7 +435,7 @@ pub fn maybe_notify_escalating_chains<R: Runtime>(app: &AppHandle<R>) {
             crate::signal_chains::ChainPhase::Escalating | crate::signal_chains::ChainPhase::Peak
         );
 
-        if !dominated || prediction.confidence < 0.3 {
+        if !dominated || prediction.confidence < 0.3 || chain.confidence < 0.7 {
             continue;
         }
 

@@ -26,6 +26,7 @@ export interface SignalChain {
   overall_priority: string;
   resolution: 'open' | 'resolved' | 'expired' | 'snoozed';
   suggested_action: string;
+  confidence: number;
   created_at: string;
   updated_at: string;
 }
