@@ -48,7 +48,7 @@ pub async fn get_item_content(item_id: i64) -> Result<ItemContent> {
 
     let (content, source_type, _char_count) = db
         .get_item_content(item_id)?
-        .ok_or_else(|| FourDaError::Internal(format!("Item {} not found", item_id)))?;
+        .ok_or_else(|| FourDaError::Internal(format!("Item {item_id} not found")))?;
 
     let word_count = content.split_whitespace().count();
 
@@ -120,7 +120,7 @@ pub async fn generate_item_summary(item_id: i64) -> Result<ItemSummary> {
     let client = LLMClient::new(llm_config);
     let system_prompt = "You are a concise technical summarizer. Given an article title and content, produce a 2-3 sentence summary that captures the key technical insight. Focus on what a developer needs to know. Do not use markdown formatting.";
 
-    let user_message = format!("Title: {}\n\nContent:\n{}", title, content_snippet);
+    let user_message = format!("Title: {title}\n\nContent:\n{content_snippet}");
 
     let response = client
         .complete(

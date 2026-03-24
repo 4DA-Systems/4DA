@@ -376,7 +376,7 @@ pub(crate) async fn check_rig_requirements() -> RigRequirements {
     let ollama_check = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(3))
         .build()
-        .map(|c| c.get(format!("{}/api/tags", ollama_url)));
+        .map(|c| c.get(format!("{ollama_url}/api/tags")));
 
     let (ollama_running, embedding_model, models_list) = match ollama_check {
         Ok(req) => match req.send().await {

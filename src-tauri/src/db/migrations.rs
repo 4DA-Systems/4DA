@@ -12,7 +12,7 @@ impl Database {
     pub(crate) fn backup_before_migration(&self, current_version: i64) {
         let backup_path = self
             .db_path
-            .with_extension(format!("db.backup.v{}", current_version));
+            .with_extension(format!("db.backup.v{current_version}"));
         // Checkpoint WAL so the main db file is consistent for copy
         if let Some(conn) = self.conn.try_lock() {
             if let Err(e) = conn.execute_batch("PRAGMA wal_checkpoint(TRUNCATE)") {
@@ -21,10 +21,10 @@ impl Database {
         }
         match std::fs::copy(&self.db_path, &backup_path) {
             Ok(bytes) => {
-                info!(target: "4da::db", path = %backup_path.display(), bytes, "Pre-migration backup created")
+                info!(target: "4da::db", path = %backup_path.display(), bytes, "Pre-migration backup created");
             }
             Err(e) => {
-                tracing::warn!(target: "4da::db", error = %e, "Pre-migration backup failed (continuing anyway)")
+                tracing::warn!(target: "4da::db", error = %e, "Pre-migration backup failed (continuing anyway)");
             }
         }
         // Prune old backups: keep only the 2 most recent
@@ -67,7 +67,7 @@ impl Database {
         // Execute migration inside a transaction
         let result = {
             let tx = conn.unchecked_transaction()?;
-            let res = migration_fn(&tx).and_then(|_| {
+            let res = migration_fn(&tx).and_then(|()| {
                 tx.execute(
                     "UPDATE schema_version SET version = ?1",
                     params![to_version],
@@ -90,10 +90,10 @@ impl Database {
 
         match &result {
             Ok(()) => {
-                info!(target: "4da::db", name, to_version, duration_ms, "{} completed in {}ms", name, duration_ms)
+                info!(target: "4da::db", name, to_version, duration_ms, "{} completed in {}ms", name, duration_ms);
             }
             Err(e) => {
-                tracing::error!(target: "4da::db", name, to_version, error = %e, "{} FAILED — rolled back", name)
+                tracing::error!(target: "4da::db", name, to_version, error = %e, "{} FAILED — rolled back", name);
             }
         }
 

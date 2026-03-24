@@ -22,7 +22,7 @@ pub async fn fetch_plugin_items(plugin_name: String) -> Result<Vec<PluginItem>> 
     let manifest = plugins
         .iter()
         .find(|p| p.name == plugin_name)
-        .ok_or_else(|| format!("Plugin '{}' not found", plugin_name))?;
+        .ok_or_else(|| format!("Plugin '{plugin_name}' not found"))?;
 
     let config = loader::build_plugin_config();
     loader::execute_plugin(manifest, &config)

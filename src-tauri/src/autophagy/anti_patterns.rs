@@ -156,7 +156,7 @@ pub(crate) fn store_anti_patterns(
                 pattern.exposure_count,
             ],
         )
-        .with_context(|| format!("Failed to insert anti-pattern for {}", subject))?;
+        .with_context(|| format!("Failed to insert anti-pattern for {subject}"))?;
 
         let new_id = conn.last_insert_rowid();
 
@@ -167,7 +167,7 @@ pub(crate) fn store_anti_patterns(
              WHERE digest_type = 'anti_pattern' AND subject = ?2 AND superseded_by IS NULL AND id != ?1",
             params![new_id, subject],
         )
-        .with_context(|| format!("Failed to supersede anti-pattern for {}", subject))?;
+        .with_context(|| format!("Failed to supersede anti-pattern for {subject}"))?;
     }
 
     debug!(target: "4da::autophagy", count = patterns.len(), "Stored anti-patterns");

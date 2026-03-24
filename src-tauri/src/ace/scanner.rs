@@ -401,7 +401,7 @@ impl ProjectScanner {
 
         let dep_lower = dep.to_lowercase();
         for (pattern, framework) in frameworks {
-            let matches = dep_lower == pattern || dep_lower.starts_with(&format!("{}-", pattern));
+            let matches = dep_lower == pattern || dep_lower.starts_with(&format!("{pattern}-"));
             if matches && !signal.frameworks.contains(&framework.to_string()) {
                 signal.frameworks.push(framework.to_string());
             }
@@ -424,14 +424,14 @@ impl ProjectScanner {
 
         if let Some(deps) = pkg.get("dependencies").and_then(|v| v.as_object()) {
             for key in deps.keys() {
-                signal.dependencies.push(key.to_string());
+                signal.dependencies.push(key.clone());
                 self.detect_js_framework(key, signal);
             }
         }
 
         if let Some(dev_deps) = pkg.get("devDependencies").and_then(|v| v.as_object()) {
             for key in dev_deps.keys() {
-                signal.dev_dependencies.push(key.to_string());
+                signal.dev_dependencies.push(key.clone());
             }
             // Detect TypeScript from devDependencies
             if dev_deps.contains_key("typescript")
@@ -473,8 +473,8 @@ impl ProjectScanner {
         let dep_lower = dep.to_lowercase();
         for (pattern, framework) in frameworks {
             let matches = dep_lower == pattern
-                || dep_lower.starts_with(&format!("{}-", pattern))
-                || dep_lower.ends_with(&format!("/{}", pattern));
+                || dep_lower.starts_with(&format!("{pattern}-"))
+                || dep_lower.ends_with(&format!("/{pattern}"));
             if matches && !signal.frameworks.contains(&framework.to_string()) {
                 signal.frameworks.push(framework.to_string());
             }
@@ -664,7 +664,7 @@ impl ProjectScanner {
         else if let Some(deps) = lock.get("dependencies").and_then(|v| v.as_object()) {
             for (name, value) in deps {
                 if let Some(version) = value.get("version").and_then(|v| v.as_str()) {
-                    packages.push((name.to_string(), version.to_string()));
+                    packages.push((name.clone(), version.to_string()));
                 }
             }
         }
@@ -685,7 +685,7 @@ impl Default for ProjectScanner {
 
 /// Extract a string value from TOML content (basic implementation)
 fn extract_toml_value(content: &str, key: &str) -> Option<String> {
-    let pattern = format!("{} = \"", key);
+    let pattern = format!("{key} = \"");
     if let Some(start) = content.find(&pattern) {
         let value_start = start + pattern.len();
         if let Some(end) = content[value_start..].find('"') {
@@ -775,7 +775,7 @@ pub(crate) fn extract_imports_from_source(path: &Path) -> Vec<String> {
                     }
                 } else if let Some(rest) = trimmed.strip_prefix("import ") {
                     for part in rest.split(',') {
-                        let pkg = part.trim().split_whitespace().next().unwrap_or("");
+                        let pkg = part.split_whitespace().next().unwrap_or("");
                         let top = pkg.split('.').next().unwrap_or(pkg);
                         if !top.is_empty() {
                             imports.insert(top.to_string());

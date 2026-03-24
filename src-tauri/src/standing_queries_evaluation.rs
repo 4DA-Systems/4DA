@@ -72,12 +72,11 @@ pub fn evaluate_standing_queries(conn: &rusqlite::Connection) -> Vec<StandingQue
         }
 
         // Determine the time boundary: last_run or 24 hours ago
-        let since = match last_run {
-            Some(lr) => lr.clone(),
-            None => {
-                let yesterday = chrono::Utc::now() - chrono::Duration::hours(24);
-                yesterday.format("%Y-%m-%d %H:%M:%S").to_string()
-            }
+        let since = if let Some(lr) = last_run {
+            lr.clone()
+        } else {
+            let yesterday = chrono::Utc::now() - chrono::Duration::hours(24);
+            yesterday.format("%Y-%m-%d %H:%M:%S").to_string()
         };
 
         // Build LIKE conditions

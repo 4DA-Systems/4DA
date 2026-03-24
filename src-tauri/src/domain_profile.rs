@@ -487,7 +487,7 @@ fn infer_domain_concerns(primary: &HashSet<String>, all_tech: &HashSet<String>) 
     let combined: HashSet<&str> = primary
         .iter()
         .chain(all_tech.iter())
-        .map(|s| s.as_str())
+        .map(std::string::String::as_str)
         .collect();
 
     for (signals, domain_concerns) in archetype_map() {

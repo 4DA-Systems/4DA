@@ -215,8 +215,8 @@ async fn fetch_fallback(
 
 /// Parse Algolia HN Search API response into SourceItems.
 fn parse_hn_algolia(body: &str) -> Result<Vec<SourceItem>, SourceError> {
-    let json: serde_json::Value = serde_json::from_str(body)
-        .map_err(|e| SourceError::Parse(format!("Algolia JSON: {}", e)))?;
+    let json: serde_json::Value =
+        serde_json::from_str(body).map_err(|e| SourceError::Parse(format!("Algolia JSON: {e}")))?;
 
     let hits = json
         .get("hits")
@@ -229,19 +229,18 @@ fn parse_hn_algolia(body: &str) -> Result<Vec<SourceItem>, SourceError> {
             let title = hit.get("title")?.as_str()?;
             let object_id = hit.get("objectID")?.as_str()?;
             let url = hit.get("url").and_then(|u| u.as_str()).map(String::from);
-            let points = hit.get("points").and_then(|p| p.as_i64()).unwrap_or(0);
+            let points = hit
+                .get("points")
+                .and_then(serde_json::Value::as_i64)
+                .unwrap_or(0);
             let author = hit
                 .get("author")
                 .and_then(|a| a.as_str())
                 .unwrap_or("unknown");
 
             let mut item = SourceItem::new("hackernews", object_id, title);
-            item.url = url.or_else(|| {
-                Some(format!(
-                    "https://news.ycombinator.com/item?id={}",
-                    object_id
-                ))
-            });
+            item.url =
+                url.or_else(|| Some(format!("https://news.ycombinator.com/item?id={object_id}")));
             item.metadata = Some(serde_json::json!({
                 "score": points,
                 "author": author,
@@ -330,8 +329,8 @@ fn parse_rss_generic(body: &str, source_type: &str) -> Result<Vec<SourceItem>, S
 ///
 /// Handles CDATA sections. Returns `None` if the tag is not found or empty.
 fn extract_tag(block: &str, tag: &str) -> Option<String> {
-    let open = format!("<{}", tag);
-    let close = format!("</{}>", tag);
+    let open = format!("<{tag}");
+    let close = format!("</{tag}>");
     let start = block.find(&open)?;
     let content_start = block[start..].find('>')? + start + 1;
     let end = block[content_start..].find(&close)? + content_start;
@@ -349,11 +348,11 @@ fn extract_tag(block: &str, tag: &str) -> Option<String> {
 
 /// Extract an attribute value from a self-closing tag (e.g., `<link href="..."/>`).
 fn extract_attr(block: &str, tag: &str, attr: &str) -> Option<String> {
-    let open = format!("<{}", tag);
+    let open = format!("<{tag}");
     let start = block.find(&open)?;
     let tag_end = block[start..].find('>')? + start;
     let tag_block = &block[start..tag_end];
-    let attr_pattern = format!("{}=\"", attr);
+    let attr_pattern = format!("{attr}=\"");
     let attr_start = tag_block.find(&attr_pattern)? + attr_pattern.len();
     let attr_end = tag_block[attr_start..].find('"')? + attr_start;
     Some(tag_block[attr_start..attr_end].to_string())

@@ -273,7 +273,7 @@ impl JobQueue {
                 "DELETE FROM extraction_jobs
                  WHERE status IN ('completed', 'failed')
                  AND created_at < datetime('now', ?1)",
-                [format!("-{} days", days)],
+                [format!("-{days} days")],
             )
             .context("Failed to cleanup jobs")?;
 

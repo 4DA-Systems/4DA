@@ -103,7 +103,7 @@ fn extract_signals(
     let topics = extract_topics(input.title, input.content);
 
     // Raw context: best KNN score from embedding similarity
-    let raw_context = matches.first().map(|m| m.similarity).unwrap_or(0.0);
+    let raw_context = matches.first().map_or(0.0, |m| m.similarity);
 
     // Raw interest: embedding similarity against declared interests
     let raw_interest = compute_interest_score(input.embedding, &ctx.interests);
@@ -125,7 +125,9 @@ fn extract_signals(
         match_dependencies(input.title, input.content, &topics, &ctx.ace_ctx);
 
     // Feedback learning boost
-    let feedback_boost = if !ctx.feedback_boosts.is_empty() {
+    let feedback_boost = if ctx.feedback_boosts.is_empty() {
+        0.0
+    } else {
         let mut boost_sum: f64 = 0.0;
         let mut match_count = 0;
         for topic in &topics {
@@ -142,8 +144,6 @@ fn extract_signals(
         } else {
             0.0
         }
-    } else {
-        0.0
     };
 
     // Affinity and anti-penalty from learned topic preferences
@@ -289,30 +289,30 @@ fn compute_quality_composite(
                     .iter()
                     .filter_map(|t| ctx.topic_half_lives.get(t.as_str()).copied())
                     .collect();
-                if !matching_half_lives.is_empty() {
+                if matching_half_lives.is_empty() {
+                    base_freshness
+                } else {
                     let avg_half_life =
                         matching_half_lives.iter().sum::<f32>() / matching_half_lives.len() as f32;
                     let age_hours =
                         ((chrono::Utc::now() - *created_at).num_minutes() as f32 / 60.0).max(0.0);
                     let calibrated = (-0.693 * age_hours / avg_half_life.max(1.0)).exp();
                     (base_freshness * 0.5 + calibrated * 0.5).clamp(0.3, 1.0)
-                } else {
-                    base_freshness
                 }
             } else {
                 base_freshness
             };
             // Peak hours boost: slight freshness bonus for content published during
             // the user's active coding hours (from git commit frequency analysis)
-            if !ctx.ace_ctx.peak_hours.is_empty() {
+            if ctx.ace_ctx.peak_hours.is_empty() {
+                topic_adjusted
+            } else {
                 let publish_hour = chrono::Timelike::hour(created_at) as u8;
                 if ctx.ace_ctx.peak_hours.contains(&publish_hour) {
                     (topic_adjusted + 0.03).min(1.0)
                 } else {
                     topic_adjusted
                 }
-            } else {
-                topic_adjusted
             }
         } else {
             1.0
@@ -322,17 +322,16 @@ fn compute_quality_composite(
     };
 
     // Source quality boost from learned preferences
-    let source_quality_boost = ctx
-        .source_quality
-        .get(input.source_type)
-        .copied()
-        .map(|score| {
-            (score * scoring_config::SOURCE_QUALITY_MULT).clamp(
-                scoring_config::SOURCE_QUALITY_CAP_RANGE.0,
-                scoring_config::SOURCE_QUALITY_CAP_RANGE.1,
-            )
-        })
-        .unwrap_or(0.0);
+    let source_quality_boost =
+        ctx.source_quality
+            .get(input.source_type)
+            .copied()
+            .map_or(0.0, |score| {
+                (score * scoring_config::SOURCE_QUALITY_MULT).clamp(
+                    scoring_config::SOURCE_QUALITY_CAP_RANGE.0,
+                    scoring_config::SOURCE_QUALITY_CAP_RANGE.1,
+                )
+            });
     let source_quality_mult = 1.0 + source_quality_boost;
 
     // Anti-topic multiplier
@@ -454,7 +453,9 @@ fn compute_boosts(
     let dep_boost = raw.dep_match_score * dep_weight;
 
     // Intent boost: amplify items matching recent work topics
-    let intent_boost: f32 = if !ctx.work_topics.is_empty() {
+    let intent_boost: f32 = if ctx.work_topics.is_empty() {
+        0.0
+    } else {
         let matching_work_topics = raw
             .topics
             .iter()
@@ -465,12 +466,12 @@ fn compute_boosts(
             1 => scoring_config::INTENT_BOOST_SINGLE_MATCH,
             _ => scoring_config::INTENT_BOOST_MULTI_MATCH,
         }
-    } else {
-        0.0
     };
 
     // Decision window boost
-    let (window_boost, matched_window_id) = if !ctx.open_windows.is_empty() {
+    let (window_boost, matched_window_id) = if ctx.open_windows.is_empty() {
+        (0.0, None)
+    } else {
         crate::decision_advantage::compute_decision_window_boost(
             &ctx.open_windows,
             input.title,
@@ -481,14 +482,14 @@ fn compute_boosts(
                 .map(|d| d.package_name.clone())
                 .collect::<Vec<_>>(),
         )
-    } else {
-        (0.0, None)
     };
 
     // Skill-gap boost
     let mut matched_skill_gaps: Vec<String> = Vec::new();
     let skill_gap_boost: f32 = if let Some(ref profile) = ctx.sovereign_profile {
-        if !profile.intelligence.skill_gaps.is_empty() {
+        if profile.intelligence.skill_gaps.is_empty() {
+            0.0
+        } else {
             for t in &raw.topics {
                 if let Some(g) = profile
                     .intelligence
@@ -506,8 +507,6 @@ fn compute_boosts(
                 1 => 0.15,
                 _ => 0.20,
             }
-        } else {
-            0.0
         }
     } else {
         0.0
@@ -521,11 +520,11 @@ fn compute_boosts(
                 .iter()
                 .filter_map(|t| ctx.calibration_deltas.get(t.as_str()).copied())
                 .collect();
-            if !matching.is_empty() {
+            if matching.is_empty() {
+                0.0
+            } else {
                 let avg_delta = matching.iter().sum::<f32>() / matching.len() as f32;
                 avg_delta.clamp(-0.10, 0.10)
-            } else {
-                0.0
             }
         } else {
             0.0
@@ -725,7 +724,7 @@ pub(crate) fn score_item(
         return SourceRelevance {
             id: input.id,
             title: input.title.to_string(),
-            url: input.url.map(|s| s.to_string()),
+            url: input.url.map(std::string::ToString::to_string),
             top_score: 0.0,
             matches: vec![],
             relevant: false,
@@ -762,7 +761,7 @@ pub(crate) fn score_item(
                     let similarity = 1.0 / (1.0 + result.distance);
                     let matched_text = if result.text.len() > 100 {
                         let truncated: String = result.text.chars().take(100).collect();
-                        format!("{}...", truncated)
+                        format!("{truncated}...")
                     } else {
                         result.text
                     };
@@ -923,12 +922,9 @@ pub(crate) fn score_item(
     );
 
     // ── Necessity scoring ─────────────────────────────────────────────
-    let age_hours = input
-        .created_at
-        .map(|ts| {
-            (chrono::Utc::now() - *ts).num_minutes().max(0) as f64 / 60.0
-        })
-        .unwrap_or(0.0);
+    let age_hours = input.created_at.map_or(0.0, |ts| {
+        (chrono::Utc::now() - *ts).num_minutes().max(0) as f64 / 60.0
+    });
 
     let necessity_inputs = necessity::NecessityInputs {
         dep_match_score: raw.dep_match_score,
@@ -1011,7 +1007,7 @@ pub(crate) fn score_item(
     SourceRelevance {
         id: input.id,
         title: crate::decode_html_entities(input.title),
-        url: input.url.map(|s| s.to_string()),
+        url: input.url.map(std::string::ToString::to_string),
         top_score: combined_score,
         matches,
         relevant,

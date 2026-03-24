@@ -114,7 +114,7 @@ pub fn execute() -> SunResult {
 
     SunResult {
         success: true,
-        message: format!("Updated {} hardware facts", facts_found),
+        message: format!("Updated {facts_found} hardware facts"),
         data: disk_alert.map(|msg| serde_json::json!({ "alert": msg })),
     }
 }
@@ -148,14 +148,13 @@ fn check_disk_space() -> Option<String> {
                 let trimmed = line.trim();
                 let val = trimmed
                     .strip_prefix("FreeSpace=")
-                    .or_else(|| trimmed.strip_prefix("FreeSpace :").map(|s| s.trim()));
+                    .or_else(|| trimmed.strip_prefix("FreeSpace :").map(str::trim));
                 if let Some(val) = val {
                     if let Ok(free_bytes) = val.trim().parse::<u64>() {
                         let free_gb = free_bytes / (1024 * 1024 * 1024);
                         if free_gb < 50 {
                             return Some(format!(
-                                "Low disk space: {}GB free on system drive",
-                                free_gb
+                                "Low disk space: {free_gb}GB free on system drive"
                             ));
                         }
                     }

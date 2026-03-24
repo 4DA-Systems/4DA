@@ -46,7 +46,7 @@ pub(crate) async fn run_npm_audit(project_path: &Path) -> Vec<LocalAuditFinding>
         Command::new("which").arg("npm").output().await
     };
 
-    if check.is_err() || !check.as_ref().map_or(false, |o| o.status.success()) {
+    if check.is_err() || !check.as_ref().is_ok_and(|o| o.status.success()) {
         debug!(target: "4da::audit", "npm not found — skipping npm audit");
         return Vec::new();
     }
@@ -175,7 +175,7 @@ pub(crate) async fn run_cargo_audit(project_path: &Path) -> Vec<LocalAuditFindin
         .output()
         .await;
 
-    if check.is_err() || !check.as_ref().map_or(false, |o| o.status.success()) {
+    if check.is_err() || !check.as_ref().is_ok_and(|o| o.status.success()) {
         debug!(target: "4da::audit", "cargo-audit not installed — skipping cargo audit");
         return Vec::new();
     }
@@ -267,8 +267,8 @@ fn parse_cargo_audit_json(json_str: &str) -> Vec<LocalAuditFinding> {
         // so we infer from the advisory kind or default to "medium"
         let severity = advisory
             .get("cvss")
-            .and_then(|v| v.as_f64())
-            .map(|score| {
+            .and_then(serde_json::Value::as_f64)
+            .map_or("medium", |score| {
                 if score >= 9.0 {
                     "critical"
                 } else if score >= 7.0 {
@@ -279,7 +279,6 @@ fn parse_cargo_audit_json(json_str: &str) -> Vec<LocalAuditFinding> {
                     "low"
                 }
             })
-            .unwrap_or("medium")
             .to_string();
 
         // Extract patched versions

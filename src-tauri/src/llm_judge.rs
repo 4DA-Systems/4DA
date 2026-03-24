@@ -65,9 +65,7 @@ Output JSON array (one per article):
             .join("\n\n");
 
         let user_message = format!(
-            "## Developer Context\n{}\n\n## Articles to Judge\n{}\n\nRate each article 1-5 per the rubric. Output JSON array:",
-            context_summary,
-            items_text
+            "## Developer Context\n{context_summary}\n\n## Articles to Judge\n{items_text}\n\nRate each article 1-5 per the rubric. Output JSON array:"
         );
 
         let response = self
@@ -107,10 +105,7 @@ Output JSON array (one per article):
         };
 
         let parsed: Vec<serde_json::Value> = serde_json::from_str(json_str).map_err(|e| {
-            format!(
-                "Failed to parse LLM response as JSON: {}. Response: {}",
-                e, response
-            )
+            format!("Failed to parse LLM response as JSON: {e}. Response: {response}")
         })?;
 
         let mut judgments = Vec::new();
@@ -119,7 +114,7 @@ Output JSON array (one per article):
             // Handle ID as string or number
             let id = value["id"]
                 .as_str()
-                .map(|s| s.to_string())
+                .map(std::string::ToString::to_string)
                 .or_else(|| value["id"].as_u64().map(|n| n.to_string()))
                 .or_else(|| value["id"].as_i64().map(|n| n.to_string()))
                 .unwrap_or_default();

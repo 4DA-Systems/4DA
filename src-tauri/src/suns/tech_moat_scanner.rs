@@ -8,7 +8,7 @@ pub fn execute() -> SunResult {
         Err(e) => {
             return SunResult {
                 success: false,
-                message: format!("DB unavailable: {}", e),
+                message: format!("DB unavailable: {e}"),
                 data: None,
             }
         }
@@ -57,8 +57,7 @@ pub fn execute() -> SunResult {
     SunResult {
         success: true,
         message: format!(
-            "{} technologies detected, {} potential moat candidates",
-            tech_count, moat_candidates
+            "{tech_count} technologies detected, {moat_candidates} potential moat candidates"
         ),
         data: Some(serde_json::json!({
             "tech_count": tech_count,

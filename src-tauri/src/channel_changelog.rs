@@ -16,14 +16,14 @@ pub(crate) fn compute_changelog(
     let old_paragraphs: Vec<&str> = old_render
         .content_markdown
         .split("\n\n")
-        .map(|p| p.trim())
+        .map(str::trim)
         .filter(|p| !p.is_empty())
         .collect();
 
     let new_paragraphs: Vec<&str> = new_render
         .content_markdown
         .split("\n\n")
-        .map(|p| p.trim())
+        .map(str::trim)
         .filter(|p| !p.is_empty())
         .collect();
 

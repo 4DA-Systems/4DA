@@ -139,7 +139,7 @@ pub(crate) fn check_ace_exclusions(topics: &[String], ace_ctx: &ACEContext) -> O
     for topic in topics {
         for anti_topic in &ace_ctx.anti_topics {
             if topic.contains(anti_topic.as_str()) || anti_topic.contains(topic.as_str()) {
-                return Some(format!("ACE anti-topic: {}", anti_topic));
+                return Some(format!("ACE anti-topic: {anti_topic}"));
             }
         }
     }

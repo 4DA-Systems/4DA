@@ -48,11 +48,10 @@ fn compute_blind_spot_moat(ctx: &PersonalizationContext) -> Option<MirrorBlock> 
     Some(MirrorBlock {
         block_id: "blind_spot_moat".into(),
         connection_type: ConnectionType::BlindSpotMoat,
-        headline: format!("{} × {} = Unexplored Moat", blind_spot, primary),
+        headline: format!("{blind_spot} × {primary} = Unexplored Moat"),
         insight: format!(
-            "You deeply know {} but don't track {}. Developers who bridge this gap \
-             often find unique product opportunities that pure specialists miss.",
-            primary, blind_spot
+            "You deeply know {primary} but don't track {blind_spot}. Developers who bridge this gap \
+             often find unique product opportunities that pure specialists miss."
         ),
         data_sources: vec!["Developer DNA".into(), "Domain Profile".into()],
         content: None,
@@ -77,7 +76,7 @@ fn compute_feed_predicts_engine(ctx: &PersonalizationContext) -> Option<MirrorBl
                     .any(|et| et.to_lowercase().contains(*t))
             })
             .count();
-        if matches > 0 && best_match.map(|(_, c)| matches > c).unwrap_or(true) {
+        if matches > 0 && best_match.is_none_or(|(_, c)| matches > c) {
             best_match = Some((engine.name, matches));
         }
     }
@@ -87,11 +86,10 @@ fn compute_feed_predicts_engine(ctx: &PersonalizationContext) -> Option<MirrorBl
     Some(MirrorBlock {
         block_id: "feed_predicts_engine".into(),
         connection_type: ConnectionType::FeedPredictsEngine,
-        headline: format!("Your Reading Habits Point to: {}", engine_name),
+        headline: format!("Your Reading Habits Point to: {engine_name}"),
         insight: format!(
-            "Your most-engaged feed topics match {} topic signals for {}. \
-             Your attention naturally gravitates toward this engine's domain.",
-            match_count, engine_name
+            "Your most-engaged feed topics match {match_count} topic signals for {engine_name}. \
+             Your attention naturally gravitates toward this engine's domain."
         ),
         data_sources: vec!["Feed Engagement".into(), "Engine Topic Mapping".into()],
         content: None,
@@ -124,11 +122,10 @@ fn compute_radar_momentum(ctx: &PersonalizationContext) -> Option<MirrorBlock> {
     Some(MirrorBlock {
         block_id: "radar_momentum".into(),
         connection_type: ConnectionType::RadarMomentum,
-        headline: format!("Rising in Your Radar: {}", tech_list),
+        headline: format!("Rising in Your Radar: {tech_list}"),
         insight: format!(
-            "Technologies in your Trial/Assess rings ({}) suggest emerging interest. \
-             Products built on emerging tech you're actively learning have stronger moats.",
-            tech_list
+            "Technologies in your Trial/Assess rings ({tech_list}) suggest emerging interest. \
+             Products built on emerging tech you're actively learning have stronger moats."
         ),
         data_sources: vec!["Tech Radar".into()],
         content: None,

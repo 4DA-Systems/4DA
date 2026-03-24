@@ -115,14 +115,10 @@ pub(crate) fn compute_security(
         label: label.to_string(),
         details: if chain_penalty > 0 {
             format!(
-                "{} security items + {} escalating signal chains for your dependencies",
-                security_hits, chain_penalty
+                "{security_hits} security items + {chain_penalty} escalating signal chains for your dependencies"
             )
         } else {
-            format!(
-                "{} security-related items found for your dependencies",
-                security_hits
-            )
+            format!("{security_hits} security-related items found for your dependencies")
         },
     })
 }
@@ -167,10 +163,7 @@ pub(crate) fn compute_momentum(
             "Low activity"
         }
         .to_string(),
-        details: format!(
-            "{} mentions of your dependencies in recent sources",
-            total_mentions
-        ),
+        details: format!("{total_mentions} mentions of your dependencies in recent sources"),
     })
 }
 
@@ -208,10 +201,7 @@ pub(crate) fn compute_community(
     Ok(HealthDimension {
         score,
         label: if score >= 0.7 { "Positive" } else { "Neutral" }.to_string(),
-        details: format!(
-            "{} positive community signals about your tech",
-            positive_mentions
-        ),
+        details: format!("{positive_mentions} positive community signals about your tech"),
     })
 }
 

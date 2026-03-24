@@ -32,7 +32,7 @@ pub(crate) fn parse_anthropic_input_tokens(data: &str) -> Option<u64> {
     if v.get("type")?.as_str()? == "message_start" {
         return v
             .pointer("/message/usage/input_tokens")
-            .and_then(|t| t.as_u64());
+            .and_then(serde_json::Value::as_u64);
     }
     None
 }
@@ -41,7 +41,9 @@ pub(crate) fn parse_anthropic_input_tokens(data: &str) -> Option<u64> {
 pub(crate) fn parse_anthropic_output_tokens(data: &str) -> Option<u64> {
     let v: serde_json::Value = serde_json::from_str(data).ok()?;
     if v.get("type")?.as_str()? == "message_delta" {
-        return v.pointer("/usage/output_tokens").and_then(|t| t.as_u64());
+        return v
+            .pointer("/usage/output_tokens")
+            .and_then(serde_json::Value::as_u64);
     }
     None
 }
@@ -61,22 +63,28 @@ pub(crate) fn parse_ollama_ndjson(line: &str) -> (Option<String>, bool, u64, u64
         Err(_) => return (None, false, 0, 0),
     };
 
-    let done = v.get("done").and_then(|d| d.as_bool()).unwrap_or(false);
+    let done = v
+        .get("done")
+        .and_then(serde_json::Value::as_bool)
+        .unwrap_or(false);
 
-    let token = if !done {
+    let token = if done {
+        None
+    } else {
         v.pointer("/message/content")
             .and_then(|c| c.as_str())
             .filter(|s| !s.is_empty())
             .map(String::from)
-    } else {
-        None
     };
 
     let input_tokens = v
         .get("prompt_eval_count")
-        .and_then(|t| t.as_u64())
+        .and_then(serde_json::Value::as_u64)
         .unwrap_or(0);
-    let output_tokens = v.get("eval_count").and_then(|t| t.as_u64()).unwrap_or(0);
+    let output_tokens = v
+        .get("eval_count")
+        .and_then(serde_json::Value::as_u64)
+        .unwrap_or(0);
 
     (token, done, input_tokens, output_tokens)
 }
@@ -210,7 +218,7 @@ where
         if base.ends_with("/chat/completions") {
             base.to_string()
         } else {
-            format!("{}/chat/completions", base)
+            format!("{base}/chat/completions")
         }
     } else {
         provider
@@ -314,7 +322,7 @@ where
         .base_url
         .as_deref()
         .unwrap_or("http://localhost:11434");
-    let url = format!("{}/api/chat", base_url);
+    let url = format!("{base_url}/api/chat");
 
     let mut all_messages = vec![serde_json::json!({
         "role": "system",
@@ -343,11 +351,10 @@ where
             let msg = e.to_string();
             if msg.contains("connect") || msg.contains("refused") {
                 format!(
-                    "Cannot connect to Ollama at {}. Make sure Ollama is running (ollama serve).",
-                    base_url
+                    "Cannot connect to Ollama at {base_url}. Make sure Ollama is running (ollama serve)."
                 )
             } else {
-                format!("Ollama streaming request failed: {}", e)
+                format!("Ollama streaming request failed: {e}")
             }
         })?;
 

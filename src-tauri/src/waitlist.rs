@@ -72,7 +72,7 @@ pub fn get_waitlist_signups() -> Result<Vec<WaitlistEntry>> {
                 signed_up_at: row.get(8)?,
             })
         })?
-        .filter_map(|r| r.ok())
+        .filter_map(std::result::Result::ok)
         .collect();
 
     Ok(entries)

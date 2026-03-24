@@ -151,19 +151,19 @@ fn compute_diff_ribbon(
     // Compare stack
     for tech in &ctx.stack.primary {
         if !old_ctx.stack.primary.contains(tech) {
-            added.push(format!("Stack: {}", tech));
+            added.push(format!("Stack: {tech}"));
         }
     }
     for tech in &old_ctx.stack.primary {
         if !ctx.stack.primary.contains(tech) {
-            removed.push(format!("Stack: {}", tech));
+            removed.push(format!("Stack: {tech}"));
         }
     }
 
     // Compare radar adopt ring
     for tech in &ctx.radar.adopt {
         if !old_ctx.radar.adopt.contains(tech) {
-            added.push(format!("Radar Adopt: {}", tech));
+            added.push(format!("Radar Adopt: {tech}"));
         }
     }
 
@@ -190,7 +190,7 @@ fn compute_diff_ribbon(
     // Compare completed lessons
     if ctx.progress.completed_lesson_count > old_ctx.progress.completed_lesson_count {
         let delta = ctx.progress.completed_lesson_count - old_ctx.progress.completed_lesson_count;
-        added.push(format!("{} more lessons completed", delta));
+        added.push(format!("{delta} more lessons completed"));
     }
 
     // Compare profile completeness
@@ -263,7 +263,7 @@ fn compute_progressive_reveal(
             ctx.progress.completed_modules.contains(&mid.to_string())
                 && !old_completed.contains(&mid.to_string())
         })
-        .map(|mid| mid.to_string())
+        .map(std::string::ToString::to_string)
         .collect();
 
     if newly_completed.is_empty() {
@@ -277,7 +277,7 @@ fn compute_progressive_reveal(
             "T" => "Technical Moats analysis unlocked".into(),
             "R" => "Revenue Engine rankings now computed".into(),
             "E1" => "Execution metrics available".into(),
-            _ => format!("Module {} insights now available", mid),
+            _ => format!("Module {mid} insights now available"),
         })
         .collect();
 
@@ -317,7 +317,7 @@ fn compute_feed_echoes(
 
     // Build parameterized LIKE conditions — each topic gets two params
     // (one for title LIKE, one for content LIKE)
-    let like_patterns: Vec<String> = topics.iter().map(|t| format!("%{}%", t)).collect();
+    let like_patterns: Vec<String> = topics.iter().map(|t| format!("%{t}%")).collect();
 
     // Param numbering: ?1..?N for title/content LIKE pairs,
     // then ?N+1 for the optional read_at timestamp
@@ -325,10 +325,7 @@ fn compute_feed_echoes(
         .map(|i| {
             let title_idx = i * 2 + 1;
             let content_idx = i * 2 + 2;
-            format!(
-                "(si.title LIKE ?{} OR si.content LIKE ?{})",
-                title_idx, content_idx
-            )
+            format!("(si.title LIKE ?{title_idx} OR si.content LIKE ?{content_idx})")
         })
         .collect();
     let topic_filter = topic_conditions.join(" OR ");
@@ -338,19 +335,17 @@ fn compute_feed_echoes(
         format!(
             "SELECT si.title, si.source, si.url, si.fetched_at
              FROM source_items si
-             WHERE ({}) AND si.fetched_at > ?{}
+             WHERE ({topic_filter}) AND si.fetched_at > ?{time_param_idx}
              ORDER BY si.fetched_at DESC
-             LIMIT 5",
-            topic_filter, time_param_idx
+             LIMIT 5"
         )
     } else {
         format!(
             "SELECT si.title, si.source, si.url, si.fetched_at
              FROM source_items si
-             WHERE ({}) AND si.fetched_at > datetime('now', '-7 days')
+             WHERE ({topic_filter}) AND si.fetched_at > datetime('now', '-7 days')
              ORDER BY si.fetched_at DESC
-             LIMIT 3",
-            topic_filter
+             LIMIT 3"
         )
     };
 
@@ -375,7 +370,8 @@ fn compute_feed_echoes(
     if let Some(ref read_at) = last_read {
         params.push(Box::new(read_at.clone()));
     }
-    let param_refs: Vec<&dyn rusqlite::types::ToSql> = params.iter().map(|p| p.as_ref()).collect();
+    let param_refs: Vec<&dyn rusqlite::types::ToSql> =
+        params.iter().map(std::convert::AsRef::as_ref).collect();
 
     let raw_items: Vec<FeedEchoItem> = match stmt.query_map(param_refs.as_slice(), map_row) {
         Ok(rows) => rows
@@ -415,7 +411,7 @@ fn compute_feed_echoes(
          LIMIT 3";
 
     for topic in &topics {
-        let pattern = format!("%{}%", topic);
+        let pattern = format!("%{topic}%");
         if let Ok(mut cstmt) = conn.prepare(channel_query) {
             if let Ok(rows) = cstmt.query_map(rusqlite::params![pattern], |row| {
                 Ok(FeedEchoItem {

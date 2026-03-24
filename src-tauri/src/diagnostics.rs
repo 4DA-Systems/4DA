@@ -58,10 +58,7 @@ pub fn collect_diagnostics(db: &Database, db_path: &std::path::Path) -> Diagnost
     let memory_bytes = get_process_memory();
 
     // Uptime
-    let uptime_secs = APP_START
-        .get()
-        .map(|start| start.elapsed().as_secs())
-        .unwrap_or(0);
+    let uptime_secs = APP_START.get().map_or(0, |start| start.elapsed().as_secs());
 
     // Source health from database
     let source_health = db

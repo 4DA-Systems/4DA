@@ -113,7 +113,7 @@ pub async fn toolkit_test_feed(url: String) -> Result<FeedTestResult> {
         .map(|e| {
             let preview = if e.description.len() > 200 {
                 let truncated = crate::truncate_utf8(&e.description, 200);
-                format!("{}...", truncated)
+                format!("{truncated}...")
             } else {
                 e.description.clone()
             };

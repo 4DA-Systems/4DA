@@ -21,27 +21,25 @@ pub async fn get_license_tier() -> Result<serde_json::Value> {
     // Extract expiry from license key payload if present.
     // Self-signed keys (4DA-...) embed expiry in the payload.
     // Keygen keys (BE3529-...) don't — trust the stored tier and use cached validation.
-    let (expires_at, days_remaining, expired) = if !license.license_key.is_empty() {
-        if license.license_key.starts_with("4DA-") {
-            // Self-signed ed25519 key — verify and extract embedded expiry
-            match crate::settings::verify_license_key(&license.license_key) {
-                Ok(payload) => {
-                    if let Ok(exp) = chrono::DateTime::parse_from_rfc3339(&payload.expires_at) {
-                        let now: chrono::DateTime<chrono::Utc> = chrono::Utc::now();
-                        let days = (exp.with_timezone(&chrono::Utc) - now).num_days();
-                        (Some(payload.expires_at), days.max(0) as i32, days < 0)
-                    } else {
-                        (Some(payload.expires_at), 0, false)
-                    }
+    let (expires_at, days_remaining, expired) = if license.license_key.is_empty() {
+        (None, 0, false)
+    } else if license.license_key.starts_with("4DA-") {
+        // Self-signed ed25519 key — verify and extract embedded expiry
+        match crate::settings::verify_license_key(&license.license_key) {
+            Ok(payload) => {
+                if let Ok(exp) = chrono::DateTime::parse_from_rfc3339(&payload.expires_at) {
+                    let now: chrono::DateTime<chrono::Utc> = chrono::Utc::now();
+                    let days = (exp.with_timezone(&chrono::Utc) - now).num_days();
+                    (Some(payload.expires_at), days.max(0) as i32, days < 0)
+                } else {
+                    (Some(payload.expires_at), 0, false)
                 }
-                Err(_) => (None, 0, true), // Signature invalid — treat as expired
             }
-        } else {
-            // Keygen API key — trust stored tier (validated at activation time).
-            // Background re-validation happens via the periodic license check.
-            (None, 0, false)
+            Err(_) => (None, 0, true), // Signature invalid — treat as expired
         }
     } else {
+        // Keygen API key — trust stored tier (validated at activation time).
+        // Background re-validation happens via the periodic license check.
         (None, 0, false)
     };
 
@@ -236,7 +234,7 @@ pub async fn get_user_context() -> Result<serde_json::Value> {
 
     let identity = engine
         .get_static_identity()
-        .map_err(|e| format!("Failed to get identity: {}", e))?;
+        .map_err(|e| format!("Failed to get identity: {e}"))?;
 
     let interest_count = engine.interest_count().unwrap_or(0);
     let exclusion_count = engine.exclusion_count().unwrap_or(0);
@@ -269,7 +267,7 @@ pub async fn set_user_role(app: AppHandle, role: Option<String>) -> Result<serde
     let engine = get_context_engine()?;
     engine
         .set_role(role.as_deref())
-        .map_err(|e| format!("Failed to set role: {}", e))?;
+        .map_err(|e| format!("Failed to set role: {e}"))?;
 
     info!(target: "4da::context", role = ?role, "Role updated");
 
@@ -298,7 +296,7 @@ pub async fn add_tech_stack(app: AppHandle, technology: String) -> Result<serde_
     let engine = get_context_engine()?;
     engine
         .add_technology(&technology)
-        .map_err(|e| format!("Failed to add technology: {}", e))?;
+        .map_err(|e| format!("Failed to add technology: {e}"))?;
 
     debug!(target: "4da::context", technology = %technology, "Added technology");
 
@@ -324,7 +322,7 @@ pub async fn remove_tech_stack(technology: String) -> Result<serde_json::Value> 
     let engine = get_context_engine()?;
     engine
         .remove_technology(&technology)
-        .map_err(|e| format!("Failed to remove technology: {}", e))?;
+        .map_err(|e| format!("Failed to remove technology: {e}"))?;
 
     debug!(target: "4da::context", technology = %technology, "Removed technology");
 
@@ -345,11 +343,11 @@ pub async fn add_interest(
 
     // Generate embedding for the topic
     let embedding = embed_texts(std::slice::from_ref(&topic)).await?;
-    let emb = embedding.first().map(|e| e.as_slice());
+    let emb = embedding.first().map(std::vec::Vec::as_slice);
 
     let id = engine
         .add_interest(&topic, weight, emb, InterestSource::Explicit)
-        .map_err(|e| format!("Failed to add interest: {}", e))?;
+        .map_err(|e| format!("Failed to add interest: {e}"))?;
 
     info!(target: "4da::context", topic = %topic, weight = weight, has_embedding = emb.is_some(), "Added interest");
     invalidate_context_engine();
@@ -379,7 +377,7 @@ pub async fn remove_interest(topic: String) -> Result<serde_json::Value> {
     let engine = get_context_engine()?;
     engine
         .remove_interest(&topic)
-        .map_err(|e| format!("Failed to remove interest: {}", e))?;
+        .map_err(|e| format!("Failed to remove interest: {e}"))?;
 
     info!(target: "4da::context", topic = %topic, "Removed interest");
     invalidate_context_engine();
@@ -396,7 +394,7 @@ pub async fn add_exclusion(topic: String) -> Result<serde_json::Value> {
     let engine = get_context_engine()?;
     engine
         .add_exclusion(&topic)
-        .map_err(|e| format!("Failed to add exclusion: {}", e))?;
+        .map_err(|e| format!("Failed to add exclusion: {e}"))?;
 
     info!(target: "4da::context", topic = %topic, "Added exclusion");
     invalidate_context_engine();
@@ -413,7 +411,7 @@ pub async fn remove_exclusion(topic: String) -> Result<serde_json::Value> {
     let engine = get_context_engine()?;
     engine
         .remove_exclusion(&topic)
-        .map_err(|e| format!("Failed to remove exclusion: {}", e))?;
+        .map_err(|e| format!("Failed to remove exclusion: {e}"))?;
 
     info!(target: "4da::context", topic = %topic, "Removed exclusion");
     invalidate_context_engine();
@@ -437,12 +435,12 @@ pub async fn record_interaction(
         "save" => InteractionType::Save,
         "dismiss" => InteractionType::Dismiss,
         "ignore" => InteractionType::Ignore,
-        _ => return Err(format!("Unknown action type: {}", action).into()),
+        _ => return Err(format!("Unknown action type: {action}").into()),
     };
 
     engine
         .record_interaction(source_item_id, action_type)
-        .map_err(|e| format!("Failed to record interaction: {}", e))?;
+        .map_err(|e| format!("Failed to record interaction: {e}"))?;
 
     debug!(target: "4da::context", action = %action, item_id = source_item_id, "Recorded interaction");
 
@@ -485,7 +483,7 @@ pub async fn set_locale(country: String, language: String, currency: String) -> 
     };
     guard
         .save()
-        .map_err(|e| FourDaError::Config(format!("Failed to save locale: {}", e)))?;
+        .map_err(|e| FourDaError::Config(format!("Failed to save locale: {e}")))?;
     info!(target: "4da::settings", "Locale updated");
     Ok(())
 }
@@ -500,7 +498,7 @@ pub async fn get_context_stats() -> Result<serde_json::Value> {
 
     let identity = engine
         .get_static_identity()
-        .map_err(|e| format!("Failed to get identity: {}", e))?;
+        .map_err(|e| format!("Failed to get identity: {e}"))?;
 
     Ok(serde_json::json!({
         "interests": interest_count,

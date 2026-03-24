@@ -141,7 +141,7 @@ pub async fn get_sovereign_profile_completeness() -> Result<ProfileCompleteness>
     let missing: Vec<String> = ALL_CATEGORIES
         .iter()
         .filter(|c| !filled.contains(**c))
-        .map(|c| c.to_string())
+        .map(std::string::ToString::to_string)
         .collect();
 
     let percentage = if total > 0 {
@@ -197,7 +197,7 @@ pub async fn generate_sovereign_stack_document() -> Result<String> {
 
     for cat in ALL_CATEGORIES {
         let label = category_labels.get(cat).unwrap_or(cat);
-        doc.push_str(&format!("## {}\n\n", label));
+        doc.push_str(&format!("## {label}\n\n"));
 
         if let Some(facts) = by_category.get(*cat) {
             for fact in facts {

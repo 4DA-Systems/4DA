@@ -143,15 +143,12 @@ fn process_l1(input: &str, ctx: &PersonalizationContext) -> (String, u32, u32) {
             let (path, fallback) = parse_l1_token(token_body);
 
             // Resolve the path against the context
-            match resolve_path(path, ctx) {
-                Some(value) => {
-                    output.push_str(&value);
-                    resolved += 1;
-                }
-                None => {
-                    output.push_str(fallback.unwrap_or(path));
-                    fallbacks += 1;
-                }
+            if let Some(value) = resolve_path(path, ctx) {
+                output.push_str(&value);
+                resolved += 1;
+            } else {
+                output.push_str(fallback.unwrap_or(path));
+                fallbacks += 1;
             }
 
             remaining = &remaining[token_end..];

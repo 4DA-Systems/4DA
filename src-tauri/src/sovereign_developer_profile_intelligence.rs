@@ -122,8 +122,7 @@ pub(super) fn detect_infrastructure_mismatches(
             mismatches.push(InfrastructureMismatch {
                 category: "RAM + LLM".to_string(),
                 issue: format!(
-                    "Only {:.0}GB RAM detected with local LLM — may cause swap thrashing. Consider a cloud provider or smaller model",
-                    total_gb
+                    "Only {total_gb:.0}GB RAM detected with local LLM — may cause swap thrashing. Consider a cloud provider or smaller model"
                 ),
             });
         }
@@ -293,14 +292,14 @@ pub(super) fn build_identity_summary(stack: &StackDimension) -> String {
             .map(|s| capitalize(s))
             .collect::<Vec<_>>()
             .join("/");
-        return format!("{} developer", stack_str);
+        return format!("{stack_str} developer");
     }
     let stack_str = worthy
         .iter()
         .map(|s| capitalize(s))
         .collect::<Vec<_>>()
         .join("/");
-    format!("{} developer", stack_str)
+    format!("{stack_str} developer")
 }
 
 pub(super) fn capitalize(s: &str) -> String {
@@ -612,7 +611,7 @@ fn write_map_section(md: &mut String, label: &str, map: &HashMap<String, String>
         return;
     }
     for (key, value) in map {
-        md.push_str(&format!("- **{}/{}:** {}\n", label, key, value));
+        md.push_str(&format!("- **{label}/{key}:** {value}\n"));
     }
 }
 

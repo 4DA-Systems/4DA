@@ -25,19 +25,16 @@ pub(crate) fn process_l2(input: &str, ctx: &PersonalizationContext) -> (String, 
         output.push_str(&remaining[..if_start]);
 
         // Find the matching endif
-        match find_conditional_block(&remaining[if_start..]) {
-            Some((block, after_block_len)) => {
-                let (result, count) = evaluate_conditional_block(&block, ctx);
-                output.push_str(&result);
-                evaluated += count;
-                remaining = &remaining[if_start + after_block_len..];
-            }
-            None => {
-                // Malformed block — pass through and move past the tag
-                debug!(target: "4da::personalize", "Malformed L2 conditional block");
-                output.push_str("{? if ");
-                remaining = &remaining[if_start + 6..];
-            }
+        if let Some((block, after_block_len)) = find_conditional_block(&remaining[if_start..]) {
+            let (result, count) = evaluate_conditional_block(&block, ctx);
+            output.push_str(&result);
+            evaluated += count;
+            remaining = &remaining[if_start + after_block_len..];
+        } else {
+            // Malformed block — pass through and move past the tag
+            debug!(target: "4da::personalize", "Malformed L2 conditional block");
+            output.push_str("{? if ");
+            remaining = &remaining[if_start + 6..];
         }
     }
 
@@ -245,9 +242,7 @@ fn evaluate_condition(condition: &str, ctx: &PersonalizationContext) -> bool {
     }
 
     // Truthy path check: any dotted path that resolves to a non-empty value
-    resolve_path(cond, ctx)
-        .map(|v| !v.is_empty())
-        .unwrap_or(false)
+    resolve_path(cond, ctx).is_some_and(|v| !v.is_empty())
 }
 
 // ============================================================================

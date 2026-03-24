@@ -282,7 +282,7 @@ fn make_window(
         dependency: dep,
         status: "open".into(),
         opened_at: String::new(),
-        expires_at: expires.map(|s| s.into()),
+        expires_at: expires.map(std::convert::Into::into),
         lead_time_hours: None,
         streets_engine: streets_engine_for(wtype),
     }
@@ -502,7 +502,7 @@ fn deduplicate_and_store(conn: &Connection, windows: &mut Vec<DecisionWindow>) {
                     .unwrap_or_default();
             }
             Err(e) => {
-                warn!(target: "4da::decision_advantage", error = %e, wtype = %w.window_type, "Insert window failed")
+                warn!(target: "4da::decision_advantage", error = %e, wtype = %w.window_type, "Insert window failed");
             }
         }
     }

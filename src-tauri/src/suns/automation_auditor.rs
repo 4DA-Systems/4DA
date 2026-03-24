@@ -8,7 +8,7 @@ pub fn execute() -> SunResult {
         Err(e) => {
             return SunResult {
                 success: false,
-                message: format!("DB unavailable: {}", e),
+                message: format!("DB unavailable: {e}"),
                 data: None,
             }
         }

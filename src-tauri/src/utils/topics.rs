@@ -311,13 +311,7 @@ pub(crate) fn extract_topics(title: &str, content: &str) -> Vec<String> {
     // Also extract capitalized words from title as potential topics
     for word in title.split_whitespace() {
         let clean = word.trim_matches(|c: char| !c.is_alphanumeric());
-        if clean.len() > 2
-            && clean
-                .chars()
-                .next()
-                .map(|c| c.is_uppercase())
-                .unwrap_or(false)
-        {
+        if clean.len() > 2 && clean.chars().next().is_some_and(char::is_uppercase) {
             let lower = clean.to_lowercase();
             if !seen.contains(&lower)
                 && !TITLE_STOPWORDS.contains(&lower.as_str())

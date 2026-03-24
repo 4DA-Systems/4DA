@@ -9,7 +9,7 @@ pub fn execute() -> SunResult {
         Err(e) => {
             return SunResult {
                 success: false,
-                message: format!("DB unavailable: {}", e),
+                message: format!("DB unavailable: {e}"),
                 data: None,
             }
         }
@@ -29,7 +29,7 @@ pub fn execute() -> SunResult {
     let mut term_counts: Vec<(String, i64)> = Vec::new();
 
     for term in &revenue_terms {
-        let pattern = format!("%{}%", term);
+        let pattern = format!("%{term}%");
         let count: i64 = conn
             .query_row(
                 "SELECT COUNT(*) FROM source_items
@@ -48,7 +48,7 @@ pub fn execute() -> SunResult {
 
     SunResult {
         success: true,
-        message: format!("{} revenue-related mentions in last 7 days", total_mentions),
+        message: format!("{total_mentions} revenue-related mentions in last 7 days"),
         data: Some(serde_json::json!({
             "total_mentions": total_mentions,
             "term_counts": term_counts,

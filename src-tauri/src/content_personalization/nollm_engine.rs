@@ -100,7 +100,7 @@ fn compute_hardware_benchmark(ctx: &PersonalizationContext) -> Option<SovereignI
             value: if cpu_cores.is_empty() {
                 cpu_model.clone()
             } else {
-                format!("{} ({} cores)", cpu_model, cpu_cores)
+                format!("{cpu_model} ({cpu_cores} cores)")
             },
             context: None,
             highlight: false,
@@ -108,7 +108,7 @@ fn compute_hardware_benchmark(ctx: &PersonalizationContext) -> Option<SovereignI
         DataPoint {
             label: "RAM".into(),
             value: if ram_gb > 0.0 {
-                format!("{:.0} GB", ram_gb)
+                format!("{ram_gb:.0} GB")
             } else {
                 "Not detected".into()
             },
@@ -119,7 +119,7 @@ fn compute_hardware_benchmark(ctx: &PersonalizationContext) -> Option<SovereignI
             label: "GPU".into(),
             value: gpu_name.clone(),
             context: if gpu_mem_gb > 0.0 {
-                Some(format!("{:.0} GB VRAM", gpu_mem_gb))
+                Some(format!("{gpu_mem_gb:.0} GB VRAM"))
             } else {
                 None
             },
@@ -198,7 +198,7 @@ fn compute_stack_fit(ctx: &PersonalizationContext) -> Option<SovereignInsightCar
         .iter()
         .take(3)
         .map(|(id, name, score)| DataPoint {
-            label: format!("Engine {}", id),
+            label: format!("Engine {id}"),
             value: name.to_string(),
             context: Some(format!("{:.0}% stack match", score * 100.0)),
             highlight: *score >= 0.7,
@@ -246,7 +246,7 @@ fn compute_cost_projection(ctx: &PersonalizationContext) -> Option<SovereignInsi
     let data_points = vec![
         DataPoint {
             label: "Electricity (est.)".into(),
-            value: format!("{}{:.2}/mo", symbol, electricity_monthly),
+            value: format!("{symbol}{electricity_monthly:.2}/mo"),
             context: Some(format!(
                 "{:.1} kWh × {}{:.3}/kWh",
                 ctx.computed.monthly_electricity_estimate, symbol, ctx.regional.electricity_kwh
@@ -255,13 +255,13 @@ fn compute_cost_projection(ctx: &PersonalizationContext) -> Option<SovereignInsi
         },
         DataPoint {
             label: "Internet".into(),
-            value: format!("{}{:.0}/mo", symbol, internet),
+            value: format!("{symbol}{internet:.0}/mo"),
             context: None,
             highlight: false,
         },
         DataPoint {
             label: "Base Operating Cost".into(),
-            value: format!("{}{:.2}/mo", symbol, total),
+            value: format!("{symbol}{total:.2}/mo"),
             context: Some("Before API costs or hosting".into()),
             highlight: true,
         },
@@ -312,7 +312,7 @@ fn compute_t_shape(ctx: &PersonalizationContext) -> Option<SovereignInsightCard>
         data_points,
         visualization: Some(Visualization::TShape {
             primary: primary.clone(),
-            depth_label: format!("{} (primary)", primary),
+            depth_label: format!("{primary} (primary)"),
             adjacent: adjacent.iter().take(8).cloned().collect(),
             breadth_label: format!("{} technologies", adjacent.len()),
         }),

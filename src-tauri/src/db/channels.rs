@@ -161,8 +161,7 @@ impl Database {
             .collect::<Vec<_>>()
             .join(", ");
         let sql = format!(
-            "SELECT COUNT(*) FROM channels WHERE status = 'active' AND slug NOT IN ({})",
-            placeholders
+            "SELECT COUNT(*) FROM channels WHERE status = 'active' AND slug NOT IN ({placeholders})"
         );
         let mut stmt = conn.prepare(&sql)?;
         let params: Vec<&dyn rusqlite::ToSql> = seed_slugs
@@ -297,7 +296,7 @@ impl Database {
             content_markdown: content_markdown.to_string(),
             content_hash,
             source_item_ids: source_item_ids.to_vec(),
-            model: model.map(|s| s.to_string()),
+            model: model.map(std::string::ToString::to_string),
             tokens_used,
             latency_ms,
             rendered_at: chrono::Utc::now().format("%Y-%m-%d %H:%M:%S").to_string(),

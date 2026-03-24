@@ -161,7 +161,7 @@ pub async fn get_streets_suggestion() -> Result<Option<StreetsSuggestion>> {
         )
         .and_then(|mut stmt| {
             stmt.query_map([], |row| row.get::<_, String>(0))
-                .map(|rows| rows.filter_map(|r| r.ok()).collect())
+                .map(|rows| rows.filter_map(std::result::Result::ok).collect())
         })
         .unwrap_or_default();
 
@@ -176,7 +176,7 @@ pub async fn get_streets_suggestion() -> Result<Option<StreetsSuggestion>> {
         )
         .and_then(|mut stmt| {
             stmt.query_map([], |row| row.get::<_, String>(0))
-                .map(|rows| rows.filter_map(|r| r.ok()).collect())
+                .map(|rows| rows.filter_map(std::result::Result::ok).collect())
         })
         .unwrap_or_default();
 
@@ -211,17 +211,16 @@ pub async fn get_streets_suggestion() -> Result<Option<StreetsSuggestion>> {
             })
             .count();
 
-        if match_count >= 3 && best_module.map_or(true, |b| match_count > b.2) {
+        if match_count >= 3 && best_module.is_none_or(|b| match_count > b.2) {
             best_module = Some((module_id, module_title, match_count));
         }
     }
 
-    let (module_id, module_title, match_count) = match best_module {
-        Some(m) => m,
-        None => {
-            debug!(target: "4da::streets_suggest", "No module reached 3+ topic matches");
-            return Ok(None);
-        }
+    let (module_id, module_title, match_count) = if let Some(m) = best_module {
+        m
+    } else {
+        debug!(target: "4da::streets_suggest", "No module reached 3+ topic matches");
+        return Ok(None);
     };
 
     // 4. Check frequency caps using kv_store
@@ -299,8 +298,7 @@ pub async fn get_streets_suggestion() -> Result<Option<StreetsSuggestion>> {
 
     let match_strength = (match_count as f32 / 10.0).min(1.0);
     let reason = format!(
-        "You saved {} items about topics related to this module in the last week.",
-        match_count
+        "You saved {match_count} items about topics related to this module in the last week."
     );
 
     debug!(target: "4da::streets_suggest",

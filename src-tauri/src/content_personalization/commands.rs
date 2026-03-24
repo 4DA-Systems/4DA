@@ -31,8 +31,7 @@ pub async fn get_personalized_lesson(
 
     let lesson = content.lessons.get(lesson_idx as usize).ok_or_else(|| {
         FourDaError::Internal(format!(
-            "Lesson {} not found in module {}",
-            lesson_idx, module_id
+            "Lesson {lesson_idx} not found in module {module_id}"
         ))
     })?;
 
@@ -116,17 +115,16 @@ pub async fn get_personalized_lessons_batch(
     for (module_id, lesson_idx) in &requests {
         let content = crate::playbook_commands::get_playbook_content(module_id.clone(), None)?;
 
-        let lesson = match content.lessons.get(*lesson_idx as usize) {
-            Some(l) => l,
-            None => {
-                warn!(
-                    target: "4da::personalize",
-                    module = %module_id,
-                    lesson = lesson_idx,
-                    "Lesson not found in batch, skipping"
-                );
-                continue;
-            }
+        let lesson = if let Some(l) = content.lessons.get(*lesson_idx as usize) {
+            l
+        } else {
+            warn!(
+                target: "4da::personalize",
+                module = %module_id,
+                lesson = lesson_idx,
+                "Lesson not found in batch, skipping"
+            );
+            continue;
         };
 
         let processed = template_processor::process_template(&lesson.content, &ctx);
@@ -234,8 +232,7 @@ pub async fn hydrate_lesson_with_llm(
 
     let lesson = content.lessons.get(lesson_idx as usize).ok_or_else(|| {
         FourDaError::Internal(format!(
-            "Lesson {} not found in module {}",
-            lesson_idx, module_id
+            "Lesson {lesson_idx} not found in module {module_id}"
         ))
     })?;
 
@@ -257,7 +254,7 @@ pub async fn hydrate_lesson_with_llm(
         };
 
         // Determine session type from card type
-        let session_type = match block.source_labels.first().map(|s| s.as_str()) {
+        let session_type = match block.source_labels.first().map(std::string::String::as_str) {
             Some("mirror") => "mirror",
             Some("recommendation") => "recommendation",
             _ => "insight",

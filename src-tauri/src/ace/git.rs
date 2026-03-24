@@ -406,7 +406,7 @@ fn extract_topics_from_commit_message(message: &str) -> Vec<String> {
     ];
     for prefix in prefixes {
         if message_lower.starts_with(prefix) {
-            topics.insert(format!("commit-{}", prefix));
+            topics.insert(format!("commit-{prefix}"));
         }
     }
 

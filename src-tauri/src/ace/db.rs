@@ -310,7 +310,7 @@ pub fn migrate(conn: &Arc<Mutex<Connection>>) -> Result<()> {
 
     // Phase 1C migration: Anomalies table
     conn.execute_batch(
-        r#"
+        r"
         CREATE TABLE IF NOT EXISTS anomalies (
             id INTEGER PRIMARY KEY,
             anomaly_type TEXT NOT NULL,
@@ -324,7 +324,7 @@ pub fn migrate(conn: &Arc<Mutex<Connection>>) -> Result<()> {
         );
         CREATE INDEX IF NOT EXISTS idx_anomalies_resolved ON anomalies(resolved);
         CREATE INDEX IF NOT EXISTS idx_anomalies_type ON anomalies(anomaly_type);
-    "#,
+    ",
     )
     .ok();
 

@@ -198,8 +198,7 @@ pub fn blend_profile(weights: &[f64; 9], threshold: f64) -> BlendedProfile {
         .iter()
         .enumerate()
         .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
-        .map(|(i, _)| i)
-        .unwrap_or(0);
+        .map_or(0, |(i, _)| i);
 
     // Blend interests from all above-threshold personas
     for (i, &w) in weights.iter().enumerate() {
@@ -233,7 +232,7 @@ pub fn blend_profile(weights: &[f64; 9], threshold: f64) -> BlendedProfile {
     }
 
     // Normalize interest weights to [0, 1]
-    let max_weight = interest_weights.values().cloned().fold(0.0f32, f32::max);
+    let max_weight = interest_weights.values().copied().fold(0.0f32, f32::max);
     if max_weight > 0.0 {
         for w in interest_weights.values_mut() {
             *w /= max_weight;
@@ -248,7 +247,7 @@ pub fn blend_profile(weights: &[f64; 9], threshold: f64) -> BlendedProfile {
     let exclusions: Vec<String> = TEMPLATES[dominant]
         .exclusions
         .iter()
-        .map(|s| s.to_string())
+        .map(std::string::ToString::to_string)
         .collect();
 
     // Calibration deltas: topics from non-dominant personas get a positive delta

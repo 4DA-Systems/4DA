@@ -91,12 +91,10 @@ fn load_regional_file(country_code: &str) -> Option<RegionalData> {
                 p.join("docs")
                     .join("streets")
                     .join("regions")
-                    .join(format!("{}.json", country_code))
+                    .join(format!("{country_code}.json"))
             }),
         // Fallback: relative to current working directory
-        Some(
-            std::path::PathBuf::from("docs/streets/regions").join(format!("{}.json", country_code)),
-        ),
+        Some(std::path::PathBuf::from("docs/streets/regions").join(format!("{country_code}.json"))),
     ];
 
     for path in paths_to_try.into_iter().flatten() {
@@ -203,9 +201,9 @@ pub async fn format_currency(amount: f64) -> Result<String> {
 
     // Zero-decimal currencies get no fractional digits
     if ["JPY", "KRW"].contains(&currency.as_str()) {
-        Ok(format!("{}{:.0}", symbol, converted))
+        Ok(format!("{symbol}{converted:.0}"))
     } else {
-        Ok(format!("{}{:.2}", symbol, converted))
+        Ok(format!("{symbol}{converted:.2}"))
     }
 }
 

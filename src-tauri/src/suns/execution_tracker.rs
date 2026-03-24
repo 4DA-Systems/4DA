@@ -8,7 +8,7 @@ pub fn execute() -> SunResult {
         Err(e) => {
             return SunResult {
                 success: false,
-                message: format!("DB unavailable: {}", e),
+                message: format!("DB unavailable: {e}"),
                 data: None,
             }
         }
@@ -63,8 +63,7 @@ pub fn execute() -> SunResult {
     SunResult {
         success: true,
         message: format!(
-            "Execution velocity: {} ({} lessons, {} commands this week)",
-            velocity_label, recent_lessons, recent_commands
+            "Execution velocity: {velocity_label} ({recent_lessons} lessons, {recent_commands} commands this week)"
         ),
         data: Some(serde_json::json!({
             "recent_lessons": recent_lessons,

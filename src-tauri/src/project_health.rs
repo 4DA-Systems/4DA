@@ -67,7 +67,7 @@ pub fn compute_all_project_health(conn: &rusqlite::Connection) -> Result<Vec<Pro
         match compute_project_health(conn, &path) {
             Ok(health) => results.push(health),
             Err(e) => {
-                warn!(target: "4da::health", path = %path, error = %e, "Failed to compute health")
+                warn!(target: "4da::health", path = %path, error = %e, "Failed to compute health");
             }
         }
     }

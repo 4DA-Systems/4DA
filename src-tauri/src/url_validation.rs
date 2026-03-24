@@ -138,7 +138,7 @@ pub(crate) fn is_internal_url(url: &str) -> bool {
 
     // Attempt DNS resolution (best-effort, non-blocking is not feasible here
     // but this runs only at validation time, not in hot paths)
-    if let Ok(addrs) = format!("{}:80", host).to_socket_addrs() {
+    if let Ok(addrs) = format!("{host}:80").to_socket_addrs() {
         for addr in addrs {
             if is_internal_ip(addr.ip()) {
                 return true;

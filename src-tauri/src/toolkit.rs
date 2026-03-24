@@ -194,8 +194,10 @@ fn get_process_name_win(pid: u32) -> String {
             text.lines()
                 .find(|l| !l.starts_with("INFO:") && l.contains(','))
                 .and_then(|line| line.split(',').next())
-                .map(|name| name.trim_matches('"').to_string())
-                .unwrap_or_else(|| format!("PID {pid}"))
+                .map_or_else(
+                    || format!("PID {pid}"),
+                    |name| name.trim_matches('"').to_string(),
+                )
         }
         Err(_) => format!("PID {pid}"),
     }
@@ -263,9 +265,10 @@ pub async fn toolkit_kill_process(pid: u32) -> Result<String> {
 
 #[tauri::command]
 pub async fn toolkit_env_snapshot(working_dir: Option<String>) -> Result<EnvSnapshot> {
-    let work_dir = working_dir
-        .map(std::path::PathBuf::from)
-        .unwrap_or_else(|| std::env::current_dir().unwrap_or_default());
+    let work_dir = working_dir.map_or_else(
+        || std::env::current_dir().unwrap_or_default(),
+        std::path::PathBuf::from,
+    );
 
     tokio::task::spawn_blocking(move || {
         let run = |prog: &str, args: &[&str]| -> Option<String> {

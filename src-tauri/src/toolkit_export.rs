@@ -166,7 +166,7 @@ pub async fn toolkit_generate_export_pack() -> Result<ExportPackResult> {
                         ));
                         s.push_str(&format!("**Decision:** {}\n\n", d.decision));
                         if let Some(ref rationale) = d.rationale {
-                            s.push_str(&format!("**Rationale:** {}\n\n", rationale));
+                            s.push_str(&format!("**Rationale:** {rationale}\n\n"));
                         }
                         if !d.alternatives_rejected.is_empty() {
                             s.push_str(&format!(

@@ -114,14 +114,14 @@ impl PdfExtractor {
         }
 
         // Single page or couldn't split - return as single page
-        if !text.trim().is_empty() {
+        if text.trim().is_empty() {
+            vec![]
+        } else {
             vec![PageContent {
                 page_number: 1,
                 text: text.trim().to_string(),
                 confidence: Some(1.0),
             }]
-        } else {
-            vec![]
         }
     }
 }

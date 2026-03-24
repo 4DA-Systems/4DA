@@ -56,7 +56,7 @@ pub async fn maybe_auto_briefing<R: Runtime>(app: &AppHandle<R>) {
         Ok(result) => {
             if result
                 .get("success")
-                .and_then(|v| v.as_bool())
+                .and_then(serde_json::Value::as_bool)
                 .unwrap_or(false)
             {
                 info!(target: "4da::jobs", "Auto-briefing generated successfully");
@@ -188,7 +188,7 @@ pub async fn maybe_generate_digest<R: Runtime>(app: &AppHandle<R>) {
                 let notif_body = if frequency == "weekly" {
                     "Your weekly intelligence digest is ready".to_string()
                 } else {
-                    format!("{} new items in your {} digest", item_count, frequency)
+                    format!("{item_count} new items in your {frequency} digest")
                 };
                 if let Err(e) = app
                     .notification()
@@ -372,7 +372,7 @@ pub fn maybe_save_mini_digest(state: &crate::monitoring::MonitoringState) {
         .join("\n");
 
     let timestamp = chrono::Utc::now().format("%Y%m%d_%H%M%S");
-    let filename = format!("mini_digest_{}.md", timestamp);
+    let filename = format!("mini_digest_{timestamp}.md");
 
     if let Ok(data_dir) = std::env::current_dir() {
         let digest_dir = data_dir.join("data").join("digests");

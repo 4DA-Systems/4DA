@@ -212,8 +212,7 @@ fn check_unresolved_l2(
             if !is_inside_code_block(content, abs_pos) {
                 let end = content[abs_pos..]
                     .find("?}")
-                    .map(|e| abs_pos + e + 2)
-                    .unwrap_or(abs_pos + tag.len());
+                    .map_or(abs_pos + tag.len(), |e| abs_pos + e + 2);
                 let fragment = &content[abs_pos..end.min(content.len())];
                 report.unresolved_templates.push(AuditIssue {
                     module_id: module_id.into(),

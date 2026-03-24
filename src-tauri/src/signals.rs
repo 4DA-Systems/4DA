@@ -315,7 +315,7 @@ impl SignalClassifier {
         declared_tech: &[String],
         detected_tech: &[String],
     ) -> Option<SignalClassification> {
-        let text_lower = format!("{} {}", title, content).to_lowercase();
+        let text_lower = format!("{title} {content}").to_lowercase();
         let title_lower = title.to_lowercase();
 
         let mut best: Option<(SignalType, f32, Vec<String>)> = None;
@@ -393,7 +393,11 @@ impl SignalClassifier {
         let priority = SignalPriority::from_score(priority_score.min(4));
 
         // Generate action text using ONLY declared tech match (prevents "python workflow" for Rust devs)
-        let action = self.generate_action(&signal_type, title, declared_match.map(|s| s.as_str()));
+        let action = self.generate_action(
+            &signal_type,
+            title,
+            declared_match.map(std::string::String::as_str),
+        );
 
         // Suppress detected_tech to avoid confusion - we don't use it for action text or escalation
         let _ = detected_tech;
@@ -456,40 +460,37 @@ impl SignalClassifier {
         let short_title: String = title.chars().take(60).collect();
         match (signal_type, matched_tech) {
             (SignalType::SecurityAlert, Some(tech)) => {
-                format!("Review {} - affects your {} stack", short_title, tech)
+                format!("Review {short_title} - affects your {tech} stack")
             }
             (SignalType::SecurityAlert, None) => {
-                format!("Review security implications: {}", short_title)
+                format!("Review security implications: {short_title}")
             }
             (SignalType::BreakingChange, Some(tech)) => {
-                format!("Check migration path - {} breaking change", tech)
+                format!("Check migration path - {tech} breaking change")
             }
             (SignalType::BreakingChange, None) => {
-                format!("Review breaking change: {}", short_title)
+                format!("Review breaking change: {short_title}")
             }
             (SignalType::ToolDiscovery, Some(tech)) => {
-                format!("Evaluate for your {} workflow: {}", tech, short_title)
+                format!("Evaluate for your {tech} workflow: {short_title}")
             }
             (SignalType::ToolDiscovery, None) => {
-                format!("Evaluate new tool: {}", short_title)
+                format!("Evaluate new tool: {short_title}")
             }
             (SignalType::TechTrend, Some(tech)) => {
-                format!(
-                    "Emerging trend: {} gaining traction — {}",
-                    tech, short_title
-                )
+                format!("Emerging trend: {tech} gaining traction — {short_title}")
             }
             (SignalType::TechTrend, None) => {
-                format!("Emerging trend: {}", short_title)
+                format!("Emerging trend: {short_title}")
             }
             (SignalType::Learning, Some(tech)) => {
-                format!("Learn - {} resource: {}", tech, short_title)
+                format!("Learn - {tech} resource: {short_title}")
             }
             (SignalType::Learning, None) => {
-                format!("Learning resource: {}", short_title)
+                format!("Learning resource: {short_title}")
             }
             (SignalType::CompetitiveIntel, Some(tech)) => {
-                format!("Competitive move in {} space: {}", tech, short_title)
+                format!("Competitive move in {tech} space: {short_title}")
             }
             (SignalType::CompetitiveIntel, None) => {
                 format!("{}: {}", signal_type.label(), short_title)

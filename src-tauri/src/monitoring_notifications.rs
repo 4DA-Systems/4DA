@@ -100,7 +100,7 @@ pub fn complete_scheduled_check<R: Runtime>(
                     },
                 );
             } else {
-                let native_title = format!("4DA — {} Security Alerts Detected", total_security);
+                let native_title = format!("4DA — {total_security} Security Alerts Detected");
                 if let Err(e) = app
                     .notification()
                     .builder()
@@ -176,8 +176,8 @@ pub fn complete_scheduled_check<R: Runtime>(
         relevant = new_relevant_count,
         total = total_count,
         threshold = %threshold,
-        critical = signal_summary.as_ref().map(|s| s.critical_count).unwrap_or(0),
-        high = signal_summary.as_ref().map(|s| s.high_count).unwrap_or(0),
+        critical = signal_summary.as_ref().map_or(0, |s| s.critical_count),
+        high = signal_summary.as_ref().map_or(0, |s| s.high_count),
         "Scheduled check complete"
     );
 }
@@ -195,7 +195,7 @@ fn batch_generic_items(
     let mut guard = state.batched_items.lock();
     // Push a summary entry for the batch of items
     guard.push(BatchedNotification {
-        title: format!("{} new relevant items", count),
+        title: format!("{count} new relevant items"),
         source_type: "mixed".to_string(),
         score: 0.0,
         signal_priority: None,
@@ -233,7 +233,7 @@ pub fn send_notification<R: Runtime>(
     let title = if relevant_count == 1 {
         "1 new item matches your interests".to_string()
     } else {
-        format!("{} new items match your interests", relevant_count)
+        format!("{relevant_count} new items match your interests")
     };
 
     if notification_style() == "custom" {
@@ -289,8 +289,9 @@ pub fn send_signal_notification<R: Runtime>(
     let (signal_type, action_text) = summary
         .top_signal
         .as_ref()
-        .map(|(st, act)| (Some(st.clone()), Some(act.clone())))
-        .unwrap_or((None, None));
+        .map_or((None, None), |(st, act)| {
+            (Some(st.clone()), Some(act.clone()))
+        });
 
     // Build the display title for the notification body
     let display_title = if let Some(ref action) = action_text {
@@ -299,9 +300,9 @@ pub fn send_signal_notification<R: Runtime>(
             Some("breaking_change") => "Breaking Change",
             _ => "Alert",
         };
-        format!("{}: {}", label, action)
+        format!("{label}: {action}")
     } else {
-        format!("{} {} priority items found", count, priority)
+        format!("{count} {priority} priority items found")
     };
 
     if notification_style() == "custom" {
@@ -402,9 +403,9 @@ pub fn send_chain_prediction_notification<R: Runtime>(
 
     // Native OS notification fallback
     let title = match phase {
-        "escalating" => format!("4DA — {} Escalating", chain_name),
-        "peak" => format!("4DA — {} at Peak", chain_name),
-        _ => format!("4DA — {} Signal Chain", chain_name),
+        "escalating" => format!("4DA — {chain_name} Escalating"),
+        "peak" => format!("4DA — {chain_name} at Peak"),
+        _ => format!("4DA — {chain_name} Signal Chain"),
     };
 
     if let Err(e) = app

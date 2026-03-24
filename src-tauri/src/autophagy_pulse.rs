@@ -228,15 +228,15 @@ pub async fn get_intelligence_pulse() -> Result<IntelligencePulse> {
                     .to_string();
                 let items_surfaced = data
                     .get("items_surfaced")
-                    .and_then(|v| v.as_i64())
+                    .and_then(serde_json::Value::as_i64)
                     .unwrap_or(0);
                 let items_engaged = data
                     .get("items_engaged")
-                    .and_then(|v| v.as_i64())
+                    .and_then(serde_json::Value::as_i64)
                     .unwrap_or(0);
                 let engagement_rate = data
                     .get("engagement_rate")
-                    .and_then(|v| v.as_f64())
+                    .and_then(serde_json::Value::as_f64)
                     .unwrap_or(0.0);
 
                 // Keep first (most recent) entry for each source_type
@@ -305,8 +305,7 @@ pub async fn get_intelligence_pulse() -> Result<IntelligencePulse> {
 
     if rejection_rate > 95.0 {
         learning_narratives.push(format!(
-            "Processed {} items, surfaced {} ({:.1}% rejection rate) \u{2014} your filter is sharp",
-            items_analyzed_7d, items_surfaced_7d, rejection_rate
+            "Processed {items_analyzed_7d} items, surfaced {items_surfaced_7d} ({rejection_rate:.1}% rejection rate) \u{2014} your filter is sharp"
         ));
     }
 
@@ -327,8 +326,7 @@ pub async fn get_intelligence_pulse() -> Result<IntelligencePulse> {
             );
         } else if items_analyzed_7d > 0 {
             learning_narratives.push(format!(
-                "Processed {} items this week \u{2014} interact with results to sharpen your profile",
-                items_analyzed_7d
+                "Processed {items_analyzed_7d} items this week \u{2014} interact with results to sharpen your profile"
             ));
         }
     }

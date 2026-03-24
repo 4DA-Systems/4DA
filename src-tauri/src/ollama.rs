@@ -142,7 +142,7 @@ pub(crate) async fn warm_model(model: &str, base_url: &str, app: &AppHandle) {
         Ok(resp) => {
             let status = resp.status();
             let error_body = resp.text().await.unwrap_or_default();
-            let error_msg = format!("HTTP {}: {}", status, error_body);
+            let error_msg = format!("HTTP {status}: {error_body}");
             warn!(target: "4da::ollama", model, error = %error_msg, "Warm request failed");
 
             let _ = app.emit(
@@ -155,7 +155,7 @@ pub(crate) async fn warm_model(model: &str, base_url: &str, app: &AppHandle) {
             );
         }
         Err(e) => {
-            let error_msg = format!("{}", e);
+            let error_msg = format!("{e}");
             warn!(target: "4da::ollama", model, error = %error_msg, "Warm request error");
 
             let _ = app.emit(
@@ -237,7 +237,7 @@ pub(crate) async fn ensure_models_available(llm_model: &str, base_url: &str, app
                     OllamaStatusEvent {
                         phase: "error".into(),
                         model: String::new(),
-                        error: Some(format!("Cannot reach Ollama: {}", e)),
+                        error: Some(format!("Cannot reach Ollama: {e}")),
                     },
                 );
                 return;
@@ -311,7 +311,7 @@ pub(crate) async fn ensure_models_available(llm_model: &str, base_url: &str, app
                         OllamaStatusEvent {
                             phase: "error".into(),
                             model: model.clone(),
-                            error: Some(format!("Failed to pull {}: {}", model, e)),
+                            error: Some(format!("Failed to pull {model}: {e}")),
                         },
                     );
                     return;

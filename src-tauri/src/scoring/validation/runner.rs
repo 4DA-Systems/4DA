@@ -288,8 +288,7 @@ pub async fn run_scoring_validation() -> Result<ValidationReport> {
                 .partial_cmp(&b.precision_at_20)
                 .unwrap_or(std::cmp::Ordering::Equal)
         })
-        .map(|r| r.persona.clone())
-        .unwrap_or_else(|| "N/A".to_string());
+        .map_or_else(|| "N/A".to_string(), |r| r.persona.clone());
 
     let worst = results
         .iter()
@@ -298,8 +297,7 @@ pub async fn run_scoring_validation() -> Result<ValidationReport> {
                 .partial_cmp(&b.precision_at_20)
                 .unwrap_or(std::cmp::Ordering::Equal)
         })
-        .map(|r| r.persona.clone())
-        .unwrap_or_else(|| "N/A".to_string());
+        .map_or_else(|| "N/A".to_string(), |r| r.persona.clone());
 
     // Generate recommendations
     let recommendations = generate_recommendations(&results, overall_precision, separation_score);

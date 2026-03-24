@@ -234,10 +234,8 @@ pub fn get_model_info(model_id: &str) -> Option<ModelInfo> {
     // Pick shortest key to avoid non-deterministic HashMap ordering
     let mut best: Option<(&str, &ModelInfo)> = None;
     for (key, info) in &registry.models {
-        if key.to_lowercase().starts_with(&id_lower) {
-            if best.map_or(true, |b| key.len() < b.0.len()) {
-                best = Some((key.as_str(), info));
-            }
+        if key.to_lowercase().starts_with(&id_lower) && best.is_none_or(|b| key.len() < b.0.len()) {
+            best = Some((key.as_str(), info));
         }
     }
     if let Some((_, info)) = best {
@@ -248,10 +246,8 @@ pub fn get_model_info(model_id: &str) -> Option<ModelInfo> {
     // Pick shortest key for determinism
     let mut best: Option<(&str, &ModelInfo)> = None;
     for (key, info) in &registry.models {
-        if key.to_lowercase().contains(&id_lower) {
-            if best.map_or(true, |b| key.len() < b.0.len()) {
-                best = Some((key.as_str(), info));
-            }
+        if key.to_lowercase().contains(&id_lower) && best.is_none_or(|b| key.len() < b.0.len()) {
+            best = Some((key.as_str(), info));
         }
     }
     if let Some((_, info)) = best {
@@ -453,7 +449,7 @@ pub async fn refresh_registry() -> Result<()> {
 
         // Strip provider prefix (e.g., "openai/gpt-4.1" → "gpt-4.1")
         let model_id = raw_id
-            .strip_prefix(&format!("{}/", provider))
+            .strip_prefix(&format!("{provider}/"))
             .unwrap_or(raw_id)
             .to_string();
 

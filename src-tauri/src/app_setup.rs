@@ -300,7 +300,14 @@ pub(crate) fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::
                 info!(target: "4da::license", "Startup license validation (Keygen)");
                 let result =
                     crate::settings::validate_license_key_keygen(&license_key, &current_tier).await;
-                if result.tier != current_tier {
+                if result.tier == current_tier {
+                    info!(target: "4da::license",
+                        tier = %result.tier,
+                        cached = result.cached,
+                        detail = %result.detail,
+                        "Startup license validation complete"
+                    );
+                } else {
                     let manager = get_settings_manager();
                     let mut guard = manager.lock();
                     let settings = guard.get_mut();
@@ -314,13 +321,6 @@ pub(crate) fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::
                     if let Err(e) = guard.save() {
                         warn!("Failed to save settings: {e}");
                     }
-                } else {
-                    info!(target: "4da::license",
-                        tier = %result.tier,
-                        cached = result.cached,
-                        detail = %result.detail,
-                        "Startup license validation complete"
-                    );
                 }
             });
         }

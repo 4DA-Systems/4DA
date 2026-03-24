@@ -147,8 +147,7 @@ impl Digest {
             let topic = item
                 .matched_topics
                 .first()
-                .map(|t| Self::normalize_topic(t))
-                .unwrap_or_else(|| "General".to_string());
+                .map_or_else(|| "General".to_string(), |t| Self::normalize_topic(t));
 
             groups.entry(topic).or_default().push(item);
         }
@@ -253,7 +252,7 @@ impl Digest {
         // Sources breakdown
         output.push_str("Sources:\n");
         for (source, count) in &self.summary.sources {
-            output.push_str(&format!("  - {}: {} items\n", source, count));
+            output.push_str(&format!("  - {source}: {count} items\n"));
         }
         output.push('\n');
 
@@ -261,7 +260,7 @@ impl Digest {
         if !self.summary.top_topics.is_empty() {
             output.push_str("Top Topics:\n");
             for (topic, count) in &self.summary.top_topics {
-                output.push_str(&format!("  - {} ({})\n", topic, count));
+                output.push_str(&format!("  - {topic} ({count})\n"));
             }
             output.push('\n');
         }
@@ -328,13 +327,13 @@ impl Digest {
                 item.title
             ));
             if let Some(url) = &item.url {
-                output.push_str(&format!("   {}\n", url));
+                output.push_str(&format!("   {url}\n"));
             }
             if !item.matched_topics.is_empty() {
                 output.push_str(&format!("   Topics: {}\n", item.matched_topics.join(", ")));
             }
             if let Some(ref action) = item.signal_action {
-                output.push_str(&format!("   Signal: {}\n", action));
+                output.push_str(&format!("   Signal: {action}\n"));
             }
             output.push('\n');
         }
@@ -487,7 +486,7 @@ impl Digest {
             if !item.matched_topics.is_empty() {
                 output.push_str(r#"<div class="item-topics">"#);
                 for topic in &item.matched_topics {
-                    output.push_str(&format!(r#"<span class="topic">{}</span>"#, topic));
+                    output.push_str(&format!(r#"<span class="topic">{topic}</span>"#));
                 }
                 output.push_str("</div>");
             }
@@ -565,7 +564,7 @@ impl Digest {
                     .unwrap_or("low")
                     .to_uppercase();
                 let action = item.signal_action.as_deref().unwrap_or(&item.title);
-                output.push_str(&format!("- {} **[{}]** {}\n", emoji, priority, action));
+                output.push_str(&format!("- {emoji} **[{priority}]** {action}\n"));
             }
             output.push('\n');
         }
@@ -599,7 +598,7 @@ impl Digest {
                         "**Topics:** {}\n\n",
                         item.matched_topics
                             .iter()
-                            .map(|t| format!("`{}`", t))
+                            .map(|t| format!("`{t}`"))
                             .collect::<Vec<_>>()
                             .join(" ")
                     ));
@@ -607,7 +606,7 @@ impl Digest {
 
                 // Include LLM summary if present
                 if let Some(summary) = &item.summary {
-                    output.push_str(&format!("**Summary:** {}\n\n", summary));
+                    output.push_str(&format!("**Summary:** {summary}\n\n"));
                 }
             }
         }

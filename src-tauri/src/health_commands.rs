@@ -23,14 +23,14 @@ fn relative_time(iso: &str) -> String {
             return "just now".to_string();
         }
         if mins < 60 {
-            return format!("{}m ago", mins);
+            return format!("{mins}m ago");
         }
         let hours = diff.num_hours();
         if hours < 24 {
-            return format!("{}h ago", hours);
+            return format!("{hours}h ago");
         }
         let days = diff.num_days();
-        return format!("{}d ago", days);
+        return format!("{days}d ago");
     }
     iso.to_string()
 }

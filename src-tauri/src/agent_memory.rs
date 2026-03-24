@@ -126,8 +126,10 @@ pub fn recall_memories(
     sql.push_str(" ORDER BY created_at DESC LIMIT ?");
     param_values.push(Box::new(limit as i64));
 
-    let params_ref: Vec<&dyn rusqlite::types::ToSql> =
-        param_values.iter().map(|p| p.as_ref()).collect();
+    let params_ref: Vec<&dyn rusqlite::types::ToSql> = param_values
+        .iter()
+        .map(std::convert::AsRef::as_ref)
+        .collect();
 
     let mut stmt = conn.prepare(&sql).context("Failed to prepare")?;
     let rows = stmt
@@ -163,8 +165,10 @@ pub fn get_memories_since(
     sql.push_str(" ORDER BY created_at DESC LIMIT ?");
     param_values.push(Box::new(limit as i64));
 
-    let params_ref: Vec<&dyn rusqlite::types::ToSql> =
-        param_values.iter().map(|p| p.as_ref()).collect();
+    let params_ref: Vec<&dyn rusqlite::types::ToSql> = param_values
+        .iter()
+        .map(std::convert::AsRef::as_ref)
+        .collect();
 
     let mut stmt = conn.prepare(&sql).context("Failed to prepare")?;
     let rows = stmt
@@ -196,7 +200,7 @@ pub fn promote_to_decision(conn: &Connection, memory_id: i64) -> Result<i64> {
         )
         .optional()
         .context("Failed to get memory")?
-        .ok_or_else(|| format!("Memory {} not found", memory_id))?;
+        .ok_or_else(|| format!("Memory {memory_id} not found"))?;
 
     let (_, subject, content, tags_str) = memory;
     let tags: Vec<String> = serde_json::from_str(&tags_str).unwrap_or_default();
