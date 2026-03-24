@@ -79,7 +79,6 @@
     "jsdom": "^26.0.0",
     "knip": "^6.0.4",
     "playwright": "^1.58.2",
-    "png-to-ico": "^3.0.1",
     "sharp": "^0.34.5",
     "tailwindcss": "^4.1.18",
     "to-ico": "^1.1.5",

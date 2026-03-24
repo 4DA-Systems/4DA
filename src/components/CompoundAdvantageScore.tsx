@@ -29,7 +29,7 @@ function MiniSparkline({ data }: { data: number[] }) {
         fill="none"
         stroke="currentColor"
         strokeWidth="1.5"
-        className="text-[#D4AF37]"
+        className="text-accent-gold"
       />
     </svg>
   );
@@ -52,7 +52,7 @@ export const CompoundAdvantageScore = memo(function CompoundAdvantageScore() {
 
   const displayScore = Math.round(advantage.score);
   const scoreColor = displayScore >= 60 ? 'text-green-400'
-    : displayScore >= 30 ? 'text-[#D4AF37]'
+    : displayScore >= 30 ? 'text-accent-gold'
     : 'text-text-secondary';
 
   // Use real history if available, otherwise synthesize from current score

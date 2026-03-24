@@ -185,7 +185,7 @@ export function LocaleSection() {
             <div className="pt-2">
               <button
                 onClick={() => setShowEditor(!showEditor)}
-                className="text-xs text-[#D4AF37] hover:text-[#C4A030] transition-colors"
+                className="text-xs text-accent-gold hover:text-[#C4A030] transition-colors"
               >
                 {showEditor ? '- ' : '+ '}
                 {t('settings.translations.editorToggle')}

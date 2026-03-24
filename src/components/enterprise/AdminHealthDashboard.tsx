@@ -73,9 +73,9 @@ export function AdminHealthDashboard() {
 
   const statusColor = (status: string) => {
     switch (status) {
-      case 'healthy': return 'bg-[#22C55E]';
+      case 'healthy': return 'bg-success';
       case 'degraded': return 'bg-[#F97316]';
-      case 'down': return 'bg-[#EF4444]';
+      case 'down': return 'bg-error';
       default: return 'bg-text-muted';
     }
   };
@@ -118,13 +118,13 @@ export function AdminHealthDashboard() {
         <div className="bg-bg-primary rounded-lg p-3 border border-border/50">
           <p className="text-[10px] text-text-muted">{t('enterprise.health.relay', 'Relay')}</p>
           <div className="flex items-center gap-2 mt-1">
-            <div className={`w-2 h-2 rounded-full ${relayHealth.connected ? 'bg-[#22C55E]' : 'bg-[#EF4444]'}`} />
+            <div className={`w-2 h-2 rounded-full ${relayHealth.connected ? 'bg-success' : 'bg-error'}`} />
             <span className="text-xs text-white">
               {relayHealth.connected ? t('enterprise.health.connected', 'Connected') : t('enterprise.health.disconnected', 'Disconnected')}
             </span>
           </div>
           {relayHealth.pending_entries > 0 && (
-            <p className="text-[10px] text-[#D4AF37] mt-1">
+            <p className="text-[10px] text-accent-gold mt-1">
               {relayHealth.pending_entries} {t('enterprise.health.pending', 'pending')}
             </p>
           )}
@@ -145,7 +145,7 @@ export function AdminHealthDashboard() {
         <div className="bg-bg-primary rounded-lg p-3 border border-border/50">
           <p className="text-[10px] text-text-muted">{t('enterprise.health.embeddings', 'Embeddings')}</p>
           <div className="flex items-center gap-2 mt-1">
-            <div className={`w-2 h-2 rounded-full ${diagnostics?.embedding_operational ? 'bg-[#22C55E]' : 'bg-[#F97316]'}`} />
+            <div className={`w-2 h-2 rounded-full ${diagnostics?.embedding_operational ? 'bg-success' : 'bg-[#F97316]'}`} />
             <span className="text-xs text-white">
               {diagnostics?.embedding_model || 'Not configured'}
             </span>
@@ -177,7 +177,7 @@ export function AdminHealthDashboard() {
                 <div className="flex items-center gap-3 text-[10px] text-text-muted">
                   <span>{source.items_fetched} {t('enterprise.health.fetched', 'fetched')}</span>
                   {source.error_count > 0 && (
-                    <span className="text-[#EF4444]">{source.error_count} {t('enterprise.health.errors', 'errors')}</span>
+                    <span className="text-error">{source.error_count} {t('enterprise.health.errors', 'errors')}</span>
                   )}
                   {source.last_success && (
                     <span>{formatRelativeTime(source.last_success)}</span>
@@ -198,8 +198,8 @@ export function AdminHealthDashboard() {
           <div className="grid grid-cols-4 gap-2">
             {[
               { label: 'Active Seats', value: orgAnalytics.active_seats, color: 'text-white' },
-              { label: 'Signals/Period', value: orgAnalytics.signals_detected, color: 'text-[#D4AF37]' },
-              { label: 'Resolved', value: orgAnalytics.signals_resolved, color: 'text-[#22C55E]' },
+              { label: 'Signals/Period', value: orgAnalytics.signals_detected, color: 'text-accent-gold' },
+              { label: 'Resolved', value: orgAnalytics.signals_resolved, color: 'text-success' },
               { label: 'Decisions', value: orgAnalytics.decisions_tracked, color: 'text-[#818CF8]' },
             ].map(m => (
               <div key={m.label} className="bg-bg-primary rounded p-2 border border-border/50 text-center">

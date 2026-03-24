@@ -2,6 +2,7 @@
 // Licensed under the Functional Source License 1.1 (FSL-1.1-Apache-2.0). See LICENSE file.
 
 import { useState, useEffect, memo } from 'react';
+import { useTranslation } from 'react-i18next';
 import { cmd } from '../../lib/commands';
 import type { AiUsageSummary, AiCostRecommendation } from '../../lib/commands';
 
@@ -46,6 +47,7 @@ function formatTokens(count: number): string {
 // ============================================================================
 
 export const CostTab = memo(function CostTab() {
+  const { t } = useTranslation();
   const [usage, setUsage] = useState<AiUsageSummary | null>(null);
   const [recommendation, setRecommendation] = useState<AiCostRecommendation | null>(null);
   const [loading, setLoading] = useState(true);
@@ -91,10 +93,9 @@ export const CostTab = memo(function CostTab() {
     return (
       <div className="p-5">
         <div className="bg-bg-primary rounded-lg border border-border/50 p-6 text-center">
-          <p className="text-sm text-text-muted mb-2">No AI usage recorded yet</p>
+          <p className="text-sm text-text-muted mb-2">{t('costs.noData')}</p>
           <p className="text-xs text-text-muted/60 leading-relaxed">
-            AI cost tracking begins automatically when you use LLM features.
-            4DA records token usage per provider and model for full transparency.
+            {t('costs.noDataDesc')}
           </p>
         </div>
       </div>
@@ -106,20 +107,20 @@ export const CostTab = memo(function CostTab() {
       {/* Summary Stats */}
       <div className="grid grid-cols-3 gap-3">
         <StatCard
-          label="Total Cost"
+          label={t('costs.totalCost')}
           value={usage.total_cost_usd.toFixed(2)}
           suffix="$"
           color="text-white"
         />
         <StatCard
-          label="Tokens In"
+          label={t('costs.tokensIn')}
           value={formatTokens(usage.total_tokens_in)}
-          color="text-[#22C55E]"
+          color="text-success"
         />
         <StatCard
-          label="Tokens Out"
+          label={t('costs.tokensOut')}
           value={formatTokens(usage.total_tokens_out)}
-          color="text-[#D4AF37]"
+          color="text-accent-gold"
         />
       </div>
 
@@ -127,16 +128,16 @@ export const CostTab = memo(function CostTab() {
       {usage.by_provider.length > 0 && (
         <div>
           <h4 className="text-xs font-medium text-text-muted uppercase tracking-wider mb-3">
-            By Provider
+            {t('costs.byProvider')}
           </h4>
           <div className="overflow-hidden rounded-lg border border-border">
             <table className="w-full text-sm">
               <thead>
                 <tr className="bg-bg-tertiary text-text-muted text-xs uppercase tracking-wider">
-                  <th className="text-left px-4 py-2.5 font-medium">Provider</th>
-                  <th className="text-left px-4 py-2.5 font-medium">Model</th>
-                  <th className="text-right px-4 py-2.5 font-medium">Requests</th>
-                  <th className="text-right px-4 py-2.5 font-medium">Cost</th>
+                  <th className="text-left px-4 py-2.5 font-medium">{t('costs.thProvider')}</th>
+                  <th className="text-left px-4 py-2.5 font-medium">{t('costs.thModel')}</th>
+                  <th className="text-right px-4 py-2.5 font-medium">{t('costs.thRequests')}</th>
+                  <th className="text-right px-4 py-2.5 font-medium">{t('costs.thCost')}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
@@ -160,7 +161,7 @@ export const CostTab = memo(function CostTab() {
       {usage.by_task.length > 0 && (
         <div>
           <h4 className="text-xs font-medium text-text-muted uppercase tracking-wider mb-3">
-            By Task
+            {t('costs.byTask')}
           </h4>
           <div className="space-y-2">
             {usage.by_task.map((task, i) => {
@@ -191,11 +192,11 @@ export const CostTab = memo(function CostTab() {
       {recommendation && (
         <div>
           <h4 className="text-xs font-medium text-text-muted uppercase tracking-wider mb-3">
-            Optimization
+            {t('costs.optimization')}
           </h4>
-          <div className="bg-bg-primary rounded-lg border border-[#22C55E]/20 p-4 space-y-2">
+          <div className="bg-bg-primary rounded-lg border border-success/20 p-4 space-y-2">
             <div className="flex items-center gap-2">
-              <div className="w-2 h-2 rounded-full bg-[#22C55E]" />
+              <div className="w-2 h-2 rounded-full bg-success" />
               <span className="text-sm text-text-primary">
                 Switch {recommendation.current_provider}/{recommendation.current_model} to{' '}
                 {recommendation.recommended_provider}/{recommendation.recommended_model}
@@ -204,10 +205,10 @@ export const CostTab = memo(function CostTab() {
             <p className="text-xs text-text-muted leading-relaxed">{recommendation.reason}</p>
             <div className="flex items-center gap-4 text-xs text-text-muted">
               <span>
-                Est. savings: <span className="text-[#22C55E] font-medium">${recommendation.estimated_savings_usd.toFixed(2)}/mo</span>
+                {t('costs.estSavings')}: <span className="text-success font-medium">${recommendation.estimated_savings_usd.toFixed(2)}/mo</span>
               </span>
               <span>
-                Quality match: <span className="text-text-secondary">{recommendation.quality_match_pct}%</span>
+                {t('costs.qualityMatch')}: <span className="text-text-secondary">{recommendation.quality_match_pct}%</span>
               </span>
             </div>
           </div>

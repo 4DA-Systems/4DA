@@ -84,7 +84,7 @@ export const SettingsTeamTab = memo(function SettingsTeamTab({
       ) : (
         <div className="space-y-6 py-2">
           <WaitlistSignup tier="team" inline />
-          <div className="border-t border-[#2A2A2A] pt-6">
+          <div className="border-t border-border pt-6">
             <WaitlistSignup tier="enterprise" inline />
           </div>
         </div>

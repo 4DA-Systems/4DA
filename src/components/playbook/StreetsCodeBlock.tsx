@@ -20,9 +20,9 @@ function detectCurrentOs(): OsTarget {
 }
 
 const RISK_COLORS: Record<RiskLevel, { dot: string; label: string }> = {
-  safe: { dot: 'bg-[#22C55E]', label: 'Safe' },
-  moderate: { dot: 'bg-[#D4AF37]', label: 'Moderate' },
-  elevated: { dot: 'bg-[#EF4444]', label: 'Elevated' },
+  safe: { dot: 'bg-success', label: 'Safe' },
+  moderate: { dot: 'bg-accent-gold', label: 'Moderate' },
+  elevated: { dot: 'bg-error', label: 'Elevated' },
 };
 
 const OS_LABELS: Record<OsTarget, string> = {
@@ -172,7 +172,7 @@ export function StreetsCodeBlock({ code, language, moduleId, lessonIdx, blockInd
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-1.5">
           {/* Language label */}
-          <span className="text-[10px] text-[#8A8A8A] mr-2 font-mono">{language}</span>
+          <span className="text-[10px] text-text-muted mr-2 font-mono">{language}</span>
           {/* OS tabs */}
           {osTabs.length > 1 && osTabs.map((os) => (
             <button
@@ -181,8 +181,8 @@ export function StreetsCodeBlock({ code, language, moduleId, lessonIdx, blockInd
               aria-label={`Select OS: ${OS_LABELS[os]}`}
               className={`px-2 py-0.5 text-[10px] rounded font-medium transition-colors ${
                 activeOs === os
-                  ? 'bg-[#D4AF37]/20 text-[#D4AF37] border border-[#D4AF37]/30'
-                  : 'text-[#8A8A8A] hover:text-text-secondary border border-transparent'
+                  ? 'bg-accent-gold/20 text-accent-gold border border-accent-gold/30'
+                  : 'text-text-muted hover:text-text-secondary border border-transparent'
               }`}
             >
               {OS_LABELS[os]}
@@ -195,16 +195,16 @@ export function StreetsCodeBlock({ code, language, moduleId, lessonIdx, blockInd
               onClick={runAllSafe}
               disabled={runningAny}
               aria-label={t('playbook.code.runAllSafe', { count: safeCount })}
-              className="flex items-center gap-1 px-2 py-1 text-[10px] font-medium text-[#22C55E] bg-[#22C55E]/10 border border-[#22C55E]/20 rounded hover:bg-[#22C55E]/20 transition-colors disabled:opacity-50"
+              className="flex items-center gap-1 px-2 py-1 text-[10px] font-medium text-success bg-success/10 border border-success/20 rounded hover:bg-success/20 transition-colors disabled:opacity-50"
             >
-              {runningAny && <span className="w-3 h-3 border border-[#22C55E] border-t-transparent rounded-full animate-spin" aria-hidden="true" />}
+              {runningAny && <span className="w-3 h-3 border border-success border-t-transparent rounded-full animate-spin" aria-hidden="true" />}
               {t('playbook.code.runAllSafe', { count: safeCount })}
             </button>
           )}
           <button
             onClick={copyBlock}
             aria-label={copied ? t('action.copied') : t('action.copy')}
-            className="px-2 py-1 text-[10px] text-[#8A8A8A] hover:text-text-secondary border border-border rounded transition-colors"
+            className="px-2 py-1 text-[10px] text-text-muted hover:text-text-secondary border border-border rounded transition-colors"
           >
             {copied ? t('action.copied') : t('action.copy')}
           </button>
@@ -212,7 +212,7 @@ export function StreetsCodeBlock({ code, language, moduleId, lessonIdx, blockInd
       </div>
 
       {parseError && (
-        <div className="mb-2 px-3 py-2 text-[10px] text-[#EF4444] bg-[#EF4444]/10 rounded">
+        <div className="mb-2 px-3 py-2 text-[10px] text-error bg-error/10 rounded">
           {parseError}
         </div>
       )}
@@ -239,7 +239,7 @@ export function StreetsCodeBlock({ code, language, moduleId, lessonIdx, blockInd
                 <code
                   className={`flex-1 text-xs font-mono leading-relaxed px-1 ${
                     isComment
-                      ? 'text-[#8A8A8A] italic'
+                      ? 'text-text-muted italic'
                       : isEmpty
                         ? ''
                         : 'text-text-secondary'
@@ -260,12 +260,12 @@ export function StreetsCodeBlock({ code, language, moduleId, lessonIdx, blockInd
                         <button
                           onClick={() => handleRunClick(matchedCmd)}
                           disabled={isRunning}
-                          className="flex items-center justify-center w-5 h-5 text-[#22C55E] hover:bg-[#22C55E]/10 rounded transition-colors disabled:opacity-50"
+                          className="flex items-center justify-center w-5 h-5 text-success hover:bg-success/10 rounded transition-colors disabled:opacity-50"
                           title={t('playbook.code.runCommand')}
                           aria-label={t('playbook.code.runCommand')}
                         >
                           {isRunning ? (
-                            <span className="w-3 h-3 border border-[#22C55E] border-t-transparent rounded-full animate-spin" aria-hidden="true" />
+                            <span className="w-3 h-3 border border-success border-t-transparent rounded-full animate-spin" aria-hidden="true" />
                           ) : (
                             <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
                               <polygon points="5,3 19,12 5,21" />
@@ -277,7 +277,7 @@ export function StreetsCodeBlock({ code, language, moduleId, lessonIdx, blockInd
                     {!matchedCmd && !parsed && (
                       <button
                         onClick={ensureParsed}
-                        className="flex items-center justify-center w-5 h-5 text-[#8A8A8A] hover:text-text-secondary hover:bg-bg-tertiary rounded transition-colors"
+                        className="flex items-center justify-center w-5 h-5 text-text-muted hover:text-text-secondary hover:bg-bg-tertiary rounded transition-colors"
                         title={t('playbook.code.parseCommands')}
                         aria-label={t('playbook.code.parseCommands')}
                       >
@@ -294,15 +294,15 @@ export function StreetsCodeBlock({ code, language, moduleId, lessonIdx, blockInd
               {result && isExpanded && (
                 <div
                   className={`mt-1 mb-2 ml-1 p-3 rounded text-xs font-mono border-l-2 bg-bg-primary cursor-pointer ${
-                    result.success ? 'border-[#22C55E]' : 'border-[#EF4444]'
+                    result.success ? 'border-success' : 'border-error'
                   }`}
                   onClick={() => matchedCmd && toggleResult(matchedCmd.id)}
                 >
                   <div className="flex items-center justify-between mb-1.5">
-                    <span className={`text-[10px] font-medium ${result.success ? 'text-[#22C55E]' : 'text-[#EF4444]'}`}>
+                    <span className={`text-[10px] font-medium ${result.success ? 'text-success' : 'text-error'}`}>
                       {result.success ? t('playbook.code.success') : t('playbook.code.failed', { code: result.exit_code })}
                     </span>
-                    <span className="text-[10px] text-[#8A8A8A]">{result.duration_ms}ms</span>
+                    <span className="text-[10px] text-text-muted">{result.duration_ms}ms</span>
                   </div>
                   {result.stdout && (
                     <pre className="text-text-secondary whitespace-pre-wrap break-all max-h-40 overflow-y-auto">
@@ -310,7 +310,7 @@ export function StreetsCodeBlock({ code, language, moduleId, lessonIdx, blockInd
                     </pre>
                   )}
                   {result.stderr && (
-                    <pre className="text-[#EF4444]/80 whitespace-pre-wrap break-all mt-1 max-h-20 overflow-y-auto">
+                    <pre className="text-error/80 whitespace-pre-wrap break-all mt-1 max-h-20 overflow-y-auto">
                       {result.stderr}
                     </pre>
                   )}
@@ -324,8 +324,8 @@ export function StreetsCodeBlock({ code, language, moduleId, lessonIdx, blockInd
                   aria-label={result.success ? t('playbook.code.showOutput') : t('playbook.code.showError')}
                   className={`ml-1 mt-0.5 mb-1 px-2 py-0.5 text-[10px] rounded ${
                     result.success
-                      ? 'text-[#22C55E] bg-[#22C55E]/5 hover:bg-[#22C55E]/10'
-                      : 'text-[#EF4444] bg-[#EF4444]/5 hover:bg-[#EF4444]/10'
+                      ? 'text-success bg-success/5 hover:bg-success/10'
+                      : 'text-error bg-error/5 hover:bg-error/10'
                   } transition-colors`}
                 >
                   {result.success ? t('playbook.code.showOutput') : t('playbook.code.showError')} ({result.duration_ms}ms)

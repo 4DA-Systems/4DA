@@ -119,7 +119,7 @@ export function WebhookDocsPanel() {
                 className="w-full px-3 py-2 flex items-center justify-between hover:bg-bg-tertiary/30 transition-colors text-left"
                 aria-expanded={expandedEvent === evt.event}
               >
-                <code className="text-xs text-[#D4AF37] font-mono">{evt.event}</code>
+                <code className="text-xs text-accent-gold font-mono">{evt.event}</code>
                 <span className={`text-text-muted text-[10px] transition-transform ${expandedEvent === evt.event ? 'rotate-180' : ''}`}>
                   &#9660;
                 </span>

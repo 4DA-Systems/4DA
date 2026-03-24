@@ -37,16 +37,16 @@ interface DepAlert {
 // ============================================================================
 
 const SEVERITY_BADGE: Record<Severity, string> = {
-  critical: 'bg-[#EF4444]/15 text-[#EF4444] border-[#EF4444]/25',
+  critical: 'bg-error/15 text-error border-error/25',
   high: 'bg-[#F97316]/15 text-[#F97316] border-[#F97316]/25',
-  medium: 'bg-[#D4AF37]/15 text-[#D4AF37] border-[#D4AF37]/25',
+  medium: 'bg-accent-gold/15 text-accent-gold border-accent-gold/25',
   low: 'bg-white/5 text-text-muted border-border',
 };
 
 const SEVERITY_DOT: Record<Severity, string> = {
-  critical: 'bg-[#EF4444]',
+  critical: 'bg-error',
   high: 'bg-[#F97316]',
-  medium: 'bg-[#D4AF37]',
+  medium: 'bg-accent-gold',
   low: 'bg-text-muted',
 };
 
@@ -209,11 +209,11 @@ const SecurityDashboard = memo(function SecurityDashboard() {
 
         {/* Active Alerts */}
         {isEmpty ? (
-          <div className="bg-[#22C55E]/5 rounded-lg border border-[#22C55E]/20 p-6 text-center">
-            <div className="w-10 h-10 mx-auto mb-3 bg-[#22C55E]/10 rounded-full flex items-center justify-center">
-              <span className="text-[#22C55E] text-lg">&#x2713;</span>
+          <div className="bg-success/5 rounded-lg border border-success/20 p-6 text-center">
+            <div className="w-10 h-10 mx-auto mb-3 bg-success/10 rounded-full flex items-center justify-center">
+              <span className="text-success text-lg">&#x2713;</span>
             </div>
-            <p className="text-sm text-[#22C55E]">
+            <p className="text-sm text-success">
               {configured
                 ? t('security.noVulnerabilities')
                 : t('security.monitoringInactive')}

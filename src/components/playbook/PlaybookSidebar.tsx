@@ -45,16 +45,16 @@ export const PlaybookSidebar = memo(function PlaybookSidebar({
             onClick={() => onModuleClick(modId)}
             className={`w-full text-left px-3 py-2.5 rounded-lg transition-all flex items-center gap-3 group ${
               isActive
-                ? 'bg-[#D4AF37]/15 border border-[#D4AF37]/30'
+                ? 'bg-accent-gold/15 border border-accent-gold/30'
                 : 'hover:bg-bg-tertiary border border-transparent'
             }`}
           >
             <span
               className={`w-7 h-7 rounded-md flex items-center justify-center text-xs font-bold flex-shrink-0 ${
                 pct >= 100
-                  ? 'bg-[#22C55E]/20 text-[#22C55E]'
+                  ? 'bg-success/20 text-success'
                   : isActive
-                    ? 'bg-[#D4AF37]/20 text-[#D4AF37]'
+                    ? 'bg-accent-gold/20 text-accent-gold'
                     : 'bg-bg-tertiary text-text-secondary'
               }`}
             >
@@ -64,7 +64,7 @@ export const PlaybookSidebar = memo(function PlaybookSidebar({
               <p className={`text-sm truncate ${isActive ? 'text-white font-medium' : 'text-text-secondary'}`}>
                 {t(`streets:streets.module.${modId}`)}
               </p>
-              <p className="text-[10px] text-[#8A8A8A]">
+              <p className="text-[10px] text-text-muted">
                 {lessonCount} {lessonCount !== 1 ? t('streets:streets.lessons').toLowerCase() : t('streets:streets.lesson').toLowerCase()}
                 {pct > 0 && pct < 100 && ` - ${Math.round(pct)}%`}
               </p>
@@ -79,14 +79,14 @@ export const PlaybookSidebar = memo(function PlaybookSidebar({
         onClick={onShowTemplates}
         className={`w-full text-left px-3 py-2.5 rounded-lg transition-all flex items-center gap-3 group ${
           showTemplates
-            ? 'bg-[#D4AF37]/15 border border-[#D4AF37]/30'
+            ? 'bg-accent-gold/15 border border-accent-gold/30'
             : 'hover:bg-bg-tertiary border border-transparent'
         }`}
       >
         <span
           className={`w-7 h-7 rounded-md flex items-center justify-center text-xs flex-shrink-0 ${
             showTemplates
-              ? 'bg-[#D4AF37]/20 text-[#D4AF37]'
+              ? 'bg-accent-gold/20 text-accent-gold'
               : 'bg-bg-tertiary text-text-secondary'
           }`}
         >
@@ -99,13 +99,13 @@ export const PlaybookSidebar = memo(function PlaybookSidebar({
           <p className={`text-sm truncate ${showTemplates ? 'text-white font-medium' : 'text-text-secondary'}`}>
             {t('playbook.templates')}
           </p>
-          <p className="text-[10px] text-[#8A8A8A]">{t('playbook.templatesSubtitle')}</p>
+          <p className="text-[10px] text-text-muted">{t('playbook.templatesSubtitle')}</p>
         </div>
       </button>
 
       {/* Free tier notice */}
       <div className="mt-4 pt-4 border-t border-border">
-        <p className="text-[10px] text-[#8A8A8A] text-center">
+        <p className="text-[10px] text-text-muted text-center">
           {t('streets:streets.freeForever')}
         </p>
       </div>

@@ -54,7 +54,7 @@ export function TeamSharedSources() {
         </h4>
         <button
           onClick={() => setShowAddForm(!showAddForm)}
-          className="text-[10px] text-[#22C55E] hover:text-[#22C55E]/80 transition-colors"
+          className="text-[10px] text-success hover:text-success/80 transition-colors"
         >
           {showAddForm ? t('action.cancel', 'Cancel') : t('team.sources.recommend', '+ Recommend')}
         </button>
@@ -66,7 +66,7 @@ export function TeamSharedSources() {
           <select
             value={newSourceType}
             onChange={e => setNewSourceType(e.target.value)}
-            className="w-full px-2 py-1.5 text-xs bg-bg-primary border border-border rounded text-white focus:outline-none focus:border-[#22C55E]/50"
+            className="w-full px-2 py-1.5 text-xs bg-bg-primary border border-border rounded text-white focus:outline-none focus:border-success/50"
             aria-label="Source type"
           >
             {Object.keys(SOURCE_ICONS).map(type => (
@@ -78,13 +78,13 @@ export function TeamSharedSources() {
             value={newRecommendation}
             onChange={e => setNewRecommendation(e.target.value)}
             placeholder={t('team.sources.whyRecommend', 'Why is this source valuable?')}
-            className="w-full px-2 py-1.5 text-xs bg-bg-primary border border-border rounded text-white focus:outline-none focus:border-[#22C55E]/50"
+            className="w-full px-2 py-1.5 text-xs bg-bg-primary border border-border rounded text-white focus:outline-none focus:border-success/50"
             onKeyDown={e => e.key === 'Enter' && handleShare()}
           />
           <button
             onClick={handleShare}
             disabled={!newRecommendation.trim()}
-            className="text-[10px] px-3 py-1.5 bg-[#22C55E]/15 text-[#22C55E] rounded hover:bg-[#22C55E]/25 transition-colors disabled:opacity-50"
+            className="text-[10px] px-3 py-1.5 bg-success/15 text-success rounded hover:bg-success/25 transition-colors disabled:opacity-50"
           >
             {t('team.sources.share', 'Share with Team')}
           </button>
@@ -105,7 +105,7 @@ export function TeamSharedSources() {
             >
               <div className="flex items-center gap-2.5 min-w-0">
                 {/* Source Badge */}
-                <span className="text-[10px] font-mono font-bold text-[#D4AF37] bg-[#D4AF37]/10 px-1.5 py-0.5 rounded shrink-0">
+                <span className="text-[10px] font-mono font-bold text-accent-gold bg-accent-gold/10 px-1.5 py-0.5 rounded shrink-0">
                   {SOURCE_ICONS[source.source_type] || source.source_type.slice(0, 3).toUpperCase()}
                 </span>
 
@@ -119,7 +119,7 @@ export function TeamSharedSources() {
                 {/* Upvote */}
                 <button
                   onClick={() => upvoteSource(source.id)}
-                  className="flex items-center gap-1 text-[10px] text-text-muted hover:text-[#D4AF37] transition-colors"
+                  className="flex items-center gap-1 text-[10px] text-text-muted hover:text-accent-gold transition-colors"
                   aria-label={`Upvote ${source.source_type}`}
                 >
                   <span>&#9650;</span>
@@ -129,7 +129,7 @@ export function TeamSharedSources() {
                 {/* Remove */}
                 <button
                   onClick={() => removeSharedSource(source.id)}
-                  className="text-[10px] text-text-muted hover:text-[#EF4444] transition-colors"
+                  className="text-[10px] text-text-muted hover:text-error transition-colors"
                   aria-label={`Remove ${source.source_type}`}
                 >
                   &#10005;
