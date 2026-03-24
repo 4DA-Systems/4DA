@@ -118,7 +118,7 @@ export function BriefingReadyState() {
                 <button
                   onClick={handleStartTrial}
                   disabled={startingTrial}
-                  className="px-5 py-2.5 text-sm font-medium text-[#D4AF37] border border-[#D4AF37]/30 rounded-lg hover:bg-[#D4AF37]/10 transition-colors disabled:opacity-50"
+                  className="px-5 py-2.5 text-sm font-medium text-accent-gold border border-accent-gold/30 rounded-lg hover:bg-accent-gold/10 transition-colors disabled:opacity-50"
                 >
                   {startingTrial ? t('pro.startingTrial') : t('pro.startTrial')}
                 </button>

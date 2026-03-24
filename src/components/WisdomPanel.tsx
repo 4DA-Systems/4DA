@@ -1,7 +1,9 @@
 import { useState, memo, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import { cmd } from '../lib/commands';
 
 const FeedbackButtons = memo(function FeedbackButtons({ query }: { query: string }) {
+  const { t } = useTranslation();
   const [submitted, setSubmitted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
@@ -24,21 +26,21 @@ const FeedbackButtons = memo(function FeedbackButtons({ query }: { query: string
 
   if (submitted) {
     return (
-      <p className="text-xs text-text-muted italic">Outcome recorded — improves future analysis.</p>
+      <p className="text-xs text-text-muted italic">{t('wisdom.outcomeRecorded')}</p>
     );
   }
 
   return (
     <div className="flex items-center gap-2">
-      <span className="text-xs text-text-muted">How did it turn out?</span>
-      {['confirmed', 'refuted', 'partial', 'too_early'].map(outcome => (
+      <span className="text-xs text-text-muted">{t('wisdom.howDidItTurnOut')}</span>
+      {(['confirmed', 'refuted', 'partial', 'too_early'] as const).map(outcome => (
         <button
           key={outcome}
           onClick={() => handleFeedback(outcome)}
           disabled={submitting}
           className="text-xs px-2 py-0.5 rounded border border-border/50 text-text-muted hover:text-text-secondary hover:border-border transition-colors disabled:opacity-30"
         >
-          {outcome === 'too_early' ? 'Too Early' : outcome.charAt(0).toUpperCase() + outcome.slice(1)}
+          {t(`wisdom.outcome_${outcome}`)}
         </button>
       ))}
     </div>
@@ -60,6 +62,7 @@ interface TransmuteResult {
  * Three modes: Perspective (voice), Analysis (structured), Challenge.
  */
 export const WisdomPanel = memo(function WisdomPanel() {
+  const { t } = useTranslation();
   const [query, setQuery] = useState('');
   const [result, setResult] = useState<TransmuteResult | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -88,9 +91,9 @@ export const WisdomPanel = memo(function WisdomPanel() {
   return (
     <div className="bg-bg-secondary rounded-lg border border-border overflow-hidden">
       <div className="px-5 py-4 border-b border-border">
-        <h3 className="text-sm font-medium text-white">Decision Analysis</h3>
+        <h3 className="text-sm font-medium text-white">{t('wisdom.title')}</h3>
         <p className="text-xs text-text-muted mt-1">
-          What are you deciding? Get perspective from your history.
+          {t('wisdom.subtitle')}
         </p>
       </div>
 
@@ -102,7 +105,7 @@ export const WisdomPanel = memo(function WisdomPanel() {
             value={query}
             onChange={e => setQuery(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && handleTransmute()}
-            placeholder="Should we migrate from X to Y?"
+            placeholder={t('wisdom.placeholder')}
             className="flex-1 bg-bg-tertiary border border-border rounded-lg px-3 py-2 text-sm text-text-primary placeholder:text-text-muted/50 focus:outline-none focus:border-text-muted/50"
           />
           <button
@@ -110,16 +113,16 @@ export const WisdomPanel = memo(function WisdomPanel() {
             disabled={!query.trim() || loading}
             className="px-4 py-2 bg-bg-tertiary border border-border rounded-lg text-sm text-text-secondary hover:text-white hover:border-text-muted/50 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
           >
-            {loading ? 'Analyzing...' : 'Analyze'}
+            {loading ? t('wisdom.analyzing') : t('wisdom.analyze')}
           </button>
         </div>
 
         {/* Mode selector */}
         <div className="flex gap-2">
           {([
-            { key: 'voice' as const, label: 'Perspective' },
-            { key: 'structured' as const, label: 'Analysis' },
-            { key: 'challenge' as const, label: 'Challenge' },
+            { key: 'voice' as const, label: t('wisdom.perspective') },
+            { key: 'structured' as const, label: t('wisdom.analysis') },
+            { key: 'challenge' as const, label: t('wisdom.challenge') },
           ]).map(({ key, label }) => (
             <button
               key={key}
@@ -141,7 +144,7 @@ export const WisdomPanel = memo(function WisdomPanel() {
             <div className="flex items-center gap-2">
               <div className="w-2 h-2 rounded-full bg-accent-gold animate-pulse" />
               <span className="text-xs text-text-muted">
-                Running 7-stage analysis pipeline...
+                {t('wisdom.pipelineRunning')}
               </span>
             </div>
           </div>
@@ -165,18 +168,18 @@ export const WisdomPanel = memo(function WisdomPanel() {
             {/* Confidence */}
             <div className="flex items-center gap-3 text-xs text-text-muted">
               <span>
-                {(result.confidence * 100).toFixed(0)}% confidence
+                {t('wisdom.confidence', { value: (result.confidence * 100).toFixed(0) })}
               </span>
               <span className="text-text-muted/40">|</span>
               <span>
-                {result.mode === 'voice' ? 'Perspective' : result.mode === 'challenge' ? 'Challenge' : 'Analysis'}
+                {result.mode === 'voice' ? t('wisdom.perspective') : result.mode === 'challenge' ? t('wisdom.challenge') : t('wisdom.analysis')}
               </span>
             </div>
 
             {/* Watch for */}
             {result.watch_for.length > 0 && (
               <div className="pt-2 border-t border-border/30">
-                <p className="text-xs text-text-muted mb-1">Watch for:</p>
+                <p className="text-xs text-text-muted mb-1">{t('wisdom.watchFor')}</p>
                 {result.watch_for.map((w, i) => (
                   <p key={i} className="text-xs text-text-secondary ml-2">
                     {w}

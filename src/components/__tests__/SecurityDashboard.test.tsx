@@ -76,11 +76,11 @@ describe('SecurityDashboard', () => {
   it('renders severity count badges', async () => {
     render(<SecurityDashboard />);
     await waitFor(() => {
-      expect(screen.getByText('Critical')).toBeInTheDocument();
+      expect(screen.getByText('security.severityCritical')).toBeInTheDocument();
     });
-    expect(screen.getByText('High')).toBeInTheDocument();
-    expect(screen.getByText('Medium')).toBeInTheDocument();
-    expect(screen.getByText('Low')).toBeInTheDocument();
+    expect(screen.getByText('security.severityHigh')).toBeInTheDocument();
+    expect(screen.getByText('security.severityMedium')).toBeInTheDocument();
+    expect(screen.getByText('security.severityLow')).toBeInTheDocument();
   });
 
   it('renders active alerts with CVE identifiers', async () => {
@@ -94,7 +94,7 @@ describe('SecurityDashboard', () => {
   it('renders Resolve buttons for active alerts', async () => {
     render(<SecurityDashboard />);
     await waitFor(() => {
-      const resolveButtons = screen.getAllByText('Resolve');
+      const resolveButtons = screen.getAllByText('security.resolve');
       expect(resolveButtons.length).toBeGreaterThan(0);
     });
   });
@@ -102,24 +102,24 @@ describe('SecurityDashboard', () => {
   it('shows resolved section after resolving an alert', async () => {
     render(<SecurityDashboard />);
     await waitFor(() => {
-      expect(screen.getAllByText('Resolve').length).toBeGreaterThan(0);
+      expect(screen.getAllByText('security.resolve').length).toBeGreaterThan(0);
     });
     // Resolve first alert
-    fireEvent.click(screen.getAllByText('Resolve')[0]);
+    fireEvent.click(screen.getAllByText('security.resolve')[0]);
     await waitFor(() => {
-      expect(screen.getByText('Resolved')).toBeInTheDocument();
+      expect(screen.getByText('security.resolved')).toBeInTheDocument();
     });
   });
 
   it('moves alert to resolved when Resolve is clicked', async () => {
     render(<SecurityDashboard />);
     await waitFor(() => {
-      expect(screen.getAllByText('Resolve').length).toBe(2);
+      expect(screen.getAllByText('security.resolve').length).toBe(2);
     });
-    const resolveButtons = screen.getAllByText('Resolve');
+    const resolveButtons = screen.getAllByText('security.resolve');
     fireEvent.click(resolveButtons[0]);
     await waitFor(() => {
-      const remaining = screen.getAllByText('Resolve');
+      const remaining = screen.getAllByText('security.resolve');
       expect(remaining.length).toBe(1);
     });
   });
